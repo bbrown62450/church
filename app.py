@@ -5,6 +5,7 @@ OpenAI liturgy generation, and Word/PDF download.
 """
 
 import html
+import logging
 import os
 from datetime import date
 import streamlit as st
@@ -21,9 +22,15 @@ from worship_service import (
 from vanderbilt_lectionary import get_readings_for_date_string
 from scripture_fetcher import get_passage_text
 from hymn_usage import get_recently_used_identifiers, record_usage, is_hymn_recently_used
-from service_archive import list_saved_services, save_service, get_service
+from service_archive import list_saved_services, save_service, update_service, get_service
+from email_send import send_gmail
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
+# Show INFO logs in terminal when running: streamlit run app.py
+if not logging.getLogger().handlers:
+    logging.basicConfig(level=logging.INFO, format="%(name)s %(levelname)s %(message)s")
 
 # Default Benediction (shorthand; user can paste full Halverson or other text)
 DEFAULT_BENEDICTION = "Halverson"
@@ -63,6 +70,8 @@ if "last_lectionary_date" not in st.session_state:
     st.session_state.last_lectionary_date = None
 if "load_service_id" not in st.session_state:
     st.session_state.load_service_id = None
+if "editing_service_id" not in st.session_state:
+    st.session_state.editing_service_id = None
 
 
 def get_db():
@@ -90,6 +99,7 @@ def main():
             st.session_state.selected_ot_ref = loaded.get("selected_ot_ref", "")
             st.session_state.selected_nt_ref = loaded.get("selected_nt_ref", "")
             st.session_state.include_communion = loaded.get("include_communion", False)
+            st.session_state.editing_service_id = loaded.get("id")
             lit = loaded.get("liturgy") or {}
             for section_key in ("call_to_worship", "opening_prayer", "prayer_of_confession", "assurance",
                                "prayer_for_illumination", "prayers_of_the_people", "offertory_prayer", "benediction"):
@@ -122,8 +132,12 @@ def main():
     service_date_str = service_date_picked.strftime("%B %d, %Y")
     date_iso = service_date_picked.isoformat()
 
-    # Auto-load lectionary when date changes
+    # Auto-load lectionary when date changes — show loading in sidebar and Hymns section so nothing is clickable until done
     if date_iso != st.session_state.last_lectionary_date:
+        with st.sidebar:
+            st.header("Service details")
+            st.info("Loading occasion and readings…")
+        st.header("Hymns")
         with st.spinner("Loading occasion and readings…"):
             readings = get_readings_for_date_string(service_date_str)
         st.session_state.last_lectionary_date = date_iso
@@ -139,14 +153,15 @@ def main():
             st.session_state.occasion = ""
             st.session_state.scriptures_text = ""
         st.rerun()
+        return
 
-    # Sidebar: occasion (from date) and scriptures
+    # Sidebar: occasion (from date) and scriptures (only after page has loaded / lectionary ready)
     with st.sidebar:
         st.header("Service details")
         st.caption("Filled from the service date above.")
+        # Widget bound to key="occasion"; value comes from session state only (set by date/load/init)
         occasion = st.text_input(
             "Occasion / Sunday",
-            value=st.session_state.occasion or "",
             key="occasion",
             help="Auto-filled from lectionary; you can edit if needed.",
         )
@@ -263,17 +278,21 @@ def main():
             if "scripture_hymns" in st.session_state:
                 refs_used = st.session_state.get("scripture_refs_used", [])
                 st.caption("Matching: " + ", ".join(refs_used))
-                for i, h in enumerate(st.session_state["scripture_hymns"][:20]):
-                    info = hymn_display_info(h)
+                # Resolve real audio URL from Hymnary only for first 15 to avoid run timeout; rest use constructed URL
+                max_resolve = 15
+                hymn_list = st.session_state["scripture_hymns"][:20]
+                for i, h in enumerate(hymn_list):
+                    resolve_audio = i < max_resolve
+                    info = hymn_display_info(h, resolve_audio=resolve_audio)
                     num = info.get("number") or "—"
+                    audio_url = info.get("audio_url") or ""
+                    audio_id = f"audio_{h['id']}_{i}"
                     st.text(f"#{num} — {info['title']}")
-                    if info.get("audio_url"):
-                        # Embed URL and unique id so each player has the correct src
-                        audio_url = html.escape(info["audio_url"])
-                        audio_id = f"audio_{h['id']}_{i}"
-                        st.markdown(
-                            f'<audio id="{html.escape(audio_id)}" controls src="{audio_url}"></audio>',
-                            unsafe_allow_html=True,
+                    if audio_url:
+                        escaped_url = html.escape(audio_url)
+                        safe_id = html.escape(audio_id)
+                        st.html(
+                            f'<div id="wrap-{safe_id}"><audio id="{safe_id}" controls src="{escaped_url}"></audio></div>'
                         )
 
     # Main: hymn selection (from Notion list or manual)
@@ -316,52 +335,70 @@ def main():
             return "— Select —"
         return (title_to_info.get(x) or {}).get("title") or x
 
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.subheader("Opening")
-        if titles_sorted:
-            opening_choice = st.selectbox(
-                "Opening hymn",
-                options=[""] + titles_sorted,
-                format_func=_hymn_label,
-                key="opening",
-            )
-            if opening_choice:
-                hymn_options_opening = [title_to_info[opening_choice]]
-        else:
-            opening_manual = st.text_input("Opening hymn (title)", key="open_man")
-            if opening_manual:
-                hymn_options_opening = [{"title": opening_manual, "number": None, "link": None}]
-    with col2:
-        st.subheader("After sermon")
-        if titles_sorted:
-            response_choice = st.selectbox(
-                "Response hymn",
-                options=[""] + titles_sorted,
-                format_func=_hymn_label,
-                key="response",
-            )
-            if response_choice:
-                hymn_options_response = [title_to_info[response_choice]]
-        else:
-            response_manual = st.text_input("Response hymn (title)", key="resp_man")
-            if response_manual:
-                hymn_options_response = [{"title": response_manual, "number": None, "link": None}]
-    with col3:
-        st.subheader("Closing")
-        if titles_sorted:
-            closing_choice = st.selectbox(
-                "Closing hymn",
-                options=[""] + titles_sorted,
-                format_func=_hymn_label,
-                key="closing",
-            )
-            if closing_choice:
-                hymn_options_closing = [title_to_info[closing_choice]]
-        else:
-            closing_manual = st.text_input("Closing hymn (title)", key="close_man")
-            if closing_manual:
-                hymn_options_closing = [{"title": closing_manual, "number": None, "link": None}]
+    @st.fragment
+    def hymn_selection_fragment():
+        """Isolated fragment so changing a hymn only reruns this block (less full-page fade)."""
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.subheader("Opening")
+            if titles_sorted:
+                st.selectbox(
+                    "Opening hymn",
+                    options=[""] + titles_sorted,
+                    format_func=_hymn_label,
+                    key="opening",
+                )
+            else:
+                st.text_input("Opening hymn (title)", key="open_man")
+        with col2:
+            st.subheader("After sermon")
+            if titles_sorted:
+                st.selectbox(
+                    "Response hymn",
+                    options=[""] + titles_sorted,
+                    format_func=_hymn_label,
+                    key="response",
+                )
+            else:
+                st.text_input("Response hymn (title)", key="resp_man")
+        with col3:
+            st.subheader("Closing")
+            if titles_sorted:
+                st.selectbox(
+                    "Closing hymn",
+                    options=[""] + titles_sorted,
+                    format_func=_hymn_label,
+                    key="closing",
+                )
+            else:
+                st.text_input("Closing hymn (title)", key="close_man")
+
+    hymn_selection_fragment()
+
+    # Build hymns_ordered from session state so full runs (e.g. Generate, Download) use latest
+    hymn_options_opening = []
+    hymn_options_response = []
+    hymn_options_closing = []
+    if titles_sorted:
+        opening_choice = st.session_state.get("opening", "")
+        if opening_choice:
+            hymn_options_opening = [title_to_info[opening_choice]]
+        response_choice = st.session_state.get("response", "")
+        if response_choice:
+            hymn_options_response = [title_to_info[response_choice]]
+        closing_choice = st.session_state.get("closing", "")
+        if closing_choice:
+            hymn_options_closing = [title_to_info[closing_choice]]
+    else:
+        open_man = st.session_state.get("open_man", "")
+        if open_man:
+            hymn_options_opening = [{"title": open_man, "number": None, "link": None}]
+        resp_man = st.session_state.get("resp_man", "")
+        if resp_man:
+            hymn_options_response = [{"title": resp_man, "number": None, "link": None}]
+        close_man = st.session_state.get("close_man", "")
+        if close_man:
+            hymn_options_closing = [{"title": close_man, "number": None, "link": None}]
 
     hymns_ordered = hymn_options_opening + hymn_options_response + hymn_options_closing
     hymns_ordered = [h for h in hymns_ordered if h.get("title")]
@@ -411,6 +448,7 @@ def main():
         sections.append("benediction")
 
     if st.button("Generate liturgy", type="primary"):
+        st.session_state.editing_service_id = None
         if not os.getenv("OPENAI_API_KEY"):
             st.error("Set **OPENAI_API_KEY** in `.env` to generate liturgy.")
         else:
@@ -464,6 +502,7 @@ def main():
     # Prepare Word documents (show whenever liturgy is generated)
     if st.session_state.liturgy:
         st.subheader("Prepare Word documents")
+        st.caption("Prepare the secretary or pastor copy, then download or email from the section below.")
         col_sec, col_pastor = st.columns(2)
         with col_sec:
             if st.button("Prepare for secretary", key="prep_sec"):
@@ -510,7 +549,8 @@ def main():
                 st.success("Pastor document ready. Download below.")
                 st.rerun()
         if st.button("Save this service to archive", key="save_archive"):
-            save_service(
+            editing_id = st.session_state.get("editing_service_id")
+            save_kw = dict(
                 service_date=service_date_str,
                 service_date_iso=service_date_picked.isoformat(),
                 occasion=occasion,
@@ -522,8 +562,21 @@ def main():
                 selected_nt_ref=st.session_state.get("selected_nt_ref") or "",
                 include_communion=st.session_state.get("include_communion", False),
             )
-            st.success("Service saved to archive.")
-            st.rerun()
+            try:
+                if editing_id:
+                    updated = update_service(editing_id, **save_kw)
+                    if updated:
+                        st.success("Service updated in archive.")
+                    else:
+                        st.session_state.editing_service_id = None
+                        save_service(**save_kw)
+                        st.success("Service saved to archive.")
+                else:
+                    save_service(**save_kw)
+                    st.success("Service saved to archive.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Archive save failed: {e}")
 
     # Download prepared documents (show whenever we have them, even after rerun when hymns may be filtered out)
     if st.session_state.docx_bytes_secretary or st.session_state.docx_bytes_pastor:
@@ -549,6 +602,41 @@ def main():
                     key="dl_pastor",
                 )
         st.caption("Secretary copy: liturgy only (no sermon, no Prayers of the People). Pastor copy: full order including sermon and Prayers of the People.")
+
+        # Email secretary (when secretary doc is ready)
+        if st.session_state.docx_bytes_secretary:
+            with st.expander("Email to secretary", expanded=True):
+                st.caption("Send the secretary .docx and a friendly message via Gmail.")
+                secretary_email = st.text_input(
+                    "Secretary email",
+                    key="secretary_email",
+                    placeholder="secretary@church.org",
+                    help="Recipient address.",
+                )
+                email_message = st.text_area(
+                    "Message",
+                    key="email_message",
+                    height=100,
+                    placeholder="Hi! Here’s the worship bulletin for this Sunday. Let me know if you need any changes.",
+                    help="This will appear in the email body.",
+                )
+                if st.button("Send email to secretary", key="send_email_sec"):
+                    if not (secretary_email and secretary_email.strip()):
+                        st.error("Please enter the secretary’s email.")
+                    else:
+                        subject = f"Worship service — {service_date_str}"
+                        body = (email_message or "Hi! Here’s the worship bulletin for this Sunday.").strip()
+                        err = send_gmail(
+                            secretary_email.strip(),
+                            subject,
+                            body,
+                            attachment_bytes=st.session_state.docx_bytes_secretary,
+                            attachment_filename=f"worship_{safe_date}.docx",
+                        )
+                        if err:
+                            st.error(f"Email failed: {err}")
+                        else:
+                            st.success("Email sent.")
 
 
 if __name__ == "__main__":

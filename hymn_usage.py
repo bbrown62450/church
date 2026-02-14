@@ -2,6 +2,9 @@
 """
 Track which hymns were used on which dates and exclude recently used hymns
 (e.g. last 12 weeks) from selection.
+
+When NOTION_USAGE_DATABASE_ID is set (and NOTION_API_KEY), usage is stored
+in that Notion database (accessible online). Otherwise uses local data/hymn_usage.json.
 """
 
 import json
@@ -12,6 +15,10 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 # Store in project data dir so it persists and can be committed if desired
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 USAGE_FILE = os.path.join(DATA_DIR, "hymn_usage.json")
+
+
+def _use_notion() -> bool:
+    return bool(os.getenv("NOTION_USAGE_DATABASE_ID") and os.getenv("NOTION_API_KEY"))
 
 
 def _ensure_data_dir() -> None:
@@ -60,6 +67,9 @@ def get_recently_used_identifiers(weeks: int = 12) -> Set[Tuple[Optional[int], s
     Return a set of (number, title_lower) for every hymn used in the last `weeks` weeks.
     Use this to filter the hymn list: exclude any hymn whose (number, title.lower()) is in this set.
     """
+    if _use_notion():
+        from notion_usage import get_recently_used_identifiers as notion_recent
+        return notion_recent(weeks=weeks)
     cutoff = datetime.now().date() - timedelta(weeks=weeks)
     log = _load_log()
     out = set()
@@ -94,6 +104,11 @@ def record_usage(date_str: str, hymns: List[Dict[str, Any]]) -> bool:
     iso = _parse_date_to_iso(date_str)
     if not iso:
         return False
+    if _use_notion():
+        from notion_usage import record_usage as notion_record
+        if notion_record(date_str, hymns):
+            return True
+        # fallback to local if Notion failed
     payload = []
     for h in hymns:
         title = h.get("title") or ""

@@ -175,12 +175,13 @@ You can run the app on [Streamlit Community Cloud](https://share.streamlit.io/) 
    ```
    The app reads these via `os.getenv()`; Streamlit injects them as environment variables. No code changes needed for secrets.
 
-4. **Data persistence:**  
-   The app currently stores **saved services** and **hymn usage** (12-week exclusion) in local files under `data/`. On Streamlit Cloud the filesystem is **ephemeral**: it’s reset on redeploy or after inactivity, so:
-   - **As-is:** Archive and “hymns used in last 12 weeks” will not persist between restarts. The app still works; you just lose saved services and usage history on the host.
-   - **If you want persistence online:** You’d need to point the app at a persistent store (e.g. a database or cloud storage) instead of local JSON. That would mean a small change to how `service_archive` and `hymn_usage` read/write (e.g. env var for “backend” and optional DB/API). For many uses, running the app in the cloud for a session and keeping the main archive on your machine (local run) is enough.
-
-**Summary:** You do **not** need to change how data is *fetched* (Notion, lectionary, OpenAI) for hosting. Only if you want **saved services and hymn usage to persist on the host** would you add a persistent backend; the current “local JSON” model is fine for local use and for cloud runs where you don’t need lasting archive/usage on the server.
+4. **Archive and hymn usage online:**  
+   To keep **saved services** and **hymns used in the last 12 weeks** when running online, create two Notion databases and set:
+   ```toml
+   NOTION_ARCHIVE_DATABASE_ID = "your_archive_database_id"
+   NOTION_USAGE_DATABASE_ID = "your_usage_database_id"
+   ```
+   **Archive DB** — properties: Name (title; Notion default), Service date (date), Occasion (rich text), Scriptures (rich text), Hymns (rich text), Liturgy (rich text), Sermon title (rich text), Selected OT (rich text), Selected NT (rich text), Include communion (checkbox), Saved at (date). **Usage DB** — Title (title), Date (date), Hymn number (number), Hymn title (rich text). Connect your integration to both. If unset, the app uses local `data/` JSON (no persistence on Streamlit Cloud).
 
 ## Notes
 

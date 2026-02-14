@@ -4,16 +4,23 @@ Worship service generator: hymn suggestions by scripture, OpenAI liturgy,
 and Word document export.
 """
 
+import logging
 import os
 import re
 from typing import Dict, Any, List, Optional
 from io import BytesIO
+from urllib.parse import urlparse, urlunparse
 
 from dotenv import load_dotenv
 from notion_hymns import NotionHymnsDB
 from hymn_utils import get_property_value
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
+
+# Cache for resolved Hymnary audio URLs (number -> url) to avoid re-fetching
+_hymnary_audio_resolve_cache: Dict[int, Optional[str]] = {}
 
 # Optional imports for docx and openai
 try:
@@ -190,16 +197,33 @@ def hymns_by_scripture(
     return results[:limit]
 
 
-def hymn_display_info(hymn: Dict[str, Any]) -> Dict[str, Any]:
-    """Extract title, number, and link for display/export."""
+def hymn_display_info(hymn: Dict[str, Any], *, resolve_audio: bool = False) -> Dict[str, Any]:
+    """Extract title, number, and link for display/export.
+    If resolve_audio is True, fetches the hymn page to get the real MP3 URL (used for scripture list players).
+    """
     title = get_property_value(hymn, "Hymn Title") or "Unknown"
     number = get_property_value(hymn, "Hymn Number")
     link = get_property_value(hymn, "Hymnary.org Link")
+    if number is not None:
+        audio_url = (
+            resolve_hymnary_audio_url(number, title)
+            if resolve_audio
+            else _hymnary_audio_url(number, title)
+        )
+    else:
+        audio_url = None
+    logger.info(
+        "hymn_display_info hymn_id=%s number=%s title=%r audio_url=%s",
+        hymn.get("id"),
+        number,
+        title,
+        audio_url,
+    )
     return {
         "title": title,
         "number": number,
         "link": link,
-        "audio_url": _hymnary_audio_url(number, title) if number is not None else None,
+        "audio_url": audio_url,
     }
 
 
@@ -208,15 +232,73 @@ def _hymnary_audio_url(number: Optional[int], title: str) -> Optional[str]:
     Build a possible Hymnary.org GG2013 audio MP3 URL. Pattern from hymnary:
     .../hymnary/audio/GG2013/{number:03d}-{slug}.mp3
     Slug is a short lowercase version of the title (spaces as %20). Not all hymns have audio.
+    Some hymns use a different CDN (e.g. 150282) and slug format; use resolve_hymnary_audio_url() for those.
     """
     if number is None:
+        logger.debug("_hymnary_audio_url number=None title=%r -> None", title)
         return None
     slug = re.sub(r"[^\w\s]", "", (title or "").lower())
     slug = re.sub(r"\s+", "%20", slug.strip())[:30]
     if not slug:
         slug = str(number)
     num_str = f"{int(number):03d}"
-    return f"https://hymnary.org/media/fetch/148542/hymnary/audio/GG2013/{num_str}-{slug}.mp3"
+    url = f"https://hymnary.org/media/fetch/148542/hymnary/audio/GG2013/{num_str}-{slug}.mp3"
+    logger.debug("_hymnary_audio_url number=%s title=%r -> %s", number, title, url)
+    return url
+
+
+def resolve_hymnary_audio_url(number: Optional[int], title: str) -> Optional[str]:
+    """
+    Resolve the real GG2013 audio URL by fetching the hymn page and parsing the MP3 link.
+    Hymnary uses different CDN IDs and slug formats (e.g. 191 uses 150282 and WeHaveComeAt_accomp),
+    so the constructed URL can point at the wrong file. Results are cached by hymn number.
+    Never raises: on any error returns the constructed fallback URL so the hymn list still renders.
+    """
+    if number is None:
+        return None
+    num = int(number)
+    if num in _hymnary_audio_resolve_cache:
+        return _hymnary_audio_resolve_cache[num]
+    fallback = _hymnary_audio_url(number, title)
+    try:
+        import httpx
+        from bs4 import BeautifulSoup
+    except ImportError:
+        _hymnary_audio_resolve_cache[num] = fallback
+        return fallback
+    page_url = f"https://hymnary.org/hymn/GG2013/{num}"
+    try:
+        with httpx.Client(follow_redirects=True, timeout=8.0) as client:
+            r = client.get(page_url)
+            r.raise_for_status()
+    except Exception as e:
+        logger.debug("resolve_hymnary_audio_url fetch %s: %s", page_url, e)
+        _hymnary_audio_resolve_cache[num] = fallback
+        return fallback
+    try:
+        soup = BeautifulSoup(r.text, "lxml")
+        found: Optional[str] = None
+        for a in soup.find_all("a", href=True):
+            href = (a.get("href") or "").strip()
+            if not href or "hymnary/audio/GG2013" not in href or ".mp3" not in href:
+                continue
+            raw = href.split("?")[0]
+            if not raw.endswith(".mp3"):
+                continue
+            if raw.startswith("/"):
+                found = "https://hymnary.org" + raw
+            else:
+                parsed = urlparse(raw)
+                found = urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", "", ""))
+            break
+        url = found or fallback
+    except Exception as e:
+        logger.debug("resolve_hymnary_audio_url parse %s: %s", page_url, e)
+        url = fallback
+    _hymnary_audio_resolve_cache[num] = url
+    if url != fallback:
+        logger.debug("resolve_hymnary_audio_url number=%s -> %s", num, url)
+    return url
 
 
 def generate_liturgy(
