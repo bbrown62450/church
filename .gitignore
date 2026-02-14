@@ -1,0 +1,31 @@
+# Environment variables (never commit real keys)
+.env
+.env.local
+.env.*.local
+
+# Local data (optional: remove data/*.json to commit archive/usage)
+data/*.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
