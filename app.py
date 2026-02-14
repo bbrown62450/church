@@ -72,6 +72,8 @@ if "load_service_id" not in st.session_state:
     st.session_state.load_service_id = None
 if "editing_service_id" not in st.session_state:
     st.session_state.editing_service_id = None
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
 
 
 def get_db():
@@ -82,6 +84,22 @@ def get_db():
 
 
 def main():
+    # Optional password protection (set APP_PASSWORD in .env or Streamlit secrets)
+    app_password = os.getenv("APP_PASSWORD", "").strip()
+    if app_password and not st.session_state.get("authenticated"):
+        st.title("Worship Service Builder")
+        st.caption("Enter the app password to continue.")
+        pw = st.text_input("Password", type="password", key="app_pw", placeholder="App password")
+        if st.button("Log in", key="login_btn"):
+            if pw == app_password:
+                st.session_state.authenticated = True
+                st.rerun()
+            else:
+                st.error("Incorrect password.")
+        st.divider()
+        st.caption("Set APP_PASSWORD in your environment to protect the app (e.g. email sending).")
+        return
+
     # Restore from archive when Load was clicked
     if st.session_state.get("load_service_id"):
         loaded = get_service(st.session_state.load_service_id)
@@ -157,6 +175,11 @@ def main():
 
     # Sidebar: occasion (from date) and scriptures (only after page has loaded / lectionary ready)
     with st.sidebar:
+        if app_password:
+            if st.button("Log out", key="logout_btn", help="Lock the app (requires password again)."):
+                st.session_state.authenticated = False
+                st.rerun()
+            st.divider()
         st.header("Service details")
         st.caption("Filled from the service date above.")
         # Widget bound to key="occasion"; value comes from session state only (set by date/load/init)

@@ -88,7 +88,7 @@ python notion_hymns.py --create
 
 Generate a full worship service with AI-written liturgy and export to Word:
 
-1. **Environment:** Add `OPENAI_API_KEY` to your `.env` (and keep `NOTION_API_KEY` / `NOTION_DATABASE_ID` for hymn data). The app uses `gpt-3.5-turbo` by default; if your project has access to another model (e.g. `gpt-4o-mini`), set `OPENAI_MODEL` in `.env`.
+1. **Environment:** Add `OPENAI_API_KEY` to your `.env` (and keep `NOTION_API_KEY` / `NOTION_DATABASE_ID` for hymn data). The app uses `gpt-3.5-turbo` by default; if your project has access to another model (e.g. `gpt-4o-mini`), set `OPENAI_MODEL` in `.env`. To password-protect the app (recommended when using “Email to secretary” or when hosting publicly), set `APP_PASSWORD` in `.env` or in Streamlit Cloud secrets; users must enter it to access the app.
 2. **Run the app:**
    ```bash
    streamlit run app.py
