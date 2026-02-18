@@ -74,6 +74,29 @@ if "editing_service_id" not in st.session_state:
     st.session_state.editing_service_id = None
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
+if "custom_elements" not in st.session_state:
+    st.session_state.custom_elements = []  # [{"label": "...", "text": "...", "insert_after": "..."}]
+
+# Placement options for custom elements (insert_after keys)
+CUSTOM_PLACEMENTS = [
+    ("call_to_worship", "After Call to Worship"),
+    ("opening_prayer", "After Opening Prayer"),
+    ("first_hymn", "After First Hymn"),
+    ("prayer_of_confession", "After Prayer of Confession"),
+    ("assurance", "After Assurance of Pardon"),
+    ("prayer_for_illumination", "After Prayer for Illumination"),
+    ("ot_reading", "After Old Testament Reading"),
+    ("nt_reading", "After New Testament Reading"),
+    ("sermon", "After Sermon"),
+    ("affirmation_of_faith", "After Affirmation of Faith"),
+    ("second_hymn", "After Second Hymn"),
+    ("communion", "After Communion"),
+    ("prayers_of_the_people", "After Prayers of the People"),
+    ("offertory_prayer", "After Offertory Prayer"),
+    ("third_hymn", "After Third Hymn"),
+    ("benediction", "Before Benediction"),
+    ("end", "At the end (after Benediction)"),
+]
 
 
 def get_db():
@@ -471,6 +494,35 @@ def main():
     if st.checkbox("Benediction", value=True):
         sections.append("benediction")
 
+    # Custom elements (e.g. Children's Moment, Special Music)
+    with st.expander("Add custom element (e.g. Children's Moment, anthem)"):
+        st.caption("Add a custom section with a label and text. It will appear in the Word doc at the chosen position.")
+        new_label = st.text_input("Label", key="custom_label", placeholder="e.g. Children's Moment")
+        new_text = st.text_area("Text", key="custom_text", height=80, placeholder="Content for the bulletin or order of service")
+        new_place = st.selectbox(
+            "Place after",
+            options=[p[0] for p in CUSTOM_PLACEMENTS],
+            format_func=lambda k: next(l for pk, l in CUSTOM_PLACEMENTS if pk == k),
+            key="custom_place",
+        )
+        if st.button("Add custom element", key="add_custom"):
+            if new_label and new_label.strip():
+                st.session_state.custom_elements.append({
+                    "label": new_label.strip(),
+                    "text": (new_text or "").strip(),
+                    "insert_after": new_place,
+                })
+                st.rerun()
+        for i, ce in enumerate(st.session_state.custom_elements):
+            with st.container():
+                col_a, col_b = st.columns([4, 1])
+                with col_a:
+                    st.caption(f"**{ce['label']}** — placed after {next(l for pk, l in CUSTOM_PLACEMENTS if pk == ce['insert_after'])}")
+                with col_b:
+                    if st.button("Remove", key=f"rm_custom_{i}"):
+                        st.session_state.custom_elements.pop(i)
+                        st.rerun()
+
     if st.button("Generate liturgy", type="primary"):
         st.session_state.editing_service_id = None
         if not os.getenv("OPENAI_API_KEY"):
@@ -544,6 +596,7 @@ def main():
                     include_sermon=False,
                     include_prayers_of_the_people=False,
                     include_communion=include_communion,
+                    custom_elements=st.session_state.custom_elements,
                 )
                 st.session_state.docx_bytes_secretary = buf.getvalue()
                 if hymns_ordered and record_usage(service_date_str, hymns_ordered):
@@ -566,6 +619,7 @@ def main():
                     include_sermon=True,
                     include_prayers_of_the_people=True,
                     include_communion=include_communion,
+                    custom_elements=st.session_state.custom_elements,
                 )
                 st.session_state.docx_bytes_pastor = buf.getvalue()
                 if hymns_ordered and record_usage(service_date_str, hymns_ordered):

@@ -427,6 +427,20 @@ def generate_liturgy(
     return out
 
 
+def _add_custom_elements_after(
+    doc,
+    anchor: str,
+    custom_elements: List[Dict[str, Any]],
+) -> None:
+    """Add any custom elements that are inserted after this anchor."""
+    for ce in custom_elements:
+        if ce.get("insert_after") == anchor and ce.get("label"):
+            doc.add_paragraph(ce["label"], style="Heading 2")
+            if ce.get("text"):
+                doc.add_paragraph(ce["text"])
+            doc.add_paragraph()
+
+
 def build_docx(
     *,
     occasion: str,
@@ -442,6 +456,7 @@ def build_docx(
     include_sermon: bool = True,
     include_prayers_of_the_people: bool = True,
     include_communion: bool = False,
+    custom_elements: Optional[List[Dict[str, Any]]] = None,
 ) -> BytesIO:
     """
     Build a Word document with the worship service order and generated liturgy.
@@ -453,6 +468,7 @@ def build_docx(
     if not Document:
         raise RuntimeError("python-docx is required. pip install python-docx")
 
+    custom = custom_elements or []
     doc = Document()
     style = doc.styles["Normal"]
     style.font.size = Pt(11)
@@ -476,12 +492,14 @@ def build_docx(
         doc.add_paragraph("Call to Worship", style="Heading 2")
         _add_leader_people_paragraph(doc, liturgy["call_to_worship"])
         doc.add_paragraph()
+    _add_custom_elements_after(doc, "call_to_worship", custom)
 
     # 2. Opening Prayer
     if liturgy.get("opening_prayer"):
         doc.add_paragraph("Opening Prayer", style="Heading 2")
         doc.add_paragraph(liturgy["opening_prayer"])
         doc.add_paragraph()
+    _add_custom_elements_after(doc, "opening_prayer", custom)
 
     # 3. First Hymn
     if hymns:
@@ -489,6 +507,7 @@ def build_docx(
         h = hymns[0]
         doc.add_paragraph(f"{h.get('title', '')} — #{h.get('number', '')}")
         doc.add_paragraph()
+    _add_custom_elements_after(doc, "first_hymn", custom)
 
     # 4. Prayer of Confession (bold)
     if liturgy.get("prayer_of_confession"):
@@ -496,18 +515,21 @@ def build_docx(
         p = doc.add_paragraph()
         p.add_run(liturgy["prayer_of_confession"]).bold = True
         doc.add_paragraph()
+    _add_custom_elements_after(doc, "prayer_of_confession", custom)
 
     # 5. Assurance of Pardon (Leader: ... / People: Thanks be to God! Amen. in bold)
     if liturgy.get("assurance"):
         doc.add_paragraph("Assurance of Pardon", style="Heading 2")
         _add_assurance_paragraph(doc, liturgy["assurance"])
         doc.add_paragraph()
+    _add_custom_elements_after(doc, "assurance", custom)
 
     # 6. Prayer for Illumination
     if liturgy.get("prayer_for_illumination"):
         doc.add_paragraph("Prayer for Illumination", style="Heading 2")
         doc.add_paragraph(liturgy["prayer_for_illumination"])
         doc.add_paragraph()
+    _add_custom_elements_after(doc, "prayer_for_illumination", custom)
 
     # 7. Old Testament Reading (reference only)
     ot_ref = selected_ot_ref or (scriptures[0] if scriptures else None)
@@ -515,6 +537,7 @@ def build_docx(
         doc.add_paragraph("Old Testament Reading", style="Heading 2")
         doc.add_paragraph(ot_ref)
         doc.add_paragraph()
+    _add_custom_elements_after(doc, "ot_reading", custom)
 
     # 8. New Testament Reading (reference only)
     nt_ref = selected_nt_ref or (scriptures[1] if len(scriptures) > 1 else None)
@@ -522,17 +545,20 @@ def build_docx(
         doc.add_paragraph("New Testament Reading", style="Heading 2")
         doc.add_paragraph(nt_ref)
         doc.add_paragraph()
+    _add_custom_elements_after(doc, "nt_reading", custom)
 
     # 9. Sermon Title (optional; for pastor copy only)
     if include_sermon:
         doc.add_paragraph("Sermon Title", style="Heading 2")
         doc.add_paragraph(sermon_title.strip() if sermon_title and sermon_title.strip() else "[Sermon title]")
         doc.add_paragraph()
+    _add_custom_elements_after(doc, "sermon", custom)
 
     # 10. Affirmation of Faith
     doc.add_paragraph("Affirmation of Faith", style="Heading 2")
     doc.add_paragraph("Apostles' Creed (or as printed)")
     doc.add_paragraph()
+    _add_custom_elements_after(doc, "affirmation_of_faith", custom)
 
     # 11. Second Hymn
     if len(hymns) > 1:
@@ -540,22 +566,26 @@ def build_docx(
         h = hymns[1]
         doc.add_paragraph(f"{h.get('title', '')} — #{h.get('number', '')}")
         doc.add_paragraph()
+    _add_custom_elements_after(doc, "second_hymn", custom)
 
     # 11b. Communion liturgy (after second hymn when communion is included)
     if include_communion:
         _add_communion_liturgy(doc)
+    _add_custom_elements_after(doc, "communion", custom)
 
     # 12. Prayers of the People (optional; for pastor copy only)
     if include_prayers_of_the_people and liturgy.get("prayers_of_the_people"):
         doc.add_paragraph("Prayers of the People", style="Heading 2")
         doc.add_paragraph(liturgy["prayers_of_the_people"])
         doc.add_paragraph()
+    _add_custom_elements_after(doc, "prayers_of_the_people", custom)
 
     # 13. Offertory Prayer
     if liturgy.get("offertory_prayer"):
         doc.add_paragraph("Offertory Prayer", style="Heading 2")
         doc.add_paragraph(liturgy["offertory_prayer"])
         doc.add_paragraph()
+    _add_custom_elements_after(doc, "offertory_prayer", custom)
 
     # 14. Third Hymn
     if len(hymns) > 2:
@@ -563,11 +593,15 @@ def build_docx(
         h = hymns[2]
         doc.add_paragraph(f"{h.get('title', '')} — #{h.get('number', '')}")
         doc.add_paragraph()
+    _add_custom_elements_after(doc, "third_hymn", custom)
+    _add_custom_elements_after(doc, "benediction", custom)  # "Before Benediction"
 
     # Benediction
     if liturgy.get("benediction"):
         doc.add_paragraph("Benediction", style="Heading 2")
         doc.add_paragraph(liturgy["benediction"])
+
+    _add_custom_elements_after(doc, "end", custom)  # At the end (after Benediction)
 
     buf = BytesIO()
     doc.save(buf)
