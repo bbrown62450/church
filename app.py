@@ -464,9 +464,13 @@ def main():
         key="suggest_hymns_btn",
         help="Use AI to suggest opening (gathering), response (scripture-based), and closing (joyful) hymns.",
     ):
-        with st.spinner("AI suggesting hymns…"):
-            try:
-                suggestions = suggest_hymns_for_service(
+        progress_bar = st.progress(0, text="Starting…")
+
+        def _on_progress(msg: str, pct: float) -> None:
+            progress_bar.progress(min(1.0, pct), text=msg)
+
+        try:
+            suggestions = suggest_hymns_for_service(
                     db=db,
                     occasion=occasion,
                     scriptures=scriptures,
@@ -474,6 +478,7 @@ def main():
                     scripture_full_texts=st.session_state.get("scripture_full_texts") or {},
                     scripture_text_fetcher=get_passage_text,
                     limit_per_slot=5,
+                    progress_callback=_on_progress,
                 )
                 # Pre-fill with first suggestion per slot; match by title
                 def _find_key(suggested: dict) -> str:
@@ -497,10 +502,11 @@ def main():
                         found = _find_key(key)
                         if found:
                             st.session_state[slot] = found
+                progress_bar.progress(1.0, text="Done!")
                 st.success("Suggestions applied. Review and adjust if needed.")
-            except Exception as e:
-                logger.exception("Suggest hymns failed")
-                st.error(f"Could not suggest hymns: {e}")
+        except Exception as e:
+            logger.exception("Suggest hymns failed")
+            st.error(f"Could not suggest hymns: {e}")
         st.rerun()
 
     @st.fragment

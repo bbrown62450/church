@@ -378,6 +378,7 @@ def suggest_hymns_for_service(
     scripture_text_fetcher: Optional[Any] = None,
     api_key: Optional[str] = None,
     limit_per_slot: int = 5,
+    progress_callback: Optional[Any] = None,
 ) -> Dict[str, List[Dict[str, Any]]]:
     """
     Use AI to suggest hymns for opening, response (after sermon), and closing.
@@ -397,7 +398,12 @@ def suggest_hymns_for_service(
     if not client:
         return {"opening": [], "response": [], "closing": []}
 
+    def _progress(msg: str, pct: float) -> None:
+        if progress_callback:
+            progress_callback(msg, pct)
+
     # Get NT scripture text for theme extraction
+    _progress("Preparing scripture text…", 0.02)
     nt_text = ""
     if selected_nt_ref:
         nt_text = scripture_full_texts.get(selected_nt_ref) or ""
@@ -421,14 +427,21 @@ def suggest_hymns_for_service(
                 break
 
     # Gather candidate hymns
+    _progress("Loading hymn list from Notion…", 0.1)
     all_hymns = db.list_hymns()
     scripture_hymns = []
+    total_refs = sum(1 + ref.count(" or ") for ref in scriptures) if scriptures else 0
+    ref_idx = 0
     for ref in scriptures:
         if " or " in ref:
             for part in ref.split(" or "):
+                _progress(f"Searching hymns for {part.strip()}…", 0.15 + 0.25 * (ref_idx / max(total_refs, 1)))
                 scripture_hymns.extend(hymns_by_scripture(db, part.strip(), limit=30))
+                ref_idx += 1
         else:
+            _progress(f"Searching hymns for {ref}…", 0.15 + 0.25 * (ref_idx / max(total_refs, 1)))
             scripture_hymns.extend(hymns_by_scripture(db, ref, limit=30))
+            ref_idx += 1
     seen = set()
     scripture_hymns = [h for h in scripture_hymns if h["id"] not in seen and not seen.add(h["id"])]
 
@@ -442,6 +455,7 @@ def suggest_hymns_for_service(
 
     response_candidates = scripture_hymns if scripture_hymns else all_hymns[:80]
 
+    _progress("Building prompt for AI…", 0.45)
     def _hymn_summary(h: Dict) -> str:
         title = get_property_value(h, "Hymn Title") or "Unknown"
         num = get_property_value(h, "Hymn Number")
@@ -485,6 +499,7 @@ Respond with a JSON object only, no other text:
 
 Pick {limit_per_slot} hymns per slot. Use the EXACT titles from the lists above."""
 
+    _progress("Calling AI to select hymns…", 0.55)
     try:
         resp = client.chat.completions.create(
             model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
@@ -504,6 +519,7 @@ Pick {limit_per_slot} hymns per slot. Use the EXACT titles from the lists above.
         logger.warning("suggest_hymns_for_service failed: %s", e)
         return {"opening": [], "response": [], "closing": []}
 
+    _progress("Applying suggestions…", 0.9)
     title_to_hymn = {}
     for h in all_hymns:
         t = get_property_value(h, "Hymn Title")
