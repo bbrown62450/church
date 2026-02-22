@@ -274,12 +274,19 @@ def main():
 
         st.divider()
         st.subheader("Service archive")
-        try:
-            saved = list_saved_services()
-        except Exception as e:
-            logger.exception("Failed to load service archive")
-            st.error(f"Could not load archive: {e}")
-            saved = []
+        saved = st.session_state.get("_cached_saved_services")
+        if saved is None:
+            try:
+                saved = list_saved_services()
+                st.session_state["_cached_saved_services"] = saved
+            except Exception as e:
+                logger.exception("Failed to load service archive")
+                st.error(f"Could not load archive: {e}. Click **Refresh archive** to retry.")
+                st.session_state["_cached_saved_services"] = []
+                saved = []
+        if st.button("Refresh archive", key="refresh_archive", help="Reload services from Notion"):
+            st.session_state.pop("_cached_saved_services", None)
+            st.rerun()
         if not saved:
             st.caption("No saved services yet. Generate liturgy and click “Save this service to archive”.")
         else:
@@ -380,7 +387,7 @@ def main():
                         seen_ids = set()
                         matched = []
                         for ref in refs_to_search:
-                            for h in hymns_by_scripture(db, ref, limit=50):
+                            for h in hymns_by_scripture(db, ref, limit=50, all_hymns=cached_all_hymns or None):
                                 if h["id"] not in seen_ids:
                                     seen_ids.add(h["id"])
                                     matched.append(h)
@@ -421,25 +428,31 @@ def main():
     )
     if use_notion:
         title_to_info = st.session_state.get("_hymn_title_to_info")
+        cached_all_hymns = st.session_state.get("_cached_all_hymns")
         if title_to_info is None:
             try:
                 with st.spinner("Loading hymn list from Notion…"):
-                    all_hymns = db.list_hymns()
+                    cached_all_hymns = db.list_hymns()
                     title_to_info = {}
-                    for h in all_hymns:
+                    for h in cached_all_hymns:
                         t = get_property_value(h, "Hymn Title")
                         if t:
                             info = hymn_display_info(h)
                             key = t.strip().lower()
                             title_to_info[key] = info
                     st.session_state["_hymn_title_to_info"] = title_to_info
+                    st.session_state["_cached_all_hymns"] = cached_all_hymns
                     logger.info("Cached %d hymns in session state", len(title_to_info))
             except Exception as e:
                 logger.exception("Failed to load hymn list")
-                st.error(f"Could not load hymns from Notion: {e}")
+                st.error(f"Could not load hymns from Notion: {e}. Click **Refresh hymn list** to retry.")
+                st.session_state["_hymn_title_to_info"] = {}
+                st.session_state["_cached_all_hymns"] = []
                 title_to_info = {}
+                cached_all_hymns = []
         if st.button("Refresh hymn list", key="refresh_hymns", help="Reload all hymns from Notion"):
             st.session_state.pop("_hymn_title_to_info", None)
+            st.session_state.pop("_cached_all_hymns", None)
             st.rerun()
         if exclude_recent_hymns:
             recent_used = get_recently_used_identifiers(weeks=12)
@@ -485,6 +498,7 @@ def main():
                 scripture_text_fetcher=get_passage_text,
                 limit_per_slot=5,
                 progress_callback=_on_progress,
+                all_hymns=cached_all_hymns or None,
             )
             logger.info("AI suggestions returned: %s", {
                 k: [s.get("title") for s in v] for k, v in suggestions.items()
@@ -808,6 +822,7 @@ def main():
                 else:
                     save_service(**save_kw)
                     st.success("Service saved to archive.")
+                st.session_state.pop("_cached_saved_services", None)
                 st.rerun()
             except Exception as e:
                 st.error(f"Archive save failed: {e}")

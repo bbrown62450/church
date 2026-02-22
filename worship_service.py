@@ -283,58 +283,62 @@ def hymns_by_scripture(
     db: NotionHymnsDB,
     scripture_ref: str,
     limit: int = 50,
+    all_hymns: Optional[List[Dict[str, Any]]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Return hymns whose Scripture References contain the given reference.
     Uses fuzzy matching: tries multiple variants (book+chapter, abbreviations, etc.)
     to find more hymns. Handles " or " for alternative gospel choices.
+
+    If *all_hymns* is provided the search runs entirely in-memory (zero API calls).
+    Otherwise falls back to Notion search API + list_hymns.
     """
     ref_clean = scripture_ref.strip()
     if not ref_clean:
         return []
 
-    # If ref has " or " (e.g. gospel choices), search each part and combine
     refs_to_try = [ref_clean]
     if " or " in ref_clean:
         refs_to_try = [p.strip() for p in ref_clean.split(" or ") if p.strip()]
 
+    variant_set: set = set()
+    for ref in refs_to_try:
+        variant_set.update(v.lower() for v in _scripture_search_variants(ref))
+    variant_set.add(ref_clean.lower())
+    for r in refs_to_try:
+        variant_set.add(r.lower())
+
     seen_ids: set = set()
     results: List[Dict[str, Any]] = []
 
-    for ref in refs_to_try:
-        variants = _scripture_search_variants(ref)
-        if not variants:
-            variants = [ref]
-        # Prefer longer/more specific variants first
-        variants = list(dict.fromkeys(variants))
+    hymn_pool = all_hymns if all_hymns is not None else None
 
-        for variant in variants:
-            if len(results) >= limit:
-                break
-            try:
-                batch = db.search_hymns(
-                    filter_property="Scripture References",
-                    filter_value=variant,
-                )
-                for h in batch:
-                    if h["id"] not in seen_ids:
-                        seen_ids.add(h["id"])
-                        results.append(h)
-            except Exception:
-                pass
-
-    # Fallback: scan all hymns if we have few results (handles formats Notion might miss)
-    if len(results) < 15:
-        all_hymns = db.list_hymns()
-        variant_set = set()
+    if hymn_pool is None:
+        # No cached data — use Notion search API (original path)
         for ref in refs_to_try:
-            variant_set.update(v.lower() for v in _scripture_search_variants(ref))
-        variant_set.add(ref_clean.lower())
-        if " or " in ref_clean:
-            for r in refs_to_try:
-                variant_set.add(r.lower())
+            variants = _scripture_search_variants(ref)
+            if not variants:
+                variants = [ref]
+            variants = list(dict.fromkeys(variants))
+            for variant in variants:
+                if len(results) >= limit:
+                    break
+                try:
+                    batch = db.search_hymns(
+                        filter_property="Scripture References",
+                        filter_value=variant,
+                    )
+                    for h in batch:
+                        if h["id"] not in seen_ids:
+                            seen_ids.add(h["id"])
+                            results.append(h)
+                except Exception:
+                    pass
+        if len(results) < 15:
+            hymn_pool = db.list_hymns()
 
-        for h in all_hymns:
+    if hymn_pool is not None:
+        for h in hymn_pool:
             if h["id"] in seen_ids:
                 continue
             scripture = get_property_value(h, "Scripture References")
@@ -379,12 +383,16 @@ def suggest_hymns_for_service(
     api_key: Optional[str] = None,
     limit_per_slot: int = 5,
     progress_callback: Optional[Any] = None,
+    all_hymns: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, List[Dict[str, Any]]]:
     """
     Use AI to suggest hymns for opening, response (after sermon), and closing.
     - Opening: gathering/opening hymns
     - Response: hymns that match scripture themes (especially NT reading)
     - Closing: joyful, upbeat hymns
+
+    If *all_hymns* is provided, uses that cached list instead of calling db.list_hymns()
+    (avoids redundant Notion API calls).
 
     Returns {"opening": [...], "response": [...], "closing": [...]} with hymn info dicts.
     """
@@ -427,8 +435,11 @@ def suggest_hymns_for_service(
                 break
 
     # Gather candidate hymns
-    _progress("Loading hymn list from Notion…", 0.1)
-    all_hymns = db.list_hymns()
+    if all_hymns is None:
+        _progress("Loading hymn list from Notion…", 0.1)
+        all_hymns = db.list_hymns()
+    else:
+        _progress("Using cached hymn list…", 0.1)
     scripture_hymns = []
     total_refs = sum(1 + ref.count(" or ") for ref in scriptures) if scriptures else 0
     ref_idx = 0
@@ -436,11 +447,11 @@ def suggest_hymns_for_service(
         if " or " in ref:
             for part in ref.split(" or "):
                 _progress(f"Searching hymns for {part.strip()}…", 0.15 + 0.25 * (ref_idx / max(total_refs, 1)))
-                scripture_hymns.extend(hymns_by_scripture(db, part.strip(), limit=30))
+                scripture_hymns.extend(hymns_by_scripture(db, part.strip(), limit=30, all_hymns=all_hymns))
                 ref_idx += 1
         else:
             _progress(f"Searching hymns for {ref}…", 0.15 + 0.25 * (ref_idx / max(total_refs, 1)))
-            scripture_hymns.extend(hymns_by_scripture(db, ref, limit=30))
+            scripture_hymns.extend(hymns_by_scripture(db, ref, limit=30, all_hymns=all_hymns))
             ref_idx += 1
     seen = set()
     scripture_hymns = [h for h in scripture_hymns if h["id"] not in seen and not seen.add(h["id"])]

@@ -29,8 +29,9 @@ def _request_with_retry(client, method: str, url: str, **kwargs):
             last_err = e
             resp = getattr(e, "response", None)
             if resp is not None and resp.status_code == 429 and attempt < _MAX_RETRIES - 1:
-                wait = int(resp.headers.get("Retry-After", _INITIAL_BACKOFF * (2 ** attempt)))
-                logger.warning("Notion rate limit (429), retrying in %ds (attempt %d/%d)", wait, attempt + 1, _MAX_RETRIES)
+                raw_wait = int(resp.headers.get("Retry-After", _INITIAL_BACKOFF * (2 ** attempt)))
+                wait = min(raw_wait, 10)
+                logger.warning("Notion rate limit (429), retrying in %ds (header suggested %ds, attempt %d/%d)", wait, raw_wait, attempt + 1, _MAX_RETRIES)
                 time.sleep(wait)
             else:
                 raise
