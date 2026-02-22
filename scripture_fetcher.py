@@ -53,14 +53,27 @@ def _expand_part(part: str, last_book: Optional[str]) -> str:
 
 def fetch_passage(reference: str, translation: str = "web") -> Optional[Dict[str, Any]]:
     """
-    Fetch passage text for a reference (e.g. '2 Kings 2:1-12', 'Genesis 2:15-17; 3:1-7').
+    Fetch passage text for a reference (e.g. '2 Kings 2:1-12', 'Genesis 2:15-17; 3:1-7',
+    'John 3:1-17 or Matthew 17:1-9').
     Lectionary refs often use semicolons; later parts may omit the book name (e.g. '3:1-7').
+    Gospel readings sometimes offer alternatives joined by " or "; we fetch each and combine.
     We carry the book name from the first part when a part looks like just chapter:verse.
     Returns dict with keys: reference, text (combined), or None on total failure.
     """
     ref = reference.strip()
     if not ref:
         return None
+    # Handle " or " (alternative gospel choices) - split and process each separately
+    if " or " in ref:
+        alternatives = [p.strip() for p in ref.split(" or ") if p.strip()]
+        texts = []
+        for alt in alternatives:
+            result = fetch_passage(alt, translation=translation)
+            if result and result.get("text"):
+                texts.append(f"--- {alt} ---\n\n{result['text']}")
+        if not texts:
+            return None
+        return {"reference": ref, "text": "\n\n".join(texts)}
     raw_parts = [p.strip() for p in ref.split(";") if p.strip()]
     if not raw_parts:
         return None

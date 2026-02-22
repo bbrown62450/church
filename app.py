@@ -250,7 +250,8 @@ def main():
         if labels_refs and st.button("Load full text for all readings"):
             with st.spinner("Fetching passage text…"):
                 for _label, ref in labels_refs:
-                    if ref and ref not in st.session_state.scripture_full_texts:
+                    cached = st.session_state.scripture_full_texts.get(ref)
+                    if ref and (cached is None or cached == "[Could not load text]"):
                         text = get_passage_text(ref)
                         st.session_state.scripture_full_texts[ref] = text or "[Could not load text]"
             st.rerun()
