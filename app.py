@@ -420,36 +420,42 @@ def main():
         help="When checked, hymns from recent services are hidden from the dropdowns.",
     )
     if use_notion:
-        try:
-            with st.spinner("Loading hymn list and liturgy options…"):
-                all_hymns = db.list_hymns()
+        title_to_info = st.session_state.get("_hymn_title_to_info")
+        if title_to_info is None:
+            try:
+                with st.spinner("Loading hymn list from Notion…"):
+                    all_hymns = db.list_hymns()
+                    title_to_info = {}
+                    for h in all_hymns:
+                        t = get_property_value(h, "Hymn Title")
+                        if t:
+                            info = hymn_display_info(h)
+                            key = t.strip().lower()
+                            title_to_info[key] = info
+                    st.session_state["_hymn_title_to_info"] = title_to_info
+                    logger.info("Cached %d hymns in session state", len(title_to_info))
+            except Exception as e:
+                logger.exception("Failed to load hymn list")
+                st.error(f"Could not load hymns from Notion: {e}")
                 title_to_info = {}
-                for h in all_hymns:
-                    t = get_property_value(h, "Hymn Title")
-                    if t:
-                        info = hymn_display_info(h)
-                        key = t.strip().lower()
-                        title_to_info[key] = info
-                if exclude_recent_hymns:
-                    recent_used = get_recently_used_identifiers(weeks=12)
-                    titles_sorted = sorted(
-                        k for k in title_to_info
-                        if not is_hymn_recently_used(
-                            title_to_info[k].get("number"),
-                            title_to_info[k].get("title") or "",
-                            recent_used,
-                        )
-                    )
-                    recent_count = len(title_to_info) - len(titles_sorted)
-                    if recent_count > 0:
-                        st.caption(f"Hymns used in the last 12 weeks are excluded ({recent_count} excluded).")
-                else:
-                    titles_sorted = sorted(title_to_info.keys(), key=str.lower)
-        except Exception as e:
-            logger.exception("Failed to load hymn list")
-            st.error(f"Could not load hymns from Notion: {e}")
-            title_to_info = {}
-            titles_sorted = []
+        if st.button("Refresh hymn list", key="refresh_hymns", help="Reload all hymns from Notion"):
+            st.session_state.pop("_hymn_title_to_info", None)
+            st.rerun()
+        if exclude_recent_hymns:
+            recent_used = get_recently_used_identifiers(weeks=12)
+            titles_sorted = sorted(
+                k for k in title_to_info
+                if not is_hymn_recently_used(
+                    title_to_info[k].get("number"),
+                    title_to_info[k].get("title") or "",
+                    recent_used,
+                )
+            )
+            recent_count = len(title_to_info) - len(titles_sorted)
+            if recent_count > 0:
+                st.caption(f"Hymns used in the last 12 weeks are excluded ({recent_count} excluded).")
+        else:
+            titles_sorted = sorted(title_to_info.keys(), key=str.lower)
     else:
         title_to_info = {}
         titles_sorted = []

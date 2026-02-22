@@ -565,7 +565,7 @@ def hymn_display_info(hymn: Dict[str, Any], *, resolve_audio: bool = False) -> D
         )
     else:
         audio_url = None
-    logger.info(
+    logger.debug(
         "hymn_display_info hymn_id=%s number=%s title=%r audio_url=%s",
         hymn.get("id"),
         number,
