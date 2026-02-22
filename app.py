@@ -486,7 +486,10 @@ def main():
                 limit_per_slot=5,
                 progress_callback=_on_progress,
             )
-            # Pre-fill with first suggestion per slot; match by title
+            logger.info("AI suggestions returned: %s", {
+                k: [s.get("title") for s in v] for k, v in suggestions.items()
+            })
+
             def _find_key(suggested: dict) -> str:
                 t = (suggested.get("title") or "").strip()
                 if not t:
@@ -497,23 +500,40 @@ def main():
                 for key in title_to_info:
                     if (title_to_info[key].get("title") or "").strip().lower() == k:
                         return key
-                return k
+                logger.warning("Suggested title %r not found in hymn list", t)
+                return ""
 
-            for slot, key in [
-                ("opening", suggestions.get("opening", [{}])[0] if suggestions.get("opening") else {}),
-                ("response", suggestions.get("response", [{}])[0] if suggestions.get("response") else {}),
-                ("closing", suggestions.get("closing", [{}])[0] if suggestions.get("closing") else {}),
-            ]:
-                if isinstance(key, dict):
-                    found = _find_key(key)
-                    if found:
-                        st.session_state[slot] = found
+            applied = {}
+            for slot in ("opening", "response", "closing"):
+                slot_suggestions = suggestions.get(slot, [])
+                if not slot_suggestions:
+                    logger.warning("No suggestions for slot %r", slot)
+                    continue
+                found = _find_key(slot_suggestions[0])
+                if found and found in title_to_info:
+                    st.session_state[slot] = found
+                    applied[slot] = title_to_info[found].get("title", found)
+                    logger.info("Applied %s: %r -> key %r", slot, slot_suggestions[0].get("title"), found)
+                else:
+                    logger.warning("Could not match %s suggestion %r to hymn list", slot, slot_suggestions[0].get("title"))
+
+            if applied:
+                parts = [f"**{slot.title()}**: {title}" for slot, title in applied.items()]
+                st.session_state["_suggestion_message"] = "AI suggestions applied: " + " | ".join(parts)
+            else:
+                st.session_state["_suggestion_message"] = "AI could not match any suggestions to your hymn list. Try different scriptures or check the logs."
             progress_bar.progress(1.0, text="Done!")
-            st.success("Suggestions applied. Review and adjust if needed.")
         except Exception as e:
             logger.exception("Suggest hymns failed")
-            st.error(f"Could not suggest hymns: {e}")
+            st.session_state["_suggestion_message"] = f"Could not suggest hymns: {e}"
         st.rerun()
+
+    if "_suggestion_message" in st.session_state:
+        msg = st.session_state.pop("_suggestion_message")
+        if "Could not" in msg or "could not" in msg:
+            st.warning(msg)
+        else:
+            st.success(msg)
 
     @st.fragment
     def hymn_selection_fragment():

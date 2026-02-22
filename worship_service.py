@@ -520,6 +520,7 @@ Pick {limit_per_slot} hymns per slot. Use the EXACT titles from the lists above.
         return {"opening": [], "response": [], "closing": []}
 
     _progress("Applying suggestions…", 0.9)
+    logger.info("AI raw response: %s", data)
     title_to_hymn = {}
     for h in all_hymns:
         t = get_property_value(h, "Hymn Title")
@@ -535,12 +536,19 @@ Pick {limit_per_slot} hymns per slot. Use the EXACT titles from the lists above.
                 if key in title_to_hymn:
                     info = hymn_display_info(title_to_hymn[key])
                     out.append(info)
+                    logger.info("Resolved %s: %r -> exact match", slot, t)
                 else:
+                    matched = False
                     for k, h in title_to_hymn.items():
                         if key in k or k in key:
                             info = hymn_display_info(h)
                             out.append(info)
+                            logger.info("Resolved %s: %r -> fuzzy match %r", slot, t, k)
+                            matched = True
                             break
+                    if not matched:
+                        logger.warning("Resolve %s: %r -> NO MATCH in %d hymns", slot, t, len(title_to_hymn))
+        logger.info("Resolved %s: %d of %d titles matched", slot, len(out), len(titles))
         return out
 
     return {
