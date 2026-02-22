@@ -471,39 +471,39 @@ def main():
 
         try:
             suggestions = suggest_hymns_for_service(
-                    db=db,
-                    occasion=occasion,
-                    scriptures=scriptures,
-                    selected_nt_ref=st.session_state.get("selected_nt_ref") or None,
-                    scripture_full_texts=st.session_state.get("scripture_full_texts") or {},
-                    scripture_text_fetcher=get_passage_text,
-                    limit_per_slot=5,
-                    progress_callback=_on_progress,
-                )
-                # Pre-fill with first suggestion per slot; match by title
-                def _find_key(suggested: dict) -> str:
-                    t = (suggested.get("title") or "").strip()
-                    if not t:
-                        return ""
-                    k = t.lower()
-                    if k in title_to_info:
-                        return k
-                    for key in title_to_info:
-                        if (title_to_info[key].get("title") or "").strip().lower() == k:
-                            return key
+                db=db,
+                occasion=occasion,
+                scriptures=scriptures,
+                selected_nt_ref=st.session_state.get("selected_nt_ref") or None,
+                scripture_full_texts=st.session_state.get("scripture_full_texts") or {},
+                scripture_text_fetcher=get_passage_text,
+                limit_per_slot=5,
+                progress_callback=_on_progress,
+            )
+            # Pre-fill with first suggestion per slot; match by title
+            def _find_key(suggested: dict) -> str:
+                t = (suggested.get("title") or "").strip()
+                if not t:
+                    return ""
+                k = t.lower()
+                if k in title_to_info:
                     return k
+                for key in title_to_info:
+                    if (title_to_info[key].get("title") or "").strip().lower() == k:
+                        return key
+                return k
 
-                for slot, key in [
-                    ("opening", suggestions.get("opening", [{}])[0] if suggestions.get("opening") else {}),
-                    ("response", suggestions.get("response", [{}])[0] if suggestions.get("response") else {}),
-                    ("closing", suggestions.get("closing", [{}])[0] if suggestions.get("closing") else {}),
-                ]:
-                    if isinstance(key, dict):
-                        found = _find_key(key)
-                        if found:
-                            st.session_state[slot] = found
-                progress_bar.progress(1.0, text="Done!")
-                st.success("Suggestions applied. Review and adjust if needed.")
+            for slot, key in [
+                ("opening", suggestions.get("opening", [{}])[0] if suggestions.get("opening") else {}),
+                ("response", suggestions.get("response", [{}])[0] if suggestions.get("response") else {}),
+                ("closing", suggestions.get("closing", [{}])[0] if suggestions.get("closing") else {}),
+            ]:
+                if isinstance(key, dict):
+                    found = _find_key(key)
+                    if found:
+                        st.session_state[slot] = found
+            progress_bar.progress(1.0, text="Done!")
+            st.success("Suggestions applied. Review and adjust if needed.")
         except Exception as e:
             logger.exception("Suggest hymns failed")
             st.error(f"Could not suggest hymns: {e}")
