@@ -35,6 +35,42 @@ if not logging.getLogger().handlers:
 # Default Benediction (shorthand; user can paste full Halverson or other text)
 DEFAULT_BENEDICTION = "Halverson"
 
+# New Testament books (for OT/NT classification of lectionary readings)
+_NT_BOOKS = {
+    "matthew", "mark", "luke", "john", "acts", "romans",
+    "1 corinthians", "2 corinthians", "galatians", "ephesians", "philippians",
+    "colossians", "1 thessalonians", "2 thessalonians", "1 timothy", "2 timothy",
+    "titus", "philemon", "hebrews", "james", "1 peter", "2 peter",
+    "1 john", "2 john", "3 john", "jude", "revelation",
+}
+
+
+def _expand_ref_options(refs: list) -> list:
+    """Expand refs that contain ' or ' into separate options (e.g. gospel choices)."""
+    out = []
+    for ref in refs:
+        if ref and " or " in ref:
+            out.extend(p.strip() for p in ref.split(" or ") if p.strip())
+        elif ref:
+            out.append(ref)
+    return out
+
+
+def _is_nt_ref(ref: str) -> bool:
+    """Return True if ref is from the New Testament."""
+    s = ref.strip().lower()
+    # Check longer names first (e.g. "1 john" before "john")
+    for nt_book in sorted(_NT_BOOKS, key=len, reverse=True):
+        if s == nt_book or s.startswith(nt_book + " "):
+            return True
+    return False
+
+
+def _is_ot_ref(ref: str) -> bool:
+    """Return True if ref is from the Old Testament (or Psalms)."""
+    return not _is_nt_ref(ref)
+
+
 st.set_page_config(
     page_title="Worship Service Builder",
     page_icon="✝️",
@@ -261,30 +297,34 @@ def main():
                     st.text(st.session_state.scripture_full_texts[ref])
                 else:
                     st.caption("Click “Load full text for all readings” to fetch text.")
-        ref_options = [ref for _l, ref in labels_refs]
+        # Expand "X or Y" into separate options so user can select each gospel choice
+        raw_refs = [ref for _l, ref in labels_refs]
+        ref_options = _expand_ref_options(raw_refs)
+        ot_options = [r for r in ref_options if _is_ot_ref(r)]
+        nt_options = [r for r in ref_options if _is_nt_ref(r)]
         if ref_options:
-            def _ref_index(ref_key: str) -> int:
+            def _ref_index(options: list, ref_key: str) -> int:
                 sel = st.session_state.get(ref_key) or ""
-                if sel in ref_options:
-                    return ref_options.index(sel) + 1
+                if sel in options:
+                    return options.index(sel) + 1
                 return 0
             col_ot, col_nt = st.columns(2)
             with col_ot:
                 ot_choice = st.selectbox(
                     "Use as Old Testament reading",
-                    options=[""] + ref_options,
+                    options=[""] + ot_options,
                     format_func=lambda x: x or "— Select —",
                     key="select_ot",
-                    index=min(_ref_index("selected_ot_ref"), len(ref_options)),
+                    index=min(_ref_index(ot_options, "selected_ot_ref"), len(ot_options)),
                 )
                 st.session_state.selected_ot_ref = ot_choice or ""
             with col_nt:
                 nt_choice = st.selectbox(
                     "Use as New Testament reading",
-                    options=[""] + ref_options,
+                    options=[""] + nt_options,
                     format_func=lambda x: x or "— Select —",
                     key="select_nt",
-                    index=min(_ref_index("selected_nt_ref"), len(ref_options)),
+                    index=min(_ref_index(nt_options, "selected_nt_ref"), len(nt_options)),
                 )
                 st.session_state.selected_nt_ref = nt_choice or ""
         st.divider()
