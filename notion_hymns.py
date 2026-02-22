@@ -7,9 +7,34 @@ Requires NOTION_API_KEY and NOTION_DATABASE_ID environment variables.
 import logging
 import os
 import sys
+import time
 from typing import Optional, List, Dict, Any
 
 logger = logging.getLogger(__name__)
+
+# Retry 429 (rate limit) up to 3 times with exponential backoff
+_MAX_RETRIES = 3
+_INITIAL_BACKOFF = 5
+
+
+def _request_with_retry(client, method: str, url: str, **kwargs):
+    """Make httpx request, retrying on 429 with backoff."""
+    last_err = None
+    for attempt in range(_MAX_RETRIES):
+        try:
+            response = client.request(method, url, **kwargs)
+            response.raise_for_status()
+            return response
+        except Exception as e:
+            last_err = e
+            resp = getattr(e, "response", None)
+            if resp is not None and resp.status_code == 429 and attempt < _MAX_RETRIES - 1:
+                wait = int(resp.headers.get("Retry-After", _INITIAL_BACKOFF * (2 ** attempt)))
+                logger.warning("Notion rate limit (429), retrying in %ds (attempt %d/%d)", wait, attempt + 1, _MAX_RETRIES)
+                time.sleep(wait)
+            else:
+                raise
+    raise last_err or RuntimeError("No response")
 from notion_client import Client
 from notion_client.errors import APIResponseError
 import httpx
@@ -73,12 +98,11 @@ class NotionHymnsDB:
                 if cursor:
                     body["start_cursor"] = cursor
                 
-                # Use httpx directly since notion-client's request() doesn't work properly for queries
-                response = self.httpx_client.post(
+                response = _request_with_retry(
+                    self.httpx_client, "POST",
                     f"/databases/{self.database_id}/query",
                     json=body
                 )
-                response.raise_for_status()
                 data = response.json()
                 
                 results.extend(data["results"])
@@ -132,12 +156,11 @@ class NotionHymnsDB:
             
             filter_condition = {"and": filters} if len(filters) > 1 else filters[0]
             
-            # Use httpx directly since notion-client's request() doesn't work properly for queries
-            response = self.httpx_client.post(
+            response = _request_with_retry(
+                self.httpx_client, "POST",
                 f"/databases/{self.database_id}/query",
                 json={"filter": filter_condition}
             )
-            response.raise_for_status()
             data = response.json()
             
             return data["results"]

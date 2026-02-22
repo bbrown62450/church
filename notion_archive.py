@@ -18,7 +18,9 @@ Optional (omit if not in your DB): Sermon title (rich_text), Include communion (
 """
 
 import json
+import logging
 import os
+import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -26,6 +28,8 @@ try:
     import httpx
 except ImportError:
     httpx = None
+
+logger = logging.getLogger(__name__)
 
 BASE_URL = "https://api.notion.com/v1"
 NOTION_VERSION = "2022-06-28"
@@ -73,6 +77,26 @@ def _prop_date(iso_date: Optional[str]) -> Dict[str, Any]:
 
 def _prop_checkbox(value: bool) -> Dict[str, Any]:
     return {"checkbox": bool(value)}
+
+
+def _request_with_retry(client, method: str, url: str, **kwargs):
+    """Make httpx request, retrying on 429 (rate limit) with backoff."""
+    last_err = None
+    for attempt in range(3):
+        try:
+            r = client.request(method, url, **kwargs)
+            r.raise_for_status()
+            return r
+        except Exception as e:
+            last_err = e
+            resp = getattr(e, "response", None)
+            if resp is not None and resp.status_code == 429 and attempt < 2:
+                wait = int(resp.headers.get("Retry-After", 5 * (2 ** attempt)))
+                logger.warning("Notion rate limit (429), retrying in %ds", wait)
+                time.sleep(wait)
+            else:
+                raise
+    raise last_err or RuntimeError("No response")
 
 
 def _iso_to_display(iso: str) -> str:
@@ -169,8 +193,7 @@ def list_saved_services() -> List[Dict[str, Any]]:
                 body: Dict[str, Any] = {"page_size": 100, "sorts": [{"property": "Saved at", "direction": "descending"}]}
                 if cursor:
                     body["start_cursor"] = cursor
-                r = client.post(f"/databases/{db}/query", json=body)
-                r.raise_for_status()
+                r = _request_with_retry(client, "POST", f"/databases/{db}/query", json=body)
                 data = r.json()
                 for page in data.get("results", []):
                     results.append(_page_to_service(page))
@@ -190,8 +213,7 @@ def get_service(service_id: str) -> Optional[Dict[str, Any]]:
         if not client:
             return None
         try:
-            r = client.get(f"/pages/{service_id}")
-            r.raise_for_status()
+            r = _request_with_retry(client, "GET", f"/pages/{service_id}")
             return _page_to_service(r.json())
         except Exception:
             return None
