@@ -28,9 +28,12 @@ from email_send import send_gmail
 load_dotenv()
 
 logger = logging.getLogger(__name__)
-# Show INFO logs in terminal when running: streamlit run app.py
+# Show logs in terminal when running: streamlit run app.py
+# Set LOG_LEVEL=DEBUG in .env for verbose output (e.g. scripture fetch details)
 if not logging.getLogger().handlers:
-    logging.basicConfig(level=logging.INFO, format="%(name)s %(levelname)s %(message)s")
+    level_name = os.getenv("LOG_LEVEL", "INFO").upper()
+    level = getattr(logging, level_name, logging.INFO)
+    logging.basicConfig(level=level, format="%(name)s %(levelname)s %(message)s")
 
 # Default Benediction (shorthand; user can paste full Halverson or other text)
 DEFAULT_BENEDICTION = "Halverson"
@@ -187,6 +190,7 @@ def main():
                 st.session_state[key] = title.lower() if title else ""
             st.rerun()
 
+    logger.info("Rendering main page (date=%s)", st.session_state.get("last_lectionary_date", "?"))
     st.title("Worship Service Builder")
     st.caption("Suggest hymns by scripture, generate liturgy with AI, export to Word.")
 
@@ -211,12 +215,14 @@ def main():
 
     # Auto-load lectionary when date changes — show loading in sidebar and Hymns section so nothing is clickable until done
     if date_iso != st.session_state.last_lectionary_date:
+        logger.info("Date changed to %s, loading lectionary…", date_iso)
         with st.sidebar:
             st.header("Service details")
             st.info("Loading occasion and readings…")
         st.header("Hymns")
         with st.spinner("Loading occasion and readings…"):
             readings = get_readings_for_date_string(service_date_str)
+        logger.info("Lectionary loaded: %s", "yes" if readings else "no")
         st.session_state.last_lectionary_date = date_iso
         if readings:
             st.session_state.lectionary_readings = readings
@@ -284,12 +290,17 @@ def main():
         ]
         labels_refs = [(label, ref) for label, ref in labels_refs if ref]
         if labels_refs and st.button("Load full text for all readings"):
+            logger.info("Load full text clicked, fetching %d passages", len(labels_refs))
             with st.spinner("Fetching passage text…"):
                 for _label, ref in labels_refs:
                     cached = st.session_state.scripture_full_texts.get(ref)
                     if ref and (cached is None or cached == "[Could not load text]"):
+                        logger.info("Fetching passage: %s", ref)
                         text = get_passage_text(ref)
+                        ok = bool(text and text != "[Could not load text]")
+                        logger.info("Fetched %s: %s", ref, "ok" if ok else "failed")
                         st.session_state.scripture_full_texts[ref] = text or "[Could not load text]"
+            logger.info("All passages fetched, rerunning")
             st.rerun()
         for label, ref in labels_refs:
             with st.expander(f"{label}: {ref}", expanded=False):
@@ -302,6 +313,11 @@ def main():
         ref_options = _expand_ref_options(raw_refs)
         ot_options = [r for r in ref_options if _is_ot_ref(r)]
         nt_options = [r for r in ref_options if _is_nt_ref(r)]
+        logger.info(
+            "Ref options: raw=%s expanded=%s ot=%s nt=%s selected_ot=%s selected_nt=%s",
+            raw_refs, ref_options, ot_options, nt_options,
+            st.session_state.get("selected_ot_ref"), st.session_state.get("selected_nt_ref"),
+        )
         if ref_options:
             def _ref_index(options: list, ref_key: str) -> int:
                 sel = st.session_state.get(ref_key) or ""
@@ -348,6 +364,7 @@ def main():
                 if not refs_to_search:
                     st.info("Enter scripture readings above, or add one in the field above.")
                 else:
+                    logger.info("Searching hymns for refs: %s", refs_to_search)
                     with st.spinner("Searching Notion…"):
                         seen_ids = set()
                         matched = []
@@ -357,8 +374,10 @@ def main():
                                     seen_ids.add(h["id"])
                                     matched.append(h)
                     if not matched:
+                        logger.info("No hymns found for refs %s", refs_to_search)
                         st.info("No hymns in your database matching those references. Try shorter refs (e.g. 'Matthew 17').")
                     else:
+                        logger.info("Found %d hymns for refs %s", len(matched), refs_to_search)
                         st.session_state["scripture_hymns"] = matched
                         st.session_state["scripture_refs_used"] = refs_to_search
 

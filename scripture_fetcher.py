@@ -3,9 +3,12 @@
 Fetch full Bible passage text by reference using bible-api.com (no API key).
 """
 
+import logging
 import re
 from typing import Optional, Dict, Any
 import httpx
+
+logger = logging.getLogger(__name__)
 
 # bible-api.com: GET https://bible-api.com/{passage}?translation=web
 BIBLE_API_BASE = "https://bible-api.com"
@@ -24,11 +27,15 @@ def _fetch_one_passage(ref: str, translation: str) -> Optional[str]:
     url = f"{BIBLE_API_BASE}/{ref_param}"
     params = {"translation": translation}
     try:
+        logger.debug("Fetching %s from bible-api", ref)
         r = httpx.get(url, params=params, timeout=15.0)
         r.raise_for_status()
         data = r.json()
-        return (data.get("text") or "").strip() or None
-    except Exception:
+        text = (data.get("text") or "").strip() or None
+        logger.debug("Fetched %s: %s chars", ref, len(text) if text else 0)
+        return text
+    except Exception as e:
+        logger.warning("Failed to fetch %s: %s", ref, e)
         return None
 
 
@@ -66,11 +73,13 @@ def fetch_passage(reference: str, translation: str = "web") -> Optional[Dict[str
     # Handle " or " (alternative gospel choices) - split and process each separately
     if " or " in ref:
         alternatives = [p.strip() for p in ref.split(" or ") if p.strip()]
+        logger.info("Fetching %d alternatives for '%s'", len(alternatives), ref)
         texts = []
         for alt in alternatives:
             result = fetch_passage(alt, translation=translation)
             if result and result.get("text"):
                 texts.append(f"--- {alt} ---\n\n{result['text']}")
+        logger.info("Alternatives fetched: %d/%d ok", len(texts), len(alternatives))
         if not texts:
             return None
         return {"reference": ref, "text": "\n\n".join(texts)}

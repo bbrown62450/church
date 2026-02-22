@@ -5,9 +5,12 @@ Uses their CSV exports: https://lectionary.library.vanderbilt.edu/
 """
 
 import csv
+import logging
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 import httpx
+
+logger = logging.getLogger(__name__)
 
 # Liturgical year CSV URLs: 2025-26 (Year A), 2026-27 (Year B), 2027-28 (Year C)
 VANDERBILT_YEAR_URL = "https://lectionary.library.vanderbilt.edu/calendar/{year}/?season=all&download=csv"
@@ -49,8 +52,10 @@ def _normalize_date_for_match(d: datetime) -> datetime:
 def fetch_lectionary_year(year_str: str) -> List[Dict[str, str]]:
     """Download and parse CSV for one liturgical year. Results cached."""
     if year_str in _cache:
+        logger.debug("Using cached lectionary for year %s", year_str)
         return _cache[year_str]
     url = VANDERBILT_YEAR_URL.format(year=year_str)
+    logger.info("Fetching lectionary CSV for year %s from %s", year_str, url)
     try:
         r = httpx.get(
             url,
@@ -59,7 +64,9 @@ def fetch_lectionary_year(year_str: str) -> List[Dict[str, str]]:
         )
         r.raise_for_status()
         text = r.text
-    except Exception:
+        logger.info("Lectionary CSV fetched: %d bytes", len(text))
+    except Exception as e:
+        logger.warning("Failed to fetch lectionary: %s", e)
         _cache[year_str] = []
         return []
 
@@ -84,6 +91,7 @@ def fetch_lectionary_year(year_str: str) -> List[Dict[str, str]]:
         if _parse_csv_date(cal):
             rows.append(row)
     _cache[year_str] = rows
+    logger.info("Parsed %d lectionary rows for year %s", len(rows), year_str)
     return rows
 
 
@@ -97,10 +105,12 @@ def get_readings_for_date(
     year_str = _liturgical_year_for_date(date)
     rows = fetch_lectionary_year(year_str)
     if not rows:
+        logger.warning("No lectionary rows for year %s", year_str)
         return None
 
     target = _normalize_date_for_match(date)
     target_ts = target.date()
+    logger.debug("Looking for readings for date %s (Sunday %s)", date, target_ts)
 
     for row in rows:
         cal_str = (row.get("Calendar Date") or "").strip().strip('"')
@@ -114,6 +124,7 @@ def get_readings_for_date(
             gospel = (row.get("Gospel") or "").strip().strip('"')
             scriptures = [first, psalm, second, gospel]
             scriptures = [s for s in scriptures if s and not s.startswith("http")]
+            logger.info("Found match for %s: %s", target_ts, row.get("Liturgical Date"))
             return {
                 "liturgical_date": (row.get("Liturgical Date") or "").strip().strip('"'),
                 "calendar_date": cal_str,
@@ -144,6 +155,7 @@ def get_readings_for_date(
                 "gospel": gospel,
                 "scriptures": scriptures,
             }
+    logger.warning("No lectionary match for date %s", target_ts)
     return None
 
 
