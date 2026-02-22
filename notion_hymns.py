@@ -4,9 +4,12 @@ Script to interact with a Notion database of hymns.
 Requires NOTION_API_KEY and NOTION_DATABASE_ID environment variables.
 """
 
+import logging
 import os
 import sys
 from typing import Optional, List, Dict, Any
+
+logger = logging.getLogger(__name__)
 from notion_client import Client
 from notion_client.errors import APIResponseError
 import httpx
@@ -86,8 +89,8 @@ class NotionHymnsDB:
             
             return results
         except Exception as e:
-            print(f"Error querying database: {e}")
-            sys.exit(1)
+            logger.error("Error querying hymn database: %s", e)
+            raise
     
     def search_hymns(self, 
                      title: Optional[str] = None,
@@ -139,8 +142,8 @@ class NotionHymnsDB:
             
             return data["results"]
         except Exception as e:
-            print(f"Error searching database: {e}")
-            sys.exit(1)
+            logger.error("Error searching hymn database: %s", e)
+            raise
     
     def get_hymn(self, page_id: str) -> Dict[str, Any]:
         """
@@ -155,8 +158,8 @@ class NotionHymnsDB:
         try:
             return self.client.pages.retrieve(page_id)
         except APIResponseError as e:
-            print(f"Error retrieving page: {e}")
-            sys.exit(1)
+            logger.error("Error retrieving page: %s", e)
+            raise
     
     def create_hymn(self, properties: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -175,8 +178,8 @@ class NotionHymnsDB:
                 properties=properties
             )
         except APIResponseError as e:
-            print(f"Error creating hymn: {e}")
-            sys.exit(1)
+            logger.error("Error creating hymn: %s", e)
+            raise
     
     def update_hymn(self, page_id: str, properties: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -195,8 +198,8 @@ class NotionHymnsDB:
                 properties=properties
             )
         except APIResponseError as e:
-            print(f"Error updating hymn: {e}")
-            sys.exit(1)
+            logger.error("Error updating hymn: %s", e)
+            raise
     
     def format_hymn(self, hymn: Dict[str, Any]) -> str:
         """

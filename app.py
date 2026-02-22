@@ -221,8 +221,13 @@ def main():
             st.header("Service details")
             st.info("Loading occasion and readings…")
         st.header("Hymns")
-        with st.spinner("Loading occasion and readings…"):
-            readings = get_readings_for_date_string(service_date_str)
+        try:
+            with st.spinner("Loading occasion and readings…"):
+                readings = get_readings_for_date_string(service_date_str)
+        except Exception as e:
+            logger.exception("Lectionary fetch failed")
+            st.error(f"Could not load lectionary: {e}")
+            readings = None
         logger.info("Lectionary loaded: %s", "yes" if readings else "no")
         st.session_state.last_lectionary_date = date_iso
         if readings:
@@ -269,7 +274,12 @@ def main():
 
         st.divider()
         st.subheader("Service archive")
-        saved = list_saved_services()
+        try:
+            saved = list_saved_services()
+        except Exception as e:
+            logger.exception("Failed to load service archive")
+            st.error(f"Could not load archive: {e}")
+            saved = []
         if not saved:
             st.caption("No saved services yet. Generate liturgy and click “Save this service to archive”.")
         else:
@@ -410,30 +420,36 @@ def main():
         help="When checked, hymns from recent services are hidden from the dropdowns.",
     )
     if use_notion:
-        with st.spinner("Loading hymn list and liturgy options…"):
-            all_hymns = db.list_hymns()
-            title_to_info = {}
-            for h in all_hymns:
-                t = get_property_value(h, "Hymn Title")
-                if t:
-                    info = hymn_display_info(h)
-                    key = t.strip().lower()
-                    title_to_info[key] = info
-            if exclude_recent_hymns:
-                recent_used = get_recently_used_identifiers(weeks=12)
-                titles_sorted = sorted(
-                    k for k in title_to_info
-                    if not is_hymn_recently_used(
-                        title_to_info[k].get("number"),
-                        title_to_info[k].get("title") or "",
-                        recent_used,
+        try:
+            with st.spinner("Loading hymn list and liturgy options…"):
+                all_hymns = db.list_hymns()
+                title_to_info = {}
+                for h in all_hymns:
+                    t = get_property_value(h, "Hymn Title")
+                    if t:
+                        info = hymn_display_info(h)
+                        key = t.strip().lower()
+                        title_to_info[key] = info
+                if exclude_recent_hymns:
+                    recent_used = get_recently_used_identifiers(weeks=12)
+                    titles_sorted = sorted(
+                        k for k in title_to_info
+                        if not is_hymn_recently_used(
+                            title_to_info[k].get("number"),
+                            title_to_info[k].get("title") or "",
+                            recent_used,
+                        )
                     )
-                )
-                recent_count = len(title_to_info) - len(titles_sorted)
-                if recent_count > 0:
-                    st.caption(f"Hymns used in the last 12 weeks are excluded ({recent_count} excluded).")
-            else:
-                titles_sorted = sorted(title_to_info.keys(), key=str.lower)
+                    recent_count = len(title_to_info) - len(titles_sorted)
+                    if recent_count > 0:
+                        st.caption(f"Hymns used in the last 12 weeks are excluded ({recent_count} excluded).")
+                else:
+                    titles_sorted = sorted(title_to_info.keys(), key=str.lower)
+        except Exception as e:
+            logger.exception("Failed to load hymn list")
+            st.error(f"Could not load hymns from Notion: {e}")
+            title_to_info = {}
+            titles_sorted = []
     else:
         title_to_info = {}
         titles_sorted = []
