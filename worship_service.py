@@ -153,48 +153,385 @@ def _add_assurance_paragraph(doc, leader_text: str) -> None:
     r.bold = True
 
 
+# Common Bible book abbreviations (full name -> variants to try)
+_BOOK_ABBREVS: Dict[str, List[str]] = {
+    "genesis": ["gen", "ge", "gn"],
+    "exodus": ["exod", "ex"],
+    "leviticus": ["lev"],
+    "numbers": ["num", "nm"],
+    "deuteronomy": ["deut", "dt"],
+    "joshua": ["josh", "jos"],
+    "judges": ["judg", "jdg"],
+    "ruth": [],
+    "1 samuel": ["1 sam", "1 samuel"],
+    "2 samuel": ["2 sam", "2 samuel"],
+    "1 kings": ["1 kgs", "1 kings"],
+    "2 kings": ["2 kgs", "2 kings"],
+    "1 chronicles": ["1 chr", "1 chron"],
+    "2 chronicles": ["2 chr", "2 chron"],
+    "ezra": [],
+    "nehemiah": ["neh"],
+    "esther": ["esth", "est"],
+    "job": [],
+    "psalm": ["ps", "psa", "psalms"],
+    "psalms": ["ps", "psa", "psalm"],
+    "proverbs": ["prov", "prv"],
+    "ecclesiastes": ["eccl", "ecc"],
+    "song of solomon": ["song", "sos", "canticles"],
+    "song of songs": ["song", "sos"],
+    "isaiah": ["isa", "is"],
+    "jeremiah": ["jer", "jr"],
+    "lamentations": ["lam"],
+    "ezekiel": ["ezek", "ezk"],
+    "daniel": ["dan", "dnl"],
+    "hosea": ["hos"],
+    "joel": [],
+    "amos": [],
+    "obadiah": ["obad", "ob"],
+    "jonah": ["jon"],
+    "micah": ["mic"],
+    "nahum": ["nah"],
+    "habakkuk": ["hab"],
+    "zephaniah": ["zeph", "zep"],
+    "haggai": ["hag"],
+    "zechariah": ["zech", "zec"],
+    "malachi": ["mal"],
+    "matthew": ["matt", "mt"],
+    "mark": ["mk", "mrk"],
+    "luke": ["lk", "luk"],
+    "john": ["jn", "jhn", "joh"],
+    "acts": [],
+    "romans": ["rom", "rm"],
+    "1 corinthians": ["1 cor", "1 corinthians"],
+    "2 corinthians": ["2 cor", "2 corinthians"],
+    "galatians": ["gal"],
+    "ephesians": ["eph"],
+    "philippians": ["phil", "php"],
+    "colossians": ["col"],
+    "1 thessalonians": ["1 thess", "1 thes"],
+    "2 thessalonians": ["2 thess", "2 thes"],
+    "1 timothy": ["1 tim", "1 timothy"],
+    "2 timothy": ["2 tim", "2 timothy"],
+    "titus": ["tit"],
+    "philemon": ["phlm", "phm"],
+    "hebrews": ["heb"],
+    "james": ["jas", "jm"],
+    "1 peter": ["1 pet", "1 peter"],
+    "2 peter": ["2 pet", "2 peter"],
+    "1 john": ["1 jn", "1 jhn"],
+    "2 john": ["2 jn", "2 jhn"],
+    "3 john": ["3 jn", "3 jhn"],
+    "jude": ["jud"],
+    "revelation": ["rev", "rv"],
+}
+
+
+def _scripture_search_variants(ref: str) -> List[str]:
+    """
+    Generate fuzzy search variants from a scripture reference.
+    E.g. "Genesis 12:1-4a" -> ["Genesis 12:1-4a", "Genesis 12:1-4", "Genesis 12:1", "Genesis 12", "Gen 12", ...]
+    """
+    ref = ref.strip()
+    if not ref:
+        return []
+    variants = [ref]
+    ref_lower = ref.lower()
+
+    # Extract book + chapter + verse
+    # Match: "Genesis 12:1-4a" or "Psalm 121" or "Romans 4:1-5, 13-17"
+    m = re.match(r"^(.+?)\s+(\d+)(?::(.+))?$", ref, re.IGNORECASE)
+    if m:
+        book_part = m.group(1).strip()
+        chapter = m.group(2)
+        verse_part = m.group(3) or ""
+
+        # Book + chapter (e.g. "Genesis 12")
+        bc = f"{book_part} {chapter}"
+        variants.append(bc)
+
+        if verse_part:
+            # Strip "a" or "b" suffix (e.g. "1-4a" -> "1-4")
+            verse_clean = re.sub(r"([\d\-]+)[ab]\b", r"\1", verse_part, flags=re.I).strip()
+            if verse_clean:
+                bcv = f"{book_part} {chapter}:{verse_clean}"
+                variants.append(bcv)
+            # First verse only (e.g. "Genesis 12:1")
+            first_verse = re.match(r"(\d+)", verse_part)
+            if first_verse:
+                variants.append(f"{book_part} {chapter}:{first_verse.group(1)}")
+
+    # Abbreviation variants (e.g. "Gen 12", "Matt 17")
+    for full_book, abbrevs in _BOOK_ABBREVS.items():
+        if ref_lower.startswith(full_book + " "):
+            rest = ref[len(full_book) + 1:].strip()
+            for ab in abbrevs[:2]:
+                if rest:
+                    variants.append(f"{ab} {rest}")
+
+    # Dedupe while preserving order
+    seen: set = set()
+    out = []
+    for v in variants:
+        vc = v.strip()
+        if vc and vc.lower() not in seen:
+            seen.add(vc.lower())
+            out.append(vc)
+    return out
+
+
 def hymns_by_scripture(
     db: NotionHymnsDB,
     scripture_ref: str,
-    limit: int = 30,
+    limit: int = 50,
 ) -> List[Dict[str, Any]]:
     """
-    Return hymns whose Scripture References contain the given reference
-    (e.g. "Matthew 17", "Psalm 99").
+    Return hymns whose Scripture References contain the given reference.
+    Uses fuzzy matching: tries multiple variants (book+chapter, abbreviations, etc.)
+    to find more hymns. Handles " or " for alternative gospel choices.
     """
     ref_clean = scripture_ref.strip()
     if not ref_clean:
         return []
 
-    # Normalize for matching: "Matthew 17" matches "Matthew 17:1-8"
-    ref_lower = ref_clean.lower()
-    # Allow "Matt 17" -> "matthew 17"
-    ref_lower = re.sub(r"\bmatt\b", "matthew", ref_lower)
+    # If ref has " or " (e.g. gospel choices), search each part and combine
+    refs_to_try = [ref_clean]
+    if " or " in ref_clean:
+        refs_to_try = [p.strip() for p in ref_clean.split(" or ") if p.strip()]
 
-    try:
-        # Notion filter: rich_text contains (partial match)
-        results = db.search_hymns(
-            filter_property="Scripture References",
-            filter_value=ref_clean,
-        )
-    except Exception:
-        results = []
+    seen_ids: set = set()
+    results: List[Dict[str, Any]] = []
 
-    # If Notion filter uses exact-ish match, also scan all hymns for partial ref
-    if len(results) < 10:
+    for ref in refs_to_try:
+        variants = _scripture_search_variants(ref)
+        if not variants:
+            variants = [ref]
+        # Prefer longer/more specific variants first
+        variants = list(dict.fromkeys(variants))
+
+        for variant in variants:
+            if len(results) >= limit:
+                break
+            try:
+                batch = db.search_hymns(
+                    filter_property="Scripture References",
+                    filter_value=variant,
+                )
+                for h in batch:
+                    if h["id"] not in seen_ids:
+                        seen_ids.add(h["id"])
+                        results.append(h)
+            except Exception:
+                pass
+
+    # Fallback: scan all hymns if we have few results (handles formats Notion might miss)
+    if len(results) < 15:
         all_hymns = db.list_hymns()
-        seen_ids = {h["id"] for h in results}
+        variant_set = set()
+        for ref in refs_to_try:
+            variant_set.update(v.lower() for v in _scripture_search_variants(ref))
+        variant_set.add(ref_clean.lower())
+        if " or " in ref_clean:
+            for r in refs_to_try:
+                variant_set.add(r.lower())
+
         for h in all_hymns:
             if h["id"] in seen_ids:
                 continue
             scripture = get_property_value(h, "Scripture References")
-            if scripture and ref_lower in scripture.lower():
-                results.append(h)
-                seen_ids.add(h["id"])
-                if len(results) >= limit:
+            if not scripture:
+                continue
+            scripture_lower = scripture.lower()
+            for v in variant_set:
+                if v and v in scripture_lower:
+                    results.append(h)
+                    seen_ids.add(h["id"])
                     break
+            if len(results) >= limit:
+                break
 
     return results[:limit]
+
+
+# Theme keywords for role-based hymn filtering
+_OPENING_THEMES = {"gathering", "opening", "call to worship", "invitation", "welcome", "entrance"}
+_CLOSING_THEMES = {"joy", "rejoice", "sending", "benediction", "mission", "dismissal", "praise", "thanksgiving"}
+
+
+def _hymn_matches_theme(hymn: Dict[str, Any], theme_set: set) -> bool:
+    """True if hymn's Theme property contains any of the theme keywords."""
+    themes = get_property_value(hymn, "Theme")
+    if not themes:
+        return False
+    if isinstance(themes, str):
+        themes = [themes]
+    themes_lower = " ".join(t.lower() for t in themes)
+    return any(kw in themes_lower for kw in theme_set)
+
+
+def suggest_hymns_for_service(
+    *,
+    db: NotionHymnsDB,
+    occasion: str,
+    scriptures: List[str],
+    selected_nt_ref: Optional[str] = None,
+    scripture_full_texts: Optional[Dict[str, str]] = None,
+    scripture_text_fetcher: Optional[Any] = None,
+    api_key: Optional[str] = None,
+    limit_per_slot: int = 5,
+) -> Dict[str, List[Dict[str, Any]]]:
+    """
+    Use AI to suggest hymns for opening, response (after sermon), and closing.
+    - Opening: gathering/opening hymns
+    - Response: hymns that match scripture themes (especially NT reading)
+    - Closing: joyful, upbeat hymns
+
+    Returns {"opening": [...], "response": [...], "closing": [...]} with hymn info dicts.
+    """
+    scripture_full_texts = scripture_full_texts or {}
+    client = None
+    if OpenAI:
+        key = api_key or os.getenv("OPENAI_API_KEY")
+        if key:
+            client = OpenAI(api_key=key)
+
+    if not client:
+        return {"opening": [], "response": [], "closing": []}
+
+    # Get NT scripture text for theme extraction
+    nt_text = ""
+    if selected_nt_ref:
+        nt_text = scripture_full_texts.get(selected_nt_ref) or ""
+        if not nt_text and scripture_text_fetcher:
+            try:
+                nt_text = scripture_text_fetcher(selected_nt_ref) or ""
+            except Exception:
+                pass
+        if nt_text and "[Could not load text]" in nt_text:
+            nt_text = ""
+    if not nt_text and scriptures:
+        # Fallback: use first scripture ref that looks NT
+        for ref in scriptures:
+            if " or " in ref:
+                for part in ref.split(" or "):
+                    if any(b in part.lower() for b in ["matthew", "mark", "luke", "john", "acts", "romans", "corinthians", "galatians", "ephesians", "philippians", "colossians", "thessalonians", "timothy", "titus", "philemon", "hebrews", "peter", "jude", "revelation"]):
+                        nt_text = scripture_full_texts.get(part.strip()) or ""
+                        if nt_text:
+                            break
+            if nt_text:
+                break
+
+    # Gather candidate hymns
+    all_hymns = db.list_hymns()
+    scripture_hymns = []
+    for ref in scriptures:
+        if " or " in ref:
+            for part in ref.split(" or "):
+                scripture_hymns.extend(hymns_by_scripture(db, part.strip(), limit=30))
+        else:
+            scripture_hymns.extend(hymns_by_scripture(db, ref, limit=30))
+    seen = set()
+    scripture_hymns = [h for h in scripture_hymns if h["id"] not in seen and not seen.add(h["id"])]
+
+    opening_candidates = [h for h in all_hymns if _hymn_matches_theme(h, _OPENING_THEMES)]
+    if not opening_candidates:
+        opening_candidates = all_hymns[:80]
+
+    closing_candidates = [h for h in all_hymns if _hymn_matches_theme(h, _CLOSING_THEMES)]
+    if not closing_candidates:
+        closing_candidates = all_hymns[:80]
+
+    response_candidates = scripture_hymns if scripture_hymns else all_hymns[:80]
+
+    def _hymn_summary(h: Dict) -> str:
+        title = get_property_value(h, "Hymn Title") or "Unknown"
+        num = get_property_value(h, "Hymn Number")
+        themes = get_property_value(h, "Theme")
+        themes_str = ", ".join(themes) if isinstance(themes, list) else (themes or "")
+        script = get_property_value(h, "Scripture References") or ""
+        return f"- {title} (#{num})" + (f" [themes: {themes_str}]" if themes_str else "") + (f" [scripture: {script[:60]}...]" if len(script) > 60 else f" [scripture: {script}]" if script else "")
+
+    opening_list = "\n".join(_hymn_summary(h) for h in opening_candidates[:60])
+    response_list = "\n".join(_hymn_summary(h) for h in response_candidates[:60])
+    closing_list = "\n".join(_hymn_summary(h) for h in closing_candidates[:60])
+
+    scripture_refs_str = "\n".join(f"- {s}" for s in scriptures) if scriptures else "None"
+    nt_preview = (nt_text[:1500] + "...") if len(nt_text) > 1500 else nt_text if nt_text else "(no text loaded)"
+
+    prompt = f"""You are helping plan a worship service. Select hymns for three slots.
+
+OCCASION: {occasion}
+SCRIPTURE READINGS: {scripture_refs_str}
+NEW TESTAMENT READING (for response hymn): {selected_nt_ref or "Not specified"}
+NT PASSAGE TEXT (excerpt): {nt_preview}
+
+ROLE REQUIREMENTS:
+- OPENING: Must be a gathering/opening hymn—something that invites people into worship, calls them to praise, or welcomes them. NOT a hymn focused on the sermon theme.
+- RESPONSE (after sermon): Must connect to the scripture, especially the New Testament reading. Match themes in the passage (e.g. transfiguration, Lent, grace, faith, etc.).
+- CLOSING: Must be joyful, upbeat, or sending—something that sends people out with hope and praise. NOT somber or reflective.
+
+CANDIDATE HYMNS:
+
+OPENING CANDIDATES (prefer gathering/opening hymns):
+{opening_list}
+
+RESPONSE CANDIDATES (prefer scripture-linked hymns):
+{response_list}
+
+CLOSING CANDIDATES (prefer joyful/sending hymns):
+{closing_list}
+
+Respond with a JSON object only, no other text:
+{{"opening": ["Exact Hymn Title 1", "Exact Hymn Title 2", ...], "response": ["Exact Hymn Title 1", ...], "closing": ["Exact Hymn Title 1", ...]}}
+
+Pick {limit_per_slot} hymns per slot. Use the EXACT titles from the lists above."""
+
+    try:
+        resp = client.chat.completions.create(
+            model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3,
+        )
+        content = (resp.choices[0].message.content or "").strip()
+        # Extract JSON (handle markdown code blocks)
+        if "```" in content:
+            content = content.split("```")[1]
+            if content.startswith("json"):
+                content = content[4:]
+        content = content.strip()
+        import json
+        data = json.loads(content)
+    except Exception as e:
+        logger.warning("suggest_hymns_for_service failed: %s", e)
+        return {"opening": [], "response": [], "closing": []}
+
+    title_to_hymn = {}
+    for h in all_hymns:
+        t = get_property_value(h, "Hymn Title")
+        if t:
+            title_to_hymn[t.strip().lower()] = h
+
+    def _resolve(slot: str) -> List[Dict[str, Any]]:
+        titles = data.get(slot, [])
+        out = []
+        for t in titles:
+            if isinstance(t, str) and t.strip():
+                key = t.strip().lower()
+                if key in title_to_hymn:
+                    info = hymn_display_info(title_to_hymn[key])
+                    out.append(info)
+                else:
+                    for k, h in title_to_hymn.items():
+                        if key in k or k in key:
+                            info = hymn_display_info(h)
+                            out.append(info)
+                            break
+        return out
+
+    return {
+        "opening": _resolve("opening"),
+        "response": _resolve("response"),
+        "closing": _resolve("closing"),
+    }
 
 
 def hymn_display_info(hymn: Dict[str, Any], *, resolve_audio: bool = False) -> Dict[str, Any]:

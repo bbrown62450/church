@@ -18,6 +18,7 @@ from worship_service import (
     hymn_display_info,
     generate_liturgy,
     build_docx,
+    suggest_hymns_for_service,
 )
 from vanderbilt_lectionary import get_readings_for_date_string
 from scripture_fetcher import get_passage_text
@@ -369,7 +370,7 @@ def main():
                         seen_ids = set()
                         matched = []
                         for ref in refs_to_search:
-                            for h in hymns_by_scripture(db, ref, limit=30):
+                            for h in hymns_by_scripture(db, ref, limit=50):
                                 if h["id"] not in seen_ids:
                                     seen_ids.add(h["id"])
                                     matched.append(h)
@@ -442,12 +443,57 @@ def main():
             return "— Select —"
         return (title_to_info.get(x) or {}).get("title") or x
 
+    if use_notion and titles_sorted and st.button(
+        "Suggest hymns (AI)",
+        key="suggest_hymns_btn",
+        help="Use AI to suggest opening (gathering), response (scripture-based), and closing (joyful) hymns.",
+    ):
+        with st.spinner("AI suggesting hymns…"):
+            try:
+                suggestions = suggest_hymns_for_service(
+                    db=db,
+                    occasion=occasion,
+                    scriptures=scriptures,
+                    selected_nt_ref=st.session_state.get("selected_nt_ref") or None,
+                    scripture_full_texts=st.session_state.get("scripture_full_texts") or {},
+                    scripture_text_fetcher=get_passage_text,
+                    limit_per_slot=5,
+                )
+                # Pre-fill with first suggestion per slot; match by title
+                def _find_key(suggested: dict) -> str:
+                    t = (suggested.get("title") or "").strip()
+                    if not t:
+                        return ""
+                    k = t.lower()
+                    if k in title_to_info:
+                        return k
+                    for key in title_to_info:
+                        if (title_to_info[key].get("title") or "").strip().lower() == k:
+                            return key
+                    return k
+
+                for slot, key in [
+                    ("opening", suggestions.get("opening", [{}])[0] if suggestions.get("opening") else {}),
+                    ("response", suggestions.get("response", [{}])[0] if suggestions.get("response") else {}),
+                    ("closing", suggestions.get("closing", [{}])[0] if suggestions.get("closing") else {}),
+                ]:
+                    if isinstance(key, dict):
+                        found = _find_key(key)
+                        if found:
+                            st.session_state[slot] = found
+                st.success("Suggestions applied. Review and adjust if needed.")
+            except Exception as e:
+                logger.exception("Suggest hymns failed")
+                st.error(f"Could not suggest hymns: {e}")
+        st.rerun()
+
     @st.fragment
     def hymn_selection_fragment():
         """Isolated fragment so changing a hymn only reruns this block (less full-page fade)."""
         col1, col2, col3 = st.columns(3)
         with col1:
             st.subheader("Opening")
+            st.caption("Gathering / call to worship")
             if titles_sorted:
                 st.selectbox(
                     "Opening hymn",
@@ -459,6 +505,7 @@ def main():
                 st.text_input("Opening hymn (title)", key="open_man")
         with col2:
             st.subheader("After sermon")
+            st.caption("Response to scripture (NT reading)")
             if titles_sorted:
                 st.selectbox(
                     "Response hymn",
@@ -470,6 +517,7 @@ def main():
                 st.text_input("Response hymn (title)", key="resp_man")
         with col3:
             st.subheader("Closing")
+            st.caption("Joyful / sending")
             if titles_sorted:
                 st.selectbox(
                     "Closing hymn",

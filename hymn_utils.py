@@ -20,4 +20,6 @@ def get_property_value(hymn: Dict[str, Any], prop_name: str) -> Any:
     elif prop_type == "date":
         date_obj = prop_data.get("date")
         return date_obj.get("start") if date_obj else None
+    elif prop_type == "multi_select":
+        return [opt.get("name") for opt in prop_data.get("multi_select", []) if opt.get("name")]
     return None
