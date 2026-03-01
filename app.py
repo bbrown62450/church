@@ -367,6 +367,7 @@ def main():
     hymn_options_opening = []
     hymn_options_response = []
     hymn_options_closing = []
+    cached_all_hymns = st.session_state.get("_cached_all_hymns")
 
     if use_notion:
         with st.expander("Find hymns matching any of the scriptures", expanded=True):
