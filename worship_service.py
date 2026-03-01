@@ -513,7 +513,7 @@ Pick {limit_per_slot} hymns per slot. Use the EXACT titles from the lists above.
     _progress("Calling AI to select hymns…", 0.55)
     try:
         resp = client.chat.completions.create(
-            model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+            model=os.getenv("OPENAI_MODEL", "gpt-3.5-turbo"),
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
         )
