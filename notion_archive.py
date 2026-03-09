@@ -253,8 +253,10 @@ def save_service(
                     "Scriptures": _prop_rich_text("\n".join(scriptures or [])),
                     "Hymns": _prop_rich_text(json.dumps(hymns_payload)),
                     "Liturgy": _prop_rich_text(json.dumps(liturgy or {})),
+                    "Sermon title": _prop_rich_text(sermon_title or ""),
                     "Selected OT": _prop_rich_text(selected_ot_ref),
                     "Selected NT": _prop_rich_text(selected_nt_ref),
+                    "Include communion": _prop_checkbox(include_communion),
                     "Saved at": _prop_date(now),
                 },
             }
@@ -309,8 +311,10 @@ def update_service(
                     "Scriptures": _prop_rich_text("\n".join(scriptures or [])),
                     "Hymns": _prop_rich_text(json.dumps(hymns_payload)),
                     "Liturgy": _prop_rich_text(json.dumps(liturgy or {})),
+                    "Sermon title": _prop_rich_text(sermon_title or ""),
                     "Selected OT": _prop_rich_text(selected_ot_ref),
                     "Selected NT": _prop_rich_text(selected_nt_ref),
+                    "Include communion": _prop_checkbox(include_communion),
                     "Saved at": _prop_date(now),
                 },
             }
