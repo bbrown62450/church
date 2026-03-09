@@ -25,6 +25,7 @@ from scripture_fetcher import get_passage_text
 from hymn_usage import get_recently_used_identifiers, record_usage, is_hymn_recently_used
 from service_archive import list_saved_services, save_service, update_service, get_service
 from email_send import send_gmail
+from email_contacts import get_contacts_for_display
 
 load_dotenv()
 
@@ -207,7 +208,7 @@ def main():
     # Top: date selector — drives occasion and lectionary
     service_date_picked = st.date_input(
         "Service date",
-        value=date(2026, 2, 15),
+        value=date.today(),
         key="service_date_picked",
         help="Occasion and lectionary readings load automatically for this date.",
     )
@@ -216,7 +217,10 @@ def main():
 
     # Auto-load lectionary when date changes — show loading in sidebar and Hymns section so nothing is clickable until done
     if date_iso != st.session_state.last_lectionary_date:
-        logger.info("Date changed to %s, loading lectionary…", date_iso)
+        logger.info(
+            "Date changed: date_iso=%s, last_lectionary_date=%s, service_date_str=%s",
+            date_iso, st.session_state.last_lectionary_date, service_date_str,
+        )
         with st.sidebar:
             st.header("Service details")
             st.info("Loading occasion and readings…")
@@ -228,11 +232,15 @@ def main():
             logger.exception("Lectionary fetch failed")
             st.error(f"Could not load lectionary: {e}")
             readings = None
-        logger.info("Lectionary loaded: %s", "yes" if readings else "no")
+        logger.info("Lectionary result: readings=%s", "None" if readings is None else "dict with keys " + str(list(readings.keys()) if readings else []))
+        if readings:
+            logger.info("Lectionary data: liturgical_date=%r, calendar_date=%r", readings.get("liturgical_date"), readings.get("calendar_date"))
         st.session_state.last_lectionary_date = date_iso
         if readings:
             st.session_state.lectionary_readings = readings
-            st.session_state.occasion = readings.get("liturgical_date") or ""
+            liturgical_date = (readings.get("liturgical_date") or "").strip()
+            st.session_state.occasion = liturgical_date
+            logger.info("Set session_state.occasion=%r (from liturgical_date)", liturgical_date)
             st.session_state.scriptures_text = "\n".join(readings.get("scriptures", []))
             st.session_state.scripture_full_texts = {}
             st.session_state.selected_ot_ref = ""
@@ -241,10 +249,18 @@ def main():
             st.session_state.lectionary_readings = None
             st.session_state.occasion = ""
             st.session_state.scriptures_text = ""
+            logger.info("No readings; set session_state.occasion=''")
+        logger.info("About to st.rerun(); session_state.occasion=%r", st.session_state.get("occasion"))
         st.rerun()
         return
 
     # Sidebar: occasion (from date) and scriptures (only after page has loaded / lectionary ready)
+    logger.info(
+        "Rendering sidebar: last_lectionary_date=%s, occasion=%r, lectionary_readings=%s",
+        st.session_state.last_lectionary_date,
+        st.session_state.get("occasion"),
+        "present" if st.session_state.get("lectionary_readings") else "None",
+    )
     with st.sidebar:
         if app_password:
             if st.button("Log out", key="logout_btn", help="Lock the app (requires password again)."):
@@ -253,9 +269,10 @@ def main():
             st.divider()
         st.header("Service details")
         st.caption("Filled from the service date above.")
-        # Widget bound to key="occasion"; value comes from session state only (set by date/load/init)
+        # Use value= from session state so programmatic updates (from date/lectionary) display correctly
         occasion = st.text_input(
             "Occasion / Sunday",
+            value=st.session_state.get("occasion", ""),
             key="occasion",
             help="Auto-filled from lectionary; you can edit if needed.",
         )
@@ -695,7 +712,6 @@ def main():
                         st.rerun()
 
     if st.button("Generate liturgy", type="primary"):
-        st.session_state.editing_service_id = None
         if not os.getenv("OPENAI_API_KEY"):
             st.error("Set **OPENAI_API_KEY** in `.env` to generate liturgy.")
         else:
@@ -764,7 +780,7 @@ def main():
                     selected_ot_ref=st.session_state.get("selected_ot_ref") or None,
                     selected_nt_ref=st.session_state.get("selected_nt_ref") or None,
                     scripture_full_texts=st.session_state.get("scripture_full_texts") or None,
-                    include_sermon=False,
+                    include_sermon=True,
                     include_prayers_of_the_people=False,
                     include_communion=include_communion,
                     custom_elements=st.session_state.custom_elements,
@@ -797,8 +813,15 @@ def main():
                     pass
                 st.success("Pastor document ready. Download below.")
                 st.rerun()
-        if st.button("Save this service to archive", key="save_archive"):
-            editing_id = st.session_state.get("editing_service_id")
+        editing_id = st.session_state.get("editing_service_id")
+        # Clear editing_id if user switched to a different service date
+        if editing_id:
+            existing = get_service(editing_id)
+            if existing and existing.get("service_date_iso") != date_iso:
+                st.session_state.editing_service_id = None
+                editing_id = None
+        save_btn_label = "Save changes" if editing_id else "Save this service to archive"
+        if st.button(save_btn_label, key="save_archive"):
             save_kw = dict(
                 service_date=service_date_str,
                 service_date_iso=service_date_picked.isoformat(),
@@ -817,11 +840,14 @@ def main():
                     if updated:
                         st.success("Service updated in archive.")
                     else:
+                        # Entry may have been deleted; save as new
                         st.session_state.editing_service_id = None
-                        save_service(**save_kw)
+                        out = save_service(**save_kw)
+                        st.session_state.editing_service_id = out.get("id")
                         st.success("Service saved to archive.")
                 else:
-                    save_service(**save_kw)
+                    out = save_service(**save_kw)
+                    st.session_state.editing_service_id = out.get("id")
                     st.success("Service saved to archive.")
                 st.session_state.pop("_cached_saved_services", None)
                 st.rerun()
@@ -857,11 +883,21 @@ def main():
         if st.session_state.docx_bytes_secretary:
             with st.expander("Email to secretary", expanded=True):
                 st.caption("Send the secretary .docx and a friendly message via Gmail.")
-                secretary_email = st.text_input(
-                    "Secretary email",
-                    key="secretary_email",
-                    placeholder="secretary@church.org",
-                    help="Recipient address.",
+                contacts = get_contacts_for_display()
+                contact_options = [f"{c['name']} <{c['email']}>" for c in contacts]
+                email_to_contact = {f"{c['name']} <{c['email']}>": c["email"] for c in contacts}
+                selected_contacts = st.multiselect(
+                    "Recipients",
+                    options=contact_options,
+                    default=contact_options,
+                    key="email_recipients",
+                    help="Select one or more saved contacts.",
+                )
+                additional_emails = st.text_input(
+                    "Additional emails (comma-separated)",
+                    key="secretary_email_extra",
+                    placeholder="other@example.com, another@example.com",
+                    help="Add more recipients not in your saved contacts.",
                 )
                 email_message = st.text_area(
                     "Message",
@@ -871,13 +907,18 @@ def main():
                     help="This will appear in the email body.",
                 )
                 if st.button("Send email to secretary", key="send_email_sec"):
-                    if not (secretary_email and secretary_email.strip()):
-                        st.error("Please enter the secretary’s email.")
+                    recipient_emails = [email_to_contact[c] for c in selected_contacts]
+                    if additional_emails and additional_emails.strip():
+                        recipient_emails.extend(
+                            e.strip() for e in additional_emails.split(",") if e.strip()
+                        )
+                    if not recipient_emails:
+                        st.error("Please select at least one recipient or enter an email address.")
                     else:
                         subject = f"Worship service — {service_date_str}"
                         body = (email_message or "Hi! Here’s the worship bulletin for this Sunday.").strip()
                         err = send_gmail(
-                            secretary_email.strip(),
+                            recipient_emails,
                             subject,
                             body,
                             attachment_bytes=st.session_state.docx_bytes_secretary,
@@ -886,7 +927,7 @@ def main():
                         if err:
                             st.error(f"Email failed: {err}")
                         else:
-                            st.success("Email sent.")
+                            st.success(f"Email sent to {len(recipient_emails)} recipient(s).")
 
 
 if __name__ == "__main__":
