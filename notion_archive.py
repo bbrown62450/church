@@ -79,6 +79,24 @@ def _prop_checkbox(value: bool) -> Dict[str, Any]:
     return {"checkbox": bool(value)}
 
 
+def _liturgy_with_meta(liturgy: Dict[str, Any], sermon_title: str, include_communion: bool) -> Dict[str, Any]:
+    """Embed sermon_title and include_communion in liturgy JSON (avoids needing separate Notion properties)."""
+    out = dict(liturgy)
+    out["_sermon_title"] = sermon_title or ""
+    out["_include_communion"] = include_communion
+    return out
+
+
+def _liturgy_extract_meta(liturgy: Dict[str, Any]) -> tuple:
+    """Extract sermon_title and include_communion from liturgy JSON; return (liturgy_clean, sermon_title, include_communion)."""
+    if not liturgy:
+        return {}, "", False
+    out = {k: v for k, v in liturgy.items() if not k.startswith("_")}
+    sermon_title = liturgy.get("_sermon_title", "") or ""
+    include_communion = bool(liturgy.get("_include_communion", False))
+    return out, sermon_title, include_communion
+
+
 def _request_with_retry(client, method: str, url: str, **kwargs):
     """Make httpx request, retrying on 429 (rate limit) with backoff."""
     last_err = None
@@ -153,6 +171,8 @@ def _page_to_service(page: Dict[str, Any]) -> Dict[str, Any]:
         except Exception:
             pass
 
+    liturgy, embedded_sermon, embedded_communion = _liturgy_extract_meta(liturgy)
+
     hymns_raw = get_rich_text("Hymns")
     hymns = []
     if hymns_raw:
@@ -163,6 +183,8 @@ def _page_to_service(page: Dict[str, Any]) -> Dict[str, Any]:
 
     service_date_iso = get_date("Service date") or ""
     title_str = get_title(_title_property()) or get_title("Name") or get_title("Title")
+    sermon_title = get_rich_text("Sermon title") or embedded_sermon
+    include_communion = get_checkbox("Include communion") or embedded_communion
     return {
         "id": pid,
         "service_date": _iso_to_display(service_date_iso) or title_str,
@@ -171,10 +193,10 @@ def _page_to_service(page: Dict[str, Any]) -> Dict[str, Any]:
         "scriptures": (get_rich_text("Scriptures") or "").strip().splitlines(),
         "hymns": hymns,
         "liturgy": liturgy,
-        "sermon_title": get_rich_text("Sermon title") or "",
+        "sermon_title": sermon_title,
         "selected_ot_ref": get_rich_text("Selected OT") or "",
         "selected_nt_ref": get_rich_text("Selected NT") or "",
-        "include_communion": get_checkbox("Include communion"),
+        "include_communion": include_communion,
         "saved_at": get_date("Saved at") or "",
     }
 
@@ -252,11 +274,9 @@ def save_service(
                     "Occasion": _prop_rich_text(occasion),
                     "Scriptures": _prop_rich_text("\n".join(scriptures or [])),
                     "Hymns": _prop_rich_text(json.dumps(hymns_payload)),
-                    "Liturgy": _prop_rich_text(json.dumps(liturgy or {})),
-                    "Sermon title": _prop_rich_text(sermon_title or ""),
+                    "Liturgy": _prop_rich_text(json.dumps(_liturgy_with_meta(liturgy or {}, sermon_title, include_communion))),
                     "Selected OT": _prop_rich_text(selected_ot_ref),
                     "Selected NT": _prop_rich_text(selected_nt_ref),
-                    "Include communion": _prop_checkbox(include_communion),
                     "Saved at": _prop_date(now),
                 },
             }
@@ -310,11 +330,9 @@ def update_service(
                     "Occasion": _prop_rich_text(occasion),
                     "Scriptures": _prop_rich_text("\n".join(scriptures or [])),
                     "Hymns": _prop_rich_text(json.dumps(hymns_payload)),
-                    "Liturgy": _prop_rich_text(json.dumps(liturgy or {})),
-                    "Sermon title": _prop_rich_text(sermon_title or ""),
+                    "Liturgy": _prop_rich_text(json.dumps(_liturgy_with_meta(liturgy or {}, sermon_title, include_communion))),
                     "Selected OT": _prop_rich_text(selected_ot_ref),
                     "Selected NT": _prop_rich_text(selected_nt_ref),
-                    "Include communion": _prop_checkbox(include_communion),
                     "Saved at": _prop_date(now),
                 },
             }
