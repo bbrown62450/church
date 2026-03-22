@@ -97,6 +97,8 @@ if "docx_bytes_pastor" not in st.session_state:
     st.session_state.docx_bytes_pastor = None
 if "lectionary_readings" not in st.session_state:
     st.session_state.lectionary_readings = None
+if "lectionary_readings_list" not in st.session_state:
+    st.session_state.lectionary_readings_list = []
 if "scriptures_text" not in st.session_state:
     st.session_state.scriptures_text = ""
 if "scripture_full_texts" not in st.session_state:
@@ -153,13 +155,14 @@ def main():
     if app_password and not st.session_state.get("authenticated"):
         st.title("Worship Service Builder")
         st.caption("Enter the app password to continue.")
-        pw = st.text_input("Password", type="password", key="app_pw", placeholder="App password")
-        if st.button("Log in", key="login_btn"):
-            if pw == app_password:
-                st.session_state.authenticated = True
-                st.rerun()
-            else:
-                st.error("Incorrect password.")
+        with st.form("login_form"):
+            pw = st.text_input("Password", type="password", key="app_pw", placeholder="App password")
+            if st.form_submit_button("Log in"):
+                if pw == app_password:
+                    st.session_state.authenticated = True
+                    st.rerun()
+                else:
+                    st.error("Incorrect password.")
         st.divider()
         st.caption("Set APP_PASSWORD in your environment to protect the app (e.g. email sending).")
         return
@@ -205,38 +208,45 @@ def main():
     else:
         use_notion = True
 
-    # Top: date selector — drives occasion and lectionary
-    service_date_picked = st.date_input(
-        "Service date",
-        value=date.today(),
-        key="service_date_picked",
-        help="Occasion and lectionary readings load automatically for this date.",
-    )
+    # Sidebar: date selector, occasion, and scriptures
+    with st.sidebar:
+        if app_password:
+            if st.button("Log out", key="logout_btn", help="Lock the app (requires password again)."):
+                st.session_state.authenticated = False
+                st.rerun()
+            st.divider()
+
+        service_date_picked = st.date_input(
+            "Service date",
+            value=date.today(),
+            key="service_date_picked",
+            help="Occasion and lectionary readings load automatically for this date.",
+        )
+
     service_date_str = service_date_picked.strftime("%B %d, %Y")
     date_iso = service_date_picked.isoformat()
 
-    # Auto-load lectionary when date changes — show loading in sidebar and Hymns section so nothing is clickable until done
+    # Auto-load lectionary when date changes
     if date_iso != st.session_state.last_lectionary_date:
         logger.info(
             "Date changed: date_iso=%s, last_lectionary_date=%s, service_date_str=%s",
             date_iso, st.session_state.last_lectionary_date, service_date_str,
         )
         with st.sidebar:
-            st.header("Service details")
             st.info("Loading occasion and readings…")
-        st.header("Hymns")
         try:
             with st.spinner("Loading occasion and readings…"):
-                readings = get_readings_for_date_string(service_date_str)
+                readings_list = get_readings_for_date_string(service_date_str)
         except Exception as e:
             logger.exception("Lectionary fetch failed")
             st.error(f"Could not load lectionary: {e}")
-            readings = None
-        logger.info("Lectionary result: readings=%s", "None" if readings is None else "dict with keys " + str(list(readings.keys()) if readings else []))
-        if readings:
-            logger.info("Lectionary data: liturgical_date=%r, calendar_date=%r", readings.get("liturgical_date"), readings.get("calendar_date"))
+            readings_list = []
+        logger.info("Lectionary result: %d reading set(s)", len(readings_list))
         st.session_state.last_lectionary_date = date_iso
-        if readings:
+        st.session_state.lectionary_readings_list = readings_list
+        if readings_list:
+            # Default to the last set (Passion for Palm Sunday, or the only set otherwise)
+            readings = readings_list[-1]
             st.session_state.lectionary_readings = readings
             liturgical_date = (readings.get("liturgical_date") or "").strip()
             st.session_state.occasion = liturgical_date
@@ -247,6 +257,7 @@ def main():
             st.session_state.selected_nt_ref = ""
         else:
             st.session_state.lectionary_readings = None
+            st.session_state.lectionary_readings_list = []
             st.session_state.occasion = ""
             st.session_state.scriptures_text = ""
             logger.info("No readings; set session_state.occasion=''")
@@ -254,7 +265,7 @@ def main():
         st.rerun()
         return
 
-    # Sidebar: occasion (from date) and scriptures (only after page has loaded / lectionary ready)
+    # Sidebar continued: occasion (from date) and scriptures
     logger.info(
         "Rendering sidebar: last_lectionary_date=%s, occasion=%r, lectionary_readings=%s",
         st.session_state.last_lectionary_date,
@@ -262,14 +273,34 @@ def main():
         "present" if st.session_state.get("lectionary_readings") else "None",
     )
     with st.sidebar:
-        if app_password:
-            if st.button("Log out", key="logout_btn", help="Lock the app (requires password again)."):
-                st.session_state.authenticated = False
-                st.rerun()
-            st.divider()
         st.header("Service details")
         st.caption("Filled from the service date above.")
-        # Use value= from session state so programmatic updates (from date/lectionary) display correctly
+        # When multiple reading sets exist (e.g. Palm Sunday: Palms + Passion), let user switch.
+        # When multiple reading sets exist (e.g. Palm Sunday: Palms + Passion), let user switch.
+        readings_list = st.session_state.get("lectionary_readings_list") or []
+        if len(readings_list) > 1:
+            liturgy_names = [rd["liturgical_date"] for rd in readings_list]
+            current = st.session_state.lectionary_readings
+            current_idx = liturgy_names.index(current["liturgical_date"]) if current and current["liturgical_date"] in liturgy_names else len(liturgy_names) - 1
+
+            def _on_liturgy_change():
+                idx = liturgy_names.index(st.session_state.liturgy_selector)
+                rd = readings_list[idx]
+                st.session_state.lectionary_readings = rd
+                st.session_state.occasion = rd["liturgical_date"]
+                st.session_state.scriptures_text = "\n".join(rd.get("scriptures", []))
+                st.session_state.scripture_full_texts = {}
+                st.session_state.selected_ot_ref = ""
+                st.session_state.selected_nt_ref = ""
+
+            st.radio(
+                "Liturgy",
+                options=liturgy_names,
+                index=current_idx,
+                key="liturgy_selector",
+                on_change=_on_liturgy_change,
+                help="This date has multiple liturgies in the RCL. Select which one to use.",
+            )
         occasion = st.text_input(
             "Occasion / Sunday",
             value=st.session_state.get("occasion", ""),
@@ -429,7 +460,11 @@ def main():
                     num = info.get("number") or "—"
                     audio_url = info.get("audio_url") or ""
                     audio_id = f"audio_{h['id']}_{i}"
-                    st.text(f"#{num} — {info['title']}")
+                    hymn_link = info.get("link") or ""
+                    if hymn_link:
+                        st.markdown(f"[#{num} — {info['title']}]({hymn_link})")
+                    else:
+                        st.text(f"#{num} — {info['title']}")
                     if audio_url:
                         escaped_url = html.escape(audio_url)
                         safe_id = html.escape(audio_id)

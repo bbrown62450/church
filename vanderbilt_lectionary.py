@@ -190,71 +190,70 @@ def fetch_lectionary_year(year_str: str) -> List[Dict[str, str]]:
     return rows
 
 
+def _row_to_reading(row: Dict[str, str]) -> Dict[str, Any]:
+    """Convert a Vanderbilt CSV row to a reading dict."""
+    cal_str = (row.get("Calendar Date") or "").strip().strip('"')
+    first = (row.get("First reading") or "").strip().strip('"')
+    psalm = (row.get("Psalm") or "").strip().strip('"')
+    second = (row.get("Second reading") or "").strip().strip('"')
+    gospel = (row.get("Gospel") or "").strip().strip('"')
+    scriptures = [first, psalm, second, gospel]
+    scriptures = [s for s in scriptures if s and not s.startswith("http")]
+    liturgical_date = (row.get("Liturgical Date") or "").strip().strip('"')
+    return {
+        "liturgical_date": liturgical_date,
+        "calendar_date": cal_str,
+        "first_reading": first,
+        "psalm": psalm,
+        "second_reading": second,
+        "gospel": gospel,
+        "scriptures": scriptures,
+    }
+
+
 def get_readings_for_date(
     date: datetime,
-) -> Optional[Dict[str, Any]]:
+) -> List[Dict[str, Any]]:
     """
     Get Revised Common Lectionary readings for the Sunday on or before the given date.
-    Returns dict with: liturgical_date, calendar_date, first_reading, psalm, second_reading, gospel, scriptures (list).
+    Returns a list of reading dicts (usually 1, but 2 for Palm Sunday: Palms + Passion).
+    Each dict has: liturgical_date, calendar_date, first_reading, psalm, second_reading, gospel, scriptures.
     """
     year_str = _liturgical_year_for_date(date)
     rows = fetch_lectionary_year(year_str)
     if not rows:
         logger.warning("No lectionary rows for year %s", year_str)
-        return None
+        return []
 
     target = _normalize_date_for_match(date)
     target_ts = target.date()
     logger.info("Looking for readings for date %s (Sunday %s), liturgical year %s", date, target_ts, year_str)
 
+    # Collect ALL rows that match the target date (e.g. Palm Sunday has Palms + Passion)
+    matches = []
     for row in rows:
         cal_str = (row.get("Calendar Date") or "").strip().strip('"')
         row_date = _parse_csv_date(cal_str)
         if not row_date:
             continue
         if row_date.date() == target_ts:
-            first = (row.get("First reading") or "").strip().strip('"')
-            psalm = (row.get("Psalm") or "").strip().strip('"')
-            second = (row.get("Second reading") or "").strip().strip('"')
-            gospel = (row.get("Gospel") or "").strip().strip('"')
-            scriptures = [first, psalm, second, gospel]
-            scriptures = [s for s in scriptures if s and not s.startswith("http")]
-            liturgical_date = (row.get("Liturgical Date") or "").strip().strip('"')
-            logger.info("Found exact match for %s: liturgical_date=%r", target_ts, liturgical_date)
-            return {
-                "liturgical_date": liturgical_date,
-                "calendar_date": cal_str,
-                "first_reading": first,
-                "psalm": psalm,
-                "second_reading": second,
-                "gospel": gospel,
-                "scriptures": scriptures,
-            }
+            reading = _row_to_reading(row)
+            logger.info("Found exact match for %s: liturgical_date=%r", target_ts, reading["liturgical_date"])
+            matches.append(reading)
+
+    if matches:
+        return matches
 
     # No exact match: try nearest previous Sunday
     for row in reversed(rows):
         cal_str = (row.get("Calendar Date") or "").strip().strip('"')
         row_date = _parse_csv_date(cal_str)
         if row_date and row_date.date() <= target_ts:
-            first = (row.get("First reading") or "").strip().strip('"')
-            psalm = (row.get("Psalm") or "").strip().strip('"')
-            second = (row.get("Second reading") or "").strip().strip('"')
-            gospel = (row.get("Gospel") or "").strip().strip('"')
-            scriptures = [first, psalm, second, gospel]
-            scriptures = [s for s in scriptures if s and not s.startswith("http")]
-            liturgical_date = (row.get("Liturgical Date") or "").strip().strip('"')
-            logger.info("Found nearest Sunday match for %s (using %s): liturgical_date=%r", target_ts, row_date.date(), liturgical_date)
-            return {
-                "liturgical_date": liturgical_date,
-                "calendar_date": cal_str,
-                "first_reading": first,
-                "psalm": psalm,
-                "second_reading": second,
-                "gospel": gospel,
-                "scriptures": scriptures,
-            }
+            reading = _row_to_reading(row)
+            logger.info("Found nearest Sunday match for %s (using %s): liturgical_date=%r", target_ts, row_date.date(), reading["liturgical_date"])
+            return [reading]
     logger.warning("No lectionary match for date %s", target_ts)
-    return None
+    return []
 
 
 def _get_readings_from_lectio(date_iso: str) -> Optional[Dict[str, Any]]:
@@ -331,11 +330,12 @@ def _get_readings_from_lectio(date_iso: str) -> Optional[Dict[str, Any]]:
     }
 
 
-def get_readings_for_date_string(date_str: str) -> Optional[Dict[str, Any]]:
+def get_readings_for_date_string(date_str: str) -> List[Dict[str, Any]]:
     """
     Parse a date string (e.g. 'February 15, 2026', 'Feb 15, 2026', '2026-02-15')
     and return lectionary readings for that Sunday.
-    Tries Lectio API first (reliable); falls back to Vanderbilt CSV (often blocked).
+    Returns a list of reading dicts (usually 1, but 2 for Palm Sunday: Palms + Passion).
+    Tries Lectio API first; also checks Vanderbilt CSV for additional reading sets.
     """
     date_str = date_str.strip()
     logger.info("get_readings_for_date_string called with date_str=%r", date_str)
@@ -351,19 +351,46 @@ def get_readings_for_date_string(date_str: str) -> Optional[Dict[str, Any]]:
 
     if not d:
         logger.warning("Could not parse date string %r with any format", date_str)
-        return None
+        return []
 
     # Normalize to Sunday on or before (same as Vanderbilt) for consistent Sunday readings
     target_sunday = _normalize_date_for_match(d)
     date_iso = target_sunday.strftime("%Y-%m-%d")
     logger.info("Parsed date -> %s, normalized to Sunday %s", d, date_iso)
 
-    # Try Lectio API first (works when Vanderbilt returns 403/HTML)
-    result = _get_readings_from_lectio(date_iso)
-    if result:
-        return result
+    # Try Lectio API (reliable readings)
+    lectio_result = _get_readings_from_lectio(date_iso)
 
-    # Fallback to Vanderbilt
-    result = get_readings_for_date(d)
-    logger.info("Vanderbilt fallback returned: %s", "dict" if result else "None")
+    # Also get Vanderbilt CSV readings (may have additional sets, e.g. Liturgy of the Palms)
+    vanderbilt_results = get_readings_for_date(d)
+    logger.info("Vanderbilt returned %d reading set(s)", len(vanderbilt_results))
+
+    if not lectio_result and not vanderbilt_results:
+        return []
+
+    if not lectio_result:
+        return vanderbilt_results
+
+    if not vanderbilt_results or len(vanderbilt_results) <= 1:
+        # No extra sets from Vanderbilt — just use Lectio
+        return [lectio_result]
+
+    # Multiple Vanderbilt sets (e.g. Palm Sunday: Palms + Passion).
+    # Use Vanderbilt as the base structure, but replace the Passion set with
+    # Lectio data (which has better readings for the main service).
+    result = []
+    replaced = False
+    for v_reading in vanderbilt_results:
+        v_name = v_reading["liturgical_date"].lower()
+        if not replaced and "passion" in v_name:
+            # Replace Vanderbilt Passion entry with Lectio data, keeping the liturgical_date label
+            lectio_result["liturgical_date"] = v_reading["liturgical_date"]
+            result.append(lectio_result)
+            replaced = True
+        else:
+            result.append(v_reading)
+    if not replaced:
+        # Lectio didn't match any Passion entry — append it
+        result.append(lectio_result)
+    logger.info("Merged results: %d reading set(s): %s", len(result), [r["liturgical_date"] for r in result])
     return result
