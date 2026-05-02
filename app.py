@@ -344,21 +344,20 @@ def main():
                     st.session_state.load_service_id = svc["id"]
                     st.rerun()
 
-    # Lectionary readings: show full text and let user select which two to use (OT / NT)
-    if st.session_state.lectionary_readings:
-        r = st.session_state.lectionary_readings
-        st.header("Lectionary readings")
-        labels_refs = [
-            ("First reading (OT)", r.get("first_reading")),
-            ("Psalm", r.get("psalm")),
-            ("Second reading (NT)", r.get("second_reading")),
-            ("Gospel", r.get("gospel")),
-        ]
-        labels_refs = [(label, ref) for label, ref in labels_refs if ref]
-        if labels_refs and st.button("Load full text for all readings"):
-            logger.info("Load full text clicked, fetching %d passages", len(labels_refs))
+    # Readings: show full text and let user select which two to use (OT / NT).
+    # Sourced from the sidebar Scripture list, so user-entered references work
+    # even without a lectionary, and edits flow through to the OT/NT pickers.
+    if scriptures:
+        st.header("Readings")
+        if st.session_state.lectionary_readings:
+            r = st.session_state.lectionary_readings
+            st.caption(f"RCL: {r.get('calendar_date', '')} — {r.get('liturgical_date', '')}. Edit the Scripture list in the sidebar to use your own.")
+        else:
+            st.caption("Using the Scripture list from the sidebar. Edit it to add or change references.")
+        if st.button("Load full text for all readings"):
+            logger.info("Load full text clicked, fetching %d passages", len(scriptures))
             with st.spinner("Fetching passage text…"):
-                for _label, ref in labels_refs:
+                for ref in scriptures:
                     cached = st.session_state.scripture_full_texts.get(ref)
                     if ref and (cached is None or cached == "[Could not load text]"):
                         logger.info("Fetching passage: %s", ref)
@@ -368,20 +367,19 @@ def main():
                         st.session_state.scripture_full_texts[ref] = text or "[Could not load text]"
             logger.info("All passages fetched, rerunning")
             st.rerun()
-        for label, ref in labels_refs:
-            with st.expander(f"{label}: {ref}", expanded=False):
+        for ref in scriptures:
+            with st.expander(ref, expanded=False):
                 if ref in st.session_state.scripture_full_texts:
                     st.text(st.session_state.scripture_full_texts[ref])
                 else:
                     st.caption("Click “Load full text for all readings” to fetch text.")
-        # Expand "X or Y" into separate options so user can select each gospel choice
-        raw_refs = [ref for _l, ref in labels_refs]
-        ref_options = _expand_ref_options(raw_refs)
+        # Expand "X or Y" into separate options so user can select each choice
+        ref_options = _expand_ref_options(scriptures)
         ot_options = [r for r in ref_options if _is_ot_ref(r)]
         nt_options = [r for r in ref_options if _is_nt_ref(r)]
         logger.info(
             "Ref options: raw=%s expanded=%s ot=%s nt=%s selected_ot=%s selected_nt=%s",
-            raw_refs, ref_options, ot_options, nt_options,
+            scriptures, ref_options, ot_options, nt_options,
             st.session_state.get("selected_ot_ref"), st.session_state.get("selected_nt_ref"),
         )
         if ref_options:
