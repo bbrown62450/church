@@ -26,6 +26,7 @@ from hymn_usage import get_recently_used_identifiers, record_usage, is_hymn_rece
 from service_archive import list_saved_services, save_service, update_service, get_service
 from email_send import send_gmail
 from email_contacts import get_contacts_for_display
+import google_oauth
 
 load_dotenv()
 
@@ -119,6 +120,10 @@ if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 if "custom_elements" not in st.session_state:
     st.session_state.custom_elements = []  # [{"label": "...", "text": "...", "insert_after": "..."}]
+if "gmail_user" not in st.session_state:
+    st.session_state.gmail_user = None  # email of the connected Gmail account (this session)
+if "oauth_state" not in st.session_state:
+    st.session_state.oauth_state = None  # CSRF token for the Google OAuth round-trip
 
 # Placement options for custom elements (insert_after keys)
 CUSTOM_PLACEMENTS = [
@@ -149,7 +154,95 @@ def get_db():
         return None
 
 
+def _new_oauth_state() -> str:
+    """Generate and remember a CSRF state token for the Google OAuth round-trip."""
+    import secrets
+
+    state = secrets.token_urlsafe(24)
+    st.session_state.oauth_state = state
+    return state
+
+
+def _handle_gmail_oauth_callback():
+    """
+    Process the Google OAuth redirect (?code=...&state=...) if present.
+
+    The redirect returns to a fresh Streamlit session, so we persist the token
+    to disk (keyed by email) and carry the active account in the URL via
+    ?gmail=<email>. Runs before the app-password gate so the code isn't lost.
+    """
+    qp = st.query_params
+    if "code" not in qp:
+        return
+    code = qp.get("code")
+    returned_state = qp.get("state")
+    expected_state = st.session_state.get("oauth_state")
+    # Only enforce CSRF state when we still have it (a fresh session after the
+    # redirect legitimately won't); this app also sits behind APP_PASSWORD.
+    if expected_state and returned_state and returned_state != expected_state:
+        st.session_state.oauth_error = "Sign-in was cancelled or the request expired. Please try again."
+        st.query_params.clear()
+        st.rerun()
+        return
+    try:
+        result = google_oauth.exchange_code(code)
+    except Exception as e:  # noqa: BLE001 - show the reason to the user
+        st.session_state.oauth_error = str(e)
+        st.query_params.clear()
+        st.rerun()
+        return
+    email = (result or {}).get("email")
+    st.query_params.clear()
+    if email:
+        st.session_state.gmail_user = email
+        st.query_params["gmail"] = email
+    st.rerun()
+
+
+def _active_gmail_user():
+    """The connected Gmail for this browser, from session or the ?gmail= param."""
+    active = st.session_state.get("gmail_user") or st.query_params.get("gmail")
+    if active and not google_oauth.is_connected(active):
+        # Token was revoked/removed; forget it so the UI re-prompts.
+        active = None
+        st.session_state.gmail_user = None
+    st.session_state.gmail_user = active
+    return active
+
+
+def _render_gmail_sidebar(active_gmail):
+    """Sidebar controls for connecting / switching / disconnecting a Gmail account."""
+    with st.sidebar:
+        st.divider()
+        st.subheader("✉️ Gmail")
+        if st.session_state.get("oauth_error"):
+            st.error(st.session_state.pop("oauth_error"))
+        if not google_oauth.is_configured():
+            st.caption(
+                "Per-user Gmail sign-in isn't set up. Set GOOGLE_CLIENT_ID, "
+                "GOOGLE_CLIENT_SECRET and GOOGLE_OAUTH_REDIRECT_URI to let each "
+                "person send from their own Gmail. Falls back to a shared "
+                "Gmail App Password if configured."
+            )
+            return
+        if active_gmail:
+            st.success(f"Connected: {active_gmail}")
+            st.link_button("Switch account", google_oauth.build_auth_url(_new_oauth_state()))
+            if st.button("Disconnect", key="gmail_disconnect"):
+                google_oauth.disconnect(active_gmail)
+                st.session_state.gmail_user = None
+                st.query_params.clear()
+                st.rerun()
+        else:
+            st.caption("Sign in with Google to send worship emails from your own Gmail.")
+            st.link_button("Connect your Gmail", google_oauth.build_auth_url(_new_oauth_state()))
+
+
 def main():
+    # Handle the Google OAuth redirect first (before the password gate) so the
+    # ?code= isn't discarded when it returns to a fresh session.
+    _handle_gmail_oauth_callback()
+
     # Optional password protection (set APP_PASSWORD in .env or Streamlit secrets)
     app_password = os.getenv("APP_PASSWORD", "").strip()
     if app_password and not st.session_state.get("authenticated"):
@@ -166,6 +259,10 @@ def main():
         st.divider()
         st.caption("Set APP_PASSWORD in your environment to protect the app (e.g. email sending).")
         return
+
+    # Connected Gmail account for this browser (per-user sign-in), plus sidebar controls.
+    active_gmail = _active_gmail_user()
+    _render_gmail_sidebar(active_gmail)
 
     # Restore from archive when Load was clicked
     if st.session_state.get("load_service_id"):
@@ -916,6 +1013,14 @@ def main():
         if st.session_state.docx_bytes_secretary:
             with st.expander("Email to secretary", expanded=True):
                 st.caption("Send the secretary .docx and a friendly message via Gmail.")
+                use_oauth = google_oauth.is_configured()
+                if use_oauth:
+                    if active_gmail:
+                        st.caption(f"Sending as **{active_gmail}** (your connected Gmail).")
+                    else:
+                        st.warning(
+                            "Connect your Gmail in the sidebar to send from your own account."
+                        )
                 contacts = get_contacts_for_display()
                 contact_options = [f"{c['name']} <{c['email']}>" for c in contacts]
                 email_to_contact = {f"{c['name']} <{c['email']}>": c["email"] for c in contacts}
@@ -950,13 +1055,28 @@ def main():
                     else:
                         subject = f"Worship service — {service_date_str}"
                         body = (email_message or "Hi! Here’s the worship bulletin for this Sunday.").strip()
-                        err = send_gmail(
-                            recipient_emails,
-                            subject,
-                            body,
-                            attachment_bytes=st.session_state.docx_bytes_secretary,
-                            attachment_filename=f"worship_{safe_date}.docx",
-                        )
+                        attachment_filename = f"worship_{safe_date}.docx"
+                        if use_oauth and active_gmail:
+                            # Send from the user's own connected Gmail (Gmail API).
+                            err = google_oauth.send_email(
+                                active_gmail,
+                                recipient_emails,
+                                subject,
+                                body,
+                                attachment_bytes=st.session_state.docx_bytes_secretary,
+                                attachment_filename=attachment_filename,
+                            )
+                        elif use_oauth and not active_gmail:
+                            err = "Connect your Gmail in the sidebar first, then try again."
+                        else:
+                            # Fall back to the shared Gmail App Password (SMTP).
+                            err = send_gmail(
+                                recipient_emails,
+                                subject,
+                                body,
+                                attachment_bytes=st.session_state.docx_bytes_secretary,
+                                attachment_filename=attachment_filename,
+                            )
                         if err:
                             st.error(f"Email failed: {err}")
                         else:
