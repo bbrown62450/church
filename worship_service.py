@@ -4,16 +4,20 @@ Worship service generator: hymn suggestions by scripture, OpenAI liturgy,
 and Word document export.
 """
 
+from __future__ import annotations
+
 import logging
 import os
 import re
-from typing import Dict, Any, List, Optional
+from typing import TYPE_CHECKING, Dict, Any, List, Optional
 from io import BytesIO
 from urllib.parse import urlparse, urlunparse
 
 from dotenv import load_dotenv
-from notion_hymns import NotionHymnsDB
 from hymn_utils import get_property_value
+
+if TYPE_CHECKING:  # notion-client is migration-only; only needed for type hints here
+    from notion_hymns import NotionHymnsDB
 
 load_dotenv()
 
