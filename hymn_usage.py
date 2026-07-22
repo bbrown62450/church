@@ -1,28 +1,23 @@
 #!/usr/bin/env python3
-"""
-Track which hymns were used on which dates and exclude recently used hymns
-(e.g. last 12 weeks) from selection.
+"""Database-backed, church-scoped hymn-usage tracking.
 
-When NOTION_USAGE_DATABASE_ID is set (and NOTION_API_KEY), usage is stored
-in that Notion database (accessible online). Otherwise uses local data/hymn_usage.json.
+Drives the "exclude hymns used in the last 12 weeks" filter. All reads and
+writes are scoped to a validated `church_id`; writes are idempotent per
+(church_id, date_iso, hymn_number, hymn_title) so re-preparing a bulletin
+never inflates the exclusion set.
 """
-
-import json
-import os
-from datetime import datetime, timedelta
+import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-# Store in project data dir so it persists and can be committed if desired
-DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
-USAGE_FILE = os.path.join(DATA_DIR, "hymn_usage.json")
+from sqlalchemy import select
+
+from db import session_scope
+from db.models import HymnUsage
 
 
-def _use_notion() -> bool:
-    return bool(os.getenv("NOTION_USAGE_DATABASE_ID") and os.getenv("NOTION_API_KEY"))
-
-
-def _ensure_data_dir() -> None:
-    os.makedirs(DATA_DIR, exist_ok=True)
+def _as_uuid(value: Any) -> uuid.UUID:
+    return value if isinstance(value, uuid.UUID) else uuid.UUID(str(value))
 
 
 def _parse_date_to_iso(date_str: str) -> Optional[str]:
@@ -30,102 +25,82 @@ def _parse_date_to_iso(date_str: str) -> Optional[str]:
     s = (date_str or "").strip()
     if not s:
         return None
-    for fmt in ("%B %d, %Y", "%b %d, %Y", "%Y-%m-%d", "%m/%d/%Y", "%-m/%-d/%Y", "%d %B %Y"):
+    for fmt in ("%Y-%m-%d", "%B %d, %Y", "%b %d, %Y", "%m/%d/%Y", "%d %B %Y"):
         try:
-            d = datetime.strptime(s, fmt)
-            return d.strftime("%Y-%m-%d")
+            return datetime.strptime(s, fmt).strftime("%Y-%m-%d")
         except ValueError:
             continue
     return None
 
 
-def _load_log() -> List[Dict[str, Any]]:
-    _ensure_data_dir()
-    if not os.path.isfile(USAGE_FILE):
-        return []
+def _coerce_number(num: Any) -> Optional[int]:
+    if num is None or isinstance(num, int):
+        return num
     try:
-        with open(USAGE_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return []
-
-
-def _save_log(entries: List[Dict[str, Any]]) -> None:
-    _ensure_data_dir()
-    with open(USAGE_FILE, "w", encoding="utf-8") as f:
-        json.dump(entries, f, indent=2)
+        return int(num)
+    except (TypeError, ValueError):
+        return None
 
 
 def _hymn_key(number: Optional[int], title: str) -> Tuple[Optional[int], str]:
     """Normalized (number, title_lower) for matching."""
-    t = (title or "").strip().lower()
-    return (number, t)
+    return (number, (title or "").strip().lower())
 
 
-def get_recently_used_identifiers(weeks: int = 12) -> Set[Tuple[Optional[int], str]]:
-    """
-    Return a set of (number, title_lower) for every hymn used in the last `weeks` weeks.
-    Use this to filter the hymn list: exclude any hymn whose (number, title.lower()) is in this set.
-    """
-    if _use_notion():
-        from notion_usage import get_recently_used_identifiers as notion_recent
-        return notion_recent(weeks=weeks)
-    cutoff = datetime.now().date() - timedelta(weeks=weeks)
-    log = _load_log()
-    out = set()
-    for entry in log:
-        date_str = entry.get("date")
-        if not date_str:
-            continue
-        try:
-            entry_date = datetime.strptime(date_str, "%Y-%m-%d").date()
-        except ValueError:
-            continue
-        if entry_date < cutoff:
-            continue
-        for h in entry.get("hymns", []):
-            num = h.get("number")
-            if num is not None and not isinstance(num, int):
-                try:
-                    num = int(num)
-                except (TypeError, ValueError):
-                    num = None
-            title = (h.get("title") or "").strip()
-            out.add(_hymn_key(num, title))
-    return out
+def get_recently_used_identifiers(church_id, weeks: int = 12) -> Set[Tuple[Optional[int], str]]:
+    """Set of (number, title_lower) used by THIS church in the last `weeks` weeks."""
+    cid = _as_uuid(church_id)
+    cutoff = (datetime.now(timezone.utc).date() - timedelta(weeks=weeks)).isoformat()
+    with session_scope() as session:
+        rows = session.execute(
+            select(HymnUsage.hymn_number, HymnUsage.hymn_title).where(
+                HymnUsage.church_id == cid,
+                HymnUsage.date_iso >= cutoff,
+            )
+        ).all()
+    return {_hymn_key(number, title) for number, title in rows}
 
 
-def record_usage(date_str: str, hymns: List[Dict[str, Any]]) -> bool:
-    """
-    Append a service to the usage log. `date_str` can be e.g. "February 15, 2026".
-    `hymns` is a list of dicts with "title" and optionally "number" (e.g. from hymn_display_info).
-    Returns True if recorded, False if date could not be parsed.
+def record_usage(church_id, date_str: str, hymns: List[Dict[str, Any]]) -> bool:
+    """Record a service's hymns for a church. Idempotent per dedupe key.
+
+    `date_str` may be e.g. "February 15, 2026" or "2026-02-15".
+    Returns True if recorded (or nothing to record); False if date unparseable.
     """
     iso = _parse_date_to_iso(date_str)
     if not iso:
         return False
-    if _use_notion():
-        from notion_usage import record_usage as notion_record
-        if notion_record(date_str, hymns):
-            return True
-        # fallback to local if Notion failed
-    payload = []
+    cid = _as_uuid(church_id)
+
+    payload: List[Tuple[Optional[int], str]] = []
     for h in hymns:
-        title = h.get("title") or ""
+        title = (h.get("title") or "").strip()
         if not title:
             continue
-        num = h.get("number")
-        if num is not None and not isinstance(num, int):
-            try:
-                num = int(num)
-            except (TypeError, ValueError):
-                num = None
-        payload.append({"number": num, "title": title})
+        payload.append((_coerce_number(h.get("number")), title))
     if not payload:
         return True
-    log = _load_log()
-    log.append({"date": iso, "hymns": payload})
-    _save_log(log)
+
+    with session_scope() as session:
+        existing = session.execute(
+            select(HymnUsage.hymn_number, HymnUsage.hymn_title).where(
+                HymnUsage.church_id == cid,
+                HymnUsage.date_iso == iso,
+            )
+        ).all()
+        seen = {(n, t) for n, t in existing}
+        for num, title in payload:
+            if (num, title) in seen:
+                continue
+            session.add(
+                HymnUsage(
+                    church_id=cid,
+                    date_iso=iso,
+                    hymn_number=num,
+                    hymn_title=title,
+                )
+            )
+            seen.add((num, title))
     return True
 
 
@@ -135,4 +110,4 @@ def is_hymn_recently_used(
     recent_set: Set[Tuple[Optional[int], str]],
 ) -> bool:
     """True if this hymn (number, title) is in the recent-usage set."""
-    return _hymn_key(number, (title or "").strip()) in recent_set
+    return _hymn_key(number, title) in recent_set
