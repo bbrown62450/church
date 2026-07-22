@@ -26,7 +26,9 @@ Setup (one-time, in your own Google account):
 
 import base64
 import os
+import secrets
 import uuid
+from datetime import datetime, timedelta, timezone
 from email import encoders
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
@@ -39,7 +41,7 @@ from sqlalchemy import select
 
 import auth
 from db import session_scope
-from db.models import GmailToken
+from db.models import GmailToken, OAuthState
 
 # Scopes: identify the connecting Google account (email) and let the app send
 # mail as them. openid/userinfo.email are kept ONLY so the callback can verify
@@ -57,6 +59,12 @@ GMAIL_SEND_URI = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send"
 
 _TIMEOUT = 30
 
+# Marker appended to the manual gmail.send redirect (app root) so its ?code=
+# is distinguishable from Streamlit's internal /oauth2callback (§1).
+GMAIL_OAUTH_MARKER = "gmail_oauth"
+# Short TTL for a single-use CSRF state.
+STATE_TTL = timedelta(minutes=10)
+
 
 # --------------------------------------------------------------------------- #
 # Configuration
@@ -71,6 +79,13 @@ def _client_secret() -> str:
 
 def _redirect_uri() -> str:
     return os.getenv("GOOGLE_OAUTH_REDIRECT_URI", "").strip()
+
+
+def _redirect_uri_with_marker() -> str:
+    """The app-root redirect_uri plus the gmail_oauth marker query param."""
+    base = _redirect_uri()
+    sep = "&" if "?" in base else "?"
+    return f"{base}{sep}{GMAIL_OAUTH_MARKER}=1"
 
 
 def is_configured() -> bool:
@@ -117,18 +132,78 @@ def disconnect(user_id: uuid.UUID) -> None:
 # OAuth flow
 # --------------------------------------------------------------------------- #
 def build_auth_url(state: str) -> str:
-    """URL to send the user to Google's consent screen."""
+    """URL to send the user to Google's consent screen for the gmail.send grant.
+
+    The redirect target is the app root plus the gmail_oauth marker so the return
+    trip is distinguishable from Streamlit's internal /oauth2callback handler and
+    is only processed by should_handle_gmail_callback().
+    """
     params = {
         "client_id": _client_id(),
-        "redirect_uri": _redirect_uri(),
+        "redirect_uri": _redirect_uri_with_marker(),
         "response_type": "code",
         "scope": " ".join(SCOPES),
         "access_type": "offline",       # request a refresh token
         "prompt": "consent",            # ensure a refresh token is returned
-        "include_granted_scopes": "true",
         "state": state,
     }
     return f"{AUTH_URI}?{urlencode(params)}"
+
+
+def create_state(user_id: uuid.UUID) -> str:
+    """Create a single-use CSRF state bound to the user; return the opaque token."""
+    state = secrets.token_urlsafe(32)
+    now = datetime.now(timezone.utc)
+    with session_scope() as session:
+        session.add(
+            OAuthState(
+                state=state,
+                user_id=user_id,
+                created_at=now,
+                expires_at=now + STATE_TTL,
+            )
+        )
+    return state
+
+
+def consume_state(state: str) -> Optional[uuid.UUID]:
+    """Validate and consume a CSRF state; return the bound user_id on success.
+
+    Single-use: the row is deleted whenever found (valid *or* expired). Returns
+    None for missing / expired / already-used states — never raises, and a
+    missing state is never treated as a pass (§4).
+    """
+    if not state:
+        return None
+    with session_scope() as session:
+        row = session.get(OAuthState, state)
+        if row is None:
+            return None
+        user_id = row.user_id
+        expires_at = row.expires_at
+        session.delete(row)  # consumed regardless of validity
+    if expires_at is None:
+        return None
+    if expires_at.tzinfo is None:            # SQLite may hand back naive datetimes
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at < datetime.now(timezone.utc):
+        return None
+    return user_id
+
+
+def should_handle_gmail_callback(query_params, is_logged_in: bool) -> bool:
+    """Whether a ?code= belongs to the manual gmail.send flow (vs. st.login).
+
+    Pure/testable. True only when the gmail marker is present, an auth code is
+    present, and a login session already exists — keeping Streamlit's internal
+    handler from grabbing the manual code and enforcing "never exchange a token
+    before authentication" (§4).
+    """
+    if not is_logged_in or not query_params:
+        return False
+    has_marker = str(query_params.get(GMAIL_OAUTH_MARKER, "")) in ("1", "true", "True")
+    has_code = bool(query_params.get("code"))
+    return has_marker and has_code
 
 
 def exchange_code(code: str) -> Dict[str, Optional[str]]:
