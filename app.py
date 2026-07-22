@@ -19,13 +19,20 @@ from hymn_usage import get_recently_used_identifiers, record_usage, is_hymn_rece
 from service_archive import list_saved_services, save_service, update_service, get_service
 from email_contacts import list_contacts
 from repos.hymns import list_hymns
-from repos.churches import list_user_churches
+from repos.churches import list_user_churches, create_church
+from repos.invites import accept_invite
 import google_oauth
 
 from db import init_db
 from auth import require_login, do_logout
 from tenancy import require_active_church
-from ui_helpers import capture_query_params, clear_oauth_query_params, build_title_to_info
+from ui_helpers import (
+    capture_query_params,
+    clear_oauth_query_params,
+    build_title_to_info,
+    pick_invite_code,
+    coerce_selectbox_value,
+)
 import pages.settings as settings_page
 
 load_dotenv()
@@ -230,10 +237,68 @@ def render_church_switcher(user, active):
             st.rerun()
 
 
+def safe_hymn_selectbox(label, options, key, format_func):
+    """A hymn selectbox that first coerces a stale stored value to '' (guarding
+    against StreamlitAPIException when the church's options changed), then renders."""
+    current = st.session_state.get(key, "")
+    coerced = coerce_selectbox_value(current, options)
+    if coerced != current:
+        st.session_state[key] = coerced
+    return st.selectbox(label, options=options, key=key, format_func=format_func)
+
+
 def render_onboarding(user):
-    # Placeholder; fully implemented in Task 18.
-    st.title("Welcome")
-    st.info("You don't belong to a church yet. Create one or join by invite.")
+    """Signed-in user with no membership: create a church or join by invite."""
+    user_id = user["user_id"]
+    st.title("Welcome to Worship Service Builder")
+    st.caption(f"Signed in as {user['email']}. You don't belong to a church yet.")
+
+    pending_code = st.session_state.get("pending_invite_code")
+    if pending_code:
+        st.info("You opened an invite link. Review and accept it below.")
+
+    tab_join, tab_create = st.tabs(["Join a church", "Create a church"])
+
+    with tab_join:
+        typed = st.text_input("Invite code", value=pending_code or "", key="onboard_invite_code")
+        if st.button("Join church", key="onboard_join"):
+            code = pick_invite_code(pending_code, typed)
+            if not code:
+                st.error("Enter an invite code, or open your invite link again.")
+            else:
+                try:
+                    ok, msg = accept_invite(code, user_id)
+                except Exception as e:  # noqa: BLE001
+                    ok, msg = False, str(e)
+                if ok:
+                    st.session_state.pop("pending_invite_code", None)
+                    st.query_params.clear()  # onboarding is terminal; safe to clear here
+                    st.success(msg or "Joined. Loading your church…")
+                    st.rerun()
+                else:
+                    st.error(msg or "That invite code is not valid.")
+
+    with tab_create:
+        with st.form("onboard_create_church"):
+            name = st.text_input("Church name", key="onboard_church_name")
+            timezone = st.text_input("Timezone", value="America/New_York",
+                                     key="onboard_church_tz",
+                                     help="e.g. America/New_York — drives first-Sunday and the 12-week window.")
+            if st.form_submit_button("Create church"):
+                if not name.strip():
+                    st.error("Church name is required.")
+                elif not timezone.strip():
+                    st.error("Timezone is required.")
+                else:
+                    try:
+                        cid = create_church(name=name.strip(),
+                                            timezone=timezone.strip(),
+                                            owner_user_id=user_id)
+                        st.session_state["active_church_id"] = str(cid)
+                        st.success("Church created. Loading…")
+                        st.rerun()
+                    except Exception as e:  # noqa: BLE001
+                        st.error(f"Could not create church: {e}")
 
 
 def main():
@@ -563,20 +628,17 @@ def render_service_builder(user, active):
             st.subheader("Opening")
             st.caption("Gathering / call to worship")
             if titles_sorted:
-                st.selectbox("Opening hymn", options=[""] + titles_sorted,
-                             format_func=_hymn_label, key="opening")
+                safe_hymn_selectbox("Opening hymn", [""] + titles_sorted, "opening", _hymn_label)
         with col2:
             st.subheader("After sermon")
             st.caption("Response to scripture (NT reading)")
             if titles_sorted:
-                st.selectbox("Response hymn", options=[""] + titles_sorted,
-                             format_func=_hymn_label, key="response")
+                safe_hymn_selectbox("Response hymn", [""] + titles_sorted, "response", _hymn_label)
         with col3:
             st.subheader("Closing")
             st.caption("Joyful / sending")
             if titles_sorted:
-                st.selectbox("Closing hymn", options=[""] + titles_sorted,
-                             format_func=_hymn_label, key="closing")
+                safe_hymn_selectbox("Closing hymn", [""] + titles_sorted, "closing", _hymn_label)
 
     hymn_selection_fragment()
 

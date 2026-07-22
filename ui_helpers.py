@@ -45,3 +45,19 @@ def build_title_to_info(hymns: list) -> dict:
         if title:
             out[title.lower()] = hymn_display_from_flat(row)
     return out
+
+
+def pick_invite_code(pending, typed) -> str:
+    """Invite code to attempt: a typed value wins; otherwise the captured ?invite=."""
+    typed = (typed or "").strip()
+    if typed:
+        return typed
+    return (pending or "").strip()
+
+
+def coerce_selectbox_value(current, options) -> str:
+    """Reset a stored selectbox value to '' when it's not among the current options,
+    so switching churches never raises StreamlitAPIException (spec §5)."""
+    if current in options:
+        return current
+    return ""
