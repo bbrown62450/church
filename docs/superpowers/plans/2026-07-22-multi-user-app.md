@@ -18,6 +18,7 @@ _These apply to every task; each task's requirements implicitly include this sec
 - **Session key:** the active church is stored under the session key `active_church_id` (one canonical key everywhere — capture, switcher, guard).
 - **Connection (prod):** Supabase **session pooler** URL (IPv4) in `DATABASE_URL`; engine built with `pool_pre_ping=True`, `pool_recycle=280`, cached with `@st.cache_resource` in the app.
 - **TDD:** each task = write failing test -> run (fail) -> implement -> run (pass) -> commit. Tests use the shared `tests/conftest.py` fixtures (`tmp_db`, `make_user`, `make_church`, `seed_catalog`). Streamlit-only code is tested via extracted pure helpers.
+- **FK insert ordering:** the models deliberately define no ORM `relationship()`s, so the unit-of-work does NOT auto-order parent-before-child inserts. Any code that inserts a parent and a FK-referencing child in the SAME `session_scope()` (e.g. `create_church` inserting a `Church` then its owner `Membership` and seeded `Hymn`s) MUST call `session.flush()` after the parent rows, before adding the children — otherwise SQLite (FK pragma on) and Postgres both raise a foreign-key IntegrityError. Discovered while implementing Task 3.
 - **Commits:** end each commit message with `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
 
 A canonical **Shared Interfaces** reference (every module's exact signatures) is included as an appendix at the end of this plan — consult it whenever a task consumes another task's output.

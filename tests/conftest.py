@@ -78,6 +78,7 @@ def make_church(tmp_db, make_user):
         church_id = uuid.uuid4()
         with session_scope() as s:
             s.add(Church(id=church_id, name=name, timezone=timezone))
+            s.flush()  # persist the church before its FK-referencing membership
             s.add(Membership(church_id=church_id, user_id=owner_user_id, role="owner"))
         return church_id
 
