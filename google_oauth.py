@@ -37,11 +37,9 @@ from typing import Dict, List, Optional, Union
 from urllib.parse import urlencode
 
 import requests
-from sqlalchemy import select
 
-import auth
 from db import session_scope
-from db.models import GmailToken, OAuthState
+from db.models import GmailToken, OAuthState, User
 
 # Scopes: identify the connecting Google account (email) and let the app send
 # mail as them. openid/userinfo.email are kept ONLY so the callback can verify
@@ -86,6 +84,13 @@ def _redirect_uri_with_marker() -> str:
     base = _redirect_uri()
     sep = "&" if "?" in base else "?"
     return f"{base}{sep}{GMAIL_OAUTH_MARKER}=1"
+
+
+def _user_email(user_id: uuid.UUID) -> Optional[str]:
+    """The stored (normalized) email for a user id, or None if unknown."""
+    with session_scope() as session:
+        user = session.get(User, user_id)
+        return user.email if user else None
 
 
 def is_configured() -> bool:
@@ -206,20 +211,26 @@ def should_handle_gmail_callback(query_params, is_logged_in: bool) -> bool:
     return has_marker and has_code
 
 
-def exchange_code(code: str) -> Dict[str, Optional[str]]:
+def exchange_code(code: str, expected_user_id: uuid.UUID) -> dict:
+    """Exchange an authorization code for tokens and store them for the signed-in
+    user only.
+
+    Security (§4): the refresh token is saved *only if* the Google account that
+    authorized equals the signed-in user's email. A mismatch raises RuntimeError
+    and stores nothing, so a user can never connect (or later send as) an account
+    that isn't theirs. Returns {"user_id": UUID, "email": str, "refresh_token": str|None}.
     """
-    Exchange an authorization code for tokens, look up the user's email, and
-    persist the refresh token bound to a user row. Returns
-    {"user_id": ..., "email": ..., "refresh_token": ...}. Raises RuntimeError
-    with a readable message on failure.
-    """
+    expected_email = _user_email(expected_user_id)
+    if not expected_email:
+        raise RuntimeError("Sign in before connecting a Gmail account.")
+
     resp = requests.post(
         TOKEN_URI,
         data={
             "code": code,
             "client_id": _client_id(),
             "client_secret": _client_secret(),
-            "redirect_uri": _redirect_uri(),
+            "redirect_uri": _redirect_uri_with_marker(),
             "grant_type": "authorization_code",
         },
         timeout=_TIMEOUT,
@@ -232,21 +243,28 @@ def exchange_code(code: str) -> Dict[str, Optional[str]]:
     if not access_token:
         raise RuntimeError("Google did not return an access token.")
 
-    email = _fetch_email(access_token)
-    if not email:
+    google_email = _fetch_email(access_token)
+    if not google_email:
         raise RuntimeError("Could not read your email address from Google.")
 
-    # Transitional: bind the token to a user row. Task 16 replaces this with an
-    # explicit expected_user_id + email-match check (the §4 security fix).
-    user_id = auth.upsert_from_claims({"email": email})
+    if google_email.strip().lower() != expected_email.strip().lower():
+        raise RuntimeError(
+            "That Google account doesn't match your signed-in email. "
+            "Connect the Gmail account you're logged in with."
+        )
+
     if refresh_token:
-        save_user_token(user_id, email, refresh_token)
-    elif not is_connected(user_id):
+        save_user_token(expected_user_id, google_email, refresh_token)
+    elif not is_connected(expected_user_id):
         raise RuntimeError(
             "Google did not return a refresh token. Remove this app's access at "
             "https://myaccount.google.com/permissions and connect again."
         )
-    return {"user_id": user_id, "email": email, "refresh_token": refresh_token}
+    return {
+        "user_id": expected_user_id,
+        "email": google_email,
+        "refresh_token": refresh_token,
+    }
 
 
 def _fetch_email(access_token: str) -> Optional[str]:
