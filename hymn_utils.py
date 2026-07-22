@@ -1,9 +1,20 @@
-"""Shared helpers for reading hymn properties from Notion."""
-from typing import Dict, Any
+"""Shared helpers for reading hymn properties.
+
+Supports two shapes:
+  * Nested Notion page shape: {"properties": {<name>: {"type": ..., ...}}}
+  * Flat dict shape produced by repos.hymns.list_hymns:
+    {<Notion property name>: <plain value>}
+"""
+from typing import Any, Dict
 
 
 def get_property_value(hymn: Dict[str, Any], prop_name: str) -> Any:
-    """Get the value of a property from a hymn object."""
+    """Get the value of a property from a hymn object (nested or flat)."""
+    # Flat shape: the Notion property names are top-level keys mapping directly
+    # to plain values. Detect it by the absence of a Notion "properties" envelope.
+    if "properties" not in hymn:
+        return hymn.get(prop_name)
+
     props = hymn.get("properties", {})
     prop_data = props.get(prop_name, {})
     prop_type = prop_data.get("type")
