@@ -403,7 +403,12 @@ def suggest_hymns_for_service(
     scripture_full_texts = scripture_full_texts or {}
     client = None
     if OpenAI:
-        key = api_key or os.getenv("OPENAI_API_KEY")
+        key = (api_key or os.getenv("OPENAI_API_KEY") or "").strip()
+        if key and not key.isascii():
+            raise ValueError(
+                "Your OPENAI_API_KEY contains invalid (non-ASCII) characters — "
+                "it was likely mangled when pasted. Re-paste it in Settings → Secrets."
+            )
         if key:
             client = OpenAI(api_key=key)
 
@@ -694,7 +699,16 @@ def generate_liturgy(
     overrides = user_overrides or {}
     client = None
     if OpenAI:
-        key = api_key or os.getenv("OPENAI_API_KEY")
+        key = (api_key or os.getenv("OPENAI_API_KEY") or "").strip()
+        if key and not key.isascii():
+            # A pasted key sometimes arrives with Unicode look-alike characters
+            # (e.g. from a rich-text copy path); the HTTP layer then fails with a
+            # cryptic 'ascii codec' error. Say what actually happened instead.
+            return {
+                s: "[Your OPENAI_API_KEY contains invalid (non-ASCII) characters — "
+                   "it was likely mangled when pasted. Re-paste it in Settings → Secrets.]"
+                for s in sections
+            }
         if key:
             client = OpenAI(api_key=key)
 

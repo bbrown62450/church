@@ -12,7 +12,13 @@ from datetime import date
 import streamlit as st
 from dotenv import load_dotenv
 
-from worship_service import generate_liturgy, build_docx
+from worship_service import (
+    generate_liturgy,
+    build_docx,
+    hymns_by_scripture,
+    hymn_display_info,
+    suggest_hymns_for_service,
+)
 from vanderbilt_lectionary import get_readings_for_date_string
 from scripture_fetcher import get_passage_text
 from hymn_usage import get_recently_used_identifiers, record_usage, is_hymn_recently_used
@@ -33,7 +39,7 @@ from ui_helpers import (
     pick_invite_code,
     coerce_selectbox_value,
 )
-import pages.settings as settings_page
+import views.settings as settings_page
 
 load_dotenv()
 
@@ -573,13 +579,8 @@ def render_service_builder(user, active):
                 st.session_state.selected_nt_ref = nt_choice or ""
         st.divider()
 
-    # Main: hymn selection (from this church's DB hymnal)
-    st.header("Hymns")
-    exclude_recent_hymns = st.checkbox(
-        "Exclude hymns used in the last 12 weeks",
-        value=False,
-        help="When checked, hymns from recent services are hidden from the dropdowns.",
-    )
+    # Load this church's hymnal once per session (used by the scripture search,
+    # AI suggestions, and the hymn pickers below).
     all_hymns = st.session_state.get("_cached_all_hymns")
     if all_hymns is None:
         try:
@@ -591,6 +592,69 @@ def render_service_builder(user, active):
             st.error(f"Could not load hymns: {e}. Click **Refresh hymn list** to retry.")
             all_hymns = []
             st.session_state["_cached_all_hymns"] = []
+
+    # Hymn search by scripture (in-memory over this church's hymnal)
+    if all_hymns:
+        with st.expander("Find hymns matching any of the scriptures", expanded=True):
+            extra_scripture = st.text_input(
+                "Additional scripture (optional)",
+                placeholder="e.g. Matthew 17 or Psalm 99",
+                key="extra_scripture",
+            )
+            refs_to_search = list(scriptures) if scriptures else []
+            if extra_scripture and extra_scripture.strip():
+                refs_to_search.append(extra_scripture.strip())
+            if st.button("Find hymns matching any of the scriptures"):
+                if not refs_to_search:
+                    st.info("Enter scripture readings above, or add one in the field above.")
+                else:
+                    logger.info("Searching hymns for refs: %s", refs_to_search)
+                    with st.spinner("Searching hymnal…"):
+                        seen_ids = set()
+                        matched = []
+                        for ref in refs_to_search:
+                            for h in hymns_by_scripture(None, ref, limit=50, all_hymns=all_hymns):
+                                if h["id"] not in seen_ids:
+                                    seen_ids.add(h["id"])
+                                    matched.append(h)
+                    if not matched:
+                        logger.info("No hymns found for refs %s", refs_to_search)
+                        st.info("No hymns in your hymnal matching those references. Try shorter refs (e.g. 'Matthew 17').")
+                    else:
+                        logger.info("Found %d hymns for refs %s", len(matched), refs_to_search)
+                        st.session_state["scripture_hymns"] = matched
+                        st.session_state["scripture_refs_used"] = refs_to_search
+
+            if "scripture_hymns" in st.session_state:
+                refs_used = st.session_state.get("scripture_refs_used", [])
+                st.caption("Matching: " + ", ".join(refs_used))
+                # Resolve real audio URL from Hymnary only for first 15 to avoid run timeout
+                max_resolve = 15
+                hymn_list = st.session_state["scripture_hymns"][:20]
+                for i, h in enumerate(hymn_list):
+                    info = hymn_display_info(h, resolve_audio=i < max_resolve)
+                    num = info.get("number") or "—"
+                    audio_url = info.get("audio_url") or ""
+                    audio_id = f"audio_{h['id']}_{i}"
+                    hymn_link = info.get("link") or ""
+                    if hymn_link:
+                        st.markdown(f"[#{num} — {info['title']}]({hymn_link})")
+                    else:
+                        st.text(f"#{num} — {info['title']}")
+                    if audio_url:
+                        escaped_url = html.escape(audio_url)
+                        safe_id = html.escape(audio_id)
+                        st.html(
+                            f'<div id="wrap-{safe_id}"><audio id="{safe_id}" controls src="{escaped_url}"></audio></div>'
+                        )
+
+    # Main: hymn selection (from this church's DB hymnal)
+    st.header("Hymns")
+    exclude_recent_hymns = st.checkbox(
+        "Exclude hymns used in the last 12 weeks",
+        value=False,
+        help="When checked, hymns from recent services are hidden from the dropdowns.",
+    )
     if st.button("Refresh hymn list", key="refresh_hymns"):
         st.session_state.pop("_cached_all_hymns", None)
         st.rerun()
@@ -620,6 +684,77 @@ def render_service_builder(user, active):
         if not x:
             return "— Select —"
         return (title_to_info.get(x) or {}).get("title") or x
+
+    if titles_sorted and st.button(
+        "Suggest hymns (AI)",
+        key="suggest_hymns_btn",
+        help="Use AI to suggest opening (gathering), response (scripture-based), and closing (joyful) hymns.",
+    ):
+        progress_bar = st.progress(0, text="Starting…")
+
+        def _on_progress(msg: str, pct: float) -> None:
+            progress_bar.progress(min(1.0, pct), text=msg)
+
+        try:
+            suggestions = suggest_hymns_for_service(
+                db=None,
+                occasion=occasion,
+                scriptures=scriptures,
+                selected_nt_ref=st.session_state.get("selected_nt_ref") or None,
+                scripture_full_texts=st.session_state.get("scripture_full_texts") or {},
+                scripture_text_fetcher=get_passage_text,
+                limit_per_slot=5,
+                progress_callback=_on_progress,
+                all_hymns=all_hymns,
+            )
+            logger.info("AI suggestions returned: %s", {
+                k: [s.get("title") for s in v] for k, v in suggestions.items()
+            })
+
+            def _find_key(suggested: dict) -> str:
+                t = (suggested.get("title") or "").strip()
+                if not t:
+                    return ""
+                k = t.lower()
+                if k in title_to_info:
+                    return k
+                for key in title_to_info:
+                    if (title_to_info[key].get("title") or "").strip().lower() == k:
+                        return key
+                logger.warning("Suggested title %r not found in hymn list", t)
+                return ""
+
+            applied = {}
+            for slot in ("opening", "response", "closing"):
+                slot_suggestions = suggestions.get(slot, [])
+                if not slot_suggestions:
+                    logger.warning("No suggestions for slot %r", slot)
+                    continue
+                found = _find_key(slot_suggestions[0])
+                if found and found in title_to_info:
+                    st.session_state[slot] = found
+                    applied[slot] = title_to_info[found].get("title", found)
+                    logger.info("Applied %s: %r -> key %r", slot, slot_suggestions[0].get("title"), found)
+                else:
+                    logger.warning("Could not match %s suggestion %r to hymn list", slot, slot_suggestions[0].get("title"))
+
+            if applied:
+                parts = [f"**{slot.title()}**: {title}" for slot, title in applied.items()]
+                st.session_state["_suggestion_message"] = "AI suggestions applied: " + " | ".join(parts)
+            else:
+                st.session_state["_suggestion_message"] = "AI could not match any suggestions to your hymn list. Try different scriptures or check the logs."
+            progress_bar.progress(1.0, text="Done!")
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Suggest hymns failed")
+            st.session_state["_suggestion_message"] = f"Could not suggest hymns: {e}"
+        st.rerun()
+
+    if "_suggestion_message" in st.session_state:
+        msg = st.session_state.pop("_suggestion_message")
+        if "Could not" in msg or "could not" in msg:
+            st.warning(msg)
+        else:
+            st.success(msg)
 
     @st.fragment
     def hymn_selection_fragment():
