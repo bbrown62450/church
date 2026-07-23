@@ -1037,7 +1037,7 @@ def render_service_builder(user, active):
                 contact_options = [f"{c['name']} <{c['email']}>" for c in contacts]
                 email_to_contact = {f"{c['name']} <{c['email']}>": c["email"] for c in contacts}
                 selected_contacts = st.multiselect(
-                    "Recipients", options=contact_options, default=contact_options,
+                    "Recipients", options=contact_options,
                     key="email_recipients", help="Select one or more saved contacts.")
                 additional_emails = st.text_input(
                     "Additional emails (comma-separated)", key="secretary_email_extra",
