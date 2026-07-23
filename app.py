@@ -385,8 +385,9 @@ def render_service_builder(user, active):
     st.title("Worship Service Builder")
     st.caption("Suggest hymns by scripture, generate liturgy with AI, export to Word.")
 
-    # Sidebar: date selector, occasion, and scriptures
-    with st.sidebar:
+    # Service date: top of the main screen — it drives the occasion and readings.
+    col_date, _ = st.columns([1, 3])
+    with col_date:
         service_date_picked = st.date_input(
             "Service date",
             value=date.today(),
@@ -403,8 +404,7 @@ def render_service_builder(user, active):
             "Date changed: date_iso=%s, last_lectionary_date=%s, service_date_str=%s",
             date_iso, st.session_state.last_lectionary_date, service_date_str,
         )
-        with st.sidebar:
-            st.info("Loading occasion and readings…")
+        st.info("Loading occasion and readings…")
         try:
             with st.spinner("Loading occasion and readings…"):
                 readings_list = get_readings_for_date_string(service_date_str)
@@ -445,7 +445,7 @@ def render_service_builder(user, active):
     )
     with st.sidebar:
         st.header("Service details")
-        st.caption("Filled from the service date above.")
+        st.caption("Filled from the service date on the main screen.")
         # When multiple reading sets exist (e.g. Palm Sunday: Palms + Passion), let user switch.
         readings_list = st.session_state.get("lectionary_readings_list") or []
         if len(readings_list) > 1:
