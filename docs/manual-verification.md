@@ -6,7 +6,7 @@ redirects/cookies and cannot be fully covered by unit tests.
 
 ## 1. Gmail callback with `[auth]` CORS/XSRF enabled
 - [ ] Enabling `[auth]` auto-enables Streamlit's CORS/XSRF protection. Confirm
-      the manual gmail.send return to the **app root** with `?code=...&gmail_oauth=1`
+      the manual gmail.send return to the **app root** with `?code=...&state=...`
       is delivered to app code (a top-level GET) and is **not** swallowed by
       Streamlit's internal `/oauth2callback` login handler.
 - [ ] Click **Connect your Gmail**, complete Google consent, and confirm the

@@ -46,10 +46,10 @@ def test_consume_expired_state_returns_none_and_deletes(tmp_db, make_user):
 @pytest.mark.parametrize(
     "params,is_logged_in,expected",
     [
-        ({"gmail_oauth": "1", "code": "abc"}, True, True),
-        ({"code": "abc"}, True, False),                     # no marker -> st.login's
-        ({"gmail_oauth": "1"}, True, False),                # no code
-        ({"gmail_oauth": "1", "code": "abc"}, False, False),  # not logged in
+        ({"code": "abc", "state": "s1"}, True, True),
+        ({"code": "abc"}, True, False),                      # no state -> not ours
+        ({"state": "s1"}, True, False),                      # no code
+        ({"code": "abc", "state": "s1"}, False, False),      # not logged in
         ({}, True, False),
     ],
 )
@@ -57,10 +57,13 @@ def test_should_handle_gmail_callback(params, is_logged_in, expected):
     assert google_oauth.should_handle_gmail_callback(params, is_logged_in) is expected
 
 
-def test_build_auth_url_carries_marker_and_state(monkeypatch):
+def test_build_auth_url_uses_bare_root_and_state(monkeypatch):
     monkeypatch.setenv("GOOGLE_CLIENT_ID", "cid")
     monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "secret")
     monkeypatch.setenv("GOOGLE_OAUTH_REDIRECT_URI", "https://app.example/")
     url = google_oauth.build_auth_url("state-token-123")
-    assert "gmail_oauth%3D1" in url          # marker rides inside redirect_uri (url-encoded)
+    # Bare app-root redirect (exactly what gets registered in the Google console) —
+    # no query-string marker that would break Google's exact-match rule.
+    assert "redirect_uri=https%3A%2F%2Fapp.example%2F&" in url
+    assert "gmail_oauth" not in url
     assert "state=state-token-123" in url

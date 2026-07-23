@@ -58,11 +58,11 @@ trailing slash):
 
 1. `https://<app>/oauth2callback` — for `st.login` (handled internally by
    Streamlit; never reaches app code). This is the `[auth]` `redirect_uri`.
-2. `https://<app>/` (the app root) — for the manual `gmail.send` flow. The
-   manual redirect carries the marker `?gmail_oauth=1`, and
-   `google_oauth.should_handle_gmail_callback(...)` processes a `?code=` **only**
-   when that marker is present, so it never collides with Streamlit's login
-   handler. Set `GOOGLE_OAUTH_REDIRECT_URI` to this app-root value.
+2. `https://<app>/` (the bare app root, trailing slash included) — for the
+   manual `gmail.send` flow. Set `GOOGLE_OAUTH_REDIRECT_URI` to this exact
+   app-root value. The return trip is identified by its single-use `?state=`;
+   Streamlit's login callback lives on `/oauth2callback` and never delivers a
+   code to the app root, so the flows cannot collide.
 
 Enable the **Gmail API**, and while the app is unverified add each sender under
 **Test users** (up to 100). A dedicated OAuth client for `gmail.send` is an

@@ -11,7 +11,7 @@ def test_readme_documents_multiuser_ops():
     readme = _read("README.md")
     assert "[auth]" in readme                          # Streamlit login secrets block
     assert "/oauth2callback" in readme                 # login redirect URI (URI #1)
-    assert "gmail_oauth=1" in readme                   # app-root gmail.send redirect (URI #2)
+    assert "bare app root" in readme                   # app-root gmail.send redirect (URI #2)
     assert "pooler.supabase.com" in readme             # session-pooler DATABASE_URL
     assert "python migrate_to_db.py" in readme         # migration command
     assert ("keep-alive" in readme.lower()) or ("keepalive" in readme.lower())

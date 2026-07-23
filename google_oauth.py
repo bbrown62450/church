@@ -57,9 +57,6 @@ GMAIL_SEND_URI = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send"
 
 _TIMEOUT = 30
 
-# Marker appended to the manual gmail.send redirect (app root) so its ?code=
-# is distinguishable from Streamlit's internal /oauth2callback (§1).
-GMAIL_OAUTH_MARKER = "gmail_oauth"
 # Short TTL for a single-use CSRF state.
 STATE_TTL = timedelta(minutes=10)
 
@@ -77,13 +74,6 @@ def _client_secret() -> str:
 
 def _redirect_uri() -> str:
     return os.getenv("GOOGLE_OAUTH_REDIRECT_URI", "").strip()
-
-
-def _redirect_uri_with_marker() -> str:
-    """The app-root redirect_uri plus the gmail_oauth marker query param."""
-    base = _redirect_uri()
-    sep = "&" if "?" in base else "?"
-    return f"{base}{sep}{GMAIL_OAUTH_MARKER}=1"
 
 
 def _user_email(user_id: uuid.UUID) -> Optional[str]:
@@ -139,13 +129,14 @@ def disconnect(user_id: uuid.UUID) -> None:
 def build_auth_url(state: str) -> str:
     """URL to send the user to Google's consent screen for the gmail.send grant.
 
-    The redirect target is the app root plus the gmail_oauth marker so the return
-    trip is distinguishable from Streamlit's internal /oauth2callback handler and
-    is only processed by should_handle_gmail_callback().
+    The redirect target is the bare app root (register exactly that URI in the
+    Google console). The return trip is identified by its single-use ?state=
+    (validated against oauth_states); Streamlit's own login callback lives on
+    /oauth2callback and never reaches app code.
     """
     params = {
         "client_id": _client_id(),
-        "redirect_uri": _redirect_uri_with_marker(),
+        "redirect_uri": _redirect_uri(),
         "response_type": "code",
         "scope": " ".join(SCOPES),
         "access_type": "offline",       # request a refresh token
@@ -199,16 +190,15 @@ def consume_state(state: str) -> Optional[uuid.UUID]:
 def should_handle_gmail_callback(query_params, is_logged_in: bool) -> bool:
     """Whether a ?code= belongs to the manual gmail.send flow (vs. st.login).
 
-    Pure/testable. True only when the gmail marker is present, an auth code is
-    present, and a login session already exists — keeping Streamlit's internal
-    handler from grabbing the manual code and enforcing "never exchange a token
-    before authentication" (§4).
+    Pure/testable. True only when an auth code AND a state are present and a
+    login session already exists. st.login's callback is handled internally by
+    Streamlit on /oauth2callback and never delivers a code to the app root, so
+    a root code+state pair is ours — and consume_state() then rejects anything
+    that isn't a real, unexpired, single-use state we issued (§4).
     """
     if not is_logged_in or not query_params:
         return False
-    has_marker = str(query_params.get(GMAIL_OAUTH_MARKER, "")) in ("1", "true", "True")
-    has_code = bool(query_params.get("code"))
-    return has_marker and has_code
+    return bool(query_params.get("code")) and bool(query_params.get("state"))
 
 
 def exchange_code(code: str, expected_user_id: uuid.UUID) -> dict:
@@ -230,7 +220,7 @@ def exchange_code(code: str, expected_user_id: uuid.UUID) -> dict:
             "code": code,
             "client_id": _client_id(),
             "client_secret": _client_secret(),
-            "redirect_uri": _redirect_uri_with_marker(),
+            "redirect_uri": _redirect_uri(),
             "grant_type": "authorization_code",
         },
         timeout=_TIMEOUT,
