@@ -385,8 +385,11 @@ def render_service_builder(user, active):
     st.title("Worship Service Builder")
     st.caption("Suggest hymns by scripture, generate liturgy with AI, export to Word.")
 
-    # Service date: top of the main screen — it drives the occasion and readings.
-    col_date, _ = st.columns([1, 3])
+    # Service date + occasion: top of the main screen — they drive the readings.
+    # (col_occasion is filled AFTER the lectionary block below, because that block
+    # writes st.session_state.occasion and Streamlit forbids writing a widget's
+    # session value once the widget is instantiated.)
+    col_date, col_occasion = st.columns([1, 2])
     with col_date:
         service_date_picked = st.date_input(
             "Service date",
@@ -436,16 +439,14 @@ def render_service_builder(user, active):
         st.rerun()
         return
 
-    # Sidebar continued: occasion (from date) and scriptures
+    # Occasion: fills the top-row column next to the date (see note above).
     logger.info(
-        "Rendering sidebar: last_lectionary_date=%s, occasion=%r, lectionary_readings=%s",
+        "Rendering occasion: last_lectionary_date=%s, occasion=%r, lectionary_readings=%s",
         st.session_state.last_lectionary_date,
         st.session_state.get("occasion"),
         "present" if st.session_state.get("lectionary_readings") else "None",
     )
-    with st.sidebar:
-        st.header("Service details")
-        st.caption("Filled from the service date on the main screen.")
+    with col_occasion:
         # When multiple reading sets exist (e.g. Palm Sunday: Palms + Passion), let user switch.
         readings_list = st.session_state.get("lectionary_readings_list") or []
         if len(readings_list) > 1:
@@ -480,7 +481,9 @@ def render_service_builder(user, active):
         if st.session_state.lectionary_readings:
             r = st.session_state.lectionary_readings
             st.caption(f"RCL: {r.get('calendar_date', '')} — {r.get('liturgical_date', '')}")
-        st.divider()
+
+    # Sidebar: scriptures and the service archive
+    with st.sidebar:
         st.subheader("Scripture readings")
         scriptures_text = st.text_area(
             "One per line (e.g. Matthew 17:1–8)",
