@@ -385,11 +385,12 @@ def render_service_builder(user, active):
     st.title("Worship Service Builder")
     st.caption("Suggest hymns by scripture, generate liturgy with AI, export to Word.")
 
-    # Service date + occasion: top of the main screen — they drive the readings.
-    # (col_occasion is filled AFTER the lectionary block below, because that block
-    # writes st.session_state.occasion and Streamlit forbids writing a widget's
-    # session value once the widget is instantiated.)
-    col_date, col_occasion = st.columns([1, 2])
+    # Service date + occasion + scriptures: top of the main screen.
+    # (col_occasion/col_scripts are filled AFTER the lectionary block below,
+    # because that block writes st.session_state.occasion/scriptures_text and
+    # Streamlit forbids writing a widget's session value once the widget is
+    # instantiated.)
+    col_date, col_occasion, col_scripts = st.columns([1, 2, 2])
     with col_date:
         service_date_picked = st.date_input(
             "Service date",
@@ -482,18 +483,19 @@ def render_service_builder(user, active):
             r = st.session_state.lectionary_readings
             st.caption(f"RCL: {r.get('calendar_date', '')} — {r.get('liturgical_date', '')}")
 
-    # Sidebar: scriptures and the service archive
-    with st.sidebar:
-        st.subheader("Scripture readings")
+    # Scripture readings: fills the third top-row column (deferred, see note above).
+    with col_scripts:
         scriptures_text = st.text_area(
-            "One per line (e.g. Matthew 17:1–8)",
+            "Scripture readings (one per line)",
             height=120,
             placeholder="Filled from lectionary for the selected date.",
             key="scriptures_text",
+            help="e.g. Matthew 17:1–8 — auto-filled from the lectionary; edit as needed.",
         )
-        scriptures = [s.strip() for s in scriptures_text.splitlines() if s.strip()]
+    scriptures = [s.strip() for s in scriptures_text.splitlines() if s.strip()]
 
-        st.divider()
+    # Sidebar: the service archive
+    with st.sidebar:
         st.subheader("Service archive")
         saved = st.session_state.get("_cached_saved_services")
         if saved is None:
