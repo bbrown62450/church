@@ -17,6 +17,12 @@ import json
 import sys
 from datetime import datetime, timezone as dtz
 
+from dotenv import load_dotenv
+
+# Load .env from the project directory so DATABASE_URL / NOTION_* are set when
+# this is run as a CLI (the Streamlit app does the same in app.py).
+load_dotenv()
+
 from sqlalchemy import func, select
 
 from db import init_db, session_scope
