@@ -82,3 +82,48 @@ def update_church(church_id, *, name=None, timezone=None, settings=None) -> None
             church.timezone = timezone
         if settings is not None:
             church.settings = settings
+
+
+def _merge_settings(church_id, patch: dict) -> None:
+    """Shallow-merge `patch` into the church's settings JSON (reassigns a new
+    dict so SQLAlchemy detects the change)."""
+    with session_scope() as session:
+        church = session.get(Church, church_id)
+        if church is None or church.deleted_at is not None:
+            return
+        current = dict(church.settings or {})
+        current.update(patch)
+        church.settings = current
+
+
+def get_church_prompts(church_id) -> dict:
+    """Per-church liturgy prompt overrides ({} when the church uses all defaults)."""
+    church = get_church(church_id)
+    if not church:
+        return {}
+    return dict((church.get("settings") or {}).get("liturgy_prompts") or {})
+
+
+def set_church_prompts(church_id, prompts: dict) -> None:
+    """Store per-church prompt overrides. A blank value for a key means "reset to
+    default" — it is dropped, so only real overrides are persisted."""
+    from liturgy_prompts import PROMPT_KEYS
+
+    cleaned = {
+        k: v.strip()
+        for k, v in (prompts or {}).items()
+        if k in PROMPT_KEYS and (v or "").strip()
+    }
+    _merge_settings(church_id, {"liturgy_prompts": cleaned})
+
+
+def get_church_translation(church_id) -> str | None:
+    """The church's default Bible translation id, or None (falls back to app default)."""
+    church = get_church(church_id)
+    if not church:
+        return None
+    return (church.get("settings") or {}).get("bible_translation")
+
+
+def set_church_translation(church_id, translation_id: str) -> None:
+    _merge_settings(church_id, {"bible_translation": translation_id})
