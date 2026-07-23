@@ -910,10 +910,10 @@ def render_service_builder(user, active):
     # Prepare Word documents (show whenever liturgy is generated)
     if st.session_state.liturgy:
         st.subheader("Prepare Word documents")
-        st.caption("Prepare the secretary or pastor copy, then download or email from the section below.")
+        st.caption("Prepare the bulletin copy or the pastor's copy, then download or email from the section below.")
         col_sec, col_pastor = st.columns(2)
         with col_sec:
-            if st.button("Prepare for secretary", key="prep_sec"):
+            if st.button("Prepare bulletin copy", key="prep_sec", help="Liturgy only — for whoever assembles the bulletin."):
                 buf = build_docx(
                     occasion=occasion,
                     date=service_date_str,
@@ -933,10 +933,10 @@ def render_service_builder(user, active):
                 st.session_state.docx_bytes_secretary = buf.getvalue()
                 if hymns_ordered:
                     record_usage(church_id, service_date_str, hymns_ordered)
-                st.success("Secretary document ready. Download below.")
+                st.success("Bulletin copy ready. Download below.")
                 st.rerun()
         with col_pastor:
-            if st.button("Prepare for pastor", key="prep_pastor"):
+            if st.button("Prepare pastor's copy", key="prep_pastor", help="Full order of worship, including sermon and Prayers of the People."):
                 buf = build_docx(
                     occasion=occasion,
                     date=service_date_str,
@@ -956,7 +956,7 @@ def render_service_builder(user, active):
                 st.session_state.docx_bytes_pastor = buf.getvalue()
                 if hymns_ordered:
                     record_usage(church_id, service_date_str, hymns_ordered)
-                st.success("Pastor document ready. Download below.")
+                st.success("Pastor's copy ready. Download below.")
                 st.rerun()
         editing_id = st.session_state.get("editing_service_id")
         # Clear editing_id if user switched to a different service date
@@ -1006,7 +1006,7 @@ def render_service_builder(user, active):
         with col1:
             if st.session_state.docx_bytes_secretary:
                 st.download_button(
-                    label="Download .docx (for secretary)",
+                    label="Download .docx (bulletin copy)",
                     data=st.session_state.docx_bytes_secretary,
                     file_name=f"worship_{safe_date}.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -1015,18 +1015,18 @@ def render_service_builder(user, active):
         with col2:
             if st.session_state.docx_bytes_pastor:
                 st.download_button(
-                    label="Download .docx (for pastor)",
+                    label="Download .docx (pastor's copy)",
                     data=st.session_state.docx_bytes_pastor,
                     file_name=f"worship_pastor_{safe_date}.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                     key="dl_pastor",
                 )
-        st.caption("Secretary copy: liturgy only (no sermon, no Prayers of the People). Pastor copy: full order including sermon and Prayers of the People.")
+        st.caption("Bulletin copy: liturgy only (no sermon, no Prayers of the People) — for whoever assembles the bulletin. Pastor's copy: full order including sermon and Prayers of the People.")
 
-        # Email secretary (when secretary doc is ready)
+        # Email the bulletin copy (when it is ready)
         if st.session_state.docx_bytes_secretary:
-            with st.expander("Email to secretary", expanded=True):
-                st.caption("Send the secretary .docx and a friendly message via Gmail.")
+            with st.expander("Email bulletin copy", expanded=True):
+                st.caption("Send the bulletin .docx and a friendly message via Gmail.")
                 connected = google_oauth.is_configured() and google_oauth.is_connected(user_id)
                 if google_oauth.is_configured():
                     if connected:
@@ -1043,7 +1043,7 @@ def render_service_builder(user, active):
                     "Additional emails (comma-separated)", key="secretary_email_extra",
                     placeholder="other@example.com")
                 email_message = st.text_area("Message", key="email_message", height=100)
-                if st.button("Send email to secretary", key="send_email_sec"):
+                if st.button("Send email", key="send_email_sec"):
                     recipient_emails = [email_to_contact[c] for c in selected_contacts]
                     if additional_emails and additional_emails.strip():
                         recipient_emails.extend(
