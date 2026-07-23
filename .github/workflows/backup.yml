@@ -1,0 +1,28 @@
+# Backups (required): Supabase Free retains NO backups, so schedule our own
+# pg_dump. NOTE: GitHub artifacts are retained only ~30 days and are not a
+# durable store — for real retention, add a step that uploads the dump to
+# object storage (e.g. S3/GCS/Backblaze) with a longer lifecycle.
+name: db-backup
+on:
+  schedule:
+    - cron: "37 8 * * *"   # daily at 08:37 UTC
+  workflow_dispatch: {}
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: pg_dump
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          sudo apt-get update && sudo apt-get install -y postgresql-client
+          ts=$(date -u +%Y%m%dT%H%M%SZ)
+          pg_dump "$DATABASE_URL" --no-owner --no-privileges -f "backup-$ts.sql"
+          gzip "backup-$ts.sql"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: db-backup
+          path: backup-*.sql.gz
+          retention-days: 30

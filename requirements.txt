@@ -1,4 +1,7 @@
-notion-client>=2.2.1
+# --- Runtime ---
+streamlit[auth]>=1.45.0
+SQLAlchemy>=2.0
+psycopg2-binary>=2.9
 python-dotenv>=1.0.0
 beautifulsoup4>=4.12.0
 requests>=2.31.0
@@ -7,5 +10,6 @@ lxml>=4.9.0
 playwright>=1.40.0
 openai>=1.0.0
 python-docx>=1.0.0
-streamlit>=1.28.0
 
+# --- migration only (one-time Notion -> Postgres import; NOT a runtime dependency) ---
+notion-client>=2.2.1

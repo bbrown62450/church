@@ -1,52 +1,64 @@
 #!/usr/bin/env python3
+"""Database-backed, church-scoped email contacts for bulletin distribution.
+
+The hardcoded DEFAULT_CONTACTS have been removed: each church manages its own
+recipients on the Settings page, and a new church starts with an empty list.
 """
-Saved email contacts for worship bulletin distribution.
-Stored in data/email_contacts.json.
-"""
+import uuid
+from typing import Any, Dict, List
 
-import json
-import os
-from typing import Dict, List
+from sqlalchemy import delete, select
 
-DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
-CONTACTS_FILE = os.path.join(DATA_DIR, "email_contacts.json")
-
-DEFAULT_CONTACTS = [
-    {"name": "Mary Swope", "email": "swopemom@gmail.com"},
-    {"name": "Marilyn Stevens", "email": "office@connerpres.org"},
-]
+from db import session_scope
+from db.models import Contact
 
 
-def _ensure_data_dir() -> None:
-    os.makedirs(DATA_DIR, exist_ok=True)
+def _as_uuid(value: Any) -> uuid.UUID:
+    return value if isinstance(value, uuid.UUID) else uuid.UUID(str(value))
 
 
-def load_contacts() -> List[Dict[str, str]]:
-    """Load saved contacts. Returns list of {name, email}. Seeds defaults if file missing."""
-    _ensure_data_dir()
-    if not os.path.isfile(CONTACTS_FILE):
-        save_contacts(DEFAULT_CONTACTS)
-        return DEFAULT_CONTACTS
-    try:
-        with open(CONTACTS_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        contacts = data.get("contacts", [])
-        return contacts if isinstance(contacts, list) else []
-    except Exception:
-        return DEFAULT_CONTACTS.copy()
+def _to_dict(c: Contact) -> Dict[str, str]:
+    return {"id": str(c.id), "name": c.name, "email": c.email}
 
 
-def save_contacts(contacts: List[Dict[str, str]]) -> None:
-    """Save contacts to JSON."""
-    _ensure_data_dir()
-    with open(CONTACTS_FILE, "w", encoding="utf-8") as f:
-        json.dump({"contacts": contacts}, f, indent=2)
+def list_contacts(church_id) -> List[Dict[str, str]]:
+    """All contacts for a church, ordered by creation then name."""
+    cid = _as_uuid(church_id)
+    with session_scope() as session:
+        rows = (
+            session.execute(
+                select(Contact)
+                .where(Contact.church_id == cid)
+                .order_by(Contact.created_at, Contact.name)
+            )
+            .scalars()
+            .all()
+        )
+        return [_to_dict(c) for c in rows]
 
 
-def get_contacts_for_display() -> List[Dict[str, str]]:
-    """Return contacts for UI display. Ensures defaults exist if file is empty."""
-    contacts = load_contacts()
-    if not contacts:
-        save_contacts(DEFAULT_CONTACTS)
-        return DEFAULT_CONTACTS
-    return contacts
+def add_contact(church_id, *, name: str, email: str) -> Dict[str, str]:
+    """Insert a contact for a church. Returns {id, name, email}."""
+    cid = _as_uuid(church_id)
+    with session_scope() as session:
+        c = Contact(church_id=cid, name=name, email=email)
+        session.add(c)
+        session.flush()
+        return _to_dict(c)
+
+
+def delete_contact(contact_id, church_id) -> bool:
+    """Delete a contact only if it belongs to `church_id`. Cross-church -> False."""
+    cid = _as_uuid(church_id)
+    with session_scope() as session:
+        result = session.execute(
+            delete(Contact).where(
+                Contact.id == _as_uuid(contact_id), Contact.church_id == cid
+            )
+        )
+        return result.rowcount > 0
+
+
+def get_contacts_for_display(church_id) -> List[Dict[str, str]]:
+    """Contacts for the UI. No defaults — empty list when a church has none."""
+    return list_contacts(church_id)
