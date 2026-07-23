@@ -221,6 +221,7 @@ CHURCH_SCOPED_SESSION_KEYS = (
     "liturgy_prayer_for_illumination", "liturgy_prayers_of_the_people",
     "liturgy_offertory_prayer", "liturgy_benediction", "include_communion",
     "custom_elements", "selected_ot_ref", "selected_nt_ref", "bible_translation",
+    "active_hymnal",
 )
 
 
@@ -624,21 +625,38 @@ def render_service_builder(user, active):
                 st.session_state.selected_nt_ref = nt_choice or ""
         st.divider()
 
-    # Load this church's hymnal once per session (used by the scripture search,
+    # Load this church's hymns once per session (used by the scripture search,
     # AI suggestions, and the hymn pickers below).
-    all_hymns = st.session_state.get("_cached_all_hymns")
-    if all_hymns is None:
+    cached_hymns = st.session_state.get("_cached_all_hymns")
+    if cached_hymns is None:
         try:
             with st.spinner("Loading this church's hymnal…"):
-                all_hymns = list_hymns(church_id)
-            st.session_state["_cached_all_hymns"] = all_hymns
+                cached_hymns = list_hymns(church_id)
+            st.session_state["_cached_all_hymns"] = cached_hymns
         except Exception as e:  # noqa: BLE001
             logger.exception("Failed to load hymns")
             st.error(f"Could not load hymns: {e}. Click **Refresh hymn list** to retry.")
-            all_hymns = []
+            cached_hymns = []
             st.session_state["_cached_all_hymns"] = []
 
-    # Hymn search by scripture (in-memory over this church's hymnal)
+    # Hymnal selector — when the church has more than one hymnal, choose which to
+    # pick from. Everything below (search, suggestions, pickers) uses `all_hymns`.
+    hymnals_present = sorted({h.get("Hymnal") for h in cached_hymns if h.get("Hymnal")})
+    if len(hymnals_present) > 1:
+        col_h, _ = st.columns([1, 2])
+        with col_h:
+            active_hymnal = st.selectbox(
+                "Hymnal",
+                hymnals_present,
+                key="active_hymnal",
+                help="Which hymnal to choose hymns from for this service.",
+            )
+        all_hymns = [h for h in cached_hymns if h.get("Hymnal") == active_hymnal]
+    else:
+        active_hymnal = hymnals_present[0] if hymnals_present else None
+        all_hymns = cached_hymns
+
+    # Hymn search by scripture (in-memory over the selected hymnal)
     if all_hymns:
         with st.expander("Find hymns matching any of the scriptures", expanded=True):
             extra_scripture = st.text_input(

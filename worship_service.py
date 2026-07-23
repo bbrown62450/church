@@ -724,7 +724,7 @@ def generate_liturgy(
         }
 
     hymn_lines = "\n".join(
-        f"- {h.get('title', '')} (GG2013 #{h.get('number', '')})" for h in hymns
+        f"- {h.get('title', '')} (#{h.get('number', '')})" for h in hymns
     )
     scripture_lines = "\n".join(f"- {s}" for s in scriptures) if scriptures else "None specified."
 
