@@ -17,12 +17,6 @@ import json
 import sys
 from datetime import datetime, timezone as dtz
 
-from dotenv import load_dotenv
-
-# Load .env from the project directory so DATABASE_URL / NOTION_* are set when
-# this is run as a CLI (the Streamlit app does the same in app.py).
-load_dotenv()
-
 from sqlalchemy import func, select
 
 from db import init_db, session_scope
@@ -573,6 +567,12 @@ def _print_report(report):
 
 
 def main(argv=None):
+    # CLI-only: load .env so DATABASE_URL / NOTION_* are set (the Streamlit app
+    # does the same in app.py). Kept out of module import so tests stay hermetic.
+    from dotenv import load_dotenv
+
+    load_dotenv()
+
     parser = argparse.ArgumentParser(
         description="One-time migration: Notion -> app database (founder church)."
     )
