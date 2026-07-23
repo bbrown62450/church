@@ -21,6 +21,7 @@ def _hymn_to_dict(h: Hymn) -> Dict[str, Any]:
     """Map a Hymn row to the flat Notion-key dict the app consumes."""
     return {
         "id": str(h.id),
+        "Hymnal": h.hymnal,
         "Hymn Title": h.title,
         "Hymn Number": h.number,
         "Scripture References": h.scripture_refs,
@@ -30,20 +31,25 @@ def _hymn_to_dict(h: Hymn) -> Dict[str, Any]:
     }
 
 
-def list_hymns(church_id) -> List[Dict[str, Any]]:
-    """All hymns for a church, ordered by number then title. Flat-key dicts."""
+def list_hymns(church_id, hymnal: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Hymns for a church (optionally one hymnal), ordered by number then title."""
     cid = _as_uuid(church_id)
     with session_scope() as session:
-        rows = (
-            session.execute(
-                select(Hymn)
-                .where(Hymn.church_id == cid)
-                .order_by(Hymn.number, Hymn.title)
-            )
-            .scalars()
-            .all()
-        )
+        stmt = select(Hymn).where(Hymn.church_id == cid)
+        if hymnal:
+            stmt = stmt.where(Hymn.hymnal == hymnal)
+        rows = session.execute(stmt.order_by(Hymn.number, Hymn.title)).scalars().all()
         return [_hymn_to_dict(h) for h in rows]
+
+
+def list_church_hymnals(church_id) -> List[str]:
+    """Distinct hymnal names present in a church's hymnal, ordered."""
+    cid = _as_uuid(church_id)
+    with session_scope() as session:
+        rows = session.execute(
+            select(Hymn.hymnal).where(Hymn.church_id == cid).distinct()
+        ).scalars().all()
+        return sorted(h for h in rows if h)
 
 
 def add_hymn(
@@ -55,12 +61,14 @@ def add_hymn(
     theme: Optional[str] = None,
     hymnary_link: Optional[str] = None,
     audio_url: Optional[str] = None,
+    hymnal: str = "GG2013",
 ) -> Dict[str, Any]:
     """Insert a hymn for a church. Returns the flat-key dict (with new id)."""
     cid = _as_uuid(church_id)
     with session_scope() as session:
         h = Hymn(
             church_id=cid,
+            hymnal=hymnal,
             title=title,
             number=number,
             scripture_refs=scripture_refs,
@@ -71,6 +79,52 @@ def add_hymn(
         session.add(h)
         session.flush()
         return _hymn_to_dict(h)
+
+
+def import_hymns(church_id, hymnal: str, rows: List[Dict[str, Any]]) -> Dict[str, int]:
+    """Bulk-load a hymnal into a church. Idempotent per (church_id, hymnal, number,
+    normalized title): re-running updates enrichment on matched rows instead of
+    duplicating. `rows` keys: number, title (required), scripture_refs, theme,
+    hymnary_link."""
+    cid = _as_uuid(church_id)
+    inserted = updated = 0
+    with session_scope() as session:
+        existing = session.execute(
+            select(Hymn).where(Hymn.church_id == cid, Hymn.hymnal == hymnal)
+        ).scalars().all()
+        by_key = {(h.number, (h.title or "").strip().lower()): h for h in existing}
+        for r in rows:
+            title = (r.get("title") or "").strip()
+            if not title:
+                continue
+            number = r.get("number")
+            try:
+                number = int(number) if number not in (None, "") else None
+            except (TypeError, ValueError):
+                number = None
+            key = (number, title.lower())
+            match = by_key.get(key)
+            fields = dict(
+                scripture_refs=r.get("scripture_refs") or None,
+                theme=r.get("theme") or None,
+                hymnary_link=r.get("hymnary_link") or None,
+            )
+            if match is None:
+                h = Hymn(church_id=cid, hymnal=hymnal, title=title, number=number, **fields)
+                session.add(h)
+                session.flush()
+                by_key[key] = h
+                inserted += 1
+            else:
+                # only fill in enrichment we now have (don't wipe existing with blanks)
+                changed = False
+                for attr, val in fields.items():
+                    if val and getattr(match, attr) != val:
+                        setattr(match, attr, val)
+                        changed = True
+                if changed:
+                    updated += 1
+    return {"inserted": inserted, "updated": updated, "total": inserted + updated}
 
 
 def update_hymn(
@@ -125,6 +179,7 @@ def seed_church_from_catalog(church_id, session: Session) -> int:
         session.add(
             Hymn(
                 church_id=cid,
+                hymnal=c.hymnal,
                 title=c.title,
                 number=c.number,
                 scripture_refs=c.scripture_refs,

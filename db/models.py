@@ -102,6 +102,7 @@ class HymnCatalog(Base):
     __tablename__ = "hymn_catalog"
 
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    hymnal = Column(String, nullable=False, default="GG2013")  # which hymnal
     title = Column(String)
     number = Column(Integer)
     scripture_refs = Column(Text)
@@ -118,6 +119,7 @@ class Hymn(Base):
     church_id = Column(
         Uuid, ForeignKey("churches.id", ondelete="CASCADE"), nullable=False
     )
+    hymnal = Column(String, nullable=False, default="GG2013")  # which hymnal
     title = Column(String)
     number = Column(Integer)
     scripture_refs = Column(Text)
@@ -127,6 +129,7 @@ class Hymn(Base):
 
     __table_args__ = (
         Index("ix_hymns_church_id", "church_id"),
+        Index("ix_hymns_church_hymnal", "church_id", "hymnal"),
         Index("ix_hymns_church_number", "church_id", "number"),
     )
 
