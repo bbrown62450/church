@@ -16,10 +16,16 @@ from tenancy import is_admin
 from repos.memberships import (
     get_role, set_role, remove_membership, list_members, LastAdminError,
 )
-from repos.churches import soft_delete_church
+from repos.churches import (
+    soft_delete_church,
+    get_church_prompts, set_church_prompts,
+    get_church_translation, set_church_translation,
+)
 from repos.invites import create_invite, list_invites, revoke_invite
 import email_contacts
 from repos import hymns as hymns_repo
+import liturgy_prompts
+from scripture_fetcher import available_translations, translation_label, DEFAULT_TRANSLATION
 
 logger = logging.getLogger(__name__)
 
@@ -132,6 +138,36 @@ def delete_this_church(actor_user_id, church_id):
     soft_delete_church(church_id)  # soft delete; also revokes pending invites
 
 
+def submit_prompts(actor_user_id, church_id, prompts: dict):
+    """Save per-church liturgy prompt overrides (admin only). A field equal to the
+    default (or blank) is not stored, so it stays on the shared default."""
+    _require_admin(actor_user_id, church_id)
+    defaults = liturgy_prompts.default_prompts()
+    cleaned = {
+        k: (v or "").strip()
+        for k, v in (prompts or {}).items()
+        if k in liturgy_prompts.PROMPT_KEYS
+        and (v or "").strip()
+        and (v or "").strip() != defaults.get(k, "").strip()
+    }
+    set_church_prompts(church_id, cleaned)
+
+
+def reset_prompts(actor_user_id, church_id):
+    """Clear all overrides -> back to the shared defaults (admin only)."""
+    _require_admin(actor_user_id, church_id)
+    set_church_prompts(church_id, {})
+
+
+def submit_translation(actor_user_id, church_id, translation_id: str):
+    """Set the church's default Bible translation (admin only)."""
+    _require_admin(actor_user_id, church_id)
+    valid = {tid for tid, _ in available_translations()}
+    if translation_id not in valid:
+        raise ValueError("Unknown or unavailable translation.")
+    set_church_translation(church_id, translation_id)
+
+
 # --------------------------------------------------------------------------- #
 # Render (Streamlit shell)
 # --------------------------------------------------------------------------- #
@@ -148,8 +184,10 @@ def render_settings_page(user, active):
     st.title("Settings")
     st.caption(f"{active['name']} — you are **{role}**.")
 
-    tab_profile, tab_contacts, tab_hymns, tab_members, tab_invites, tab_danger = st.tabs(
-        ["Church profile", "Contacts", "Hymns", "Members", "Invites", "Danger zone"])
+    (tab_profile, tab_contacts, tab_hymns, tab_prompts,
+     tab_members, tab_invites, tab_danger) = st.tabs(
+        ["Church profile", "Contacts", "Hymns", "Liturgy prompts",
+         "Members", "Invites", "Danger zone"])
 
     with tab_profile:
         if not admin:
@@ -157,12 +195,67 @@ def render_settings_page(user, active):
         with st.form("church_profile"):
             name = st.text_input("Church name", value=active["name"])
             timezone = st.text_input("Timezone", value=current_tz)
+            trans_opts = available_translations()
+            trans_ids = [t[0] for t in trans_opts]
+            trans_labels = {t[0]: t[1] for t in trans_opts}
+            cur_trans = get_church_translation(church_id) or DEFAULT_TRANSLATION
+            translation = st.selectbox(
+                "Default Bible translation",
+                trans_ids,
+                index=trans_ids.index(cur_trans) if cur_trans in trans_ids else 0,
+                format_func=lambda tid: trans_labels.get(tid, tid),
+                help="Default for on-screen passage text; anyone can switch it per session.",
+            )
             if st.form_submit_button("Save profile", disabled=not admin):
                 try:
                     submit_profile_update(user_id, church_id, name=name, timezone=timezone)
+                    submit_translation(user_id, church_id, translation)
                     st.success("Profile updated.")
                     st.rerun()
                 except (NotAuthorizedError, ValueError) as e:
+                    st.error(str(e))
+
+    with tab_prompts:
+        st.caption(
+            "These are the instructions the AI follows when it writes your liturgy. "
+            "Edit any of them to shape the voice; leave a box on its default to use the "
+            "shared wording. " + liturgy_prompts.PLACEHOLDER_HELP
+        )
+        if not admin:
+            st.info("Only admins can edit the prompts (you can read them below).")
+        overrides = get_church_prompts(church_id)
+        defaults = liturgy_prompts.default_prompts()
+
+        def _prompt_box(key, label):
+            customized = " • customized" if overrides.get(key) else ""
+            return st.text_area(
+                f"{label}{customized}",
+                value=overrides.get(key, defaults[key]),
+                key=f"prompt_{key}",
+                height=200 if key in ("system", "prayers_of_the_people") else 110,
+                disabled=not admin,
+            )
+
+        with st.form("liturgy_prompts_form"):
+            edited = {"system": _prompt_box("system", "Overall voice (system prompt)")}
+            for section in liturgy_prompts.SECTION_ORDER:
+                edited[section] = _prompt_box(section, liturgy_prompts.SECTION_LABELS[section])
+            col_save, col_reset = st.columns(2)
+            save = col_save.form_submit_button("Save prompts", disabled=not admin)
+            reset = col_reset.form_submit_button("Reset all to defaults", disabled=not admin)
+            if save:
+                try:
+                    submit_prompts(user_id, church_id, edited)
+                    st.success("Prompts saved.")
+                    st.rerun()
+                except NotAuthorizedError as e:
+                    st.error(str(e))
+            elif reset:
+                try:
+                    reset_prompts(user_id, church_id)
+                    st.success("Prompts reset to defaults.")
+                    st.rerun()
+                except NotAuthorizedError as e:
                     st.error(str(e))
 
     with tab_contacts:

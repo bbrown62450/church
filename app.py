@@ -20,12 +20,19 @@ from worship_service import (
     suggest_hymns_for_service,
 )
 from vanderbilt_lectionary import get_readings_for_date_string
-from scripture_fetcher import get_passage_text
+from scripture_fetcher import (
+    get_passage_text,
+    available_translations,
+    translation_label,
+    DEFAULT_TRANSLATION,
+)
 from hymn_usage import get_recently_used_identifiers, record_usage, is_hymn_recently_used
 from service_archive import list_saved_services, save_service, update_service, get_service
 from email_contacts import list_contacts
 from repos.hymns import list_hymns
-from repos.churches import list_user_churches, create_church
+from repos.churches import (
+    list_user_churches, create_church, get_church_prompts, get_church_translation,
+)
 from repos.invites import accept_invite
 import google_oauth
 
@@ -214,7 +221,7 @@ CHURCH_SCOPED_SESSION_KEYS = (
     "liturgy_prayer_of_confession", "liturgy_assurance",
     "liturgy_prayer_for_illumination", "liturgy_prayers_of_the_people",
     "liturgy_offertory_prayer", "liturgy_benediction", "include_communion",
-    "custom_elements", "selected_ot_ref", "selected_nt_ref",
+    "custom_elements", "selected_ot_ref", "selected_nt_ref", "bible_translation",
 )
 
 
@@ -352,6 +359,16 @@ def main():
 def render_service_builder(user, active):
     church_id = active["church_id"]
     user_id = user["user_id"]
+
+    # Active Bible translation for on-screen passage text (per-church default,
+    # overridable per session via the picker in the Readings section).
+    if "bible_translation" not in st.session_state:
+        st.session_state["bible_translation"] = (
+            get_church_translation(church_id) or DEFAULT_TRANSLATION
+        )
+    _avail_ids = [t[0] for t in available_translations()]
+    if st.session_state["bible_translation"] not in _avail_ids:
+        st.session_state["bible_translation"] = DEFAULT_TRANSLATION
 
     # Restore from archive when Load was clicked
     if st.session_state.get("load_service_id"):
@@ -529,14 +546,38 @@ def render_service_builder(user, active):
             st.caption(f"RCL: {r.get('calendar_date', '')} — {r.get('liturgical_date', '')}. Edit the Scripture list in the sidebar to use your own.")
         else:
             st.caption("Using the Scripture list from the sidebar. Edit it to add or change references.")
+
+        # Translation picker (on-screen study text only — the bulletin lists references)
+        trans_opts = available_translations()
+        trans_ids = [t[0] for t in trans_opts]
+        trans_labels = {t[0]: t[1] for t in trans_opts}
+        cur_trans = st.session_state.get("bible_translation", DEFAULT_TRANSLATION)
+        col_t, _ = st.columns([1, 2])
+        with col_t:
+            picked_trans = st.selectbox(
+                "Bible translation",
+                trans_ids,
+                index=trans_ids.index(cur_trans) if cur_trans in trans_ids else 0,
+                format_func=lambda tid: trans_labels.get(tid, tid),
+                key="translation_picker",
+                help="Used for the passage text shown below. This is study text only — "
+                     "the bulletin lists the references, not the verse text.",
+            )
+        if picked_trans != st.session_state.get("bible_translation"):
+            st.session_state["bible_translation"] = picked_trans
+            st.session_state.scripture_full_texts = {}   # cached in the old translation
+            st.rerun()
+        translation = st.session_state["bible_translation"]
+        st.caption(f"Passage text shown in **{translation_label(translation)}**.")
+
         if st.button("Load full text for all readings"):
-            logger.info("Load full text clicked, fetching %d passages", len(scriptures))
+            logger.info("Load full text clicked, fetching %d passages (%s)", len(scriptures), translation)
             with st.spinner("Fetching passage text…"):
                 for ref in scriptures:
                     cached = st.session_state.scripture_full_texts.get(ref)
                     if ref and (cached is None or cached == "[Could not load text]"):
                         logger.info("Fetching passage: %s", ref)
-                        text = get_passage_text(ref)
+                        text = get_passage_text(ref, translation=translation)
                         ok = bool(text and text != "[Could not load text]")
                         logger.info("Fetched %s: %s", ref, "ok" if ok else "failed")
                         st.session_state.scripture_full_texts[ref] = text or "[Could not load text]"
@@ -652,6 +693,10 @@ def render_service_builder(user, active):
                         st.html(
                             f'<div id="wrap-{safe_id}"><audio id="{safe_id}" controls src="{escaped_url}"></audio></div>'
                         )
+                st.caption(
+                    "Hymn links and audio courtesy of [Hymnary.org](https://hymnary.org). "
+                    "Individual hymns may carry their own copyright — see each hymn's page."
+                )
 
     # Main: hymn selection (from this church's DB hymnal)
     st.header("Hymns")
@@ -707,7 +752,9 @@ def render_service_builder(user, active):
                 scriptures=scriptures,
                 selected_nt_ref=st.session_state.get("selected_nt_ref") or None,
                 scripture_full_texts=st.session_state.get("scripture_full_texts") or {},
-                scripture_text_fetcher=get_passage_text,
+                scripture_text_fetcher=lambda ref: get_passage_text(
+                    ref, translation=st.session_state.get("bible_translation", DEFAULT_TRANSLATION)
+                ),
                 limit_per_slot=5,
                 progress_callback=_on_progress,
                 all_hymns=all_hymns,
@@ -877,6 +924,7 @@ def render_service_builder(user, active):
                     hymns=hymns_ordered,
                     sections=sections,
                     user_overrides=user_overrides or None,
+                    prompt_overrides=get_church_prompts(church_id),
                 )
             st.session_state.liturgy = liturgy
             st.success("Liturgy generated. Review below and download Word.")
