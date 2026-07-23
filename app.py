@@ -5,7 +5,6 @@ OpenAI liturgy generation, and Word/PDF download. Multi-church: each user signs
 in with Google and works within a church they belong to.
 """
 
-import html
 import logging
 import os
 from datetime import date
@@ -674,27 +673,19 @@ def render_service_builder(user, active):
             if "scripture_hymns" in st.session_state:
                 refs_used = st.session_state.get("scripture_refs_used", [])
                 st.caption("Matching: " + ", ".join(refs_used))
-                # Resolve real audio URL from Hymnary only for first 15 to avoid run timeout
-                max_resolve = 15
                 hymn_list = st.session_state["scripture_hymns"][:20]
-                for i, h in enumerate(hymn_list):
-                    info = hymn_display_info(h, resolve_audio=i < max_resolve)
+                for h in hymn_list:
+                    info = hymn_display_info(h)
                     num = info.get("number") or "—"
-                    audio_url = info.get("audio_url") or ""
-                    audio_id = f"audio_{h['id']}_{i}"
                     hymn_link = info.get("link") or ""
                     if hymn_link:
-                        st.markdown(f"[#{num} — {info['title']}]({hymn_link})")
+                        # Link to the hymn's Hymnary page (where audio can be played
+                        # in context) rather than hotlinking their media files.
+                        st.markdown(f"[#{num} — {info['title']}]({hymn_link}) · [▶ listen]({hymn_link})")
                     else:
                         st.text(f"#{num} — {info['title']}")
-                    if audio_url:
-                        escaped_url = html.escape(audio_url)
-                        safe_id = html.escape(audio_id)
-                        st.html(
-                            f'<div id="wrap-{safe_id}"><audio id="{safe_id}" controls src="{escaped_url}"></audio></div>'
-                        )
                 st.caption(
-                    "Hymn links and audio courtesy of [Hymnary.org](https://hymnary.org). "
+                    "Hymn information and links courtesy of [Hymnary.org](https://hymnary.org). "
                     "Individual hymns may carry their own copyright — see each hymn's page."
                 )
 
