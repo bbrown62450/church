@@ -15,6 +15,7 @@ from urllib.parse import urlparse, urlunparse
 
 from dotenv import load_dotenv
 from hymn_utils import get_property_value
+import liturgy_prompts
 
 if TYPE_CHECKING:  # notion-client is migration-only; only needed for type hints here
     from notion_hymns import NotionHymnsDB
@@ -690,13 +691,17 @@ def generate_liturgy(
     sections: List[str],
     api_key: Optional[str] = None,
     user_overrides: Optional[Dict[str, str]] = None,
+    prompt_overrides: Optional[Dict[str, str]] = None,
 ) -> Dict[str, str]:
     """
     Use OpenAI to generate liturgy text for the requested sections.
     If user_overrides[section] is non-empty, that text is used instead of generating.
+    prompt_overrides (per church) replaces the default AI instructions for the
+    "system" voice and/or any section; missing keys fall back to the defaults.
     Returns dict mapping section key -> plain text.
     """
     overrides = user_overrides or {}
+    prompts = liturgy_prompts.merge_prompts(prompt_overrides)
     client = None
     if OpenAI:
         key = (api_key or os.getenv("OPENAI_API_KEY") or "").strip()
@@ -723,95 +728,25 @@ def generate_liturgy(
     )
     scripture_lines = "\n".join(f"- {s}" for s in scriptures) if scriptures else "None specified."
 
-    system = (
-        "You are a thoughtful worship writer for Christian liturgy from a moderate Reformed perspective, "
-        "in line with PC(USA) theology. Write in clear, inclusive language. "
-        "Avoid exclusively male references to God: use 'God' by name, or varied language (e.g. 'God who is Father, Son, and Holy Spirit' when trinitarian language fits); "
-        "do not use only 'he/him/his' or 'Lord' alone for God; you may use 'Lord' as one among other titles. "
-        "Do not directly cite or name scripture passages in the liturgy (e.g. avoid 'as we hear in 1 Samuel,' 'in our gospel reading,' or 'the psalm tells us'). "
-        "Instead, draw on the themes and spirit of the day in general, evocative language. "
-        "The occasion is given only to guide tone and theme — do not name or refer to the liturgical season or calendar in the text itself: "
-        "no 'in this ordinary time,' 'in this season of...,' 'as we journey through...,' 'on this Nth Sunday...,' or similar. "
-        "Exception: on a major festival (Christmas Eve/Day, Easter, Pentecost) you may name the day itself, at most once across the piece. "
-        "Vary how you address God—avoid repeating similar openings (e.g. 'God of X and Y') across prayers. "
-        "Use diverse forms: 'Gracious God,' 'Eternal One,' 'Lord of mercy,' 'O God,' 'God of all creation,' etc. "
-        "Keep each piece concise and usable in worship. Output only the liturgy text, no meta-commentary or labels."
-    )
+    system = prompts["system"]
+    opening_hymn = hymns[0].get("title", "") if hymns else "N/A"
 
     out = {}
     for section in sections:
         if overrides.get(section, "").strip():
             out[section] = overrides[section].strip()
             continue
-        if section == "call_to_worship":
-            prompt = (
-                f"Write a Call to Worship for: {occasion}. "
-                f"Themes from today's readings (use for inspiration only; do not cite): {scripture_lines}. Opening hymn: {hymns[0].get('title', '') if hymns else 'N/A'}. "
-                "Use exactly this format with four parts: 'Leader: ' (2-3 lines), then 'People: ' (one short response), "
-                "then 'Leader: ' again (2-3 lines), then 'People: ' again (one short response). "
-                "Do not mention specific books, chapters, or verses."
-            )
-        elif section == "prayer_of_confession":
-            prompt = (
-                f"Write a Prayer of Confession for: {occasion}. "
-                f"Themes from today's readings (use for inspiration only; do not cite): {scripture_lines}. "
-                "One short paragraph. First person plural (we). "
-                "Do not end with an invitation (e.g. avoid 'let us now take a moment to confess' or 'in a moment of silence...'). "
-                "End with 'in the name of Jesus. Amen.' Do not mention specific scripture passages."
-            )
-        elif section == "assurance":
-            prompt = (
-                f"Write only the Leader line for Assurance of Pardon for: {occasion}, "
-                "grounded in God’s grace in Christ. One sentence. Do not include "
-                "'People:' or 'Thanks be to God'—that will be added separately. "
-                "Start your response with 'Leader: ' followed by the sentence."
-            )
-        elif section == "opening_prayer":
-            prompt = (
-                f"Write an Opening Prayer (collect) for: {occasion}. "
-                f"Themes from today's readings (use for inspiration only; do not cite): {scripture_lines}. "
-                "Around 100 words. Address God, thank or praise, and ask for one thing fitting the day. End with 'Amen.' "
-                "Do not name or quote specific passages."
-            )
-        elif section == "prayer_for_illumination":
-            prompt = (
-                f"Write a Prayer for Illumination for: {occasion}. "
-                f"Themes from today's readings (use for inspiration only; do not cite): {scripture_lines}. "
-                "Write 3-5 sentences asking God to open hearts and minds to the Word, that we may hear and respond. End with 'Amen.' "
-                "Do not name specific books or passages; speak generally of God's Word."
-            )
-        elif section == "offertory_prayer":
-            prompt = (
-                f"Write an Offertory Prayer for: {occasion}. "
-                "Three to five sentences: thank God for provision, dedicate our gifts and ourselves to God's service, "
-                "and ask that our offerings be used for the work of the kingdom. End with 'Amen.'"
-            )
-        elif section == "prayers_of_the_people":
-            prompt = (
-                f"Write Prayers of the People for: {occasion}. "
-                f"Themes from today's readings (use for inspiration only; do not cite): {scripture_lines}. Hymns: {hymn_lines}. "
-                "Write a substantial, full prayer (at least 10–15 paragraphs) in 'out to in' order: "
-                "First, prayers for the world (nations, creation, peace, the suffering). "
-                "Second, prayers for the Church universal and our denomination and congregation. "
-                "Third, prayers for our country and our local community and leaders. "
-                "Fourth, prayers for ourselves and our families. "
-                "Then include an explicit invitation for the congregation to share joys and concerns aloud "
-                "(e.g. 'Let us now lift up the joys and concerns of this congregation' or 'You are invited to name aloud...'). "
-                "Then include a clear bid for a moment of silence—to lift up individuals or situations, or simply to sit in silence before God. "
-                "Use 'we pray,' 'let us pray,' or similar. End with a closing that leads into the Lord's Prayer or a final amen. "
-                "Write in full sentences and paragraphs; this should feel like a complete, unhurried pastoral prayer. "
-                "Do not cite or name specific scripture passages."
-            )
-        elif section == "benediction":
-            prompt = (
-                f"Write a Benediction (1–3 sentences) for: {occasion}. "
-                f"Themes from today's readings (use for inspiration only; do not cite): {scripture_lines}. "
-                "Send the people out to serve and share God’s love. You may invoke the Trinity. End with 'Amen.' "
-                "Do not mention specific books or passages."
-            )
-        else:
+        template = prompts.get(section)
+        if not template:
             out[section] = ""
             continue
+        prompt = liturgy_prompts.render(
+            template,
+            occasion=occasion,
+            scriptures=scripture_lines,
+            opening_hymn=opening_hymn,
+            hymns=hymn_lines,
+        )
 
         model = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
         try:
