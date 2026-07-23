@@ -2,7 +2,7 @@ import pytest
 
 
 def test_member_rejected_by_action_helpers(tmp_db, make_user, make_church):
-    from pages.settings import (
+    from views.settings import (
         apply_role_change, apply_remove_member, do_create_invite,
         do_revoke_invite, NotAuthorizedError,
     )
@@ -22,7 +22,7 @@ def test_member_rejected_by_action_helpers(tmp_db, make_user, make_church):
 
 
 def test_remove_last_admin_surfaces_lastadmin_error(tmp_db, make_user, make_church):
-    from pages.settings import apply_remove_member
+    from views.settings import apply_remove_member
     from repos.memberships import LastAdminError
     owner = make_user(email="o@d.org")
     church = make_church(name="D", timezone="America/New_York", owner_user_id=owner)
@@ -31,7 +31,7 @@ def test_remove_last_admin_surfaces_lastadmin_error(tmp_db, make_user, make_chur
 
 
 def test_owner_only_transfer_and_delete(tmp_db, make_user, make_church):
-    from pages.settings import transfer_ownership, delete_this_church, NotAuthorizedError
+    from views.settings import transfer_ownership, delete_this_church, NotAuthorizedError
     from repos.memberships import add_membership, get_role
     owner = make_user(email="o@e.org")
     church = make_church(name="E", timezone="America/New_York", owner_user_id=owner)
@@ -48,7 +48,7 @@ def test_owner_only_transfer_and_delete(tmp_db, make_user, make_church):
 
 
 def test_admin_can_create_invite(tmp_db, make_user, make_church):
-    from pages.settings import do_create_invite
+    from views.settings import do_create_invite
     owner = make_user(email="o@k.org")
     church = make_church(name="K", timezone="America/New_York", owner_user_id=owner)
     code = do_create_invite(owner, church, role="member")
