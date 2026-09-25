@@ -6,6 +6,12 @@
 # Local data (optional: remove data/*.json to commit archive/usage)
 data/*.json
 
+# Local SQLite dev databases (never commit church data)
+data/*.db
+
+# Streamlit auth/DB secrets (client_id, client_secret, cookie_secret, DATABASE_URL)
+.streamlit/secrets.toml
+
 # Python
 __pycache__/
 *.py[cod]
@@ -14,6 +20,7 @@ __pycache__/
 .Python
 env/
 venv/
+.venv/
 ENV/
 env.bak/
 venv.bak/

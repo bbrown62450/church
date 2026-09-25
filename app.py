@@ -1,32 +1,51 @@
 #!/usr/bin/env python3
 """
 Streamlit UI: worship service planner with hymn suggestions by scripture,
-OpenAI liturgy generation, and Word/PDF download.
+OpenAI liturgy generation, and Word/PDF download. Multi-church: each user signs
+in with Google and works within a church they belong to.
 """
 
-import html
 import logging
 import os
 from datetime import date
 import streamlit as st
 from dotenv import load_dotenv
 
-from notion_hymns import NotionHymnsDB
-from hymn_utils import get_property_value
 from worship_service import (
-    hymns_by_scripture,
-    hymn_display_info,
     generate_liturgy,
     build_docx,
+    hymns_by_scripture,
+    hymn_display_info,
     suggest_hymns_for_service,
 )
 from vanderbilt_lectionary import get_readings_for_date_string
-from scripture_fetcher import get_passage_text
+from scripture_fetcher import (
+    get_passage_text,
+    available_translations,
+    translation_label,
+    DEFAULT_TRANSLATION,
+)
 from hymn_usage import get_recently_used_identifiers, record_usage, is_hymn_recently_used
 from service_archive import list_saved_services, save_service, update_service, get_service
-from email_send import send_gmail
-from email_contacts import get_contacts_for_display
+from email_contacts import list_contacts
+from repos.hymns import list_hymns
+from repos.churches import (
+    list_user_churches, create_church, get_church_prompts, get_church_translation,
+)
+from repos.invites import accept_invite
 import google_oauth
+
+from db import init_db
+from auth import require_login, do_logout
+from tenancy import require_active_church
+from ui_helpers import (
+    capture_query_params,
+    clear_oauth_query_params,
+    build_title_to_info,
+    pick_invite_code,
+    coerce_selectbox_value,
+)
+import views.settings as settings_page
 
 load_dotenv()
 
@@ -116,14 +135,8 @@ if "load_service_id" not in st.session_state:
     st.session_state.load_service_id = None
 if "editing_service_id" not in st.session_state:
     st.session_state.editing_service_id = None
-if "authenticated" not in st.session_state:
-    st.session_state.authenticated = False
 if "custom_elements" not in st.session_state:
     st.session_state.custom_elements = []  # [{"label": "...", "text": "...", "insert_after": "..."}]
-if "gmail_user" not in st.session_state:
-    st.session_state.gmail_user = None  # email of the connected Gmail account (this session)
-if "oauth_state" not in st.session_state:
-    st.session_state.oauth_state = None  # CSRF token for the Google OAuth round-trip
 
 # Placement options for custom elements (insert_after keys)
 CUSTOM_PLACEMENTS = [
@@ -147,126 +160,219 @@ CUSTOM_PLACEMENTS = [
 ]
 
 
-def get_db():
-    try:
-        return NotionHymnsDB()
-    except ValueError:
-        return None
+@st.cache_resource
+def _init_db_once():
+    """Create the schema once per process (cached resource)."""
+    init_db()
+    return True
 
 
-def _new_oauth_state() -> str:
-    """Generate and remember a CSRF state token for the Google OAuth round-trip."""
-    import secrets
-
-    state = secrets.token_urlsafe(24)
-    st.session_state.oauth_state = state
-    return state
-
-
-def _handle_gmail_oauth_callback():
-    """
-    Process the Google OAuth redirect (?code=...&state=...) if present.
-
-    The redirect returns to a fresh Streamlit session, so we persist the token
-    to disk (keyed by email) and carry the active account in the URL via
-    ?gmail=<email>. Runs before the app-password gate so the code isn't lost.
-    """
+def _handle_gmail_callback(user):
+    """Process the manual gmail.send OAuth redirect (?code=&state=). Only reached
+    when should_handle_gmail_callback() is True AND the user is logged in."""
     qp = st.query_params
-    if "code" not in qp:
-        return
     code = qp.get("code")
     returned_state = qp.get("state")
-    expected_state = st.session_state.get("oauth_state")
-    # Only enforce CSRF state when we still have it (a fresh session after the
-    # redirect legitimately won't); this app also sits behind APP_PASSWORD.
-    if expected_state and returned_state and returned_state != expected_state:
-        st.session_state.oauth_error = "Sign-in was cancelled or the request expired. Please try again."
-        st.query_params.clear()
+    # CSRF: state must be present, single-use, and bound to THIS user (spec §4.3).
+    state_user = google_oauth.consume_state(returned_state) if returned_state else None
+    if state_user is None or str(state_user) != str(user["user_id"]):
+        st.session_state.oauth_error = "Sign-in expired or was invalid. Please try again."
+        clear_oauth_query_params(qp)
         st.rerun()
         return
     try:
-        result = google_oauth.exchange_code(code)
-    except Exception as e:  # noqa: BLE001 - show the reason to the user
+        # Refuses unless the Google-returned email == the logged-in user (spec §4.4).
+        google_oauth.exchange_code(code, user["user_id"])
+    except Exception as e:  # noqa: BLE001 - surface the reason to the user
         st.session_state.oauth_error = str(e)
-        st.query_params.clear()
-        st.rerun()
-        return
-    email = (result or {}).get("email")
-    st.query_params.clear()
-    if email:
-        st.session_state.gmail_user = email
-        st.query_params["gmail"] = email
+    clear_oauth_query_params(qp)
     st.rerun()
 
 
-def _active_gmail_user():
-    """The connected Gmail for this browser, from session or the ?gmail= param."""
-    active = st.session_state.get("gmail_user") or st.query_params.get("gmail")
-    if active and not google_oauth.is_connected(active):
-        # Token was revoked/removed; forget it so the UI re-prompts.
-        active = None
-        st.session_state.gmail_user = None
-    st.session_state.gmail_user = active
-    return active
-
-
-def _render_gmail_sidebar(active_gmail):
-    """Sidebar controls for connecting / switching / disconnecting a Gmail account."""
+def _render_gmail_sidebar(user_id, user_email):
+    """Sidebar controls for connecting / disconnecting the caller's own Gmail."""
     with st.sidebar:
         st.divider()
         st.subheader("✉️ Gmail")
         if st.session_state.get("oauth_error"):
             st.error(st.session_state.pop("oauth_error"))
         if not google_oauth.is_configured():
-            st.caption(
-                "Per-user Gmail sign-in isn't set up. Set GOOGLE_CLIENT_ID, "
-                "GOOGLE_CLIENT_SECRET and GOOGLE_OAUTH_REDIRECT_URI to let each "
-                "person send from their own Gmail. Falls back to a shared "
-                "Gmail App Password if configured."
-            )
+            st.caption("Per-user Gmail sending isn't configured on this deployment.")
             return
-        if active_gmail:
-            st.success(f"Connected: {active_gmail}")
-            st.link_button("Switch account", google_oauth.build_auth_url(_new_oauth_state()))
+        if google_oauth.is_connected(user_id):
+            st.success(f"Connected: {user_email}")
             if st.button("Disconnect", key="gmail_disconnect"):
-                google_oauth.disconnect(active_gmail)
-                st.session_state.gmail_user = None
-                st.query_params.clear()
+                google_oauth.disconnect(user_id)
                 st.rerun()
         else:
-            st.caption("Sign in with Google to send worship emails from your own Gmail.")
-            st.link_button("Connect your Gmail", google_oauth.build_auth_url(_new_oauth_state()))
+            st.caption("Connect Google to send worship emails from your own Gmail.")
+            st.link_button(
+                "Connect your Gmail",
+                google_oauth.build_auth_url(google_oauth.create_state(user_id)),
+            )
+
+
+CHURCH_SCOPED_SESSION_KEYS = (
+    "_cached_all_hymns", "_hymn_title_to_info", "_cached_saved_services",
+    "scripture_hymns", "scripture_refs_used", "opening", "response", "closing",
+    "open_man", "resp_man", "close_man", "editing_service_id", "load_service_id",
+    "liturgy", "liturgy_call_to_worship", "liturgy_opening_prayer",
+    "liturgy_prayer_of_confession", "liturgy_assurance",
+    "liturgy_prayer_for_illumination", "liturgy_prayers_of_the_people",
+    "liturgy_offertory_prayer", "liturgy_benediction", "include_communion",
+    "custom_elements", "selected_ot_ref", "selected_nt_ref", "bible_translation",
+    "active_hymnal",
+)
+
+
+def _reset_church_scoped_state():
+    for k in CHURCH_SCOPED_SESSION_KEYS:
+        st.session_state.pop(k, None)
+
+
+def render_church_switcher(user, active):
+    """Sidebar switcher for users in >1 church. Switching resets all church-scoped
+    state so a stale previous-church read is impossible (spec §5)."""
+    churches = list_user_churches(user["user_id"])
+    if len(churches) <= 1:
+        return
+    with st.sidebar:
+        labels = {c["name"]: c["id"] for c in churches}
+        current_name = active["name"]
+        picked = st.selectbox(
+            "Church", list(labels.keys()),
+            index=list(labels.keys()).index(current_name) if current_name in labels else 0,
+            key="church_switcher",
+        )
+        if labels[picked] != active["church_id"]:
+            _reset_church_scoped_state()
+            st.session_state["active_church_id"] = str(labels[picked])
+            st.rerun()
+
+
+def safe_hymn_selectbox(label, options, key, format_func):
+    """A hymn selectbox that first coerces a stale stored value to '' (guarding
+    against StreamlitAPIException when the church's options changed), then renders."""
+    current = st.session_state.get(key, "")
+    coerced = coerce_selectbox_value(current, options)
+    if coerced != current:
+        st.session_state[key] = coerced
+    return st.selectbox(label, options=options, key=key, format_func=format_func)
+
+
+def render_onboarding(user):
+    """Signed-in user with no membership: create a church or join by invite."""
+    user_id = user["user_id"]
+    st.title("Welcome to Worship Service Builder")
+    st.caption(f"Signed in as {user['email']}. You don't belong to a church yet.")
+
+    pending_code = st.session_state.get("pending_invite_code")
+    if pending_code:
+        st.info("You opened an invite link. Review and accept it below.")
+
+    tab_join, tab_create = st.tabs(["Join a church", "Create a church"])
+
+    with tab_join:
+        typed = st.text_input("Invite code", value=pending_code or "", key="onboard_invite_code")
+        if st.button("Join church", key="onboard_join"):
+            code = pick_invite_code(pending_code, typed)
+            if not code:
+                st.error("Enter an invite code, or open your invite link again.")
+            else:
+                try:
+                    ok, msg = accept_invite(code, user_id)
+                except Exception as e:  # noqa: BLE001
+                    ok, msg = False, str(e)
+                if ok:
+                    st.session_state.pop("pending_invite_code", None)
+                    st.query_params.clear()  # onboarding is terminal; safe to clear here
+                    st.success(msg or "Joined. Loading your church…")
+                    st.rerun()
+                else:
+                    st.error(msg or "That invite code is not valid.")
+
+    with tab_create:
+        with st.form("onboard_create_church"):
+            name = st.text_input("Church name", key="onboard_church_name")
+            timezone = st.text_input("Timezone", value="America/New_York",
+                                     key="onboard_church_tz",
+                                     help="e.g. America/New_York — drives first-Sunday and the 12-week window.")
+            if st.form_submit_button("Create church"):
+                if not name.strip():
+                    st.error("Church name is required.")
+                elif not timezone.strip():
+                    st.error("Timezone is required.")
+                else:
+                    try:
+                        cid = create_church(name=name.strip(),
+                                            timezone=timezone.strip(),
+                                            owner_user_id=user_id)
+                        st.session_state["active_church_id"] = str(cid)
+                        st.success("Church created. Loading…")
+                        st.rerun()
+                    except Exception as e:  # noqa: BLE001
+                        st.error(f"Could not create church: {e}")
 
 
 def main():
-    # Handle the Google OAuth redirect first (before the password gate) so the
-    # ?code= isn't discarded when it returns to a fresh session.
-    _handle_gmail_oauth_callback()
+    # 1) FIRST LINE: capture untrusted ?invite=/?church= before any gate/OAuth.
+    capture_query_params(st.query_params, st.session_state)
 
-    # Optional password protection (set APP_PASSWORD in .env or Streamlit secrets)
-    app_password = os.getenv("APP_PASSWORD", "").strip()
-    if app_password and not st.session_state.get("authenticated"):
-        st.title("Worship Service Builder")
-        st.caption("Enter the app password to continue.")
-        with st.form("login_form"):
-            pw = st.text_input("Password", type="password", key="app_pw", placeholder="App password")
-            if st.form_submit_button("Log in"):
-                if pw == app_password:
-                    st.session_state.authenticated = True
-                    st.rerun()
-                else:
-                    st.error("Incorrect password.")
-        st.divider()
-        st.caption("Set APP_PASSWORD in your environment to protect the app (e.g. email sending).")
+    # 2) Ensure the schema exists (cached, once per process).
+    _init_db_once()
+
+    # 3) Identity via Streamlit-native Google OIDC. Stops on the login screen if
+    #    not signed in; returns {"user_id","email","name","picture"}.
+    user = require_login()
+
+    # 4) Manual gmail.send OAuth callback — only OUR flow, only while logged in.
+    if google_oauth.should_handle_gmail_callback(st.query_params, True):
+        _handle_gmail_callback(user)
+
+    # 5) Server-verified active church (role re-derived per request).
+    active = require_active_church(user["user_id"])
+    if active is None:
+        render_onboarding(user)
         return
 
-    # Connected Gmail account for this browser (per-user sign-in), plus sidebar controls.
-    active_gmail = _active_gmail_user()
-    _render_gmail_sidebar(active_gmail)
+    render_church_switcher(user, active)
+    _render_gmail_sidebar(user["user_id"], user["email"])
+    with st.sidebar:
+        st.divider()
+        st.caption(f"Signed in as {user['email']} · {active['name']}")
+        if st.button("Log out", key="logout_btn"):
+            do_logout()
+
+    def _service_builder_page():
+        render_service_builder(user, active)
+
+    def _settings_page():
+        settings_page.render_settings_page(user, active)
+
+    nav = st.navigation([
+        st.Page(_service_builder_page, title="Service Builder", icon="✝️", default=True),
+        st.Page(_settings_page, title="Settings", icon="⚙️"),
+    ])
+    nav.run()
+
+
+def render_service_builder(user, active):
+    church_id = active["church_id"]
+    user_id = user["user_id"]
+
+    # Active Bible translation for on-screen passage text (per-church default,
+    # overridable per session via the picker in the Readings section).
+    if "bible_translation" not in st.session_state:
+        st.session_state["bible_translation"] = (
+            get_church_translation(church_id) or DEFAULT_TRANSLATION
+        )
+    _avail_ids = [t[0] for t in available_translations()]
+    if st.session_state["bible_translation"] not in _avail_ids:
+        st.session_state["bible_translation"] = DEFAULT_TRANSLATION
 
     # Restore from archive when Load was clicked
     if st.session_state.get("load_service_id"):
-        loaded = get_service(st.session_state.load_service_id)
+        loaded = get_service(st.session_state.load_service_id, church_id)
         st.session_state.load_service_id = None
         if loaded:
             try:
@@ -296,23 +402,13 @@ def main():
     st.title("Worship Service Builder")
     st.caption("Suggest hymns by scripture, generate liturgy with AI, export to Word.")
 
-    db = get_db()
-    if not db:
-        st.warning(
-            "Set **NOTION_API_KEY** and **NOTION_DATABASE_ID** in `.env` to use hymn search and suggestions."
-        )
-        use_notion = False
-    else:
-        use_notion = True
-
-    # Sidebar: date selector, occasion, and scriptures
-    with st.sidebar:
-        if app_password:
-            if st.button("Log out", key="logout_btn", help="Lock the app (requires password again)."):
-                st.session_state.authenticated = False
-                st.rerun()
-            st.divider()
-
+    # Service date + occasion + scriptures: top of the main screen.
+    # (col_occasion/col_scripts are filled AFTER the lectionary block below,
+    # because that block writes st.session_state.occasion/scriptures_text and
+    # Streamlit forbids writing a widget's session value once the widget is
+    # instantiated.)
+    col_date, col_occasion, col_scripts = st.columns([1, 2, 2])
+    with col_date:
         service_date_picked = st.date_input(
             "Service date",
             value=date.today(),
@@ -329,8 +425,7 @@ def main():
             "Date changed: date_iso=%s, last_lectionary_date=%s, service_date_str=%s",
             date_iso, st.session_state.last_lectionary_date, service_date_str,
         )
-        with st.sidebar:
-            st.info("Loading occasion and readings…")
+        st.info("Loading occasion and readings…")
         try:
             with st.spinner("Loading occasion and readings…"):
                 readings_list = get_readings_for_date_string(service_date_str)
@@ -362,17 +457,14 @@ def main():
         st.rerun()
         return
 
-    # Sidebar continued: occasion (from date) and scriptures
+    # Occasion: fills the top-row column next to the date (see note above).
     logger.info(
-        "Rendering sidebar: last_lectionary_date=%s, occasion=%r, lectionary_readings=%s",
+        "Rendering occasion: last_lectionary_date=%s, occasion=%r, lectionary_readings=%s",
         st.session_state.last_lectionary_date,
         st.session_state.get("occasion"),
         "present" if st.session_state.get("lectionary_readings") else "None",
     )
-    with st.sidebar:
-        st.header("Service details")
-        st.caption("Filled from the service date above.")
-        # When multiple reading sets exist (e.g. Palm Sunday: Palms + Passion), let user switch.
+    with col_occasion:
         # When multiple reading sets exist (e.g. Palm Sunday: Palms + Passion), let user switch.
         readings_list = st.session_state.get("lectionary_readings_list") or []
         if len(readings_list) > 1:
@@ -407,29 +499,32 @@ def main():
         if st.session_state.lectionary_readings:
             r = st.session_state.lectionary_readings
             st.caption(f"RCL: {r.get('calendar_date', '')} — {r.get('liturgical_date', '')}")
-        st.divider()
-        st.subheader("Scripture readings")
+
+    # Scripture readings: fills the third top-row column (deferred, see note above).
+    with col_scripts:
         scriptures_text = st.text_area(
-            "One per line (e.g. Matthew 17:1–8)",
+            "Scripture readings (one per line)",
             height=120,
             placeholder="Filled from lectionary for the selected date.",
             key="scriptures_text",
+            help="e.g. Matthew 17:1–8 — auto-filled from the lectionary; edit as needed.",
         )
-        scriptures = [s.strip() for s in scriptures_text.splitlines() if s.strip()]
+    scriptures = [s.strip() for s in scriptures_text.splitlines() if s.strip()]
 
-        st.divider()
+    # Sidebar: the service archive
+    with st.sidebar:
         st.subheader("Service archive")
         saved = st.session_state.get("_cached_saved_services")
         if saved is None:
             try:
-                saved = list_saved_services()
+                saved = list_saved_services(church_id)
                 st.session_state["_cached_saved_services"] = saved
             except Exception as e:
                 logger.exception("Failed to load service archive")
                 st.error(f"Could not load archive: {e}. Click **Refresh archive** to retry.")
                 st.session_state["_cached_saved_services"] = []
                 saved = []
-        if st.button("Refresh archive", key="refresh_archive", help="Reload services from Notion"):
+        if st.button("Refresh archive", key="refresh_archive", help="Reload services"):
             st.session_state.pop("_cached_saved_services", None)
             st.rerun()
         if not saved:
@@ -451,14 +546,38 @@ def main():
             st.caption(f"RCL: {r.get('calendar_date', '')} — {r.get('liturgical_date', '')}. Edit the Scripture list in the sidebar to use your own.")
         else:
             st.caption("Using the Scripture list from the sidebar. Edit it to add or change references.")
+
+        # Translation picker (on-screen study text only — the bulletin lists references)
+        trans_opts = available_translations()
+        trans_ids = [t[0] for t in trans_opts]
+        trans_labels = {t[0]: t[1] for t in trans_opts}
+        cur_trans = st.session_state.get("bible_translation", DEFAULT_TRANSLATION)
+        col_t, _ = st.columns([1, 2])
+        with col_t:
+            picked_trans = st.selectbox(
+                "Bible translation",
+                trans_ids,
+                index=trans_ids.index(cur_trans) if cur_trans in trans_ids else 0,
+                format_func=lambda tid: trans_labels.get(tid, tid),
+                key="translation_picker",
+                help="Used for the passage text shown below. This is study text only — "
+                     "the bulletin lists the references, not the verse text.",
+            )
+        if picked_trans != st.session_state.get("bible_translation"):
+            st.session_state["bible_translation"] = picked_trans
+            st.session_state.scripture_full_texts = {}   # cached in the old translation
+            st.rerun()
+        translation = st.session_state["bible_translation"]
+        st.caption(f"Passage text shown in **{translation_label(translation)}**.")
+
         if st.button("Load full text for all readings"):
-            logger.info("Load full text clicked, fetching %d passages", len(scriptures))
+            logger.info("Load full text clicked, fetching %d passages (%s)", len(scriptures), translation)
             with st.spinner("Fetching passage text…"):
                 for ref in scriptures:
                     cached = st.session_state.scripture_full_texts.get(ref)
                     if ref and (cached is None or cached == "[Could not load text]"):
                         logger.info("Fetching passage: %s", ref)
-                        text = get_passage_text(ref)
+                        text = get_passage_text(ref, translation=translation)
                         ok = bool(text and text != "[Could not load text]")
                         logger.info("Fetched %s: %s", ref, "ok" if ok else "failed")
                         st.session_state.scripture_full_texts[ref] = text or "[Could not load text]"
@@ -506,13 +625,39 @@ def main():
                 st.session_state.selected_nt_ref = nt_choice or ""
         st.divider()
 
-    # Hymn suggestions by scripture (any of the readings + optional extra)
-    hymn_options_opening = []
-    hymn_options_response = []
-    hymn_options_closing = []
-    cached_all_hymns = st.session_state.get("_cached_all_hymns")
+    # Load this church's hymns once per session (used by the scripture search,
+    # AI suggestions, and the hymn pickers below).
+    cached_hymns = st.session_state.get("_cached_all_hymns")
+    if cached_hymns is None:
+        try:
+            with st.spinner("Loading this church's hymnal…"):
+                cached_hymns = list_hymns(church_id)
+            st.session_state["_cached_all_hymns"] = cached_hymns
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Failed to load hymns")
+            st.error(f"Could not load hymns: {e}. Click **Refresh hymn list** to retry.")
+            cached_hymns = []
+            st.session_state["_cached_all_hymns"] = []
 
-    if use_notion:
+    # Hymnal selector — when the church has more than one hymnal, choose which to
+    # pick from. Everything below (search, suggestions, pickers) uses `all_hymns`.
+    hymnals_present = sorted({h.get("Hymnal") for h in cached_hymns if h.get("Hymnal")})
+    if len(hymnals_present) > 1:
+        col_h, _ = st.columns([1, 2])
+        with col_h:
+            active_hymnal = st.selectbox(
+                "Hymnal",
+                hymnals_present,
+                key="active_hymnal",
+                help="Which hymnal to choose hymns from for this service.",
+            )
+        all_hymns = [h for h in cached_hymns if h.get("Hymnal") == active_hymnal]
+    else:
+        active_hymnal = hymnals_present[0] if hymnals_present else None
+        all_hymns = cached_hymns
+
+    # Hymn search by scripture (in-memory over the selected hymnal)
+    if all_hymns:
         with st.expander("Find hymns matching any of the scriptures", expanded=True):
             extra_scripture = st.text_input(
                 "Additional scripture (optional)",
@@ -527,17 +672,17 @@ def main():
                     st.info("Enter scripture readings above, or add one in the field above.")
                 else:
                     logger.info("Searching hymns for refs: %s", refs_to_search)
-                    with st.spinner("Searching Notion…"):
+                    with st.spinner("Searching hymnal…"):
                         seen_ids = set()
                         matched = []
                         for ref in refs_to_search:
-                            for h in hymns_by_scripture(db, ref, limit=50, all_hymns=cached_all_hymns or None):
+                            for h in hymns_by_scripture(None, ref, limit=50, all_hymns=all_hymns):
                                 if h["id"] not in seen_ids:
                                     seen_ids.add(h["id"])
                                     matched.append(h)
                     if not matched:
                         logger.info("No hymns found for refs %s", refs_to_search)
-                        st.info("No hymns in your database matching those references. Try shorter refs (e.g. 'Matthew 17').")
+                        st.info("No hymns in your hymnal matching those references. Try shorter refs (e.g. 'Matthew 17').")
                     else:
                         logger.info("Found %d hymns for refs %s", len(matched), refs_to_search)
                         st.session_state["scripture_hymns"] = matched
@@ -546,87 +691,60 @@ def main():
             if "scripture_hymns" in st.session_state:
                 refs_used = st.session_state.get("scripture_refs_used", [])
                 st.caption("Matching: " + ", ".join(refs_used))
-                # Resolve real audio URL from Hymnary only for first 15 to avoid run timeout; rest use constructed URL
-                max_resolve = 15
                 hymn_list = st.session_state["scripture_hymns"][:20]
-                for i, h in enumerate(hymn_list):
-                    resolve_audio = i < max_resolve
-                    info = hymn_display_info(h, resolve_audio=resolve_audio)
+                for h in hymn_list:
+                    info = hymn_display_info(h)
                     num = info.get("number") or "—"
-                    audio_url = info.get("audio_url") or ""
-                    audio_id = f"audio_{h['id']}_{i}"
                     hymn_link = info.get("link") or ""
                     if hymn_link:
-                        st.markdown(f"[#{num} — {info['title']}]({hymn_link})")
+                        # Link to the hymn's Hymnary page (where audio can be played
+                        # in context) rather than hotlinking their media files.
+                        st.markdown(f"[#{num} — {info['title']}]({hymn_link}) · [▶ listen]({hymn_link})")
                     else:
                         st.text(f"#{num} — {info['title']}")
-                    if audio_url:
-                        escaped_url = html.escape(audio_url)
-                        safe_id = html.escape(audio_id)
-                        st.html(
-                            f'<div id="wrap-{safe_id}"><audio id="{safe_id}" controls src="{escaped_url}"></audio></div>'
-                        )
+                st.caption(
+                    "Hymn information and links courtesy of [Hymnary.org](https://hymnary.org). "
+                    "Individual hymns may carry their own copyright — see each hymn's page."
+                )
 
-    # Main: hymn selection (from Notion list or manual)
+    # Main: hymn selection (from this church's DB hymnal)
     st.header("Hymns")
     exclude_recent_hymns = st.checkbox(
         "Exclude hymns used in the last 12 weeks",
         value=False,
         help="When checked, hymns from recent services are hidden from the dropdowns.",
     )
-    if use_notion:
-        title_to_info = st.session_state.get("_hymn_title_to_info")
-        cached_all_hymns = st.session_state.get("_cached_all_hymns")
-        if title_to_info is None:
-            try:
-                with st.spinner("Loading hymn list from Notion…"):
-                    cached_all_hymns = db.list_hymns()
-                    title_to_info = {}
-                    for h in cached_all_hymns:
-                        t = get_property_value(h, "Hymn Title")
-                        if t:
-                            info = hymn_display_info(h)
-                            key = t.strip().lower()
-                            title_to_info[key] = info
-                    st.session_state["_hymn_title_to_info"] = title_to_info
-                    st.session_state["_cached_all_hymns"] = cached_all_hymns
-                    logger.info("Cached %d hymns in session state", len(title_to_info))
-            except Exception as e:
-                logger.exception("Failed to load hymn list")
-                st.error(f"Could not load hymns from Notion: {e}. Click **Refresh hymn list** to retry.")
-                st.session_state["_hymn_title_to_info"] = {}
-                st.session_state["_cached_all_hymns"] = []
-                title_to_info = {}
-                cached_all_hymns = []
-        if st.button("Refresh hymn list", key="refresh_hymns", help="Reload all hymns from Notion"):
-            st.session_state.pop("_hymn_title_to_info", None)
-            st.session_state.pop("_cached_all_hymns", None)
-            st.rerun()
-        if exclude_recent_hymns:
-            recent_used = get_recently_used_identifiers(weeks=12)
-            titles_sorted = sorted(
-                k for k in title_to_info
-                if not is_hymn_recently_used(
-                    title_to_info[k].get("number"),
-                    title_to_info[k].get("title") or "",
-                    recent_used,
-                )
-            )
-            recent_count = len(title_to_info) - len(titles_sorted)
-            if recent_count > 0:
-                st.caption(f"Hymns used in the last 12 weeks are excluded ({recent_count} excluded).")
-        else:
-            titles_sorted = sorted(title_to_info.keys(), key=str.lower)
+    if st.button("Refresh hymn list", key="refresh_hymns"):
+        st.session_state.pop("_cached_all_hymns", None)
+        st.rerun()
+
+    title_to_info = build_title_to_info(all_hymns)
+    if not title_to_info:
+        # Explicit empty-hymnal message — never a silent swap to free-text inputs.
+        st.warning(
+            "This church's hymnal is empty. Add hymns on the **Settings → Hymns** "
+            "page to enable hymn selection."
+        )
+
+    if exclude_recent_hymns and title_to_info:
+        recent_used = get_recently_used_identifiers(church_id, weeks=12)
+        titles_sorted = sorted(
+            k for k in title_to_info
+            if not is_hymn_recently_used(
+                title_to_info[k].get("number"), title_to_info[k].get("title") or "", recent_used)
+        )
+        excluded = len(title_to_info) - len(titles_sorted)
+        if excluded > 0:
+            st.caption(f"Hymns used in the last 12 weeks are excluded ({excluded} excluded).")
     else:
-        title_to_info = {}
-        titles_sorted = []
+        titles_sorted = sorted(title_to_info.keys(), key=str.lower)
 
     def _hymn_label(x):
         if not x:
             return "— Select —"
         return (title_to_info.get(x) or {}).get("title") or x
 
-    if use_notion and titles_sorted and st.button(
+    if titles_sorted and st.button(
         "Suggest hymns (AI)",
         key="suggest_hymns_btn",
         help="Use AI to suggest opening (gathering), response (scripture-based), and closing (joyful) hymns.",
@@ -638,15 +756,17 @@ def main():
 
         try:
             suggestions = suggest_hymns_for_service(
-                db=db,
+                db=None,
                 occasion=occasion,
                 scriptures=scriptures,
                 selected_nt_ref=st.session_state.get("selected_nt_ref") or None,
                 scripture_full_texts=st.session_state.get("scripture_full_texts") or {},
-                scripture_text_fetcher=get_passage_text,
+                scripture_text_fetcher=lambda ref: get_passage_text(
+                    ref, translation=st.session_state.get("bible_translation", DEFAULT_TRANSLATION)
+                ),
                 limit_per_slot=5,
                 progress_callback=_on_progress,
-                all_hymns=cached_all_hymns or None,
+                all_hymns=all_hymns,
             )
             logger.info("AI suggestions returned: %s", {
                 k: [s.get("title") for s in v] for k, v in suggestions.items()
@@ -685,7 +805,7 @@ def main():
             else:
                 st.session_state["_suggestion_message"] = "AI could not match any suggestions to your hymn list. Try different scriptures or check the logs."
             progress_bar.progress(1.0, text="Done!")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.exception("Suggest hymns failed")
             st.session_state["_suggestion_message"] = f"Could not suggest hymns: {e}"
         st.rerun()
@@ -699,74 +819,30 @@ def main():
 
     @st.fragment
     def hymn_selection_fragment():
-        """Isolated fragment so changing a hymn only reruns this block (less full-page fade)."""
         col1, col2, col3 = st.columns(3)
         with col1:
             st.subheader("Opening")
             st.caption("Gathering / call to worship")
             if titles_sorted:
-                st.selectbox(
-                    "Opening hymn",
-                    options=[""] + titles_sorted,
-                    format_func=_hymn_label,
-                    key="opening",
-                )
-            else:
-                st.text_input("Opening hymn (title)", key="open_man")
+                safe_hymn_selectbox("Opening hymn", [""] + titles_sorted, "opening", _hymn_label)
         with col2:
             st.subheader("After sermon")
             st.caption("Response to scripture (NT reading)")
             if titles_sorted:
-                st.selectbox(
-                    "Response hymn",
-                    options=[""] + titles_sorted,
-                    format_func=_hymn_label,
-                    key="response",
-                )
-            else:
-                st.text_input("Response hymn (title)", key="resp_man")
+                safe_hymn_selectbox("Response hymn", [""] + titles_sorted, "response", _hymn_label)
         with col3:
             st.subheader("Closing")
             st.caption("Joyful / sending")
             if titles_sorted:
-                st.selectbox(
-                    "Closing hymn",
-                    options=[""] + titles_sorted,
-                    format_func=_hymn_label,
-                    key="closing",
-                )
-            else:
-                st.text_input("Closing hymn (title)", key="close_man")
+                safe_hymn_selectbox("Closing hymn", [""] + titles_sorted, "closing", _hymn_label)
 
     hymn_selection_fragment()
 
-    # Build hymns_ordered from session state so full runs (e.g. Generate, Download) use latest
-    hymn_options_opening = []
-    hymn_options_response = []
-    hymn_options_closing = []
-    if titles_sorted:
-        opening_choice = st.session_state.get("opening", "")
-        if opening_choice:
-            hymn_options_opening = [title_to_info[opening_choice]]
-        response_choice = st.session_state.get("response", "")
-        if response_choice:
-            hymn_options_response = [title_to_info[response_choice]]
-        closing_choice = st.session_state.get("closing", "")
-        if closing_choice:
-            hymn_options_closing = [title_to_info[closing_choice]]
-    else:
-        open_man = st.session_state.get("open_man", "")
-        if open_man:
-            hymn_options_opening = [{"title": open_man, "number": None, "link": None}]
-        resp_man = st.session_state.get("resp_man", "")
-        if resp_man:
-            hymn_options_response = [{"title": resp_man, "number": None, "link": None}]
-        close_man = st.session_state.get("close_man", "")
-        if close_man:
-            hymn_options_closing = [{"title": close_man, "number": None, "link": None}]
-
-    hymns_ordered = hymn_options_opening + hymn_options_response + hymn_options_closing
-    hymns_ordered = [h for h in hymns_ordered if h.get("title")]
+    hymns_ordered = []
+    for slot in ("opening", "response", "closing"):
+        choice = st.session_state.get(slot, "")
+        if choice and choice in title_to_info:
+            hymns_ordered.append(title_to_info[choice])
 
     # Sermon title (for Word doc)
     st.text_input("Sermon title (for bulletin)", key="sermon_title", placeholder="[Sermon title]")
@@ -857,6 +933,7 @@ def main():
                     hymns=hymns_ordered,
                     sections=sections,
                     user_overrides=user_overrides or None,
+                    prompt_overrides=get_church_prompts(church_id),
                 )
             st.session_state.liturgy = liturgy
             st.success("Liturgy generated. Review below and download Word.")
@@ -895,10 +972,10 @@ def main():
     # Prepare Word documents (show whenever liturgy is generated)
     if st.session_state.liturgy:
         st.subheader("Prepare Word documents")
-        st.caption("Prepare the secretary or pastor copy, then download or email from the section below.")
+        st.caption("Prepare the bulletin copy or the pastor's copy, then download or email from the section below.")
         col_sec, col_pastor = st.columns(2)
         with col_sec:
-            if st.button("Prepare for secretary", key="prep_sec"):
+            if st.button("Prepare bulletin copy", key="prep_sec", help="Liturgy only — for whoever assembles the bulletin."):
                 buf = build_docx(
                     occasion=occasion,
                     date=service_date_str,
@@ -916,12 +993,12 @@ def main():
                     custom_elements=st.session_state.custom_elements,
                 )
                 st.session_state.docx_bytes_secretary = buf.getvalue()
-                if hymns_ordered and record_usage(service_date_str, hymns_ordered):
-                    pass
-                st.success("Secretary document ready. Download below.")
+                if hymns_ordered:
+                    record_usage(church_id, service_date_str, hymns_ordered)
+                st.success("Bulletin copy ready. Download below.")
                 st.rerun()
         with col_pastor:
-            if st.button("Prepare for pastor", key="prep_pastor"):
+            if st.button("Prepare pastor's copy", key="prep_pastor", help="Full order of worship, including sermon and Prayers of the People."):
                 buf = build_docx(
                     occasion=occasion,
                     date=service_date_str,
@@ -939,14 +1016,14 @@ def main():
                     custom_elements=st.session_state.custom_elements,
                 )
                 st.session_state.docx_bytes_pastor = buf.getvalue()
-                if hymns_ordered and record_usage(service_date_str, hymns_ordered):
-                    pass
-                st.success("Pastor document ready. Download below.")
+                if hymns_ordered:
+                    record_usage(church_id, service_date_str, hymns_ordered)
+                st.success("Pastor's copy ready. Download below.")
                 st.rerun()
         editing_id = st.session_state.get("editing_service_id")
         # Clear editing_id if user switched to a different service date
         if editing_id:
-            existing = get_service(editing_id)
+            existing = get_service(editing_id, church_id)
             if existing and existing.get("service_date_iso") != date_iso:
                 st.session_state.editing_service_id = None
                 editing_id = None
@@ -966,22 +1043,21 @@ def main():
             )
             try:
                 if editing_id:
-                    updated = update_service(editing_id, **save_kw)
+                    updated = update_service(editing_id, church_id, **save_kw)
                     if updated:
                         st.success("Service updated in archive.")
                     else:
-                        # Entry may have been deleted; save as new
                         st.session_state.editing_service_id = None
-                        out = save_service(**save_kw)
+                        out = save_service(church_id=church_id, created_by=user_id, **save_kw)
                         st.session_state.editing_service_id = out.get("id")
                         st.success("Service saved to archive.")
                 else:
-                    out = save_service(**save_kw)
+                    out = save_service(church_id=church_id, created_by=user_id, **save_kw)
                     st.session_state.editing_service_id = out.get("id")
                     st.success("Service saved to archive.")
                 st.session_state.pop("_cached_saved_services", None)
                 st.rerun()
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 st.error(f"Archive save failed: {e}")
 
     # Download prepared documents (show whenever we have them, even after rerun when hymns may be filtered out)
@@ -992,7 +1068,7 @@ def main():
         with col1:
             if st.session_state.docx_bytes_secretary:
                 st.download_button(
-                    label="Download .docx (for secretary)",
+                    label="Download .docx (bulletin copy)",
                     data=st.session_state.docx_bytes_secretary,
                     file_name=f"worship_{safe_date}.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -1001,82 +1077,52 @@ def main():
         with col2:
             if st.session_state.docx_bytes_pastor:
                 st.download_button(
-                    label="Download .docx (for pastor)",
+                    label="Download .docx (pastor's copy)",
                     data=st.session_state.docx_bytes_pastor,
                     file_name=f"worship_pastor_{safe_date}.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                     key="dl_pastor",
                 )
-        st.caption("Secretary copy: liturgy only (no sermon, no Prayers of the People). Pastor copy: full order including sermon and Prayers of the People.")
+        st.caption("Bulletin copy: liturgy only (no sermon, no Prayers of the People) — for whoever assembles the bulletin. Pastor's copy: full order including sermon and Prayers of the People.")
 
-        # Email secretary (when secretary doc is ready)
+        # Email the bulletin copy (when it is ready)
         if st.session_state.docx_bytes_secretary:
-            with st.expander("Email to secretary", expanded=True):
-                st.caption("Send the secretary .docx and a friendly message via Gmail.")
-                use_oauth = google_oauth.is_configured()
-                if use_oauth:
-                    if active_gmail:
-                        st.caption(f"Sending as **{active_gmail}** (your connected Gmail).")
+            with st.expander("Email bulletin copy", expanded=True):
+                st.caption("Send the bulletin .docx and a friendly message via Gmail.")
+                connected = google_oauth.is_configured() and google_oauth.is_connected(user_id)
+                if google_oauth.is_configured():
+                    if connected:
+                        st.caption(f"Sending as **{user['email']}** (your connected Gmail).")
                     else:
-                        st.warning(
-                            "Connect your Gmail in the sidebar to send from your own account."
-                        )
-                contacts = get_contacts_for_display()
+                        st.warning("Connect your Gmail in the sidebar to send from your own account.")
+                contacts = list_contacts(church_id)
                 contact_options = [f"{c['name']} <{c['email']}>" for c in contacts]
                 email_to_contact = {f"{c['name']} <{c['email']}>": c["email"] for c in contacts}
                 selected_contacts = st.multiselect(
-                    "Recipients",
-                    options=contact_options,
-                    default=contact_options,
-                    key="email_recipients",
-                    help="Select one or more saved contacts.",
-                )
+                    "Recipients", options=contact_options,
+                    key="email_recipients", help="Select one or more saved contacts.")
                 additional_emails = st.text_input(
-                    "Additional emails (comma-separated)",
-                    key="secretary_email_extra",
-                    placeholder="other@example.com, another@example.com",
-                    help="Add more recipients not in your saved contacts.",
-                )
-                email_message = st.text_area(
-                    "Message",
-                    key="email_message",
-                    height=100,
-                    placeholder="Hi! Here’s the worship bulletin for this Sunday. Let me know if you need any changes.",
-                    help="This will appear in the email body.",
-                )
-                if st.button("Send email to secretary", key="send_email_sec"):
+                    "Additional emails (comma-separated)", key="secretary_email_extra",
+                    placeholder="other@example.com")
+                email_message = st.text_area("Message", key="email_message", height=100)
+                if st.button("Send email", key="send_email_sec"):
                     recipient_emails = [email_to_contact[c] for c in selected_contacts]
                     if additional_emails and additional_emails.strip():
                         recipient_emails.extend(
-                            e.strip() for e in additional_emails.split(",") if e.strip()
-                        )
+                            e.strip() for e in additional_emails.split(",") if e.strip())
                     if not recipient_emails:
                         st.error("Please select at least one recipient or enter an email address.")
+                    elif not connected:
+                        st.error("Connect your Gmail in the sidebar first, then try again.")
                     else:
                         subject = f"Worship service — {service_date_str}"
                         body = (email_message or "Hi! Here’s the worship bulletin for this Sunday.").strip()
                         attachment_filename = f"worship_{safe_date}.docx"
-                        if use_oauth and active_gmail:
-                            # Send from the user's own connected Gmail (Gmail API).
-                            err = google_oauth.send_email(
-                                active_gmail,
-                                recipient_emails,
-                                subject,
-                                body,
-                                attachment_bytes=st.session_state.docx_bytes_secretary,
-                                attachment_filename=attachment_filename,
-                            )
-                        elif use_oauth and not active_gmail:
-                            err = "Connect your Gmail in the sidebar first, then try again."
-                        else:
-                            # Fall back to the shared Gmail App Password (SMTP).
-                            err = send_gmail(
-                                recipient_emails,
-                                subject,
-                                body,
-                                attachment_bytes=st.session_state.docx_bytes_secretary,
-                                attachment_filename=attachment_filename,
-                            )
+                        err = google_oauth.send_email(
+                            user_id, recipient_emails, subject, body,
+                            attachment_bytes=st.session_state.docx_bytes_secretary,
+                            attachment_filename=attachment_filename,
+                        )
                         if err:
                             st.error(f"Email failed: {err}")
                         else:

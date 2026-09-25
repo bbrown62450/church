@@ -1,0 +1,54 @@
+# Streamlit Community Cloud hibernates apps after 12 hours without traffic.
+# A plain HTTP ping does NOT count (the 200 comes from the platform's sleep
+# page), so this job opens each app in headless Chromium — a real WebSocket
+# session — every 6 hours, and presses the wake button if the app was asleep.
+name: keep-awake
+on:
+  schedule:
+    - cron: "23 */6 * * *"   # every 6 hours, off the :00 mark
+  workflow_dispatch: {}
+
+jobs:
+  visit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Playwright
+        run: |
+          pip install playwright
+          playwright install --with-deps chromium
+      - name: Visit apps (real browser session)
+        env:
+          APP_URLS: "https://liturgy-stg.streamlit.app/ https://liturgy.streamlit.app/"
+        run: |
+          python - <<'PY'
+          import os, sys
+          from playwright.sync_api import sync_playwright
+
+          urls = os.environ["APP_URLS"].split()
+          failures = 0
+          with sync_playwright() as p:
+              browser = p.chromium.launch()
+              for url in urls:
+                  page = browser.new_page()
+                  try:
+                      page.goto(url, wait_until="networkidle", timeout=120_000)
+                      # If the hibernation page is showing, press the wake button
+                      # and give the app time to boot.
+                      try:
+                          page.get_by_text("get this app back up", exact=False).click(timeout=5_000)
+                          page.wait_for_timeout(45_000)
+                      except Exception:
+                          pass  # not asleep — normal case
+                      page.wait_for_timeout(10_000)  # let the session register as traffic
+                      print(f"visited {url}")
+                  except Exception as e:  # noqa: BLE001
+                      failures += 1
+                      print(f"FAILED {url}: {e}", file=sys.stderr)
+                  finally:
+                      page.close()
+              browser.close()
+          sys.exit(1 if failures else 0)
+          PY

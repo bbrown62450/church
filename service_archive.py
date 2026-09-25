@@ -1,60 +1,67 @@
 #!/usr/bin/env python3
-"""
-Save and load worship services to/from an archive so you can
-revisit or restore a service's final state in the app.
+"""Database-backed, church-scoped worship service archive.
 
-When NOTION_ARCHIVE_DATABASE_ID is set (and NOTION_API_KEY), the archive
-is stored in that Notion database (accessible online). Otherwise uses
-local data/saved_services.json.
+Every function is scoped to a validated `church_id` (derived server-side by the
+active-church guard). Reads/updates/deletes for an id outside the caller's
+church return "not found" (None / False) — the IDOR fix.
 """
-
-import json
-import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
-ARCHIVE_FILE = os.path.join(DATA_DIR, "saved_services.json")
+from sqlalchemy import delete, select
+
+from db import session_scope
+from db.models import Service
 
 
-def _use_notion() -> bool:
-    return bool(os.getenv("NOTION_ARCHIVE_DATABASE_ID") and os.getenv("NOTION_API_KEY"))
+def _as_uuid(value: Any) -> uuid.UUID:
+    return value if isinstance(value, uuid.UUID) else uuid.UUID(str(value))
 
 
-def _ensure_data_dir() -> None:
-    os.makedirs(DATA_DIR, exist_ok=True)
+def _hymn_snapshot(hymns: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [{"title": h.get("title"), "number": h.get("number")} for h in (hymns or [])]
 
 
-def _load_archive() -> List[Dict[str, Any]]:
-    _ensure_data_dir()
-    if not os.path.isfile(ARCHIVE_FILE):
-        return []
-    try:
-        with open(ARCHIVE_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return []
+def _to_dict(s: Service) -> Dict[str, Any]:
+    return {
+        "id": str(s.id),
+        "church_id": str(s.church_id),
+        "created_by": str(s.created_by) if s.created_by else None,
+        "service_date": s.service_date_display,
+        "service_date_iso": s.service_date_iso,
+        "occasion": s.occasion,
+        "scriptures": s.scriptures or [],
+        "hymns": s.hymns or [],
+        "liturgy": s.liturgy or {},
+        "sermon_title": s.sermon_title or "",
+        "selected_ot_ref": s.selected_ot_ref or "",
+        "selected_nt_ref": s.selected_nt_ref or "",
+        "include_communion": bool(s.include_communion),
+        "saved_at": s.saved_at.isoformat() if s.saved_at else None,
+    }
 
 
-def _save_archive(services: List[Dict[str, Any]]) -> None:
-    _ensure_data_dir()
-    with open(ARCHIVE_FILE, "w", encoding="utf-8") as f:
-        json.dump(services, f, indent=2)
-
-
-def list_saved_services() -> List[Dict[str, Any]]:
-    """Return all saved services, most recent first (by saved_at)."""
-    if _use_notion():
-        from notion_archive import list_saved_services as notion_list
-        return notion_list()
-    services = _load_archive()
-    services.sort(key=lambda s: s.get("saved_at") or "", reverse=True)
-    return services
+def list_saved_services(church_id) -> List[Dict[str, Any]]:
+    """All services for a church, most recent first (by saved_at)."""
+    cid = _as_uuid(church_id)
+    with session_scope() as session:
+        rows = (
+            session.execute(
+                select(Service)
+                .where(Service.church_id == cid)
+                .order_by(Service.saved_at.desc())
+            )
+            .scalars()
+            .all()
+        )
+        return [_to_dict(s) for s in rows]
 
 
 def save_service(
+    church_id,
     *,
+    created_by=None,
     service_date: str,
     service_date_iso: str,
     occasion: str,
@@ -66,59 +73,43 @@ def save_service(
     selected_nt_ref: str = "",
     include_communion: bool = False,
 ) -> Dict[str, Any]:
-    """
-    Append the current service to the archive. Returns the saved service dict (with id, saved_at).
-    """
-    if _use_notion():
-        from notion_archive import save_service as notion_save
-        out = notion_save(
-            service_date=service_date,
+    """Insert a service for a church. Returns the saved dict (with id, saved_at)."""
+    cid = _as_uuid(church_id)
+    with session_scope() as session:
+        s = Service(
+            church_id=cid,
+            created_by=_as_uuid(created_by) if created_by else None,
+            service_date_display=service_date,
             service_date_iso=service_date_iso,
             occasion=occasion,
-            scriptures=scriptures,
-            hymns=hymns,
-            liturgy=liturgy,
-            sermon_title=sermon_title,
-            selected_ot_ref=selected_ot_ref,
-            selected_nt_ref=selected_nt_ref,
-            include_communion=include_communion,
+            scriptures=list(scriptures or []),
+            hymns=_hymn_snapshot(hymns),
+            liturgy=dict(liturgy or {}),
+            sermon_title=sermon_title or "",
+            selected_ot_ref=selected_ot_ref or "",
+            selected_nt_ref=selected_nt_ref or "",
+            include_communion=bool(include_communion),
         )
-        return out
-    services = _load_archive()
-    entry = {
-        "id": str(uuid.uuid4()),
-        "service_date": service_date,
-        "service_date_iso": service_date_iso,
-        "occasion": occasion,
-        "scriptures": scriptures,
-        "hymns": [{"title": h.get("title"), "number": h.get("number")} for h in hymns],
-        "liturgy": liturgy,
-        "sermon_title": sermon_title or "",
-        "selected_ot_ref": selected_ot_ref or "",
-        "selected_nt_ref": selected_nt_ref or "",
-        "include_communion": include_communion,
-        "saved_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
-    }
-    services.append(entry)
-    _save_archive(services)
-    return entry
+        session.add(s)
+        session.flush()
+        return _to_dict(s)
 
 
-def get_service(service_id: str) -> Optional[Dict[str, Any]]:
-    """Return one saved service by id, or None."""
-    if _use_notion():
-        from notion_archive import get_service as notion_get
-        out = notion_get(service_id)
-        if out is not None:
-            return out
-    for s in _load_archive():
-        if s.get("id") == service_id:
-            return s
-    return None
+def get_service(service_id, church_id) -> Optional[Dict[str, Any]]:
+    """Return one service only if it belongs to `church_id`. Else None."""
+    cid = _as_uuid(church_id)
+    with session_scope() as session:
+        s = session.execute(
+            select(Service).where(
+                Service.id == _as_uuid(service_id), Service.church_id == cid
+            )
+        ).scalar_one_or_none()
+        return _to_dict(s) if s is not None else None
 
 
 def update_service(
-    service_id: str,
+    service_id,
+    church_id,
     *,
     service_date: str,
     service_date_iso: str,
@@ -131,53 +122,38 @@ def update_service(
     selected_nt_ref: str = "",
     include_communion: bool = False,
 ) -> Optional[Dict[str, Any]]:
-    """
-    Update an existing archive entry by id. Returns the updated service dict, or None if not found.
-    """
-    if _use_notion():
-        from notion_archive import update_service as notion_update
-        return notion_update(
-            service_id,
-            service_date=service_date,
-            service_date_iso=service_date_iso,
-            occasion=occasion,
-            scriptures=scriptures,
-            hymns=hymns,
-            liturgy=liturgy,
-            sermon_title=sermon_title,
-            selected_ot_ref=selected_ot_ref,
-            selected_nt_ref=selected_nt_ref,
-            include_communion=include_communion,
+    """Update a service only if it belongs to `church_id`. Cross-church -> None."""
+    cid = _as_uuid(church_id)
+    with session_scope() as session:
+        s = session.execute(
+            select(Service).where(
+                Service.id == _as_uuid(service_id), Service.church_id == cid
+            )
+        ).scalar_one_or_none()
+        if s is None:
+            return None
+        s.service_date_display = service_date
+        s.service_date_iso = service_date_iso
+        s.occasion = occasion
+        s.scriptures = list(scriptures or [])
+        s.hymns = _hymn_snapshot(hymns)
+        s.liturgy = dict(liturgy or {})
+        s.sermon_title = sermon_title or ""
+        s.selected_ot_ref = selected_ot_ref or ""
+        s.selected_nt_ref = selected_nt_ref or ""
+        s.include_communion = bool(include_communion)
+        s.saved_at = datetime.now(timezone.utc)
+        session.flush()
+        return _to_dict(s)
+
+
+def delete_service(service_id, church_id) -> bool:
+    """Delete a service only if it belongs to `church_id`. Cross-church -> False."""
+    cid = _as_uuid(church_id)
+    with session_scope() as session:
+        result = session.execute(
+            delete(Service).where(
+                Service.id == _as_uuid(service_id), Service.church_id == cid
+            )
         )
-    services = _load_archive()
-    for i, s in enumerate(services):
-        if s.get("id") == service_id:
-            services[i] = {
-                "id": service_id,
-                "service_date": service_date,
-                "service_date_iso": service_date_iso,
-                "occasion": occasion,
-                "scriptures": scriptures,
-                "hymns": [{"title": h.get("title"), "number": h.get("number")} for h in hymns],
-                "liturgy": liturgy,
-                "sermon_title": sermon_title or "",
-                "selected_ot_ref": selected_ot_ref or "",
-                "selected_nt_ref": selected_nt_ref or "",
-                "include_communion": include_communion,
-                "saved_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
-            }
-            _save_archive(services)
-            return services[i]
-    return None
-
-
-def delete_service(service_id: str) -> bool:
-    """Remove a service from the archive. Returns True if removed."""
-    if _use_notion():
-        from notion_archive import delete_service as notion_delete
-        return notion_delete(service_id)
-    services = [s for s in _load_archive() if s.get("id") != service_id]
-    if len(services) == len(_load_archive()):
-        return False
-    _save_archive(services)
-    return True
+        return result.rowcount > 0
