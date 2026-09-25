@@ -6,6 +6,7 @@ from sqlalchemy import select, update
 
 from db import session_scope
 from db.models import Church, Membership, Invite
+from service_rubric import apply_patch, merge_rubric, validate_patch
 
 
 def create_church(*, name, timezone, owner_user_id) -> uuid.UUID:
@@ -115,6 +116,30 @@ def set_church_prompts(church_id, prompts: dict) -> None:
         if k in PROMPT_KEYS and (v or "").strip()
     }
     _merge_settings(church_id, {"liturgy_prompts": cleaned})
+
+
+def get_church_rubric_overrides(church_id) -> dict:
+    """The church's stored rubric overrides ({} when it uses all defaults)."""
+    church = get_church(church_id)
+    if not church:
+        return {}
+    stored = (church.get("settings") or {}).get("rubric")
+    return dict(stored) if isinstance(stored, dict) else {}
+
+
+def get_church_rubric(church_id) -> dict:
+    """The church's full rubric: the defaults with its valid overrides applied."""
+    return merge_rubric(get_church_rubric_overrides(church_id))
+
+
+def update_church_rubric(church_id, patch: dict) -> dict:
+    """Validate and apply a sparse rubric patch (None resets that checklist or
+    setting to its default). Raises ValueError, storing nothing, on invalid
+    input. Returns the merged rubric."""
+    cleaned = validate_patch(patch)
+    overrides = apply_patch(get_church_rubric_overrides(church_id), cleaned)
+    _merge_settings(church_id, {"rubric": overrides})
+    return merge_rubric(overrides)
 
 
 def get_church_translation(church_id) -> str | None:
