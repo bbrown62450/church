@@ -2,7 +2,7 @@ import pytest
 
 
 def test_member_cannot_edit_prompts_or_translation(tmp_db, make_user, make_church):
-    from views.settings import (
+    from streamlit_views.settings import (
         submit_prompts, reset_prompts, submit_translation, NotAuthorizedError,
     )
     from repos.memberships import add_membership
@@ -19,7 +19,7 @@ def test_member_cannot_edit_prompts_or_translation(tmp_db, make_user, make_churc
 
 
 def test_admin_prompt_save_drops_defaults_and_reset_clears(tmp_db, make_user, make_church):
-    from views.settings import submit_prompts, reset_prompts
+    from streamlit_views.settings import submit_prompts, reset_prompts
     from repos.churches import get_church_prompts
     import liturgy_prompts as lp
     owner = make_user(email="o2@p.org")
@@ -37,7 +37,7 @@ def test_admin_prompt_save_drops_defaults_and_reset_clears(tmp_db, make_user, ma
 
 
 def test_admin_translation_validated(tmp_db, make_user, make_church):
-    from views.settings import submit_translation
+    from streamlit_views.settings import submit_translation
     from repos.churches import get_church_translation
     owner = make_user(email="o3@p.org")
     church = make_church(name="P3", timezone="America/New_York", owner_user_id=owner)

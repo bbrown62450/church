@@ -15,6 +15,7 @@ jobs:
       - name: Install driver
         run: pip install "SQLAlchemy>=2.0" psycopg2-binary
       - name: SELECT 1
+        working-directory: backend
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: python keepalive.py

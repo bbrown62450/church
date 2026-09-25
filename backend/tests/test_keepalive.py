@@ -2,7 +2,7 @@ import pathlib
 
 from keepalive import ping
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
+ROOT = pathlib.Path(__file__).resolve().parents[2]   # repo root
 
 
 def test_ping_ok_on_sqlite(tmp_path):

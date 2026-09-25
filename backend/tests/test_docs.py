@@ -1,6 +1,6 @@
 import pathlib
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
+ROOT = pathlib.Path(__file__).resolve().parents[2]   # repo root
 
 
 def _read(rel):

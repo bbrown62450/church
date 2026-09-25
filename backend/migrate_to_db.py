@@ -503,7 +503,7 @@ def fetch_legacy_contacts():
     """
     import os
 
-    path = os.path.join(os.path.dirname(__file__), "data", "email_contacts.json")
+    path = os.path.join(os.path.dirname(__file__), "..", "data", "email_contacts.json")
     if not os.path.isfile(path):
         return []
     try:
