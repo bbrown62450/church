@@ -1,3 +1,5 @@
+import json
+
 import jwt
 import pytest
 from jwt import PyJWKClient
@@ -49,9 +51,40 @@ def test_rejects_hmac_signed_token():
     forged = jwt.encode(
         {"aud": "authenticated", "iss": ISSUER, "sub": "x", "exp": 9999999999,
          "app_metadata": {"provider": "google"}},
-        "shared-secret",
+        "x" * 32,
         algorithm="HS256",
     )
+    with pytest.raises(InvalidToken):
+        _verifier().verify(forged)
+
+
+def test_tolerates_small_clock_skew():
+    """A token whose iat is a few seconds ahead of our clock still verifies."""
+    claims = _verifier().verify(make_token(iat_offset=20))
+    assert claims["email"] == "pastor@example.com"
+
+
+def test_rejects_token_missing_top_level_email():
+    """Only the Supabase-controlled top-level `email` claim counts, never
+    user_metadata.email (which the signed-in user can edit)."""
+    token = make_token(email=None)
+    claims = jwt.decode(token, options={"verify_signature": False})
+    assert "email" not in claims
+    assert claims["user_metadata"]["email"] == "pastor@example.com"
+    with pytest.raises(InvalidToken):
+        _verifier().verify(token)
+
+
+def test_rejects_token_with_no_exp():
+    """A token missing `exp` entirely must be rejected."""
+    claims = {
+        "sub": "x",
+        "aud": "authenticated",
+        "iss": ISSUER,
+        "email": "pastor@example.com",
+        "app_metadata": {"provider": "google"},
+    }
+    forged = jwt.encode(claims, SIGNING_KEY, algorithm="RS256", headers={"kid": "test-key"})
     with pytest.raises(InvalidToken):
         _verifier().verify(forged)
 
@@ -78,7 +111,42 @@ def test_claims_to_profile_maps_google_identity():
     claims = jwt.decode(token, options={"verify_signature": False})
     assert claims_to_profile(claims) == {
         "email": "p@x.com",
-        "sub": "g-123",
+        "sub": None,
         "name": "Pat",
         "picture": "https://x/p.png",
     }
+
+
+def test_jwks_resolver_bad_json_fails_closed(monkeypatch):
+    def broken_fetch(self):
+        raise json.JSONDecodeError("bad", "", 0)
+
+    monkeypatch.setattr(PyJWKClient, "fetch_data", broken_fetch)
+    resolve = jwks_key_resolver("https://test-project.supabase.co/auth/v1/.well-known/jwks.json")
+    with pytest.raises(AuthUnavailable):
+        TokenVerifier(resolve, issuer=ISSUER).verify(make_token())
+
+
+def test_jwks_resolver_empty_key_set_fails_closed(monkeypatch):
+    monkeypatch.setattr(PyJWKClient, "fetch_data", lambda self: {"keys": []})
+    resolve = jwks_key_resolver("https://test-project.supabase.co/auth/v1/.well-known/jwks.json")
+    with pytest.raises(AuthUnavailable):
+        TokenVerifier(resolve, issuer=ISSUER).verify(make_token())
+
+
+def test_jwks_resolver_no_matching_kid_is_invalid_token(monkeypatch):
+    jwk = RSAAlgorithm.to_jwk(SIGNING_KEY.public_key(), as_dict=True)
+    jwk.update({"kid": "other-key", "alg": "RS256", "use": "sig"})
+    monkeypatch.setattr(PyJWKClient, "fetch_data", lambda self: {"keys": [jwk]})
+    resolve = jwks_key_resolver("https://test-project.supabase.co/auth/v1/.well-known/jwks.json")
+    with pytest.raises(InvalidToken):
+        TokenVerifier(resolve, issuer=ISSUER).verify(make_token())
+
+
+def test_jwks_resolver_rejects_garbage_token_as_invalid(monkeypatch):
+    jwk = RSAAlgorithm.to_jwk(SIGNING_KEY.public_key(), as_dict=True)
+    jwk.update({"kid": "test-key", "alg": "RS256", "use": "sig"})
+    monkeypatch.setattr(PyJWKClient, "fetch_data", lambda self: {"keys": [jwk]})
+    resolve = jwks_key_resolver("https://test-project.supabase.co/auth/v1/.well-known/jwks.json")
+    with pytest.raises(InvalidToken):
+        TokenVerifier(resolve, issuer=ISSUER).verify("not-a-jwt")

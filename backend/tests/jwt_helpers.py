@@ -25,6 +25,7 @@ def make_token(
     aud="authenticated",
     iss=ISSUER,
     expires_in=3600,
+    iat_offset=0,
     key=None,
 ) -> str:
     now = int(time.time())
@@ -32,13 +33,12 @@ def make_token(
         "sub": str(uuid.uuid4()),          # Supabase's own user id (not used by us)
         "aud": aud,
         "iss": iss,
-        "iat": now,
+        "iat": now + iat_offset,
         "exp": now + expires_in,
         "role": "authenticated",
-        "email": email,
         "app_metadata": {"provider": provider, "providers": [provider]},
         "user_metadata": {
-            "email": email,
+            "email": email if email is not None else "pastor@example.com",
             "provider_id": google_sub,
             "sub": google_sub,
             "full_name": name,
@@ -47,4 +47,9 @@ def make_token(
             "picture": picture,
         },
     }
+    # `email=None` omits the top-level (Supabase-controlled) email claim
+    # while user_metadata.email (user-editable) still carries a value, so
+    # tests can exercise "no trustworthy email" without touching user_metadata.
+    if email is not None:
+        claims["email"] = email
     return jwt.encode(claims, key or SIGNING_KEY, algorithm="RS256", headers={"kid": "test-key"})
