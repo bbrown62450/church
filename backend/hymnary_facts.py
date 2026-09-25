@@ -7,6 +7,12 @@ each text that cites the reference: its title, "number of hymnals" (our
 familiarity signal), often "date", and people fields with life dates such as
 "Perronet, Edward, 1721-1792".
 
+The API returns at most RESULT_CAP texts per reference, sorted by first line,
+with no way to page past them: under "Psalm 23" it stops at "When it seems
+that all is hopeless" and never lists "Ye Servants of God" (723 hymnals).
+Hymns cited only by such a broad reference can therefore stay unknown, and
+the CLI names every reference that hit the cap.
+
 The fetch function is injected so tests never touch the network; the CLI in
 backfill_hymn_facts.py supplies the real, throttled one.
 """
@@ -22,6 +28,7 @@ API_URL = "https://hymnary.org/api/scripture"
 PEOPLE_FIELDS = ("author", "translator", "paraphraser", "adapter", "alterer")
 BIRTH_ONLY_OFFSET = 35   # a living writer born in 1936 counts as writing around 1971
 WRITE_BATCH = 50
+RESULT_CAP = 100         # most texts the API returns for one reference
 
 Fetch = Callable[[str], Any]
 
@@ -69,10 +76,27 @@ def split_refs(refs: Optional[str]) -> List[str]:
     return [r for r in _REF_BREAK.split((refs or "").strip()) if r]
 
 
+def _records(results: Any) -> List[Any]:
+    """The text records in one API response: a dict keyed by first line, a
+    list, or [] / None when nothing cites the reference."""
+    return list(results.values()) if isinstance(results, dict) else list(results or [])
+
+
+def is_truncated(results: Any) -> bool:
+    """True when a response holds RESULT_CAP texts, so the API may have cut
+    off texts that also cite the reference."""
+    return len(_records(results)) >= RESULT_CAP
+
+
+def _text_id(record: Dict[str, Any]) -> str:
+    """Identifies one text, so a text listed under two references counts once."""
+    return record.get("text link") or repr(sorted(record.items()))
+
+
 def find_facts(title: str, refs: Optional[str], fetch: Fetch,
                cache: Dict[str, Any]) -> Optional[Dict[str, Optional[int]]]:
     """Look up one hymn: query each of its references (cached per reference),
-    collect every record whose title matches, and return the facts of one of
+    collect every text whose title matches, and return the facts of one of
     them, or None when nothing matches.
 
     Hymnary often gives one title to several texts (under "Psalm 23", a modern
@@ -80,24 +104,34 @@ def find_facts(title: str, refs: Optional[str], fetch: Fetch,
     psalm in 769). We take the text printed in the most hymnals, since that is
     the one a hymnal is most likely to mean by the title; ties go to the
     earliest listed. Both facts come from that one record, so a text never
-    borrows another text's year."""
+    borrows another text's year.
+
+    That choice needs every same-title text in hand. When several texts share
+    the title and any response hit RESULT_CAP, the cap may have dropped the
+    most-published one, so we return None: a guess is never overwritten, while
+    an unknown can still be filled by hand. The live "Psalm 23" response is
+    capped, so "The Lord's My Shepherd" cited only by it stays unknown. A
+    single match in a capped response is still taken; nothing in the response
+    shows it is ambiguous."""
     want = normalize_title(title)
     if not want:
         return None
-    best = None
+    matches: Dict[str, Dict[str, Any]] = {}
+    truncated = False
     for ref in split_refs(refs):
         if ref not in cache:
             cache[ref] = fetch(ref)
-        results = cache[ref]
-        records = results.values() if isinstance(results, dict) else (results or [])
-        for record in records:
-            if not (isinstance(record, dict) and normalize_title(record.get("title", "")) == want):
-                continue
-            count = hymnal_count(record)
-            if best is None or (count is not None and (best[1] is None or count > best[1])):
-                best = (record, count)
-    if best is None:
+        truncated = truncated or is_truncated(cache[ref])
+        for record in _records(cache[ref]):
+            if isinstance(record, dict) and normalize_title(record.get("title", "")) == want:
+                matches.setdefault(_text_id(record), record)
+    if not matches or (truncated and len(matches) > 1):
         return None
+    best = None
+    for record in matches.values():
+        count = hymnal_count(record)
+        if best is None or (count is not None and (best[1] is None or count > best[1])):
+            best = (record, count)
     return {"text_year": text_year(best[0]), "hymnal_count": best[1]}
 
 

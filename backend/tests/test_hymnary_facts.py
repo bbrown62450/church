@@ -1,6 +1,11 @@
+import sys
+import uuid
+
+import httpx
 import pytest
 from sqlalchemy import select
 
+import backfill_hymn_facts
 import hymnary_facts as hf
 from db import session_scope
 from db.models import Hymn, HymnCatalog
@@ -102,6 +107,43 @@ def test_find_facts_compares_matches_across_all_references():
     assert fetch.calls == ["John 10:11", "Psalm 23"]
 
 
+def _capped(*records):
+    """An API response at Hymnary's cap: `records` padded with unrelated texts
+    to exactly RESULT_CAP entries, as the live API returns for "Psalm 23"."""
+    filler = {f"filler {i}": {"title": f"Filler Hymn {i}", "number of hymnals": "5"}
+              for i in range(hf.RESULT_CAP - len(records))}
+    return {**{f"r{i}": r for i, r in enumerate(records)}, **filler}
+
+
+def test_is_truncated_flags_a_response_at_the_cap():
+    assert hf.is_truncated(_capped())
+    assert hf.is_truncated(list(_capped().values()))
+    assert not hf.is_truncated({"a": HOLY})
+    assert not hf.is_truncated([])
+    assert not hf.is_truncated(None)
+
+
+def test_find_facts_leaves_a_collision_unknown_when_a_response_hits_the_cap():
+    # The cap may have dropped a same-title text in more hymnals than either
+    # of these, so picking one would be a guess that re-runs could never fix.
+    fetch = FakeFetch({"Psalm 23": _capped(SHEPHERD_MODERN, SHEPHERD_ROUS)})
+    assert hf.find_facts("The Lord's My Shepherd", "Psalm 23", fetch, {}) is None
+
+
+def test_find_facts_still_matches_in_a_capped_response_when_the_title_is_unique():
+    fetch = FakeFetch({"Isaiah 6:3": _capped(HOLY)})
+    assert hf.find_facts(HOLY["title"], "Isaiah 6:3", fetch, {}) == \
+        {"text_year": 1826, "hymnal_count": 1322}
+
+
+def test_find_facts_counts_one_text_seen_under_two_references_once():
+    # The same text under two references is not a collision, even with a cap.
+    fetch = FakeFetch({"John 10:11": {"a": SHEPHERD_ROUS},
+                       "Psalm 23": _capped(SHEPHERD_ROUS)})
+    assert hf.find_facts("The Lord's My Shepherd", "John 10:11; Psalm 23", fetch, {}) == \
+        {"text_year": None, "hymnal_count": 769}
+
+
 def test_find_facts_handles_empty_results_and_missing_refs():
     fetch = FakeFetch({})
     assert hf.find_facts("Anything", "Jude 1:25", fetch, {}) is None   # API returns []
@@ -137,3 +179,75 @@ def test_run_backfill_dry_run_writes_nothing(tmp_db):
     assert stats["updated"] == 1
     with session_scope() as s:
         assert s.execute(select(HymnCatalog)).scalar_one().text_year is None
+
+
+# --- The CLI (backfill_hymn_facts.py), with the network replaced by httpx.MockTransport.
+
+_REAL_CLIENT = httpx.Client   # the CLI test swaps httpx.Client out
+
+
+def _mock_client(responses, seen=None):
+    """An httpx.Client whose requests never leave the process: `responses`
+    maps a reference to the JSON the fake Hymnary API returns."""
+    def handler(request):
+        ref = request.url.params["reference"]
+        if seen is not None:
+            seen.append(ref)
+        return httpx.Response(200, json=responses.get(ref, []))
+    return _REAL_CLIENT(transport=httpx.MockTransport(handler))
+
+
+def test_make_fetch_reports_references_that_hit_the_cap(capsys):
+    truncated = []
+    with _mock_client({"Psalm 23": _capped(), "Isaiah 6:3": {"Holy": HOLY}}) as client:
+        fetch = backfill_hymn_facts.make_fetch(client, delay=0, truncated=truncated)
+        assert fetch("Isaiah 6:3") == {"Holy": HOLY}
+        assert len(fetch("Psalm 23")) == hf.RESULT_CAP
+    assert truncated == ["Psalm 23"]
+    out = capsys.readouterr().out
+    assert "Psalm 23" in out and "Isaiah 6:3" not in out
+
+
+@pytest.fixture
+def unbound_engine(tmp_db, monkeypatch):
+    """The database state a fresh CLI process starts in: tables exist, but no
+    engine is bound yet and DATABASE_URL names the database."""
+    import db.engine as engine_mod
+
+    monkeypatch.setenv("DATABASE_URL", tmp_db.url.render_as_string(hide_password=False))
+    monkeypatch.setattr(engine_mod, "_engine", None)
+    engine_mod.SessionLocal.configure(bind=None)
+    yield
+    if engine_mod._engine is not None:   # the engine the CLI created
+        engine_mod._engine.dispose()
+    engine_mod.SessionLocal.configure(bind=tmp_db)
+
+
+def test_cli_binds_the_database_and_reports_coverage(tmp_db, unbound_engine, monkeypatch, capsys):
+    engine = tmp_db
+    with engine.begin() as conn:   # insert without a session: SessionLocal is unbound
+        conn.execute(HymnCatalog.__table__.insert(), [
+            {"id": uuid.uuid4(), "title": HOLY["title"], "scripture_refs": "Isaiah 6:3"},
+            {"id": uuid.uuid4(), "title": "Unknown Hymn", "scripture_refs": "Psalm 23"},
+        ])
+    seen = []
+    monkeypatch.setattr(backfill_hymn_facts.httpx, "Client", lambda **kw: _mock_client(
+        {"Isaiah 6:3": {"Holy": HOLY}, "Psalm 23": _capped()}, seen))
+    monkeypatch.setattr(backfill_hymn_facts.time, "sleep", lambda _s: None)
+
+    monkeypatch.setattr(sys, "argv", ["backfill_hymn_facts.py", "--dry-run"])
+    backfill_hymn_facts.main()
+
+    out = capsys.readouterr().out
+    assert "[DRY RUN] checked 2, matched 1, updated 1, unknown 1" in out
+    assert "1 reference" in out and "Psalm 23" in out.splitlines()[-1]
+    assert sorted(seen) == ["Isaiah 6:3", "Psalm 23"]
+    with engine.connect() as conn:
+        assert conn.execute(select(HymnCatalog.text_year)).scalars().all() == [None, None]
+
+    monkeypatch.setattr(sys, "argv", ["backfill_hymn_facts.py"])
+    backfill_hymn_facts.main()
+    with engine.connect() as conn:
+        rows = conn.execute(select(HymnCatalog.title, HymnCatalog.text_year,
+                                   HymnCatalog.hymnal_count)).all()
+    assert sorted(rows) == [(HOLY["title"], 1826, 1322), ("Unknown Hymn", None, None)]
