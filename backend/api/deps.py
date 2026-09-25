@@ -38,6 +38,10 @@ class ActiveChurch:
 @lru_cache
 def get_verifier() -> TokenVerifier:
     settings = get_settings()
+    if not settings.supabase_url:
+        # Misconfigured deploy: fail closed with a clear 503 (not cached, so a
+        # fixed environment takes effect on the next restart).
+        raise auth_unavailable()
     return TokenVerifier(jwks_key_resolver(settings.jwks_url), issuer=settings.token_issuer)
 
 

@@ -135,3 +135,19 @@ def test_require_admin_allows_owner_and_admin_only():
     with pytest.raises(ApiError) as exc:
         require_admin(ActiveChurch(id=uuid.uuid4(), name="Grace", role="member"))
     assert exc.value.status == 403
+
+
+def test_missing_supabase_url_returns_503_not_500(tmp_db, monkeypatch):
+    """A deploy without SUPABASE_URL must fail closed with a clear error."""
+    from api import settings as settings_mod
+
+    monkeypatch.setenv("SUPABASE_URL", "")
+    settings_mod.get_settings.cache_clear()
+    get_verifier.cache_clear()
+    try:
+        r = TestClient(create_app()).get("/me", headers=_auth())
+        assert r.status_code == 503
+        assert r.json()["error"]["code"] == "auth_unavailable"
+    finally:
+        settings_mod.get_settings.cache_clear()
+        get_verifier.cache_clear()
