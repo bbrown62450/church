@@ -5,6 +5,12 @@ OpenAI liturgy generation, and Word/PDF download. Multi-church: each user signs
 in with Google and works within a church they belong to.
 """
 
+import sys
+from pathlib import Path
+
+# The core Python modules live in backend/ (shared with the FastAPI app).
+sys.path.insert(0, str(Path(__file__).resolve().parent / "backend"))
+
 import logging
 import os
 from datetime import date
@@ -36,8 +42,8 @@ from repos.invites import accept_invite
 import google_oauth
 
 from db import init_db
-from auth import require_login, do_logout
-from tenancy import require_active_church
+from streamlit_auth import require_login, do_logout
+from streamlit_tenancy import require_active_church
 from ui_helpers import (
     capture_query_params,
     clear_oauth_query_params,
@@ -45,7 +51,7 @@ from ui_helpers import (
     pick_invite_code,
     coerce_selectbox_value,
 )
-import views.settings as settings_page
+import streamlit_views.settings as settings_page
 
 load_dotenv()
 

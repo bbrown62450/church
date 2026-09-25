@@ -7,6 +7,44 @@ deployment; each church's hymnal, archive, contacts, and members are fully
 isolated. People sign in with Google, then create a church (becoming owner) or
 join one by invite.
 
+## New web app (React + FastAPI) — migration in progress
+
+The app is moving off Streamlit in slices (see
+`docs/superpowers/specs/2026-09-25-react-fastapi-migration-design.md`). Until the
+last slice lands, the Streamlit app (`app.py`) keeps working on the same database.
+
+| Part | Folder | Hosted on |
+|---|---|---|
+| Frontend (Next.js, React) | `frontend/` | Vercel |
+| API (FastAPI) | `backend/` | Railway |
+| Sign-in (Google only) + database | — | Supabase |
+
+**Run locally** (two terminals):
+
+```bash
+cd backend && ../.venv/bin/python -m uvicorn api.main:app --reload --port 8000
+cd frontend && npm run dev
+```
+
+Copy `backend/.env.example` → `backend/.env` and `frontend/.env.example` →
+`frontend/.env.local` first. Tests: `.venv/bin/python -m pytest -q` (backend and
+Streamlit) and `cd frontend && npm test`.
+
+**Deploying:**
+
+- **Railway** (service root `backend`, health check `/health`): env
+  `DATABASE_URL` (Supabase session pooler), `SUPABASE_URL`, `CORS_ORIGINS`
+  (exact Vercel URL, no trailing slash, comma-separated for multiple), plus
+  the carried-over `OPENAI_API_KEY` and `GOOGLE_*` gmail.send vars.
+- **Vercel** (project root `frontend`): env `NEXT_PUBLIC_SUPABASE_URL`,
+  `NEXT_PUBLIC_SUPABASE_ANON_KEY` (publishable key), `NEXT_PUBLIC_API_URL`
+  (the Railway URL).
+- **Supabase Auth:** Google only; Site URL = the Vercel URL; redirect URLs
+  `https://<app>.vercel.app/**` and `http://localhost:3000/**`; keep
+  `mailer_autoconfirm` off.
+- Vercel preview deployments won't be able to sign in until their preview
+  origins are added to `CORS_ORIGINS` and to the Supabase redirect URLs.
+
 ## Architecture at a glance
 
 - **Auth:** Streamlit native OIDC (`st.login` / `st.user`) with Google. Login
@@ -15,8 +53,10 @@ join one by invite.
 - **Storage:** one relational database via SQLAlchemy 2.x, selected by
   `DATABASE_URL`. SQLite for local dev, Supabase Postgres in production.
 - **Tenancy:** every request re-derives the caller's membership + role
-  server-side (`tenancy.require_active_church`); all church data is filtered by
-  the validated `church_id`.
+  server-side (`streamlit_tenancy.require_active_church` in Streamlit,
+  `api.deps.require_church` in the API — both call the shared DB check
+  `tenancy.validate_active_church`); all church data is filtered by the
+  validated `church_id`.
 
 ## Local setup
 
