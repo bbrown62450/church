@@ -71,20 +71,34 @@ def split_refs(refs: Optional[str]) -> List[str]:
 
 def find_facts(title: str, refs: Optional[str], fetch: Fetch,
                cache: Dict[str, Any]) -> Optional[Dict[str, Optional[int]]]:
-    """Look up one hymn: query each of its references (cached per reference)
-    and return the facts from the first record whose title matches, or None."""
+    """Look up one hymn: query each of its references (cached per reference),
+    collect every record whose title matches, and return the facts of one of
+    them, or None when nothing matches.
+
+    Hymnary often gives one title to several texts (under "Psalm 23", a modern
+    "The Lord's My Shepherd" in 14 hymnals is listed before the Rous metrical
+    psalm in 769). We take the text printed in the most hymnals, since that is
+    the one a hymnal is most likely to mean by the title; ties go to the
+    earliest listed. Both facts come from that one record, so a text never
+    borrows another text's year."""
     want = normalize_title(title)
     if not want:
         return None
+    best = None
     for ref in split_refs(refs):
         if ref not in cache:
             cache[ref] = fetch(ref)
         results = cache[ref]
         records = results.values() if isinstance(results, dict) else (results or [])
         for record in records:
-            if isinstance(record, dict) and normalize_title(record.get("title", "")) == want:
-                return {"text_year": text_year(record), "hymnal_count": hymnal_count(record)}
-    return None
+            if not (isinstance(record, dict) and normalize_title(record.get("title", "")) == want):
+                continue
+            count = hymnal_count(record)
+            if best is None or (count is not None and (best[1] is None or count > best[1])):
+                best = (record, count)
+    if best is None:
+        return None
+    return {"text_year": text_year(best[0]), "hymnal_count": best[1]}
 
 
 def _write(updates: List[tuple]) -> None:

@@ -77,6 +77,31 @@ def test_find_facts_matches_by_title_and_caches_each_reference():
     assert fetch.calls == ["Isaiah 6:3"]   # second lookup served from the cache
 
 
+# Hymnary often gives one title to several texts. Under "Psalm 23" the API lists
+# a modern "The Lord's My Shepherd" in 14 hymnals before the Rous metrical psalm
+# in 769, and the Rous record carries no date or people fields.
+SHEPHERD_MODERN = {"title": "The Lord's My Shepherd", "number of hymnals": "14",
+                   "author": "Townend, Stuart, 1963-"}
+SHEPHERD_ROUS = {"title": "The Lord's my Shepherd", "number of hymnals": "769"}
+SHEPHERD_UNCOUNTED = {"title": "The Lord's My Shepherd", "number of hymnals": ""}
+
+
+def test_find_facts_takes_the_most_published_text_when_titles_collide():
+    fetch = FakeFetch({"Psalm 23": {"a": SHEPHERD_UNCOUNTED, "b": SHEPHERD_MODERN,
+                                    "c": SHEPHERD_ROUS}})
+    facts = hf.find_facts("The Lord's My Shepherd", "Psalm 23", fetch, {})
+    # Both facts come from the one chosen text: the modern text's year is not borrowed.
+    assert facts == {"text_year": None, "hymnal_count": 769}
+
+
+def test_find_facts_compares_matches_across_all_references():
+    fetch = FakeFetch({"John 10:11": {"a": SHEPHERD_MODERN},
+                       "Psalm 23": {"a": SHEPHERD_MODERN, "b": SHEPHERD_ROUS}})
+    facts = hf.find_facts("The Lord's My Shepherd", "John 10:11; Psalm 23", fetch, {})
+    assert facts == {"text_year": None, "hymnal_count": 769}
+    assert fetch.calls == ["John 10:11", "Psalm 23"]
+
+
 def test_find_facts_handles_empty_results_and_missing_refs():
     fetch = FakeFetch({})
     assert hf.find_facts("Anything", "Jude 1:25", fetch, {}) is None   # API returns []
