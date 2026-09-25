@@ -150,3 +150,64 @@ def test_jwks_resolver_rejects_garbage_token_as_invalid(monkeypatch):
     resolve = jwks_key_resolver("https://test-project.supabase.co/auth/v1/.well-known/jwks.json")
     with pytest.raises(InvalidToken):
         TokenVerifier(resolve, issuer=ISSUER).verify("not-a-jwt")
+
+
+def test_jwks_resolver_non_object_body_fails_closed(monkeypatch):
+    """A JWKS body that is valid JSON but not an object (e.g. `[]`) is a
+    malformed-server response, not a per-token problem."""
+    monkeypatch.setattr(PyJWKClient, "fetch_data", lambda self: [])
+    resolve = jwks_key_resolver("https://test-project.supabase.co/auth/v1/.well-known/jwks.json")
+    with pytest.raises(AuthUnavailable):
+        TokenVerifier(resolve, issuer=ISSUER).verify(make_token())
+
+
+def test_jwks_resolver_no_usable_signing_keys_fails_closed(monkeypatch):
+    """Every key present but none usable for signing (e.g. all `use: enc`)
+    is a server-side outage, not an invalid token."""
+    jwk = RSAAlgorithm.to_jwk(SIGNING_KEY.public_key(), as_dict=True)
+    jwk.update({"kid": "test-key", "alg": "RS256", "use": "enc"})
+    monkeypatch.setattr(PyJWKClient, "fetch_data", lambda self: {"keys": [jwk]})
+    resolve = jwks_key_resolver("https://test-project.supabase.co/auth/v1/.well-known/jwks.json")
+    with pytest.raises(AuthUnavailable):
+        TokenVerifier(resolve, issuer=ISSUER).verify(make_token())
+
+
+def test_rejects_iat_beyond_leeway():
+    """iat 60s in the future exceeds the 30s leeway window."""
+    with pytest.raises(InvalidToken):
+        _verifier().verify(make_token(iat_offset=60))
+
+
+def test_accepts_expiry_within_leeway():
+    """A token expired 10s ago is still within the 30s leeway."""
+    claims = _verifier().verify(make_token(expires_in=-10))
+    assert claims["email"] == "pastor@example.com"
+
+
+def test_rejects_non_string_email():
+    """A non-string top-level `email` claim must not crash with AttributeError."""
+    claims = {
+        "sub": "x",
+        "aud": "authenticated",
+        "iss": ISSUER,
+        "exp": int(__import__("time").time()) + 3600,
+        "email": 123,
+        "app_metadata": {"provider": "google"},
+    }
+    forged = jwt.encode(claims, SIGNING_KEY, algorithm="RS256", headers={"kid": "test-key"})
+    with pytest.raises(InvalidToken):
+        _verifier().verify(forged)
+
+
+def test_rejects_token_missing_app_metadata():
+    """A validly signed token with no `app_metadata` key at all must be rejected."""
+    claims = {
+        "sub": "x",
+        "aud": "authenticated",
+        "iss": ISSUER,
+        "exp": int(__import__("time").time()) + 3600,
+        "email": "pastor@example.com",
+    }
+    forged = jwt.encode(claims, SIGNING_KEY, algorithm="RS256", headers={"kid": "test-key"})
+    with pytest.raises(InvalidToken):
+        _verifier().verify(forged)

@@ -34,10 +34,22 @@ def jwks_key_resolver(jwks_url: str) -> KeyResolver:
     PyJWKClient forces a refresh from the endpoint when it sees an unknown
     `kid` (subject to its refetch cooldown), so a just-rotated Supabase
     signing key may briefly be rejected with a 401 until that refresh fires.
+
+    We first fetch the signing key set on its own (`get_signing_keys`, which
+    reads from PyJWKClient's cache when warm — no extra network call) so a
+    malformed or unusable JWKS response (not a JSON object, or no keys
+    usable for signing) is reported as a server-side outage before we ever
+    look at the token's `kid`. Only then do we look up the key for this
+    token's `kid`, so an unknown `kid` or malformed token still surfaces as
+    a per-token failure to `verify`, not an outage.
     """
     client = PyJWKClient(jwks_url, cache_keys=True)
 
     def resolve(token: str):
+        try:
+            client.get_signing_keys()
+        except (PyJWKClientError, PyJWKSetError, ValueError) as exc:
+            raise AuthUnavailable(str(exc)) from exc
         return client.get_signing_key_from_jwt(token).key
 
     return resolve
@@ -55,12 +67,19 @@ class TokenVerifier:
         except PyJWKClientConnectionError as exc:
             raise AuthUnavailable(str(exc)) from exc
         except (PyJWKSetError, ValueError) as exc:
-            # An empty/unusable JWKS key set (PyJWKSetError) or a JWKS
-            # response that isn't valid JSON (json.JSONDecodeError, a
-            # ValueError) means the outage is on Supabase's side, not the
-            # caller's — fail closed the same way as a connection failure.
+            # `jwks_key_resolver`'s resolver already converts a malformed or
+            # unusable JWKS response into `AuthUnavailable` itself, before
+            # this point. This clause is a safety net for any other
+            # `key_resolver` that raises PyJWKSetError/ValueError directly
+            # (e.g. one built straight on PyJWKClient without that check) —
+            # such a failure is still Supabase's outage, not the caller's,
+            # so fail closed the same way as a connection failure.
             raise AuthUnavailable(str(exc)) from exc
         except (PyJWKClientError, jwt.PyJWTError) as exc:
+            # A per-token failure: no key matches this token's `kid`, or the
+            # token itself is malformed. `AuthUnavailable` raised inside a
+            # resolver (e.g. `jwks_key_resolver`'s) is a different exception
+            # type and passes through this clause untouched.
             raise InvalidToken(str(exc)) from exc
         try:
             claims = jwt.decode(
@@ -76,7 +95,8 @@ class TokenVerifier:
             raise InvalidToken(str(exc)) from exc
         if (claims.get("app_metadata") or {}).get("provider") != "google":
             raise InvalidToken("Only Google sign-in is allowed.")
-        if not (claims.get("email") or "").strip():
+        email = claims.get("email")
+        if not isinstance(email, str) or not email.strip():
             raise InvalidToken("Token has no email.")
         return claims
 
