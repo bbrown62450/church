@@ -85,16 +85,24 @@ def update_church(church_id, *, name=None, timezone=None, settings=None) -> None
             church.settings = settings
 
 
+def _lock_live_church(session, church_id) -> Optional[Church]:
+    """Load the church row with SELECT ... FOR UPDATE (Postgres; SQLite ignores
+    it), so a concurrent settings write waits for this transaction instead of
+    overwriting it. None if the church is missing or soft-deleted."""
+    church = session.get(Church, church_id, with_for_update=True)
+    if church is None or church.deleted_at is not None:
+        return None
+    return church
+
+
 def _merge_settings(church_id, patch: dict) -> None:
-    """Shallow-merge `patch` into the church's settings JSON (reassigns a new
-    dict so SQLAlchemy detects the change)."""
+    """Shallow-merge `patch` into the church's settings JSON under a row lock
+    (reassigns a new dict so SQLAlchemy detects the change)."""
     with session_scope() as session:
-        church = session.get(Church, church_id)
-        if church is None or church.deleted_at is not None:
+        church = _lock_live_church(session, church_id)
+        if church is None:
             return
-        current = dict(church.settings or {})
-        current.update(patch)
-        church.settings = current
+        church.settings = {**(church.settings or {}), **patch}
 
 
 def get_church_prompts(church_id) -> dict:
@@ -135,10 +143,19 @@ def get_church_rubric(church_id) -> dict:
 def update_church_rubric(church_id, patch: dict) -> dict:
     """Validate and apply a sparse rubric patch (None resets that checklist or
     setting to its default). Raises ValueError, storing nothing, on invalid
-    input. Returns the merged rubric."""
+    input. Returns the merged rubric.
+
+    The stored overrides are read from the row this transaction locks and then
+    rewrites, so two admins patching at once cannot drop each other's change.
+    """
     cleaned = validate_patch(patch)
-    overrides = apply_patch(get_church_rubric_overrides(church_id), cleaned)
-    _merge_settings(church_id, {"rubric": overrides})
+    with session_scope() as session:
+        church = _lock_live_church(session, church_id)
+        settings = dict(church.settings or {}) if church is not None else {}
+        stored = settings.get("rubric")
+        overrides = apply_patch(stored if isinstance(stored, dict) else {}, cleaned)
+        if church is not None:
+            church.settings = {**settings, "rubric": overrides}
     return merge_rubric(overrides)
 
 
