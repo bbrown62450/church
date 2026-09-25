@@ -41,3 +41,5 @@ On the deployed Vercel URL, on a phone and on a desktop:
 - [ ] `https://<railway-domain>/health` returns `{"ok":true}`.
 - [ ] `https://<railway-domain>/me` without a token returns 401 with the error shape.
 - [ ] The Streamlit app still signs in and loads your church.
+- [ ] Supabase → Authentication → Sign In / Providers: only Google enabled.
+- [ ] Supabase email changes require confirmation: `curl -s -H "apikey: <publishable key>" https://<ref>.supabase.co/auth/v1/settings` shows `"mailer_autoconfirm": false` (users are matched by email, so auto-confirmed email changes would allow account takeover).

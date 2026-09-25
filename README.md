@@ -30,6 +30,21 @@ Copy `backend/.env.example` → `backend/.env` and `frontend/.env.example` →
 `frontend/.env.local` first. Tests: `.venv/bin/python -m pytest -q` (backend and
 Streamlit) and `cd frontend && npm test`.
 
+**Deploying:**
+
+- **Railway** (service root `backend`, health check `/health`): env
+  `DATABASE_URL` (Supabase session pooler), `SUPABASE_URL`, `CORS_ORIGINS`
+  (exact Vercel URL, no trailing slash, comma-separated for multiple), plus
+  the carried-over `OPENAI_API_KEY` and `GOOGLE_*` gmail.send vars.
+- **Vercel** (project root `frontend`): env `NEXT_PUBLIC_SUPABASE_URL`,
+  `NEXT_PUBLIC_SUPABASE_ANON_KEY` (publishable key), `NEXT_PUBLIC_API_URL`
+  (the Railway URL).
+- **Supabase Auth:** Google only; Site URL = the Vercel URL; redirect URLs
+  `https://<app>.vercel.app/**` and `http://localhost:3000/**`; keep
+  `mailer_autoconfirm` off.
+- Vercel preview deployments won't be able to sign in until their preview
+  origins are added to `CORS_ORIGINS` and to the Supabase redirect URLs.
+
 ## Architecture at a glance
 
 - **Auth:** Streamlit native OIDC (`st.login` / `st.user`) with Google. Login
@@ -38,8 +53,10 @@ Streamlit) and `cd frontend && npm test`.
 - **Storage:** one relational database via SQLAlchemy 2.x, selected by
   `DATABASE_URL`. SQLite for local dev, Supabase Postgres in production.
 - **Tenancy:** every request re-derives the caller's membership + role
-  server-side (`tenancy.require_active_church`); all church data is filtered by
-  the validated `church_id`.
+  server-side (`streamlit_tenancy.require_active_church` in Streamlit,
+  `api.deps.require_church` in the API — both call the shared DB check
+  `tenancy.validate_active_church`); all church data is filtered by the
+  validated `church_id`.
 
 ## Local setup
 

@@ -85,6 +85,22 @@ def test_settings_derive_supabase_urls(monkeypatch):
         settings_mod.get_settings.cache_clear()
 
 
+def test_lifespan_warns_when_supabase_url_unset(monkeypatch, tmp_db, caplog):
+    monkeypatch.setenv("SUPABASE_URL", "")
+    settings_mod.get_settings.cache_clear()
+    try:
+        with caplog.at_level("WARNING"):
+            with TestClient(create_app()):
+                pass
+        assert any(
+            "SUPABASE_URL is not set; every authenticated request will return 503."
+            in record.message
+            for record in caplog.records
+        )
+    finally:
+        settings_mod.get_settings.cache_clear()
+
+
 def test_api_does_not_import_streamlit():
     code = "import sys, api.main; sys.exit(1 if 'streamlit' in sys.modules else 0)"
     result = subprocess.run([sys.executable, "-c", code], cwd=BACKEND, capture_output=True, text=True)

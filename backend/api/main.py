@@ -24,6 +24,10 @@ if not logging.getLogger().handlers:
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     init_db()   # create_all: no-op on existing tables, creates them for local SQLite
+    if not get_settings().supabase_url:
+        logging.getLogger(__name__).warning(
+            "SUPABASE_URL is not set; every authenticated request will return 503."
+        )
     yield
 
 
