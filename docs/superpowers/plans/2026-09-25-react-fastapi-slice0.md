@@ -2602,7 +2602,7 @@ cd backend
 GOOGLE_EMAIL="<your Google address>" ../.venv/bin/python - <<'PY'
 import os
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv(".env")  # explicit path: find_dotenv() fails for stdin scripts
 from db import init_db
 from auth import upsert_from_claims
 from repos.churches import create_church

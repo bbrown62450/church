@@ -36,6 +36,7 @@ export function AppHeader({ user, churches, active, onSelectChurch, onSignOut }:
         <div className="min-w-0 flex-1">
           {churches.length > 0 ? (
             <Select
+              items={churches.map((c) => ({ value: c.id, label: c.name }))}
               value={active?.id ?? ""}
               onValueChange={(id) => {
                 const church = churches.find((c) => c.id === id);
