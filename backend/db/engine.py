@@ -24,7 +24,20 @@ def _database_url() -> str:
     return os.environ.get("DATABASE_URL", "sqlite:///data/church.db")
 
 
+def _normalize_url(url: str) -> str:
+    """Pin bare Postgres URLs to psycopg2, the driver we install.
+
+    SQLAlchemy 2.1 made psycopg (v3) the default for ``postgresql://``, and
+    Supabase hands out bare ``postgresql://`` connection strings.
+    """
+    for prefix in ("postgresql://", "postgres://"):
+        if url.startswith(prefix):
+            return "postgresql+psycopg2://" + url[len(prefix):]
+    return url
+
+
 def _make_engine(url: str) -> Engine:
+    url = _normalize_url(url)
     kwargs = {"pool_pre_ping": True, "future": True}
     if url.startswith("sqlite"):
         # Streamlit reruns across threads; SQLite needs this relaxed.

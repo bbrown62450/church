@@ -3,8 +3,8 @@
 
 The free Supabase project pauses after ~7 days idle, so the first visitor each
 week would otherwise hit a cold/paused database. A scheduled `SELECT 1` (see
-.github/workflows/keepalive.yml) keeps it awake. Standalone: imports no app
-modules, so CI needs only SQLAlchemy + a Postgres driver.
+.github/workflows/keepalive.yml) keeps it awake. Imports only db.engine (which
+needs nothing beyond SQLAlchemy), so CI needs only SQLAlchemy + a Postgres driver.
 """
 
 import os
@@ -12,13 +12,15 @@ import sys
 
 from sqlalchemy import create_engine, text
 
+from db.engine import _normalize_url
+
 
 def ping(database_url: str) -> bool:
     """Open a short-lived connection and run SELECT 1. Returns True on success."""
     if not database_url:
         return False
     try:
-        engine = create_engine(database_url, pool_pre_ping=True)
+        engine = create_engine(_normalize_url(database_url), pool_pre_ping=True)
         try:
             with engine.connect() as conn:
                 value = conn.execute(text("SELECT 1")).scalar()

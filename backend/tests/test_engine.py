@@ -47,3 +47,30 @@ def test_session_scope_rolls_back_on_exception(tmp_path):
     with session_scope() as s:
         count = s.execute(text("SELECT COUNT(*) FROM t")).fetchone()
     assert count[0] == 0
+
+
+@pytest.mark.parametrize(
+    "raw, expected",
+    [
+        ("postgresql://u:p@h:5432/db", "postgresql+psycopg2://u:p@h:5432/db"),
+        ("postgres://u:p@h:5432/db", "postgresql+psycopg2://u:p@h:5432/db"),
+        ("postgresql+psycopg2://u:p@h/db", "postgresql+psycopg2://u:p@h/db"),
+        ("sqlite:///data/app.db", "sqlite:///data/app.db"),
+    ],
+)
+def test_postgres_urls_pin_the_installed_psycopg2_driver(raw, expected):
+    """SQLAlchemy 2.1 made psycopg (v3) the default for bare postgresql:// URLs;
+    we install psycopg2, so bare URLs must be pinned to it."""
+    from db.engine import _normalize_url
+
+    assert _normalize_url(raw) == expected
+
+
+def test_bare_postgres_url_builds_a_psycopg2_engine():
+    from db.engine import _make_engine
+
+    engine = _make_engine("postgresql://u:p@localhost:5432/db")  # no connection is opened
+    try:
+        assert engine.dialect.driver == "psycopg2"
+    finally:
+        engine.dispose()
