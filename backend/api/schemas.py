@@ -21,3 +21,15 @@ class ChurchOut(BaseModel):
 class MeOut(BaseModel):
     user: UserOut
     churches: list[ChurchOut]
+
+
+class RubricModel(BaseModel):
+    hymns: dict[str, list[str]]
+    prayers: dict[str, list[str]]
+    prefer_before_year: int
+    prefer_familiar: bool
+
+
+class RubricOut(BaseModel):
+    rubric: RubricModel
+    customized: list[str]
