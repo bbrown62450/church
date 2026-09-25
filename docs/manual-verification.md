@@ -28,3 +28,16 @@ redirects/cookies and cannot be fully covered by unit tests.
       param is preserved and the church is joined as `member`.
 - [ ] Confirm an expired/revoked code fails cleanly, and accepting when already
       a member is a no-op.
+
+## Slice 0 — React + FastAPI foundation
+
+On the deployed Vercel URL, on a phone and on a desktop:
+
+- [ ] `/` redirects to `/login` when signed out.
+- [ ] Sign in with Google returns to `/` and shows your church in the switcher.
+- [ ] Account menu shows name, email, and your role.
+- [ ] Switching churches (if you have more than one) updates the role shown.
+- [ ] Log out returns to `/login`.
+- [ ] `https://<railway-domain>/health` returns `{"ok":true}`.
+- [ ] `https://<railway-domain>/me` without a token returns 401 with the error shape.
+- [ ] The Streamlit app still signs in and loads your church.

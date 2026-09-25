@@ -7,6 +7,29 @@ deployment; each church's hymnal, archive, contacts, and members are fully
 isolated. People sign in with Google, then create a church (becoming owner) or
 join one by invite.
 
+## New web app (React + FastAPI) — migration in progress
+
+The app is moving off Streamlit in slices (see
+`docs/superpowers/specs/2026-09-25-react-fastapi-migration-design.md`). Until the
+last slice lands, the Streamlit app (`app.py`) keeps working on the same database.
+
+| Part | Folder | Hosted on |
+|---|---|---|
+| Frontend (Next.js, React) | `frontend/` | Vercel |
+| API (FastAPI) | `backend/` | Railway |
+| Sign-in (Google only) + database | — | Supabase |
+
+**Run locally** (two terminals):
+
+```bash
+cd backend && ../.venv/bin/python -m uvicorn api.main:app --reload --port 8000
+cd frontend && npm run dev
+```
+
+Copy `backend/.env.example` → `backend/.env` and `frontend/.env.example` →
+`frontend/.env.local` first. Tests: `.venv/bin/python -m pytest -q` (backend and
+Streamlit) and `cd frontend && npm test`.
+
 ## Architecture at a glance
 
 - **Auth:** Streamlit native OIDC (`st.login` / `st.user`) with Google. Login

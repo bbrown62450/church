@@ -26,3 +26,10 @@ def test_gitignore_covers_local_db_and_secrets():
     text = (ROOT / ".gitignore").read_text()
     assert "data/*.db" in text
     assert ".streamlit/secrets.toml" in text
+
+
+def test_backend_deploy_files_run_uvicorn_on_python_311():
+    procfile = (ROOT / "backend" / "Procfile").read_text()
+    assert "uvicorn api.main:app" in procfile
+    assert "$PORT" in procfile
+    assert (ROOT / "backend" / ".python-version").read_text().strip() == "3.11"
