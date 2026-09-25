@@ -80,7 +80,8 @@ fits clearly better.
 - builds toward praise, ending with a strong People response
 - hints at the day's themes without citing scripture
 
-**Opening Prayer.** A good opening prayer follows the classic collect shape:
+**Opening Prayer.** A good opening prayer:
+- follows the classic collect shape
 - addresses God
 - names something God has done or is ("who…")
 - asks for one thing that fits the day
@@ -177,7 +178,7 @@ A new router, `backend/api/routes/rubric.py`, registered in `api/main.py`:
   sparse patch as described above. Returns the same shape as `GET`. Invalid
   input returns 422 with the validation message.
 
-Pydantic models for both go in `api/schemas.py`.
+The response model (`RubricOut`) goes in `api/schemas.py`. The `PATCH` body is a plain JSON object checked by `service_rubric.validate_patch`, so its error messages stay readable.
 
 ## Hymn year and familiarity
 
