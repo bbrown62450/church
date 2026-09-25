@@ -36,8 +36,8 @@ from repos.invites import accept_invite
 import google_oauth
 
 from db import init_db
-from auth import require_login, do_logout
-from tenancy import require_active_church
+from streamlit_auth import require_login, do_logout
+from streamlit_tenancy import require_active_church
 from ui_helpers import (
     capture_query_params,
     clear_oauth_query_params,
