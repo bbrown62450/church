@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -15,6 +15,7 @@ import {
   readStoredChurchId,
   storeChurchId,
 } from "@/lib/church";
+import { createLatestTracker } from "@/lib/latest";
 import { createClient } from "@/lib/supabase/client";
 
 async function accessToken(): Promise<string | null> {
@@ -26,6 +27,7 @@ export default function Home() {
   const router = useRouter();
   const [me, setMe] = useState<Me | null>(null);
   const [active, setActive] = useState<Church | null>(null);
+  const churchSelection = useRef(createLatestTracker());
 
   const signOut = useCallback(async () => {
     storeChurchId(null);
@@ -44,13 +46,16 @@ export default function Home() {
   // Ask the server to confirm the church; it re-checks membership every time.
   const selectChurch = useCallback(
     async (church: Church) => {
+      const isLatest = churchSelection.current.begin();
       const token = await accessToken();
       if (!token) return signOut();
       try {
         const confirmed = await apiFetch<Church>("/church", { token, churchId: church.id });
+        if (!isLatest()) return;
         storeChurchId(confirmed.id);
         setActive(confirmed);
       } catch (err) {
+        if (!isLatest()) return;
         if (err instanceof ApiError && err.status === 403) {
           storeChurchId(null);
           setActive(null);
