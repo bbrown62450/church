@@ -1767,7 +1767,7 @@ Create `frontend/src/lib/supabase/proxy.ts`:
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/auth"];
+const PUBLIC_PATHS = new Set(["/login", "/auth/callback"]);
 
 /** Refresh the Supabase session cookie and send signed-out visitors to /login. */
 export async function updateSession(request: NextRequest) {
@@ -1797,7 +1797,7 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const isPublic = PUBLIC_PATHS.some((p) => request.nextUrl.pathname.startsWith(p));
+  const isPublic = PUBLIC_PATHS.has(request.nextUrl.pathname);
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
