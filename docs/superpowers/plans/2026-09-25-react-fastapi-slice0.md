@@ -1407,7 +1407,8 @@ def test_me_creates_user_from_google_identity(client):
     assert body["churches"] == []
     with session_scope() as s:
         user = s.execute(select(User).where(User.email == "new@example.com")).scalar_one()
-        assert user.google_sub == "g-42"
+        # google_sub comes from user-editable metadata, so the API never writes it.
+        assert user.google_sub is None
         assert str(user.id) == body["user"]["id"]
 
 

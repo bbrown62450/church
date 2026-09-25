@@ -137,12 +137,16 @@ requirements.txt       # "-r backend/requirements.txt" + streamlit[auth]
      enforced in code, not only in Supabase settings, because users are keyed by
      email and a non-Google signup with someone else's email would otherwise
      take over their account.
-  4. Map claims to the shape `upsert_from_claims` expects:
-     `email` ← `email`; `sub` ← `user_metadata.provider_id` (the Google subject,
-     preserving the meaning of the existing `google_sub` column); `name` ←
-     `user_metadata.full_name`; `picture` ← `user_metadata.avatar_url`.
+  4. Map claims to the shape `upsert_from_claims` expects: `email` ← the
+     top-level `email` claim only (set by Supabase; a missing email → 401);
+     `name` ← `user_metadata.full_name`; `picture` ← `user_metadata.avatar_url`;
+     `sub` ← `None`. `user_metadata` is editable by the signed-in user, so it is
+     never used for identity: the API does not write `users.google_sub`
+     (nothing looks users up by it; rows created by the Streamlit login keep
+     theirs). Token validation allows 30 seconds of clock skew.
   5. Call `upsert_from_claims` and return the user id.
-- JWKS unreachable (and no cached key) → 503, never a pass-through.
+- JWKS unreachable, or returning a malformed or empty key set → 503, never a
+  pass-through.
 
 ### 0.4 Tenancy — `require_church` / `require_admin`
 
