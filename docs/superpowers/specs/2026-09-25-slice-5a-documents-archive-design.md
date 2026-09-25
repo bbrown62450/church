@@ -370,6 +370,8 @@ class ServiceSummary(BaseModel):
 | `render_docx(resolved, variant) -> bytes` | Calls `worship_service.build_docx` with the resolved readings, slot hymns and variant flags |
 | `content_disposition(filename) -> str` | `attachment; filename="{f}"; filename*=UTF-8''{quote(f)}` (F§1.9) |
 
+**Reading heading (owner decision B; resolves index open question 7).** The docx heading for the resolved first reading changes from `"Old Testament Reading"` to **`"First Reading"`**; `"New Testament Reading"` is unchanged. This is `worship_service.build_docx`'s own literal text (see "Changed modules" below), not a `service_output` constant, and it must stay in sync with slice 4's `liturgy_config.OUTLINE` `ot_reading` label exactly as `SLOT_HEADINGS` must — the outline/docx test (slice 4) enforces it. `resolve_doc_readings` is unaffected: it only decides *which* reading fills the slot, and that rule (`selected_ot_ref or scriptures[0]`) is unchanged.
+
 5b adds `bulletin_email_subject(d: datetime.date)` and the other email helpers to this module. 5a does not define them.
 
 **Rule for `resolve_doc_readings`.** This is the NT fallback from owner decision 9 and inv §7 question 14, implemented **once**, in slice 2's `scripture_refs.resolve_readings`. The screen (`effectivePicks`), `draftToServicePayload`, `docReadings` and this function all delegate to it (or to its TypeScript port `resolveReadings`), so what the Bulletin readings selects show is what the Word file prints, whether or not a pick is stale:
@@ -427,6 +429,7 @@ With RCL order `[first, psalm, second, gospel]` and no picks, the NT reading is 
 - **New keyword signature:** `build_docx(*, occasion, date_display, hymns_by_slot, liturgy, ot_ref, nt_ref, sermon_title, include_sermon, include_prayers_of_the_people, include_communion, custom_elements) -> bytes`.
 - `hymns_by_slot` maps each slot to `{title, number}` or `None`. Each hymn heading renders only when its slot is filled. The custom-element anchors `first_hymn`, `second_hymn` and `third_hymn` are still always emitted, as today (inv E5: anchors are emitted even when the section is absent).
 - **Removed:** `include_placeholders` and `scripture_full_texts` (inv §3 row worship_service.py:790, 794). OT and NT arrive already resolved. Hymn lines use `hymn_line`.
+- **Reading heading (owner decision B).** The heading printed above `ot_ref` changes from `"Old Testament Reading"` to **`"First Reading"`**; the heading above `nt_ref` stays `"New Testament Reading"`. This is a text-only change: `ot_ref` / `nt_ref` keep their names, and the fallback rule (`ot_ref` from `resolve_doc_readings`'s parity default) is unchanged.
 - **Docstring fixed:** "Both variants include the sermon title; only the pastor's copy includes Prayers of the People."
 - **Unchanged:** Times New Roman 11 pt, the centered bold 16 pt title "Worship Service\n{occasion}", the 12 pt date line, the Leader/People bolding, bold confession, the Assurance response, "Affirmation of Faith / Apostles' Creed", the communion block after the Second Hymn, the "benediction" and "end" anchors, and ignoring keys outside the 8 sections.
 - **python-docx missing:** still raises `RuntimeError`. It reaches `UnhandledErrorMiddleware` as a logged 500 `internal_error` (F§7.4).
@@ -726,13 +729,14 @@ Legacy `liturgy` keys outside the 8 sections (Notion era, inv E7) are not return
 | 17 | Legacy liturgy keys outside the 8 sections sit in stored rows | Not returned, and dropped on the next save | F§6.2 |
 | 18 | Raw exception text: "Archive save failed: {e}", tracebacks on Prepare | Typed messages only. Unexpected failures show "Something went wrong. (Ref: …)". | F§1.5 |
 | 19 | The download filename uses the *current* date, even for stale bytes | The filename comes from the date in the posted draft, through `Content-Disposition` | F§1.9 |
+| 20 | The Word documents, and anywhere else the app shows this heading (e.g. the liturgy/summary outline), print "Old Testament Reading" above the resolved first reading | The heading is now **"First Reading"**. The "New Testament Reading" heading and the selection rule for both slots are unchanged; internal field/parameter names (`ot_reading`, `reading_ot`, `selected_ot_ref`, `ot_ref`) are unchanged | Owner decision B |
 
 Unchanged on purpose:
 - the document layout, fonts, section order, communion text, "Apostles' Creed", and the Assurance response;
 - `saved_at` bumping on every save;
 - multiple services on the same date being allowed;
 - only the bulletin copy being emailable (5b);
-- the OT fallback `selected_ot_ref or scriptures[0]`, where a stale pick counts as no pick (open question 2).
+- the OT fallback `selected_ot_ref or scriptures[0]`, where a stale pick counts as no pick — confirmed by owner decision B (index open question 7); only the heading text changes ("First Reading", was "Old Testament Reading").
 
 ---
 
@@ -748,7 +752,7 @@ Characterization comes first (F§2.3.1). `backend/tests/test_build_docx_characte
 - anchors emitted when their section is absent;
 - keys outside the 8 sections being ignored.
 
-When the refactor lands, this file is updated **only** where a behavior change above requires it: slot mapping, `#None` and the NT fallback.
+When the refactor lands, this file is updated **only** where a behavior change above requires it: slot mapping, `#None`, the NT fallback, and the first-reading heading text ("Old Testament Reading" → "First Reading", owner decision B). The updated pinned heading sequence asserts **"First Reading"** appears for both variants and that the string "Old Testament Reading" appears nowhere in the output.
 
 `test_service_output.py`:
 - `service_date_display` zero-pads and is locale-independent (the test sets `LC_TIME` to a non-English locale when one is available, else skips that case);
@@ -768,6 +772,7 @@ When the refactor lands, this file is updated **only** where a behavior change a
 
   Slice 2's `scripture_refs.json` carries the same cases; `resolve_doc_readings` also runs every `resolve_readings` case of that file and must equal its `(ot, nt)`, which pins the delegation;
 - **stale pick in the document:** `render_docx` (through `build_document`) with the lines Isaiah 5:1-7 / Psalm 80:7-15 / Philippians 3:4b-14 / Matthew 21:33-46 and `selected_nt_ref = "Matthew 21:33-40"` (no longer a line) prints "Philippians 3:4b-14" under "New Testament Reading", the same reading `resolve_readings` reports as automatic;
+- **"First Reading" heading (owner decision B):** `render_docx` for both variants prints the heading **"First Reading"** above the resolved OT reading, including the Easter-season case where that reading is Acts (no OT pick, RCL order starting with Acts) — the heading changes but the reading under it is unchanged from today's "Old Testament Reading" behavior. "Old Testament Reading" does not appear in any generated document;
 - `stored_hymns` shape, with 3 entries and `""` for an empty slot;
 - `is_legacy_error_placeholder`, including the three real strings and the negative case "[Sermon title]";
 - `content_disposition` matching F§1.9 exactly.
@@ -950,7 +955,7 @@ DOM tests (`*.test.tsx`), using `renderWithProviders` and `installFakeApi`. `URL
 2. Both variants include "Sermon Title". Only `pastor` includes "Prayers of the People", and only when it has text. No user-facing copy calls the bulletin "no sermon" or "Liturgy only". *(test + grep)*
 3. Hymn headings follow slots. An empty Opening slot never moves another hymn into "First Hymn". No document contains `#None`. *(test)*
 4. The shared fixtures `docx_filenames.json`, `doc_readings.json` and `order_of_worship.json` pass in both pytest and Vitest. `resolve_doc_readings` and `docReadings` delegate to slice 2's `resolve_readings` / `resolveReadings`, so a stale pick prints the automatic reading the screen shows, and `draftToServicePayload` never sends a pick that is not a current option. `orderOfWorship` takes slice 4's `outline` and holds no order, anchor or heading constants; `order_of_worship.json` is generated from `OUTLINE` and matches the docx. *(CI)*
-5. The build_docx characterization test passes. It differs from pre-5a output only in the documented changes (behavior changes 5-7). *(test)*
+5. The build_docx characterization test passes. It differs from pre-5a output only in the documented changes (behavior changes 5-7, 20): slot-keyed hymn headings, `#None` removed, the NT fallback, and "First Reading" replacing "Old Testament Reading". *(test)*
 6. `POST /services` and `PUT /services/{id}` store `hymns` as exactly 3 slot-ordered entries with non-null titles. They store `service_date_display` in `'%B %d, %Y'`, `liturgy` with only the 8 keys (non-blank, no placeholders), and `custom_elements` and `hymnal`. *(test)*
 7. After any save, the saved date's `hymn_usage` rows equal the union of hymns from the church's archived services on that date, deduplicated by slice 3's `usage_key`. A malformed legacy row on that date is skipped and does not fail the save. **A delete leaves `hymn_usage` unchanged**, and so does the old date of a date-changing PUT. `/documents` writes no usage. A failure during the usage rebuild rolls back the service write. On Postgres, concurrent saves for one date produce the full union with no deadlock. *(test, including the Postgres job)*
 8. `PUT` without `If-Match` returns 422. With a stale `If-Match` it returns 409 `conflict` with the exact F§1.7 message. On Postgres, two concurrent PUTs with the same `If-Match` give exactly one 200. *(test, including the Postgres job)*
@@ -993,7 +998,7 @@ DOM tests (`*.test.tsx`), using `renderWithProviders` and `installFakeApi`. `URL
    - **Last Sunday.** Deleting last Sunday's service would stop its hymns counting as recently used.
 
    The cost of the default: deleting an abandoned planned service keeps its hymns counted as recently used near that date, until another save on that date rebuilds it. The user can also turn off "Exclude" on the hymns step. Slice 7 may revisit this, once Streamlit no longer writes usage, by adding the rebuild to `delete_service`, which is a one-line change. If the owner wants the rebuild before then, they must sign off with the coexistence case above spelled out.
-2. **The OT fallback when the first reading isn't from the Old Testament.** The OT rule is unchanged: `selected_ot_ref or scriptures[0]`. In Easter season the first RCL reading is from Acts, so with no OT pick the document prints Acts under "Old Testament Reading", as it does today. Options: (a) keep parity (**default**); (b) use the first OT-classified reading and omit the section when there is none, which in Easter would print only the Psalm under that heading. The decision covered the NT fallback only.
+2. ~~The OT fallback when the first reading isn't from the Old Testament.~~ **Decided (owner decision B).** Parity is final: the rule stays `selected_ot_ref or scriptures[0]`, so in Easter season the first RCL reading (Acts) still fills that slot when there is no OT pick. Only the heading text changes: it now prints **"First Reading"** instead of "Old Testament Reading", so that Easter example reads "First Reading / Acts …". The "New Testament Reading" heading and its own fallback (owner decision 9) are unchanged; the owner may rename it to "Second Reading" later.
 
 **Risks**
 

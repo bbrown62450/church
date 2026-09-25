@@ -143,7 +143,7 @@ Order of worship
 [● Prayer of Confession …]
 [● Assurance of Pardon …]  People: Thanks be to God! Amen.
 [● Prayer for Illumination …]
-─ Old Testament Reading · Isaiah 40:1-11
+─ First Reading · Isaiah 40:1-11
 ─ New Testament Reading
 ─ Sermon Title · Living Water
 ─ Affirmation of Faith · Apostles' Creed
@@ -536,7 +536,7 @@ def normalize_placement(key: str) -> str: ...   # unknown → "end"
 | 4 | section | prayer_of_confession | Prayer of Confession | none | prayer_of_confession |
 | 5 | section | assurance | Assurance of Pardon | none | assurance |
 | 6 | section | prayer_for_illumination | Prayer for Illumination | none | prayer_for_illumination |
-| 7 | landmark | ot_reading | Old Testament Reading | reading_ot | ot_reading |
+| 7 | landmark | ot_reading | First Reading | reading_ot | ot_reading |
 | 8 | landmark | nt_reading | New Testament Reading | reading_nt | nt_reading |
 | 9 | landmark | sermon | Sermon Title | sermon_title | sermon |
 | 10 | landmark | affirmation_of_faith | Affirmation of Faith | fixed ("Apostles' Creed") | affirmation_of_faith |
@@ -548,6 +548,7 @@ def normalize_placement(key: str) -> str: ...   # unknown → "end"
 | 16 | section | benediction | Benediction | none | end |
 
 - Every placement key appears exactly once across `anchors_after`.
+- **Reading heading (owner decision B; resolves index open question 7).** Row 7's label is **"First Reading"** (was "Old Testament Reading"); the key `ot_reading`, the value source `reading_ot` and the anchor `ot_reading` are unchanged — only the printed heading text changes, both here (the liturgy step's landmark row and 5a's order-of-worship card) and in the Word documents (5a). Row 8's label stays "New Testament Reading"; which reading fills each slot is unchanged; the owner may rename row 8 to "Second Reading" later.
 - If 5a renames the docx hymn headings (`SLOT_HEADINGS`) when it makes them slot-keyed, it updates these `OUTLINE` labels and regenerates `shared/liturgy_outline.json` in the same PR. The outline/docx test (Testing) enforces this.
 - `OUTLINE` is the only encoding of the order of worship. The frontend (5a's `orderOfWorship`) receives it as a parameter from `GET /liturgy/config`; any other fixture, such as 5a's `shared/order_of_worship.json`, is expected output generated from it.
 
@@ -847,6 +848,7 @@ Communion: a toggle sets `communion_origin: "user"`. "Use default" sets it to `"
 | BC-20 | The success message "Liturgy generated. Review below and download Word." is gone. Results are visible in the cards. A bulk run ends with one toast. | F §4.8 toast rule |
 | BC-21 | Generation continues while the user moves between builder steps. | Step-by-step UX (owner decision 1) |
 | BC-22 | AI generation is rate-limited: the shared `ai` bucket, 40 sections / 10 min / user and 400 / day / church. Only sections that reach the AI call are charged. | F §1.8 cost exposure |
+| BC-23 | The landmark row and outline heading for the first reading slot read **"First Reading"** (was "Old Testament Reading"). The second slot's heading is unchanged ("New Testament Reading"), and which reading fills each slot is unchanged. | Owner decision B |
 
 ---
 
