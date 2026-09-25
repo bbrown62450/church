@@ -13,6 +13,20 @@ function jsonFetch(status: number, body: unknown) {
 }
 
 describe("apiFetch", () => {
+  it("strips a trailing slash from baseUrl before joining the path", async () => {
+    const f = jsonFetch(200, { ok: true });
+    await apiFetch("/church", { token: "t", baseUrl: "https://api.test/", fetchImpl: f });
+    const [url] = f.mock.calls[0];
+    expect(url).toBe("https://api.test/church");
+  });
+
+  it("strips multiple trailing slashes from baseUrl", async () => {
+    const f = jsonFetch(200, { ok: true });
+    await apiFetch("/church", { token: "t", baseUrl: "https://api.test///", fetchImpl: f });
+    const [url] = f.mock.calls[0];
+    expect(url).toBe("https://api.test/church");
+  });
+
   it("sends the bearer token and church id", async () => {
     const f = jsonFetch(200, { ok: true });
     await apiFetch("/church", { token: "t0k", churchId: "c-1", baseUrl: "https://api.test", fetchImpl: f });

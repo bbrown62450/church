@@ -32,9 +32,11 @@ export async function apiFetch<T>(
   headers.set("Authorization", `Bearer ${token}`);
   if (churchId) headers.set("X-Church-Id", churchId);
 
+  const normalizedBaseUrl = baseUrl.replace(/\/+$/, "");
+
   let res: Response;
   try {
-    res = await fetchImpl(`${baseUrl}${path}`, { ...init, headers });
+    res = await fetchImpl(`${normalizedBaseUrl}${path}`, { ...init, headers });
   } catch {
     throw new ApiError(0, "network_error", "Can't reach the server. Check your connection and try again.");
   }
