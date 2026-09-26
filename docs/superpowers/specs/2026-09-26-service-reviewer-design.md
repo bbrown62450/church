@@ -194,7 +194,9 @@ keeps the old wording. A church whose admin saved its own system prompt keeps it
 If the migration's freeze contingency is in force instead (F §6.1 item 6: Streamlit keeps running from
 `main` through a `generate_liturgy` wrapper), the wrapper keeps the old season sentences by using a frozen
 copy of the old constant (for example `LEGACY_SYSTEM_PROMPT` in `liturgy_prompts`), because Streamlit gets
-no new features. The new season guidance applies only to the new app (decision 7). (Added 2026-09-26.)
+no new features. Streamlit's Settings page, which also runs from `main`, shows and compares with the same
+old default, so an admin's save there never stores the new wording (slice 4, reviewer amendment). The new
+season guidance applies only to the new app (decision 7). (Added 2026-09-26.)
 
 ## Testing
 

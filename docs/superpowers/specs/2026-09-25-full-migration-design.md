@@ -165,7 +165,7 @@ graph LR
 **6a: Settings (church)** ([spec](2026-09-25-slice-6a-settings-church-design.md))
 - **UX:**
   - `/settings/church`: name, time zone, default translation, default hymnal, default benediction;
-  - `/settings/hymns`: add or remove bundled hymnals; add, edit and delete hymns, including a hymn's year and familiarity (*amended 2026-09-26*, §6 question 23);
+  - `/settings/hymns`: add or remove bundled hymnals; add, edit and delete hymns, including a hymn's year and familiarity (admins only; *amended 2026-09-26*, §6 question 23);
   - `/settings/liturgy`: 9 prompt cards with reset;
   - `/settings/contacts`.
 
@@ -232,7 +232,7 @@ Only questions that are still open. Each has a default the build follows until t
 | 11 | Commit the Hymnary.org-derived catalog CSV to the public repo, or commit it `age`-encrypted? | Plain, with an attribution README | 7-D | [7](2026-09-25-slice-7-cutover-design.md) |
 | 12 | Is 30 days of backup retention enough? | Yes; longer means storage off GitHub | any time | [ops](2026-09-25-slice-ops-cleanup-design.md), [7](2026-09-25-slice-7-cutover-design.md) |
 | 22 | *(Amended 2026-09-26.)* Opening and closing hymn candidates are still gathered by fixed theme keywords before the AI reads the church's rubric checklist. If a church rewrites those checklists, should the keyword pre-filter be dropped for that slot? (The rubric spec's known limit.) | Keep the keywords; 6a's rubric editor explains it | 6a | [3](2026-09-25-slice-3-hymns-design.md), [6a](2026-09-25-slice-6a-settings-church-design.md) |
-| 23 | ~~*(Amended 2026-09-26.)* Should admins edit a hymn's year and familiarity by hand? (The rubric spec calls it a slice 6 hymn-settings concern.)~~ **Decided.** | Yes (owner, 2026-09-26). 6a's hymn dialog gets two optional fields, "Year the words were written" and "Number of hymnals (familiarity)". `HymnIn` and `HymnPatchIn` accept `text_year` and `hymnal_count` (each an integer or null), and clearing a field sets null. The ops backfill CLI still fills blanks only, so hand-entered values survive it. | 6a | [6a](2026-09-25-slice-6a-settings-church-design.md) |
+| 23 | ~~*(Amended 2026-09-26.)* Should admins edit a hymn's year and familiarity by hand? (The rubric spec calls it a slice 6 hymn-settings concern.)~~ **Decided.** | Yes (owner, 2026-09-26). 6a's hymn dialog gets two optional fields, "Year the words were written" and "Number of hymnals (familiarity)", for admins (read-only for members; a member's request that sets either gets the role 403). `HymnIn` and `HymnPatchIn` accept `text_year` and `hymnal_count` (each an integer or null), and clearing a field sets null. The ops backfill CLI still fills blanks only, so hand-entered values survive it. | 6a | [6a](2026-09-25-slice-6a-settings-church-design.md) |
 
 **Facts the owner must check** (these block the step named)
 

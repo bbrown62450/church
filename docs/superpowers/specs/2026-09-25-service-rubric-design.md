@@ -32,8 +32,8 @@ its hymn picks and liturgy start following the rubric too; Beau approved this.
 
 Out of scope: the prayer library, the reviewer, per-hymn manual editing of
 year and familiarity (a slice 6 hymn-settings concern; it is in migration
-slice 6a's hymn dialog, owner-approved 2026-09-26), and changing the AI
-model.
+slice 6a's hymn dialog, for admins, owner-approved 2026-09-26), and changing
+the AI model.
 
 ## The rubric
 
@@ -252,7 +252,9 @@ A new one-off script, `backend/backfill_hymn_facts.py`:
 
 Rows with no scripture references or no match stay `NULL` (unknown). Hymns
 added later, by a hymnal import or Settings' Add hymn, also start unknown until
-the script runs again.
+the script runs again. (In the new app, an admin can also enter both facts in
+migration slice 6a's hymn dialog, owner-approved 2026-09-26; the script's
+fill-blanks rule keeps those values.)
 
 ## How the hymn picker uses the rubric
 
