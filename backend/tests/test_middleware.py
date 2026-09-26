@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from api import settings as settings_mod
 from api.deps import get_verifier
 from api.errors import error_body
+from api.logging_config import LOG_FORMAT, configure_logging
 from api.main import create_app
 from api.middleware import RequestIdMiddleware, UnhandledErrorMiddleware
 
@@ -198,3 +199,83 @@ def test_a_trailing_slash_is_a_404_not_a_redirect(path):
     assert "location" not in r.headers
     assert r.json()["error"]["code"] == "not_found"
     assert r.json()["error"]["request_id"] == r.headers["x-request-id"]
+
+
+# --- Logging: request_id= on every line (F §2.5) --------------------------------
+
+def test_a_log_line_from_a_sync_route_carries_the_request_id(caplog):
+    app = create_app()
+    router = APIRouter()
+
+    @router.get("/hello")
+    def hello():                      # a plain def: FastAPI runs it in the threadpool
+        logging.getLogger("tests.hello").info("hello")
+        return {"ok": True}
+
+    app.include_router(router)
+    with caplog.at_level(logging.INFO):
+        r = TestClient(app).get("/hello")
+    records = [rec for rec in caplog.records if rec.name == "tests.hello"]
+    assert len(records) == 1
+    assert records[0].request_id == r.headers["x-request-id"]
+
+
+def test_a_log_line_outside_a_request_has_a_dash(caplog):
+    with caplog.at_level(logging.INFO):
+        logging.getLogger("tests.outside").info("no request here")
+    assert [rec.request_id for rec in caplog.records if rec.name == "tests.outside"] == ["-"]
+
+
+def test_configure_logging_installs_the_record_factory_once():
+    configure_logging("INFO")
+    factory = logging.getLogRecordFactory()
+    configure_logging("INFO")
+    assert logging.getLogRecordFactory() is factory
+
+
+@pytest.mark.parametrize("value, level", [
+    ("debug", logging.DEBUG), (" Warning ", logging.WARNING), ("ERROR", logging.ERROR),
+])
+def test_configure_logging_accepts_level_names(value, level):
+    assert configure_logging(value) == level
+
+
+def test_an_invalid_log_level_warns_and_uses_info(caplog):
+    with caplog.at_level(logging.WARNING):
+        assert configure_logging("verbose") == logging.INFO
+    assert "LOG_LEVEL='verbose' is not a valid level; using INFO." in [
+        rec.getMessage() for rec in caplog.records if rec.levelno == logging.WARNING]
+
+
+def test_configure_logging_sets_up_a_root_logger_that_has_no_handlers():
+    root = logging.getLogger()
+    saved_handlers, saved_level = root.handlers[:], root.level
+    root.handlers[:] = []                 # as under uvicorn: nothing has configured root
+    try:
+        assert configure_logging("WARNING") == logging.WARNING
+        assert root.level == logging.WARNING
+        assert len(root.handlers) == 1
+        # A record built without the factory (makeLogRecord) still formats, with "-".
+        record = logging.makeLogRecord({"name": "api.x", "levelname": "INFO", "msg": "hi"})
+        assert root.handlers[0].format(record) == "api.x INFO request_id=- hi"
+    finally:
+        root.handlers[:] = saved_handlers
+        root.setLevel(saved_level)
+
+
+def test_the_log_format_names_the_request_id():
+    assert LOG_FORMAT == "%(name)s %(levelname)s request_id=%(request_id)s %(message)s"
+
+
+@pytest.mark.parametrize("env, expected", [(None, "INFO"), ("", "INFO"), (" debug ", "debug")],
+                         ids=["unset", "blank", "set"])
+def test_the_log_level_setting_comes_from_log_level(monkeypatch, env, expected):
+    if env is None:
+        monkeypatch.delenv("LOG_LEVEL", raising=False)
+    else:
+        monkeypatch.setenv("LOG_LEVEL", env)
+    settings_mod.get_settings.cache_clear()
+    try:
+        assert settings_mod.get_settings().log_level == expected
+    finally:
+        settings_mod.get_settings.cache_clear()

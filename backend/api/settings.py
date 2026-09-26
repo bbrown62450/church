@@ -8,6 +8,7 @@ from functools import lru_cache
 class Settings:
     supabase_url: str
     cors_origins: tuple[str, ...]
+    log_level: str = "INFO"                # LOG_LEVEL; api.logging_config validates it
 
     @property
     def jwks_url(self) -> str:
@@ -27,4 +28,5 @@ def get_settings() -> Settings:
     return Settings(
         supabase_url=os.environ.get("SUPABASE_URL", "").strip().rstrip("/"),
         cors_origins=_split_origins(os.environ.get("CORS_ORIGINS", "http://localhost:3000")),
+        log_level=os.environ.get("LOG_LEVEL", "").strip() or "INFO",
     )

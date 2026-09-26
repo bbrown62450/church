@@ -1,6 +1,5 @@
 """FastAPI entry point. Run from backend/: uvicorn api.main:app --reload"""
 import logging
-import os
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
@@ -8,18 +7,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.errors import install_error_handlers
+from api.logging_config import configure_logging
 from api.middleware import RequestIdMiddleware, UnhandledErrorMiddleware
 from api.routes import health, me, rubric
 from api.settings import get_settings
 from db import init_db
 
 load_dotenv()
-
-if not logging.getLogger().handlers:
-    logging.basicConfig(
-        level=os.getenv("LOG_LEVEL", "INFO").upper(),
-        format="%(name)s %(levelname)s %(message)s",
-    )
+configure_logging(get_settings().log_level)
 
 
 @asynccontextmanager
