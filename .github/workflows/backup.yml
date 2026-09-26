@@ -2,6 +2,10 @@
 # The dump is piped through `age` to the public keys in
 # .github/backup/age-recipients.txt, so no plaintext dump ever touches the
 # runner's disk, and only the owner's private key can open the artifact.
+# BACKUP_DATABASE_URL is a secret of the `backup` environment, which only
+# `main` may use. .github/backup/pg_env.py masks every part of the URL, then
+# hands the parts to libpq as PG* variables, so psql and pg_dump never get a
+# URL they could quote back into this public log.
 # Key custody, key rotation and the restore drill: docs/ops-runbook.md → Backups.
 name: db-backup
 on:
@@ -17,10 +21,13 @@ jobs:
   dump:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    environment: backup       # holds BACKUP_DATABASE_URL; deployment branches: main only
     env:
-      PG_MAJOR: "17"          # MUST equal the Supabase server major recorded in step 0; the job checks it
+      PG_MAJOR: "17"          # MUST equal "- Postgres server major:" in docs/ops-runbook.md → Platform limits; the job checks the server
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - name: Check prerequisites
         env:
           BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
@@ -37,19 +44,24 @@ jobs:
       - name: Dump, compress and encrypt (plaintext never touches disk)
         env:
           BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+          PGSSLMODE: require
         run: |
           set -euo pipefail
-          url=$(printf '%s' "$BACKUP_DATABASE_URL" | bash .github/backup/normalize-pg-url.sh)
-          echo "::add-mask::$url"
+          python3 .github/backup/pg_env.py --mask <<<"$BACKUP_DATABASE_URL"
+          # The masks are registered; now hand libpq the parts, not the URL.
+          pg_env=$(python3 .github/backup/pg_env.py --exports <<<"$BACKUP_DATABASE_URL")
+          eval "$pg_env"
+          unset pg_env BACKUP_DATABASE_URL
           bin="/usr/lib/postgresql/${PG_MAJOR}/bin"
-          server=$("$bin/psql" "$url" -Atc 'show server_version_num')
+          server=$("$bin/psql" -X -Atc 'show server_version_num')
           major=$(( server / 10000 ))
           [ "$major" = "$PG_MAJOR" ] || { echo "::error::Postgres server major is $major but PG_MAJOR is $PG_MAJOR; update PG_MAJOR in backup.yml"; exit 1; }
           ts=$(date -u +%Y%m%dT%H%M%SZ)
-          "$bin/pg_dump" "$url" --schema=public --no-owner --no-privileges --format=custom \
+          "$bin/pg_dump" --schema=public --no-owner --no-privileges --format=custom \
             | age --encrypt --recipients-file .github/backup/age-recipients.txt --output "backup-$ts.dump.age"
-          test "$(stat -c %s "backup-$ts.dump.age")" -gt 1024
-      - uses: actions/upload-artifact@v4
+          size=$(stat -c %s "backup-$ts.dump.age")
+          [ "$size" -gt 1024 ] || { echo "::error::Encrypted backup is unexpectedly small ($size bytes)"; exit 1; }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: db-backup
           path: backup-*.dump.age

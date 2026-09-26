@@ -4,9 +4,9 @@
 
 **Goal:** Ship PR ops-1 of the ops slice: fix the Streamlit hymn-loss bug (inv D5), make the daily database backup encrypted and correct, delete six dead modules, fix configuration drift (`backend/.env.example`, `shadcn`), and start `docs/ops-runbook.md`. Then hand the owner the manual steps that gate the next PR.
 
-**Architecture:** The D5 fix is two pure helpers in the root `ui_helpers.py` that `app.py` calls. It changes nothing under `backend/`. It goes live on the production Streamlit app `liturgy-stg` (https://liturgy-stg.streamlit.app, used by the owner and the tester) as soon as ops-1 merges, provided `liturgy-stg` deploys from `main`; Task 0 checks that before any code is written. The backup is a rewritten GitHub Actions workflow. It normalizes the URL with a small bash script, checks the server's Postgres major, and pipes `pg_dump` through `age` to public keys committed in the repo, so no plaintext dump ever exists on the runner. Workflow text, the URL script, the recipients file and the runbook are all guarded by pytest tests in a new `backend/tests/test_ops_workflows.py`.
+**Architecture:** The D5 fix is two pure helpers in the root `ui_helpers.py` that `app.py` calls. It changes nothing under `backend/`. It goes live on the production Streamlit app `liturgy-stg` (https://liturgy-stg.streamlit.app, used by the owner and the tester) as soon as ops-1 merges, provided `liturgy-stg` deploys from `main`; Task 0 checks that before any code is written. The backup is a rewritten GitHub Actions workflow. It runs in the GitHub Environment `backup` (the only holder of the secret; `main` only), splits the URL into libpq `PG*` variables with a small stdlib Python helper that first masks each part in the log, checks the server's Postgres major, and pipes `pg_dump` through `age` to public keys committed in the repo, so no plaintext dump ever exists on the runner. The parsed workflow, the URL helper, the recipients file and the runbook are all guarded by pytest tests in a new `backend/tests/test_ops_workflows.py`.
 
-**Tech Stack:** Python 3.11, pytest, PyYAML (test only), Streamlit (root app, unchanged framework), bash + `sed -E`, GitHub Actions (`ubuntu-24.04`, `actions/checkout@v4`, `actions/upload-artifact@v4`), PostgreSQL client from the PGDG apt repo, `age`, npm (Next.js frontend, dependency move only).
+**Tech Stack:** Python 3.11, pytest, PyYAML (test only), Streamlit (root app, unchanged framework), bash, Python 3 standard library (`pg_env.py`, on the runner's system `python3`), GitHub Actions (`ubuntu-24.04`, `actions/checkout` v4.4.0 and `actions/upload-artifact` v4.6.2 pinned to commit SHAs, GitHub Environment `backup`), PostgreSQL client from the PGDG apt repo, `age`, npm (Next.js frontend, dependency move only).
 
 **Spec:** `docs/superpowers/specs/2026-09-25-slice-ops-cleanup-design.md` ("the ops spec"). Foundations: `docs/superpowers/specs/2026-09-25-migration-foundations-design.md` ("F"). Inventory: `docs/superpowers/specs/2026-09-25-streamlit-migration-inventory.md` ("inv").
 
@@ -18,7 +18,7 @@
 - Every commit message ends with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Commits follow TDD: test first.
 - Nothing under `backend/` may import `streamlit`. The D5 fix touches only the root Streamlit files `app.py` and `ui_helpers.py`. It imports the existing `hymn_usage.is_hymn_recently_used` and changes nothing under `backend/`.
 - No schema changes and no Alembic (slice 1).
-- The backup secret is named `BACKUP_DATABASE_URL`, never `DATABASE_URL`. The owner adds it **only after ops-1 has merged** (the F §7.2 gate).
+- The backup secret is named `BACKUP_DATABASE_URL`, never `DATABASE_URL`. It is an **environment secret** of the GitHub Environment `backup`, whose deployment-branch rule admits only `main`, never a repository secret. The owner creates the environment and adds the secret **only after ops-1 has merged** (the F §7.2 gate; Task 11).
 - `backup.yml` runs daily at cron `"37 8 * * *"`, on `ubuntu-24.04`, with `timeout-minutes: 20` and `PG_MAJOR: "17"` (the server is 17.6, recorded 2026-09-25). It uploads artifact `db-backup` with files `backup-<UTC timestamp>.dump.age`, `retention-days: 30`.
 - `PG_MAJOR` in `backup.yml` must equal the runbook line `- Postgres server major: <N>` (exactly one such line in `docs/ops-runbook.md`).
 - An age recipient line matches `^age1[02-9ac-hj-np-z]{58}$`. The private key never goes to GitHub, Railway, the repo or chat.
@@ -60,10 +60,10 @@ backend/tests/test_foundation_setup.py        + dead modules gone, .env.example 
 backend/.env.example                          + APP_ENV, LOG_LEVEL, DB_POOL_SIZE=3, DB_MAX_OVERFLOW=3, ESV_API_KEY
 frontend/package.json, package-lock.json      shadcn moved to devDependencies
 requirements-dev.txt                          + PyYAML>=6.0 (test only)
-.github/backup/normalize-pg-url.sh            NEW: stdin URL -> libpq URL on stdout
+.github/backup/pg_env.py                      NEW: stdin URL -> ::add-mask:: lines or PG* exports (fix round 1; replaced normalize-pg-url.sh)
 .github/workflows/backup.yml                  REWRITTEN: version-matched pg_dump | age, encrypted artifact
 .github/backup/age-recipients.txt             NEW: owner's age public key(s)
-backend/tests/test_ops_workflows.py           NEW: backup.yml, PG_MAJOR, normalize script, runbook, README, recipients
+backend/tests/test_ops_workflows.py           NEW: parsed backup.yml, PG_MAJOR, pg_env.py, runbook, README, recipients
 docs/ops-runbook.md                           NEW: lockdown record, backups, Streamlit apps + triage + D5, platform limits, incident response
 README.md                                     "Backups (required)" paragraph rewritten (lines 151-156)
 ```
@@ -688,6 +688,8 @@ If `git status` shows `frontend/AGENTS.md`, `frontend/CLAUDE.md` or `frontend/ne
 
 ### Task 5: URL normalizer and the encrypted `backup.yml` (S2)
 
+> **Fix round 1 (2026-09-26, owner-approved security review).** Task 5 was built as written below and then changed; the committed files are authoritative, and `.superpowers/sdd/ops1-task-5-report.md` → "Fix round 1" has the details. libpq quotes password fragments of a malformed URL in its errors, and GitHub masks only the whole secret, so `.github/backup/pg_env.py` replaced `normalize-pg-url.sh` (deleted). The dump step first runs `python3 .github/backup/pg_env.py --mask <<<"$BACKUP_DATABASE_URL"` (one escaped `::add-mask::` per part: password, user, host, whole URL), then `eval`s `pg_env.py --exports`, so `psql` and `pg_dump` get `PG*` variables (with `PGSSLMODE: require`) and no URL. The job has `environment: backup` (the secret lives there; only `main` may use it), the actions are pinned to commit SHAs (`actions/checkout` v4.4.0 with `persist-credentials: false`, `actions/upload-artifact` v4.6.2), and the size check prints `::error::Encrypted backup is unexpectedly small`. `test_ops_workflows.py` now checks the parsed YAML and `pg_env.py` (57 tests): `NORMALIZE_SCRIPT` became `PG_ENV_SCRIPT`, `_postgres_image_majors(text)` became `_postgres_service_majors(workflow)` (reads `jobs.*.services.*.image`), and `SERVER_MAJOR = "17"` was added. `ROOT`, `_read`, `_pg_major`, `AGE_RECIPIENT` and `re`, which Tasks 6 and 7 use, are unchanged. The suite is `271 passed` after this task.
+
 **Files:**
 - Create: `.github/backup/normalize-pg-url.sh`
 - Modify: `.github/workflows/backup.yml:1-28` (full rewrite)
@@ -1005,7 +1007,7 @@ def test_readme_backups_paragraph_describes_encrypted_backups():
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_ops_workflows.py`
-Expected: `4 failed, 9 passed`. The three runbook tests fail with `FileNotFoundError` for `docs/ops-runbook.md`, and the README test fails with `AssertionError: BACKUP_DATABASE_URL`.
+Expected: `4 failed, 57 passed`. The three runbook tests fail with `FileNotFoundError` for `docs/ops-runbook.md`, and the README test fails with `AssertionError: BACKUP_DATABASE_URL`.
 
 - [ ] **Step 3: Create `docs/ops-runbook.md`**
 
@@ -1030,8 +1032,21 @@ response. Design: `docs/superpowers/specs/2026-09-25-slice-ops-cleanup-design.md
 
 Project `worship-staging`, ref `tbecmwtitsoxzkrvxxxu`. Procedure: the ops spec →
 Data and migrations → Step 0. Done on 2026-09-25; the results are below. To
-check again, use the session-pooler URL the apps use;
-`docker run --rm -it postgres:17 psql "<url>"` works if `psql` isn't installed.
+check again, connect with the session-pooler URL the apps use, but never put
+the URL on a command line: shell history keeps it, and libpq quotes parts of a
+malformed URL, password included, in its errors. From the repo root, in bash
+or zsh, `.github/backup/pg_env.py` turns it into `PG*` variables:
+
+```
+IFS= read -rs BACKUP_URL        # paste the URL and press Return; nothing is shown
+eval "$(python3 .github/backup/pg_env.py --exports <<<"$BACKUP_URL")"; unset BACKUP_URL
+docker run --rm -it -e PGHOST -e PGPORT -e PGUSER -e PGPASSWORD -e PGDATABASE \
+    -e PGSSLMODE=require postgres:17 psql
+unset PGHOST PGPORT PGUSER PGPASSWORD PGDATABASE    # when finished
+```
+
+If `psql` is installed, plain `PGSSLMODE=require psql` can replace the
+`docker run` line.
 
 **1. Exposure before the lockdown.** For each of `users`, `gmail_tokens`,
 `invites` and `memberships`:
@@ -1120,8 +1135,8 @@ app uses those roles.
 ## Backups
 
 - **Workflow:** `.github/workflows/backup.yml` (`db-backup`). Daily at 08:37 UTC,
-  and by hand: Actions → db-backup → Run workflow, or
-  `gh workflow run db-backup`.
+  and by hand from `main`: Actions → db-backup → Run workflow (branch `main`),
+  or `gh workflow run db-backup --ref main`.
 - **What it does:** checks the server's Postgres major against `PG_MAJOR`,
   dumps the `public` schema with `pg_dump --format=custom --no-owner
   --no-privileges`, pipes it through `age` to every key in
@@ -1130,13 +1145,19 @@ app uses those roles.
   No plaintext dump touches the runner's disk. Supabase-managed schemas
   (`auth`, `storage`) are not included; users sign in again with Google and are
   matched by email.
-- **Secret:** `BACKUP_DATABASE_URL` (repo Settings → Secrets and variables →
-  Actions → Secrets): the Supabase **session pooler** URL the apps use. The
-  direct host is IPv6-only on Free and GitHub runners are IPv4. The
-  SQLAlchemy form (`postgresql+psycopg2://…`) is fine:
-  `.github/backup/normalize-pg-url.sh` strips the driver. It is added only
-  after the encrypted workflow is on `main`; until then every run fails at
-  "Check prerequisites", which is intended.
+- **Secret:** `BACKUP_DATABASE_URL`, an **environment secret** of the GitHub
+  Environment `backup` (repo Settings → Environments → `backup`), whose
+  deployment-branch rule admits only `main`, so a workflow on any other branch
+  cannot read it. There is no repository secret of that name. The value is
+  the Supabase **session pooler** URL the apps use. The direct host is
+  IPv6-only on Free and GitHub runners are IPv4. The SQLAlchemy form
+  (`postgresql+psycopg2://…`) is fine: `.github/backup/pg_env.py` reads the
+  URL as the app does, masks each part in the log (password, user, host,
+  whole URL), and hands the parts to `psql` and `pg_dump` as `PG*` variables,
+  so the URL never reaches a command line. The secret is added only after the
+  encrypted workflow is on `main`; until then every run fails at "Check
+  prerequisites", which is intended. Scheduled runs use `main`; a manual run
+  from any other branch is refused by the environment.
 - **Artifacts** are encrypted, so it is acceptable that anyone signed in to
   GitHub can download them from this public repo.
 
@@ -1337,11 +1358,13 @@ Only if Step 0, step 1 returned rows. Do it the same day (Supabase Free keeps
 logs for a short time). Steps 1–3 come before any repair.
 
 1. **Preserve evidence.** Take an encrypted dump before changing any row; it
-   never exists in plaintext:
+   never exists in plaintext. First load the pooler URL into `PG*` variables
+   (the `read` and `eval` lines in "Supabase lockdown record"), then:
    ```
-   docker run --rm postgres:17 pg_dump "<pooler URL, libpq form: postgresql://…, no +psycopg2>" \
-       --schema=public --format=custom \
+   docker run --rm -e PGHOST -e PGPORT -e PGUSER -e PGPASSWORD -e PGDATABASE \
+       -e PGSSLMODE=require postgres:17 pg_dump --schema=public --format=custom \
      | age --encrypt -r <your age1… public key> > incident-$(date -u +%Y%m%dT%H%M%SZ).dump.age
+   unset PGHOST PGPORT PGUSER PGPASSWORD PGDATABASE
    ```
    Use an image tag at least as new as the server major. Keep the file
    offline next to the key, not in the repo or in GitHub.
@@ -1407,9 +1430,10 @@ format, client major matched to the server), encrypts the dump with `age` to
 the public keys in `.github/backup/age-recipients.txt` before anything is
 written to disk, and uploads `backup-<timestamp>.dump.age` as an artifact kept
 30 days. Only the owner's `age` private key can open it. The job reads the
-Supabase session-pooler URL from the Actions secret `BACKUP_DATABASE_URL`,
-which is added only after the encrypted workflow is on `main`. Key custody,
-key rotation and the restore drill are in `docs/ops-runbook.md` → Backups.
+Supabase session-pooler URL from `BACKUP_DATABASE_URL`, a secret of the GitHub
+Environment `backup` that only `main` can use, added only after the encrypted
+workflow is on `main`. Key custody, key rotation and the restore drill are in
+`docs/ops-runbook.md` → Backups.
 ```
 
 Leave "Keep-alive (required)" and the rest of the README unchanged (ops-3 and slice 7).
@@ -1421,7 +1445,7 @@ Leave "Keep-alive (required)" and the rest of the README unchanged (ops-3 and sl
 grep -c '^- Postgres server major:' docs/ops-runbook.md
 .venv/bin/python -m pytest -q | tail -1
 ```
-Expected: `16 passed` (13 in `test_ops_workflows.py`, 3 in `test_docs.py`), then `1`, then `227 passed`.
+Expected: `64 passed` (61 in `test_ops_workflows.py`, 3 in `test_docs.py`), then `1`, then `275 passed`.
 
 - [ ] **Step 6: Commit**
 
@@ -1500,7 +1524,7 @@ def test_no_age_private_key_is_committed_under_github_or_docs():
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_ops_workflows.py`
-Expected: `1 failed, 15 passed`. `test_age_recipients_lists_only_real_recipients` fails with `FileNotFoundError` for `.github/backup/age-recipients.txt`.
+Expected: `1 failed, 63 passed`. `test_age_recipients_lists_only_real_recipients` fails with `FileNotFoundError` for `.github/backup/age-recipients.txt`.
 
 - [ ] **Step 3: Create the recipients file with the marked placeholder**
 
@@ -1552,7 +1576,7 @@ Expected: `recipient ok`
 .venv/bin/python -m pytest -q backend/tests/test_ops_workflows.py
 .venv/bin/python -m pytest -q | tail -1
 ```
-Expected: `16 passed`, then `230 passed`.
+Expected: `64 passed`, then `278 passed`.
 
 - [ ] **Step 8: Commit**
 
@@ -1584,7 +1608,7 @@ grep -rnwE '(email_send|notion_archive|notion_usage|select_sunday_hymns|add_hymn
 ls backend/cache.py backend/tests/test_cache.py 2>&1 | grep -c "No such file"
 git diff --stat origin/main...HEAD -- backend/api backend/db backend/repos backend/auth.py backend/keepalive.py .github/workflows/keepalive.yml .github/workflows/keep-awake.yml .github/workflows/ci.yml
 ```
-Expected: `230 passed`; no grep matches and `grep exit 1`; `2`; the last command prints nothing, because ops-1 touches none of the ops-2/ops-3 files.
+Expected: `278 passed`; no grep matches and `grep exit 1`; `2`; the last command prints nothing, because ops-1 touches none of the ops-2/ops-3 files.
 
 - [ ] **Step 2: Run the frontend checks one more time**
 
@@ -1617,12 +1641,12 @@ gh pr create --base main --head claude/ops-1-backups-cleanup-d5 \
   --body "PR ops-1 of the ops slice (docs/superpowers/specs/2026-09-25-slice-ops-cleanup-design.md; plan docs/superpowers/plans/2026-09-25-ops-1-backups-cleanup-d5.md).
 
 - Streamlit data-safety fix (S16, inv D5): with 'Exclude hymns used in the last 12 weeks' ticked, hymns already picked are no longer cleared by Prepare, Save or loading a recent service. Goes live on merge on the production Streamlit app liturgy-stg (https://liturgy-stg.streamlit.app), which deploys from main (branch checked in plan Task 0, Step 2).
-- backup.yml rewritten (S2): BACKUP_DATABASE_URL, driver suffix stripped, pg_dump matched to PG_MAJOR, age-encrypted before upload (backup-*.dump.age, 30 days). The secret is added only after this merges.
+- backup.yml rewritten (S2): BACKUP_DATABASE_URL as a secret of the GitHub Environment backup (main only); .github/backup/pg_env.py masks each part of the URL and hands psql/pg_dump PG* variables, never a URL; actions pinned to commit SHAs; pg_dump matched to PG_MAJOR, age-encrypted before upload (backup-*.dump.age, 30 days). The environment and secret are added only after this merges.
 - Deleted six dead modules (S4); backend/.env.example gains APP_ENV, LOG_LEVEL, DB_POOL_SIZE=3, DB_MAX_OVERFLOW=3 (Supavisor Pool Size 15: 2 x (3+3) + 2 = 14), ESV_API_KEY (S5); shadcn moved to devDependencies (S6).
 - docs/ops-runbook.md: Step 0 lockdown record (done 2026-09-25, no incident), backups (key custody, rotation, restore drill), Streamlit apps (liturgy-stg is production, liturgy unused), bug triage and D5 recovery, platform limits, incident response. README Backups paragraph.
-- Tests: +24 (230 total).
+- Tests: +72 (278 total).
 
-Owner steps before merge: plan Task 9. After merge: Tasks 10-12 (D5 check and recovery query, tester message, BACKUP_DATABASE_URL, manual backup run, restore drill).
+Owner steps before merge: plan Task 9. After merge: Tasks 10-12 (D5 check and recovery query, tester message, the backup environment and BACKUP_DATABASE_URL, manual backup run, restore drill).
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)"
 gh pr checks --watch
@@ -1665,7 +1689,7 @@ Both stop rules were settled on 2026-09-25: Railway allows 5 minutes idle and up
 grep -n '^- Postgres server major' docs/ops-runbook.md
 .venv/bin/python -m pytest -q backend/tests/test_ops_workflows.py
 ```
-Expected: `<line>:- Postgres server major: 17`, then `16 passed`.
+Expected: `<line>:- Postgres server major: 17`, then `64 passed`.
 
 - [ ] **Step 4: Commit the records and push**
 
@@ -1678,7 +1702,7 @@ git commit -m "Runbook: record the D5 workaround date, liturgy-stg branch and po
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 git push
 ```
-Expected: `grep` lists only the 6 post-merge marker lines: three rows of the D5 table ("ops-1 build live", "D5 manual check passed", "Fixed message sent"), the D5 recovery "Result", the backup run record row and the restore drill row. The key-custody row (Task 7) and everything in the lockdown record, Platform limits and Incident record are filled. Then `230 passed`.
+Expected: `grep` lists only the 6 post-merge marker lines: three rows of the D5 table ("ops-1 build live", "D5 manual check passed", "Fixed message sent"), the D5 recovery "Result", the backup run record row and the restore drill row. The key-custody row (Task 7) and everything in the lockdown record, Platform limits and Incident record are filled. Then `278 passed`.
 
 - [ ] **Step 5 (OWNER): Check the Vercel install settings and the preview build**
 
@@ -1692,7 +1716,7 @@ The owner reviews the PR. All CI checks must be green and every task above must 
 gh pr merge --merge claude/ops-1-backups-cleanup-d5
 ```
 
-Do **not** add `BACKUP_DATABASE_URL` before this merge completes.
+Do **not** create the `backup` environment's `BACKUP_DATABASE_URL` secret before this merge completes.
 
 ---
 
@@ -1767,24 +1791,42 @@ Pass on these dates: live, check passed, and message sent. Also pass on the reco
 
 ---
 
-### Task 11 (OWNER, after merge): Add `BACKUP_DATABASE_URL` and run the backup by hand
+### Task 11 (OWNER, after merge): Create the `backup` environment, add `BACKUP_DATABASE_URL`, and run the backup by hand
 
 - [ ] **Step 1: Confirm the encrypted workflow and a real recipient are on `main`**
 
 ```bash
 git fetch origin
 git show origin/main:.github/workflows/backup.yml | grep -c 'age --encrypt'
+git show origin/main:.github/workflows/backup.yml | grep -c '^    environment: backup'
 git show origin/main:.github/backup/age-recipients.txt | grep -Ec '^age1[02-9ac-hj-np-z]{58}$'
 ```
-Expected: `1`, then `1` or more. If either is `0`, stop: the secret must not be added yet.
+Expected: `1`, `1`, then `1` or more. If any is `0`, stop: the secret must not be added yet.
 
-- [ ] **Step 2 (OWNER only): Add the secret**
+- [ ] **Step 2 (OWNER only): Create the `backup` environment and add the secret to it**
 
-GitHub → `bbrown62450/church` → Settings → Secrets and variables → Actions → Secrets → New repository secret.
-- Name: `BACKUP_DATABASE_URL`
-- Value: the Supabase **session pooler** URL with the database password. This is the same value as Railway's `DATABASE_URL`: Supabase Dashboard → Connect → Session pooler. The `postgresql+psycopg2://` form is fine.
+The secret goes in a GitHub Environment whose deployment-branch rule admits only `main`, so a workflow pushed to any other branch cannot read it. It is never a repository secret.
 
-Alternatively, run `gh secret set BACKUP_DATABASE_URL` in your own terminal and paste the value at its prompt. Never paste it into chat.
+1. GitHub → `bbrown62450/church` → Settings → Environments. If `backup` is already listed (a scheduled run since the merge creates it automatically, with no rules), open it; otherwise New environment → Name: `backup` → Configure environment.
+2. Deployment branches and tags: choose "Selected branches and tags" (older UI: "Selected branches") → Add deployment branch or tag rule → Ref type: Branch, Name pattern: `main` → Add rule. Add no other rule.
+3. Environment secrets → Add environment secret:
+   - Name: `BACKUP_DATABASE_URL`
+   - Value: the Supabase **session pooler** URL with the database password. This is the same value as Railway's `DATABASE_URL`: Supabase Dashboard → Connect → Session pooler. The `postgresql+psycopg2://` form is fine.
+
+   Alternatively, after item 2, run `gh secret set BACKUP_DATABASE_URL --env backup -R bbrown62450/church` in your own terminal and paste the value at its prompt. Never paste it into chat.
+4. Settings → Secrets and variables → Actions → Repository secrets must not list `BACKUP_DATABASE_URL`. If it does, delete it: a repository secret is readable from every branch.
+
+Check (no secret value is shown):
+
+```bash
+gh api repos/bbrown62450/church/environments/backup --jq '.deployment_branch_policy'
+gh api repos/bbrown62450/church/environments/backup/deployment-branch-policies --jq '.branch_policies[] | "\(.type) \(.name)"'
+gh secret list --env backup -R bbrown62450/church
+gh secret list -R bbrown62450/church | grep -c BACKUP_DATABASE_URL
+```
+Expected: `{"custom_branch_policies":true,"protected_branches":false}`, then exactly `branch main`, then a line starting with `BACKUP_DATABASE_URL`, then `0`.
+
+Scheduled runs use the default branch, `main`, so they satisfy the rule. Manual runs must be dispatched from `main` (Step 3 does); a run from any other branch is refused before the job starts.
 
 - [ ] **Step 3: Run the workflow by hand**
 
@@ -1793,13 +1835,14 @@ gh workflow run db-backup --ref main
 sleep 5; gh run list --workflow db-backup --limit 1
 gh run watch <run-id> --exit-status
 ```
-Expected: the run completes with success (the server was 17.6 on 2026-09-25, matching `PG_MAJOR: "17"`). If Supabase has since upgraded and it fails with `::error::Postgres server major is N but PG_MAJOR is M; update PG_MAJOR in backup.yml`, open a small PR from `origin/main` that changes `PG_MAJOR`, the runbook's major and `server_version` lines and the `postgres:` image tags together, merge it on the owner's yes, and run again:
+Expected: the run completes with success (the server was 17.6 on 2026-09-25, matching `PG_MAJOR: "17"`). If Supabase has since upgraded and it fails with `::error::Postgres server major is N but PG_MAJOR is M; update PG_MAJOR in backup.yml`, open a small PR from `origin/main` that changes `PG_MAJOR`, `SERVER_MAJOR` in `backend/tests/test_ops_workflows.py`, the runbook's major and `server_version` lines and the `postgres:` image tags together, merge it on the owner's yes, and run again:
 
 ```bash
 N=18   # the major from the error message (example value)
 sed -i '' "s/PG_MAJOR: \"17\"/PG_MAJOR: \"$N\"/" .github/workflows/backup.yml
+sed -i '' "s/^SERVER_MAJOR = \"17\"/SERVER_MAJOR = \"$N\"/" backend/tests/test_ops_workflows.py
 sed -i '' "s/^- Postgres server major: 17\$/- Postgres server major: $N/; s/postgres:17/postgres:$N/g" docs/ops-runbook.md
-.venv/bin/python -m pytest -q backend/tests/test_ops_workflows.py   # 16 passed
+.venv/bin/python -m pytest -q backend/tests/test_ops_workflows.py   # 64 passed
 ```
 (On Linux use `sed -i` without `''`. Update the `server_version` line by hand from `show server_version;`.)
 
@@ -1890,7 +1933,7 @@ gh pr create --base main --head claude/ops-1-records \
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)"
 ```
-Expected: no marker lines and `grep exit 1`, then `230 passed`. Merge after the owner's yes. The ops-1 gate is then passed, and ops-2 can start.
+Expected: no marker lines and `grep exit 1`, then `278 passed`. Merge after the owner's yes. The ops-1 gate is then passed, and ops-2 can start.
 
 ---
 
@@ -1907,13 +1950,13 @@ Expected: no marker lines and `grep exit 1`, then `230 passed`. Merge after the 
 | S5: `backend/.env.example` block after `CORS_ORIGINS`; `OPENAI_MODEL` untouched; Testing → the five keys, plus `DB_POOL_SIZE=3` / `DB_MAX_OVERFLOW=3` (owner correction 3); AC 7 | 3 |
 | S6: `shadcn` to devDependencies (moved by hand plus `npm install`, clarification 8), lockfile committed with no version changed; Testing → `package.json` parsed as JSON; Frontend → CI checks pass | 4, 8 |
 | Frontend: Vercel has no `--omit=dev` install and no `NPM_CONFIG_PRODUCTION`; preview build and production deploy succeed; AC 8 (sign-in at 375 px) | 9 (Step 5), 10 (Step 1) |
-| S2: `backup.yml` exactly as specified (cron, `ubuntu-24.04`, `PG_MAJOR`, prerequisites, PGDG client, `normalize-pg-url.sh`, version check, `pg_dump | age`, size check, artifact settings) | 5 |
-| S2: `.github/backup/normalize-pg-url.sh` (sed rule, `set -euo pipefail`, no stderr, run via `bash`) | 5 |
+| S2: `backup.yml` exactly as specified (cron, `ubuntu-24.04`, `PG_MAJOR`, prerequisites, PGDG client, version check, `pg_dump | age`, size check, artifact settings), with fix round 1: `environment: backup`, SHA-pinned actions, URL parts masked and passed as `PG*` variables instead of `normalize-pg-url.sh` | 5 |
+| S2 URL handling: `.github/backup/pg_env.py` replaces the spec's `normalize-pg-url.sh` (fix round 1: parsed as SQLAlchemy does, one escaped `::add-mask::` per part, `PG*` exports for `eval`, URL on stdin only, generic error with no input echoed) | 5 |
 | Exact copy: the three `backup.yml` `::error::` messages | 5 |
-| Testing → `test_ops_workflows.py` `backup.yml` contains / does not contain lists | 5 |
-| Testing → `normalize-pg-url.sh`: three URL cases, stderr empty, run as `bash .github/backup/normalize-pg-url.sh` from the repo root | 5 |
+| Testing → `test_ops_workflows.py` `backup.yml` contains / does not contain lists, plus checks of the parsed YAML (fix round 1) | 5 |
+| Testing → URL handling (replaces the three `normalize-pg-url.sh` cases): the scheme forms, tricky passwords decoded exactly as SQLAlchemy does, escaped masks, `--exports` evaluated in bash, malformed URLs rejected without echo, run as `.github/backup/pg_env.py` from the repo root | 5 |
 | Testing → `PG_MAJOR` parsed as YAML equals the runbook's `- Postgres server major: <N>` line | 5 (parse), 6 (runbook check) |
-| Testing → a `postgres:<N>` image in `ci.yml` must equal `PG_MAJOR` (inert until slice 1) | 5 |
+| Testing → a `postgres:<N>` image in `ci.yml` (`jobs.*.services.*.image`, parsed) must equal `PG_MAJOR` (inert until slice 1) | 5 |
 | S2: `.github/backup/age-recipients.txt`, comments plus `age1…` lines; test enforces format so a placeholder cannot merge | 7 |
 | Testing → `age-recipients.txt` exists, at least one recipient, every entry matches; no age private key under `.github/` or `docs/` (clarification 1) | 7 |
 | Backups → key setup (owner): `age-keygen`, password manager plus offline copy, file deleted, optional second key, public line to the PR (not yet generated on 2026-09-25) | 0 (Step 3), 7 (Steps 5-6) |
@@ -1929,7 +1972,7 @@ Expected: no marker lines and `grep exit 1`, then `230 passed`. Merge after the 
 | D5 recovery query run and recorded (AC 25), plus the partial-loss query (clarification 10) | 6 (runbook), 10, 12 (Step 5) |
 | Tester "fixed" message, exact copy, only after the check passes (User experience; AC 25) | 10 |
 | D5 workaround message sent to the tester and its date recorded (AC 25; not in the owner's list of completed Step 0 items, so checked and, if needed, sent on the owner's yes) | 0 (Step 1), 9 (Step 2) |
-| Delivery gate: owner adds `BACKUP_DATABASE_URL` after merge, runs the workflow by hand, the log shows no URL or password (AC 3) | 11 |
+| Delivery gate: owner creates the `backup` environment (`main` only) and adds `BACKUP_DATABASE_URL` to it after merge, runs the workflow by hand, the log shows no URL or password (AC 3) | 11 |
 | Delivery gate: restore drill restores every table, counts match production (AC 3) | 12 |
 | AC 3: `backup.yml` matches the spec and `test_ops_workflows.py` passes with `PG_MAJOR` equal to the runbook's major (17, server 17.6) | 5, 6, 9 (Step 3) |
 | AC 23 (ops-1 share): runbook sections filled in | 6, 9, 12 |
