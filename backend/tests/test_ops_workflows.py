@@ -501,3 +501,62 @@ def test_pool_defaults_fit_the_recorded_pooler_size():
     env_example = _read(ROOT / "backend" / ".env.example")
     assert f"\nDB_POOL_SIZE={DEFAULT_POOL_SIZE}\n" in env_example
     assert f"\nDB_MAX_OVERFLOW={DEFAULT_MAX_OVERFLOW}\n" in env_example
+
+
+# --- keepalive.yml: curls /health/ready and holds no secret (ops-3) -------------
+
+KEEPALIVE_YML = ROOT / ".github" / "workflows" / "keepalive.yml"
+KEEPALIVE_MUST_CONTAIN = (
+    "schedule:",
+    "cron:",
+    "/health/ready",
+    "vars.API_BASE_URL",
+    "--fail",
+    # Exact copy from the ops spec's "Exact server messages" table.
+    "::error::Set the API_BASE_URL repository variable (Settings → Secrets and variables → Actions → Variables)",
+)
+KEEPALIVE_MUST_NOT_CONTAIN = ("secrets.", "python keepalive.py")
+
+
+def test_keepalive_workflow_curls_readiness():
+    text = _read(KEEPALIVE_YML)
+    assert [needle for needle in KEEPALIVE_MUST_CONTAIN if needle not in text] == []
+
+
+def test_keepalive_workflow_holds_no_secret():
+    text = _read(KEEPALIVE_YML)
+    assert [needle for needle in KEEPALIVE_MUST_NOT_CONTAIN if needle in text] == []
+
+
+def test_keepalive_workflow_needs_no_token_permissions_and_no_checkout():
+    workflow = yaml.safe_load(_read(KEEPALIVE_YML))
+    assert workflow["permissions"] == {}
+    assert [step["uses"] for step in workflow["jobs"]["ping"]["steps"] if "uses" in step] == []
+
+
+def test_the_keepalive_script_and_its_tests_are_gone():
+    left = [rel for rel in ("backend/keepalive.py", "backend/tests/test_keepalive.py") if (ROOT / rel).exists()]
+    assert left == []
+
+
+def test_backup_workflow_runs_pg_dump_on_a_schedule():
+    # Ported from the deleted test_keepalive.py::test_backup_workflow_present.
+    text = _read(BACKUP_YML)
+    assert "pg_dump" in text
+    assert "schedule:" in text
+
+
+def test_readme_keep_alive_paragraph_describes_the_readiness_curl():
+    section = _read(README).split("### Keep-alive (required)", 1)[1].split("\n### ", 1)[0]
+    for needle in ("/health/ready", "API_BASE_URL", "docs/ops-runbook.md"):
+        assert needle in section, needle
+    for stale in ("keepalive.py", "DATABASE_URL"):
+        assert stale not in section, stale
+
+
+def test_runbook_keep_alive_section_names_the_variable_and_the_endpoint():
+    text = _read(RUNBOOK)
+    section = text.split("\n## Keep-alive\n", 1)[1].split("\n## ", 1)[0]
+    for needle in ("API_BASE_URL", "/health/ready", "keepalive.yml", "keep-awake.yml"):
+        assert needle in section, needle
+    assert "keepalive.py" not in text        # the script is gone; nothing may point at it

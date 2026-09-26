@@ -214,6 +214,53 @@ key file is left on disk.
 |---|---|---|
 | 2026-09-26 (first manual run after ops-1) | https://github.com/bbrown62450/church/actions/runs/36261197972 | Green. Artifact `db-backup` (225,686 bytes, encrypted), expires 2026-10-26. A scan of the public log found no database host, user, URL, `PGPASSWORD` or private-key text; 4 values were masked as `***`. |
 
+## Keep-alive
+
+Supabase Free pauses a project after about 7 days without activity, and
+Streamlit Community Cloud hibernates an app after 12 hours without traffic.
+Two scheduled workflows keep both awake:
+
+- **`keepalive`** (`.github/workflows/keepalive.yml`): daily at 09:17 UTC, and
+  by hand (Actions → keepalive → Run workflow, or `gh workflow run keepalive`).
+  It curls `${API_BASE_URL}/health/ready` (up to 4 tries, 20 s apart) and is
+  green when that returns 200 `{"ok":true,"db":"ok"}`. The API answers with a
+  `SELECT 1` through its own connection pool, so the database sees real
+  activity. The job holds no database credentials and no token permissions.
+- **`keep-awake`** (`.github/workflows/keep-awake.yml`): every 6 hours it opens
+  https://liturgy-next.streamlit.app/, the production Streamlit app, in
+  headless Chromium (a plain HTTP ping does not count as traffic). Deleted in
+  slice 7.
+
+**Variable.** `API_BASE_URL` = `https://church-production-74ca.up.railway.app`,
+under repo Settings → Secrets and variables → Actions → **Variables** (not
+Secrets). It is not a secret: the frontend bundle already carries the same URL
+as `NEXT_PUBLIC_API_URL`. Without it the job fails with
+`::error::Set the API_BASE_URL repository variable (Settings → Secrets and variables → Actions → Variables)`.
+
+**`GET /health/ready`** is public and reads no table. It memoizes its answer
+(10 s after a success, 5 s after a failure) and runs at most one probe at a
+time, so however many requests arrive it holds at most one pooled
+connection. 503 `db_unavailable` means the API cannot reach the database, and
+the Railway logs then show `Readiness check failed: <exception class>`.
+`GET /health` stays the dependency-free liveness probe and Railway's deploy
+health check; slice 1 moves the deploy check to `/health/ready`.
+
+**If `keepalive` is red:**
+1. `curl -i https://church-production-74ca.up.railway.app/health`. If that
+   fails too, the API is down: Railway → the API service → Deployments.
+2. If `/health` is 200 and `/health/ready` is 503: Supabase Dashboard → is the
+   project paused? Restore it. Otherwise read the Railway logs for
+   `Readiness check failed:`.
+3. If the log shows `::error::Set the API_BASE_URL repository variable …`,
+   set the variable as above.
+4. GitHub disables scheduled workflows in a public repository after 60 days
+   without activity (ops spec, Risks item 7): re-enable it under Actions →
+   keepalive. Slice 7 adds an external uptime monitor.
+
+| Date | Run | Result |
+|---|---|---|
+| [owner: first manual run after ops-3] | [owner: run URL] | [owner: green; the log shows `{"ok":true,"db":"ok"}`] |
+
 ## Streamlit freeze
 
 ### Streamlit apps
@@ -359,9 +406,10 @@ when it merged, before the freeze locks it in (ops spec, Delivery plan):
   3 and 3 (`DEFAULT_POOL_SIZE`, `DEFAULT_MAX_OVERFLOW`), plus `pool_pre_ping`,
   `pool_recycle=1800` and `connect_timeout=10`. The API, `liturgy-next` and
   the CLIs that use `db.get_engine()`, `init_db()` or `session_scope()` share
-  that engine setup. `backend/keepalive.py` builds its own engine without
-  these settings (ops-3 replaces it); its one short scheduled session fits in
-  the spare connection (14 of 15). `backend/tests/test_ops_workflows.py`
+  that engine setup, and so does the API's `GET /health/ready` probe (ops-3),
+  which holds at most one of the API's pooled connections at a time. The old
+  keep-alive script, which built its own engine, is gone.
+  `backend/tests/test_ops_workflows.py`
   fails if the code defaults stop fitting the Pool Size line above or stop
   matching `backend/.env.example`. An invalid value stops the process when
   the engine is created, with `DB_POOL_SIZE must be an integer >= 1 (got '…').`
@@ -371,8 +419,11 @@ when it merged, before the freeze locks it in (ops spec, Delivery plan):
   2026-09-26. Real use by one tester is 2–4 sessions.
 - Values set: `DB_POOL_SIZE=3` and `DB_MAX_OVERFLOW=3` as Railway service
   variables (API), and as top-level keys `DB_POOL_SIZE = "3"` and
-  `DB_MAX_OVERFLOW = "3"` in the `liturgy-stg` app's Streamlit Secrets (not
-  `liturgy`, which is being deleted): 2026-09-26 (Railway API service and `liturgy-stg` Secrets)
+  `DB_MAX_OVERFLOW = "3"` in the production Streamlit Secrets, at the very top
+  above the first `[section]` line (a key below `[auth]` belongs to that
+  section, and Streamlit does not export it to the environment). Set in
+  `liturgy-stg`'s Secrets on 2026-09-26, before that app was deleted the same
+  day; for `liturgy-next`'s see the ops-2 gate table and the Freeze record.
 - GitHub Actions artifacts: `db-backup` keeps 30 days (GitHub's maximum is 90).
 
 ## Incident response
