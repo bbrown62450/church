@@ -398,3 +398,44 @@ def test_ci_postgres_service_matches_pg_major():
     # This is the only check of the CI Postgres major (ops spec, slice 1 row).
     majors = _postgres_service_majors(_workflow(CI_YML))
     assert [m for m in majors if m != _pg_major()] == []
+
+
+# --- docs/ops-runbook.md and README ------------------------------------------
+
+RUNBOOK = ROOT / "docs" / "ops-runbook.md"
+README = ROOT / "README.md"
+PG_MAJOR_LINE = re.compile(r"^- Postgres server major: (\d+)\s*$", re.MULTILINE)
+OPS1_RUNBOOK_SECTIONS = (
+    "## Supabase lockdown record",
+    "## Backups",
+    "## Streamlit freeze",
+    "## Platform limits",
+    "## Incident response",
+)
+TRIAGE_ROWS = ("D5", "A7", "E6", "E4", "D6", "F6", "F7", "F10", "D3", "G7", "F4", "B2", "C1", "G5")
+
+
+def test_runbook_postgres_server_major_matches_pg_major():
+    majors = PG_MAJOR_LINE.findall(_read(RUNBOOK))
+    assert len(majors) == 1, f"want exactly one '- Postgres server major: <N>' line, found {majors}"
+    assert majors[0] == _pg_major()
+
+
+def test_runbook_has_the_ops1_sections():
+    headings = set(re.findall(r"^## .+$", _read(RUNBOOK), re.MULTILINE))
+    assert [s for s in OPS1_RUNBOOK_SECTIONS if s not in headings] == []
+
+
+def test_runbook_records_the_streamlit_bug_triage_and_d5_recovery():
+    text = _read(RUNBOOK)
+    assert "### Streamlit bug triage" in text
+    assert [row for row in TRIAGE_ROWS if f"\n| {row}" not in text] == []
+    assert "jsonb_array_length(hymns::jsonb) = 0" in text   # the D5 recovery query
+
+
+def test_readme_backups_paragraph_describes_encrypted_backups():
+    section = _read(README).split("### Backups (required)", 1)[1].split("\n### ", 1)[0]
+    # "`age`" with backticks: a bare "age" is already a substring of "storage" in the old text.
+    for needle in ("BACKUP_DATABASE_URL", "`age`", ".dump.age", "docs/ops-runbook.md"):
+        assert needle in section, needle
+    assert "compressed dump" not in section
