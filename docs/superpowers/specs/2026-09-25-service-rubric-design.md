@@ -234,15 +234,22 @@ Rows with no scripture references or no title match stay `NULL` (unknown).
 `suggest_hymns_for_service` gains `rubric: dict | None = None`, where `None`
 means the defaults.
 
-- **Ranking.** Each slot's candidate list is sorted before being cut to 60.
+- **Ranking.** Each slot's candidate list is sorted, then cut to 60.
   - First key: era. Hymns with `text_year < prefer_before_year` come first,
     then unknown years, then newer hymns.
   - Second key (only when `prefer_familiar` is on): `hymnal_count`, highest
     first. An unknown count ranks as the median of the known counts in that
     list, so it is neither pushed up nor down.
   - The sort is stable, so the existing order breaks ties.
+  - The cut keeps places for newer hymns. A list of 60 or fewer is not cut.
+    For a longer list, up to 12 of the 60 places go to the best-ranked
+    unknown-year and newer hymns, taken from each group in turn, so older
+    hymns cannot crowd them out. Places they do not need go back to older
+    hymns. The list stays in ranked order. (Added during Task 7 review so the
+    age preference does not act as a filter. Not yet confirmed by Beau.)
   - When a slot has no theme-matched candidates, the fallback becomes the full
-    ranked hymn list. Today it is the first 80 hymns in storage order.
+    ranked hymn list, cut the same way. Today it is the first 80 hymns in
+    storage order.
 - **Checklists.** The hard-coded `ROLE REQUIREMENTS` block is replaced by the
   three slot checklists from the rubric.
 - **More detail for the AI.** Each candidate line gains `(written 1826, in
