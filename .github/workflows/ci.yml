@@ -16,6 +16,33 @@ jobs:
       - run: pip install -r requirements-dev.txt
       - run: python -m pytest -q
 
+  backend-postgres:
+    # ON CONFLICT (email), the 3 + 3 pool and concurrent first sign-ins on real
+    # Postgres, in a throwaway container (major matches PG_MAJOR in backup.yml).
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: ci-throwaway
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://postgres:ci-throwaway@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - run: python backend/tests/pg_smoke.py
+
   frontend:
     runs-on: ubuntu-latest
     defaults:

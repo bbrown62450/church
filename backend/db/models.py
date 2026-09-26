@@ -39,6 +39,7 @@ class User(Base):
     name = Column(String)
     picture = Column(String)
     created_at = Column(DateTime(timezone=True), nullable=False, default=_utcnow)
+    # Last seen, to the hour (see repos.users.LAST_SEEN_RESOLUTION).
     last_login_at = Column(DateTime(timezone=True))
 
 

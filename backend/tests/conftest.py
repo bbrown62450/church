@@ -11,6 +11,19 @@ import uuid
 import pytest
 
 
+class FakeClock:
+    """A monotonic clock tests move by hand: pass `clock.now` where code takes a clock."""
+
+    def __init__(self, start: float = 1000.0):
+        self.value = start
+
+    def now(self) -> float:
+        return self.value
+
+    def advance(self, seconds: float) -> None:
+        self.value += seconds
+
+
 @pytest.fixture
 def tmp_db(tmp_path):
     """Fresh, isolated SQLite database for one test.
@@ -108,3 +121,34 @@ def seed_catalog(tmp_db):
         return n
 
     return _seed
+
+
+@pytest.fixture
+def identity_clock(monkeypatch):
+    """Swap api.deps' identity cache for one on a FakeClock; return the clock.
+
+    Works because get_current_user reads api.deps._identity_cache on every call.
+    """
+    import api.deps
+    from api.identity_cache import IdentityCache
+
+    clock = FakeClock()
+    monkeypatch.setattr(api.deps, "_identity_cache",
+                        IdentityCache(maxsize=1024, ttl=300, clock=clock.now))
+    return clock
+
+
+@pytest.fixture(autouse=True)
+def _fresh_identity_cache():
+    """Every test gets a new SQLite file but reuses the same emails, so a user id
+    cached by an earlier test must never leak into this one (ops slice, F §2.4).
+
+    Clears only when api.deps is already imported: a stale entry can exist only
+    then, and tests that never touch the API stay independent of that layer
+    (the deferred-import rule at the top of this file)."""
+    import sys
+
+    deps = sys.modules.get("api.deps")
+    if deps is not None:
+        deps.clear_identity_cache()
+    yield

@@ -102,15 +102,15 @@ class TokenVerifier:
 
 
 def claims_to_profile(claims: dict) -> dict:
-    """Shape Supabase claims for auth.upsert_from_claims.
+    """Shape Supabase claims for api.deps.get_current_user.
 
     `sub` is always None: `user_metadata` is editable by the signed-in user
     (it's account metadata, not an identity claim we control), so it must
     never be trusted as a source of identity. `google_sub` is only used to
     key rows created by the old Streamlit login, not for lookups here, so
-    `auth.upsert_from_claims` simply leaves it alone (it only writes
-    `google_sub` when `sub` is truthy) and those rows keep the value
-    Streamlit stored. `name` and `picture` stay sourced from
+    `get_current_user` never passes it to `repos.users.ensure_user` (which
+    writes `google_sub` only when given a truthy one) and those rows keep the
+    value Streamlit stored. `name` and `picture` stay sourced from
     `user_metadata` because they're display-only, not used for identity.
     """
     meta = claims.get("user_metadata") or {}

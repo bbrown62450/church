@@ -483,3 +483,21 @@ def test_no_age_private_key_is_committed_in_any_tracked_file():
         if AGE_SECRET_KEY.search(data.decode("utf-8", errors="ignore")):
             leaks.append(rel)
     assert leaks == []
+
+
+# --- Pool budget: code defaults vs the recorded pooler size (ops-2) -----------
+
+POOL_SIZE_LINE = re.compile(r"^- Supabase session pooler \(Supavisor\) Pool Size: (\d+)", re.MULTILINE)
+
+
+def test_pool_defaults_fit_the_recorded_pooler_size():
+    from db.engine import DEFAULT_MAX_OVERFLOW, DEFAULT_POOL_SIZE
+
+    sizes = POOL_SIZE_LINE.findall(_read(RUNBOOK))
+    assert len(sizes) == 1, f"want one '- Supabase session pooler (Supavisor) Pool Size: <N>' line, found {sizes}"
+    # Two apps (the API and liturgy-next) each at their pool limit, plus the backup
+    # job's session and the owner's SQL editor (ops spec, Risks item 2).
+    assert 2 * (DEFAULT_POOL_SIZE + DEFAULT_MAX_OVERFLOW) + 2 <= int(sizes[0])
+    env_example = _read(ROOT / "backend" / ".env.example")
+    assert f"\nDB_POOL_SIZE={DEFAULT_POOL_SIZE}\n" in env_example
+    assert f"\nDB_MAX_OVERFLOW={DEFAULT_MAX_OVERFLOW}\n" in env_example
