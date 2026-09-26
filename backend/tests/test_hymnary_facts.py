@@ -21,6 +21,15 @@ from db.models import Hymn, HymnCatalog
     # Life dates written with an en dash, as in the live "Psalm 23" response.
     ({"author": "Franzén, Frans Michael, 1772-1847", "adapter": "Price, Charles P., 1920–1999"}, 1999),
     ({"author": "Wren, Brian, 1936—"}, 1936 + hf.BIRTH_ONLY_OFFSET),   # em dash
+    # Roles qualified in parentheses, as in the live "Psalm 23" and "Isaiah 6:3" responses.
+    ({"author (attributed to)": "Lyte, Henry Francis, 1793-1847"}, 1847),
+    ({"author (st. 4, 5)": "Montgomery, James, 1771-1854", "author (st. 1, 2, 3)": "Anonymous"}, 1854),
+    ({"translator (dutch)": "De Moor, Robert, 1950-"}, 1950 + hf.BIRTH_ONLY_OFFSET),
+    ({"versifier": "Idle, Christopher M., 1938-"}, 1938 + hf.BIRTH_ONLY_OFFSET),
+    # Only a death year, or only a birth year, marked "d." or "b.".
+    ({"author": "Kethe, William, d. 1594"}, 1594),
+    ({"author": "Tel, Martin, b. 1964"}, 1964 + hf.BIRTH_ONLY_OFFSET),
+    ({"composer": "Smart, Henry, 1813-1879", "place of origin": "England"}, None),   # not a writer of words
     ({"author": "Latin hymn, 12th cent."}, None),
     ({}, None),
 ])
@@ -319,7 +328,61 @@ def test_make_fetch_raises_on_a_failed_request_and_records_it(capsys):
                 fetch(ref)
         assert fetch("Jude 1:25") == []   # an empty result is still just empty
     assert failed == list(fail)
-    assert "Jude 1:25" not in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "Jude 1:25" not in out
+    assert "challenge" in out   # a body that is not JSON is shown, not just the parse error
+
+
+def _unparseable(ref):
+    """Hymnary's answer to a reference it cannot parse, exactly as the live API
+    sends it for "Isaiah 6:3 (st. 1)": HTTP 200, text/html, one sentence."""
+    return httpx.Response(200, headers={"content-type": "text/html; charset=UTF-8"},
+                          text=f"Could not parse text reference '{ref}'.")
+
+
+def test_make_fetch_treats_an_unparseable_reference_as_citing_nothing(capsys):
+    # Hymnary gives the same answer every time, so it is not a failure to retry:
+    # the reference simply finds no texts.
+    failed, unparseable = [], []
+
+    def handler(request):
+        return _unparseable(request.url.params["reference"])
+
+    with _REAL_CLIENT(transport=httpx.MockTransport(handler)) as client:
+        fetch = backfill_hymn_facts.make_fetch(client, delay=0, failed=failed,
+                                               unparseable=unparseable)
+        assert fetch("Isaiah 6:3 (st. 1)") == []
+    assert (failed, unparseable) == ([], ["Isaiah 6:3 (st. 1)"])
+    assert "Could not parse text reference 'Isaiah 6:3 (st. 1)'" in capsys.readouterr().out
+
+
+def test_run_backfill_matches_on_other_references_when_one_is_unparseable(tmp_db, make_church):
+    cid = make_church()
+    refs = "Revelation 4:8; Isaiah 6:3 (st. 1)"
+    with session_scope() as s:
+        s.add(HymnCatalog(title=HOLY["title"], scripture_refs=refs))
+        s.add(Hymn(church_id=cid, title=HOLY["title"], scripture_refs=refs))
+    seen = []
+
+    def handler(request):
+        ref = request.url.params["reference"]
+        seen.append(ref)
+        if ref == "Revelation 4:8":
+            return httpx.Response(200, json={"Holy, holy, holy! Lord God Almighty": HOLY})
+        return _unparseable(ref)
+
+    failed, unparseable = [], []
+    with _REAL_CLIENT(transport=httpx.MockTransport(handler)) as client:
+        fetch = backfill_hymn_facts.make_fetch(client, delay=0, failed=failed,
+                                               unparseable=unparseable)
+        stats = hf.run_backfill(fetch)
+
+    assert stats == {"checked": 2, "matched": 2, "updated": 2, "unknown": 0}
+    assert seen == ["Revelation 4:8", "Isaiah 6:3 (st. 1)"]   # the bad reference is asked once
+    assert (failed, unparseable) == ([], ["Isaiah 6:3 (st. 1)"])
+    with session_scope() as s:
+        assert s.execute(select(HymnCatalog.text_year, HymnCatalog.hymnal_count)).one() == (1826, 1322)
+        assert s.execute(select(Hymn.text_year, Hymn.hymnal_count)).one() == (1826, 1322)
 
 
 def test_run_backfill_stores_no_guess_when_a_request_fails(tmp_db, make_church):
@@ -425,3 +488,30 @@ def test_cli_names_references_whose_requests_failed(tmp_db, unbound_engine, monk
     assert "[DRY RUN] checked 2, matched 1, updated 1, unknown 1" in out
     last = out.splitlines()[-1]
     assert "1 reference" in last and "failed" in last and "Psalm 23" in last
+
+
+def test_cli_names_unparseable_references_apart_from_failed_ones(tmp_db, unbound_engine,
+                                                               monkeypatch, capsys):
+    with tmp_db.begin() as conn:
+        conn.execute(HymnCatalog.__table__.insert(), [
+            {"id": uuid.uuid4(), "title": HOLY["title"], "scripture_refs": "Revelation 4:8; Isaiah 6:3 (st. 1)"},
+        ])
+
+    def handler(request):
+        ref = request.url.params["reference"]
+        if ref == "Revelation 4:8":
+            return httpx.Response(200, json={"Holy": HOLY})
+        return _unparseable(ref)
+
+    monkeypatch.setattr(backfill_hymn_facts.httpx, "Client",
+                        lambda **kw: _REAL_CLIENT(transport=httpx.MockTransport(handler)))
+    monkeypatch.setattr(backfill_hymn_facts.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(sys, "argv", ["backfill_hymn_facts.py", "--dry-run"])
+
+    backfill_hymn_facts.main()
+
+    out = capsys.readouterr().out
+    assert "[DRY RUN] checked 1, matched 1, updated 1, unknown 0" in out
+    last = out.splitlines()[-1]
+    assert "1 reference" in last and "could not parse" in last and "Isaiah 6:3 (st. 1)" in last
+    assert "failed" not in out and "re-run" not in out   # a re-run would get the same answer

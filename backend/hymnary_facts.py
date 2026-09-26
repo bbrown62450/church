@@ -5,7 +5,9 @@ Hymnary.org's website sits behind a bot challenge, so we never scrape it. The
 public API (API_URL?reference=...) answers plain requests and returns, for
 each text that cites the reference, a record keyed by the text's first line
 with: its title, "number of hymnals" (our familiarity signal), often "date",
-and people fields with life dates such as "Perronet, Edward, 1721-1792".
+and people fields with life dates such as "Perronet, Edward, 1721-1792". A
+people field's role can carry a qualifier ("author (attributed to)",
+"translator (dutch)"), and a writer can have only a death date ("d. 1594").
 
 The title is often a short name ("Guide Me" for "Guide me, O Thou great
 Jehovah") or missing, while hymnals such as PH1990 list hymns by first line,
@@ -20,7 +22,9 @@ the CLI names every reference that hit the cap.
 The fetch function is injected so tests never touch the network; the CLI in
 backfill_hymn_facts.py supplies the real, throttled one. It returns the API's
 JSON ([] when nothing cites the reference) and raises FetchError when the
-request fails, so a failure is never mistaken for an empty result.
+request fails, so a failure is never mistaken for an empty result. A
+reference Hymnary cannot parse ("Isaiah 6:3 (st. 1)") gets the same answer
+every time, so it is not a failure: the fetch returns [] for it.
 """
 import re
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -31,7 +35,9 @@ from db import session_scope
 from db.models import Hymn, HymnCatalog
 
 API_URL = "https://hymnary.org/api/scripture"
-PEOPLE_FIELDS = ("author", "translator", "paraphraser", "adapter", "alterer")
+# Roles of the people who wrote the words. A versifier turns a text (usually a
+# psalm) into metrical verse, the same work as a paraphraser.
+PEOPLE_FIELDS = ("author", "translator", "paraphraser", "adapter", "alterer", "versifier")
 BIRTH_ONLY_OFFSET = 35   # a living writer born in 1936 counts as writing around 1971
 WRITE_BATCH = 50
 RESULT_CAP = 100         # most texts the API returns for one reference
@@ -45,6 +51,7 @@ class FetchError(Exception):
 
 _YEAR = re.compile(r"\b(1\d{3}|20\d{2})\b")
 _LIFE = re.compile(r"(\d{4})\s*[-–—]\s*(\d{4})?")   # hyphen, en or em dash
+_MARKED = re.compile(r"\b([bd])\.\s*(\d{4})")          # "b. 1964", "d. 1594"
 _REF_BREAK = re.compile(r"\s*(?:;|\n|,(?=\s*[1-3]?\s?[A-Za-z]))\s*")
 _ARTICLE = re.compile(r"^(the|a|an) ")
 
@@ -54,7 +61,15 @@ def _person_year(value: str) -> Optional[int]:
     year + BIRTH_ONLY_OFFSET when only a birth year is known."""
     years = [int(died) if died else int(born) + BIRTH_ONLY_OFFSET
              for born, died in _LIFE.findall(value)]
+    years += [int(year) if mark == "d" else int(year) + BIRTH_ONLY_OFFSET
+              for mark, year in _MARKED.findall(value)]
     return max(years) if years else None
+
+
+def _is_writer(field: Any) -> bool:
+    """True for a people field naming a writer of the words, with or without a
+    qualifier: "author", "author (attributed to)", "author (st. 4, 5)"."""
+    return str(field).split("(", 1)[0].strip().lower() in PEOPLE_FIELDS
 
 
 def text_year(record: Dict[str, Any]) -> Optional[int]:
@@ -63,8 +78,8 @@ def text_year(record: Dict[str, Any]) -> Optional[int]:
     match = _YEAR.search(str(record.get("date") or ""))
     if match:
         return int(match.group(1))
-    years = [y for field in PEOPLE_FIELDS
-             if (y := _person_year(str(record.get(field) or ""))) is not None]
+    years = [y for field, value in record.items()
+             if _is_writer(field) and (y := _person_year(str(value or ""))) is not None]
     return max(years) if years else None
 
 

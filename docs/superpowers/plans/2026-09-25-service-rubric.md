@@ -2079,8 +2079,9 @@ and "prefer familiar" hymn suggestions.
    safe to re-run. It takes about a second per scripture reference:
 
    ```bash
-   cd backend && python backfill_hymn_facts.py --dry-run
-   cd backend && python backfill_hymn_facts.py
+   cd backend
+   python backfill_hymn_facts.py --dry-run
+   python backfill_hymn_facts.py
    ```
 ````
 
