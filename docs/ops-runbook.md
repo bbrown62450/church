@@ -412,7 +412,9 @@ logs for a short time). Steps 1–3 come before any repair.
      10 minutes, so the only cost is restarting a Gmail connect in progress).
 4. **Repair** from the forensic dump or the known values: a changed
    `users.email` first, before anyone signs in again; then memberships,
-   contacts and settings.
+   contacts and settings; then restart the API service on Railway (clears
+   the per-process identity cache, which can otherwise map an email to a
+   user id for up to 5 minutes).
 5. Revoke every active invite in Streamlit Settings → Invites and reissue
    those still needed (invite codes are bearer secrets).
 6. Send the tester the Gmail message (ops spec, User experience): remove the

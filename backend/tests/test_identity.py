@@ -189,6 +189,8 @@ def test_upsert_from_claims_delegates_to_ensure_user(tmp_db, monkeypatch):
     )
     assert calls == [(("pastor@example.com", "Pat Tor", "http://x/p.png"), {"google_sub": "google-sub-1"})]
     assert _stored("pastor@example.com").id == user_id
+    with pytest.raises(ValueError, match="OIDC claims are missing an email address"):
+        auth.upsert_from_claims({"email": "  "})
 
 
 # --- get_current_user: identity cache in front of ensure_user ------------------
@@ -259,6 +261,9 @@ def test_a_fresh_entry_does_no_users_work(client, tmp_db, identity_clock):
     with users_statements(tmp_db) as counts:
         assert client.get("/me", headers=headers).status_code == 200
     assert counts == {"insert": 0, "update": 0, "select": 0}
+    with users_statements(tmp_db) as blank:            # a blank name/picture counts as unchanged
+        assert client.get("/me", headers=_auth(name=None, picture=None)).status_code == 200
+    assert blank == {"insert": 0, "update": 0, "select": 0}
 
 
 def test_a_profile_change_updates_once_even_on_a_cache_hit(client, tmp_db):
@@ -271,6 +276,11 @@ def test_a_profile_change_updates_once_even_on_a_cache_hit(client, tmp_db):
     with users_statements(tmp_db) as again:            # the cache now holds the new name
         client.get("/me", headers=_auth(name="Pat Tor Jr."))
     assert again == {"insert": 0, "update": 0, "select": 0}
+    with users_statements(tmp_db) as picture_changed:  # a changed picture still writes
+        r2 = client.get("/me", headers=_auth(name="Pat Tor Jr.", picture="https://x/new.png"))
+    assert picture_changed["update"] == 1
+    assert r2.json()["user"]["picture"] == "https://x/new.png"
+    assert _stored("pastor@example.com").picture == "https://x/new.png"
 
 
 def test_different_users_never_share_a_cached_identity(client):
