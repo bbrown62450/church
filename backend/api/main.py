@@ -11,19 +11,25 @@ from api.logging_config import configure_logging
 from api.middleware import RequestIdMiddleware, UnhandledErrorMiddleware
 from api.routes import health, me, rubric
 from api.settings import get_settings
-from db import init_db
+from api.startup import check_app_env, describe_database, enforce_production_guards
+from db import get_engine, init_db
 
 load_dotenv()
 configure_logging(get_settings().log_level)
 
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    init_db()   # create_all: no-op on existing tables, creates them for local SQLite
-    if not get_settings().supabase_url:
-        logging.getLogger(__name__).warning(
-            "SUPABASE_URL is not set; every authenticated request will return 503."
-        )
+    settings = get_settings()
+    check_app_env(settings.app_env)
+    engine = get_engine()                                   # creating the engine opens no connection
+    logger.info("Database: %s", describe_database(engine.url))
+    enforce_production_guards(settings, engine)             # before anything touches the database
+    init_db()   # create_all: no-op on existing tables, creates them for local SQLite; removed in slice 1
+    if not settings.supabase_url:
+        logger.warning("SUPABASE_URL is not set; every authenticated request will return 503.")
     yield
 
 

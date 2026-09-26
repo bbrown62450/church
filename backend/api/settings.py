@@ -8,7 +8,12 @@ from functools import lru_cache
 class Settings:
     supabase_url: str
     cors_origins: tuple[str, ...]
+    app_env: str = "development"           # APP_ENV; api.startup.check_app_env validates it
     log_level: str = "INFO"                # LOG_LEVEL; api.logging_config validates it
+
+    @property
+    def is_production(self) -> bool:
+        return self.app_env == "production"
 
     @property
     def jwks_url(self) -> str:
@@ -28,5 +33,6 @@ def get_settings() -> Settings:
     return Settings(
         supabase_url=os.environ.get("SUPABASE_URL", "").strip().rstrip("/"),
         cors_origins=_split_origins(os.environ.get("CORS_ORIGINS", "http://localhost:3000")),
+        app_env=os.environ.get("APP_ENV", "").strip().lower() or "development",
         log_level=os.environ.get("LOG_LEVEL", "").strip() or "INFO",
     )
