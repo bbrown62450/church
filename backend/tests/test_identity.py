@@ -169,3 +169,22 @@ def test_concurrent_first_calls_create_one_row(tmp_db):
     assert errors == []
     assert len(ids) == workers and len(set(ids)) == 1
     assert _user_count() == 1
+
+
+# --- auth.upsert_from_claims (Streamlit and migrate_to_db.py) -----------------
+
+def test_upsert_from_claims_delegates_to_ensure_user(tmp_db, monkeypatch):
+    import auth
+
+    calls = []
+
+    def spy(email, name=None, picture=None, **kwargs):
+        calls.append(((email, name, picture), kwargs))
+        return ensure_user(email, name, picture, **kwargs)
+
+    monkeypatch.setattr(auth, "ensure_user", spy)
+    user_id = auth.upsert_from_claims(
+        {"email": " Pastor@Example.com", "sub": "google-sub-1", "name": "Pat Tor", "picture": "http://x/p.png"}
+    )
+    assert calls == [(("pastor@example.com", "Pat Tor", "http://x/p.png"), {"google_sub": "google-sub-1"})]
+    assert _stored("pastor@example.com").id == user_id
