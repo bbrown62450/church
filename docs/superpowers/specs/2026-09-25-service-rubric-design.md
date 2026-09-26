@@ -207,9 +207,11 @@ columns.
 
 Hymnary.org's website sits behind a bot challenge, so the backfill does not
 scrape it. The public scripture API (`https://hymnary.org/api/scripture?reference=…`)
-answers plain requests and returns, per text, `title`, `number of hymnals`,
-and often `date`, plus people fields with life dates such as
-`author: "Perronet, Edward, 1721-1792"`.
+answers plain requests. It returns a JSON object keyed by each text's first
+line. Each value holds `title` (a short name, sometimes null),
+`number of hymnals`, a `text link`, often `date`, and people fields with life
+dates such as `author: "Perronet, Edward, 1721-1792"`. A response holds at most
+100 texts and cannot be paged.
 
 A new one-off script, `backend/backfill_hymn_facts.py`:
 
@@ -217,18 +219,30 @@ A new one-off script, `backend/backfill_hymn_facts.py`:
    queries the API once for each of the row's `scripture_refs`. Responses are
    cached per reference, and requests are spaced about 1 second apart.
 2. Matches results to the row by normalized title (lowercase, punctuation and
-   leading articles stripped).
-3. Sets `hymnal_count` from `number of hymnals`.
-4. Sets `text_year` from the first 4-digit year in `date`. If `date` is absent,
-   it estimates from the people fields (author, translator, paraphraser,
-   adapter, alterer). It takes the latest death year among them. A person with
-   only a birth year counts as birth year + 35, capped at the current year so
-   the estimate is never a future year.
-5. Only fills blanks and never overwrites a value, so manual corrections
+   leading articles stripped). It compares the row's title with each text's
+   `title` and with its first line, since some catalogs list hymns by first
+   line. A text matching both ways counts once. When any text matches by
+   title, texts that only match by first line are set aside.
+3. When several texts match, takes the one in the most hymnals. It leaves the
+   row unknown instead when a response hit the 100-text cap, because the cap
+   may have dropped a more-published text of the same name.
+4. Sets `hymnal_count` from `number of hymnals`.
+5. Sets `text_year` from the first 4-digit year in `date`. If `date` is absent,
+   it estimates from the people fields: author, translator, paraphraser,
+   adapter, alterer and versifier, including qualified keys such as
+   `author (attributed to)`. It takes the latest death year among them. Life
+   dates may use a hyphen, en dash or em dash, or `d. YYYY` and `b. YYYY`. A
+   person with only a birth year counts as birth year + 35, capped at the
+   current year so the estimate is never a future year.
+6. Only fills blanks and never overwrites a value, so manual corrections
    survive re-runs. The script is idempotent and supports `--dry-run`.
-6. Prints coverage: rows matched, and rows left unknown.
+7. Leaves a row unknown for this run when one of its requests fails, rather
+   than guessing from partial results. A later run retries it.
+8. Prints coverage: rows matched, rows left unknown, failed requests,
+   references that hit the 100-text cap, and references Hymnary could not
+   parse (these are skipped).
 
-Rows with no scripture references or no title match stay `NULL` (unknown).
+Rows with no scripture references or no match stay `NULL` (unknown).
 
 ## How the hymn picker uses the rubric
 

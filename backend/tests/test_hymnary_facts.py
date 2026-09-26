@@ -198,16 +198,39 @@ def test_find_facts_counts_a_text_matching_by_title_and_first_line_once():
         {"text_year": 1826, "hymnal_count": 1322}
 
 
-def test_find_facts_weighs_first_line_and_title_matches_alike():
-    # A text whose first line is the wanted title competes with a text whose
-    # title is, and the one in more hymnals wins.
-    fetch = FakeFetch({"Psalm 23": {"The Lord's my shepherd, I'll not want": SHEPHERD_ROUS,
-                                    "The Lord's my shepherd": {**SHEPHERD_MODERN, "title": "Townend"}}})
-    assert hf.find_facts("The Lord's My Shepherd", "Psalm 23", fetch, {}) == \
-        {"text_year": None, "hymnal_count": 769}
+def test_find_facts_prefers_a_title_match_over_a_first_line_match():
+    # When one text's title is the wanted title and another text only begins
+    # with those words, the titled text wins, even in fewer hymnals.
     fetch = FakeFetch({"Psalm 23": {"The Lord's my shepherd, I'll not want": SHEPHERD_MODERN,
                                     "The Lord's my shepherd": {**SHEPHERD_ROUS, "title": "Rous"}}})
     assert hf.find_facts("The Lord's My Shepherd", "Psalm 23", fetch, {}) == \
+        {"text_year": 1998, "hymnal_count": 14}
+
+
+def test_find_facts_title_match_is_not_a_collision_with_a_first_line_match():
+    # The saved live "Psalm 23" response (capped at 100 texts) holds Haugen's
+    # "Shepherd Me, O God" (18 hymnals) and a responsorial setting in 7 whose
+    # first line is "Shepherd me, O God". Only the title match counts, so the
+    # capped-collision rule does not leave the hymn unknown.
+    haugen = {"title": "Shepherd Me, O God", "number of hymnals": "18",
+              "author": "Haugen, Marty, 1950-",
+              "text link": "https://hymnary.org/text/god_is_my_shepherd_so_nothing_shall_i"}
+    responsorial = {"title": "Psalm 23 (A Responsorial Setting)", "number of hymnals": "7",
+                    "author": "Haugen, Marty, 1950-",
+                    "text link": "https://hymnary.org/text/shepherd_me_o_god"}
+    filler = {f"Filler text {i}": {"title": f"Filler {i}", "text link": f"https://hymnary.org/text/f{i}"}
+              for i in range(hf.RESULT_CAP - 2)}
+    response = {"God is my shepherd, so nothing shall I want": haugen,
+                "Shepherd me, O God": responsorial, **filler}
+    assert hf.is_truncated(response)
+    assert hf.find_facts("Shepherd Me, O God", "Psalm 23", FakeFetch({"Psalm 23": response}), {}) == \
+        {"text_year": 1985, "hymnal_count": 18}
+
+
+def test_find_facts_uses_first_line_matches_when_no_title_matches():
+    fetch = FakeFetch({"Psalm 23": {"The Lord's my shepherd": {**SHEPHERD_ROUS, "title": "Rous"},
+                                    "The Lord's my shepherd, I'll not want": {**SHEPHERD_MODERN, "title": "Townend"}}})
+    assert hf.find_facts("The Lord's my shepherd", "Psalm 23", fetch, {}) == \
         {"text_year": None, "hymnal_count": 769}
 
 

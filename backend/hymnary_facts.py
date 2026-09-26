@@ -137,6 +137,12 @@ def find_facts(title: str, refs: Optional[str], fetch: Fetch,
     facts of one of them, or None when nothing matches. A text matching both
     ways counts once.
 
+    An exact title match wins: when any text's title matches, texts that only
+    begin with the wanted words are set aside. Under "Psalm 23", "Shepherd Me,
+    O God" is the title of Haugen's text in 18 hymnals, while a responsorial
+    setting in 7 merely starts "Shepherd me, O God". First lines are used only
+    when no title matches, as for catalogs that list hymns by first line.
+
     Hymnary often gives one title to several texts (under "Psalm 23", a modern
     "The Lord's My Shepherd" in 14 hymnals is listed before the Rous metrical
     psalm in 769). We take the text printed in the most hymnals, since that is
@@ -160,7 +166,8 @@ def find_facts(title: str, refs: Optional[str], fetch: Fetch,
     want = normalize_title(title)
     if not want:
         return None
-    matches: Dict[str, Dict[str, Any]] = {}
+    title_matches: Dict[str, Dict[str, Any]] = {}
+    line_matches: Dict[str, Dict[str, Any]] = {}
     truncated = False
     for ref in split_refs(refs):
         if ref not in cache:
@@ -170,9 +177,13 @@ def find_facts(title: str, refs: Optional[str], fetch: Fetch,
                 return None
         truncated = truncated or is_truncated(cache[ref])
         for first_line, record in _entries(cache[ref]):
-            if isinstance(record, dict) and want in (normalize_title(record.get("title")),
-                                                     normalize_title(first_line)):
-                matches.setdefault(_text_id(record), record)
+            if not isinstance(record, dict):
+                continue
+            if normalize_title(record.get("title")) == want:
+                title_matches.setdefault(_text_id(record), record)
+            elif normalize_title(first_line) == want:
+                line_matches.setdefault(_text_id(record), record)
+    matches = title_matches or line_matches
     if not matches or (truncated and len(matches) > 1):
         return None
     best = None
