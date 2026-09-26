@@ -1,3 +1,4 @@
+import json
 import re
 from pathlib import Path
 
@@ -64,3 +65,9 @@ def test_backend_env_example_lists_the_ops_settings():
     # Supavisor Pool Size is 15 (Nano): 2 x (3 + 3) + 2 = 14 <= 15 (owner, 2026-09-25).
     assert re.search(r"^DB_POOL_SIZE=3$", text, re.MULTILINE)
     assert re.search(r"^DB_MAX_OVERFLOW=3$", text, re.MULTILINE)
+
+
+def test_shadcn_is_a_dev_dependency_only():
+    package = json.loads((ROOT / "frontend" / "package.json").read_text())
+    assert "shadcn" in package["devDependencies"]
+    assert "shadcn" not in package["dependencies"]
