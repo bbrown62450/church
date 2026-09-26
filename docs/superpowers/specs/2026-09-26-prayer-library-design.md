@@ -64,7 +64,7 @@ precedent (F §3.5). No DDL or Alembic revision is needed.
   There is no backfill.
 - Every write goes through the locked settings merge (F §1.7, slice 6a `lock_and_read_actor` and
   `merge_settings`). A write never replaces the whole `settings` object.
-- Frozen Streamlit ignores the new key.
+- Frozen Streamlit ignores the new key. If F §6.1 item 6 applies and Streamlit keeps running from `main` through slice 4's `generate_liturgy` wrapper, the wrapper switches the library off (`use_library=False`), so no voice profile or example reaches Streamlit (slice 4, 'Freeze contingency').
 
 ## API (slice 6a)
 
