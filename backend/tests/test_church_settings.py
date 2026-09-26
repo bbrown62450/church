@@ -114,6 +114,7 @@ def test_rubric_edits_stay_in_their_church(tmp_db, make_user):
     a = create_church(name="A", timezone="UTC", owner_user_id=make_user(email="a@x.org"))
     b = create_church(name="B", timezone="UTC", owner_user_id=make_user(email="b@x.org"))
     update_church_rubric(a, {"prayers": {"benediction": ["Only in A."]}})
+    assert get_church_rubric_overrides(a) == {"prayers": {"benediction": ["Only in A."]}}
     assert get_church_rubric(b) == default_rubric()
     assert get_church_rubric_overrides(b) == {}
 

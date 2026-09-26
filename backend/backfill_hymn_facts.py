@@ -2,8 +2,10 @@
 """Fill in each hymn's year and familiarity from Hymnary.org's public API.
 
 Fills blanks only (never overwrites), so it is safe to re-run and manual
-corrections survive. Run AFTER migrate_add_hymn_facts.py. Requests are spaced
-DELAY_SECONDS apart to be polite to Hymnary.org.
+corrections survive. Run AFTER migrate_add_hymn_facts.py, and again after
+importing a hymnal or adding hymns (new hymns start with both facts unknown).
+Requests are spaced DELAY_SECONDS apart to be polite to Hymnary.org. It first
+prints the database it reads and fills, password hidden.
 
     python backfill_hymn_facts.py --dry-run
     python backfill_hymn_facts.py
@@ -82,7 +84,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Fill hymn year and familiarity from Hymnary.org.")
     parser.add_argument("--dry-run", action="store_true", help="report matches without writing")
     args = parser.parse_args()
-    get_engine()   # bind the session to DATABASE_URL (not init_db: no create_all on Supabase)
+    engine = get_engine()   # bind the session to DATABASE_URL (not init_db: no create_all on Supabase)
+    # Name the target first, since load_dotenv() quietly uses a backend/.env
+    # when DATABASE_URL is not exported.
+    print("Database:", engine.url.render_as_string(hide_password=True))
     truncated: List[str] = []
     failed: List[str] = []
     unparseable: List[str] = []

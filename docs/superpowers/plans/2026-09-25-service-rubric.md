@@ -2103,6 +2103,6 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ## After the tasks (for Beau, not the implementer)
 
-1. Run `migrate_add_hymn_facts.py` against Supabase, then open the PR.
-2. After merging, run `backfill_hymn_facts.py --dry-run` to see coverage, then run it for real.
+1. Before merging, run `migrate_add_hymn_facts.py` against Supabase (check that the `Database:` line it prints shows the Supabase host), then open the PR.
+2. Run `backfill_hymn_facts.py --dry-run` to see coverage, then run it for real, before or after the merge. If it ran before, run it again after the merge, since a church created in between is seeded without the facts. Also re-run it after importing a hymnal or adding hymns. It fills blanks only, so re-runs are safe. The README section "Service rubric: hymn year and familiarity" has the steps.
 3. The rubric editor screen comes in migration slice 6; the "newer hymn" year label comes in slice 3.

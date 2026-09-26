@@ -402,20 +402,22 @@ def suggest_hymns_for_service(
 ) -> Dict[str, List[Dict[str, Any]]]:
     """
     Use AI to suggest hymns for opening, response (after sermon), and closing.
-    - Opening: gathering/opening hymns
-    - Response: hymns that match scripture themes (especially NT reading)
-    - Closing: joyful, upbeat hymns
+    What makes a good hymn for each slot comes from the rubric's slot checklists.
+    Response candidates are the hymns citing the scripture readings (the whole
+    hymnal when none do); opening and closing candidates are pre-filtered by
+    theme keywords.
 
     If *all_hymns* is provided, uses that cached list instead of calling db.list_hymns()
     (avoids redundant Notion API calls).
 
     Returns {"opening": [...], "response": [...], "closing": [...]} with hymn info dicts.
 
-    *rubric* (a merged service rubric; None means the defaults) supplies the slot checklists and the older/familiar preferences.
+    *rubric* supplies the slot checklists and the older/familiar preferences. It
+    is merged over the defaults, so None, a church's sparse overrides or a full
+    rubric all work.
     """
     scripture_full_texts = scripture_full_texts or {}
-    if rubric is None:
-        rubric = service_rubric.default_rubric()
+    rubric = service_rubric.merge_rubric(rubric)
     client = None
     if OpenAI:
         key = (api_key or os.getenv("OPENAI_API_KEY") or "").strip()
@@ -550,13 +552,13 @@ PREFERENCES: {preference} Each candidate shows when its words were written and h
 
 CANDIDATE HYMNS:
 
-OPENING CANDIDATES (prefer gathering/opening hymns):
+OPENING CANDIDATES:
 {opening_list}
 
-RESPONSE CANDIDATES (prefer scripture-linked hymns):
+RESPONSE CANDIDATES:
 {response_list}
 
-CLOSING CANDIDATES (prefer joyful/sending hymns):
+CLOSING CANDIDATES:
 {closing_list}
 
 Respond with a JSON object only, no other text:
@@ -775,16 +777,16 @@ def generate_liturgy(
     prompt_overrides (per church) replaces the default AI instructions for the
     "system" voice and/or any section; missing keys fall back to the defaults.
     Returns dict mapping section key -> plain text.
-    rubric (a merged service rubric; None means the defaults) adds each section's
-    quality checklist to its prompt. sermon_text, as (reference, passage text), is
+    rubric adds each section's quality checklist to its prompt. It is merged over
+    the defaults, so None, a church's sparse overrides or a full rubric all
+    work. sermon_text, as (reference, passage text), is
     added to every prompt for themes; it is skipped when missing or when the
     passage failed to load. Both are appended in code, so churches with edited
     prompts get them too.
     """
     overrides = user_overrides or {}
     prompts = liturgy_prompts.merge_prompts(prompt_overrides)
-    if rubric is None:
-        rubric = service_rubric.default_rubric()
+    rubric = service_rubric.merge_rubric(rubric)
     sermon_block = _sermon_text_block(sermon_text)
     client = None
     if OpenAI:

@@ -12,6 +12,7 @@ separate so a future reviewer can grade a draft item by item.
 """
 import copy
 import datetime as _dt
+import unicodedata
 from typing import Any, Callable, Dict, List
 
 from liturgy_prompts import SECTION_ORDER
@@ -126,7 +127,11 @@ def _clean_checklist(value: Any) -> List[str]:
     for item in value:
         if not isinstance(item, str) or not item.strip():
             raise ValueError("Each checklist point must be non-empty text.")
-        item = item.strip()
+        # One point prints as one "- point" line, so line breaks and other
+        # whitespace runs become single spaces.
+        item = " ".join(item.split())
+        if any(unicodedata.category(ch) == "Cc" for ch in item):
+            raise ValueError("Checklist points cannot contain control characters.")
         if len(item) > MAX_ITEM_CHARS:
             raise ValueError(f"Each checklist point must be at most {MAX_ITEM_CHARS} characters.")
         items.append(item)
@@ -161,7 +166,8 @@ def _is_valid(clean: Callable[[Any], Any], value: Any) -> bool:
 
 
 def validate_patch(patch: Any) -> Dict[str, Any]:
-    """Check a sparse rubric patch and return it cleaned (points trimmed).
+    """Check a sparse rubric patch and return it cleaned (each point trimmed,
+    with whitespace runs, line breaks included, collapsed to single spaces).
 
     None for a checklist or setting means "reset to default" and passes
     through. Raises ValueError with a readable message on an unknown key or a

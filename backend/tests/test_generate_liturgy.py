@@ -56,6 +56,14 @@ def test_a_church_rubric_replaces_the_checklist(fake):
     assert "speaks a blessing to the people" not in text
 
 
+@pytest.mark.parametrize("rubric", [{}, {"hymns": {"closing": ["Joyful."]}}])
+def test_a_partial_rubric_falls_back_to_the_defaults(fake, rubric):
+    # A church's sparse overrides ({} when nothing is customized) are filled in
+    # from the defaults rather than raising KeyError.
+    generate(["benediction"], rubric=rubric)
+    assert "A good Benediction:\n- speaks a blessing to the people" in user_message(fake.requests[0])
+
+
 def test_edited_prompts_still_get_the_checklist(fake):
     generate(["benediction"], prompt_overrides={"benediction": "My own benediction instruction."})
     text = user_message(fake.requests[0])

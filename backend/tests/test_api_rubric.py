@@ -72,10 +72,23 @@ def test_invalid_values_return_a_readable_422(client, church):
 def test_non_object_body_is_rejected(client, church):
     r = client.patch("/rubric", json=["x"], headers=_headers("owner@x.org", church))
     assert r.status_code == 422
+    assert r.json()["error"]["code"] == "invalid_request"
+
+
+def test_admin_can_change_the_rubric(client, church, make_user):
+    add_membership(make_user(email="admin@x.org"), church, "admin")
+    r = client.patch("/rubric", json={"prefer_familiar": False}, headers=_headers("admin@x.org", church))
+    assert r.status_code == 200
+    assert r.json()["rubric"]["prefer_familiar"] is False
+    assert r.json()["customized"] == ["prefer_familiar"]
 
 
 def test_edits_stay_in_their_church(client, church, make_church, make_user):
     other = make_church(name="Other", owner_user_id=make_user(email="other@x.org"))
-    client.patch("/rubric", json={"prefer_familiar": False}, headers=_headers("owner@x.org", church))
+    h = _headers("owner@x.org", church)
+    assert client.patch("/rubric", json={"prefer_familiar": False}, headers=h).status_code == 200
+    mine = client.get("/rubric", headers=h).json()
+    assert mine["rubric"]["prefer_familiar"] is False
+    assert mine["customized"] == ["prefer_familiar"]
     r = client.get("/rubric", headers=_headers("other@x.org", other))
     assert r.json() == {"rubric": default_rubric(), "customized": []}

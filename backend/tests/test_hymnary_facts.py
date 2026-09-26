@@ -301,13 +301,46 @@ def test_run_backfill_fills_blanks_without_overwriting(tmp_db, make_church):
     assert hf.run_backfill(fetch)["checked"] == 2   # only the two unknowns remain blank
 
 
-def test_run_backfill_dry_run_writes_nothing(tmp_db):
+@pytest.fixture
+def write_batches(monkeypatch):
+    """Records the size of each batch run_backfill writes (the writes still happen)."""
+    sizes = []
+    real_write = hf._write
+
+    def spy(updates):
+        sizes.append(len(updates))
+        real_write(updates)
+
+    monkeypatch.setattr(hf, "_write", spy)
+    return sizes
+
+
+def _add_matching_catalog_rows(n):
     with session_scope() as s:
-        s.add(HymnCatalog(title=HOLY["title"], scripture_refs="Isaiah 6:3"))
+        for _ in range(n):
+            s.add(HymnCatalog(title=HOLY["title"], scripture_refs="Isaiah 6:3"))
+
+
+# More rows than one batch, so the write inside the loop runs as well as the final one.
+@pytest.mark.parametrize("rows", [1, hf.WRITE_BATCH + 10])
+def test_run_backfill_dry_run_writes_nothing(tmp_db, write_batches, rows):
+    _add_matching_catalog_rows(rows)
     stats = hf.run_backfill(FakeFetch({"Isaiah 6:3": {"Holy": HOLY}}), dry_run=True)
-    assert stats["updated"] == 1
+    assert stats["updated"] == rows
+    assert write_batches == []
     with session_scope() as s:
-        assert s.execute(select(HymnCatalog)).scalar_one().text_year is None
+        assert s.execute(select(HymnCatalog.text_year)).scalars().all() == [None] * rows
+
+
+def test_run_backfill_writes_each_row_once_in_batches(tmp_db, write_batches):
+    rows = hf.WRITE_BATCH + 10
+    _add_matching_catalog_rows(rows)
+    stats = hf.run_backfill(FakeFetch({"Isaiah 6:3": {"Holy": HOLY}}))
+    assert stats == {"checked": rows, "matched": rows, "updated": rows, "unknown": 0}
+    assert write_batches == [hf.WRITE_BATCH, 10]
+    with session_scope() as s:
+        filled = s.execute(select(HymnCatalog.text_year, HymnCatalog.hymnal_count)).all()
+    assert filled == [(1826, 1322)] * rows
 
 
 # --- The CLI (backfill_hymn_facts.py), with the network replaced by httpx.MockTransport.
@@ -492,6 +525,7 @@ def test_cli_binds_the_database_and_reports_coverage(tmp_db, unbound_engine, mon
     backfill_hymn_facts.main()
 
     out = capsys.readouterr().out
+    assert out.splitlines()[0] == "Database: " + engine.url.render_as_string(hide_password=True)
     assert "[DRY RUN] checked 2, matched 1, updated 1, unknown 1" in out
     assert "1 reference" in out and "Psalm 23" in out.splitlines()[-1]
     assert sorted(seen) == ["Isaiah 6:3", "Psalm 23"]

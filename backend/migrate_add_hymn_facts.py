@@ -6,7 +6,8 @@ Fresh databases get the columns from Base.metadata.create_all. Run this against
 the deployed Postgres BEFORE merging code that maps these columns: the
 Streamlit app and the API both select every mapped column and would fail
 without them. Idempotent: it adds only the missing columns, so it is safe to
-re-run and also works on SQLite (which lacks ADD COLUMN IF NOT EXISTS).
+re-run and also works on SQLite (which lacks ADD COLUMN IF NOT EXISTS). It
+first prints the database it is about to change, password hidden.
 
     python migrate_add_hymn_facts.py
 """
@@ -37,6 +38,14 @@ def run(engine=None) -> list:
     return added
 
 
-if __name__ == "__main__":
-    added = run()
+def main() -> None:
+    engine = get_engine()
+    # Name the target first: a wrong DATABASE_URL (or a backend/.env picked up
+    # when none is exported) prints the same "already present" as a correct run.
+    print("Database:", engine.url.render_as_string(hide_password=True))
+    added = run(engine)
     print("Added: " + ", ".join(added) if added else "OK — columns already present.")
+
+
+if __name__ == "__main__":
+    main()

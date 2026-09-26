@@ -55,6 +55,31 @@ def prompt_of(fake):
     return fake.requests[0]["messages"][0]["content"]
 
 
+_AFTER_SLOT = {"OPENING": "RESPONSE CANDIDATES", "RESPONSE": "CLOSING CANDIDATES",
+               "CLOSING": "Respond with a JSON object"}
+
+
+def candidates(prompt, slot):
+    """The titles listed under one slot's CANDIDATES heading, in prompt order."""
+    block = prompt.split(f"{slot} CANDIDATES")[1].split(_AFTER_SLOT[slot])[0]
+    return [line[2:].split(" (#")[0] for line in block.splitlines() if line.startswith("- ")]
+
+
+def prompt_for(fake, hymns, rubric):
+    """The prompt sent for `hymns` under `rubric` (the latest request)."""
+    worship_service.suggest_hymns_for_service(
+        db=None, occasion="Trinity Sunday", scriptures=["Isaiah 6:1-8"],
+        api_key="test-key", all_hymns=hymns, rubric=rubric,
+    )
+    return fake.requests[-1]["messages"][0]["content"]
+
+
+def rubric_with(**settings):
+    rubric = default_rubric()
+    rubric.update(settings)
+    return rubric
+
+
 def test_prompt_uses_the_default_slot_checklists_and_preferences(fake):
     suggest()
     prompt = prompt_of(fake)
@@ -85,6 +110,75 @@ def test_a_church_rubric_changes_the_prompt(fake):
     assert "is joyful and upbeat" not in prompt
     assert "Prefer hymns written before 1900; choose a newer hymn" in prompt
     assert "hymns found in many hymnals" not in prompt
+
+
+def test_candidate_headings_add_no_fixed_role_hints(fake):
+    # The church's checklists alone say what each slot needs: a fixed hint such
+    # as "prefer joyful/sending hymns" would contradict a quiet, reflective closing.
+    rubric = default_rubric()
+    rubric["hymns"]["closing"] = ["is quiet and reflective"]
+    prompt = prompt_for(fake, HYMNS, rubric)
+    headings = [line for line in prompt.splitlines() if "CANDIDATES" in line]
+    assert headings == ["OPENING CANDIDATES:", "RESPONSE CANDIDATES:", "CLOSING CANDIDATES:"]
+    assert "joyful" not in prompt
+
+
+@pytest.mark.parametrize("rubric", [{}, {"prefer_before_year": 1900}])
+def test_a_partial_rubric_falls_back_to_the_defaults(fake, rubric):
+    # A church's sparse overrides ({} when nothing is customized) are filled in
+    # from the defaults rather than raising KeyError.
+    suggest(rubric=rubric)
+    prompt = prompt_of(fake)
+    assert "A good Closing (Sending) Hymn:\n- is joyful and upbeat" in prompt
+    year = rubric.get("prefer_before_year", 1970)
+    assert f"Prefer hymns written before {year} and hymns found in many hymnals" in prompt
+
+
+def test_a_church_year_decides_which_hymns_rank_as_older(fake):
+    # Same familiarity, so only the year can reorder them.
+    hymns = [hymn("Gathering of 1920", 1, "gathering", 1920, 100),
+             hymn("Gathering of 1880", 2, "gathering", 1880, 100)]
+    both_older = prompt_for(fake, hymns, rubric_with(prefer_before_year=1970))
+    assert candidates(both_older, "OPENING") == ["Gathering of 1920", "Gathering of 1880"]
+    only_1880_older = prompt_for(fake, hymns, rubric_with(prefer_before_year=1900))
+    assert candidates(only_1880_older, "OPENING") == ["Gathering of 1880", "Gathering of 1920"]
+
+
+def test_turning_familiarity_off_keeps_the_given_order_within_an_era(fake):
+    hymns = [hymn("Rare Gathering", 1, "gathering", 1850, 5),
+             hymn("Common Gathering", 2, "gathering", 1850, 3000)]
+    familiar = prompt_for(fake, hymns, rubric_with(prefer_familiar=True))
+    assert candidates(familiar, "OPENING") == ["Common Gathering", "Rare Gathering"]
+    not_familiar = prompt_for(fake, hymns, rubric_with(prefer_familiar=False))
+    assert candidates(not_familiar, "OPENING") == ["Rare Gathering", "Common Gathering"]
+
+
+def test_response_candidates_are_ranked_by_the_church_rubric(fake):
+    # Every HYMNS entry cites Isaiah 6:3, so all four are scripture matches (a
+    # reference keeps at most 30 matches, which this list stays well under).
+    # Before 1990, "Go Forth Rejoicing" (1985) counts as older and leads
+    # "Newer Gathering Song" (1995) despite being in fewer hymnals.
+    prompt = prompt_for(fake, HYMNS, rubric_with(prefer_before_year=1990))
+    assert candidates(prompt, "RESPONSE") == [
+        "Holy, Holy, Holy", "Rejoice, the Lord Is King", "Go Forth Rejoicing", "Newer Gathering Song",
+    ]
+
+
+def test_a_long_list_keeps_places_for_hymns_newer_than_the_church_year(fake):
+    # 70 closing hymns before 1900, then five from the 1920s, all equally familiar.
+    hymns = [hymn(f"Old Joy {i}", 100 + i, "joy", 1800 + i, 10) for i in range(70)]
+    hymns += [hymn(f"Joy of 192{i}", 200 + i, "joy", 1920 + i, 10) for i in range(5)]
+
+    # Under the default 1970 the 1920s hymns count as older, so they rank last and are cut.
+    closing = candidates(prompt_for(fake, hymns, default_rubric()), "CLOSING")
+    assert len(closing) == 60
+    assert not any(title.startswith("Joy of 192") for title in closing)
+
+    # Before 1900 they are newer, so the shortlist keeps places for them.
+    closing = candidates(prompt_for(fake, hymns, rubric_with(prefer_before_year=1900)), "CLOSING")
+    assert len(closing) == 60
+    assert closing[0] == "Old Joy 0"
+    assert closing[-5:] == [f"Joy of 192{i}" for i in range(5)]
 
 
 def test_results_carry_year_and_newer_flag(fake):

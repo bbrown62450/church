@@ -162,7 +162,10 @@ Repo functions in `repos/churches.py`, alongside `get_church_prompts`:
 Reset granularity is one checklist or one setting.
 
 Validation limits: at most 12 items per checklist; each item is a non-empty
-string of at most 300 characters after trimming. `prefer_before_year` must be
+string of at most 300 characters after trimming. Whitespace runs inside an item,
+line breaks included, collapse to single spaces, so each item stays one
+`- item` line in the prompt; an item with any other control character is
+invalid. `prefer_before_year` must be
 between 1500 and the current year. `prefer_familiar` must be a boolean. An
 empty list is invalid; to reset, use `null`.
 
@@ -238,11 +241,13 @@ A new one-off script, `backend/backfill_hymn_facts.py`:
    survive re-runs. The script is idempotent and supports `--dry-run`.
 7. Leaves a row unknown for this run when one of its requests fails, rather
    than guessing from partial results. A later run retries it.
-8. Prints coverage: rows matched, rows left unknown, failed requests,
-   references that hit the 100-text cap, and references Hymnary could not
-   parse (these are skipped).
+8. Prints the database it uses first (password hidden), then coverage: rows
+   matched, rows left unknown, failed requests, references that hit the
+   100-text cap, and references Hymnary could not parse (these are skipped).
 
-Rows with no scripture references or no match stay `NULL` (unknown).
+Rows with no scripture references or no match stay `NULL` (unknown). Hymns
+added later, by a hymnal import or Settings' Add hymn, also start unknown until
+the script runs again.
 
 ## How the hymn picker uses the rubric
 
