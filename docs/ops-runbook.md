@@ -310,6 +310,8 @@ as `NEXT_PUBLIC_API_URL`. Without it the job fails with
 time, so however many requests arrive it holds at most one pooled
 connection. 503 `db_unavailable` means the API cannot reach the database, and
 the Railway logs then show `Readiness check failed: <exception class>`.
+An error that is not a database error instead gives a 500 `internal_error`
+and the log line `Unhandled error on GET /health/ready`.
 `GET /health` stays the dependency-free liveness probe and Railway's deploy
 health check; slice 1 moves the deploy check to `/health/ready`.
 
@@ -319,6 +321,8 @@ health check; slice 1 moves the deploy check to `/health/ready`.
 2. If `/health` is 200 and `/health/ready` is 503: Supabase Dashboard → is the
    project paused? Restore it. Otherwise read the Railway logs for
    `Readiness check failed:`.
+   If `/health/ready` is 500 instead, look for
+   `Unhandled error on GET /health/ready`.
 3. If the log shows `::error::Set the API_BASE_URL repository variable …`,
    set the variable as above.
 4. GitHub disables scheduled workflows in a public repository after 60 days

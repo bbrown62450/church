@@ -5,8 +5,12 @@ one `SELECT 1` through the process engine, so it exercises the real pool. The
 route is public, so the answer is memoized and single-flight: however many
 requests arrive, at most one probe (one pooled connection) runs at a time, and
 a result is reused for READY_OK_TTL seconds after a success or READY_FAIL_TTL
-after a failure. A caller that waits on the lock waits for at most one probe,
-which connect_timeout (10 s, db/engine.py) and statement_timeout (5 s) bound.
+after a failure. A caller that waits on the lock waits for at most one probe.
+connect_timeout (10 s, db/engine.py) and statement_timeout (5 s) bound most
+of that probe, but not all of it: checkout can wait pool_timeout (30 s) for a
+free pooled connection, and pool_pre_ping has no timeout of its own. A slow
+database can therefore hold threadpool workers; slice 2's rate limiter caps
+that exposure.
 
 The SQL and the try/except live here, not in the route (the recorded
 exception to F §2.2 in the ops spec's API section). No FastAPI import.
