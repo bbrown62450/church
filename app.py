@@ -37,6 +37,7 @@ from email_contacts import list_contacts
 from repos.hymns import list_hymns
 from repos.churches import (
     list_user_churches, create_church, get_church_prompts, get_church_translation,
+    get_church_rubric,
 )
 from repos.invites import accept_invite
 import google_oauth
@@ -52,6 +53,7 @@ from ui_helpers import (
     coerce_selectbox_value,
     hymn_options_excluding_recent,
     picked_hymn_keys,
+    sermon_text_for,
 )
 import streamlit_views.settings as settings_page
 
@@ -775,6 +777,7 @@ def render_service_builder(user, active):
                 limit_per_slot=5,
                 progress_callback=_on_progress,
                 all_hymns=all_hymns,
+                rubric=get_church_rubric(church_id),
             )
             logger.info("AI suggestions returned: %s", {
                 k: [s.get("title") for s in v] for k, v in suggestions.items()
@@ -942,6 +945,15 @@ def render_service_builder(user, active):
                     sections=sections,
                     user_overrides=user_overrides or None,
                     prompt_overrides=get_church_prompts(church_id),
+                    rubric=get_church_rubric(church_id),
+                    # A fetched passage is kept in the page's session cache.
+                    sermon_text=sermon_text_for(
+                        st.session_state.get("selected_nt_ref"),
+                        st.session_state.setdefault("scripture_full_texts", {}),
+                        lambda ref: get_passage_text(
+                            ref, translation=st.session_state.get("bible_translation", DEFAULT_TRANSLATION)
+                        ),
+                    ),
                 )
             st.session_state.liturgy = liturgy
             st.success("Liturgy generated. Review below and download Word.")

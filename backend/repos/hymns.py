@@ -28,6 +28,8 @@ def _hymn_to_dict(h: Hymn) -> Dict[str, Any]:
         "Theme": h.theme,
         "Hymnary.org Link": h.hymnary_link,
         "Audio": h.audio_url,
+        "Text Year": h.text_year,
+        "Hymnal Count": h.hymnal_count,
     }
 
 
@@ -186,6 +188,8 @@ def seed_church_from_catalog(church_id, session: Session) -> int:
                 theme=c.theme,
                 hymnary_link=c.hymnary_link,
                 audio_url=c.audio_url,
+                text_year=c.text_year,
+                hymnal_count=c.hymnal_count,
             )
         )
         count += 1

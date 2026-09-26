@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.errors import install_error_handlers
-from api.routes import health, me
+from api.routes import health, me, rubric
 from api.settings import get_settings
 from db import init_db
 
@@ -43,6 +43,7 @@ def create_app() -> FastAPI:
     install_error_handlers(app)
     app.include_router(health.router)
     app.include_router(me.router)
+    app.include_router(rubric.router)
     return app
 
 

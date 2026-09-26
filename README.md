@@ -139,6 +139,56 @@ hymn usage, and copies contacts into the **founder church only**. It is
 any liturgy rows flagged as truncated. Enrichment is validated at the end; an
 empty scripture lookup aborts the run non-zero.
 
+### Service rubric: hymn year and familiarity
+
+Hymns carry two facts from Hymnary.org: the year the words were written and how
+many hymnals include them (familiarity). They drive the rubric's "prefer older"
+and "prefer familiar" hymn suggestions.
+
+Run each command below from the repo root, with `DATABASE_URL` set to the
+deployed (Supabase) database. When `DATABASE_URL` is not exported, the scripts
+load the nearest `.env` found walking up from `backend/` (`backend/.env`, else
+the repo-root `.env`). Each script first prints `Database: ...` (password
+hidden) before changing anything: check that it shows the Supabase pooler host
+before trusting the rest of its output.
+
+1. **Before merging** code that maps these columns, add them to the deployed
+   database. Both apps select every mapped column and would fail without them:
+
+   ```bash
+   (cd backend && ../.venv/bin/python migrate_add_hymn_facts.py)
+   ```
+
+2. Preview the fill from Hymnary.org's public API. It writes nothing and takes
+   about a second per scripture reference:
+
+   ```bash
+   (cd backend && ../.venv/bin/python backfill_hymn_facts.py --dry-run)
+   ```
+
+   Before the real run, read the summary lines at the end. References that
+   "hit Hymnary's 100-text cap" may leave hymns cited only by them unknown.
+   References "Hymnary could not parse" were skipped; fix the stored reference
+   and dry-run again.
+
+3. Fill them in. This fills blanks only, so it is safe to re-run (for example,
+   to retry references it reports as failed):
+
+   ```bash
+   (cd backend && ../.venv/bin/python backfill_hymn_facts.py)
+   ```
+
+Steps 2 and 3 can run before or after the merge. Run step 3 again:
+
+- **after the merge**, if steps 2 and 3 ran before it: a church created in
+  between is seeded by the old code, which does not copy these facts;
+- **after importing a hymnal** (`import_hymnal.py`) **or adding hymns** in
+  Settings: new hymns start with both facts unknown, and rank as "unknown
+  year", until the backfill fills them.
+
+The backfill covers the shared catalog and every church's hymns, and never
+overwrites a value, so these re-runs are safe.
+
 ## Operations
 
 ### Keep-alive (required)
