@@ -2,18 +2,20 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship PR ops-2 of the ops slice: first sign-ins no longer race, and authenticated requests stop writing `users` on every call. The pieces are `db/upsert.py`, `repos.users.ensure_user`, a thin `auth.upsert_from_claims` wrapper, the removal of `repos.users.upsert_user`, and a success-only identity cache in `api/deps.py`. The PR also sizes the Postgres pool for the Supabase pooler (3 + 3, `connect_timeout=10`). Then it passes the gate: the tester uses Streamlit for a day and nothing regresses.
+**Goal:** Ship PR ops-2 of the ops slice: first sign-ins no longer race, and authenticated requests stop writing `users` on every call. The pieces are `db/upsert.py`, `repos.users.ensure_user`, a thin `auth.upsert_from_claims` wrapper, the removal of `repos.users.upsert_user`, and a success-only identity cache in `api/deps.py`. The PR also sizes the Postgres pool for the Supabase pooler (3 + 3, `connect_timeout=10`). Then it passes the gate: the tester uses Streamlit (`liturgy-next`, deployed from `main`) for a day and nothing regresses.
 
-**Architecture:** One identity write path serves both apps. `repos.users.ensure_user` runs `INSERT … ON CONFLICT (email) DO NOTHING`, then a SELECT, then at most one UPDATE, all in one transaction. The UPDATE runs only for a changed truthy profile value, or when `last_login_at` is more than an hour old. `insert_ignore` picks the Postgres or SQLite `insert()` construct from the process engine. Streamlit and `migrate_to_db.py` keep calling `auth.upsert_from_claims`, now a wrapper with the same signature. The API's `get_current_user` still verifies the token on every request. In front of `ensure_user` it keeps a thread-safe LRU cache with a 300 s TTL, keyed by email, so an unchanged profile costs no database work. `db/engine.py` reads `DB_POOL_SIZE` / `DB_MAX_OVERFLOW` (defaults 3 and 3) and sets `connect_timeout=10` for Postgres. `liturgy-stg` deploys from `main` (since the owner's post-merge redeploy at the ops-1 merge, ops-1 plan Task 9a), so every change reaches the tester when this PR merges. That is why the gate exists.
+**Architecture:** One identity write path serves both apps. `repos.users.ensure_user` runs `INSERT … ON CONFLICT (email) DO NOTHING`, then a SELECT, then at most one UPDATE, all in one transaction. The UPDATE runs only for a changed truthy profile value, or when `last_login_at` is more than an hour old. `insert_ignore` picks the Postgres or SQLite `insert()` construct from the process engine. Streamlit and `migrate_to_db.py` keep calling `auth.upsert_from_claims`, now a wrapper with the same signature. The API's `get_current_user` still verifies the token on every request. In front of `ensure_user` it keeps a thread-safe LRU cache with a 300 s TTL, keyed by email, so an unchanged profile costs no database work. `db/engine.py` reads `DB_POOL_SIZE` / `DB_MAX_OVERFLOW` (defaults 3 and 3) and sets `connect_timeout=10` for Postgres. The production Streamlit app, `liturgy-next`, deploys from `main` (true as of 2026-09-26), so every change reaches the tester when this PR merges. That is why the gate exists. The service rubric's `/rubric` routes (PR #4) sit behind `require_church` / `require_admin`, so they get the identity cache too; roles and tenancy stay uncached.
 
-**Tech Stack:** Python 3.11, SQLAlchemy 2.1 (`sqlalchemy.dialects.postgresql.insert` / `sqlite.insert` with `on_conflict_do_nothing`), FastAPI 0.141 / Starlette 1.7 `TestClient`, psycopg2, pytest, SQLite (tests), Supabase Postgres 17.6 through the Supavisor session pooler (production).
+**Tech Stack:** Python 3.11 locally (Streamlit Community Cloud runs `liturgy-next` on Python 3.13), SQLAlchemy 2.1 (`sqlalchemy.dialects.postgresql.insert` / `sqlite.insert` with `on_conflict_do_nothing`), FastAPI 0.141 / Starlette 1.7 `TestClient`, psycopg2, pytest, SQLite (tests), Supabase Postgres 17.6 through the Supavisor session pooler (production).
 
-**Spec:** `docs/superpowers/specs/2026-09-25-slice-ops-cleanup-design.md` ("the ops spec"). Foundations: `docs/superpowers/specs/2026-09-25-migration-foundations-design.md` ("F", §2.4, §2.6 item 6, §2.7, §7.3). Inventory: `docs/superpowers/specs/2026-09-25-streamlit-migration-inventory.md` ("inv"). Previous PR: `docs/superpowers/plans/2026-09-25-ops-1-backups-cleanup-d5.md` ("the ops-1 plan"). This plan assumes ops-1 and its records PR are merged exactly as written.
+**Spec:** `docs/superpowers/specs/2026-09-25-slice-ops-cleanup-design.md` ("the ops spec"). Foundations: `docs/superpowers/specs/2026-09-25-migration-foundations-design.md` ("F", §2.4, §2.6 item 6, §2.7, §7.3). Inventory: `docs/superpowers/specs/2026-09-25-streamlit-migration-inventory.md` ("inv"). Previous PR: `docs/superpowers/plans/2026-09-25-ops-1-backups-cleanup-d5.md` ("the ops-1 plan").
+
+**Starting point (refreshed 2026-09-26).** `main` is at 2749e78: the service rubric (PR #4: `service_rubric.py`, `hymn_ranking.py`, `hymnary_facts.py`, `api/routes/rubric.py`, `text_year` / `hymnal_count` on `hymn_catalog` and `hymns`, and more) and ops-1 (PR #5: backups, `docs/ops-runbook.md`, `backend/.env.example` with `DB_POOL_SIZE=3` / `DB_MAX_OVERFLOW=3`, the D5 fix, `test_ops_workflows.py`) are both merged. ops-1's post-merge records PR is not: the runbook still has ops-1 `[owner…]` markers (key custody, restore drill, backup run, D5 rows, recovery result), so every marker check below looks only at ops-2's own subsection. The branch is `claude/ops-2`, cut from 2749e78; its first commit is this refreshed plan. Open PR #6 (`claude/streamlit-liturgy-next`) edits `docs/ops-runbook.md` (the "Streamlit apps" row: `liturgy-stg` → `liturgy-next`) and `.github/workflows/keep-awake.yml`; see Global Constraints.
 
 ## Global Constraints
 
 - Run every command from the repo root with `.venv/bin/python` (Python 3.11). The system `python3` is 3.9 and has no deps. If `.venv` is missing: `/Users/beaubrown/.local/bin/python3.11 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt`.
-- Backend test command: `.venv/bin/python -m pytest -q` (pytest.ini: `pythonpath = . backend`, `testpaths = backend/tests streamlit_tests`). Baseline after ops-1: `279 passed` (ops-1 plan, Task 8, Step 1's final count; this and every other total below derive from it — recompute them if ops-1's actual final count differs). This plan adds 47 tests, for `326 passed`. If the baseline differs because a later docs-only PR added tests, use your number and add the same deltas.
+- Backend test command: `.venv/bin/python -m pytest -q` (pytest.ini: `pythonpath = . backend`, `testpaths = backend/tests streamlit_tests`). Baseline on `main` at 2749e78 (after the rubric and ops-1 merges): `440 passed` (checked 2026-09-26; `test_ops_workflows.py` alone has 65 tests, `test_engine.py` 10, `test_api_me.py` 17, `test_api_rubric.py` 8, `test_users_repo.py` 5, `test_auth.py` 3). This plan adds 48 tests, for `488 passed`. Every total below derives from 440; if a later PR (PR #6 adds none) changes the baseline, use your number and add the same deltas.
 - Every commit message ends with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Commits follow TDD: test first, watch it fail, then code.
 - Nothing under `backend/` imports `streamlit`. The new modules `db/upsert.py` and `api/identity_cache.py` import neither Streamlit nor FastAPI. `db/` never imports `api/`: pool settings are read from the environment inside `db/engine.py`, the same way `DATABASE_URL` is.
 - No schema changes, no Alembic, no data migration (slice 1).
@@ -27,9 +29,11 @@
   - token verification runs on every request and is never cached;
   - `require_church` → `validate_active_church` runs on every request and is never cached.
 - `auth.upsert_from_claims(claims: dict) -> uuid.UUID` keeps its signature and its error text `OIDC claims are missing an email address.` (callers: `streamlit_auth.py:28`, `backend/migrate_to_db.py:130`).
-- **Pool budget (owner correction 3, 2026-09-25; overrides the spec's 5 and 5).** The Supabase session pooler (Supavisor, Nano compute) has Pool Size 15 and max client connections 200. The spec's trigger 2 × (5 + 5) + 2 = 22 > 15 fires. So `DEFAULT_POOL_SIZE = 3` and `DEFAULT_MAX_OVERFLOW = 3`: 2 × (3 + 3) + 2 = 14 ≤ 15. The same values are in `backend/.env.example` (ops-1), on Railway, and in the `liturgy-stg` Streamlit Secrets (ops-1 plan, Task 9, Step 1; checked again in Task 9 here). Postgres also gets `pool_pre_ping=True`, `pool_recycle=1800` and `connect_args={"connect_timeout": 10}`.
+- **Pool budget (owner correction 3, 2026-09-25; overrides the spec's 5 and 5).** The Supabase session pooler (Supavisor, Nano compute) has Pool Size 15 and max client connections 200. The spec's trigger 2 × (5 + 5) + 2 = 22 > 15 fires. So `DEFAULT_POOL_SIZE = 3` and `DEFAULT_MAX_OVERFLOW = 3`: 2 × (3 + 3) + 2 = 14 ≤ 15. The same values are in `backend/.env.example` (ops-1) and on Railway (API service variables, set 2026-09-26). In Streamlit they were set as top-level Secrets on 2026-09-26 on the old `liturgy-stg` app and carried over to `liturgy-next`; the owner confirms they are present in `liturgy-next`'s Secrets in Task 9, Step 2 — never assume it. Postgres also gets `pool_pre_ping=True`, `pool_recycle=1800` and `connect_args={"connect_timeout": 10}`.
 - Exact copy (ops spec, "Exact server messages"), raised as `ValueError` when the engine is created: `DB_POOL_SIZE must be an integer >= 1 (got '{value}').` · `DB_MAX_OVERFLOW must be an integer >= 0 (got '{value}').`
-- **Streamlit apps (owner correction 1, 2026-09-25; reverses the ops spec).** `liturgy-stg`, https://liturgy-stg.streamlit.app, is the production Streamlit app: the owner and the tester use it. During ops-2 it deploys from `main` **only because** the owner deleted and redeployed it from its old feature branch to `main` right after the ops-1 merge (ops-1 plan, Task 9a) — Streamlit Community Cloud cannot switch an app's branch in place. This PR's gate depends on that redeploy having happened; Task 9, Step 4 re-checks the branch before this PR merges too. `liturgy`, https://liturgy.streamlit.app, is unused, and its Google sign-in already fails with `StreamlitAuthError`. ops-2 does not touch it: the Freeze step deletes it and its redirect URIs.
+- **Streamlit apps (updated 2026-09-26; supersedes owner correction 1 and the ops spec).** The production Streamlit app is `liturgy-next`, https://liturgy-next.streamlit.app: repo `bbrown62450/church`, branch `main`, main file `app.py`, Python 3.13. The owner and the tester use it. `liturgy-stg` and `liturgy` were deleted on 2026-09-26: Streamlit Community Cloud allows one app per repository + branch + main file, and `liturgy-next` already held `main`/`app.py`, so the owner kept it instead of redeploying `liturgy-stg` (the ops-1 plan's Task 9a). Nothing in ops-2 depends on that redeploy any more; the gate's pre-check is simply "`liturgy-next` deploys from `main`" (true as of 2026-09-26), re-checked in Task 9, Step 4 before this PR merges. Every merge to `main` rebuilds `liturgy-next`.
+- **Owner decision: no new features in Streamlit (data-safety only).** ops-2 adds none. Its Streamlit effect is limited to the identity write path behind `auth.upsert_from_claims` (race-free, hourly `last_login_at`) and the pool settings; no file at the repo root (`app.py`, `streamlit_*.py`, `ui_helpers.py`) changes.
+- **Open PR #6** (`claude/streamlit-liturgy-next`) changes the "Streamlit apps" row of `docs/ops-runbook.md` and `keep-awake.yml` (`liturgy-stg` → `liturgy-next`). ops-2's runbook edits (Task 7) touch other lines, so no conflict is expected. If PR #6 merges before this PR, rebase `claude/ops-2` onto `origin/main` (Task 1, Step 1 and Task 8, Step 1 check this) and keep PR #6's `liturgy-next` wording; never bring back `liturgy-stg` as a live app. If this PR merges first, PR #6 rebases instead.
 - **Step 0 is done (owner correction 2).** ops-1 wrote the results into `docs/ops-runbook.md`; never ask the owner to redo them:
   - the Data API was already off (REST and GraphQL with the anon key return HTTP 503 `PGRST002`, no rows), so there was no incident;
   - every `public` table is owned by `postgres`, and `current_user` `postgres` has `rolbypassrls = true`;
@@ -38,9 +42,10 @@
   - Railway allows 5 minutes idle and up to 15 minutes while data flows.
   ops-2 changes none of this. The one open Step 0 item, the owner's `age` key pair, belongs to ops-1's backups (ops-1 plan, Task 0), not to ops-2.
 - The agent never sees or types a secret (database URLs, keys, tokens). Opening a PR, merging, reverting and messaging the tester are outward-facing: get the owner's explicit yes first.
-- These tests stay unchanged and green: `test_auth.py`, `test_api_me.py`, `test_api_app.py`, `test_api_security.py`, `test_docs.py`, `test_ci_workflow.py`, `test_no_streamlit_in_core.py`, `test_keepalive.py`, and all of `streamlit_tests/`. `test_users_repo.py` is ported (Task 3), as the spec says.
+- These tests stay unchanged and green: `test_auth.py`, `test_api_me.py`, `test_api_app.py`, `test_api_security.py`, `test_api_rubric.py`, `test_docs.py`, `test_ci_workflow.py`, `test_no_streamlit_in_core.py`, `test_keepalive.py`, and all of `streamlit_tests/`. `test_users_repo.py` is ported (Task 3), as the spec says. `test_engine.py` and `test_ops_workflows.py` only gain tests (Task 7).
 - **Not in ops-2** (other PRs and slices; do not touch):
-  - ops-3: `api/middleware.py`, `request_id`, CORS lists, `redirect_slashes`, `api/logging_config.py`, `api/startup.py`, `api/settings.py`, `api/main.py`, `api/errors.py`, `db/health.py` and `/health/ready`, `keepalive.yml`, `keepalive.py` (it builds its own engine, so the ops-2 pool settings do not reach it), `keep-awake.yml` (which then pings only https://liturgy-stg.streamlit.app/), the `app.py` FROZEN header, the README and `docs/manual-verification.md`;
+  - the service rubric (PR #4): `service_rubric.py`, `hymn_ranking.py`, `hymnary_facts.py`, `api/routes/rubric.py`, `api/schemas.py`, `repos/churches.py`, `repos/hymns.py`, the `text_year` / `hymnal_count` columns. ops-2 only adds a regression test that `/rubric`'s admin check still works with a warm identity cache (Task 6);
+  - ops-3: `api/middleware.py`, `request_id`, CORS lists, `redirect_slashes`, `api/logging_config.py`, `api/startup.py`, `api/settings.py`, `api/main.py` (it now also mounts the rubric router; unchanged here), `api/errors.py`, `db/health.py` and `/health/ready`, `keepalive.yml`, `keepalive.py` (it builds its own engine, so the ops-2 pool settings do not reach it), `keep-awake.yml` (PR #6 points it at https://liturgy-next.streamlit.app/), the `app.py` FROZEN header, the README and `docs/manual-verification.md`;
   - the Freeze step;
   - slice 1: the `@pytest.mark.postgres` re-run of the race test (it should include the Streamlit `google_sub` case of the Task 8 smoke) and the Postgres CI job;
   - slice 2: `backend/cache.py`;
@@ -49,7 +54,7 @@
 ## Spec clarifications (recorded, not deviations of intent)
 
 1. **Pool numbers (owner correction 3).** Wherever the spec says 5 and 5 (Backend changes → Engine and pool; Testing → `test_engine.py`; AC 17; Behavior change 9; "What the frozen app inherits"), this plan uses 3 and 3. A new test in `test_ops_workflows.py` ties the code defaults to the runbook's recorded Pool Size (15) and to `backend/.env.example`, so the three cannot drift apart.
-2. **Streamlit app names (owner correction 1).** The spec's gate says "the tester uses Streamlit (still deployed from `main`)". Here that means `liturgy-stg`, which the owner deleted and redeployed from its old feature branch to `main` at the ops-1 merge (ops-1 plan, Task 9a), because Streamlit Community Cloud cannot switch an app's branch in place. This gate depends on that redeploy having happened; Task 9, Step 4 re-confirms the branch is still `main` before this PR's own merge. The runbook's new subsection "What the frozen app inherits from ops-2" names it.
+2. **Streamlit app names (updated 2026-09-26).** The spec's gate says "the tester uses Streamlit (still deployed from `main`)". Here that means `liturgy-next`, which already deploys from `main` / `app.py` (`liturgy-stg` and `liturgy` were deleted on 2026-09-26). The gate's pre-check is therefore "`liturgy-next` deploys from `main`"; Task 9, Step 4 re-confirms it before this PR's merge. The runbook's new subsection "What the frozen app inherits from ops-2" names `liturgy-next`.
 3. **`FakeClock` lives in `backend/tests/conftest.py`** (spec: conftest). `test_identity_cache.py` imports it with `from tests.conftest import FakeClock`, the same import style as `tests.jwt_helpers`. `backend/` has no `__init__.py`, so pytest registers the conftest as `tests.conftest` and the import gets the same module.
 4. **The API concurrency test uses a barrier.** The spec asks for two concurrent `/me` calls on a `ThreadPoolExecutor`. Without coordination the second call may simply hit the cache the first one filled, and the test would prove nothing. So a 2-party `threading.Barrier` wraps `api.deps.ensure_user`, and both requests are guaranteed to miss the cache and run `ensure_user` together. This test guards the new API path; it is not the proof that the old path raced. Its red phase is only `AttributeError` (no `api.deps.ensure_user` yet), and after Task 4 the old path already goes through the race-free `ensure_user`. The regression proof for the race is Task 2's `test_concurrent_first_calls_create_one_row`.
 5. **Statement counting.** A `before_cursor_execute` listener (spec) records each statement with its whitespace collapsed. A users INSERT starts with `INSERT INTO users `, a users UPDATE starts with `UPDATE users `, and a users SELECT starts with `SELECT ` and contains the whole word `FROM users`. `/me`'s church listing (`FROM churches JOIN memberships`) is not counted. After the TTL, `ensure_user` also runs its no-op `INSERT … ON CONFLICT DO NOTHING`. The spec's TTL assertion (one SELECT, no UPDATE) does not count it, and neither does this plan.
@@ -57,10 +62,11 @@
 7. **`google_sub` normalization.** `ensure_user` strips `google_sub` and turns an empty one into None (spec step 2), as `upsert_from_claims` did.
 8. **Comment fixes.** `db/engine.py:43` (spec), `db/models.py:42` (spec), plus the `claims_to_profile` docstring in `api/security.py:105-115`. That docstring named `auth.upsert_from_claims` as its caller, which stops being true in Task 6.
 9. **Production precondition.** On Postgres, `ON CONFLICT (email)` needs a unique constraint or a non-partial unique index on exactly `users(email)`. There is no local Postgres and no Postgres CI job until slice 1. So the owner checks production's unique indexes on `users` before merging (Task 9, Step 1; a `UNIQUE` constraint shows up there as its backing index), and the agent runs a throwaway Postgres 17 smoke test when Docker is available (Task 8, Step 3).
-10. **Runbook.** ops-1 recorded the Pool Size, the arithmetic and the values set. ops-2 replaces the two "until ops-2" bullets in "Platform limits", which become stale. It also adds "What the frozen app inherits from ops-2" with the gate record, which the Freeze step relies on ("verifies each before the branch is cut").
+10. **Runbook.** ops-1 recorded the Pool Size, the arithmetic and the values set. ops-2 replaces the "Hand-off to ops-2" and "Until ops-2 merges" bullets in "Platform limits", which become stale. It also adds "What the frozen app inherits from ops-2" with the gate record, which the Freeze step relies on ("verifies each before the branch is cut"). The gate table has a row for the pool values in `liturgy-next`'s Secrets, and the Task 11 records PR moves the "Values set" line from `liturgy-stg` to `liturgy-next` once the owner has confirmed them. ops-2 leaves the "Streamlit apps" table to PR #6.
 11. **Blank or padded settings.** `_int_env` strips the value; blank or unset means the default. The message shows the stripped value.
 12. **`google_sub` is written by the UPDATE, not the INSERT (changes spec step 3's INSERT; same intent: a race-free first sign-in).** The spec's INSERT carries `google_sub`. On Postgres its `ON CONFLICT (email)` arbiter does not cover the separate unique index `users_google_sub_key`. So two concurrent first Streamlit sign-ins for the same new Google account (two tabs) can both pass the arbiter pre-check. Postgres checks every non-arbiter unique index normally, so the second then waits for the first to commit and raises `IntegrityError` on `users_google_sub_key`. The SQLite race test cannot show this, because SQLite serializes writers. Leaving `google_sub` out of the INSERT lets step 5 collect it and step 6's UPDATE write it. A concurrent UPDATE of the same row waits on the row lock and does not conflict with itself. The cost is one extra UPDATE on a user's first Streamlit sign-in. The spec's note still holds: a `google_sub` already used by another email raises `IntegrityError`, now from the UPDATE, and the whole transaction rolls back. The API path never passes `google_sub`, so it is unaffected. `test_ensure_user_stores_google_sub_only_when_passed` pins this: the first call runs one INSERT and one UPDATE.
 13. **A revert keeps the gate honest.** The gate table is added in the ops-2 PR itself (Task 7), so reverting the merge also removes it. The revert PR therefore adds, in a separate commit, an "ops-2 regression" paragraph under the runbook's Incident record that says the gate FAILED and ops-3 must not start (Task 10, Step 4). The re-land PR starts by reverting the revert, which brings back the code, the pool bullets and the gate table. Task 11 checks that the gate heading exists, so "no `[owner` markers" cannot pass just because the table is gone.
+14. **`/rubric` goes through the cache (service rubric merge).** `api/routes/rubric.py` depends on `require_church` (GET) and `require_admin` (PATCH), both built on `get_current_user`, so the identity cache now sits in front of them as well. The cache holds only the user id, name and picture; `validate_active_church` still returns the role on every request. `test_demoting_an_admin_takes_effect_with_a_warm_cache` (Task 6) pins that a demoted admin gets 403 from `PATCH /rubric` on the very next request, and `test_api_rubric.py` stays unchanged and green.
 
 ## File Map
 
@@ -75,11 +81,11 @@ backend/api/security.py                  claims_to_profile docstring (names its 
 backend/db/engine.py                     DEFAULT_POOL_SIZE/DEFAULT_MAX_OVERFLOW, _int_env, _engine_kwargs, comments
 backend/tests/conftest.py                + FakeClock, autouse clear_identity_cache, identity_clock fixture
 backend/tests/test_upsert.py             NEW (4 tests)
-backend/tests/test_identity.py           NEW (26 tests: ensure_user, race, wrapper, API identity)
+backend/tests/test_identity.py           NEW (27 tests: ensure_user, race, wrapper, API identity incl. /rubric)
 backend/tests/test_identity_cache.py     NEW (6 tests)
-backend/tests/test_users_repo.py         ported from upsert_user to ensure_user (+1 removal guard)
-backend/tests/test_engine.py             + 9 pool tests
-backend/tests/test_ops_workflows.py      + pool budget vs runbook and .env.example (1 test)
+backend/tests/test_users_repo.py         ported from upsert_user to ensure_user (5 -> 6: +1 removal guard)
+backend/tests/test_engine.py             10 -> 19: + 9 pool tests
+backend/tests/test_ops_workflows.py      65 -> 66: + pool budget vs runbook and .env.example
 docs/ops-runbook.md                      Platform limits pool bullets; "What the frozen app inherits from ops-2"
 ```
 
@@ -95,19 +101,23 @@ docs/ops-runbook.md                      Platform limits pool bullets; "What the
 - Consumes: `db.engine.get_engine() -> Engine` (the process engine that `SessionLocal` is bound to, including after `reset_engine_for_tests`); `db.models.User`; fixture `tmp_db`.
 - Produces: `db.upsert.insert_ignore(table: Table | type, *, dialect_name: str | None = None) -> postgresql.Insert | sqlite.Insert`. Callers chain `.values(...).on_conflict_do_nothing(index_elements=[...])`. It raises `NotImplementedError` for any dialect other than `postgresql` and `sqlite`. Later users: Task 2 (`ensure_user`), slice 1 (`insert_ignore(Membership)`), slice 5a (`insert_ignore(HymnUsage.__table__)`).
 
-- [ ] **Step 1: Start the branch and check the baseline**
+- [ ] **Step 1: Check the branch and the baseline**
+
+Work on `claude/ops-2`. It was cut from `origin/main` at 2749e78, its first commit is this plan, and it is not pushed yet. Do not create another branch.
 
 ```bash
 git fetch origin
-git switch -c claude/ops-2-identity-db origin/main
+git branch --show-current
+git log --oneline HEAD..origin/main
 test -f docs/ops-runbook.md && test -f backend/tests/test_ops_workflows.py \
   && grep -qx 'DB_POOL_SIZE=3' backend/.env.example && echo "ops-1 is on main"
+test -f backend/api/routes/rubric.py && grep -q 'rubric.router' backend/api/main.py && echo "rubric is on main"
 grep -c '^- Supabase session pooler (Supavisor) Pool Size: 15' docs/ops-runbook.md
 .venv/bin/python -m pytest -q | tail -1
 ```
-Expected: `ops-1 is on main`, then `1`, then `279 passed`. If the first line is missing, stop: ops-2 builds on ops-1.
+Expected: `claude/ops-2`; then nothing (no commit on `main` that the branch lacks); `ops-1 is on main`; `rubric is on main`; `1`; `440 passed`. If `ops-1 is on main` or `rubric is on main` is missing, stop: this plan is written against both merges.
 
-If `git switch` refuses because an untracked file would be overwritten (for example an untracked copy of the ops-1 plan, which `main` now has), move that copy out of the way (`mv docs/superpowers/plans/2026-09-25-ops-1-backups-cleanup-d5.md "${TMPDIR:-/tmp}/"`) and switch again. Leave this plan file untracked until Task 8 commits it.
+If the second command lists commits (for example PR #6's), run `git rebase origin/main`, then run the block again. A PR #6 rebase is docs and YAML only, so the count stays `440 passed`; for any other new commit, use the new count as the baseline and add this plan's deltas.
 
 - [ ] **Step 2: Write the failing tests**
 
@@ -228,7 +238,7 @@ def insert_ignore(
 .venv/bin/python -m pytest -q backend/tests/test_upsert.py
 .venv/bin/python -m pytest -q | tail -1
 ```
-Expected: `4 passed`, then `283 passed`.
+Expected: `4 passed`, then `444 passed`.
 
 - [ ] **Step 6: Commit**
 
@@ -606,7 +616,7 @@ for i in $(seq 1 20); do .venv/bin/python -m pytest -q -p no:cacheprovider \
   backend/tests/test_identity.py::test_concurrent_first_calls_create_one_row | tail -1; done | grep -c "1 passed"
 .venv/bin/python -m pytest -q | tail -1
 ```
-Expected: `14 passed`; then `20` (no flaky run); then `297 passed`.
+Expected: `14 passed`; then `20` (no flaky run); then `458 passed`.
 
 - [ ] **Step 6: Commit**
 
@@ -723,7 +733,7 @@ together with the two blank lines after it, so that `_to_dict` is followed by tw
 grep -rnw 'upsert_user' --include='*.py' backend app.py streamlit_* ui_helpers.py | grep -v '^backend/tests/test_users_repo.py'; echo "grep exit $?"
 .venv/bin/python -m pytest -q | tail -1
 ```
-Expected: `6 passed`; no grep output and `grep exit 1` (only the guard test names it); then `298 passed`.
+Expected: `6 passed`; no grep output and `grep exit 1` (only the guard test names it); then `459 passed`.
 
 - [ ] **Step 5: Commit**
 
@@ -830,7 +840,7 @@ Behavior on the Streamlit path is unchanged except as the spec intends. `google_
 .venv/bin/python -c "import sys; sys.path[:0] = ['.', 'backend']; import streamlit_auth, migrate_to_db; print('imports ok')"
 .venv/bin/python -m pytest -q | tail -1
 ```
-Expected: `36 passed` (15 + 3 + 17 + 1; `test_auth.py` is unchanged, including its `google_sub` assertion); `imports ok`; `299 passed`.
+Expected: `36 passed` (15 + 3 + 17 + 1; `test_auth.py` is unchanged, including its `google_sub` assertion); `imports ok`; `460 passed`.
 
 - [ ] **Step 5: Commit**
 
@@ -1055,7 +1065,7 @@ class IdentityCache:
 .venv/bin/python -m pytest -q | tail -1
 ls backend/cache.py backend/tests/test_cache.py 2>&1 | grep -c "No such file"
 ```
-Expected: `5 passed`, then `304 passed`, then `2` (no slice-2 cache files).
+Expected: `5 passed`, then `465 passed`, then `2` (no slice-2 cache files).
 
 - [ ] **Step 5: Commit**
 
@@ -1080,7 +1090,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Test: `backend/tests/test_identity.py` (one import added; append the API section), `backend/tests/test_identity_cache.py` (append the success-only test)
 
 **Interfaces:**
-- Consumes: `repos.users.ensure_user`, `UserRow` (Task 2); `CachedIdentity`, `IdentityCache` (Task 5); `FakeClock` (Task 5); `users_statements`, `_stored`, `_user_count` in `test_identity.py` (Task 2); `tests.jwt_helpers.make_token(email=…, provider=…, name=…, expires_in=…)`, `ISSUER`, `SIGNING_KEY`; fixtures `tmp_db`, `make_user`, `make_church`.
+- Consumes: `repos.users.ensure_user`, `UserRow` (Task 2); `CachedIdentity`, `IdentityCache` (Task 5); `FakeClock` (Task 5); `users_statements`, `_stored`, `_user_count` in `test_identity.py` (Task 2); `tests.jwt_helpers.make_token(email=…, provider=…, name=…, expires_in=…)`, `ISSUER`, `SIGNING_KEY`; fixtures `tmp_db`, `make_user`, `make_church`; the service rubric routes in `api/routes/rubric.py` (`GET /rubric` depends on `require_church`, `PATCH /rubric` on `require_admin`; a sparse body such as `{"prefer_familiar": false}` is valid) and `api.main.create_app`, which mounts the `health`, `me` and `rubric` routers.
 - Produces:
   - `api.deps._identity_cache: IdentityCache`, a module attribute that `get_current_user` reads on every call;
   - `api.deps.clear_identity_cache() -> None`;
@@ -1265,6 +1275,21 @@ def test_another_church_is_refused_with_a_warm_cache(client, make_user, make_chu
     assert "Other Church" not in r.text
 
 
+def test_demoting_an_admin_takes_effect_with_a_warm_cache(client, make_user, make_church):
+    """require_admin re-reads the role on every request (PATCH /rubric, from the
+    service rubric merge): the cache holds the identity only, never the role."""
+    from db.models import Membership
+
+    me_id, church_id, headers = _warm_church(client, make_user, make_church)
+    assert client.patch("/rubric", json={"prefer_familiar": False}, headers=headers).status_code == 200
+    with session_scope() as s:
+        s.get(Membership, (church_id, me_id)).role = "member"
+    r = client.patch("/rubric", json={"prefer_familiar": True}, headers=headers)
+    assert r.status_code == 403
+    assert r.json()["error"]["code"] == "forbidden"
+    assert client.get("/rubric", headers=headers).status_code == 200   # a member still reads it
+
+
 @pytest.mark.parametrize("bad_token", [
     {"expires_in": -120},          # expired beyond the 30 s leeway
     {"provider": "email"},         # not a Google sign-in
@@ -1327,11 +1352,11 @@ The 500 body is asserted by `code` only: ops-3 adds `request_id` to it.
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_identity.py backend/tests/test_identity_cache.py`
-Expected: `4 failed, 26 passed, 2 errors` (checked 2026-09-25 in a scratch copy with Tasks 1–5 applied):
+Expected: `4 failed, 27 passed, 2 errors` (checked 2026-09-26 in a scratch copy of `main` at 2749e78 with Tasks 1–5 applied):
 - failing on their assertions: `test_ten_sequential_requests_touch_users_once` (`{'insert': 10, …, 'select': 10} == {'insert': 1, …, 'select': 1}`: today every `/me` runs `ensure_user`) and `test_a_profile_change_updates_once_even_on_a_cache_hit` (its last check sees `{'insert': 1, …, 'select': 1}`, not zeros);
 - failing with `AttributeError: <module 'api.deps' …> has no attribute 'ensure_user'` (the monkeypatch target does not exist yet): `test_concurrent_first_requests_both_succeed_with_one_id` (clarification 4) and `test_a_failed_ensure_user_is_never_cached`;
 - erroring in setup with `AttributeError: … has no attribute '_identity_cache'` (`identity_clock` has nothing to swap yet): `test_an_expired_entry_reads_users_again_without_writing` and `test_a_fresh_entry_does_no_users_work`. The "a cache hit does no users work" behaviour is seen failing on its assertion in the ten-request test above;
-- passing: the 20 tests from Tasks 2, 4 and 5, plus 6 regression guards that pass on the old code by design, because the old code has no cache to get wrong: `test_different_users_never_share_a_cached_identity`, the three warm-cache tenancy tests, and both `test_the_token_is_verified_even_when_the_identity_is_cached` cases. They must stay green once the cache exists.
+- passing: the 20 tests from Tasks 2, 4 and 5, plus 7 regression guards that pass on the old code by design, because the old code has no cache to get wrong: `test_different_users_never_share_a_cached_identity`, the three warm-cache tenancy tests, `test_demoting_an_admin_takes_effect_with_a_warm_cache` (`/rubric`, clarification 14), and both `test_the_token_is_verified_even_when_the_identity_is_cached` cases. They must stay green once the cache exists.
 
 - [ ] **Step 3: Add the autouse cache reset and wire the cache into `backend/api/deps.py`**
 
@@ -1446,7 +1471,7 @@ def _user_id_for(email: str, name: Optional[str], picture: Optional[str]) -> uui
     return row.id
 ```
 
-The first half of `get_current_user` (bearer parsing, `verifier.verify` on every request, and the 401/503 mapping) is unchanged. So are `require_church` and `require_admin`: `validate_active_church` still runs on every request.
+The first half of `get_current_user` (bearer parsing, `verifier.verify` on every request, and the 401/503 mapping) is unchanged. So are `require_church` and `require_admin`: `validate_active_church` still runs on every request. `ActiveChurch`, `CurrentUser`, `get_current_user`, `get_verifier`, `require_church` and `require_admin` keep their names, so `api/routes/me.py` and `api/routes/rubric.py` need no change. `from auth import upsert_from_claims` leaves `api/deps.py`; `auth` stays for Streamlit and `migrate_to_db.py`.
 
 - [ ] **Step 4: Fix the `claims_to_profile` docstring in `backend/api/security.py`**
 
@@ -1486,12 +1511,12 @@ with:
 
 ```bash
 .venv/bin/python -m pytest -q backend/tests/test_identity.py backend/tests/test_identity_cache.py \
-  backend/tests/test_api_me.py backend/tests/test_auth.py
+  backend/tests/test_api_me.py backend/tests/test_auth.py backend/tests/test_api_rubric.py
 for i in $(seq 1 10); do .venv/bin/python -m pytest -q -p no:cacheprovider \
   backend/tests/test_identity.py -k concurrent | tail -1; done | grep -c "2 passed"
 .venv/bin/python -m pytest -q | tail -1
 ```
-Expected: `52 passed` (26 + 6 + 17 + 3; `test_api_me.py` and `test_auth.py` are unchanged); then `10`; then `316 passed`.
+Expected: `61 passed` (27 + 6 + 17 + 3 + 8; `test_api_me.py`, `test_auth.py` and `test_api_rubric.py` are unchanged); then `10`; then `478 passed`.
 
 - [ ] **Step 6: Commit**
 
@@ -1502,8 +1527,9 @@ git commit -m "get_current_user: identity cache in front of ensure_user (F §2.4
 
 Concurrent first requests for a new email now both return 200 with one id,
 and an unchanged profile costs no users query for 5 minutes and at most one
-write an hour. Tokens are still verified on every request, tenancy is never
-cached, and a failed ensure_user caches nothing.
+write an hour. Tokens are still verified on every request, tenancy and roles
+are never cached (a warm-cache test covers /rubric's admin check), and a
+failed ensure_user caches nothing.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -1523,7 +1549,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - `db.engine.DEFAULT_POOL_SIZE = 3` and `db.engine.DEFAULT_MAX_OVERFLOW = 3`;
   - `db.engine._int_env(name: str, default: int, *, minimum: int) -> int`, which raises `ValueError` with the exact copy;
   - `db.engine._engine_kwargs(url: str) -> dict`. Postgres gets `pool_pre_ping`, `future`, `pool_size`, `max_overflow`, `pool_recycle=1800` and `connect_args={"connect_timeout": 10}`. SQLite gets `pool_pre_ping`, `future` and `connect_args={"check_same_thread": False}`;
-  - `_make_engine(url)` calls `create_engine(url, **_engine_kwargs(url))`. The API, `liturgy-stg` and the CLIs that go through `db.get_engine()` / `session_scope()` (`migrate_to_db.py`, `migrate_add_hymnal.py`) get the same settings. The exception is `backend/keepalive.py`: it builds its own engine (`create_engine(_normalize_url(database_url), pool_pre_ping=True)`), so it gets no pool settings and no `connect_timeout`. ops-3 owns it (the `keepalive.yml` rewrite deletes it). Its one short scheduled session fits in the one spare connection (14 of 15).
+  - `_make_engine(url)` calls `create_engine(url, **_engine_kwargs(url))`. The API, `liturgy-next` and the CLIs that go through `db.get_engine()` / `init_db()` / `session_scope()` (`migrate_to_db.py`, `migrate_add_hymnal.py`, `import_hymnal.py`, and the rubric merge's `migrate_add_hymn_facts.py` and `backfill_hymn_facts.py`) get the same settings. The exception is `backend/keepalive.py`: it builds its own engine (`create_engine(_normalize_url(database_url), pool_pre_ping=True)`), so it gets no pool settings and no `connect_timeout`. ops-3 owns it (the `keepalive.yml` rewrite deletes it). Its one short scheduled session fits in the one spare connection (14 of 15).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1626,7 +1652,7 @@ def test_pool_defaults_fit_the_recorded_pooler_size():
 
     sizes = POOL_SIZE_LINE.findall(_read(RUNBOOK))
     assert len(sizes) == 1, f"want one '- Supabase session pooler (Supavisor) Pool Size: <N>' line, found {sizes}"
-    # Two apps (the API and liturgy-stg) each at their pool limit, plus the backup
+    # Two apps (the API and liturgy-next) each at their pool limit, plus the backup
     # job's session and the owner's SQL editor (ops spec, Risks item 2).
     assert 2 * (DEFAULT_POOL_SIZE + DEFAULT_MAX_OVERFLOW) + 2 <= int(sizes[0])
     env_example = _read(ROOT / "backend" / ".env.example")
@@ -1637,12 +1663,12 @@ def test_pool_defaults_fit_the_recorded_pooler_size():
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_engine.py backend/tests/test_ops_workflows.py`
-Expected: `10 failed, 26 passed`.
-- The `_engine_kwargs` tests fail with `ImportError: cannot import name '_engine_kwargs'`.
-- The four invalid-value cases fail with `Failed: DID NOT RAISE`.
+Expected: `10 failed, 75 passed`.
+- The four `_engine_kwargs` tests fail with `ImportError: cannot import name '_engine_kwargs'`.
+- The four invalid-value cases fail with `Failed: DID NOT RAISE ValueError`.
 - The pool-size test fails with `assert 5 == 3`.
 - The budget test fails with `ImportError: cannot import name 'DEFAULT_MAX_OVERFLOW'`.
-- The 10 existing engine tests and the 16 ops-1 workflow tests pass.
+- The 10 existing engine tests and the 65 existing `test_ops_workflows.py` tests pass.
 
 - [ ] **Step 3: Implement the pool settings in `backend/db/engine.py`**
 
@@ -1742,7 +1768,7 @@ The default `DATABASE_URL` (`sqlite:///data/church.db`) stays: slice 7 owns it.
 ```bash
 .venv/bin/python -m pytest -q backend/tests/test_engine.py backend/tests/test_ops_workflows.py
 ```
-Expected: `36 passed`.
+Expected: `85 passed` (19 + 66).
 
 - [ ] **Step 5: Update `docs/ops-runbook.md`**
 
@@ -1764,35 +1790,30 @@ with:
 - Since ops-2, `backend/db/engine.py` reads `DB_POOL_SIZE` and
   `DB_MAX_OVERFLOW` whenever it creates a Postgres engine, with code defaults
   3 and 3 (`DEFAULT_POOL_SIZE`, `DEFAULT_MAX_OVERFLOW`), plus `pool_pre_ping`,
-  `pool_recycle=1800` and `connect_timeout=10`. The API, `liturgy-stg` and the
-  CLIs that use `db.get_engine()` or `session_scope()` share that engine
-  setup. `backend/keepalive.py` builds its own engine without these settings
-  (ops-3 replaces it); its one short scheduled session fits in the spare
-  connection (14 of 15). `backend/tests/test_ops_workflows.py` fails if the
-  code defaults stop fitting the Pool Size line above or stop matching
-  `backend/.env.example`. An invalid value stops the process when the engine
-  is created, with `DB_POOL_SIZE must be an integer >= 1 (got '…').` or
-  `DB_MAX_OVERFLOW must be an integer >= 0 (got '…').`
-- Until the Freeze step deletes the unused `liturgy` app, it adds to the
-  worst case: at most 3 + 3 more if it deploys from `main`, or SQLAlchemy's
-  5 + 10 if it does not. Its Google sign-in fails before any user query, so
-  in practice it holds only the session its startup `init_db()` opens when
-  today's `keep-awake` visits it (ops-3 narrows `keep-awake` to
-  https://liturgy-stg.streamlit.app/ only). Retiring it frees that share.
-  Real use by one tester is 2–4 sessions.
+  `pool_recycle=1800` and `connect_timeout=10`. The API, `liturgy-next` and
+  the CLIs that use `db.get_engine()`, `init_db()` or `session_scope()` share
+  that engine setup. `backend/keepalive.py` builds its own engine without
+  these settings (ops-3 replaces it); its one short scheduled session fits in
+  the spare connection (14 of 15). `backend/tests/test_ops_workflows.py`
+  fails if the code defaults stop fitting the Pool Size line above or stop
+  matching `backend/.env.example`. An invalid value stops the process when
+  the engine is created, with `DB_POOL_SIZE must be an integer >= 1 (got '…').`
+  or `DB_MAX_OVERFLOW must be an integer >= 0 (got '…').`
+- The two apps in the budget are the API (Railway) and `liturgy-next`, the
+  only Streamlit app since `liturgy-stg` and `liturgy` were deleted on
+  2026-09-26. Real use by one tester is 2–4 sessions.
 ```
 
-Leave the Pool Size, Budget and "Values set" bullets as ops-1 and its records PR left them.
+Leave the Pool Size, Budget and "Values set" bullets as ops-1 left them. The "Values set" line still names `liturgy-stg`; Task 11 moves it to `liturgy-next` after the owner confirms the Secrets (Task 9, Step 2). Do not touch the "Streamlit apps" table either: PR #6 owns that row. If PR #6 is already on the branch (Task 1, Step 1), the table names `liturgy-next`; keep it as it is.
 
 Then insert this subsection directly above the line `## Platform limits`, so it ends the `## Streamlit freeze` section after "D5 fix and recovery record":
 
 ```markdown
 ### What the frozen app inherits from ops-2
 
-`liturgy-stg` deploys from `main` (since the owner's delete-and-redeploy at
-the ops-1 merge, ops-1 plan Task 9a — Streamlit Community Cloud cannot switch
-an app's branch in place), so ops-2 went live on it when it merged, before
-the freeze locks it in (ops spec, Delivery plan):
+`liturgy-next`, the production Streamlit app, deploys from `main` (branch
+`main`, main file `app.py`; see "Streamlit apps"), so ops-2 went live on it
+when it merged, before the freeze locks it in (ops spec, Delivery plan):
 
 - Sign-in runs `auth.upsert_from_claims`, now a thin wrapper over
   `repos.users.ensure_user`. Per rerun it runs an
@@ -1805,11 +1826,12 @@ the freeze locks it in (ops spec, Delivery plan):
 
 | ops-2 gate (ops spec, Delivery plan) | Result | Date |
 |---|---|---|
-| Pre-check: `liturgy-stg`'s Settings still shows branch `main` (confirms the ops-1 Task 9a redeploy is in effect); if not, stop and do not merge | [owner] | [owner] |
+| Pre-check: `liturgy-next`'s Settings shows branch `main` and main file `app.py`; if not, stop and do not merge | [owner] | [owner] |
 | Production `users` has a unique constraint or non-partial unique index on exactly `(email)`, the `ON CONFLICT` target | [owner] | [owner] |
+| `DB_POOL_SIZE` and `DB_MAX_OVERFLOW` are both present and `3` on Railway (API) and as top-level keys in `liturgy-next`'s Secrets | [owner] | [owner] |
 | API deploy of the ops-2 merge live; sign-in on https://worship-service-builder.vercel.app works | [owner] | [owner] |
-| New `liturgy-stg` build after the merge; smoke check passed on https://liturgy-stg.streamlit.app/ | [owner] | [owner] |
-| The tester used `liturgy-stg` for at least one day and nothing regressed | [owner: days used, what the tester reported, log check] | [owner] |
+| New `liturgy-next` build after the merge; smoke check passed on https://liturgy-next.streamlit.app/ | [owner] | [owner] |
+| The tester used `liturgy-next` for at least one day and nothing regressed | [owner: days used, what the tester reported, log check] | [owner] |
 
 ```
 
@@ -1818,10 +1840,11 @@ the freeze locks it in (ops spec, Delivery plan):
 ```bash
 grep -c 'Until ops-2 merges' docs/ops-runbook.md
 grep -n '^### What the frozen app inherits from ops-2\|^## Platform limits' docs/ops-runbook.md
+awk '/^### What the frozen app inherits from ops-2/{f=1; next} /^##/{f=0} f' docs/ops-runbook.md | grep -c '\[owner'
 .venv/bin/python -m pytest -q backend/tests/test_ops_workflows.py | tail -1
 .venv/bin/python -m pytest -q | tail -1
 ```
-Expected: `0`; two lines, the `###` subsection first and `## Platform limits` exactly 21 lines later; `17 passed`; `326 passed`.
+Expected: `0`; two lines, the `###` subsection first and `## Platform limits` exactly 24 lines later (`313` and `337` on 2749e78; PR #6 changes one line in place, so the numbers stay); `6` (the six gate rows); `66 passed`; `488 passed`. PR #6's diff was checked to apply cleanly on top of these edits (2026-09-26).
 
 - [ ] **Step 7: Commit**
 
@@ -1833,7 +1856,7 @@ The Supabase session pooler's Pool Size is 15 (Nano): 2 x (3 + 3) + 2 = 14.
 Invalid values stop the process at engine creation with the spec's copy. A
 test ties the code defaults to the runbook's Pool Size and .env.example. The
 SQLite comment no longer cites Streamlit reruns. The runbook records what
-liturgy-stg inherits and the ops-2 gate.
+liturgy-next inherits and the ops-2 gate.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -1842,13 +1865,19 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ### Task 8: Full verification, Postgres smoke and the ops-2 pull request
 
-**Files:** none changed (this plan file is committed in Step 5)
+**Files:** none changed (this plan is already committed on `claude/ops-2`, as the branch's first commit)
 
 **Interfaces:**
 - Consumes: everything from Tasks 1–7.
-- Produces: an open PR `claude/ops-2-identity-db` → `main`, with green CI.
+- Produces: an open PR `claude/ops-2` → `main`, with green CI.
 
-- [ ] **Step 1: Run the whole suite and the acceptance checks**
+- [ ] **Step 1: Catch up with `main`, then run the whole suite and the acceptance checks**
+
+```bash
+git fetch origin
+git log --oneline HEAD..origin/main
+```
+Expected: nothing. If it lists commits (for example PR #6 merged meanwhile), run `git rebase origin/main` (the branch is still unpushed). Task 7's runbook edits and PR #6 touch different lines, so no conflict is expected; if one appears in `docs/ops-runbook.md`, keep PR #6's `liturgy-next` wording and ops-2's new subsection and bullets. Then run the checks below.
 
 ```bash
 .venv/bin/python -m pytest -q | tail -1
@@ -1857,24 +1886,27 @@ ls backend/cache.py backend/tests/test_cache.py 2>&1 | grep -c "No such file"
 .venv/bin/python -c "import sys; sys.path[:0] = ['backend']; import db.upsert, repos.users, auth, api.identity_cache; print(sorted(m for m in sys.modules if m.split('.')[0] in ('streamlit', 'fastapi', 'starlette') or (m.startswith('api.') and m != 'api.identity_cache')))"
 grep -nE '^(from|import) ' backend/db/upsert.py backend/db/engine.py | grep -E 'api|fastapi|streamlit'; echo "grep exit $?"
 git diff --stat origin/main...HEAD -- backend/api/main.py backend/api/errors.py backend/api/settings.py backend/api/routes \
-  backend/.env.example .github app.py ui_helpers.py streamlit_auth.py frontend README.md docs/manual-verification.md
+  backend/api/schemas.py backend/service_rubric.py backend/repos/churches.py backend/.env.example .github \
+  app.py ui_helpers.py streamlit_auth.py streamlit_tenancy.py streamlit_views frontend README.md docs/manual-verification.md
+git diff --name-only origin/main...HEAD
 ```
 Expected, in order:
-- `326 passed`;
+- `488 passed`;
 - no grep output and `grep exit 1`;
 - `2`;
 - `[]` (none of the new modules pulls in Streamlit, FastAPI or another `api` module);
 - no output and `grep exit 1` (`db/` imports no `api/`);
-- the last command prints nothing: ops-2 touches no ops-3 file, no workflow, no Streamlit file and no frontend file.
+- the `--stat` command prints nothing: ops-2 touches no ops-3 file, no rubric file, no workflow, no Streamlit file and no frontend file;
+- exactly these 17 paths: `backend/api/deps.py`, `backend/api/identity_cache.py`, `backend/api/security.py`, `backend/auth.py`, `backend/db/engine.py`, `backend/db/models.py`, `backend/db/upsert.py`, `backend/repos/users.py`, `backend/tests/conftest.py`, `backend/tests/test_engine.py`, `backend/tests/test_identity.py`, `backend/tests/test_identity_cache.py`, `backend/tests/test_ops_workflows.py`, `backend/tests/test_upsert.py`, `backend/tests/test_users_repo.py`, `docs/ops-runbook.md`, and this plan (`docs/superpowers/plans/2026-09-25-ops-2-identity-db.md`).
 
 - [ ] **Step 2: Check the runbook markers**
 
-Run: `grep -n '\[owner' docs/ops-runbook.md | grep -v 'An entry marked'`
-Expected: exactly the 5 lines of the "ops-2 gate" table (including the branch pre-check row). ops-1's records PR filled every ops-1 marker. If an ops-1 marker still shows, tell the owner; it belongs to the ops-1 plan (Task 12), not to this PR.
+Run: `awk '/^### What the frozen app inherits from ops-2/{f=1; next} /^##/{f=0} f' docs/ops-runbook.md | grep -c '\[owner'`
+Expected: `6`, the six "ops-2 gate" rows (including the branch pre-check and the pool-values row). The check is scoped to ops-2's subsection on purpose: on 2749e78 the runbook still has 8 ops-1 marker lines (key custody, restore drill, backup run record, the `liturgy-stg` redeploy date, three D5 rows, the recovery result; PR #6 fills the redeploy one). They belong to ops-1's post-merge records (ops-1 plan, Task 12), not to this PR; mention them to the owner if they are still open.
 
 - [ ] **Step 3: Postgres smoke test (only if `docker` is on PATH)**
 
-On Postgres, `ON CONFLICT (email)` and the pool settings cannot be exercised by the SQLite suite, and the Postgres CI job arrives in slice 1. Check `command -v docker` first. This machine had no Docker on 2026-09-25. If there is none, skip this step and write "Postgres smoke: skipped (no Docker); owner runs it in Task 9, Step 3" in the PR body.
+On Postgres, `ON CONFLICT (email)` and the pool settings cannot be exercised by the SQLite suite, and the Postgres CI job arrives in slice 1. Check `command -v docker` first. This machine had no Docker on 2026-09-25 or 2026-09-26. If there is none, skip this step and write "Postgres smoke: skipped (no Docker); owner runs it in Task 9, Step 3" in the PR body.
 
 ```bash
 ready=no
@@ -1930,7 +1962,7 @@ print(engine.dialect.name, engine.pool.size(), api_errors + st_errors, len(api_i
 PY
 docker stop ops2-pg 2>/dev/null
 ```
-Expected: `postgres ready: yes`, then `postgresql 3 [] 1 1 2 google-sub-tabs Racer Two True`. The readiness wait is bounded: if `docker run` fails (Docker Desktop not running, port 55432 in use, image pull error) or the server is not ready within 60 s, it prints `postgres ready: no` and skips the script. Then stop, fix Docker, and run the block again; do not open the PR on a skipped smoke if Docker is present. Each race runs eight threads on a 3 + 3 pool, so two of them wait briefly for a connection. The second race is the Streamlit case of clarification 12: several tabs sign in a new Google account at once, with `google_sub`. Only Postgres can exercise it, because SQLite serializes writers. With `google_sub` in the INSERT, two threads that both pass the arbiter pre-check could raise `IntegrityError` on `users_google_sub_key` (timing-dependent); with it written only by the UPDATE, no thread can. The same script against SQLite printed `sqlite 5 [] 1 1 2 google-sub-tabs Racer Two True` on 2026-09-25; SQLite does not use the Postgres pool settings. Anything else means stop and investigate before opening the PR.
+Expected: `postgres ready: yes`, then `postgresql 3 [] 1 1 2 google-sub-tabs Racer Two True`. The readiness wait is bounded: if `docker run` fails (Docker Desktop not running, port 55432 in use, image pull error) or the server is not ready within 60 s, it prints `postgres ready: no` and skips the script. Then stop, fix Docker, and run the block again; do not open the PR on a skipped smoke if Docker is present. Each race runs eight threads on a 3 + 3 pool, so two of them wait briefly for a connection. The second race is the Streamlit case of clarification 12: several tabs sign in a new Google account at once, with `google_sub`. Only Postgres can exercise it, because SQLite serializes writers. With `google_sub` in the INSERT, two threads that both pass the arbiter pre-check could raise `IntegrityError` on `users_google_sub_key` (timing-dependent); with it written only by the UPDATE, no thread can. The same script against SQLite printed `sqlite 5 [] 1 1 2 google-sub-tabs Racer Two True` on 2026-09-25 and again on 2026-09-26 (Tasks 1–7 applied to 2749e78); SQLite does not use the Postgres pool settings. Anything else means stop and investigate before opening the PR.
 
 - [ ] **Step 4: Frontend untouched**
 
@@ -1940,24 +1972,21 @@ Expected: nothing. CI's frontend job still runs on the PR and must pass.
 - [ ] **Step 5: Push and open the PR (get the owner's go-ahead first)**
 
 ```bash
-git add docs/superpowers/plans/2026-09-25-ops-2-identity-db.md
-git commit -m "Add the ops-2 implementation plan
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" || true   # "nothing to commit" is fine if it is already committed
-git push -u origin claude/ops-2-identity-db
-gh pr create --base main --head claude/ops-2-identity-db \
+git status --short -- docs/superpowers/plans/2026-09-25-ops-2-identity-db.md   # expect nothing: the plan is already committed
+git push -u origin claude/ops-2
+gh pr create --base main --head claude/ops-2 \
   --title "ops-2: identity race fix, identity cache and pool settings" \
   --body "PR ops-2 of the ops slice (docs/superpowers/specs/2026-09-25-slice-ops-cleanup-design.md; plan docs/superpowers/plans/2026-09-25-ops-2-identity-db.md).
 
 - db/upsert.py insert_ignore; repos.users.ensure_user (INSERT ... ON CONFLICT (email) DO NOTHING, SELECT, one UPDATE only for a changed truthy profile or a last_login_at older than an hour; google_sub is written by the UPDATE, never the INSERT, so users_google_sub_key cannot break concurrent first Streamlit sign-ins); repos.users.upsert_user removed, its tests ported (S8, S14).
-- auth.upsert_from_claims is a thin wrapper with the same signature, so Streamlit (liturgy-stg, still deployed from main) and migrate_to_db.py get the race fix and hourly last_login_at.
-- api/identity_cache.py and the cache in get_current_user: token verified on every request, tenancy never cached, success-only, 1024 entries / 300 s (F §2.4, §7.3).
+- auth.upsert_from_claims is a thin wrapper with the same signature, so Streamlit (liturgy-next, deployed from main) and migrate_to_db.py get the race fix and hourly last_login_at. No Streamlit file changes (no new Streamlit features).
+- api/identity_cache.py and the cache in get_current_user: token verified on every request, tenancy and roles never cached (a warm-cache test covers PATCH /rubric's admin check), success-only, 1024 entries / 300 s (F §2.4, §7.3).
 - Postgres pool DB_POOL_SIZE/DB_MAX_OVERFLOW, defaults 3 and 3 (Supavisor Pool Size 15: 2 x (3+3) + 2 = 14), pool_recycle 1800, connect_timeout 10; exact-copy errors for invalid values (S10 pool part).
-- Comment fixes: db/engine.py SQLite comment, models.last_login_at, claims_to_profile docstring. Runbook: pool bullets and the ops-2 gate table.
-- Tests: +47 (326 total), including 8-thread ensure_user and 2-request /me race tests.
+- Comment fixes: db/engine.py SQLite comment, models.last_login_at, claims_to_profile docstring. Runbook: pool bullets and the ops-2 gate table (the Streamlit apps row is PR #6's).
+- Tests: +48 (488 total), including 8-thread ensure_user and 2-request /me race tests.
 - Postgres smoke: <paste the Task 8 Step 3 output, or 'skipped (no Docker); owner runs it in Task 9, Step 3'>
 
-Owner steps before merge: plan Task 9 (unique index on users(email), pool values present and 3 on Railway and liturgy-stg). After merge: Task 10 (deploy checks, liturgy-stg smoke check, one day of tester use), then Task 11 records the gate.
+Owner steps before merge: plan Task 9 (unique index on users(email); pool values present and 3 on Railway and in liturgy-next's Secrets; liturgy-next still deploys from main). After merge: Task 10 (deploy checks, liturgy-next smoke check, one day of tester use), then Task 11 records the gate.
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)"
 gh pr checks --watch
@@ -1968,7 +1997,7 @@ Replace the `<paste …>` line with the actual Step 3 result before running `gh 
 
 ### Task 9 (OWNER, before merge): unique index on `users(email)` in production, pool values, Postgres smoke, merge
 
-Merging puts ops-2 live on `liturgy-stg` at once (it deploys from `main`, since the owner's redeploy at the ops-1 merge, ops-1 plan Task 9a). Every sign-in and rerun then runs `INSERT … ON CONFLICT (email) DO NOTHING`. These checks make sure that works on the real database first. The owner passes results to the agent; no secret goes into chat.
+Merging puts ops-2 live on `liturgy-next` at once (it deploys from `main`). Every sign-in and rerun then runs `INSERT … ON CONFLICT (email) DO NOTHING`. These checks make sure that works on the real database first. The owner passes results to the agent; no secret goes into chat.
 
 **Files:** none (results go into the runbook in Task 11)
 
@@ -1997,20 +2026,20 @@ Give the agent the result and the date (for the gate table's unique-index row).
 
 - [ ] **Step 2 (OWNER): Confirm the pool values in both apps**
 
-ops-1's plan (Task 9, Step 1) set them, and the runbook's "Values set" line has the date. From this PR on the code reads them, so check the exact values now. The code defaults are also 3 and 3, but owner correction 3 requires the values to be set explicitly in both apps, and a typo such as `3 ,` would stop the app at engine creation.
+They were set on 2026-09-26: on Railway, and on the old `liturgy-stg` app, whose Secrets carried over to `liturgy-next`. The runbook's "Values set" line still names `liturgy-stg`. From this PR on the code reads them, so check the exact values now in the apps that exist today; do not assume the carry-over. The code defaults are also 3 and 3, but owner correction 3 requires the values to be set explicitly in both apps, and a typo such as `3 ,` would stop the app at engine creation.
 - Railway → the API service → Variables: both `DB_POOL_SIZE` and `DB_MAX_OVERFLOW` are present, and each is `3`. If either is missing or has another value, set it to `3` (saving redeploys the API).
-- Streamlit Cloud (share.streamlit.io) → `liturgy-stg` → ⋮ → Settings → Secrets: the top-level keys `DB_POOL_SIZE = "3"` and `DB_MAX_OVERFLOW = "3"` are both present and sit above the first `[section]` header. Fix them if not, at a time the tester is not using the app, because saving restarts it. Do not change the unused `liturgy` app: the Freeze step deletes it.
+- Streamlit Cloud (share.streamlit.io) → `liturgy-next` → ⋮ → Settings → Secrets: the top-level keys `DB_POOL_SIZE = "3"` and `DB_MAX_OVERFLOW = "3"` are both present and sit above the first `[section]` header (for example above `[auth]`). Fix them if not, at a time the tester is not using the app, because saving restarts it.
 
-If you had to add or change a value in either app, tell the agent the date. The runbook's "Values set" line was then not true until that date, so the agent corrects it in the Task 11 records PR.
+Tell the agent the result and the date (for the gate table's pool-values row), and whether you had to add or change a value in either app. Task 11 then moves the runbook's "Values set" line to `liturgy-next`, with this date.
 
 - [ ] **Step 3 (OWNER, only if Task 8 skipped the Postgres smoke): Run it on your machine**
 
-Requires Docker (as for the restore drill). Do not use the main checkout (`/Users/beaubrown/Desktop/projects/church`): it has no `.venv`, and `git switch claude/ops-2-identity-db` fails there with "already used by worktree", because the agent's worktree has that branch checked out. Instead make a throwaway, detached worktree of the pushed branch with its own `.venv` (a few minutes for the install):
+Requires Docker (as for the restore drill). Do not use the main checkout (`/Users/beaubrown/Desktop/projects/church`): it has no `.venv`, and `git switch claude/ops-2` fails there with "already used by worktree", because the agent's worktree has that branch checked out. Instead make a throwaway, detached worktree of the pushed branch with its own `.venv` (a few minutes for the install):
 
 ```bash
 cd /Users/beaubrown/Desktop/projects/church
 git fetch origin
-git worktree add --detach "${TMPDIR:-/tmp}/ops2-smoke" origin/claude/ops-2-identity-db
+git worktree add --detach "${TMPDIR:-/tmp}/ops2-smoke" origin/claude/ops-2
 cd "${TMPDIR:-/tmp}/ops2-smoke"
 /Users/beaubrown/.local/bin/python3.11 -m venv .venv && .venv/bin/pip install -q -r requirements-dev.txt
 ```
@@ -2083,19 +2112,19 @@ git worktree remove --force "${TMPDIR:-/tmp}/ops2-smoke"
 
 - [ ] **Step 4 (OWNER): Confirm the branch, then review and merge at a quiet time**
 
-Streamlit Cloud → `liturgy-stg` → ⋮ → Settings: confirm it still shows branch `main` (the ops-1 redeploy, Task 9a). If it shows anything else, stop and do not merge — the gate this PR relies on assumes `liturgy-stg` serves `main`. Give the agent the result and the date, for the gate table's pre-check row.
+Streamlit Cloud → `liturgy-next` → ⋮ → Settings: confirm it shows repo `bbrown62450/church`, branch `main` and main file `app.py` (true on 2026-09-26). If it shows anything else, stop and do not merge — the gate this PR relies on assumes `liturgy-next` serves `main`. Give the agent the result and the date, for the gate table's pre-check row.
 
-Merging rebuilds `liturgy-stg` (a short restart), so merge on a weekday when the tester is not using it, never Saturday or Sunday. All CI checks must be green and Steps 1–3 done, plus the branch check above. Merging is outward-facing: merge only on the owner's explicit yes.
+Merging rebuilds `liturgy-next` (a short restart), so merge on a weekday when the tester is not using it, never Saturday or Sunday. All CI checks must be green and Steps 1–3 done, plus the branch check above. Merging is outward-facing: merge only on the owner's explicit yes.
 
 ```bash
-gh pr merge --merge claude/ops-2-identity-db
+gh pr merge --merge claude/ops-2
 ```
 
 ---
 
 ### Task 10 (OWNER, after merge): deploy checks, smoke check and the one-day tester gate
 
-This is the delivery-plan gate: "For at least one day the tester uses Streamlit (still deployed from `main`) and nothing regresses." ops-3 does not start until it passes. It is valid only because `liturgy-stg` was deleted and redeployed from `main` at the ops-1 merge (ops-1 plan, Task 9a) — Streamlit Community Cloud cannot switch an app's branch in place; Step 2 below re-confirms the branch before relying on this gate.
+This is the delivery-plan gate: "For at least one day the tester uses Streamlit (still deployed from `main`) and nothing regresses." ops-3 does not start until it passes. Here "Streamlit" is `liturgy-next`, which deploys from `main` (true as of 2026-09-26); Step 2 below re-confirms the branch before relying on this gate.
 
 **Files:** none (results go into the runbook in Task 11)
 
@@ -2104,24 +2133,24 @@ This is the delivery-plan gate: "For at least one day the tester uses Streamlit 
 - Railway → the API service → Deployments: the deployment for the merge commit is Active. Its logs show a normal start, with no `DB_POOL_SIZE must` or `DB_MAX_OVERFLOW must` line and no traceback.
 - On https://worship-service-builder.vercel.app, at 375 px (Chrome device mode, iPhone SE) and on desktop: sign in, the church shows in the switcher, switch church if you have two, log out. (Ops spec, Manual checks: "after each ops merge".)
 
-- [ ] **Step 2 (OWNER): `liturgy-stg` rebuilt and the smoke check**
+- [ ] **Step 2 (OWNER): `liturgy-next` rebuilt and the smoke check**
 
-- Streamlit Cloud → `liturgy-stg` → ⋮ → Settings still shows branch `main` (confirming the ops-1 Task 9a redeploy held), and → Manage app → logs: a new build started after the merge commit landed, and it finished without a traceback.
-- On https://liturgy-stg.streamlit.app/: sign in, the church loads, load an archived service, open Settings. (Not the `liturgy` app: it is unused and its sign-in is already broken.)
-- The `liturgy-stg` proof is that sign-in and the church load succeed, and its logs show no `IntegrityError` and no traceback.
-- In the Supabase SQL editor: `select email, last_login_at, now() - last_login_at as age from users order by last_login_at desc nulls last limit 5;`. Your own row's `age` is under 1 hour (read `age`, not `last_login_at`, which the editor shows in UTC). This confirms that an `ensure_user` write path works on production. It does not show which app wrote it: the Vercel sign-in in Step 1 runs the same `ensure_user` just before, and the `liturgy-stg` sign-in then writes nothing, because the stored value is under an hour old.
+- Streamlit Cloud → `liturgy-next` → ⋮ → Settings still shows branch `main` and main file `app.py`, and → Manage app → logs: a new build started after the merge commit landed, and it finished without a traceback.
+- On https://liturgy-next.streamlit.app/: sign in, the church loads, load an archived service, open Settings. (`liturgy-stg` and `liturgy` no longer exist; they were deleted on 2026-09-26.)
+- The `liturgy-next` proof is that sign-in and the church load succeed, and its logs show no `IntegrityError` and no traceback.
+- In the Supabase SQL editor: `select email, last_login_at, now() - last_login_at as age from users order by last_login_at desc nulls last limit 5;`. Your own row's `age` is under 1 hour (read `age`, not `last_login_at`, which the editor shows in UTC). This confirms that an `ensure_user` write path works on production. It does not show which app wrote it: the Vercel sign-in in Step 1 runs the same `ensure_user` just before, and the `liturgy-next` sign-in then writes nothing, because the stored value is under an hour old.
 
 - [ ] **Step 3 (OWNER): At least one day of normal tester use**
 
-Let the tester use https://liturgy-stg.streamlit.app/ as usual for at least one full day: sign in, load a service, pick hymns, Prepare, Save. The spec prescribes no message copy for this; if you ask the tester, just ask whether anything looked different or failed. Afterwards, check both logs for the day:
-- Streamlit Cloud → `liturgy-stg` → Manage app → logs;
+Let the tester use https://liturgy-next.streamlit.app/ as usual for at least one full day: sign in, load a service, pick hymns, Prepare, Save. The spec prescribes no message copy for this; if you ask the tester, just ask whether anything looked different or failed. Afterwards, check both logs for the day:
+- Streamlit Cloud → `liturgy-next` → Manage app → logs;
 - Railway → the API service → Logs.
 
 Search each for `Traceback`, `IntegrityError`, `OperationalError`, `QueuePool limit`, `DB_POOL_SIZE must`, `DB_MAX_OVERFLOW must` and (Railway) `Unhandled error on`. None should appear. A `QueuePool limit of size 3 overflow 3 reached` line would mean the pool is too small for real use: report it rather than raising the values, which must still fit the Pool Size of 15.
 
 - [ ] **Step 4 (OWNER → agent): Contingency if anything regressed**
 
-Revert the merge (outward-facing; only on the owner's yes). Timing: merging the revert redeploys `liturgy-stg` like any merge to `main`. If the regression blocks the tester, merge it right away. Otherwise merge it on a weekday when the tester is not using `liturgy-stg`, never Saturday or Sunday.
+Revert the merge (outward-facing; only on the owner's yes). Timing: merging the revert redeploys `liturgy-next` like any merge to `main`. If the regression blocks the tester, merge it right away. Otherwise merge it on a weekday when the tester is not using `liturgy-next`, never Saturday or Sunday.
 
 The revert removes everything the ops-2 PR added. That includes the runbook's "What the frozen app inherits from ops-2" subsection with its gate table, and the new pool bullets (the old "until ops-2" bullets come back, and they are true again). So the revert PR has two commits: the pure revert, then a docs-only commit that records the failed gate. Keep them separate, because a re-land reverts only the first.
 
@@ -2139,7 +2168,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 .venv/bin/python -m pytest -q | tail -1
 grep -c '^### What the frozen app inherits from ops-2' docs/ops-runbook.md
 ```
-Expected: `279 passed` (plus any tests from later PRs), then `0` (the gate table is gone).
+Expected: `440 passed` (plus any tests from later PRs), then `0` (the gate table is gone).
 
 Commit 2, the record. Append this paragraph to the end of `### Incident record` in `docs/ops-runbook.md`, after the existing "None: the Data API was already off" paragraph. It goes there, and not where the gate table was, so that reverting the revert later applies without a conflict:
 
@@ -2161,11 +2190,11 @@ git commit -m "Runbook: ops-2 reverted, gate failed
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 git push -u origin claude/revert-ops-2
 gh pr create --base main --head claude/revert-ops-2 --title "Revert ops-2" \
-  --body "Reverts ops-2 after a regression on liturgy-stg: <what the tester or the logs showed>. Records the failed ops-2 gate in docs/ops-runbook.md (Incident record); ops-3 must not start.
+  --body "Reverts ops-2 after a regression on liturgy-next: <what the tester or the logs showed>. Records the failed ops-2 gate in docs/ops-runbook.md (Incident record); ops-3 must not start.
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)"
 ```
-Expected: `1`, then the same count as after commit 1. After the merge, `liturgy-stg` and Railway redeploy the pre-ops-2 code. Task 11 does not run for this attempt: its table no longer exists.
+Expected: `1`, then the same count as after commit 1. After the merge, `liturgy-next` and Railway redeploy the pre-ops-2 code. Task 11 does not run for this attempt: its table no longer exists.
 
 **Re-landing ops-2.** Once a merge commit is reverted, merging the same branch again does not bring the reverted changes back, even with a fix commit on top: git treats them as already merged. So the re-land branch starts from `origin/main` by reverting the revert. `<revert commit sha>` is commit 1 above, "Revert ops-2 (…)"; not the revert PR's merge commit and not the runbook commit:
 
@@ -2179,14 +2208,14 @@ This reverts commit <revert commit sha>.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
-This brings back the code, the tests, the pool bullets and the gate table with fresh `[owner]` markers. Then add the fix test first and the fix (TDD, new commits). Run Task 8 again (its counts become 326 plus the fix's tests), then Tasks 9–11 for the re-land PR. Keep the "ops-2 regression" paragraph: it is the record of attempt 1.
+This brings back the code, the tests, the pool bullets and the gate table with fresh `[owner]` markers. Then add the fix test first and the fix (TDD, new commits). Run Task 8 again (its counts become 488 plus the fix's tests), then Tasks 9–11 for the re-land PR. Keep the "ops-2 regression" paragraph: it is the record of attempt 1.
 
 - [ ] **Step 5 (OWNER → agent): Give the agent the gate results**
 
 Pass on, with dates:
-- the Step 1 result from Task 9 (the unique index on exactly `email` present), and the date of any pool value you had to add or fix in Task 9, Step 2;
+- the Task 9 results: Step 1 (the unique index on exactly `email` present), Step 2 (both pool values present and `3` on Railway and in `liturgy-next`'s Secrets, and whether you had to add or fix one) and Step 4 (`liturgy-next` on `main`);
 - the API deploy and Vercel sign-in (Step 1);
-- the `liturgy-stg` build and smoke check (Step 2);
+- the `liturgy-next` build and smoke check (Step 2);
 - the days the tester used the app, what the tester reported, and the log check (Step 3).
 
 ---
@@ -2196,7 +2225,7 @@ Pass on, with dates:
 Run this only when every gate check passed. If Task 10, Step 4 reverted ops-2, the gate FAILED: the table is gone from `main`, the revert PR recorded the failure, and this task waits for the re-land PR's gate.
 
 **Files:**
-- Modify: `docs/ops-runbook.md` (the five "ops-2 gate" rows, including the branch pre-check; the pool "Values set" date only if Task 9, Step 2 changed a value)
+- Modify: `docs/ops-runbook.md` (the six "ops-2 gate" rows, including the branch pre-check and the pool values; the "Values set" line in `## Platform limits`, which moves from `liturgy-stg` to `liturgy-next`)
 
 **Interfaces:**
 - Consumes: the Task 9, Steps 1–2 and Task 10 results.
@@ -2213,13 +2242,33 @@ Expected: `1`. If it prints `0`, stop: ops-2 is not on `main` (it was reverted o
 
 In `docs/ops-runbook.md` → Streamlit freeze → "What the frozen app inherits from ops-2", replace each row's two `[owner…]` markers with the result and the date the owner gave. For the last row, write the days used, what the tester reported, and "no errors in the Streamlit or Railway logs".
 
-If the owner had to add or fix a pool value in Task 9, Step 2, also change the date on the "Values set" line in `## Platform limits` to that date, and add "(corrected before the ops-2 merge)".
+Then, in `## Platform limits`, replace the "Values set" bullet (ops-1 wrote it; it still names the deleted `liturgy-stg`):
+
+```markdown
+- Values set: `DB_POOL_SIZE=3` and `DB_MAX_OVERFLOW=3` as Railway service
+  variables (API), and as top-level keys `DB_POOL_SIZE = "3"` and
+  `DB_MAX_OVERFLOW = "3"` in the `liturgy-stg` app's Streamlit Secrets (not
+  `liturgy`, which is being deleted): 2026-09-26 (Railway API service and `liturgy-stg` Secrets)
+```
+
+with (fill in the Task 9, Step 2 date):
+
+```markdown
+- Values set: `DB_POOL_SIZE=3` and `DB_MAX_OVERFLOW=3` as Railway service
+  variables (API), and as top-level keys `DB_POOL_SIZE = "3"` and
+  `DB_MAX_OVERFLOW = "3"` in the `liturgy-next` app's Streamlit Secrets:
+  2026-09-26 (Railway API service, and `liturgy-stg`'s Secrets, which carried
+  over to `liturgy-next`); confirmed present in both on <date>.
+```
+
+If the owner had to add or fix a value in Task 9, Step 2, write that date instead of "confirmed present in both on <date>": "set in <app> on <date> (corrected before the ops-2 merge)". If another PR has already rewritten this bullet for `liturgy-next`, keep its wording and only add the confirmation date.
 
 - [ ] **Step 2: Check and commit**
 
 ```bash
 grep -c '^### What the frozen app inherits from ops-2' docs/ops-runbook.md
-grep -n '\[owner' docs/ops-runbook.md | grep -v 'An entry marked'; echo "grep exit $?"
+awk '/^### What the frozen app inherits from ops-2/{f=1; next} /^##/{f=0} f' docs/ops-runbook.md | grep -c '\[owner'
+grep -c "in the \`liturgy-stg\` app's Streamlit Secrets" docs/ops-runbook.md
 .venv/bin/python -m pytest -q | tail -1
 git add docs/ops-runbook.md
 git commit -m "Runbook: record the ops-2 gate (unique email index, deploys, one day of tester use)
@@ -2228,13 +2277,13 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 git push -u origin claude/ops-2-records
 gh pr create --base main --head claude/ops-2-records \
   --title "Runbook: ops-2 gate record" \
-  --body "Fills the ops-2 gate table in docs/ops-runbook.md: production unique index on users(email), API and liturgy-stg deploys, and at least one day of tester use with no regression.
+  --body "Fills the ops-2 gate table in docs/ops-runbook.md: liturgy-next on main, production unique index on users(email), pool values on Railway and in liturgy-next's Secrets, API and liturgy-next deploys, and at least one day of tester use with no regression. Moves the Values set line from liturgy-stg to liturgy-next.
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)"
 ```
-Expected: `1` (the heading is there, so the next check cannot pass just because the table is missing); then no marker lines and `grep exit 1`; then `326 passed` (for a re-land, 326 plus the fix's tests).
+Expected: `1` (the heading is there, so the next check cannot pass just because the table is missing); then `0` (no marker left in ops-2's subsection; ops-1's own markers elsewhere are ops-1's business); then `0` (the "Values set" line no longer names `liturgy-stg`); then `488 passed` (plus any tests from later PRs; for a re-land, plus the fix's tests).
 
-Merge after the owner's yes, and at a quiet time: every merge to `main` redeploys `liturgy-stg`, so merge on a weekday when the tester is not using it, never Saturday or Sunday. The ops-2 gate is then passed, and ops-3 can start.
+Merge after the owner's yes, and at a quiet time: every merge to `main` redeploys `liturgy-next`, so merge on a weekday when the tester is not using it, never Saturday or Sunday. The ops-2 gate is then passed, and ops-3 can start.
 
 ---
 
@@ -2259,21 +2308,21 @@ Merge after the owner's yes, and at a quiet time: every merge to `main` redeploy
 | S8: `api.deps._identity_cache = IdentityCache(maxsize=1024, ttl=300)`, `clear_identity_cache()`, `get_current_user` reads the module attribute per call; flow steps 1–6 (verify every request; 401 on empty email; cleaned name/picture; hit with unchanged profile → no DB; else `ensure_user` without `google_sub`, `put` only after it returns; same `CurrentUser` shape) | 6 |
 | Testing → conftest: autouse `clear_identity_cache()`; `identity_clock` monkeypatches `api.deps._identity_cache` | 6 |
 | Testing → success-only: `ensure_user` raising `OperationalError` → 500, cache empty; restored → runs once, 200 | 6 |
-| Testing → API identity: ten sequential `/me` = 1 INSERT, 0 UPDATE, 1 SELECT; two concurrent `/me` same id; TTL 301 s → 1 SELECT, 0 UPDATE; 299 s → no users statement; profile change → 1 UPDATE on a hit; no cross-user leak; tenancy not cached (membership removed, church soft-deleted, other church → 403 without its name); token still verified on a hit (expired, other provider) | 6 |
+| Testing → API identity: ten sequential `/me` = 1 INSERT, 0 UPDATE, 1 SELECT; two concurrent `/me` same id; TTL 301 s → 1 SELECT, 0 UPDATE; 299 s → no users statement; profile change → 1 UPDATE on a hit; no cross-user leak; tenancy not cached (membership removed, church soft-deleted, other church → 403 without its name); roles not cached (a demoted admin gets 403 from `PATCH /rubric`, clarification 14); token still verified on a hit (expired, other provider) | 6 |
 | AC 12 (first half), AC 13, AC 14; F acceptance criterion 3; F §7.3 rows 2 and 3; Behavior changes 1, 2, 3 | 2, 6 |
 | AC 26: no `backend/cache.py` or `test_cache.py`; the identity cache stores only successful results; a TTL test drives it through `identity_clock` | 5, 6, 8 (Step 1) |
 | Data access: `require_church` unchanged and uncached; regression tests with a warm cache | 6 |
 | S10 (pool part) / F §2.6 item 6: `_engine_kwargs(url)`; `_int_env` (blank = default, exact-copy `ValueError`); Postgres `pool_size`/`max_overflow` from `DB_POOL_SIZE`/`DB_MAX_OVERFLOW`, `pool_recycle=1800`, `pool_pre_ping`, `connect_args={"connect_timeout": 10}`; SQLite `check_same_thread=False`, no pool keys | 7 |
-| Owner correction 3: defaults 3 and 3 (Supavisor Pool Size 15, Nano, max clients 200; 2 × (3 + 3) + 2 = 14 ≤ 15), the same on Railway and in the `liturgy-stg` Secrets; arithmetic in the runbook, guarded by a test against the runbook and `.env.example` | 7, 9 (Step 2) |
+| Owner correction 3: defaults 3 and 3 (Supavisor Pool Size 15, Nano, max clients 200; 2 × (3 + 3) + 2 = 14 ≤ 15), the same on Railway and in the `liturgy-next` Secrets (confirmed by the owner, not assumed); arithmetic in the runbook, guarded by a test against the runbook and `.env.example` | 7, 9 (Step 2), 11 |
 | Testing → `test_engine.py`: defaults (3/3 per correction 3), recycle, pre-ping, `connect_args`; `DB_POOL_SIZE=2`, `DB_MAX_OVERFLOW=0` honored; `abc` and `0` raise the exact copy, blank gives the default; SQLite has no pool keys and `check_same_thread` is False; `_make_engine(...).pool.size() == 3` without connecting | 7 |
 | AC 17 (pool, per correction 3); Behavior change 9; Exact copy for invalid `DB_POOL_SIZE` / `DB_MAX_OVERFLOW` | 7 |
 | Comment fixes: `db/engine.py:43` ("FastAPI runs sync routes in a threadpool; SQLite needs this relaxed."); also the `claims_to_profile` docstring (clarification 8) | 6, 7 |
 | Risks item 2: pool values set in both apps before ops-2 merges and recorded; the stale "until ops-2" runbook text replaced | 7, 9 (Step 2) |
 | Streamlit coupling: nothing under `backend/` imports streamlit; the new modules import neither Streamlit nor FastAPI; `db/` does not import `api/`; `test_no_streamlit_in_core.py` and `test_api_does_not_import_streamlit` stay green | 4, 8 (Step 1) |
 | "What the frozen app inherits" (the `ensure_user` and pool parts), recorded in the runbook and verified before the Freeze | 7, 10, 11 |
-| Delivery plan gate: merged; for at least one day the tester uses Streamlit (`liturgy-stg`, owner correction 1), still deployed from `main`, and nothing regresses; on a regression, a revert with a failed-gate record and a revert-the-revert re-land (clarification 13) | 9 (Step 4), 10, 11 |
+| Delivery plan gate: merged; for at least one day the tester uses Streamlit (`liturgy-next`, deployed from `main`), and nothing regresses; on a regression, a revert with a failed-gate record and a revert-the-revert re-land (clarification 13) | 9 (Step 4), 10, 11 |
 | AC 24 (ops-2 share): backend suite and frontend checks green on the ops-2 PR | 8 |
-| Unchanged-and-green list (`test_auth`, `test_api_me`, `test_api_app`, `test_api_security`, `test_docs`, `test_ci_workflow`, `test_no_streamlit_in_core`, `test_keepalive`, all of `streamlit_tests/`) | every task's full-suite run; 8 |
+| Unchanged-and-green list (`test_auth`, `test_api_me`, `test_api_app`, `test_api_security`, `test_api_rubric`, `test_docs`, `test_ci_workflow`, `test_no_streamlit_in_core`, `test_keepalive`, all of `streamlit_tests/`) | every task's full-suite run; 8 |
 
 **Deliberately not in ops-2** (ops spec delivery plan and owner corrections):
 - ops-3:
@@ -2281,9 +2330,11 @@ Merge after the owner's yes, and at a quiet time: every merge to `main` redeploy
   - `request_id` in error bodies and `redirect_slashes=False`;
   - `api/logging_config.py`, `api/startup.py`, `APP_ENV`/`LOG_LEVEL` settings and the startup guards;
   - `db/health.py`, `/health/ready`, `db_unavailable` and the `reset_readiness_for_tests` autouse fixture;
-  - the `keepalive.yml` rewrite, deleting `keepalive.py` and `test_keepalive.py`, `keep-awake.yml` (pings only https://liturgy-stg.streamlit.app/, owner correction 1);
+  - the `keepalive.yml` rewrite, deleting `keepalive.py` and `test_keepalive.py`, and any further `keep-awake.yml` change (PR #6 points it at https://liturgy-next.streamlit.app/);
   - the `app.py` FROZEN header, the README and `docs/manual-verification.md` updates, and the runbook's environment, keep-alive and freeze-record sections.
-- The Freeze step: cut and protect `streamlit-frozen`, and redeploy `liturgy-stg` from it. Delete the unused `liturgy` app and its redirect URIs.
+- The Freeze step: cut and protect `streamlit-frozen` and move production (`liturgy-next`) onto it, plus whatever `liturgy` clean-up is left (the app itself was deleted on 2026-09-26).
+- PR #6: the runbook's "Streamlit apps" table and `keep-awake.yml`.
+- Any new Streamlit feature (owner decision: data-safety fixes only).
 - Slice 1: the `@pytest.mark.postgres` copy of the race test (with the Streamlit `google_sub` case) and the Postgres CI job.
 - Slice 2: `backend/cache.py` and `backend/tests/test_cache.py`.
 - Slice 7: the `db/engine.py` default URL and `migrate_to_db.py`.
