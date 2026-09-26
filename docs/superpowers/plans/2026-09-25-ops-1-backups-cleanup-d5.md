@@ -105,7 +105,7 @@ The whole file was stored in the password manager plus one offline copy, then de
 age1zl8f90cg4cn2cujdl6dz8yqgj33vvqvyjjwwyp7hjdwf7r9efcwsratwe5
 ```
 
-Still needed from the owner, for the runbook's Key custody row (Task 7, Step 6): the password-manager entry name and the offline copy's location. Never the key file or its `AGE-SECRET-KEY-…` line.
+Still needed from the owner, for the runbook's Key custody row (Task 7, Step 6): the password-manager entry name and whether an offline copy exists (yes/no). Never the key file, its offline copy's location, or its `AGE-SECRET-KEY-…` line.
 
 ---
 
@@ -1176,14 +1176,15 @@ app uses those roles.
 
 | Key | Where the private key is kept | Created |
 |---|---|---|
-| `age1zl8f90cg` | [owner: password manager entry name; offline copy location] | 2026-09-26 |
+| `age1zl8f90cg` | [owner: password-manager entry name; offline copy: yes/no] | 2026-09-26 |
 
 ### Rotating the key
 
 1. Generate and store the new key as in "Key custody".
 2. PR: add its `age1…` line to `.github/backup/age-recipients.txt` next to the
    old one. After merging, run db-backup by hand and decrypt that artifact
-   with the new key (restore drill, first two commands).
+   with the new key (the download and `age --decrypt` lines of the restore
+   drill).
 3. PR: remove the old line. Keep the old private key for 30 more days, until
    the last artifact encrypted to it has expired, then destroy every copy.
 4. If a private key is exposed: remove its line at once, delete the existing
@@ -1205,6 +1206,10 @@ docker exec wsb-restore psql -h 127.0.0.1 -U postgres -Atc "select 'users', coun
 docker stop wsb-restore
 rm -f backup.dump ~/wsb-backup-key.txt backup-*.dump.age     # the plaintext dump holds Gmail refresh tokens; the key never stays on disk
 ```
+
+If you stop early (for example Ctrl-C during the `pg_isready` wait), still run
+the cleanup `rm …` line and `docker stop wsb-restore`, so no plaintext dump or
+key file is left on disk.
 
 - Use an image tag at least as new as the server major (`PG_MAJOR`).
 - The wait uses TCP (`-h 127.0.0.1`) because the image first runs a temporary,
@@ -1550,7 +1555,7 @@ Expected: FAIL, `AssertionError: every non-comment line must be an age1… publi
 
 - [ ] **Step 5 (OWNER): Hand over the `age` public key from Task 0, Step 3**
 
-The key pair had not been generated as of 2026-09-25; the owner generates it in Task 0, Step 3 (`brew install age`, `age-keygen`, whole file into the password manager plus an offline copy, then deleted from disk). Here the agent collects what that step produced, if it has not already: the `age1…` public line(s), the password-manager entry name, the offline copy's location and the creation date. The agent receives **only** those: never the key file and never its `AGE-SECRET-KEY-…` line.
+The key pair had not been generated as of 2026-09-25; the owner generates it in Task 0, Step 3 (`brew install age`, `age-keygen`, whole file into the password manager plus an offline copy, then deleted from disk). Here the agent collects what that step produced, if it has not already: the `age1…` public line(s), the password-manager entry name, whether an offline copy exists (yes/no) and the creation date. The agent receives **only** those: never the key file, never the offline copy's location, and never its `AGE-SECRET-KEY-…` line.
 
 - [ ] **Step 6: Replace the placeholder with the owner's key**
 
@@ -1561,7 +1566,7 @@ In `.github/backup/age-recipients.txt`, replace the line `OWNER-REPLACES-THIS-LI
 <the age1… public key exactly as the owner gave it>
 ```
 
-In `docs/ops-runbook.md` → Backups → Key custody, replace the table row's three `[owner: …]` markers with: the first 12 characters of each public key, the password-manager entry name and the offline copy's location (as the owner states them), and the creation date.
+In `docs/ops-runbook.md` → Backups → Key custody, replace the table row's three `[owner: …]` markers with: the first 12 characters of each public key, the password-manager entry name and whether an offline copy exists (yes/no) (as the owner states them), and the creation date. The repo is public, so never record the offline copy's physical location.
 
 Then check that the workflow's own guard accepts the file:
 
@@ -1637,8 +1642,8 @@ git add docs/superpowers/plans/2026-09-25-ops-1-backups-cleanup-d5.md
 git commit -m "Add the ops-1 implementation plan
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" || true   # "nothing to commit" is fine if it is already committed
-git push -u origin claude/ops-1-backups-cleanup-d5
-gh pr create --base main --head claude/ops-1-backups-cleanup-d5 \
+git push -u origin claude/ops-1
+gh pr create --base main --head claude/ops-1 \
   --title "ops-1: Streamlit D5 fix, encrypted backups, dead-code and config cleanup" \
   --body "PR ops-1 of the ops slice (docs/superpowers/specs/2026-09-25-slice-ops-cleanup-design.md; plan docs/superpowers/plans/2026-09-25-ops-1-backups-cleanup-d5.md).
 
@@ -1737,7 +1742,7 @@ Expected: `{"custom_branch_policies":true,"protected_branches":false}`, then exa
 The owner reviews the PR. All CI checks must be green and every task above must be done. Merging is outward-facing: merge only on the owner's explicit yes:
 
 ```bash
-gh pr merge --merge claude/ops-1-backups-cleanup-d5
+gh pr merge --merge claude/ops-1
 ```
 
 Do **not** add the `backup` environment's `BACKUP_DATABASE_URL` secret before this merge completes; the environment and its branch rule from Step 6 stay secret-free until Task 11.
@@ -1875,6 +1880,13 @@ The environment and its deployment-branch policy (admits only `main`, so a workf
    - Name: `BACKUP_DATABASE_URL`
    - Value: the Supabase **session pooler** URL with the database password. This is the same value as Railway's `DATABASE_URL`: Supabase Dashboard → Connect → Session pooler. The `postgresql+psycopg2://` form is fine.
 
+   Re-check the branch policy before adding the secret (the environment and its `main`-only rule were created on 2026-09-26, Task 9, Step 6, done):
+
+   ```bash
+   gh api repos/bbrown62450/church/environments/backup/deployment-branch-policies --jq '.branch_policies[] | "\(.type) \(.name)"'
+   ```
+   Expected: exactly `branch main`. Stop if it isn't.
+
    Alternatively, run `gh secret set BACKUP_DATABASE_URL --env backup -R bbrown62450/church` in your own terminal and paste the value at its prompt. Never paste it into chat.
 2. Settings → Secrets and variables → Actions → Repository secrets must not list `BACKUP_DATABASE_URL`. If it does, delete it: a repository secret is readable from every branch.
 
@@ -1902,7 +1914,7 @@ N=18   # the major from the error message (example value)
 sed -i '' "s/PG_MAJOR: \"17\"/PG_MAJOR: \"$N\"/" .github/workflows/backup.yml
 sed -i '' "s/^SERVER_MAJOR = \"17\"/SERVER_MAJOR = \"$N\"/" backend/tests/test_ops_workflows.py
 sed -i '' "s/^- Postgres server major: 17\$/- Postgres server major: $N/; s/postgres:17/postgres:$N/g" docs/ops-runbook.md
-.venv/bin/python -m pytest -q backend/tests/test_ops_workflows.py   # 64 passed
+.venv/bin/python -m pytest -q backend/tests/test_ops_workflows.py   # 65 passed
 ```
 (On Linux use `sed -i` without `''`. Update the `server_version` line by hand from `show server_version;`.)
 

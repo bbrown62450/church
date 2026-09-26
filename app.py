@@ -736,8 +736,10 @@ def render_service_builder(user, active):
 
     if exclude_recent_hymns and title_to_info:
         recent_used = get_recently_used_identifiers(church_id, weeks=12)
-        # Hymns already picked stay selectable (inv D5). Prepare records them as used
-        # today; dropping them here would reset the slots and save the service without hymns.
+        # Hymns already picked stay selectable (inv D5). Prepare records the picks
+        # under the service date (still counts as recent because the cutoff has no
+        # upper bound); dropping them here would reset the slots and save the
+        # service without hymns.
         titles_sorted = hymn_options_excluding_recent(title_to_info, recent_used, picked_hymn_keys(st.session_state))
         excluded = len(title_to_info) - len(titles_sorted)
         if excluded > 0:

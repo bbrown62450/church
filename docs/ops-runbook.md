@@ -160,14 +160,15 @@ app uses those roles.
 
 | Key | Where the private key is kept | Created |
 |---|---|---|
-| `age1zl8f90cg` | [owner: password manager entry name; offline copy location] | 2026-09-26 |
+| `age1zl8f90cg` | [owner: password-manager entry name; offline copy: yes/no] | 2026-09-26 |
 
 ### Rotating the key
 
 1. Generate and store the new key as in "Key custody".
 2. PR: add its `age1…` line to `.github/backup/age-recipients.txt` next to the
    old one. After merging, run db-backup by hand and decrypt that artifact
-   with the new key (restore drill, first two commands).
+   with the new key (the download and `age --decrypt` lines of the restore
+   drill).
 3. PR: remove the old line. Keep the old private key for 30 more days, until
    the last artifact encrypted to it has expired, then destroy every copy.
 4. If a private key is exposed: remove its line at once, delete the existing
@@ -189,6 +190,10 @@ docker exec wsb-restore psql -h 127.0.0.1 -U postgres -Atc "select 'users', coun
 docker stop wsb-restore
 rm -f backup.dump ~/wsb-backup-key.txt backup-*.dump.age     # the plaintext dump holds Gmail refresh tokens; the key never stays on disk
 ```
+
+If you stop early (for example Ctrl-C during the `pg_isready` wait), still run
+the cleanup `rm …` line and `docker stop wsb-restore`, so no plaintext dump or
+key file is left on disk.
 
 - Use an image tag at least as new as the server major (`PG_MAJOR`).
 - The wait uses TCP (`-h 127.0.0.1`) because the image first runs a temporary,

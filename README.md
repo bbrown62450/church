@@ -145,8 +145,8 @@ empty scripture lookup aborts the run non-zero.
 
 The free Supabase project pauses after ~7 days idle. `.github/workflows/keepalive.yml`
 runs `keepalive.py` (a `SELECT 1` against `DATABASE_URL`) daily so the first
-visitor each week never hits a paused/cold database. Add `DATABASE_URL` as an
-Actions secret.
+visitor each week never hits a paused/cold database. Do not add a
+`DATABASE_URL` repository secret; see docs/ops-runbook.md → Backups.
 
 ### Backups (required)
 

@@ -468,11 +468,18 @@ def test_secret_key_pattern_matches_a_key_but_not_a_mention():
     assert not AGE_SECRET_KEY.search("no file under .github/ or docs/ contains `AGE-SECRET-KEY-`.")
 
 
-def test_no_age_private_key_is_committed_under_github_or_docs():
-    leaks = [
-        str(path.relative_to(ROOT))
-        for base in (".github", "docs")
-        for path in sorted((ROOT / base).rglob("*"))
-        if path.is_file() and AGE_SECRET_KEY.search(path.read_text(encoding="utf-8", errors="ignore"))
-    ]
+def test_no_age_private_key_is_committed_in_any_tracked_file():
+    tracked = subprocess.run(
+        ["git", "ls-files"], cwd=ROOT, capture_output=True, text=True, check=True,
+    ).stdout.splitlines()
+    leaks = []
+    for rel in tracked:
+        path = ROOT / rel
+        if not path.is_file():
+            continue
+        data = path.read_bytes()
+        if b"\x00" in data:
+            continue   # skip binary files
+        if AGE_SECRET_KEY.search(data.decode("utf-8", errors="ignore")):
+            leaks.append(rel)
     assert leaks == []

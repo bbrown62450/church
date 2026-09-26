@@ -69,7 +69,8 @@ def hymn_options_excluding_recent(title_to_info: dict, recent_used: set, keep: s
     """Sorted title keys without recently used hymns, but never without a key in `keep`
     (the hymns already picked in the three slots).
 
-    inv D5: Prepare records the picks as used today, so without `keep` the next
+    inv D5: Prepare records the picks under the service date (still counts as
+    recent because the cutoff has no upper bound), so without `keep` the next
     rerun drops them from the options, safe_hymn_selectbox resets them to '' and
     the next Prepare or Save stores the service without hymns. A key in `keep`
     that is not in `title_to_info` (a renamed or deleted hymn) is not added.
