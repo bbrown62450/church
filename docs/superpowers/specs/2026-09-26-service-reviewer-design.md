@@ -92,7 +92,7 @@ These are deterministic, free, and they run even without an OpenAI key. Each ret
 | A scripture reference: a Bible book name or common abbreviation followed by a chapter number ("Mark 4", "1 Sam 3:10") | Rules | `Cites {match}. Draw on the reading's themes without naming it.` |
 | The same opening words on two or more cards: the first two words after any leading "Leader:" or "People:" label, case-insensitive, punctuation dropped (for example "Gracious God") | Repetition | This goes in the "Across the service" box: `Several prayers open with "{words}".` |
 
-The book list lives in `review_checks.py`, which owns it; slice 4a deletes `worship_service`.
+Book names come from `scripture_refs.BOOKS`, the single book table from slices 2 and 3; there is no second list. `review_checks.py` builds its prose pattern from every alias in `BOOKS` (longest alias first, whole words, followed by a chapter number), then confirms each candidate with `scripture_refs.parse_refs`. That parser matches slice 3's, so "Psalm 1" never reads as "Psalm 119". Only matches that `parse_refs` turns into a span become notes. Slice 3 lands before this add-on, so the table and the parser already exist.
 
 ### Layer 2: AI review (`backend/usecases/liturgy_review.py`)
 
@@ -183,7 +183,7 @@ keeps the old wording. A church whose admin saved its own system prompt keeps it
 
 Backend, per F §5:
 - `review_checks`, table-tested:
-  - each stock phrase, "Ordinary Time", book-and-chapter references and common abbreviations;
+  - each stock phrase, "Ordinary Time", book-and-chapter references and common abbreviations, drawn from `scripture_refs.BOOKS` aliases;
   - no false hit on "Mark" as a verb or on "the book of life";
   - repeated openings across cards.
 - Review usecase with `FakeAI`:
