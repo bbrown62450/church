@@ -582,3 +582,65 @@ def test_app_py_carries_the_frozen_header():
     lines = _read(ROOT / "app.py").splitlines()
     first = lines[1] if lines[0].startswith("#!") else lines[0]   # the line after the shebang
     assert first == FROZEN_HEADER
+
+
+# --- Runbook sections, freeze record, manual checks (ops-3) --------------------
+
+RUNBOOK_SECTIONS = (
+    "## Environments and variables",
+    "## Supabase lockdown record",
+    "## Backups",
+    "## Keep-alive",
+    "## Streamlit freeze",
+    "## Platform limits",
+    "## Incident response",
+)
+FREEZE_SUBSECTIONS = (
+    "### Streamlit apps",
+    "### What the frozen app inherits from ops-3",
+    "### Freeze record",
+    "### Freeze policy",
+    "### Recorded Python and package versions",
+    "### Contingency",
+)
+MANUAL_VERIFICATION = ROOT / "docs" / "manual-verification.md"
+
+
+def _section(text, heading):
+    """The body of `heading` up to the next heading of the same level."""
+    level = heading.split(" ", 1)[0]
+    return text.split(f"\n{heading}\n", 1)[1].split(f"\n{level} ", 1)[0]
+
+
+def test_runbook_has_the_seven_sections_in_order():
+    assert re.findall(r"^## .+$", _read(RUNBOOK), re.MULTILINE) == list(RUNBOOK_SECTIONS)
+
+
+def test_runbook_streamlit_freeze_has_the_record_policy_and_versions():
+    section = _section(_read(RUNBOOK), "## Streamlit freeze")
+    headings = re.findall(r"^### .+$", section, re.MULTILINE)
+    assert [h for h in FREEZE_SUBSECTIONS if h not in headings] == []
+
+
+def test_runbook_environments_name_every_ops_setting():
+    section = _section(_read(RUNBOOK), "## Environments and variables")
+    for name in ("APP_ENV", "LOG_LEVEL", "DB_POOL_SIZE", "DB_MAX_OVERFLOW", "CORS_ORIGINS",
+                 "API_BASE_URL", "BACKUP_DATABASE_URL", "NEXT_PUBLIC_API_URL", "streamlit-frozen",
+                 "https://liturgy-next.streamlit.app/"):
+        assert name in section, name
+
+
+def test_runbook_contingency_keeps_the_old_season_wording_and_no_prayer_library():
+    # F §6.1 item 6 and §6.2 (amendment 2026-09-26): if Streamlit stays on main,
+    # it gets no new features.
+    section = _section(_section(_read(RUNBOOK), "## Streamlit freeze"), "### Contingency")
+    for needle in ("LEGACY_SYSTEM_PROMPT", "legacy_default_prompts()", "prayer_library",
+                   "streamlit_tests/test_app_smoke.py", "Reboot"):
+        assert needle in section, needle
+
+
+def test_manual_verification_has_the_ops_slice_checklist():
+    section = _section(_read(MANUAL_VERIFICATION), "## Ops slice")
+    for needle in ("/health/ready", "x-request-id", "/me/", "streamlit-frozen", "keep-awake",
+                   "https://liturgy-next.streamlit.app", "db-backup", "375 px"):
+        assert needle in section, needle

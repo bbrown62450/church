@@ -43,3 +43,24 @@ On the deployed Vercel URL, on a phone and on a desktop:
 - [ ] The Streamlit app still signs in and loads your church.
 - [ ] Supabase → Authentication → Sign In / Providers: only Google enabled.
 - [ ] Supabase email changes require confirmation: `curl -s -H "apikey: <publishable key>" https://<ref>.supabase.co/auth/v1/settings` shows `"mailer_autoconfirm": false` (users are matched by email, so auto-confirmed email changes would allow account takeover).
+
+## Ops slice
+
+Run on the production URLs: https://worship-service-builder.vercel.app (at
+375 px in Chrome device mode, iPhone SE, and on desktop),
+https://church-production-74ca.up.railway.app, and
+https://liturgy-next.streamlit.app, the production Streamlit app (the only
+one since `liturgy` and `liturgy-stg` were deleted on 2026-09-26). Record each
+result, with its date, in `docs/ops-runbook.md`.
+
+- [ ] Step 0 recorded in `docs/ops-runbook.md` (done on 2026-09-25; confirm the records are there, do not redo the checks): the exposure checks (the Data API was already off: REST and GraphQL with the anon key return 503 `PGRST002` and no rows, so no incident), GraphQL introspection, table owners and BYPASSRLS, `server_version` 17.6 and the `- Postgres server major: 17` line, the pooler Pool Size 15 with 2 × (3 + 3) + 2 = 14 ≤ 15, and Railway's request limit with its source. If a later exposure check ever returns rows: the incident record, including the users/contacts audit and where the forensic dump is kept.
+- [ ] D5 workaround message: sent to the tester on day one, or the owner's decision not to send it recorded (as on 2026-09-26).
+- [ ] D5 fix, live on `liturgy-next` since the ops-1 merge, in a throwaway church: sign in with a second Google account that has no church and create "Ops test". Tick "Exclude hymns used in the last 12 weeks", pick three hymns, generate the liturgy, click "Prepare bulletin copy": the three picks are still selected. Click "Prepare pastor's copy": both Word files list the three hymns. Save, then load the service again with the box still ticked: its three hymns are in the slots. Delete "Ops test" in Settings → Danger zone. Then run the recovery queries, record the result, and send the tester the "fixed" message.
+- [ ] https://worship-service-builder.vercel.app, after the lockdown and after each ops merge: sign in, the church shows in the switcher, switch church if you have two, log out.
+- [ ] `db-backup` run by hand: green, with an artifact `backup-*.dump.age`; the log shows no URL or password. The restore drill's counts match production.
+- [ ] `https://church-production-74ca.up.railway.app/health/ready` → `{"ok":true,"db":"ok"}`. The `keepalive` run by hand is green.
+- [ ] Railway deploy log after ops-3: `Database: dialect=postgresql driver=psycopg2 host=…pooler.supabase.com database=postgres`, with no username or password, and no `CORS_ORIGINS allows only localhost` ERROR line.
+- [ ] Browser devtools on the Vercel app: the `/me` response has an `x-request-id` header, and it is readable from JS: in the console, `fetch("https://church-production-74ca.up.railway.app/health").then(r => r.headers.get("x-request-id"))` resolves to an id, not `null`.
+- [ ] `curl -i https://church-production-74ca.up.railway.app/me/` → 404 JSON with `request_id`, and no `location` header (not a 307).
+- [ ] `liturgy-next` after the ops-3 merge (rebooted), the temporary pre-flight app `liturgy-frozen` from `streamlit-frozen`, and `liturgy-next` again after the Freeze: sign in, the church and hymnal load, load a saved service, open Settings; on the pre-flight app and after the Freeze also connect Gmail and send a test email to yourself. After the Freeze the app's settings show branch `streamlit-frozen` and the Sharing noted before it. After the next merge to `main`, the app's logs show no code pull (`Pulling code changes from Github`, `Updated app!`) and its settings still show `streamlit-frozen`.
+- [ ] `keep-awake` is green with one URL, https://liturgy-next.streamlit.app/. The Google OAuth client "Liturgy" lists only the two `liturgy-next` redirect URIs: the deleted `liturgy` and `liturgy-stg` apps' four were removed before the Freeze, and the temporary `liturgy-frozen` two after it.
