@@ -2,23 +2,24 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship PR ops-3 of the ops slice, then the Freeze. ops-3 adds request ids on every response, CORS-safe 500s, the final CORS lists, `redirect_slashes=False`, logging with `request_id=`, the `APP_ENV` startup guards and `GET /health/ready`. `keepalive.yml` then curls `/health/ready` and holds no database secret. `app.py` on `main` gets its FROZEN header, and `keep-awake.yml` pings only production. The Freeze then serves the production Streamlit app `liturgy-stg` from a protected `streamlit-frozen` branch and deletes the unused `liturgy` app.
+**Goal:** Ship PR ops-3 of the ops slice, then the Freeze. ops-3 adds request ids on every response, CORS-safe 500s, the final CORS lists, `redirect_slashes=False`, logging with `request_id=`, the `APP_ENV` startup guards and `GET /health/ready`. `keepalive.yml` then curls `/health/ready` and holds no database secret, and `app.py` on `main` gets its FROZEN header. The Freeze then serves the production Streamlit app `liturgy-next` (https://liturgy-next.streamlit.app) from a protected `streamlit-frozen` branch, by deleting the app and recreating it under the same subdomain.
 
-**Architecture:** Two pure-ASGI middlewares in `backend/api/middleware.py` sit inside `CORSMiddleware`, in this order: CORS → `RequestIdMiddleware` → `UnhandledErrorMiddleware`. So every response the app produces carries `X-Request-Id`, and an unexpected exception becomes the uniform 500 body with CORS headers instead of a network error. A contextvar holds the request id. Error bodies read it (`api/errors._body`), and so does a log-record factory (`api/logging_config`) that stamps `request_id` on every record. `api/startup.py` holds the pure startup checks the lifespan runs before `init_db()`. `db/health.py` holds the memoized, single-flight `SELECT 1` probe; the public route `/health/ready` only calls it. Workflows, docs and the runbook are guarded by pytest tests in `backend/tests/test_ops_workflows.py`. The Freeze is owner work plus two git commands, recorded in `docs/ops-runbook.md`.
+**Architecture:** Two pure-ASGI middlewares in `backend/api/middleware.py` sit inside `CORSMiddleware`, in this order: CORS → `RequestIdMiddleware` → `UnhandledErrorMiddleware`. So every response the app produces carries `X-Request-Id`, and an unexpected exception becomes the uniform 500 body with CORS headers instead of a network error. A contextvar holds the request id. Error bodies read it (`api/errors._body`), and so does a log-record factory (`api/logging_config`) that stamps `request_id` on every record. `api/startup.py` holds the pure startup checks the lifespan runs before `init_db()`. `db/health.py` holds the memoized, single-flight `SELECT 1` probe; the public route `/health/ready` only calls it. Workflows, docs and the runbook are guarded by pytest tests in `backend/tests/test_ops_workflows.py`. The Freeze is owner work in Streamlit Community Cloud (it cannot change an app's branch, so `liturgy-next` is deleted and recreated from `streamlit-frozen` with the same subdomain and Secrets) plus two git commands, recorded in `docs/ops-runbook.md`.
 
-**Tech Stack:** Python 3.11, FastAPI 0.141.1 / Starlette 1.7.0 (pure ASGI middleware, `CORSMiddleware`, `TestClient`), anyio 4.15 (copies the context into the threadpool), SQLAlchemy 2.1.1, psycopg2, pytest, PyYAML 6 (test only), GitHub Actions (`curl`), Railway, Vercel (unchanged), Streamlit Community Cloud, Google Cloud OAuth client.
+**Tech Stack:** Python 3.11, FastAPI 0.141.1 / Starlette 1.7.0 (pure ASGI middleware, `CORSMiddleware`, `TestClient`), anyio 4.15 (copies the context into the threadpool), SQLAlchemy 2.1.1, psycopg2, pytest 9, PyYAML 6 (test only), Streamlit 1.64 (`AppTest`, Task 16 only), GitHub Actions (`curl`), Railway, Vercel (unchanged), Streamlit Community Cloud (Python 3.13), Google Cloud OAuth client "Liturgy".
 
-**Spec:** `docs/superpowers/specs/2026-09-25-slice-ops-cleanup-design.md` ("the ops spec"). Foundations: `docs/superpowers/specs/2026-09-25-migration-foundations-design.md` ("F": §1.1, §1.5, §1.10, §2.5, §2.6 items 1–2, §3.3, §5.5, §6.1, §7.2, §7.3). Inventory: `docs/superpowers/specs/2026-09-25-streamlit-migration-inventory.md` ("inv"). Earlier PRs, assumed merged exactly as written, together with their records PRs: `docs/superpowers/plans/2026-09-25-ops-1-backups-cleanup-d5.md` ("the ops-1 plan") and `docs/superpowers/plans/2026-09-25-ops-2-identity-db.md` ("the ops-2 plan").
+**Spec:** `docs/superpowers/specs/2026-09-25-slice-ops-cleanup-design.md` ("the ops spec"). Foundations: `docs/superpowers/specs/2026-09-25-migration-foundations-design.md` ("F": §1.1, §1.5, §1.10, §2.5, §2.6 items 1–2, §3.3, §5.5, §6.1, §6.2 with its 2026-09-26 amendment, §7.2, §7.3). Inventory: `docs/superpowers/specs/2026-09-25-streamlit-migration-inventory.md` ("inv"). Already on `main` (57beda0): PR #4 (service rubric: `api/routes/rubric.py`, `service_rubric.py`, `hymn_ranking.py`, `hymnary_facts.py`, `text_year`/`hymnal_count`), ops-1 (#5), #6 (keep-awake and runbook → `liturgy-next`), the design-only PRs #7–#11, and ops-2 (#12: `db/upsert.py`, `ensure_user`, `api/identity_cache.py` wired into `api/deps.get_current_user`, the 3 + 3 pool with `connect_timeout=10`, the `backend-postgres` CI job, `keep-awake.yml` visiting only `liturgy-next`). The ops-1 and ops-2 plans are `docs/superpowers/plans/2026-09-25-ops-1-backups-cleanup-d5.md` and `docs/superpowers/plans/2026-09-25-ops-2-identity-db.md`.
 
 ## Global Constraints
 
 - Run every command from the repo root with `.venv/bin/python` (Python 3.11). The system `python3` is 3.9 and has no deps. If `.venv` is missing: `/Users/beaubrown/.local/bin/python3.11 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt`.
-- Backend test command: `.venv/bin/python -m pytest -q` (pytest.ini: `pythonpath = . backend`, `testpaths = backend/tests streamlit_tests`). Baseline after ops-1, ops-2 and their records PRs: `326 passed` (ops-2 plan, Task 8, Step 1's final count, itself derived from ops-1's final count of `279 passed` — recompute both if either differs). This plan adds 74 tests and deletes the 5 in `test_keepalive.py`, for `395 passed`. If the baseline differs because a docs-only PR added tests, use your number and add the same deltas.
-- Frontend: untouched. CI's frontend job (`npm ci`, lint, typecheck, `npm test`, build) must stay green.
+- Branch `claude/ops-3`, created from `origin/main` at 57beda0 ("Merge pull request #12 from bbrown62450/claude/ops-2") and checked out in this worktree. Its first commit is this plan. Never switch branches for Tasks 1–11. Stage files by name, never `git add -A` or `git add .`: the untracked `.claude/` directory must stay uncommitted.
+- Backend test command: `.venv/bin/python -m pytest -q` (pytest.ini: `pythonpath = . backend`, `testpaths = backend/tests streamlit_tests`). Baseline on `claude/ops-3`: `489 passed` (2026-09-26). This plan adds 75 tests and deletes the 5 in `test_keepalive.py`, for `559 passed` (Task 16, only if needed, adds 1 more). If the baseline differs, stop and ask the owner.
+- Frontend: untouched. CI's `frontend` job (`npm ci`, lint, typecheck, `npm test`, build) and the `backend-postgres` job (`backend/tests/pg_smoke.py` on a `postgres:17` service) must stay green.
 - Every commit message ends with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Commits follow TDD: test first, watch it fail, then code.
 - Layering: nothing under `backend/` imports `streamlit`. `backend/db/health.py` imports neither FastAPI nor Starlette. `db/` never imports `api/`. `api/routes/health.py` holds no SQL and no `try` (the recorded exception to F §2.2 items 1 and 4: `/health` and `/health/ready` have no usecase and raise `ApiError`).
 - No schema change, no Alembic, no data migration (slice 1). `init_db()` stays in the lifespan (slice 1 removes it).
-- Middleware order in `create_app()` (the last added is the outermost): `add_middleware(UnhandledErrorMiddleware)`, then `RequestIdMiddleware`, then `CORSMiddleware`. The resulting stack, outside in: Starlette `ServerErrorMiddleware` → CORS → RequestId → UnhandledError → `ExceptionMiddleware` → router. The existing `@app.exception_handler(Exception)` stays as the last resort.
+- Middleware order in `create_app()` (the last added is the outermost): `add_middleware(UnhandledErrorMiddleware)`, then `RequestIdMiddleware`, then `CORSMiddleware`. The resulting stack, outside in: Starlette `ServerErrorMiddleware` → CORS → RequestId → UnhandledError → `ExceptionMiddleware` → router. The existing `@app.exception_handler(Exception)` stays as the last resort. The routers stay `health`, `me` and `rubric`, in that order.
 - CORS (F §1.10), verbatim: `allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"]`, `allow_headers=["Authorization", "Content-Type", "X-Church-Id", "Idempotency-Key", "If-Match", "X-Request-Id"]`, `expose_headers=["Content-Disposition", "Retry-After", "X-Request-Id"]`, `max_age=600`, `allow_credentials` off.
 - Request id: the inbound `X-Request-Id` is echoed if it matches `^[A-Za-z0-9-]{8,64}$`, else the server uses `uuid.uuid4().hex`. Every error body is `{"error": {"code", "message", "request_id"}}`, with `request_id` equal to the header (`fields` and `details` arrive in slice 1).
 - Readiness: `GET /health/ready` is public; 200 `{"ok": true, "db": "ok"}`; 503 `db_unavailable` "The database is not reachable."; memoized 10 s after a success and 5 s after a failure; one probe at a time; `SET LOCAL statement_timeout = '5s'` on Postgres. `GET /health` stays the dependency-free liveness probe and Railway's deploy health check (slice 1 moves the deploy check).
@@ -32,17 +33,23 @@
   - `LOG_LEVEL='{value}' is not a valid level; using INFO.` (log WARNING)
   - `::error::Set the API_BASE_URL repository variable (Settings → Secrets and variables → Actions → Variables)` (`keepalive.yml`)
 - Log lines never contain request bodies, tokens, invite codes, OAuth codes or state, email bodies, AI prompts or outputs, or a query string (F §2.5).
-- **Streamlit apps (owner correction 1, 2026-09-25; reverses the ops spec).** `liturgy-stg`, https://liturgy-stg.streamlit.app, is the production Streamlit app. The owner and the tester use it; it is the app to keep, freeze on `streamlit-frozen` and keep awake. `liturgy`, https://liturgy.streamlit.app, is unused, and its Google sign-in already fails with `StreamlitAuthError` (its secrets config). The Freeze deletes it and its two redirect URIs. Wherever the ops spec says "delete `liturgy-stg`" or "keep-awake pings only `https://liturgy.streamlit.app/`", this plan does the opposite. Tester messages and smoke checks use `liturgy-stg`.
-- **Step 0 is done (owner correction 2).** ops-1 wrote the results into `docs/ops-runbook.md`; never ask the owner to redo them. The Data API was already off (REST and GraphQL with the anon key return 503 `PGRST002`, no rows), so there was no incident. Every `public` table is owned by `postgres`, with `rolbypassrls = true`. RLS and the REVOKE / `ALTER DEFAULT PRIVILEGES` statements ran on 2026-09-25, and afterwards the Vercel app and `liturgy-stg` both still loaded the owner's church. The server is 17.6 (`- Postgres server major: 17`, `PG_MAJOR` 17). Railway closes a request after 5 minutes with no data, and allows up to 15 minutes while data flows (https://docs.railway.com/networking/public-networking/specs-and-limits, checked 2026-09-25), so the 120 s floor is met. The `age` key pair had **not** been generated on 2026-09-25; that owner step comes before backups and belongs to ops-1 (its Task 0, Step 3, and Task 7). ops-3 neither asks for it nor touches it: Task 1, Step 1's empty `[owner` grep shows that ops-1's records PR filled the runbook's Key custody row.
-- **Pool (owner correction 3).** The Supavisor Pool Size is 15 (Nano compute; max client connections 200): 2 × (3 + 3) + 2 = 14 ≤ 15. `DB_POOL_SIZE=3` and `DB_MAX_OVERFLOW=3` are the code defaults (ops-2), the `backend/.env.example` values (ops-1), Railway service variables and top-level keys in the `liturgy-stg` Streamlit Secrets. ops-3 changes none of them. The owner confirms both keys in the `liturgy-stg` Secrets before the cut (Task 13, Step 3); if the Freeze recreates `liturgy-stg`, its pasted Secrets must still contain both keys. Deleting the unused `liturgy` app in the Freeze also frees its connections (Task 15 rewrites the Platform limits bullet to say so).
-- Production URLs: API https://church-production-74ca.up.railway.app; frontend https://worship-service-builder.vercel.app; Supabase project `worship-staging`, ref `tbecmwtitsoxzkrvxxxu`; repo `bbrown62450/church`.
-- The agent never sees or types a secret (database URLs, keys, tokens, Streamlit Secrets). Opening a PR, merging, pushing a branch other than the PR branch, setting repository variables or protection, triggering workflows and messaging the tester are outward-facing: get the owner's explicit yes first.
-- These tests stay unchanged and green: `test_auth.py`, `test_api_me.py`, `test_api_security.py`, `test_docs.py`, `test_ci_workflow.py`, `test_no_streamlit_in_core.py`, the ops-2 identity tests, and all of `streamlit_tests/`. `test_api_app.py` changes exactly one test (Tasks 1–2). `test_keepalive.py` is deleted (Task 7).
-- **Not in ops-3** (other PRs and slices; do not touch): `backup.yml`, the `age` recipients, `normalize-pg-url.sh` (ops-1); `db/upsert.py`, `ensure_user`, the identity cache and the pool code (ops-2); Alembic, `railway.toml`, the Railway health check move, the schema-behind gate, `domain_errors.py`, `fields`/`details`, `test_route_guards.py`, the frontend `ApiError.requestId` and "(Ref: …)" text, `frontend/src/lib/api/errors.ts` itself (slice 1); `backend/cache.py` and `backend/tests/test_cache.py` (slice 2, never create them); `OPENAI_MODEL` (slice 3); the switchover banner (5b); the root `.env.example`, deleting `keep-awake.yml`, the README rewrite (slice 7).
+- **Production Streamlit (facts of 2026-09-26; they override the ops spec).** The one Streamlit app is `liturgy-next`, https://liturgy-next.streamlit.app, on Streamlit Community Cloud: repo `bbrown62450/church`, branch `main`, main file `app.py`, Python 3.13. Its Secrets carry `[auth] redirect_uri = https://liturgy-next.streamlit.app/oauth2callback` and `GOOGLE_OAUTH_REDIRECT_URI = https://liturgy-next.streamlit.app/`, both registered on the Google OAuth client "Liturgy". The owner and the tester use it. `liturgy` and `liturgy-stg` were **deleted on 2026-09-26** (both URLs return 404); their four Google redirect URIs are harmless and may be removed. `keep-awake.yml` on `main` already visits only https://liturgy-next.streamlit.app/. Wherever the ops spec says "redeploy `liturgy`", "delete `liturgy-stg`" or "keep-awake pings only `https://liturgy.streamlit.app/`", read `liturgy-next` and "already done".
+- **Streamlit Community Cloud rules.** One app per repo + branch + main file. An existing app's repo, branch or main file cannot be changed: changing the branch means deleting the app and redeploying it with the same subdomain (`liturgy-next`) and re-entering its Secrets, which the owner keeps in the password manager. A running app hot-pulls new commits and can keep stale imported modules (an `ImportError` happened on the old `liturgy` app), so after any code change reaches a running app, reboot it (Manage app → Reboot).
+- **Owner decisions.** No new features in Streamlit, only data-safety fixes. The database password was not rotated (accepted risk, recorded in the runbook); ops-3 does not touch it. Backups are live (environment `backup`, secret `BACKUP_DATABASE_URL`, first run green on 2026-09-26). Railway has `DB_POOL_SIZE=3` and `DB_MAX_OVERFLOW=3`; `APP_ENV` is **not** set on Railway yet (Task 11 sets it before merge). The Supabase pooler Pool Size is 15: 2 × (3 + 3) + 2 = 14 ≤ 15, for the API and `liturgy-next`. ops-3 changes no pool value.
+- **Step 0 is done.** ops-1 wrote the results into `docs/ops-runbook.md`; never ask the owner to redo them. The Data API was already off (REST and GraphQL with the anon key return 503 `PGRST002`, no rows), so there was no incident. The server is 17.6 (`- Postgres server major: 17`). Railway's request limit (5 minutes idle, 15 minutes while data flows) is recorded with its source.
+- **Open owner markers from ops-1 and ops-2.** On 2026-09-26 the runbook has 11 `[owner` lines that are not ops-3's: the `age` key's password-manager entry, the restore drill, three D5 rows (manual check, "fixed" message, recovery result) and the six ops-2 gate rows. ops-3's code work does not wait for them. The six ops-2 gate rows must be filled before ops-3 merges (the ops spec's gate after ops-2; Task 11), and the D5 manual check must have passed before `streamlit-frozen` is cut (Task 13). ops-3's own markers are checked with this section-scoped command, which reads only the sections ops-3 adds (call it "the ops-3 marker check"):
+
+  ```bash
+  awk '/^## Environments and variables$|^## Keep-alive$|^### What the frozen app inherits from ops-3$/{on=1} /^## Supabase lockdown record$|^## Streamlit freeze$|^## Platform limits$/{on=0} on && /\[owner/{print FNR": "$0}' docs/ops-runbook.md
+  ```
+- Production URLs: API https://church-production-74ca.up.railway.app; frontend https://worship-service-builder.vercel.app; Streamlit https://liturgy-next.streamlit.app; Supabase project `worship-staging`, ref `tbecmwtitsoxzkrvxxxu`; repo `bbrown62450/church`.
+- The agent never sees or types a secret (database URLs, keys, tokens, Streamlit Secrets, the contents of `backend/.env`). Opening a PR, merging, pushing a branch other than the PR branch, setting repository variables or protection, triggering workflows and messaging the tester are outward-facing: get the owner's explicit yes first.
+- These tests stay unchanged and green: `test_auth.py`, `test_api_me.py`, `test_api_rubric.py`, `test_api_security.py`, `test_docs.py`, `test_ci_workflow.py`, `test_no_streamlit_in_core.py`, `test_engine.py`, the ops-2 identity tests (`test_identity.py`, `test_identity_cache.py`, `test_upsert.py`, `test_users_repo.py`), `backend/tests/pg_smoke.py`, and all of `streamlit_tests/`. `test_api_app.py` changes exactly one test (Tasks 1–2). `test_keepalive.py` is deleted (Task 7).
+- **Not in ops-3** (other PRs and slices; do not touch): `backup.yml`, `.github/backup/`, `backend/.env.example` (ops-1 already documents `APP_ENV`, `LOG_LEVEL`, `DB_POOL_SIZE`, `DB_MAX_OVERFLOW` and `ESV_API_KEY`); `keep-awake.yml` (already visits only `liturgy-next`, PR #6/#12); `db/upsert.py`, `ensure_user`, `api/deps.py`, the identity cache, the pool code and `ci.yml` (ops-2); the rubric code (PR #4); the prayer library and the service reviewer (PRs #7–#11, new app only, never Streamlit); Alembic, `railway.toml`, the Railway health check move, the schema-behind gate, `domain_errors.py`, `fields`/`details`, `test_route_guards.py`, the frontend `ApiError.requestId` and "(Ref: …)" text, `frontend/src/lib/api/errors.ts` itself (slice 1); `backend/cache.py` and `backend/tests/test_cache.py` (slice 2, never create them); `liturgy_prompts.LEGACY_SYSTEM_PROMPT` and `legacy_default_prompts()` (slice 4, and only under the Freeze contingency); `OPENAI_MODEL` (slice 3); the switchover banner (5b); the root `.env.example`, deleting `keep-awake.yml`, the README rewrite (slice 7).
 
 ## Spec clarifications (recorded, not deviations of intent)
 
-1. **Owner correction 1 in code.** `keep-awake.yml`'s `APP_URLS` becomes exactly `https://liturgy-stg.streamlit.app/`. The spec's test ("contains `https://liturgy.streamlit.app/` and not `liturgy-stg`") is inverted to match: the one URL is `https://liturgy-stg.streamlit.app/`, and `https://liturgy.streamlit.app` is absent. Slice 7's "verify ops" row names `liturgy`; slice 7 adapts it, as that row itself allows.
+1. **`liturgy-next` in code.** `keep-awake.yml` already lists exactly `https://liturgy-next.streamlit.app/` on `main`, so ops-3 does not edit it. The spec's keep-awake test ("contains `https://liturgy.streamlit.app/` and not `liturgy-stg`") is kept as a guard with the facts swapped in: the one URL is `https://liturgy-next.streamlit.app/`, and neither `https://liturgy.streamlit.app` nor `https://liturgy-stg.streamlit.app` appears. It passes when written (Task 8). The spec's Freeze step 5 (delete the second app) was done on 2026-09-26; only the optional redirect-URI cleanup is left. Slice 7's "verify ops" row names `liturgy`; slice 7 adapts it, as that row itself allows.
 2. **`test_api_app.py::test_unhandled_exception_is_a_generic_500` changes in two steps.** Task 1 adds `request_id` to every error body. The last-resort 500 then carries a fallback id but no header yet, so Task 1 asserts a 32-hex `request_id`. Task 2 puts `UnhandledErrorMiddleware` inside `RequestIdMiddleware` and tightens the test to the spec's final form: `request_id` equals the `X-Request-Id` header, and the body has exactly `code`, `message` and `request_id`.
 3. **Request-id boundaries.** The spec lists the invalid inbound id "`short` (7 characters)", but `short` has 5. The test uses the 7-character `abc-123`, plus `bad id!` and a 65-character id. The valid cases include both edges: 8 characters and 64 characters.
 4. **405 in the error-body test.** The spec's API section names 404s, 405s and 422s. The body test covers 404, 405, 401 and 422.
@@ -52,12 +59,15 @@
 8. **Readiness-reset fixture.** The spec's autouse fixture resets the memo only when `db.health` is already imported, the same pattern as ops-2's `_fresh_identity_cache`. A stale result can only exist then.
 9. **The `errors.ts` check** (`test_foundation_setup.py`) accepts `"db_unavailable"` or `'db_unavailable'`, and a parametrized self-test shows it bites. It passes as soon as it is written, because the file arrives in slice 1. `test_foundation_setup.py` gains `import pytest` for the self-test.
 10. **What moves out of `test_keepalive.py`.** Its workflow assertions move to `test_ops_workflows.py`. `test_backup_workflow_present` is ported as `test_backup_workflow_runs_pg_dump_on_a_schedule`. The three `ping` tests go with `keepalive.py`, and `test_health_ready.py`'s 200 and 503 tests cover the same ground through the API.
-11. **Docs get tests.** The README keep-alive paragraph, the runbook's seven sections, its Keep-alive and Environments sections, the freeze subsections and the manual-verification "Ops slice" checklist are asserted in `test_ops_workflows.py`, so each docs change has a failing test first. `test_docs.py` stays unchanged.
+11. **Docs get tests.** The README keep-alive paragraph, the runbook's seven sections, its Keep-alive and Environments sections, the freeze subsections, the Contingency wording and the manual-verification "Ops slice" checklist are asserted in `test_ops_workflows.py`, so each docs change has a failing test first. `test_docs.py` stays unchanged.
 12. **Checklist boxes stay unchecked.** `docs/manual-verification.md` is a reusable checklist, as slice 0 left its own section. Results, with dates, go into `docs/ops-runbook.md`. So AC 23's "every box is checked" means performed and recorded.
 13. **Two freeze-records PRs.** The spec's "after the next merge to `main`, the app's logs show no new build" needs a merge after the redeploy. Records PR A (Task 15) is that merge. Records PR B records the check that PR A's merge triggered.
-14. **Stale mentions of the keep-alive script.** The ops-2 docstring in `db/engine.py` and ops-2's "Platform limits" bullet in the runbook mention `keepalive.py`, which ops-3 deletes. Both are reworded (Task 7), and a test keeps the runbook from mentioning it again.
-15. **Contingency code.** The spec's contingency (Freeze step 8) asks for an `AppTest` smoke test. Task 16 gives it in full, checked against this repo on 2026-09-25 (it passed in 0.7 s). It is used only if Task 14 fails.
-16. **The old `DATABASE_URL` Actions secret.** After ops-3 only `db-backup` holds database credentials (ops spec, Backups → Decisions). Inventory H4 says the keepalive secret was never added. If a `DATABASE_URL` Actions secret does exist, the owner deletes it in Task 12, because nothing reads it any more.
+14. **Stale mentions of the keep-alive script.** The ops-2 docstring in `db/engine.py` (lines 10–11) and ops-2's pool bullet in the runbook's "Platform limits" mention `keepalive.py`, which ops-3 deletes. Both are reworded (Task 7), and a test keeps the runbook from mentioning it again.
+15. **Contingency code.** The spec's contingency (Freeze step 8) asks for an `AppTest` smoke test. Task 16 gives it in full, checked against this branch on 2026-09-26 (it passed in 0.7 s, and the suite was then `560 passed`). It is used only if Task 14 falls back to `main`.
+16. **The old `DATABASE_URL` Actions secret.** After ops-3 only `db-backup` holds database credentials (ops spec, Backups → Decisions). Inventory H4 says the keepalive secret was never added. If a `DATABASE_URL` repository secret does exist, the owner deletes it in Task 12, because nothing reads it any more.
+17. **The Freeze is delete-and-recreate, for one app.** Streamlit Cloud cannot switch `liturgy-next` to another branch, so the ops spec's "otherwise" path is the only path: copy the Secrets, delete `liturgy-next`, create an app from `streamlit-frozen` / `app.py` with subdomain `liturgy-next` and Python 3.13, paste the Secrets unchanged (the redirect URIs already point at `liturgy-next`). Rollback is the same procedure from `main`. The tester is told about a window of about 5 minutes.
+18. **Contingency wording (F §6.1 item 6 and the §6.2 amendment of 2026-09-26, PR #11).** If Streamlit keeps running from `main`, it still gets no new features: it keeps the old season wording (slice 4's `generate_liturgy` wrapper keeps the old sentences through `liturgy_prompts.LEGACY_SYSTEM_PROMPT`, and Streamlit's Settings page shows and compares with `liturgy_prompts.legacy_default_prompts()`), and it never reads `prayer_library`. The runbook's Contingency subsection says so (Task 9) and a test pins it. ops-3 writes no prompt code: those names arrive in slice 4, and only under the contingency.
+19. **Reboot after merges that reach `liturgy-next`.** Until the Freeze, `liturgy-next` deploys from `main`, so the ops-3 merge reaches it (a comment line in `app.py`, a docstring in `db/engine.py`, a deleted module it never imported). The owner reboots it right after the merge (Task 11), and the pre-freeze smoke check runs on that rebooted build (Task 13).
 
 ## File Map
 
@@ -67,26 +77,27 @@ backend/api/logging_config.py        NEW: LOG_FORMAT, configure_logging(level) -
 backend/api/startup.py               NEW: describe_database(url), check_app_env(value), enforce_production_guards(settings, engine)
 backend/db/health.py                 NEW: READY_OK_TTL, READY_FAIL_TTL, database_ready(*, clock), _probe(), reset_readiness_for_tests()
 backend/api/errors.py                request_id in _body; error_body alias; db_unavailable()
-backend/api/main.py                  configure_logging; lifespan guards and Database log; redirect_slashes=False; middleware order; CORS lists
+backend/api/main.py                  configure_logging; lifespan guards and Database log; redirect_slashes=False; middleware order; CORS lists (routers health, me, rubric unchanged)
 backend/api/settings.py              Settings.app_env, Settings.log_level, Settings.is_production
 backend/api/routes/health.py         ReadyOut; GET /health/ready
-backend/db/engine.py                 module docstring: the readiness probe, not the keep-alive script
+backend/db/engine.py                 module docstring lines 10-11: the readiness probe, not the keep-alive script
 backend/keepalive.py                 DELETED
 backend/tests/test_keepalive.py      DELETED (5 tests)
 backend/tests/test_middleware.py     NEW (33 tests)
 backend/tests/test_startup.py        NEW (14 tests)
 backend/tests/test_health_ready.py   NEW (10 tests)
-backend/tests/test_api_app.py        test_unhandled_exception_is_a_generic_500 asserts request_id == header
-backend/tests/test_foundation_setup.py  + errors.ts "db_unavailable" check and its self-test (4 tests)
-backend/tests/test_ops_workflows.py  + keepalive, keep-awake, FROZEN header, README, runbook, manual checks (13 tests)
+backend/tests/test_api_app.py        test_unhandled_exception_is_a_generic_500 asserts request_id == header (still 9 tests)
+backend/tests/test_foundation_setup.py  + errors.ts "db_unavailable" check and its self-test (7 -> 11 tests)
+backend/tests/test_ops_workflows.py  + keepalive, keep-awake guard, FROZEN header, README, runbook, contingency, manual checks (66 -> 80 tests)
 backend/tests/conftest.py            + autouse readiness-memo reset
 .github/workflows/keepalive.yml      REWRITTEN: curl ${API_BASE_URL}/health/ready, permissions {}, no secret
-.github/workflows/keep-awake.yml     APP_URLS = https://liturgy-stg.streamlit.app/ only; header comment
 app.py                               line 2: FROZEN header
-README.md                            "Keep-alive (required)" paragraph (lines 144-149)
-docs/ops-runbook.md                  + Environments and variables, Keep-alive, freeze subsections; Platform limits bullets
+README.md                            "Keep-alive (required)" paragraph (lines 194-199)
+docs/ops-runbook.md                  + Environments and variables, Keep-alive, freeze subsections; intro bullet; Platform limits pool bullet
 docs/manual-verification.md          + "## Ops slice"
 ```
+
+Unchanged on purpose: `.github/workflows/keep-awake.yml` (already `liturgy-next` only), `backend/.env.example`, `.github/workflows/ci.yml`, `backend/api/deps.py`, `backend/api/identity_cache.py`, every Streamlit file except `app.py`'s comment line.
 
 ---
 
@@ -95,11 +106,11 @@ docs/manual-verification.md          + "## Ops slice"
 **Files:**
 - Create: `backend/api/middleware.py`
 - Modify: `backend/api/errors.py:1-9` (docstring and imports), `backend/api/errors.py:40-41` (`_body`)
-- Modify: `backend/api/main.py:10` (import), `backend/api/main.py:36-37` (add the middleware)
+- Modify: `backend/api/main.py:10` (add an import after it), `backend/api/main.py:36-37` (add the middleware)
 - Test: `backend/tests/test_middleware.py` (new), `backend/tests/test_api_app.py:1-3` (imports) and `:50-53` (the end of the 500 test)
 
 **Interfaces:**
-- Consumes: `api.main.create_app() -> FastAPI`; `api.deps.get_verifier` (overridden so `/me` fails on the missing token first); `api.errors._body(code, message) -> dict`.
+- Consumes: `api.main.create_app() -> FastAPI`; `api.deps.get_verifier` (overridden so `/me` fails on the missing token first, before the identity cache or the database); `api.errors._body(code, message) -> dict`.
 - Produces:
   - `api.middleware.REQUEST_ID_HEADER = "X-Request-Id"`;
   - `api.middleware.current_request_id() -> Optional[str]` (None outside a request);
@@ -108,24 +119,25 @@ docs/manual-verification.md          + "## Ops slice"
   - `api.errors.error_body`, a public alias of `_body` (Task 2 uses it);
   - in `test_middleware.py`: `HEX32` (compiled `[0-9a-f]{32}`) and `_app_with_test_routes()`.
 
-- [ ] **Step 1: Start the branch and check the baseline**
+- [ ] **Step 1: Check the branch and the baseline**
 
 ```bash
-git fetch origin
-git switch -c claude/ops-3-api-platform-freeze origin/main
+git status -sb | head -1
+git log --oneline -1 origin/main
+git log --oneline origin/main..HEAD
 test -f docs/superpowers/specs/2026-09-25-slice-ops-cleanup-design.md \
   && test -f backend/tests/test_ops_workflows.py \
   && grep -q '^DEFAULT_POOL_SIZE = 3$' backend/db/engine.py \
   && grep -q '^def ensure_user' backend/repos/users.py \
-  && test -f backend/api/identity_cache.py && echo "ops-1 and ops-2 are on main"
+  && test -f backend/api/identity_cache.py \
+  && grep -q '^from api.routes import health, me, rubric$' backend/api/main.py \
+  && echo "ops-1, ops-2 and the rubric are on main"
 grep -c '^### What the frozen app inherits from ops-2' docs/ops-runbook.md
-grep -n '\[owner' docs/ops-runbook.md | grep -v 'An entry marked'; echo "grep exit $?"
+grep -n '\[owner' docs/ops-runbook.md | grep -v 'An entry marked' | wc -l
 .venv/bin/python -m pytest -q | tail -1
 ```
 
-Expected: `ops-1 and ops-2 are on main`; `1`; no marker lines and `grep exit 1` (the ops-1 and ops-2 records PRs filled every marker, so the ops-2 gate passed); `326 passed`. If any check fails, stop: ops-3 starts only after the ops-2 gate is recorded (ops-2 plan, Task 11).
-
-If `git switch` refuses because an untracked file would be overwritten (an untracked copy of an earlier plan that `main` now has), move that copy out of the way (`mv docs/superpowers/plans/<file> "${TMPDIR:-/tmp}/"`) and switch again. Leave this plan file untracked until Task 10 commits it.
+Expected: `## claude/ops-3...origin/main [ahead 1]`; `57beda0 Merge pull request #12 from bbrown62450/claude/ops-2`; exactly one line, this plan's commit `Plan: refresh ops-3 for current main (ops-2, rubric, liturgy-next freeze)`; `ops-1, ops-2 and the rubric are on main`; `1`; `11` (the ops-1 and ops-2 owner markers listed in Global Constraints; a smaller number only means the owner filled some); `489 passed`. If the branch line shows `behind`, or any other check differs, stop and ask the owner.
 
 - [ ] **Step 2: Write the failing tests**
 
@@ -375,7 +387,7 @@ def _body(code: str, message: str) -> dict:
 error_body = _body
 ```
 
-`_body` keeps its name, because slice 1 extends it with `fields` and `details`. `ApiError` and the four handlers in `install_error_handlers` are unchanged.
+`_body` keeps its name, because slice 1 extends it with `fields` and `details`. `ApiError`, `unauthenticated`, `forbidden`, `auth_unavailable` and the four handlers in `install_error_handlers` are unchanged. The rubric route's `ApiError(422, "invalid_rubric", …)` gets the `request_id` like every other error (`test_api_rubric.py` reads only `code` and `message`).
 
 - [ ] **Step 6: Add the middleware in `backend/api/main.py`**
 
@@ -385,7 +397,7 @@ After line 10 (`from api.errors import install_error_handlers`), add:
 from api.middleware import RequestIdMiddleware
 ```
 
-Replace lines 36-37:
+Replace the two lines that were lines 36-37 before that import was added:
 
 ```python
     app = FastAPI(title="Worship Service Builder API", lifespan=lifespan)
@@ -407,7 +419,7 @@ with:
 .venv/bin/python -m pytest -q | tail -1
 ```
 
-Expected: `21 passed` (12 + 9), then `338 passed`.
+Expected: `21 passed` (12 + 9), then `501 passed`.
 
 - [ ] **Step 8: Commit**
 
@@ -429,7 +441,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 **Files:**
 - Modify: `backend/api/middleware.py` (docstring, imports, append the class)
-- Modify: `backend/api/main.py` (import line; the `RequestIdMiddleware` line from Task 1)
+- Modify: `backend/api/main.py` (the import line and the `RequestIdMiddleware` line from Task 1)
 - Test: `backend/tests/test_middleware.py` (imports; append), `backend/tests/test_api_app.py` (the 500 test)
 
 **Interfaces:**
@@ -713,10 +725,11 @@ with:
 ```bash
 .venv/bin/python -m pytest -q backend/tests/test_middleware.py backend/tests/test_api_app.py
 .venv/bin/python -m pytest -q backend/tests/test_identity_cache.py
+.venv/bin/python -m pytest -q backend/tests/test_api_me.py backend/tests/test_api_rubric.py
 .venv/bin/python -m pytest -q | tail -1
 ```
 
-Expected: `26 passed` (17 + 9); `6 passed` (ops-2's `test_a_failed_ensure_user_is_never_cached` still gets its 500 `internal_error`, now from `UnhandledErrorMiddleware`); `343 passed`.
+Expected: `26 passed` (17 + 9); `6 passed` (ops-2's `test_a_failed_ensure_user_is_never_cached` still gets its 500 `internal_error`, now from `UnhandledErrorMiddleware`, and still caches nothing); `25 passed` (`/me`, `/church` and `/rubric` unchanged); `506 passed`.
 
 - [ ] **Step 6: Commit**
 
@@ -837,7 +850,7 @@ with:
     )
 ```
 
-`allow_credentials` stays at its default (off): the API uses bearer tokens, not cookies. The slice-0 frontend calls only `/me` and `/church`, never with a trailing slash (`frontend/src/app/page.tsx`), so nothing depends on the old 307.
+`allow_credentials` stays at its default (off): the API uses bearer tokens, not cookies. The frontend calls only `/me` and `/church`, never with a trailing slash (`frontend/src/app/page.tsx:53` and `:77`), and nothing calls `/rubric` from a browser yet, so nothing depends on the old 307.
 
 - [ ] **Step 4: Run the tests and the suite**
 
@@ -846,7 +859,7 @@ with:
 .venv/bin/python -m pytest -q | tail -1
 ```
 
-Expected: `30 passed` (21 + 9), then `347 passed`. `test_api_app.py::test_cors_allows_only_configured_origins` still passes.
+Expected: `30 passed` (21 + 9), then `510 passed`. `test_api_app.py::test_cors_allows_only_configured_origins` still passes.
 
 - [ ] **Step 5: Commit**
 
@@ -868,7 +881,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 **Files:**
 - Create: `backend/api/logging_config.py`
 - Modify: `backend/api/settings.py:7-10` (the `Settings` fields), `backend/api/settings.py:25-30` (`get_settings`)
-- Modify: `backend/api/main.py:2-4` (imports), the `api.errors` import line (add one after it), `backend/api/main.py:15-21` (logging setup)
+- Modify: `backend/api/main.py:2-4` (imports), the `api.errors` import line (add one after it), `backend/api/main.py:15-21` of the original file (logging setup)
 - Test: `backend/tests/test_middleware.py` (imports; append)
 
 **Interfaces:**
@@ -1097,7 +1110,7 @@ def get_settings() -> Settings:
     )
 ```
 
-Validation stays out of `get_settings`, so importing `api.main` never raises.
+Validation stays out of `get_settings`, so importing `api.main` never raises. The `jwks_url` and `token_issuer` properties are unchanged.
 
 - [ ] **Step 5: Call it from `backend/api/main.py`**
 
@@ -1150,7 +1163,7 @@ configure_logging(get_settings().log_level)
 .venv/bin/python -m pytest -q | tail -1
 ```
 
-Expected: `33 passed`, then `359 passed`.
+Expected: `33 passed`, then `522 passed`.
 
 - [ ] **Step 7: Commit**
 
@@ -1177,7 +1190,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Test: `backend/tests/test_startup.py` (new)
 
 **Interfaces:**
-- Consumes: `api.settings.Settings`, `get_settings()` (Task 4); `db.get_engine() -> Engine`; `db.init_db()`; `db.engine._make_engine(url) -> Engine` (ops-2; it opens no connection); fixture `tmp_db`.
+- Consumes: `api.settings.Settings`, `get_settings()` (Task 4); `db.get_engine() -> Engine`; `db.init_db()`; `db.engine._make_engine(url) -> Engine` (ops-2; it applies the pool and `connect_timeout` settings but opens no connection); fixture `tmp_db`.
 - Produces:
   - `Settings.app_env: str = "development"`, which `get_settings()` reads from `APP_ENV` (stripped and lower-cased; blank means `"development"`);
   - `Settings.is_production -> bool`;
@@ -1402,7 +1415,7 @@ with:
 
 - [ ] **Step 5: Rewrite the lifespan in `backend/api/main.py`**
 
-After this step the whole file reads as below. Compared with Task 4, three things change: the imports of `api.startup` and `get_engine`, the module `logger`, and the lifespan, which replaces lines 24-31 of the original file.
+After this step the whole file reads as below. Compared with Task 4, three things change: the imports of `api.startup` and `get_engine`, the module `logger`, and the lifespan, which replaces lines 24-31 of the original file. The `rubric` router (PR #4) stays exactly where it was.
 
 ```python
 """FastAPI entry point. Run from backend/: uvicorn api.main:app --reload"""
@@ -1416,7 +1429,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.errors import install_error_handlers
 from api.logging_config import configure_logging
 from api.middleware import RequestIdMiddleware, UnhandledErrorMiddleware
-from api.routes import health, me
+from api.routes import health, me, rubric
 from api.settings import get_settings
 from api.startup import check_app_env, describe_database, enforce_production_guards
 from db import get_engine, init_db
@@ -1460,13 +1473,14 @@ def create_app() -> FastAPI:
     install_error_handlers(app)
     app.include_router(health.router)
     app.include_router(me.router)
+    app.include_router(rubric.router)
     return app
 
 
 app = create_app()
 ```
 
-The SUPABASE_URL warning text is unchanged (`test_api_app.py::test_lifespan_warns_when_supabase_url_unset`).
+The SUPABASE_URL warning text is unchanged (`test_api_app.py::test_lifespan_warns_when_supabase_url_unset`). `db` already exports `get_engine` (`backend/db/__init__.py`).
 
 - [ ] **Step 6: Run the tests, the suite and a real uvicorn start**
 
@@ -1477,7 +1491,7 @@ The SUPABASE_URL warning text is unchanged (`test_api_app.py::test_lifespan_warn
   ../.venv/bin/python -m uvicorn api.main:app --port 8765 2>&1 | tail -3)
 ```
 
-Expected: `23 passed` (14 + 9), then `373 passed`. uvicorn exits by itself, and the last three lines are `RuntimeError: APP_ENV=production requires a PostgreSQL DATABASE_URL; refusing to start.`, a blank line, and `ERROR:    Application startup failed. Exiting.`
+Expected: `23 passed` (14 + 9), then `536 passed`. uvicorn exits by itself, and the last three lines are `RuntimeError: APP_ENV=production requires a PostgreSQL DATABASE_URL; refusing to start.`, a blank line, and `ERROR:    Application startup failed. Exiting.` (`load_dotenv()` reads `backend/.env` but never overrides the two variables set on the command line.)
 
 - [ ] **Step 7: Commit**
 
@@ -1501,7 +1515,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Create: `backend/db/health.py`
 - Modify: `backend/api/routes/health.py:1-8` (full rewrite)
 - Modify: `backend/api/errors.py` (add `db_unavailable()` after `auth_unavailable()`)
-- Modify: `backend/tests/conftest.py` (append an autouse fixture at the end, after ops-2's `_fresh_identity_cache`)
+- Modify: `backend/tests/conftest.py` (append an autouse fixture at the end, after ops-2's `_fresh_identity_cache`, lines 141-154)
 - Test: `backend/tests/test_health_ready.py` (new); `backend/tests/test_foundation_setup.py` (imports; append)
 
 **Interfaces:**
@@ -1892,7 +1906,7 @@ for i in $(seq 1 10); do .venv/bin/python -m pytest -q -p no:cacheprovider \
 .venv/bin/python -m pytest -q | tail -1
 ```
 
-Expected: `21 passed` (10 + 11); `10` (no flaky run); `387 passed`.
+Expected: `21 passed` (10 + 11); `10` (no flaky run); `550 passed`.
 
 - [ ] **Step 8: Commit**
 
@@ -1916,9 +1930,9 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 **Files:**
 - Modify: `.github/workflows/keepalive.yml:1-21` (full rewrite)
 - Delete: `backend/keepalive.py`, `backend/tests/test_keepalive.py`
-- Modify: `README.md:144-149` ("Keep-alive (required)")
-- Modify: `docs/ops-runbook.md` (a new `## Keep-alive` section directly above `## Streamlit freeze`; one sentence of the ops-2 pool bullet in `## Platform limits`)
-- Modify: `backend/db/engine.py` (the last two lines of the module docstring, lines 10-11 after ops-2)
+- Modify: `README.md:194-199` ("Keep-alive (required)")
+- Modify: `docs/ops-runbook.md` (a new `## Keep-alive` section directly above `## Streamlit freeze`; three lines of the ops-2 pool bullet in `## Platform limits`)
+- Modify: `backend/db/engine.py:10-11` (the last two lines of the module docstring)
 - Test: `backend/tests/test_ops_workflows.py` (append)
 
 **Interfaces:**
@@ -1995,7 +2009,7 @@ def test_runbook_keep_alive_section_names_the_variable_and_the_endpoint():
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_ops_workflows.py 2>&1 | tail -8`
 
-Expected: `6 failed, 18 passed`. The two workflow-text tests fail on the old workflow (`'/health/ready'` missing; `'secrets.'` present). The permissions test fails with `KeyError: 'permissions'`. The files test lists both files. The README test fails with `AssertionError: /health/ready`. The runbook test fails with `IndexError: list index out of range`, because there is no `## Keep-alive` section yet. The ported backup test passes.
+Expected: `6 failed, 67 passed`. The two workflow-text tests fail on the old workflow (`'/health/ready'` missing; `'secrets.'` present). The permissions test fails with `KeyError: 'permissions'`. The files test lists both files. The README test fails with `AssertionError: /health/ready` (today's paragraph already names `docs/ops-runbook.md`). The runbook test fails with `IndexError: list index out of range`, because there is no `## Keep-alive` section yet. The ported backup test passes.
 
 - [ ] **Step 3: Rewrite `.github/workflows/keepalive.yml`**
 
@@ -2035,21 +2049,22 @@ Four tries of at most 30 s plus three 20 s waits is 180 s, inside `timeout-minut
 
 ```bash
 git rm backend/keepalive.py backend/tests/test_keepalive.py
+grep -rnE '(import|from) keepalive' --include='*.py' backend app.py streamlit_* ui_helpers.py; echo "grep exit $?"
 ```
 
-Nothing imports it: `grep -rnE '(import|from) keepalive' --include='*.py' backend app.py streamlit_* ui_helpers.py` prints nothing.
+Expected: `rm 'backend/keepalive.py'`, `rm 'backend/tests/test_keepalive.py'`, then no grep output and `grep exit 1`: nothing else imported it (before the `git rm`, the only hit was `test_keepalive.py` itself).
 
 - [ ] **Step 5: Rewrite the README "Keep-alive (required)" paragraph**
 
-`README.md:144-149` reads:
+`README.md:194-199` reads:
 
 ```markdown
 ### Keep-alive (required)
 
 The free Supabase project pauses after ~7 days idle. `.github/workflows/keepalive.yml`
 runs `keepalive.py` (a `SELECT 1` against `DATABASE_URL`) daily so the first
-visitor each week never hits a paused/cold database. Add `DATABASE_URL` as an
-Actions secret.
+visitor each week never hits a paused/cold database. Do not add a
+`DATABASE_URL` repository secret; see docs/ops-runbook.md → Backups.
 ```
 
 Replace it with:
@@ -2066,7 +2081,7 @@ public in the frontend bundle). Details, and what to do when it is red:
 `docs/ops-runbook.md` → Keep-alive.
 ```
 
-The "Backups (required)" paragraph below it (ops-1) and the rest of the README stay unchanged (slice 7).
+The "Backups (required)" paragraph below it (ops-1) and the rest of the README stay unchanged (slice 7). The runbook's Environments section (Task 9) keeps the old "no `DATABASE_URL` repository secret" advice.
 
 - [ ] **Step 6: Add the runbook's Keep-alive section and fix the pool bullet**
 
@@ -2086,8 +2101,9 @@ Two scheduled workflows keep both awake:
   `SELECT 1` through its own connection pool, so the database sees real
   activity. The job holds no database credentials and no token permissions.
 - **`keep-awake`** (`.github/workflows/keep-awake.yml`): every 6 hours it opens
-  https://liturgy-stg.streamlit.app/ in headless Chromium (a plain HTTP ping
-  does not count as traffic). Deleted in slice 7.
+  https://liturgy-next.streamlit.app/, the production Streamlit app, in
+  headless Chromium (a plain HTTP ping does not count as traffic). Deleted in
+  slice 7.
 
 **Variable.** `API_BASE_URL` = `https://church-production-74ca.up.railway.app`,
 under repo Settings → Secrets and variables → Actions → **Variables** (not
@@ -2123,25 +2139,28 @@ health check; slice 1 moves the deploy check to `/health/ready`.
 
 (The outer four-backtick fence is only for this plan; paste the content between the fences.)
 
-In `## Platform limits`, ops-2's pool bullet contains these three lines:
+In `## Platform limits`, ops-2's pool bullet ("Since ops-2, `backend/db/engine.py` reads …") contains these three lines:
 
 ```markdown
-  setup. `backend/keepalive.py` builds its own engine without these settings
-  (ops-3 replaces it); its one short scheduled session fits in the spare
-  connection (14 of 15). `backend/tests/test_ops_workflows.py` fails if the
+  that engine setup. `backend/keepalive.py` builds its own engine without
+  these settings (ops-3 replaces it); its one short scheduled session fits in
+  the spare connection (14 of 15). `backend/tests/test_ops_workflows.py`
 ```
 
 Replace them with:
 
 ```markdown
-  setup, and so does the API's `GET /health/ready` probe (ops-3), which holds
-  at most one of the API's pooled connections at a time. The old keep-alive
-  script, which built its own engine, is gone. `backend/tests/test_ops_workflows.py` fails if the
+  that engine setup, and so does the API's `GET /health/ready` probe (ops-3),
+  which holds at most one of the API's pooled connections at a time. The old
+  keep-alive script, which built its own engine, is gone.
+  `backend/tests/test_ops_workflows.py`
 ```
+
+The rest of that bullet ("fails if the code defaults stop fitting …") is unchanged.
 
 - [ ] **Step 7: Fix the `db/engine.py` docstring**
 
-The module docstring (ops-2) ends with:
+The module docstring (ops-2) ends with (lines 10-12):
 
 ```python
 Supabase session pooler (docs/ops-runbook.md → Platform limits). keepalive.py
@@ -2166,7 +2185,7 @@ grep -rnI --exclude-dir=__pycache__ 'keepalive\.py' backend .github README.md do
 .venv/bin/python -m pytest -q | tail -1
 ```
 
-Expected: `27 passed` (24 + 3); no grep output and `grep exit 1`; `389 passed` (7 added, 5 deleted).
+Expected: `76 passed` (73 + 3); no grep output and `grep exit 1`; `552 passed` (7 added, 5 deleted).
 
 - [ ] **Step 9: Commit**
 
@@ -2184,21 +2203,23 @@ red.
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
+(`git rm` in Step 4 already staged the two deletions.)
+
 ---
 
-### Task 8: Freeze on `main`: the FROZEN header and `keep-awake.yml` production-only (S7)
+### Task 8: Freeze on `main`: the FROZEN header, and a keep-awake guard (S7)
+
+`keep-awake.yml` already visits only https://liturgy-next.streamlit.app/ on `main` (PR #6/#12), so this task does not edit it. It adds the spec's keep-awake test as a guard (it passes when written) and the FROZEN header (test first).
 
 **Files:**
 - Modify: `app.py:1` (insert line 2)
-- Modify: `.github/workflows/keep-awake.yml:1-5` (header comment), `.github/workflows/keep-awake.yml:24` (`APP_URLS`)
-- Modify: `docs/ops-runbook.md` (`## Platform limits`: the bullet about the unused `liturgy` app)
 - Test: `backend/tests/test_ops_workflows.py` (append)
 
 **Interfaces:**
 - Consumes: `ROOT`, `_read(path)`, `yaml` from `test_ops_workflows.py`.
-- Produces: `KEEP_AWAKE_YML`, `PRODUCTION_STREAMLIT_URL = "https://liturgy-stg.streamlit.app/"`, `RETIRED_STREAMLIT_URL = "https://liturgy.streamlit.app"`, `FROZEN_HEADER`. `keep-awake` visits only `liturgy-stg` from the ops-3 merge on, so the unused `liturgy` app hibernates before the Freeze deletes it.
+- Produces: `KEEP_AWAKE_YML`, `PRODUCTION_STREAMLIT_URL = "https://liturgy-next.streamlit.app/"`, `DELETED_STREAMLIT_URLS`, `FROZEN_HEADER` (Task 16 reuses `FROZEN_HEADER`).
 
-- [ ] **Step 1: Write the failing tests**
+- [ ] **Step 1: Write the tests**
 
 Append to `backend/tests/test_ops_workflows.py`:
 
@@ -2208,8 +2229,8 @@ Append to `backend/tests/test_ops_workflows.py`:
 # --- Streamlit freeze on main: keep-awake and the FROZEN header (ops-3) --------
 
 KEEP_AWAKE_YML = ROOT / ".github" / "workflows" / "keep-awake.yml"
-PRODUCTION_STREAMLIT_URL = "https://liturgy-stg.streamlit.app/"   # owner correction 1: liturgy-stg is production
-RETIRED_STREAMLIT_URL = "https://liturgy.streamlit.app"           # the unused app the Freeze step deletes
+PRODUCTION_STREAMLIT_URL = "https://liturgy-next.streamlit.app/"   # the one Streamlit app since 2026-09-26
+DELETED_STREAMLIT_URLS = ("https://liturgy.streamlit.app", "https://liturgy-stg.streamlit.app")
 FROZEN_HEADER = "# FROZEN — production runs from branch streamlit-frozen; deleted in slice 7."
 
 
@@ -2218,7 +2239,7 @@ def test_keep_awake_pings_only_the_production_streamlit_app():
     steps = yaml.safe_load(text)["jobs"]["visit"]["steps"]
     urls = [url for step in steps for url in step.get("env", {}).get("APP_URLS", "").split()]
     assert urls == [PRODUCTION_STREAMLIT_URL]
-    assert RETIRED_STREAMLIT_URL not in text
+    assert [url for url in DELETED_STREAMLIT_URLS if url in text] == []
 
 
 def test_app_py_carries_the_frozen_header():
@@ -2227,13 +2248,13 @@ def test_app_py_carries_the_frozen_header():
     assert first == FROZEN_HEADER
 ```
 
-`"https://liturgy.streamlit.app"` is not a substring of `"https://liturgy-stg.streamlit.app/"` (a `-` follows `liturgy` there, not a `.`), so the second assertion cannot trip on the production URL.
+Neither deleted URL is a substring of `https://liturgy-next.streamlit.app/` (a `-` follows `liturgy` there, then `next`), so the second assertion cannot trip on the production URL.
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [ ] **Step 2: Run the tests: the header test fails, the keep-awake guard passes**
 
-Run: `.venv/bin/python -m pytest -q backend/tests/test_ops_workflows.py 2>&1 | tail -4`
+Run: `.venv/bin/python -m pytest -q backend/tests/test_ops_workflows.py 2>&1 | tail -3`
 
-Expected: `2 failed, 24 passed`. The keep-awake test fails because the list has one more item, `'https://liturgy.streamlit.app/'`. The header test fails with `assert '"""' == '# FROZEN — production runs from branch streamlit-frozen; deleted in slice 7.'`.
+Expected: `1 failed, 74 passed`. `test_app_py_carries_the_frozen_header` fails with `assert '"""' == '# FROZEN — production runs from branch streamlit-frozen; deleted in slice 7.'`. `test_keep_awake_pings_only_the_production_streamlit_app` passes: it guards what `main` already has (clarification 1).
 
 - [ ] **Step 3: Add the FROZEN header to `app.py`**
 
@@ -2256,63 +2277,7 @@ Streamlit UI: worship service planner with hymn suggestions by scripture,
 
 The docstring stays the module's first statement. Nothing else in `app.py` changes. ops-3's only change to a file the Streamlit app runs is this comment line, and `streamlit-frozen`, cut from the ops-3 merge commit, carries it too, where it is also true.
 
-- [ ] **Step 4: Point `keep-awake.yml` at production only**
-
-Replace lines 1-5:
-
-```yaml
-# Streamlit Community Cloud hibernates apps after 12 hours without traffic.
-# A plain HTTP ping does NOT count (the 200 comes from the platform's sleep
-# page), so this job opens each app in headless Chromium — a real WebSocket
-# session — every 6 hours, and presses the wake button if the app was asleep.
-name: keep-awake
-```
-
-with:
-
-```yaml
-# Streamlit Community Cloud hibernates apps after 12 hours without traffic.
-# A plain HTTP ping does NOT count (the 200 comes from the platform's sleep
-# page), so this job opens each app in headless Chromium — a real WebSocket
-# session — every 6 hours, and presses the wake button if the app was asleep.
-# Production only: liturgy-stg, which the Streamlit freeze serves from branch
-# streamlit-frozen (docs/ops-runbook.md → Streamlit freeze). Deleted in slice 7.
-name: keep-awake
-```
-
-and replace line 24:
-
-```yaml
-          APP_URLS: "https://liturgy-stg.streamlit.app/ https://liturgy.streamlit.app/"
-```
-
-with:
-
-```yaml
-          APP_URLS: "https://liturgy-stg.streamlit.app/"
-```
-
-Scheduled workflows run from `main`, so this takes effect on merge, before the Freeze.
-
-- [ ] **Step 5: Update the runbook bullet about the unused `liturgy` app**
-
-In `docs/ops-runbook.md` → `## Platform limits`, ops-2's bullet "Until the Freeze step deletes the unused `liturgy` app, …" contains these three lines:
-
-```markdown
-  in practice it holds only the session its startup `init_db()` opens when
-  today's `keep-awake` visits it (ops-3 narrows `keep-awake` to
-  https://liturgy-stg.streamlit.app/ only). Retiring it frees that share.
-```
-
-Replace them with:
-
-```markdown
-  in practice it holds only the session its startup `init_db()` opens when
-  someone visits it. Since ops-3 `keep-awake` no longer does, so it
-  hibernates. Retiring it frees that share.
-```
-
-- [ ] **Step 6: Run the tests and the suite**
+- [ ] **Step 4: Run the tests and the suite**
 
 ```bash
 .venv/bin/python -m py_compile app.py && echo compiled
@@ -2320,16 +2285,17 @@ Replace them with:
 .venv/bin/python -m pytest -q | tail -1
 ```
 
-Expected: `compiled`, `26 passed`, `391 passed`.
+Expected: `compiled`, `75 passed`, `554 passed`.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add app.py .github/workflows/keep-awake.yml docs/ops-runbook.md backend/tests/test_ops_workflows.py
-git commit -m "Streamlit freeze on main: FROZEN header; keep-awake pings only liturgy-stg (F §6.1)
+git add app.py backend/tests/test_ops_workflows.py
+git commit -m "Streamlit freeze on main: FROZEN header in app.py; keep-awake guard (F §6.1)
 
-liturgy-stg is the production Streamlit app (owner correction); the unused
-liturgy app is no longer kept awake and is deleted in the Freeze step.
+keep-awake already visits only liturgy-next, the production Streamlit app; a
+test now keeps it that way and keeps the deleted liturgy and liturgy-stg URLs
+out.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -2339,13 +2305,13 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ### Task 9: Runbook sections and the "Ops slice" manual checks (S15)
 
 **Files:**
-- Modify: `docs/ops-runbook.md` (the intro bullet about ops-3; a new `## Environments and variables` directly above `## Supabase lockdown record`; five new `###` subsections directly above `## Platform limits`)
+- Modify: `docs/ops-runbook.md` (the intro bullet about ops-3, lines 13-15; a new `## Environments and variables` directly above `## Supabase lockdown record`; five new `###` subsections directly above `## Platform limits`)
 - Modify: `docs/manual-verification.md` (append `## Ops slice` after line 45)
 - Test: `backend/tests/test_ops_workflows.py` (append)
 
 **Interfaces:**
 - Consumes: `ROOT`, `_read(path)`, `RUNBOOK`, `re` from `test_ops_workflows.py`.
-- Produces: `RUNBOOK_SECTIONS` (the seven `##` headings in order), `FREEZE_SUBSECTIONS`, `MANUAL_VERIFICATION` and `_section(text, heading) -> str`. The runbook's `[owner: …]` markers for ops-3 are one line in "Environments and variables" (filled in Task 11), one Keep-alive run row (Task 7) and eleven "Freeze record" rows plus two version lines (Tasks 13–15).
+- Produces: `RUNBOOK_SECTIONS` (the seven `##` headings in order), `FREEZE_SUBSECTIONS`, `MANUAL_VERIFICATION` and `_section(text, heading) -> str`. ops-3's `[owner: …]` markers are 14 lines: one in "Environments and variables" (filled in Task 11), one Keep-alive run row (Task 7), ten "Freeze record" rows and two version lines (Tasks 13–15).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -2395,26 +2361,36 @@ def test_runbook_streamlit_freeze_has_the_record_policy_and_versions():
 def test_runbook_environments_name_every_ops_setting():
     section = _section(_read(RUNBOOK), "## Environments and variables")
     for name in ("APP_ENV", "LOG_LEVEL", "DB_POOL_SIZE", "DB_MAX_OVERFLOW", "CORS_ORIGINS",
-                 "API_BASE_URL", "BACKUP_DATABASE_URL", "NEXT_PUBLIC_API_URL", "streamlit-frozen"):
+                 "API_BASE_URL", "BACKUP_DATABASE_URL", "NEXT_PUBLIC_API_URL", "streamlit-frozen",
+                 "https://liturgy-next.streamlit.app/"):
         assert name in section, name
+
+
+def test_runbook_contingency_keeps_the_old_season_wording_and_no_prayer_library():
+    # F §6.1 item 6 and §6.2 (amendment 2026-09-26): if Streamlit stays on main,
+    # it gets no new features.
+    section = _section(_section(_read(RUNBOOK), "## Streamlit freeze"), "### Contingency")
+    for needle in ("LEGACY_SYSTEM_PROMPT", "legacy_default_prompts()", "prayer_library",
+                   "streamlit_tests/test_app_smoke.py"):
+        assert needle in section, needle
 
 
 def test_manual_verification_has_the_ops_slice_checklist():
     section = _section(_read(MANUAL_VERIFICATION), "## Ops slice")
     for needle in ("/health/ready", "x-request-id", "/me/", "streamlit-frozen", "keep-awake",
-                   "https://liturgy-stg.streamlit.app", "db-backup", "375 px"):
+                   "https://liturgy-next.streamlit.app", "db-backup", "375 px"):
         assert needle in section, needle
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `.venv/bin/python -m pytest -q backend/tests/test_ops_workflows.py 2>&1 | tail -6`
+Run: `.venv/bin/python -m pytest -q backend/tests/test_ops_workflows.py 2>&1 | tail -7`
 
-Expected: `4 failed, 26 passed`. The order test fails `At index 0 diff: '## Supabase lockdown record' != '## Environments and variables'`. The freeze test lists the five missing subsections, starting with `'### What the frozen app inherits from ops-3'`. The environments and manual-verification tests fail with `IndexError: list index out of range`.
+Expected: `5 failed, 75 passed`. The order test fails `At index 0 diff: '## Supabase lockdown record' != '## Environments and variables'`. The freeze test lists the five missing subsections, starting with `'### What the frozen app inherits from ops-3'`. The environments, contingency and manual-verification tests fail with `IndexError: list index out of range`.
 
 - [ ] **Step 3: Replace the runbook's ops-3 intro bullet**
 
-In `docs/ops-runbook.md`, replace (ops-1):
+In `docs/ops-runbook.md`, replace (lines 13-15, ops-1):
 
 ```markdown
 - ops-3 adds "Environments and variables" at the top and "Keep-alive" after
@@ -2451,6 +2427,7 @@ deploy health check `/health` (slice 1 moves it to `/health/ready`).
 | `APP_ENV` | `production`, set before ops-3 merged. The API then refuses to start on anything but PostgreSQL, and logs an ERROR when `CORS_ORIGINS` lists only localhost. | ops-3 |
 | `LOG_LEVEL` | optional: `DEBUG`, `INFO` (the default when unset), `WARNING` or `ERROR` | ops-3 |
 | `DB_POOL_SIZE`, `DB_MAX_OVERFLOW` | `3` and `3` (see Platform limits) | ops-1; read since ops-2 |
+| `ESV_API_KEY` | optional: enables the ESV translation (secret) | ops-1 |
 | `OPENAI_API_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI` | carried over for later slices (secrets) | slice 0 |
 
 Checked against Railway → the API service → Variables (names only):
@@ -2468,29 +2445,30 @@ build needs the `shadcn` devDependency.
 
 | Kind | Name | Used by | Since |
 |---|---|---|---|
-| Secret | `BACKUP_DATABASE_URL` | `db-backup` (see Backups) | ops-1 |
-| Variable | `API_BASE_URL` = `https://church-production-74ca.up.railway.app` | `keepalive` (see Keep-alive) | ops-3 |
+| Environment secret (environment `backup`, deployment branch `main` only) | `BACKUP_DATABASE_URL` | `db-backup` (see Backups) | ops-1 |
+| Repository variable | `API_BASE_URL` = `https://church-production-74ca.up.railway.app` | `keepalive` (see Keep-alive) | ops-3 |
 
-No other secret is needed. Nothing reads a `DATABASE_URL` Actions secret since
-ops-3; if one exists, delete it.
+No repository secret is needed. Nothing reads a `DATABASE_URL` Actions secret
+since ops-3; if one exists, delete it.
 
 **Streamlit Community Cloud.**
 
 | App | Source | Secrets (names only) |
 |---|---|---|
-| `liturgy-stg`, https://liturgy-stg.streamlit.app/ (production) | repo `bbrown62450/church`, main file `app.py`, branch `main` until the Freeze, then `streamlit-frozen` | the `[auth]` block (Google sign-in), `DATABASE_URL`, `OPENAI_API_KEY` and the `GOOGLE_*` gmail.send client (README → Local setup), plus the top-level `DB_POOL_SIZE = "3"` and `DB_MAX_OVERFLOW = "3"` |
-| `liturgy`, https://liturgy.streamlit.app/ (unused) | deleted in the Freeze | — |
+| `liturgy-next`, https://liturgy-next.streamlit.app/ (production, the only Streamlit app) | repo `bbrown62450/church`, main file `app.py`, Python 3.13; branch `main` until the Freeze, then `streamlit-frozen`. Streamlit Cloud cannot change an app's branch, so the Freeze deletes the app and recreates it under the same subdomain. | the `[auth]` block (Google sign-in, `redirect_uri = https://liturgy-next.streamlit.app/oauth2callback`), `DATABASE_URL`, `OPENAI_API_KEY`, the `GOOGLE_*` gmail.send client with `GOOGLE_OAUTH_REDIRECT_URI = https://liturgy-next.streamlit.app/` (README → Local setup), and the top-level `DB_POOL_SIZE = "3"` and `DB_MAX_OVERFLOW = "3"`. The owner keeps a copy in the password manager. |
+| `liturgy`, `liturgy-stg` | deleted on 2026-09-26 (see Streamlit apps) | — |
 
 **Supabase**, project `worship-staging` (ref `tbecmwtitsoxzkrvxxxu`, Nano
 compute, Postgres 17.6): Data API off (see Supabase lockdown record); Auth
 providers: Google only; `mailer_autoconfirm` off; session pooler Pool Size 15
 (see Platform limits).
 
-**Google OAuth client** (Google Cloud Console → APIs & Services →
+**Google OAuth client "Liturgy"** (Google Cloud Console → APIs & Services →
 Credentials): the Streamlit redirect URIs are
-`https://liturgy-stg.streamlit.app/oauth2callback` and the bare root
-`https://liturgy-stg.streamlit.app/`. The Freeze removes the two `liturgy`
-ones. No other redirect URI is touched.
+`https://liturgy-next.streamlit.app/oauth2callback` and the bare root
+`https://liturgy-next.streamlit.app/`. The four URIs of the deleted `liturgy`
+and `liturgy-stg` apps are harmless and may be removed (see Freeze record). No
+other redirect URI is touched.
 
 ````
 
@@ -2498,7 +2476,7 @@ ones. No other redirect URI is touched.
 
 - [ ] **Step 5: Add the freeze subsections**
 
-Insert directly above the line `## Platform limits`, so they follow ops-2's `### What the frozen app inherits from ops-2` and its gate table:
+Insert directly above the line `## Platform limits`, so they follow ops-2's `### What the frozen app inherits from ops-2` and its gate table. The existing `### Streamlit apps`, `### Streamlit bug triage` and `### D5 fix and recovery record` stay as they are.
 
 ````markdown
 ### What the frozen app inherits from ops-3
@@ -2508,58 +2486,68 @@ Nothing that the Streamlit app runs. ops-3 changes the FastAPI app
 (imported only by the API), deletes the old keep-alive script (never
 imported), edits a docstring in `backend/db/engine.py`, changes workflows and
 docs, and adds the FROZEN comment at the top of `app.py`. So
-`streamlit-frozen`, cut from the ops-3 merge commit, runs what `liturgy-stg`
-already ran after ops-2:
+`streamlit-frozen`, cut from the ops-3 merge commit, runs what `liturgy-next`
+already runs from `main` after ops-2:
 
-- the D5 fix (ops-1; manual check passed, see "D5 fix and recovery record");
+- the service rubric (PR #4): it reads `churches.settings.rubric` and maps
+  `text_year` and `hymnal_count` (F §6.2, amendment 2026-09-26);
+- the D5 fix (ops-1; see "D5 fix and recovery record");
 - `ensure_user` through `upsert_from_claims`, and the 3 + 3 pool with
-  `connect_timeout=10` (ops-2; gate passed, see the table above);
+  `connect_timeout=10` (ops-2; see the gate table above);
 - without the six dead modules (ops-1), which it never imported.
 
-`streamlit_tests/` passed on the ops-3 PR, and the pre-freeze smoke check
-below runs on the ops-3 build.
+It never gets the prayer library (PR #7) or the new season wording (PR #8):
+both are new-app only (F §6.2). `streamlit_tests/` passed on the ops-3 PR, and
+the pre-freeze smoke check below runs on the ops-3 build.
 
 ### Freeze record
 
-The ops spec's Freeze steps, with the app names swapped (owner correction,
-2026-09-25): `liturgy-stg` is kept and frozen; the unused `liturgy` is deleted.
+The ops spec's Freeze steps for the one production app, `liturgy-next` (see
+Streamlit apps; `liturgy` and `liturgy-stg` were deleted on 2026-09-26, so
+there is no second app to delete). Streamlit Community Cloud cannot change an
+app's branch, so the Freeze deletes `liturgy-next` and recreates it from
+`streamlit-frozen` under the same subdomain, with the same Secrets.
 
 | Step | Result | Date |
 |---|---|---|
-| Pre-freeze smoke check on https://liturgy-stg.streamlit.app/ (built from the ops-3 merge on `main`): sign in, the church loads, an archived service loads, Settings opens, and the sidebar has no "Church" selectbox | [owner] | [owner] |
-| Tester "before" message sent, with the window | [owner: window] | [owner] |
+| Pre-freeze smoke check on https://liturgy-next.streamlit.app/ after the ops-3 merge and a reboot: sign in, the church and hymnal load, a saved service loads, Settings opens, and the sidebar has no "Church" selectbox | [owner] | [owner] |
+| Tester "before" message sent, with the window (about 5 minutes) | [owner: window] | [owner] |
 | `streamlit-frozen` created at the ops-3 merge commit | [owner: commit sha] | [owner] |
 | `streamlit-frozen` protected: pull request required, `backend` check required, no force pushes, no deletion | [owner] | [owner] |
-| `liturgy-stg` recreated (deleted and redeployed) from `streamlit-frozen`, same subdomain `liturgy-stg`, same Python version, Secrets re-entered | [owner] | [owner] |
-| Post-freeze smoke check on https://liturgy-stg.streamlit.app/ passed; the app's settings show branch `streamlit-frozen` | [owner] | [owner] |
-| Unused `liturgy` app deleted | [owner] | [owner] |
-| Google OAuth client: `https://liturgy.streamlit.app/oauth2callback` and `https://liturgy.streamlit.app/` removed; the two `liturgy-stg` URIs kept | [owner] | [owner] |
-| `keep-awake` run by hand: green, one URL | [owner: run URL] | [owner] |
+| `liturgy-next` Secrets copied to the password manager; the app deleted and recreated from branch `streamlit-frozen`, main file `app.py`, subdomain `liturgy-next`, Python 3.13, Secrets pasted unchanged | [owner] | [owner] |
+| Post-freeze smoke check on https://liturgy-next.streamlit.app/ passed; the app's settings show branch `streamlit-frozen` | [owner] | [owner] |
+| `keep-awake` run by hand: green, one URL (https://liturgy-next.streamlit.app/) | [owner: run URL] | [owner] |
 | Tester "after" message sent | [owner] | [owner] |
-| After the next merge to `main`, `liturgy-stg` shows no new build | [owner: the merge, and what the logs showed] | [owner] |
+| Google OAuth client "Liturgy": the four redirect URIs of the deleted `liturgy` and `liturgy-stg` apps removed, the two `liturgy-next` URIs kept (optional cleanup; harmless until then) | [owner] | [owner] |
+| After the next merge to `main`, `liturgy-next` shows no new build | [owner: the merge, and what the logs showed] | [owner] |
 
 ### Freeze policy
 
 - Only data-safety fixes (data loss, corruption, leakage, security) go into
   `streamlit-frozen`, as pull requests into that branch; CI runs on them. The
-  one planned exception is the slice 5b switchover banner.
+  one planned exception is the slice 5b switchover banner. No new features
+  (owner decision).
 - A fix that also concerns backend code on `main` is fixed on `main`
   separately, with its own tests.
 - Streamlit code on `main` is not maintained (F §2.3.7); the FROZEN comment
   at the top of `app.py` on `main` says so.
+- A running Streamlit app hot-pulls new commits but can keep stale imported
+  modules. After a fix merges into `streamlit-frozen`, reboot the app
+  (Manage app → Reboot) and run the smoke check.
 - If a Streamlit Cloud reboot breaks the frozen app because a dependency
   released a new version, pin the versions recorded below in the frozen
   branch's `requirements.txt`. That counts as a data-safety fix: it restores
   the tester's access to their data.
-- Merges to `main` no longer redeploy `liturgy-stg`. `keep-awake` (on `main`)
+- Merges to `main` no longer redeploy `liturgy-next`. `keep-awake` (on `main`)
   still keeps it awake.
 
 ### Recorded Python and package versions
 
-From `liturgy-stg`'s build log just before the freeze (Streamlit Cloud →
-`liturgy-stg` → Manage app → logs, the dependency-install lines).
+From `liturgy-next`'s build log just before the freeze (Streamlit Cloud →
+`liturgy-next` → Manage app → logs, the dependency-install lines). The app's
+Python setting is 3.13.
 
-- Python: [owner]
+- Python: [owner: the exact version from the build log]
 - Packages:
 
 ```
@@ -2568,16 +2556,25 @@ From `liturgy-stg`'s build log just before the freeze (Streamlit Cloud →
 
 ### Contingency
 
-If `liturgy-stg` cannot be moved to `streamlit-frozen` (F §6.1.6):
-1. `liturgy-stg` was already rolled back to `main` (Task 14, Step 1: redeployed
-   again from branch `main` with the same Secrets, since the delete-and-recreate
-   to `streamlit-frozen` failed). Leave `streamlit-frozen` in place as a record.
+If `liturgy-next` cannot run from `streamlit-frozen` (F §6.1 item 6):
+1. `liturgy-next` was already redeployed from branch `main`, with the same
+   subdomain and Secrets (the Freeze's rollback), so it runs `main` as before
+   the Freeze. Leave `streamlit-frozen` in place as a record.
 2. Remove the FROZEN comment from `app.py` on `main`.
 3. From then on every PR keeps `app.py` working against `main`: no signature
-   change to a function `app.py` calls without a compatible wrapper, and
-   `streamlit_tests/test_app_smoke.py` (an `AppTest` run of `app.py`
-   signed out) stays green.
-4. Record the decision and the date here.
+   change to a function `app.py` calls without a compatible wrapper (the
+   slice specs name their shims for this case), and
+   `streamlit_tests/test_app_smoke.py` (an `AppTest` run of `app.py` signed
+   out) stays green.
+4. Streamlit still gets no new features. It keeps the old season wording:
+   slice 4's `generate_liturgy` wrapper keeps the old season sentences
+   through a frozen copy of the old constant
+   (`liturgy_prompts.LEGACY_SYSTEM_PROMPT`), and Streamlit's Settings page
+   shows that copy as the "Overall voice" default and compares saves with it
+   (`liturgy_prompts.legacy_default_prompts()`), so an admin's edit there
+   never stores the new wording as an override. It never reads
+   `prayer_library` (F §6.2, amendment 2026-09-26).
+5. Record the decision and the date here.
 
 ````
 
@@ -2594,21 +2591,21 @@ Append after line 45 (the last Slice 0 item):
 Run on the production URLs: https://worship-service-builder.vercel.app (at
 375 px in Chrome device mode, iPhone SE, and on desktop),
 https://church-production-74ca.up.railway.app, and
-https://liturgy-stg.streamlit.app, the production Streamlit app (the unused
-`liturgy` app is deleted in the Freeze). Record each result, with its date,
-in `docs/ops-runbook.md`.
+https://liturgy-next.streamlit.app, the production Streamlit app (the only
+one since `liturgy` and `liturgy-stg` were deleted on 2026-09-26). Record each
+result, with its date, in `docs/ops-runbook.md`.
 
 - [ ] Step 0 recorded in `docs/ops-runbook.md` (done on 2026-09-25; confirm the records are there, do not redo the checks): the exposure checks (the Data API was already off: REST and GraphQL with the anon key return 503 `PGRST002` and no rows, so no incident), GraphQL introspection, table owners and BYPASSRLS, `server_version` 17.6 and the `- Postgres server major: 17` line, the pooler Pool Size 15 with 2 × (3 + 3) + 2 = 14 ≤ 15, and Railway's request limit with its source. If a later exposure check ever returns rows: the incident record, including the users/contacts audit and where the forensic dump is kept.
-- [ ] D5 workaround message sent to the tester on day one.
-- [ ] D5 fix, after ops-1 is live on `liturgy-stg`, in a throwaway church: sign in with a second Google account that has no church and create "Ops test". Tick "Exclude hymns used in the last 12 weeks", pick three hymns, generate the liturgy, click "Prepare bulletin copy": the three picks are still selected. Click "Prepare pastor's copy": both Word files list the three hymns. Save, then load the service again with the box still ticked: its three hymns are in the slots. Delete "Ops test" in Settings → Danger zone. Then run the recovery queries, record the result, and send the tester the "fixed" message.
+- [ ] D5 workaround message: sent to the tester on day one, or the owner's decision not to send it recorded (as on 2026-09-26).
+- [ ] D5 fix, live on `liturgy-next` since the ops-1 merge, in a throwaway church: sign in with a second Google account that has no church and create "Ops test". Tick "Exclude hymns used in the last 12 weeks", pick three hymns, generate the liturgy, click "Prepare bulletin copy": the three picks are still selected. Click "Prepare pastor's copy": both Word files list the three hymns. Save, then load the service again with the box still ticked: its three hymns are in the slots. Delete "Ops test" in Settings → Danger zone. Then run the recovery queries, record the result, and send the tester the "fixed" message.
 - [ ] https://worship-service-builder.vercel.app, after the lockdown and after each ops merge: sign in, the church shows in the switcher, switch church if you have two, log out.
 - [ ] `db-backup` run by hand: green, with an artifact `backup-*.dump.age`; the log shows no URL or password. The restore drill's counts match production.
 - [ ] `https://church-production-74ca.up.railway.app/health/ready` → `{"ok":true,"db":"ok"}`. The `keepalive` run by hand is green.
 - [ ] Railway deploy log after ops-3: `Database: dialect=postgresql driver=psycopg2 host=…pooler.supabase.com database=postgres`, with no username or password, and no `CORS_ORIGINS allows only localhost` ERROR line.
 - [ ] Browser devtools on the Vercel app: the `/me` response has an `x-request-id` header, and it is readable from JS: in the console, `fetch("https://church-production-74ca.up.railway.app/health").then(r => r.headers.get("x-request-id"))` resolves to an id, not `null`.
 - [ ] `curl -i https://church-production-74ca.up.railway.app/me/` → 404 JSON with `request_id`, and no `location` header (not a 307).
-- [ ] `liturgy-stg` before the freeze and after the redeploy: sign in, load the church, load an archived service, open Settings. The app's settings show branch `streamlit-frozen`. After the next merge to `main`, no new Streamlit build.
-- [ ] The unused `liturgy` app is gone; its two redirect URIs (`https://liturgy.streamlit.app/oauth2callback` and `https://liturgy.streamlit.app/`) are removed from the Google OAuth client; `keep-awake` is green with one URL, https://liturgy-stg.streamlit.app/.
+- [ ] `liturgy-next` after the ops-3 merge (rebooted) and again after it is recreated from `streamlit-frozen`: sign in, the church and hymnal load, load a saved service, open Settings. The app's settings show branch `streamlit-frozen`. After the next merge to `main`, no new Streamlit build.
+- [ ] `keep-awake` is green with one URL, https://liturgy-next.streamlit.app/. Optional cleanup: the redirect URIs of the deleted `liturgy` and `liturgy-stg` apps are gone from the Google OAuth client.
 ```
 
 The boxes stay unchecked: this is a reusable checklist, as slice 0 left its own section, and results go into the runbook (clarification 12).
@@ -2618,21 +2615,24 @@ The boxes stay unchecked: this is a reusable checklist, as slice 0 left its own 
 ```bash
 .venv/bin/python -m pytest -q backend/tests/test_ops_workflows.py backend/tests/test_docs.py
 grep -n '^## ' docs/ops-runbook.md
+awk '/^## Environments and variables$|^## Keep-alive$|^### What the frozen app inherits from ops-3$/{on=1} /^## Supabase lockdown record$|^## Streamlit freeze$|^## Platform limits$/{on=0} on && /\[owner/{print FNR": "$0}' docs/ops-runbook.md | wc -l
 grep -n '\[owner' docs/ops-runbook.md | grep -v 'An entry marked' | wc -l
 .venv/bin/python -m pytest -q | tail -1
 ```
 
-Expected: `33 passed` (30 + 3); the seven `##` headings in the order of `RUNBOOK_SECTIONS`; `15` marker lines (the Railway check line, the Keep-alive run row, 11 Freeze record rows, and the two version lines); `395 passed`.
+Expected: `83 passed` (80 + 3); the seven `##` headings in the order of `RUNBOOK_SECTIONS`; `14` (ops-3's markers: the Railway check line, the Keep-alive run row, 10 Freeze record rows and the two version lines); `25` (those 14 plus the 11 ops-1/ops-2 markers from Task 1, Step 1, or fewer if the owner has filled some); `559 passed`.
 
 - [ ] **Step 8: Commit**
 
 ```bash
 git add docs/ops-runbook.md docs/manual-verification.md backend/tests/test_ops_workflows.py
-git commit -m "Runbook: environments, freeze record and policy; 'Ops slice' manual checks (S15)
+git commit -m "Runbook: environments, freeze record, policy and contingency; 'Ops slice' checks (S15)
 
-The runbook now has the spec's seven sections. The freeze record, the
-recorded versions and the Railway check are [owner: …] markers, filled
-before merge and after the Freeze.
+The runbook now has the spec's seven sections. The Freeze deletes and
+recreates liturgy-next from streamlit-frozen; the contingency keeps the old
+season wording and no prayer library (F §6.1 item 6, §6.2). The freeze
+record, the recorded versions and the Railway check are [owner: …] markers,
+filled before merge and after the Freeze.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -2641,11 +2641,11 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ### Task 10: Full verification, local smoke and the ops-3 pull request
 
-**Files:** none changed (this plan file is committed in Step 5)
+**Files:** none changed (this plan is already the branch's first commit)
 
 **Interfaces:**
 - Consumes: everything from Tasks 1–9.
-- Produces: an open PR `claude/ops-3-api-platform-freeze` → `main` with green CI.
+- Produces: an open PR `claude/ops-3` → `main` with green CI.
 
 - [ ] **Step 1: Run the whole suite and the acceptance checks**
 
@@ -2654,17 +2654,45 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ls backend/keepalive.py backend/tests/test_keepalive.py backend/cache.py backend/tests/test_cache.py 2>&1 | grep -c "No such file"
 (cd backend && ../.venv/bin/python -c "import sys, api.main, db.health; print(sorted(m for m in sys.modules if m.split('.')[0] == 'streamlit'))")
 grep -nE '^(from|import) ' backend/db/health.py backend/db/engine.py | grep -E 'api|fastapi|starlette|streamlit'; echo "grep exit $?"
-git diff --stat origin/main...HEAD -- frontend backend/.env.example .github/workflows/backup.yml .github/workflows/ci.yml \
-  .github/backup backend/repos backend/auth.py backend/api/deps.py backend/api/identity_cache.py backend/db/upsert.py
+git diff --name-only origin/main...HEAD
+git status --short
 grep -n '^- Postgres server major: 17$\|docs.railway.com/networking/public-networking/specs-and-limits' docs/ops-runbook.md | wc -l
 ```
 
 Expected, in order:
-- `395 passed`;
+- `559 passed`;
 - `4` (the keep-alive script and its tests are gone; slice 2's cache files were never created);
 - `[]` (the API and the readiness module pull in no Streamlit);
 - no output and `grep exit 1` (`db/` imports no `api/`, FastAPI, Starlette or Streamlit);
-- nothing: ops-3 touches no ops-1 or ops-2 file, no frontend file and no other workflow;
+- exactly these 24 paths, and nothing else (no ops-1 or ops-2 file, no frontend file, no other workflow, not `keep-awake.yml`, `backend/.env.example`, `backend/api/deps.py` or `backend/api/identity_cache.py`):
+
+  ```
+  .github/workflows/keepalive.yml
+  README.md
+  app.py
+  backend/api/errors.py
+  backend/api/logging_config.py
+  backend/api/main.py
+  backend/api/middleware.py
+  backend/api/routes/health.py
+  backend/api/settings.py
+  backend/api/startup.py
+  backend/db/engine.py
+  backend/db/health.py
+  backend/keepalive.py
+  backend/tests/conftest.py
+  backend/tests/test_api_app.py
+  backend/tests/test_foundation_setup.py
+  backend/tests/test_health_ready.py
+  backend/tests/test_keepalive.py
+  backend/tests/test_middleware.py
+  backend/tests/test_ops_workflows.py
+  backend/tests/test_startup.py
+  docs/manual-verification.md
+  docs/ops-runbook.md
+  docs/superpowers/plans/2026-09-25-ops-3-api-platform-freeze.md
+  ```
+- only `?? .claude/` (nothing else modified or untracked);
 - `2` (ops-1's Step 0 records: the Postgres major line and Railway's request limit, AC 19).
 
 - [ ] **Step 2: Check what the frozen branch will inherit**
@@ -2683,7 +2711,7 @@ Expected:
 - `4` (two docstring lines out, two in);
 - no output and `grep exit 1`.
 
-So the Streamlit app's behavior on `streamlit-frozen` is exactly what `liturgy-stg` ran after ops-2, as the runbook's "What the frozen app inherits from ops-3" says.
+So the Streamlit app's behavior on `streamlit-frozen` is exactly what `liturgy-next` runs from `main` after ops-2, as the runbook's "What the frozen app inherits from ops-3" says.
 
 - [ ] **Step 3: Local smoke test with a real uvicorn**
 
@@ -2706,7 +2734,7 @@ kill "$pid"; sleep 1
 grep 'Database:' "$tmp/uvicorn.log"
 ```
 
-Run it as one block (shell state does not carry between separate commands). Expected (checked in a scratch copy on 2026-09-25):
+Run it as one block (shell state does not carry between separate commands). `load_dotenv()` reads `backend/.env` but never overrides the three variables set on the command line. Expected (checked in a scratch clone of this branch on 2026-09-26):
 
 ```
 {"ok":true,"db":"ok"}
@@ -2724,50 +2752,58 @@ api.main INFO request_id=- Database: dialect=sqlite driver=pysqlite host=- datab
 
 There is no `location` line for `/me/`.
 
-- [ ] **Step 4: Check the runbook markers**
+- [ ] **Step 4: Check ops-3's runbook markers**
 
-Run: `grep -n '\[owner' docs/ops-runbook.md | grep -v 'An entry marked' | wc -l`
-Expected: `15` (the Railway check line, the Keep-alive run row, 11 Freeze record rows, and the two version lines). Every ops-1 and ops-2 marker was already filled (Task 1, Step 1).
+```bash
+awk '/^## Environments and variables$|^## Keep-alive$|^### What the frozen app inherits from ops-3$/{on=1} /^## Supabase lockdown record$|^## Streamlit freeze$|^## Platform limits$/{on=0} on && /\[owner/{print FNR": "$0}' docs/ops-runbook.md | wc -l
+```
+
+Expected: `14` (the Railway check line, the Keep-alive run row, 10 Freeze record rows, and the two version lines).
 
 - [ ] **Step 5: Push and open the PR (get the owner's go-ahead first)**
 
 ```bash
-git add docs/superpowers/plans/2026-09-25-ops-3-api-platform-freeze.md
-git commit -m "Add the ops-3 implementation plan
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" || true   # "nothing to commit" is fine if it is already committed
-git push -u origin claude/ops-3-api-platform-freeze
-gh pr create --base main --head claude/ops-3-api-platform-freeze \
+git push -u origin claude/ops-3
+gh pr create --base main --head claude/ops-3 \
   --title "ops-3: request ids, CORS-safe 500s, startup guards, /health/ready, keepalive, freeze on main" \
   --body "PR ops-3 of the ops slice (docs/superpowers/specs/2026-09-25-slice-ops-cleanup-design.md; plan docs/superpowers/plans/2026-09-25-ops-3-api-platform-freeze.md).
 
-- RequestIdMiddleware and UnhandledErrorMiddleware (pure ASGI), order CORS → RequestId → UnhandledError: X-Request-Id on every response the app produces, request_id in every error body, unexpected 500s arrive with CORS headers (S9, S13, F §7.3).
+- RequestIdMiddleware and UnhandledErrorMiddleware (pure ASGI), order CORS → RequestId → UnhandledError: X-Request-Id on every response the app produces, request_id in every error body, unexpected 500s arrive with CORS headers (S9, S13, F §7.3). /me, /church and /rubric are unchanged apart from request_id.
 - Final CORS lists (Idempotency-Key, If-Match, X-Request-Id; exposes Content-Disposition, Retry-After, X-Request-Id; max-age 600) and redirect_slashes=False (S11).
 - Logging: request_id= on every line; LOG_LEVEL validated. Startup: 'Database: dialect=… driver=… host=… database=…' without credentials; APP_ENV=production refuses a non-PostgreSQL DATABASE_URL before init_db and logs an ERROR for localhost-only CORS (S10).
 - GET /health/ready: memoized (10 s ok / 5 s failed), single-flight SELECT 1 in db/health.py; 503 db_unavailable (S3).
 - keepalive.yml curls \${API_BASE_URL}/health/ready with no secret; backend/keepalive.py and test_keepalive.py deleted (inv H4).
-- app.py FROZEN header; keep-awake.yml pings only https://liturgy-stg.streamlit.app/ (owner correction: liturgy-stg is production; the unused liturgy app is deleted in the Freeze).
-- README keep-alive, runbook (environments, keep-alive, freeze record and policy), 'Ops slice' manual checks.
-- Tests: +74, -5 (395 total).
+- app.py FROZEN header; keep-awake.yml already visits only https://liturgy-next.streamlit.app/ and a test now guards it.
+- README keep-alive, runbook (environments, keep-alive, freeze record, policy and contingency for liturgy-next), 'Ops slice' manual checks.
+- Tests: +75, -5 (559 total).
 
-Before merge: owner sets APP_ENV=production on Railway (plan Task 11). After merge: API_BASE_URL variable and a keepalive run (Task 12), then the Freeze (Tasks 13-15).
+Before merge: the ops-2 gate rows are recorded and the owner sets APP_ENV=production on Railway (plan Task 11). After merge: reboot liturgy-next, set the API_BASE_URL variable and run keepalive (Tasks 11-12), then the Freeze (Tasks 13-15).
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)"
 gh pr checks --watch
 ```
 
-Expected: the `backend` and `frontend` checks pass, and the Vercel preview deployment reports success (the frontend is unchanged).
+Expected: the `backend`, `backend-postgres` and `frontend` checks pass, and the Vercel preview deployment reports success (the frontend is unchanged).
 
 ---
 
-### Task 11 (OWNER, before merge): `APP_ENV=production` on Railway, the variables check, merge
+### Task 11 (OWNER, before merge): the ops-2 gate, `APP_ENV=production` on Railway, merge
 
-The ops spec's gate: set `APP_ENV=production` on Railway **before** merging. The code on Railway before the merge ignores it, so setting it early is harmless. Once ops-3 is live, the guard needs it.
+The ops spec's gates: ops-2's ("for at least one day the tester uses Streamlit, still deployed from `main`, and nothing regresses") comes before ops-3, and `APP_ENV=production` is set on Railway **before** merging ops-3. The code on Railway before the merge ignores `APP_ENV`, so setting it early is harmless. Once ops-3 is live, the guard needs it.
 
 **Files:**
-- Modify (by the agent, from the owner's answer): `docs/ops-runbook.md` → Environments and variables, the `[owner: …]` "Checked against Railway" line
+- Modify (by the agent, from the owner's answers): `docs/ops-runbook.md` → Environments and variables, the `[owner: …]` "Checked against Railway" line; and, if still open, the six rows of the ops-2 gate table under "What the frozen app inherits from ops-2"
 
-- [ ] **Step 1 (OWNER): Set and check the Railway variables**
+- [ ] **Step 1 (agent): Is the ops-2 gate recorded?**
+
+```bash
+git fetch origin
+git show origin/main:docs/ops-runbook.md | sed -n '/^| ops-2 gate/,/^$/p' | grep -c '\[owner'
+```
+
+Expected: `0`. If it prints more (it printed `6` on 2026-09-26), ask the owner for the six results (the pre-check that `liturgy-next` showed branch `main` and `app.py`; the unique constraint on `users(email)`; the pool keys on Railway and in `liturgy-next`'s Secrets, "present" or "missing" only; the API deploy and Vercel sign-in; the `liturgy-next` build and smoke check; the days the tester used `liturgy-next` and what they reported). Record them in Step 3's commit. Do not merge ops-3 while a row is open or the tester has reported a regression.
+
+- [ ] **Step 2 (OWNER): Set and check the Railway variables**
 
 Railway → the project → the API service → Variables:
 1. Add `APP_ENV` = `production`. Optionally add `LOG_LEVEL` = `INFO` (unset means `INFO` too).
@@ -2780,16 +2816,17 @@ Railway → the project → the API service → Variables:
 
 Then tell the agent the date, and any variable name that differs from the runbook's Railway table.
 
-- [ ] **Step 2 (agent): Confirm the API is still up and record the check**
+- [ ] **Step 3 (agent): Confirm the API is still up and record the checks**
 
 ```bash
 curl -s https://church-production-74ca.up.railway.app/health; echo
 ```
 
-Expected: `{"ok":true}`. In `docs/ops-runbook.md` → Environments and variables, replace `[owner: date, and any variable that differs from this table]` with the date and `matches` (or the differences the owner named, and a table fix to match reality). Then:
+Expected: `{"ok":true}`. In `docs/ops-runbook.md` → Environments and variables, replace `[owner: date, and any variable that differs from this table]` with the date and `matches` (or the differences the owner named, and a table fix to match reality). If Step 1 found open ops-2 gate rows, fill each with the owner's result and date. Then:
 
 ```bash
-grep -n '\[owner' docs/ops-runbook.md | grep -v 'An entry marked' | wc -l
+awk '/^## Environments and variables$|^## Keep-alive$|^### What the frozen app inherits from ops-3$/{on=1} /^## Supabase lockdown record$|^## Streamlit freeze$|^## Platform limits$/{on=0} on && /\[owner/{print FNR": "$0}' docs/ops-runbook.md | wc -l
+sed -n '/^| ops-2 gate/,/^$/p' docs/ops-runbook.md | grep -c '\[owner'
 .venv/bin/python -m pytest -q | tail -1
 git add docs/ops-runbook.md
 git commit -m "Runbook: Railway variables checked; APP_ENV=production set before merge
@@ -2798,17 +2835,19 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 git push
 ```
 
-Expected: `14`, then `395 passed`.
+Expected: `13`; `0`; `559 passed`. (Name the ops-2 gate in the commit message too if this commit records it.)
 
-- [ ] **Step 3 (OWNER): Review and merge at a quiet time**
+- [ ] **Step 4 (OWNER): Review and merge at a quiet time, then reboot `liturgy-next`**
 
-Every merge to `main` still rebuilds `liturgy-stg` until the Freeze (for ops-3, only a comment line changes in `app.py`), which briefly restarts the app. Merge on a weekday when the tester is not using it, never Saturday or Sunday. All CI checks must be green. Merging is outward-facing, so merge only on the owner's explicit yes:
+Until the Freeze every merge to `main` reaches `liturgy-next` (for ops-3: a comment line in `app.py`, a docstring in `backend/db/engine.py`, and the deletion of `backend/keepalive.py`, which Streamlit never imported). Merge on a weekday when the tester is not using the app, never Saturday or Sunday. All CI checks must be green. Merging is outward-facing, so merge only on the owner's explicit yes:
 
 ```bash
-gh pr merge --merge claude/ops-3-api-platform-freeze
+gh pr merge --merge claude/ops-3
 ```
 
 Use a merge commit (`--merge`), not squash: its sha is "the ops-3 merge commit" the Freeze branches from.
+
+Right after the merge: Streamlit Cloud (share.streamlit.io) → `liturgy-next` → Manage app → Reboot, so no stale imported module survives the hot-pull. The smoke check follows in Task 13, Step 3.
 
 ---
 
@@ -2824,7 +2863,7 @@ Railway → the API service → Deployments: the deployment for the merge commit
 api.main INFO request_id=- Database: dialect=postgresql driver=psycopg2 host=aws-…pooler.supabase.com database=postgres
 ```
 
-They must show no `CORS_ORIGINS allows only localhost` line and no traceback. If the deploy failed with `APP_ENV=production requires a PostgreSQL DATABASE_URL; refusing to start.`, the previous release is still serving: fix `DATABASE_URL` (Task 11, Step 1) and redeploy. (AC 18.)
+They must show no `CORS_ORIGINS allows only localhost` line and no traceback. If the deploy failed with `APP_ENV=production requires a PostgreSQL DATABASE_URL; refusing to start.`, the previous release is still serving: fix `DATABASE_URL` (Task 11, Step 2) and redeploy. (AC 18.)
 
 - [ ] **Step 2 (agent): Production responses**
 
@@ -2860,7 +2899,7 @@ This value is not a secret. Alternatively the agent runs this, on your explicit 
 gh variable set API_BASE_URL --body "https://church-production-74ca.up.railway.app" -R bbrown62450/church
 ```
 
-On the **Secrets** tab, the only secret should be `BACKUP_DATABASE_URL`. If a `DATABASE_URL` secret exists (the old keep-alive's, which inventory H4 says was never added), delete it: nothing reads it since ops-3.
+On the **Secrets** tab there should be no repository secret (`BACKUP_DATABASE_URL` lives in the `backup` environment, Settings → Environments). If a `DATABASE_URL` repository secret exists (the old keep-alive's, which inventory H4 says was never added), delete it: nothing reads it since ops-3.
 
 - [ ] **Step 4 (agent, on the owner's yes): Run keepalive by hand**
 
@@ -2884,7 +2923,7 @@ Give the agent the dates and results of Steps 1–5.
 
 ### Task 13 (OWNER + agent): Freeze, part 1: pre-freeze checks, cut and protect `streamlit-frozen`
 
-F §6.1 and the ops spec's Freeze steps 1–3, with owner correction 1: the app that is kept and frozen is `liturgy-stg`.
+F §6.1 and the ops spec's Freeze steps 1–3, for the one production app `liturgy-next`.
 
 **Files:** none (results go into the runbook in Task 15)
 
@@ -2892,41 +2931,42 @@ F §6.1 and the ops spec's Freeze steps 1–3, with owner correction 1: the app 
 
 ```bash
 git fetch origin
-gh pr view claude/ops-3-api-platform-freeze -R bbrown62450/church --json state,mergeCommit \
+gh pr view claude/ops-3 -R bbrown62450/church --json state,mergeCommit \
   -q '.state + " " + .mergeCommit.oid'
-git show origin/main:docs/ops-runbook.md | grep -n '\[owner' | grep -v 'An entry marked' | wc -l
+git show origin/main:docs/ops-runbook.md | awk '/^## Environments and variables$|^## Keep-alive$|^### What the frozen app inherits from ops-3$/{on=1} /^## Supabase lockdown record$|^## Streamlit freeze$|^## Platform limits$/{on=0} on && /\[owner/{print FNR": "$0}' | wc -l
+git show origin/main:docs/ops-runbook.md | grep -c '^| D5 manual check passed.*| \[owner\] |$'
 gh run list --workflow ci --branch main --limit 1 -R bbrown62450/church --json headSha,conclusion \
   -q '.[0].headSha + " " + .[0].conclusion'
 ```
 
-Expected: `MERGED <sha>`; `14` (the Keep-alive run row, the 11 Freeze record rows and the two version lines. The Railway line was filled in Task 11, and the D5 rows and the ops-2 gate before ops-3 started); `<the same sha> success`. If CI on `main` is not green for the merge commit, stop.
+Expected: `MERGED <sha>`; `13` (the Keep-alive run row, the 10 Freeze record rows and the two version lines; the Railway line was filled in Task 11); `0` (the D5 manual check on `liturgy-next` is recorded as passed; if `1`, the owner runs it now, `docs/manual-verification.md` → Ops slice, before Step 4, and Task 15 records it); `<the same sha> success`. If CI on `main` is not green for the merge commit, stop.
 
 - [ ] **Step 2 (OWNER): Schedule the window and send the "before" message**
 
-Pick a weekday window the tester agrees to, never Saturday or Sunday. Send (exact copy, with the production address):
+Pick a weekday window the tester agrees to, never Saturday or Sunday, and not at minute :23 of 00, 06, 12 or 18 UTC, when `keep-awake` runs (a run that hits the window fails once, harmlessly). Send (exact copy, with the production address):
 
-> Heads-up: on {weekday, date} between {start} and {end} I'm moving the planning app to a new setup. The address stays https://liturgy-stg.streamlit.app. It may be unavailable for up to 15 minutes. Please don't start a new service during that window — anything you've already saved is safe.
+> Heads-up: on {weekday, date} between {start} and {end} I'm moving the planning app to a new setup. The address stays https://liturgy-next.streamlit.app. It may be unavailable for about 5 minutes. Please don't start a new service during that window — anything you've already saved is safe.
 
 - [ ] **Step 3 (OWNER): Pre-freeze smoke check and recorded versions**
 
-Streamlit Cloud (share.streamlit.io) → `liturgy-stg` → Manage app → logs: the latest build started after the ops-3 merge and finished. On https://liturgy-stg.streamlit.app/: sign in, the church loads, load an archived service, open Settings, and confirm the sidebar shows no "Church" selectbox (the bug-triage row A7 relies on it). If anything fails, stop: do not cut the branch.
+Streamlit Cloud → `liturgy-next` → Manage app: if it was not rebooted after the ops-3 merge (Task 11, Step 4), Reboot now. The logs show a build or reboot after the merge that finished. On https://liturgy-next.streamlit.app/: sign in, the church and hymnal load, load a saved service, open Settings, and confirm the sidebar shows no "Church" selectbox (the bug-triage row A7 relies on it). If anything fails, stop: do not cut the branch.
 
-From the same build log, copy the Python version and the dependency-install lines (`name==version`) into a note for the agent. Also note, from ⋮ → Settings, the app's Python version and custom subdomain (`liturgy-stg`), and check in ⋮ → Settings → Secrets that the top-level `DB_POOL_SIZE = "3"` and `DB_MAX_OVERFLOW = "3"` are there (ops-1 set them; owner correction 3). Tell the agent only "present" or "missing", never the Secrets text. If they are missing, add both lines and save before the cut: without them the Streamlit app's engine still uses the code defaults 3 and 3 (ops-2), but the runbook says the keys are set.
+From the same logs, copy the Python version and the dependency-install lines (`name==version`) into a note for the agent. Also note, from ⋮ → Settings, the app's Python version (3.13) and custom subdomain (`liturgy-next`), and check in ⋮ → Settings → Secrets that the top-level `DB_POOL_SIZE = "3"` and `DB_MAX_OVERFLOW = "3"` are there. Tell the agent only "present" or "missing", never the Secrets text. If they are missing, add both lines and save before the cut: without them the engine still uses the code defaults 3 and 3 (ops-2), but the runbook says the keys are set. Make sure the password-manager copy of the Secrets matches what is saved now.
 
 - [ ] **Step 4 (agent, on the owner's yes): Cut `streamlit-frozen` from the ops-3 merge commit**
 
 ```bash
 git fetch origin
-sha=$(gh pr view claude/ops-3-api-platform-freeze -R bbrown62450/church --json mergeCommit -q .mergeCommit.oid)
+sha=$(gh pr view claude/ops-3 -R bbrown62450/church --json mergeCommit -q .mergeCommit.oid)
 git merge-base --is-ancestor "$sha" origin/main && echo "on main"
 git log -1 --format='%s' "$sha"
 git ls-remote --exit-code origin refs/heads/streamlit-frozen; echo "ls-remote exit $?"
 ```
 
-Expected: `on main`; `Merge pull request #<n> from bbrown62450/claude/ops-3-api-platform-freeze`; `ls-remote exit 2` (the branch does not exist yet). Then push it (the first line derives the sha again, because shell variables do not carry over between commands):
+Expected: `on main`; `Merge pull request #<n> from bbrown62450/claude/ops-3`; `ls-remote exit 2` (the branch does not exist yet). Then push it (the first line derives the sha again, because shell variables do not carry over between commands):
 
 ```bash
-sha=$(gh pr view claude/ops-3-api-platform-freeze -R bbrown62450/church --json mergeCommit -q .mergeCommit.oid)
+sha=$(gh pr view claude/ops-3 -R bbrown62450/church --json mergeCommit -q .mergeCommit.oid)
 git push origin "$sha:refs/heads/streamlit-frozen"
 git ls-remote origin refs/heads/streamlit-frozen
 ```
@@ -2969,36 +3009,34 @@ Expected: `checks=backend pr=true force_push=false deletion=false`. (AC 20, seco
 
 ---
 
-### Task 14 (OWNER): Freeze, part 2: serve `liturgy-stg` from `streamlit-frozen`, retire `liturgy`
+### Task 14 (OWNER): Freeze, part 2: recreate `liturgy-next` from `streamlit-frozen`
 
-The ops spec's Freeze steps 4–6, with the app names swapped. Do this inside the window announced in Task 13.
+The ops spec's Freeze steps 4–6 for `liturgy-next` (clarification 17). Do this inside the window announced in Task 13.
 
 **Files:** none (results go into the runbook in Task 15)
 
-- [ ] **Step 1 (OWNER): Delete and recreate `liturgy-stg` from `streamlit-frozen`**
+- [ ] **Step 1 (OWNER): Delete `liturgy-next` and recreate it from `streamlit-frozen`**
 
-Streamlit Community Cloud cannot change an existing app's repository, branch or main file in place (https://docs.streamlit.io/deploy/streamlit-community-cloud/manage-your-app/rename-your-app: "Delete your app … Redeploy your app"). Moving `liturgy-stg` to `streamlit-frozen` means deleting it and redeploying under the same custom subdomain, with its Secrets re-entered. Because the URL does not change, the Google OAuth redirect URIs stay valid, and this is the same procedure the owner already used at the ops-1 merge to move `liturgy-stg` onto `main` (ops-1 plan, Task 9a).
+Streamlit Community Cloud cannot change an existing app's repository, branch or main file, and it allows only one app per repository + branch + main file. Moving `liturgy-next` to `streamlit-frozen` therefore means deleting it and deploying a new app under the same custom subdomain, with its Secrets re-entered. The URL does not change, so the Google OAuth redirect URIs, which already point at `liturgy-next`, stay valid.
 
-1. ⋮ → Settings → Secrets: copy the whole Secrets text into your password manager (entry "liturgy-stg Streamlit secrets", with the date). It includes the `[auth]` block and the top-level `DB_POOL_SIZE = "3"` and `DB_MAX_OVERFLOW = "3"`. Never paste it into chat or the repo.
-2. Note the Python version and the custom subdomain `liturgy-stg` (Task 13, Step 3).
+1. ⋮ → Settings → Secrets: copy the whole Secrets text into your password manager (update the `liturgy-next` Streamlit Secrets entry, with the date). It includes the `[auth]` block with `redirect_uri = https://liturgy-next.streamlit.app/oauth2callback`, `GOOGLE_OAUTH_REDIRECT_URI = https://liturgy-next.streamlit.app/`, and the top-level `DB_POOL_SIZE = "3"` and `DB_MAX_OVERFLOW = "3"`. Never paste it into chat or the repo.
+2. Note the Python version 3.13 and the custom subdomain `liturgy-next` (Task 13, Step 3).
 3. ⋮ → Delete app, and confirm.
-4. Create app → deploy from GitHub: repository `bbrown62450/church`, branch `streamlit-frozen`, main file path `app.py`, App URL (custom subdomain) `liturgy-stg`. Under Advanced settings, pick the same Python version and paste the Secrets from item 1. Deploy.
+4. Create app → deploy from GitHub: repository `bbrown62450/church`, branch `streamlit-frozen`, main file path `app.py`, App URL (custom subdomain) `liturgy-next`. Under Advanced settings, pick Python 3.13 and paste the Secrets from item 1 unchanged. Deploy.
 
 The tester's session cookie resets, so they sign in once.
 
-**Rollback.** If Streamlit refuses the subdomain `liturgy-stg` (ops spec, Risks item 4), retry after a few minutes. If it is still refused before the window ends: redeploy again, this time from branch `main` with the same Secrets, so `liturgy-stg` returns to exactly the state it was in before this task started (the same repository, branch and subdomain it has served since the ops-1 redeploy). Verify it loads and sign-in works, then stop and tell the agent — the fallback is the Contingency (Task 16). Do not send the "after" message.
+**Rollback.** If Streamlit refuses the subdomain `liturgy-next` right after the delete, wait a few minutes and retry. If the app from `streamlit-frozen` cannot be made to work before the window ends (the subdomain stays refused, the build fails, or Step 2's smoke check fails): delete that new app if it exists, then create the app again from branch `main`, main file `app.py`, subdomain `liturgy-next`, Python 3.13 and the same Secrets. That is exactly the state before this task (nothing else holds `main`/`app.py`). Verify sign-in, the church and hymnal, and a saved service, then send the "after" message (it is true either way), stop, and tell the agent: the fallback is the Contingency (Task 16).
 
-- [ ] **Step 2: Verify the frozen app**
+- [ ] **Step 2 (OWNER): Verify the frozen app**
 
 - Manage app → logs: a build from branch `streamlit-frozen` finished without a traceback.
-- ⋮ → Settings shows branch `streamlit-frozen`.
-- On https://liturgy-stg.streamlit.app/: sign in, the church loads, load an archived service, open Settings. (AC 21.)
+- ⋮ → Settings shows branch `streamlit-frozen`, main file `app.py`, Python 3.13.
+- On https://liturgy-next.streamlit.app/: sign in, the church and hymnal load, load a saved service, open Settings. (AC 21.)
 
-- [ ] **Step 3: Delete the unused `liturgy` app and its redirect URIs**
+- [ ] **Step 3 (OWNER, optional cleanup): Remove the old redirect URIs**
 
-1. Streamlit Cloud → `liturgy` → ⋮ → Delete app, and confirm. (Its sign-in was already broken, and nobody uses it.)
-2. Google Cloud Console → APIs & Services → Credentials → the OAuth 2.0 client the Streamlit apps use → Authorized redirect URIs: remove `https://liturgy.streamlit.app/oauth2callback` and `https://liturgy.streamlit.app/`. Keep `https://liturgy-stg.streamlit.app/oauth2callback` and `https://liturgy-stg.streamlit.app/`. Save.
-3. After a few minutes, sign out of https://liturgy-stg.streamlit.app/ and sign in again, to confirm that login still works. (AC 22.)
+`liturgy` and `liturgy-stg` were deleted on 2026-09-26; their redirect URIs are harmless but no longer needed. Google Cloud Console → APIs & Services → Credentials → the OAuth 2.0 client "Liturgy" → Authorized redirect URIs: remove `https://liturgy.streamlit.app/oauth2callback`, `https://liturgy.streamlit.app/`, `https://liturgy-stg.streamlit.app/oauth2callback` and `https://liturgy-stg.streamlit.app/`. Keep `https://liturgy-next.streamlit.app/oauth2callback` and `https://liturgy-next.streamlit.app/`. Save. After a few minutes, sign out of https://liturgy-next.streamlit.app/ and sign in again, to confirm that login still works. (AC 22, adapted: the apps themselves are already gone.)
 
 - [ ] **Step 4 (agent, on the owner's yes): Run keep-awake by hand**
 
@@ -3009,21 +3047,21 @@ gh run watch <run-id> --exit-status -R bbrown62450/church
 gh run view <run-id> --log -R bbrown62450/church | grep -E '(visited|FAILED) https://'
 ```
 
-Expected: the run succeeds, and the grep prints exactly one line, ending in `visited https://liturgy-stg.streamlit.app/`. (The pattern needs `https://` so that it skips the echoed script, whose lines read `visited {url}`.) (AC 22.)
+Expected: the run succeeds, and the grep prints exactly one line, ending in `visited https://liturgy-next.streamlit.app/`. (The pattern needs `https://` so that it skips the echoed script, whose lines read `visited {url}`.) (AC 22.)
 
-- [ ] **Step 5: Send the "after" message (exact copy)**
+- [ ] **Step 5 (OWNER): Send the "after" message (exact copy)**
 
 > All done — the app is back at the same address. Please sign in once and let me know if anything looks different.
 
-- [ ] **Step 6: Give the agent the results**
+- [ ] **Step 6 (OWNER): Give the agent the results**
 
-For Task 15, the agent needs: the dates of Tasks 13–14; the window; the merge sha and the protection check; whether the delete-and-recreate to `streamlit-frozen` succeeded or the rollback to `main` was used; the smoke results; the `liturgy` deletion and redirect-URI removal; the keep-awake run URL; the date the "after" message was sent; and, from Task 13, Step 3, the Python and package versions and whether the two pool keys were present in the Secrets.
+For Task 15, the agent needs: the dates of Tasks 13–14; the window; the merge sha and the protection check; whether the recreate from `streamlit-frozen` succeeded or the rollback to `main` was used; the smoke results; whether the old redirect URIs were removed; the keep-awake run URL; the date the "after" message was sent; and, from Task 13, Step 3, the Python and package versions, whether the two pool keys were present in the Secrets, and (if it was open) the D5 manual check result.
 
 ---
 
 ### Task 15 (agent + OWNER): Freeze records
 
-Two small docs-only PRs (clarification 13). Merging PR A is itself "the next merge to `main`", so PR B records whether `liturgy-stg` rebuilt.
+Two small docs-only PRs (clarification 13). Merging PR A is itself "the next merge to `main`", so PR B records whether `liturgy-next` rebuilt.
 
 **Files:**
 - Modify: `docs/ops-runbook.md`
@@ -3038,46 +3076,48 @@ git switch -c claude/ops-3-freeze-records origin/main
 In `docs/ops-runbook.md`, fill in the owner's values from Tasks 12–14:
 
 1. `## Keep-alive` → the run-record row: the date, the run URL, and `green; the log shows {"ok":true,"db":"ok"}`.
-2. `### Freeze record`: the Result and Date of every row **except** the last one ("After the next merge to `main`, `liturgy-stg` shows no new build"). The `streamlit-frozen` row gets the merge commit sha.
+2. `### Freeze record`: the Result and Date of every row **except** the last one ("After the next merge to `main`, `liturgy-next` shows no new build"). The `streamlit-frozen` row gets the merge commit sha. If the redirect-URI cleanup was skipped, write "skipped (harmless)" and the date.
 3. `### Recorded Python and package versions`: the Python version, and the `name==version` lines inside the code block.
-4. `### Streamlit apps`: replace the whole `liturgy-stg` row and the whole `liturgy` row with:
+4. `### Streamlit apps`: replace the whole `liturgy-next` row (the line that starts with ``| `liturgy-next` |``) with the row below; the `liturgy` row stays.
 
 ```markdown
-| `liturgy-stg` | https://liturgy-stg.streamlit.app/ | **Production.** The owner and the tester use it. Serves repo `bbrown62450/church`, branch `streamlit-frozen`, main file `app.py`, since <freeze date> (see Freeze record); merges to `main` no longer redeploy it. `keep-awake` keeps it awake. |
-| `liturgy` | https://liturgy.streamlit.app/ | **Deleted** on <date>, with its two Google redirect URIs. Its sign-in had failed with `StreamlitAuthError`, and nobody used it. |
+| `liturgy-next` | https://liturgy-next.streamlit.app/ | **Production.** The owner and the tester use it. Since <freeze date> it serves repo `bbrown62450/church`, branch `streamlit-frozen`, main file `app.py`, Python 3.13: Streamlit Cloud cannot change an app's branch, so it was deleted and recreated under the same subdomain with the same Secrets (see Freeze record). Merges to `main` no longer redeploy it. From 2026-09-26 until then it deployed from `main` (`liturgy-stg` was deleted that day during ops-1's Task 9a). Its Secrets carry `[auth] redirect_uri = https://liturgy-next.streamlit.app/oauth2callback` and `GOOGLE_OAUTH_REDIRECT_URI = https://liturgy-next.streamlit.app/`, both registered on the Google OAuth client "Liturgy". `keep-awake` keeps it awake. |
 ```
 
-5. `## Platform limits`: replace the whole bullet that starts "Until the Freeze step deletes the unused `liturgy` app" with:
+5. `## Platform limits`: replace the bullet that starts "Values set:" (it still names `liturgy-stg`) with:
 
 ```markdown
-- The unused `liturgy` app was deleted on <date> (see Freeze record), so the
-  budget above covers every client: the API and `liturgy-stg` at 3 + 3 each,
-  plus the backup job's session and the SQL editor. Real use by one tester is
-  2–4 sessions.
+- Values set: `DB_POOL_SIZE=3` and `DB_MAX_OVERFLOW=3` as Railway service
+  variables (API), and as top-level keys `DB_POOL_SIZE = "3"` and
+  `DB_MAX_OVERFLOW = "3"` in the production Streamlit Secrets: set in
+  `liturgy-stg`'s on 2026-09-26; <present | added> in `liturgy-next`'s on
+  <date> (Freeze, Task 13) and carried unchanged into the recreated app.
 ```
 
-Replace `<freeze date>` and `<date>` with the real dates. `liturgy-stg` is deleted and redeployed every time its branch moves (Streamlit Cloud cannot switch it in place), so mention the recreate date in the `liturgy-stg` row ("recreated on <date>"). If Task 14's rollback was used instead (redeployed again from `main`), say so here and do not mark the Freeze steps below as done.
+6. If Task 13, Step 1 found the D5 manual check open: its row in "D5 fix and recovery record", with the owner's result and date.
+
+Replace `<freeze date>`, `<date>` and `<present | added>` with the real values. If Task 14's rollback was used instead (the app redeployed from `main`), do not use the row in item 4: write "Freeze attempted on <date>; rolled back to `main` (see Contingency)" into the `liturgy-next` row, write "not done: rolled back" in the Freeze record rows that did not happen, and continue with Task 16 instead of Step 2 below.
 
 ```bash
-grep -n '\[owner' docs/ops-runbook.md | grep -v 'An entry marked'
+awk '/^## Environments and variables$|^## Keep-alive$|^### What the frozen app inherits from ops-3$/{on=1} /^## Supabase lockdown record$|^## Streamlit freeze$|^## Platform limits$/{on=0} on && /\[owner/{print FNR": "$0}' docs/ops-runbook.md
 .venv/bin/python -m pytest -q | tail -1
 git add docs/ops-runbook.md
-git commit -m "Runbook: Streamlit freeze record (liturgy-stg on streamlit-frozen, liturgy deleted), keepalive run
+git commit -m "Runbook: Streamlit freeze record (liturgy-next on streamlit-frozen), keepalive run
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 git push -u origin claude/ops-3-freeze-records
 gh pr create --base main --head claude/ops-3-freeze-records \
   --title "Runbook: Streamlit freeze record" \
-  --body "Records the ops-3 after-merge checks and the Streamlit freeze: streamlit-frozen cut at the ops-3 merge commit and protected; liturgy-stg (production) serves from it; the unused liturgy app and its redirect URIs are gone; keepalive and keep-awake runs are green; Python and package versions recorded. Merging this PR is the 'next merge to main' whose (absent) liturgy-stg rebuild the follow-up records.
+  --body "Records the ops-3 after-merge checks and the Streamlit freeze: streamlit-frozen cut at the ops-3 merge commit and protected; liturgy-next (production) deleted and recreated from it under the same subdomain and Secrets; keepalive and keep-awake runs are green; Python and package versions recorded. Merging this PR is the 'next merge to main' whose (absent) liturgy-next rebuild the follow-up records.
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)"
 ```
 
-Expected: the grep prints exactly one line, the last Freeze record row; `395 passed`. Merge on the owner's explicit yes (`gh pr merge --merge claude/ops-3-freeze-records`).
+Expected: the awk prints exactly one line, the last Freeze record row; `559 passed`. Merge on the owner's explicit yes (`gh pr merge --merge claude/ops-3-freeze-records`).
 
-- [ ] **Step 2 (OWNER): Check that the merge did not redeploy `liturgy-stg`**
+- [ ] **Step 2 (OWNER): Check that the merge did not redeploy `liturgy-next`**
 
-About 5 minutes after PR A merges: Streamlit Cloud → `liturgy-stg` → Manage app → logs show no new build after the merge time, and https://liturgy-stg.streamlit.app/ still loads. Tell the agent the result and the date. (AC 21.) If a build did start, the app still follows `main`: stop and check its branch setting (Task 14, Step 2).
+About 5 minutes after PR A merges: Streamlit Cloud → `liturgy-next` → Manage app → logs show no new build after the merge time, and https://liturgy-next.streamlit.app/ still loads. Tell the agent the result and the date. (AC 21.) If a build did start, the app still follows `main`: stop and check its branch setting (Task 14, Step 2).
 
 - [ ] **Step 3: Records PR B: the last row**
 
@@ -3086,30 +3126,31 @@ git fetch origin
 git switch -c claude/ops-3-freeze-records-2 origin/main
 ```
 
-Fill the last Freeze record row with "PR #<A's number> merged <date/time>; no new `liturgy-stg` build" and the date. Then:
+Fill the last Freeze record row with "PR #<A's number> merged <date/time>; no new `liturgy-next` build" and the date. Then:
 
 ```bash
-grep -n '\[owner' docs/ops-runbook.md | grep -v 'An entry marked'; echo "grep exit $?"
+awk '/^## Environments and variables$|^## Keep-alive$|^### What the frozen app inherits from ops-3$/{on=1} /^## Supabase lockdown record$|^## Streamlit freeze$|^## Platform limits$/{on=0} on && /\[owner/{print FNR": "$0}' docs/ops-runbook.md | wc -l
+grep -n '\[owner' docs/ops-runbook.md | grep -v 'An entry marked'
 .venv/bin/python -m pytest -q | tail -1
 git add docs/ops-runbook.md
-git commit -m "Runbook: merges to main no longer redeploy liturgy-stg (freeze verified)
+git commit -m "Runbook: merges to main no longer redeploy liturgy-next (freeze verified)
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 git push -u origin claude/ops-3-freeze-records-2
 gh pr create --base main --head claude/ops-3-freeze-records-2 \
   --title "Runbook: freeze verified" \
-  --body "Records that merging the freeze-records PR did not rebuild liturgy-stg, so production Streamlit is frozen on streamlit-frozen. Every item of the 'Ops slice' checklist in docs/manual-verification.md has now been run on the production URLs, with results in docs/ops-runbook.md. The ops slice is done.
+  --body "Records that merging the freeze-records PR did not rebuild liturgy-next, so production Streamlit is frozen on streamlit-frozen.
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)"
 ```
 
-Expected: no marker lines and `grep exit 1`; `395 passed`. Merge on the owner's yes. The ops slice's acceptance criteria 20–22 are then met, and slice work can start on `main`.
+Expected: `0` (every ops-3 marker is filled); the whole-runbook grep lists only ops-1 markers the owner may still owe (the `age` key's password-manager entry, the restore drill, the D5 "fixed" message and recovery result); `559 passed`. Merge on the owner's yes. The ops slice's acceptance criteria 20–22 are then met, and slice work can start on `main`. The ops slice as a whole is done when that whole-runbook grep is empty too (AC 23: every "Ops slice" check run and recorded).
 
 ---
 
-### Task 16 (only if Task 14 cannot move `liturgy-stg` to `streamlit-frozen`): Contingency
+### Task 16 (only if Task 14 rolled `liturgy-next` back to `main`): Contingency
 
-F §6.1.6 and the ops spec's Freeze step 8. Skip this task when Task 14 succeeded.
+F §6.1 item 6 and the ops spec's Freeze step 8, with the §6.2 amendment of 2026-09-26 (clarification 18). Skip this task when Task 14 succeeded.
 
 **Files:**
 - Modify: `app.py:2` (remove the FROZEN line)
@@ -3118,8 +3159,8 @@ F §6.1.6 and the ops spec's Freeze step 8. Skip this task when Task 14 succeede
 - Modify: `docs/ops-runbook.md` → `### Contingency` and `### Freeze record`
 
 **Interfaces:**
-- Consumes: `FROZEN_HEADER`, `ROOT` and `_read` from `test_ops_workflows.py`; the `tmp_db` fixture (re-exported by `streamlit_tests/conftest.py`); `streamlit.testing.v1.AppTest`.
-- Produces: a green `AppTest` run of `app.py` signed out, which every later PR must keep green.
+- Consumes: `FROZEN_HEADER`, `ROOT` and `_read` from `test_ops_workflows.py` (Task 8); the `tmp_db` fixture (re-exported by `streamlit_tests/conftest.py`); `streamlit.testing.v1.AppTest`.
+- Produces: a green `AppTest` run of `app.py` signed out, which every later PR must keep green. Later slices then apply their own contingency shims (slice 1 invites, slice 2 lectionary shim, slice 3 hymn wrappers, slice 4's `generate_liturgy` wrapper with `LEGACY_SYSTEM_PROMPT` and `legacy_default_prompts()`, slice 5b's Gmail wrappers); ops-3 writes none of them.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3142,26 +3183,26 @@ with:
 ```python
 def test_app_py_has_no_frozen_header_while_production_runs_from_main():
     # Freeze contingency (docs/ops-runbook.md → Streamlit freeze → Contingency):
-    # liturgy-stg still deploys from main, so app.py must not claim to be frozen.
+    # liturgy-next still deploys from main, so app.py must not claim to be frozen.
     assert FROZEN_HEADER not in _read(ROOT / "app.py")
 ```
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_ops_workflows.py -k frozen_header`
-Expected: FAIL (`assert '# FROZEN — …' not in '#!/usr/bin/env python3\n# FROZEN — …'`).
+Expected: `1 failed, 79 deselected` (`assert '# FROZEN — … in slice 7.' not in '#!/usr/bin/…'`).
 
 - [ ] **Step 2: Remove the header**
 
 Delete line 2 of `app.py` (`# FROZEN — production runs from branch streamlit-frozen; deleted in slice 7.`), so the file starts with the shebang and then the docstring, as before ops-3.
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_ops_workflows.py -k frozen_header`
-Expected: `1 passed`.
+Expected: `1 passed, 79 deselected`.
 
 - [ ] **Step 3: Add the `AppTest` smoke test**
 
 Create `streamlit_tests/test_app_smoke.py`:
 
 ```python
-"""Freeze contingency (ops spec, Freeze step 8; F §6.1.6): app.py must keep
+"""Freeze contingency (ops spec, Freeze step 8; F §6.1 item 6): app.py must keep
 working against main, because production Streamlit could not move to
 streamlit-frozen."""
 from pathlib import Path
@@ -3179,27 +3220,27 @@ def test_app_py_runs_signed_out(tmp_db):
 ```
 
 Run: `.venv/bin/python -m pytest -q streamlit_tests/test_app_smoke.py`
-Expected: `1 passed` (checked on 2026-09-25: the signed-out page renders "Please sign in with Google to continue." and one "Sign in with Google" button in under a second). It passes at once: it is a guard against later PRs breaking `app.py` on `main`.
+Expected: `1 passed` (checked on 2026-09-26 against this branch with the header removed: the signed-out page renders one "Sign in with Google" button in under a second). It passes at once: it is a guard against later PRs breaking `app.py` on `main`.
 
 - [ ] **Step 4: Record the contingency and open the PR**
 
-In `docs/ops-runbook.md` → `### Contingency`, add a line at the end: "Applied on <date>: <why the redeploy was impossible>. `liturgy-stg` stays on `main`; the Freeze policy above does not apply until a later freeze succeeds." In `### Freeze record`, write "not done: contingency applied" in the rows that could not happen.
+In `docs/ops-runbook.md` → `### Contingency`, add a line at the end: "Applied on <date>: <why the recreate from `streamlit-frozen` failed>. `liturgy-next` stays on `main`, with the old season wording and no prayer library (item 4); the Freeze policy above does not apply until a later freeze succeeds." In `### Freeze record`, write "not done: contingency applied" in the rows that could not happen.
 
 ```bash
 .venv/bin/python -m pytest -q | tail -1
 git add app.py streamlit_tests/test_app_smoke.py backend/tests/test_ops_workflows.py docs/ops-runbook.md
-git commit -m "Freeze contingency: liturgy-stg stays on main; AppTest smoke for app.py (F §6.1.6)
+git commit -m "Freeze contingency: liturgy-next stays on main; AppTest smoke for app.py (F §6.1 item 6)
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 git push -u origin claude/ops-3-freeze-contingency
 gh pr create --base main --head claude/ops-3-freeze-contingency \
   --title "Freeze contingency: keep app.py working on main" \
-  --body "liturgy-stg could not be moved to streamlit-frozen (see docs/ops-runbook.md → Contingency). The FROZEN header is removed, and an AppTest smoke test keeps app.py working against main (F §6.1.6).
+  --body "liturgy-next could not be recreated from streamlit-frozen (see docs/ops-runbook.md → Contingency), so it keeps deploying from main. The FROZEN header is removed, and an AppTest smoke test keeps app.py working against main (F §6.1 item 6). Streamlit still gets no new features: it keeps the old season wording and never reads prayer_library (F §6.2, amendment 2026-09-26).
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)"
 ```
 
-Expected: `396 passed`. Merge on the owner's yes.
+Expected: `560 passed`. Merge on the owner's yes. Right after the merge, reboot `liturgy-next` (Manage app → Reboot), because the merge reaches it.
 
 ---
 
@@ -3210,7 +3251,7 @@ Expected: `396 passed`. Merge on the owner's yes.
 | S9 `RequestIdMiddleware`: inbound id kept if `^[A-Za-z0-9-]{8,64}$`, else `uuid4().hex`; contextvar (threadpool sees it); `X-Request-Id` on `http.response.start`; reset in `finally`; non-`http` scopes pass through | 1 |
 | S13 / F §1.5: `request_id` in every error body (`_body`), equal to the header; `error_body` alias; the fallback outside the middleware | 1, 2 |
 | S9 `UnhandledErrorMiddleware` (pure ASGI): logs method and path (never the query) with the stack; 500 `internal_error` if not started; re-raises if started; no exception text to the client; F §7.3 row 1 | 2 |
-| Middleware order in `create_app()` (UnhandledError, RequestId, CORS added in that order; `user_middleware` = CORS, RequestId, UnhandledError); `@app.exception_handler(Exception)` kept as the last resort | 2 |
+| Middleware order in `create_app()` (UnhandledError, RequestId, CORS added in that order; `user_middleware` = CORS, RequestId, UnhandledError); `@app.exception_handler(Exception)` kept as the last resort; `/me`, `/church`, `/rubric` and the identity cache stay green | 2 |
 | S9 CORS lists (F §1.10): six allowed headers, three exposed headers, `max_age=600`, credentials off | 3 |
 | S11 `FastAPI(redirect_slashes=False)`: `GET /me/` and `/health/` → 404 `not_found`, no `location` | 3 |
 | Logging (F §2.5): record factory installed once, `request_id` or `-`, format `name level request_id=… message`, `configure_logging` replaces the inline `basicConfig`, `LOG_LEVEL` invalid → WARNING copy and INFO | 4 |
@@ -3222,14 +3263,14 @@ Expected: `396 passed`. Merge on the owner's yes.
 | Testing → conftest: autouse `reset_readiness_for_tests()` before each test | 6 |
 | S3 `keepalive.yml` rewritten exactly as specified (no secret, `permissions: {}`, `vars.API_BASE_URL`, `curl --fail-with-body … /health/ready`, missing-variable copy); `backend/keepalive.py` deleted; `test_keepalive.py` → `test_ops_workflows.py` (inv H4) | 7 |
 | S15: README → Operations "Keep-alive" (`/health/ready` curl, `API_BASE_URL`, no secret); runbook "Keep-alive" section | 7 |
-| S7 on `main`: `app.py` FROZEN header; `keep-awake.yml` production-only, i.e. https://liturgy-stg.streamlit.app/ (owner correction 1) | 8 |
-| S15: `docs/ops-runbook.md` with the seven sections (environments; lockdown; backups; keep-alive; Streamlit freeze with record, policy, triage, D5 result, versions; platform limits with the Pool Size and pool values; incident response) | 7, 9 (sections), ops-1/ops-2 (the rest) |
-| S15: `docs/manual-verification.md` "## Ops slice", with the app names swapped | 9 |
+| S7 on `main`: `app.py` FROZEN header; `keep-awake.yml` production-only (already https://liturgy-next.streamlit.app/ on `main`; guarded by a test) | 8 |
+| S15: `docs/ops-runbook.md` with the seven sections (environments; lockdown; backups; keep-alive; Streamlit freeze with record, policy, triage, D5 result, versions, contingency; platform limits with the Pool Size and pool values; incident response) | 7, 9 (sections), ops-1/ops-2 (the rest) |
+| S15: `docs/manual-verification.md` "## Ops slice", for `liturgy-next` | 9 |
 | Testing → `test_middleware.py`: generated 32-hex id; echo; `bad id!`, 7-char and 65-char replaced; 404/401/422 (and 405) bodies' `request_id` == header; CORS on 500 for allowed and other origins; response-already-started unit test; log record from a sync route; `-` outside a request; no nested factories; `LOG_LEVEL=verbose`; `/health/` 404 with no `location`; preflight six headers and `max-age` 600; expose headers; middleware order | 1, 2, 3, 4 |
 | Testing → `test_api_app.py::test_unhandled_exception_is_a_generic_500`: `code`, `message`, 32-hex `request_id` == header, no "secret detail" | 1, 2 |
 | Testing → `test_startup.py`: `describe_database` without credentials; lifespan logs `Database: dialect=sqlite driver=pysqlite`; production + SQLite raises the exact copy and the `init_db` spy is not called; `APP_ENV=staging` raises; `" Production "` accepted; localhost-only CORS ERROR, Vercel origin none (engine `postgresql://u:p@localhost:1/db`, `init_db` stubbed); development on SQLite has no ERROR; the `SUPABASE_URL` test still passes | 5 |
 | Testing → `test_health_ready.py`: 200 without auth and with junk headers; 503 body with `request_id` and a class-only WARNING; sync `def`; memo 9 s / 11 s and 5 s / 6 s; 16 threads → one probe; no `sqlalchemy` import in the route | 6 |
-| Testing → `test_ops_workflows.py` (ops-3 part): `keepalive.yml` contains / does not contain; `keep-awake.yml` production only | 7, 8 |
+| Testing → `test_ops_workflows.py` (ops-3 part): `keepalive.yml` contains / does not contain; `keep-awake.yml` production only (`liturgy-next`) | 7, 8 |
 | Exact server messages: `/health/ready` 503; any 500; invalid `APP_ENV`; production non-Postgres; localhost CORS; `Database:` INFO; invalid `LOG_LEVEL`; `keepalive.yml` missing variable | 2, 4, 5, 6, 7 |
 | User experience → Browser: `X-Request-Id` readable, `request_id` in bodies, readable 500s, slice-0 messages unchanged; Owner: Railway log lines, keepalive green | 1–4, 12 |
 | AC 4 Readiness (200 no auth; 503 `db_unavailable` with `request_id`; memo; one probe; no SQL in the route) | 6, 12 |
@@ -3239,36 +3280,39 @@ Expected: `396 passed`. Merge on the owner's yes.
 | AC 11 Routing and CORS | 3, 12 |
 | AC 16 Startup | 5 |
 | AC 18 Railway: `APP_ENV=production` set; deploy log shows the pooler host, no credentials, no CORS ERROR | 11, 12 |
-| AC 19 Railway limit recorded (ops-1, from Step 0; owner correction 2): confirmed present | 10 (Step 1) |
+| AC 19 Railway limit recorded (ops-1, from Step 0): confirmed present | 10 (Step 1) |
 | AC 20 Branch: `streamlit-frozen` at the ops-3 merge commit, protected (PR, `backend` check, no force push, no deletion) | 13 |
-| AC 21 Frozen app: `liturgy-stg` serves from `streamlit-frozen` at https://liturgy-stg.streamlit.app/; smoke passes; a later merge does not redeploy it (owner correction 1) | 14, 15 |
-| AC 22 Staging gone, swapped: `liturgy` deleted and its two redirect URIs removed; `keep-awake` pings only production and its run is green; `app.py` carries the FROZEN header | 8, 14, 15 |
+| AC 21 Frozen app: `liturgy-next` serves from `streamlit-frozen` at https://liturgy-next.streamlit.app/; smoke passes; a later merge does not redeploy it | 14, 15 |
+| AC 22 (adapted) Second app gone: `liturgy` and `liturgy-stg` already deleted on 2026-09-26, their redirect URIs removed (optional); `keep-awake` pings only production and its run is green; `app.py` carries the FROZEN header | 8, 14, 15 |
 | AC 23 Docs: runbook sections filled; README Operations updated; "Ops slice" checklist run on production URLs (results in the runbook) | 7, 9, 11, 15 |
-| AC 24 CI green on the ops-3 PR | 10 |
+| AC 24 CI green on the ops-3 PR (`backend`, `backend-postgres`, `frontend`) | 10 |
 | AC 26 No `backend/cache.py` or `test_cache.py` | 10 (Step 1) |
 | Behavior changes 4, 5, 6, 7, 8, 10, 11, 14, 18 | 2; 1, 4; 3; 3; 5; 6; 7; 13–15; 6 |
+| Delivery plan gate after ops-2 (the tester used Streamlit from `main` for a day, nothing regressed): recorded before the ops-3 merge | 11 (Step 1) |
 | Delivery plan gate: `APP_ENV=production` on Railway before merging | 11 |
 | Delivery plan gate: after merging, set `API_BASE_URL` and run keepalive | 12 |
-| Freeze step 1: before the freeze, CI green; smoke check including no "Church" selectbox; Python and package versions recorded | 13, 15 |
+| Freeze step 1: before the freeze, CI green; D5 manual check passed; reboot after the merge; smoke check including no "Church" selectbox; Python and package versions recorded | 11 (Step 4), 13, 15 |
 | Freeze steps 2–3: cut from the ops-3 merge commit; protect | 13 |
-| Freeze steps 4–6 (swapped): tester "before" message; delete-and-recreate `liturgy-stg` with the same subdomain and secrets (including `DB_POOL_SIZE`/`DB_MAX_OVERFLOW`, owner correction 3), since Streamlit Cloud cannot switch an app's branch in place, with a rollback to `main` if the recreate fails; delete `liturgy` and its redirect URIs; verify; "after" message | 13, 14 |
-| Freeze step 7: policy recorded in the runbook | 9 |
-| Freeze step 8: contingency (revert the header, keep `app.py` working on `main`, `AppTest` smoke, record) | 9 (runbook), 16 |
-| "What the frozen app inherits": verified before the cut (D5 record, ops-2 gate, CI on the merge commit, ops-3 touches only a comment in Streamlit-run code) | 9, 10 (Step 2), 13 (Step 1) |
+| Freeze steps 4–6 (for `liturgy-next`): tester "before" message (about 5 minutes); delete-and-recreate `liturgy-next` from `streamlit-frozen` with the same subdomain, Python 3.13 and Secrets (including `DB_POOL_SIZE`/`DB_MAX_OVERFLOW`), since Streamlit Cloud cannot switch an app's branch; rollback = the same from `main`; optional removal of the deleted apps' redirect URIs; verify; "after" message | 13, 14 |
+| Freeze step 7: policy recorded in the runbook (incl. reboot after fixes reach the app) | 9 |
+| Freeze step 8: contingency (revert the header, keep `app.py` working on `main`, `AppTest` smoke, record; old season wording and no prayer library per F §6.1 item 6 / §6.2) | 9 (runbook and its test), 16 |
+| "What the frozen app inherits": verified before the cut (rubric, D5, ops-2, CI on the merge commit, ops-3 touches only a comment in Streamlit-run code) | 9, 10 (Step 2), 13 (Step 1) |
 | Streamlit coupling and layering: no Streamlit under `backend/`; `db/health` imports no FastAPI; `db/` imports no `api/` | 6, 10 |
 | Data access: `/health/ready` touches no table; no church-scoped route added | 6 |
-| Owner correction 2 (Step 0 done; Data API already off, no incident; `age` key still ops-1's): nothing re-asked; records already in the runbook; the "Ops slice" item only confirms them | Global Constraints, 1 (Step 1), 9 (Step 6), 10 |
-| Owner correction 3 (Pool Size 15, 3 + 3, 14 ≤ 15): unchanged by ops-3; checked on Railway and in the `liturgy-stg` Secrets; carried into a recreated `liturgy-stg`; recorded in the environments table; `liturgy`'s connections freed by its deletion | 9, 11, 13, 14, 15 |
+| Step 0 done (Data API already off, no incident): nothing re-asked; records already in the runbook; the "Ops slice" item only confirms them | Global Constraints, 1 (Step 1), 9 (Step 6), 10 |
+| Pool Size 15, 3 + 3, 14 ≤ 15: unchanged by ops-3; checked on Railway and in `liturgy-next`'s Secrets; carried into the recreated app; recorded in the environments table and the "Values set" bullet | 9, 11, 13, 14, 15 |
 
-**Deliberately not in ops-3** (ops spec delivery plan and owner corrections):
-- ops-1 and ops-2 work: `backup.yml`, the `age` key and recipients, the D5 fix, the dead modules, `.env.example`, `shadcn`, `insert_ignore`, `ensure_user`, the identity cache and the pool code.
+**Deliberately not in ops-3** (ops spec delivery plan and the facts of 2026-09-26):
+- Already on `main`: ops-1 and ops-2 work (`backup.yml`, the `age` key and recipients, the D5 fix, the dead modules, `.env.example`, `shadcn`, `insert_ignore`, `ensure_user`, the identity cache, the pool code, the `backend-postgres` CI job), the rubric (PR #4), `keep-awake.yml` visiting only `liturgy-next`, and the deletion of `liturgy` and `liturgy-stg`.
+- New app only, never Streamlit: the prayer library (PR #7) and the service reviewer and its season wording (PR #8).
 - Slice 1:
   - Alembic, `railway.toml` and moving Railway's health check to `/health/ready`;
   - the production schema-behind gate (`details.reason = "schema_behind"`), the revision and RLS startup checks, removing `init_db()` from the lifespan;
   - `domain_errors.py`, `fields`/`details`, the Pydantic 422 mapping;
   - `test_route_guards.py` (its `PUBLIC` allowlist must hold `/health` and `/health/ready`);
   - `frontend/src/lib/api/errors.ts` and `ApiError.requestId` with "(Ref: …)";
-  - the Postgres CI job and the no-network fixture.
+  - the no-network fixture.
 - Slice 2: `backend/cache.py`, `test_cache.py` and the rate limiter.
+- Slice 4 (only under the contingency): `liturgy_prompts.LEGACY_SYSTEM_PROMPT`, `legacy_default_prompts()` and the `generate_liturgy` wrapper.
 - Slice 5b: the switchover banner on `streamlit-frozen`.
 - Slice 7: deleting `keep-awake.yml`, the README and manual-verification rewrite, the external uptime monitor.
