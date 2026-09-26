@@ -64,7 +64,7 @@ precedent (F §3.5). No DDL or Alembic revision is needed.
   There is no backfill.
 - Every write goes through the locked settings merge (F §1.7, slice 6a `lock_and_read_actor` and
   `merge_settings`). A write never replaces the whole `settings` object.
-- Frozen Streamlit ignores the new key.
+- Frozen Streamlit ignores the new key. If F §6.1 item 6 applies and Streamlit keeps running from `main` through slice 4's `generate_liturgy` wrapper, the wrapper switches the library off (`use_library=False`), so no voice profile or example reaches Streamlit (slice 4, 'Freeze contingency').
 
 ## API (slice 6a)
 
@@ -95,6 +95,12 @@ All three routes live in a new module, `backend/api/routes/prayer_library.py`, a
   - `max_completion_tokens=800`;
   - a 75 s deadline, matching `/hymns/suggestions`;
   - the prayers, in order, each labeled with its type.
+- **Input budget.** The draft never returns 422 for length. Every saved prayer is included, in saved
+  order. If the prompt would exceed the 24,000-character cap (`MAX_PROMPT_CHARS`, F §2.8), each prayer
+  longer than an equal share of the space left after the fixed instructions and the type labels is cut
+  to that share, at the last sentence end (`.`, `!` or `?`) within its share when there is one, and
+  otherwise at the share itself. (Added 2026-09-26 after the plan check: 30 prayers of 6,000 characters
+  would otherwise be about 180,000 characters.)
 - The instruction asks for a description of about 250 words covering:
   - how the pastor addresses God;
   - sentence length and rhythm;
@@ -130,7 +136,7 @@ library is read fresh on every call, with no cache.
   When no prayer has that type, there is no example.
 - **Budget:** the example is truncated to 3,000 characters.
   - If system plus user still exceeds `MAX_PROMPT_CHARS` (24,000), the example is dropped first, then the profile.
-  - The library never causes `prompt_invalid`. That error still applies only when the church's own prompts are too long.
+  - The library never causes `prompt_invalid`. That error still applies only when the church's own prompts, plus the readings, hymns and rubric checklist, are too long (slice 4).
 - **Unchanged:**
   - Sections the user typed are never sent to the AI, so the library does not touch them.
   - An empty library gives messages byte-identical to slice 4's baseline, so the existing assertions hold.
@@ -185,6 +191,8 @@ Backend, per F §5:
 - Draft:
   - uses `FakeAI` and asserts the message content (the prayers, their type labels, and the no-quoting instruction);
   - returns 422 with no prayers;
+  - 30 prayers of 6,000 characters give a prompt within the 24,000-character cap that still carries
+    every prayer's type label, with no 422;
   - maps each AI error;
   - charges the `ai` bucket once.
 - `build_messages`:

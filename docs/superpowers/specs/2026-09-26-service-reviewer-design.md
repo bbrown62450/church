@@ -138,12 +138,20 @@ deadline. Its messages contain:
 
 One `complete` call. Its messages:
 - **System:** the church's merged system prompt, with the voice profile appended as in the prayer-library spec.
-- **User:** the section label, the rubric checklist for the section, the occasion and readings, the
-  current draft, and the notes, followed by the instruction: "Revise this draft to address these notes
+- **User:** the section label, the rubric checklist for the section, the occasion and readings (with the
+  sermon text when it is sent, truncated to 2,000 characters as in the review), the current draft, and
+  the notes, followed by the instruction: "Revise this draft to address these notes
   only. Keep everything that works. Keep the same form (Leader/People lines where present) and about
   the same length. Output only the revised text."
 
 `max_completion_tokens` is the section's slice 4 budget: 1,500, or 4,000 for Prayers of the People.
+
+**Budget** (added 2026-09-26 after the plan check):
+- The prompt must stay within `MAX_PROMPT_CHARS` (24,000).
+- If it would exceed it, the voice profile is dropped first, then the sermon text, then the rubric checklist.
+- If the draft plus the fixed instructions (the system prompt, the section label, the occasion and
+  readings, the notes and the instruction) still exceed the cap, Revise returns 422 `prompt_invalid`
+  with the message "This prayer is too long to revise." No AI call is made.
 
 ## API
 
@@ -163,7 +171,11 @@ Both routes live in `backend/api/routes/liturgy_review.py`, with request models 
   only when an AI call is made (F §1.8). When the bucket is empty, the AI call is skipped and
   `ai_status` is `rate_limited`, so the code notes still come back.
 - **Revise** returns AI failures as HTTP statuses (503 `ai_not_configured` or `ai_busy`, 504 `ai_timeout`, 502
-  `ai_upstream_error`), as `/hymns/suggestions` does, and charges the `ai` bucket 1.
+  `ai_upstream_error`), as `/hymns/suggestions` does, and charges the `ai` bucket 1. A draft too long to revise
+  returns 422 `prompt_invalid` "This prayer is too long to revise." (Revise §Budget).
+- The client sends review and revise the same resolved `sermon_text` as generation (slice 4 "Sermon text": the
+  effective NT reading, WEB text instead of ESV under the Crossway rule, one bounded fetch, omitted when the fetch
+  fails). (Added 2026-09-26.)
 - Prayer text is logged at DEBUG only (F §2.5). No OpenAI text is returned to users.
 
 ## Writer: new season guidance
@@ -178,6 +190,13 @@ They are replaced with:
 
 This lands with the reviewer add-on in the new app, after the Streamlit freeze. `streamlit-frozen`
 keeps the old wording. A church whose admin saved its own system prompt keeps it.
+
+If the migration's freeze contingency is in force instead (F §6.1 item 6: Streamlit keeps running from
+`main` through a `generate_liturgy` wrapper), the wrapper keeps the old season sentences by using a frozen
+copy of the old constant (for example `LEGACY_SYSTEM_PROMPT` in `liturgy_prompts`), because Streamlit gets
+no new features. Streamlit's Settings page, which also runs from `main`, shows and compares with the same
+old default, so an admin's save there never stores the new wording (slice 4, reviewer amendment). The new
+season guidance applies only to the new app (decision 7). (Added 2026-09-26.)
 
 ## Testing
 
@@ -197,6 +216,9 @@ Backend, per F §5:
   - The messages include the draft, the notes and the section checklist.
   - The token budget for each section is correct.
   - Each AI error maps to its HTTP status.
+  - The budget drops the profile, then the sermon text, then the checklist; a draft still over the cap with
+    only the fixed instructions returns 422 `prompt_invalid` "This prayer is too long to revise." and makes
+    no AI call.
 - Routes: guards, `assert_church_isolated` (another church's rubric and profile never appear), and validation.
 - `DEFAULT_SYSTEM_PROMPT`: contains the new season sentences and none of the old ones.
 

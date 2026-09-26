@@ -357,6 +357,7 @@ def generate_key() -> str: ...                        # Fernet.generate_key().de
 - **Key:** `(hymnal, number, title.strip().lower())`. A NULL number is a distinct key value.
 - **Compared fields:** `title` in its **exact** text (so a title that differs only in case or surrounding spaces under the same key counts as changed, and `seed` updates it to the file's text), `scripture_refs`, `theme`, `hymnary_link` and `audio_url`.
 - **Equality:** an empty string and NULL compare equal, and `seed` writes NULL for empty fields.
+- *Amendment 2026-09-26 (PR #4):* the hymn facts `text_year` and `hymnal_count` (integers) are also exported, compared by `seed` and checked by `verify`. They follow the backfill's fill-blanks rule: an empty cell never nulls a stored fact, so `seed` leaves it and `verify` does not count it. A non-empty cell that differs from the stored value, including a stored NULL, is a changed field under the rules above: `seed` updates it and `verify` reports it.
 - Ids are not exported. Nothing references `hymn_catalog.id`: `seed_church_from_catalog` copies field values, and 6a's catalog source maps rows.
 
 **`backend/scripts/rotate_gmail_token_key.py`** (7-F). `python -m scripts.rotate_gmail_token_key [--dry-run]`.
@@ -472,8 +473,8 @@ The chain before this slice (F§3.5) is `0001`–`0004` (slice 1), `0005_service
 
 `backend/seed/catalog/hymn_catalog.csv`:
 - UTF-8 **without** BOM, LF line endings, `csv.QUOTE_MINIMAL`.
-- Header exactly `hymnal,number,title,scripture_refs,theme,hymnary_link,audio_url`.
-- `number` is an integer or empty. Other fields are stored text; NULL is written as empty.
+- Header exactly `hymnal,number,title,scripture_refs,theme,hymnary_link,audio_url,text_year,hymnal_count` (*amendment 2026-09-26*: the last two are PR #4's hymn facts).
+- `number`, `text_year` and `hymnal_count` are integers or empty. Other fields are stored text; NULL is written as empty.
 - Rows are sorted by `(hymnal, number IS NULL, number, title.lower(), title)`, so a re-export produces no diff.
 - There are no duplicate keys (`export` refuses them).
 
@@ -481,7 +482,8 @@ The chain before this slice (F§3.5) is `0001`–`0004` (slice 1), `0005_service
 - that this file is the source of `hymn_catalog`, which is copied into every new church;
 - how to regenerate it (`export`) and apply it (`seed`);
 - how it differs from `seed/hymnals/` (6a's hymnals an admin can **add**);
-- attribution: numbers and titles from the hymnal, with scripture references, themes and links gathered from Hymnary.org during the original import. See open question 1.
+- attribution: numbers and titles from the hymnal, with scripture references, themes and links gathered from Hymnary.org during the original import, and `text_year` / `hymnal_count` from Hymnary.org's public scripture API (the PR #4 backfill). See open question 1.
+- *amendment 2026-09-26:* the `text_year` and `hymnal_count` columns: the year the words were written and the number of hymnals that include them, filled from Hymnary.org's public API by the ops backfill CLI (`backfill_hymn_facts.py`). An empty cell means unknown, and `seed` never clears a stored value for it.
 
 The file is created by the owner running `export` against production **after `normalize_legacy_data` is applied there**, so the committed themes are already clean.
 
@@ -675,11 +677,12 @@ Two limits of a revived app:
   - a title that differs only in case from the database's under the same key → `seed` reports `updated=1` and stores the file's exact text; `verify` then exits 0;
   - `seed` on a file with a blank title or a duplicate key exits 2 naming the line and writes nothing;
   - `seed --dry-run` writes nothing;
+  - *amendment 2026-09-26*, hymn facts: the fixture has `text_year`/`hymnal_count` on some rows and empty cells on others, and `export` reproduces them; an empty cell over a stored `1826` leaves it (`unchanged`, and `verify` exits 0); a stored NULL under a file value of `1826` → `updated=1`; a stored `1900` under a file value of `1826` → `verify` reports `changed=1`, then `seed` reports `updated=1` and stores 1826;
   - after `seed`, `usecases.onboarding.create_church` seeds exactly as many hymns as file rows (the tie to slice 1);
   - each command on a database behind head exits 2 with the `require_head` message (`require_head` ships in the same PR).
 - `test_catalog_seed_file.py` (7-D, over the committed file):
   - it exists under `backend/`, is UTF-8 without BOM, and has the exact header;
-  - every row has a hymnal and a title; `number` is an integer or empty;
+  - every row has a hymnal and a title; `number`, `text_year` and `hymnal_count` are integers or empty;
   - there are no duplicate keys, and the rows are in the sort order (so re-export yields no diff);
   - there is at least one row (the PR records the real count).
 - `test_migration_normalize_legacy_data.py`:

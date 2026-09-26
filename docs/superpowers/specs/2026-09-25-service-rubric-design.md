@@ -31,8 +31,9 @@ The Streamlit app gets no new screens. Because it calls the same backend code,
 its hymn picks and liturgy start following the rubric too; Beau approved this.
 
 Out of scope: the prayer library, the reviewer, per-hymn manual editing of
-year and familiarity (a slice 6 hymn-settings concern), and changing the AI
-model.
+year and familiarity (a slice 6 hymn-settings concern; it is in migration
+slice 6a's hymn dialog, for admins, owner-approved 2026-09-26), and changing
+the AI model.
 
 ## The rubric
 
@@ -251,7 +252,9 @@ A new one-off script, `backend/backfill_hymn_facts.py`:
 
 Rows with no scripture references or no match stay `NULL` (unknown). Hymns
 added later, by a hymnal import or Settings' Add hymn, also start unknown until
-the script runs again.
+the script runs again. (In the new app, an admin can also enter both facts in
+migration slice 6a's hymn dialog, owner-approved 2026-09-26; the script's
+fill-blanks rule keeps those values.)
 
 ## How the hymn picker uses the rubric
 
@@ -271,6 +274,8 @@ means the defaults.
     hymns cannot crowd them out. Places they do not need go back to older
     hymns. The list stays in ranked order. (Added during Task 7 review so the
     age preference does not act as a filter.)
+  - The new app (migration slice 3) cuts to 50 and keeps up to 10 places, the
+    same one-in-five share (owner-approved 2026-09-26).
   - When a slot has no theme-matched candidates, the fallback becomes the full
     ranked hymn list, cut the same way. Today it is the first 80 hymns in
     storage order.
