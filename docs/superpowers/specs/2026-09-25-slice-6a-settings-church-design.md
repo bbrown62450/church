@@ -9,6 +9,7 @@
 - Owner decisions 5 and 9, plus decisions 1 and 7 where the builder or the switchover is affected.
 - **Amendment 2026-09-26: the service rubric (PR #4, merged).** `docs/superpowers/specs/2026-09-25-service-rubric-design.md` shipped the rubric's storage, defaults, validation and the `GET`/`PATCH /rubric` API (inv §1 G11), and left "the rubric editor" to this slice. 6a adds the **Rubric** page over the existing routes (UX §6, API, Testing). It also moves the PATCH write under this slice's locking rule, with no change to the route's request or response shape beyond one additive field.
 - **Amendment 2026-09-26: the prayer library (PR #7, merged).** `docs/superpowers/specs/2026-09-26-prayer-library-design.md` is the source for the **Prayers** page, its three routes and the voice-profile draft. It is new-app only. This spec adds short pointers (UX §5, API, Backend, Testing, Acceptance) and does not repeat that spec.
+- **Amendment 2026-09-26: hymn year and familiarity (owner decision, index §6 question 23).** A hymn's `text_year` and `hymnal_count` can be edited by hand in the hymn dialog (In scope, UX §2, API, Testing, acceptance 25; Open question 4 is answered). The owner approved this for admins; the two fields follow the hymn routes' existing guard, so members, who may add and edit hymns (decision 5), can edit them too.
 
 ---
 
@@ -49,6 +50,7 @@ It also puts hymnal import in the app (inv §1 H3) so admins can add bundled hym
 | streamlit_tests assertions for these tabs (inv §6) | Ported to backend tests (see Testing). |
 | G11 service rubric (PR #4; amendment 2026-09-26) | `/settings/rubric`: read for members, edit for admins, over the existing `GET`/`PATCH /rubric`. The PATCH write moves into `usecases/church_admin.update_rubric` under `lock_and_read_actor`, and `GET` gains an additive `defaults` field. |
 | Prayer library (PR #7; amendment 2026-09-26; new app only) | `/settings/prayers` and `GET`/`PUT /church/prayer-library` plus `POST /church/prayer-library/voice-profile-draft`, exactly as PR #7 specifies. |
+| Hymn year and familiarity (PR #4's `text_year` and `hymnal_count`; amendment 2026-09-26, owner decision: index §6 question 23) | The hymn dialog edits both facts by hand: two optional fields, "Year the words were written" and "Number of hymnals (familiarity)". `HymnIn` and `HymnPatchIn` accept them, and clearing a field sets null. The ops backfill CLI still fills blanks only, so hand-entered values survive it. |
 
 ### Out of scope (and where it goes)
 
@@ -63,7 +65,7 @@ It also puts hymnal import in the app (inv §1 H3) so admins can add bundled hym
 | Uploading a custom hymnal CSV | Not scheduled. The owner approved bundled hymnals only (inv §7 Q16). The CLI stays available for ops. |
 | Exporting `hymn_catalog` to `backend/seed/` plus a seed CLI; normalizing `{A,"B"}` theme literals | 7 (F §6.4) |
 | Free-text hymns in the builder | Stays removed (decision 9) |
-| Editing a hymn's `text_year` or `hymnal_count` (amendment 2026-09-26) | Not scheduled; an open owner question (index §6). The facts come only from the ops backfill CLI (`backfill_hymn_facts.py`, inv H14), which stays an ops tool. `HymnIn`/`HymnPatchIn` don't accept them, so hymns added here start unknown until the CLI runs again. |
+| Filling `text_year` and `hymnal_count` in bulk, and editing them in `hymn_catalog` (amendment 2026-09-26) | The ops backfill CLI (`backfill_hymn_facts.py`, inv H14), which stays an ops tool and fills blanks only. Per-hymn editing in the hymn dialog is **in scope** (owner, 2026-09-26; In scope above). A hymn added here with no facts stays unknown until someone enters them or the CLI runs again. |
 | Document import or seeding the prayer library from saved services; the service reviewer (amendment 2026-09-26) | Out of scope (PR #7 §Scope). The reviewer is a slice-4 add-on (`2026-09-26-service-reviewer-design.md`). |
 
 ### Assumed interfaces from other slices
@@ -200,6 +202,8 @@ Two stacked sections.
 | Scripture references | Placeholder "e.g. Psalm 23; John 10:11-18". Help: "Used by “Find hymns” and AI suggestions." |
 | Themes | Placeholder "e.g. Advent, hope" |
 | Link | Placeholder "https://hymnary.org/…". "Links must start with https://." |
+| Year the words were written (*amendment 2026-09-26*) | Optional. Text input with `inputMode="numeric"`. Empty = unknown (null). The client rejects anything that isn't a whole number from 1 to the current year with "Year must be a whole number from 1 to {current year}."; the server returns the same message. |
+| Number of hymnals (familiarity) (*amendment 2026-09-26*) | Optional. Text input with `inputMode="numeric"`. Empty = unknown (null). The client rejects anything that isn't a whole number from 0 to 100000 with "Number of hymnals must be a whole number from 0 to 100000."; the server returns the same message. |
 
 - Add submits **Add hymn**. On success the dialog closes and a toast says **"Hymn added."** (the new row may be on another page).
 - Edit submits **Save changes** and sends only the changed fields. Toast: **"Hymn updated."** In edit mode a muted note sits above the buttons: **"Changes also appear in saved services that use this hymn."** (5a resolves an archived hymn by `hymn_id` to the row's current title, number and hymnal, so its regenerated documents print the edit.)
@@ -323,7 +327,7 @@ Pydantic length errors → 422 `invalid_request` "Too long (max N characters)." 
 | POST | `/contacts` | admin | `ContactIn` (below) | 201 `ContactOut` | 403; 422 `email` "Email is required." (omitted, `""` or blank) / "Enter a valid email address."; 409 `conflict` "That email is already in your contacts." |
 | PATCH | `/contacts/{contact_id}` | admin | `ContactPatchIn` (below) | 200 `ContactOut` | 403; 404 `not_found` "Contact not found."; 422 and 409 as for POST |
 | DELETE | `/contacts/{contact_id}` | admin | – | 200 `{deleted: true}` | 403; 404 "Contact not found." |
-| POST | `/hymns` | church | `HymnIn` (below) | 201 `HymnDetailOut` | 403; 422 `title` "Hymn title is required." (omitted or blank), `number` "Hymn number must be a whole number." (outside 1–99999; a non-integer JSON value is Pydantic's generic "Not a valid value."), `hymnal` "Choose one of your church's hymnals.", `link` "Links must start with https://."; 409 `conflict` "{hymnal} already has #{number} {title}." (no number: "{hymnal} already has {title}.") |
+| POST | `/hymns` | church | `HymnIn` (below) | 201 `HymnDetailOut` | 403; 422 `title` "Hymn title is required." (omitted or blank), `number` "Hymn number must be a whole number." (outside 1–99999; a non-integer JSON value is Pydantic's generic "Not a valid value."), `hymnal` "Choose one of your church's hymnals.", `link` "Links must start with https://.", *amendment 2026-09-26:* `text_year` "Year must be a whole number from 1 to {current year}." (outside 1 to the current year), `hymnal_count` "Number of hymnals must be a whole number from 0 to 100000." (outside 0–100000; a non-integer JSON value for either is Pydantic's generic "Not a valid value."); 409 `conflict` "{hymnal} already has #{number} {title}." (no number: "{hymnal} already has {title}.") |
 | PATCH | `/hymns/{hymn_id}` | church | `HymnPatchIn` (below) | 200 `HymnDetailOut` | 403; 404 "Hymn not found."; 422 and 409 as for POST |
 | DELETE | `/hymns/{hymn_id}` | church | – | 200 `{deleted: true}` | 403; 404 "Hymn not found." |
 | GET | `/hymnals` (3) | church | – | 6a adds `label: str?` to each item (additive) | – |
@@ -334,12 +338,12 @@ Pydantic length errors → 422 `invalid_request` "Too long (max N characters)." 
 | PATCH | `/rubric` (**exists**, PR #4; amendment 2026-09-26) | admin | sparse plain JSON object, validated by `service_rubric.validate_patch` (unchanged; declared exception to the `extra="forbid"` model rule, F §1.3) | 200 `RubricOut` (with `defaults`) | 403 "Only church admins can do this."; 422 `invalid_rubric` with the `service_rubric` message and no `fields` (unchanged from PR #4; F §1.5 registry as amended); 422 `invalid_request` for a non-object body |
 | GET | `/church/prayer-library` (amendment 2026-09-26, PR #7) | church | – | 200 `{prayers: [PrayerOut], voice_profile, can_edit}` | 403 |
 | PUT | `/church/prayer-library` (PR #7) | admin | `{prayers: [{id?, type, text}], voice_profile}` (full replace) | 200, same shape as GET | 403; 422 `invalid_request` with `fields` `prayers.<i>.text` / `prayers.<i>.type` / `voice_profile` and PR #7's five messages |
-| POST | `/church/prayer-library/voice-profile-draft` (PR #7) | admin + `rate_limit("ai")` (cost 1) | – | 200 `{draft: str}` (not stored) | 403; 422 `invalid_request` "Add at least one prayer and save it first."; 429 `rate_limited`; 503 `ai_not_configured` / `ai_busy`; 504 `ai_timeout`; 502 `ai_upstream_error` |
+| POST | `/church/prayer-library/voice-profile-draft` (PR #7) | admin + `rate_limit("ai")` (cost 1) | – | 200 `{draft: str}` (not stored) | 403; 422 `invalid_request` "Add at least one prayer and save it first."; 429 `rate_limited`; 503 `ai_not_configured` / `ai_busy`; 504 `ai_timeout`; 502 `ai_upstream_error`. Never 422 for length: a long library is cut to fit (notes below). |
 
 *Amendment 2026-09-26 notes on the new rows.*
 - **`/rubric` keeps its path.** It predates F §1.1's "church sub-resources sit under `/church`" rule and already ships on `main`. It is recorded as the one exception in F §1.1 and is not renamed, because a rename would break any client of PR #4's API for no gain. `PATCH /rubric` is admin-guarded through `require_admin`, so the route-guard test needs no allowlist change.
 - **`PATCH /rubric` now takes the locking rule.** It starts with `lock_and_read_actor` and then `require_admin_role`, like every other write in this slice (Semantics → Locking), so a demoted admin gets the role 403 and a removed member gets `no_church_access`.
-- **Prayer-library routes:** everything in PR #7 §API applies (module `backend/api/routes/prayer_library.py` calling `backend/usecases/prayer_library.py`; models at the top with `extra="forbid"`; `PUT` semantics; the draft's 75 s deadline, `max_completion_tokens=800` and 2 000-character cap). `PUT` starts with `lock_and_read_actor` and `require_admin_role` and writes through `merge_settings`, never replacing `settings`. The draft route reads the saved prayers in one session, closes it, and then calls `openai_client.complete(…, deadline=…)`; it takes no lock, because it writes nothing. The `ai` bucket is charged by the dependency, as on `/hymns/suggestions`, so a 422 for an empty library also costs one token (F §1.8).
+- **Prayer-library routes:** everything in PR #7 §API applies (module `backend/api/routes/prayer_library.py` calling `backend/usecases/prayer_library.py`; models at the top with `extra="forbid"`; `PUT` semantics; the draft's 75 s deadline, `max_completion_tokens=800` and 2 000-character cap). `PUT` starts with `lock_and_read_actor` and `require_admin_role` and writes through `merge_settings`, never replacing `settings`. The draft route reads the saved prayers in one session, closes it, and then calls `openai_client.complete(…, deadline=…)`; it takes no lock, because it writes nothing. **Draft input budget (PR #7 §Draft semantics, added 2026-09-26):** the draft never returns 422 for length. Every saved prayer is sent, in saved order, with its type label. If the prompt would exceed slice 4's `liturgy_prompts.MAX_PROMPT_CHARS` (24 000, F §2.8), each prayer longer than an equal share of the space left after the fixed instructions and the type labels is cut to that share, at the last sentence end (`.`, `!` or `?`) within its share when there is one, and otherwise at the share itself. The `ai` bucket is charged by the dependency, as on `/hymns/suggestions`, so a 422 for an empty library also costs one token (F §1.8).
 - **Client timeouts** (F §1.8): the draft is 90 000 ms (75 s server deadline, like `/hymns/suggestions`); every other new route uses the 20 s default.
 
 **Church, membership or role gone mid-request.** Every write in this slice starts with `lock_and_read_actor` (6b's helper; Semantics → Locking), which takes the church-row lock and re-reads the caller's membership under it.
@@ -397,6 +401,9 @@ class HymnIn(BaseModel):
     scripture_refs: str | None = Field(None, max_length=2000)
     theme: str | None = Field(None, max_length=2000)
     link: str | None = Field(None, max_length=500)
+    # Amendment 2026-09-26 (index §6 question 23): optional hymn facts; null/omitted = unknown.
+    text_year: int | None = None              # range 1..current year checked in the usecase
+    hymnal_count: int | None = None           # range 0..100000 checked in the usecase
 
 class HymnPatchIn(BaseModel):              # omitted = unchanged (model_fields_set)
     model_config = ConfigDict(extra="forbid")
@@ -406,10 +413,13 @@ class HymnPatchIn(BaseModel):              # omitted = unchanged (model_fields_s
     scripture_refs: str | None = Field(None, max_length=2000)  # null or "" clears
     theme: str | None = Field(None, max_length=2000)            # null or "" clears
     link: str | None = Field(None, max_length=500)              # null or "" clears
+    text_year: int | None = None                         # amendment 2026-09-26: null clears; range in the usecase
+    hymnal_count: int | None = None                      # amendment 2026-09-26: null clears; range in the usecase
 
 class HymnDetailOut(BaseModel):
     id: uuid.UUID; hymnal: str; title: str; number: int | None
     scripture_refs: str | None; theme: str | None; link: str | None
+    text_year: int | None; hymnal_count: int | None     # amendment 2026-09-26 (additive)
 
 class HymnalSourceOut(BaseModel):
     code: str; label: str | None; hymn_count: int
@@ -454,8 +464,9 @@ class HymnalSourceOut(BaseModel):
   - `hymnal` defaults to the effective default. It must be one of the church's hymnals, unless the church has none, in which case any code matching `^[A-Za-z0-9_-]{2,20}$` is accepted and the default is `GG2013` (parity with repos/hymns.py:64).
   - `link`, when non-blank, must start with `https://`.
   - Blank `scripture_refs`, `theme` and `link` are stored as NULL.
+  - *Amendment 2026-09-26 (index §6 question 23):* `text_year`, when not null, must be 1 to the current year, else `InvalidInput(field="text_year", "Year must be a whole number from 1 to {current year}.")`; `hymnal_count`, when not null, must be 0–100000, else `InvalidInput(field="hymnal_count", "Number of hymnals must be a whole number from 0 to 100000.")`. Null or omitted stores NULL (unknown). The facts follow the hymn routes' guard like every other hymn field (members may add and edit hymns, decision 5). The ops backfill CLI fills blanks only, so a hand-entered value survives its next run.
   - Duplicate rule: the same `(hymnal, number, lower(trim(title)))` as an existing hymn of the church → 409. This is the same key `import_hymns` uses (repos/hymns.py:95).
-- **PATCH /hymns:** merges the provided fields into the row. Everything not provided, including `audio_url`, is kept. This avoids the full-replace hazard in `update_hymn` (repos/hymns.py:130-156). The same validation and duplicate rule apply, excluding the row itself. Changing `hymnal` is allowed, to any of the church's hymnals.
+- **PATCH /hymns:** merges the provided fields into the row. Everything not provided, including `audio_url`, is kept. This avoids the full-replace hazard in `update_hymn` (repos/hymns.py:130-156). The same validation and duplicate rule apply, excluding the row itself. Changing `hymnal` is allowed, to any of the church's hymnals. *Amendment 2026-09-26:* `text_year` and `hymnal_count` are validated as for POST, and `null` clears either one (back to unknown).
 - **POST /hymnals:**
   - Looks `code` up in the source registry and imports that source's rows with `import_hymns` semantics: idempotent per `(hymnal, number, lower title)`; it fills missing enrichment only and never deletes (inv §1 H3).
   - Runs under the church-row lock, so two concurrent imports cannot both insert.
@@ -488,7 +499,7 @@ class HymnalSourceOut(BaseModel):
 | `backend/seed/hymnals/PH1990.csv` | Moved with `git mv` from `data/hymnals/PH1990_hymns.csv` (605 rows; `number,title,tune`). Railway deploys only `backend/` (F §2.1). |
 | `backend/timezones.py` (only if slice 1 didn't make it shareable) | Slice 1's definition, moved as is: `_zones() -> frozenset[str]` (`frozenset(zoneinfo.available_timezones())`, computed once) and `is_valid_timezone(name) -> bool` = `name in _zones()`, exact and case-sensitive. It is **not** a `zoneinfo.ZoneInfo(name)` lookup, which accepts values such as `america/new_york` or `posixrules` on some filesystems and not others (slice 2 rejects that approach for `timezone_valid`, so the two would disagree). `tzdata` in `backend/requirements.txt` so slim images have the database. |
 | `backend/api/routes/church_prompts.py` | GET and PUT `/church/liturgy-prompts` (F §2.1 names this module). |
-| `backend/api/routes/prayer_library.py`, `backend/usecases/prayer_library.py` (amendment 2026-09-26, PR #7) | The three prayer-library routes and their usecase (PR #7 §API): `get_library(church_id, *, can_edit)`, `save_library(church_id, actor_id, body)` (locked, role re-read, normalized, validated, merged into `settings`), `draft_voice_profile(church_id, *, ai=openai_client, clock=time.monotonic)` (read, close the session, then one `complete` call inside a 75 s deadline, capped at 2 000 characters). New error messages go through the registry (F §1.5). |
+| `backend/api/routes/prayer_library.py`, `backend/usecases/prayer_library.py` (amendment 2026-09-26, PR #7) | The three prayer-library routes and their usecase (PR #7 §API): `get_library(church_id, *, can_edit)`, `save_library(church_id, actor_id, body)` (locked, role re-read, normalized, validated, merged into `settings`), `draft_voice_profile(church_id, *, ai=openai_client, clock=time.monotonic)` (read, close the session, fit the prayers to `MAX_PROMPT_CHARS` by the equal-share cut in API → "Draft input budget", then one `complete` call inside a 75 s deadline, capped at 2 000 characters). The cut is a pure helper, `fit_prayers(prayers, budget) -> list[str]`, in the same module. New error messages go through the registry (F §1.5). |
 
 The profile patch types in `usecases/church_admin.py`:
 
@@ -525,7 +536,7 @@ def clean_profile_patch(patch: ProfilePatch, *,
 | `routes/hymns.py` (3) | Add POST, PATCH and DELETE. Add `q` to GET if slice 3 didn't. |
 | `routes/hymnals.py` (3) | Add `label` to the GET items; add `GET /hymnal-sources`, `POST /hymnals` and `DELETE /hymnals/{code}`. |
 | `repos/churches.py` | Add `lock_church(session, church_id) -> Church \| None` if 6b didn't: `select(Church).where(Church.id == cid, Church.deleted_at.is_(None)).with_for_update()`. `_merge_settings` (87-96) becomes `merge_settings(church_id, patch, *, session=None)`. It locks through `lock_church` and assigns a **new** dict (so SQLAlchemy sees the change). New `update_profile(church_id, *, name=None, timezone=None, settings_patch=None, session=None) -> dict or None`: one locked read-modify-write; None when the church is missing or soft-deleted, which the usecases turn into the `no_church_access` 403 (API). `set_church_prompts` and `set_church_translation` gain `session=None` and go through `merge_settings`. `update_church(settings=…)` (74-84) gets a docstring warning that it **replaces** settings; the API never calls it. |
-| `repos/hymns.py` | `add_hymn` gains `session=None`. New `patch_hymn(hymn_id, church_id, changes, *, session=None) -> dict or None`, which sets only the keys provided (allowed: title, number, hymnal, scripture_refs, theme, hymnary_link). New `find_duplicate(church_id, hymnal, number, title, *, exclude_id=None, session=None) -> bool`. New `delete_hymnal(church_id, hymnal, *, session=None) -> int`. Counts come from slice 3's `hymnal_summaries(church_id, *, session=None)`; 6a adds a count helper only if slice 3 didn't ship one. `import_hymns` gains `session=None` and **drops the per-row `session.flush()`** (line 115). The objects are tracked in `by_key`, and SQLAlchemy 2.x batches the INSERTs at flush ("insertmanyvalues"), which keeps a 605-row import well inside the 10 s budget over the Supabase pooler. `get_hymn` is added if slices 3/4 didn't. Malformed ids go through `db.ids.as_uuid` (F §2.2.5). `update_hymn` and `list_hymns` stay for existing callers. |
+| `repos/hymns.py` | `add_hymn` gains `session=None`. New `patch_hymn(hymn_id, church_id, changes, *, session=None) -> dict or None`, which sets only the keys provided (allowed: title, number, hymnal, scripture_refs, theme, hymnary_link, and, *amendment 2026-09-26*, text_year and hymnal_count; `add_hymn` accepts the two facts too). New `find_duplicate(church_id, hymnal, number, title, *, exclude_id=None, session=None) -> bool`. New `delete_hymnal(church_id, hymnal, *, session=None) -> int`. Counts come from slice 3's `hymnal_summaries(church_id, *, session=None)`; 6a adds a count helper only if slice 3 didn't ship one. `import_hymns` gains `session=None` and **drops the per-row `session.flush()`** (line 115). The objects are tracked in `by_key`, and SQLAlchemy 2.x batches the INSERTs at flush ("insertmanyvalues"), which keeps a 605-row import well inside the 10 s budget over the Supabase pooler. `get_hymn` is added if slices 3/4 didn't. Malformed ids go through `db.ids.as_uuid` (F §2.2.5). `update_hymn` and `list_hymns` stay for existing callers. |
 | `email_contacts.py` | `add_contact` and `delete_contact` gain `session=None`. New `update_contact(contact_id, church_id, changes: dict, *, session=None) -> dict or None` (sets only the keys given, `name` and/or `email`; already cleaned by the usecase) and `email_exists(church_id, email, *, exclude_id=None, session=None) -> bool` (compares `lower(email)`). `_as_uuid` is replaced by `db.ids.as_uuid`. `get_contacts_for_display` stays (dead, inv §1 I; still asserted by `backend/tests/test_email_contacts.py`); slice 7 deletes it with that assertion, as 5b schedules. |
 | `email_addresses.py` (5b) | Unchanged; reused through `church_admin.normalize_email`. 6a adds no `email-validator` to `backend/requirements.txt`. |
 | `usecases/email.py` (5b) | `MALFORMED_CONTACT_HINT` changes from "An admin can remove it and add it again in the current app's Settings." to **"An admin can fix it in Settings → Contacts."** Contacts are now editable in the new app, and after slice 7 there is no "current app" to send admins to. The full 422 becomes "The saved contact “{name, or the address}” has an invalid email address. An admin can fix it in Settings → Contacts." Nothing else in the send path changes. |
@@ -662,7 +673,8 @@ Base UI components needed: input, textarea, label, dialog, alert-dialog, combobo
   - Rebasing on refetch reuses `rebaseForm` over `initialPromptValues`.
 - `hymns.ts`:
   - `parseHymnNumber(text) -> number | null | "invalid"`.
-  - `hymnPatch(baseline, form) -> HymnPatch`: changed fields only; `""` → null for the clearable fields.
+  - *Amendment 2026-09-26:* `parseTextYear(text, thisYear)` and `parseHymnalCount(text)`, each `-> number | null | "invalid"` (`""` → null; the ranges 1–`thisYear` and 0–100000).
+  - `hymnPatch(baseline, form) -> HymnPatch`: changed fields only; `""` → null for the clearable fields (*amendment 2026-09-26:* including `text_year` and `hymnal_count`).
 - `email.ts`: `looksLikeEmail(text)`, a lenient client pre-check. The server is authoritative.
 - `rubric.ts` (amendment 2026-09-26): `cleanPoints(points) -> string[]` (trim, collapse whitespace runs, drop blanks: the server's rule); `rubricFormFrom(out)`; `rubricPatch(baseline, current, defaults) -> object` (changed items only; an item equal to its default → `null`; never an empty list); `checklistError(points)` ("Keep at least one point, or use Reset to default."); `yearError(value, thisYear)` ("The preferred year must be between 1500 and {thisYear}.").
 - `prayers.ts` (amendment 2026-09-26, PR #7): `prayersPayload(rows, profile)` (keeps each row's `id`; new rows have none), `firstLine(text)`, `isDirty(baseline, current)`.
@@ -723,6 +735,7 @@ Base UI components needed: input, textarea, label, dialog, alert-dialog, combobo
 | 22 | Read-only notices | "Only admins can edit the prompts (you can read them below)."; "Only admins can add or remove contacts." | "Only admins can edit the prompts. You can read them below."; "Only admins can add or change contacts." (contacts can now be edited). The profile notice, "Only admins can edit the church profile." (settings.py:194), is unchanged. | Copy polish; contact edit is new |
 | 23 | Service rubric (amendment 2026-09-26) | No editor anywhere. `PATCH /rubric` existed for API clients only (inv G11) | `/settings/rubric` for admins, read-only for members. An item saved equal to its default is stored as "not customized". `PATCH /rubric` now re-reads the role under the church-row lock, and `GET /rubric` gains `defaults` | PR #4 left the editor to slice 6; F §1.7 |
 | 24 | Prayer library (amendment 2026-09-26) | Does not exist | `/settings/prayers` and its three routes, new app only | PR #7 |
+| 25 | Hymn year and familiarity (amendment 2026-09-26) | Set only by the ops backfill CLI (PR #4, inv H14); no screen | The hymn dialog edits "Year the words were written" and "Number of hymnals (familiarity)"; clearing a field sets it back to unknown; the backfill still fills blanks only | Owner decision (index §6 question 23) |
 
 Carried over unchanged:
 - Members may add and edit hymns, and admins manage the profile, translation, prompts and contacts (decision 5). Members may also delete hymns (Streamlit parity, pending Open question 2).
@@ -766,9 +779,11 @@ Carried over unchanged:
     - title required; number 0 and 100000 → "Hymn number must be a whole number." (`field == "number"`); default hymnal = effective default (stored default honored; alphabetical fallback);
     - hymnal must exist; any valid code when the church has none, with `GG2013` as the default;
     - https-only link; blanks become NULL;
+    - *amendment 2026-09-26:* `text_year` 1826 and `hymnal_count` 1322 are stored; `text_year` 0 and next year → "Year must be a whole number from 1 to {current year}." (`field == "text_year"`); `hymnal_count` -1 and 100001 → "Number of hymnals must be a whole number from 0 to 100000." (`field == "hymnal_count"`); omitted → NULL;
     - duplicate `(hymnal, number, lower title)` → 409 with the exact message, including the no-number variant.
   - `update_hymn`:
-    - merges (omitted keeps; null clears number, refs, theme and link);
+    - merges (omitted keeps; null clears number, refs, theme and link, and, *amendment 2026-09-26*, `text_year` and `hymnal_count`);
+    - *amendment 2026-09-26:* a hand-entered `text_year` survives the backfill: with `hymnal_count` still NULL, run `backfill_hymn_facts` against a faked Hymnary response that gives another year; the count is filled and the hand-entered year is unchanged;
     - `audio_url` preserved;
     - title null or blank → "Hymn title is required.";
     - hymnal change validated;
@@ -808,7 +823,7 @@ Carried over unchanged:
   - hymn id (PATCH, DELETE);
   - contact id (PATCH, DELETE).
   For `DELETE /hymnals/{code}`, assert that B's hymns with the same code are untouched. `PATCH /church` with `"church_id": "<B>"` in the body → 422 `invalid_request`, and B is unchanged.
-- **Error contract:** code and exact message for every message in the API table, plus `fields` keys (`name`, `timezone`, `bible_translation`, `default_hymnal`, `email`, `title`, `number`, `hymnal`, `link`, `code`, `prompts.benediction`). **Omitted required fields** get the friendly message, not Pydantic's "Required.": `POST /hymns {}` → "Hymn title is required." (`fields.title`); `POST /contacts {"name": "Mary"}` → "Email is required." (`fields.email`); `POST /hymns {"title": "X", "number": 0}` → "Hymn number must be a whole number." (`fields.number`). Malformed path ids → 422. An unknown prompt key → 422 `invalid_request`. A soft-deleted church or a removed membership between guard and write → 403 with `details.reason == "no_church_access"`, and a demotion between guard and write → 403 "Only church admins can do this." with no `reason` (covered by the usecase tests above plus the `DomainError` → HTTP mapping from slice 1).
+- **Error contract:** code and exact message for every message in the API table, plus `fields` keys (`name`, `timezone`, `bible_translation`, `default_hymnal`, `email`, `title`, `number`, `hymnal`, `link`, `code`, `prompts.benediction`, and, *amendment 2026-09-26*, `text_year` and `hymnal_count`). **Omitted required fields** get the friendly message, not Pydantic's "Required.": `POST /hymns {}` → "Hymn title is required." (`fields.title`); `POST /contacts {"name": "Mary"}` → "Email is required." (`fields.email`); `POST /hymns {"title": "X", "number": 0}` → "Hymn number must be a whole number." (`fields.number`). Malformed path ids → 422. An unknown prompt key → 422 `invalid_request`. A soft-deleted church or a removed membership between guard and write → 403 with `details.reason == "no_church_access"`, and a demotion between guard and write → 403 "Only church admins can do this." with no `reason` (covered by the usecase tests above plus the `DomainError` → HTTP mapping from slice 1).
 - **Prompt cleaning through the API** (`test_api_liturgy_prompts.py`; this replaces a 6a unit test, because `clean_prompt_overrides` is slice 4's): `PUT` with the Benediction default re-sent with `\r\n` line endings and surrounding spaces → that field comes back `override: null`, `customized: false`; a blank value → not stored; a changed value with `\r\n` → stored trimmed with `\n`; a following `GET` matches. This pins that `PUT` uses the same rule generation uses.
 - **Ported `streamlit_tests` assertions** (F §5.1; inv §6):
 
@@ -851,6 +866,7 @@ Carried over unchanged:
 - `added_at` kept for known ids and new ids assigned;
 - a missing or junk key reads as empty;
 - the draft uses `FakeAI` (checking the prayers, their type labels and the no-quoting instruction), returns 422 with no prayers, maps each AI error to its status, and charges the `ai` bucket once;
+- **draft input budget** (added 2026-09-26): 30 prayers of 6 000 characters give a prompt of at most 24 000 characters that includes every prayer's type label, in saved order, and returns 200, not 422; a library under the cap is sent uncut; `fit_prayers` cuts a prayer at its last sentence end inside its share, or at the share when the share holds no sentence end;
 - the concurrent-save case in the Postgres block above.
 - The writer-hook cases belong to slice 4.
 - The role re-read under the lock (demoted admin → role 403, nothing written) is added, as for every 6a write.
@@ -868,7 +884,8 @@ Carried over unchanged:
   - `hymnalItems`: adds "{code} (no longer in your hymnals)" only for a stored code that is missing.
   - `promptsPayload`: default-equal and blank dropped; whitespace-only difference dropped.
   - `parseHymnNumber`: `""` → null, `"12"` → 12, `"12a"`, `"0"`, `"100000"` → "invalid".
-  - `hymnPatch`: `""` → null for the clearable fields; unchanged fields omitted.
+  - *Amendment 2026-09-26:* `parseTextYear`: `""` → null, `"1826"` → 1826, `"0"`, next year and `"18a"` → "invalid". `parseHymnalCount`: `""` → null, `"0"` → 0, `"1322"` → 1322, `"-1"` and `"100001"` → "invalid".
+  - `hymnPatch`: `""` → null for the clearable fields (including a cleared year or count); unchanged fields omitted.
   - `looksLikeEmail`.
   - `benedictionIsShorthand`.
   - `leave-guard.ts`: `confirmLeave()` resolves true at once with no active guard.
@@ -890,6 +907,7 @@ Carried over unchanged:
     - Chips appear only with more than one hymnal.
     - Add → POST body, the dialog closes, and `invalidateQueries` is called with `["church", id, "hymns"]` and `["church", id, "hymnals"]` (spy).
     - Edit → PATCH with changed fields only; the edit dialog shows "Changes also appear in saved services that use this hymn.", the add dialog doesn't.
+    - *Amendment 2026-09-26:* the dialog shows "Year the words were written" and "Number of hymnals (familiarity)" filled from the hymn; entering 1826 sends `{text_year: 1826}` only; clearing the count sends `{hymnal_count: null}`; a year after the current year shows the inline message and sends nothing.
     - Delete asks for confirmation, then DELETE.
     - A 409 message stays in the dialog.
     - Members don't see "Add a hymnal"; admins do.
@@ -992,7 +1010,8 @@ Carried over unchanged:
 21. A write to a church soft-deleted after the guard ran, or by a caller whose membership was removed after the guard ran, returns 403 `no_church_access` and writes nothing. An admin demoted after the guard ran gets 403 "Only church admins can do this." (no `reason`) on every admin write and nothing is written; the role is always the one re-read under the church-row lock (6b's `lock_and_read_actor`). *(test)*
 22. `ESV_API_KEY` is read only in `api/settings.py` and passed to `scripture_fetcher`; ESV gating, `GET /translations`, passages and the profile's `effective_translation` behave exactly as before. *(test)*
 23. *(Amendment 2026-09-26, PR #4.)* `/settings/rubric` lets admins edit every hymn and prayer checklist and both preferences over the existing `GET`/`PATCH /rubric`. Members read it. It saves one sparse `PATCH`, and an item equal to its default is stored as not customized. Validation copy equals the `service_rubric` messages, and a server 422 `invalid_rubric` saves nothing. `PATCH /rubric` re-reads the role under the church-row lock, keeps PR #4's request, response and error shape (plus the additive `defaults`), and its tests from PR #4 still pass. A year change relabels the builder's hymns without a reload. *(test + DOM test + manual 11)*
-24. *(Amendment 2026-09-26, PR #7.)* `/settings/prayers` sits right after Liturgy in `SETTINGS_SECTIONS`, followed by Rubric. `GET /church/prayer-library` (`require_church`), `PUT` (`require_admin`, full replace, `lock_and_read_actor`) and `POST …/voice-profile-draft` (`require_admin`, `ai` bucket cost 1, 75 s deadline, draft not stored) behave as PR #7 specifies. The library lives in `churches.settings["prayer_library"]` with no DDL, and concurrent settings writes never lose it. *(test + DOM test + manual 12)*
+24. *(Amendment 2026-09-26, PR #7.)* `/settings/prayers` sits right after Liturgy in `SETTINGS_SECTIONS`, followed by Rubric. `GET /church/prayer-library` (`require_church`), `PUT` (`require_admin`, full replace, `lock_and_read_actor`) and `POST …/voice-profile-draft` (`require_admin`, `ai` bucket cost 1, 75 s deadline, draft not stored) behave as PR #7 specifies. The library lives in `churches.settings["prayer_library"]` with no DDL, and concurrent settings writes never lose it. The voice-profile draft never returns 422 for length: 30 prayers of 6 000 characters are cut to fit 24 000 characters and every type label is sent. *(test + DOM test + manual 12)*
+25. *(Amendment 2026-09-26; owner decision, index §6 question 23.)* The hymn dialog edits a hymn's "Year the words were written" and "Number of hymnals (familiarity)". `POST`/`PATCH /hymns` accept `text_year` (1 to the current year, or null) and `hymnal_count` (0 to 100000, or null) with the exact messages, `HymnDetailOut` returns both, clearing a field stores NULL, and a hand-entered value survives the ops backfill. *(test + DOM test)*
 
 ---
 
@@ -1002,7 +1021,7 @@ Carried over unchanged:
 1. **Removing a hymnal is new.** `DELETE /hymnals/{code}` is admin-only, refused for the only or default hymnal, and confirmed in the UI. It exists so a mistaken "Add a hymnal" (605 rows) can be undone. The owner approved *adding* bundled hymnals, not removing them. If the owner doesn't want removal, drop the route and the dialog; nothing else depends on them.
 2. **May members delete hymns?** Decision 5 grants members "add/edit hymns" and says nothing about deleting them; inv §7 Q8 asked it explicitly. Streamlit lets any member delete any hymn (settings.py:303-306), so 6a keeps that as **parity**, now with a confirmation. The gap: admins can't remove the only or the default hymnal, but a member can empty a hymnal, or the whole library, one hymn at a time through `DELETE /hymns/{id}`. The builder then falls back to the next hymnal, or shows the empty-hymnal state. If the owner answers "admins only", change the `DELETE /hymns/{hymn_id}` guard to `require_admin`, hide **Delete hymn** for members, and flip the role tests (Testing → Role denials). Nothing else changes.
 3. **Opening and closing theme keywords (amendment 2026-09-26; the rubric spec's known limit).** Slice 3 still gathers opening and closing candidates with the fixed theme keywords before the AI reads the church's checklist. If a church rewrites those checklists, the keywords may not match them. Default until answered: keep the keywords and show the note on the two cards (UX §6). The alternative, dropping the keyword pre-filter when a slot checklist is customized, is a slice 3 change that 6a doesn't need to know about.
-4. **Editing a hymn's year and familiarity (amendment 2026-09-26).** The rubric spec calls this "a slice 6 hymn-settings concern". Default: not in 6a. The facts come from the ops backfill CLI only, and hymns added here start unknown until it runs again. If wanted, add optional `text_year` and `hymnal_count` to `HymnIn`/`HymnPatchIn` and to the hymn dialog (additive).
+4. ~~**Editing a hymn's year and familiarity (amendment 2026-09-26).**~~ **Answered: Yes (owner, 2026-09-26).** The rubric spec calls this "a slice 6 hymn-settings concern", and it is now in 6a: optional `text_year` and `hymnal_count` on `HymnIn`/`HymnPatchIn` and two optional fields in the hymn dialog, "Year the words were written" and "Number of hymnals (familiarity)" (In scope, UX §2, API, Testing, acceptance 25). Clearing a field sets null. The ops backfill CLI still fills blanks only, so hand-entered values survive it.
 
 **Risks**
 1. **Cross-slice assumptions.** The benediction fallback must be key-presence, not truthiness (slice 4). `effective_hymnal` must follow the effective default rule and must match 6a's deletion guard (slice 3). Contacts must use exactly 5b's `normalize_address`, or a saved contact can fail every send (5b). Prompt cleaning must be slice 4's single `clean_prompt_overrides`, including its `\r\n` normalization, or `PUT` and generation can disagree on which overrides equal the default (slice 4). Every write must take the role from 6b's single `lock_and_read_actor`, not from the guard's snapshot (6b). The timezone check must be slice 1's exact `available_timezones()` membership, or `PATCH /church` and `timezone_valid` disagree (slices 1 and 2). Role 403s must not trigger the church fallback (slice 1). Each has a stated remedy under Assumed interfaces. The implementer checks them first and adjusts before writing 6a code.

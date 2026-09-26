@@ -73,7 +73,7 @@ On the backend, this slice adds:
 | Editing the default benediction and the liturgy prompts in Settings | 6a (uses this slice's resolver and validator) |
 | Per-church communion text | Not planned. The static text moves unchanged. |
 | Reordering custom elements that share a position | Not planned. List order is print order, as today. |
-| Sending the sermon title or existing card text to the AI ("rewrite this") | Not planned (parity: E1) |
+| Sending the sermon title or existing card text to the AI ("rewrite this") | Not in 4a/4b. The sermon title is never sent. The reviewer add-on (amendment 2026-09-26, PR #8) sends card text for review and revises AI-origin drafts. |
 | Streaming progress (SSE) | Dropped (F D4) |
 
 ### Inventory coverage (E1-E8)
@@ -479,7 +479,7 @@ class LiturgyConfigOut(BaseModel):
    | `UpstreamTimeout` | `ai_timeout` | "The AI took too long to answer. Try again." |
    | `UpstreamError`; an empty answer; an answer > 20 000 chars; any unexpected exception (logged at ERROR with the stack trace) | `ai_upstream_error` | "The AI service had a problem. Try again." |
    | The stored template fails `check_template` | `prompt_invalid` | "The {Label} prompt in Settings has a problem: {reason} An admin can fix it under Settings → Liturgy prompts." ({reason} is the Backend §2 table message) |
-   | System + rendered user prompt > 24 000 chars (F §2.8) | `prompt_invalid` | Same template, with {reason} = "It is too long once the readings and hymns are added." |
+   | System + rendered user prompt + rubric checklist > 24 000 chars (F §2.8; checklist and wording amended 2026-09-26, backend §2) | `prompt_invalid` | Same template, with {reason} = "It is too long once the readings, hymns and rubric checklist are added." |
 
    **One rule for every `prompt_invalid`:** the message is always "The {Label} prompt in Settings has a problem: {reason} An admin can fix it under Settings → Liturgy prompts.", where {Label} is the section's `SECTION_LABELS` value and {reason} is `PromptInvalid.reason`. `test_usecase_liturgy.py` pins both cases verbatim.
 
@@ -494,7 +494,7 @@ class LiturgyConfigOut(BaseModel):
     - `profile` is the stored voice profile, trimmed and capped at 2 000 characters;
     - `example` is a uniformly random prayer whose `type` equals the section key (the chooser is injectable), cut to 3 000 characters, or `None` when no prayer has that type. An `"other"` prayer is never an example.
 
-    `build_messages` appends the profile to the system message and the example to the user message, after `render()`. When the prompt is over `MAX_PROMPT_CHARS`, the example is dropped first, then the profile, then the sermon block. The library never causes `prompt_invalid`, and an empty or missing library gives messages byte-identical to the messages without it. Nothing is added to the request or the response.
+    `build_messages` appends the profile to the system message and the example to the user message, after `render()`. It applies the trim and both caps itself (backend §2 step 5), so a pre-cut in the usecase is a harmless duplicate. When the prompt is over `MAX_PROMPT_CHARS`, the example is dropped first, then the profile, then the sermon block. The library never causes `prompt_invalid`, and an empty or missing library gives messages byte-identical to the messages without it. Nothing is added to the request or the response.
 
 **Deviation from F (declared; recorded in F's "Amendments from slice specs", citing this slice).** On this route only, AI and prompt failures are per-section results inside a 200 body, not HTTP errors. This overrides:
 - F §1.5 status registry rows 422 `prompt_invalid`, 503 `ai_not_configured` / `ai_busy`, 502 `ai_upstream_error` and 504 `ai_timeout`. On `/liturgy/generate` these codes arrive as `SectionError`, with the same codes and messages. `/hymns/suggestions` (slice 3) still returns them as HTTP statuses, so the frontend `ApiErrorCode` union keeps them.
@@ -587,7 +587,7 @@ def normalize_placement(key: str) -> str: ...   # unknown → "end"
   - `MAX_TEMPLATE_CHARS = 8000`;
   - `MAX_PROMPT_CHARS = 24_000`.
 
-  Per-template sizes are bounded so that 8 000 (system) + 8 000 (template) + about 5 000 (scriptures and hymns) stays under 24 000.
+  Per-template sizes are bounded so that 8 000 (system) + 8 000 (template) + about 5 000 (scriptures and hymns) stays under 24 000. *Amendment 2026-09-26:* the rubric checklist also counts (`build_messages` step 4). At its limits (12 points of 300 characters plus the heading) it adds up to about 3 700 characters, so a church at every maximum can exceed the cap. The sermon block is dropped before any error is raised, under the existing rule: like the voice blocks, it never counts toward the check, and step 5 drops it (after the example and the profile) when the total is over. If the church's own text, the readings, the hymns and the checklist are still too long, the section returns `prompt_invalid` with the reason "It is too long once the readings, hymns and rubric checklist are added."
 - **Validator** (the "prompt test-render validator", reused by 6a):
 
   ```python
@@ -650,7 +650,8 @@ def normalize_placement(key: str) -> str: ...   # unknown → "end"
       # check_template(section, prompts[section]) must pass, else PromptInvalid;
       # [{"role":"system","content":prompts["system"]}, {"role":"user","content":render(...)}];
       # len(system) + len(user) > MAX_PROMPT_CHARS →
-      #   PromptInvalid(reason="It is too long once the readings and hymns are added.")
+      #   PromptInvalid(reason="It is too long once the readings, hymns and rubric checklist are added.")
+      #   (reason amended 2026-09-26: the rubric checklist counts; see the amendment below)
   ```
 
   The usecase turns every `PromptInvalid` into the one `prompt_invalid` message in API §semantics 7.
@@ -687,14 +688,14 @@ def normalize_placement(key: str) -> str: ...   # unknown → "end"
   1. `check_template` as before; a failure raises `PromptInvalid`.
   2. `system = prompts["system"]` and `user = render(template, ctx)`.
   3. If `ctx.checklists.get(section)` is non-empty, `user += "\n\n" + service_rubric.format_checklist(SECTION_LABELS[section], checklist)` (PR #4 wording: "A good {Label}:" plus "- point" lines).
-  4. If `len(system) + len(user) > MAX_PROMPT_CHARS`, raise `PromptInvalid(reason="It is too long once the readings and hymns are added.")`, as before. The checklist counts because it is the church's own text.
+  4. If `len(system) + len(user) > MAX_PROMPT_CHARS`, raise `PromptInvalid(reason="It is too long once the readings, hymns and rubric checklist are added.")`. The checklist counts because it is the church's own text, and the reason names it because a maximum-size checklist can push a church whose prompts are near their limits over the cap (New constants). The sermon and voice blocks are not yet appended, so they never cause this error.
   5. Optional blocks, each appended **after** `render()` so braces in them are never read as placeholders:
      - `ctx.sermon` → `user += "\n\n" + ctx.sermon` (PR #4);
-     - `voice.profile` (when non-empty) → `system += "\n\nWrite in the voice of this church's pastor, described here:\n" + profile` (PR #7);
-     - `voice.example` (when set) → `user += "\n\nFor voice only, here is a {Section Label} this pastor wrote. Do not reuse its lines or phrases:\n" + example` (PR #7).
+     - `profile = voice.profile.strip()[:2000]` (`prayer_library.MAX_PROFILE_CHARS`); when non-empty → `system += "\n\nWrite in the voice of this church's pastor, described here:\n" + profile` (PR #7). A whitespace-only profile is empty, so it adds nothing;
+     - `example = voice.example[:3000]` (when set) → `user += "\n\nFor voice only, here is a {Section Label} this pastor wrote. Do not reuse its lines or phrases:\n" + example` (PR #7).
 
-     While the total is over `MAX_PROMPT_CHARS`, drop the example first, then the profile, then the sermon block. None of them ever raises `PromptInvalid`.
-  6. Return `[system, user]`. With `voice=None`, or with an empty profile and no example, the result is byte-identical to steps 1–5 without the voice blocks; that is the baseline the existing assertions pin.
+     `build_messages` itself strips the profile and applies both caps (PR #7 §Writer hook "Budget"), so the result does not depend on the caller; the usecase may also pre-cut (§3), and the duplicate cuts are harmless. While the total is over `MAX_PROMPT_CHARS`, drop the example first, then the profile, then the sermon block. None of them ever raises `PromptInvalid`.
+  6. Return `[system, user]`. With `voice=None`, or with a profile that is empty after `strip()` and no example, the result is byte-identical to steps 1–5 without the voice blocks; that is the baseline the existing assertions pin.
 
   The Prayer for Illumination and Offertory Prayer defaults already say "no more than 3 sentences" / "No more than three sentences" (PR #4). They pass `check_template` like every default, and this slice does not change their text.
 
@@ -740,7 +741,7 @@ Flow. No database connection is held during AI calls (F §1.8):
 **Amendment 2026-09-26 (PR #4 and PR #7; API semantics 9 and 10).**
 - The signature gains `sermon: tuple[str, str] | None = None` (the route passes `(sermon_text.ref, sermon_text.text)`) and `choose: Callable[[list[str]], str] = random.choice` (tests pin it).
 - Step 2 also reads, **in the same `session_scope`** and only when a section needs AI: `repos.churches.get_church_rubric_overrides(church_id, session=s)` and the church's `settings["prayer_library"]` through `prayer_library.read_library(settings)`. Every getter takes the session, and the identity map means the church row is loaded once. The session still closes before any AI call.
-- Step 5 builds `ctx = build_context(..., rubric=service_rubric.merge_rubric(overrides), sermon_ref=…, sermon_text=…)` and, for each section, `voice = VoiceContext(profile=library.voice_profile.strip()[:2000], example=prayer_library.choose_example(library, section, choose=choose))`, where `choose_example` returns the chosen text cut to 3 000 characters, or `None` when no prayer has that type. Then `build_messages(section, prompts, ctx, voice=voice)`.
+- Step 5 builds `ctx = build_context(..., rubric=service_rubric.merge_rubric(overrides), sermon_ref=…, sermon_text=…)` and, for each section, `voice = VoiceContext(profile=library.voice_profile, example=prayer_library.choose_example(library, section, choose=choose))`, where `choose_example` returns the chosen text, or `None` when no prayer has that type. Then `build_messages(section, prompts, ctx, voice=voice)`, which strips the profile, treats a whitespace-only one as empty and caps the profile at 2 000 and the example at 3 000 characters (backend §2 step 5). The usecase may also pre-cut (`strip()[:2000]`, and `choose_example` cutting to 3 000); the duplicate cuts are harmless.
 - The rubric and the library are read fresh on every call, with no cache, like the prompts.
 - **Logging** adds `rubric=default|custom`, `sermon=yes|no`, `voice=profile,example` (which were present) and `dropped=example,profile,sermon` (which the budget dropped). The checklist, sermon text, profile and example are prompt content, logged at DEBUG only (PR #7 §Privacy).
 
@@ -1017,14 +1018,14 @@ Streamlit sends the sermon (NT) passage with every liturgy request (inv E9). Her
   - a number of `None` gives `- Title`;
   - no hymns gives "None chosen.";
   - no scriptures gives "None specified.".
-- `build_messages`: over 24 000 characters raises `PromptInvalid` with reason "It is too long once the readings and hymns are added."
+- `build_messages`: over 24 000 characters raises `PromptInvalid` with reason "It is too long once the readings, hymns and rubric checklist are added."
 
 `test_usecase_liturgy.py` (SQLite `tmp_db`, `FakeAI`):
 1. **No key (F acceptance 15).** `sections=[call_to_worship, benediction]` and `overrides={benediction: "  Go in peace.  "}` → benediction `override` with text `"  Go in peace.  "` (verbatim); call_to_worship `error/ai_not_configured`; `FakeAI.calls == 0`.
 2. **AI configured.** Generated text is stripped. The church's stored `system` and section overrides reach FakeAI. They are read fresh: change the stored prompt between two calls and assert the second call sees it.
 3. **Error mapping.** FakeAI raises `UpstreamTimeout("ai_timeout")`, `Busy("ai_busy")`, `UpstreamError("ai_upstream_error")` with secret text, `NotConfigured`, or `RuntimeError("secret")`; it returns `""`; or it returns 20 001 characters. Each maps to the table in API §semantics 7. The upstream text never appears in any outcome (assert "secret" is absent).
 4. **Partial failure.** A church with a malformed stored `call_to_worship` template (`{"a": 1}`) → that section is `prompt_invalid` with exactly "The Call to Worship prompt in Settings has a problem: Placeholders must be a single word such as {occasion}. To print a { or } as text, write {{ or }}. An admin can fix it under Settings → Liturgy prompts."; `opening_prayer` is generated in the same call.
-   - **Length cap:** a stored 20 000-character `system` prompt (possible only from unvalidated Streamlit writes), plus the default benediction template and 20 scriptures, pushes the prompt over 24 000 characters → the benediction result is exactly "The Benediction prompt in Settings has a problem: It is too long once the readings and hymns are added. An admin can fix it under Settings → Liturgy prompts."
+   - **Length cap:** a stored 20 000-character `system` prompt (possible only from unvalidated Streamlit writes), plus the default benediction template and 20 scriptures, pushes the prompt over 24 000 characters → the benediction result is exactly "The Benediction prompt in Settings has a problem: It is too long once the readings, hymns and rubric checklist are added. An admin can fix it under Settings → Liturgy prompts."
 5. **Hymns.** A hymn of the same church resolves to database values even when the client title differs. Another church's hymn id → `NotFound`. A malformed id → `NotFound`. A `hymn_id: None` snapshot uses its own title.
 6. **Charging** (a recording `charge` callback):
    - two sections needing AI, both generated → `charge` called once with 2, before the first `complete()`;
@@ -1071,8 +1072,8 @@ Streamlit sends the sermon (NT) passage with every liturgy request (inv E9). Her
   - **Order:** rendered template, then "A good {Label}:" with its points, then the sermon block, then the voice example. The profile is only in the system message.
   - **Braces:** braces inside a checklist point, the sermon text, the profile and the example come through literally, and nothing raises (the blocks are appended after `render()`).
   - **Byte-identical baseline:** `build_messages(..., voice=None)`, `voice=VoiceContext("", None)` and `voice=VoiceContext("   ", None)` give equal lists.
-  - **Budget:** with a system prompt and template near the limit, the example is dropped first, then the profile, then the sermon block. A voice or sermon block never raises `PromptInvalid`. A checklist that pushes the church's own text over the limit does raise the pinned "It is too long once the readings and hymns are added." reason.
-  - **Truncation:** a 2 500-character profile is sent as 2 000 characters and a 4 000-character example as 3 000.
+  - **Budget:** with a system prompt and template near the limit, the example is dropped first, then the profile, then the sermon block. A voice or sermon block never raises `PromptInvalid`. A checklist that pushes the church's own text over the limit does raise the pinned "It is too long once the readings, hymns and rubric checklist are added." reason: an 8 000-character system prompt, an 8 000-character template that uses `{occasion}`, `{scriptures}` and `{hymns}`, a 300-character occasion, 20 scriptures of 200 characters, three hymns with 300-character titles and a maximum-size checklist (12 points of 300 characters) → `PromptInvalid` with that reason, while the same church with the default checklist is not over the cap and a sermon block on top of it is dropped, not raised.
+  - **Truncation:** called directly, `build_messages` sends a 2 500-character profile as 2 000 characters and a 4 000-character example as 3 000, and a profile with surrounding whitespace is sent stripped.
   - **Defaults:** the `prayer_for_illumination` default contains "no more than 3 sentences", `offertory_prayer` contains "No more than three sentences", and both pass `check_template`.
 - `test_prayer_library.py` (pure): a missing key and junk values (`[]`, `{"prayers": "x"}`, `{"prayers": [{"type": 5}]}`) read as empty and never raise; `choose_example` with a pinned chooser returns the expected prayer, returns `None` when no prayer has that type, and never returns an `"other"` prayer.
 - `test_usecase_liturgy.py` additions:
@@ -1236,7 +1237,7 @@ Append to `docs/manual-verification.md`. Run on the production Vercel URL at 375
     *(deployed)*
 19. *(Amendment 2026-09-26, PR #4.)* Every AI section's user message is the rendered template, then that section's checklist from the church's rubric (read fresh on each request, defaults when unset or invalid), then the sermon-text block when `sermon_text` is sent, with PR #4's wording, order and 2 000-character cut. Typed sections are never sent. The Illumination and Offertory defaults say "no more than 3 sentences". Every assertion of PR #4's `test_generate_liturgy.py` has an equivalent against the new code before `generate_liturgy` is deleted. *(test)*
 20. *(Amendment 2026-09-26.)* The client sends the effective NT reading's passage as `sermon_text`, never ESV text, with one passage fetch per batch, and a failed fetch never blocks generation. The server never fetches passage text on `/liturgy/generate`. *(test)*
-21. *(Amendment 2026-09-26, PR #7.)* `build_messages(section, prompts, ctx, *, voice=None)` appends the voice profile (capped at 2 000) to the system message and one random same-type example (capped at 3 000) to the user message, both after `render()`. Over `MAX_PROMPT_CHARS`, the example is dropped first, then the profile, then the sermon block. The library never causes `prompt_invalid`. With an empty or missing library the messages are byte-identical to the baseline. `usecases/liturgy` reads `churches.settings["prayer_library"]` in the same `session_scope` as `get_church_prompts`, fresh on every call. *(test)*
+21. *(Amendment 2026-09-26, PR #7.)* `build_messages(section, prompts, ctx, *, voice=None)` appends the voice profile (capped at 2 000) to the system message and one random same-type example (capped at 3 000) to the user message, both after `render()`. Over `MAX_PROMPT_CHARS`, the example is dropped first, then the profile, then the sermon block. The library never causes `prompt_invalid`. With an empty or missing library the messages are byte-identical to the baseline. *(Amended 2026-09-26.)* `build_messages` itself strips the profile, treats a whitespace-only profile as empty and applies both caps, whatever the caller passes. `usecases/liturgy` reads `churches.settings["prayer_library"]` in the same `session_scope` as `get_church_prompts`, fresh on every call. *(test)*
 
 ---
 
@@ -1285,9 +1286,11 @@ Append to `docs/manual-verification.md`. Run on the production Vercel URL at 375
 | Route | Guard and rate limit | Errors |
 |---|---|---|
 | `POST /liturgy/review` | `require_church`. The `ai` bucket is charged **cost 1, and only when the AI call is made**, through a `charge` callback like `/liturgy/generate`'s (semantics 8). When the bucket is empty, the usecase skips the AI call instead of raising. | Always **200** once the request is valid: code notes plus `ai_status: "ok" \| "not_configured" \| "busy" \| "timeout" \| "rate_limited" \| "error"`. Request-level problems stay HTTP errors (401, 403, 422 `invalid_request`, 500). |
-| `POST /liturgy/revise` | `require_church` plus `rate_limit("ai")` (cost 1), as on `/hymns/suggestions` | AI failures as HTTP statuses: 503 `ai_not_configured` / `ai_busy`, 504 `ai_timeout`, 502 `ai_upstream_error`; 429 `rate_limited` with `Retry-After`; 422 `invalid_request`. |
+| `POST /liturgy/revise` | `require_church` plus `rate_limit("ai")` (cost 1), as on `/hymns/suggestions` | AI failures as HTTP statuses: 503 `ai_not_configured` / `ai_busy`, 504 `ai_timeout`, 502 `ai_upstream_error`; 429 `rate_limited` with `Retry-After`; 422 `invalid_request`; 422 `prompt_invalid` "This prayer is too long to revise." (budget below). |
 
-- **Consistency with F.** `ai_status` is a response field, not an error code, so nothing is added to F §1.5's `ERROR_CODES` or the frontend `ApiErrorCode` union. Like this slice's per-section results, review's "AI failure inside a 200" and its "empty bucket → `ai_status: rate_limited` instead of 429" are declared deviations from F §1.5 and §1.8, recorded in F's "Amendments from slice specs". Revise follows F exactly.
+- **Consistency with F.** `ai_status` is a response field, not an error code, so nothing is added to F §1.5's `ERROR_CODES` or the frontend `ApiErrorCode` union. Like this slice's per-section results, review's "AI failure inside a 200" and its "empty bucket → `ai_status: rate_limited` instead of 429" are declared deviations from F §1.5 and §1.8, recorded in F's "Amendments from slice specs". Revise follows F exactly; its F §2.8 prompt-size 422 carries its own message, "This prayer is too long to revise."
+- **Revise input budget** (reviewer spec §Revise, added 2026-09-26). The revise prompt must stay within `MAX_PROMPT_CHARS` (24 000). If it would exceed it, the usecase drops the voice profile first, then the sermon text, then the rubric checklist. If the draft plus the fixed instructions (the church's system prompt, the section label, the occasion and readings, the notes and the revise instruction) still exceed the cap, it returns 422 `prompt_invalid` "This prayer is too long to revise." before any AI call. The `rate_limit("ai")` dependency has already charged the token, as for any Revise request.
+- **Sermon text** (added 2026-09-26). Review and revise requests send the same resolved `sermon_text` as generation (Frontend changes, "Sermon text"): the effective NT reading, in the draft's translation with **WEB instead of ESV** under the Crossway rule, from one bounded 10 s passage fetch through the same `fetchQuery` (a passage already cached is reused), and omitted when the fetch fails, times out or returns no text. The server never fetches passage text on these routes.
 - **Timeouts** (F §1.8): review has a 75 s server deadline passed to `complete(deadline=…)` and a 90 000 ms client timeout. Revise uses the section's slice 4 token budget (1 500, or 4 000 for Prayers of the People) and the 90 000 ms client timeout.
 - **Tenancy.** The rubric, the merged system prompt and the voice profile are read on the server in one `session_scope`, closed before the AI call (F §1.8), and never taken from the client. Both routes get `assert_church_isolated` tests.
 - Neither route is user-scoped, so the `test_route_guards.py` allowlists don't change. The OpenAPI snapshot is regenerated.
@@ -1296,9 +1299,12 @@ Append to `docs/manual-verification.md`. Run on the production Vercel URL at 375
 
 **Baseline change to this slice: the season guidance.** The add-on replaces the "do not name the season…" sentences in `liturgy_prompts.DEFAULT_SYSTEM_PROMPT` with the new season guidance. The exact old and new text is in the reviewer spec, §"Writer: new season guidance".
 - It lands **with the add-on, after the Streamlit freeze**, so `streamlit-frozen` keeps the old wording. A church whose admin saved its own system prompt keeps it, because overrides are stored whole. 6a's prompts page shows whichever default is in code.
+- **Freeze contingency** (added 2026-09-26). If F §6.1 item 6 is in force, Streamlit keeps running from `main` through the `generate_liturgy` wrapper (Backend §6, `worship_service.py`), so editing `DEFAULT_SYSTEM_PROMPT` would reach it. The owner decided Streamlit gets no new features (reviewer decision 7; owner decision 7), so the add-on keeps a frozen copy of the old constant, `liturgy_prompts.LEGACY_SYSTEM_PROMPT`, with the old season sentences. The wrapper passes it as the `system` default: a church with no saved system prompt gets `LEGACY_SYSTEM_PROMPT` in Streamlit and the new `DEFAULT_SYSTEM_PROMPT` in the new app, and a saved system prompt is used as is in both. The new season guidance applies only to the new app. The wrapper's smoke test asserts that the old season sentences reach the fake model. `LEGACY_SYSTEM_PROMPT` is deleted with the wrapper.
 - **Tests before and after.** This slice's tests must not pin the old season sentences as a literal. They compare with `liturgy_prompts.default_prompts()["system"]` or `DEFAULT_SYSTEM_PROMPT` (for example "the system message equals the merged system prompt"), so they pass unchanged before the add-on lands and after it. Any slice 4 test that does quote the default system text is updated to the new text **in the add-on's PR**, never earlier. The add-on adds the test that the constant contains the new season sentences and none of the old ones.
 - Writer behavior otherwise stays as specified here. The reviewer never rewrites a card on its own.
 
-**Testing and acceptance** for the add-on are the reviewer spec's §Testing (backend `FakeAI` and route tests, frontend DOM tests, a 375 px manual check). Two cases are this slice's contract and are added to its test files when the add-on lands:
+**Testing and acceptance** for the add-on are the reviewer spec's §Testing (backend `FakeAI` and route tests, frontend DOM tests, a 375 px manual check). These cases are this slice's contract and are added to its test files when the add-on lands:
 - `generation`/card tests: typing, Regenerate, Revise, Clear text and "Use church default" each clear that card's notes. A review result for a card edited mid-review is dropped.
 - `cards.test.ts`: Revise is offered only for origin `ai`, and its Undo restores the previous text and origin, like Regenerate.
+- *(Added 2026-09-26.)* Request builders for review and revise: `sermon_text` is the same resolved `{ref, text}` that `buildGenerateRequest` sends, it is omitted when the passage fetch fails or times out, and for an ESV church no ESV text is sent (the WEB passage is read).
+- *(Added 2026-09-26.)* Revise budget, with `FakeAI`: while the prompt is over the cap, the voice profile is dropped first, then the sermon text, then the checklist, and each only when still needed; a draft that is still over `MAX_PROMPT_CHARS` with only the fixed instructions (for example an 8 000-character system prompt and a 20 000-character draft) returns 422 `prompt_invalid` "This prayer is too long to revise." and `FakeAI.calls == 0`.

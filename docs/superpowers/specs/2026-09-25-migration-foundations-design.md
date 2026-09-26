@@ -68,11 +68,12 @@ The slice specs refined several foundation rules. This pass folds every one of t
 | §1.3 | *(2026-09-26)* `PATCH /rubric` takes a plain JSON object checked by `service_rubric.validate_patch`, which rejects unknown keys itself, as a declared exception to the model rule. `SermonText {ref ≤200, text ≤20 000}` is shared by `/liturgy/generate`, `/liturgy/review` and `/liturgy/revise`. | PR #4, 4, PR #8 |
 | §1.5 | *(2026-09-26)* New 422 code `invalid_rubric` (PR #4's `PATCH /rubric`). `POST /liturgy/review` returns AI failures and an empty `ai` bucket as `ai_status` inside a 200, like `/liturgy/generate`; `ai_status` is a field, not an error code. | PR #4, PR #8 |
 | §1.7 | *(2026-09-26)* Since PR #4, `repos.churches._merge_settings` (and so frozen Streamlit's settings writes) locks the church row. | PR #4 |
-| §1.8 | *(2026-09-26)* `ai` bucket: `POST /church/prayer-library/voice-profile-draft` and `POST /liturgy/revise` (dependency, cost 1), and `POST /liturgy/review` (cost 1, only when the AI runs; empty bucket → `ai_status: rate_limited`). Timeout rows added. | PR #7, PR #8 |
+| §1.8 | *(2026-09-26)* `ai` bucket: `POST /church/prayer-library/voice-profile-draft` and `POST /liturgy/revise` (dependency, cost 1), and `POST /liturgy/review` (cost 1, only when the AI runs; empty bucket → `ai_status: rate_limited`). Timeout rows added. `POST /liturgy/review` is the second exception to the 504 timeout rule: AI failures come back as `ai_status` inside a 200. | PR #7, PR #8 |
+| §2.8 | *(2026-09-26)* The prompt-size cap: the voice-profile draft never returns it (it cuts each prayer to fit, 6a), and `POST /liturgy/revise` drops the profile, the sermon text and the checklist before returning 422 `prompt_invalid` "This prayer is too long to revise." (slice 4). | 6a, 4, PR #7, PR #8 |
 | §3.2 | *(2026-09-26)* `0001_baseline` includes `text_year` and `hymnal_count` on `hymns` and `hymn_catalog` (already in production), `0002_reconcile` adds them where missing, and `migrate_add_hymn_facts.py` is deleted with `migrate_add_hymnal.py`. | PR #4, 1 |
 | §3.5 | *(2026-09-26)* Settings keys `rubric` (PR #4; read in 3, 4 and frozen Streamlit; written by `PATCH /rubric`, edited in 6a) and `prayer_library` (PR #7; read in 4, written in 6a). No DDL. | PR #4, PR #7 |
 | §4.1, §4.4 | *(2026-09-26)* Routes `/settings/prayers` and `/settings/rubric`; keys `rubric` and `prayer-library`; a rubric save with `prefer_before_year` also invalidates `hymns`. | 6a |
-| §6.2 | *(2026-09-26)* Frozen Streamlit (cut after PR #4) reads `settings.rubric` and maps `text_year`/`hymnal_count`. | PR #4 |
+| §6.2 | *(2026-09-26)* Frozen Streamlit (cut after PR #4) reads `settings.rubric` and maps `text_year`/`hymnal_count`. It keeps the old season wording; under the §6.1 item 6 contingency, slice 4's `generate_liturgy` wrapper keeps it through a frozen copy of the old constant (`liturgy_prompts.LEGACY_SYSTEM_PROMPT`), so the new season guidance reaches only the new app. | PR #4, PR #8, 4 |
 
 ---
 
@@ -261,7 +262,7 @@ Rules:
 | `POST /gmail-connection` | Google token 15 s + userinfo 15 s | 30 s | 40 000 |
 | `POST /bulletin-emails` | token refresh 15 s + send 30 s | 45 s | 60 000 |
 
-- An upstream timeout on the server → 504 `upstream_timeout` or `ai_timeout`. Exception: on `POST /liturgy/generate`, `ai_timeout` is a per-section result inside a 200 (§1.5, slice 4).
+- An upstream timeout on the server → 504 `upstream_timeout` or `ai_timeout`. Exceptions: on `POST /liturgy/generate`, `ai_timeout` is a per-section result inside a 200 (§1.5, slice 4); on `POST /liturgy/review` (*amendment 2026-09-26*, PR #8), AI failures (not configured, busy, timeout, rate limited, error) come back as `ai_status` inside a 200, with the code notes (§1.5).
 - A client timeout → `ApiError(0, "timeout", "This is taking too long. Try again.")`.
 - The ops slice confirms that Railway's proxy request limit exceeds 120 s (Railway documentation or support; do not add a sleep endpoint).
 
@@ -521,12 +522,12 @@ The lifespan does the following:
 | `AuthenticationError`, `PermissionDeniedError` | `NotConfigured("ai_not_configured")` (log ERROR) |
 | `BadRequestError`, `APIConnectionError`, other `APIStatusError` | `UpstreamError("ai_upstream_error")` |
 
-On `POST /liturgy/generate` these errors reach the client as per-section results inside a 200, not as HTTP statuses (§1.5, slice 4).
+On `POST /liturgy/generate` these errors reach the client as per-section results inside a 200, not as HTTP statuses (§1.5, slice 4). *Amendment 2026-09-26:* on `POST /liturgy/review` they reach it as `ai_status` inside a 200 (§1.5, PR #8).
 
 - **Logs:** model, duration, token usage and outcome only.
 - **Tests:** a `FakeAI` implementing `complete()`, installed with `set_ai_for_tests()`. No test reaches OpenAI.
 - **Cost guards:**
-  - Cap the prompt size at 24 000 characters (422 `prompt_invalid` "This prompt is too long."). On `POST /liturgy/generate` this is a section-level `prompt_invalid` with slice 4's unified message instead of an HTTP 422 (§1.5).
+  - Cap the prompt size at 24 000 characters (422 `prompt_invalid` "This prompt is too long."). On `POST /liturgy/generate` this is a section-level `prompt_invalid` with slice 4's unified message instead of an HTTP 422 (§1.5). *Amendment 2026-09-26:* the voice-profile draft never returns it: it cuts each prayer to an equal share so the prompt fits (6a, PR #7). `POST /liturgy/revise` drops the voice profile, then the sermon text, then the checklist, and returns this 422 with the message "This prayer is too long to revise." only when the draft and the fixed instructions alone are too long (slice 4, PR #8).
   - Build candidate hymn lists on the server from the church's hymnal; never accept one from the client.
 - Owner decision 9: generating without a key is allowed. The usecase applies typed card text first and raises `NotConfigured` only per section that needs AI (slice 4).
 
@@ -1151,7 +1152,7 @@ The new app **must**:
 *Amendment 2026-09-26:* `streamlit-frozen` is cut after PR #4, so the frozen app **reads `churches.settings.rubric`** (through `merge_rubric`, which ignores invalid values) for its hymn suggestions and liturgy, and its ORM **maps `hymns.text_year`/`hymnal_count` and the same columns on `hymn_catalog`**. So:
 - 6a's rubric editor changes the frozen app's AI output too, which is intended;
 - those columns cannot be dropped or renamed before slice 7 (§3.4);
-- the frozen app ignores `prayer_library`, and it keeps the old season wording in its default system prompt, which the reviewer add-on changes only on `main` (PR #8).
+- the frozen app ignores `prayer_library`, and it keeps the old season wording in its default system prompt, which the reviewer add-on changes only on `main` (PR #8). If the §6.1 item 6 contingency is in force instead, Streamlit runs from `main` through slice 4's `generate_liturgy` wrapper, which keeps the old season sentences through a frozen copy of the old constant (`liturgy_prompts.LEGACY_SYSTEM_PROMPT`), because the owner decided Streamlit gets no new features. The new season guidance applies only to the new app (slice 4, reviewer amendment).
 
 What the frozen app cannot break, and why:
 - Its ORM doesn't map new columns, so its updates leave `custom_elements`, `hymnal`, `reusable` and `accepted_by` untouched.

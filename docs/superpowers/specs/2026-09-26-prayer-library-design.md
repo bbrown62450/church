@@ -95,6 +95,12 @@ All three routes live in a new module, `backend/api/routes/prayer_library.py`, a
   - `max_completion_tokens=800`;
   - a 75 s deadline, matching `/hymns/suggestions`;
   - the prayers, in order, each labeled with its type.
+- **Input budget.** The draft never returns 422 for length. Every saved prayer is included, in saved
+  order. If the prompt would exceed the 24,000-character cap (`MAX_PROMPT_CHARS`, F §2.8), each prayer
+  longer than an equal share of the space left after the fixed instructions and the type labels is cut
+  to that share, at the last sentence end (`.`, `!` or `?`) within its share when there is one, and
+  otherwise at the share itself. (Added 2026-09-26 after the plan check: 30 prayers of 6,000 characters
+  would otherwise be about 180,000 characters.)
 - The instruction asks for a description of about 250 words covering:
   - how the pastor addresses God;
   - sentence length and rhythm;
@@ -185,6 +191,8 @@ Backend, per F §5:
 - Draft:
   - uses `FakeAI` and asserts the message content (the prayers, their type labels, and the no-quoting instruction);
   - returns 422 with no prayers;
+  - 30 prayers of 6,000 characters give a prompt within the 24,000-character cap that still carries
+    every prayer's type label, with no 422;
   - maps each AI error;
   - charges the `ai` bucket once.
 - `build_messages`:
