@@ -256,7 +256,7 @@ longer clear them. Recent hymns that are not picked stay hidden.
 
 | Event | Date |
 |---|---|
-| D5 workaround message sent to the tester | [owner: date, or "not sent" and why] |
+| D5 workaround message sent to the tester | Not sent (owner decision, 2026-09-26): the fix goes live right after the ops-1 merge, when `liturgy-stg` is redeployed from `main` (Task 9a), so the window is short. |
 | ops-1 build live on https://liturgy-stg.streamlit.app/ | [owner] |
 | D5 manual check passed on https://liturgy-stg.streamlit.app/ | [owner] |
 | "Fixed" message sent to the tester | [owner] |
@@ -335,7 +335,7 @@ Result: [owner: "no rows" for both queries, or per row: the query, the date, the
 - Values set: `DB_POOL_SIZE=3` and `DB_MAX_OVERFLOW=3` as Railway service
   variables (API), and as top-level keys `DB_POOL_SIZE = "3"` and
   `DB_MAX_OVERFLOW = "3"` in the `liturgy-stg` app's Streamlit Secrets (not
-  `liturgy`, which is being deleted): [owner: date set]
+  `liturgy`, which is being deleted): 2026-09-26 (Railway API service and `liturgy-stg` Secrets)
 - GitHub Actions artifacts: `db-backup` keeps 30 days (GitHub's maximum is 90).
 
 ## Incident response
