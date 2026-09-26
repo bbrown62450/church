@@ -560,3 +560,25 @@ def test_runbook_keep_alive_section_names_the_variable_and_the_endpoint():
     for needle in ("API_BASE_URL", "/health/ready", "keepalive.yml", "keep-awake.yml"):
         assert needle in section, needle
     assert "keepalive.py" not in text        # the script is gone; nothing may point at it
+
+
+# --- Streamlit freeze on main: keep-awake and the FROZEN header (ops-3) --------
+
+KEEP_AWAKE_YML = ROOT / ".github" / "workflows" / "keep-awake.yml"
+PRODUCTION_STREAMLIT_URL = "https://liturgy-next.streamlit.app/"   # the one Streamlit app since 2026-09-26
+DELETED_STREAMLIT_URLS = ("https://liturgy.streamlit.app", "https://liturgy-stg.streamlit.app")
+FROZEN_HEADER = "# FROZEN — production runs from branch streamlit-frozen; deleted in slice 7."
+
+
+def test_keep_awake_pings_only_the_production_streamlit_app():
+    text = _read(KEEP_AWAKE_YML)
+    steps = yaml.safe_load(text)["jobs"]["visit"]["steps"]
+    urls = [url for step in steps for url in step.get("env", {}).get("APP_URLS", "").split()]
+    assert urls == [PRODUCTION_STREAMLIT_URL]
+    assert [url for url in DELETED_STREAMLIT_URLS if url in text] == []
+
+
+def test_app_py_carries_the_frozen_header():
+    lines = _read(ROOT / "app.py").splitlines()
+    first = lines[1] if lines[0].startswith("#!") else lines[0]   # the line after the shebang
+    assert first == FROZEN_HEADER
