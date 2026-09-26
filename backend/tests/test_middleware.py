@@ -157,3 +157,44 @@ def test_middleware_order_is_cors_then_request_id_then_unhandled_error():
     assert [m.cls for m in app.user_middleware] == [
         CORSMiddleware, RequestIdMiddleware, UnhandledErrorMiddleware,
     ]
+
+
+# --- CORS header lists (F §1.10) and no trailing-slash redirect (F §1.1) --------
+
+ALLOWED_REQUEST_HEADERS = ("authorization", "content-type", "x-church-id",
+                           "idempotency-key", "if-match", "x-request-id")
+
+
+def _header_list(value):
+    return {item.strip().lower() for item in value.split(",")}
+
+
+def test_preflight_allows_the_six_request_headers_for_ten_minutes(cors_origin):
+    r = TestClient(create_app()).options("/me", headers={
+        "Origin": cors_origin,
+        "Access-Control-Request-Method": "GET",
+        "Access-Control-Request-Headers": ", ".join(ALLOWED_REQUEST_HEADERS),
+    })
+    assert r.status_code == 200
+    assert r.headers["access-control-allow-origin"] == cors_origin
+    assert set(ALLOWED_REQUEST_HEADERS) <= _header_list(r.headers["access-control-allow-headers"])
+    assert r.headers["access-control-max-age"] == "600"
+    assert "access-control-allow-credentials" not in r.headers    # bearer tokens, not cookies
+    # CORSMiddleware answers preflights itself, outside RequestIdMiddleware (accepted, F §2.5).
+    assert "x-request-id" not in r.headers
+
+
+def test_responses_expose_request_id_content_disposition_and_retry_after(cors_origin):
+    r = TestClient(create_app()).get("/health", headers={"Origin": cors_origin})
+    assert r.status_code == 200
+    assert {"x-request-id", "content-disposition", "retry-after"} <= _header_list(
+        r.headers["access-control-expose-headers"])
+
+
+@pytest.mark.parametrize("path", ["/health/", "/me/"])
+def test_a_trailing_slash_is_a_404_not_a_redirect(path):
+    r = TestClient(create_app()).get(path, follow_redirects=False)
+    assert r.status_code == 404
+    assert "location" not in r.headers
+    assert r.json()["error"]["code"] == "not_found"
+    assert r.json()["error"]["request_id"] == r.headers["x-request-id"]

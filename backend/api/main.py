@@ -34,7 +34,8 @@ async def lifespan(_app: FastAPI):
 
 def create_app() -> FastAPI:
     settings = get_settings()
-    app = FastAPI(title="Worship Service Builder API", lifespan=lifespan)
+    # No trailing-slash redirects: a cross-origin 307 drops Authorization (F §1.1).
+    app = FastAPI(title="Worship Service Builder API", lifespan=lifespan, redirect_slashes=False)
     # The last middleware added is the outermost: CORS → RequestId → UnhandledError
     # (F §2.5), so CORS decorates the 500s that UnhandledError produces.
     app.add_middleware(UnhandledErrorMiddleware)
@@ -43,7 +44,10 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=list(settings.cors_origins),
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-        allow_headers=["Authorization", "Content-Type", "X-Church-Id"],
+        allow_headers=["Authorization", "Content-Type", "X-Church-Id",
+                       "Idempotency-Key", "If-Match", "X-Request-Id"],
+        expose_headers=["Content-Disposition", "Retry-After", "X-Request-Id"],
+        max_age=600,
     )
     install_error_handlers(app)
     app.include_router(health.router)
