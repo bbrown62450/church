@@ -4,7 +4,7 @@
 
 **Goal:** Ship PR ops-1 of the ops slice: fix the Streamlit hymn-loss bug (inv D5), make the daily database backup encrypted and correct, delete six dead modules, fix configuration drift (`backend/.env.example`, `shadcn`), and start `docs/ops-runbook.md`. Then hand the owner the manual steps that gate the next PR.
 
-**Architecture:** The D5 fix is two pure helpers in the root `ui_helpers.py` that `app.py` calls. It changes nothing under `backend/`. It goes live on the production Streamlit app `liturgy-stg` (https://liturgy-stg.streamlit.app, used by the owner and the tester) as soon as ops-1 merges, provided `liturgy-stg` deploys from `main`; Task 0 checks that before any code is written. The backup is a rewritten GitHub Actions workflow. It runs in the GitHub Environment `backup` (the only holder of the secret; `main` only), splits the URL into libpq `PG*` variables with a small stdlib Python helper that first masks each part in the log, checks the server's Postgres major, and pipes `pg_dump` through `age` to public keys committed in the repo, so no plaintext dump ever exists on the runner. The parsed workflow, the URL helper, the recipients file and the runbook are all guarded by pytest tests in a new `backend/tests/test_ops_workflows.py`.
+**Architecture:** The D5 fix is two pure helpers in the root `ui_helpers.py` that `app.py` calls. It changes nothing under `backend/`. It goes live on the production Streamlit app `liturgy-stg` (https://liturgy-stg.streamlit.app, used by the owner and the tester) once the owner deletes and redeploys `liturgy-stg` from `main` right after the ops-1 merge (new Task 9a): Task 0 found that it currently deploys from the old, already-merged feature branch `claude/multi-user-app-support-edd5eb`, and Streamlit Community Cloud cannot switch an existing app's branch, repository or main file in place — only delete and redeploy it under the same custom subdomain. The backup is a rewritten GitHub Actions workflow. It runs in the GitHub Environment `backup` (the only holder of the secret; `main` only), splits the URL into libpq `PG*` variables with a small stdlib Python helper that first masks each part in the log, checks the server's Postgres major, and pipes `pg_dump` through `age` to public keys committed in the repo, so no plaintext dump ever exists on the runner. The parsed workflow, the URL helper, the recipients file and the runbook are all guarded by pytest tests in a new `backend/tests/test_ops_workflows.py`.
 
 **Tech Stack:** Python 3.11, pytest, PyYAML (test only), Streamlit (root app, unchanged framework), bash, Python 3 standard library (`pg_env.py`, on the runner's system `python3`), GitHub Actions (`ubuntu-24.04`, `actions/checkout` v4.4.0 and `actions/upload-artifact` v4.6.2 pinned to commit SHAs, GitHub Environment `backup`), PostgreSQL client from the PGDG apt repo, `age`, npm (Next.js frontend, dependency move only).
 
@@ -26,7 +26,7 @@
 - The agent never sees or types a secret: database URLs, the anon key, access tokens and age private keys are handled only in OWNER steps. An age **public** key is not a secret.
 - Opening a PR, merging, and messaging the tester are outward-facing. Get the owner's explicit yes first.
 - **Streamlit apps (owner correction, 2026-09-25; reverses the ops spec).** `liturgy-stg`, https://liturgy-stg.streamlit.app, is the production Streamlit app: the owner and the tester use it, and it is the app to keep, freeze on `streamlit-frozen` and keep awake. `liturgy`, https://liturgy.streamlit.app, is unused, and its Google sign-in already fails with `StreamlitAuthError` (its secrets config); the Freeze step deletes it and its redirect URIs. Every Streamlit check, log, secret and tester message in this plan uses `liturgy-stg`.
-- **Step 0 is done (2026-09-25), except the `age` key pair.** The owner's results are pre-filled in the runbook (Task 6); never ask the owner to redo them. Data API already off (REST and GraphQL with the anon key return HTTP 503 `PGRST002`, no rows), so no incident; every `public` table owned by `postgres`; `current_user` `postgres` with `rolbypassrls = true`; RLS enabled and the REVOKE / ALTER DEFAULT PRIVILEGES statements run; the Vercel app and `liturgy-stg` still load the owner's church afterwards; `server_version` 17.6; Railway closes a request after 5 min with no data, up to 15 min while data flows. The `age` key pair is generated in Task 0, Step 3.
+- **Step 0 is done (2026-09-25), including the `age` key pair (generated 2026-09-26).** The owner's results are pre-filled in the runbook (Task 6); never ask the owner to redo them. Data API already off (REST and GraphQL with the anon key return HTTP 503 `PGRST002`, no rows), so no incident; every `public` table owned by `postgres`; `current_user` `postgres` with `rolbypassrls = true`; RLS enabled and the REVOKE / ALTER DEFAULT PRIVILEGES statements run; the Vercel app and `liturgy-stg` still load the owner's church afterwards; `server_version` 17.6; Railway closes a request after 5 min with no data, up to 15 min while data flows. The `age` key pair's public recipient line is `age1zl8f90cg4cn2cujdl6dz8yqgj33vvqvyjjwwyp7hjdwf7r9efcwsratwe5` (Task 0, Step 3; public, safe to commit); Task 7 puts it in `.github/backup/age-recipients.txt`.
 - **Pool budget (owner correction, 2026-09-25).** The Supabase session pooler (Supavisor, Nano compute) has Pool Size 15, so the ops spec's trigger 2 × (5 + 5) + 2 = 22 > 15 fires. The values are `DB_POOL_SIZE=3` and `DB_MAX_OVERFLOW=3` (2 × (3 + 3) + 2 = 14 ≤ 15): in `backend/.env.example` (Task 3), on Railway and in the `liturgy-stg` Streamlit Secrets (Task 9, Step 1), and as the code defaults that ops-2 must use.
 - **Not in ops-1** (other PRs and slices; do not touch): `keepalive.yml`, `backend/keepalive.py`, `backend/tests/test_keepalive.py`, `keep-awake.yml`, the `app.py` FROZEN header, `docs/manual-verification.md` "Ops slice" section, the `errors.ts` check in `test_foundation_setup.py` (all ops-3); `db/upsert.py`, `ensure_user`, the identity cache, the pool settings in `db/engine.py` (ops-2, with code defaults 3 and 3), the `db/engine.py` comment (ops-2); `OPENAI_MODEL` (slice 3); root `.env.example`, `migrate_to_db.py`, `notion_hymns.py`, `fill_from_hymnary.py` (slice 7). Never create `backend/cache.py` or `backend/tests/test_cache.py` (slice 2).
 - These tests stay unchanged and green: `test_auth.py`, `test_api_me.py`, `test_api_security.py`, `test_docs.py`, `test_ci_workflow.py`, `test_no_streamlit_in_core.py`, `test_keepalive.py`, and all of `streamlit_tests/`.
@@ -72,7 +72,7 @@ README.md                                     "Backups (required)" paragraph rew
 
 ### Task 0 (OWNER, before Task 1): tester workaround, `liturgy-stg` deploy branch, `age` key
 
-These are owner steps. The agent asks for them at the start and records the answers; Tasks 1–6 can proceed while Step 3 is under way.
+These are owner steps. Steps 2 and 3 are answered (2026-09-26, recorded below and in Task 6); only Step 1 is still an open owner question. The agent asks for it at the start; Tasks 1–6 can proceed while it is outstanding.
 
 **Files:** none changed here. The answers go into `docs/ops-runbook.md` in Task 6, Step 3 (if already known) or Task 9, Step 2.
 
@@ -84,26 +84,28 @@ The ops spec sends it on day one (Step 0), but the owner's list of completed Ste
 
 Record the date it was sent (or "not sent" and why) for the runbook's D5 table.
 
-- [ ] **Step 2 (OWNER): Check which branch `liturgy-stg` deploys from**
+- [ ] **Step 2 (OWNER, done 2026-09-26): Which branch `liturgy-stg` deploys from**
 
-Streamlit Cloud (share.streamlit.io) → `liturgy-stg` → ⋮ → Settings: note the repository, branch and main file. Expected: `bbrown62450/church`, `main`, `app.py`. Give the agent the three values and the date.
+Streamlit Cloud (share.streamlit.io) → `liturgy-stg` → ⋮ → Settings: repository `bbrown62450/church`, branch `claude/multi-user-app-support-edd5eb` (an old, already-merged feature branch, 26 commits behind `main`), main file `app.py`. Checked 2026-09-26.
 
-- If the branch is `main`, the D5 fix goes live on `liturgy-stg` when ops-1 merges, and Task 10, Step 1 confirms the rebuild.
-- If it is any other branch (origin still has old feature branches, for example `claude/multi-user-app-support-edd5eb`, 26 commits behind `main`), stop before Task 8 and decide with the owner: switch `liturgy-stg` to `main` (it then serves `main`'s current code; sign in and check that the owner's church loads before the tester next uses it), or also merge the D5 commit into that branch. Record the decision in the runbook next to the branch, and have Task 10 check the branch the app really serves.
+Streamlit Community Cloud cannot change an existing app's repository, branch or main file in place — only delete the app and redeploy it under the same custom subdomain (https://docs.streamlit.io/deploy/streamlit-community-cloud/manage-your-app/rename-your-app: "Delete your app … Redeploy your app"). **Decision (owner, 2026-09-26): move `liturgy-stg` twice.** Right after the ops-1 merge, and before Task 10's D5 check, the owner deletes and redeploys `liturgy-stg` from `main` under the same subdomain (new Task 9a, right after Task 9). ops-3's Freeze (Tasks 13–14) later does the same again, to `streamlit-frozen`. Because the subdomain never changes, the Google OAuth redirect URIs stay valid both times.
 
-- [ ] **Step 3 (OWNER, in parallel with Tasks 1–6): Generate the backup `age` key pair**
+- [ ] **Step 3 (OWNER, done 2026-09-26): Backup `age` key pair**
 
-The key pair has not been generated yet (2026-09-25). Task 7, Step 5 needs its public line. On the owner's own machine:
+Generated on the owner's own machine:
 
 ```bash
 brew install age
 age-keygen -o ~/wsb-backup-key.txt      # prints "Public key: age1…"
 ```
 
-1. Store the **whole** file in the password manager, plus one offline copy (for example, a printout or an encrypted USB stick kept at home).
-2. Delete it from disk: `rm ~/wsb-backup-key.txt`.
-3. Optional: repeat with `-o ~/wsb-backup-key-2.txt` for a second recovery key, stored apart from the first.
-4. Give the agent **only** the `age1…` public line(s) (62 characters: `age1` plus 58), the password-manager entry name, the offline copy's location and the date. Never the key file or its `AGE-SECRET-KEY-…` line.
+The whole file was stored in the password manager plus one offline copy, then deleted from disk (`rm ~/wsb-backup-key.txt`). Its public recipient line, which Task 7, Step 5 uses (public; safe to commit):
+
+```
+age1zl8f90cg4cn2cujdl6dz8yqgj33vvqvyjjwwyp7hjdwf7r9efcwsratwe5
+```
+
+Still needed from the owner, for the runbook's Key custody row (Task 7, Step 6): the password-manager entry name and the offline copy's location. Never the key file or its `AGE-SECRET-KEY-…` line.
 
 ---
 
@@ -1007,7 +1009,7 @@ def test_readme_backups_paragraph_describes_encrypted_backups():
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_ops_workflows.py`
-Expected: `4 failed, 57 passed`. The three runbook tests fail with `FileNotFoundError` for `docs/ops-runbook.md`, and the README test fails with `AssertionError: BACKUP_DATABASE_URL`.
+Expected: `4 failed, 58 passed`. The three runbook tests fail with `FileNotFoundError` for `docs/ops-runbook.md`, and the README test fails with `AssertionError: BACKUP_DATABASE_URL`.
 
 - [ ] **Step 3: Create `docs/ops-runbook.md`**
 
@@ -1174,7 +1176,7 @@ app uses those roles.
 
 | Key | Where the private key is kept | Created |
 |---|---|---|
-| [owner: first 12 characters of the `age1…` public key] | [owner: password manager entry name; offline copy location] | [owner] |
+| `age1zl8f90cg` | [owner: password manager entry name; offline copy location] | 2026-09-26 |
 
 ### Rotating the key
 
@@ -1232,7 +1234,7 @@ owner corrected this on 2026-09-25: it is the other way round.
 
 | App | URL | Status |
 |---|---|---|
-| `liturgy-stg` | https://liturgy-stg.streamlit.app/ | **Production.** The owner and the tester use it. Deploys from repo `bbrown62450/church`, main file `app.py`, branch [owner: branch shown in Streamlit Cloud → Settings, and the date checked]. The Freeze step moves it to `streamlit-frozen`, and `keep-awake` keeps it awake. |
+| `liturgy-stg` | https://liturgy-stg.streamlit.app/ | **Production.** The owner and the tester use it. As of 2026-09-26, deploys from repo `bbrown62450/church`, main file `app.py`, branch `claude/multi-user-app-support-edd5eb` (an old, already-merged feature branch, 26 commits behind `main`). Streamlit Community Cloud cannot switch an app's branch in place, so right after the ops-1 merge the owner deletes and redeploys it from `main` under the same subdomain (Task 9a): [owner: redeploy date]. ops-3's Freeze step does the same again, to `streamlit-frozen`, and `keep-awake` keeps it awake. |
 | `liturgy` | https://liturgy.streamlit.app/ | **Unused.** Its Google sign-in fails with `StreamlitAuthError` (its secrets config). The Freeze step deletes it and removes its two Google redirect URIs (`https://liturgy.streamlit.app/oauth2callback` and the bare root `https://liturgy.streamlit.app/`). |
 
 ### Streamlit bug triage
@@ -1445,7 +1447,7 @@ Leave "Keep-alive (required)" and the rest of the README unchanged (ops-3 and sl
 grep -c '^- Postgres server major:' docs/ops-runbook.md
 .venv/bin/python -m pytest -q | tail -1
 ```
-Expected: `64 passed` (61 in `test_ops_workflows.py`, 3 in `test_docs.py`), then `1`, then `275 passed`.
+Expected: `65 passed` (62 in `test_ops_workflows.py`, 3 in `test_docs.py`), then `1`, then `276 passed`.
 
 - [ ] **Step 6: Commit**
 
@@ -1524,7 +1526,7 @@ def test_no_age_private_key_is_committed_under_github_or_docs():
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_ops_workflows.py`
-Expected: `1 failed, 63 passed`. `test_age_recipients_lists_only_real_recipients` fails with `FileNotFoundError` for `.github/backup/age-recipients.txt`.
+Expected: `1 failed, 64 passed`. `test_age_recipients_lists_only_real_recipients` fails with `FileNotFoundError` for `.github/backup/age-recipients.txt`.
 
 - [ ] **Step 3: Create the recipients file with the marked placeholder**
 
@@ -1576,7 +1578,7 @@ Expected: `recipient ok`
 .venv/bin/python -m pytest -q backend/tests/test_ops_workflows.py
 .venv/bin/python -m pytest -q | tail -1
 ```
-Expected: `64 passed`, then `278 passed`.
+Expected: `65 passed`, then `279 passed`.
 
 - [ ] **Step 8: Commit**
 
@@ -1608,7 +1610,7 @@ grep -rnwE '(email_send|notion_archive|notion_usage|select_sunday_hymns|add_hymn
 ls backend/cache.py backend/tests/test_cache.py 2>&1 | grep -c "No such file"
 git diff --stat origin/main...HEAD -- backend/api backend/db backend/repos backend/auth.py backend/keepalive.py .github/workflows/keepalive.yml .github/workflows/keep-awake.yml .github/workflows/ci.yml
 ```
-Expected: `278 passed`; no grep matches and `grep exit 1`; `2`; the last command prints nothing, because ops-1 touches none of the ops-2/ops-3 files.
+Expected: `279 passed`; no grep matches and `grep exit 1`; `2`; the last command prints nothing, because ops-1 touches none of the ops-2/ops-3 files.
 
 - [ ] **Step 2: Run the frontend checks one more time**
 
@@ -1623,9 +1625,9 @@ Expected: all four pass as in Task 4, Step 5.
 - [ ] **Step 3: Check the `[owner: …]` markers left for the owner**
 
 Run: `grep -n '\[owner' docs/ops-runbook.md | grep -v 'An entry marked'`
-Expected (the `grep -v` drops the runbook's own explanation of the marker): at most these 9 lines, and nothing from the Supabase lockdown record, the Railway, `server_version` or Pool Size lines, or the Incident record, which are pre-filled:
-- before merge (Task 9): the `liturgy-stg` branch in "Streamlit apps" and the "D5 workaround message sent" row (both absent if the Task 0 answers were already written in Task 6), and the pool "Values set" line;
-- after merge (Tasks 10–12): the D5 rows "ops-1 build live", "D5 manual check passed" and "Fixed message sent", the recovery "Result", the backup run record row and the restore drill row.
+Expected (the `grep -v` drops the runbook's own explanation of the marker): at most these 9 lines, and nothing from the Supabase lockdown record, the Railway, `server_version` or Pool Size lines, the Streamlit apps row's branch/repo/main-file facts (known since Task 0, Step 2), or the Incident record, which are pre-filled:
+- before merge (Task 9): the "D5 workaround message sent" row (status unknown as of 2026-09-26; absent only if the owner answers before Task 9 runs), and the pool "Values set" line;
+- after merge (Task 9a, then Tasks 10–12): the `liturgy-stg` redeploy date in "Streamlit apps" (Task 9a), the D5 rows "ops-1 build live", "D5 manual check passed" and "Fixed message sent", the recovery "Result", the backup run record row and the restore drill row.
 The key-custody row is filled (Task 7), unless the Task 7 placeholder contingency applies.
 
 - [ ] **Step 4: Push and open the PR (get the owner's go-ahead first)**
@@ -1640,13 +1642,13 @@ gh pr create --base main --head claude/ops-1-backups-cleanup-d5 \
   --title "ops-1: Streamlit D5 fix, encrypted backups, dead-code and config cleanup" \
   --body "PR ops-1 of the ops slice (docs/superpowers/specs/2026-09-25-slice-ops-cleanup-design.md; plan docs/superpowers/plans/2026-09-25-ops-1-backups-cleanup-d5.md).
 
-- Streamlit data-safety fix (S16, inv D5): with 'Exclude hymns used in the last 12 weeks' ticked, hymns already picked are no longer cleared by Prepare, Save or loading a recent service. Goes live on merge on the production Streamlit app liturgy-stg (https://liturgy-stg.streamlit.app), which deploys from main (branch checked in plan Task 0, Step 2).
+- Streamlit data-safety fix (S16, inv D5): with 'Exclude hymns used in the last 12 weeks' ticked, hymns already picked are no longer cleared by Prepare, Save or loading a recent service. Goes live on liturgy-stg (https://liturgy-stg.streamlit.app) once the owner's post-merge redeploy from main completes (plan Task 9a); it currently deploys from the old branch claude/multi-user-app-support-edd5eb (Task 0, Step 2), and Streamlit Cloud cannot switch an app's branch in place.
 - backup.yml rewritten (S2): BACKUP_DATABASE_URL as a secret of the GitHub Environment backup (main only); .github/backup/pg_env.py masks each part of the URL and hands psql/pg_dump PG* variables, never a URL; actions pinned to commit SHAs; pg_dump matched to PG_MAJOR, age-encrypted before upload (backup-*.dump.age, 30 days). The environment and its branch rule (`main` only, no secret) are created before merge (Task 9, Step 6); the secret itself is added only after this merges (Task 11).
 - Deleted six dead modules (S4); backend/.env.example gains APP_ENV, LOG_LEVEL, DB_POOL_SIZE=3, DB_MAX_OVERFLOW=3 (Supavisor Pool Size 15: 2 x (3+3) + 2 = 14), ESV_API_KEY (S5); shadcn moved to devDependencies (S6).
 - docs/ops-runbook.md: Step 0 lockdown record (done 2026-09-25, no incident), backups (key custody, rotation, restore drill), Streamlit apps (liturgy-stg is production, liturgy unused), bug triage and D5 recovery, platform limits, incident response. README Backups paragraph.
-- Tests: +72 (278 total).
+- Tests: +73 (279 total).
 
-Owner steps before merge: plan Task 9 (including creating the `backup` environment and its `main`-only branch rule, no secret yet). After merge: Tasks 10-12 (D5 check and recovery query, tester message, adding `BACKUP_DATABASE_URL` to that environment, manual backup run, restore drill).
+Owner steps before merge: plan Task 9 (including creating the `backup` environment and its `main`-only branch rule, no secret yet). After merge: Task 9a (delete-and-redeploy `liturgy-stg` from `main`, since Streamlit Cloud cannot switch its branch in place), then Tasks 10-12 (D5 check and recovery query, tester message, adding `BACKUP_DATABASE_URL` to that environment, manual backup run, restore drill).
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)"
 gh pr checks --watch
@@ -1676,10 +1678,11 @@ The Supavisor Pool Size is 15, and 2 × (3 + 3) + 2 = 14 ≤ 15 (runbook → Pla
 
 Only what the runbook does not have yet:
 - the date the D5 workaround message was sent (Task 0, Step 1), or "not sent" and why;
-- `liturgy-stg`'s deploy branch and the date checked (Task 0, Step 2), plus the decision if it is not `main`;
 - the date the pool values were set (Step 1).
 
-The agent replaces the matching markers: the "D5 workaround message sent" row, the `liturgy-stg` branch in "Streamlit apps", and the pool "Values set" line.
+(`liturgy-stg`'s current branch and the redeploy decision are already in the runbook, from Task 0, Step 2 and Task 6; the redeploy itself happens after merge, in Task 9a.)
+
+The agent replaces the matching markers: the "D5 workaround message sent" row and the pool "Values set" line.
 
 - [ ] **Step 3: Confirm the settled Step 0 items (no owner action)**
 
@@ -1689,7 +1692,7 @@ Both stop rules were settled on 2026-09-25: Railway allows 5 minutes idle and up
 grep -n '^- Postgres server major' docs/ops-runbook.md
 .venv/bin/python -m pytest -q backend/tests/test_ops_workflows.py
 ```
-Expected: `<line>:- Postgres server major: 17`, then `64 passed`.
+Expected: `<line>:- Postgres server major: 17`, then `65 passed`.
 
 - [ ] **Step 4: Commit the records and push**
 
@@ -1702,7 +1705,7 @@ git commit -m "Runbook: record the D5 workaround date, liturgy-stg branch and po
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 git push
 ```
-Expected: `grep` lists only the 6 post-merge marker lines: three rows of the D5 table ("ops-1 build live", "D5 manual check passed", "Fixed message sent"), the D5 recovery "Result", the backup run record row and the restore drill row. The key-custody row (Task 7) and everything in the lockdown record, Platform limits and Incident record are filled. Then `278 passed`.
+Expected: `grep` lists only the 7 post-merge marker lines: the `liturgy-stg` redeploy date in "Streamlit apps" (Task 9a), three rows of the D5 table ("ops-1 build live", "D5 manual check passed", "Fixed message sent"), the D5 recovery "Result", the backup run record row and the restore drill row. The key-custody row (Task 7) and everything in the lockdown record, Platform limits and Incident record are filled. Then `279 passed`.
 
 - [ ] **Step 5 (OWNER): Check the Vercel install settings and the preview build**
 
@@ -1741,6 +1744,46 @@ Do **not** add the `backup` environment's `BACKUP_DATABASE_URL` secret before th
 
 ---
 
+### Task 9a (OWNER, immediately after the ops-1 merge, before Task 10): Redeploy `liturgy-stg` from `main`
+
+`liturgy-stg` deploys from the old, already-merged feature branch `claude/multi-user-app-support-edd5eb` (Task 0, Step 2), not `main`. Streamlit Community Cloud cannot change an existing app's repository, branch or main file in place — only delete the app and redeploy it under the same custom subdomain (https://docs.streamlit.io/deploy/streamlit-community-cloud/manage-your-app/rename-your-app: "Delete your app … Redeploy your app"). So the D5 fix, and everything else this PR merges to `main`, reaches `liturgy-stg` only once this task is done. Do it before Task 10's D5 check. ops-3's Freeze (Tasks 13–14) repeats the same delete-and-redeploy later, to `streamlit-frozen`.
+
+**Files:** none (results go into the runbook in Task 12, Step 5)
+
+- [ ] **Step 1 (OWNER): Pick a quiet time and warn the tester**
+
+Outward-facing: send only on the owner's explicit yes. Exact copy, with the production address:
+
+> Heads-up: on {weekday, date} between {start} and {end} I'm moving the planning app to a new setup. The address stays https://liturgy-stg.streamlit.app. It may be unavailable for up to 5 minutes. Please don't start a new service during that window — anything you've already saved is safe.
+
+- [ ] **Step 2 (OWNER): Copy the Secrets and note the settings**
+
+Streamlit Cloud → `liturgy-stg` → ⋮ → Settings → Secrets: copy the whole Secrets text into the password manager (entry "liturgy-stg Streamlit secrets", with the date). It contains the database password and the OAuth secrets: never paste it into chat or the repo. Also note the Python version and any "Sharing" / viewer settings.
+
+- [ ] **Step 3 (OWNER): Confirm the pool keys and the URL, before deleting anything**
+
+In the Secrets text just copied: the top-level keys `DB_POOL_SIZE = "3"` and `DB_MAX_OVERFLOW = "3"` are present (Task 9, Step 1 added them), and `DATABASE_URL` is the Supabase **session pooler** URL. Tell the agent only "present" or "missing" for each, never the Secrets text.
+
+- [ ] **Step 4 (OWNER): Delete the app**
+
+⋮ → Delete app, and confirm.
+
+- [ ] **Step 5 (OWNER): Recreate it from `main`, same subdomain**
+
+Create app → deploy from GitHub: repository `bbrown62450/church`, branch `main`, main file path `app.py`, App URL (custom subdomain) `liturgy-stg`. Under Advanced settings, pick the same Python version and paste the Secrets from Step 2. Deploy. The URL is unchanged, so the Google OAuth redirect URIs (`https://liturgy-stg.streamlit.app/oauth2callback` and the bare root) stay valid; the tester's session cookie resets, so they sign in once.
+
+- [ ] **Step 6 (OWNER): Verify**
+
+On https://liturgy-stg.streamlit.app/: it loads, Google sign-in works, the owner's church and hymnal load, and the saved services list appears.
+
+- [ ] **Step 7 (OWNER → agent): Give the agent the record**
+
+Pass on the date, the old branch (`claude/multi-user-app-support-edd5eb`) and the new one (`main`), for the runbook's "Streamlit apps" table (filled in Task 12, Step 5, alongside the other after-merge records).
+
+**Rollback:** if the redeploy in Step 5 fails, redeploy again from branch `claude/multi-user-app-support-edd5eb` with the same Secrets (from Step 2), so the tester is not left without the app while the problem is investigated.
+
+---
+
 ### Task 10 (OWNER, after merge): D5 check on liturgy-stg, recovery queries, tester message
 
 **Files:**
@@ -1748,7 +1791,7 @@ Do **not** add the `backup` environment's `BACKUP_DATABASE_URL` secret before th
 
 - [ ] **Step 1: Confirm both apps redeployed from the merge**
 
-- Streamlit Cloud → `liturgy-stg` (the production app; `liturgy` is unused and is not checked) → ⋮ → Settings still shows branch `main` (or the branch decided in Task 0, Step 2, which must now contain the D5 commit), and Manage app → logs show a new build that started after the merge commit landed and finished. https://liturgy-stg.streamlit.app/ loads. Step 2 is the functional proof that this build has the fix.
+- Confirm Task 9a's redeploy is done: Streamlit Cloud → `liturgy-stg` (the production app; `liturgy` is unused and is not checked) → ⋮ → Settings shows branch `main`, and Manage app → logs show a build from `main` that finished after the redeploy. https://liturgy-stg.streamlit.app/ loads. Step 2 is the functional proof that this build has the fix.
 - Vercel → Deployments: the Production deployment for the merge commit is "Ready". At 375 px (Chrome device mode, iPhone SE) and on desktop, on https://worship-service-builder.vercel.app: sign in, the church shows in the switcher, switch church if you have two, log out. (Acceptance criterion 8.)
 
 Record the date `liturgy-stg` went live ("ops-1 build live").
@@ -1934,7 +1977,7 @@ git fetch origin
 git switch -c claude/ops-1-records origin/main
 ```
 
-Edit `docs/ops-runbook.md`, replacing the remaining `[owner: …]` markers with the values from Tasks 10–12: the D5 table's three dates and the recovery "Result", "Backup run record", and the "Restore drill" row. Then:
+Edit `docs/ops-runbook.md`, replacing the remaining `[owner: …]` markers with the values from Task 9a and Tasks 10–12: the `liturgy-stg` redeploy date in "Streamlit apps" (Task 9a), the D5 table's three dates and the recovery "Result", "Backup run record", and the "Restore drill" row. Then:
 
 ```bash
 grep -n '\[owner' docs/ops-runbook.md | grep -v 'An entry marked'; echo "grep exit $?"
@@ -1946,11 +1989,11 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 git push -u origin claude/ops-1-records
 gh pr create --base main --head claude/ops-1-records \
   --title "Runbook: ops-1 after-merge records" \
-  --body "Fills the ops-1 after-merge records in docs/ops-runbook.md: D5 manual check and recovery result, first encrypted backup run, restore drill.
+  --body "Fills the ops-1 after-merge records in docs/ops-runbook.md: the liturgy-stg redeploy from main (Task 9a), D5 manual check and recovery result, first encrypted backup run, restore drill.
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)"
 ```
-Expected: no marker lines and `grep exit 1`, then `278 passed`. Merge after the owner's yes. The ops-1 gate is then passed, and ops-2 can start.
+Expected: no marker lines and `grep exit 1`, then `279 passed`. Merge after the owner's yes. The ops-1 gate is then passed, and ops-2 can start.
 
 ---
 
@@ -1959,7 +2002,7 @@ Expected: no marker lines and `grep exit 1`, then `278 passed`. Merge after the 
 | Spec item / acceptance criterion (ops-1 share) | Task |
 |---|---|
 | S16: D5 fix, `ui_helpers.hymn_options_excluding_recent`, `app.py:735-746` `keep` set (built by `picked_hymn_keys`, clarification 9), own first commit, may ship as a separate PR | 1 |
-| D5 fix goes live on the production Streamlit app: `liturgy-stg` deploys from `main` (owner correction 1) | 0 (Step 2), 10 (Step 1) |
+| D5 fix goes live on the production Streamlit app: `liturgy-stg` deleted and redeployed from `main` right after the ops-1 merge, because Streamlit Cloud cannot switch an app's branch in place (owner correction 1; owner decision, 2026-09-26) | 0 (Step 2), 9a, 10 (Step 1) |
 | Testing → `streamlit_tests/test_app_helpers.py`: A,B recent with A kept → `["a","c"]`; empty keep → `["c"]`; non-recent always present; kept key missing from hymnal not added; D5 regression with `tmp_db`, `make_church`, `record_usage`, `get_recently_used_identifiers`, `coerce_selectbox_value` | 1 |
 | Behavior change 17 (picked hymns stay selectable; unpicked recent stay hidden) | 1 |
 | S4: delete the six modules; Testing → `test_foundation_setup.py` "none of the six exists"; AC 6 whole-word grep finds nothing | 2, 8 |
