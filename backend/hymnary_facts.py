@@ -45,7 +45,6 @@ MAIN_WRITER_FIELDS = ("author", "translator", "paraphraser", "versifier")
 # Roles of people who reworked existing words, often long after they were
 # written: used for the year only when no main writer gives one.
 REWORKER_FIELDS = ("adapter", "alterer")
-PEOPLE_FIELDS = MAIN_WRITER_FIELDS + REWORKER_FIELDS
 BIRTH_ONLY_OFFSET = 35   # a living writer born in 1936 counts as writing around 1971;
                          # the estimate is capped at this year
 WRITE_BATCH = 50
