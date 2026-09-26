@@ -2,6 +2,10 @@
 
 Scope: the worktree at `.claude/worktrees/duplicate-wire-activity-review-6370f5`, branch `claude/react-fastapi-slice0`. This merges seven area inventories into one. Where they disagreed I checked the code; section 0 lists what was checked. No files were changed.
 
+> **Amendment 2026-09-26: the service rubric (PR #4) is now current behavior.** PR #4 ("Service rubric", merged to `main` on 2026-09-26; design `2026-09-25-service-rubric-design.md`) added behavior that both Streamlit and the API already run: per-church rubric checklists and hymn preferences, hymn year and familiarity facts, rubric-aware hymn ranking, and rubric checklists plus sermon-text themes in the liturgy prompts. It is inventoried in D10, E9, G11, H13–H14, the `hymns`/`hymn_catalog`/`churches` rows of I, the `/rubric` rows of §2.2, a §3 row, §4 and §6. Line references in those additions are to `main` at `475c748` (after PR #4 and PR #6); older references elsewhere in this document still point at the original snapshot. Production Streamlit (`liturgy-next`) runs from `main` today, and the ops freeze cuts `streamlit-frozen` after PR #4, so the frozen app keeps all of this behavior.
+>
+> The prayer library (`docs/superpowers/specs/2026-09-26-prayer-library-design.md`, PR #7) is **new-app only** (owner decision): Streamlit has no counterpart, so there is no current behavior to inventory. Slices 4 and 6a carry it. The same holds for the service reviewer (`docs/superpowers/specs/2026-09-26-service-reviewer-design.md`, PR #8), an add-on right after slice 4. Its change to the default system prompt's season wording lands only with that add-on, so current behavior (E6) and frozen Streamlit keep the old wording.
+
 ---
 
 ## 0. Conventions and reconciled findings
@@ -382,6 +386,7 @@ Each feature lists what it does, the user steps, the domain code it reuses, the 
   - The fuzzy resolve can pick the wrong hymn.
   - The non-ASCII-key message leaks configuration detail to members.
 - **Tests:** none.
+- **Amendment 2026-09-26 (PR #4):** steps 5 and 7 changed. Candidates are now ranked by the church's rubric and cut to 60 with places kept for newer hymns, the fixed "ROLE REQUIREMENTS" text is replaced by the rubric's slot checklists, each candidate line shows its year and hymnal count, and `app.py` passes `rubric=get_church_rubric(church_id)`. See D10. Tests now exist: backend/tests/test_suggest_hymns.py and test_hymn_ranking.py.
 
 **D8. Hymn display, numbers, Hymnary links, dead audio**
 - `hymn_display_info` (worship_service.py:582-609) is used for search results and AI. It returns title (not stripped, "Unknown" if missing), number, link, and `audio_url`, always built from the GG2013 CDN pattern (612-629).
@@ -389,9 +394,22 @@ Each feature lists what it does, the user steps, the domain code it reuses, the 
 - `resolve_hymnary_audio_url` (632-683) and its unbounded cache keyed by number (28) are dead: nothing passes `resolve_audio=True`.
 - Links come from the catalog, or from the import pattern `https://hymnary.org/hymn/{HYMNAL}/{n}`.
 - **Edge cases:** the docx prints `'{title} — #{number}'`, which becomes `#None` for a hymn without a number (worship_service.py:847/906/933). `hymnary_link` is member-editable, so its scheme must be validated before it is rendered as an href.
+- **Amendment 2026-09-26 (PR #4):** `hymn_display_info(hymn, *, resolve_audio=False, prefer_before_year=None)` (worship_service.py:628) also returns `year` (Text Year), `hymnal_count` and `newer_than_preferred` (true only when the year is known and `>= prefer_before_year`). The AI path passes the rubric's year; the Streamlit UI shows none of the three yet. `_hymn_to_dict` (repos/hymns.py) exposes the new columns as `"Text Year"` and `"Hymnal Count"`.
 
 **D9. Manual hymn entry fields (`*_man`): removed**
 - Commit 527ddb5 removed them in favor of the empty-hymnal warning. Only key names remain in the reset lists (app.py:224; streamlit_tenancy.py:25-27). Do not port unless the product owner asks for free-text hymns (see question 13).
+
+**D10. Service rubric in hymn suggestions (amendment 2026-09-26, PR #4; no new screen)**
+- **Rubric** (`backend/service_rubric.py`): `DEFAULT_RUBRIC` holds a checklist per hymn slot (`HYMN_SLOTS` = opening, response, closing, labelled by `HYMN_SLOT_LABELS`), a checklist per liturgy section (the 8 `SECTION_ORDER` keys), `prefer_before_year` (default 1970) and `prefer_familiar` (default true). `merge_rubric(overrides)` applies a church's valid sparse overrides and silently ignores unknown keys and invalid stored values, so a bad stored value never breaks suggestions or generation. Storage and editing: G11.
+- **Hymn facts:** nullable integer columns `text_year` (year the words were written) and `hymnal_count` (hymnals that include the text; the familiarity signal) on `hymns` and `hymn_catalog` (db/models.py). `seed_church_from_catalog` copies them. They are filled only by the ops backfill (H14); hymns added later (Settings "Add hymn", `import_hymnal.py`) start unknown (`NULL`).
+- **Ranking** (`backend/hymn_ranking.py`, pure; used by `suggest_hymns_for_service`, worship_service.py:389):
+  - `rank_candidates(hymns, *, prefer_before_year, prefer_familiar)`: a stable sort, first by era (words written before the year, then unknown, then newer), then, when `prefer_familiar` is on, by `hymnal_count` descending, where an unknown count ranks as the median of the known counts in that list.
+  - `shortlist(ranked, *, limit, prefer_before_year, reserve)`: cuts to `limit` in ranked order, keeping up to `reserve` places for the best unknown-year and newer hymns (taken from each group in turn); unused reserved places go back to older hymns. The suggester uses `_CANDIDATES_PER_SLOT = 60` and `_CANDIDATES_KEPT_FOR_NEWER = 12` (worship_service.py:374-375).
+  - Each slot's list is ranked then shortlisted: opening and closing from the theme-matched hymns, response from the scripture matches. A slot with no matches falls back to the **whole ranked hymnal** cut the same way (was `all_hymns[:80]`). The theme keyword sets `_OPENING_THEMES` / `_CLOSING_THEMES` (worship_service.py:367-368) still pre-filter opening and closing; they match the default checklists, not an edited one (a known limit in the rubric spec).
+  - For a hymnal with no facts and no themes (PH1990 today), ranking is a no-op, so the D7 edge case "PH1990 candidates are hymns #1-60, all Advent" still holds.
+- **Prompt:** the fixed ROLE REQUIREMENTS text is replaced by the three slot checklists (`format_checklist("Opening (Gathering) Hymn", …)` → "A good Opening (Gathering) Hymn:" plus one "- point" per line), followed by `PREFERENCES: Prefer hymns written before {year}[ and hymns found in many hymnals]; choose a newer hymn only when it fits clearly better. Each candidate shows when its words were written and how many hymnals include it, when known.` (worship_service.py:531-551). Each candidate line gains `hymn_ranking.facts_note`, for example `(written 1826, in 1,322 hymnals)`, when either fact is known.
+- **Call site:** app.py:768-780 passes `rubric=get_church_rubric(church_id)`, read on each click.
+- **Tests:** backend/tests/test_service_rubric.py, test_hymn_ranking.py, test_suggest_hymns.py, test_hymns_repo.py (facts mapping and seeding).
 
 ### E. Service Builder: liturgy
 
@@ -451,6 +469,7 @@ Each feature lists what it does, the user steps, the domain code it reuses, the 
   - Raw provider errors are shown and can be saved or printed.
   - Messages mention "Settings → Secrets" and `.env`, which do not apply on Railway.
 - **Tests:** test_liturgy_prompts.py (merge and render only).
+- **Amendment 2026-09-26 (PR #4):** the call (app.py:941-956) also passes `rubric=get_church_rubric(church_id)` and `sermon_text=sermon_text_for(...)`, and each generated section's prompt gains the rubric checklist and the sermon-text themes. See E9. Tests now exist: backend/tests/test_generate_liturgy.py.
 
 **E7. Preview (read-only)**
 - Shown when the liturgy is not empty (app.py:947-966). For each of the 8 sections with text: subheader, `st.text` (monospace, no markdown), divider. Assurance gets "\n\nPeople: Thanks be to God! Amen." appended.
@@ -468,6 +487,16 @@ Each feature lists what it does, the user steps, the domain code it reuses, the 
 - Archived and restored.
 - **Edge cases:** the default does not update when the date changes afterwards; it ignores church timezone; the text is not per church and not previewed.
 - **Tests:** test_service_archive.py (persisted).
+
+**E9. Rubric checklists and sermon-text themes in the liturgy prompts (amendment 2026-09-26, PR #4; no new screen)**
+- `generate_liturgy(..., rubric=None, sermon_text=None)` (worship_service.py:762). `rubric` is merged over the defaults (`service_rubric.merge_rubric`), so `None`, sparse overrides and a full rubric all work.
+- For each section it sends to the AI, after `render()`, it appends in code (not as template placeholders, so churches with edited prompts get them too):
+  1. the section's checklist, `service_rubric.format_checklist(SECTION_LABELS[section], rubric["prayers"][section])` → "A good {Section Label}:" plus one "- point" line per item (worship_service.py:836-839);
+  2. when `sermon_text` is given, `_sermon_text_block` (worship_service.py:747): "Sermon text ({ref}), for themes only; do not quote, cite, or name it:" then the text cut to `SERMON_TEXT_LIMIT = 2000` characters. It is skipped when the reference or text is blank or the passage failed to load (`"[Could not load text]"`).
+- Override (typed) sections are never sent, so neither block touches them.
+- **Sermon text source:** `ui_helpers.sermon_text_for(ref, cached_texts, fetch)` (ui_helpers.py:100) takes `st.session_state["selected_nt_ref"]` and the passage already loaded on the page (`scripture_full_texts`); when it is missing or failed, it fetches with the session's Bible translation (including ESV) and keeps a successful fetch in the session cache. A failed or empty fetch is logged and yields `None`, so generation never breaks on it.
+- **Default prompt changes:** `prayer_for_illumination` now says "Write no more than 3 sentences" (was 3-5) and `offertory_prayer` "No more than three sentences" (was three to five), matching their checklists' "is no more than 3 sentences" (liturgy_prompts.py).
+- **Tests:** backend/tests/test_generate_liturgy.py (default and church checklists, partial rubric, edited prompts, sermon text appended, truncated and skipped, typed sections never sent), test_liturgy_prompts.py (the two defaults), streamlit_tests/test_app_helpers.py (`sermon_text_for`).
 
 ### F. Output: documents, usage, archive, Gmail, email
 
@@ -613,6 +642,7 @@ Each feature lists what it does, the user steps, the domain code it reuses, the 
 - `submit_translation` (162-168) requires admin: "Unknown or unavailable translation." Stored with `set_church_translation`, a shallow `_merge_settings` read-modify-write (repos/churches.py:87-96, 128-129).
 - **Edge cases:** if `ESV_API_KEY` is removed, the next profile save silently overwrites an "esv" default with "web".
 - **Tests:** test_settings_prompts_translation.py, test_church_settings.py.
+- **Amendment 2026-09-26 (PR #4):** `_merge_settings` (repos/churches.py:98) now loads the church row with `SELECT … FOR UPDATE` (`_lock_live_church`, repos/churches.py:88; a no-op on SQLite) and writes a new dict in the same transaction, so concurrent Streamlit settings saves (translation, prompts, rubric) no longer lose each other's keys on Postgres.
 
 **G4. Contacts**
 - List for all members: `list_contacts`, ordered by `created_at` then name (email_contacts.py:24-37), shown as "**{name}** — {email}".
@@ -675,6 +705,14 @@ Each feature lists what it does, the user steps, the domain code it reuses, the 
 - No restore and no hard purge.
 - **Tests:** test_churches_repo.py (soft delete, revoke), test_tenancy.py::test_validate_rejects_soft_deleted_church.
 
+**G11. Service rubric storage and API (amendment 2026-09-26, PR #4; no Streamlit screen)**
+- Each church stores **only its overrides** in `churches.settings["rubric"]`, the same shape as `DEFAULT_RUBRIC` but sparse, for example `{"hymns": {"closing": [...]}, "prefer_before_year": 1960}`. A church that never edits anything picks up improved defaults automatically.
+- Repo functions (repos/churches.py:129-160): `get_church_rubric_overrides(church_id)` (`{}` when none or not a dict), `get_church_rubric(church_id)` (merged), `update_church_rubric(church_id, patch)`. The update validates with `service_rubric.validate_patch`, then reads the stored overrides from the row it locks (`_lock_live_church`), applies them with `apply_patch` and writes `{**settings, "rubric": overrides}` in that transaction, so two admins patching at once cannot drop each other's change. `null` for one checklist or one setting removes that override (reset granularity is one checklist or one setting); a group left empty is dropped.
+- **Validation** (`validate_patch`, raises `ValueError` with these exact messages): "The rubric update must be an object."; "'{key}' must be an object of checklists."; "Unknown {hymns|prayers} checklist: '{sub}'."; "Unknown rubric setting: '{key}'."; "A checklist must be a non-empty list of points." (an empty list is invalid; reset with `null`); "A checklist can have at most 12 points."; "Each checklist point must be non-empty text."; "Checklist points cannot contain control characters."; "Each checklist point must be at most 300 characters." (after trimming; whitespace runs, line breaks included, collapse to single spaces); "The preferred year must be between 1500 and {current year}."; "prefer_familiar must be true or false."
+- **API** (backend/api/routes/rubric.py, registered in `api/main.py`; `RubricOut` in api/schemas.py): `GET /rubric` (`require_church`) returns `{"rubric": <merged>, "customized": ["hymns.closing", "prefer_before_year", …]}` (dotted names of the valid stored overrides, in rubric order, `service_rubric.customized_keys`). `PATCH /rubric` (`require_admin`) takes the sparse patch as a plain JSON object and returns the same shape; a `ValueError` becomes `ApiError(422, "invalid_rubric", <message>)` with no `fields`, and a non-object body is FastAPI's 422 `invalid_request`. The role is the one `require_admin` read; the write does not re-read it under the lock.
+- **Who reads it:** Streamlit's hymn suggestions and liturgy generation (D10, E9) on every click, via `get_church_rubric`. Nothing in Streamlit writes it, and there is no editor anywhere yet; PR #4 leaves the editor to settings slice 6.
+- **Tests:** backend/tests/test_api_rubric.py (member reads, non-member 403, member PATCH 403, admin and owner PATCH, reset with `null`, readable 422, non-object body, per-church isolation), test_church_settings.py (merge, isolation, locked update), test_service_rubric.py.
+
 ### H. Operations, scripts and legacy code
 
 Each item is marked with its fate: **KEEP**, **API/UI** (needs an in-app equivalent), or **DELETE**.
@@ -693,17 +731,19 @@ Each item is marked with its fate: **KEEP**, **API/UI** (needs an in-app equival
 | H10 `fill_from_hymnary.py`, `add_hymnary_links.py`, `fix_hymn_titles.py`, `select_sunday_hymns.py` | Notion-bound Hymnary scraping and fixes. `fill_from_hymnary` uses Playwright and takes about 45-60 minutes for ~700 hymns. It is the only reason `playwright` is a runtime dependency. | DELETE; any DB enrichment later must be a background job |
 | H11 `backend/email_send.py` | Shared SMTP sender using `GMAIL_ADDRESS`/`GMAIL_APP_PASSWORD`. Zero importers. Would bypass the per-user sender check. | DELETE now |
 | H12 Config, env, deps, docs | The DB default is `sqlite:///data/church.db` (db/engine.py:24) but the docs say `data/app.db`. `ESV_API_KEY` and `LOG_LEVEL` are missing from `backend/.env.example`. `backend/requirements.txt` ships `playwright` and `notion-client`. `shadcn` is a runtime dependency in `frontend/package.json`. README sections at 10-14 and 48-119 and docs/manual-verification.md sections 1-3 describe Streamlit. | KEEP; rewrite at cutover |
+| H13 `backend/migrate_add_hymn_facts.py` (amendment 2026-09-26, PR #4) | Idempotent one-off: adds `text_year INTEGER` and `hymnal_count INTEGER` to `hymns` and `hymn_catalog` where the SQLAlchemy inspector shows them missing (works on Postgres and SQLite). Prints the target database first (password hidden). **Already applied to production Supabase** before PR #4 merged. Test: backend/tests/test_migrate_hymn_facts.py. README "Service rubric: hymn year and familiarity" step 1 documents it. | DELETE in slice 1 with H2, once the Alembic baseline and `0002_reconcile` cover the columns |
+| H14 `backend/backfill_hymn_facts.py` + `backend/hymnary_facts.py` (amendment 2026-09-26, PR #4) | Ops CLI (`--dry-run`) that fills blank `text_year` and `hymnal_count` on `hymn_catalog` and `hymns` from Hymnary.org's public scripture API (never the bot-protected website): one request per scripture reference, about 1 s apart, cached per reference; matches by normalized title or first line; fills blanks only, so manual corrections survive; leaves a row unknown when a request fails or a response hit the 100-text cap; prints coverage. Uses `httpx`; `load_dotenv()` runs in the CLI entry module only. PH1990 has no scripture references, so its hymns stay unknown. Re-run after a hymnal import or added hymns. Test: backend/tests/test_hymnary_facts.py (no network). | KEEP as an ops CLI (not an API route) |
 
 ### I. Data model, scoping and functions with no UI
 
 | Table | Scope | Notes relevant to the API |
 |---|---|---|
 | users (models.py:33-42) | global | `email` is UNIQUE and normalized (race on insert). `google_sub` is UNIQUE and nullable. |
-| churches (45-53) | tenant root | `timezone` is free text and unused. `settings` JSON holds `liturgy_prompts` and `bible_translation`. Soft delete through `deleted_at`, no purge job. |
+| churches (45-53) | tenant root | `timezone` is free text and unused. `settings` JSON holds `liturgy_prompts` and `bible_translation`, and since PR #4 (amendment 2026-09-26) the sparse `rubric` overrides (G11). Soft delete through `deleted_at`, no purge job. |
 | memberships (56-73) | church | Primary key `(church_id, user_id)`. Role CHECK in owner/admin/member. |
 | invites (76-97) | church | `code` UNIQUE. `role` has **no CHECK**. `UNIQUE(church_id,email)` covers every row, which contradicts the comment at line 84. |
-| hymn_catalog (100-111) | global, read-only | Seed source. Empty in local DBs. |
-| hymns (114-134) | church | No uniqueness. `hymnal` defaults to GG2013. |
+| hymn_catalog (100-111) | global, read-only | Seed source. Empty in local DBs. Since PR #4 (amendment 2026-09-26): nullable `text_year` and `hymnal_count` (D10), already added in production by H13. |
+| hymns (114-134) | church | No uniqueness. `hymnal` defaults to GG2013. Since PR #4 (amendment 2026-09-26): nullable `text_year` and `hymnal_count`, copied from the catalog on seed and filled by H14; `NULL` means unknown. |
 | services (137-160) | church | Date stored as two strings. `hymns` JSON is a `[{title, number}]` snapshot. No `custom_elements` column. `saved_at` rewritten on every update. |
 | hymn_usage (163-182) | church | UNIQUE `(church, date_iso, number, title)`; NULL numbers do not collide. |
 | contacts (185-199) | church | No uniqueness, no format check. |
@@ -716,7 +756,7 @@ Each item is marked with its fate: **KEEP**, **API/UI** (needs an in-app equival
   - `repos/churches|memberships|invites|users` do not coerce strings to UUID. On SQLite a string raises `StatementError`, and `revoke_invite(id, str(church_id))` silently does nothing because a UUID never equals a string.
   - `hymns`, `service_archive`, `email_contacts` and `hymn_usage` use `_as_uuid`, which raises `ValueError` (a 500) on malformed input.
   - Type every path id as `uuid.UUID`.
-- **Domain functions with no UI or no runtime caller:** `service_archive.delete_service`, `email_contacts.get_contacts_for_display`, `repos.hymns.list_church_hymnals` (CLI only), `repos.hymns.update_hymn` (helper only), `repos.hymns.import_hymns` (CLI only), `repos.churches.update_church`, `repos.memberships.count_admins` and `add_membership`, `repos.invites.get_invite_by_code`, `repos.users.upsert_user` and `get_user_by_email`, `streamlit_auth.current_user_id`, `worship_service.resolve_hymnary_audio_url`, `email_send.send_gmail`.
+- **Domain functions with no UI or no runtime caller:** `service_archive.delete_service`, `email_contacts.get_contacts_for_display`, `repos.hymns.list_church_hymnals` (CLI only), `repos.hymns.update_hymn` (helper only), `repos.hymns.import_hymns` (CLI only), `repos.churches.update_church`, `repos.memberships.count_admins` and `add_membership`, `repos.invites.get_invite_by_code`, `repos.users.upsert_user` and `get_user_by_email`, `streamlit_auth.current_user_id`, `worship_service.resolve_hymnary_audio_url`, `email_send.send_gmail`. Amendment 2026-09-26: `repos.churches.update_church_rubric` has no UI caller (API only, `PATCH /rubric`).
 
 ---
 
@@ -799,6 +839,8 @@ Latency: **fast** is under about 1 s. **EXT** means an external HTTP call. **LON
 | POST | /invites | admin | 6 | Create | `{role:'member' or 'admin', email?: EmailStr}` | 201 `{id, code, url, email, role, expires_at}`; 409 `invite_exists` | create_invite (return id and expiry) | fast |
 | DELETE | /invites/{invite_id} | admin | 6 | Revoke | uuid | `{revoked:true}`; 404 | revoke_invite (must return a found flag) | fast |
 | GET | /health/ready | none | ops (optional) | DB readiness; can also act as an off-GitHub keep-alive target | – | `{ok, db}`; 503 | SELECT 1 on the process engine | fast |
+| GET | /rubric | church | **exists** (PR #4; amendment 2026-09-26). Editor UI in 6a | Read the church's service rubric | – | `RubricOut {rubric: {hymns: {slot: [str]}, prayers: {SectionKey: [str]}, prefer_before_year: int, prefer_familiar: bool}, customized: [str]}` | routes/rubric.py; get_church_rubric_overrides, service_rubric.merge_rubric, customized_keys | fast |
+| PATCH | /rubric | admin | **exists** (PR #4; amendment 2026-09-26). Editor UI in 6a | Sparse update; `null` resets one checklist or setting | plain JSON object, e.g. `{"prayers": {"benediction": [...]}, "prefer_before_year": null}` | same as GET; 422 `invalid_rubric` with the G11 message (no `fields`); 422 `invalid_request` for a non-object body; 403 for members | update_church_rubric (locked), service_rubric.validate_patch | fast |
 
 ### 2.3 Long-running endpoints: approach
 
@@ -834,6 +876,7 @@ The main recommendation: **use synchronous `def` routes with explicit upstream t
 | app.py:753-824, 770-772 | First-pick apply, `_find_key`, messages classified by the substring "Could not", `st.progress`, and a closure that reads the session translation | Structured response with `picks`; HTTP errors; translation passed explicitly | 3 |
 | app.py:259-266, 401-404, 847-851 | Picks are lower-cased titles, flattened by position | React state holds `{opening,response,closing}` hymn ids; the API takes slot-keyed hymns | 3-5 |
 | app.py:926-945 | Generate reads overrides from session, gates on an env var, is not wrapped in try/except | `liturgy_service.generate_for_church(...)` behind POST /liturgy/generate | 4 |
+| ui_helpers.py `sermon_text_for` (amendment 2026-09-26, PR #4); app.py:941-956 | The sermon text for the liturgy prompt comes from the page's session passage cache (fetched in the session translation, ESV included) | The client sends the effective NT reference and its already-loaded passage text with each generate request (never ESV text; slice 4 amendment); the backend only formats it | 4 |
 | app.py:1029-1067 | Editing-id lifecycle (a `get_service` call every rerun), update-then-insert fallback | The client keeps `editingServiceId` and `editingDateIso`; PUT, then POST on 404 | 5a |
 | app.py:176-218, 334-336 | Gmail callback read from `st.query_params` at the app root; `create_state` on every render; errors passed through `oauth_error` | `/gmail-connection` endpoints, a frontend `/gmail/callback` page, state created on click only | 5b |
 | app.py:169-173 | `@st.cache_resource` around `init_db` | Already replaced by the lifespan (api/main.py:24-31) | done |
@@ -872,7 +915,7 @@ The main recommendation: **use synchronous `def` routes with explicit upstream t
 - User upsert race on the first request, which returns a 500 (deps.py:63-66). Fix it with `INSERT … ON CONFLICT (email)`, or catch and re-select. Consider throttling the `last_login_at` write.
 - `record_usage` check-then-insert races, for example the client preparing both copies at once. Use `ON CONFLICT DO NOTHING`. NULL-number duplicates are not blocked by the constraint.
 - A concurrent `accept_invite` hits the memberships primary key: map it to success.
-- `_merge_settings` is a read-modify-write, so concurrent prompt and translation saves can lose one of them. Use `SELECT … FOR UPDATE`.
+- `_merge_settings` is a read-modify-write, so concurrent prompt and translation saves can lose one of them. Use `SELECT … FOR UPDATE`. **Amendment 2026-09-26:** PR #4 already did this in `repos/churches.py` (`_lock_live_church`, G3, G11); the remaining work is the API's single locked merge helper with a `session` parameter (6a).
 - `update_service` is last-write-wins. Optionally use `saved_at` as an ETag.
 - Multi-step writes are not atomic, because each repo call opens its own `session_scope`: profile save, transfer, save-then-usage. Add service-layer functions that take a session. Keep the property that no DB connection is held during OpenAI or Google calls.
 - SQLite differs from production: foreign keys are not enforced outside tests (conftest.py:29-34), `with_for_update` does nothing, datetimes are naive, and NULL ordering is reversed.
@@ -910,7 +953,7 @@ The main recommendation: **use synchronous `def` routes with explicit upstream t
 - Notion: migration only.
 
 **Schema, migrations, coexistence**
-- There is no migration tool. `create_all` never alters tables. Adopt Alembic with a baseline of the current production schema before the first change. Planned changes: partial unique index on pending invites, a CHECK on `invites.role`, optionally `services.custom_elements`, and the missing `ix_hymns_church_hymnal` if applicable.
+- There is no migration tool. `create_all` never alters tables. Adopt Alembic with a baseline of the current production schema before the first change. Planned changes: partial unique index on pending invites, a CHECK on `invites.role`, optionally `services.custom_elements`, and the missing `ix_hymns_church_hymnal` if applicable. **Amendment 2026-09-26:** the current production schema now includes `text_year` and `hymnal_count` on `hymns` and `hymn_catalog` (PR #4, added by the one-off H13), so the baseline must include them.
 - While both apps run on the same database:
   - Keep `services.hymns` as a list the Streamlit loader can read (app.py:401-404 calls `hymns[i].get('title')`, so no `None` entries). Recommendation: always store 3 entries `{slot, title, number, hymn_id, hymnal}`, with `title: ''` for an empty slot, and extend `_hymn_snapshot` to keep the extra keys.
   - Keep `service_date_display` in `'%B %d, %Y'`.
@@ -973,6 +1016,12 @@ Moves compared with the original roadmap:
 - Hymnal import: from the ops CLI into 6.
 - Slice 5 split into 5a and 5b; slice 6 split into 6a and 6b.
 
+**Amendment 2026-09-26.** Work added to this breakdown after it was written (the index `2026-09-25-full-migration-design.md` and each slice spec carry the detail):
+- **1:** the Alembic baseline includes `text_year` and `hymnal_count` (PR #4); `migrate_add_hymn_facts.py` (H13) is deleted with `migrate_add_hymnal.py`. The backfill (H14) stays an ops CLI.
+- **3:** suggestions keep PR #4's rubric behavior (D10): ranked candidates, slot checklists and facts in the prompt; hymn DTOs carry the year, hymnal count and a "newer than preferred" flag, and the step labels newer hymns with their year.
+- **4:** generation keeps PR #4's per-section checklist and sermon-text themes (E9), and adds the prayer library's voice profile and example (PR #7; new app only).
+- **6a:** a rubric editor over the existing `GET`/`PATCH /rubric` (G11), and the Prayers page with its API (PR #7; new app only).
+
 ---
 
 ## 6. Cutover checklist (retiring Streamlit)
@@ -982,7 +1031,7 @@ Moves compared with the original roadmap:
 - [ ] `backend/google_oauth.should_handle_gmail_callback` and its cases in backend/tests/test_oauth_state.py. Update the module and build_auth_url docstrings.
 - [ ] `backend/worship_service.py`: Notion fallback and the `NotionHymnsDB` TYPE_CHECKING import, the audio resolver and its cache, unused build_docx parameters, the "Settings → Secrets" messages, `load_dotenv()` at import.
 - [ ] After the catalog export: `backend/migrate_to_db.py`, `backend/notion_hymns.py`, `backend/fill_from_hymnary.py`, and backend/tests/test_migrate_hymns.py and test_migrate_archive.py.
-- [ ] Once Alembic covers it: `backend/migrate_add_hymnal.py`.
+- [ ] Once Alembic covers it: `backend/migrate_add_hymnal.py`, and (amendment 2026-09-26) `backend/migrate_add_hymn_facts.py` with backend/tests/test_migrate_hymn_facts.py (both deleted in slice 1). `backend/backfill_hymn_facts.py` and `backend/hymnary_facts.py` stay as ops tools.
 - [ ] Any remaining dead modules (section 1, H8, H10, H11).
 - [ ] `repos/users.upsert_user`, or consolidate it with `auth.upsert_from_claims`. `streamlit_auth.current_user_id` goes with its file.
 

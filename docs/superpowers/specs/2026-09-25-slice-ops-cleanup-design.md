@@ -82,6 +82,7 @@ Nothing in this slice changes a screen in the React app.
 | The Streamlit switchover banner on `streamlit-frozen` | 5b (parity gate) | F §6.3 phase C |
 | `migrate_to_db.py`, `notion_hymns.py`, `fill_from_hymnary.py`, their tests, and the `playwright` and `notion-client` requirements | 7 | They wait for the `hymn_catalog` export (inv §6 "Data", F §6.4). |
 | `migrate_add_hymnal.py` | 1 | F §3.2 |
+| `migrate_add_hymn_facts.py` and `tests/test_migrate_hymn_facts.py` (PR #4; amendment 2026-09-26) | 1 | Deleted with the Alembic baseline, which includes `text_year` and `hymnal_count` (slice 1 spec). `backfill_hymn_facts.py` and `hymnary_facts.py` stay as an ops CLI. |
 | `db/engine.py` default URL (`sqlite:///data/church.db`, which differs from the docs' `data/app.db`) | 7 | inv §3 row "backend/db/engine.py:24". Only the stale comment is fixed here, because ops edits that function anyway. |
 | README and manual-verification rewrite, root `.env.example` deletion, deleting `keep-awake.yml` and the `liturgy` app, rotating secrets, an off-GitHub pinger | 7 | inv §6; F §6.3 phase E |
 | Gmail refresh-token encryption | 7 | F §6.4 (the frozen Streamlit app reads the tokens as plaintext) |
@@ -92,6 +93,8 @@ Nothing in this slice changes a screen in the React app.
 |---|---|
 | H1 `migrate_to_db.py` | Untouched; deleted in 7. Its `upsert_from_claims` call keeps working because the wrapper keeps its signature. |
 | H2 `migrate_add_hymnal.py` | Untouched; deleted in 1. |
+| H13 `migrate_add_hymn_facts.py` (PR #4, added after this spec; amendment 2026-09-26) | Untouched; deleted in 1 with its test. |
+| H14 `backfill_hymn_facts.py` + `hymnary_facts.py` (PR #4) | Untouched; they stay as an ops CLI (fills `text_year`/`hymnal_count` from Hymnary.org's public API). |
 | H3 `import_hymnal.py` | Untouched. It stays a CLI; the admin API comes in 6a. |
 | H4 `keepalive.py` + `keepalive.yml` | The workflow now curls `/health/ready`. **`backend/keepalive.py` and its `ping` tests are deleted.** The inventory's "KEEP" assumed the workflow ran the script, and after this slice nothing does. |
 | H5 `backup.yml` | Rewritten (S2). |

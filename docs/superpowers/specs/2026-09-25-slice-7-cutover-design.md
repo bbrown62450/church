@@ -77,6 +77,8 @@ Status legend:
 | inv §6 code | `worship_service.py`: the Notion fallback, the `NotionHymnsDB` TYPE_CHECKING import, the audio resolver and its cache, the unused `build_docx` parameters, the "Settings → Secrets" messages, `load_dotenv()` at import | Verify (3, 4, 5a) with the grep in acceptance criterion 4 |
 | inv §6 code | `migrate_to_db.py`, `notion_hymns.py`, `fill_from_hymnary.py`, `test_migrate_hymns.py`, `test_migrate_archive.py` | Here (7-D), after the catalog export |
 | inv §6 code | `migrate_add_hymnal.py` | Verify (1) |
+| inv §6 code (amendment 2026-09-26, PR #4) | `migrate_add_hymn_facts.py` and `tests/test_migrate_hymn_facts.py` | Verify (1 deleted them with the Alembic baseline) |
+| Kept (amendment 2026-09-26, PR #4) | `backfill_hymn_facts.py` and `hymnary_facts.py` | Kept as an ops CLI after cutover; it no longer needs Streamlit. Document it in the post-cutover README's operations section. |
 | inv §6 code | Remaining dead modules (H8, H10, H11) | Verify (ops deleted six); Here (7-D) for `fill_from_hymnary.py` |
 | inv §6 code | `repos/users.upsert_user`; `streamlit_auth.current_user_id` | Verify (ops); Here (7-B), where it goes with its file. Also `auth.upsert_from_claims`, dead once Streamlit and `migrate_to_db` are gone: Here (7-B) |
 | inv §6 tests | `pytest.ini` → `pythonpath = backend`, `testpaths = backend/tests` | Here (7-B) |

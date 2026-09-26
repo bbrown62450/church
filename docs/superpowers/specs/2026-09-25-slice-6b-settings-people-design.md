@@ -90,7 +90,7 @@ It also closes F acceptance 19: the role-policy truth table is fully tested, and
 
 Both pages render inside 5b's settings layout. At 375 px they are one column with 16 px gutters; from `md` up the content column is `max-w-3xl` beside the settings nav. Primary actions use `size="touch"`, inputs use `text-base md:text-sm`, and icon buttons have 44 px targets (F §4.8).
 
-**Settings nav:** 6b adds **People** (`/settings/people`) and **Danger zone** (`/settings/danger`) to `SETTINGS_SECTIONS` (5b's `src/components/settings/sections.ts`), in the positions 5b and 6a list: Church, Hymns, Liturgy, Contacts, **People**, Account, **Danger zone**. Both entries are visible to every role.
+**Settings nav:** 6b adds **People** (`/settings/people`) and **Danger zone** (`/settings/danger`) to `SETTINGS_SECTIONS` (5b's `src/components/settings/sections.ts`), in the positions 5b and 6a list: Church, Hymns, Liturgy, Prayers, Rubric, Contacts, **People**, Account, **Danger zone**. Both entries are visible to every role.
 
 **Legacy note:** 6b deletes 5b's `LegacySettingsNote` ("People and invites are still managed in the current app for now." after 6a), because after 6b nothing is managed in the old app.
 
@@ -988,7 +988,7 @@ That gives 51 rows:
 - **Role loss:** a 403 on `GET /invites` toasts, invalidates the profile and members, and does **not** call the church fallback.
 - **Lost access:** a 403 with `details.reason: "no_church_access"` on `PATCH /members/{id}` (which carries `forbiddenIsRole`) **does** emit `churchAccessLost`.
 - **ErrorState** with Retry on a 500 from `GET /members`.
-- **Settings layout (after 6b):** the nav lists Church, Hymns, Liturgy, Contacts, People, Account, Danger zone in that order, and no "still managed in the current app" text renders (`LegacySettingsNote` is gone).
+- **Settings layout (after 6b):** the nav lists Church, Hymns, Liturgy, Prayers, Rubric, Contacts, People, Account, Danger zone in that order, and no "still managed in the current app" text renders (`LegacySettingsNote` is gone).
 - **`(church)` layout, exited church** (slice 1's layout test file): a `churchAccessLost` for an id marked exited adds it to `excluded` and refetches `/me` with **no** toast; an unmarked id still toasts "You no longer have access to {name}.".
 - **DangerZonePage as a member:** the owner-only banner plus Leave. Leave confirms and sends `POST /church/leave`. It then toasts "You left {church}.", removes `wsb:draft:{userId}:{churchId}` from the fake storage, calls `useMembershipChanged` with `{selectChurchId: null}` (so `router.replace("/")` runs), and shows no "no longer have access" toast.
 - **DangerZonePage as the owner:**
@@ -1065,7 +1065,7 @@ Use four Google accounts, each in its own browser profile or incognito window: *
 19. The OpenAPI snapshot and generated types are updated, and CI (backend, backend-postgres, frontend) is green. *(CI)*
 20. After 6b-2 deploys, the frozen Streamlit app still loads the church and lists members. Its transfer and grant-owner actions fail without changing data. *(manual 7)*
 21. A 6b write whose church was deleted, or whose caller's membership was removed, after the guard ran returns 403 with `details.reason = "no_church_access"` and writes nothing, so the client takes slice 1's church fallback. *(usecase + API + Postgres test)*
-22. `SETTINGS_SECTIONS` (`sections.ts`) lists Church, Hymns, Liturgy, Contacts, People, Account, Danger zone, and `LegacySettingsNote` is deleted. Invite emails are validated only by `email_addresses.normalize_address` and stored lower-cased; `email-validator` is not a dependency. *(DOM test + test)*
+22. `SETTINGS_SECTIONS` (`sections.ts`) lists Church, Hymns, Liturgy, Prayers, Rubric, Contacts, People, Account, Danger zone, and `LegacySettingsNote` is deleted. Invite emails are validated only by `email_addresses.normalize_address` and stored lower-cased; `email-validator` is not a dependency. *(DOM test + test)*
 
 ---
 
