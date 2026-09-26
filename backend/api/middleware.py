@@ -7,15 +7,23 @@ threadpool, so sync routes and dependencies see it too), and every response
 started inside the middleware carries it as X-Request-Id. Error bodies and log
 lines read it through current_request_id().
 
+UnhandledErrorMiddleware turns an unexpected exception into the uniform 500
+body from inside CORSMiddleware and RequestIdMiddleware, so the browser gets a
+readable 500 with CORS headers and X-Request-Id instead of a network error.
+
 Pure ASGI, not BaseHTTPMiddleware: nothing here buffers or re-wraps a response.
 """
+import logging
 import re
 import uuid
 from contextvars import ContextVar
 from typing import Optional
 
 from starlette.datastructures import MutableHeaders
+from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
+
+logger = logging.getLogger(__name__)
 
 REQUEST_ID_HEADER = "X-Request-Id"
 
@@ -58,3 +66,39 @@ class RequestIdMiddleware:
             await self.app(scope, receive, send_with_request_id)
         finally:
             _request_id.reset(token)
+
+
+class UnhandledErrorMiddleware:
+    """Log an unexpected exception and answer 500 `internal_error`.
+
+    If the response has already started, a second one must never start: the
+    error is logged and re-raised. Otherwise it is logged, the 500 is sent and
+    nothing is re-raised. The exception text never reaches the client.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        started = False
+
+        async def send_wrapper(message: Message) -> None:
+            nonlocal started
+            if message["type"] == "http.response.start":
+                started = True
+            await send(message)
+
+        try:
+            await self.app(scope, receive, send_wrapper)
+        except Exception:
+            # The path only, never the query string: it can carry codes or tokens.
+            logger.exception("Unhandled error on %s %s", scope["method"], scope["path"])
+            if started:
+                raise
+            from api.errors import error_body   # deferred: api.errors imports this module
+
+            response = JSONResponse(error_body("internal_error", "Something went wrong."), status_code=500)
+            await response(scope, receive, send)

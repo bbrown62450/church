@@ -1,13 +1,18 @@
 """Request ids, CORS-safe 500s, middleware order, CORS lists and logging (ops slice, F §1.10, §2.5)."""
+import asyncio
+import logging
 import re
 
 import pytest
 from fastapi import APIRouter
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.testclient import TestClient
 
+from api import settings as settings_mod
 from api.deps import get_verifier
 from api.errors import error_body
 from api.main import create_app
+from api.middleware import RequestIdMiddleware, UnhandledErrorMiddleware
 
 HEX32 = re.compile(r"[0-9a-f]{32}")
 
@@ -66,3 +71,89 @@ def test_an_error_body_built_outside_a_request_still_has_a_request_id():
     # Only the last-resort handler (outside RequestIdMiddleware) builds one here.
     body = error_body("internal_error", "Something went wrong.")
     assert HEX32.fullmatch(body["error"]["request_id"])
+
+
+# --- UnhandledErrorMiddleware: CORS-safe 500s (F §2.5, §7.3) --------------------
+
+ALLOWED_ORIGIN = "https://church.example.app"
+
+
+@pytest.fixture
+def cors_origin(monkeypatch):
+    """CORS_ORIGINS is exactly ALLOWED_ORIGIN for apps created in this test."""
+    monkeypatch.setenv("CORS_ORIGINS", ALLOWED_ORIGIN)
+    settings_mod.get_settings.cache_clear()
+    yield ALLOWED_ORIGIN
+    settings_mod.get_settings.cache_clear()
+
+
+def _app_that_raises():
+    app = create_app()
+    router = APIRouter()
+
+    @router.get("/boom")
+    def boom():
+        raise RuntimeError("secret detail")
+
+    app.include_router(router)
+    return app
+
+
+def test_a_500_carries_cors_headers_and_the_request_id(cors_origin):
+    client = TestClient(_app_that_raises(), raise_server_exceptions=False)
+    r = client.get("/boom", headers={"Origin": cors_origin})
+    assert r.status_code == 500
+    assert r.json() == {"error": {
+        "code": "internal_error",
+        "message": "Something went wrong.",
+        "request_id": r.headers["x-request-id"],
+    }}
+    assert r.headers["access-control-allow-origin"] == cors_origin
+    assert "secret detail" not in r.text
+
+
+def test_a_500_for_another_origin_has_no_cors_header(cors_origin):
+    client = TestClient(_app_that_raises(), raise_server_exceptions=False)
+    r = client.get("/boom", headers={"Origin": "https://evil.example"})
+    assert r.status_code == 500
+    assert "access-control-allow-origin" not in r.headers
+    assert r.json()["error"]["request_id"] == r.headers["x-request-id"]
+
+
+def test_an_unhandled_error_is_logged_with_the_path_but_not_the_query(caplog):
+    client = TestClient(_app_that_raises(), raise_server_exceptions=False)
+    with caplog.at_level(logging.ERROR):
+        r = client.get("/boom?code=do-not-log-me")
+    assert r.status_code == 500
+    records = [rec for rec in caplog.records if rec.name == "api.middleware"]
+    assert [rec.getMessage() for rec in records] == ["Unhandled error on GET /boom"]
+    assert records[0].exc_info is not None                  # the stack trace is logged
+    assert "do-not-log-me" not in caplog.text
+
+
+def test_an_error_after_the_response_started_is_reraised_without_a_second_start():
+    sent = []
+
+    async def app(scope, receive, send):
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        raise RuntimeError("mid-stream")
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message):
+        sent.append(message)
+
+    scope = {"type": "http", "method": "GET", "path": "/stream", "headers": []}
+    with pytest.raises(RuntimeError, match="mid-stream"):
+        asyncio.run(UnhandledErrorMiddleware(app)(scope, receive, send))
+    assert [m["type"] for m in sent] == ["http.response.start"]
+
+
+def test_middleware_order_is_cors_then_request_id_then_unhandled_error():
+    # Starlette makes the last middleware added the outermost; user_middleware
+    # lists them outermost first (F §2.5; slice 3 appends GZip innermost).
+    app = create_app()
+    assert [m.cls for m in app.user_middleware] == [
+        CORSMiddleware, RequestIdMiddleware, UnhandledErrorMiddleware,
+    ]

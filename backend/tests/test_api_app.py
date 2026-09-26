@@ -51,8 +51,10 @@ def test_unhandled_exception_is_a_generic_500():
     r = TestClient(app, raise_server_exceptions=False).get("/boom")
     assert r.status_code == 500
     error = r.json()["error"]
+    assert set(error) == {"code", "message", "request_id"}
     assert (error["code"], error["message"]) == ("internal_error", "Something went wrong.")
     assert re.fullmatch(r"[0-9a-f]{32}", error["request_id"])
+    assert error["request_id"] == r.headers["x-request-id"]
     assert "secret detail" not in r.text
 
 
