@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]   # repo root (this file is backend/tests/...)
@@ -53,3 +54,13 @@ def test_dead_modules_are_deleted():
     found = [str(p.relative_to(ROOT)) for name in DELETED_DEAD_MODULES
              for p in (ROOT / "backend").rglob(name)]
     assert found == []
+
+
+def test_backend_env_example_lists_the_ops_settings():
+    text = (ROOT / "backend" / ".env.example").read_text()
+    missing = [key for key in ("APP_ENV", "LOG_LEVEL", "DB_POOL_SIZE", "DB_MAX_OVERFLOW", "ESV_API_KEY")
+               if not re.search(rf"^{key}=", text, re.MULTILINE)]
+    assert missing == []
+    # Supavisor Pool Size is 15 (Nano): 2 x (3 + 3) + 2 = 14 <= 15 (owner, 2026-09-25).
+    assert re.search(r"^DB_POOL_SIZE=3$", text, re.MULTILINE)
+    assert re.search(r"^DB_MAX_OVERFLOW=3$", text, re.MULTILINE)
