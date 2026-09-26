@@ -11,6 +11,7 @@
   - **F §4.4:** hymn and hymnal mutations (6a) also invalidate `["church", id, "profile"]`, because they can change `effective_hymnal` (row 6a in "Interfaces with other slices").
 - The shared `HymnRef`, `SlotHymns` and `SectionKey` shapes are **frozen in F §1.3**. This slice lands first and creates them with exactly that shape (§API Models).
 - Owner decisions 3 and 9.
+- **Amendment 2026-09-26: the service rubric (PR #4).** `docs/superpowers/specs/2026-09-25-service-rubric-design.md`, merged to `main` on 2026-09-26, changed `worship_service.suggest_hymns_for_service`, which this slice replaces. Its behavior is now current behavior (inv §1 D10, D8 amendment) and is **carried over, not dropped**: rubric-aware ranking, the rubric's slot checklists and the year/familiarity facts in the prompt, and year and familiarity on every hymn DTO. PR #4 left one screen change to this slice: the "newer hymn" year label. The additions are marked "Amendment 2026-09-26" below; the main ones are §Backend 3.8, §User experience "Newer-hymn year label", the `HymnOut` fields in §API Models, and the Testing and Acceptance additions.
 
 ---
 
@@ -43,6 +44,8 @@ Each current behavior is carried over, changed (listed again under "Behavior cha
 | D7 AI suggestions | `POST /hymns/suggestions`. Top pick plus 2–4 alternatives per slot (owner decision 3). The server guarantees the minimum by topping up from the slot's candidate list (§3.6 step 9). Typed errors, timeouts, and resolution by candidate id. |
 | D8 hymn display, links, dead audio | One backend read model (`HymnOut`). Links are rendered only through `safeHttpsUrl`. The audio resolver and its cache are deleted. |
 | D9 free-text hymns | Stay removed (owner decision 9). A slot always references a hymnal hymn. |
+| D10 service rubric in suggestions (amendment 2026-09-26, PR #4) | **Carried** into `hymn_suggest` and `usecases.hymns` (§Backend 3.8): each slot's candidates are ranked with `hymn_ranking` by the church's rubric; the rubric's slot checklists replace the fixed role text; each catalogue line shows the year and hymnal count; `HymnOut` carries `text_year`, `hymnal_count` and `newer_than_preferred`. **New screen piece:** the "Written {year}" label on newer hymns (§User experience). |
+| D8 amendment (PR #4): `hymn_display_info`'s `year`, `hymnal_count`, `newer_than_preferred` | Become `HymnOut.text_year`, `hymnal_count` and `newer_than_preferred` on every hymn DTO, not only AI results. |
 
 Foundation pieces this slice builds (F §7.2 row 3):
 - `backend/integrations/openai_client.py` (F §2.8) and `OPENAI_MODEL` on Railway;
@@ -79,6 +82,8 @@ For everything this slice **provides**, this table and §API are the source of t
 | 4 | provided | `integrations/openai_client` (`ai_available()`, `complete(messages, *, max_completion_tokens, json_mode=False, deadline=None) -> str`, `FakeAI`, `set_ai_for_tests()`; `deadline` is optional, so 4's calls without it keep the F §2.8 behavior), the `ai` bucket, the `repos.hymns.HymnRecord` type, **`HymnRef`, `SlotHymns` and `SectionKey` in `api/schemas.py`** (shape frozen in F §1.3; created here, §API Models; 4 imports them unchanged and keeps its own schema tests), and the rule that slots are never compacted. **Shell hand-off:** `SummaryPanel`'s Liturgy block still reads "Available soon" and `StepProgress` still shows "Soon" for Liturgy after this slice; slice 4 adds `"liturgy"` to `SHIPPED_STEPS` and the liturgy block per F §4.7. |
 | 5a | provided / assumed | **Provided:** `Page[T]`, `HymnRef`, `SlotHymns` and `SectionKey` in `api/schemas.py` (shapes frozen in F §1.3; 5a reuses them and does not define its own copy); the usage key in §3.4; `GET /hymns?hymnal=&limit=2000`; `usecases.hymns.resolve_default_hymnal`. **Assumed — archived hymnal, 5a's server-side rule:** the payload sends `draft.hymns.hymnal` as is (null passes through), so church data stays out of the payload and its fingerprint. 5a's `create_service`/`replace_service` store `resolve_default_hymnal(...).effective_hymnal` when it is null, which is the hymnal this step showed as selected (`selectHymnal` also falls back to `effective_hymnal`). There is no client-side fallback and no first-pick fallback here; if a first-pick fallback is wanted for a church with no hymnals, 5a adds it to `create_service`/`replace_service` with a test. A draft code that has since vanished is sent and archived as stored (the step never rewrites it, §User experience "Toolbar"). **Shell hand-off:** 5a adds `"review"` to `SHIPPED_STEPS` (Saved / Unsaved via `isDirty` and `editing`), wires the `SummaryPanel` status line and deletes `StepPlaceholder`. |
 | 6a | provided / handed off | 6a writes `churches.settings.default_hymnal` through `PATCH /church` and must validate it against `GET /hymnals` codes. The `GET /hymnals` shape in §API Models is authoritative. **Hymn create, edit and delete invalidate `["church", id, "hymns"]`, `["church", id, "hymnals"]` and `["church", id, "profile"]`**: a hymn change can alter `hymn_count` and `scripture_ref_count`, add or remove a hymnal code, and change `effective_hymnal` (for example the first hymn in an alphabetically earlier code). F's "Amendments from slice specs" adds `profile` to the §4.4 map, and 6a's hymn-mutation row carries it. 6a's hymn library reuses `GET /hymns` with the ordering and `q` rule in §API notes (hymnal, then number with nulls last, then title, then id; `q` of 1–6 digits also matches `number`). The `hymns` prefix also covers the scripture-match queries (key nested under it, §Frontend). Hymnal import and removal invalidate the same three keys. 6a may add an optional `label` to `GET /hymnals` items, which is additive. When 6a ships, it sets `SETTINGS_HYMNS_READY = true` so the empty-hymnal state links to `/settings/hymns`. |
+| PR #4 (on `main`; amendment 2026-09-26) | assumed | `backend/service_rubric.py` (`merge_rubric`, `HYMN_SLOTS`, `HYMN_SLOT_LABELS`, `format_checklist`) and `backend/hymn_ranking.py` (`rank_candidates`, `shortlist`, `facts_note`), reused as the one implementation (§Backend 3.8). `repos.churches.get_church_rubric_overrides(church_id)`, which this slice gives `session: Session \| None = None` (F §2.2 rule 3). The nullable `text_year` and `hymnal_count` columns on `hymns`, already in production and in slice 1's `0001_baseline` (slice 1 amendment). The existing `GET`/`PATCH /rubric` routes stay as they are; this slice does not touch them. |
+| 6a (rubric editor; amendment 2026-09-26) | provided | `newer_than_preferred` on `HymnOut` depends on the rubric's `prefer_before_year`, so 6a's rubric mutation invalidates `["church", id, "hymns"]` (F §4.4 as amended), and the picker, chips and matches relabel without a reload. |
 
 ---
 
@@ -237,6 +242,16 @@ carry their own copyright — see each hymn's page.
 - **Loading and errors:** three skeleton rows while loading. On error: `ErrorState` "Couldn't search the hymnal." with Retry.
 - The Hymnary credit caption stays under the section (parity, app.py:710-713).
 
+### Newer-hymn year label (amendment 2026-09-26, PR #4)
+
+PR #4 prefers hymns whose words were written before the church's rubric year (default 1970) and left this label to slice 3. The server decides which hymns are "newer" (`HymnOut.newer_than_preferred`, §API Models), so the client holds no rubric rule.
+- `HymnLabel` adds a small muted badge **"Written {text_year}"** when `newer_than_preferred` is true. Older hymns and hymns of unknown year get no badge, so the label marks the exception, not the norm.
+- It appears wherever `HymnLabel` renders a live `HymnOut`: picker rows, the filled slot card (once its hymnal's list has loaded; the draft snapshot carries no year), "Other ideas" chips and "Hymns for the readings" rows.
+- On a chip, the badge follows the title and any "Used Sep 7" badge; at 375 px the title truncates first, the badges never do.
+- Accessibility: the badge text is read as is; the chip's aria-label becomes "Use {title}, written {text_year}, as the {slot} hymn" for a flagged hymn.
+- After **Suggest hymns** succeeds, the helper under the button adds: "Suggestions favor older and familiar hymns. Newer hymns show the year their words were written." It is shown only when at least one returned hymn is flagged.
+- Unchanged: the year is never shown for older hymns, hymnal counts are never shown (they only steer the AI), and nothing about the label is stored in the draft.
+
 ### Whole-step states
 
 - **Loading.** Slot cards render immediately from the draft snapshot. Pickers are disabled with "Loading hymnal…" and the toolbar shows skeletons until `GET /hymnals` and the hymnal list load. There is no full-page spinner.
@@ -304,6 +319,10 @@ class HymnOut(BaseModel):
     scripture_refs: str | None
     themes: list[str]             # hymn_search.parse_themes(theme)
     recent_use_on: date | None    # nearest usage date in the recent window; null when no date given
+    # Amendment 2026-09-26 (PR #4; §Backend 3.8):
+    text_year: int | None         # hymns.text_year: year the words were written; null = unknown
+    hymnal_count: int | None      # hymns.hymnal_count: hymnals that include the text; null = unknown
+    newer_than_preferred: bool    # text_year is not null and >= the church rubric's prefer_before_year
 
 class ScriptureMatchIn(BaseModel):          # extra="forbid"
     refs: list[Annotated[str, StringConstraints(max_length=200)]] = Field(default_factory=list, max_length=20)
@@ -386,6 +405,7 @@ Notes on the models:
 - `Page[T]` (`items`, `total`, `limit`, `offset`) goes in `api/schemas.py`. If it does not exist yet, this slice creates it, and 5a reuses it.
 - `HymnRef`, `SlotHymns` and `SectionKey` are created here and no slice-3 route uses them, so they do not appear in the OpenAPI snapshot until slice 4 adds a route that does. `test_schemas.py` covers them: extra field rejected (on `HymnRef` and on `SlotHymns`); `title` of 300 characters accepted and 301 rejected; `number` of -1 and 100 001 rejected; `hymnal` of 21 characters rejected; **a `hymnal` that breaks the `HymnalCode` pattern (for example `"PH 1990"` or `"X"`) accepted**; `hymn_id: null` accepted; an unknown section key rejected by a model typed with `SectionKey`. 4 and 5a import them, keep their own tests, and neither redefine nor tighten them. No slice-3 field uses `HymnalCode`.
 - In suggestion results, `recent_use_on` is always computed against `service_date_iso`, whatever `exclude_recent` is.
+- **Amendment 2026-09-26 (PR #4).** `text_year`, `hymnal_count` and `newer_than_preferred` are on `HymnOut`, so every route that returns hymns (`GET /hymns`, matches, suggestions) carries them, and 6a's hymn library inherits them. `newer_than_preferred` uses PR #4's rule from `hymn_display_info` (`year is not None and year >= prefer_before_year`), with `prefer_before_year` from the church's merged rubric, read in the same session as the hymns (§Backend 3.8). The three fields are additive to the OpenAPI snapshot. `HymnalListOut`, `ScriptureMatchIn` and `HymnSuggestionIn` do not change: the rubric is always read on the server and is never accepted from the client.
 - **`GET /hymns` ordering:** `hymnal ASC, number ASC NULLS LAST (nulls_last()), lower(title) ASC, id ASC`.
   - `q` (trimmed; empty means no filter): **1 to 6 digits** → `number = int(q) OR lower(title) LIKE %q%`; otherwise, including longer digit strings, `lower(title) LIKE %lower(q)%`, built with `.contains(…, autoescape=True)`. The digit cap keeps a long all-digit `q` from binding an integer above 2^63, which raises `OverflowError` (a 500) on SQLite.
   - `hymnal` filters exactly. An unknown hymnal returns an empty page, not an error, because this is a list filter.
@@ -418,8 +438,14 @@ Notes on the models:
 | `backend/worship_service.py` | **Deleted:** `_BOOK_ABBREVS`, `_scripture_search_variants`, `hymns_by_scripture` (with the Notion path), `_OPENING_THEMES`, `_CLOSING_THEMES`, `_hymn_matches_theme`, `suggest_hymns_for_service`, `hymn_display_info`, `_hymnary_audio_url`, `resolve_hymnary_audio_url`, `_hymnary_audio_resolve_cache`, the `NotionHymnsDB` TYPE_CHECKING import, and `load_dotenv()` at import (F §2.3.5). `generate_liturgy` and `build_docx` stay until 4 and 5a. |
 | `backend/requirements.txt` | Remove `lxml`: its only runtime user was the audio resolver. `beautifulsoup4` stays until `fill_from_hymnary.py` is deleted in 7. **Raise `openai>=1.0.0` to `openai>=1.45.0`**, the first release whose `chat.completions.create` accepts `max_completion_tokens` (`response_format={"type": "json_object"}` is older). With an older SDK every call would raise `TypeError`, a 500. A test asserts the installed SDK's `create` signature has `max_completion_tokens`. |
 | `backend/.env.example` | Replace `OPENAI_MODEL=gpt-3.5-turbo` with the model chosen at deploy, and add `OPENAI_TIMEOUT_SECONDS=30`, `OPENAI_MAX_RETRIES=1`, `OPENAI_MAX_CONCURRENCY=4`, and a commented `# OPENAI_TEMPERATURE=`. |
+| `backend/repos/hymns.py` (amendment 2026-09-26) | `HymnRecord` also carries `text_year: int \| None` and `hymnal_count: int \| None`, selected with the other columns. |
+| `backend/hymn_ranking.py` (PR #4; amendment 2026-09-26) | **Generalized, not copied:** `rank_candidates`, `shortlist` and `facts_note` gain keyword-only accessors `year_of` and `count_of` (defaults read the flat `"Text Year"` / `"Hymnal Count"` keys, so PR #4's tests pass unchanged). `hymn_suggest` passes `lambda r: r.text_year` and `lambda r: r.hymnal_count` for `HymnRecord`s. Adds the pure `is_newer_than_preferred(year, prefer_before_year) -> bool`, which `HymnOut` mapping uses; this is PR #4's `hymn_display_info` rule, moved here when that function is deleted. |
+| `backend/service_rubric.py` (PR #4) | Unchanged. `merge_rubric`, `HYMN_SLOTS`, `HYMN_SLOT_LABELS` and `format_checklist` are reused. |
+| `backend/repos/churches.py` (amendment 2026-09-26) | `get_church_rubric_overrides(church_id, *, session=None)` (F §2.2 rule 3). No write is added. |
 
 If the F §6.1 contingency is in force (Streamlit still runs from `main`), keep `hymns_by_scripture`, `suggest_hymns_for_service` and `hymn_display_info` as thin wrappers over the new code, with an `AppTest` smoke test. Otherwise delete them (F §2.3).
+
+**Amendment 2026-09-26 (PR #4).** The deletion also removes PR #4's `_CANDIDATES_PER_SLOT` and `_CANDIDATES_KEPT_FOR_NEWER` and its `rubric=` parameters on `suggest_hymns_for_service` and `hymn_display_info`. Their behavior moves into `hymn_suggest` / `usecases.hymns` (§3.8) before the delete. Frozen Streamlit keeps its own copy on `streamlit-frozen`, which is cut after PR #4. If the contingency wrappers are kept, `suggest_hymns_for_service(..., rubric=...)` keeps passing its rubric through.
 
 ### 2. Scripture matcher (owner decision 9: tightened matching)
 
@@ -488,7 +514,7 @@ One session: `hymnal_summaries` plus `resolve_default_hymnal`.
 
 #### 3.3 `list_hymns_page(church_id, *, hymnal, q, limit, offset, recent_for_date) -> page`
 
-One session: `query_hymns`. If `recent_for_date` is given, also `usage_near(church_id, recent_for_date)`, and each record's `recent_use_on = usage.get(usage_key(record))`.
+One session: `query_hymns`. If `recent_for_date` is given, also `usage_near(church_id, recent_for_date)`, and each record's `recent_use_on = usage.get(usage_key(record))`. *Amendment 2026-09-26:* the same session also reads the church's rubric overrides, so each record's `newer_than_preferred` uses the merged `prefer_before_year` (§3.8).
 
 #### 3.4 Recent-use window (`hymn_usage.usage_near`)
 
@@ -506,13 +532,13 @@ One session: `query_hymns`. If `recent_for_date` is given, also `usage_near(chur
 
 1. `refs_used`: trim each ref, drop blanks, and apply `split_alternatives`. If nothing is left → `InvalidInput(field="refs", message="Enter at least one scripture reference.")`.
 2. Resolve the hymnal (§API notes). If `effective_hymnal` is null (empty church hymnal), return an empty result.
-3. One session: `list_hymnal_records(church_id, hymnal)`, plus `usage_near` when a date is given.
+3. One session: `list_hymnal_records(church_id, hymnal)`, plus `usage_near` when a date is given, plus the rubric overrides for `newer_than_preferred` (*amendment 2026-09-26*, §3.8).
 4. `match_hymns(...)`. Then map to `HymnMatchOut` with `recent_use_on`.
 
 #### 3.6 `suggest_hymns(church_id, user_id, req, *, ai=openai_client, fetch_text=passages.get_passage_text, clock=time.monotonic) -> HymnSuggestionsOut data`
 
 0. **Deadline.** `deadline = clock() + SUGGEST_BUDGET_S` (75 s, the F §1.8 server worst case) is set on entry. Every later wait is bounded by it (§3.7 has the arithmetic). `SUGGEST_BUDGET_S` and `NT_FETCH_BUDGET_S` are module constants so tests can shrink them.
-1. **Read phase** (one session, closed before any external call, F §1.8): resolve the hymnal; `pool = list_hymnal_records(...)` minus blank titles; `usage = usage_near(church_id, req.service_date_iso)`, always read, for `recent_use_on`.
+1. **Read phase** (one session, closed before any external call, F §1.8): resolve the hymnal; `pool = list_hymnal_records(...)` minus blank titles; `usage = usage_near(church_id, req.service_date_iso)`, always read, for `recent_use_on`; *amendment 2026-09-26:* `rubric = service_rubric.merge_rubric(get_church_rubric_overrides(church_id, session=s))`, read fresh on every request (§3.8).
 2. `pool` is empty → `InvalidInput(field="hymnal", "This hymnal has no hymns to suggest from.")`.
 3. If `req.exclude_recent`: `eligible = [h for h in pool if usage_key(h) not in usage]` and `excluded_recent_count = len(pool) - len(eligible)`. Otherwise `eligible = pool` and the count is 0. `eligible` is empty → `InvalidInput("Every hymn in this hymnal was used within 12 weeks of this service. Turn off “Exclude” and try again.")`.
 4. `ai.ai_available()` is false → `NotConfigured("ai_not_configured", "AI suggestions aren't set up on this app yet.")`. The check runs before any network call.
@@ -527,14 +553,14 @@ One session: `query_hymns`. If `recent_for_date` is given, also `usage_near(chur
    - **opening**: hymns whose normalized themes match `_OPENING_THEMES` by word start (`\bkeyword`);
    - **closing**: the same with `_CLOSING_THEMES`.
    - **Other slots' picks removed first.** Before capping, padding and prompt building, each slot's list drops the other two slots' `current_picks` ids. The AI therefore never sees another slot's chosen hymn as a candidate for this slot. A slot's own current pick may stay in its own list.
-   - **Capping.** A response list longer than `SLOT_CAP` is truncated in the order above. An opening or closing list longer than `SLOT_CAP` (for example "praise" or "joy" in GG2013) is reduced with `evenly_spaced(list, SLOT_CAP)` rather than truncated, so it is not biased to low hymn numbers.
+   - **Capping.** A response list longer than `SLOT_CAP` is truncated in the order above. An opening or closing list longer than `SLOT_CAP` (for example "praise" or "joy" in GG2013) is reduced with `evenly_spaced(list, SLOT_CAP)` rather than truncated, so it is not biased to low hymn numbers. *Amendment 2026-09-26:* each focused list is first ranked by the rubric, and the cut becomes `hymn_ranking.shortlist` whenever ranking has a signal; see §3.8 for the exact rule.
    - **Padding.** Any list with fewer than 15 focused hymns is padded to 40 with `evenly_spaced(remaining, k)`, which is `remaining[floor(i * len(remaining) / k)]` for `i` in `0..k-1`, over the rest of `eligible` (minus the other slots' current picks) in hymnal order. This replaces "first 80", which for PH1990 meant Advent-only hymns (inv D7).
 7. **Prompt** (`build_prompt`), deterministic and at most 24 000 characters (F §2.8):
    - a system message: "You help a church choose hymns for a worship service. Reply with JSON only.";
    - a user message containing:
      - `OCCASION`, `SCRIPTURE READINGS`, `NEW TESTAMENT READING` and `NT PASSAGE TEXT (excerpt)` (parity fields);
-     - the ROLE REQUIREMENTS text for the three slots (parity, worship_service.py:508-511);
-     - one `HYMNS` catalogue listing every distinct candidate once: `H{k} | {title ≤80} | #{number or –} | themes: {≤60} | scripture: {≤60}`, with tokens `H1…Hn` in first-seen order;
+     - the ROLE REQUIREMENTS text for the three slots (parity, worship_service.py:508-511); *amendment 2026-09-26:* since PR #4 the parity text **is** the church's three rubric slot checklists plus the PREFERENCES line (§3.8);
+     - one `HYMNS` catalogue listing every distinct candidate once: `H{k} | {title ≤80} | #{number or –} | themes: {≤60} | scripture: {≤60}`, with tokens `H1…Hn` in first-seen order; *amendment 2026-09-26:* `| {facts}` follows the number when either fact is known (§3.8);
      - `OPENING CANDIDATES: H…, …`, and the same for RESPONSE and CLOSING;
      - `Return {"opening": [ids], "response": [ids], "closing": [ids]}, with exactly 5 ids per slot (all of that slot's ids if it lists fewer than 5), best first, using only ids listed for that slot, and never the same hymn in two slots.`
    - If the result exceeds 24 000 characters, drop the last candidate of the longest slot list (and its catalogue line when no other list uses it), and repeat. `build_prompt` returns `(messages, token_map)`.
@@ -577,7 +603,26 @@ One session: `query_hymns`. If `recent_for_date` is given, also `usage_near(chur
   - ERROR `AI: not configured (OPENAI_API_KEY is not ASCII)`.
 
   The key is never printed.
-- **Worst case on the server** for `POST /hymns/suggestions`: everything from the read phase to the last OpenAI attempt runs inside the 75 s deadline set in §3.6 step 0. Inside it, the NT fetch takes ≤ 10 s, the semaphore wait ≤ 15 s, attempt 1 ≤ 30 s, the backoff ≤ 2 s, and attempt 2 gets whatever remains (at least 5 s, or no retry). Mapping the response afterwards is in memory (< 1 s). The total is about 76 s, which matches F §1.8's "~75 s" and leaves about 14 s under the 90 000 ms client timeout. The concurrency slot is held only for the attempts and the backoff, all inside the deadline.
+- **Worst case on the server** for `POST /hymns/suggestions` (unchanged by the 2026-09-26 amendment: the rubric read is one more JSON key in the read phase): everything from the read phase to the last OpenAI attempt runs inside the 75 s deadline set in §3.6 step 0. Inside it, the NT fetch takes ≤ 10 s, the semaphore wait ≤ 15 s, attempt 1 ≤ 30 s, the backoff ≤ 2 s, and attempt 2 gets whatever remains (at least 5 s, or no retry). Mapping the response afterwards is in memory (< 1 s). The total is about 76 s, which matches F §1.8's "~75 s" and leaves about 14 s under the 90 000 ms client timeout. The concurrency slot is held only for the attempts and the backoff, all inside the deadline.
+
+#### 3.8 Service rubric in suggestions (amendment 2026-09-26, PR #4)
+
+PR #4's behavior (inv §1 D10) is carried into the new pipeline. It reuses `service_rubric` and `hymn_ranking` (module map); nothing is re-implemented.
+- **Read.** `rubric = merge_rubric(get_church_rubric_overrides(church_id, session=s))` in the read phase (§3.6 step 1), and in `list_hymns_page` and `scripture_matches` for the `newer_than_preferred` flag. It is read fresh on every request with no cache (parity: app.py reads it on every click). Invalid stored values fall back to the defaults, as `merge_rubric` guarantees, so a bad stored rubric can never fail a request.
+- **Ranking and cut** (replaces the "Capping" rule in §3.6 step 6; padding and the other-slots rule are unchanged):
+  1. Each slot's focused list (response: the `match_hymns` order, with the NT reading first; opening and closing: theme matches in hymnal order) is ranked with `hymn_ranking.rank_candidates(list, prefer_before_year=…, prefer_familiar=…, year_of=…, count_of=…)`. The sort is stable, so the slice's own order still breaks ties within an era and familiarity level.
+  2. A ranked list longer than `SLOT_CAP` (50) is cut with `hymn_ranking.shortlist(ranked, limit=SLOT_CAP, prefer_before_year=…, reserve=NEWER_RESERVE)`, where `NEWER_RESERVE = 10`, the same one-in-five share as PR #4's 12 of 60. Up to 10 places therefore go to the best unknown-year and newer hymns, so the age preference never acts as a filter.
+  3. **No-signal exception.** When no hymn in the list has a known `text_year`, and either `prefer_familiar` is off or no hymn has a known `hymnal_count`, ranking changes nothing. An opening or closing list is then still reduced with `evenly_spaced`, as before, so a hymnal without facts (PH1990 today) does not fall back to its first 50 hymns, which are all Advent hymns. A response list is truncated as before.
+  4. Padding (fewer than 15 focused hymns → 40) is unchanged: pad hymns are an even sample of the rest of `eligible`, appended **after** the ranked focused hymns and not re-ranked. So focused hymns still come first for the minimum top-up (§3.6 step 9). This replaces PR #4's fallback of the whole ranked hymnal, which kept the Advent bias for PH1990.
+- **Prompt** (§3.6 step 7; the 24 000-character cap still applies):
+  - The ROLE REQUIREMENTS block is `"ROLE REQUIREMENTS (what makes a good hymn for each slot):"` followed by `format_checklist(HYMN_SLOT_LABELS[slot], rubric["hymns"][slot])` for opening, response and closing, separated by blank lines, exactly as PR #4 builds it (worship_service.py:529-551).
+  - Then the PREFERENCES line, verbatim from PR #4: `Prefer hymns written before {prefer_before_year}` + (` and hymns found in many hymnals` when `prefer_familiar`) + `; choose a newer hymn only when it fits clearly better. Each candidate shows when its words were written and how many hymnals include it, when known.`
+  - Catalogue lines become `H{k} | {title ≤80} | #{number or –} | {facts} | themes: {≤60} | scripture: {≤60}`, where `{facts}` is `hymn_ranking.facts_note(record, …)`, for example `(written 1826, in 1,322 hymnals)`. The `| {facts}` field is left out when both facts are unknown.
+  - The slot lists (`OPENING CANDIDATES: H…`) keep the ranked order, so the AI sees older and familiar hymns first.
+  - **Trimming.** If the prompt is over 24 000 characters, candidates are dropped as before; checklist points are never dropped. A rubric at its limits (3 slots × 12 points × 300 characters, about 11 000 characters) leaves room for fewer candidates. That is accepted, because the default checklists are about 1 000 characters.
+- **Output.** Every `HymnOut` in the response sets `text_year`, `hymnal_count` and `newer_than_preferred` (§API Models). Top-up hymns (`source: "candidates"`) carry them too.
+- **Logs** (§3.6 step 10) add `prefer_before_year`, `prefer_familiar`, whether the rubric is customized (`bool(overrides)`), the ranking mode per slot (`ranked` or `sampled`), and the count of newer or unknown hymns per slot list. The checklists themselves are logged only at DEBUG, like the prompt.
+- **Known limit, carried from the rubric spec.** Opening and closing candidates are still pre-filtered by the fixed `_OPENING_THEMES` / `_CLOSING_THEMES` keywords (moved to `hymn_suggest`). They match the default checklists. If a church rewrites a slot checklist in 6a's editor, the keywords may not match it. The open question is in the index §6; until the owner answers, the keywords stay and 6a's editor explains it.
 
 ### 4. Routes
 
@@ -618,6 +663,7 @@ Every route calls its usecase with `church.id` only (F §1.2 rule 1).
 - The AI candidate list is built on the server from the church's hymnal. It is never accepted from the client (F §2.8).
 - Hymn titles and themes are editable by members and appear in the prompt. The output is constrained to candidate tokens and to this church's hymns, so a prompt-injected title can at worst skew that church's own suggestions.
 - `nt_text` from the client goes only into that user's prompt, truncated to 1 500 characters, and is never logged.
+- *Amendment 2026-09-26:* the rubric is read only from the active church's settings, never from the request. Its checklists are admin-edited text that reaches the prompt; like hymn titles, they can at worst skew that church's own suggestions.
 - No write happens anywhere in this slice.
 
 ---
@@ -628,6 +674,7 @@ Every route calls its usecase with `church.id` only (F §1.2 rule 1).
   - `hymns`, using `ix_hymns_church_hymnal`, which `0002_reconcile` creates in production in slice 1;
   - `hymn_usage`, using `ix_hymn_usage_church_date`;
   - `churches.settings["default_hymnal"]`, a JSON key that 6a writes and that is absent until then (F §3.5).
+  - *Amendment 2026-09-26:* `hymns.text_year` and `hymns.hymnal_count` (nullable; added in production by PR #4's `migrate_add_hymn_facts.py` and part of slice 1's `0001_baseline`), and `churches.settings["rubric"]` (sparse overrides, written today only through `PATCH /rubric` and from 6a by its editor; F §3.5). Both are read only. The facts are filled by the ops backfill CLI (`backfill_hymn_facts.py`, inv H14), never by this slice; hymns without facts rank as unknown.
 - **Compatibility with frozen Streamlit:** nothing is written, so there is nothing to break.
   - Usage rows written by Streamlit's Prepare (ISO `date_iso` from `record_usage`) are read correctly.
   - Streamlit ignores `default_hymnal`, and its settings merge preserves unknown keys (F §6.2).
@@ -674,14 +721,16 @@ src/components/builder/hymns/
   hymn-picker.tsx           SearchCombobox + filterHymns
   alternative-chips.tsx
   scripture-matches.tsx     collapsible section, extra-ref input, grouped results, Add menu
-  hymn-label.tsx            "#n Title", hymnal badge, recent badge, ▶ Listen via safeHttpsUrl
+  hymn-label.tsx            "#n Title", hymnal badge, recent badge, ▶ Listen via safeHttpsUrl;
+                            amendment 2026-09-26: "Written {year}" badge when newer_than_preferred
 src/lib/hymns/
   filter.ts                 filterHymns(items, query, {excludeRecent}) -> {shown ≤50, totalMatches, hiddenRecent}
   picks.ts                  pickFromHymn, reconcilePick, applySuggestions, swapAlternative, setSlot, clearSlot, duplicateSlots
   suggest-request.ts        buildSuggestionRequest(draft, selectedHymnal, getCachedPassage)
   match-request.ts          buildMatchRefs(scriptures, extraRef) -> string[]; shared cleanRefs(list, {max, maxLen})
   hymnal.ts                 selectHymnal(stored, hymnals) -> {code, stale}
-  labels.ts                 SLOT_META (titles/captions), recentUseLabel(dateIso, serviceDateIso), notice copy
+  labels.ts                 SLOT_META (titles/captions), recentUseLabel(dateIso, serviceDateIso), notice copy;
+                            amendment 2026-09-26: newerYearLabel(h: HymnOut) -> string | null ("Written 1985" or null)
 src/lib/queries/hymns.ts    useHymnals, useHymnList, useHymnLists, useScriptureMatches, useSuggestHymns
 src/lib/queries/keys.ts     + hymnList, hymnMatches
 src/lib/api/timeouts.ts     hymnSuggestions: 90_000 (if not already present)
@@ -834,6 +883,10 @@ Slice 2's hand-off table assigns this to slice 3 (F §4.7); the copy is in §Use
 17. **Ordering.** NULL-number hymns sort last on both SQLite and Postgres (before: first on SQLite, last on Postgres).
 18. **Themes** stored as Postgres array literals (`{A,"B"}`) are normalized for display and matching. The data itself is cleaned up in 7.
 19. **Hymnals without scripture data** get an explicit note (PH1990 has no scripture references).
+20. **Rubric behavior (amendment 2026-09-26; compared with Streamlit after PR #4, inv D10):**
+    - Kept: ranking by the church's rubric, its slot checklists, the PREFERENCES line and the year/familiarity facts in the prompt, all read fresh on each request.
+    - Changed: the cut keeps 10 of 50 places for newer and unknown-year hymns (Streamlit: 12 of 60). A hymnal with no facts is sampled evenly instead of cut at its first hymns, and a small focused list is padded with an even sample instead of the whole ranked hymnal. Both fix the PH1990 Advent bias that PR #4 kept (inv D7).
+    - New on screen: newer hymns show "Written {year}" in the picker, slot cards, chips and matches. Streamlit shows no year.
 
 Unchanged on purpose:
 - empty-hymnal message wording (adapted for the link);
@@ -868,6 +921,7 @@ All backend tests are network-free (F §5.1 autouse guard). AI goes through `Fak
 | Contract and guards | `test_schemas.py` covers `HymnRef`, `SlotHymns` and `SectionKey` against the F §1.3 frozen shape, including a non-pattern `hymnal` code accepted (§API notes). `test_route_guards.py` passes with no allowlist change. `test_openapi_contract.py` passes with the regenerated snapshot. `test_no_streamlit_in_core.py` imports `api.main` with the new routers. |
 | GZip | `GET /hymns?limit=2000` with `Accept-Encoding: gzip` and an allowed `Origin` → `content-encoding: gzip`, plus `access-control-allow-origin` and `x-request-id`. The ops middleware-order test is updated to CORS, RequestId, UnhandledError, GZip (outermost first) and passes. |
 | `@pytest.mark.postgres` | `GET /hymns` ordering with NULL numbers and the `q` ILIKE escaping on Postgres; `usage_near` string-date range on Postgres, including a datetime-shaped `date_iso`. |
+| **Rubric (amendment 2026-09-26, PR #4)** | **Characterization first:** PR #4's `backend/tests/test_suggest_hymns.py` pins `suggest_hymns_for_service`'s rubric behavior. Before the function is deleted, each of its cases gets an equivalent against the new code, and the file is deleted with the function. Cases: default slot checklists and preferences in the prompt; a church rubric changes the prompt; a partial rubric falls back to the defaults; candidate headings carry no fixed role hints; the church's year decides the era; familiarity off keeps the given order within an era; response candidates ranked by the church rubric; a long list keeps places for newer and unknown-year hymns; results carry the year and the newer flag. `test_hymn_ranking.py` is kept unchanged, plus accessor cases: `year_of`/`count_of` over `HymnRecord`s give the same order as the flat-dict defaults, and `is_newer_than_preferred` is false for `None` and for a year before the preference and true for the year itself and later. `test_hymn_suggest.py` additions: ranked focused lists (older, then unknown, then newer; familiarity within an era; the median rule); `shortlist` with `SLOT_CAP` 50 and `NEWER_RESERVE` 10 over 60 older plus 20 newer hymns keeps 10 newer or unknown; **no-signal lists**: a 120-hymn opening list with no facts is still `evenly_spaced` and includes hymns from the last third; padding is appended after the ranked focused hymns, not re-ranked; `build_prompt` contains "A good Opening (Gathering) Hymn:", "A good Response Hymn (after the sermon):" and "A good Closing (Sending) Hymn:" with their points, the PREFERENCES line with the church's year, no "hymnals" clause when `prefer_familiar` is false, `(written 1826, in 1,322 hymnals)` on a known hymn's catalogue line and no facts field on an unknown one; trimming at 24 000 characters with a maximum-size rubric drops candidates, never checklist points. `test_api_hymns.py` / `test_api_hymn_matches.py` / `test_api_hymn_suggestions.py`: every `HymnOut` has `text_year`, `hymnal_count` and `newer_than_preferred`; with the default rubric, 1985 is flagged and 1826 and unknown are not; after the church stores `prefer_before_year: 1800`, 1826 is flagged; the rubric is read fresh (change it between two suggestion calls and the second prompt shows the new checklist); church B's rubric never affects church A's prompt or flags; an invalid stored rubric (`{"prefer_before_year": "x"}`) gives the default behavior and a 200. |
 
 The `streamlit_tests/` assertions on `hymn_display_from_flat`, `build_title_to_info` and `coerce_selectbox_value` test Streamlit-only helpers that this slice does not modify or move: `hymn_display_from_flat` is **replaced** by `HymnOut`, not moved to the backend. Their intent (trimmed titles, blank titles skipped, stale picks never crash) is covered here by the `HymnOut` mapping test in `test_api_hymns.py` (title stripped, NULL title → `""`, link verbatim, themes normalized), the `filterHymns` tests ("blank titles never listed", "same title stays distinct by id") and the `reconcilePick` "missing" status. 6b's port ledger (`test_streamlit_port_ledger.py`) maps them as follows, and the files are deleted in 7:
 
@@ -891,6 +945,7 @@ The `streamlit_tests/` assertions on `hymn_display_from_flat`, `build_title_to_i
 | dom `components/app/search-combobox.test.tsx` | Opens on click; renders at most 50 with the hints; shows the empty and hidden footers; keyboard selection. |
 | dom `components/builder/summary-panel.test.tsx` (slice 2's file, extended) | **Hymns step shows its status and the summary no longer says "Available soon" for hymns:** with a draft holding an Opening and a Closing pick, `StepProgress` shows "2 of 3" on the Hymns item (not "Soon"), and after filling Response it shows ✓; the `SummaryPanel` Hymns block shows "#403 Come, Thou Almighty King" for Opening and "No Response hymn" for the empty slot, and its text does not contain "Available soon"; the Liturgy block still reads "Available soon" (until slice 4). Rendered at 375 px (bottom sheet) and at `lg` (column). |
 | dom `components/builder/hymns/hymns-step.test.tsx` | See the list after this table. |
+| unit `lib/hymns/labels.test.ts` + dom `hymn-label.test.tsx` (amendment 2026-09-26) | `newerYearLabel` returns "Written 1985" only when `newer_than_preferred` is true, and null for an older, unknown-year or unflagged hymn. `HymnLabel` renders the badge in a picker row, a filled slot card (after the list loads) and a chip; a chip's aria-label reads "Use {title}, written 1985, as the {slot} hymn"; at 375 px the title truncates while the badge stays whole. After Suggest, the "Suggestions favor older and familiar hymns…" helper appears only when a returned hymn is flagged. |
 
 `hymns-step.test.tsx` runs against `installFakeApi` and `renderWithProviders` and covers:
 - picks render from the draft before the list loads;
@@ -924,6 +979,7 @@ Run on the production Vercel URL, at 375 px (iPhone SE in device mode) and on de
 7. Refresh the page mid-step: picks, chips and the switch state survive. Switch church and back: each church keeps its own draft. The progress bar shows "n of 3" (then ✓) for Hymns, and the summary (bottom sheet at 375 px, right column on desktop) lists the three hymns or "No {Slot} hymn", with no "Available soon" in its Hymns block.
 8. The 375 px layout has no horizontal scroll, the chips wrap, the Combobox list is usable with the keyboard open, and the sticky footer does not cover the last card.
 9. Regression pass: sign in, switch church, and open every shipped nav item. Streamlit smoke check: load the church, load an archived service, open Settings (F §6.3).
+10. *(Amendment 2026-09-26.)* In GG2013 after the production backfill, Suggest for a real Sunday: the chips lean older and familiar, and any hymn written in 1970 or later shows "Written {year}". Search the picker for a known modern hymn: it shows the badge, and a nineteenth-century hymn does not.
 
 ---
 
@@ -947,6 +1003,8 @@ Run on the production Vercel URL, at 375 px (iPhone SE in device mode) and on de
 16. `GET /hymns?limit=2000` is gzip-encoded for clients that accept it, and still carries the CORS and request-id headers. *(test)*
 17. The manual checklist passes on production at 375 px and on desktop, and the post-merge Streamlit smoke check passes. *(deployed)*
 18. `POST /hymns/suggestions` finishes within its 75 s server deadline even when the NT fetch hangs or OpenAI asks for a long `Retry-After`, so it always answers before the 90 s client timeout. *(test)*
+19. *(Amendment 2026-09-26, PR #4.)* Suggestions follow the church's rubric, read fresh on each request. Each slot's candidates are ranked older, then unknown, then newer, and by familiarity within each era when `prefer_familiar` is on. A cut keeps up to 10 places for newer and unknown-year hymns, and a list with no facts is still sampled evenly. The prompt carries the three slot checklists, the PREFERENCES line and each known hymn's facts, and never the fixed role text. Every assertion of PR #4's `test_suggest_hymns.py` has an equivalent against the new code before that file is deleted. `hymn_ranking` and `service_rubric` are reused, not copied. *(test)*
+20. *(Amendment 2026-09-26.)* Every `HymnOut` carries `text_year`, `hymnal_count` and `newer_than_preferred`, computed with the church's `prefer_before_year`. The step shows "Written {year}" on exactly the flagged hymns in the picker, slot cards, chips and matches. *(test + manual 10)*
 
 ---
 
@@ -959,6 +1017,7 @@ Run on the production Vercel URL, at 375 px (iPhone SE in device mode) and on de
 - **Payload size.** One hymnal of about 850 rows is about 200 KB uncompressed and about 35 KB gzipped, refetched when stale on focus. If mobile data use becomes a complaint, raise `staleTime` for the hymn-list key (hymn edits already invalidate it).
 - **Rate limiter dependency.** If slice 2's limiter has no church-keyed buckets, this slice extends it (§1). The `ai` bucket is shared with slice 4, so heavy liturgy use can block suggestions for the rest of the window, as intended.
 - **Parallel slice naming.** The slice 2 interfaces (`useDraft`, `default_nt_ref`, `get_passage_text`, `ChurchProfileOut`) are assumed as written. If slice 2 lands with other names, adapt at implementation. The behavior contracts in "Interfaces with other slices" are what matter.
+- **Sparse hymn facts (amendment 2026-09-26).** Facts come only from the ops backfill, which matches through scripture references. PH1990 hymns (no references) and hymns added after the last run stay unknown, so they rank in the middle and never get the year label. Mitigation: the no-signal sampling rule (§3.8) and the README's "re-run after importing or adding hymns" step. Per-hymn editing of the facts is an open owner question (index §6), not part of 3 or 6a.
 
 **Open questions:**
 1. **Recent use across hymnals.** Usage is matched on `(number, normalized title)`, as today, so a hymn sung from GG2013 is not flagged when the same text is picked from PH1990 under a different number. Should the match use the normalized title alone, with more matches but occasional false positives for different hymns with the same title? This spec keeps the current key until the owner decides. It is a one-line change in `usage_key`.

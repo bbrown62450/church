@@ -7,6 +7,8 @@
 - Foundations: `docs/superpowers/specs/2026-09-25-migration-foundations-design.md`, cited as "F §n". This spec follows it and does not restate its conventions.
 - Inventory: `docs/superpowers/specs/2026-09-25-streamlit-migration-inventory.md`, cited as "inv §n". It is the source of truth for current behavior.
 - Owner decisions 5 and 9, plus decisions 1 and 7 where the builder or the switchover is affected.
+- **Amendment 2026-09-26: the service rubric (PR #4, merged).** `docs/superpowers/specs/2026-09-25-service-rubric-design.md` shipped the rubric's storage, defaults, validation and the `GET`/`PATCH /rubric` API (inv §1 G11), and left "the rubric editor" to this slice. 6a adds the **Rubric** page over the existing routes (UX §6, API, Testing). It also moves the PATCH write under this slice's locking rule, with no change to the route's request or response shape beyond one additive field.
+- **Amendment 2026-09-26: the prayer library (PR #7, merged).** `docs/superpowers/specs/2026-09-26-prayer-library-design.md` is the source for the **Prayers** page, its three routes and the voice-profile draft. It is new-app only. This spec adds short pointers (UX §5, API, Backend, Testing, Acceptance) and does not repeat that spec.
 
 ---
 
@@ -18,6 +20,8 @@ Move the church-level Settings tabs out of Streamlit and into the new app, so th
 - default benediction (written here; read since slice 4).
 
 It also puts hymnal import in the app (inv §1 H3) so admins can add bundled hymnals (owner decision 9). Every edit is enforced on the server by role, church-scoped, and visible to the builder without a reload.
+
+*Amendment 2026-09-26:* it also adds the **service rubric editor** (PR #4, read since slices 3 and 4) and the **prayer library** page (PR #7, read since slice 4). Neither has a Streamlit tab: the rubric has had no editor anywhere, and the prayer library is new-app only.
 
 ---
 
@@ -43,6 +47,8 @@ It also puts hymnal import in the app (inv §1 H3) so admins can add bundled hym
 | Hand-off from 3 | `SETTINGS_HYMNS_READY` in `src/lib/features.ts` is set to `true`, so the builder's empty-hymnal state links to `/settings/hymns`. |
 | Hand-off from 4 | In the Benediction card's origin-`default` hint ("Your church's default benediction. Admins can change it in Settings."), the word "Settings" becomes a link to `/settings/church`. |
 | streamlit_tests assertions for these tabs (inv §6) | Ported to backend tests (see Testing). |
+| G11 service rubric (PR #4; amendment 2026-09-26) | `/settings/rubric`: read for members, edit for admins, over the existing `GET`/`PATCH /rubric`. The PATCH write moves into `usecases/church_admin.update_rubric` under `lock_and_read_actor`, and `GET` gains an additive `defaults` field. |
+| Prayer library (PR #7; amendment 2026-09-26; new app only) | `/settings/prayers` and `GET`/`PUT /church/prayer-library` plus `POST /church/prayer-library/voice-profile-draft`, exactly as PR #7 specifies. |
 
 ### Out of scope (and where it goes)
 
@@ -57,6 +63,8 @@ It also puts hymnal import in the app (inv §1 H3) so admins can add bundled hym
 | Uploading a custom hymnal CSV | Not scheduled. The owner approved bundled hymnals only (inv §7 Q16). The CLI stays available for ops. |
 | Exporting `hymn_catalog` to `backend/seed/` plus a seed CLI; normalizing `{A,"B"}` theme literals | 7 (F §6.4) |
 | Free-text hymns in the builder | Stays removed (decision 9) |
+| Editing a hymn's `text_year` or `hymnal_count` (amendment 2026-09-26) | Not scheduled; an open owner question (index §6). The facts come only from the ops backfill CLI (`backfill_hymn_facts.py`, inv H14), which stays an ops tool. `HymnIn`/`HymnPatchIn` don't accept them, so hymns added here start unknown until the CLI runs again. |
+| Document import or seeding the prayer library from saved services; the service reviewer (amendment 2026-09-26) | Out of scope (PR #7 §Scope). The reviewer is a slice-4 add-on (`2026-09-26-service-reviewer-design.md`). |
 
 ### Assumed interfaces from other slices
 
@@ -74,6 +82,9 @@ It also puts hymnal import in the app (inv §1 H3) so admins can add bundled hym
 | 4 | `GET /church.default_benediction: str` is the stored value **when the key is present, even if it is `""`**, else `"Halverson"`. A draft's benediction card with `origin: "default"` shows the current profile value, with the hint "Your church's default benediction. Admins can change it in Settings." (`SectionCard.tsx`). `POST /liturgy/generate` reads the church's prompts from the database on every request. The validator is `liturgy_prompts.template_error(template: str) -> str or None`, which returns a short user-facing reason or None and never raises; its reasons are slice 4's pinned strings (for example "It has a { or } without a partner. Use {{ or }} to print a brace."). Prompt cleaning is `liturgy_prompts.clean_prompt_overrides(prompts, defaults=None) -> dict`, whose only implementation is in `liturgy_prompts` (slice 4): it normalizes `\r\n` → `\n`, trims, and keeps only `PROMPT_KEYS` whose value is non-blank and differs from the trimmed default. | If slice 4 wrote `settings.get("default_benediction") or "Halverson"`, 6a changes it to a key-presence check, with a test. If the validator has another shape, 6a wraps it; the 422 contract below is fixed. If `clean_prompt_overrides` lacks the `\r\n` normalization, 6a adds it there (with slice 4's test), never in a second copy. |
 | 5b | `src/app/(signed-in)/(church)/settings/layout.tsx` renders the "Settings" header, the caption "{church name} — you’re {a member \| an admin \| the owner}.", the section nav (`settings-nav.tsx`) from `SETTINGS_SECTIONS` in `src/components/settings/sections.ts`, and `LegacySettingsNote` (`legacy-settings-note.tsx`). `/settings` redirects to `SETTINGS_SECTIONS[0].href`. `GET /contacts` → `{items: [ContactOut {id, name (str or null), email}]}`, served from `routes/contacts.py`, ordered by `list_contacts` (creation time, name NULLs last, id). There is a `useContacts()` hook. `backend/email_addresses.py::normalize_address(raw) -> str` (raises `InvalidAddress`; ASCII-only labels; returns the trimmed address with its case kept), which `POST /bulletin-emails` re-applies to every selected contact; a saved contact that fails it gets the 422 "The saved contact “{name, or the address}” has an invalid email address. " followed by `MALFORMED_CONTACT_HINT` (a module constant in `backend/usecases/email.py`). `EmailBulletinDialog`'s empty contacts state is "No saved contacts yet — type addresses below." | If `/settings` is hard-wired to `/settings/account`, 6a points it at `/settings/church` (F §4.1). If `normalize_address` is missing, 6a adds it exactly as 5b specifies, never a second rule. |
 | 6b | May land first and create `usecases/church_admin.py`, `repos.churches.lock_church(session, church_id) -> Church \| None` (`SELECT … FOR UPDATE` on a non-deleted church) and `lock_and_read_actor(s, church_id, actor_id) -> str` (in `usecases/members.py`). `lock_and_read_actor` calls `lock_church` (None → the `no_church_access` 403 below), then re-reads the actor's membership **under that lock**: membership gone → the same `no_church_access` 403; otherwise it returns the actor's current role. 6a adds functions to `church_admin.py` and starts **every write below** with `lock_and_read_actor`, so 6a and 6b give the same guarantee. No route is shared. Neither slice adds `email-validator`: 6b validates invite emails with the same `email_addresses.normalize_address` (5b). | If 6a lands first, it creates `lock_church` and `lock_and_read_actor` with those signatures and semantics, at the path 6b names. There is one helper, never two: if it ends up in `church_admin.py` instead, both slices import it from there. |
+| PR #4 (on `main`; amendment 2026-09-26) | `backend/api/routes/rubric.py` (`GET /rubric` with `require_church`, `PATCH /rubric` with `require_admin`), `RubricOut`/`RubricModel` in `api/schemas.py`, and `service_rubric` (`DEFAULT_RUBRIC`, `default_rubric`, `validate_patch`, `apply_patch`, `merge_rubric`, `customized_keys`, `HYMN_SLOTS`, `HYMN_SLOT_LABELS`, `MAX_ITEMS = 12`, `MAX_ITEM_CHARS = 300`, `MIN_YEAR = 1500`). `repos.churches._lock_live_church(session, church_id)` already does `SELECT … FOR UPDATE` on a non-deleted church; `_merge_settings` and `update_church_rubric` use it. | `_lock_live_church` **becomes** `lock_church` (renamed, same semantics), so there is one lock helper, not two. `_merge_settings` becomes `merge_settings` (Changed modules). |
+| 4 (amendment 2026-09-26) | The pure `backend/prayer_library.py` (`read_library`, `PRAYER_TYPES`, the limits) that slice 4's writer hook reads. `usecases/liturgy` reads `prayer_library` and `rubric` fresh on every generation. | If 4 did not ship it, 6a adds it with the slice 4 shape, and 4's reader imports it. |
+| 3 (amendment 2026-09-26) | `HymnOut.newer_than_preferred` depends on the rubric's `prefer_before_year`. | The rubric mutation invalidates `["church", id, "hymns"]` (Queries). |
 
 ---
 
@@ -98,6 +109,8 @@ All four pages render inside 5b's settings layout. On mobile (375 px) they are a
 ### Settings nav (6a entries)
 
 6a **prepends** to `SETTINGS_SECTIONS` (`src/components/settings/sections.ts`), in this order: **Church** (`/settings/church`), **Hymns** (`/settings/hymns`), **Liturgy** (`/settings/liturgy`), **Contacts** (`/settings/contacts`). After 6a the list is Church, Hymns, Liturgy, Contacts, Account (5b). 6b then adds People and Danger zone; 6a doesn't depend on where. Because 5b's `/settings` redirects to `SETTINGS_SECTIONS[0].href`, `/settings` now lands on `/settings/church`.
+
+*Amendment 2026-09-26:* 6a also inserts **Prayers** (`/settings/prayers`, PR #7) right after **Liturgy**, then **Rubric** (`/settings/rubric`, PR #4) right after Prayers. Both are visible to every role (members read). After 6a the list is **Church, Hymns, Liturgy, Prayers, Rubric, Contacts, Account**. After 6b it is **Church, Hymns, Liturgy, Prayers, Rubric, Contacts, People, Account, Danger zone**. This supersedes the final order written in the 5b and 6b specs, and 6b's `SETTINGS_SECTIONS` DOM assertion (6b acceptance 22) uses this list.
 
 **Legacy note (5b):** 6a changes the `LegacySettingsNote` text to **"People and invites are still managed in the current app for now."** The words "the current app" keep 5b's optional link. Without this change, the note would send the tester back to Streamlit for the pages 6a just moved, where settings writes don't take the row lock. 6b deletes the note.
 
@@ -243,6 +256,48 @@ Two stacked sections.
   - admin: "No contacts yet" / "Add the people who receive the bulletin, like your church secretary."
   - member: "No contacts yet" / "Ask an admin to add bulletin recipients."
 
+### 5. Prayers: `/settings/prayers` (amendment 2026-09-26, PR #7; new app only)
+
+The page is specified in `docs/superpowers/specs/2026-09-26-prayer-library-design.md` §"Prayers page (slice 6a)". Its copy, states and rules are used verbatim and not repeated here. In summary:
+- a voice-profile card with **"Update from my prayers"**. It is disabled with "Save your prayers first." while the list has unsaved changes. The draft appears beside the current profile, stacked at 375 px, with **"Use this draft"** and **"Keep mine"**. While it waits: a spinner, "Still working" after 8 s, and Cancel;
+- the prayers list: a type select (the 8 section labels plus "Other"), the prayer's first line, Edit, and Remove with a `ConfirmDialog`. **Add a prayer** appends an open row;
+- one sticky **Save** that sends the prayers and the profile together (`PUT`);
+- the empty state "No prayers yet. Paste in a few of your own prayers so the writer can learn your voice.";
+- for members, the banner "Only admins can edit the prayer library. You can read it below." and a read-only page.
+
+This page follows this slice's "Every page" rules: skeleton, ErrorState with Retry, PendingButton, toasts, inline 422 `fields` (keyed `prayers.<i>.text`, `prayers.<i>.type`, `voice_profile`), and the baseline/rebase rule. The leave guard (`useLeaveGuard(dirty)`) protects unsaved prayers and profile edits. All pastor text is rendered as React text.
+
+### 6. Service rubric: `/settings/rubric` (amendment 2026-09-26, PR #4)
+
+`PageHeader` **"Service rubric"**. Intro: **"What makes a good hymn or prayer at your church. The AI follows these checklists when it suggests hymns and writes liturgy. How each prayer is laid out (Leader and People lines, length, “Amen”) stays in Liturgy prompts."** Members see the banner **"Only admins can edit the rubric. You can read it below."**. Their fields are read-only, and the footer and every add, remove and reset control are hidden.
+
+**Hymn preferences card:**
+- **"Prefer hymns written before"**: a year input (`inputMode="numeric"`, 4 digits). Help: **"Hymns with older words are suggested first. This is a preference, not a filter: a newer hymn can still be suggested when it fits clearly better, and the builder shows its year."**
+- **"Prefer familiar hymns"**: a `Switch`. Help: **"Hymns found in many hymnals are suggested first."**
+- A **Customized** badge and a **Reset to default** text button on each setting that differs from its default.
+
+**Checklist cards**, in two groups. Each card is a collapsible section: all collapsed on mobile except a card with an error, all expanded on desktop.
+- The **"Hymns"** group has three cards titled with `HYMN_SLOT_LABELS`: "Opening (Gathering) Hymn", "Response Hymn (after the sermon)", "Closing (Sending) Hymn".
+- The **"Prayers"** group has eight cards titled with `SECTION_LABELS`, in `SECTION_ORDER`.
+- Each card shows "A good {Label}:" and its points in order. Each point is an auto-growing text box with `maxLength` 300. Line breaks are not allowed there: Enter adds a new point below, and a pasted line break becomes a space, matching the server's whitespace rule.
+- Each point has a remove ✕ (aria-label "Remove point {n} from {Label}").
+- **Add a point** is disabled at 12, with the helper "A checklist can have at most 12 points."
+- A **Customized** badge shows when the card's cleaned points differ from the default. **Reset to default** puts the default points back into the card; the change is unsaved until Save.
+- Under the Opening and Closing cards: **"The builder first gathers opening and closing hymns by theme (gathering, praise, sending and similar). This checklist then guides which of them the AI suggests."** This is the known limit in the rubric spec and slice 3 §3.8; see Open question 3.
+
+**Sticky footer (admins):**
+- **Save rubric** (primary; disabled until something changes). It sends **one** sparse `PATCH /rubric` with only the changed items. Each point is trimmed, whitespace runs are collapsed and blank points are dropped. An item whose cleaned value **equals its default is sent as `null`**, so the church keeps following future improvements to the defaults (the rubric spec's intent). Toast: **"Rubric saved."**
+- **Reset all to defaults** (secondary; shown when `customized` is non-empty). It opens a `ConfirmDialog`: title "Reset the rubric?", body "Your church's checklists and preferences go back to the shared defaults.", confirm **"Reset all"**. It sends `null` for every customized key. Toast: **"Rubric reset to defaults."**
+- The footer is `sticky bottom-0` with the safe-area inset, as on the prompts page.
+
+**Validation copy.** The client checks run first, and their messages equal the server's `service_rubric` messages (inv §1 G11), so there is one wording:
+- A card whose points are all blank or removed: **"Keep at least one point, or use Reset to default."**, shown inline on the card; Save is disabled. The server's "A checklist must be a non-empty list of points." is the backstop.
+- The year: **"The preferred year must be between 1500 and {current year}."**, shown inline under the field.
+- Points over 300 characters and more than 12 points can't be entered.
+- A 422 `invalid_rubric` from the server, for example a control character pasted in, shows the server message in an inline `Alert` above the footer. The PATCH is validated as a whole, so nothing was saved, and the edits stay.
+
+The form follows "Every page": the baseline and rebase-on-refetch rule (`rebaseForm` over one value per preference and per checklist), the leave guard while dirty, and re-initialization from the PATCH response.
+
 ### Losing a role mid-session
 
 If an admin is demoted in another tab or by another admin (6b), their next admin mutation gets 403 "Only church admins can do this.". This holds even when the demotion lands between the route guard and the write, because every write re-reads the role under the church-row lock (Semantics → Locking). The app toasts that message and invalidates `profile`. `role` then updates, and the page switches to its read-only form without leaving the church. An admin or member **removed** from the church gets the `no_church_access` 403 instead, and the client takes slice 1's church fallback.
@@ -275,6 +330,17 @@ Pydantic length errors → 422 `invalid_request` "Too long (max N characters)." 
 | GET | `/hymnal-sources` | admin | – | 200 `{items: [HymnalSourceOut]}` | 403 |
 | POST | `/hymnals` | admin | `{code: str(20)}` | 200 `{code, label?, inserted, updated}` | 403; 422 `code` "That hymnal isn't available to add." |
 | DELETE | `/hymnals/{code}` | admin | path `code` matches `^[A-Za-z0-9_-]{2,20}$` (else 422) | 200 `{deleted: true, hymns_deleted: n}` | 403; 404 "Your church doesn't have that hymnal."; 409 `conflict` "You can't remove your only hymnal." / "{code} is your default hymnal. Choose a different default in Church profile first." |
+| GET | `/rubric` (**exists**, PR #4; amendment 2026-09-26) | church | – | 200 `RubricOut {rubric, customized}`, plus the additive `defaults: RubricModel` (the full default rubric), so the editor can show "Reset to default" and send `null` for values equal to the default | 403 |
+| PATCH | `/rubric` (**exists**, PR #4; amendment 2026-09-26) | admin | sparse plain JSON object, validated by `service_rubric.validate_patch` (unchanged; declared exception to the `extra="forbid"` model rule, F §1.3) | 200 `RubricOut` (with `defaults`) | 403 "Only church admins can do this."; 422 `invalid_rubric` with the `service_rubric` message and no `fields` (unchanged from PR #4; F §1.5 registry as amended); 422 `invalid_request` for a non-object body |
+| GET | `/church/prayer-library` (amendment 2026-09-26, PR #7) | church | – | 200 `{prayers: [PrayerOut], voice_profile, can_edit}` | 403 |
+| PUT | `/church/prayer-library` (PR #7) | admin | `{prayers: [{id?, type, text}], voice_profile}` (full replace) | 200, same shape as GET | 403; 422 `invalid_request` with `fields` `prayers.<i>.text` / `prayers.<i>.type` / `voice_profile` and PR #7's five messages |
+| POST | `/church/prayer-library/voice-profile-draft` (PR #7) | admin + `rate_limit("ai")` (cost 1) | – | 200 `{draft: str}` (not stored) | 403; 422 `invalid_request` "Add at least one prayer and save it first."; 429 `rate_limited`; 503 `ai_not_configured` / `ai_busy`; 504 `ai_timeout`; 502 `ai_upstream_error` |
+
+*Amendment 2026-09-26 notes on the new rows.*
+- **`/rubric` keeps its path.** It predates F §1.1's "church sub-resources sit under `/church`" rule and already ships on `main`. It is recorded as the one exception in F §1.1 and is not renamed, because a rename would break any client of PR #4's API for no gain. `PATCH /rubric` is admin-guarded through `require_admin`, so the route-guard test needs no allowlist change.
+- **`PATCH /rubric` now takes the locking rule.** It starts with `lock_and_read_actor` and then `require_admin_role`, like every other write in this slice (Semantics → Locking), so a demoted admin gets the role 403 and a removed member gets `no_church_access`.
+- **Prayer-library routes:** everything in PR #7 §API applies (module `backend/api/routes/prayer_library.py` calling `backend/usecases/prayer_library.py`; models at the top with `extra="forbid"`; `PUT` semantics; the draft's 75 s deadline, `max_completion_tokens=800` and 2 000-character cap). `PUT` starts with `lock_and_read_actor` and `require_admin_role` and writes through `merge_settings`, never replacing `settings`. The draft route reads the saved prayers in one session, closes it, and then calls `openai_client.complete(…, deadline=…)`; it takes no lock, because it writes nothing. The `ai` bucket is charged by the dependency, as on `/hymns/suggestions`, so a 422 for an empty library also costs one token (F §1.8).
+- **Client timeouts** (F §1.8): the draft is 90 000 ms (75 s server deadline, like `/hymns/suggestions`); every other new route uses the 20 s default.
 
 **Church, membership or role gone mid-request.** Every write in this slice starts with `lock_and_read_actor` (6b's helper; Semantics → Locking), which takes the church-row lock and re-reads the caller's membership under it.
 - If the church was soft-deleted after `require_church` ran (the lock returns None), or the caller's membership is gone (removed, or left in another tab), the usecase raises `Forbidden("You don't have access to this church.", details={"reason": "no_church_access"})` → 403, the same body `require_church` returns. The client then takes slice 1's church fallback. (Streamlit raised "Church not found.", inv §1 G2.)
@@ -398,6 +464,15 @@ class HymnalSourceOut(BaseModel):
   - Deletes every hymn of the church with that `hymnal`, under the church-row lock.
   - Refused if it is the church's only hymnal, or the effective default.
   - Services, `hymn_usage` and drafts are not touched. `hymn_usage` is a title/number snapshot. An archived service resolves each stored `hymn_id` to the row's **current** title, number and hymnal while the row exists (5a); once the row is gone it falls back to the snapshot saved with the service (`in_hymnal: false`). Drafts re-resolve by `hymn_id` (slice 3). So deleting keeps saved services' hymns as saved, while **editing** a hymn (PATCH /hymns) changes what past services show and print; the edit dialog says so.
+- **PATCH /rubric (amendment 2026-09-26):** `church_admin.update_rubric(church_id, actor_id, patch)` runs in one session:
+  1. `lock_and_read_actor`, then `require_admin_role`;
+  2. `service_rubric.validate_patch(patch)`. A `ValueError` → `InvalidInput(code="invalid_rubric", message=str(exc))` with no field, so the body is PR #4's: 422, the same code and message, no `fields`. Nothing is written.
+  3. Read the stored overrides from the locked row (a non-dict is treated as `{}`), then `service_rubric.apply_patch` (a `null` removes that override; an empty group is dropped);
+  4. `merge_settings(church_id, {"rubric": overrides}, session=s)`;
+  5. Return `{rubric: merge_rubric(overrides), customized: customized_keys(overrides), defaults: default_rubric()}`.
+
+  The request and response are otherwise PR #4's. `repos.churches.update_church_rubric` is deleted, and its tests in `test_church_settings.py` are retargeted to the usecase, so there is one write path. `get_church_rubric_overrides` and `get_church_rubric` stay; frozen Streamlit and slices 3 and 4 read through them. `GET /rubric` is unchanged apart from `defaults`.
+- **PUT /church/prayer-library (amendment 2026-09-26):** PR #7 §API "PUT semantics", through `usecases/prayer_library.py`, which imports slice 4's pure `prayer_library` reader and limits. It runs under the same lock and role re-read and writes the `prayer_library` key through `merge_settings`.
 
 ---
 
@@ -413,6 +488,7 @@ class HymnalSourceOut(BaseModel):
 | `backend/seed/hymnals/PH1990.csv` | Moved with `git mv` from `data/hymnals/PH1990_hymns.csv` (605 rows; `number,title,tune`). Railway deploys only `backend/` (F §2.1). |
 | `backend/timezones.py` (only if slice 1 didn't make it shareable) | Slice 1's definition, moved as is: `_zones() -> frozenset[str]` (`frozenset(zoneinfo.available_timezones())`, computed once) and `is_valid_timezone(name) -> bool` = `name in _zones()`, exact and case-sensitive. It is **not** a `zoneinfo.ZoneInfo(name)` lookup, which accepts values such as `america/new_york` or `posixrules` on some filesystems and not others (slice 2 rejects that approach for `timezone_valid`, so the two would disagree). `tzdata` in `backend/requirements.txt` so slim images have the database. |
 | `backend/api/routes/church_prompts.py` | GET and PUT `/church/liturgy-prompts` (F §2.1 names this module). |
+| `backend/api/routes/prayer_library.py`, `backend/usecases/prayer_library.py` (amendment 2026-09-26, PR #7) | The three prayer-library routes and their usecase (PR #7 §API): `get_library(church_id, *, can_edit)`, `save_library(church_id, actor_id, body)` (locked, role re-read, normalized, validated, merged into `settings`), `draft_voice_profile(church_id, *, ai=openai_client, clock=time.monotonic)` (read, close the session, then one `complete` call inside a 75 s deadline, capped at 2 000 characters). New error messages go through the registry (F §1.5). |
 
 The profile patch types in `usecases/church_admin.py`:
 
@@ -461,6 +537,10 @@ def clean_profile_patch(patch: ProfilePatch, *,
 | `import_hymnal.py` (CLI, kept per inv §1 H3) | `load_rows` delegates to `hymnal_sources.load_rows`. `load_dotenv()` moves from import time (13-15) into `main()` (F §2.3.5). `--csv` becomes optional when `--hymnal` names a bundled source. The docstring path becomes `backend/seed/hymnals/PH1990.csv`. It remains an ops tool with no role check, run only by the owner with the production `DATABASE_URL`. |
 | `api/schemas.py` | Reuses 5a's `DeletedOut` (defined for `DELETE /services/{id}`); 6a adds it only if 5a hasn't landed. The request models above live in their route modules; only models used by two or more modules go here (F §1.3). |
 | `frontend/src/lib/api/openapi.json`, `schema.d.ts` | Regenerated (F §1.11). |
+| `backend/usecases/church_admin.py` (amendment 2026-09-26) | Adds `update_rubric(church_id, actor_id, patch) -> dict` (Semantics). |
+| `backend/api/routes/rubric.py` (PR #4; amendment 2026-09-26) | `PATCH` calls `church_admin.update_rubric(church.id, actor_id=user.id, patch=…)` instead of the repo function. The route keeps its path, guards and body. |
+| `backend/api/schemas.py` (amendment 2026-09-26) | `RubricOut` gains `defaults: RubricModel` (additive). |
+| `repos/churches.py` (amendment 2026-09-26) | PR #4's `_lock_live_church` is renamed `lock_church` (the row above adds it only if neither PR #4 nor 6b did). `_merge_settings` already locks since PR #4; it becomes `merge_settings(…, session=None)` as described above. `update_church_rubric` is deleted (Semantics → PATCH /rubric). |
 
 ### Domain functions reused
 
@@ -505,12 +585,15 @@ Per F §2.3.2 nothing is re-exported from `streamlit_views/settings.py`. That mo
   - `default_hymnal: str`: absent or null means the effective default rule applies.
 - `bible_translation` and `liturgy_prompts` keep their current shapes (repos/churches.py:99-129).
 - No backfill. "Seeded with the current value" (decision 9) is satisfied by the read-side fallback: churches without the key behave exactly as before until an admin saves the profile.
+- *Amendment 2026-09-26:* two more JSON keys are written here, still with no DDL (F §3.5):
+  - `rubric`: PR #4's sparse overrides, already written by `PATCH /rubric` since PR #4 and read by frozen Streamlit, slice 3 and slice 4 through `merge_rubric`, which ignores invalid values. Its shape is unchanged.
+  - `prayer_library`: PR #7's `{prayers: [{id, type, text, added_at}], voice_profile}`, read by slice 4. It is absent until an admin saves the Prayers page, and frozen Streamlit ignores it.
 
 **File move:** `data/hymnals/PH1990_hymns.csv` → `backend/seed/hymnals/PH1990.csv` (`git mv`; content unchanged). `data/hymnals/` is removed. A test asserts that the file exists under `backend/` and loads 605 rows.
 
 **Compatibility with the frozen Streamlit app** (F §6.2):
 - **Reads:** Streamlit reads `settings.liturgy_prompts` and `settings.bible_translation`, whose shapes are unchanged. It ignores `default_benediction` and `default_hymnal`, so it keeps printing its constant "Halverson" and its alphabetical hymnal default. That is accepted: the tester builds services in the new app after the parity gate.
-- **Writes:** Streamlit's `_merge_settings` copies the dict and updates only its own key, so it preserves the new keys. Its writes don't take the row lock, so a concurrent Streamlit settings save can still overwrite an API write made in the same instant. This is accepted (F §1.7). Once 6a ships, the settings `LegacySettingsNote` points the tester to Streamlit only for people and invites, which don't write `churches.settings`, so the tester has no reason to use Streamlit's profile or prompt tabs; after 6b the note is gone.
+- **Writes:** Streamlit's `_merge_settings` copies the dict and updates only its own key, so it preserves the new keys. Its writes don't take the row lock, so a concurrent Streamlit settings save can still overwrite an API write made in the same instant. This is accepted (F §1.7). *Amendment 2026-09-26:* this is no longer true of a `streamlit-frozen` cut after PR #4, which the ops freeze is. Since PR #4, Streamlit's `_merge_settings` locks the church row (`SELECT … FOR UPDATE` in the same transaction), so on Postgres its settings saves and the API's locked merges wait for each other and neither loses a key. Streamlit's other writes (hymns, contacts, profile name and timezone) are still unlocked. Once 6a ships, the settings `LegacySettingsNote` points the tester to Streamlit only for people and invites, which don't write `churches.settings`, so the tester has no reason to use Streamlit's profile or prompt tabs; after 6b the note is gone.
 - **Profile saves:** Streamlit's "Save profile" always re-writes `bible_translation` with its own selectbox value (settings.py:212). Documented; accepted.
 - **Hymnals:** hymns added through 6a use one of the church's existing hymnal codes. Adding PH1990 makes Streamlit show its hymnal switcher, which already works (inv §1 D2).
 - **Hymn and contact edits:** plain row updates. Streamlit lists at most 50 hymns and reads all contacts, both unaffected.
@@ -530,6 +613,8 @@ Per F §2.3.2 nothing is re-exported from `streamlit_views/settings.py`. That mo
 | `hymns/page.tsx` | `<HymnsSettingsPage>` (HymnalsCard + HymnLibrary) |
 | `liturgy/page.tsx` | `<LiturgyPromptsPage>` |
 | `contacts/page.tsx` | `<ContactsSettingsPage>` |
+| `prayers/page.tsx` (amendment 2026-09-26, PR #7) | `<PrayersSettingsPage>` |
+| `rubric/page.tsx` (amendment 2026-09-26, PR #4) | `<RubricSettingsPage>` |
 | `page.tsx` (5b) | redirect target → `/settings/church` |
 
 ### Components (`src/components/settings/`)
@@ -544,6 +629,8 @@ Per F §2.3.2 nothing is re-exported from `streamlit_views/settings.py`. That mo
   - `HymnDialog` (mode `"add" | "edit"`) with its delete confirmation.
 - **Liturgy:** `LiturgyPromptsForm`, `PromptCard`.
 - **Contacts:** `ContactsList`, `ContactAddForm`, `ContactEditDialog`.
+- **Prayers (amendment 2026-09-26, PR #7):** `VoiceProfileCard` (textarea, "Update from my prayers", side-by-side draft with "Use this draft" / "Keep mine"), `PrayerList`, `PrayerRow` (type `Select` with an `items` map, F §4.9.3), with the remove `ConfirmDialog`.
+- **Rubric (amendment 2026-09-26, PR #4):** `RubricForm`, `HymnPreferencesCard`, `ChecklistCard` (points, add, remove, reset, Customized badge), `RubricFooter`.
 - **Shared:** `ReadOnlyBanner(text)`.
 - **5b files:**
   - `sections.ts`: prepend the four entries to `SETTINGS_SECTIONS`.
@@ -577,6 +664,8 @@ Base UI components needed: input, textarea, label, dialog, alert-dialog, combobo
   - `parseHymnNumber(text) -> number | null | "invalid"`.
   - `hymnPatch(baseline, form) -> HymnPatch`: changed fields only; `""` → null for the clearable fields.
 - `email.ts`: `looksLikeEmail(text)`, a lenient client pre-check. The server is authoritative.
+- `rubric.ts` (amendment 2026-09-26): `cleanPoints(points) -> string[]` (trim, collapse whitespace runs, drop blanks: the server's rule); `rubricFormFrom(out)`; `rubricPatch(baseline, current, defaults) -> object` (changed items only; an item equal to its default → `null`; never an empty list); `checklistError(points)` ("Keep at least one point, or use Reset to default."); `yearError(value, thisYear)` ("The preferred year must be between 1500 and {thisYear}.").
+- `prayers.ts` (amendment 2026-09-26, PR #7): `prayersPayload(rows, profile)` (keeps each row's `id`; new rows have none), `firstLine(text)`, `isDirty(baseline, current)`.
 - Time zones: none here. 6a uses slice 1's `src/lib/timezones.ts` as is.
 
 ### Queries and mutations (`src/lib/queries/`)
@@ -588,6 +677,8 @@ Base UI components needed: input, textarea, label, dialog, alert-dialog, combobo
 | `contacts.ts` (5b) | add `useCreateContact`, `useUpdateContact`, `useDeleteContact` | invalidate `["church", id, "contacts"]` |
 | `hymns.ts` (3) | add `useHymnLibrary({hymnal, q})` (`useInfiniteQuery`, `limit: 50`, `getNextPageParam` from `offset + items.length < total`), `useCreateHymn`, `useUpdateHymn`, `useDeleteHymn` | key `["church", id, "hymns", {view: "library", hymnal, q}]`; mutations invalidate the prefixes `["church", id, "hymns"]` and `["church", id, "hymnals"]` (F §4.4), plus `["church", id, "profile"]` because deleting or moving a hymn can change `effective_hymnal` (the profile entry is in F §4.4 as amended from slices 3 and 6a). Because the builder's `useHymns` shares the prefix, the picker refetches without a reload (F acceptance 18). |
 | `hymnals.ts` (3) | add `useHymnalSources()`, `useAddHymnal()`, `useRemoveHymnal()` | new key `["church", id, "hymnal-sources"]` (added to `keys.ts`); add and remove invalidate `hymns`, `hymnals`, `hymnal-sources` and `profile` |
+| `rubric.ts` (amendment 2026-09-26) | `useRubric()`, `useSaveRubric()` → `PATCH /rubric` | key `["church", id, "rubric"]` (added to `keys.ts`); set from the PATCH response; also invalidates `["church", id, "hymns"]` when `prefer_before_year` was sent, because `HymnOut.newer_than_preferred` depends on it (slice 3). Liturgy generation reads the rubric on the server, so nothing else is invalidated. |
+| `prayer-library.ts` (amendment 2026-09-26, PR #7) | `usePrayerLibrary()`, `useSavePrayerLibrary()` → `PUT`, `useDraftVoiceProfile()` → `POST …/voice-profile-draft` (`timeoutMs: 90_000`, `signal` for Cancel) | key `["church", id, "prayer-library"]` (added to `keys.ts`); set from the PUT response; the draft mutation touches no cache (the draft is not stored) |
 
 - All hooks use `api.church` (F §4.5).
 - Mutations are not optimistic (F §4.4).
@@ -630,6 +721,8 @@ Base UI components needed: input, textarea, label, dialog, alert-dialog, combobo
 | 20 | Success messages | "Profile updated.", "Prompts saved.", "Contact added.", "Hymn added." were wiped by `st.rerun()` (inv §0 item 3) | Visible toasts ("Profile saved.", "Prompts saved.", "Hymn added.", …); contact add shows the new row instead | inv §0 item 3 |
 | 21 | Role-denied message | "You must be an admin to do that." | "Only church admins can do this." (slice 0's `require_admin` message, deps.py:89-92) | One message across the API |
 | 22 | Read-only notices | "Only admins can edit the prompts (you can read them below)."; "Only admins can add or remove contacts." | "Only admins can edit the prompts. You can read them below."; "Only admins can add or change contacts." (contacts can now be edited). The profile notice, "Only admins can edit the church profile." (settings.py:194), is unchanged. | Copy polish; contact edit is new |
+| 23 | Service rubric (amendment 2026-09-26) | No editor anywhere. `PATCH /rubric` existed for API clients only (inv G11) | `/settings/rubric` for admins, read-only for members. An item saved equal to its default is stored as "not customized". `PATCH /rubric` now re-reads the role under the church-row lock, and `GET /rubric` gains `defaults` | PR #4 left the editor to slice 6; F §1.7 |
+| 24 | Prayer library (amendment 2026-09-26) | Does not exist | `/settings/prayers` and its three routes, new app only | PR #7 |
 
 Carried over unchanged:
 - Members may add and edit hymns, and admins manage the profile, translation, prompts and contacts (decision 5). Members may also delete hymns (Streamlit parity, pending Open question 2).
@@ -736,6 +829,31 @@ Carried over unchanged:
   - Concurrent `POST /hymnals {PH1990}` × 2 → exactly 605 PH1990 rows.
   - Two threads with a barrier each run `POST /contacts {email: "mary@x.org"}` (the second as `MARY@x.org`) → exactly one 201 and one 409, and one row; repeat 20 times. The same for two identical `POST /hymns`.
   - `POST /hymnals` for 605 rows finishes in under 10 s against the CI Postgres. This is a guard, not a benchmark.
+  - *Amendment 2026-09-26:* four threads with a barrier run `PATCH /church {bible_translation}`, `PUT /church/liturgy-prompts`, `PATCH /rubric {prefer_before_year: 1900}` and `PUT /church/prayer-library` (one prayer). All four keys are present afterwards; repeat 20 times. Two concurrent `PATCH /rubric` calls on different checklists keep both overrides.
+
+**Rubric (amendment 2026-09-26, PR #4)**
+- PR #4's `backend/tests/test_api_rubric.py` keeps passing unchanged: a member reads the defaults; a non-member gets 403; a member's `PATCH` gets 403; owner and admin can `PATCH`; reset with `null`; a readable 422; a non-object body is rejected; edits stay in their church.
+- `test_church_admin.py` additions for `update_rubric`:
+  - each `service_rubric` message comes back as 422 `invalid_rubric` with that exact message and no `fields`, and nothing is written;
+  - `customized` and `defaults` are accurate after a change and after a reset;
+  - an admin demoted under the lock → `Forbidden("Only church admins can do this.")` and nothing is written;
+  - a soft-deleted church or a removed member → `no_church_access`;
+  - unknown settings keys (`liturgy_prompts`, `prayer_library`, `{"foo": 1}`) survive;
+  - a stored non-dict `rubric` is treated as `{}`.
+- PR #4's `test_church_settings.py` rubric cases are retargeted to `update_rubric` when `update_church_rubric` is deleted.
+- `assert_church_isolated` on `GET` and `PATCH /rubric` (the 403 half; no path ids).
+- `GET /rubric` includes `defaults` equal to `service_rubric.default_rubric()`.
+- The OpenAPI snapshot shows the additive `defaults` field.
+
+**Prayer library (amendment 2026-09-26, PR #7)** — every case in PR #7 §Testing, in `test_api_prayer_library.py` and `test_usecase_prayer_library.py`:
+- guards: `assert_church_isolated` on all three routes (non-member 403, other church 404 where an id applies), and a member's `PUT` gets the role 403;
+- every validation message with its exact `fields` key;
+- `added_at` kept for known ids and new ids assigned;
+- a missing or junk key reads as empty;
+- the draft uses `FakeAI` (checking the prayers, their type labels and the no-quoting instruction), returns 422 with no prayers, maps each AI error to its status, and charges the `ai` bucket once;
+- the concurrent-save case in the Postgres block above.
+- The writer-hook cases belong to slice 4.
+- The role re-read under the lock (demoted admin → role 403, nothing written) is added, as for every 6a write.
 
 ### Frontend (Vitest 3)
 
@@ -797,7 +915,20 @@ Carried over unchanged:
   - **TimezoneCombobox** (slice 1's test file, extended): an out-of-list `value` renders selected; `warning` renders below; without `warning` slice 1's behavior is unchanged.
   - **EmailBulletinDialog** (5b's test file, extended): with no contacts, an admin sees **Manage contacts** linking to `/settings/contacts`; a member doesn't.
   - **SectionCard** (slice 4's test file, extended): a Benediction card with origin `default` renders the hint with "Settings" as a link to `/settings/church`, for an admin and for a member; other origins show no such link.
-  - **Settings layout** (5b's test, updated): `/settings` now redirects to `/settings/church`; the nav starts Church, Hymns, Liturgy, Contacts, Account; the legacy note reads "People and invites are still managed in the current app for now.".
+  - **Settings layout** (5b's test, updated): `/settings` now redirects to `/settings/church`; the nav starts Church, Hymns, Liturgy, Contacts, Account; the legacy note reads "People and invites are still managed in the current app for now.". *Amendment 2026-09-26:* the nav is Church, Hymns, Liturgy, **Prayers, Rubric**, Contacts, Account.
+  - **RubricSettingsPage** (amendment 2026-09-26):
+    - A member sees the banner and read-only points, with no footer, add, remove or reset controls.
+    - An admin edits one point of the Benediction card → exactly one `PATCH /rubric` with body `{prayers: {benediction: [...]}}`; toast "Rubric saved.".
+    - Editing a card back to its default text sends `{prayers: {benediction: null}}`.
+    - Reset to default restores the default points unsaved, and the Customized badge follows the text.
+    - Changing the year sends only `{prefer_before_year: 1900}` and invalidates `["church", id, "hymns"]` (spy). A year of 1499 or next year shows the inline message and disables Save.
+    - Add a point is disabled at 12; Enter in a point adds a new point below; removing every point shows "Keep at least one point, or use Reset to default." and disables Save.
+    - A 422 `invalid_rubric` shows the server message above the footer and keeps the edits.
+    - Reset all confirms, then sends `null` for exactly the `customized` keys.
+    - The Opening and Closing cards show the theme note.
+    - The leave guard fires on navigation while dirty.
+  - **PrayersSettingsPage** (amendment 2026-09-26): PR #7 §Testing's DOM cases: the happy path and the error state; a member's read-only view; "Use this draft" and "Keep mine"; the "Save your prayers first" rule; remove with confirm; a 422 field error. Plus the leave guard while dirty, and Cancel on the draft aborting its request.
+  - `rubric.test.ts` / `prayers.test.ts` (unit, amendment 2026-09-26): `cleanPoints`, `rubricPatch` (unchanged → `{}`, equal to default → `null`, never `[]`), `yearError`, `checklistError`, and `prayersPayload` (keeps ids, new rows without an id).
 
 ### Manual checks (appended to `docs/manual-verification.md`; production Vercel URL; 375 px and desktop)
 
@@ -825,6 +956,14 @@ Carried over unchanged:
     - load the church in Streamlit;
     - its Settings shows the translation and prompts saved by the new app;
     - Streamlit's "Save prompts" leaves `default_benediction` and `default_hymnal` in place (verify with `GET /church`).
+11. **Rubric** (amendment 2026-09-26):
+    - As the owner, edit the Prayer of Confession checklist and save;
+    - generate the Confession in the builder: the new point is followed (the prompt is DEBUG-only, so judge the text);
+    - set "Prefer hymns written before" to 1900: the hymn picker labels hymns written in or after 1900 without a reload;
+    - Reset all;
+    - Streamlit (frozen) suggestions and liturgy follow the saved rubric too, because both apps read the same key;
+    - as a member, the page is read-only.
+12. **Prayers** (amendment 2026-09-26): PR #7's manual check at 375 px, plus: save three prayers of mixed types and a profile, then generate a Prayer of Confession in the builder with no reload.
 
 ---
 
@@ -852,6 +991,8 @@ Carried over unchanged:
 20. The hand-offs are done. From 5b: Settings opens on Church, the legacy note mentions only people and invites, an admin with no contacts sees **Manage contacts** in the email dialog, and a bulletin send with a malformed saved contact says "An admin can fix it in Settings → Contacts." From 4: the Benediction card's "Settings" hint links to `/settings/church`. *(DOM test + test)*
 21. A write to a church soft-deleted after the guard ran, or by a caller whose membership was removed after the guard ran, returns 403 `no_church_access` and writes nothing. An admin demoted after the guard ran gets 403 "Only church admins can do this." (no `reason`) on every admin write and nothing is written; the role is always the one re-read under the church-row lock (6b's `lock_and_read_actor`). *(test)*
 22. `ESV_API_KEY` is read only in `api/settings.py` and passed to `scripture_fetcher`; ESV gating, `GET /translations`, passages and the profile's `effective_translation` behave exactly as before. *(test)*
+23. *(Amendment 2026-09-26, PR #4.)* `/settings/rubric` lets admins edit every hymn and prayer checklist and both preferences over the existing `GET`/`PATCH /rubric`. Members read it. It saves one sparse `PATCH`, and an item equal to its default is stored as not customized. Validation copy equals the `service_rubric` messages, and a server 422 `invalid_rubric` saves nothing. `PATCH /rubric` re-reads the role under the church-row lock, keeps PR #4's request, response and error shape (plus the additive `defaults`), and its tests from PR #4 still pass. A year change relabels the builder's hymns without a reload. *(test + DOM test + manual 11)*
+24. *(Amendment 2026-09-26, PR #7.)* `/settings/prayers` sits right after Liturgy in `SETTINGS_SECTIONS`, followed by Rubric. `GET /church/prayer-library` (`require_church`), `PUT` (`require_admin`, full replace, `lock_and_read_actor`) and `POST …/voice-profile-draft` (`require_admin`, `ai` bucket cost 1, 75 s deadline, draft not stored) behave as PR #7 specifies. The library lives in `churches.settings["prayer_library"]` with no DDL, and concurrent settings writes never lose it. *(test + DOM test + manual 12)*
 
 ---
 
@@ -860,6 +1001,8 @@ Carried over unchanged:
 **Open questions (for the owner)**
 1. **Removing a hymnal is new.** `DELETE /hymnals/{code}` is admin-only, refused for the only or default hymnal, and confirmed in the UI. It exists so a mistaken "Add a hymnal" (605 rows) can be undone. The owner approved *adding* bundled hymnals, not removing them. If the owner doesn't want removal, drop the route and the dialog; nothing else depends on them.
 2. **May members delete hymns?** Decision 5 grants members "add/edit hymns" and says nothing about deleting them; inv §7 Q8 asked it explicitly. Streamlit lets any member delete any hymn (settings.py:303-306), so 6a keeps that as **parity**, now with a confirmation. The gap: admins can't remove the only or the default hymnal, but a member can empty a hymnal, or the whole library, one hymn at a time through `DELETE /hymns/{id}`. The builder then falls back to the next hymnal, or shows the empty-hymnal state. If the owner answers "admins only", change the `DELETE /hymns/{hymn_id}` guard to `require_admin`, hide **Delete hymn** for members, and flip the role tests (Testing → Role denials). Nothing else changes.
+3. **Opening and closing theme keywords (amendment 2026-09-26; the rubric spec's known limit).** Slice 3 still gathers opening and closing candidates with the fixed theme keywords before the AI reads the church's checklist. If a church rewrites those checklists, the keywords may not match them. Default until answered: keep the keywords and show the note on the two cards (UX §6). The alternative, dropping the keyword pre-filter when a slot checklist is customized, is a slice 3 change that 6a doesn't need to know about.
+4. **Editing a hymn's year and familiarity (amendment 2026-09-26).** The rubric spec calls this "a slice 6 hymn-settings concern". Default: not in 6a. The facts come from the ops backfill CLI only, and hymns added here start unknown until it runs again. If wanted, add optional `text_year` and `hymnal_count` to `HymnIn`/`HymnPatchIn` and to the hymn dialog (additive).
 
 **Risks**
 1. **Cross-slice assumptions.** The benediction fallback must be key-presence, not truthiness (slice 4). `effective_hymnal` must follow the effective default rule and must match 6a's deletion guard (slice 3). Contacts must use exactly 5b's `normalize_address`, or a saved contact can fail every send (5b). Prompt cleaning must be slice 4's single `clean_prompt_overrides`, including its `\r\n` normalization, or `PUT` and generation can disagree on which overrides equal the default (slice 4). Every write must take the role from 6b's single `lock_and_read_actor`, not from the guard's snapshot (6b). The timezone check must be slice 1's exact `available_timezones()` membership, or `PATCH /church` and `timezone_valid` disagree (slices 1 and 2). Role 403s must not trigger the church fallback (slice 1). Each has a stated remedy under Assumed interfaces. The implementer checks them first and adjusts before writing 6a code.
@@ -868,4 +1011,5 @@ Carried over unchanged:
 4. **Browser and server timezone lists can differ.** A zone the browser lists but Python's tzdata lacks returns 422 "Unknown timezone.". Mitigations: the `tzdata` package pinned in requirements, and canonical `Intl` ids.
 5. **Import speed on the Supabase pooler.** Removing the per-row flush should make PH1990 a batched insert. If production still exceeds about 10 s, switch `import_hymns` to a single `insert(Hymn).values([...])` for new rows. Verify in manual check 3.
 6. **Last write wins within one resource.** `PUT /church/liturgy-prompts` replaces all prompts, so two admins saving prompts at the same moment keep the later set. PATCH sends only changed fields, and a background refetch rebases untouched fields before the next save, so disjoint profile edits merge; for prompts the same rebase means a save after a refetch keeps the other admin's untouched cards. Two edits of the same field keep the later one. Accepted for a single-tester deployment. If it matters later, add `If-Match` on a settings version.
-7. **Frozen Streamlit writes are unlocked** and can race an API settings, hymn or contact write (including creating a duplicate contact or hymn the API's locked check would refuse). Accepted per F §1.7 and §6.2. After 6a the legacy note sends the tester to Streamlit only for people and invites, and after 6b not at all.
+7. **Frozen Streamlit writes are unlocked** and can race an API settings, hymn or contact write (including creating a duplicate contact or hymn the API's locked check would refuse). Accepted per F §1.7 and §6.2. After 6a the legacy note sends the tester to Streamlit only for people and invites, and after 6b not at all. *Amendment 2026-09-26:* Streamlit's **settings** writes are locked since PR #4 (Data and migrations), so only its hymn, contact and profile-name writes remain unlocked.
+8. **Rubric and prayers affect prompts in both apps (amendment 2026-09-26).** Frozen Streamlit reads the same `rubric` key, so an edit here changes its hymn suggestions and liturgy too. That is intended, and harmless because `merge_rubric` ignores bad values. It ignores `prayer_library`. Longer prompts from both features are measured in slice 4 (Risk 2 there; index open item 18).

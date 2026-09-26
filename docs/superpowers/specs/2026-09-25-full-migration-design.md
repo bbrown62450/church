@@ -3,6 +3,10 @@
 **Date:** 2026-09-25
 **Status:** Draft for review. This is the index. The foundations spec and each slice spec are the binding detail. If this page disagrees with one of them, the linked spec wins.
 **Inputs:** [Slice 0 spec](2026-09-25-react-fastapi-migration-design.md) (done, live) · [Migration inventory](2026-09-25-streamlit-migration-inventory.md) (source of truth for current behavior) · [Foundations](2026-09-25-migration-foundations-design.md) (cross-cutting conventions) · owner decisions 1–9.
+**Amended 2026-09-26** with three owner-approved inputs, folded into the slice specs as marked amendments:
+- [Service rubric](2026-09-25-service-rubric-design.md), PR #4. Merged; its behavior is current behavior (inventory D10, E9, G11, H13–H14).
+- [Prayer library](2026-09-26-prayer-library-design.md), PR #7. New app only; built in slices 4 and 6a.
+- [Service reviewer](2026-09-26-service-reviewer-design.md), PR #8. New app only; a small add-on right after slice 4.
 
 ---
 
@@ -35,7 +39,7 @@ The worship-service planning app moves from the Streamlit app (`app.py`, `stream
 
 ## 3. Roadmap
 
-Build order: ops → 1 → 2 → 3 → 4 → 5a → 5b → **parity gate** → 6a → 6b → 7. The 6b backend PR (6b-1) can be built in parallel any time after slice 1. Its UI PR (6b-2) merges after 5b.
+Build order: ops → 1 → 2 → 3 → 4 → 5a → 5b → **parity gate** → 6a → 6b → 7. The 6b backend PR (6b-1) can be built in parallel any time after slice 1. Its UI PR (6b-2) merges after 5b. *Amendment 2026-09-26:* the service-reviewer add-on (PR #8) builds right after 4b, before 5a.
 
 | Order | Slice | Goal | Depends on | Size | Spec |
 |---|---|---|---|---|---|
@@ -44,11 +48,11 @@ Build order: ops → 1 → 2 → 3 → 4 → 5a → 5b → **parity gate** → 6
 | 1 | ops: Ops cleanup | Lock down the Supabase Data API, encrypt backups, fix the three deferred slice-0 issues, add request ids and readiness, freeze Streamlit | 0 | M | [spec](2026-09-25-slice-ops-cleanup-design.md) |
 | 2 | 1: Onboarding + platform (1a, 1b) | Create or join churches at any time, with invite links that survive sign-in; ship the Alembic, error, query and layout platform | ops | L (1a M + 1b S–M) | [spec](2026-09-25-slice-1-onboarding-design.md) |
 | 3 | 2: Builder shell + Date & readings (2a–2c) | Four-step shell with a per-church draft; any-date lectionary lookup, manual fallback, passage text, OT/NT picks | ops, 1 | L | [spec](2026-09-25-slice-2-readings-design.md) |
-| 4 | 3: Hymns (3a, 3b) | Opening, Response and Closing slots from the church hymnal; 12-week exclusion; tighter scripture matching; AI top pick + 2–4 chips | ops, 1, 2 | L | [spec](2026-09-25-slice-3-hymns-design.md) |
-| 5 | 4: Liturgy (4a, 4b) | Editable section cards with per-card Generate; typed text never changed; works without an AI key | ops, 1, 2, 3 | M | [spec](2026-09-25-slice-4-liturgy-design.md) |
+| 4 | 3: Hymns (3a, 3b) | Opening, Response and Closing slots from the church hymnal; 12-week exclusion; tighter scripture matching; AI top pick + 2–4 chips; rubric-aware ranking and the newer-hymn year label (amended 2026-09-26) | ops, 1, 2 | L | [spec](2026-09-25-slice-3-hymns-design.md) |
+| 5 | 4: Liturgy (4a, 4b) | Editable section cards with per-card Generate; typed text never changed; works without an AI key; rubric checklists, sermon themes and the prayer-library voice (amended 2026-09-26); then the reviewer add-on | ops, 1, 2, 3 | M (+ S add-on) | [spec](2026-09-25-slice-4-liturgy-design.md), [reviewer](2026-09-26-service-reviewer-design.md) |
 | 6 | 5a: Review, Word docs, archive (5a-1, 5a-2) | Save to archive with conflict checks, on-demand bulletin and pastor's copies, `/services` archive with delete | ops, 1, 2, 3, 4 | L | [spec](2026-09-25-slice-5a-documents-archive-design.md) |
 | 7 | 5b: Gmail + bulletin email | Per-user Gmail connection and a BCC bulletin email with an editable message; Settings layout; **parity gate** | ops, 1, 2, 5a | M | [spec](2026-09-25-slice-5b-gmail-email-design.md) |
-| 8 | 6a: Settings (church) | Church profile and defaults, hymn library and bundled hymnals, liturgy prompts, contacts | 1, 2, 3, 4, 5b | M | [spec](2026-09-25-slice-6a-settings-church-design.md) |
+| 8 | 6a: Settings (church) | Church profile and defaults, hymn library and bundled hymnals, liturgy prompts, contacts; rubric editor and prayer library (amended 2026-09-26) | 1, 2, 3, 4, 5b | M | [spec](2026-09-25-slice-6a-settings-church-design.md), [prayer library](2026-09-26-prayer-library-design.md) |
 | 9 | 6b: Settings (people) (6b-1, 6b-2) | Members, single-use or reusable invites, role policy, transfer, leave, delete church; one owner enforced | 1 (6b-1); 5b (6b-2) | M | [spec](2026-09-25-slice-6b-settings-people-design.md) |
 | 10 | 7: Cutover | Tombstone and quiet period, then delete Streamlit, rotate secrets, run contract migrations, encrypt Gmail tokens, seed the catalog | 6a, 6b, parity gate | M | [spec](2026-09-25-slice-7-cutover-design.md) |
 
@@ -80,7 +84,7 @@ graph LR
   - `POST /churches`: `Idempotency-Key`, and a cap of 5 per user per 24 h;
   - `POST /invites/preview` and `POST /invites/accept`;
   - the `GET /church` 403 carries `details.reason = "no_church_access"`.
-- **Schema:** Alembic arrives with `0001_baseline` (production is stamped, not re-created), `0002_reconcile`, `0003_lockdown` and `0004_invites_reusable` (`invites.reusable`, `invites.accepted_by`). Railway runs migrations as a pre-deploy step, and its health check is `/health/ready`.
+- **Schema:** Alembic arrives with `0001_baseline` (production is stamped, not re-created), `0002_reconcile`, `0003_lockdown` and `0004_invites_reusable` (`invites.reusable`, `invites.accepted_by`). Railway runs migrations as a pre-deploy step, and its health check is `/health/ready`. *Amended 2026-09-26:* the baseline includes PR #4's `text_year` and `hymnal_count` on `hymns` and `hymn_catalog` (already in production), `0002` adds them where missing, and `migrate_add_hymn_facts.py` is deleted with `migrate_add_hymnal.py`. The Hymnary backfill CLI stays an ops tool.
 - **Platform:**
   - backend: `domain_errors` and `usecases/`, the idempotency store, route-guard and OpenAPI contract tests, a Postgres CI job;
   - frontend: TanStack Query, the `(signed-in)` and `(church)` layouts, the UI kit and Combobox, the Vitest `dom` project.
@@ -107,6 +111,11 @@ graph LR
 - **Endpoints:** `GET /hymnals`, `GET /hymns` (paged, with `recent_for_date`), `POST /hymns/scripture-matches` and `POST /hymns/suggestions` (`ai` bucket, 90 s client timeout). `GET /church` gains `default_hymnal` and `effective_hymnal`.
 - **Schema:** none. The slice reads `churches.settings.default_hymnal`. The 12-week window covers the 12 weeks before and after the service date, excluding that date itself.
 - **Backend additions:** a tighter matcher (Psalm 1 no longer matches Psalm 119), the shared OpenAI client, `GZipMiddleware`, and the frozen `HymnRef`, `SlotHymns` and `SectionKey` schemas.
+- **Service rubric (amended 2026-09-26, PR #4):**
+  - suggestions keep the rubric behavior already on `main`: candidates ranked older, then familiar (with places kept for newer hymns), the church's slot checklists and a preferences line in the prompt, and each hymn's year and hymnal count;
+  - `HymnOut` gains `text_year`, `hymnal_count` and `newer_than_preferred`;
+  - newer hymns show "Written {year}";
+  - `service_rubric` and `hymn_ranking` are reused.
 
 **4: Liturgy** ([spec](2026-09-25-slice-4-liturgy-design.md))
 - **UX:**
@@ -119,6 +128,18 @@ graph LR
   - a no-AI banner.
 - **Endpoints:** `GET /liturgy/config` and `POST /liturgy/generate`. Generate returns a result per section inside a 200, and the `ai` bucket is charged per section that reaches the AI. `GET /church` gains `default_benediction`, which falls back to "Halverson".
 - **Schema:** none, and no draft version bump. Errors are never stored. `liturgy_config.py` and the prompt validator are reused in 6a.
+- **Rubric and sermon text (amended 2026-09-26, PR #4):** each AI section keeps its rubric checklist and the sermon (NT) text themes, reusing PR #4's functions. The client sends the effective NT passage as `sermon_text` (never ESV). The Illumination and Offertory defaults say "no more than 3 sentences".
+- **Prayer library read path (amended 2026-09-26, PR #7):**
+  - `build_messages(..., voice=)` appends the voice profile (≤2 000 characters) and one random same-type example (≤3 000);
+  - the example is dropped first, then the profile, when the prompt is too long, and the library never causes `prompt_invalid`;
+  - an empty library gives byte-identical messages;
+  - `settings.prayer_library` is read in the same session as the prompts.
+- **Reviewer add-on (amended 2026-09-26, PR #8; right after 4b, new app only):**
+  - a "Review service" button, up to 3 notes per card and an "Across the service" box;
+  - "Revise with these notes" on AI cards only, with Undo;
+  - `POST /liturgy/review`: 200 with code notes plus `ai_status`, and the `ai` bucket charged only when the AI runs;
+  - `POST /liturgy/revise`: `ai` bucket, AI errors as HTTP statuses;
+  - new season guidance in the default system prompt (Streamlit keeps the old wording).
 
 **5a: Review, Word docs, archive** ([spec](2026-09-25-slice-5a-documents-archive-design.md))
 - **Review step:** a "Still to do" checklist and an Archive card with Save, Save changes or Save as new service. A 409 conflict opens a dialog.
@@ -150,6 +171,14 @@ graph LR
   Members see admin-only pages read-only, and a leave guard protects unsaved edits.
 - **Endpoints:** `PATCH /church`; `GET`/`PUT /church/liturgy-prompts`; `POST`/`PATCH`/`DELETE /contacts`; `POST`/`PATCH`/`DELETE /hymns`; `GET /hymnal-sources`; `POST /hymnals`; `DELETE /hymnals/{code}`.
 - **Schema:** no DDL. The `default_benediction` and `default_hymnal` keys in `churches.settings` are written through a `FOR UPDATE` merge. The PH1990 seed moves to `backend/seed/hymnals/`.
+- **Rubric editor (amended 2026-09-26, PR #4):**
+  - `/settings/rubric`: admins edit the hymn and prayer checklists and the two preferences; members read;
+  - it uses the existing `GET`/`PATCH /rubric`; the PATCH now goes through `lock_and_read_actor`, and GET gains an additive `defaults`;
+  - validation copy equals `service_rubric`'s messages (422 `invalid_rubric`).
+- **Prayer library (amended 2026-09-26, PR #7; new app only):**
+  - `/settings/prayers`, right after Liturgy in the nav, with Rubric after it;
+  - `GET /church/prayer-library` (church), `PUT` (admin, full replace, locked) and `POST /church/prayer-library/voice-profile-draft` (admin, `ai` bucket cost 1, 75 s deadline, draft not stored);
+  - stored in `churches.settings.prayer_library`, with no DDL.
 
 **6b: Settings (people)** ([spec](2026-09-25-slice-6b-settings-people-design.md))
 - **`/settings/people`:**
@@ -201,6 +230,8 @@ Only questions that are still open. Each has a default the build follows until t
 | 10 | May members delete hymns, or only admins? | Members, as today, with a confirmation | 6a | [6a](2026-09-25-slice-6a-settings-church-design.md) |
 | 11 | Commit the Hymnary.org-derived catalog CSV to the public repo, or commit it `age`-encrypted? | Plain, with an attribution README | 7-D | [7](2026-09-25-slice-7-cutover-design.md) |
 | 12 | Is 30 days of backup retention enough? | Yes; longer means storage off GitHub | any time | [ops](2026-09-25-slice-ops-cleanup-design.md), [7](2026-09-25-slice-7-cutover-design.md) |
+| 22 | *(Amended 2026-09-26.)* Opening and closing hymn candidates are still gathered by fixed theme keywords before the AI reads the church's rubric checklist. If a church rewrites those checklists, should the keyword pre-filter be dropped for that slot? (The rubric spec's known limit.) | Keep the keywords; 6a's rubric editor explains it | 6a | [3](2026-09-25-slice-3-hymns-design.md), [6a](2026-09-25-slice-6a-settings-church-design.md) |
+| 23 | *(Amended 2026-09-26.)* Should admins edit a hymn's year and familiarity by hand? (The rubric spec calls it a slice 6 hymn-settings concern.) | No; the ops backfill CLI fills blanks only | 6a | [6a](2026-09-25-slice-6a-settings-church-design.md) |
 
 **Facts the owner must check** (these block the step named)
 
@@ -216,7 +247,7 @@ Only questions that are still open. Each has a default the build follows until t
 
 | # | Item | Fallback | Source |
 |---|---|---|---|
-| 18 | Can Prayers of the People finish within the 30 s OpenAI timeout? Do the token budgets fit the chosen `OPENAI_MODEL` (a reasoning model spends tokens on reasoning)? | 60 s for that section with no retry; adjust `max_completion_tokens`; pick a non-reasoning model | [4](2026-09-25-slice-4-liturgy-design.md), [3](2026-09-25-slice-3-hymns-design.md) |
+| 18 | Can Prayers of the People finish within the 30 s OpenAI timeout? Do the token budgets fit the chosen `OPENAI_MODEL` (a reasoning model spends tokens on reasoning)? *(Amended 2026-09-26:)* measure with the longer prompt: rubric checklist and sermon text (PR #4), plus a 2 000-character voice profile and a 3 000-character example (PR #7). | 60 s for that section with no retry; adjust `max_completion_tokens`; pick a non-reasoning model | [4](2026-09-25-slice-4-liturgy-design.md), [3](2026-09-25-slice-3-hymns-design.md) |
 | 19 | How long does seeding the hymnal on church create take in production? | Above 5 s, switch to `INSERT … SELECT` | [1](2026-09-25-slice-1-onboarding-design.md) |
 | 20 | Does `prompt=select_account` reach Google through Supabase? Does Next 16 handle `history.replaceState` on `/join`? | Different copy; `router.replace` | [1](2026-09-25-slice-1-onboarding-design.md) |
 | 21 | Does a `.docx` download on iOS Safari still work after an `await`? | A second-tap "Save {filename}" link | [5a](2026-09-25-slice-5a-documents-archive-design.md) |

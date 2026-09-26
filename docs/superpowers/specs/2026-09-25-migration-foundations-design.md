@@ -1,11 +1,12 @@
 # Migration Foundations — Cross-cutting Design for Slices ops–7
 
 **Date:** 2026-09-25
-**Status:** Draft for review. Amended 2026-09-25 with the cross-slice consistency resolutions (see "Amendments from slice specs").
+**Status:** Draft for review. Amended 2026-09-25 with the cross-slice consistency resolutions (see "Amendments from slice specs"). Amended 2026-09-26 for the service rubric (PR #4), the prayer library (PR #7) and the service reviewer (PR #8).
 **Inputs:**
 - Slice 0 spec: `docs/superpowers/specs/2026-09-25-react-fastapi-migration-design.md`
 - Migration inventory: `docs/superpowers/specs/2026-09-25-streamlit-migration-inventory.md` (cited below as "inventory §n"). It is the source of truth for current behavior.
 - The owner's product decisions 1-9 (restated where they shape a foundation).
+- *Amendment 2026-09-26:* `2026-09-25-service-rubric-design.md` (PR #4, merged: current behavior on `main`), `2026-09-26-prayer-library-design.md` (PR #7) and `2026-09-26-service-reviewer-design.md` (PR #8). The last two are new-app only, built inside slices 4 and 6a and the reviewer add-on after 4b.
 
 ## Goal
 
@@ -63,6 +64,15 @@ The slice specs refined several foundation rules. This pass folds every one of t
 | §4.4 | Hymn and hymnal mutations also invalidate `profile`. Service save and delete also invalidate `hymns`. `PATCH /church` with `default_hymnal` also invalidates `hymnals`. New key `hymnal-sources`. Role 403s don't trigger the church fallback. | 3, 5a, 6a, 6b |
 | §4.6 | `editing` gains `date_iso`, and the draft gains `save_key_fingerprint` (a `DRAFT_VERSION` bump with a migration). | 5a |
 | §7.2 | The Combobox pattern moves from slice 3 to slice 1 (`TimezoneCombobox`). | 1, 3, 6a (resolution) |
+| §1.1 | *(2026-09-26)* `GET`/`PATCH /rubric` (PR #4, already on `main`) keep their top-level path, the one exception to "church sub-resources sit under `/church`". New: `/church/prayer-library` (+ `/voice-profile-draft`) and the reviewer actions `POST /liturgy/review` and `POST /liturgy/revise`. | PR #4, PR #7, PR #8 |
+| §1.3 | *(2026-09-26)* `PATCH /rubric` takes a plain JSON object checked by `service_rubric.validate_patch`, which rejects unknown keys itself, as a declared exception to the model rule. `SermonText {ref ≤200, text ≤20 000}` is shared by `/liturgy/generate`, `/liturgy/review` and `/liturgy/revise`. | PR #4, 4, PR #8 |
+| §1.5 | *(2026-09-26)* New 422 code `invalid_rubric` (PR #4's `PATCH /rubric`). `POST /liturgy/review` returns AI failures and an empty `ai` bucket as `ai_status` inside a 200, like `/liturgy/generate`; `ai_status` is a field, not an error code. | PR #4, PR #8 |
+| §1.7 | *(2026-09-26)* Since PR #4, `repos.churches._merge_settings` (and so frozen Streamlit's settings writes) locks the church row. | PR #4 |
+| §1.8 | *(2026-09-26)* `ai` bucket: `POST /church/prayer-library/voice-profile-draft` and `POST /liturgy/revise` (dependency, cost 1), and `POST /liturgy/review` (cost 1, only when the AI runs; empty bucket → `ai_status: rate_limited`). Timeout rows added. | PR #7, PR #8 |
+| §3.2 | *(2026-09-26)* `0001_baseline` includes `text_year` and `hymnal_count` on `hymns` and `hymn_catalog` (already in production), `0002_reconcile` adds them where missing, and `migrate_add_hymn_facts.py` is deleted with `migrate_add_hymnal.py`. | PR #4, 1 |
+| §3.5 | *(2026-09-26)* Settings keys `rubric` (PR #4; read in 3, 4 and frozen Streamlit; written by `PATCH /rubric`, edited in 6a) and `prayer_library` (PR #7; read in 4, written in 6a). No DDL. | PR #4, PR #7 |
+| §4.1, §4.4 | *(2026-09-26)* Routes `/settings/prayers` and `/settings/rubric`; keys `rubric` and `prayer-library`; a rubric save with `prefer_before_year` also invalidates `hymns`. | 6a |
+| §6.2 | *(2026-09-26)* Frozen Streamlit (cut after PR #4) reads `settings.rubric` and maps `text_year`/`hymnal_count`. | PR #4 |
 
 ---
 
@@ -93,6 +103,7 @@ These rules apply to every route added from the ops slice on.
   - `POST /church/leave` is added (6b).
   - Invites gain a `reusable` flag (6b; the column lands in 1).
   - `/documents/preview` and `/hymns/suggestions/stream` are dropped (D4).
+  - *Amendment 2026-09-26:* `GET /rubric` (church) and `PATCH /rubric` (admin) already exist from PR #4 and **keep their path**. They are the one exception to the `/church/…` rule for settings sub-resources, and no new route follows them. New routes: `GET`/`PUT /church/prayer-library` and the action `POST /church/prayer-library/voice-profile-draft` (6a, PR #7); the actions `POST /liturgy/review` and `POST /liturgy/revise` (the reviewer add-on after 4b, PR #8).
 
 ### 1.2 Scoping and guards
 
@@ -128,6 +139,8 @@ Rules:
   - A model used by two or more route modules lives in `backend/api/schemas.py`, for example `ServiceDraft`, `HymnRef`, `Page`.
   - A model used by one route module sits at the top of that module.
   - `ServiceDraft` is the shape in inventory §2.1 plus `hymnal: str | null`.
+  - *Amendment 2026-09-26:* `SermonText {ref: str ≤200, text: str ≤20 000}` (`extra="forbid"`) lives in `api/schemas.py`, shared by `POST /liturgy/generate` (slice 4), `/liturgy/review` and `/liturgy/revise` (PR #8).
+- *Amendment 2026-09-26, declared exception:* `PATCH /rubric` (PR #4) takes a plain JSON object validated by `service_rubric.validate_patch`, not a Pydantic model. The validator rejects unknown keys and bad values itself with 422 `invalid_rubric` and a readable message, so the intent of `extra="forbid"` holds.
 - **`HymnRef`, `SlotHymns` and `SectionKey` are frozen here.** This is the only definition. Slice 3 lands first and creates them in `backend/api/schemas.py` with exactly this shape, although no slice-3 route uses them. Slice 4 (`POST /liturgy/generate`) and 5a (`ServiceDraft`, `/services`, `/documents`) and 5b (`/bulletin-emails`) import them unchanged and neither redefine, tighten nor loosen them. A change needs an amendment here first.
 
   ```python
@@ -182,7 +195,7 @@ Rules:
 | 403 | `forbidden` | Not a member, wrong role, or an owner-protection rule (with a specific message). A `require_church` 403 (not a member of the church in `X-Church-Id`) carries `details.reason = "no_church_access"`; a role or policy 403 carries no `reason` (slice 1). The client's church fallback (§4.2) keys on that reason. |
 | 404 | `not_found` | Unknown id, or an id from another church |
 | 409 | `conflict` (stale write), `last_admin`, `owner_must_transfer`, `invite_exists`, `gmail_not_connected` | Conflicts with current state |
-| 422 | `invalid_request`, `prompt_invalid`, `idempotency_mismatch` | Input the user can correct |
+| 422 | `invalid_request`, `prompt_invalid`, `idempotency_mismatch`, `invalid_rubric` (*amendment 2026-09-26*: PR #4's `PATCH /rubric`; message from `service_rubric`, no `fields`) | Input the user can correct |
 | 429 | `rate_limited` (+ `Retry-After` header and `details.retry_after_seconds`) | §1.8. Always raised as `domain_errors.RateLimited` (§2.2), by the limiter and by slice 1's durable church-create cap alike. |
 | 500 | `internal_error` | Anything unexpected. The message is generic and the stack trace is logged. |
 | 502 | `upstream_error`, `ai_upstream_error`, `gmail_send_failed` | Upstream returned an error |
@@ -191,6 +204,8 @@ Rules:
 | 504 | `upstream_timeout`, `ai_timeout` | Upstream timed out |
 
 **Per-section AI results on `POST /liturgy/generate` (slice 4).** On that route only, `ai_not_configured`, `ai_busy`, `ai_timeout`, `ai_upstream_error` and `prompt_invalid` are not HTTP errors. They come back per section inside a **200** body as `SectionError {code, message}` with the same codes and messages, next to any override or generated text in the same response (owner decision 9 needs typed cards and "AI not configured" side by side). Hymn-resolution 404s, request-validation 422s and 429 stay HTTP errors on that route. `POST /hymns/suggestions` (slice 3) still returns the AI codes as HTTP statuses, so the frontend union keeps them.
+
+**`POST /liturgy/review` (amendment 2026-09-26, PR #8).** On a valid request it always returns 200 with the code-check notes. AI failures (`not_configured`, `busy`, `timeout`, `error`) and an empty `ai` bucket (`rate_limited`) are reported in the body field `ai_status`, not as HTTP errors and not as `RateLimited`. `ai_status` values are not error codes and are not added to `ERROR_CODES`. `POST /liturgy/revise` and `POST /church/prayer-library/voice-profile-draft` return the AI codes as HTTP statuses, like `/hymns/suggestions`.
 
 **Validation errors:**
 - Pydantic `RequestValidationError` → 422 `invalid_request`, message "The request was not valid." `fields` maps dotted locations (`body.hymns.opening.title` → `hymns.opening.title`) to short messages: "Required.", "Too long (max N characters).", "Not a valid value.".
@@ -221,7 +236,7 @@ Rules:
 ### 1.7 Concurrency on writes
 
 - `PUT /services/{id}` takes `If-Match: <saved_at>`. A mismatch → 409 `conflict` "This service was changed by someone else. Reload it to see their changes." The client offers "Reload" or "Save as new".
-- Settings JSON writes (`churches.settings`) read-modify-write under `SELECT … FOR UPDATE` in one transaction (6a). Two things still happen outside a single transaction: the Streamlit app's own settings writes (frozen), and the SQLite dev path, where `FOR UPDATE` does nothing (a known SQLite gap, covered by the Postgres test job).
+- Settings JSON writes (`churches.settings`) read-modify-write under `SELECT … FOR UPDATE` in one transaction (6a). Two things still happen outside a single transaction: the Streamlit app's own settings writes (frozen), and the SQLite dev path, where `FOR UPDATE` does nothing (a known SQLite gap, covered by the Postgres test job). *Amendment 2026-09-26:* PR #4 made `repos.churches._merge_settings` and `update_church_rubric` lock the church row (`_lock_live_church`). `streamlit-frozen` is cut after PR #4, so frozen Streamlit's settings writes are locked too; only its hymn, contact and profile-name writes remain unlocked. 6a renames that helper `lock_church` (one helper) and routes `PATCH /rubric` through `lock_and_read_actor`.
 
 ### 1.8 Long-running endpoints, timeouts and rate limits
 
@@ -239,6 +254,9 @@ Rules:
 | `POST /scripture/passages` (UI sends one reference) | 10 s per part, ≤ 4 parts in parallel. Public-domain text cached 7 days; ESV never cached. | 20 s | 30 000 |
 | `POST /hymns/suggestions` | NT text 10 s (skipped when `nt_text` is sent) + OpenAI (§2.8), all inside a 75 s server deadline passed to `complete(deadline=…)` (slice 3) | ~75 s | 90 000 |
 | `POST /liturgy/generate` (UI sends one section) | OpenAI (§2.8) + ≤ 15 s waiting for a concurrency slot | ~80 s | 90 000 |
+| `POST /church/prayer-library/voice-profile-draft` (6a, PR #7; *amendment 2026-09-26*) | OpenAI inside a 75 s deadline passed to `complete(deadline=…)` | ~75 s | 90 000 |
+| `POST /liturgy/review` (PR #8; *amendment 2026-09-26*) | code checks + OpenAI inside a 75 s deadline | ~75 s | 90 000 |
+| `POST /liturgy/revise` (PR #8; *amendment 2026-09-26*) | OpenAI (§2.8), as `/liturgy/generate` for one section | ~80 s | 90 000 |
 | `POST /documents` | local python-docx | < 3 s | 30 000 |
 | `POST /gmail-connection` | Google token 15 s + userinfo 15 s | 30 s | 40 000 |
 | `POST /bulletin-emails` | token refresh 15 s + send 30 s | 45 s | 60 000 |
@@ -256,7 +274,7 @@ Rules:
 |---|---|---|
 | `lectionary` | 120 / 5 min / user | `/lectionary/readings`, dependency (slice 2; uncached dates call third parties) |
 | `scripture` | 60 **upstream parts** / 5 min / user | `/scripture/passages`. The route calls `consume(cost=len(parts))` after validation (slice 2). |
-| `ai` | 40 / 10 min / user **and** 400 / day / church | `/hymns/suggestions`, dependency (slice 3). `/liturgy/generate`: the usecase calls a `charge(n)` callback once, with `n` = sections that will actually call the AI, and never when `n` is 0 (slice 4). |
+| `ai` | 40 / 10 min / user **and** 400 / day / church | `/hymns/suggestions`, dependency (slice 3). `/liturgy/generate`: the usecase calls a `charge(n)` callback once, with `n` = sections that will actually call the AI, and never when `n` is 0 (slice 4). *Amendment 2026-09-26:* `/church/prayer-library/voice-profile-draft` (6a) and `/liturgy/revise` (PR #8): dependency, cost 1. `/liturgy/review` (PR #8): a `charge(1)` callback only when the AI call is made; if the bucket is empty, the usecase catches `RateLimited`, skips the AI and returns `ai_status: "rate_limited"` with the code notes (a declared deviation, §1.5). |
 | `email` | 10 / hour / user | `/bulletin-emails`. Not a dependency: the usecase charges once, right before the first Google call, so rejected requests and replays cost nothing (5b). |
 | `church_create` | **3 / minute / user (burst guard)** | `POST /churches`, dependency (added to the route in 2). |
 
@@ -531,16 +549,17 @@ On `POST /liturgy/generate` these errors reach the client as per-section results
 
 ### 3.2 Baseline of the existing schema (slice 1, no data touched)
 
-1. **`0001_baseline`** creates all 11 current tables exactly as in `db/models.py`. It is used only for fresh databases (CI, new local dev).
+1. **`0001_baseline`** creates all 11 current tables exactly as in `db/models.py`. It is used only for fresh databases (CI, new local dev). *Amendment 2026-09-26:* "current" means `main` after PR #4, so the baseline includes the nullable `text_year` and `hymnal_count` INTEGER columns on `hymns` and `hymn_catalog`. Production already has them (PR #4's one-off `migrate_add_hymn_facts.py` ran before merge), so stamping stays correct.
 2. **Production is stamped, not migrated.** The one-time runbook, run by the owner from a laptop with the production `DATABASE_URL`, lives in `backend/migrations/README.md`:
    1. `pg_dump` a local backup.
    2. `alembic stamp 0001_baseline`.
    3. `alembic check`, and record its output in the PR.
 3. **`0002_reconcile`** contains only idempotent operations that make production equal the models:
    - `op.create_index("ix_hymns_church_hymnal", …, if_not_exists=True)` (the index `migrate_add_hymnal.py` never created);
-   - any other difference `alembic check` reports, each written with `IF NOT EXISTS` guards.
+   - any other difference `alembic check` reports, each written with `IF NOT EXISTS` guards;
+   - *amendment 2026-09-26:* `text_year` and `hymnal_count` on `hymns` and `hymn_catalog`, added only where missing (`ADD COLUMN IF NOT EXISTS` on Postgres; an inspector check on SQLite). This is a no-op on production and fresh databases, and it repairs a local database created before PR #4 and then stamped.
 
-   After it runs, `alembic check` must report no differences. `migrate_add_hymnal.py` is deleted in the same PR.
+   After it runs, `alembic check` must report no differences. `migrate_add_hymnal.py` is deleted in the same PR, and so is `migrate_add_hymn_facts.py` with its test (*amendment 2026-09-26*). `backfill_hymn_facts.py` (data, not schema) stays as an ops CLI.
 4. **`0003_lockdown`** (Postgres only; no-op on SQLite):
    - `ALTER TABLE … ENABLE ROW LEVEL SECURITY` for every table, including `alembic_version`;
    - `REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon, authenticated`, plus the matching `ALTER DEFAULT PRIVILEGES`, inside `DO $$ … IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname='anon') …$$`, so it runs on CI Postgres, where those roles don't exist.
@@ -599,6 +618,10 @@ When slice 7 starts, the head is always 6b-2's `memberships_one_owner`. 5a merge
 
 `churches.settings` gains JSON keys `default_benediction` (read in 4 with fallback `"Halverson"`, written in 6a) and `default_hymnal` (read in 3, written in 6a). These are JSON keys, so no DDL is needed.
 
+*Amendment 2026-09-26:* two more JSON keys, also with no DDL:
+- `rubric`: PR #4's sparse overrides, already on `main`. It is read through `service_rubric.merge_rubric`, which ignores invalid values, by frozen Streamlit, slice 3 (suggestions and the `newer_than_preferred` flag) and slice 4 (checklists). It is written by `PATCH /rubric`, which 6a's editor uses and moves under `lock_and_read_actor`.
+- `prayer_library`: PR #7's `{prayers, voice_profile}`. It is read in slice 4, where a missing or malformed value reads as empty, and by the reviewer add-on for the voice profile. It is written only by 6a's `PUT /church/prayer-library`. Frozen Streamlit ignores it.
+
 ### 3.6 Supabase Data API lockdown (ops slice, first task)
 
 This is a manual step for the owner, codified later by `0003_lockdown`:
@@ -648,6 +671,8 @@ Before writing Next.js code, read the relevant guide in `frontend/node_modules/n
 | `/settings/hymns` | church (members edit hymns; admins add hymnals) | Hymn library, hymnals | 6a |
 | `/settings/liturgy` | church (admin edits) | Liturgy prompts | 6a |
 | `/settings/contacts` | church (admin edits) | Email contacts | 6a |
+| `/settings/prayers` | church (admin edits) | Prayer library and voice profile (*amendment 2026-09-26*, PR #7). Nav order: right after Liturgy | 6a |
+| `/settings/rubric` | church (admin edits) | Service rubric editor (*amendment 2026-09-26*, PR #4). Nav order: right after Prayers | 6a |
 | `/settings/people` | church (admin manages; owner rules) | Members with emails, roles, invites | 6b |
 | `/settings/danger` | church | Leave church (anyone), transfer ownership and delete church (owner) | 6b |
 | `/gmail/callback` | signed-in | Gmail OAuth return. Handles `?error=`, POSTs `{code, state}`, returns to the stored path. | 5b |
@@ -749,6 +774,7 @@ Session storage keys use the `wsb:` prefix and go through `lib/storage.ts`, wher
   | `["church", id, "hymnal-sources"]` | bundled hymnals an admin can add (6a) | default |
   | `["church", id, "services", params]`, `["church", id, "service", sid]` | archive | default |
   | `["church", id, "contacts" \| "members" \| "invites" \| "liturgy-prompts"]` | settings | default |
+  | `["church", id, "rubric" \| "prayer-library"]` (*amendment 2026-09-26*, 6a) | settings | default |
 
 - **Invalidation map.** Each mutation hook invalidates exactly these:
   - hymn create, edit or delete → `hymns`, `hymnals` **and `profile`** (3, 6a). A hymn change can alter `hymn_count` and `scripture_ref_count`, add or remove a hymnal code, and change `effective_hymnal` in `GET /church`;
@@ -757,6 +783,7 @@ Session storage keys use the `wsb:` prefix and go through `lib/storage.ts`, wher
   - service save → `services` **and `hymns`** (5a), plus `setQueryData` for that `service`. Save writes hymn usage, which changes `recently_used`;
   - service delete → `services` **and `hymns`** (5a), plus `removeQueries` for that `service`;
   - contact changes → `contacts`;
+  - *amendment 2026-09-26:* rubric save → `rubric` (set from the response), **plus `hymns` when `prefer_before_year` was sent** (slice 3's `newer_than_preferred`); prayer-library save → `prayer-library` (set from the response). Liturgy generation and the reviewer read both keys on the server, so no builder query depends on them;
   - member or invite changes → `members` / `invites`;
   - transfer ownership → `members` (set from the response), `profile` and `["me"]` (6b);
   - create, join, leave or delete church → `["me"]`, then a re-pick.
@@ -1121,6 +1148,11 @@ The new app **must**:
   - usage rows added on Prepare → replaced for that date on the next React save (owner decision 9);
   - invites with `role = 'owner'` → `0006` first fixes such rows to `admin` (and revokes them), then asserts, then adds the CHECK (§3.5).
 
+*Amendment 2026-09-26:* `streamlit-frozen` is cut after PR #4, so the frozen app **reads `churches.settings.rubric`** (through `merge_rubric`, which ignores invalid values) for its hymn suggestions and liturgy, and its ORM **maps `hymns.text_year`/`hymnal_count` and the same columns on `hymn_catalog`**. So:
+- 6a's rubric editor changes the frozen app's AI output too, which is intended;
+- those columns cannot be dropped or renamed before slice 7 (§3.4);
+- the frozen app ignores `prayer_library`, and it keeps the old season wording in its default system prompt, which the reviewer add-on changes only on `main` (PR #8).
+
 What the frozen app cannot break, and why:
 - Its ORM doesn't map new columns, so its updates leave `custom_elements`, `hymnal`, `reusable` and `accepted_by` untouched.
 - Its inserts get server defaults or NULL.
@@ -1179,7 +1211,7 @@ graph LR
   gate --> s7
 ```
 
-**Build order:** ops, 1, 2, 3, 4, 5a, 5b, 6a, 6b, 7.
+**Build order:** ops, 1, 2, 3, 4, 5a, 5b, 6a, 6b, 7. *Amendment 2026-09-26:* the service-reviewer add-on (PR #8, new app only) builds right after 4b and before 5a. The prayer-library writer hook ships in 4 and its page in 6a (PR #7).
 - 6b's backend (6b-1: members, invites, transfer, delete, leave, `require_owner`, `0006_invites_integrity`) depends only on 1, so a second worker may build it in parallel any time after 1. Its pages mount in the settings layout from 5b, so 6b's UI PR (6b-2, which also carries the `memberships_one_owner` revision) merges after 5b. All of 6b merges before 7. Revision file numbers follow merge order (§3.5).
 - If 6b's backend lands before 6a, 6b creates `usecases/church_admin.py` and 6a extends it.
 - 6a depends on:
@@ -1195,13 +1227,13 @@ graph LR
 | Slice | Foundation pieces it builds (in addition to its inventory §5 feature scope) |
 |---|---|
 | **ops** | Data API lockdown (§3.6); backup workflow (strip `+psycopg2`, match `pg_dump` to the server major, encrypt with `age` against a committed public key before upload, then add the secret); `GET /health/ready` (the `db_unavailable` code, §1.5), with `keepalive.yml` curling it (no DB secret in GitHub); `/health` stays the dependency-free liveness probe (slice 1 then moves the Railway deploy health check to `/health/ready`, §3.3); delete `email_send.py`, `notion_archive.py`, `notion_usage.py`, `select_sunday_hymns.py`, `add_hymnary_links.py`, `fix_hymn_titles.py`; `.env.example` gains `ESV_API_KEY`, `LOG_LEVEL`, `APP_ENV`, `DB_POOL_SIZE`; `shadcn` → devDependencies; Streamlit freeze (§6.1); `db/upsert.py` + `ensure_user` + identity cache (§2.4); `RequestIdMiddleware` + `UnhandledErrorMiddleware` + middleware order + CORS header lists (§1.10, §2.5); startup dialect log, `APP_ENV` production guard, pool settings (§2.6); `redirect_slashes=False`; confirm Railway's request timeout exceeds 120 s. |
-| **1** | Alembic setup + `0001`–`0004` + production stamping runbook + `railway.toml` pre-deploy and `healthcheckPath = "/health/ready"` + revision and RLS startup checks + production schema-behind readiness gate (§2.6, §3.3) + delete `migrate_add_hymnal.py` (§3); `backend-postgres` CI job; `domain_errors.py` (including `RateLimited` and `db_unavailable` in `ERROR_CODES`) + error body `fields`/`details` + `no_church_access` reason + Pydantic 422 mapping (§1.5, §2.2); durable church-create cap (§1.8); `usecases/` package; idempotency store and `lib/idempotency.ts` key tracker (§1.6); `test_route_guards.py`, `assert_church_isolated`, no-network fixture, `test_openapi_contract.py` + `export_openapi.py`; frontend `gen:api`, TanStack Query client and keys, `useApi`, amended `apiFetch` (§4.5); route groups, `(signed-in)`/`(church)` layouts, `ChurchProvider` with keyed remount and 403 fallback, switcher menu with "Join or create a church…", `queryClient.clear()` on sign-out; `/join`, `/welcome`, `safeInternalPath`, `next` handling in proxy and login (§4.3); UI kit (§4.8) + `touch` button size + `react/no-danger`; the **Combobox pattern** (§4.9 item 5) with `TimezoneCombobox` (6a reuses it; slice 3 applies the same pattern to the hymn picker); Vitest projects + jsdom + Testing Library + `renderWithProviders` + `installFakeApi`. |
+| **1** | Alembic setup + `0001`–`0004` + production stamping runbook + `railway.toml` pre-deploy and `healthcheckPath = "/health/ready"` + revision and RLS startup checks + production schema-behind readiness gate (§2.6, §3.3) + delete `migrate_add_hymnal.py` (§3) and (*amendment 2026-09-26*) `migrate_add_hymn_facts.py`, with the facts columns in `0001` and a guarded add in `0002`; `backend-postgres` CI job; `domain_errors.py` (including `RateLimited` and `db_unavailable` in `ERROR_CODES`) + error body `fields`/`details` + `no_church_access` reason + Pydantic 422 mapping (§1.5, §2.2); durable church-create cap (§1.8); `usecases/` package; idempotency store and `lib/idempotency.ts` key tracker (§1.6); `test_route_guards.py`, `assert_church_isolated`, no-network fixture, `test_openapi_contract.py` + `export_openapi.py`; frontend `gen:api`, TanStack Query client and keys, `useApi`, amended `apiFetch` (§4.5); route groups, `(signed-in)`/`(church)` layouts, `ChurchProvider` with keyed remount and 403 fallback, switcher menu with "Join or create a church…", `queryClient.clear()` on sign-out; `/join`, `/welcome`, `safeInternalPath`, `next` handling in proxy and login (§4.3); UI kit (§4.8) + `touch` button size + `react/no-danger`; the **Combobox pattern** (§4.9 item 5) with `TimezoneCombobox` (6a reuses it; slice 3 applies the same pattern to the hymn picker); Vitest projects + jsdom + Testing Library + `renderWithProviders` + `installFakeApi`. |
 | **2** | Draft store (§4.6), builder shell with all four step routes, progress, summary panel and footer (§4.7); `lib/dates.ts` (§4.10); `integrations/http.py`, `cache.py`, `ratelimit.py` with every §1.8 bucket defined and `lectionary`, `scripture` and the `church_create` burst guard wired (§1.8, §2.7); `respx`; shared Python/TS fixtures; `GET /church` gains `timezone`, `timezone_valid`, `bible_translation`, `effective_translation`. |
-| **3** | `integrations/openai_client.py` (§2.8, with its retry, deadline and `insufficient_quota` rules) and `OPENAI_MODEL` on Railway; the `ai` bucket wired on `/hymns/suggestions`; `GZipMiddleware` (§2.5); `HymnRef`, `SlotHymns` and `SectionKey` in `api/schemas.py` exactly as §1.3; the hymn picker on slice 1's Combobox pattern; `GET /church` gains `default_hymnal` (read). |
-| **4** | Per-section AI results on `/liturgy/generate` (§1.5) and the `ai` charge per AI section (§1.8); prompt test-render validator (reused in 6a); `liturgy_config.py`; `GET /church` gains `default_benediction` (read, fallback "Halverson"). |
+| **3** | `integrations/openai_client.py` (§2.8, with its retry, deadline and `insufficient_quota` rules) and `OPENAI_MODEL` on Railway; the `ai` bucket wired on `/hymns/suggestions`; `GZipMiddleware` (§2.5); `HymnRef`, `SlotHymns` and `SectionKey` in `api/schemas.py` exactly as §1.3; the hymn picker on slice 1's Combobox pattern; `GET /church` gains `default_hymnal` (read). *Amendment 2026-09-26:* PR #4's rubric-aware ranking, slot checklists and year/familiarity facts carried into the new suggester (reusing `service_rubric` and `hymn_ranking`); `HymnOut` gains `text_year`, `hymnal_count`, `newer_than_preferred`; the "Written {year}" label. |
+| **4** | Per-section AI results on `/liturgy/generate` (§1.5) and the `ai` charge per AI section (§1.8); prompt test-render validator (reused in 6a); `liturgy_config.py`; `GET /church` gains `default_benediction` (read, fallback "Halverson"). *Amendment 2026-09-26:* PR #4's per-section rubric checklist and sermon-text block (`SermonText` in `api/schemas.py`); PR #7's read path (`build_messages(..., voice=)`, pure `prayer_library.py`). **Reviewer add-on right after 4b** (PR #8): `POST /liturgy/review`, `POST /liturgy/revise`, `review_checks.py`, `usecases/liturgy_review.py`, and the new season guidance in `DEFAULT_SYSTEM_PROMPT`. |
 | **5a** | `apiFetchBlob` + download helper + `docxFilename` (§1.9); `If-Match` on services (§1.7); `0005_services_extras` with `ix_services_church_date` (§3.5); the draft's `editing.date_iso` and `save_key_fingerprint` with the save-key rule (§1.6, §4.6); `serviceToDraft` / `draftToServicePayload` (§4.6); `/services` page. |
 | **5b** | Settings layout + `/settings/account`; `/gmail/callback` (§4.3); Idempotency-Key required on `/bulletin-emails` with `store_error` for uncertain sends and `createSendKeyTracker` (§1.6); the `email` bucket; parity gate (§6.3). |
-| **6a** | `usecases/church_admin.py`; locked settings merge (§1.7); `backend/seed/hymnals/` + `hymnal_sources.py` + the `hymnal-sources` query key (§4.4); the settings section nav fully populated. |
+| **6a** | `usecases/church_admin.py`; locked settings merge (§1.7); `backend/seed/hymnals/` + `hymnal_sources.py` + the `hymnal-sources` query key (§4.4); the settings section nav fully populated. *Amendment 2026-09-26:* the Rubric editor over `GET`/`PATCH /rubric` (PATCH moved under `lock_and_read_actor`; `defaults` added to `GET`); the Prayers page and `/church/prayer-library` routes (PR #7); the `rubric` and `prayer-library` query keys. |
 | **6b** | `require_owner` + role-policy truth-table tests; `POST /church/leave`; `0006_invites_integrity` (6b-1); the `memberships_one_owner` revision (6b-2); one-owner data check; the rest of the `streamlit_tests` port. |
 | **7** | Inventory §6 checklist; §6.4 items, including the revisions `normalize_legacy_data`, `contract_after_cutover` and `encrypt_gmail_tokens` (§3.5); remove the `streamlit_tests` path from `pytest.ini` and CI; delete `keep-awake.yml`; rewrite README and `docs/manual-verification.md`. |
 

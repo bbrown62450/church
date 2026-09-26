@@ -8,6 +8,9 @@
 - Foundations spec (cited "F §n"). This spec follows it and does not restate its conventions.
 - Owner decisions 1, 2, 5 and 9.
 - F's "Amendments from slice specs" section, which records up front every foundation rule this slice changes (API §"Deviation from F"), so 4a does not edit F.
+- **Amendment 2026-09-26: the service rubric (PR #4, merged to `main`).** `docs/superpowers/specs/2026-09-25-service-rubric-design.md` changed `worship_service.generate_liturgy`, which this slice ports and then deletes. Each AI section's prompt now also carries that section's rubric checklist and the sermon (NT) text for themes, and the Prayer for Illumination and Offertory Prayer defaults say "no more than 3 sentences" (inv §1 E9). This is current behavior and is **carried over**, reusing PR #4's backend functions: backend §2 and §3, API semantics 9, and the Testing and Acceptance additions.
+- **Amendment 2026-09-26: the prayer library (PR #7).** `docs/superpowers/specs/2026-09-26-prayer-library-design.md` is the source for the writer hook; it is new-app only. This slice ships the **read path**: `build_messages` gains `voice`, and the usecase reads `churches.settings["prayer_library"]`. It is harmless until 6a lets admins fill the library. The rules are summarized in backend §2 and §3 and API semantics 10, and not repeated from that spec.
+- **Amendment 2026-09-26: the service reviewer (PR #8).** `docs/superpowers/specs/2026-09-26-service-reviewer-design.md` is a new-app-only add-on built right after this slice's liturgy step (4b). Its hooks into this slice are in the closing section, "Amendment 2026-09-26: service reviewer".
 
 Ship as two PRs, both additive (F §1.11): **4a** backend (config, validator, generation, `GET /church` field), then **4b** frontend (the step). The tester keeps building real services in Streamlit until the parity gate after 5b, so a short deploy skew between them is harmless. 4b starts only after the owner has answered Risks and open questions item 7 (recorded in F's decisions table).
 
@@ -92,6 +95,7 @@ Every current behavior is either carried over, changed (the BC-n references poin
 | E8 | Communion default = first Sunday of the month, set once when the key is absent. Checkbox label and help text. The docx inserts static text after the Second Hymn. Archived and restored. Ignores the church timezone. Not per church. Not previewed. | **Carried:** the rule, the label, the static text (moved verbatim) and the position. **Changed:** BC-10, BC-11. Docx → 5a. Archive → 5a. |
 | inv §3 | app.py:67, 148-166, the four section-list copies and 969-971; app.py:926-945 (env-var gate, no `try`); worship_service.py:705-724 and 763-764 (UI-shaped errors) | Moved to `liturgy_config.py`, `usecases/liturgy.py` and typed errors (Backend changes §6) |
 | inv §4 | "Error placeholders stored as liturgy"; "Halverson literal"; malformed-prompt crash (inv §0 item 4) | Fixed: BC-6, BC-9, BC-7 |
+| E9 (amendment 2026-09-26, PR #4) | Each AI section's prompt gets its rubric checklist ("A good {Label}:" + points) and, when a sermon text is known, "Sermon text ({ref}), for themes only; do not quote, cite, or name it:" + the text cut to 2 000 characters, both appended after `render()`, so edited prompts get them too; the rubric is read fresh per click; the sermon text is the selected NT reading's passage from the session cache, fetched in the session translation when missing; the Illumination and Offertory defaults say "no more than 3 sentences" | **Carried:** the checklist and the sermon block, verbatim and in that order, through `liturgy_prompts` (backend §2) using `service_rubric.format_checklist` and the moved `sermon_text_block`; the rubric read fresh per request; the two defaults (already in `liturgy_prompts.DEFAULT_SECTION_PROMPTS`). **Changed:** BC-24 (where the sermon text comes from). |
 
 ### Interfaces this slice assumes
 
@@ -100,6 +104,9 @@ Every current behavior is either carried over, changed (the BC-n references poin
 | 1 | `domain_errors.py` (`InvalidInput`, `NotFound`, `NotConfigured`, `Busy`, `UpstreamError`, `UpstreamTimeout`, each with `.code` and `.message`); `db.ids.as_uuid`; `assert_church_isolated`; `test_route_guards.py` with its `USER_SCOPED` allowlist; `useApi()` (`api.user`, `api.church`); `handleAuthErrors`; `ConfirmDialog`, `PendingButton`, `ErrorState`, `Skeleton`, `size="touch"`; `renderWithProviders`, `installFakeApi` |
 | 2 | `DraftProvider` / `useDraft()` returning `{draft, update(fn: (d: DraftV1) => DraftV1)}`; `DraftV1.liturgy` exactly as in F §4.6; `lib/draft/status.ts` (liturgy is complete when every enabled card has text; `stillNeeded(draft, SHIPPED_STEPS)`); `lib/draft/steps.ts` `SHIPPED_STEPS` (slice 2's hand-off table: this slice adds `"liturgy"`); `BuilderShell`, `StepFooter`, `SummaryPanel` (its Liturgy block reads "Available soon" until this slice replaces it); `lib/dates.ts` (`parseIsoDate`, `formatServiceDate`); `api/ratelimit.py` with an `ai` bucket (40 / 10 min / user and 400 / day / church); the `GET /church` profile response model (called `ChurchProfileOut` below) and query key `["church", id, "profile"]`; `lib/api/timeouts.ts` |
 | 3 | `integrations/openai_client.py`: `ai_available()`, `complete(messages, *, max_completion_tokens, json_mode=False) -> str`, the error mapping in F §2.8, and `set_ai_for_tests()` / `FakeAI`. `draft.hymns.slots: Record<Slot, HymnPick \| null>`. `api/schemas.py`: `HymnRef`, `SlotHymns` and `SectionKey`, created in 3 with the shape frozen in F §1.3. |
+| PR #4 (on `main`; amendment 2026-09-26) | `backend/service_rubric.py`: `merge_rubric`, `format_checklist`, the `prayers` checklists keyed by `SECTION_ORDER`. `repos.churches.get_church_rubric_overrides(church_id)`; slice 3 gives it `session=` (slice 3 amendment), or this slice adds it if 3 did not. `worship_service._sermon_text_block` and `SERMON_TEXT_LIMIT = 2000`, which this slice **moves** into `liturgy_prompts` (backend §2) before `generate_liturgy` is deleted. The default Illumination and Offertory prompts already say "no more than 3 sentences". |
+| PR #7 spec (amendment 2026-09-26) | The `prayer_library` settings shape, limits and writer-hook rules in `2026-09-26-prayer-library-design.md` §Data and §Writer hook. Nothing from 6a is needed: this slice reads the key and treats a missing or malformed value as an empty library. |
+| 2 (amendment 2026-09-26) | Frontend passage query options for `["passage", translation, ref]` (`POST /scripture/passages` with one reference), so the generation provider can `queryClient.fetchQuery` the sermon text (Frontend changes, "Sermon text"); `effectivePicks(draft)` for the effective NT reading. |
 
 If 2 did not ship `ratelimit.consume(..., cost=)`, or 3 did not ship a by-id hymn lookup, this slice adds them. Both additions are listed under Backend changes.
 
@@ -115,6 +122,8 @@ If 2 did not ship `ratelimit.consume(..., cost=)`, or 3 did not ship a by-id hym
 | 5a | **Unknown custom-element placements are normalized to `"end"`, never dropped** (F §4.6: never destroy typed input). The client applies `normalizePlacement` when it loads a draft or maps a service. 5a's server-side mapping of stored `custom_elements` into `ServiceOut` applies `liturgy_config.normalize_placement` to each entry instead of dropping entries with an unknown `insert_after`. `ServiceDraft` still rejects an unknown placement with 422, which is safe because the client never sends one. 5a's spec states the same rule in "Normalizing stored data → Other fields", and its archive-usecase tests include a stored bogus placement that survives load and then save (as `"end"`). |
 | 6a | `liturgy_prompts`: `template_error(template) -> str \| None` (the section-template check 6a calls), `check_template`, `validate_prompts`, `MAX_TEMPLATE_CHARS`, the reason strings in Backend §2, and **`clean_prompt_overrides(prompts, defaults=None)`, whose only home is `liturgy_prompts`** because it is pure. It includes the `\r\n` → `\n` normalization (Backend §2), so there is one rule for which overrides equal the default. 6a's `usecases/church_admin.py` imports it and implements neither a second copy nor its own normalization; 6a tests it through the API. **6a owns the shape of `PUT /church/liturgy-prompts`** (status, `fields` keys, message prefix, first-failure rule). This slice defines only the reason strings, and 6a's copy and examples use them verbatim (for example "It has a { or } without a partner. Use {{ or }} to print a brace."). |
 | 6a | Settings key `churches.settings.default_benediction` (string), read through `liturgy_config.resolve_default_benediction(settings)`. A missing or non-string value means "Halverson". An empty string is a valid stored value meaning "no default" (the card starts empty). 6a's `PATCH /church` writes it and invalidates `["church", id, "profile"]`; the builder then follows the new default for untouched cards. |
+| 6a (amendment 2026-09-26) | **Prayer library read path (PR #7).** The pure module `backend/prayer_library.py`: `PRAYER_TYPES` (the 8 `SectionKey`s plus `"other"`), the limits (`MAX_PRAYERS = 30`, `MAX_PRAYER_CHARS = 6_000`, `MAX_PROFILE_CHARS = 2_000`), `read_library(settings) -> PrayerLibrary(prayers, voice_profile)` (a missing key or a stored value of the wrong shape reads as `{"prayers": [], "voice_profile": ""}`, PR #7 §Data; it never raises) and `choose_example(library, section, *, choose=random.choice) -> str \| None`. 6a's `usecases/prayer_library.py` imports the reader and limits for `GET`/`PUT /church/prayer-library` and adds its own validation; there is one reader. `liturgy_prompts.VoiceContext` and `build_messages(..., voice=)` are what the writer uses; 6a's draft route does not use them. |
+| 6a (amendment 2026-09-26) | **Rubric (PR #4).** Liturgy generation reads `churches.settings["rubric"]` fresh on every request, so 6a's rubric editor changes the next generation without any cache invalidation. |
 
 ---
 
@@ -391,6 +400,14 @@ class GenerateLiturgyIn(BaseModel):
     hymns: SlotHymns = Field(default_factory=SlotHymns)
     sections: list[SectionKey] = Field(min_length=1, max_length=4)    # UI sends exactly 1
     overrides: dict[SectionKey, Annotated[str, Field(max_length=20_000)]] = Field(default_factory=dict)
+    # Amendment 2026-09-26 (PR #4; semantics 9). Optional, so the change is additive:
+    sermon_text: SermonText | None = None    # the effective NT reading and its passage text, never ESV
+
+# api/schemas.py (amendment 2026-09-26; shared with the reviewer's /liturgy/review and /liturgy/revise, F §1.3)
+class SermonText(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    ref: str = Field(max_length=200)
+    text: str = Field(max_length=20_000)
 
 class SectionError(BaseModel):
     code: Literal["ai_not_configured", "ai_busy", "ai_timeout", "ai_upstream_error", "prompt_invalid"]
@@ -468,6 +485,16 @@ class LiturgyConfigOut(BaseModel):
 
    Upstream, SDK and database text is logged, never returned (F §1.5).
 8. **Rate limit.** The `ai` bucket is charged only for sections that will actually call the AI. The usecase calls a `charge(n)` callback supplied by the route once, **after** hymn resolution and after `build_messages` has run for every section needing AI. `n` is the number of sections about to call `ai.complete`. `charge` is not called when `n` is 0, which covers: overrides only, AI not configured, a 404 hymn id (raised before), and every section needing AI failing `prompt_invalid`. If `charge` raises 429, no AI call is made. With at most 4 sections per request, one request costs at most 4 tokens.
+9. **Rubric checklist and sermon text (amendment 2026-09-26, PR #4; inv E9).** For every section that needs AI, the user message is the rendered template, then that section's checklist from the church's merged rubric, then the sermon-text block, exactly as `generate_liturgy` builds them today (backend §2):
+   - The rubric is read on the server in the same session as the prompts, fresh on every request. It is never accepted from the client. A church with no overrides gets the default checklists; invalid stored values fall back to the defaults.
+   - The sermon block uses the request's `sermon_text.ref` and `sermon_text.text`, the text cut to 2 000 characters. It is left out when `sermon_text` is absent, when either field is blank after trimming, or when the text is the legacy `"[Could not load text]"` sentinel. The server never fetches passage text for this route, so the F §1.8 worst case is unchanged; the client supplies it (Frontend changes, "Sermon text").
+   - Override sections are never sent, so neither block touches typed text.
+   - The checklist counts toward the prompt-length check that raises `prompt_invalid`, because it is the church's own text, like its prompts. The sermon block does not: when the prompt is too long it is dropped instead, after the library blocks (semantics 10).
+10. **Prayer library (amendment 2026-09-26; PR #7 §Writer hook, which is authoritative).** The usecase reads `churches.settings["prayer_library"]` in the same `session_scope` as `get_church_prompts`, fresh on every call, and builds one `VoiceContext(profile, example)` per section that needs AI:
+    - `profile` is the stored voice profile, trimmed and capped at 2 000 characters;
+    - `example` is a uniformly random prayer whose `type` equals the section key (the chooser is injectable), cut to 3 000 characters, or `None` when no prayer has that type. An `"other"` prayer is never an example.
+
+    `build_messages` appends the profile to the system message and the example to the user message, after `render()`. When the prompt is over `MAX_PROMPT_CHARS`, the example is dropped first, then the profile, then the sermon block. The library never causes `prompt_invalid`, and an empty or missing library gives messages byte-identical to the messages without it. Nothing is added to the request or the response.
 
 **Deviation from F (declared; recorded in F's "Amendments from slice specs", citing this slice).** On this route only, AI and prompt failures are per-section results inside a 200 body, not HTTP errors. This overrides:
 - F §1.5 status registry rows 422 `prompt_invalid`, 503 `ai_not_configured` / `ai_busy`, 502 `ai_upstream_error` and 504 `ai_timeout`. On `/liturgy/generate` these codes arrive as `SectionError`, with the same codes and messages. `/hymns/suggestions` (slice 3) still returns them as HTTP statuses, so the frontend `ApiErrorCode` union keeps them.
@@ -628,6 +655,49 @@ def normalize_placement(key: str) -> str: ...   # unknown → "end"
 
   The usecase turns every `PromptInvalid` into the one `prompt_invalid` message in API §semantics 7.
 
+- **Amendment 2026-09-26: rubric, sermon text and voice** (API semantics 9 and 10). The prompt builder carries PR #4's two blocks and PR #7's voice hook. It reuses PR #4's functions rather than re-implementing them:
+
+  ```python
+  # Moved from worship_service.py (PR #4) before generate_liturgy is deleted; same text, same tests:
+  SERMON_TEXT_LIMIT = 2000
+  def sermon_text_block(ref: str | None, text: str | None) -> str
+      # "Sermon text ({ref}), for themes only; do not quote, cite, or name it:\n" + text[:2000],
+      # or "" when ref or text is blank after strip() or text contains "[Could not load text]"
+
+  @dataclass(frozen=True)
+  class PromptContext:
+      occasion: str; scriptures: str; opening_hymn: str; hymns: str
+      checklists: Mapping[str, tuple[str, ...]]   # the merged rubric's "prayers", keyed by section
+      sermon: str                                 # sermon_text_block(...) or ""
+
+  def build_context(*, occasion, scriptures, hymns_by_slot,
+                    rubric: Mapping | None = None,             # service_rubric.merge_rubric(overrides)
+                    sermon_ref: str | None = None, sermon_text: str | None = None) -> PromptContext
+
+  @dataclass(frozen=True)
+  class VoiceContext:                              # PR #7
+      profile: str
+      example: str | None
+
+  def build_messages(section: str, prompts: Mapping[str, str], ctx: PromptContext,
+                     *, voice: VoiceContext | None = None) -> list[dict]
+  ```
+
+  `build_messages` builds the messages in this order:
+  1. `check_template` as before; a failure raises `PromptInvalid`.
+  2. `system = prompts["system"]` and `user = render(template, ctx)`.
+  3. If `ctx.checklists.get(section)` is non-empty, `user += "\n\n" + service_rubric.format_checklist(SECTION_LABELS[section], checklist)` (PR #4 wording: "A good {Label}:" plus "- point" lines).
+  4. If `len(system) + len(user) > MAX_PROMPT_CHARS`, raise `PromptInvalid(reason="It is too long once the readings and hymns are added.")`, as before. The checklist counts because it is the church's own text.
+  5. Optional blocks, each appended **after** `render()` so braces in them are never read as placeholders:
+     - `ctx.sermon` → `user += "\n\n" + ctx.sermon` (PR #4);
+     - `voice.profile` (when non-empty) → `system += "\n\nWrite in the voice of this church's pastor, described here:\n" + profile` (PR #7);
+     - `voice.example` (when set) → `user += "\n\nFor voice only, here is a {Section Label} this pastor wrote. Do not reuse its lines or phrases:\n" + example` (PR #7).
+
+     While the total is over `MAX_PROMPT_CHARS`, drop the example first, then the profile, then the sermon block. None of them ever raises `PromptInvalid`.
+  6. Return `[system, user]`. With `voice=None`, or with an empty profile and no example, the result is byte-identical to steps 1–5 without the voice blocks; that is the baseline the existing assertions pin.
+
+  The Prayer for Illumination and Offertory Prayer defaults already say "no more than 3 sentences" / "No more than three sentences" (PR #4). They pass `check_template` like every default, and this slice does not change their text.
+
 - `render` and `merge_prompts` are unchanged. `render` is lenient; it is called only after `check_template` passes.
 
 ### 3. `backend/usecases/liturgy.py` (new)
@@ -667,6 +737,13 @@ Flow. No database connection is held during AI calls (F §1.8):
    - any other exception is logged with `logger.exception` and becomes `ai_upstream_error`.
 6. Return the outcomes in request order.
 
+**Amendment 2026-09-26 (PR #4 and PR #7; API semantics 9 and 10).**
+- The signature gains `sermon: tuple[str, str] | None = None` (the route passes `(sermon_text.ref, sermon_text.text)`) and `choose: Callable[[list[str]], str] = random.choice` (tests pin it).
+- Step 2 also reads, **in the same `session_scope`** and only when a section needs AI: `repos.churches.get_church_rubric_overrides(church_id, session=s)` and the church's `settings["prayer_library"]` through `prayer_library.read_library(settings)`. Every getter takes the session, and the identity map means the church row is loaded once. The session still closes before any AI call.
+- Step 5 builds `ctx = build_context(..., rubric=service_rubric.merge_rubric(overrides), sermon_ref=…, sermon_text=…)` and, for each section, `voice = VoiceContext(profile=library.voice_profile.strip()[:2000], example=prayer_library.choose_example(library, section, choose=choose))`, where `choose_example` returns the chosen text cut to 3 000 characters, or `None` when no prayer has that type. Then `build_messages(section, prompts, ctx, voice=voice)`.
+- The rubric and the library are read fresh on every call, with no cache, like the prompts.
+- **Logging** adds `rubric=default|custom`, `sermon=yes|no`, `voice=profile,example` (which were present) and `dropped=example,profile,sermon` (which the budget dropped). The checklist, sermon text, profile and example are prompt content, logged at DEBUG only (PR #7 §Privacy).
+
 Other properties:
 - **Church prompts are read on every call** (parity with E6 "read fresh on each click"; no cache).
 - **Logging** (F §2.5): `liturgy.generate church=… sections=n ai=k outcomes=generated:x,override:y,error:z codes=… duration_ms=…`. Prompts and outputs are logged at DEBUG only, never at INFO.
@@ -690,12 +767,14 @@ Other properties:
 ### 6. Other module changes
 
 - **`repos/hymns.py`:** `get_hymns_by_ids(church_id, ids, *, session=None) -> dict[uuid.UUID, dict]`, one `SELECT … WHERE church_id = :c AND id IN (…)`, using `db.ids.as_uuid`. If slice 3 already added an equivalent by-id lookup, use that instead.
-- **`repos/churches.get_church_prompts`** gains `session: Session | None = None` (F §2.2 rule 3).
+- **`repos/churches.get_church_prompts`** gains `session: Session | None = None` (F §2.2 rule 3). *Amendment 2026-09-26:* so does `get_church_rubric_overrides`, if slice 3 has not already added it.
+- **`backend/prayer_library.py`** (new, pure; amendment 2026-09-26, PR #7): the reader, limits and example chooser listed under "Interfaces this slice provides". No FastAPI and no database imports.
+- **`backend/service_rubric.py`** (PR #4): unchanged, reused (`merge_rubric`, `format_checklist`).
 - **`api/ratelimit.py`:** `consume(bucket, *, user_id, church_id=None, cost=1)` charges both of the bucket's limits by `cost` and raises the existing 429. The `rate_limit(bucket)` dependency becomes `consume(cost=1)`. This is a backward-compatible addition if slice 2 lacks it.
-- **`api/schemas.py`:** no change. `SectionKey`, `HymnRef` and `SlotHymns` are imported as slice 3 created them (shape frozen in F §1.3). `routes/liturgy.py` uses them in `GenerateLiturgyIn`, which puts them in the OpenAPI snapshot for the first time.
+- **`api/schemas.py`:** no change. `SectionKey`, `HymnRef` and `SlotHymns` are imported as slice 3 created them (shape frozen in F §1.3). `routes/liturgy.py` uses them in `GenerateLiturgyIn`, which puts them in the OpenAPI snapshot for the first time. *Amendment 2026-09-26:* one addition, `SermonText {ref, text}` (API §Schemas), shared with the reviewer add-on's routes (F §1.3).
 - **`worship_service.py`:**
   - `_add_communion_liturgy(doc)` iterates `liturgy_config.COMMUNION_BLOCKS`. The docx output must be identical: characterize first (F §2.3 step 1).
-  - `generate_liturgy` (worship_service.py:686-766) is **deleted** after its behavior is pinned in `test_liturgy_generation.py` against the new functions. Its only caller is app.py, which is frozen on its own branch (F D2).
+  - `generate_liturgy` (worship_service.py:686-766) is **deleted** after its behavior is pinned in `test_liturgy_generation.py` against the new functions. Its only caller is app.py, which is frozen on its own branch (F D2). *Amendment 2026-09-26:* since PR #4 it lives at worship_service.py:762 and takes `rubric` and `sermon_text`. `_sermon_text_block` and `SERMON_TEXT_LIMIT` move to `liturgy_prompts` (backend §2) with their tests, and PR #4's `backend/tests/test_generate_liturgy.py` is retargeted like the other characterization tests (Testing).
   - If the freeze contingency (F §6.1 item 6) is in effect, keep `generate_liturgy` instead, as a wrapper over the new usecase with the old signature.
   - The "Settings → Secrets" and `[Configure OPENAI_API_KEY…]` strings go with it.
 
@@ -718,6 +797,7 @@ Other properties:
 - The church id comes only from `require_church`. `GenerateLiturgyIn` has no church field (`extra="forbid"`).
 - Hymn ids are resolved with `church_id` in the `WHERE` clause. Another church's id → 404 (F §1.2 rule 2).
 - Prompt templates are read only from the active church's settings, never from the client (inv §4 "load prompt overrides on the server").
+- *Amendment 2026-09-26:* the same holds for the rubric and the prayer library. The only new client input is `sermon_text`, which goes into that user's own prompt, bounded by the model limits and by the 2 000-character cut, and is never logged above DEBUG (as slice 3 treats `nt_text`).
 - This slice **writes nothing** to the database. Generation is stateless, and results live only in the browser draft until 5a's save.
 
 ---
@@ -726,6 +806,7 @@ Other properties:
 
 - **No schema change and no Alembic revision.**
 - `churches.settings.default_benediction` is a JSON key (F §3.5): read here, written in 6a. No row is back-filled. The "seed with the current value" (owner decision 9) is the read fallback, "Halverson".
+- *Amendment 2026-09-26:* two more JSON keys are **read** here, with no DDL: `rubric` (PR #4's sparse overrides; written by `PATCH /rubric`, and by 6a's editor) and `prayer_library` (PR #7; written only by 6a, absent until then, so every church reads as an empty library and the messages equal the baseline). Frozen Streamlit reads `rubric` too (it runs PR #4's code) and ignores `prayer_library`.
 - **Frozen Streamlit compatibility:**
   - Streamlit never reads `default_benediction`. Its settings merge preserves unknown keys (F §6.2), so a 6a write survives Streamlit prompt or translation saves.
   - Streamlit keeps its own "Halverson" constant.
@@ -775,7 +856,7 @@ shadcn (base-nova) components added if missing: `switch`, `textarea`, `badge`, `
 |---|---|
 | `cards.ts` | Draft reducers: `editCardText`, `setCardEnabled`, `applyGenerated`, `clearCard`, `useChurchDefault`, `restoreCard`, `addCustomElement`, `updateCustomElement`, `removeCustomElement` (returns `{element, index}`), `restoreCustomElement`, `normalizePlacement` (unknown → `"end"`, mirroring `liturgy_config.normalize_placement`). Selectors: `sectionsNeedingAi(draft)`, `needsRegenerateConfirm(card)` (origin `typed` or `archive` with non-blank text). |
 | `defaults.ts` | `firstSundayOfMonth(dateIso)`, which uses `parseIsoDate` and never `new Date("YYYY-MM-DD")` (F §4.10). `applyLiturgyDefaults(draft, {defaultBenediction})` returns the same object when nothing changes. |
-| `request.ts` | `buildGenerateRequest(draft, section)`. Occasion trimmed and cut to 300. Scriptures trimmed, blanks dropped, first 20, each cut to 200 (the ServiceDraft limits). `hymns` = the three `HymnPick`s as `HymnRef`, each `title` cut to 300. `sections: [section]`. **No `overrides`.** |
+| `request.ts` | `buildGenerateRequest(draft, section)`. Occasion trimmed and cut to 300. Scriptures trimmed, blanks dropped, first 20, each cut to 200 (the ServiceDraft limits). `hymns` = the three `HymnPick`s as `HymnRef`, each `title` cut to 300. `sections: [section]`. **No `overrides`.** *Amendment 2026-09-26:* `sermon_text` from the batch's resolved sermon text ("Sermon text" below), omitted when there is none. |
 | `errors.ts` | `cardErrorFrom(ApiError \| SectionError)` → `{code, message, retryable, retryAfterSeconds?, link?}`. `localAiNotConfigured()` returns the `ai_not_configured` card error used when `config.ai_available` is false; its message equals the server's text, which `errors.test.ts` pins. |
 | `queue.ts` | `createTaskQueue({concurrency: 3})` with `push(key, run)`, `cancel(key)`, `cancelAll()` and per-task `AbortController`s |
 | `generation.tsx` | `LiturgyGenerationProvider` and `useLiturgyGeneration()` → `{runs, undo, generate(keys), cancel(keys?), applyUndo(key), dismissError(key)}` |
@@ -803,6 +884,15 @@ shadcn (base-nova) components added if missing: `switch`, `textarea`, `badge`, `
 | Archive load (5a) | the saved text, or `""` | `archive`, or `empty` (card off) |
 
 Communion: a toggle sets `communion_origin: "user"`. "Use default" sets it to `"default"`. While it is `default`, `applyLiturgyDefaults` keeps `include_communion = firstSundayOfMonth(readings.date_iso)`.
+
+### Sermon text (amendment 2026-09-26, PR #4)
+
+Streamlit sends the sermon (NT) passage with every liturgy request (inv E9). Here the client supplies it, so the server never fetches text on this route (API semantics 9):
+- **Reference:** the effective NT reading from slice 2's `effectivePicks(draft).nt` (the explicit pick, else the classifier fallback; never a Psalm), trimmed and cut to 200 characters. No reference → no `sermon_text`.
+- **Translation:** the draft's effective translation (`draft.readings.translation ?? church.effective_translation`), except that **ESV is replaced by WEB**, as in slice 3's `nt_text` rule (Crossway terms: ESV text is never sent to the AI).
+- **Loading:** before a Generate or a "Generate empty sections" batch sends anything, `generation.tsx` calls `queryClient.fetchQuery` with slice 2's passage query options for `["passage", translation, ref]`. This reuses a passage step 1 already loaded, TanStack deduplicates concurrent calls, and the result is cached for 24 h. The wait is bounded at 10 s. On a timeout, an error or a null text, the batch goes ahead without `sermon_text`, with no toast. The sermon text only adds themes, and Streamlit also skips it when the fetch fails.
+- **Request:** `sermon_text = {ref, text}`, with the text cut to 20 000 characters (the server keeps the first 2 000).
+- Cancel also aborts this wait. The sermon text is never stored in the draft.
 
 ### Draft store integration
 
@@ -849,6 +939,8 @@ Communion: a toggle sets `communion_origin: "user"`. "Use default" sets it to `"
 | BC-21 | Generation continues while the user moves between builder steps. | Step-by-step UX (owner decision 1) |
 | BC-22 | AI generation is rate-limited: the shared `ai` bucket, 40 sections / 10 min / user and 400 / day / church. Only sections that reach the AI call are charged. | F §1.8 cost exposure |
 | BC-23 | The landmark row and outline heading for the first reading slot read **"First Reading"** (was "Old Testament Reading"). The second slot's heading is unchanged ("New Testament Reading"), and which reading fills each slot is unchanged. | Owner decision B |
+| BC-24 | *(Amendment 2026-09-26.)* The rubric checklist and the sermon-text block are carried from PR #4 unchanged in wording and order. The sermon text now comes from the effective NT reading (never a Psalm) in the draft's translation, with **WEB instead of ESV**; before, it came from Streamlit's selected NT reference in the session translation, ESV included. A text that fails to load within 10 s is skipped, as before. If a long prompt must shrink, the sermon block is dropped rather than failing the section. | Crossway ESV terms (as slice 3); F §1.8 |
+| BC-25 | *(Amendment 2026-09-26; PR #7, new app only.)* When the church has a prayer library (filled in 6a), AI sections get the pastor's voice profile and one same-type example. With no library, nothing changes. | Owner decision (prayer library) |
 
 ---
 
@@ -973,6 +1065,24 @@ Communion: a toggle sets `communion_origin: "user"`. "Use default" sets it to `"
   - the OpenAPI snapshot test passes after regeneration;
   - `test_no_streamlit_in_core.py` still passes.
 
+**Amendment 2026-09-26: rubric, sermon text and prayer library (backend).**
+- **Characterization (PR #4).** PR #4's `backend/tests/test_generate_liturgy.py` is retargeted to `build_context`/`build_messages` and the usecase, like `test_liturgy_generation.py`, before `generate_liturgy` is deleted. Each case keeps its assertion: every section gets its default checklist; a church rubric replaces a checklist; a partial rubric falls back to the defaults; edited prompts still get the checklist; the sermon text is appended "for themes only"; it is cut to 2 000 characters; a missing or failed text (`"[Could not load text]"`) is skipped; typed sections are never sent. `sermon_text_block` keeps PR #4's exact wording.
+- `test_liturgy_prompts.py` additions:
+  - **Order:** rendered template, then "A good {Label}:" with its points, then the sermon block, then the voice example. The profile is only in the system message.
+  - **Braces:** braces inside a checklist point, the sermon text, the profile and the example come through literally, and nothing raises (the blocks are appended after `render()`).
+  - **Byte-identical baseline:** `build_messages(..., voice=None)`, `voice=VoiceContext("", None)` and `voice=VoiceContext("   ", None)` give equal lists.
+  - **Budget:** with a system prompt and template near the limit, the example is dropped first, then the profile, then the sermon block. A voice or sermon block never raises `PromptInvalid`. A checklist that pushes the church's own text over the limit does raise the pinned "It is too long once the readings and hymns are added." reason.
+  - **Truncation:** a 2 500-character profile is sent as 2 000 characters and a 4 000-character example as 3 000.
+  - **Defaults:** the `prayer_for_illumination` default contains "no more than 3 sentences", `offertory_prayer` contains "No more than three sentences", and both pass `check_template`.
+- `test_prayer_library.py` (pure): a missing key and junk values (`[]`, `{"prayers": "x"}`, `{"prayers": [{"type": 5}]}`) read as empty and never raise; `choose_example` with a pinned chooser returns the expected prayer, returns `None` when no prayer has that type, and never returns an `"other"` prayer.
+- `test_usecase_liturgy.py` additions:
+  1. **Rubric read fresh:** change the stored rubric between two calls; the second call's FakeAI messages show the new checklist. Church B's rubric never appears in church A's messages. An invalid stored rubric gives the default checklist.
+  2. **Library read fresh:** add a prayer between two calls; the second call's messages carry the example. An empty library gives messages equal to the no-library baseline.
+  3. **One session:** a patched `session_scope` counter shows prompts, rubric and library read in one session, and 0 open sessions during `complete()`.
+  4. **Sermon:** `sermon=("Mark 4:35-41", text)` puts the block in every AI section's user message and in no override.
+  5. **Worst case (PR #7 §Privacy; index open item 18):** Prayers of the People with a 2 000-character profile, a 3 000-character example, a maximum-size checklist and a 2 000-character sermon text stays within `MAX_PROMPT_CHARS` after the drop rules, and FakeAI receives `max_completion_tokens=4000`.
+- `test_api_liturgy.py` additions: `sermon_text` with a 201-character `ref`, a 20 001-character `text`, or an extra field → 422 `invalid_request` with `fields`. A request without `sermon_text` is still accepted (additive).
+
 ### Frontend (Vitest 3)
 
 **unit** (`*.test.ts`):
@@ -984,7 +1094,8 @@ Communion: a toggle sets `communion_origin: "user"`. "Use default" sets it to `"
     - communion recomputes on a date change only while its origin is `default`;
     - it returns the same reference when nothing changes;
   - fresh-draft card switches equal `shared/liturgy_sections.json`.
-- `request.test.ts`: one section, no `overrides`, trimmed and limited scriptures, slot-keyed `HymnRef`s including `hymn_id: null`, a 301-character hymn title cut to 300.
+- `request.test.ts`: one section, no `overrides`, trimmed and limited scriptures, slot-keyed `HymnRef`s including `hymn_id: null`, a 301-character hymn title cut to 300. *Amendment 2026-09-26:* `sermon_text` is `{ref, text}` for the effective NT reading, is omitted with no reference or no text, and is never built from an ESV passage (for an ESV church the WEB key is read). This is the port-ledger target for `streamlit_tests/test_app_helpers.py::test_sermon_text_*` (Streamlit's `sermon_text_for`).
+- `generation.test.tsx` (amendment 2026-09-26): a "Generate empty sections" batch of 4 makes **one** passage fetch, then sends 4 requests carrying the same `sermon_text`. A passage fetch that fails or passes 10 s still sends the batch, without `sermon_text` and with no toast. Cancel during the wait sends nothing.
 - `queue.test.ts`: never more than 3 running; FIFO order; `cancel(key)` and `cancelAll()` abort the signals; a cancelled task's result is never delivered.
 - `errors.test.ts`: every code in the UX table.
 - `summary.test.ts`: `liturgyCounts` on a fresh draft (7 enabled, the Benediction default counts as ready when non-blank), with whitespace-only text (not ready), with all cards off (`enabled` 0), and with custom elements and communion.
@@ -1123,6 +1234,9 @@ Append to `docs/manual-verification.md`. Run on the production Vercel URL at 375
     - a real service's default 6 empty sections generate in under about a minute, leaving typed text untouched.
 
     *(deployed)*
+19. *(Amendment 2026-09-26, PR #4.)* Every AI section's user message is the rendered template, then that section's checklist from the church's rubric (read fresh on each request, defaults when unset or invalid), then the sermon-text block when `sermon_text` is sent, with PR #4's wording, order and 2 000-character cut. Typed sections are never sent. The Illumination and Offertory defaults say "no more than 3 sentences". Every assertion of PR #4's `test_generate_liturgy.py` has an equivalent against the new code before `generate_liturgy` is deleted. *(test)*
+20. *(Amendment 2026-09-26.)* The client sends the effective NT reading's passage as `sermon_text`, never ESV text, with one passage fetch per batch, and a failed fetch never blocks generation. The server never fetches passage text on `/liturgy/generate`. *(test)*
+21. *(Amendment 2026-09-26, PR #7.)* `build_messages(section, prompts, ctx, *, voice=None)` appends the voice profile (capped at 2 000) to the system message and one random same-type example (capped at 3 000) to the user message, both after `render()`. Over `MAX_PROMPT_CHARS`, the example is dropped first, then the profile, then the sermon block. The library never causes `prompt_invalid`. With an empty or missing library the messages are byte-identical to the baseline. `usecases/liturgy` reads `churches.settings["prayer_library"]` in the same `session_scope` as `get_church_prompts`, fresh on every call. *(test)*
 
 ---
 
@@ -1132,7 +1246,7 @@ Append to `docs/manual-verification.md`. Run on the production Vercel URL at 375
    - The problem: the prayer is 10-15 paragraphs, and `OPENAI_TIMEOUT_SECONDS=30` per attempt (F §2.8) may be too short on the model slice 3 picks.
    - Measure during 4a with that model.
    - If it times out, add an optional, additive `timeout_seconds` keyword to `openai_client.complete()` and give this section 60 s with no retry. That keeps the worst case (60 + 15 s wait) inside the 90 s client timeout.
-2. **Token budgets on a reasoning model (open).** If `OPENAI_MODEL` is a reasoning model, reasoning tokens count toward `max_completion_tokens`, so 1500 or 4000 could produce empty or cut-off text. Empty text is reported as an error, not stored. Verify the budgets with the configured model in 4a and adjust `SectionSpec.max_completion_tokens` (a code constant, no API change).
+2. **Token budgets on a reasoning model (open).** If `OPENAI_MODEL` is a reasoning model, reasoning tokens count toward `max_completion_tokens`, so 1500 or 4000 could produce empty or cut-off text. Empty text is reported as an error, not stored. Verify the budgets with the configured model in 4a and adjust `SectionSpec.max_completion_tokens` (a code constant, no API change). *Amendment 2026-09-26:* the prompt is now longer, with the rubric checklist and the sermon text (PR #4) and, once 6a ships, the voice profile and example (PR #7). Measure the worst case (Prayers of the People with a 2 000-character profile, a 3 000-character example and a full sermon text) against both the budget and the 30 s timeout in item 1.
 3. **Stored prompt overrides that fail the stricter validator.**
    - Before deploying 4a, list production overrides read-only:
 
@@ -1151,3 +1265,40 @@ Append to `docs/manual-verification.md`. Run on the production Vercel URL at 375
    - **Until answered:** the design assumes no. 4a is unaffected either way.
    - **If yes:** this slice adds a `custom` request kind to `POST /liturgy/generate` (carrying the element's label, ≤200), its handling in `usecases/liturgy.py`, and Generate/Regenerate on `CustomElementCard` with the same run states and Undo as section cards (Regenerate on an element with text always confirms, since custom elements carry no origin); 6a adds the prompt template and its validator entry. No draft or schema change is needed.
    - **If no:** nothing changes; the spec stands as written.
+
+---
+
+## Amendment 2026-09-26: service reviewer (add-on after 4b; PR #8)
+
+**Source:** `docs/superpowers/specs/2026-09-26-service-reviewer-design.md`. That spec is authoritative, and this section does not repeat its checks, prompts or copy. It is **new-app only** (nothing goes into Streamlit). It ships as a small add-on right after 4b, before 5a, and needs this slice's cards, origins, stale-results rule, `usecases/liturgy.py`, `liturgy_prompts` and the OpenAI client. It uses the service rubric (PR #4) and, when a profile exists, the prayer library (PR #7).
+
+**UI hooks on this step:**
+- The liturgy step header gets a **"Review service"** button. It is enabled when at least one switched-on card has text, and it sends every such card. While it runs: a spinner, "Still working" after 8 s, and Cancel (F §1.8).
+- Each card shows **at most 3 notes** under its text (tag chip, one sentence, dismiss ×), or "Looks good." when it was reviewed with no notes. Notes about several prayers go in an **"Across the service"** box at the top of the step, also at most 3.
+- **What clears a card's notes:** typing in the card, Regenerate, Revise, Clear text and "Use church default". A review result is dropped for any card whose text or origin changed while the review ran. This is this slice's stale-results rule (UX "Generate and Regenerate" step 6: compare the text and origin captured at request start).
+- **"Revise with these notes"** appears only on cards with origin `ai` that still have at least one undismissed note. The revised text replaces the card, and the origin stays `ai`. Like Regenerate, it keeps the previous `{text, origin}` in memory for **Undo**. Cards with origin `typed`, `archive` or `default` get notes but never a Revise button, so typed text is never changed by the AI (owner decision 2).
+- Notes live in client memory only (for example in `LiturgyGenerationProvider` or a sibling provider). They are never written to the draft, the archive or `localStorage`, so `DraftV1` is unchanged, with no version bump.
+- When the AI part is missing (`ai_status` other than `ok`), the code-check notes still show, with the reviewer spec's quiet "Only quick checks ran…" line.
+
+**Routes** (in `backend/api/routes/liturgy_review.py`; request models at the top of that module with `extra="forbid"`, plus the shared `SermonText` from `api/schemas.py`, the same `{ref, text}` shape as `GenerateLiturgyIn.sermon_text`):
+
+| Route | Guard and rate limit | Errors |
+|---|---|---|
+| `POST /liturgy/review` | `require_church`. The `ai` bucket is charged **cost 1, and only when the AI call is made**, through a `charge` callback like `/liturgy/generate`'s (semantics 8). When the bucket is empty, the usecase skips the AI call instead of raising. | Always **200** once the request is valid: code notes plus `ai_status: "ok" \| "not_configured" \| "busy" \| "timeout" \| "rate_limited" \| "error"`. Request-level problems stay HTTP errors (401, 403, 422 `invalid_request`, 500). |
+| `POST /liturgy/revise` | `require_church` plus `rate_limit("ai")` (cost 1), as on `/hymns/suggestions` | AI failures as HTTP statuses: 503 `ai_not_configured` / `ai_busy`, 504 `ai_timeout`, 502 `ai_upstream_error`; 429 `rate_limited` with `Retry-After`; 422 `invalid_request`. |
+
+- **Consistency with F.** `ai_status` is a response field, not an error code, so nothing is added to F §1.5's `ERROR_CODES` or the frontend `ApiErrorCode` union. Like this slice's per-section results, review's "AI failure inside a 200" and its "empty bucket → `ai_status: rate_limited` instead of 429" are declared deviations from F §1.5 and §1.8, recorded in F's "Amendments from slice specs". Revise follows F exactly.
+- **Timeouts** (F §1.8): review has a 75 s server deadline passed to `complete(deadline=…)` and a 90 000 ms client timeout. Revise uses the section's slice 4 token budget (1 500, or 4 000 for Prayers of the People) and the 90 000 ms client timeout.
+- **Tenancy.** The rubric, the merged system prompt and the voice profile are read on the server in one `session_scope`, closed before the AI call (F §1.8), and never taken from the client. Both routes get `assert_church_isolated` tests.
+- Neither route is user-scoped, so the `test_route_guards.py` allowlists don't change. The OpenAPI snapshot is regenerated.
+
+**New modules:** `backend/review_checks.py` (pure code checks: stock seasonal phrases, naming Ordinary Time, scripture references, repeated openings) and `backend/usecases/liturgy_review.py` (review with its tolerant parsing, merge and budget, and `revise`). *Consistency note:* the reviewer spec says `review_checks.py` owns its Bible book list. Slice 3 §Backend 2 makes `scripture_refs.BOOKS` the one book table (it absorbs `worship_service._BOOK_ABBREVS`). The reference check should therefore read `BOOKS`' aliases rather than keep a second list. This needs to be settled in the add-on's plan.
+
+**Baseline change to this slice: the season guidance.** The add-on replaces the "do not name the season…" sentences in `liturgy_prompts.DEFAULT_SYSTEM_PROMPT` with the new season guidance. The exact old and new text is in the reviewer spec, §"Writer: new season guidance".
+- It lands **with the add-on, after the Streamlit freeze**, so `streamlit-frozen` keeps the old wording. A church whose admin saved its own system prompt keeps it, because overrides are stored whole. 6a's prompts page shows whichever default is in code.
+- **Tests before and after.** This slice's tests must not pin the old season sentences as a literal. They compare with `liturgy_prompts.default_prompts()["system"]` or `DEFAULT_SYSTEM_PROMPT` (for example "the system message equals the merged system prompt"), so they pass unchanged before the add-on lands and after it. Any slice 4 test that does quote the default system text is updated to the new text **in the add-on's PR**, never earlier. The add-on adds the test that the constant contains the new season sentences and none of the old ones.
+- Writer behavior otherwise stays as specified here. The reviewer never rewrites a card on its own.
+
+**Testing and acceptance** for the add-on are the reviewer spec's §Testing (backend `FakeAI` and route tests, frontend DOM tests, a 375 px manual check). Two cases are this slice's contract and are added to its test files when the add-on lands:
+- `generation`/card tests: typing, Regenerate, Revise, Clear text and "Use church default" each clear that card's notes. A review result for a card edited mid-review is dropped.
+- `cards.test.ts`: Revise is offered only for origin `ai`, and its Undo restores the previous text and origin, like Regenerate.
