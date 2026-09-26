@@ -3,9 +3,13 @@
 
 Hymnary.org's website sits behind a bot challenge, so we never scrape it. The
 public API (API_URL?reference=...) answers plain requests and returns, for
-each text that cites the reference: its title, "number of hymnals" (our
-familiarity signal), often "date", and people fields with life dates such as
-"Perronet, Edward, 1721-1792".
+each text that cites the reference, a record keyed by the text's first line
+with: its title, "number of hymnals" (our familiarity signal), often "date",
+and people fields with life dates such as "Perronet, Edward, 1721-1792".
+
+The title is often a short name ("Guide Me" for "Guide me, O Thou great
+Jehovah") or missing, while hymnals such as PH1990 list hymns by first line,
+so a hymn matches a text by either its title or its first line.
 
 The API returns at most RESULT_CAP texts per reference, sorted by first line,
 with no way to page past them: under "Psalm 23" it stops at "When it seems
@@ -17,7 +21,7 @@ The fetch function is injected so tests never touch the network; the CLI in
 backfill_hymn_facts.py supplies the real, throttled one.
 """
 import re
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from sqlalchemy import or_, select
 
@@ -33,7 +37,7 @@ RESULT_CAP = 100         # most texts the API returns for one reference
 Fetch = Callable[[str], Any]
 
 _YEAR = re.compile(r"\b(1\d{3}|20\d{2})\b")
-_LIFE = re.compile(r"(\d{4})\s*-\s*(\d{4})?")
+_LIFE = re.compile(r"(\d{4})\s*[-–—]\s*(\d{4})?")   # hyphen, en or em dash
 _REF_BREAK = re.compile(r"\s*(?:;|\n|,(?=\s*[1-3]?\s?[A-Za-z]))\s*")
 _ARTICLE = re.compile(r"^(the|a|an) ")
 
@@ -62,7 +66,7 @@ def hymnal_count(record: Dict[str, Any]) -> Optional[int]:
     return int(digits) if digits else None
 
 
-def normalize_title(title: str) -> str:
+def normalize_title(title: Optional[str]) -> str:
     """Lowercase, punctuation dropped, a leading "the/a/an" removed."""
     t = re.sub(r"[^\w\s]", " ", (title or "").lower())
     t = re.sub(r"\s+", " ", t).strip()
@@ -76,16 +80,19 @@ def split_refs(refs: Optional[str]) -> List[str]:
     return [r for r in _REF_BREAK.split((refs or "").strip()) if r]
 
 
-def _records(results: Any) -> List[Any]:
-    """The text records in one API response: a dict keyed by first line, a
-    list, or [] / None when nothing cites the reference."""
-    return list(results.values()) if isinstance(results, dict) else list(results or [])
+def _entries(results: Any) -> List[Tuple[Optional[str], Any]]:
+    """(first line, record) for each text in one API response: a dict keyed by
+    first line, a list (no first lines), or [] / None when nothing cites the
+    reference."""
+    if isinstance(results, dict):
+        return list(results.items())
+    return [(None, record) for record in results or []]
 
 
 def is_truncated(results: Any) -> bool:
     """True when a response holds RESULT_CAP texts, so the API may have cut
     off texts that also cite the reference."""
-    return len(_records(results)) >= RESULT_CAP
+    return len(_entries(results)) >= RESULT_CAP
 
 
 def _text_id(record: Dict[str, Any]) -> str:
@@ -96,8 +103,9 @@ def _text_id(record: Dict[str, Any]) -> str:
 def find_facts(title: str, refs: Optional[str], fetch: Fetch,
                cache: Dict[str, Any]) -> Optional[Dict[str, Optional[int]]]:
     """Look up one hymn: query each of its references (cached per reference),
-    collect every text whose title matches, and return the facts of one of
-    them, or None when nothing matches.
+    collect every text whose title or first line matches, and return the
+    facts of one of them, or None when nothing matches. A text matching both
+    ways counts once.
 
     Hymnary often gives one title to several texts (under "Psalm 23", a modern
     "The Lord's My Shepherd" in 14 hymnals is listed before the Rous metrical
@@ -122,8 +130,9 @@ def find_facts(title: str, refs: Optional[str], fetch: Fetch,
         if ref not in cache:
             cache[ref] = fetch(ref)
         truncated = truncated or is_truncated(cache[ref])
-        for record in _records(cache[ref]):
-            if isinstance(record, dict) and normalize_title(record.get("title", "")) == want:
+        for first_line, record in _entries(cache[ref]):
+            if isinstance(record, dict) and want in (normalize_title(record.get("title")),
+                                                     normalize_title(first_line)):
                 matches.setdefault(_text_id(record), record)
     if not matches or (truncated and len(matches) > 1):
         return None

@@ -18,6 +18,9 @@ from db.models import Hymn, HymnCatalog
     ({"author": "Heermann, Johann, 1585-1647", "translator": "Bridges, Robert, 1844-1930"}, 1930),
     ({"translator": "Seiss, Joseph A. (Joseph Augustus) 1823-1904"}, 1904),
     ({"author": "Wren, Brian, 1936-"}, 1936 + hf.BIRTH_ONLY_OFFSET),
+    # Life dates written with an en dash, as in the live "Psalm 23" response.
+    ({"author": "Franzén, Frans Michael, 1772-1847", "adapter": "Price, Charles P., 1920–1999"}, 1999),
+    ({"author": "Wren, Brian, 1936—"}, 1936 + hf.BIRTH_ONLY_OFFSET),   # em dash
     ({"author": "Latin hymn, 12th cent."}, None),
     ({}, None),
 ])
@@ -141,6 +144,49 @@ def test_find_facts_counts_one_text_seen_under_two_references_once():
     fetch = FakeFetch({"John 10:11": {"a": SHEPHERD_ROUS},
                        "Psalm 23": _capped(SHEPHERD_ROUS)})
     assert hf.find_facts("The Lord's My Shepherd", "John 10:11; Psalm 23", fetch, {}) == \
+        {"text_year": None, "hymnal_count": 769}
+
+
+# The API keys each text by its first line, and "title" is often a short name or
+# missing. Catalogs such as PH1990 list hymns by first line. Both records are
+# from the live "Psalm 23" response.
+GUIDE_ME = {"title": "Guide Me", "number of hymnals": "1997",
+            "text link": "https://hymnary.org/text/guide_me_o_thou_great_jehovah",
+            "author": "Williams, William, 1717-1791", "translator": "Williams, Peter, 1723-1796"}
+DISMISS = {"number of hymnals": "1351",
+           "text link": "https://hymnary.org/text/lord_dismiss_us_with_thy_blessing_fill"}
+DISMISS_FIRST_LINE = "Lord, dismiss us with Thy blessing, Fill our hearts with joy and peace"
+
+
+def test_find_facts_matches_the_first_line_when_the_title_differs_or_is_missing():
+    fetch = FakeFetch({"Psalm 23": {"Guide me, O Thou great Jehovah": GUIDE_ME,
+                                    DISMISS_FIRST_LINE: DISMISS}})
+    cache = {}
+    assert hf.find_facts("Guide me, O Thou great Jehovah", "Psalm 23", fetch, cache) == \
+        {"text_year": 1796, "hymnal_count": 1997}
+    assert hf.find_facts("Guide Me", "Psalm 23", fetch, cache) == \
+        {"text_year": 1796, "hymnal_count": 1997}   # the title still matches
+    assert hf.find_facts(DISMISS_FIRST_LINE, "Psalm 23", fetch, cache) == \
+        {"text_year": None, "hymnal_count": 1351}
+
+
+def test_find_facts_counts_a_text_matching_by_title_and_first_line_once():
+    # One text is not a collision with itself, so the cap does not hide it.
+    fetch = FakeFetch({"Isaiah 6:3": {HOLY["title"]: HOLY, **_capped()}})
+    assert hf.find_facts(HOLY["title"], "Isaiah 6:3", fetch, {}) == \
+        {"text_year": 1826, "hymnal_count": 1322}
+
+
+def test_find_facts_weighs_first_line_and_title_matches_alike():
+    # A text whose first line is the wanted title competes with a text whose
+    # title is, and the one in more hymnals wins.
+    fetch = FakeFetch({"Psalm 23": {"The Lord's my shepherd, I'll not want": SHEPHERD_ROUS,
+                                    "The Lord's my shepherd": {**SHEPHERD_MODERN, "title": "Townend"}}})
+    assert hf.find_facts("The Lord's My Shepherd", "Psalm 23", fetch, {}) == \
+        {"text_year": None, "hymnal_count": 769}
+    fetch = FakeFetch({"Psalm 23": {"The Lord's my shepherd, I'll not want": SHEPHERD_MODERN,
+                                    "The Lord's my shepherd": {**SHEPHERD_ROUS, "title": "Rous"}}})
+    assert hf.find_facts("The Lord's My Shepherd", "Psalm 23", fetch, {}) == \
         {"text_year": None, "hymnal_count": 769}
 
 
