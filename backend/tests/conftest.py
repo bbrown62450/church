@@ -11,6 +11,19 @@ import uuid
 import pytest
 
 
+class FakeClock:
+    """A monotonic clock tests move by hand: pass `clock.now` where code takes a clock."""
+
+    def __init__(self, start: float = 1000.0):
+        self.value = start
+
+    def now(self) -> float:
+        return self.value
+
+    def advance(self, seconds: float) -> None:
+        self.value += seconds
+
+
 @pytest.fixture
 def tmp_db(tmp_path):
     """Fresh, isolated SQLite database for one test.
