@@ -139,6 +139,41 @@ hymn usage, and copies contacts into the **founder church only**. It is
 any liturgy rows flagged as truncated. Enrichment is validated at the end; an
 empty scripture lookup aborts the run non-zero.
 
+### Service rubric: hymn year and familiarity
+
+Hymns carry two facts from Hymnary.org: the year the words were written and how
+many hymnals include them (familiarity). They drive the rubric's "prefer older"
+and "prefer familiar" hymn suggestions.
+
+Run each command below from the repo root, with `DATABASE_URL` set to the
+deployed (Supabase) database.
+
+1. **Before merging** code that maps these columns, add them to the deployed
+   database. Both apps select every mapped column and would fail without them:
+
+   ```bash
+   (cd backend && python migrate_add_hymn_facts.py)
+   ```
+
+2. Preview the fill from Hymnary.org's public API. It writes nothing and takes
+   about a second per scripture reference:
+
+   ```bash
+   (cd backend && python backfill_hymn_facts.py --dry-run)
+   ```
+
+   Before the real run, read the summary lines at the end. References that
+   "hit Hymnary's 100-text cap" may leave hymns cited only by them unknown.
+   References "Hymnary could not parse" were skipped; fix the stored reference
+   and dry-run again.
+
+3. Fill them in. This fills blanks only, so it is safe to re-run (for example,
+   to retry references it reports as failed):
+
+   ```bash
+   (cd backend && python backfill_hymn_facts.py)
+   ```
+
 ## Operations
 
 ### Keep-alive (required)

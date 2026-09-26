@@ -61,3 +61,27 @@ def coerce_selectbox_value(current, options) -> str:
     if current in options:
         return current
     return ""
+
+
+_FAILED_TEXT = "[Could not load text]"
+
+
+def sermon_text_for(ref, cached_texts, fetch=None):
+    """(reference, passage text) for the liturgy writer, or None.
+
+    Uses the passage already loaded on the page when there is one; otherwise
+    asks `fetch(ref)`. A failed or empty load yields None, so liturgy generation
+    never breaks on a missing sermon text."""
+    ref = (ref or "").strip()
+    if not ref:
+        return None
+    text = (cached_texts or {}).get(ref) or ""
+    if (not text or text == _FAILED_TEXT) and fetch is not None:
+        try:
+            text = fetch(ref) or ""
+        except Exception:
+            text = ""
+    text = text.strip()
+    if not text or text == _FAILED_TEXT:
+        return None
+    return (ref, text)
