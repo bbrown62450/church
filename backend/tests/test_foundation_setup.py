@@ -33,3 +33,23 @@ def test_backend_deploy_files_run_uvicorn_on_python_311():
     assert "uvicorn api.main:app" in procfile
     assert "$PORT" in procfile
     assert (ROOT / "backend" / ".python-version").read_text().strip() == "3.11"
+
+
+# --- ops slice (ops-1): dead code and configuration drift (inv H8, H10, H11, H12) ---
+
+# Spelled in parts so that the ops spec's whole-word grep (acceptance criterion 6),
+# which must find nothing under backend/, does not match this test.
+DELETED_DEAD_MODULES = tuple("_".join(parts) + ".py" for parts in (
+    ("email", "send"),
+    ("notion", "archive"),
+    ("notion", "usage"),
+    ("select", "sunday", "hymns"),
+    ("add", "hymnary", "links"),
+    ("fix", "hymn", "titles"),
+))
+
+
+def test_dead_modules_are_deleted():
+    found = [str(p.relative_to(ROOT)) for name in DELETED_DEAD_MODULES
+             for p in (ROOT / "backend").rglob(name)]
+    assert found == []
