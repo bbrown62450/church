@@ -21,7 +21,7 @@ jobs:
           playwright install --with-deps chromium
       - name: Visit apps (real browser session)
         env:
-          APP_URLS: "https://liturgy-next.streamlit.app/ https://liturgy.streamlit.app/"
+          APP_URLS: "https://liturgy-next.streamlit.app/"
         run: |
           python - <<'PY'
           import os, sys

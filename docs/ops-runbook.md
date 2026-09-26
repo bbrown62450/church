@@ -212,7 +212,7 @@ key file is left on disk.
 
 | Date | Run | Result |
 |---|---|---|
-| [owner: first manual run after ops-1] | [owner: run URL] | [owner: green; artifact `backup-*.dump.age`; the log shows no URL or password] |
+| 2026-09-26 (first manual run after ops-1) | https://github.com/bbrown62450/church/actions/runs/36261197972 | Green. Artifact `db-backup` (225,686 bytes, encrypted), expires 2026-10-26. A scan of the public log found no database host, user, URL, `PGPASSWORD` or private-key text; 4 values were masked as `***`. |
 
 ## Streamlit freeze
 
@@ -224,7 +224,7 @@ owner corrected this on 2026-09-25: it is the other way round.
 | App | URL | Status |
 |---|---|---|
 | `liturgy-next` | https://liturgy-next.streamlit.app/ | **Production.** The owner and the tester use it. On 2026-09-26 it deploys from repo `bbrown62450/church`, branch `main`, main file `app.py`. `liturgy-stg`, which ran from the old branch `claude/multi-user-app-support-edd5eb`, was deleted that day during Task 9a. Streamlit Community Cloud allows only one app per repository + branch + main file, and `liturgy-next` (created earlier as a side-by-side test) already held `main`/`app.py`. So the owner kept `liturgy-next` as the production address instead of recreating `liturgy-stg`. Its Secrets carry `[auth] redirect_uri = https://liturgy-next.streamlit.app/oauth2callback` and `GOOGLE_OAUTH_REDIRECT_URI = https://liturgy-next.streamlit.app/`, and both are registered on the Google OAuth client. The owner checked sign-in, church and hymnal, saved services and a Gmail test send. `keep-awake` keeps it awake. ops-3's Freeze still has to move production onto `streamlit-frozen`, at this address. |
-| `liturgy` | https://liturgy.streamlit.app/ | **Unused.** Its Google sign-in fails with `StreamlitAuthError` (its secrets config). The Freeze step deletes it and removes its two Google redirect URIs (`https://liturgy.streamlit.app/oauth2callback` and the bare root `https://liturgy.streamlit.app/`). |
+| `liturgy` | https://liturgy.streamlit.app/ | **Deleted 2026-09-26** (it was unused; its Google sign-in failed with `StreamlitAuthError` from its secrets config). The URL now returns 404. Its two Google redirect URIs (`https://liturgy.streamlit.app/oauth2callback` and the bare root `https://liturgy.streamlit.app/`) can be removed from the OAuth client; they are harmless meanwhile. |
 
 ### Streamlit bug triage
 
@@ -261,9 +261,9 @@ longer clear them. Recent hymns that are not picked stay hidden.
 
 | Event | Date |
 |---|---|
-| D5 workaround message sent to the tester | Not sent (owner decision, 2026-09-26): the fix goes live right after the ops-1 merge, when `liturgy-stg` is redeployed from `main` (Task 9a), so the window is short. |
-| ops-1 build live on https://liturgy-stg.streamlit.app/ | [owner] |
-| D5 manual check passed on https://liturgy-stg.streamlit.app/ | [owner] |
+| D5 workaround message sent to the tester | Not sent (owner decision, 2026-09-26): the fix goes live right after the ops-1 merge, when production Streamlit moves to `main` (Task 9a; production became `liturgy-next` instead), so the window is short. |
+| ops-1 build live on https://liturgy-next.streamlit.app/ | 2026-09-26 (liturgy-next deploys from `main`, which includes the D5 fix; the owner verified sign-in, church and hymnal, saved services and a Gmail test send) |
+| D5 manual check passed on https://liturgy-next.streamlit.app/ | [owner] |
 | "Fixed" message sent to the tester | [owner] |
 
 **Recovery queries** (Supabase SQL editor, after the fix is live).
@@ -393,3 +393,7 @@ logs for a short time). Steps 1–3 come before any repair.
 None: the Data API was already off (2026-09-25). REST and GraphQL requests
 with the anon key returned HTTP 503 `PGRST002` and no rows, so the owner
 recorded no incident and no incident steps were needed.
+
+### Accepted risk: database password shared in a chat session
+
+On 2026-09-25 the Supabase database password (the `postgres.<ref>` pooler user) was pasted into an AI coding-assistant chat while configuring Railway. On 2026-09-26 the owner decided not to rotate it. If it is rotated later, update it in: Supabase (Project Settings → Database → Reset database password; avoid `@ # / ?` to skip URL-encoding), Railway `DATABASE_URL`, the `liturgy-next` Streamlit Secrets `DATABASE_URL`, and the `backup` environment secret `BACKUP_DATABASE_URL`; then run the backup by hand and check `/me` and liturgy-next.
