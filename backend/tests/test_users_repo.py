@@ -1,28 +1,31 @@
 import uuid
 
-from repos.users import upsert_user, get_user, get_user_by_email
+import pytest
+
+from repos.users import UserRow, ensure_user, get_user, get_user_by_email
 
 
-def test_upsert_user_lowercases_and_creates(tmp_db):
-    uid = upsert_user(email="Beau.Brown@Example.COM", name="Beau", google_sub="sub-1")
-    assert isinstance(uid, uuid.UUID)
-    row = get_user(uid)
-    assert row["email"] == "beau.brown@example.com"
-    assert row["name"] == "Beau"
-    assert row["google_sub"] == "sub-1"
+def test_ensure_user_lowercases_and_creates(tmp_db):
+    row = ensure_user("Beau.Brown@Example.COM", "Beau", google_sub="sub-1")
+    assert isinstance(row, UserRow)
+    assert isinstance(row.id, uuid.UUID)
+    stored = get_user(row.id)
+    assert stored["email"] == "beau.brown@example.com"
+    assert stored["name"] == "Beau"
+    assert stored["google_sub"] == "sub-1"
 
 
-def test_upsert_user_is_idempotent_on_normalized_email(tmp_db):
-    uid1 = upsert_user(email="a@b.com", name="First")
-    uid2 = upsert_user(email="A@B.COM", name="Second", picture="http://x/y.png")
-    assert uid1 == uid2
-    row = get_user(uid1)
-    assert row["name"] == "Second"            # updated in place
-    assert row["picture"] == "http://x/y.png"
+def test_ensure_user_is_idempotent_on_normalized_email(tmp_db):
+    first = ensure_user("a@b.com", "First")
+    second = ensure_user("A@B.COM", "Second", "http://x/y.png")
+    assert first.id == second.id
+    stored = get_user(first.id)
+    assert stored["name"] == "Second"            # updated in place
+    assert stored["picture"] == "http://x/y.png"
 
 
 def test_get_user_by_email_matches_normalized(tmp_db):
-    uid = upsert_user(email="Carol@Example.com")
+    uid = ensure_user("Carol@Example.com").id
     assert get_user_by_email("carol@example.com")["id"] == uid
     assert get_user_by_email("  CAROL@EXAMPLE.COM ")["id"] == uid
 
@@ -32,7 +35,14 @@ def test_get_user_missing_returns_none(tmp_db):
     assert get_user_by_email("nobody@example.com") is None
 
 
-def test_upsert_user_rejects_empty_email(tmp_db):
-    import pytest
+def test_ensure_user_rejects_empty_email(tmp_db):
     with pytest.raises(ValueError):
-        upsert_user(email="   ")
+        ensure_user("   ")
+
+
+def test_upsert_user_is_folded_into_ensure_user():
+    # ops spec S14: one identity write path. Its "overwrite when not None" rule
+    # is gone; ensure_user overwrites only with truthy values.
+    import repos.users
+
+    assert not hasattr(repos.users, "upsert_user")
