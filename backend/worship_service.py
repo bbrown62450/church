@@ -739,6 +739,24 @@ def resolve_hymnary_audio_url(number: Optional[int], title: str) -> Optional[str
     return url
 
 
+SERMON_TEXT_LIMIT = 2000
+
+
+def _sermon_text_block(sermon_text: Optional[tuple]) -> str:
+    """The sermon-text context appended to each liturgy prompt, or '' when the
+    reference or text is missing, or the passage failed to load."""
+    if not sermon_text:
+        return ""
+    ref, text = sermon_text
+    text = (text or "").strip()
+    if not (ref or "").strip() or not text or "[Could not load text]" in text:
+        return ""
+    return (
+        f"Sermon text ({ref.strip()}), for themes only; do not quote, cite, or name it:\n"
+        f"{text[:SERMON_TEXT_LIMIT]}"
+    )
+
+
 def generate_liturgy(
     *,
     occasion: str,
@@ -748,6 +766,8 @@ def generate_liturgy(
     api_key: Optional[str] = None,
     user_overrides: Optional[Dict[str, str]] = None,
     prompt_overrides: Optional[Dict[str, str]] = None,
+    rubric: Optional[Dict[str, Any]] = None,
+    sermon_text: Optional[tuple] = None,
 ) -> Dict[str, str]:
     """
     Use OpenAI to generate liturgy text for the requested sections.
@@ -755,9 +775,17 @@ def generate_liturgy(
     prompt_overrides (per church) replaces the default AI instructions for the
     "system" voice and/or any section; missing keys fall back to the defaults.
     Returns dict mapping section key -> plain text.
+    rubric (a merged service rubric; None means the defaults) adds each section's
+    quality checklist to its prompt. sermon_text, as (reference, passage text), is
+    added to every prompt for themes; it is skipped when missing or when the
+    passage failed to load. Both are appended in code, so churches with edited
+    prompts get them too.
     """
     overrides = user_overrides or {}
     prompts = liturgy_prompts.merge_prompts(prompt_overrides)
+    if rubric is None:
+        rubric = service_rubric.default_rubric()
+    sermon_block = _sermon_text_block(sermon_text)
     client = None
     if OpenAI:
         key = (api_key or os.getenv("OPENAI_API_KEY") or "").strip()
@@ -803,6 +831,12 @@ def generate_liturgy(
             opening_hymn=opening_hymn,
             hymns=hymn_lines,
         )
+        checklist = rubric["prayers"].get(section)
+        if checklist:
+            label = liturgy_prompts.SECTION_LABELS.get(section, section)
+            prompt += "\n\n" + service_rubric.format_checklist(label, checklist)
+        if sermon_block:
+            prompt += "\n\n" + sermon_block
 
         model = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
         try:

@@ -87,7 +87,7 @@ DEFAULT_SECTION_PROMPTS: Dict[str, str] = {
     "prayer_for_illumination": (
         "Write a Prayer for Illumination for: {occasion}. "
         "Themes from today's readings (use for inspiration only; do not cite): {scriptures}. "
-        "Write 3-5 sentences asking God to open hearts and minds to the Word, that we may hear and respond. End with 'Amen.' "
+        "Write no more than 3 sentences asking God to open hearts and minds to the Word, that we may hear and respond. End with 'Amen.' "
         "Do not name specific books or passages; speak generally of God's Word."
     ),
     "prayers_of_the_people": (
@@ -107,7 +107,7 @@ DEFAULT_SECTION_PROMPTS: Dict[str, str] = {
     ),
     "offertory_prayer": (
         "Write an Offertory Prayer for: {occasion}. "
-        "Three to five sentences: thank God for provision, dedicate our gifts and ourselves to God's service, "
+        "No more than three sentences: thank God for provision, dedicate our gifts and ourselves to God's service, "
         "and ask that our offerings be used for the work of the kingdom. End with 'Amen.'"
     ),
     "benediction": (
