@@ -1,4 +1,5 @@
 """api.identity_cache: the private, success-only identity cache (ops slice, F §2.4)."""
+import sys
 import threading
 import uuid
 
@@ -54,11 +55,18 @@ def test_clear_empties_the_cache():
 
 
 def test_concurrent_puts_and_gets_are_safe():
+    """Without the lock, a get() can read an entry that another thread's put()
+    then evicts, and move_to_end/del raises KeyError. At the default 5 ms switch
+    interval threads rarely interleave inside one call, so this test forces
+    switches every microsecond and starts all threads together; with the lock
+    patched out it then fails most runs."""
     cache = IdentityCache(maxsize=64, ttl=300)
     errors = []
+    start = threading.Barrier(8)
 
     def work(worker):
         try:
+            start.wait()
             for i in range(1000):
                 email = f"user{(worker * 7 + i) % 100}@example.com"
                 if i % 2:
@@ -69,9 +77,14 @@ def test_concurrent_puts_and_gets_are_safe():
             errors.append(repr(exc))
 
     threads = [threading.Thread(target=work, args=(n,)) for n in range(8)]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
+    old_interval = sys.getswitchinterval()
+    sys.setswitchinterval(1e-6)
+    try:
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+    finally:
+        sys.setswitchinterval(old_interval)
     assert errors == []
-    assert len(cache) <= 64
+    assert len(cache) == 64      # all 100 emails were put, so the cache is exactly full
