@@ -100,3 +100,23 @@ def test_hymn_display_info_without_a_preference_never_flags():
     info = worship_service.hymn_display_info(HYMNS[0])
     assert info["year"] == 1995
     assert info["newer_than_preferred"] is False
+
+
+def test_a_long_run_of_older_hymns_does_not_crowd_out_newer_or_unknown_ones(monkeypatch):
+    # 70 older closing hymns would fill all 60 places if the list were simply cut.
+    hymns = [hymn(f"Old Joy {i}", 100 + i, "joy, praise", 1700 + i, 10) for i in range(70)]
+    hymns.append(hymn("Newer Sending Song", 500, "sending", 1990, 5000))
+    hymns += [hymn(f"Unknown Joy {i}", 600 + i, "joy") for i in range(5)]
+    client = FakeOpenAI(json.dumps({"opening": [], "response": [], "closing": []}))
+    monkeypatch.setattr(worship_service, "OpenAI", lambda api_key: client)
+    worship_service.suggest_hymns_for_service(
+        db=None, occasion="Easter", scriptures=["Isaiah 6:1-8"],
+        api_key="test-key", all_hymns=hymns,
+    )
+    closing = prompt_of(client).split("CLOSING CANDIDATES")[1]
+    lines = [line for line in closing.splitlines() if line.startswith("- ")]
+    assert len(lines) == 60
+    assert any(line.startswith("- Newer Sending Song ") for line in lines)
+    assert any(line.startswith("- Unknown Joy 0 ") for line in lines)
+    assert lines[0].startswith("- Old Joy")                     # older hymns still lead
+    assert lines[-1].startswith("- Newer Sending Song ")        # and the list stays in ranked order

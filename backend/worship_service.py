@@ -367,6 +367,13 @@ def hymns_by_scripture(
 _OPENING_THEMES = {"gathering", "opening", "call to worship", "invitation", "welcome", "entrance"}
 _CLOSING_THEMES = {"joy", "rejoice", "sending", "benediction", "mission", "dismissal", "praise", "thanksgiving"}
 
+# How many candidates each slot shows the AI, and how many of those places are
+# kept for hymns of unknown year and newer hymns. Without them, a slot with 60 or
+# more older hymns would hide every newer one, and the age preference would act
+# as a filter.
+_CANDIDATES_PER_SLOT = 60
+_CANDIDATES_KEPT_FOR_NEWER = 12
+
 
 def _hymn_matches_theme(hymn: Dict[str, Any], theme_set: set) -> bool:
     """True if hymn's Theme property contains any of the theme keywords."""
@@ -473,21 +480,28 @@ def suggest_hymns_for_service(
     seen = set()
     scripture_hymns = [h for h in scripture_hymns if h["id"] not in seen and not seen.add(h["id"])]
 
-    def _rank(hymns: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        return hymn_ranking.rank_candidates(
+    def _candidates(hymns: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Rank a slot's hymns, then cut them to the ones the AI is shown."""
+        ranked = hymn_ranking.rank_candidates(
             hymns,
             prefer_before_year=rubric["prefer_before_year"],
             prefer_familiar=rubric["prefer_familiar"],
         )
+        return hymn_ranking.shortlist(
+            ranked,
+            limit=_CANDIDATES_PER_SLOT,
+            prefer_before_year=rubric["prefer_before_year"],
+            reserve=_CANDIDATES_KEPT_FOR_NEWER,
+        )
 
     # A slot with no theme-matched hymns falls back to the whole ranked hymnal.
-    opening_candidates = _rank(
+    opening_candidates = _candidates(
         [h for h in all_hymns if _hymn_matches_theme(h, _OPENING_THEMES)] or all_hymns
     )
-    closing_candidates = _rank(
+    closing_candidates = _candidates(
         [h for h in all_hymns if _hymn_matches_theme(h, _CLOSING_THEMES)] or all_hymns
     )
-    response_candidates = _rank(scripture_hymns or all_hymns)
+    response_candidates = _candidates(scripture_hymns or all_hymns)
 
     _progress("Building prompt for AI…", 0.45)
     def _hymn_summary(h: Dict) -> str:
@@ -504,9 +518,9 @@ def suggest_hymns_for_service(
             + (f" [scripture: {script[:60]}...]" if len(script) > 60 else f" [scripture: {script}]" if script else "")
         )
 
-    opening_list = "\n".join(_hymn_summary(h) for h in opening_candidates[:60])
-    response_list = "\n".join(_hymn_summary(h) for h in response_candidates[:60])
-    closing_list = "\n".join(_hymn_summary(h) for h in closing_candidates[:60])
+    opening_list = "\n".join(_hymn_summary(h) for h in opening_candidates)
+    response_list = "\n".join(_hymn_summary(h) for h in response_candidates)
+    closing_list = "\n".join(_hymn_summary(h) for h in closing_candidates)
 
     scripture_refs_str = "\n".join(f"- {s}" for s in scriptures) if scriptures else "None"
     nt_preview = (nt_text[:1500] + "...") if len(nt_text) > 1500 else nt_text if nt_text else "(no text loaded)"

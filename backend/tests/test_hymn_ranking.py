@@ -1,4 +1,4 @@
-from hymn_ranking import facts_note, rank_candidates
+from hymn_ranking import facts_note, rank_candidates, shortlist
 
 
 def h(name, year=None, count=None):
@@ -45,3 +45,23 @@ def test_facts_note():
     assert facts_note(h("x", 1826)) == "(written 1826)"
     assert facts_note(h("x", None, 84)) == "(in 84 hymnals)"
     assert facts_note(h("x")) == ""
+
+
+def test_shortlist_keeps_everything_within_the_limit():
+    ranked = [h("old", 1800), h("unknown"), h("new", 1990)]
+    assert titles(shortlist(ranked, limit=3, prefer_before_year=1970, reserve=1)) == ["old", "unknown", "new"]
+
+
+def test_shortlist_reserves_places_for_unknown_and_newer_hymns_in_turn():
+    ranked = ([h(f"old{i}", 1800 + i) for i in range(6)]
+              + [h("unknown1"), h("unknown2"), h("unknown3")]
+              + [h("new1", 1990), h("new2", 1991)])
+    picked = shortlist(ranked, limit=6, prefer_before_year=1970, reserve=3)
+    # three places go to unknown1, new1, unknown2 (alternating); the rest are the top older hymns
+    assert titles(picked) == ["old0", "old1", "old2", "unknown1", "unknown2", "new1"]
+
+
+def test_shortlist_gives_unused_reserved_places_back_to_older_hymns():
+    ranked = [h(f"old{i}", 1800 + i) for i in range(6)] + [h("new1", 1990)]
+    picked = shortlist(ranked, limit=5, prefer_before_year=1970, reserve=3)
+    assert titles(picked) == ["old0", "old1", "old2", "old3", "new1"]
