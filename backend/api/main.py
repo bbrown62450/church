@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.errors import install_error_handlers
+from api.middleware import RequestIdMiddleware
 from api.routes import health, me, rubric
 from api.settings import get_settings
 from db import init_db
@@ -34,6 +35,7 @@ async def lifespan(_app: FastAPI):
 def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title="Worship Service Builder API", lifespan=lifespan)
+    app.add_middleware(RequestIdMiddleware)   # added before CORS, so CORS stays the outermost
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(settings.cors_origins),
