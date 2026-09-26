@@ -1,0 +1,7 @@
+# age public keys ("recipients") for the encrypted database backups made by
+# .github/workflows/backup.yml. One age1… key per line; every key listed can
+# decrypt every new backup. Public keys only: the private keys stay in the
+# owner's password manager (docs/ops-runbook.md → Backups → Key custody).
+# backend/tests/test_ops_workflows.py rejects any other non-comment line.
+# primary backup key (owner), created 2026-09-26
+age1zl8f90cg4cn2cujdl6dz8yqgj33vvqvyjjwwyp7hjdwf7r9efcwsratwe5

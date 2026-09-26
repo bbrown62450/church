@@ -439,3 +439,40 @@ def test_readme_backups_paragraph_describes_encrypted_backups():
     for needle in ("BACKUP_DATABASE_URL", "`age`", ".dump.age", "docs/ops-runbook.md"):
         assert needle in section, needle
     assert "compressed dump" not in section
+
+
+# --- .github/backup/age-recipients.txt ----------------------------------------
+
+RECIPIENTS = ROOT / ".github" / "backup" / "age-recipients.txt"
+# A real age private key: the prefix, "1", then 58 upper-case Bech32 characters.
+# A bare mention of the prefix (the ops spec has one) is not a key.
+AGE_SECRET_KEY = re.compile(r"AGE-SECRET-KEY-1[02-9AC-HJ-NP-Z]{58}")
+
+
+def test_age_recipients_lists_only_real_recipients():
+    # Raw lines, as age reads them: it skips only empty lines and lines starting
+    # with "#", so a stray space makes a key "malformed" at run time.
+    entries = [line for line in _read(RECIPIENTS).splitlines()
+               if line != "" and not line.startswith("#")]
+    assert entries, "no age recipient in .github/backup/age-recipients.txt"
+    bad = [line for line in entries if not AGE_RECIPIENT.match(line)]
+    assert bad == [], (
+        "every non-comment line must be an age1… public key; replace the placeholder "
+        f"with the owner's key (ops-1 plan, Task 7, OWNER step): {bad}"
+    )
+
+
+def test_secret_key_pattern_matches_a_key_but_not_a_mention():
+    fake_key = "AGE-SECRET-KEY-1" + "Q" * 58   # built at runtime so no key-shaped literal exists
+    assert AGE_SECRET_KEY.search(f"# created: today\n{fake_key}\n")
+    assert not AGE_SECRET_KEY.search("no file under .github/ or docs/ contains `AGE-SECRET-KEY-`.")
+
+
+def test_no_age_private_key_is_committed_under_github_or_docs():
+    leaks = [
+        str(path.relative_to(ROOT))
+        for base in (".github", "docs")
+        for path in sorted((ROOT / base).rglob("*"))
+        if path.is_file() and AGE_SECRET_KEY.search(path.read_text(encoding="utf-8", errors="ignore"))
+    ]
+    assert leaks == []
