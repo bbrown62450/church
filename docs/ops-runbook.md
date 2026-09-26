@@ -310,6 +310,30 @@ stores. If hymns are missing, the tester loads it, picks them again and clicks
 
 Result: [owner: "no rows" for both queries, or per row: the query, the date, the hymns `hymn_usage` lists, the tester's answer, and whether the service was re-saved]
 
+### What the frozen app inherits from ops-2
+
+`liturgy-next`, the production Streamlit app, deploys from `main` (branch
+`main`, main file `app.py`; see "Streamlit apps"), so ops-2 went live on it
+when it merged, before the freeze locks it in (ops spec, Delivery plan):
+
+- Sign-in runs `auth.upsert_from_claims`, now a thin wrapper over
+  `repos.users.ensure_user`. Per rerun it runs an
+  `INSERT … ON CONFLICT (email) DO NOTHING` plus a SELECT, instead of a
+  SELECT plus an unconditional UPDATE. It still writes `google_sub` when
+  Google supplies one (by an UPDATE, never the INSERT), writes
+  `last_login_at` at most hourly, and no longer races on a first sign-in.
+- The Postgres pool is 3 + 3 with `connect_timeout=10`, instead of
+  SQLAlchemy's default 5 + 10 with no timeout (see Platform limits).
+
+| ops-2 gate (ops spec, Delivery plan) | Result | Date |
+|---|---|---|
+| Pre-check: `liturgy-next`'s Settings shows branch `main` and main file `app.py`; if not, stop and do not merge | [owner] | [owner] |
+| Production `users` has a unique constraint or non-partial unique index on exactly `(email)`, the `ON CONFLICT` target | [owner] | [owner] |
+| `DB_POOL_SIZE` and `DB_MAX_OVERFLOW` are both present and `3` on Railway (API) and as top-level keys in `liturgy-next`'s Secrets | [owner] | [owner] |
+| API deploy of the ops-2 merge live; sign-in on https://worship-service-builder.vercel.app works | [owner] | [owner] |
+| New `liturgy-next` build after the merge; smoke check passed on https://liturgy-next.streamlit.app/ | [owner] | [owner] |
+| The tester used `liturgy-next` for at least one day and nothing regressed | [owner: days used, what the tester reported, log check] | [owner] |
+
 ## Platform limits
 
 - Railway public networking: a request is closed after 5 minutes with no data
@@ -330,13 +354,21 @@ Result: [owner: "no rows" for both queries, or per row: the query, the date, the
   the owner's SQL editor. The spec's 5 + 5 needs 22 > 15, so the trigger
   fired. The values are `DB_POOL_SIZE=3` and `DB_MAX_OVERFLOW=3`:
   2 × (3 + 3) + 2 = 14 ≤ 15. `backend/.env.example` says the same.
-- Hand-off to ops-2: the engine's code defaults must be 3 and 3, not the
-  spec's 5 and 5.
-- Until ops-2 merges, no code reads these variables: `backend/db/engine.py`
-  sets no pool size, so each process can hold SQLAlchemy's default 5 + 10 = 15
-  sessions. The API, `liturgy-stg` and (until it is deleted) `liturgy` can
-  together ask for 45 against 15. Real use by one tester is 2–4. Deleting
-  the unused `liturgy` app frees its share.
+- Since ops-2, `backend/db/engine.py` reads `DB_POOL_SIZE` and
+  `DB_MAX_OVERFLOW` whenever it creates a Postgres engine, with code defaults
+  3 and 3 (`DEFAULT_POOL_SIZE`, `DEFAULT_MAX_OVERFLOW`), plus `pool_pre_ping`,
+  `pool_recycle=1800` and `connect_timeout=10`. The API, `liturgy-next` and
+  the CLIs that use `db.get_engine()`, `init_db()` or `session_scope()` share
+  that engine setup. `backend/keepalive.py` builds its own engine without
+  these settings (ops-3 replaces it); its one short scheduled session fits in
+  the spare connection (14 of 15). `backend/tests/test_ops_workflows.py`
+  fails if the code defaults stop fitting the Pool Size line above or stop
+  matching `backend/.env.example`. An invalid value stops the process when
+  the engine is created, with `DB_POOL_SIZE must be an integer >= 1 (got '…').`
+  or `DB_MAX_OVERFLOW must be an integer >= 0 (got '…').`
+- The two apps in the budget are the API (Railway) and `liturgy-next`, the
+  only Streamlit app since `liturgy-stg` and `liturgy` were deleted on
+  2026-09-26. Real use by one tester is 2–4 sessions.
 - Values set: `DB_POOL_SIZE=3` and `DB_MAX_OVERFLOW=3` as Railway service
   variables (API), and as top-level keys `DB_POOL_SIZE = "3"` and
   `DB_MAX_OVERFLOW = "3"` in the `liturgy-stg` app's Streamlit Secrets (not

@@ -74,3 +74,82 @@ def test_bare_postgres_url_builds_a_psycopg2_engine():
         assert engine.dialect.driver == "psycopg2"
     finally:
         engine.dispose()
+
+
+# --- Postgres pool and connect timeout (ops slice, F §2.6 item 6) -------------
+# The Supabase session pooler's Pool Size is 15 (Nano), so the defaults are
+# 3 + 3: 2 x (3 + 3) + 2 = 14 <= 15 (docs/ops-runbook.md -> Platform limits).
+
+PG_URL = "postgresql://u:p@h/db"
+
+
+@pytest.fixture
+def pool_env(monkeypatch):
+    """No DB_POOL_SIZE / DB_MAX_OVERFLOW from the developer's shell; tests set them."""
+    monkeypatch.delenv("DB_POOL_SIZE", raising=False)
+    monkeypatch.delenv("DB_MAX_OVERFLOW", raising=False)
+    return monkeypatch
+
+
+def test_postgres_engine_kwargs_default_to_the_pooler_budget(pool_env):
+    from db.engine import _engine_kwargs
+
+    kwargs = _engine_kwargs(PG_URL)
+    assert kwargs["pool_size"] == 3
+    assert kwargs["max_overflow"] == 3
+    assert kwargs["pool_recycle"] == 1800
+    assert kwargs["pool_pre_ping"] is True
+    assert kwargs["connect_args"] == {"connect_timeout": 10}
+
+
+def test_pool_settings_come_from_the_environment(pool_env):
+    from db.engine import _engine_kwargs
+
+    pool_env.setenv("DB_POOL_SIZE", "2")
+    pool_env.setenv("DB_MAX_OVERFLOW", "0")
+    kwargs = _engine_kwargs(PG_URL)
+    assert (kwargs["pool_size"], kwargs["max_overflow"]) == (2, 0)
+
+
+def test_blank_pool_settings_use_the_defaults(pool_env):
+    from db.engine import _engine_kwargs
+
+    pool_env.setenv("DB_POOL_SIZE", "")
+    pool_env.setenv("DB_MAX_OVERFLOW", "  ")
+    kwargs = _engine_kwargs(PG_URL)
+    assert (kwargs["pool_size"], kwargs["max_overflow"]) == (3, 3)
+
+
+@pytest.mark.parametrize("name, value, message", [
+    ("DB_POOL_SIZE", "abc", "DB_POOL_SIZE must be an integer >= 1 (got 'abc')."),
+    ("DB_POOL_SIZE", "0", "DB_POOL_SIZE must be an integer >= 1 (got '0')."),
+    ("DB_MAX_OVERFLOW", "-1", "DB_MAX_OVERFLOW must be an integer >= 0 (got '-1')."),
+    ("DB_MAX_OVERFLOW", "2.5", "DB_MAX_OVERFLOW must be an integer >= 0 (got '2.5')."),
+])
+def test_invalid_pool_settings_raise_at_engine_creation(pool_env, name, value, message):
+    from db.engine import _make_engine
+
+    pool_env.setenv(name, value)
+    with pytest.raises(ValueError) as exc:
+        _make_engine(PG_URL)
+    assert str(exc.value) == message
+
+
+def test_sqlite_engine_kwargs_have_no_pool_size(pool_env):
+    from db.engine import _engine_kwargs
+
+    pool_env.setenv("DB_POOL_SIZE", "abc")          # ignored: SQLite never reads it
+    kwargs = _engine_kwargs("sqlite:///data/app.db")
+    assert "pool_size" not in kwargs and "max_overflow" not in kwargs
+    assert kwargs["connect_args"] == {"check_same_thread": False}
+    assert kwargs["pool_pre_ping"] is True
+
+
+def test_postgres_engine_uses_the_pool_size_without_connecting(pool_env):
+    from db.engine import _make_engine
+
+    engine = _make_engine("postgresql://u:p@localhost:5432/db")   # no connection is opened
+    try:
+        assert engine.pool.size() == 3
+    finally:
+        engine.dispose()
