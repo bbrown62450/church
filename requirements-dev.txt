@@ -1,2 +1,4 @@
 -r requirements.txt
 pytest>=8.0
+# backend/tests/test_ops_workflows.py parses workflow YAML
+PyYAML>=6.0

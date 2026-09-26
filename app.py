@@ -31,7 +31,7 @@ from scripture_fetcher import (
     translation_label,
     DEFAULT_TRANSLATION,
 )
-from hymn_usage import get_recently_used_identifiers, record_usage, is_hymn_recently_used
+from hymn_usage import get_recently_used_identifiers, record_usage
 from service_archive import list_saved_services, save_service, update_service, get_service
 from email_contacts import list_contacts
 from repos.hymns import list_hymns
@@ -51,6 +51,8 @@ from ui_helpers import (
     build_title_to_info,
     pick_invite_code,
     coerce_selectbox_value,
+    hymn_options_excluding_recent,
+    picked_hymn_keys,
     sermon_text_for,
 )
 import streamlit_views.settings as settings_page
@@ -736,11 +738,11 @@ def render_service_builder(user, active):
 
     if exclude_recent_hymns and title_to_info:
         recent_used = get_recently_used_identifiers(church_id, weeks=12)
-        titles_sorted = sorted(
-            k for k in title_to_info
-            if not is_hymn_recently_used(
-                title_to_info[k].get("number"), title_to_info[k].get("title") or "", recent_used)
-        )
+        # Hymns already picked stay selectable (inv D5). Prepare records the picks
+        # under the service date (still counts as recent because the cutoff has no
+        # upper bound); dropping them here would reset the slots and save the
+        # service without hymns.
+        titles_sorted = hymn_options_excluding_recent(title_to_info, recent_used, picked_hymn_keys(st.session_state))
         excluded = len(title_to_info) - len(titles_sorted)
         if excluded > 0:
             st.caption(f"Hymns used in the last 12 weeks are excluded ({excluded} excluded).")

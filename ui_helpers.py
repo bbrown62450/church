@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import logging
 
+from hymn_usage import is_hymn_recently_used
+
 logger = logging.getLogger(__name__)
 
 # OAuth callback query keys we strip AFTER handling. Never a blanket
@@ -65,6 +67,31 @@ def coerce_selectbox_value(current, options) -> str:
     if current in options:
         return current
     return ""
+
+
+def hymn_options_excluding_recent(title_to_info: dict, recent_used: set, keep: set[str]) -> list[str]:
+    """Sorted title keys without recently used hymns, but never without a key in `keep`
+    (the hymns already picked in the three slots).
+
+    inv D5: Prepare records the picks under the service date (still counts as
+    recent because the cutoff has no upper bound), so without `keep` the next
+    rerun drops them from the options, safe_hymn_selectbox resets them to '' and
+    the next Prepare or Save stores the service without hymns. A key in `keep`
+    that is not in `title_to_info` (a renamed or deleted hymn) is not added.
+    """
+    return sorted(
+        key for key, info in title_to_info.items()
+        if key in keep
+        or not is_hymn_recently_used(info.get("number"), info.get("title") or "", recent_used)
+    )
+
+
+def picked_hymn_keys(session) -> set[str]:
+    """The title keys picked in the three hymn slots, without empty slots.
+
+    `session` is anything with `.get`: st.session_state in app.py, a dict in tests.
+    """
+    return {session.get(slot) or "" for slot in ("opening", "response", "closing")} - {""}
 
 
 _FAILED_TEXT = "[Could not load text]"

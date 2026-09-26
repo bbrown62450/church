@@ -195,15 +195,21 @@ overwrites a value, so these re-runs are safe.
 
 The free Supabase project pauses after ~7 days idle. `.github/workflows/keepalive.yml`
 runs `keepalive.py` (a `SELECT 1` against `DATABASE_URL`) daily so the first
-visitor each week never hits a paused/cold database. Add `DATABASE_URL` as an
-Actions secret.
+visitor each week never hits a paused/cold database. Do not add a
+`DATABASE_URL` repository secret; see docs/ops-runbook.md → Backups.
 
 ### Backups (required)
 
-Supabase Free retains no backups. `.github/workflows/backup.yml` runs a daily
-`pg_dump` and uploads the compressed dump as a build artifact. Artifacts are
-short-lived — for durable retention, extend the job to push the dump to object
-storage.
+Supabase Free retains no backups. `.github/workflows/backup.yml` (`db-backup`)
+runs daily at 08:37 UTC: it dumps the `public` schema with `pg_dump` (custom
+format, client major matched to the server), encrypts the dump with `age` to
+the public keys in `.github/backup/age-recipients.txt` before anything is
+written to disk, and uploads `backup-<timestamp>.dump.age` as an artifact kept
+30 days. Only the owner's `age` private key can open it. The job reads the
+Supabase session-pooler URL from `BACKUP_DATABASE_URL`, a secret of the GitHub
+Environment `backup` that only `main` can use, added only after the encrypted
+workflow is on `main`. Key custody, key rotation and the restore drill are in
+`docs/ops-runbook.md` → Backups.
 
 ### Limits & upgrade path
 
