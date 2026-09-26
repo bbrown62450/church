@@ -150,24 +150,55 @@ def test_dump_step_masks_the_url_parts_before_anything_else():
     assert first("--mask") < first("--exports") < first("eval ") < first("/psql") < first("/pg_dump")
 
 
+#  Matches $BACKUP_DATABASE_URL, "$BACKUP_DATABASE_URL" and ${BACKUP_DATABASE_URL} alike, so a
+#  braced reference (e.g. `psql "${BACKUP_DATABASE_URL}" ...`) cannot slip past this test the
+#  way a literal '"$BACKUP_DATABASE_URL"' substring check would.
+URL_TOKEN = re.compile(r"\bBACKUP_DATABASE_URL\b")
+# A word-boundary match, not a "/psql"/"/pg_dump" substring check: it also catches a bare
+# `psql ...` or `pg_dump ...` invocation with no "$bin/" prefix.
+COMMAND_WORD = re.compile(r"\b(?:psql|pg_dump)\b")
+POSTGRES_URL_SCHEME = re.compile(r"postgres(?:ql)?://")
+
+
 def test_dump_step_gives_psql_and_pg_dump_no_url():
     step = _step(DUMP_STEP)
     commands = _commands(step["run"])
     assert step["env"] == {"BACKUP_DATABASE_URL": SECRET_REF, "PGSSLMODE": "require"}
     assert "PGSSLMODE" not in step["run"]   # nothing weakens it
-    # The URL reaches only pg_env.py, on stdin; libpq gets PG* variables.
-    assert [c for c in commands if "$BACKUP_DATABASE_URL" in c] == [
+    # The URL reaches only pg_env.py, on stdin, and is unset right after: libpq gets PG*
+    # variables. Exactly these three lines may name the token, in any shell form.
+    assert [c for c in commands if URL_TOKEN.search(c)] == [
         'python3 .github/backup/pg_env.py --mask <<<"$BACKUP_DATABASE_URL"',
         'pg_env=$(python3 .github/backup/pg_env.py --exports <<<"$BACKUP_DATABASE_URL")',
+        "unset pg_env BACKUP_DATABASE_URL",
     ]
     assert 'eval "$pg_env"' in commands
     assert 'bin="/usr/lib/postgresql/${PG_MAJOR}/bin"' in commands
-    [psql] = [c for c in commands if "/psql" in c]
-    [pg_dump] = [c for c in commands if "/pg_dump" in c]
+    command_lines = [c for c in commands if COMMAND_WORD.search(c)]
+    [psql] = [c for c in command_lines if "psql" in c]
+    [pg_dump] = [c for c in command_lines if "pg_dump" in c]
     assert psql == """server=$("$bin/psql" -X -Atc 'show server_version_num')"""
     assert pg_dump.startswith('"$bin/pg_dump" --schema=public ')
-    for command in (psql, pg_dump):
-        assert "://" not in command and "url" not in command.lower()
+    # No psql/pg_dump command line, in any form, ever sees the secret token or a raw URL.
+    assert len(command_lines) == 2
+    for command in command_lines:
+        assert not URL_TOKEN.search(command)
+        assert not POSTGRES_URL_SCHEME.search(command)
+        assert "url" not in command.lower()
+
+
+def test_dump_step_has_no_shell_tracing():
+    # Tracing would echo every expanded command, including the masked-but-still-live
+    # $BACKUP_DATABASE_URL, to the public run log. The only `set` command allowed is the
+    # one at the top of the step; no `set -x`/`-v`, `set -o xtrace`/`verbose` variant.
+    step = _step(DUMP_STEP)
+    commands = _commands(step["run"])
+    set_commands = [c for c in commands if re.match(r"^set\b", c)]
+    assert set_commands == ["set -euo pipefail"]
+    # Nothing anywhere in the workflow enables tracing another way (e.g. an env-var toggle).
+    text = _read(BACKUP_YML)
+    for forbidden in ("xtrace", "BASH_XTRACEFD", "SHELLOPTS"):
+        assert forbidden not in text, forbidden
 
 
 def test_dump_step_streams_pg_dump_into_age_with_no_plaintext_file():

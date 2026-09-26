@@ -18,7 +18,7 @@
 - Every commit message ends with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Commits follow TDD: test first.
 - Nothing under `backend/` may import `streamlit`. The D5 fix touches only the root Streamlit files `app.py` and `ui_helpers.py`. It imports the existing `hymn_usage.is_hymn_recently_used` and changes nothing under `backend/`.
 - No schema changes and no Alembic (slice 1).
-- The backup secret is named `BACKUP_DATABASE_URL`, never `DATABASE_URL`. It is an **environment secret** of the GitHub Environment `backup`, whose deployment-branch rule admits only `main`, never a repository secret. The owner creates the environment and adds the secret **only after ops-1 has merged** (the F §7.2 gate; Task 11).
+- The backup secret is named `BACKUP_DATABASE_URL`, never `DATABASE_URL`. It is an **environment secret** of the GitHub Environment `backup`, whose deployment-branch rule admits only `main`, never a repository secret. The owner may create the environment and its deployment-branch policy **before** ops-1 merges, with no secret yet (Task 9, Step 6); the owner adds the secret itself **only after ops-1 has merged** (the F §7.2 gate; Task 11).
 - `backup.yml` runs daily at cron `"37 8 * * *"`, on `ubuntu-24.04`, with `timeout-minutes: 20` and `PG_MAJOR: "17"` (the server is 17.6, recorded 2026-09-25). It uploads artifact `db-backup` with files `backup-<UTC timestamp>.dump.age`, `retention-days: 30`.
 - `PG_MAJOR` in `backup.yml` must equal the runbook line `- Postgres server major: <N>` (exactly one such line in `docs/ops-runbook.md`).
 - An age recipient line matches `^age1[02-9ac-hj-np-z]{58}$`. The private key never goes to GitHub, Railway, the repo or chat.
@@ -1641,12 +1641,12 @@ gh pr create --base main --head claude/ops-1-backups-cleanup-d5 \
   --body "PR ops-1 of the ops slice (docs/superpowers/specs/2026-09-25-slice-ops-cleanup-design.md; plan docs/superpowers/plans/2026-09-25-ops-1-backups-cleanup-d5.md).
 
 - Streamlit data-safety fix (S16, inv D5): with 'Exclude hymns used in the last 12 weeks' ticked, hymns already picked are no longer cleared by Prepare, Save or loading a recent service. Goes live on merge on the production Streamlit app liturgy-stg (https://liturgy-stg.streamlit.app), which deploys from main (branch checked in plan Task 0, Step 2).
-- backup.yml rewritten (S2): BACKUP_DATABASE_URL as a secret of the GitHub Environment backup (main only); .github/backup/pg_env.py masks each part of the URL and hands psql/pg_dump PG* variables, never a URL; actions pinned to commit SHAs; pg_dump matched to PG_MAJOR, age-encrypted before upload (backup-*.dump.age, 30 days). The environment and secret are added only after this merges.
+- backup.yml rewritten (S2): BACKUP_DATABASE_URL as a secret of the GitHub Environment backup (main only); .github/backup/pg_env.py masks each part of the URL and hands psql/pg_dump PG* variables, never a URL; actions pinned to commit SHAs; pg_dump matched to PG_MAJOR, age-encrypted before upload (backup-*.dump.age, 30 days). The environment and its branch rule (`main` only, no secret) are created before merge (Task 9, Step 6); the secret itself is added only after this merges (Task 11).
 - Deleted six dead modules (S4); backend/.env.example gains APP_ENV, LOG_LEVEL, DB_POOL_SIZE=3, DB_MAX_OVERFLOW=3 (Supavisor Pool Size 15: 2 x (3+3) + 2 = 14), ESV_API_KEY (S5); shadcn moved to devDependencies (S6).
 - docs/ops-runbook.md: Step 0 lockdown record (done 2026-09-25, no incident), backups (key custody, rotation, restore drill), Streamlit apps (liturgy-stg is production, liturgy unused), bug triage and D5 recovery, platform limits, incident response. README Backups paragraph.
 - Tests: +72 (278 total).
 
-Owner steps before merge: plan Task 9. After merge: Tasks 10-12 (D5 check and recovery query, tester message, the backup environment and BACKUP_DATABASE_URL, manual backup run, restore drill).
+Owner steps before merge: plan Task 9 (including creating the `backup` environment and its `main`-only branch rule, no secret yet). After merge: Tasks 10-12 (D5 check and recovery query, tester message, adding `BACKUP_DATABASE_URL` to that environment, manual backup run, restore drill).
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)"
 gh pr checks --watch
@@ -1708,7 +1708,28 @@ Expected: `grep` lists only the 6 post-merge marker lines: three rows of the D5 
 
 In Vercel → the `worship-service-builder` project → Settings → Build and Deployment, the Install Command is the default, or a command without `--omit=dev`. In Settings → Environment Variables there is no `NPM_CONFIG_PRODUCTION`. On the PR, the Vercel preview deployment is "Ready". Open it and sign in once.
 
-- [ ] **Step 6 (OWNER): Approve and merge**
+- [ ] **Step 6 (OWNER): Create the `backup` environment and its deployment-branch policy (no secret yet)**
+
+The environment and its branch rule may exist before merge; only the secret waits for after merge (Global Constraints; the F §7.2 gate; Task 11). Creating the rule now means a workflow dispatched from any branch but `main` is refused from day one, even before the secret exists. Before creating anything, confirm the repo has no stray Actions secret to begin with:
+
+```bash
+gh secret list -R bbrown62450/church
+```
+Expected: no output (no `DATABASE_URL` or `BACKUP_DATABASE_URL` line — the repo has no Actions secrets at all today).
+
+Then:
+1. GitHub → `bbrown62450/church` → Settings → Environments → New environment → Name: `backup` → Configure environment.
+2. Deployment branches and tags: choose "Selected branches and tags" (older UI: "Selected branches") → Add deployment branch or tag rule → Ref type: Branch, Name pattern: `main` → Add rule. Add no other rule. Add **no secret**.
+
+Check (no secret exists yet):
+
+```bash
+gh api repos/bbrown62450/church/environments/backup --jq '.deployment_branch_policy'
+gh api repos/bbrown62450/church/environments/backup/deployment-branch-policies --jq '.branch_policies[] | "\(.type) \(.name)"'
+```
+Expected: `{"custom_branch_policies":true,"protected_branches":false}`, then exactly `branch main`.
+
+- [ ] **Step 7 (OWNER): Approve and merge**
 
 The owner reviews the PR. All CI checks must be green and every task above must be done. Merging is outward-facing: merge only on the owner's explicit yes:
 
@@ -1716,7 +1737,7 @@ The owner reviews the PR. All CI checks must be green and every task above must 
 gh pr merge --merge claude/ops-1-backups-cleanup-d5
 ```
 
-Do **not** create the `backup` environment's `BACKUP_DATABASE_URL` secret before this merge completes.
+Do **not** add the `backup` environment's `BACKUP_DATABASE_URL` secret before this merge completes; the environment and its branch rule from Step 6 stay secret-free until Task 11.
 
 ---
 
@@ -1803,30 +1824,26 @@ git show origin/main:.github/backup/age-recipients.txt | grep -Ec '^age1[02-9ac-
 ```
 Expected: `1`, `1`, then `1` or more. If any is `0`, stop: the secret must not be added yet.
 
-- [ ] **Step 2 (OWNER only): Create the `backup` environment and add the secret to it**
+- [ ] **Step 2 (OWNER only): Add the secret to the already-created `backup` environment**
 
-The secret goes in a GitHub Environment whose deployment-branch rule admits only `main`, so a workflow pushed to any other branch cannot read it. It is never a repository secret.
+The environment and its deployment-branch policy (admits only `main`, so a workflow pushed to any other branch cannot read the secret) were already created before merge, with no secret, in Task 9, Step 6. This step only adds the secret; it is never a repository secret.
 
-1. GitHub → `bbrown62450/church` → Settings → Environments. If `backup` is already listed (a scheduled run since the merge creates it automatically, with no rules), open it; otherwise New environment → Name: `backup` → Configure environment.
-2. Deployment branches and tags: choose "Selected branches and tags" (older UI: "Selected branches") → Add deployment branch or tag rule → Ref type: Branch, Name pattern: `main` → Add rule. Add no other rule.
-3. Environment secrets → Add environment secret:
+1. GitHub → `bbrown62450/church` → Settings → Environments → `backup` (already listed with its `main`-only rule; if for some reason it is missing, redo Task 9, Step 6 first) → Environment secrets → Add environment secret:
    - Name: `BACKUP_DATABASE_URL`
    - Value: the Supabase **session pooler** URL with the database password. This is the same value as Railway's `DATABASE_URL`: Supabase Dashboard → Connect → Session pooler. The `postgresql+psycopg2://` form is fine.
 
-   Alternatively, after item 2, run `gh secret set BACKUP_DATABASE_URL --env backup -R bbrown62450/church` in your own terminal and paste the value at its prompt. Never paste it into chat.
-4. Settings → Secrets and variables → Actions → Repository secrets must not list `BACKUP_DATABASE_URL`. If it does, delete it: a repository secret is readable from every branch.
+   Alternatively, run `gh secret set BACKUP_DATABASE_URL --env backup -R bbrown62450/church` in your own terminal and paste the value at its prompt. Never paste it into chat.
+2. Settings → Secrets and variables → Actions → Repository secrets must not list `BACKUP_DATABASE_URL`. If it does, delete it: a repository secret is readable from every branch.
 
 Check (no secret value is shown):
 
 ```bash
-gh api repos/bbrown62450/church/environments/backup --jq '.deployment_branch_policy'
-gh api repos/bbrown62450/church/environments/backup/deployment-branch-policies --jq '.branch_policies[] | "\(.type) \(.name)"'
 gh secret list --env backup -R bbrown62450/church
-gh secret list -R bbrown62450/church | grep -c BACKUP_DATABASE_URL
+gh secret list -R bbrown62450/church
 ```
-Expected: `{"custom_branch_policies":true,"protected_branches":false}`, then exactly `branch main`, then a line starting with `BACKUP_DATABASE_URL`, then `0`.
+Expected: a line starting with `BACKUP_DATABASE_URL`, then no output (no `DATABASE_URL` or `BACKUP_DATABASE_URL` repository-level secret; the branch-policy check already ran in Task 9, Step 6).
 
-Scheduled runs use the default branch, `main`, so they satisfy the rule. Manual runs must be dispatched from `main` (Step 3 does); a run from any other branch is refused before the job starts.
+Scheduled runs use the default branch, `main`, so they satisfy the rule set in Task 9, Step 6. Manual runs must be dispatched from `main` (Step 3 does); a run from any other branch is refused before the job starts.
 
 - [ ] **Step 3: Run the workflow by hand**
 
@@ -1960,7 +1977,7 @@ Expected: no marker lines and `grep exit 1`, then `278 passed`. Merge after the 
 | S2: `.github/backup/age-recipients.txt`, comments plus `age1…` lines; test enforces format so a placeholder cannot merge | 7 |
 | Testing → `age-recipients.txt` exists, at least one recipient, every entry matches; no age private key under `.github/` or `docs/` (clarification 1) | 7 |
 | Backups → key setup (owner): `age-keygen`, password manager plus offline copy, file deleted, optional second key, public line to the PR (not yet generated on 2026-09-25) | 0 (Step 3), 7 (Steps 5-6) |
-| Backups → Order: 1 merge with real recipients → 2 add `BACKUP_DATABASE_URL` → 3 manual run → 4 restore drill | 9 (Step 6), 11, 12 |
+| Backups → Order: 1 merge with real recipients → 2 add `BACKUP_DATABASE_URL` → 3 manual run → 4 restore drill | 9 (Step 7), 11, 12 |
 | Backups → restore drill (commands, TCP wait, expected output, compare counts) | 6 (runbook), 12 |
 | S15 (ops-1 share): runbook sections for the lockdown record, backups (key custody, schedule, restore drill, rotation), Streamlit apps, bug triage and D5 record, platform limits with the exact `- Postgres server major:` line, incident response | 6 |
 | S15 (ops-1 share): README "Backups" describes encrypted artifacts, `BACKUP_DATABASE_URL`, and the runbook's key custody and restore drill | 6 |
@@ -1972,7 +1989,7 @@ Expected: no marker lines and `grep exit 1`, then `278 passed`. Merge after the 
 | D5 recovery query run and recorded (AC 25), plus the partial-loss query (clarification 10) | 6 (runbook), 10, 12 (Step 5) |
 | Tester "fixed" message, exact copy, only after the check passes (User experience; AC 25) | 10 |
 | D5 workaround message sent to the tester and its date recorded (AC 25; not in the owner's list of completed Step 0 items, so checked and, if needed, sent on the owner's yes) | 0 (Step 1), 9 (Step 2) |
-| Delivery gate: owner creates the `backup` environment (`main` only) and adds `BACKUP_DATABASE_URL` to it after merge, runs the workflow by hand, the log shows no URL or password (AC 3) | 11 |
+| Delivery gate: owner creates the `backup` environment and its branch rule (`main` only) before merge, adds `BACKUP_DATABASE_URL` to it after merge, runs the workflow by hand, the log shows no URL or password (AC 3) | 9 (Step 6), 11 |
 | Delivery gate: restore drill restores every table, counts match production (AC 3) | 12 |
 | AC 3: `backup.yml` matches the spec and `test_ops_workflows.py` passes with `PG_MAJOR` equal to the runbook's major (17, server 17.6) | 5, 6, 9 (Step 3) |
 | AC 23 (ops-1 share): runbook sections filled in | 6, 9, 12 |
