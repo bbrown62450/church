@@ -197,6 +197,45 @@ def test_find_facts_handles_empty_results_and_missing_refs():
     assert hf.find_facts("", "Jude 1:25", fetch, {}) is None
 
 
+class FlakyFetch(FakeFetch):
+    """A FakeFetch whose first request for each reference in `failing` fails."""
+
+    def __init__(self, responses, failing):
+        super().__init__(responses)
+        self.failing = set(failing)
+
+    def __call__(self, ref):
+        if ref in self.failing:
+            self.calls.append(ref)
+            self.failing.discard(ref)
+            raise hf.FetchError(ref)
+        return super().__call__(ref)
+
+
+def test_find_facts_leaves_a_hymn_unknown_when_a_reference_fails():
+    # A failed request is not "nothing cites this reference": the failed
+    # "Psalm 23" would have listed the Rous text in 769 hymnals, so taking the
+    # 14-hymnal text from "John 10:11" alone would store a guess for good.
+    fetch = FlakyFetch({"John 10:11": {"a": SHEPHERD_MODERN},
+                        "Psalm 23": {"a": SHEPHERD_MODERN, "b": SHEPHERD_ROUS}},
+                       failing=["Psalm 23"])
+    cache = {}
+    assert hf.find_facts("The Lord's My Shepherd", "John 10:11; Psalm 23", fetch, cache) is None
+    assert "Psalm 23" not in cache   # the failure is not cached as an empty result
+    assert hf.find_facts("The Lord's My Shepherd", "John 10:11; Psalm 23", fetch, cache) == \
+        {"text_year": None, "hymnal_count": 769}
+    assert fetch.calls == ["John 10:11", "Psalm 23", "Psalm 23"]
+
+
+def test_find_facts_does_not_skip_a_capped_collision_when_a_reference_fails():
+    # The failed reference hides a capped response, so a lone visible match
+    # elsewhere must not be taken as unique.
+    fetch = FlakyFetch({"John 10:11": {"a": SHEPHERD_MODERN},
+                        "Psalm 23": _capped(SHEPHERD_MODERN, SHEPHERD_ROUS)},
+                       failing=["Psalm 23"])
+    assert hf.find_facts("The Lord's My Shepherd", "John 10:11; Psalm 23", fetch, {}) is None
+
+
 def test_run_backfill_fills_blanks_without_overwriting(tmp_db, make_church):
     cid = make_church()
     with session_scope() as s:
@@ -254,6 +293,76 @@ def test_make_fetch_reports_references_that_hit_the_cap(capsys):
     assert "Psalm 23" in out and "Isaiah 6:3" not in out
 
 
+def _failing_client(fail, responses):
+    """A mock client that answers `responses`, except that a reference in
+    `fail` gets the failure it names ("503", "timeout" or "not json")."""
+    def handler(request):
+        ref = request.url.params["reference"]
+        kind = fail.get(ref)
+        if kind == "503":
+            return httpx.Response(503, text="busy")
+        if kind == "timeout":
+            raise httpx.ReadTimeout("timed out", request=request)
+        if kind == "not json":
+            return httpx.Response(200, text="<html>challenge</html>")
+        return httpx.Response(200, json=responses.get(ref, []))
+    return _REAL_CLIENT(transport=httpx.MockTransport(handler))
+
+
+def test_make_fetch_raises_on_a_failed_request_and_records_it(capsys):
+    failed = []
+    fail = {"Psalm 23": "503", "John 10:11": "timeout", "Psalm 100": "not json"}
+    with _failing_client(fail, {"Jude 1:25": []}) as client:
+        fetch = backfill_hymn_facts.make_fetch(client, delay=0, failed=failed)
+        for ref in fail:
+            with pytest.raises(hf.FetchError):
+                fetch(ref)
+        assert fetch("Jude 1:25") == []   # an empty result is still just empty
+    assert failed == list(fail)
+    assert "Jude 1:25" not in capsys.readouterr().out
+
+
+def test_run_backfill_stores_no_guess_when_a_request_fails(tmp_db, make_church):
+    # The review case end to end: "Psalm 23" fails once (503). The first row
+    # citing it stays blank rather than taking the 14-hymnal text from
+    # "John 10:11"; the next row retries "Psalm 23" and gets the 769.
+    cid = make_church()
+    refs = "John 10:11; Psalm 23"
+    with session_scope() as s:
+        s.add(HymnCatalog(title="The Lord's My Shepherd", scripture_refs=refs))
+        s.add(Hymn(church_id=cid, title="The Lord's My Shepherd", scripture_refs=refs))
+    responses = {"John 10:11": {"a": SHEPHERD_MODERN},
+                 "Psalm 23": {"a": SHEPHERD_MODERN, "b": SHEPHERD_ROUS}}
+    fail = {"Psalm 23": "503"}
+    seen = []
+
+    def handler(request):
+        ref = request.url.params["reference"]
+        seen.append(ref)
+        if fail.pop(ref, None):
+            return httpx.Response(503, text="busy")
+        return httpx.Response(200, json=responses.get(ref, []))
+
+    failed = []
+    with _REAL_CLIENT(transport=httpx.MockTransport(handler)) as client:
+        fetch = backfill_hymn_facts.make_fetch(client, delay=0, failed=failed)
+        stats = hf.run_backfill(fetch)
+
+    assert stats == {"checked": 2, "matched": 1, "updated": 1, "unknown": 1}
+    assert seen == ["John 10:11", "Psalm 23", "Psalm 23"]
+    assert failed == ["Psalm 23"]
+    with session_scope() as s:
+        cat = s.execute(select(HymnCatalog)).scalar_one()
+        assert (cat.text_year, cat.hymnal_count) == (None, None)   # no guess stored
+        hymn = s.execute(select(Hymn)).scalar_one()
+        assert (hymn.text_year, hymn.hymnal_count) == (None, 769)
+
+    with _REAL_CLIENT(transport=httpx.MockTransport(handler)) as client:
+        hf.run_backfill(backfill_hymn_facts.make_fetch(client, delay=0))   # a re-run fills it
+    with session_scope() as s:
+        assert s.execute(select(HymnCatalog.hymnal_count)).scalar_one() == 769
+
+
 @pytest.fixture
 def unbound_engine(tmp_db, monkeypatch):
     """The database state a fresh CLI process starts in: tables exist, but no
@@ -297,3 +406,22 @@ def test_cli_binds_the_database_and_reports_coverage(tmp_db, unbound_engine, mon
         rows = conn.execute(select(HymnCatalog.title, HymnCatalog.text_year,
                                    HymnCatalog.hymnal_count)).all()
     assert sorted(rows) == [(HOLY["title"], 1826, 1322), ("Unknown Hymn", None, None)]
+
+
+def test_cli_names_references_whose_requests_failed(tmp_db, unbound_engine, monkeypatch, capsys):
+    with tmp_db.begin() as conn:
+        conn.execute(HymnCatalog.__table__.insert(), [
+            {"id": uuid.uuid4(), "title": HOLY["title"], "scripture_refs": "Isaiah 6:3"},
+            {"id": uuid.uuid4(), "title": "Other Hymn", "scripture_refs": "Psalm 23"},
+        ])
+    monkeypatch.setattr(backfill_hymn_facts.httpx, "Client", lambda **kw: _failing_client(
+        {"Psalm 23": "503"}, {"Isaiah 6:3": {"Holy": HOLY}}))
+    monkeypatch.setattr(backfill_hymn_facts.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(sys, "argv", ["backfill_hymn_facts.py", "--dry-run"])
+
+    backfill_hymn_facts.main()
+
+    out = capsys.readouterr().out
+    assert "[DRY RUN] checked 2, matched 1, updated 1, unknown 1" in out
+    last = out.splitlines()[-1]
+    assert "1 reference" in last and "failed" in last and "Psalm 23" in last

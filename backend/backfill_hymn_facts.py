@@ -18,15 +18,20 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from db import get_engine  # noqa: E402
-from hymnary_facts import API_URL, RESULT_CAP, is_truncated, run_backfill  # noqa: E402
+from hymnary_facts import API_URL, RESULT_CAP, FetchError, is_truncated, run_backfill  # noqa: E402
 
 DELAY_SECONDS = 1.0
 
 
 def make_fetch(client: httpx.Client, delay: float = DELAY_SECONDS,
-               truncated: Optional[List[str]] = None):
+               truncated: Optional[List[str]] = None, failed: Optional[List[str]] = None):
     """A throttled fetch for run_backfill. Each reference whose response hit
-    Hymnary's RESULT_CAP is printed and, when given, appended to `truncated`."""
+    Hymnary's RESULT_CAP is printed and, when given, appended to `truncated`.
+
+    A failed request (timeout, HTTP error, bad JSON) raises FetchError rather
+    than returning [], which means "nothing cites this reference": hymns citing
+    it then stay blank this run instead of matching on their other references
+    alone. Each failure is printed and, when given, appended to `failed`."""
     def fetch(ref: str):
         time.sleep(delay)
         try:
@@ -35,7 +40,9 @@ def make_fetch(client: httpx.Client, delay: float = DELAY_SECONDS,
             data = response.json()
         except (httpx.HTTPError, ValueError) as exc:
             print(f"  ! {ref}: {exc}")
-            return []
+            if failed is not None:
+                failed.append(ref)
+            raise FetchError(f"{ref}: {exc}") from exc
         if is_truncated(data):
             print(f"  ~ {ref}: hit Hymnary's {RESULT_CAP}-text cap; texts past it are not seen")
             if truncated is not None:
@@ -55,9 +62,10 @@ def main() -> None:
     args = parser.parse_args()
     get_engine()   # bind the session to DATABASE_URL (not init_db: no create_all on Supabase)
     truncated: List[str] = []
+    failed: List[str] = []
     headers = {"User-Agent": "worship-service-builder hymn-facts backfill"}
     with httpx.Client(timeout=30.0, headers=headers) as client:
-        stats = run_backfill(make_fetch(client, truncated=truncated),
+        stats = run_backfill(make_fetch(client, truncated=truncated, failed=failed),
                              dry_run=args.dry_run, on_progress=_progress)
     prefix = "[DRY RUN] " if args.dry_run else ""
     print(f"{prefix}checked {stats['checked']}, matched {stats['matched']}, "
@@ -65,6 +73,10 @@ def main() -> None:
     if truncated:
         print(f"{len(truncated)} reference(s) hit Hymnary's {RESULT_CAP}-text cap, so hymns cited "
               f"only by them may be unknown: {'; '.join(truncated)}")
+    if failed:
+        refs = list(dict.fromkeys(failed))   # a failed reference is retried, so it can repeat
+        print(f"{len(refs)} reference(s) failed, so hymns citing them were left blank; "
+              f"re-run to retry them: {'; '.join(refs)}")
 
 
 if __name__ == "__main__":

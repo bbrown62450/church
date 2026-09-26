@@ -18,7 +18,9 @@ Hymns cited only by such a broad reference can therefore stay unknown, and
 the CLI names every reference that hit the cap.
 
 The fetch function is injected so tests never touch the network; the CLI in
-backfill_hymn_facts.py supplies the real, throttled one.
+backfill_hymn_facts.py supplies the real, throttled one. It returns the API's
+JSON ([] when nothing cites the reference) and raises FetchError when the
+request fails, so a failure is never mistaken for an empty result.
 """
 import re
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -35,6 +37,11 @@ WRITE_BATCH = 50
 RESULT_CAP = 100         # most texts the API returns for one reference
 
 Fetch = Callable[[str], Any]
+
+
+class FetchError(Exception):
+    """Raised by a fetch whose request failed (timeout, HTTP error, bad JSON)."""
+
 
 _YEAR = re.compile(r"\b(1\d{3}|20\d{2})\b")
 _LIFE = re.compile(r"(\d{4})\s*[-–—]\s*(\d{4})?")   # hyphen, en or em dash
@@ -120,7 +127,13 @@ def find_facts(title: str, refs: Optional[str], fetch: Fetch,
     an unknown can still be filled by hand. The live "Psalm 23" response is
     capped, so "The Lord's My Shepherd" cited only by it stays unknown. A
     single match in a capped response is still taken; nothing in the response
-    shows it is ambiguous."""
+    shows it is ambiguous.
+
+    For the same reason, when fetching any of the hymn's references raises
+    FetchError we return None: the failed response might have held a
+    same-title text in more hymnals, or hit the cap. The failure is not
+    cached, so the next hymn citing that reference asks again, and a re-run
+    fills this hymn."""
     want = normalize_title(title)
     if not want:
         return None
@@ -128,7 +141,10 @@ def find_facts(title: str, refs: Optional[str], fetch: Fetch,
     truncated = False
     for ref in split_refs(refs):
         if ref not in cache:
-            cache[ref] = fetch(ref)
+            try:
+                cache[ref] = fetch(ref)
+            except FetchError:
+                return None
         truncated = truncated or is_truncated(cache[ref])
         for first_line, record in _entries(cache[ref]):
             if isinstance(record, dict) and want in (normalize_title(record.get("title")),
