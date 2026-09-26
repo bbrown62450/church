@@ -88,3 +88,44 @@ def test_concurrent_puts_and_gets_are_safe():
         sys.setswitchinterval(old_interval)
     assert errors == []
     assert len(cache) == 64      # all 100 emails were put, so the cache is exactly full
+
+
+def test_a_failed_ensure_user_is_never_cached(tmp_db, monkeypatch):
+    """Success-only: a database error propagates as a 500 and caches nothing;
+    the next request runs ensure_user again."""
+    from fastapi.testclient import TestClient
+    from sqlalchemy.exc import OperationalError
+
+    import api.deps
+    from api.deps import get_verifier
+    from api.main import create_app
+    from api.security import TokenVerifier
+    from repos.users import ensure_user
+    from tests.jwt_helpers import ISSUER, SIGNING_KEY, make_token
+
+    app = create_app()
+    app.dependency_overrides[get_verifier] = lambda: TokenVerifier(
+        lambda _token: SIGNING_KEY.public_key(), issuer=ISSUER)
+    client = TestClient(app, raise_server_exceptions=False)
+    headers = {"Authorization": f"Bearer {make_token(email='pastor@example.com')}"}
+
+    def database_down(*_args, **_kwargs):
+        raise OperationalError("INSERT INTO users ...", {}, Exception("server closed the connection"))
+
+    monkeypatch.setattr(api.deps, "ensure_user", database_down)
+    r = client.get("/me", headers=headers)
+    assert r.status_code == 500
+    assert r.json()["error"]["code"] == "internal_error"
+    assert len(api.deps._identity_cache) == 0
+
+    calls = []
+
+    def recovered(*args, **kwargs):
+        calls.append(args)
+        return ensure_user(*args, **kwargs)
+
+    monkeypatch.setattr(api.deps, "ensure_user", recovered)
+    r = client.get("/me", headers=headers)
+    assert r.status_code == 200
+    assert len(calls) == 1
+    assert len(api.deps._identity_cache) == 1

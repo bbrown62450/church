@@ -8,6 +8,7 @@ from typing import Optional
 from fastapi import Depends, Header
 
 from api.errors import auth_unavailable, forbidden, unauthenticated
+from api.identity_cache import CachedIdentity, IdentityCache
 from api.security import (
     AuthUnavailable,
     InvalidToken,
@@ -16,8 +17,17 @@ from api.security import (
     jwks_key_resolver,
 )
 from api.settings import get_settings
-from auth import upsert_from_claims
+from repos.users import ensure_user
 from tenancy import is_admin, validate_active_church
+
+# Normalized email -> the user id and profile last written (F §2.4). Read as a
+# module attribute on every call, so tests can swap in one on a fake clock.
+_identity_cache = IdentityCache(maxsize=1024, ttl=300)
+
+
+def clear_identity_cache() -> None:
+    """Forget every cached identity (tests; see backend/tests/conftest.py)."""
+    _identity_cache.clear()
 
 
 @dataclass(frozen=True)
@@ -64,16 +74,30 @@ def get_current_user(
     except InvalidToken:
         raise unauthenticated() from None
     profile = claims_to_profile(claims)
-    try:
-        user_id = upsert_from_claims(profile)
-    except ValueError:  # token carried no email
-        raise unauthenticated() from None
-    return CurrentUser(
-        id=user_id,
-        email=profile["email"].strip().lower(),
-        name=profile["name"],
-        picture=profile["picture"],
-    )
+    email = (profile["email"] or "").strip().lower()
+    if not email:  # token carried no email
+        raise unauthenticated()
+    user_id = _user_id_for(email, _clean(profile["name"]), _clean(profile["picture"]))
+    return CurrentUser(id=user_id, email=email, name=profile["name"], picture=profile["picture"])
+
+
+def _clean(value: Optional[str]) -> Optional[str]:
+    return (value or "").strip() or None
+
+
+def _user_id_for(email: str, name: Optional[str], picture: Optional[str]) -> uuid.UUID:
+    """The caller's user id: from the cache when the profile is unchanged, else ensure_user.
+
+    Token verification has already run: it runs on every request and is never
+    cached. Tenancy (require_church) is never cached either.
+    """
+    cache = _identity_cache
+    cached = cache.get(email)
+    if cached is not None and name in (None, cached.name) and picture in (None, cached.picture):
+        return cached.user_id                       # no database work for identity
+    row = ensure_user(email, name, picture)         # never google_sub (security.claims_to_profile)
+    cache.put(email, CachedIdentity(user_id=row.id, name=row.name, picture=row.picture))
+    return row.id
 
 
 def require_church(
