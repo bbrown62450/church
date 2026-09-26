@@ -482,7 +482,7 @@ The chain before this slice (F§3.5) is `0001`–`0004` (slice 1), `0005_service
 - that this file is the source of `hymn_catalog`, which is copied into every new church;
 - how to regenerate it (`export`) and apply it (`seed`);
 - how it differs from `seed/hymnals/` (6a's hymnals an admin can **add**);
-- attribution: numbers and titles from the hymnal, with scripture references, themes and links gathered from Hymnary.org during the original import. See open question 1.
+- attribution: numbers and titles from the hymnal, with scripture references, themes and links gathered from Hymnary.org during the original import, and `text_year` / `hymnal_count` from Hymnary.org's public scripture API (the PR #4 backfill). See open question 1.
 - *amendment 2026-09-26:* the `text_year` and `hymnal_count` columns: the year the words were written and the number of hymnals that include them, filled from Hymnary.org's public API by the ops backfill CLI (`backfill_hymn_facts.py`). An empty cell means unknown, and `seed` never clears a stored value for it.
 
 The file is created by the owner running `export` against production **after `normalize_legacy_data` is applied there**, so the committed themes are already clean.

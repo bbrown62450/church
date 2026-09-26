@@ -136,7 +136,7 @@ library is read fresh on every call, with no cache.
   When no prayer has that type, there is no example.
 - **Budget:** the example is truncated to 3,000 characters.
   - If system plus user still exceeds `MAX_PROMPT_CHARS` (24,000), the example is dropped first, then the profile.
-  - The library never causes `prompt_invalid`. That error still applies only when the church's own prompts are too long.
+  - The library never causes `prompt_invalid`. That error still applies only when the church's own prompts, plus the readings, hymns and rubric checklist, are too long (slice 4).
 - **Unchanged:**
   - Sections the user typed are never sent to the AI, so the library does not touch them.
   - An empty library gives messages byte-identical to slice 4's baseline, so the existing assertions hold.
