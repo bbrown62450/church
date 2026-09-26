@@ -1,3 +1,4 @@
+import datetime
 import sys
 import uuid
 
@@ -35,6 +36,17 @@ from db.models import Hymn, HymnCatalog
 ])
 def test_text_year(record, year):
     assert hf.text_year(record) == year
+
+
+def test_text_year_never_guesses_a_future_year_for_a_recent_writer():
+    # Birth year + BIRTH_ONLY_OFFSET would land in the future for a writer born
+    # recently, so the estimate stops at this year.
+    this_year = datetime.date.today().year
+    born = this_year - 10
+    for value in (f"Smith, Jane, {born}-", f"Smith, Jane, {born}–", f"Smith, Jane, b. {born}"):
+        assert hf.text_year({"author": value}) == this_year, value
+    # An estimate that is already in the past is left alone.
+    assert hf.text_year({"author": f"Smith, Jane, {this_year - 40}-"}) == this_year - 5
 
 
 @pytest.mark.parametrize("record, count", [

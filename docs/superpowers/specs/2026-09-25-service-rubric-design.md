@@ -222,7 +222,8 @@ A new one-off script, `backend/backfill_hymn_facts.py`:
 4. Sets `text_year` from the first 4-digit year in `date`. If `date` is absent,
    it estimates from the people fields (author, translator, paraphraser,
    adapter, alterer). It takes the latest death year among them. A person with
-   only a birth year counts as birth year + 35.
+   only a birth year counts as birth year + 35, capped at the current year so
+   the estimate is never a future year.
 5. Only fills blanks and never overwrites a value, so manual corrections
    survive re-runs. The script is idempotent and supports `--dry-run`.
 6. Prints coverage: rows matched, and rows left unknown.

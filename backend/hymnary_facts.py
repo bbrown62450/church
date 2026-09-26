@@ -27,6 +27,7 @@ reference Hymnary cannot parse ("Isaiah 6:3 (st. 1)") gets the same answer
 every time, so it is not a failure: the fetch returns [] for it.
 """
 import re
+from datetime import date
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from sqlalchemy import or_, select
@@ -38,7 +39,8 @@ API_URL = "https://hymnary.org/api/scripture"
 # Roles of the people who wrote the words. A versifier turns a text (usually a
 # psalm) into metrical verse, the same work as a paraphraser.
 PEOPLE_FIELDS = ("author", "translator", "paraphraser", "adapter", "alterer", "versifier")
-BIRTH_ONLY_OFFSET = 35   # a living writer born in 1936 counts as writing around 1971
+BIRTH_ONLY_OFFSET = 35   # a living writer born in 1936 counts as writing around 1971;
+                         # the estimate is capped at this year
 WRITE_BATCH = 50
 RESULT_CAP = 100         # most texts the API returns for one reference
 
@@ -56,12 +58,18 @@ _REF_BREAK = re.compile(r"\s*(?:;|\n|,(?=\s*[1-3]?\s?[A-Za-z]))\s*")
 _ARTICLE = re.compile(r"^(the|a|an) ")
 
 
+def _birth_only_year(born: str) -> int:
+    """Estimated writing year for a writer with only a birth year: birth year
+    + BIRTH_ONLY_OFFSET, but never later than this year."""
+    return min(int(born) + BIRTH_ONLY_OFFSET, date.today().year)
+
+
 def _person_year(value: str) -> Optional[int]:
-    """Latest year a writer could have written: the death year, or the birth
-    year + BIRTH_ONLY_OFFSET when only a birth year is known."""
-    years = [int(died) if died else int(born) + BIRTH_ONLY_OFFSET
+    """Latest year a writer could have written: the death year, or the
+    birth-only estimate when only a birth year is known."""
+    years = [int(died) if died else _birth_only_year(born)
              for born, died in _LIFE.findall(value)]
-    years += [int(year) if mark == "d" else int(year) + BIRTH_ONLY_OFFSET
+    years += [int(year) if mark == "d" else _birth_only_year(year)
               for mark, year in _MARKED.findall(value)]
     return max(years) if years else None
 
