@@ -1,3 +1,4 @@
+import logging
 import pytest
 from ui_helpers import (
     capture_query_params,
@@ -48,3 +49,72 @@ def test_build_title_to_info_lowercases_skips_blank_and_handles_empty():
     assert m["holy, holy, holy"]["number"] == 1
     # empty hymnal -> empty map: this is what drives the explicit empty-hymnal message
     assert build_title_to_info([]) == {}
+
+
+from ui_helpers import sermon_text_for
+
+
+def test_sermon_text_uses_the_cached_passage():
+    assert sermon_text_for("John 21:1-19", {"John 21:1-19": "Text."}) == ("John 21:1-19", "Text.")
+
+
+def test_sermon_text_fetches_when_not_cached_or_failed():
+    fetched = []
+
+    def fetch(ref):
+        fetched.append(ref)
+        return "Fetched."
+
+    assert sermon_text_for("John 21:1-19", {}, fetch) == ("John 21:1-19", "Fetched.")
+    assert sermon_text_for("John 21:1-19", {"John 21:1-19": "[Could not load text]"}, fetch) == \
+        ("John 21:1-19", "Fetched.")
+    assert fetched == ["John 21:1-19", "John 21:1-19"]
+
+
+def test_sermon_text_is_none_without_a_reference_or_any_text():
+    assert sermon_text_for("", {"": "x"}) is None
+    assert sermon_text_for(None, {}) is None
+    assert sermon_text_for("John 21:1-19", {}) is None   # no cache, no fetcher
+
+    def broken(_ref):
+        raise RuntimeError("network down")
+
+    assert sermon_text_for("John 21:1-19", None, broken) is None
+
+
+def test_sermon_text_keeps_a_fetched_passage_for_the_session():
+    fetched = []
+
+    def fetch(ref):
+        fetched.append(ref)
+        return "  Fetched.  "
+
+    # The selected half of an "X or Y" reading is not a key the page loaded.
+    cache = {"John 21:1-19 or Luke 5:1-11": "Both."}
+    assert sermon_text_for("John 21:1-19", cache, fetch) == ("John 21:1-19", "Fetched.")
+    assert cache["John 21:1-19"] == "Fetched."
+    # The next click uses the kept text instead of fetching again.
+    assert sermon_text_for("John 21:1-19", cache, fetch) == ("John 21:1-19", "Fetched.")
+    assert fetched == ["John 21:1-19"]
+
+    # A fetched passage replaces a failed load.
+    cache = {"John 21:1-19": "[Could not load text]"}
+    sermon_text_for("John 21:1-19", cache, fetch)
+    assert cache == {"John 21:1-19": "Fetched."}
+
+
+def test_sermon_text_logs_a_failed_fetch_and_keeps_nothing(caplog):
+    def broken(_ref):
+        raise RuntimeError("network down")
+
+    cache = {}
+    with caplog.at_level(logging.WARNING, logger="ui_helpers"):
+        assert sermon_text_for("John 21:1-19", cache, broken) is None
+    assert cache == {}   # the next click tries again
+    assert any("John 21:1-19" in r.getMessage() and r.levelno == logging.WARNING
+               for r in caplog.records)
+
+    # An empty answer is not kept either.
+    assert sermon_text_for("John 21:1-19", cache, lambda _ref: None) is None
+    assert sermon_text_for("John 21:1-19", cache, lambda _ref: "[Could not load text]") is None
+    assert cache == {}

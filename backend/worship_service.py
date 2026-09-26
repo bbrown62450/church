@@ -15,7 +15,9 @@ from urllib.parse import urlparse, urlunparse
 
 from dotenv import load_dotenv
 from hymn_utils import get_property_value
+import hymn_ranking
 import liturgy_prompts
+import service_rubric
 
 if TYPE_CHECKING:  # notion-client is migration-only; only needed for type hints here
     from notion_hymns import NotionHymnsDB
@@ -365,6 +367,13 @@ def hymns_by_scripture(
 _OPENING_THEMES = {"gathering", "opening", "call to worship", "invitation", "welcome", "entrance"}
 _CLOSING_THEMES = {"joy", "rejoice", "sending", "benediction", "mission", "dismissal", "praise", "thanksgiving"}
 
+# How many candidates each slot shows the AI, and how many of those places are
+# kept for hymns of unknown year and newer hymns. Without them, a slot with 60 or
+# more older hymns would hide every newer one, and the age preference would act
+# as a filter.
+_CANDIDATES_PER_SLOT = 60
+_CANDIDATES_KEPT_FOR_NEWER = 12
+
 
 def _hymn_matches_theme(hymn: Dict[str, Any], theme_set: set) -> bool:
     """True if hymn's Theme property contains any of the theme keywords."""
@@ -389,19 +398,26 @@ def suggest_hymns_for_service(
     limit_per_slot: int = 5,
     progress_callback: Optional[Any] = None,
     all_hymns: Optional[List[Dict[str, Any]]] = None,
+    rubric: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, List[Dict[str, Any]]]:
     """
     Use AI to suggest hymns for opening, response (after sermon), and closing.
-    - Opening: gathering/opening hymns
-    - Response: hymns that match scripture themes (especially NT reading)
-    - Closing: joyful, upbeat hymns
+    What makes a good hymn for each slot comes from the rubric's slot checklists.
+    Response candidates are the hymns citing the scripture readings (the whole
+    hymnal when none do); opening and closing candidates are pre-filtered by
+    theme keywords.
 
     If *all_hymns* is provided, uses that cached list instead of calling db.list_hymns()
     (avoids redundant Notion API calls).
 
     Returns {"opening": [...], "response": [...], "closing": [...]} with hymn info dicts.
+
+    *rubric* supplies the slot checklists and the older/familiar preferences. It
+    is merged over the defaults, so None, a church's sparse overrides or a full
+    rubric all work.
     """
     scripture_full_texts = scripture_full_texts or {}
+    rubric = service_rubric.merge_rubric(rubric)
     client = None
     if OpenAI:
         key = (api_key or os.getenv("OPENAI_API_KEY") or "").strip()
@@ -466,15 +482,28 @@ def suggest_hymns_for_service(
     seen = set()
     scripture_hymns = [h for h in scripture_hymns if h["id"] not in seen and not seen.add(h["id"])]
 
-    opening_candidates = [h for h in all_hymns if _hymn_matches_theme(h, _OPENING_THEMES)]
-    if not opening_candidates:
-        opening_candidates = all_hymns[:80]
+    def _candidates(hymns: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Rank a slot's hymns, then cut them to the ones the AI is shown."""
+        ranked = hymn_ranking.rank_candidates(
+            hymns,
+            prefer_before_year=rubric["prefer_before_year"],
+            prefer_familiar=rubric["prefer_familiar"],
+        )
+        return hymn_ranking.shortlist(
+            ranked,
+            limit=_CANDIDATES_PER_SLOT,
+            prefer_before_year=rubric["prefer_before_year"],
+            reserve=_CANDIDATES_KEPT_FOR_NEWER,
+        )
 
-    closing_candidates = [h for h in all_hymns if _hymn_matches_theme(h, _CLOSING_THEMES)]
-    if not closing_candidates:
-        closing_candidates = all_hymns[:80]
-
-    response_candidates = scripture_hymns if scripture_hymns else all_hymns[:80]
+    # A slot with no theme-matched hymns falls back to the whole ranked hymnal.
+    opening_candidates = _candidates(
+        [h for h in all_hymns if _hymn_matches_theme(h, _OPENING_THEMES)] or all_hymns
+    )
+    closing_candidates = _candidates(
+        [h for h in all_hymns if _hymn_matches_theme(h, _CLOSING_THEMES)] or all_hymns
+    )
+    response_candidates = _candidates(scripture_hymns or all_hymns)
 
     _progress("Building prompt for AI…", 0.45)
     def _hymn_summary(h: Dict) -> str:
@@ -483,14 +512,30 @@ def suggest_hymns_for_service(
         themes = get_property_value(h, "Theme")
         themes_str = ", ".join(themes) if isinstance(themes, list) else (themes or "")
         script = get_property_value(h, "Scripture References") or ""
-        return f"- {title} (#{num})" + (f" [themes: {themes_str}]" if themes_str else "") + (f" [scripture: {script[:60]}...]" if len(script) > 60 else f" [scripture: {script}]" if script else "")
+        facts = hymn_ranking.facts_note(h)
+        return (
+            f"- {title} (#{num})"
+            + (f" {facts}" if facts else "")
+            + (f" [themes: {themes_str}]" if themes_str else "")
+            + (f" [scripture: {script[:60]}...]" if len(script) > 60 else f" [scripture: {script}]" if script else "")
+        )
 
-    opening_list = "\n".join(_hymn_summary(h) for h in opening_candidates[:60])
-    response_list = "\n".join(_hymn_summary(h) for h in response_candidates[:60])
-    closing_list = "\n".join(_hymn_summary(h) for h in closing_candidates[:60])
+    opening_list = "\n".join(_hymn_summary(h) for h in opening_candidates)
+    response_list = "\n".join(_hymn_summary(h) for h in response_candidates)
+    closing_list = "\n".join(_hymn_summary(h) for h in closing_candidates)
 
     scripture_refs_str = "\n".join(f"- {s}" for s in scriptures) if scriptures else "None"
     nt_preview = (nt_text[:1500] + "...") if len(nt_text) > 1500 else nt_text if nt_text else "(no text loaded)"
+
+    slot_checklists = "\n\n".join(
+        service_rubric.format_checklist(service_rubric.HYMN_SLOT_LABELS[slot], rubric["hymns"][slot])
+        for slot in service_rubric.HYMN_SLOTS
+    )
+    preference = (
+        f"Prefer hymns written before {rubric['prefer_before_year']}"
+        + (" and hymns found in many hymnals" if rubric["prefer_familiar"] else "")
+        + "; choose a newer hymn only when it fits clearly better."
+    )
 
     prompt = f"""You are helping plan a worship service. Select hymns for three slots.
 
@@ -499,20 +544,21 @@ SCRIPTURE READINGS: {scripture_refs_str}
 NEW TESTAMENT READING (for response hymn): {selected_nt_ref or "Not specified"}
 NT PASSAGE TEXT (excerpt): {nt_preview}
 
-ROLE REQUIREMENTS:
-- OPENING: Must be a gathering/opening hymn—something that invites people into worship, calls them to praise, or welcomes them. NOT a hymn focused on the sermon theme.
-- RESPONSE (after sermon): Must connect to the scripture, especially the New Testament reading. Match themes in the passage (e.g. transfiguration, Lent, grace, faith, etc.).
-- CLOSING: Must be joyful, upbeat, or sending—something that sends people out with hope and praise. NOT somber or reflective.
+ROLE REQUIREMENTS (what makes a good hymn for each slot):
+
+{slot_checklists}
+
+PREFERENCES: {preference} Each candidate shows when its words were written and how many hymnals include it, when known.
 
 CANDIDATE HYMNS:
 
-OPENING CANDIDATES (prefer gathering/opening hymns):
+OPENING CANDIDATES:
 {opening_list}
 
-RESPONSE CANDIDATES (prefer scripture-linked hymns):
+RESPONSE CANDIDATES:
 {response_list}
 
-CLOSING CANDIDATES (prefer joyful/sending hymns):
+CLOSING CANDIDATES:
 {closing_list}
 
 Respond with a JSON object only, no other text:
@@ -555,14 +601,14 @@ Pick {limit_per_slot} hymns per slot. Use the EXACT titles from the lists above.
             if isinstance(t, str) and t.strip():
                 key = t.strip().lower()
                 if key in title_to_hymn:
-                    info = hymn_display_info(title_to_hymn[key])
+                    info = hymn_display_info(title_to_hymn[key], prefer_before_year=rubric["prefer_before_year"])
                     out.append(info)
                     logger.info("Resolved %s: %r -> exact match", slot, t)
                 else:
                     matched = False
                     for k, h in title_to_hymn.items():
                         if key in k or k in key:
-                            info = hymn_display_info(h)
+                            info = hymn_display_info(h, prefer_before_year=rubric["prefer_before_year"])
                             out.append(info)
                             logger.info("Resolved %s: %r -> fuzzy match %r", slot, t, k)
                             matched = True
@@ -579,9 +625,15 @@ Pick {limit_per_slot} hymns per slot. Use the EXACT titles from the lists above.
     }
 
 
-def hymn_display_info(hymn: Dict[str, Any], *, resolve_audio: bool = False) -> Dict[str, Any]:
+def hymn_display_info(
+    hymn: Dict[str, Any],
+    *,
+    resolve_audio: bool = False,
+    prefer_before_year: Optional[int] = None,
+) -> Dict[str, Any]:
     """Extract title, number, and link for display/export.
     If resolve_audio is True, fetches the hymn page to get the real MP3 URL (used for scripture list players).
+    newer_than_preferred is True when the words were written in or after prefer_before_year, so a UI can label the hymn with its year.
     """
     title = get_property_value(hymn, "Hymn Title") or "Unknown"
     number = get_property_value(hymn, "Hymn Number")
@@ -601,11 +653,17 @@ def hymn_display_info(hymn: Dict[str, Any], *, resolve_audio: bool = False) -> D
         title,
         audio_url,
     )
+    year = get_property_value(hymn, "Text Year")
     return {
         "title": title,
         "number": number,
         "link": link,
         "audio_url": audio_url,
+        "year": year,
+        "hymnal_count": get_property_value(hymn, "Hymnal Count"),
+        "newer_than_preferred": (
+            year is not None and prefer_before_year is not None and year >= prefer_before_year
+        ),
     }
 
 
@@ -683,6 +741,24 @@ def resolve_hymnary_audio_url(number: Optional[int], title: str) -> Optional[str
     return url
 
 
+SERMON_TEXT_LIMIT = 2000
+
+
+def _sermon_text_block(sermon_text: Optional[tuple]) -> str:
+    """The sermon-text context appended to each liturgy prompt, or '' when the
+    reference or text is missing, or the passage failed to load."""
+    if not sermon_text:
+        return ""
+    ref, text = sermon_text
+    text = (text or "").strip()
+    if not (ref or "").strip() or not text or "[Could not load text]" in text:
+        return ""
+    return (
+        f"Sermon text ({ref.strip()}), for themes only; do not quote, cite, or name it:\n"
+        f"{text[:SERMON_TEXT_LIMIT]}"
+    )
+
+
 def generate_liturgy(
     *,
     occasion: str,
@@ -692,6 +768,8 @@ def generate_liturgy(
     api_key: Optional[str] = None,
     user_overrides: Optional[Dict[str, str]] = None,
     prompt_overrides: Optional[Dict[str, str]] = None,
+    rubric: Optional[Dict[str, Any]] = None,
+    sermon_text: Optional[tuple] = None,
 ) -> Dict[str, str]:
     """
     Use OpenAI to generate liturgy text for the requested sections.
@@ -699,9 +777,17 @@ def generate_liturgy(
     prompt_overrides (per church) replaces the default AI instructions for the
     "system" voice and/or any section; missing keys fall back to the defaults.
     Returns dict mapping section key -> plain text.
+    rubric adds each section's quality checklist to its prompt. It is merged over
+    the defaults, so None, a church's sparse overrides or a full rubric all
+    work. sermon_text, as (reference, passage text), is
+    added to every prompt for themes; it is skipped when missing or when the
+    passage failed to load. Both are appended in code, so churches with edited
+    prompts get them too.
     """
     overrides = user_overrides or {}
     prompts = liturgy_prompts.merge_prompts(prompt_overrides)
+    rubric = service_rubric.merge_rubric(rubric)
+    sermon_block = _sermon_text_block(sermon_text)
     client = None
     if OpenAI:
         key = (api_key or os.getenv("OPENAI_API_KEY") or "").strip()
@@ -747,6 +833,12 @@ def generate_liturgy(
             opening_hymn=opening_hymn,
             hymns=hymn_lines,
         )
+        checklist = rubric["prayers"].get(section)
+        if checklist:
+            label = liturgy_prompts.SECTION_LABELS.get(section, section)
+            prompt += "\n\n" + service_rubric.format_checklist(label, checklist)
+        if sermon_block:
+            prompt += "\n\n" + sermon_block
 
         model = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
         try:

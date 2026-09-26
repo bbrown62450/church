@@ -93,3 +93,23 @@ def test_seed_church_from_catalog_returns_count_and_copies_rows(
         n = seed_church_from_catalog(cid, session)
     assert n == 3
     assert len(list_hymns(cid)) == 3
+
+
+def test_hymn_dicts_expose_year_and_familiarity(tmp_db, make_user, make_church):
+    cid = make_church(owner_user_id=make_user(email="facts@grace.org"))
+    created = add_hymn(cid, title="Holy, Holy, Holy", number=138)
+    assert created["Text Year"] is None
+    assert created["Hymnal Count"] is None
+
+
+def test_seed_copies_year_and_familiarity(tmp_db, make_user, make_church):
+    from db.models import HymnCatalog
+
+    cid = make_church(owner_user_id=make_user(email="seedfacts@grace.org"))
+    with session_scope() as session:
+        session.add(HymnCatalog(title="Holy, Holy, Holy", number=138, text_year=1826, hymnal_count=1322))
+    with session_scope() as session:
+        seed_church_from_catalog(cid, session)
+    [hymn] = list_hymns(cid)
+    assert hymn["Text Year"] == 1826
+    assert hymn["Hymnal Count"] == 1322

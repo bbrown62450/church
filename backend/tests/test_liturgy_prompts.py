@@ -40,3 +40,11 @@ def test_render_is_safe_against_unknown_placeholders():
     # An admin who types a stray {mystery} must not crash generation.
     out = lp.render("Hello {mystery} for {occasion}", occasion="Lent")
     assert out == "Hello  for Lent"
+
+
+def test_short_prayers_default_to_three_sentences_at_most():
+    assert "no more than 3 sentences" in lp.DEFAULT_SECTION_PROMPTS["prayer_for_illumination"]
+    assert "3-5" not in lp.DEFAULT_SECTION_PROMPTS["prayer_for_illumination"]
+    assert lp.DEFAULT_SECTION_PROMPTS["offertory_prayer"].startswith(
+        "Write an Offertory Prayer for: {occasion}. No more than three sentences:"
+    )

@@ -109,6 +109,8 @@ class HymnCatalog(Base):
     theme = Column(Text)
     hymnary_link = Column(Text)
     audio_url = Column(Text)
+    text_year = Column(Integer)      # year the words were written (Hymnary.org); None = unknown
+    hymnal_count = Column(Integer)   # hymnals that include the text: familiarity; None = unknown
 
 
 class Hymn(Base):
@@ -126,6 +128,8 @@ class Hymn(Base):
     theme = Column(Text)
     hymnary_link = Column(Text)
     audio_url = Column(Text)
+    text_year = Column(Integer)      # year the words were written (Hymnary.org); None = unknown
+    hymnal_count = Column(Integer)   # hymnals that include the text: familiarity; None = unknown
 
     __table_args__ = (
         Index("ix_hymns_church_id", "church_id"),

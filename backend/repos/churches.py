@@ -6,6 +6,7 @@ from sqlalchemy import select, update
 
 from db import session_scope
 from db.models import Church, Membership, Invite
+from service_rubric import apply_patch, merge_rubric, validate_patch
 
 
 def create_church(*, name, timezone, owner_user_id) -> uuid.UUID:
@@ -84,16 +85,24 @@ def update_church(church_id, *, name=None, timezone=None, settings=None) -> None
             church.settings = settings
 
 
+def _lock_live_church(session, church_id) -> Optional[Church]:
+    """Load the church row with SELECT ... FOR UPDATE (Postgres; SQLite ignores
+    it), so a concurrent settings write waits for this transaction instead of
+    overwriting it. None if the church is missing or soft-deleted."""
+    church = session.get(Church, church_id, with_for_update=True)
+    if church is None or church.deleted_at is not None:
+        return None
+    return church
+
+
 def _merge_settings(church_id, patch: dict) -> None:
-    """Shallow-merge `patch` into the church's settings JSON (reassigns a new
-    dict so SQLAlchemy detects the change)."""
+    """Shallow-merge `patch` into the church's settings JSON under a row lock
+    (reassigns a new dict so SQLAlchemy detects the change)."""
     with session_scope() as session:
-        church = session.get(Church, church_id)
-        if church is None or church.deleted_at is not None:
+        church = _lock_live_church(session, church_id)
+        if church is None:
             return
-        current = dict(church.settings or {})
-        current.update(patch)
-        church.settings = current
+        church.settings = {**(church.settings or {}), **patch}
 
 
 def get_church_prompts(church_id) -> dict:
@@ -115,6 +124,39 @@ def set_church_prompts(church_id, prompts: dict) -> None:
         if k in PROMPT_KEYS and (v or "").strip()
     }
     _merge_settings(church_id, {"liturgy_prompts": cleaned})
+
+
+def get_church_rubric_overrides(church_id) -> dict:
+    """The church's stored rubric overrides ({} when it uses all defaults)."""
+    church = get_church(church_id)
+    if not church:
+        return {}
+    stored = (church.get("settings") or {}).get("rubric")
+    return dict(stored) if isinstance(stored, dict) else {}
+
+
+def get_church_rubric(church_id) -> dict:
+    """The church's full rubric: the defaults with its valid overrides applied."""
+    return merge_rubric(get_church_rubric_overrides(church_id))
+
+
+def update_church_rubric(church_id, patch: dict) -> dict:
+    """Validate and apply a sparse rubric patch (None resets that checklist or
+    setting to its default). Raises ValueError, storing nothing, on invalid
+    input. Returns the merged rubric.
+
+    The stored overrides are read from the row this transaction locks and then
+    rewrites, so two admins patching at once cannot drop each other's change.
+    """
+    cleaned = validate_patch(patch)
+    with session_scope() as session:
+        church = _lock_live_church(session, church_id)
+        settings = dict(church.settings or {}) if church is not None else {}
+        stored = settings.get("rubric")
+        overrides = apply_patch(stored if isinstance(stored, dict) else {}, cleaned)
+        if church is not None:
+            church.settings = {**settings, "rubric": overrides}
+    return merge_rubric(overrides)
 
 
 def get_church_translation(church_id) -> str | None:
