@@ -9,7 +9,9 @@ without them. Idempotent: it adds only the missing columns, so it is safe to
 re-run and also works on SQLite (which lacks ADD COLUMN IF NOT EXISTS). It
 first prints the database it is about to change, password hidden.
 
-    python migrate_add_hymn_facts.py
+From the repo root:
+
+    (cd backend && ../.venv/bin/python migrate_add_hymn_facts.py)
 """
 from dotenv import load_dotenv
 
@@ -40,8 +42,10 @@ def run(engine=None) -> list:
 
 def main() -> None:
     engine = get_engine()
-    # Name the target first: a wrong DATABASE_URL (or a backend/.env picked up
-    # when none is exported) prints the same "already present" as a correct run.
+    # Name the target first: a wrong DATABASE_URL prints the same "already
+    # present" as a correct run. Without an exported DATABASE_URL, load_dotenv()
+    # loads the nearest .env found walking up from backend/ (backend/.env, else
+    # the repo-root .env).
     print("Database:", engine.url.render_as_string(hide_password=True))
     added = run(engine)
     print("Added: " + ", ".join(added) if added else "OK — columns already present.")

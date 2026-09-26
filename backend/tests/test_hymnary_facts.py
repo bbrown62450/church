@@ -20,7 +20,7 @@ from db.models import Hymn, HymnCatalog
     ({"translator": "Seiss, Joseph A. (Joseph Augustus) 1823-1904"}, 1904),
     ({"author": "Wren, Brian, 1936-"}, 1936 + hf.BIRTH_ONLY_OFFSET),
     # Life dates written with an en dash, as in the live "Psalm 23" response.
-    ({"author": "Franzén, Frans Michael, 1772-1847", "adapter": "Price, Charles P., 1920–1999"}, 1999),
+    ({"adapter": "Price, Charles P., 1920–1999"}, 1999),
     ({"author": "Wren, Brian, 1936—"}, 1936 + hf.BIRTH_ONLY_OFFSET),   # em dash
     # Roles qualified in parentheses, as in the live "Psalm 23" and "Isaiah 6:3" responses.
     ({"author (attributed to)": "Lyte, Henry Francis, 1793-1847"}, 1847),
@@ -36,6 +36,46 @@ from db.models import Hymn, HymnCatalog
 ])
 def test_text_year(record, year):
     assert hf.text_year(record) == year
+
+
+@pytest.mark.parametrize("record, year", [
+    # A main writer (author, translator, paraphraser, versifier) wins over a
+    # later adapter or alterer, who only reworked the words.
+    ({"author": "Watts, Isaac, 1674-1748", "alterer": "Wesley, John, 1703-1791"}, 1748),
+    ({"translator (dutch)": "De Moor, Robert, 1950-", "adapter": "Price, Charles P., 1920–1999"},
+     1950 + hf.BIRTH_ONLY_OFFSET),
+    ({"paraphraser": "Tate, Nahum, 1652-1715", "adapter (st. 3)": "Price, Charles P., 1920-1999"}, 1715),
+    ({"versifier": "Kethe, William, d. 1594", "alterer": "Wesley, John, 1703-1791"}, 1594),
+    # Among the main writers, the latest year still counts.
+    ({"author": "Heermann, Johann, 1585-1647", "translator": "Bridges, Robert, 1844-1930",
+      "alterer": "Smith, Jane, 1940-1999"}, 1930),
+    # Adapters and alterers count only when no main writer gives a year.
+    ({"alterer": "Wesley, John, 1703-1791"}, 1791),
+    ({"author": "Anonymous", "adapter": "Price, Charles P., 1920–1999"}, 1999),
+    ({"author": "Latin hymn, 12th cent.", "alterer": "Wesley, John, 1703-1791",
+      "adapter": "Price, Charles P., 1920-1999"}, 1999),
+    ({"date": "1739", "author": "Wesley, Charles, 1707-1788", "alterer": "Whitefield, George, 1714-1770"}, 1739),
+])
+def test_text_year_uses_the_main_writers_first(record, year):
+    assert hf.text_year(record) == year
+
+
+def test_text_year_of_prepare_the_way_is_the_authors_not_the_adapters():
+    # Verbatim from the live "Psalm 23" response: Franzen wrote the words;
+    # Price adapted them 150 years later.
+    record = {
+        "title": "Prepare the Way, O Zion",
+        "meter": "7.6.7.6.7.7 with refrain",
+        "text link": "https://hymnary.org/text/prepare_the_way_o_zion_your_christ",
+        "number of hymnals": "8",
+        "scripture references": "Psalm 23:1-9",
+        "adapter": "Price, Charles P., 1920–1999",
+        "author": "Franzén, Frans Michael, 1772-1847",
+    }
+    assert hf.text_year(record) == 1847
+    facts = hf.find_facts("Prepare the Way, O Zion", "Psalm 23",
+                          lambda ref: {"Prepare the way, O Zion, Your Christ is drawing near": record}, {})
+    assert facts == {"text_year": 1847, "hymnal_count": 8}
 
 
 def test_text_year_never_guesses_a_future_year_for_a_recent_writer():

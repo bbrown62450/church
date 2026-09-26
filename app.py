@@ -944,9 +944,10 @@ def render_service_builder(user, active):
                     user_overrides=user_overrides or None,
                     prompt_overrides=get_church_prompts(church_id),
                     rubric=get_church_rubric(church_id),
+                    # A fetched passage is kept in the page's session cache.
                     sermon_text=sermon_text_for(
                         st.session_state.get("selected_nt_ref"),
-                        st.session_state.get("scripture_full_texts"),
+                        st.session_state.setdefault("scripture_full_texts", {}),
                         lambda ref: get_passage_text(
                             ref, translation=st.session_state.get("bible_translation", DEFAULT_TRANSLATION)
                         ),

@@ -1,6 +1,10 @@
 """Pure, Streamlit-free helpers so page logic is importable and unit-testable."""
 from __future__ import annotations
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 # OAuth callback query keys we strip AFTER handling. Never a blanket
 # st.query_params.clear() — that would drop ?invite=/?church= mid round-trip
 # (spec §4 query-param hygiene).
@@ -70,18 +74,25 @@ def sermon_text_for(ref, cached_texts, fetch=None):
     """(reference, passage text) for the liturgy writer, or None.
 
     Uses the passage already loaded on the page when there is one; otherwise
-    asks `fetch(ref)`. A failed or empty load yields None, so liturgy generation
-    never breaks on a missing sermon text."""
+    asks `fetch(ref)` and keeps a fetched passage in `cached_texts` (the page's
+    session cache, ref -> text), so the next click does not fetch it again. A
+    failed or empty load is logged, not kept (the next click retries), and
+    yields None, so liturgy generation never breaks on a missing sermon text."""
     ref = (ref or "").strip()
     if not ref:
         return None
-    text = (cached_texts or {}).get(ref) or ""
+    text = ((cached_texts or {}).get(ref) or "").strip()
     if (not text or text == _FAILED_TEXT) and fetch is not None:
         try:
-            text = fetch(ref) or ""
+            text = (fetch(ref) or "").strip()
         except Exception:
-            text = ""
-    text = text.strip()
+            logger.warning("Could not load the sermon text for %s", ref, exc_info=True)
+            return None
+        if not text or text == _FAILED_TEXT:
+            logger.warning("No sermon text loaded for %s", ref)
+            return None
+        if cached_texts is not None:
+            cached_texts[ref] = text
     if not text or text == _FAILED_TEXT:
         return None
     return (ref, text)

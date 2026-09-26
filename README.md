@@ -146,23 +146,24 @@ many hymnals include them (familiarity). They drive the rubric's "prefer older"
 and "prefer familiar" hymn suggestions.
 
 Run each command below from the repo root, with `DATABASE_URL` set to the
-deployed (Supabase) database. Each script first prints `Database: ...` (password
-hidden): check that it shows the Supabase pooler host before trusting the rest
-of its output. When `DATABASE_URL` is not exported, the scripts quietly use a
-`backend/.env` if one exists.
+deployed (Supabase) database. When `DATABASE_URL` is not exported, the scripts
+load the nearest `.env` found walking up from `backend/` (`backend/.env`, else
+the repo-root `.env`). Each script first prints `Database: ...` (password
+hidden) before changing anything: check that it shows the Supabase pooler host
+before trusting the rest of its output.
 
 1. **Before merging** code that maps these columns, add them to the deployed
    database. Both apps select every mapped column and would fail without them:
 
    ```bash
-   (cd backend && python migrate_add_hymn_facts.py)
+   (cd backend && ../.venv/bin/python migrate_add_hymn_facts.py)
    ```
 
 2. Preview the fill from Hymnary.org's public API. It writes nothing and takes
    about a second per scripture reference:
 
    ```bash
-   (cd backend && python backfill_hymn_facts.py --dry-run)
+   (cd backend && ../.venv/bin/python backfill_hymn_facts.py --dry-run)
    ```
 
    Before the real run, read the summary lines at the end. References that
@@ -174,7 +175,7 @@ of its output. When `DATABASE_URL` is not exported, the scripts quietly use a
    to retry references it reports as failed):
 
    ```bash
-   (cd backend && python backfill_hymn_facts.py)
+   (cd backend && ../.venv/bin/python backfill_hymn_facts.py)
    ```
 
 Steps 2 and 3 can run before or after the merge. Run step 3 again:

@@ -1,7 +1,7 @@
 # Service Rubric: Design
 
 Date: 2026-09-25
-Status: approved in conversation; awaiting written-spec review
+Status: approved; implemented on branch claude/liturgy-writing-improvements-22ed17
 
 ## Why
 
@@ -231,12 +231,16 @@ A new one-off script, `backend/backfill_hymn_facts.py`:
    may have dropped a more-published text of the same name.
 4. Sets `hymnal_count` from `number of hymnals`.
 5. Sets `text_year` from the first 4-digit year in `date`. If `date` is absent,
-   it estimates from the people fields: author, translator, paraphraser,
-   adapter, alterer and versifier, including qualified keys such as
-   `author (attributed to)`. It takes the latest death year among them. Life
-   dates may use a hyphen, en dash or em dash, or `d. YYYY` and `b. YYYY`. A
-   person with only a birth year counts as birth year + 35, capped at the
-   current year so the estimate is never a future year.
+   it estimates from the main writers first: author, translator, paraphraser
+   and versifier, including qualified keys such as `author (attributed to)`
+   and `translator (dutch)`. It takes the latest death year among them. Only
+   when none of them gives a year does it use the adapter and alterer fields
+   the same way, since those people may have reworked the words long after
+   they were written ("Prepare the Way, O Zion": author Franzen, 1772-1847,
+   adapted by Price, 1920-1999, is 1847). Life dates may use a hyphen, en dash
+   or em dash, or `d. YYYY` and `b. YYYY`. A person with only a birth year
+   counts as birth year + 35, capped at the current year so the estimate is
+   never a future year.
 6. Only fills blanks and never overwrites a value, so manual corrections
    survive re-runs. The script is idempotent and supports `--dry-run`.
 7. Leaves a row unknown for this run when one of its requests fails, rather
@@ -266,7 +270,7 @@ means the defaults.
     unknown-year and newer hymns, taken from each group in turn, so older
     hymns cannot crowd them out. Places they do not need go back to older
     hymns. The list stays in ranked order. (Added during Task 7 review so the
-    age preference does not act as a filter. Not yet confirmed by Beau.)
+    age preference does not act as a filter.)
   - When a slot has no theme-matched candidates, the fallback becomes the full
     ranked hymn list, cut the same way. Today it is the first 80 hymns in
     storage order.
@@ -279,6 +283,12 @@ means the defaults.
 - **Output.** `hymn_display_info` adds `year`, `hymnal_count` and
   `newer_than_preferred` (a boolean) so slice 3 can label newer hymns with
   their year.
+
+**Known limit.** The opening and closing candidate lists are still narrowed by
+fixed theme keywords in `worship_service.py` (`_OPENING_THEMES`,
+`_CLOSING_THEMES`) before ranking. The keywords match the default checklists;
+if a church rewrites a slot checklist, they may not match it. Revisit when the
+slice 6 rubric editor makes checklists editable.
 
 ## How the liturgy writer uses the rubric
 
@@ -306,8 +316,10 @@ In `app.py`:
 
 - `suggest_hymns_for_service(...)` also passes `rubric=get_church_rubric(church_id)`.
 - `generate_liturgy(...)` also passes `rubric=get_church_rubric(church_id)` and
-  `sermon_text` built from `selected_nt_ref` and `scripture_full_texts`, or
-  `None` when either is missing.
+  `sermon_text`: the selected New Testament reference with its text from the
+  loaded passages (`scripture_full_texts`). When that text is missing it is
+  fetched and kept in `scripture_full_texts` for the session. `sermon_text` is
+  `None` when no reference is selected or the fetch fails.
 
 ## Testing
 

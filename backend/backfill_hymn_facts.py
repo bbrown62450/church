@@ -7,8 +7,10 @@ importing a hymnal or adding hymns (new hymns start with both facts unknown).
 Requests are spaced DELAY_SECONDS apart to be polite to Hymnary.org. It first
 prints the database it reads and fills, password hidden.
 
-    python backfill_hymn_facts.py --dry-run
-    python backfill_hymn_facts.py
+From the repo root:
+
+    (cd backend && ../.venv/bin/python backfill_hymn_facts.py --dry-run)
+    (cd backend && ../.venv/bin/python backfill_hymn_facts.py)
 """
 import argparse
 import time
@@ -85,8 +87,9 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true", help="report matches without writing")
     args = parser.parse_args()
     engine = get_engine()   # bind the session to DATABASE_URL (not init_db: no create_all on Supabase)
-    # Name the target first, since load_dotenv() quietly uses a backend/.env
-    # when DATABASE_URL is not exported.
+    # Name the target before changing anything: without an exported
+    # DATABASE_URL, load_dotenv() loads the nearest .env found walking up from
+    # backend/ (backend/.env, else the repo-root .env).
     print("Database:", engine.url.render_as_string(hide_password=True))
     truncated: List[str] = []
     failed: List[str] = []

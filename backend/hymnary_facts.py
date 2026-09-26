@@ -8,6 +8,9 @@ with: its title, "number of hymnals" (our familiarity signal), often "date",
 and people fields with life dates such as "Perronet, Edward, 1721-1792". A
 people field's role can carry a qualifier ("author (attributed to)",
 "translator (dutch)"), and a writer can have only a death date ("d. 1594").
+Without a "date", the year is estimated from the main writers of the words;
+an adapter or alterer, who may have reworked them centuries later, counts
+only when no main writer gives a year.
 
 The title is often a short name ("Guide Me" for "Guide me, O Thou great
 Jehovah") or missing, while hymnals such as PH1990 list hymns by first line,
@@ -38,7 +41,11 @@ from db.models import Hymn, HymnCatalog
 API_URL = "https://hymnary.org/api/scripture"
 # Roles of the people who wrote the words. A versifier turns a text (usually a
 # psalm) into metrical verse, the same work as a paraphraser.
-PEOPLE_FIELDS = ("author", "translator", "paraphraser", "adapter", "alterer", "versifier")
+MAIN_WRITER_FIELDS = ("author", "translator", "paraphraser", "versifier")
+# Roles of people who reworked existing words, often long after they were
+# written: used for the year only when no main writer gives one.
+REWORKER_FIELDS = ("adapter", "alterer")
+PEOPLE_FIELDS = MAIN_WRITER_FIELDS + REWORKER_FIELDS
 BIRTH_ONLY_OFFSET = 35   # a living writer born in 1936 counts as writing around 1971;
                          # the estimate is capped at this year
 WRITE_BATCH = 50
@@ -74,21 +81,32 @@ def _person_year(value: str) -> Optional[int]:
     return max(years) if years else None
 
 
-def _is_writer(field: Any) -> bool:
-    """True for a people field naming a writer of the words, with or without a
-    qualifier: "author", "author (attributed to)", "author (st. 4, 5)"."""
-    return str(field).split("(", 1)[0].strip().lower() in PEOPLE_FIELDS
+def _role(field: Any) -> str:
+    """A people field's role without its qualifier: "author" for "author",
+    "author (attributed to)" and "author (st. 4, 5)"."""
+    return str(field).split("(", 1)[0].strip().lower()
+
+
+def _latest_year(record: Dict[str, Any], roles: Tuple[str, ...]) -> Optional[int]:
+    """Latest year implied by the life dates of the people in these roles."""
+    years = [y for field, value in record.items()
+             if _role(field) in roles and (y := _person_year(str(value or ""))) is not None]
+    return max(years) if years else None
 
 
 def text_year(record: Dict[str, Any]) -> Optional[int]:
     """The year the words were written: the first 4-digit year in `date`, else
-    the latest year implied by the writers' life dates. None when unknown."""
+    the latest year implied by the main writers' life dates (author,
+    translator, paraphraser, versifier), else the latest implied by the
+    adapters' and alterers'. None when unknown.
+
+    "Prepare the Way, O Zion" (author Franzen, 1772-1847; adapted by Price,
+    1920-1999) is 1847, not 1999."""
     match = _YEAR.search(str(record.get("date") or ""))
     if match:
         return int(match.group(1))
-    years = [y for field, value in record.items()
-             if _is_writer(field) and (y := _person_year(str(value or ""))) is not None]
-    return max(years) if years else None
+    main = _latest_year(record, MAIN_WRITER_FIELDS)
+    return main if main is not None else _latest_year(record, REWORKER_FIELDS)
 
 
 def hymnal_count(record: Dict[str, Any]) -> Optional[int]:
