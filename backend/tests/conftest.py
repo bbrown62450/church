@@ -152,3 +152,18 @@ def _fresh_identity_cache():
     if deps is not None:
         deps.clear_identity_cache()
     yield
+
+
+@pytest.fixture(autouse=True)
+def _fresh_readiness_memo():
+    """/health/ready memoizes its probe for up to 10 s (db.health); a result
+    from an earlier test must never answer for this one (ops slice).
+
+    Resets only when db.health is already imported: a stale result can exist
+    only then (the deferred-import rule at the top of this file)."""
+    import sys
+
+    health = sys.modules.get("db.health")
+    if health is not None:
+        health.reset_readiness_for_tests()
+    yield

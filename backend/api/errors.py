@@ -40,6 +40,11 @@ def auth_unavailable() -> ApiError:
     return ApiError(503, "auth_unavailable", "Sign-in is temporarily unavailable. Try again shortly.")
 
 
+def db_unavailable() -> ApiError:
+    """503 from GET /health/ready only (F §1.5 registry; the recorded F §2.2 exception)."""
+    return ApiError(503, "db_unavailable", "The database is not reachable.")
+
+
 def _body(code: str, message: str) -> dict:
     """The uniform error body (F §1.5); slice 1 adds `fields` and `details`.
 

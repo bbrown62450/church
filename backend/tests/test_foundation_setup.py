@@ -2,6 +2,8 @@ import json
 import re
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]   # repo root (this file is backend/tests/...)
 
 
@@ -71,3 +73,36 @@ def test_shadcn_is_a_dev_dependency_only():
     package = json.loads((ROOT / "frontend" / "package.json").read_text())
     assert "shadcn" in package["devDependencies"]
     assert "shadcn" not in package["dependencies"]
+
+
+# --- ops slice (ops-3): the frontend error union gets db_unavailable (slice 1) ---
+
+FRONTEND_ERROR_UNION = ROOT / "frontend" / "src" / "lib" / "api" / "errors.ts"
+
+
+def _missing_error_codes(path, codes=("db_unavailable",)):
+    """Codes the frontend error union lacks; [] while the file does not exist.
+
+    Slice 1 creates src/lib/api/errors.ts (F §4.11). Until then this check is
+    inert; from then on it fails slice 1's CI if the union lacks a code that
+    ops added to the backend."""
+    if not path.exists():
+        return []
+    text = path.read_text(encoding="utf-8")
+    return [code for code in codes if not re.search(rf"""["']{code}["']""", text)]
+
+
+def test_frontend_error_union_lists_db_unavailable_once_it_exists():
+    assert _missing_error_codes(FRONTEND_ERROR_UNION) == []
+
+
+@pytest.mark.parametrize("content, missing", [
+    (None, []),
+    ('export type ErrorCode = "not_found" | "internal_error";\n', ["db_unavailable"]),
+    ('export type ErrorCode = "not_found" | "db_unavailable";\n', []),
+], ids=["no-file-yet", "code-missing", "code-present"])
+def test_missing_error_codes_reads_the_union(tmp_path, content, missing):
+    path = tmp_path / "errors.ts"
+    if content is not None:
+        path.write_text(content, encoding="utf-8")
+    assert _missing_error_codes(path) == missing
