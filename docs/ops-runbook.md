@@ -446,11 +446,11 @@ when it merged, before the freeze locks it in (ops spec, Delivery plan):
 
 | ops-2 gate (ops spec, Delivery plan) | Result | Date |
 |---|---|---|
-| Pre-check: `liturgy-next`'s Settings shows branch `main` and main file `app.py`; if not, stop and do not merge | [owner] | [owner] |
-| Production `users` has a unique constraint or non-partial unique index on exactly `(email)`, the `ON CONFLICT` target | [owner] | [owner] |
-| `DB_POOL_SIZE` and `DB_MAX_OVERFLOW` are both present and `3` on Railway (API) and as top-level keys in `liturgy-next`'s Secrets | [owner] | [owner] |
-| API deploy of the ops-2 merge live; sign-in on https://worship-service-builder.vercel.app works | [owner] | [owner] |
-| New `liturgy-next` build after the merge; smoke check passed on https://liturgy-next.streamlit.app/ | [owner] | [owner] |
+| Pre-check: `liturgy-next`'s Settings shows branch `main` and main file `app.py`; if not, stop and do not merge | Yes: branch `main`, main file `app.py` | 2026-09-26 |
+| Production `users` has a unique constraint or non-partial unique index on exactly `(email)`, the `ON CONFLICT` target | Yes: `users_email_key`, `CREATE UNIQUE INDEX users_email_key ON public.users USING btree (email)`, no `WHERE` (from `pg_indexes`) | 2026-09-26 |
+| `DB_POOL_SIZE` and `DB_MAX_OVERFLOW` are both present and `3` on Railway (API) and as top-level keys in `liturgy-next`'s Secrets | Yes: both `3` in Railway's API Variables, and both `3` above `[auth]` in `liturgy-next`'s Secrets | 2026-09-26 |
+| API deploy of the ops-2 merge live; sign-in on https://worship-service-builder.vercel.app works | Yes: Railway's Active deployment is `57beda0` (the ops-2 merge); a fresh Google sign-in shows First Presbyterian Church and the Service Builder card | 2026-09-26 |
+| New `liturgy-next` build after the merge; smoke check passed on https://liturgy-next.streamlit.app/ | Yes: rebooted after the merge; fresh Google sign-in, church and hymnal, and one saved service (readings and hymns) all worked | 2026-09-26 |
 | The tester used `liturgy-next` for at least one day and nothing regressed | [owner: days used, what the tester reported, log check] | [owner] |
 
 ### What the frozen app inherits from ops-3
