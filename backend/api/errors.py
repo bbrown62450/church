@@ -1,10 +1,13 @@
-"""One error shape for every API failure: {"error": {"code", "message"}}."""
+"""One error shape for every API failure: {"error": {"code", "message", "request_id"}}."""
 import logging
+import uuid
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
+
+from api.middleware import current_request_id
 
 logger = logging.getLogger(__name__)
 
@@ -37,8 +40,26 @@ def auth_unavailable() -> ApiError:
     return ApiError(503, "auth_unavailable", "Sign-in is temporarily unavailable. Try again shortly.")
 
 
+def db_unavailable() -> ApiError:
+    """503 from GET /health/ready only (F §1.5 registry; the recorded F §2.2 exception)."""
+    return ApiError(503, "db_unavailable", "The database is not reachable.")
+
+
 def _body(code: str, message: str) -> dict:
-    return {"error": {"code": code, "message": message}}
+    """The uniform error body (F §1.5); slice 1 adds `fields` and `details`.
+
+    `request_id` is the X-Request-Id of the request. The uuid4 fallback only
+    fires outside RequestIdMiddleware, in the last-resort handler below.
+    """
+    return {"error": {
+        "code": code,
+        "message": message,
+        "request_id": current_request_id() or uuid.uuid4().hex,
+    }}
+
+
+# Public name for UnhandledErrorMiddleware (api/middleware.py).
+error_body = _body
 
 
 def install_error_handlers(app: FastAPI) -> None:

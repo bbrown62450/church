@@ -501,3 +501,146 @@ def test_pool_defaults_fit_the_recorded_pooler_size():
     env_example = _read(ROOT / "backend" / ".env.example")
     assert f"\nDB_POOL_SIZE={DEFAULT_POOL_SIZE}\n" in env_example
     assert f"\nDB_MAX_OVERFLOW={DEFAULT_MAX_OVERFLOW}\n" in env_example
+
+
+# --- keepalive.yml: curls /health/ready and holds no secret (ops-3) -------------
+
+KEEPALIVE_YML = ROOT / ".github" / "workflows" / "keepalive.yml"
+KEEPALIVE_MUST_CONTAIN = (
+    "schedule:",
+    "cron:",
+    "/health/ready",
+    "vars.API_BASE_URL",
+    "--fail",
+    # Exact copy from the ops spec's "Exact server messages" table.
+    "::error::Set the API_BASE_URL repository variable (Settings → Secrets and variables → Actions → Variables)",
+)
+KEEPALIVE_MUST_NOT_CONTAIN = ("secrets.", "python keepalive.py")
+
+
+def test_keepalive_workflow_curls_readiness():
+    text = _read(KEEPALIVE_YML)
+    assert [needle for needle in KEEPALIVE_MUST_CONTAIN if needle not in text] == []
+
+
+def test_keepalive_workflow_holds_no_secret():
+    text = _read(KEEPALIVE_YML)
+    assert [needle for needle in KEEPALIVE_MUST_NOT_CONTAIN if needle in text] == []
+
+
+def test_keepalive_workflow_needs_no_token_permissions_and_no_checkout():
+    workflow = yaml.safe_load(_read(KEEPALIVE_YML))
+    assert workflow["permissions"] == {}
+    assert [step["uses"] for step in workflow["jobs"]["ping"]["steps"] if "uses" in step] == []
+
+
+def test_the_keepalive_script_and_its_tests_are_gone():
+    left = [rel for rel in ("backend/keepalive.py", "backend/tests/test_keepalive.py") if (ROOT / rel).exists()]
+    assert left == []
+
+
+def test_backup_workflow_runs_pg_dump_on_a_schedule():
+    # Ported from the deleted test_keepalive.py::test_backup_workflow_present.
+    text = _read(BACKUP_YML)
+    assert "pg_dump" in text
+    assert "schedule:" in text
+
+
+def test_readme_keep_alive_paragraph_describes_the_readiness_curl():
+    section = _read(README).split("### Keep-alive (required)", 1)[1].split("\n### ", 1)[0]
+    for needle in ("/health/ready", "API_BASE_URL", "docs/ops-runbook.md"):
+        assert needle in section, needle
+    for stale in ("keepalive.py", "DATABASE_URL"):
+        assert stale not in section, stale
+
+
+def test_runbook_keep_alive_section_names_the_variable_and_the_endpoint():
+    text = _read(RUNBOOK)
+    section = text.split("\n## Keep-alive\n", 1)[1].split("\n## ", 1)[0]
+    for needle in ("API_BASE_URL", "/health/ready", "keepalive.yml", "keep-awake.yml"):
+        assert needle in section, needle
+    assert "keepalive.py" not in text        # the script is gone; nothing may point at it
+
+
+# --- Streamlit freeze on main: keep-awake and the FROZEN header (ops-3) --------
+
+KEEP_AWAKE_YML = ROOT / ".github" / "workflows" / "keep-awake.yml"
+PRODUCTION_STREAMLIT_URL = "https://liturgy-next.streamlit.app/"   # the one Streamlit app since 2026-09-26
+DELETED_STREAMLIT_URLS = ("https://liturgy.streamlit.app", "https://liturgy-stg.streamlit.app")
+FROZEN_HEADER = "# FROZEN — production runs from branch streamlit-frozen; deleted in slice 7."
+
+
+def test_keep_awake_pings_only_the_production_streamlit_app():
+    text = _read(KEEP_AWAKE_YML)
+    steps = yaml.safe_load(text)["jobs"]["visit"]["steps"]
+    urls = [url for step in steps for url in step.get("env", {}).get("APP_URLS", "").split()]
+    assert urls == [PRODUCTION_STREAMLIT_URL]
+    assert [url for url in DELETED_STREAMLIT_URLS if url in text] == []
+
+
+def test_app_py_carries_the_frozen_header():
+    lines = _read(ROOT / "app.py").splitlines()
+    first = lines[1] if lines[0].startswith("#!") else lines[0]   # the line after the shebang
+    assert first == FROZEN_HEADER
+
+
+# --- Runbook sections, freeze record, manual checks (ops-3) --------------------
+
+RUNBOOK_SECTIONS = (
+    "## Environments and variables",
+    "## Supabase lockdown record",
+    "## Backups",
+    "## Keep-alive",
+    "## Streamlit freeze",
+    "## Platform limits",
+    "## Incident response",
+)
+FREEZE_SUBSECTIONS = (
+    "### Streamlit apps",
+    "### What the frozen app inherits from ops-3",
+    "### Freeze record",
+    "### Freeze policy",
+    "### Recorded Python and package versions",
+    "### Contingency",
+)
+MANUAL_VERIFICATION = ROOT / "docs" / "manual-verification.md"
+
+
+def _section(text, heading):
+    """The body of `heading` up to the next heading of the same level."""
+    level = heading.split(" ", 1)[0]
+    return text.split(f"\n{heading}\n", 1)[1].split(f"\n{level} ", 1)[0]
+
+
+def test_runbook_has_the_seven_sections_in_order():
+    assert re.findall(r"^## .+$", _read(RUNBOOK), re.MULTILINE) == list(RUNBOOK_SECTIONS)
+
+
+def test_runbook_streamlit_freeze_has_the_record_policy_and_versions():
+    section = _section(_read(RUNBOOK), "## Streamlit freeze")
+    headings = re.findall(r"^### .+$", section, re.MULTILINE)
+    assert [h for h in FREEZE_SUBSECTIONS if h not in headings] == []
+
+
+def test_runbook_environments_name_every_ops_setting():
+    section = _section(_read(RUNBOOK), "## Environments and variables")
+    for name in ("APP_ENV", "LOG_LEVEL", "DB_POOL_SIZE", "DB_MAX_OVERFLOW", "CORS_ORIGINS",
+                 "API_BASE_URL", "BACKUP_DATABASE_URL", "NEXT_PUBLIC_API_URL", "streamlit-frozen",
+                 "https://liturgy-next.streamlit.app/"):
+        assert name in section, name
+
+
+def test_runbook_contingency_keeps_the_old_season_wording_and_no_prayer_library():
+    # F §6.1 item 6 and §6.2 (amendment 2026-09-26): if Streamlit stays on main,
+    # it gets no new features.
+    section = _section(_section(_read(RUNBOOK), "## Streamlit freeze"), "### Contingency")
+    for needle in ("LEGACY_SYSTEM_PROMPT", "legacy_default_prompts()", "prayer_library",
+                   "streamlit_tests/test_app_smoke.py", "Reboot"):
+        assert needle in section, needle
+
+
+def test_manual_verification_has_the_ops_slice_checklist():
+    section = _section(_read(MANUAL_VERIFICATION), "## Ops slice")
+    for needle in ("/health/ready", "x-request-id", "/me/", "streamlit-frozen", "keep-awake",
+                   "https://liturgy-next.streamlit.app", "db-backup", "375 px"):
+        assert needle in section, needle

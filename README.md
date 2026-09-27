@@ -194,9 +194,12 @@ overwrites a value, so these re-runs are safe.
 ### Keep-alive (required)
 
 The free Supabase project pauses after ~7 days idle. `.github/workflows/keepalive.yml`
-runs `keepalive.py` (a `SELECT 1` against `DATABASE_URL`) daily so the first
-visitor each week never hits a paused/cold database. Do not add a
-`DATABASE_URL` repository secret; see docs/ops-runbook.md → Backups.
+runs daily at 09:17 UTC and curls the API's `GET /health/ready`, which runs a
+`SELECT 1` through the API's own connection pool, so the first visitor each
+week never hits a paused database. The job holds no database credentials: it
+needs only the Actions **variable** `API_BASE_URL` (the Railway URL, already
+public in the frontend bundle). Details, and what to do when it is red:
+`docs/ops-runbook.md` → Keep-alive.
 
 ### Backups (required)
 

@@ -1,21 +1,25 @@
+# Keeps the Supabase Free database from pausing (it pauses after ~7 idle days)
+# by asking the API whether it is ready: GET /health/ready runs SELECT 1
+# through the API's own connection pool (ops slice, S3). The job holds no
+# database credentials and no token permissions. It needs only the repository
+# variable API_BASE_URL, the Railway URL, which is not secret: the frontend
+# bundle already carries it as NEXT_PUBLIC_API_URL. docs/ops-runbook.md → Keep-alive.
 name: keepalive
 on:
   schedule:
-    - cron: "17 9 * * *"   # daily at 09:17 UTC
+    - cron: "17 9 * * *"   # daily; Supabase Free pauses after ~7 idle days
   workflow_dispatch: {}
-
+permissions: {}
 jobs:
   ping:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Install driver
-        run: pip install "SQLAlchemy>=2.0" psycopg2-binary
-      - name: SELECT 1
-        working-directory: backend
+      - name: Check API readiness (keeps the Supabase database awake)
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: python keepalive.py
+          API_BASE_URL: ${{ vars.API_BASE_URL }}
+        run: |
+          test -n "$API_BASE_URL" || { echo "::error::Set the API_BASE_URL repository variable (Settings → Secrets and variables → Actions → Variables)"; exit 1; }
+          curl --fail-with-body --silent --show-error --max-time 30 \
+               --retry 3 --retry-delay 20 --retry-all-errors \
+               "${API_BASE_URL%/}/health/ready"

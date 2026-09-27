@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# FROZEN — production runs from branch streamlit-frozen; deleted in slice 7.
 """
 Streamlit UI: worship service planner with hymn suggestions by scripture,
 OpenAI liturgy generation, and Word/PDF download. Multi-church: each user signs

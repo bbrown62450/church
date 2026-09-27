@@ -7,8 +7,8 @@ DATABASE_URL. Tests bypass the env var via reset_engine_for_tests(url).
 The Postgres pool is read from DB_POOL_SIZE / DB_MAX_OVERFLOW (defaults 3 and
 3) when the engine is created. The API, the Streamlit app and the CLIs that
 call get_engine() or session_scope() use this engine, and they share the
-Supabase session pooler (docs/ops-runbook.md → Platform limits). keepalive.py
-builds its own engine and does not get these settings.
+Supabase session pooler (docs/ops-runbook.md → Platform limits). The API's
+readiness probe (db/health.py) uses this engine too.
 """
 import os
 from contextlib import contextmanager
