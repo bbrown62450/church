@@ -122,3 +122,18 @@ def test_pytest_ini_declares_the_postgres_marker():
     ini.read(ROOT / "pytest.ini")
     markers = [line.strip() for line in ini["pytest"]["markers"].splitlines() if line.strip()]
     assert markers == ["postgres: needs TEST_DATABASE_URL (runs in the backend-postgres CI job)"]
+
+
+# --- slice 1a: Alembic (F §3.1; slice 1 spec, "Alembic setup") ---
+
+def test_alembic_ini_uses_here_paths_and_has_logging_sections():
+    ini = configparser.RawConfigParser()
+    assert ini.read(ROOT / "backend" / "alembic.ini", encoding="utf-8")
+    assert ini.get("alembic", "script_location") == "%(here)s/migrations"
+    assert ini.get("alembic", "prepend_sys_path") == "%(here)s"
+    assert ini.get("alembic", "path_separator") == "os"
+    assert not ini.has_option("alembic", "sqlalchemy.url")    # env.py owns the URL
+    for section in ("loggers", "handlers", "formatters", "logger_root", "logger_sqlalchemy",
+                    "logger_alembic", "handler_console", "formatter_generic"):
+        assert ini.has_section(section), section
+    assert ini.get("handler_console", "args") == "(sys.stderr,)"
