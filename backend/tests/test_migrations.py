@@ -327,3 +327,177 @@ def test_offline_sql_from_baseline_renders_guarded_adds_and_no_create_table():
     assert sql.count("ADD COLUMN IF NOT EXISTS") == 4
     assert ("UPDATE alembic_version SET version_num='0002_reconcile' "
             "WHERE alembic_version.version_num = '0001_baseline';") in sql
+
+
+# --- 0003_lockdown (Task 8; F §3.2 item 4, §3.6) --------------------------------
+
+import io  # noqa: E402
+import os  # noqa: E402
+
+from alembic.script import ScriptDirectory  # noqa: E402
+from sqlalchemy import create_engine, text  # noqa: E402
+from sqlalchemy.exc import DBAPIError  # noqa: E402
+from sqlalchemy.pool import NullPool  # noqa: E402
+
+from db.engine import Base, _normalize_url  # noqa: E402
+from db import models  # noqa: E402,F401  (registers every table on Base.metadata)
+from tests.pg_helpers import require_local_test_url, supabase_roles, throwaway_database  # noqa: E402
+
+LOCKDOWN_REFUSAL = (
+    "0003_lockdown: role {role} has no BYPASSRLS and does not own: {tables}. Enabling RLS would "
+    'hide their rows from the app. See migrations/README.md "RLS precondition".'
+)
+LOCKDOWN_CANNOT_ENABLE = (
+    "0003_lockdown: cannot enable RLS on {table} (owned by {owner}, migrating as {role}). "
+    'Only the owner of a table can enable RLS on it. See migrations/README.md "RLS precondition".'
+)
+SUPABASE_REVOKES = (
+    "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon, authenticated;",
+    "REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM anon, authenticated;",
+    "ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM anon, authenticated;",
+    "ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON SEQUENCES FROM anon, authenticated;",
+)
+
+
+def _lockdown_module():
+    """The 0003 revision module, loaded by Alembic (its file name starts with a digit)."""
+    script = ScriptDirectory.from_config(alembic_config(configure_logger=False))
+    return script.get_revision("0003_lockdown").module
+
+
+def _lockdown_offline_sql() -> str:
+    """`alembic upgrade 0002_reconcile:0003_lockdown --sql` for Postgres; never connects."""
+    cfg = alembic_config(url="postgresql://u:p@localhost:1/x", configure_logger=False)
+    cfg.output_buffer = io.StringIO()
+    command.upgrade(cfg, "0002_reconcile:0003_lockdown", sql=True)
+    return cfg.output_buffer.getvalue()
+
+
+def _pg_engine(url: str):
+    return create_engine(_normalize_url(url), poolclass=NullPool)
+
+
+def _rls_flags(engine) -> dict[str, bool]:
+    """relrowsecurity of every table in `public`, by name."""
+    with engine.connect() as conn:
+        rows = conn.execute(text(
+            "SELECT c.relname, c.relrowsecurity FROM pg_class c "
+            "WHERE c.relnamespace = 'public'::regnamespace AND c.relkind IN ('r', 'p')"))
+        return {name: flag for name, flag in rows}
+
+
+def _create_foreign_owned_table(admin, owner: str) -> None:
+    """As the admin: public.foreign_owned in the sandbox, owned by another role, RLS off."""
+    with admin.begin() as conn:
+        conn.execute(text("CREATE TABLE public.foreign_owned (id integer PRIMARY KEY)"))
+        conn.execute(text(f"ALTER TABLE public.foreign_owned OWNER TO {owner}"))
+
+
+@pytest.fixture
+def pg_admin_url():
+    url = os.environ.get("TEST_DATABASE_URL", "").strip()
+    if not url:
+        pytest.skip("TEST_DATABASE_URL is not set (the backend-postgres CI job sets it)")
+    return require_local_test_url(url)
+
+
+def test_0003_is_a_no_op_on_sqlite(sqlite_url):
+    _alembic(sqlite_url, "upgrade", "0002_reconcile")
+    engine = create_engine(sqlite_url)
+    try:
+        snapshot = "SELECT type, name, tbl_name, sql FROM sqlite_master ORDER BY type, name"
+        with engine.connect() as conn:
+            before = conn.execute(text(snapshot)).all()
+        _alembic(sqlite_url, "upgrade", "0003_lockdown")
+        with engine.connect() as conn:
+            assert conn.execute(text(snapshot)).all() == before
+            assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "0003_lockdown"
+        _alembic(sqlite_url, "downgrade", "0002_reconcile")
+        with engine.connect() as conn:
+            assert conn.execute(text(snapshot)).all() == before
+            assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "0002_reconcile"
+    finally:
+        engine.dispose()
+
+
+def test_offline_sql_for_0003_has_the_do_block_and_revokes():
+    sql = _lockdown_offline_sql()
+    lockdown = _lockdown_module().LOCKDOWN_SQL
+    assert lockdown + ";" in sql                    # the module constant, verbatim
+    assert sql.count("DO $$") == 1
+    # Named paramstyle (env.py): RAISE placeholders and format() stay single %.
+    assert "%%" not in sql
+    assert LOCKDOWN_REFUSAL.format(role="%", tables="%") in sql
+    assert LOCKDOWN_CANNOT_ENABLE.format(table="%", owner="%", role="%") in sql
+    assert "EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t.tbl);" in sql
+    for statement in SUPABASE_REVOKES:
+        assert statement in sql
+    assert "UPDATE alembic_version SET version_num='0003_lockdown' " \
+           "WHERE alembic_version.version_num = '0002_reconcile';" in sql
+    assert "CREATE TABLE" not in sql
+    assert "DISABLE ROW LEVEL SECURITY" not in sql  # the downgrade's block is not in an upgrade
+
+
+@pytest.mark.postgres
+def test_0003_refuses_without_bypassrls_or_ownership_and_rolls_back(pg_admin_url):
+    with throwaway_database(pg_admin_url) as sandbox:
+        admin = _pg_engine(sandbox.admin_db_url)
+        try:
+            _create_foreign_owned_table(admin, sandbox.other_role)
+            with pytest.raises(DBAPIError) as excinfo:
+                _alembic(sandbox.role_url, "upgrade", "head")
+            assert excinfo.value.orig.diag.message_primary == LOCKDOWN_REFUSAL.format(
+                role=sandbox.role, tables="foreign_owned")
+            # One transaction (env.py): 0001 and 0002 rolled back with 0003, so no
+            # model table and no alembic_version exist, and RLS is still off.
+            assert _rls_flags(admin) == {"foreign_owned": False}
+        finally:
+            admin.dispose()
+
+
+@pytest.mark.postgres
+def test_0003_refuses_a_bypassrls_role_that_does_not_own_a_table(pg_admin_url):
+    with throwaway_database(pg_admin_url, role_bypassrls=True) as sandbox:
+        admin = _pg_engine(sandbox.admin_db_url)
+        try:
+            _create_foreign_owned_table(admin, sandbox.other_role)
+            with pytest.raises(DBAPIError) as excinfo:
+                _alembic(sandbox.role_url, "upgrade", "head")
+            assert excinfo.value.orig.diag.message_primary == LOCKDOWN_CANNOT_ENABLE.format(
+                table="foreign_owned", owner=sandbox.other_role, role=sandbox.role)
+            # The loop had already enabled RLS on alembic_version, churches and
+            # contacts (alphabetical order); the rollback undid that too.
+            assert _rls_flags(admin) == {"foreign_owned": False}
+        finally:
+            admin.dispose()
+
+
+@pytest.mark.postgres
+def test_0003_is_idempotent_after_the_manual_lockdown(pg_admin_url):
+    with supabase_roles(pg_admin_url), throwaway_database(pg_admin_url, role_bypassrls=True) as sandbox:
+        _alembic(sandbox.role_url, "upgrade", "0002_reconcile")
+        owner = _pg_engine(sandbox.role_url)
+        admin = _pg_engine(sandbox.admin_db_url)
+        try:
+            with owner.begin() as conn:
+                # The ops lockdown of 2026-09-25 enabled RLS by hand; here on three tables.
+                for table in ("churches", "invites", "users"):
+                    conn.execute(text(f"ALTER TABLE public.{table} ENABLE ROW LEVEL SECURITY"))
+                # What Supabase's defaults give anon and authenticated before the REVOKEs.
+                conn.execute(text("GRANT SELECT ON ALL TABLES IN SCHEMA public TO anon, authenticated"))
+
+            _alembic(sandbox.role_url, "upgrade", "head")
+            after_upgrade = _rls_flags(admin)
+            assert after_upgrade == {name: True for name in [*Base.metadata.tables, "alembic_version"]}
+            with admin.connect() as conn:
+                for grantee in ("anon", "authenticated"):
+                    assert conn.execute(text(
+                        "SELECT has_table_privilege(:grantee, 'public.users', 'SELECT')"),
+                        {"grantee": grantee}).scalar_one() is False
+
+            with owner.begin() as conn:            # the DO block again: no error, no change
+                conn.execute(text(_lockdown_module().LOCKDOWN_SQL))
+            assert _rls_flags(admin) == after_upgrade
+        finally:
+            owner.dispose()
+            admin.dispose()
