@@ -13,6 +13,7 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
 import { afterEach, beforeEach, vi } from "vitest";
+import { resetStoredChurchIdForTests } from "@/lib/church";
 import { resetTestMocks } from "./mocks";
 
 vi.mock("next/navigation", async () => {
@@ -92,4 +93,5 @@ afterEach(() => {
   cleanup();
   window.localStorage.clear();
   window.sessionStorage.clear();
+  resetStoredChurchIdForTests();
 });
