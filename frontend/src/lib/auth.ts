@@ -9,10 +9,15 @@
  * refetches or re-stores a church during sign-out.
  */
 import { isAuthRetryableFetchError } from "@supabase/supabase-js";
-import { useSyncExternalStore } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
+import { useCallback, useSyncExternalStore } from "react";
 
 import { ApiError, NETWORK_MESSAGE } from "@/lib/api/client";
+import { storeChurchId } from "@/lib/church";
+import { removeSession, SESSION_KEYS } from "@/lib/storage";
 import { createClient } from "@/lib/supabase/client";
+import { safeInternalPath } from "@/lib/urls";
 
 let signingOut = false;
 const listeners = new Set<() => void>();
@@ -74,4 +79,45 @@ export async function getAccessToken(): Promise<string> {
   const token = data.session?.access_token;
   if (!token) throw new ApiError(401, "unauthenticated", "Please sign in.");
   return token;
+}
+
+export type SignOutOptions = {
+  /** Keep `wsb:pendingInviteCode` (the automatic 401 path), so an invite survives the new sign-in. */
+  keepPendingInvite?: boolean;
+  /** Where to return after sign-in; used only when `safeInternalPath` accepts it. */
+  next?: string;
+};
+
+/**
+ * Flow D sign-out (S "Log out" and "Session expired"; F §4.2). The signing-out
+ * flag goes up first, so while the cache is torn down nothing refetches, no 401
+ * starts a second sign-out and no layout re-stores a church (clarification 27).
+ * Then: cancel and clear every query, forget the stored church and the `wsb:`
+ * session keys (the pending invite only when not asked to keep it), end this
+ * browser's Supabase session (`scope: "local"`, never the global default) and
+ * go to `/login`, with `?next=` when `next` is an allow-listed path. Needs no
+ * `ChurchProvider`, so the `/welcome` header can use it.
+ */
+export function useSignOut(): (opts?: SignOutOptions) => Promise<void> {
+  const queryClient = useQueryClient();
+  const router = useRouter();
+  return useCallback(
+    async ({ keepPendingInvite = false, next }: SignOutOptions = {}) => {
+      beginSignOut();
+      await queryClient.cancelQueries();
+      queryClient.clear();
+      storeChurchId(null);
+      removeSession(SESSION_KEYS.postLoginPath);
+      if (!keepPendingInvite) removeSession(SESSION_KEYS.pendingInviteCode);
+      try {
+        await createClient().auth.signOut({ scope: "local" });
+      } catch {
+        // supabase-js reports failures as `{ error }` after removing the local
+        // session; a throw here is unexpected, and /login is still the right place.
+      }
+      const back = next === undefined ? null : safeInternalPath(next);
+      router.replace(back ? `/login?next=${encodeURIComponent(back)}` : "/login");
+    },
+    [queryClient, router],
+  );
 }
