@@ -62,8 +62,8 @@ since ops-3; if one exists, delete it.
 
 | App | Source | Secrets (names only) |
 |---|---|---|
-| `liturgy-next`, https://liturgy-next.streamlit.app/ (production, the only Streamlit app) | repo `bbrown62450/church`, main file `app.py`, Python 3.13; branch `main` until the Freeze, then `streamlit-frozen`. Streamlit Cloud cannot change an app's branch, so the Freeze moves an app built and checked from `streamlit-frozen` onto this subdomain (see Freeze record). Sharing: as noted before the Freeze. | the `[auth]` block (Google sign-in, `redirect_uri = https://liturgy-next.streamlit.app/oauth2callback`), `DATABASE_URL`, `OPENAI_API_KEY`, the `GOOGLE_*` gmail.send client with `GOOGLE_OAUTH_REDIRECT_URI = https://liturgy-next.streamlit.app/` (README → Local setup), and `DB_POOL_SIZE = "3"` and `DB_MAX_OVERFLOW = "3"` at the very top, above the first `[section]` line (below `[auth]` they would belong to that section and never reach the environment). The owner keeps a copy in the password manager. |
-| `liturgy-frozen`, https://liturgy-frozen.streamlit.app/ (temporary) | branch `streamlit-frozen`, main file `app.py`, Python 3.13; exists only from the Freeze pre-flight until the window, unless the Fallback serves production there (see Freeze record) | the `liturgy-next` Secrets with exactly two values changed: `redirect_uri` and `GOOGLE_OAUTH_REDIRECT_URI` point at `https://liturgy-frozen.streamlit.app/oauth2callback` and `https://liturgy-frozen.streamlit.app/`. A separate password-manager entry. |
+| `liturgy-frozen`, https://liturgy-frozen.streamlit.app/ (production since the Freeze on 2026-09-26, the only Streamlit app) | repo `bbrown62450/church`, branch `streamlit-frozen`, main file `app.py`, Python 3.14. Created as the Freeze's temporary pre-flight app; the owner then kept production on it instead of moving it onto `liturgy-next` (see Streamlit apps). Merges to `main` do not reach it. Sharing: public. | the `[auth]` block (Google sign-in, `redirect_uri = https://liturgy-frozen.streamlit.app/oauth2callback`), `DATABASE_URL`, `OPENAI_API_KEY`, the `GOOGLE_*` gmail.send client with `GOOGLE_OAUTH_REDIRECT_URI = https://liturgy-frozen.streamlit.app/` (README → Local setup), and `DB_POOL_SIZE = "3"` and `DB_MAX_OVERFLOW = "3"` at the very top, above the first `[section]` line (below `[auth]` they would belong to that section and never reach the environment). They are `liturgy-next`'s Secrets with exactly the two redirect values changed. The owner keeps a copy in the password manager. |
+| `liturgy-next`, https://liturgy-next.streamlit.app/ | production from 2026-09-26 until the Freeze that evening: branch `main`, main file `app.py`, Python 3.14.7 (its log; this table said 3.13). Deleted in the Freeze; no app holds the subdomain now (see Streamlit apps) | — |
 | `liturgy`, `liturgy-stg` | deleted on 2026-09-26 (see Streamlit apps) | — |
 
 **Supabase**, project `worship-staging` (ref `tbecmwtitsoxzkrvxxxu`, Nano
@@ -72,15 +72,16 @@ providers: Google only; `mailer_autoconfirm` off; session pooler Pool Size 15
 (see Platform limits).
 
 **Google OAuth client "Liturgy"** (Google Cloud Console → APIs & Services →
-Credentials): the Streamlit redirect URIs are
-`https://liturgy-next.streamlit.app/oauth2callback` and the bare root
-`https://liturgy-next.streamlit.app/`. The four URIs of the deleted `liturgy`
-and `liturgy-stg` apps are removed before the Freeze (see Freeze record): once
-an app is deleted, anyone may be able to claim its subdomain and would then
-receive this client's authorization responses, for sign-in and for the
-`gmail.send` flow. For the same reason the temporary `liturgy-frozen` URIs are
-registered only while that app holds its subdomain. No other redirect URI is
-touched.
+Credentials): since 2026-09-26 the Streamlit redirect URIs are
+`https://liturgy-frozen.streamlit.app/oauth2callback` and the bare root
+`https://liturgy-frozen.streamlit.app/`, the only `streamlit.app` URIs on the
+client. Once an app is deleted, anyone may be able to claim its subdomain and
+would then receive this client's authorization responses, for sign-in and for
+the `gmail.send` flow. So a subdomain's URIs are registered only while one of
+this project's apps holds it: the four URIs of the deleted `liturgy` and
+`liturgy-stg` apps were removed before the Freeze, and the two of
+`liturgy-next` after it was deleted in the Freeze (see Freeze record). No
+other redirect URI is touched.
 
 ## Supabase lockdown record
 
@@ -295,9 +296,10 @@ Two scheduled workflows keep both awake:
   `SELECT 1` through its own connection pool, so the database sees real
   activity. The job holds no database credentials and no token permissions.
 - **`keep-awake`** (`.github/workflows/keep-awake.yml`): every 6 hours it opens
-  https://liturgy-next.streamlit.app/, the production Streamlit app, in
-  headless Chromium (a plain HTTP ping does not count as traffic). Deleted in
-  slice 7.
+  https://liturgy-frozen.streamlit.app/, the production Streamlit app since the
+  Freeze on 2026-09-26 (it opened https://liturgy-next.streamlit.app/ before),
+  in headless Chromium (a plain HTTP ping does not count as traffic). Deleted
+  in slice 7.
 
 **Variable.** `API_BASE_URL` = `https://church-production-74ca.up.railway.app`,
 under repo Settings → Secrets and variables → Actions → **Variables** (not
@@ -331,7 +333,7 @@ health check; slice 1 moves the deploy check to `/health/ready`.
 
 | Date | Run | Result |
 |---|---|---|
-| [owner: first manual run after ops-3] | [owner: run URL] | [owner: green; the log shows `{"ok":true,"db":"ok"}`] |
+| 2026-09-26 (first manual run after ops-3) | https://github.com/bbrown62450/church/actions/runs/36282260699 | Green; the log shows `{"ok":true,"db":"ok"}`. |
 
 ## Streamlit freeze
 
@@ -342,8 +344,30 @@ owner corrected this on 2026-09-25: it is the other way round.
 
 | App | URL | Status |
 |---|---|---|
-| `liturgy-next` | https://liturgy-next.streamlit.app/ | **Production.** The owner and the tester use it. On 2026-09-26 it deploys from repo `bbrown62450/church`, branch `main`, main file `app.py`. `liturgy-stg`, which ran from the old branch `claude/multi-user-app-support-edd5eb`, was deleted that day during Task 9a. Streamlit Community Cloud allows only one app per repository + branch + main file, and `liturgy-next` (created earlier as a side-by-side test) already held `main`/`app.py`. So the owner kept `liturgy-next` as the production address instead of recreating `liturgy-stg`. Its Secrets carry `[auth] redirect_uri = https://liturgy-next.streamlit.app/oauth2callback` and `GOOGLE_OAUTH_REDIRECT_URI = https://liturgy-next.streamlit.app/`, and both are registered on the Google OAuth client. The owner checked sign-in, church and hymnal, saved services and a Gmail test send. `keep-awake` keeps it awake. ops-3's Freeze still has to move production onto `streamlit-frozen`, at this address. |
+| `liturgy-frozen` | https://liturgy-frozen.streamlit.app/ | **Production** since the Freeze on 2026-09-26. Repo `bbrown62450/church`, branch `streamlit-frozen`, main file `app.py`, Python 3.14, Sharing public. The owner created it on 2026-09-26 as the Freeze's temporary pre-flight app and then kept production on it, running its pre-flight build, instead of moving it onto `liturgy-next` (see the note below and the Freeze record). Merges to `main` do not reach it. Its Secrets are `liturgy-next`'s with `[auth] redirect_uri = https://liturgy-frozen.streamlit.app/oauth2callback` and `GOOGLE_OAUTH_REDIRECT_URI = https://liturgy-frozen.streamlit.app/`, both registered on the Google OAuth client "Liturgy"; the owner keeps a copy in the password manager. The pre-flight smoke check passed without the Gmail connect and test send, so the `gmail.send` flow has not been checked on this address. `keep-awake` keeps it awake. |
+| `liturgy-next` | https://liturgy-next.streamlit.app/ | **Deleted 2026-09-26** in the Freeze window. Production from 2026-09-26 until the Freeze that evening: it deployed from repo `bbrown62450/church`, branch `main`, main file `app.py`, Python 3.14.7 (its log; this runbook had said 3.13). `liturgy-stg`, which ran from the old branch `claude/multi-user-app-support-edd5eb`, was deleted that day during Task 9a. Streamlit Community Cloud allows only one app per repository + branch + main file, and `liturgy-next` (created earlier as a side-by-side test) already held `main`/`app.py`. So the owner kept `liturgy-next` as the production address instead of recreating `liturgy-stg`, and checked sign-in, church and hymnal, saved services and a Gmail test send on it. No app holds its subdomain now. Its two Google redirect URIs (`https://liturgy-next.streamlit.app/oauth2callback` and the bare root `https://liturgy-next.streamlit.app/`) were removed from the OAuth client after it was deleted (see the Freeze record). |
 | `liturgy` | https://liturgy.streamlit.app/ | **Deleted 2026-09-26** (it was unused; its Google sign-in failed with `StreamlitAuthError` from its secrets config). The URL now returns 404. Its two Google redirect URIs (`https://liturgy.streamlit.app/oauth2callback` and the bare root `https://liturgy.streamlit.app/`) were removed from the OAuth client on 2026-09-26 (see the Freeze record). |
+
+**2026-09-26: production stays on `liturgy-frozen`.** The Freeze planned to
+delete `liturgy-next` and move the checked pre-flight app onto its subdomain
+(plan Task 14, path A, which was available). The owner deleted `liturgy-next`
+and then decided to keep production on `liturgy-frozen` permanently instead of
+renaming it. What that means:
+
+- The production address changed to https://liturgy-frozen.streamlit.app/.
+  The tester has to be told (Freeze record); the old address has no app.
+- No app holds the `liturgy-next` subdomain, so anyone may be able to claim
+  it. Its two redirect URIs were removed from the Google OAuth client for that
+  reason; add them back only once an app of this project holds that
+  subdomain again.
+- `keep-awake` and `PRODUCTION_STREAMLIT_URL` in
+  `backend/tests/test_ops_workflows.py` point at `liturgy-frozen` (records
+  PR A).
+- Renaming the app to `liturgy-next` later would repeat the move: the
+  subdomain has to be free, the tester's address changes again, the Secrets'
+  two redirect values change back, the `liturgy-next` URIs are registered
+  only once the app holds that subdomain (and the `liturgy-frozen` ones
+  removed once no app holds it), and `keep-awake` and the test follow.
 
 ### Streamlit bug triage
 
@@ -355,7 +379,7 @@ is a usability bug, not a data-safety one.
 | Inventory | Bug | Meets the definition? | Disposition |
 |---|---|---|---|
 | D5, and F6 "drops a loaded service's own hymns" | With "Exclude hymns used in the last 12 weeks" ticked, Prepare records the picks and reruns; the picks are now "recent", `safe_hymn_selectbox` resets them to '', and the next Prepare or Save stores no hymns. Loading a recent archived service with the box ticked drops its hymns, and "Save changes" then overwrites the archived hymns. | **Yes: silent loss of stored data in the normal Prepare → Save flow** | **Fixed in ops-1** (below). Until the fix is live, the tester relies on the D5 workaround message; the date it was sent is in the D5 record below. |
-| A7 | A Word file prepared for church A can be downloaded or emailed while church B is active, to church B's contacts. | Leakage, in principle | **Accepted.** The tester belongs to one church, and Streamlit offers no way to join or create a second one (onboarding runs only at zero churches, inv A5), so the switcher never renders (the pre-freeze smoke check confirms there is no "Church" selectbox in the sidebar). React keys the draft and documents by church (slice 2, 5a). |
+| A7 | A Word file prepared for church A can be downloaded or emailed while church B is active, to church B's contacts. | Leakage, in principle | **Accepted.** The tester belongs to one church, and Streamlit offers no way to join or create a second one (onboarding runs only at zero churches, inv A5), so the switcher never renders (the pre-freeze smoke check on 2026-09-26 confirmed there is no "Church" selectbox in the sidebar). React keys the draft and documents by church (slice 2, 5a). |
 | E6 | Raw provider error text, or the "[Configure OPENAI_API_KEY…]" placeholder, becomes the liturgy text and can be saved or printed. | Corruption, in principle | **Accepted.** The Preview shows the text before Prepare or Save, so it is never saved silently, and Streamlit blocks Generate entirely when no key is set (inv E6). The new app shows such stored text as ordinary text and never writes error text itself (F §6.2). |
 | E4 | Generate replaces the liturgy wholesale, so an unticked section of a loaded service disappears, and "Save changes" then overwrites it. | Loss, but visible | **Accepted.** The section is visibly missing from the Preview before Save, and the loaded text is still in its "Your text" box, so ticking the section and generating again restores it verbatim (inv E2). |
 | D6 | With no Opening hymn, the Response hymn is stored first and reloads into the Opening slot. | Corruption of the slot order, visible | **Accepted.** It happens only when Opening is left empty, and the shifted slot is visible in the pickers before the next Save. The new app always writes three positional entries (F §6.2). |
@@ -381,8 +405,8 @@ longer clear them. Recent hymns that are not picked stay hidden.
 | Event | Date |
 |---|---|
 | D5 workaround message sent to the tester | Not sent (owner decision, 2026-09-26): the fix goes live right after the ops-1 merge, when production Streamlit moves to `main` (Task 9a; production became `liturgy-next` instead), so the window is short. |
-| ops-1 build live on https://liturgy-next.streamlit.app/ | 2026-09-26 (liturgy-next deploys from `main`, which includes the D5 fix; the owner verified sign-in, church and hymnal, saved services and a Gmail test send) |
-| D5 manual check passed on https://liturgy-next.streamlit.app/ | [owner] |
+| ops-1 build live on https://liturgy-next.streamlit.app/ | 2026-09-26 (liturgy-next deployed from `main`, which includes the D5 fix; the owner verified sign-in, church and hymnal, saved services and a Gmail test send) |
+| D5 manual check passed on https://liturgy-frozen.streamlit.app/ (planned on `liturgy-next`, then on the pre-flight app `liturgy-frozen`) | Not run: skipped by the owner on 2026-09-26, on neither app; still open in `docs/manual-verification.md` |
 | "Fixed" message sent to the tester | [owner] |
 
 **Recovery queries** (Supabase SQL editor, after the fix is live).
@@ -431,9 +455,10 @@ Result: [owner: "no rows" for both queries, or per row: the query, the date, the
 
 ### What the frozen app inherits from ops-2
 
-`liturgy-next`, the production Streamlit app, deploys from `main` (branch
-`main`, main file `app.py`; see "Streamlit apps"), so ops-2 went live on it
-when it merged, before the freeze locks it in (ops spec, Delivery plan):
+`liturgy-next`, the production Streamlit app until the Freeze, deployed from
+`main` (branch `main`, main file `app.py`; see "Streamlit apps"), so ops-2
+went live on it when it merged, before the freeze locked it in (ops spec,
+Delivery plan). `streamlit-frozen`, which `liturgy-frozen` runs, includes it:
 
 - Sign-in runs `auth.upsert_from_claims`, now a thin wrapper over
   `repos.users.ensure_user`. Per rerun it runs an
@@ -461,7 +486,7 @@ Nothing that the Streamlit app runs. ops-3 changes the FastAPI app
 imported), edits a docstring in `backend/db/engine.py`, changes workflows and
 docs, and adds the FROZEN comment at the top of `app.py`. So
 `streamlit-frozen`, cut from the ops-3 merge commit, runs what `liturgy-next`
-already runs from `main` after ops-2:
+already ran from `main` after ops-2:
 
 - the service rubric (PR #4): it reads `churches.settings.rubric` and maps
   `text_year` and `hymnal_count` (F §6.2, amendment 2026-09-26);
@@ -472,34 +497,36 @@ already runs from `main` after ops-2:
 
 It never gets the prayer library (PR #7) or the new season wording (PR #8):
 both are new-app only (F §6.2). `streamlit_tests/` passed on the ops-3 PR, and
-the pre-freeze smoke check below runs on the ops-3 build.
+the pre-freeze smoke check below ran on the ops-3 build.
 
 ### Freeze record
 
 The ops spec's Freeze steps for the one production app, `liturgy-next` (see
 Streamlit apps; `liturgy` and `liturgy-stg` were deleted on 2026-09-26, so
-there is no second app to delete). Streamlit Community Cloud cannot change an
+there was no second app to delete). Streamlit Community Cloud cannot change an
 app's branch, and a deleted app's subdomain may not be free again right away.
-So the Freeze first builds and checks an app from `streamlit-frozen` on the
-temporary subdomain `liturgy-frozen` while `liturgy-next` keeps serving; in
-the window it deletes `liturgy-next` and moves the checked app onto that
-subdomain with the same Secrets. A row that did not happen says
-`not done: rolled back to main` or `not done: Fallback (production on liturgy-frozen)`.
+So the Freeze first built and checked an app from `streamlit-frozen` on the
+temporary subdomain `liturgy-frozen` while `liturgy-next` kept serving; the
+plan was then to delete `liturgy-next` in the window and move the checked app
+onto that subdomain with the same Secrets. On 2026-09-26, a Saturday evening
+(US Eastern), the owner deleted `liturgy-next` and kept production on
+`liturgy-frozen` instead (see the note under Streamlit apps). A row whose step
+did not happen as planned says what happened instead.
 
 | Step | Result | Date |
 |---|---|---|
 | Google OAuth client "Liturgy": the four redirect URIs of the deleted `liturgy` and `liturgy-stg` apps removed before the Freeze (a deleted app's subdomain may be claimable by anyone, who would then receive this client's authorization responses); the two `liturgy-next` URIs kept; sign-in on https://liturgy-next.streamlit.app/ checked afterwards. If declined: the accepted risk, and AC 22 is not met | Removed; a fresh sign-in on liturgy-next worked afterwards | 2026-09-26 |
-| Pre-freeze smoke check on https://liturgy-next.streamlit.app/ after the ops-3 merge and a reboot: sign in, the church and hymnal load, a saved service loads, Settings opens, and the sidebar has no "Church" selectbox. Noted: Python, subdomain, Sharing, other non-default settings; the pool keys sit at the top of the Secrets | [owner] | [owner] |
-| Tester "before" message sent, with the window (about 5 minutes) | [owner: window] | [owner] |
-| `streamlit-frozen` created at the ops-3 merge commit (`main` was still at that commit) | [owner: commit sha] | [owner] |
-| `streamlit-frozen` protected: pull request required with 0 approvals, `backend` check required, no bypassing (admins included), no force pushes, no deletion | [owner] | [owner] |
-| Pre-flight: temporary app `liturgy-frozen` from `streamlit-frozen` / `app.py`, Python 3.13, Sharing as `liturgy-next`; its two redirect URIs added; build finished; installed versions compared (see Recorded Python and package versions); smoke check passed, including Gmail connect and a test send; custom subdomain editable in Settings (or the reclaim test result) | [owner] | [owner] |
-| In the window: `liturgy-next` Secrets matched the password-manager copy; `liturgy-next` deleted; the checked app moved to the subdomain `liturgy-next` with those Secrets pasted unchanged (or: recreated there from `streamlit-frozen`) | [owner: which way, minutes of downtime] | [owner] |
-| Post-freeze smoke check on https://liturgy-next.streamlit.app/ passed, including Gmail connect and a test send; ⋮ → Settings shows branch `streamlit-frozen`, main file `app.py`, Python 3.13 and the noted Sharing | [owner] | [owner] |
-| Temporary subdomain retired: no app holds `liturgy-frozen`, and its two redirect URIs are removed from the Google OAuth client | [owner] | [owner] |
-| `keep-awake` run by hand: green, one URL (https://liturgy-next.streamlit.app/) | [owner: run URL] | [owner] |
-| Tester "after" message sent | [owner] | [owner] |
-| After the next merge to `main` (records PR A): `liturgy-next`'s logs show no code pull (`Pulling code changes from Github`, `Updated app!`) after the merge time, and ⋮ → Settings still shows branch `streamlit-frozen` | [owner: the merge, and what the logs showed] | [owner] |
+| Pre-freeze smoke check on https://liturgy-next.streamlit.app/ after the ops-3 merge and a reboot: sign in, the church and hymnal load, a saved service loads, Settings opens, and the sidebar has no "Church" selectbox. Noted: Python, subdomain, Sharing, other non-default settings; the pool keys sit at the top of the Secrets | Passed: `liturgy-next` rebooted after the ops-3 merge; sign-in, the church and hymnal, a saved service and Settings worked, and the sidebar had no "Church" selectbox. Noted: Python 3.14.7 (the log: `Using Python 3.14.7 environment at /home/adminuser/venv`; this runbook had said 3.13), subdomain `liturgy-next`, Sharing public, no other non-default setting. The reboot reused the installed environment, so the log had no `name==version` lines and no pre-freeze package list was recorded. The pool keys: at the top of the Secrets, as confirmed earlier that evening (ops-2 gate table) | 2026-09-26 |
+| Tester "before" message sent, with the window (about 5 minutes) | Not sent (owner decision). The owner chose a Saturday-evening window instead of the plan's weekday window | 2026-09-26 |
+| `streamlit-frozen` created at the ops-3 merge commit (`main` was still at that commit) | `7978a5ebf8efb2db1234d3d4e00c0b04e30457f3` (`7978a5e`, the merge of PR #13; CI's push run for it: success), pushed as the new branch; `main` had not moved | 2026-09-26 |
+| `streamlit-frozen` protected: pull request required with 0 approvals, `backend` check required, no bypassing (admins included), no force pushes, no deletion | Classic branch protection rule. Verified: `checks=backend pr=true approvals=0 admins=true force_push=false deletion=false` | 2026-09-26 |
+| Pre-flight: temporary app `liturgy-frozen` from `streamlit-frozen` / `app.py`, Python 3.13, Sharing as `liturgy-next`; its two redirect URIs added; build finished; installed versions compared (see Recorded Python and package versions); smoke check passed, including Gmail connect and a test send; custom subdomain editable in Settings (or the reclaim test result) | Created from repo `bbrown62450/church`, branch `streamlit-frozen`, main file `app.py`, Python 3.14 (`liturgy-next` ran 3.14.7, not 3.13; see the pre-freeze row), with the temporary Secrets (`liturgy-next`'s with only the two redirect values changed); Sharing public, the default for a public repository, not separately checked. Its two redirect URIs added to the client "Liturgy". The build finished with no traceback; its log shows Python 3.14. Versions not compared: neither package list was recorded (see Recorded Python and package versions). Smoke check passed: sign-in, the church and hymnal, a saved service, Settings. **Skipped by the owner:** the Gmail connect and test send, and the D5 manual check (which the owner had chosen to run on this app instead of on `liturgy-next`). The custom subdomain was editable in Settings → General, so path A was available and no reclaim test was needed | 2026-09-26 |
+| In the window: `liturgy-next` Secrets matched the password-manager copy; `liturgy-next` deleted; the checked app moved to the subdomain `liturgy-next` with those Secrets pasted unchanged (or: recreated there from `streamlit-frozen`) | `liturgy-next` deleted. The checked app was **not** moved: the owner decided to keep production on `liturgy-frozen` permanently instead of renaming it to `liturgy-next`, with its Secrets unchanged (the owner keeps that copy in the password manager). A comparison of `liturgy-next`'s Secrets with the password-manager copy is not recorded. Minutes of downtime not recorded: `liturgy-frozen` kept running, but the address the tester used, https://liturgy-next.streamlit.app/, has had no app since the delete, and the tester was told the new one that evening (the tester row below) | 2026-09-26 |
+| Post-freeze smoke check on https://liturgy-next.streamlit.app/ passed, including Gmail connect and a test send; ⋮ → Settings shows branch `streamlit-frozen`, main file `app.py`, Python 3.13 and the noted Sharing | Not done as planned: nothing moved onto `liturgy-next`. Production runs `liturgy-frozen`'s pre-flight build unchanged, whose smoke check passed (pre-flight row, without the Gmail connect and test send); no separate post-freeze check is recorded. The app was created with branch `streamlit-frozen`, main file `app.py`, Python 3.14, and has Sharing public; the last row re-reads its branch setting | 2026-09-26 |
+| Temporary subdomain retired: no app holds `liturgy-frozen`, and its two redirect URIs are removed from the Google OAuth client | Not done: `liturgy-frozen` serves production, so it keeps its subdomain and its two redirect URIs. Instead `liturgy-next`'s two (`https://liturgy-next.streamlit.app/oauth2callback` and `https://liturgy-next.streamlit.app/`) were removed from the client "Liturgy": no app holds that subdomain any more, and whoever claimed it would receive the client's authorization responses. The client now lists only the two `liturgy-frozen` URIs among `streamlit.app` addresses | 2026-09-26 |
+| `keep-awake` run by hand after records PR A merged (it points `keep-awake` at `liturgy-frozen`): green, one URL (https://liturgy-frozen.streamlit.app/) | [owner: run URL, after records PR A merged; green, and the log shows `visited https://liturgy-frozen.streamlit.app/`] | [owner] |
+| Tester told the new address, https://liturgy-frozen.streamlit.app/ (instead of the plan's "after" message, which said the address stayed the same) | Sent by the owner: a message with the new address, asking the tester to update their bookmark and sign in once | 2026-09-26 |
+| After the next merge to `main` (records PR A): `liturgy-frozen`'s logs show no code pull (`Pulling code changes from Github`, `Updated app!`) after the merge time, and ⋮ → Settings still shows branch `streamlit-frozen` | [owner: the merge, and what the logs showed] | [owner] |
 
 ### Freeze policy
 
@@ -515,36 +542,47 @@ subdomain with the same Secrets. A row that did not happen says
   modules. After a fix merges into `streamlit-frozen`, reboot the app
   (Manage app → Reboot) and run the smoke check.
 - If a Streamlit Cloud reboot breaks the frozen app because a dependency
-  released a new version, pin the versions recorded below in the frozen
-  branch's `requirements.txt`. That counts as a data-safety fix: it restores
-  the tester's access to their data.
-- Merges to `main` no longer reach `liturgy-next` (no code pull in its logs).
-  `keep-awake` (on `main`) still keeps it awake.
+  released a new version, pin the versions recorded below (none were recorded
+  at the Freeze on 2026-09-26; see Recorded Python and package versions) in
+  the frozen branch's `requirements.txt`. That counts as a data-safety fix: it
+  restores the tester's access to their data.
+- Merges to `main` no longer reach the production app, `liturgy-frozen` (no
+  code pull in its logs). `keep-awake` (on `main`) still keeps it awake.
 
 ### Recorded Python and package versions
 
 What production runs from `streamlit-frozen`: the installed versions from the
-build of the app that serves the production address after the Freeze (the
-pre-flight app's build when it was moved onto `liturgy-next`, or the build of
-the app recreated in the window; a later reboot replaces it). Streamlit Cloud
+build of the app that serves production after the Freeze, `liturgy-frozen`'s
+pre-flight build of 2026-09-26 (a later reboot replaces it). Streamlit Cloud
 → the app → Manage app → logs, the dependency-install lines. The app's Python
-setting is 3.13. These are the versions to pin if a later reboot breaks the
-app (Freeze policy).
+setting is 3.14. These would be the versions to pin if a later reboot breaks
+the app (Freeze policy).
 
-- Python: [owner: the exact version from that build log]
-- Compared with `liturgy-next`'s last build from `main` before the Freeze: [owner: same, or each name==version that differs]
-- Packages:
-
-```
-[owner: paste the installed name==version lines from that build log]
-```
+- Python: 3.14 (the `liturgy-frozen` build log, 2026-09-26; the patch version
+  was not recorded). Before the Freeze `liturgy-next` ran 3.14.7 (its log after
+  the ops-3 reboot: `Using Python 3.14.7 environment at /home/adminuser/venv`),
+  not the 3.13 this runbook had said.
+- Compared with `liturgy-next`'s last build from `main` before the Freeze: not
+  possible, because neither list was recorded (next line).
+- Packages: not recorded. The pre-freeze reboot of `liturgy-next` reused its
+  installed environment, so its log had no `name==version` lines, and the
+  `liturgy-frozen` build's list was not copied from its log (2026-09-26). So
+  there is no recorded list to pin if a later reboot breaks the app.
 
 ### Contingency
 
-If `liturgy-next` cannot run from `streamlit-frozen` (F §6.1 item 6):
-1. `liturgy-next` was already redeployed from branch `main`, with the same
-   subdomain and Secrets (the Freeze's rollback), so it runs `main` as before
-   the Freeze. Leave `streamlit-frozen` in place as a record.
+If the production app, `liturgy-frozen`, cannot run from `streamlit-frozen`
+(F §6.1 item 6):
+1. The production app is redeployed from branch `main` with the same
+   subdomain, Secrets and Sharing. Streamlit Cloud cannot change an app's
+   branch, so, as the Freeze planned for `liturgy-next`, an app from `main` is
+   built and checked on a temporary subdomain first, with its own two redirect
+   values in its Secrets and its own two redirect URIs on the Google OAuth
+   client "Liturgy". Then the current `liturgy-frozen` app is deleted, the
+   checked app is moved onto `liturgy-frozen` with `liturgy-frozen`'s Secrets
+   pasted unchanged, and the temporary subdomain's two URIs are removed (see
+   Freeze record). It then runs `main` as before the Freeze. Leave
+   `streamlit-frozen` in place as a record.
 2. Remove the FROZEN comment from `app.py` on `main`.
 3. From then on every PR keeps `app.py` working against `main`: no signature
    change to a function `app.py` calls without a compatible wrapper (the
@@ -561,7 +599,7 @@ If `liturgy-next` cannot run from `streamlit-frozen` (F §6.1 item 6):
    (`liturgy_prompts.legacy_default_prompts()`), so an admin's edit there
    never stores the new wording as an override. It never reads
    `prayer_library` (F §6.2, amendment 2026-09-26).
-5. After every merge to `main`, Reboot `liturgy-next` (Manage app → Reboot):
+5. After every merge to `main`, Reboot the production app (Manage app → Reboot):
    the running app hot-pulls the commit but can keep stale imported modules.
    Then run the smoke check: sign in, the church and hymnal load, a saved
    service loads, Settings opens.
@@ -590,7 +628,7 @@ If `liturgy-next` cannot run from `streamlit-frozen` (F §6.1 item 6):
 - Since ops-2, `backend/db/engine.py` reads `DB_POOL_SIZE` and
   `DB_MAX_OVERFLOW` whenever it creates a Postgres engine, with code defaults
   3 and 3 (`DEFAULT_POOL_SIZE`, `DEFAULT_MAX_OVERFLOW`), plus `pool_pre_ping`,
-  `pool_recycle=1800` and `connect_timeout=10`. The API, `liturgy-next` and
+  `pool_recycle=1800` and `connect_timeout=10`. The API, `liturgy-frozen` and
   the CLIs that use `db.get_engine()`, `init_db()` or `session_scope()` share
   that engine setup, and so does the API's `GET /health/ready` probe (ops-3),
   which holds at most one of the API's pooled connections at a time. The old
@@ -600,16 +638,19 @@ If `liturgy-next` cannot run from `streamlit-frozen` (F §6.1 item 6):
   matching `backend/.env.example`. An invalid value stops the process when
   the engine is created, with `DB_POOL_SIZE must be an integer >= 1 (got '…').`
   or `DB_MAX_OVERFLOW must be an integer >= 0 (got '…').`
-- The two apps in the budget are the API (Railway) and `liturgy-next`, the
-  only Streamlit app since `liturgy-stg` and `liturgy` were deleted on
-  2026-09-26. Real use by one tester is 2–4 sessions.
+- The two apps in the budget are the API (Railway) and `liturgy-frozen`, the
+  only Streamlit app since the Freeze on 2026-09-26 (`liturgy-stg` and
+  `liturgy` were deleted that day before it, `liturgy-next` in it). Real use
+  by one tester is 2–4 sessions.
 - Values set: `DB_POOL_SIZE=3` and `DB_MAX_OVERFLOW=3` as Railway service
   variables (API), and as top-level keys `DB_POOL_SIZE = "3"` and
   `DB_MAX_OVERFLOW = "3"` in the production Streamlit Secrets, at the very top
   above the first `[section]` line (a key below `[auth]` belongs to that
   section, and Streamlit does not export it to the environment). Set in
   `liturgy-stg`'s Secrets on 2026-09-26, before that app was deleted the same
-  day; for `liturgy-next`'s see the ops-2 gate table and the Freeze record.
+  day; present at the top of `liturgy-next`'s that day (ops-2 gate table), and
+  carried unchanged into `liturgy-frozen`'s, which differ from them only in the
+  two redirect values (Freeze record).
 - GitHub Actions artifacts: `db-backup` keeps 30 days (GitHub's maximum is 90).
 
 ## Incident response
@@ -667,4 +708,4 @@ recorded no incident and no incident steps were needed.
 
 ### Accepted risk: database password shared in a chat session
 
-On 2026-09-25 the Supabase database password (the `postgres.<ref>` pooler user) was pasted into an AI coding-assistant chat while configuring Railway. On 2026-09-26 the owner decided not to rotate it. If it is rotated later, update it in: Supabase (Project Settings → Database → Reset database password; avoid `@ # / ?` to skip URL-encoding), Railway `DATABASE_URL`, the `liturgy-next` Streamlit Secrets `DATABASE_URL`, and the `backup` environment secret `BACKUP_DATABASE_URL`; then run the backup by hand and check `/me` and liturgy-next.
+On 2026-09-25 the Supabase database password (the `postgres.<ref>` pooler user) was pasted into an AI coding-assistant chat while configuring Railway. On 2026-09-26 the owner decided not to rotate it. If it is rotated later, update it in: Supabase (Project Settings → Database → Reset database password; avoid `@ # / ?` to skip URL-encoding), Railway `DATABASE_URL`, the `liturgy-frozen` Streamlit Secrets `DATABASE_URL` (the production app since the Freeze), and the `backup` environment secret `BACKUP_DATABASE_URL`; then run the backup by hand and check `/me` and liturgy-frozen.
