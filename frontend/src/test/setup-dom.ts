@@ -15,6 +15,7 @@ import { cleanup } from "@testing-library/react";
 import { afterEach, beforeEach, vi } from "vitest";
 import { resetStoredChurchIdForTests } from "@/lib/church";
 import { resetTestMocks } from "./mocks";
+import { resetSigningOutForTests } from "@/lib/auth";
 
 vi.mock("next/navigation", async () => {
   const mocks = await import("./mocks");
@@ -94,4 +95,6 @@ afterEach(() => {
   window.localStorage.clear();
   window.sessionStorage.clear();
   resetStoredChurchIdForTests();
+  // Task 18: the signing-out flag is module state; clear it after the tree is unmounted.
+  resetSigningOutForTests();
 });
