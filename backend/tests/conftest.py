@@ -222,8 +222,9 @@ def pg_db():
 
     Skips unless TEST_DATABASE_URL is set (only the backend-postgres CI job
     sets it). The URL must be a local, throwaway Postgres
-    (tests.pg_helpers.require_local_test_url). Every table except
-    alembic_version is truncated before the test, so each test starts empty.
+    (tests.pg_helpers.require_local_test_url). The database is migrated to
+    head with Alembic (so 0003_lockdown's RLS is on), then every table except
+    alembic_version is truncated, so each test starts empty.
     """
     import os
 
@@ -231,13 +232,19 @@ def pg_db():
     if not url:
         pytest.skip("TEST_DATABASE_URL is not set (the backend-postgres CI job sets it)")
 
+    from alembic import command
     from sqlalchemy import inspect, text
 
-    from db import init_db, reset_engine_for_tests
+    from db import reset_engine_for_tests
+    from db.schema_check import alembic_config
     from tests.pg_helpers import require_local_test_url
 
     engine = reset_engine_for_tests(require_local_test_url(url))
-    init_db()   # the tables, when a run starts from an empty database
+    # Built the way every database is now built: Alembic to head (a no-op
+    # when CI's alembic cycle already got there). A local Postgres whose
+    # tables came from init_db() needs `alembic stamp head` once (tables made
+    # before slice 1a: `alembic stamp 0001_baseline`, then this upgrade).
+    command.upgrade(alembic_config(url=url, configure_logger=False), "head")
     tables = [name for name in inspect(engine).get_table_names() if name != "alembic_version"]
     if tables:
         quoted = ", ".join(f'"{name}"' for name in tables)
