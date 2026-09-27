@@ -451,7 +451,7 @@ when it merged, before the freeze locks it in (ops spec, Delivery plan):
 | `DB_POOL_SIZE` and `DB_MAX_OVERFLOW` are both present and `3` on Railway (API) and as top-level keys in `liturgy-next`'s Secrets | Yes: both `3` in Railway's API Variables, and both `3` above `[auth]` in `liturgy-next`'s Secrets | 2026-09-26 |
 | API deploy of the ops-2 merge live; sign-in on https://worship-service-builder.vercel.app works | Yes: Railway's Active deployment is `57beda0` (the ops-2 merge); a fresh Google sign-in shows First Presbyterian Church and the Service Builder card | 2026-09-26 |
 | New `liturgy-next` build after the merge; smoke check passed on https://liturgy-next.streamlit.app/ | Yes: rebooted after the merge; fresh Google sign-in, church and hymnal, and one saved service (readings and hymns) all worked | 2026-09-26 |
-| The tester used `liturgy-next` for at least one day and nothing regressed | [owner: days used, what the tester reported, log check] | [owner] |
+| The tester used `liturgy-next` for at least one day and nothing regressed | **Waived by the owner**: ops-3 goes ahead without a tester day. Rows above all passed, including a fresh sign-in on both apps on the ops-2 build. A regression the tester reports later is handled as an incident (Incident response). | 2026-09-26 |
 
 ### What the frozen app inherits from ops-3
 
