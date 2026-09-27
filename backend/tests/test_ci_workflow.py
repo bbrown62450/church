@@ -74,3 +74,29 @@ def test_ci_postgres_service_image_is_a_bare_postgres_major():
     services = _ci()["jobs"]["backend-postgres"]["services"]
     assert list(services) == ["postgres"]
     assert re.fullmatch(r"postgres:\d+", services["postgres"]["image"]), services["postgres"]["image"]
+
+
+# --- slice 1a (Task 15): the frontend job regenerates the API types (F §5.4, §1.11) ---
+
+def test_ci_frontend_regenerates_api_types_and_fails_on_diff():
+    """CI rebuilds schema.d.ts from the committed OpenAPI snapshot and fails when
+    the committed types differ; test_openapi_contract.py keeps the snapshot equal
+    to the live app, so the frontend types can never drift from the API."""
+    import json
+
+    ci = _ci()
+    job = ci["jobs"]["frontend"]
+    assert job["defaults"]["run"]["working-directory"] == "frontend"
+    runs = [step.get("run", "") for step in job["steps"]]
+    regenerate = "npm run gen:api && git diff --exit-code src/lib/api/schema.d.ts"
+    assert regenerate in runs
+    assert runs.index("npm run typecheck") < runs.index(regenerate) < runs.index("npm test")
+
+    frontend = ROOT / "frontend"
+    package = json.loads((frontend / "package.json").read_text(encoding="utf-8"))
+    assert package["scripts"]["gen:api"] == (
+        "openapi-typescript src/lib/api/openapi.json -o src/lib/api/schema.d.ts"
+    )
+    assert "openapi-typescript" in package["devDependencies"]
+    assert (frontend / "src" / "lib" / "api" / "openapi.json").is_file()
+    assert (frontend / "src" / "lib" / "api" / "schema.d.ts").is_file()

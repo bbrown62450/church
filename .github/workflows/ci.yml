@@ -82,5 +82,7 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
+      - name: API types match the OpenAPI snapshot (F §5.4)
+        run: npm run gen:api && git diff --exit-code src/lib/api/schema.d.ts
       - run: npm test
       - run: npm run build
