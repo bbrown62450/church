@@ -1,5 +1,5 @@
 import { screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { isSigningOut, type SignOutOptions, useSignOut } from "@/lib/auth";
 import { readStoredChurchId, storeChurchId } from "@/lib/church";
@@ -27,6 +27,25 @@ function seedSignedInTab(): void {
   writeSession(SESSION_KEYS.pendingInviteCode, "INVITE-CODE");
   writeSession(SESSION_KEYS.postLoginPath, JSON.stringify({ path: "/welcome", at: 0 }));
 }
+
+/** The names of the cookies jsdom's `document` holds now. */
+function cookieNames(): string[] {
+  return document.cookie
+    .split(";")
+    .map((pair) => pair.split("=", 1)[0].trim())
+    .filter(Boolean);
+}
+
+/** The chunked session cookies `@supabase/ssr`'s browser client writes, plus one that is not Supabase's. */
+function seedAuthCookies(): void {
+  document.cookie = "sb-testref-auth-token.0=base64-chunk-zero; path=/";
+  document.cookie = "sb-testref-auth-token.1=chunk-one; path=/";
+  document.cookie = "unrelated=keep; path=/";
+}
+
+afterEach(() => {
+  for (const name of cookieNames()) document.cookie = `${name}=; path=/; max-age=0`;
+});
 
 describe("useSignOut", () => {
   it("raises the flag first, clears the cache, stored church and wsb: keys, signs out locally, then goes to /login", async () => {
@@ -74,5 +93,38 @@ describe("useSignOut", () => {
     expect(readStoredChurchId()).toBeNull();
     expect(supabaseAuth.signOut).toHaveBeenCalledWith({ scope: "local" });
     expect(isSigningOut()).toBe(true);
+  });
+
+  it("removes the Supabase auth cookies itself when signOut resolves with an error (owner-approved)", async () => {
+    // auth-js returns `{ error }` without removing the session when it cannot load
+    // it first, e.g. an expired access token whose refresh failed while offline.
+    supabaseAuth.signOut.mockResolvedValue({ error: new Error("offline") });
+    seedAuthCookies();
+    expect(cookieNames()).toEqual(
+      expect.arrayContaining(["sb-testref-auth-token.0", "sb-testref-auth-token.1"]),
+    );
+    const pat = me();
+    const { user } = renderWithProviders(<LogOut />, { me: pat });
+
+    await user.click(screen.getByRole("button", { name: `Log out ${pat.user.email}` }));
+
+    await waitFor(() => expect(testRouter.replace).toHaveBeenCalledWith("/login"));
+    expect(supabaseAuth.signOut).toHaveBeenCalledWith({ scope: "local" });
+    expect(cookieNames().filter((name) => name.startsWith("sb-"))).toEqual([]);
+    expect(cookieNames()).toContain("unrelated");
+  });
+
+  it("removes the Supabase auth cookies itself when signOut throws (owner-approved)", async () => {
+    supabaseAuth.signOut.mockRejectedValue(new Error("Acquiring the auth lock timed out"));
+    seedAuthCookies();
+    const pat = me();
+    const { user } = renderWithProviders(<LogOut />, { me: pat });
+
+    await user.click(screen.getByRole("button", { name: `Log out ${pat.user.email}` }));
+
+    await waitFor(() => expect(testRouter.replace).toHaveBeenCalledWith("/login"));
+    expect(supabaseAuth.signOut).toHaveBeenCalledWith({ scope: "local" });
+    expect(cookieNames().filter((name) => name.startsWith("sb-"))).toEqual([]);
+    expect(cookieNames()).toContain("unrelated");
   });
 });

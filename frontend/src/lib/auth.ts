@@ -81,6 +81,17 @@ export async function getAccessToken(): Promise<string> {
   return token;
 }
 
+/** The session cookies `@supabase/ssr`'s browser client writes: `sb-<ref>-auth-token`, chunked `.0`, `.1`, … */
+const AUTH_COOKIE = /^sb-.+-auth-token(\.\d+)?$/;
+
+/** Expires this browser's Supabase session cookies at `path=/`, where `@supabase/ssr` writes them. */
+function removeAuthCookies(): void {
+  for (const pair of document.cookie.split(";")) {
+    const name = pair.split("=", 1)[0].trim();
+    if (AUTH_COOKIE.test(name)) document.cookie = `${name}=; path=/; max-age=0`;
+  }
+}
+
 export type SignOutOptions = {
   /** Keep `wsb:pendingInviteCode` (the automatic 401 path), so an invite survives the new sign-in. */
   keepPendingInvite?: boolean;
@@ -94,8 +105,9 @@ export type SignOutOptions = {
  * starts a second sign-out and no layout re-stores a church (clarification 27).
  * Then: cancel and clear every query, forget the stored church and the `wsb:`
  * session keys (the pending invite only when not asked to keep it), end this
- * browser's Supabase session (`scope: "local"`, never the global default) and
- * go to `/login`, with `?next=` when `next` is an allow-listed path. Needs no
+ * browser's Supabase session (`scope: "local"`, never the global default; if
+ * that fails, its auth cookies are expired directly) and go to `/login`, with
+ * `?next=` when `next` is an allow-listed path. Never rejects. Needs no
  * `ChurchProvider`, so the `/welcome` header can use it.
  */
 export function useSignOut(): (opts?: SignOutOptions) => Promise<void> {
@@ -109,12 +121,20 @@ export function useSignOut(): (opts?: SignOutOptions) => Promise<void> {
       storeChurchId(null);
       removeSession(SESSION_KEYS.postLoginPath);
       if (!keepPendingInvite) removeSession(SESSION_KEYS.pendingInviteCode);
+      // auth-js can fail without removing the session: when it cannot load the
+      // session first (an expired access token whose refresh failed offline or on a
+      // 5xx) it returns `{ error }` and keeps the refresh-token cookies, and a throw
+      // (e.g. the auth lock timing out) keeps them too. Left alone, the next full
+      // load's proxy `getUser()` would refresh and sign this browser back in as the
+      // same user, so on any failure the cookies go here (owner-approved, 2026-09-27).
+      let signedOut = false;
       try {
-        await createClient().auth.signOut({ scope: "local" });
+        const { error } = await createClient().auth.signOut({ scope: "local" });
+        signedOut = !error;
       } catch {
-        // supabase-js reports failures as `{ error }` after removing the local
-        // session; a throw here is unexpected, and /login is still the right place.
+        // Handled below with the `{ error }` case; /login is still the right place.
       }
+      if (!signedOut) removeAuthCookies();
       const back = next === undefined ? null : safeInternalPath(next);
       router.replace(back ? `/login?next=${encodeURIComponent(back)}` : "/login");
     },
