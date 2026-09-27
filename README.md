@@ -152,12 +152,7 @@ the repo-root `.env`). Each script first prints `Database: ...` (password
 hidden) before changing anything: check that it shows the Supabase pooler host
 before trusting the rest of its output.
 
-1. **Before merging** code that maps these columns, add them to the deployed
-   database. Both apps select every mapped column and would fail without them:
-
-   ```bash
-   (cd backend && ../.venv/bin/python migrate_add_hymn_facts.py)
-   ```
+1. The columns come from the Alembic migrations (`alembic upgrade head`).
 
 2. Preview the fill from Hymnary.org's public API. It writes nothing and takes
    about a second per scripture reference:

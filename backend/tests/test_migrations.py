@@ -187,3 +187,143 @@ def test_offline_sql_wraps_timeouts_in_one_transaction(capsys):
     assert "CREATE TABLE users (" in sql
     assert "Database:" not in sql
     assert "Database: dialect=postgresql driver=psycopg2 host=localhost database=x" in capsys.readouterr().err
+
+
+# --- Task 7: 0002_reconcile (F §3.2 item 3; S amendment 2026-09-26; AC18) ------
+import io
+
+from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.pool import NullPool
+
+from db.schema_check import schema_diff
+
+RECONCILE_TABLES = ("hymns", "hymn_catalog")
+RECONCILE_COLUMNS = ("text_year", "hymnal_count")
+
+
+def _execute_on(url: str, *statements: str) -> None:
+    engine = create_engine(url, poolclass=NullPool)
+    try:
+        with engine.begin() as conn:
+            for statement in statements:
+                conn.execute(text(statement))
+    finally:
+        engine.dispose()
+
+
+def _legacy_database(url: str, *, without_hymn_facts: bool = False,
+                     without_hymnal_index: bool = False) -> None:
+    """A database the old create_all made (no alembic_version table): the 0001
+    schema, minus what an older one lacked (PR #4's columns, or the index
+    migrate_add_hymnal.py never created)."""
+    _alembic(url, "upgrade", "0001_baseline")
+    statements = ["DROP TABLE alembic_version"]
+    if without_hymnal_index:
+        statements.append("DROP INDEX ix_hymns_church_hymnal")
+    if without_hymn_facts:
+        statements += [f"ALTER TABLE {table} DROP COLUMN {column}"
+                       for table in RECONCILE_TABLES for column in RECONCILE_COLUMNS]
+    _execute_on(url, *statements)
+
+
+def _tables_snapshot(url: str) -> dict:
+    """{table: (sorted (column, type, nullable), sorted (index, columns))}."""
+    engine = create_engine(url, poolclass=NullPool)
+    try:
+        with engine.connect() as conn:
+            insp = inspect(conn)
+            return {
+                table: (
+                    sorted((c["name"], str(c["type"]), c["nullable"]) for c in insp.get_columns(table)),
+                    sorted((i["name"], tuple(i["column_names"])) for i in insp.get_indexes(table)),
+                )
+                for table in insp.get_table_names()
+            }
+    finally:
+        engine.dispose()
+
+
+def _snapshot_columns(snapshot: dict, table: str) -> set[str]:
+    return {name for name, _type, _nullable in snapshot[table][0]}
+
+
+def _models_diff(url: str) -> list:
+    engine = create_engine(url, poolclass=NullPool)
+    try:
+        with engine.connect() as conn:
+            return schema_diff(conn)
+    finally:
+        engine.dispose()
+
+
+def test_a_pre_pr4_database_stamped_at_baseline_gains_hymn_facts(sqlite_url):
+    _legacy_database(sqlite_url, without_hymn_facts=True)
+    before = _tables_snapshot(sqlite_url)
+    for table in RECONCILE_TABLES:
+        assert not set(RECONCILE_COLUMNS) & _snapshot_columns(before, table)
+
+    _alembic(sqlite_url, "stamp", "0001_baseline")
+    _alembic(sqlite_url, "upgrade", "head")
+
+    after = _tables_snapshot(sqlite_url)
+    for table in RECONCILE_TABLES:
+        columns = {name: (type_, nullable) for name, type_, nullable in after[table][0]}
+        assert columns["text_year"] == ("INTEGER", True)
+        assert columns["hymnal_count"] == ("INTEGER", True)
+    assert _models_diff(sqlite_url) == []
+
+
+def test_upgrade_head_twice_changes_nothing(sqlite_url):
+    _legacy_database(sqlite_url, without_hymn_facts=True, without_hymnal_index=True)
+    _alembic(sqlite_url, "stamp", "0001_baseline")
+    _alembic(sqlite_url, "upgrade", "head")
+    first = _tables_snapshot(sqlite_url)
+
+    _alembic(sqlite_url, "upgrade", "head")              # already at head: nothing runs
+    assert _tables_snapshot(sqlite_url) == first
+
+    # 0002 itself a second time, as on production, which already has everything.
+    _alembic(sqlite_url, "stamp", "0001_baseline")
+    _alembic(sqlite_url, "upgrade", "0002_reconcile")
+    assert _tables_snapshot(sqlite_url) == first
+
+
+def test_on_a_fresh_database_0002_adds_nothing(sqlite_url):
+    _alembic(sqlite_url, "upgrade", "0001_baseline")
+    baseline = _tables_snapshot(sqlite_url)
+    for table in RECONCILE_TABLES:                       # 0001 already made them
+        assert set(RECONCILE_COLUMNS) <= _snapshot_columns(baseline, table)
+    assert ("ix_hymns_church_hymnal", ("church_id", "hymnal")) in baseline["hymns"][1]
+
+    _alembic(sqlite_url, "upgrade", "0002_reconcile")
+
+    assert _tables_snapshot(sqlite_url) == baseline
+
+
+def test_a_stamped_database_missing_the_hymnal_index_gets_it(sqlite_url):
+    _legacy_database(sqlite_url, without_hymnal_index=True)
+    assert "ix_hymns_church_hymnal" not in {name for name, _cols in _tables_snapshot(sqlite_url)["hymns"][1]}
+
+    _alembic(sqlite_url, "stamp", "0001_baseline")
+    _alembic(sqlite_url, "upgrade", "head")
+
+    assert ("ix_hymns_church_hymnal", ("church_id", "hymnal")) in _tables_snapshot(sqlite_url)["hymns"][1]
+    assert _models_diff(sqlite_url) == []
+
+
+def test_offline_sql_from_baseline_renders_guarded_adds_and_no_create_table():
+    # Runbook step 5: `alembic upgrade 0001_baseline:head --sql`. Offline mode
+    # never connects (port 1 on localhost would refuse anyway).
+    cfg = alembic_config(url="postgresql://u:p@localhost:1/x", configure_logger=False)
+    cfg.output_buffer = buffer = io.StringIO()
+    command.upgrade(cfg, "0001_baseline:head", sql=True)
+    sql = buffer.getvalue()
+
+    assert "CREATE TABLE" not in sql
+    assert "CREATE INDEX IF NOT EXISTS ix_hymns_church_hymnal ON hymns (church_id, hymnal);" in sql
+    for table in RECONCILE_TABLES:
+        for column in RECONCILE_COLUMNS:
+            assert f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} INTEGER;" in sql
+    assert sql.count("ADD COLUMN IF NOT EXISTS") == 4
+    assert ("UPDATE alembic_version SET version_num='0002_reconcile' "
+            "WHERE alembic_version.version_num = '0001_baseline';") in sql

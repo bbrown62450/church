@@ -2,7 +2,7 @@
 """Fill in each hymn's year and familiarity from Hymnary.org's public API.
 
 Fills blanks only (never overwrites), so it is safe to re-run and manual
-corrections survive. Run AFTER migrate_add_hymn_facts.py, and again after
+corrections survive. Run after `alembic upgrade head`, and again after
 importing a hymnal or adding hymns (new hymns start with both facts unknown).
 Requests are spaced DELAY_SECONDS apart to be polite to Hymnary.org. It first
 prints the database it reads and fills, password hidden.

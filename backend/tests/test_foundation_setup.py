@@ -137,3 +137,25 @@ def test_alembic_ini_uses_here_paths_and_has_logging_sections():
                     "logger_alembic", "handler_console", "formatter_generic"):
         assert ini.has_section(section), section
     assert ini.get("handler_console", "args") == "(sys.stderr,)"
+
+
+# --- slice 1a: the one-off schema scripts give way to Alembic (F §3.2; S amendment 2026-09-26) ---
+
+def test_one_off_schema_scripts_are_deleted():
+    backend = ROOT / "backend"
+    for gone in ("migrate_add_hymnal.py", "migrate_add_hymn_facts.py", "tests/test_migrate_hymn_facts.py"):
+        assert not (backend / gone).exists(), gone
+    # The data backfill stays as an ops CLI (data, not schema) and now points at Alembic.
+    backfill = (backend / "backfill_hymn_facts.py").read_text(encoding="utf-8")
+    assert "Run after `alembic upgrade head`" in backfill
+    assert "migrate_add_hymn_facts" not in backfill
+    assert (backend / "hymnary_facts.py").is_file()
+
+
+def test_readme_says_hymn_facts_columns_come_from_alembic():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    section = readme.split("### Service rubric: hymn year and familiarity", 1)[1].split("\n## ", 1)[0]
+    assert "1. The columns come from the Alembic migrations (`alembic upgrade head`)." in section
+    assert "backfill_hymn_facts.py --dry-run" in section            # steps 2 and 3 unchanged
+    assert "migrate_add_hymn_facts" not in readme
+    assert "migrate_add_hymnal" not in readme
