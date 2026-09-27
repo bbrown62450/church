@@ -30,7 +30,7 @@ anyway, roll back by hand: Deployments → the previous deployment → Redeploy.
 |---|---|---|
 | `DATABASE_URL` | Supabase session-pooler URL (secret) | slice 0 |
 | `SUPABASE_URL` | `https://tbecmwtitsoxzkrvxxxu.supabase.co` | slice 0 |
-| `CORS_ORIGINS` | `https://worship-service-builder.vercel.app`: exact origins, comma-separated, no trailing slash | slice 0 |
+| `CORS_ORIGINS` | `https://worship-service-builder.vercel.app`, plus `http://localhost:3000` and the slice-0 preview origin `https://church-git-claude-react-fastapi-slice0-bbrown62450s-projects.vercel.app` (both kept by the owner, 2026-09-26): exact origins, comma-separated, no trailing slash | slice 0 |
 | `APP_ENV` | `production`, set before ops-3 merged and confirmed in effect on the Active deployment (Railway stages variable edits until they are deployed). The API then refuses to start on anything but PostgreSQL, and logs an ERROR when `CORS_ORIGINS` lists only localhost. | ops-3 |
 | `LOG_LEVEL` | optional: `DEBUG`, `INFO` (the default when unset), `WARNING` or `ERROR` | ops-3 |
 | `DB_POOL_SIZE`, `DB_MAX_OVERFLOW` | `3` and `3` (see Platform limits) | ops-1; read since ops-2 |
@@ -38,7 +38,7 @@ anyway, roll back by hand: Deployments → the previous deployment → Redeploy.
 | `OPENAI_API_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI` | carried over for later slices (secrets) | slice 0 |
 
 Checked against Railway → the API service → Variables (names only) and Settings → Deploy → Healthcheck Path:
-[owner: date, any variable that differs from this table, and the Healthcheck Path]
+2026-09-26: the names match this table (`DATABASE_URL` is a `postgresql://` Supabase pooler URL; `CORS_ORIGINS` as in the row above). `APP_ENV` = `production` added, deployed and Active, with no staged change pending; `/health` still answered `{"ok":true}` afterwards. Healthcheck Path `/health` (already set). The Actions variable `API_BASE_URL` is set, and the repository has no Actions secrets.
 
 **Vercel, project `worship-service-builder`.** Root `frontend`; URL
 https://worship-service-builder.vercel.app. `NEXT_PUBLIC_SUPABASE_URL` (the
@@ -343,7 +343,7 @@ owner corrected this on 2026-09-25: it is the other way round.
 | App | URL | Status |
 |---|---|---|
 | `liturgy-next` | https://liturgy-next.streamlit.app/ | **Production.** The owner and the tester use it. On 2026-09-26 it deploys from repo `bbrown62450/church`, branch `main`, main file `app.py`. `liturgy-stg`, which ran from the old branch `claude/multi-user-app-support-edd5eb`, was deleted that day during Task 9a. Streamlit Community Cloud allows only one app per repository + branch + main file, and `liturgy-next` (created earlier as a side-by-side test) already held `main`/`app.py`. So the owner kept `liturgy-next` as the production address instead of recreating `liturgy-stg`. Its Secrets carry `[auth] redirect_uri = https://liturgy-next.streamlit.app/oauth2callback` and `GOOGLE_OAUTH_REDIRECT_URI = https://liturgy-next.streamlit.app/`, and both are registered on the Google OAuth client. The owner checked sign-in, church and hymnal, saved services and a Gmail test send. `keep-awake` keeps it awake. ops-3's Freeze still has to move production onto `streamlit-frozen`, at this address. |
-| `liturgy` | https://liturgy.streamlit.app/ | **Deleted 2026-09-26** (it was unused; its Google sign-in failed with `StreamlitAuthError` from its secrets config). The URL now returns 404. Its two Google redirect URIs (`https://liturgy.streamlit.app/oauth2callback` and the bare root `https://liturgy.streamlit.app/`) can be removed from the OAuth client; they are harmless meanwhile. |
+| `liturgy` | https://liturgy.streamlit.app/ | **Deleted 2026-09-26** (it was unused; its Google sign-in failed with `StreamlitAuthError` from its secrets config). The URL now returns 404. Its two Google redirect URIs (`https://liturgy.streamlit.app/oauth2callback` and the bare root `https://liturgy.streamlit.app/`) were removed from the OAuth client on 2026-09-26 (see the Freeze record). |
 
 ### Streamlit bug triage
 
@@ -488,7 +488,7 @@ subdomain with the same Secrets. A row that did not happen says
 
 | Step | Result | Date |
 |---|---|---|
-| Google OAuth client "Liturgy": the four redirect URIs of the deleted `liturgy` and `liturgy-stg` apps removed before the Freeze (a deleted app's subdomain may be claimable by anyone, who would then receive this client's authorization responses); the two `liturgy-next` URIs kept; sign-in on https://liturgy-next.streamlit.app/ checked afterwards. If declined: the accepted risk, and AC 22 is not met | [owner] | [owner] |
+| Google OAuth client "Liturgy": the four redirect URIs of the deleted `liturgy` and `liturgy-stg` apps removed before the Freeze (a deleted app's subdomain may be claimable by anyone, who would then receive this client's authorization responses); the two `liturgy-next` URIs kept; sign-in on https://liturgy-next.streamlit.app/ checked afterwards. If declined: the accepted risk, and AC 22 is not met | Removed; a fresh sign-in on liturgy-next worked afterwards | 2026-09-26 |
 | Pre-freeze smoke check on https://liturgy-next.streamlit.app/ after the ops-3 merge and a reboot: sign in, the church and hymnal load, a saved service loads, Settings opens, and the sidebar has no "Church" selectbox. Noted: Python, subdomain, Sharing, other non-default settings; the pool keys sit at the top of the Secrets | [owner] | [owner] |
 | Tester "before" message sent, with the window (about 5 minutes) | [owner: window] | [owner] |
 | `streamlit-frozen` created at the ops-3 merge commit (`main` was still at that commit) | [owner: commit sha] | [owner] |
