@@ -46,7 +46,8 @@ export type ApiOptions = {
 };
 
 const GENERIC_MESSAGE = "Something went wrong.";
-const NETWORK_MESSAGE = "Can't reach the server. Check your connection and try again.";
+/** Also used by `getAccessToken` when a token refresh cannot reach Supabase. */
+export const NETWORK_MESSAGE = "Can't reach the server. Check your connection and try again.";
 const TIMEOUT_MESSAGE = "This is taking too long. Try again.";
 const ABORTED_MESSAGE = "The request was cancelled.";
 

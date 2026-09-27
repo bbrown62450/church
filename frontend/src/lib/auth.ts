@@ -8,9 +8,10 @@
  * stays quiet, and the `(signed-in)` layout shows its skeleton, so nothing
  * refetches or re-stores a church during sign-out.
  */
+import { isAuthRetryableFetchError } from "@supabase/supabase-js";
 import { useSyncExternalStore } from "react";
 
-import { ApiError } from "@/lib/api/client";
+import { ApiError, NETWORK_MESSAGE } from "@/lib/api/client";
 import { createClient } from "@/lib/supabase/client";
 
 let signingOut = false;
@@ -59,11 +60,17 @@ export function resetSigningOutForTests(): void {
  * Rejects with `ApiError(401, "unauthenticated")` when there is no session and
  * with `ApiError(0, "aborted")` while signing out, including a sign-out that
  * starts while the session is being read.
+ *
+ * A token refresh that could not reach Supabase (auth-js returns no session
+ * with an `AuthRetryableFetchError` but keeps the refresh token, e.g. a laptop
+ * waking offline) rejects with a retryable `ApiError(0, "network_error")`
+ * instead, so it does not sign the user out (owner-approved, 2026-09-27).
  */
 export async function getAccessToken(): Promise<string> {
   if (signingOut) throw signingOutError();
-  const { data } = await createClient().auth.getSession();
+  const { data, error } = await createClient().auth.getSession();
   if (signingOut) throw signingOutError();
+  if (isAuthRetryableFetchError(error)) throw new ApiError(0, "network_error", NETWORK_MESSAGE);
   const token = data.session?.access_token;
   if (!token) throw new ApiError(401, "unauthenticated", "Please sign in.");
   return token;
