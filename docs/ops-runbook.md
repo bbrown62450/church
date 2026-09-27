@@ -20,8 +20,11 @@ Names, and where each value comes from. Never the secret values themselves.
 
 **Railway, the API service.** Service root `backend`; start command in
 `backend/Procfile`; public URL https://church-production-74ca.up.railway.app;
-deploy health check: Settings → Deploy → Healthcheck Path `/health` (slice 1
-moves it to `/health/ready`). With it, a deployment whose process never answers
+deploy health check: `/health/ready` since slice 1a, set in
+`backend/railway.toml` (Settings → Config-as-code path `/backend/railway.toml`)
+and in Settings → Deploy → Healthcheck Path. The same file runs
+`alembic upgrade head` as the pre-deploy command
+(`backend/migrations/README.md`). With it, a deployment whose process never answers
 (for example the `APP_ENV` guard refusing to start) is not promoted and the
 previous one keeps serving. Without it, or if a bad deployment went Active
 anyway, roll back by hand: Deployments → the previous deployment → Redeploy.
@@ -314,8 +317,10 @@ connection. 503 `db_unavailable` means the API cannot reach the database, and
 the Railway logs then show `Readiness check failed: <exception class>`.
 An error that is not a database error instead gives a 500 `internal_error`
 and the log line `Unhandled error on GET /health/ready`.
-`GET /health` stays the dependency-free liveness probe and Railway's deploy
-health check; slice 1 moves the deploy check to `/health/ready`.
+`GET /health` stays the dependency-free liveness probe. Since slice 1a
+`/health/ready` is also Railway's deploy health check, and in production it
+answers 503 `db_unavailable` with `details.reason` `schema_behind` while the
+database schema is behind the release (`backend/migrations/README.md`).
 
 **If `keepalive` is red:**
 1. `curl -i https://church-production-74ca.up.railway.app/health`. If that

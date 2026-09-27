@@ -65,3 +65,18 @@ Record each result, with its date, in `docs/ops-runbook.md`.
 - [ ] `curl -i https://church-production-74ca.up.railway.app/me/` → 404 JSON with `request_id`, and no `location` header (not a 307).
 - [ ] `liturgy-next` after the ops-3 merge (rebooted), and `liturgy-frozen`, the pre-flight app from `streamlit-frozen` that has served production since the Freeze (the owner kept it instead of moving it onto `liturgy-next`): sign in, the church and hymnal load, load a saved service, open Settings; on `liturgy-frozen` also connect Gmail and send a test email to yourself. Its settings show branch `streamlit-frozen`, main file `app.py`, Python 3.14 and Sharing public. After the next merge to `main`, its logs show no code pull (`Pulling code changes from Github`, `Updated app!`) and its settings still show `streamlit-frozen`.
 - [ ] `keep-awake` is green with one URL, https://liturgy-frozen.streamlit.app/. The Google OAuth client "Liturgy" lists only the two `liturgy-frozen` redirect URIs among `streamlit.app` addresses: the deleted `liturgy` and `liturgy-stg` apps' four were removed before the Freeze, and the deleted `liturgy-next` app's two after it.
+
+## Slice 1
+
+Run on the production URLs: https://worship-service-builder.vercel.app (at
+375 px in Chrome device mode, iPhone SE, and on desktop),
+https://church-production-74ca.up.railway.app, and
+https://liturgy-frozen.streamlit.app, the production Streamlit app. Record
+each result, with its date, in `docs/ops-runbook.md` → Supabase lockdown
+record → "Alembic stamping record (slice 1a)". The items marked "(after 1a)"
+come from `backend/migrations/README.md` → Production runbook; slice 1b
+appends its own items here.
+
+- [ ] (after 1a) Runbook step 0 (RLS precondition) rerun and recorded; Railway's Config-as-code path is `/backend/railway.toml` and its Healthcheck Path is `/health/ready`; the merge deploy's log shows the **pre-deploy** `alembic upgrade head` (`0001_baseline -> 0002_reconcile`, `-> 0003_lockdown`, `-> 0004_invites_reusable`) and a passing `/health/ready` health check; `alembic current` shows `0004_invites_reusable (head)` and `alembic check` prints `No new upgrade operations detected.` (outputs pasted in the 1a PR).
+- [ ] (after 1a) A new Google account signing in right after the 1a merge lands on the stub `/welcome` ("No church yet"), not a 404, and **Log out** returns it to `/login`; at 375 px and on desktop.
+- [ ] (after 1a) Streamlit smoke check on https://liturgy-frozen.streamlit.app (F §6.3): sign in, the church and hymnal load, a saved service loads, Settings opens; Settings → Invites → **Create invite** works (the frozen app's insert gets `reusable = false`), then revoke that invite.

@@ -27,12 +27,19 @@ cd frontend && npm run dev
 ```
 
 Copy `backend/.env.example` → `backend/.env` and `frontend/.env.example` →
-`frontend/.env.local` first. Tests: `.venv/bin/python -m pytest -q` (backend and
+`frontend/.env.local` first. The API does not create tables: create or update
+the local database with
+`(cd backend && DATABASE_URL=sqlite:///../data/app.db ../.venv/bin/alembic upgrade head)`
+the first time and after pulling a new migration (a `data/app.db` made before
+slice 1a needs `../.venv/bin/alembic stamp 0001_baseline` once first, with the
+same `DATABASE_URL`; see Database → Schema migrations). Tests: `.venv/bin/python -m pytest -q` (backend and
 Streamlit) and `cd frontend && npm test`.
 
 **Deploying:**
 
-- **Railway** (service root `backend`, health check `/health`): env
+- **Railway** (service root `backend`; Config-as-code path
+  `/backend/railway.toml`, which runs `alembic upgrade head` before each
+  deploy and sets the deploy health check `/health/ready`): env
   `DATABASE_URL` (Supabase session pooler), `SUPABASE_URL`, `CORS_ORIGINS`
   (exact Vercel URL, no trailing slash, comma-separated for multiple), plus
   the carried-over `OPENAI_API_KEY` and `GOOGLE_*` gmail.send vars.
@@ -117,6 +124,29 @@ allowed, slightly safer alternative to reusing the login client.
   free tier and unreachable from Streamlit Community Cloud's IPv4-only egress.
 
 Store `DATABASE_URL` in Streamlit secrets (App → Settings → Secrets).
+
+### Schema migrations (Alembic)
+
+Since slice 1a the schema comes from Alembic (`backend/alembic.ini`,
+`backend/migrations/`), and the API no longer creates tables at startup: it
+logs the WARNING `schema revision <current> != head <head>` when the database
+is not at the latest revision. Alembic reads only an exported `DATABASE_URL`,
+never `backend/.env`. For a local database, from `backend/`:
+
+```bash
+cd backend
+export DATABASE_URL=sqlite:///../data/app.db
+../.venv/bin/alembic upgrade head
+```
+
+A local database made by the old `create_all` (before slice 1a) needs stamping first:
+`../.venv/bin/alembic stamp 0001_baseline && ../.venv/bin/alembic upgrade head`.
+Tests build their SQLite databases themselves. The Postgres-only tests run
+with `TEST_DATABASE_URL` set to a local, throwaway Postgres
+(`TEST_DATABASE_URL=postgresql://postgres:<password>@localhost:5432/postgres .venv/bin/python -m pytest -m postgres -q`
+from the repo root) and skip without it. Production is migrated by Railway's
+pre-deploy command (`backend/railway.toml`); the one-time stamping runbook and
+the details are in `backend/migrations/README.md`.
 
 ## One-time migration (Notion + legacy contacts → database)
 
