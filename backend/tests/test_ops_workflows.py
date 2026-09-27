@@ -495,7 +495,7 @@ def test_pool_defaults_fit_the_recorded_pooler_size():
 
     sizes = POOL_SIZE_LINE.findall(_read(RUNBOOK))
     assert len(sizes) == 1, f"want one '- Supabase session pooler (Supavisor) Pool Size: <N>' line, found {sizes}"
-    # Two apps (the API and liturgy-next) each at their pool limit, plus the backup
+    # Two apps (the API and liturgy-frozen) each at their pool limit, plus the backup
     # job's session and the owner's SQL editor (ops spec, Risks item 2).
     assert 2 * (DEFAULT_POOL_SIZE + DEFAULT_MAX_OVERFLOW) + 2 <= int(sizes[0])
     env_example = _read(ROOT / "backend" / ".env.example")
@@ -565,8 +565,11 @@ def test_runbook_keep_alive_section_names_the_variable_and_the_endpoint():
 # --- Streamlit freeze on main: keep-awake and the FROZEN header (ops-3) --------
 
 KEEP_AWAKE_YML = ROOT / ".github" / "workflows" / "keep-awake.yml"
-PRODUCTION_STREAMLIT_URL = "https://liturgy-next.streamlit.app/"   # the one Streamlit app since 2026-09-26
-DELETED_STREAMLIT_URLS = ("https://liturgy.streamlit.app", "https://liturgy-stg.streamlit.app")
+# The one Streamlit app since the Freeze on 2026-09-26: the owner kept production on
+# the pre-flight app liturgy-frozen. liturgy-next served it until the Freeze, then was deleted.
+PRODUCTION_STREAMLIT_URL = "https://liturgy-frozen.streamlit.app/"
+DELETED_STREAMLIT_URLS = ("https://liturgy.streamlit.app", "https://liturgy-stg.streamlit.app",
+                          "https://liturgy-next.streamlit.app")
 FROZEN_HEADER = "# FROZEN — production runs from branch streamlit-frozen; deleted in slice 7."
 
 
@@ -626,7 +629,7 @@ def test_runbook_environments_name_every_ops_setting():
     section = _section(_read(RUNBOOK), "## Environments and variables")
     for name in ("APP_ENV", "LOG_LEVEL", "DB_POOL_SIZE", "DB_MAX_OVERFLOW", "CORS_ORIGINS",
                  "API_BASE_URL", "BACKUP_DATABASE_URL", "NEXT_PUBLIC_API_URL", "streamlit-frozen",
-                 "https://liturgy-next.streamlit.app/"):
+                 PRODUCTION_STREAMLIT_URL):
         assert name in section, name
 
 
@@ -642,5 +645,5 @@ def test_runbook_contingency_keeps_the_old_season_wording_and_no_prayer_library(
 def test_manual_verification_has_the_ops_slice_checklist():
     section = _section(_read(MANUAL_VERIFICATION), "## Ops slice")
     for needle in ("/health/ready", "x-request-id", "/me/", "streamlit-frozen", "keep-awake",
-                   "https://liturgy-next.streamlit.app", "db-backup", "375 px"):
+                   PRODUCTION_STREAMLIT_URL.rstrip("/"), "db-backup", "375 px"):
         assert needle in section, needle
