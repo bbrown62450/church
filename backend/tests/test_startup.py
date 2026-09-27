@@ -9,6 +9,7 @@ import api.main
 from api import settings as settings_mod
 from api.startup import check_app_env, describe_database
 from db.engine import _make_engine
+from db.schema_check import RevisionState
 
 SQLITE_REFUSED = "APP_ENV=production requires a PostgreSQL DATABASE_URL; refusing to start."
 LOCALHOST_CORS = ("CORS_ORIGINS allows only localhost origins in production; "
@@ -26,10 +27,16 @@ def api_env(monkeypatch):
 
 
 @pytest.fixture
-def init_db_calls(monkeypatch):
-    """Replace api.main.init_db with a spy; the list records each call."""
+def schema_check_calls(monkeypatch):
+    """Replace api.main.run_startup_checks with a spy: the first code that touches
+    the database (slice 1). The list records each call's is_production."""
     calls = []
-    monkeypatch.setattr(api.main, "init_db", lambda: calls.append("init_db"))
+
+    def spy(_engine, *, is_production):
+        calls.append(is_production)
+        return RevisionState("0004_invites_reusable", "0004_invites_reusable", "current")
+
+    monkeypatch.setattr(api.main, "run_startup_checks", spy)
     return calls
 
 
@@ -58,20 +65,20 @@ def test_startup_logs_the_database_target(api_env, tmp_db, caplog):
     assert lines[0].startswith("Database: dialect=sqlite driver=pysqlite host=- database=")
 
 
-def test_production_refuses_sqlite_before_init_db(api_env, tmp_db, init_db_calls):
+def test_production_refuses_sqlite_before_the_schema_check(api_env, tmp_db, schema_check_calls):
     api_env.setenv("APP_ENV", "production")
     with pytest.raises(RuntimeError) as exc:
         _start(api.main.create_app())
     assert str(exc.value) == SQLITE_REFUSED
-    assert init_db_calls == []
+    assert schema_check_calls == []
 
 
-def test_an_invalid_app_env_refuses_to_start(api_env, tmp_db, init_db_calls):
+def test_an_invalid_app_env_refuses_to_start(api_env, tmp_db, schema_check_calls):
     api_env.setenv("APP_ENV", "staging")
     with pytest.raises(RuntimeError) as exc:
         _start(api.main.create_app())
     assert str(exc.value) == "APP_ENV must be 'development' or 'production' (got 'staging')."
-    assert init_db_calls == []
+    assert schema_check_calls == []
 
 
 @pytest.mark.parametrize("env, expected", [
@@ -92,7 +99,7 @@ def test_app_env_is_normalized(api_env, env, expected):
     ("https://worship-service-builder.vercel.app", False),
     ("http://localhost:3000,https://worship-service-builder.vercel.app", False),
 ], ids=["localhost", "all-loopback-forms", "vercel", "mixed"])
-def test_production_warns_when_cors_allows_only_localhost(api_env, monkeypatch, caplog, init_db_calls,
+def test_production_warns_when_cors_allows_only_localhost(api_env, monkeypatch, caplog, schema_check_calls,
                                                           origins, logs_error):
     api_env.setenv("APP_ENV", "production")
     api_env.setenv("CORS_ORIGINS", origins)
@@ -107,7 +114,7 @@ def test_production_warns_when_cors_allows_only_localhost(api_env, monkeypatch, 
     assert "Database: dialect=postgresql driver=psycopg2 host=localhost database=db" in messages
     errors = [r.getMessage() for r in caplog.records if r.levelno >= logging.ERROR]
     assert errors == ([LOCALHOST_CORS] if logs_error else [])
-    assert init_db_calls == ["init_db"]
+    assert schema_check_calls == [True]
 
 
 def test_development_on_sqlite_starts_without_errors(api_env, tmp_db, caplog):

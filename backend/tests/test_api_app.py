@@ -301,3 +301,103 @@ def test_page_and_item_list_shapes():
     assert ItemList[str](items=["a", "b"]).model_dump() == {"items": ["a", "b"]}
     with pytest.raises(ValidationError):
         Page[ChurchOut](items=[], total=0, limit=50)        # offset is required
+
+
+# --- Task 11: no create_all in the lifespan; revision and RLS startup checks ---
+import logging
+import uuid
+
+import pytest
+from sqlalchemy import inspect as sa_inspect
+from sqlalchemy import text
+
+import db.schema_check
+from db.schema_check import RevisionState, rls_disabled_tables, run_startup_checks
+
+SCHEMA_HEAD = "0004_invites_reusable"
+BEHIND_WARNING = f"schema revision None != head {SCHEMA_HEAD}"
+
+
+@pytest.fixture
+def fresh_sqlite(tmp_path, monkeypatch):
+    """A development app on an empty SQLite file: no tables and no alembic_version."""
+    from db import reset_engine_for_tests
+
+    monkeypatch.setenv("APP_ENV", "development")
+    settings_mod.get_settings.cache_clear()
+    engine = reset_engine_for_tests(f"sqlite:///{tmp_path / 'fresh.db'}")
+    yield engine
+    engine.dispose()
+    settings_mod.get_settings.cache_clear()
+
+
+def _schema_check_records(caplog):
+    return [(r.levelno, r.getMessage()) for r in caplog.records if r.name == "db.schema_check"]
+
+
+def test_lifespan_creates_no_tables(fresh_sqlite):
+    with TestClient(create_app()):
+        pass
+    assert sa_inspect(fresh_sqlite).get_table_names() == []
+
+
+def test_startup_warns_on_a_revision_mismatch_without_errors(fresh_sqlite, caplog):
+    """The WARNING names head 0004, so the check found the scripts; no ERROR means it did not fail."""
+    app = create_app()
+    with caplog.at_level(logging.INFO):
+        with TestClient(app):
+            pass
+    assert _schema_check_records(caplog) == [(logging.WARNING, BEHIND_WARNING)]
+    assert [r.getMessage() for r in caplog.records if r.levelno >= logging.ERROR] == []
+    assert app.state.schema_state == RevisionState(None, SCHEMA_HEAD, "behind")
+
+
+def test_rls_check_is_skipped_on_sqlite(fresh_sqlite, monkeypatch):
+    calls = []
+    monkeypatch.setattr(db.schema_check, "rls_disabled_tables", lambda conn: calls.append(conn) or [])
+    with TestClient(create_app()):
+        pass
+    assert calls == []
+
+
+def test_production_logs_behind_at_error(fresh_sqlite, caplog):
+    """In production a behind schema is an ERROR (and /health/ready's gate turns it into a 503)."""
+    with caplog.at_level(logging.INFO):
+        state = run_startup_checks(fresh_sqlite, is_production=True)
+    assert state == RevisionState(None, SCHEMA_HEAD, "behind")
+    assert _schema_check_records(caplog) == [(logging.ERROR, BEHIND_WARNING)]
+
+
+def test_a_failing_schema_check_logs_error_and_starts(fresh_sqlite, monkeypatch, caplog):
+    def broken(_conn):
+        raise RuntimeError("password=s3cret host=db.internal")
+
+    monkeypatch.setattr(db.schema_check, "revision_state", broken)
+    app = create_app()
+    with caplog.at_level(logging.INFO):
+        with TestClient(app) as client:
+            assert client.get("/health").status_code == 200
+    errors = [r.getMessage() for r in caplog.records if r.levelno >= logging.ERROR]
+    assert errors == ["Schema revision check failed: RuntimeError"]    # the class only
+    assert "s3cret" not in caplog.text
+    assert app.state.schema_state == RevisionState(None, None, "unknown")
+
+
+@pytest.mark.postgres
+def test_rls_check_names_tables_without_rls(pg_db, caplog):
+    """After the CI alembic cycle 0003 has enabled RLS on every public table, so
+    the test adds its own table without RLS and drops it again."""
+    probe = f"wsb_rls_probe_{uuid.uuid4().hex[:8]}"
+    with pg_db.begin() as conn:
+        conn.execute(text(f"CREATE TABLE public.{probe} (id integer PRIMARY KEY)"))
+    try:
+        with pg_db.connect() as conn:
+            assert rls_disabled_tables(conn) == [probe]
+        with caplog.at_level(logging.INFO):
+            state = run_startup_checks(pg_db, is_production=False)
+        assert state == RevisionState(SCHEMA_HEAD, SCHEMA_HEAD, "current")
+        assert _schema_check_records(caplog) == [
+            (logging.WARNING, f"Row-level security is off on: {probe}")]
+    finally:
+        with pg_db.begin() as conn:
+            conn.execute(text(f"DROP TABLE IF EXISTS public.{probe}"))

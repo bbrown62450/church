@@ -13,6 +13,7 @@ drift script and the tests (F §3.1, §2.6; slice 1 spec, "Modules added").
 
 Imports no FastAPI and nothing from api/ (layering, F §2.2).
 """
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -22,9 +23,12 @@ from alembic.config import Config
 from alembic.migration import MigrationContext
 from alembic.script import ScriptDirectory
 from alembic.util import CommandError
-from sqlalchemy.engine import Connection
+from sqlalchemy import text
+from sqlalchemy.engine import Connection, Engine
 
 from db.engine import Base
+
+logger = logging.getLogger(__name__)
 
 ALEMBIC_INI = Path(__file__).resolve().parents[1] / "alembic.ini"
 
@@ -128,3 +132,55 @@ def _entry_lines(entry) -> list[str]:
 def format_diff(diff: list) -> list[str]:
     """schema_diff() as sorted text lines, one per difference (runbook step 6)."""
     return sorted(line for entry in diff for line in _entry_lines(entry))
+
+
+def rls_disabled_tables(conn: Connection) -> list[str]:
+    """`public` tables with row-level security off, sorted (Postgres only)."""
+    rows = conn.execute(text(
+        "SELECT tablename FROM pg_tables "
+        "WHERE schemaname = 'public' AND NOT rowsecurity ORDER BY tablename"))
+    return [row[0] for row in rows]
+
+
+def run_startup_checks(engine: Engine, *, is_production: bool) -> RevisionState:
+    """The API lifespan's schema checks (F §2.6 items 3-4). Logs; never raises.
+
+    Revision: WARNING `schema revision X != head Y` when the database is not at
+    head (ERROR when it is behind in production, where /health/ready then
+    answers 503). RLS, on Postgres only: WARNING naming every public table with
+    row-level security off. A check that fails logs an ERROR with the exception
+    class only and startup goes on; the revision state is then "unknown".
+    """
+    state = _check_revision(engine, is_production=is_production)
+    if engine.dialect.name == "postgresql":
+        _check_rls(engine)
+    return state
+
+
+def _check_revision(engine: Engine, *, is_production: bool) -> RevisionState:
+    try:
+        with engine.connect() as conn:
+            if conn.dialect.name == "postgresql":
+                # Same bound as the ops probe (db/health.py): a lock on
+                # alembic_version must not stall startup.
+                conn.exec_driver_sql("SET LOCAL statement_timeout = '5s'")
+            state = revision_state(conn)
+    except Exception as exc:  # noqa: BLE001 - a failed check never blocks startup
+        logger.error("Schema revision check failed: %s", type(exc).__name__)
+        return RevisionState(None, None, "unknown")
+    if state.state != "current":
+        level = logging.ERROR if is_production and state.state == "behind" else logging.WARNING
+        logger.log(level, "schema revision %s != head %s", state.current, state.head)
+    return state
+
+
+def _check_rls(engine: Engine) -> None:
+    try:
+        with engine.connect() as conn:
+            conn.exec_driver_sql("SET LOCAL statement_timeout = '5s'")
+            tables = rls_disabled_tables(conn)
+    except Exception as exc:  # noqa: BLE001 - a failed check never blocks startup
+        logger.error("Row-level security check failed: %s", type(exc).__name__)
+        return
+    if tables:
+        logger.warning("Row-level security is off on: %s", ", ".join(tables))
