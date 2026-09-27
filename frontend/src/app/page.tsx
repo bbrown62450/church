@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { AppHeader } from "@/components/app-header";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ApiError, apiFetch } from "@/lib/api";
+import { ApiError, apiFetch } from "@/lib/api/client";
 import {
   type Church,
   type Me,
