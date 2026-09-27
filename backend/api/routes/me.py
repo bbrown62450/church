@@ -1,13 +1,14 @@
 from fastapi import APIRouter, Depends
 
 from api.deps import ActiveChurch, CurrentUser, get_current_user, require_church
+from api.errors import error_responses
 from api.schemas import ChurchOut, MeOut, UserOut
 from repos.churches import list_user_churches
 
 router = APIRouter()
 
 
-@router.get("/me", response_model=MeOut)
+@router.get("/me", response_model=MeOut, responses=error_responses(401, 422, 503))
 def me(user: CurrentUser = Depends(get_current_user)) -> MeOut:
     return MeOut(
         user=UserOut(id=user.id, email=user.email, name=user.name, picture=user.picture),
@@ -15,6 +16,6 @@ def me(user: CurrentUser = Depends(get_current_user)) -> MeOut:
     )
 
 
-@router.get("/church", response_model=ChurchOut)
+@router.get("/church", response_model=ChurchOut, responses=error_responses(401, 403, 422, 503))
 def church(active: ActiveChurch = Depends(require_church)) -> ChurchOut:
     return ChurchOut(id=active.id, name=active.name, role=active.role)

@@ -1,10 +1,16 @@
 """Domain errors, the F §1.5 code registry, and (Task 3) their API mapping."""
+import json
+import re
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+from fastapi import APIRouter
+from fastapi.testclient import TestClient
 
+from api.errors import ApiError, domain_error_response, error_body, forbidden
+from api.main import create_app
 from domain_errors import (
     ERROR_CODES,
     Busy,
@@ -104,3 +110,95 @@ def test_domain_errors_imports_no_fastapi():
             "print(bad); sys.exit(1 if bad else 0)")
     result = subprocess.run([sys.executable, "-c", code], cwd=BACKEND, capture_output=True, text=True)
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+# --- the API mapping (Task 3; F §1.5, §2.2) ---------------------------------------
+
+HEX32 = re.compile(r"[0-9a-f]{32}")
+
+
+def _raising(exc):
+    """A client for create_app() plus GET /raise, which raises `exc`."""
+    app = create_app()
+    router = APIRouter()
+
+    @router.get("/raise")
+    def raise_it():
+        raise exc
+
+    app.include_router(router)
+    return TestClient(app)
+
+
+def test_handler_maps_a_domain_error_to_the_body():
+    r = _raising(Conflict("Someone else changed this.")).get("/raise")
+    assert r.status_code == 409
+    assert r.json() == {"error": {
+        "code": "conflict",
+        "message": "Someone else changed this.",
+        "request_id": r.headers["x-request-id"],
+    }}
+
+
+def test_field_becomes_fields():
+    r = _raising(InvalidInput("Church name is required.", field="name")).get("/raise")
+    assert r.status_code == 422
+    error = r.json()["error"]
+    assert (error["code"], error["message"]) == ("invalid_request", "Church name is required.")
+    assert error["fields"] == {"name": "Church name is required."}
+    assert "details" not in error
+
+
+def test_details_pass_through():
+    exc = Rejected("This invite has expired.", code="invite_rejected", details={"reason": "expired"})
+    r = _raising(exc).get("/raise")
+    assert r.status_code == 400
+    error = r.json()["error"]
+    assert (error["code"], error["details"]) == ("invite_rejected", {"reason": "expired"})
+    assert "fields" not in error
+
+
+def test_request_id_is_always_present():
+    r = _raising(NotFound("Not found.")).get("/raise", headers={"X-Request-Id": "abcd-1234-efgh"})
+    assert r.json()["error"]["request_id"] == "abcd-1234-efgh"
+    outside = json.loads(domain_error_response(NotFound("Not found.")).body)   # no request running
+    assert HEX32.fullmatch(outside["error"]["request_id"])
+
+
+def test_rate_limited_is_a_429_with_retry_after_equal_to_details():
+    r = _raising(RateLimited("Too many requests. Try again in 30 seconds.", retry_after_seconds=30)).get("/raise")
+    assert r.status_code == 429
+    error = r.json()["error"]
+    assert error["code"] == "rate_limited"
+    assert error["details"] == {"retry_after_seconds": 30}
+    assert r.headers["retry-after"] == "30"
+
+
+def test_api_error_carries_details():
+    exc = ApiError(503, "db_unavailable", "The database schema is behind this release.",
+                   details={"reason": "schema_behind"})
+    r = _raising(exc).get("/raise")
+    assert r.status_code == 503
+    assert r.json()["error"]["details"] == {"reason": "schema_behind"}
+    assert forbidden(details={"reason": "no_church_access"}).details == {"reason": "no_church_access"}
+    assert forbidden().details is None
+
+
+def test_body_omits_fields_and_details_when_absent():
+    assert set(error_body("not_found", "Not found.")["error"]) == {"code", "message", "request_id"}
+    assert set(error_body("not_found", "Not found.", fields={}, details={})["error"]) == {
+        "code", "message", "request_id"}
+    full = error_body("invalid_request", "The request was not valid.",
+                      fields={"name": "Required."}, details={"k": 1})["error"]
+    assert (full["fields"], full["details"]) == ({"name": "Required."}, {"k": 1})
+
+
+def test_domain_error_response_matches_the_handler():
+    exc = RateLimited("Slow down.", retry_after_seconds=7)
+    via_handler = _raising(exc).get("/raise")
+    direct = domain_error_response(exc)
+    handler_body, direct_body = via_handler.json(), json.loads(direct.body)
+    handler_body["error"].pop("request_id")
+    direct_body["error"].pop("request_id")
+    assert (direct.status_code, direct_body) == (via_handler.status_code, handler_body)
+    assert direct.headers["retry-after"] == via_handler.headers["retry-after"] == "7"

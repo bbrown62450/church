@@ -1,14 +1,26 @@
 import re
 import subprocess
 import sys
+import uuid
 from pathlib import Path
+from typing import Any
 
-from fastapi import APIRouter
+import pytest
+from fastapi import APIRouter, Body
 from fastapi.testclient import TestClient
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from api import settings as settings_mod
+from api.deps import get_verifier
+from api.errors import validation_fields
 from api.main import create_app
+from api.schemas import ChurchOut, ItemList, Page
+from api.security import TokenVerifier
 from api.settings import _split_origins
+from domain_errors import ERROR_CODES
+from repos.memberships import add_membership
+from tests.jwt_helpers import ISSUER, SIGNING_KEY, make_token
 
 BACKEND = Path(__file__).resolve().parents[1]
 
@@ -110,3 +122,182 @@ def test_api_does_not_import_streamlit():
     code = "import sys, api.main; sys.exit(1 if 'streamlit' in sys.modules else 0)"
     result = subprocess.run([sys.executable, "-c", code], cwd=BACKEND, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr or "streamlit was imported"
+
+
+# --- slice 1a: 422 fields, 403 reasons, framework codes, OpenAPI error bodies (F §1.5; S) ---
+
+class _Named(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(max_length=5)
+
+
+def _app_with_validation_routes():
+    """create_app() plus a model body, a free-form object body and a UUID path id."""
+    app = create_app()
+    router = APIRouter()
+
+    @router.post("/named")
+    def named(payload: _Named):
+        return {"name": payload.name}
+
+    @router.post("/object")
+    def any_object(payload: dict[str, Any] = Body(...)):
+        return payload
+
+    @router.get("/items/{item_id}")
+    def item(item_id: uuid.UUID):
+        return {"id": str(item_id)}
+
+    app.include_router(router)
+    return app
+
+
+@pytest.mark.parametrize("body, fields", [
+    ({}, {"name": "Required."}),
+    ({"name": "abcdef"}, {"name": "Too long (max 5 characters)."}),
+    ({"name": "Grace", "colour": "red"}, {"colour": "Not a valid value."}),
+], ids=["missing", "too-long", "extra"])
+def test_validation_422_maps_fields(body, fields):
+    r = TestClient(_app_with_validation_routes()).post("/named", json=body)
+    assert r.status_code == 422
+    assert r.json() == {"error": {
+        "code": "invalid_request",
+        "message": "The request was not valid.",
+        "request_id": r.headers["x-request-id"],
+        "fields": fields,
+    }}
+
+
+def test_a_whole_body_422_has_no_fields():
+    client = TestClient(_app_with_validation_routes())
+    not_an_object = client.post("/object", json=["x"])             # location ("body",)
+    not_json = client.post("/object", content=b"{", headers={"Content-Type": "application/json"})
+    for r in (not_an_object, not_json):
+        assert r.status_code == 422
+        error = r.json()["error"]
+        assert (error["code"], error["message"]) == ("invalid_request", "The request was not valid.")
+        assert "fields" not in error
+
+
+def test_a_path_param_422_strips_path():
+    r = TestClient(_app_with_validation_routes()).get("/items/nope")
+    assert r.status_code == 422
+    assert r.json()["error"]["fields"] == {"item_id": "Not a valid value."}
+    # Every source prefix goes; the rest of the location is dotted (F §1.5).
+    assert validation_fields([
+        {"type": "missing", "loc": ("body", "hymns", "opening", "title")},
+        {"type": "string_too_long", "loc": ("query", "q"), "ctx": {"max_length": 3}},
+        {"type": "int_parsing", "loc": ("header", "x-count")},
+        {"type": "int_parsing", "loc": ("body", "items", 0, "n")},
+    ]) == {
+        "hymns.opening.title": "Required.",
+        "q": "Too long (max 3 characters).",
+        "x-count": "Not a valid value.",
+        "items.0.n": "Not a valid value.",
+    }
+
+
+@pytest.fixture
+def auth_client(tmp_db):
+    app = create_app()
+    app.dependency_overrides[get_verifier] = lambda: TokenVerifier(
+        lambda _token: SIGNING_KEY.public_key(), issuer=ISSUER
+    )
+    return TestClient(app)
+
+
+def _auth(email):
+    return {"Authorization": f"Bearer {make_token(email=email)}"}
+
+
+def test_require_church_403_says_no_church_access(auth_client, make_user, make_church):
+    make_church(name="Grace", owner_user_id=make_user(email="a@example.com"))
+    other = make_church(name="Hope")
+    r = auth_client.get("/church", headers={**_auth("a@example.com"), "X-Church-Id": str(other)})
+    assert r.status_code == 403
+    assert r.json() == {"error": {
+        "code": "forbidden",
+        "message": "You don't have access to this church.",
+        "request_id": r.headers["x-request-id"],
+        "details": {"reason": "no_church_access"},
+    }}
+
+
+def test_require_church_without_a_church_header_says_no_church_access(auth_client, make_user, make_church):
+    make_church(name="Grace", owner_user_id=make_user(email="a@example.com"))
+    missing = auth_client.get("/church", headers=_auth("a@example.com"))
+    malformed = auth_client.get("/church", headers={**_auth("a@example.com"), "X-Church-Id": "not-a-uuid"})
+    for r in (missing, malformed):
+        assert r.status_code == 403
+        assert r.json()["error"]["details"] == {"reason": "no_church_access"}
+
+
+def test_require_admin_403_has_no_reason(auth_client, make_user, make_church):
+    church = make_church(name="Grace")
+    add_membership(make_user(email="member@example.com"), church, "member")
+    r = auth_client.patch("/rubric", json={"prefer_familiar": False},
+                          headers={**_auth("member@example.com"), "X-Church-Id": str(church)})
+    assert r.status_code == 403
+    error = r.json()["error"]
+    assert (error["code"], error["message"]) == ("forbidden", "Only church admins can do this.")
+    assert "details" not in error
+
+
+def test_other_http_errors_use_registered_codes():
+    app = create_app()
+    router = APIRouter()
+
+    @router.get("/status/{status}")
+    def fail_with(status: int):
+        raise StarletteHTTPException(status_code=status, detail="upstream said: secret" if status >= 500 else None)
+
+    app.include_router(router)
+    client = TestClient(app)
+    cases = [("GET", "/status/400", 400, "bad_request"), ("POST", "/health", 405, "method_not_allowed"),
+             ("GET", "/status/418", 418, "bad_request"), ("GET", "/status/502", 502, "internal_error")]
+    for method, path, status, code in cases:
+        r = client.request(method, path)
+        assert (r.status_code, r.json()["error"]["code"]) == (status, code), path
+        assert code in ERROR_CODES
+    assert client.get("/status/418").json()["error"]["message"] == "I'm a Teapot"
+    server = client.get("/status/502")
+    assert server.json()["error"]["message"] == "Something went wrong."
+    assert "secret" not in server.text
+
+
+def test_routes_document_the_error_body():
+    schema = create_app().openapi()
+    expected = {
+        ("/me", "get"): {"401", "422", "503"},
+        ("/church", "get"): {"401", "403", "422", "503"},
+        ("/rubric", "get"): {"401", "403", "422", "503"},
+        ("/rubric", "patch"): {"401", "403", "422", "503"},
+    }
+    for (path, method), statuses in expected.items():
+        responses = schema["paths"][path][method]["responses"]
+        assert set(responses) - {"200"} == statuses, (path, method)
+        for status in statuses:
+            assert responses[status]["content"]["application/json"]["schema"] == {
+                "$ref": "#/components/schemas/ErrorBody"}
+    schemas = schema["components"]["schemas"]
+    assert "HTTPValidationError" not in schemas            # FastAPI's default 422 shape is not ours
+    assert set(schemas["ErrorDetail"]["required"]) == {"code", "message", "request_id"}
+
+
+def test_church_out_role_is_a_literal():
+    with pytest.raises(ValidationError):
+        ChurchOut(id=uuid.uuid4(), name="Grace", role="pastor")
+    role = create_app().openapi()["components"]["schemas"]["ChurchOut"]["properties"]["role"]
+    assert role["enum"] == ["owner", "admin", "member"]
+
+
+def test_page_and_item_list_shapes():
+    church = ChurchOut(id=uuid.UUID(int=1), name="Grace", role="owner")
+    page = Page[ChurchOut](items=[church], total=3, limit=1, offset=0)
+    assert page.model_dump(mode="json") == {
+        "items": [{"id": "00000000-0000-0000-0000-000000000001", "name": "Grace", "role": "owner"}],
+        "total": 3, "limit": 1, "offset": 0,
+    }
+    assert ItemList[str](items=["a", "b"]).model_dump() == {"items": ["a", "b"]}
+    with pytest.raises(ValidationError):
+        Page[ChurchOut](items=[], total=0, limit=50)        # offset is required
