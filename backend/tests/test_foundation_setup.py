@@ -159,3 +159,16 @@ def test_readme_says_hymn_facts_columns_come_from_alembic():
     assert "backfill_hymn_facts.py --dry-run" in section            # steps 2 and 3 unchanged
     assert "migrate_add_hymn_facts" not in readme
     assert "migrate_add_hymnal" not in readme
+
+
+# --- slice 1a: Railway config-as-code (S backend/railway.toml, F §3.3) --------
+
+def test_railway_toml_runs_migrations_and_checks_readiness():
+    import tomllib
+
+    config = tomllib.loads((ROOT / "backend" / "railway.toml").read_text(encoding="utf-8"))
+    # Exactly these two settings: the start command stays in backend/Procfile.
+    assert config == {"deploy": {
+        "preDeployCommand": ["alembic upgrade head"],
+        "healthcheckPath": "/health/ready",
+    }}

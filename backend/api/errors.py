@@ -58,9 +58,14 @@ def auth_unavailable() -> ApiError:
     return ApiError(503, "auth_unavailable", "Sign-in is temporarily unavailable. Try again shortly.")
 
 
-def db_unavailable() -> ApiError:
-    """503 from GET /health/ready only (F §1.5 registry; the recorded F §2.2 exception)."""
-    return ApiError(503, "db_unavailable", "The database is not reachable.")
+def db_unavailable(message: str = "The database is not reachable.", *,
+                   details: Optional[dict[str, Any]] = None) -> ApiError:
+    """503 from GET /health/ready only (F §1.5 registry; the recorded F §2.2 exception).
+
+    The schema gate passes its own message and
+    details={"reason": "schema_behind", "current": ..., "head": ...}.
+    """
+    return ApiError(503, "db_unavailable", message, details=details)
 
 
 class ErrorDetail(BaseModel):

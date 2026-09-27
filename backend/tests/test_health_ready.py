@@ -143,3 +143,78 @@ def test_concurrent_callers_share_one_probe(monkeypatch):
         t.join()
     assert len(calls) == 1
     assert results == [True] * 16
+
+
+# --- Task 12: the production schema gate (slice 1a, F §2.6 item 5) -----------
+
+from api import settings as settings_mod
+from db.schema_check import RevisionState
+
+SCHEMA_HEAD = "0004_invites_reusable"
+
+
+@pytest.fixture
+def app_env(monkeypatch):
+    """Set APP_ENV for this test; get_settings() re-reads it."""
+    def set_app_env(value):
+        monkeypatch.setenv("APP_ENV", value)
+        settings_mod.get_settings.cache_clear()
+
+    yield set_app_env
+    settings_mod.get_settings.cache_clear()
+
+
+def _app_with_state(state):
+    """An app whose lifespan left `state` (None: the lifespan never ran)."""
+    app = create_app()
+    if state is not None:
+        app.state.schema_state = state
+    return app
+
+
+def test_gate_503_when_production_and_behind(app_env, probes):
+    app_env("production")
+    app = _app_with_state(RevisionState("0001_baseline", SCHEMA_HEAD, "behind"))
+    r = TestClient(app).get("/health/ready")
+    assert r.status_code == 503
+    assert r.json() == {"error": {
+        "code": "db_unavailable",
+        "message": "The database schema is behind this release.",
+        "request_id": r.headers["x-request-id"],
+        "details": {"reason": "schema_behind", "current": "0001_baseline", "head": SCHEMA_HEAD},
+    }}
+    assert probes.calls == 0                      # the gate answers before the probe
+
+
+@pytest.mark.parametrize("state", [
+    RevisionState("0005_from_a_newer_release", SCHEMA_HEAD, "ahead"),
+    RevisionState(None, None, "unknown"),
+    None,
+], ids=["ahead", "unknown", "unset"])
+def test_gate_passes_ahead_unknown_and_unset(app_env, probes, state):
+    app_env("production")
+    r = TestClient(_app_with_state(state)).get("/health/ready")
+    assert r.status_code == 200
+    assert r.json() == {"ok": True, "db": "ok"}
+
+
+def test_gate_does_nothing_outside_production(app_env, probes):
+    app_env("development")
+    app = _app_with_state(RevisionState(None, SCHEMA_HEAD, "behind"))
+    r = TestClient(app).get("/health/ready")
+    assert r.status_code == 200
+    assert r.json() == {"ok": True, "db": "ok"}
+
+
+def test_gate_runs_before_the_memoized_probe(app_env, probes):
+    """A remembered good probe never hides a schema that is behind."""
+    app_env("production")
+    app = _app_with_state(RevisionState(SCHEMA_HEAD, SCHEMA_HEAD, "current"))
+    client = TestClient(app)
+    assert client.get("/health/ready").status_code == 200
+    assert probes.calls == 1                      # the memo now holds a success for 10 s
+    app.state.schema_state = RevisionState("0003_lockdown", SCHEMA_HEAD, "behind")
+    r = client.get("/health/ready")
+    assert r.status_code == 503
+    assert r.json()["error"]["details"]["reason"] == "schema_behind"
+    assert probes.calls == 1
