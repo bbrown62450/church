@@ -1,3 +1,4 @@
+import configparser
 import json
 import re
 from pathlib import Path
@@ -106,3 +107,18 @@ def test_missing_error_codes_reads_the_union(tmp_path, content, missing):
     if content is not None:
         path.write_text(content, encoding="utf-8")
     assert _missing_error_codes(path) == missing
+
+
+# --- slice 1a: Alembic, tzdata, exact minor pins and the postgres marker (S Backend 1a) ---
+
+def test_backend_requirements_add_alembic_tzdata_and_exact_minor_pins():
+    lines = {line.strip() for line in (ROOT / "backend" / "requirements.txt").read_text().splitlines()}
+    assert {"alembic>=1.20", "tzdata>=2026.4", "fastapi==0.141.*", "pydantic==2.13.*"} <= lines
+    assert "fastapi>=0.115" not in lines          # replaced by the exact minor pin
+
+
+def test_pytest_ini_declares_the_postgres_marker():
+    ini = configparser.ConfigParser()
+    ini.read(ROOT / "pytest.ini")
+    markers = [line.strip() for line in ini["pytest"]["markers"].splitlines() if line.strip()]
+    assert markers == ["postgres: needs TEST_DATABASE_URL (runs in the backend-postgres CI job)"]
