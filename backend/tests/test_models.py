@@ -75,3 +75,38 @@ def test_seed_catalog_fixture_populates_enrichment(tmp_db, seed_catalog):
     assert len(rows) == 4
     assert all(r.scripture_refs for r in rows)
     assert all(r.theme for r in rows)
+
+
+def test_invite_reusable_and_accepted_by_columns(tmp_db, make_user, make_church):
+    """Slice 1 (F §3.2 item 5, §3.4): reusable has a server default for frozen Streamlit's inserts."""
+    from datetime import datetime, timedelta, timezone
+
+    from sqlalchemy.dialects import postgresql
+    from sqlalchemy.schema import CreateTable
+
+    from db import session_scope
+    from db.models import Invite, User
+
+    ddl = str(CreateTable(Invite.__table__).compile(dialect=postgresql.dialect()))
+    assert "reusable BOOLEAN DEFAULT false NOT NULL" in ddl
+    assert "accepted_by UUID," in ddl
+    assert ("CONSTRAINT fk_invites_accepted_by_users FOREIGN KEY(accepted_by) "
+            "REFERENCES users (id) ON DELETE SET NULL") in ddl
+
+    owner_id = make_user("owner@example.com")
+    joiner_id = make_user("joiner@example.com")
+    church_id = make_church(owner_user_id=owner_id)
+    invite_id = uuid.uuid4()
+    with session_scope() as s:
+        s.add(Invite(id=invite_id, church_id=church_id, code="ABC123", created_by=owner_id,
+                     expires_at=datetime.now(timezone.utc) + timedelta(days=7)))
+    with session_scope() as s:
+        invite = s.get(Invite, invite_id)
+        assert (invite.reusable, invite.accepted_by) == (False, None)
+        invite.accepted_by = joiner_id
+
+    with session_scope() as s:
+        assert s.get(Invite, invite_id).accepted_by == joiner_id
+        s.delete(s.get(User, joiner_id))
+    with session_scope() as s:            # tmp_db enforces SQLite foreign keys
+        assert s.get(Invite, invite_id).accepted_by is None

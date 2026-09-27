@@ -501,3 +501,141 @@ def test_0003_is_idempotent_after_the_manual_lockdown(pg_admin_url):
         finally:
             owner.dispose()
             admin.dispose()
+
+
+# --- Task 9: 0004_invites_reusable (F §3.2 item 5, §3.4) -----------------------
+import uuid
+from datetime import datetime, timedelta, timezone
+
+import sqlalchemy as sa
+from sqlalchemy.pool import NullPool
+
+T9_NOW = datetime(2026, 9, 26, 12, 0, tzinfo=timezone.utc)
+
+# The invites columns before 0004, i.e. everything frozen Streamlit's ORM maps:
+# its INSERTs name exactly these columns and never reusable or accepted_by.
+_legacy_invites = sa.table(
+    "invites",
+    sa.column("id", sa.Uuid()),
+    sa.column("church_id", sa.Uuid()),
+    sa.column("code", sa.String()),
+    sa.column("email", sa.String()),
+    sa.column("role", sa.String()),
+    sa.column("created_by", sa.Uuid()),
+    sa.column("created_at", sa.DateTime(timezone=True)),
+    sa.column("expires_at", sa.DateTime(timezone=True)),
+    sa.column("revoked", sa.Boolean()),
+    sa.column("accepted_at", sa.DateTime(timezone=True)),
+)
+_t9_users = sa.table(
+    "users",
+    sa.column("id", sa.Uuid()),
+    sa.column("email", sa.String()),
+    sa.column("created_at", sa.DateTime(timezone=True)),
+)
+_t9_churches = sa.table(
+    "churches",
+    sa.column("id", sa.Uuid()),
+    sa.column("name", sa.String()),
+    sa.column("timezone", sa.String()),
+    sa.column("settings", sa.JSON()),
+    sa.column("created_at", sa.DateTime(timezone=True)),
+)
+
+
+def _seed_owner_and_church(conn) -> tuple[uuid.UUID, uuid.UUID]:
+    user_id, church_id = uuid.uuid4(), uuid.uuid4()
+    conn.execute(_t9_users.insert().values(id=user_id, email="owner@example.com", created_at=T9_NOW))
+    conn.execute(_t9_churches.insert().values(
+        id=church_id, name="Grace Church", timezone="America/New_York", settings={}, created_at=T9_NOW))
+    return user_id, church_id
+
+
+def _insert_legacy_invite(conn, church_id, user_id, *, code, email=None, accepted_at=None) -> None:
+    """An INSERT shaped like frozen Streamlit's: no reusable, no accepted_by."""
+    conn.execute(_legacy_invites.insert().values(
+        id=uuid.uuid4(), church_id=church_id, code=code, email=email, role="member",
+        created_by=user_id, created_at=T9_NOW, expires_at=T9_NOW + timedelta(days=7),
+        revoked=False, accepted_at=accepted_at))
+
+
+def _invites_shape(conn) -> dict:
+    """Everything a table recreate could lose: columns, keys, constraints, indexes."""
+    insp = sa.inspect(conn)
+    return {
+        "columns": [(c["name"], str(c["type"]), c["nullable"]) for c in insp.get_columns("invites")],
+        "pk": insp.get_pk_constraint("invites")["constrained_columns"],
+        "fks": sorted(
+            (fk["name"] or "", tuple(fk["constrained_columns"]), fk["referred_table"],
+             tuple(fk["referred_columns"]), fk["options"].get("ondelete"))
+            for fk in insp.get_foreign_keys("invites")),
+        "uniques": sorted((u["name"] or "", tuple(u["column_names"]))
+                          for u in insp.get_unique_constraints("invites")),
+        "indexes": sorted((i["name"], tuple(i["column_names"]), bool(i["unique"]))
+                          for i in insp.get_indexes("invites")),
+    }
+
+
+def test_0004_marks_only_code_only_invites_reusable(sqlite_url):
+    _alembic(sqlite_url, "upgrade", "0003_lockdown")
+    engine = sa.create_engine(sqlite_url, poolclass=NullPool)
+    try:
+        with engine.begin() as conn:
+            user_id, church_id = _seed_owner_and_church(conn)
+            _insert_legacy_invite(conn, church_id, user_id, code="CODEONLY")
+            _insert_legacy_invite(conn, church_id, user_id, code="PENDING", email="new@example.com")
+            _insert_legacy_invite(conn, church_id, user_id, code="USED", email="old@example.com",
+                                  accepted_at=T9_NOW)
+        _alembic(sqlite_url, "upgrade", "head")
+        with engine.connect() as conn:
+            rows = conn.execute(sa.text(
+                "SELECT code, reusable, accepted_by FROM invites ORDER BY code")).all()
+    finally:
+        engine.dispose()
+    assert [(code, bool(reusable), accepted_by) for code, reusable, accepted_by in rows] == [
+        ("CODEONLY", True, None),
+        ("PENDING", False, None),
+        ("USED", False, None),
+    ]
+
+
+def test_0004_downgrade_drops_the_columns_and_fk(sqlite_url):
+    _alembic(sqlite_url, "upgrade", "0003_lockdown")
+    engine = sa.create_engine(sqlite_url, poolclass=NullPool)
+    try:
+        with engine.connect() as conn:
+            before = _invites_shape(conn)
+        _alembic(sqlite_url, "upgrade", "head")
+        with engine.begin() as conn:
+            user_id, church_id = _seed_owner_and_church(conn)
+            _insert_legacy_invite(conn, church_id, user_id, code="KEEP")
+            at_head = _invites_shape(conn)
+        _alembic(sqlite_url, "downgrade", "0003_lockdown")
+        with engine.connect() as conn:
+            after = _invites_shape(conn)
+            codes = conn.execute(sa.text("SELECT code FROM invites")).scalars().all()
+            version = conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
+    finally:
+        engine.dispose()
+    assert at_head["columns"] == before["columns"] + [
+        ("reusable", "BOOLEAN", False), ("accepted_by", "CHAR(32)", True)]
+    assert at_head["fks"] == sorted(before["fks"] + [
+        ("fk_invites_accepted_by_users", ("accepted_by",), "users", ("id",), "SET NULL")])
+    assert after == before          # the recreate kept every other column, key and index
+    assert codes == ["KEEP"]        # and the rows
+    assert version == "0003_lockdown"
+
+
+def test_an_insert_without_reusable_gets_false(sqlite_url):
+    _alembic(sqlite_url, "upgrade", "head")
+    engine = sa.create_engine(sqlite_url, poolclass=NullPool)
+    try:
+        with engine.begin() as conn:
+            user_id, church_id = _seed_owner_and_church(conn)
+            _insert_legacy_invite(conn, church_id, user_id, code="STREAMLIT")
+        with engine.connect() as conn:
+            reusable, accepted_by = conn.execute(sa.text(
+                "SELECT reusable, accepted_by FROM invites WHERE code = 'STREAMLIT'")).one()
+    finally:
+        engine.dispose()
+    assert (bool(reusable), accepted_by) == (False, None)

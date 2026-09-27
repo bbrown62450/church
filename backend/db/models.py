@@ -1,13 +1,18 @@
 """ORM models — one relational schema serving SQLite (dev) and Postgres (prod).
 
 Portability rules (both backends): generic types only (Uuid, JSON), Python-side
-defaults only (uuid4, utcnow) — never server defaults. Church content cascades
-to the CHURCH; authorship FKs (created_by) SET NULL so history survives a
-departing author.
+defaults (uuid4, utcnow) rather than server defaults. One exception: a NOT NULL
+column added while the frozen Streamlit app still shares the database (until
+slice 7) also declares a server default, because Streamlit's ORM does not map
+the column and its inserts must still succeed (F §3.4; Invite.reusable,
+revision 0004_invites_reusable). A new nullable column needs none. Church
+content cascades to the CHURCH; authorship FKs (created_by) SET NULL so history
+survives a departing author.
 """
 import uuid
 from datetime import datetime, timezone
 
+import sqlalchemy as sa
 from sqlalchemy import (
     JSON,
     Boolean,
@@ -89,6 +94,14 @@ class Invite(Base):
     expires_at = Column(DateTime(timezone=True), nullable=False)
     revoked = Column(Boolean, nullable=False, default=False)
     accepted_at = Column(DateTime(timezone=True))
+    # Revision 0004_invites_reusable. reusable: several people may join with
+    # the code until it expires or is revoked (6b sets it); frozen Streamlit's
+    # inserts get the server default false. accepted_by: who consumed a
+    # single-use invite (1b's accept stamps it with accepted_at).
+    reusable = Column(Boolean, nullable=False, default=False, server_default=sa.false())
+    accepted_by = Column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL", name="fk_invites_accepted_by_users")
+    )
 
     __table_args__ = (
         # NULL emails are distinct on both SQLite and Postgres, so many
