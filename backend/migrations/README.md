@@ -90,8 +90,8 @@ export DATABASE_URL=sqlite:///../data/app.db
 The owner runs steps 0–7 **before PR 1a merges** (step 7 immediately before),
 and steps 8–10 at and after the merge. Record each result with its date in
 `docs/ops-runbook.md` → Supabase lockdown record → "Alembic stamping record
-(slice 1a)". Paste the outputs of steps 5, 6 and 9 and the deploy-log lines of
-step 8 into the 1a PR.
+(slice 1a)", never a URL or a password. Paste the outputs of steps 5, 6 and 9
+and the deploy-log lines of step 8 into the 1a PR.
 
 **Laptop setup** (steps 3–6, 9 and the failure paths): a checkout of the 1a
 branch that has its own `.venv` (Python 3.11). There is no `psql`, `pg_dump`

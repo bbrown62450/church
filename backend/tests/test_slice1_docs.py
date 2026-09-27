@@ -100,6 +100,7 @@ def test_migrations_readme_has_the_production_runbook_steps():
         "Create invite",
         "relation",
         "already exists",
+        '"Alembic stamping record (slice 1a)", never a URL or a password.',
     ):
         assert needle in flat, needle
     assert "liturgy-next" not in text
