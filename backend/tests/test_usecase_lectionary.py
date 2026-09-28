@@ -210,6 +210,12 @@ def test_vanderbilt_html_200_failed(router):
     with pytest.raises(vl.SourceFailed) as caught:
         vl.load_vanderbilt_year(YEAR)
     assert isinstance(caught.value.__cause__, vl.LectionaryFormatError)
+    # The real Content-Type is unrecorded, so other CSV-ish types pass the check; the parser decides.
+    csv_body = load("vanderbilt", YEAR).body
+    for media_type in ("application/csv", "text/comma-separated-values", "application/octet-stream"):
+        route.mock(side_effect=lambda request, t=media_type: httpx.Response(
+            200, content=csv_body, headers={"Content-Type": t}))
+        assert vl.fetch_vanderbilt_year(YEAR) == csv_body.decode("utf-8")
 
 
 def test_vanderbilt_404_none(router):

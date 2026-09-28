@@ -634,8 +634,12 @@ VANDERBILT_READ_TIMEOUT = 15.0
 
 # Media types are compared without their parameters ("; charset=utf-8").
 # Lectio: application/json or any "+json" type. Vanderbilt: S's two types
-# (clarification 19); T1's recorded sidecar is the evidence.
-VANDERBILT_MEDIA_TYPES = frozenset({"text/plain", "text/csv"})
+# (clarification 19) plus other CSV-ish types, because the fixtures are synthetic and the
+# real type is unrecorded; HTML is still refused and the parser rejects anything not CSV.
+VANDERBILT_MEDIA_TYPES = frozenset({
+    "text/plain", "text/csv", "application/csv", "text/comma-separated-values",
+    "application/vnd.ms-excel", "application/octet-stream",
+})
 
 
 class SourceFailed(CacheableFailure):
