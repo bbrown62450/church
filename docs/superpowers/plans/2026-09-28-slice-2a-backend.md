@@ -12718,6 +12718,17 @@ Expected counts after this task: backend `971 passed, 9 skipped` on `main` (CI `
 
 ---
 
+## Build notes (2a build, 2026-09-28)
+
+What changed while Tasks 1 to 11 were built. The tasks above are left as planned; Task 12 wrote these into S and F, marked "(2a build)".
+- **Fixtures:** all 25 are synthetic. The network proxy blocked lectio-api.org, lectionary.library.vanderbilt.edu and bible-api.com, so Vanderbilt's Content-Type, the verbatim Easter Vigil row and the Palm Sunday names are unverified. Task 15's live check is the first check against real data, and Task 12 Step 5 made no recording-based edit.
+- **Christ the King** (owner, 2026-09-28): the Sunday before Advent 1 is "Christ the King", not "Reign of Christ". Where this plan says "Reign of Christ", read "Christ the King".
+- **`resolve_readings`** (owner-approved 2026-09-28): the automatic OT skips the NT pick, so Acts picked as the NT in Easter season is not also the OT. New aliases revelations, mat, rm, php, jdg and eccles; bible-api is sent the book's name for these six.
+- **Vanderbilt and Lectio parsing:** the parser also rejects wrong header labels, a body the `csv` module rejects, and data lines of which none parses. The accepted Vanderbilt media types widen to CSV-ish types (`application/csv`, `text/comma-separated-values`, `application/vnd.ms-excel`, `application/octet-stream`), because the real type is unrecorded. Repeated Vanderbilt names on one date get " (2)", " (3)" (owner-approved). A Proper designation in any case or spacing is never shown. A cell is split on " - " only when it has a heading. Lectio groups and merged sets are capped at 10.
+- **Passages:** a bible-api 200 whose `text` is not a string, or an ESV 200 of the wrong shape, is `unavailable` and not cached. The 20 s deadline is counted from submission to the pool, microseconds after the request starts.
+- **Idempotency key:** the frontend keeps the key after a 429 (a 429 is never stored), and F §1.6's "rotate after any 4xx" now names that exception.
+- **Logging:** "logs never contain query strings" means our own log lines. Uvicorn's access log records path and query (no secrets travel there). Pool threads copy the request context, so their log lines keep the request id rather than `request_id=-`.
+
 ## Spec coverage
 
 S = `docs/superpowers/specs/2026-09-25-slice-2-readings-design.md`; F = foundations. Items owned by 2b or 2c are listed so nothing is dropped silently.

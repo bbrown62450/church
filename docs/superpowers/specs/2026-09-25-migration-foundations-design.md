@@ -80,6 +80,12 @@ The slice specs refined several foundation rules. This pass folds every one of t
 | §3.3 | *(2026-09-28, owner, slice 1b)* Railway's Config as Code is closed to this service: the Pre-deploy Command and the Healthcheck Path are set in the Railway UI, and `backend/railway.toml` only records them. | 1a (record), 1b |
 | §6.1 | *(2026-09-28, owner, slice 1b)* Production Streamlit is https://liturgy-frozen.streamlit.app/ (branch `streamlit-frozen`) since 2026-09-26; `liturgy` and `liturgy-next` are deleted, `keep-awake` pings liturgy-frozen, and item 6's contingency is not in effect. | ops (record), 1b |
 | §7.4 | *(2026-09-28, owner, slice 1b)* The invite preview also returns `already_member`. Concurrent accepts: `invites.claim` (a conditional UPDATE) stamps a single-use invite once and `memberships.ensure_membership` inserts with `insert_ignore`, instead of treating an IntegrityError as success; Postgres race tests cover both. | 1b |
+| §1.8, §2.7, §7.4 | *(2026-09-28, slice 2a)* Process-wide upstream budgets in `integrations/budget.py`: `bible_api` 15 per 30 s; `esv` 60 per minute, 1 000 per hour and 5 000 per day. `try_acquire` never waits, and a part that gets no token is `unavailable` and never cached. `POST /scripture/passages` has a 20 s deadline per request on the pool all requests share. `GET /lectionary/readings` has a 20 s deadline on its two sources: a source still running then counts as timed out for that request. | 2, 2a |
+| §2.3 | *(2026-09-28, slice 2a)* Item 5's one recorded exception: `scripture_fetcher._esv_key()` keeps reading `ESV_API_KEY` from the environment until slice 7 moves the key into `api/settings.py`, because frozen Streamlit's Settings code and its test call the zero-argument `available_translations()`. | 2, 2a |
+| Acceptance 13 | *(2026-09-28, slice 2a)* The upstream budgets (`integrations/budget.py`) join the rate limiter, `TTLCache` and `integrations/http.py`. | 2, 2a |
+| §1.8 | *(2026-09-28, slice 2a)* The `church_create` test rule counts requests, not creates: a test that makes more than 3 `POST /churches` requests as one user (422s and replays count) advances the limiter's test clock or resets it. Slice 1's 6th-create test makes its five creates through the repo, so it is unchanged. | 2a |
+| §1.6 | *(2026-09-28, slice 2a build)* The frontend key rule keeps the key after a 429 (a 429 is never stored), and rotates it after any other 4xx. | 2a |
+| §2.5 | *(2026-09-28, slice 2a build)* "No query strings in logs" covers our own log lines; uvicorn's access log records path and query. Thread-pool log lines keep the request id. | 2a |
 
 ---
 
@@ -234,8 +240,8 @@ Rules:
   - This is acceptable because there is one uvicorn worker. If `--workers` ever exceeds 1, move the store to a Postgres table first.
   - **Church scope** (*amendment 2026-09-28, slice 1b*). The key scope has no church. That is right for `POST /churches`, which is user-scoped. A church-scoped route (5a `POST /services`, 6b `POST /invites`, 5b `POST /bulletin-emails`) must add the resolved church id to the scope, or hash it into the body, so that a key sent to two churches never replays one church's answer to the other.
 - **Frontend key rule (one rule for every idempotent POST; slices 1, 5a, 5b).** Because the server stores 4xx answers and rejects a reused key with a different body, a key must never outlive a definitive answer:
-  - **Reuse** the key only for a retry with an unchanged body after an uncertain outcome (`network_error`, `timeout`, `aborted`, or any 5xx), or while that request is still in flight (a double tap).
-  - **Rotate** to a new key after any 2xx or any 4xx, and whenever the body changes. So a corrected resubmit after a 422 never replays the stored 422 or meets `idempotency_mismatch`.
+  - **Reuse** the key only for a retry with an unchanged body after an uncertain outcome (`network_error`, `timeout`, `aborted`, any 5xx, or a 429), or while that request is still in flight (a double tap).
+  - **Rotate** to a new key after any 2xx or any 4xx except a 429, and whenever the body changes. A 429 is never stored (above), and an earlier try with the same key may already have succeeded, so the client keeps the key and retries after `Retry-After` (2a build; `settleOutcome` in `src/lib/idempotency.ts`). So a corrected resubmit after a 422 never replays the stored 422 or meets `idempotency_mismatch`.
   - Where each form keeps its key:
     - Create-church form: `createKeyTracker()` from `src/lib/idempotency.ts` (slice 1), one tracker per form mount.
     - New-service save: `draft.save_key` plus `draft.save_key_fingerprint` (§4.6), through the pure `src/lib/draft/save-key.ts` (5a). It is persisted in the draft, so it survives a refresh. A PUT never uses it; PUTs are naturally idempotent. On `idempotency_mismatch` the client retries once with the new key.
@@ -259,8 +265,8 @@ Rules:
 |---|---|---|---|
 | Default (database only) | — | < 2 s | 20 000 |
 | `POST /churches`, `POST /hymnals` | bulk insert | < 10 s | 30 000 |
-| `GET /lectionary/readings` | Lectio 10 s and Vanderbilt 15 s (connect 5 s), **in parallel**. TTL cache: success 24 h, failure 5 min. | 15 s | 25 000 |
-| `POST /scripture/passages` (UI sends one reference) | 10 s per part, ≤ 4 parts in parallel. Public-domain text cached 7 days; ESV never cached. | 20 s | 30 000 |
+| `GET /lectionary/readings` | Lectio 10 s and Vanderbilt 15 s (connect 5 s), **in parallel**. TTL cache: success 24 h, failure 5 min. A 20 s deadline on the two sources (§2.7). | 15 s on an idle pool; at most 20 s | 25 000 |
+| `POST /scripture/passages` (UI sends one reference) | 10 s per part, ≤ 4 parts in parallel on a pool all requests share, inside a 20 s deadline per request; process-wide upstream budgets (§2.7). Public-domain text cached 7 days; ESV never cached. | 20 s | 30 000 |
 | `POST /hymns/suggestions` | NT text 10 s (skipped when `nt_text` is sent) + OpenAI (§2.8), all inside a 75 s server deadline passed to `complete(deadline=…)` (slice 3) | ~75 s | 90 000 |
 | `POST /liturgy/generate` (UI sends one section) | OpenAI (§2.8) + ≤ 15 s waiting for a concurrency slot | ~80 s | 90 000 |
 | `POST /church/prayer-library/voice-profile-draft` (6a, PR #7; *amendment 2026-09-26*) | OpenAI inside a 75 s deadline passed to `complete(deadline=…)` | ~75 s | 90 000 |
@@ -287,7 +293,7 @@ Rules:
 | `email` | 10 / hour / user | `/bulletin-emails`. Not a dependency: the usecase charges once, right before the first Google call, so rejected requests and replays cost nothing (5b). |
 | `church_create` | **3 / minute / user (burst guard)** | `POST /churches`, dependency (added to the route in 2). |
 
-**`church_create` is only a burst guard.** The real limit is slice 1's **durable per-user cap**: at most 5 churches created in 24 h (counted from the database, including soft-deleted churches), which returns 429 `rate_limited` "You've created 5 churches in the last 24 hours. Try again later." The dependency runs before validation and before idempotency replay, so 422s and replays also spend burst tokens. At 3 per minute (one token back every 20 s) it stops only scripted bursts: a person filling in the form by hand, including a corrected resubmit or a key-reuse retry, stays under it, so the 6th create in 24 h meets the cap message, not the generic limiter message. Slice 1's 6th-create test must keep seeing the cap message after slice 2 wires the bucket (tests that create more than 3 churches advance the limiter's test clock or reset it between creates).
+**`church_create` is only a burst guard.** The real limit is slice 1's **durable per-user cap**: at most 5 churches created in 24 h (counted from the database, including soft-deleted churches), which returns 429 `rate_limited` "You've created 5 churches in the last 24 hours. Try again later." The dependency runs before validation and before idempotency replay, so 422s and replays also spend burst tokens. At 3 per minute (one token back every 20 s) it stops only scripted bursts: a person filling in the form by hand, including a corrected resubmit or a key-reuse retry, stays under it, so the 6th create in 24 h meets the cap message, not the generic limiter message. Slice 1's 6th-create test must keep seeing the cap message after slice 2 wires the bucket (tests that make more than 3 `POST /churches` requests as one user, 422s and replays included, advance the limiter's test clock or reset it between requests; *amendment 2026-09-28, slice 2a*).
 
 Exceeding a bucket → 429 `rate_limited` with the `Retry-After` header (seconds) and `details.retry_after_seconds`. The limiter's message is "Too many requests. Try again in {n} seconds." (slice 2). The client shows the message and disables retry until `Retry-After` has elapsed.
 
@@ -423,6 +429,7 @@ Because production Streamlit runs from `streamlit-frozen` (D2, §6), refactors o
 5. **Configuration:**
    - Configuration comes from `api/settings.py` (or `integrations/*` for clients) and is passed in. Domain modules stop calling `os.getenv` at call time and stop calling `load_dotenv()` at import; remove each one when its module is touched, and finish in 7.
    - `load_dotenv()` runs only in entry points: `api/main.py` and the CLIs.
+   - One recorded exception (*amendment 2026-09-28, slice 2a*): `scripture_fetcher._esv_key()` keeps reading `ESV_API_KEY` from the environment until slice 7 moves the key into `api/settings.py`. Frozen Streamlit's Settings code and its test call the zero-argument `available_translations()`, and slice 7 deletes both. The key never leaves the backend.
 6. **HTTP:** new and refactored outbound HTTP uses `integrations/http.py` (httpx). `requests` is removed in 7 if nothing uses it by then.
 7. **If a refactor breaks a `streamlit_tests/` test on `main`:** port the assertion to a backend or API test and delete the Streamlit test in the same PR. Never edit frozen Streamlit code on `main` to make it pass.
 
@@ -468,6 +475,7 @@ New `repos.users.ensure_user(email, name, picture) -> UserRow`, in one transacti
 - **Logging rules:**
   - One line per event: `name level request_id message`.
   - Never log request bodies, tokens, invite codes, OAuth code or state, email bodies, or AI prompts and outputs. Prompts are allowed at DEBUG only.
+  - Our own log lines never carry an upstream URL or query string: `integrations/http.py` sets the `httpx` and `httpcore` loggers to WARNING. Uvicorn's access log does record each request's path and query, which is acceptable because no secret travels in a query (§1.1). Work run on a usecase's thread pool copies the request's context, so its log lines keep the request id (2a build).
   - Log counts, ids, durations and outcome codes.
 
 ### 2.6 Startup: dialect logging, production guards, pool (ops slice; revision check in 1)
@@ -492,6 +500,8 @@ The lifespan does the following:
   - `User-Agent: WorshipServiceBuilder/1.0`;
   - redirects allowed only to https.
   Parallel upstream calls use a `ThreadPoolExecutor(max_workers=4)` owned by the usecase.
+- **Upstream budgets** (*amendment 2026-09-28, slice 2a*): `integrations/budget.py` keeps one token budget per upstream for the whole process, shared by every user and request: `bible_api` 15 per 30 s; `esv` 60 per minute **and** 1 000 per hour **and** 5 000 per day. `try_acquire(upstream) -> bool` never waits. A part that gets no token is not sent, comes back `unavailable` and is never cached. Cache hits take no token.
+- **Deadlines on the shared pools** (*amendment 2026-09-28, slice 2a*): `POST /scripture/passages` waits at most 20 s per request for its parts; parts unfinished by then are `unavailable`, and parts not yet started are cancelled. `GET /lectionary/readings` waits at most 20 s for its two sources; a source still running then counts as timed out for that request, and its loader finishes and caches its own outcome. Either way a request answers inside its client timeout however busy the pool is.
 - `cache.TTLCache(maxsize, ttl_ok, ttl_fail)` is thread-safe (a lock) and has separate TTLs for successes and failures. Never cache an error as an empty success.
 - **ESV:** no server cache (Crossway terms). Public-domain translations: 7 days. Lectionary: 24 h for success, 5 min for failure.
 
@@ -1287,7 +1297,7 @@ graph LR
 | Vanderbilt failure cached forever; dead audio cache | 2; 3 | `TTLCache`; delete the audio resolver |
 | Church default translation re-read after Settings | 2 (read), 6a (invalidate on PATCH) | `["church", id, "profile"]` |
 | OpenAI cost exposure: rate limits, prompt caps, no client-supplied hymn list | 2 (limiter), 3, 4 | §1.8, §2.8 |
-| bible-api shared-IP rate limit; ESV terms | 2 | Concurrency 4, 7-day public-domain cache, no ESV cache, `scripture` bucket |
+| bible-api shared-IP rate limit; ESV terms | 2 | Concurrency 4, 7-day public-domain cache, no ESV cache, `scripture` bucket; process-wide `bible_api` and `esv` budgets and a 20 s deadline per request (§2.7, *amendment 2026-09-28, slice 2a*) |
 | Lectio/Vanderbilt 403 or HTML responses | 2 | Validate content type; failure TTL 5 min; manual-entry fallback |
 | Gmail sending limits; silent disconnect on a 400/401 refresh | 5b | `gmail_send_failed` with `details.disconnected`; the UI prompts to reconnect |
 | Notion code | 7 | Deleted with the catalog export |
@@ -1330,7 +1340,7 @@ Each item names the slice that makes it true. A slice is not done until its item
 10. The draft store persists per user and church, survives refresh, migrates or discards bad data, and is kept across church switch and logout. It is pruned after 30 days and for churches the user left. *(test)*
 11. All four builder routes render inside the shell with progress, the sticky mobile footer, and the desktop summary panel. At 375 px there is no horizontal scroll. *(test + deployed)*
 12. A new draft defaults to the next Sunday in the church's timezone. A source-scan unit test (`src/lib/dates.guard.test.ts`) fails on `new Date(` applied to a `YYYY-MM-DD` literal or to any identifier ending in `date_iso`/`dateIso` anywhere in `src/`, except inside `lib/dates.ts`. *(test)*
-13. The rate limiter, `TTLCache` and `integrations/http.py` exist and the no-network test guard is active. *(test)*
+13. The rate limiter, the upstream budgets (`integrations/budget.py`), `TTLCache` and `integrations/http.py` exist and the no-network test guard is active. *(test)*
 
 **After 3 / 4 / 5a / 5b**
 14. (3) Every OpenAI call goes through `openai_client.complete`, with the timeout, retry and concurrency settings from §2.8. `FakeAI` covers success, timeout, busy and not-configured. *(test)*

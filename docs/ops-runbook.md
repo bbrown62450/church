@@ -39,7 +39,7 @@ deployment → Redeploy.
 | `APP_ENV` | `production`, set before ops-3 merged and confirmed in effect on the Active deployment (Railway stages variable edits until they are deployed). The API then refuses to start on anything but PostgreSQL, and logs an ERROR when `CORS_ORIGINS` lists only localhost. | ops-3 |
 | `LOG_LEVEL` | optional: `DEBUG`, `INFO` (the default when unset), `WARNING` or `ERROR` | ops-3 |
 | `DB_POOL_SIZE`, `DB_MAX_OVERFLOW` | `3` and `3` (see Platform limits) | ops-1; read since ops-2 |
-| `ESV_API_KEY` | optional: enables the ESV translation (secret) | ops-1 |
+| `ESV_API_KEY` | optional: enables the ESV translation (secret). The new app reads it from the environment (`scripture_fetcher._esv_key()`) until slice 7 moves it into `api/settings.py`; while it is unset, `GET /translations` returns `esv_available: false` and ESV is hidden. | ops-1; read by the new app since slice 2a |
 | `OPENAI_API_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI` | carried over for later slices (secrets) | slice 0 |
 
 Checked against Railway → the API service → Variables (names only) and Settings → Deploy → Healthcheck Path:
