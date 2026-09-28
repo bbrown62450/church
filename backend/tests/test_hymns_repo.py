@@ -1,4 +1,7 @@
+from sqlalchemy import event, select
+
 from db import session_scope
+from db.models import Hymn, HymnCatalog
 from repos.hymns import (
     add_hymn,
     delete_hymn,
@@ -113,3 +116,71 @@ def test_seed_copies_year_and_familiarity(tmp_db, make_user, make_church):
     [hymn] = list_hymns(cid)
     assert hymn["Text Year"] == 1826
     assert hymn["Hymnal Count"] == 1322
+
+
+SEEDED_COLUMNS = ("hymnal", "title", "number", "scripture_refs", "theme",
+                  "hymnary_link", "audio_url", "text_year", "hymnal_count")
+
+
+def _watch_hymn_inserts(engine) -> list:
+    """Record each cursor execution that inserts into hymns (an executemany is one)."""
+    seen = []
+
+    @event.listens_for(engine, "before_cursor_execute")
+    def _record(conn, cursor, statement, parameters, context, executemany):
+        if statement.lstrip().upper().startswith("INSERT INTO HYMNS "):
+            seen.append(statement)
+
+    return seen
+
+
+def test_seed_copies_every_catalog_column_in_bulk(tmp_db, make_user, make_church):
+    cid = make_church(owner_user_id=make_user(email="bulk@grace.org"))
+    with session_scope() as session:
+        session.add_all([
+            HymnCatalog(hymnal="GG2013", title="Holy, Holy, Holy", number=138,
+                        scripture_refs="Revelation 4:8", theme="trinity, praise",
+                        hymnary_link="https://hymnary.org/text/holy_holy_holy",
+                        audio_url="https://example.org/138.mp3", text_year=1826,
+                        hymnal_count=1322),
+            HymnCatalog(hymnal="PH1990", title="Be Thou My Vision", number=339),
+        ])
+    inserts = _watch_hymn_inserts(tmp_db)
+    built = []
+
+    def _count_hymn_objects(target, args, kwargs):
+        built.append(1)
+
+    event.listen(Hymn, "init", _count_hymn_objects)
+    try:
+        with session_scope() as session:
+            assert seed_church_from_catalog(cid, session) == 2
+    finally:
+        event.remove(Hymn, "init", _count_hymn_objects)
+    # One INSERT for the whole catalog, and no Hymn object built per row.
+    assert len(inserts) == 1
+    assert built == []
+
+    with session_scope() as session:
+        catalog = session.execute(
+            select(HymnCatalog).order_by(HymnCatalog.number)
+        ).scalars().all()
+        hymns = session.execute(
+            select(Hymn).where(Hymn.church_id == cid).order_by(Hymn.number)
+        ).scalars().all()
+    assert [tuple(getattr(h, col) for col in SEEDED_COLUMNS) for h in hymns] == [
+        tuple(getattr(c, col) for col in SEEDED_COLUMNS) for c in catalog
+    ]
+    assert len({h.id for h in hymns}) == 2
+    assert not {h.id for h in hymns} & {c.id for c in catalog}  # fresh ids, not the catalog's
+
+
+def test_seed_with_empty_catalog_inserts_nothing(tmp_db, make_user, make_church):
+    cid = make_church(owner_user_id=make_user(email="empty@grace.org"))
+    inserts = _watch_hymn_inserts(tmp_db)
+    with session_scope() as session:
+        # An empty parameter list would INSERT one all-defaults row (IntegrityError
+        # on hymns.church_id), so the seed must skip the statement entirely.
+        assert seed_church_from_catalog(cid, session) == 0
+    assert inserts == []
+    assert list_hymns(cid) == []

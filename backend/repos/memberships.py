@@ -1,9 +1,12 @@
 from typing import Optional
 
 from sqlalchemy import select, func, update
+from sqlalchemy.orm import Session
 
 from db import session_scope
+from db.ids import as_uuid
 from db.models import Membership, User, Service
+from db.upsert import insert_ignore
 
 _ADMIN_ROLES = ("owner", "admin")
 
@@ -26,10 +29,48 @@ def _lock_admin_user_ids(session, church_id) -> list:
     ).scalars().all()
 
 
-def get_role(user_id, church_id) -> Optional[str]:
-    with session_scope() as session:
-        m = session.get(Membership, {"church_id": church_id, "user_id": user_id})
-        return m.role if m is not None else None
+def get_role(user_id, church_id, *, session: Optional[Session] = None) -> Optional[str]:
+    if session is not None:
+        return _get_role(session, user_id, church_id)
+    with session_scope() as own:
+        return _get_role(own, user_id, church_id)
+
+
+def _get_role(session, user_id, church_id) -> Optional[str]:
+    m = session.get(Membership, {"church_id": church_id, "user_id": user_id})
+    return m.role if m is not None else None
+
+
+def ensure_membership(
+    church_id, user_id, role: str, *, session: Optional[Session] = None
+) -> tuple[str, bool]:
+    """Add `user_id` to `church_id` with `role` unless a membership exists;
+    return (stored role, inserted). An existing membership keeps its role
+    (role changes go through set_role).
+
+    INSERT ... ON CONFLICT DO NOTHING, then a select: two concurrent same-user
+    accepts never hit the primary key; the second waits for the first's row,
+    inserts nothing (rowcount 0 on both dialects) and gets inserted=False.
+    """
+    cid, uid = as_uuid(church_id), as_uuid(user_id)
+    if session is not None:
+        return _ensure_membership(session, cid, uid, role)
+    with session_scope() as own:
+        return _ensure_membership(own, cid, uid, role)
+
+
+def _ensure_membership(session, church_id, user_id, role) -> tuple[str, bool]:
+    result = session.execute(
+        insert_ignore(Membership.__table__)
+        .values(church_id=church_id, user_id=user_id, role=role)
+        .on_conflict_do_nothing(index_elements=["church_id", "user_id"])
+    )
+    stored = session.execute(
+        select(Membership.role).where(
+            Membership.church_id == church_id, Membership.user_id == user_id
+        )
+    ).scalar_one()
+    return stored, result.rowcount == 1
 
 
 def count_admins(church_id) -> int:

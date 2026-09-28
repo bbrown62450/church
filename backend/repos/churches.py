@@ -1,45 +1,108 @@
 import datetime as _dt
 import uuid
+from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import select, update
+from sqlalchemy.orm import Session
 
 from db import session_scope
+from db.ids import as_uuid
 from db.models import Church, Membership, Invite
+from repos.invites import as_utc
 from service_rubric import apply_patch, merge_rubric, validate_patch
 
 
-def create_church(*, name, timezone, owner_user_id) -> uuid.UUID:
+def create_church(
+    *, name, timezone, owner_user_id, session: Optional[Session] = None
+) -> uuid.UUID:
     """Create a church, its creator's owner membership, and seed the per-church
     hymnal from the shared catalog — all in one transaction (atomic, so no admin
     ever sees a half-populated hymnal). Returns the new church id.
+
+    Runs in the caller's `session` (no commit) or in its own scope.
+    create_church_seeded also returns the number of hymns seeded.
     """
-    with session_scope() as session:
-        church = Church(name=name, timezone=timezone)
-        session.add(church)
-        session.flush()  # assign church.id (Python-side uuid default)
-        session.add(
-            Membership(church_id=church.id, user_id=owner_user_id, role="owner")
+    church_id, _ = create_church_seeded(
+        name=name, timezone=timezone, owner_user_id=owner_user_id, session=session
+    )
+    return church_id
+
+
+def create_church_seeded(
+    *, name, timezone, owner_user_id, session: Optional[Session] = None
+) -> tuple[uuid.UUID, int]:
+    """create_church, returning (church id, hymns seeded) for the
+    `church_created ... hymns_seeded=` log line (usecases.onboarding).
+    `owner_user_id` goes through as_uuid (a malformed id is NotFound)."""
+    owner_id = as_uuid(owner_user_id)
+    if session is not None:
+        return _create_church(session, name, timezone, owner_id)
+    with session_scope() as own:
+        return _create_church(own, name, timezone, owner_id)
+
+
+def _create_church(session, name, timezone, owner_id) -> tuple[uuid.UUID, int]:
+    church = Church(name=name, timezone=timezone)
+    session.add(church)
+    session.flush()  # assign church.id (Python-side uuid default)
+    session.add(Membership(church_id=church.id, user_id=owner_id, role="owner"))
+    session.flush()  # the owner membership, before the hymn rows
+    # Looked up at call time, so a test can monkeypatch
+    # repos.hymns.seed_church_from_catalog (the atomicity test makes it raise).
+    from repos.hymns import seed_church_from_catalog
+    seeded = seed_church_from_catalog(church.id, session)
+    return church.id, seeded
+
+
+def get_church(church_id, *, session: Optional[Session] = None) -> Optional[dict]:
+    """{"id", "name", "timezone", "settings"}, or None when the church is missing
+    or soft-deleted. Reads in the caller's `session` or in its own scope."""
+    if session is not None:
+        return _get_church(session, church_id)
+    with session_scope() as own:
+        return _get_church(own, church_id)
+
+
+def _get_church(session, church_id) -> Optional[dict]:
+    church = session.get(Church, church_id)
+    if church is None or church.deleted_at is not None:
+        return None
+    return {
+        "id": church.id,
+        "name": church.name,
+        "timezone": church.timezone,
+        "settings": church.settings,
+    }
+
+
+def recent_owned_creations(
+    user_id, *, since: datetime, session: Optional[Session] = None
+) -> list[datetime]:
+    """created_at of every church `user_id` holds an owner membership in and
+    that was created after `since`, oldest first, as aware UTC. Soft-deleted
+    churches count, so deleting a church does not free a slot in the per-user
+    create cap (usecases.onboarding.create_church)."""
+    uid = as_uuid(user_id)
+    since_utc = as_utc(since)  # SQLite compares naive UTC text
+    if session is not None:
+        return _recent_owned_creations(session, uid, since_utc)
+    with session_scope() as own:
+        return _recent_owned_creations(own, uid, since_utc)
+
+
+def _recent_owned_creations(session, user_id, since) -> list[datetime]:
+    stamps = session.execute(
+        select(Church.created_at)
+        .join(Membership, Membership.church_id == Church.id)
+        .where(
+            Membership.user_id == user_id,
+            Membership.role == "owner",
+            Church.created_at > since,
         )
-        # Deferred import: repos.hymns is created in a later task, so import it
-        # locally (right before use) to keep repos.churches importable on its own.
-        from repos.hymns import seed_church_from_catalog
-        seed_church_from_catalog(church.id, session)
-        new_id = church.id
-        return new_id
-
-
-def get_church(church_id) -> Optional[dict]:
-    with session_scope() as session:
-        church = session.get(Church, church_id)
-        if church is None or church.deleted_at is not None:
-            return None
-        return {
-            "id": church.id,
-            "name": church.name,
-            "timezone": church.timezone,
-            "settings": church.settings,
-        }
+        .order_by(Church.created_at)
+    ).scalars().all()
+    return [as_utc(stamp) for stamp in stamps]
 
 
 def list_user_churches(user_id) -> list:

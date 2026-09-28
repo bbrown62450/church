@@ -6,7 +6,7 @@ Public hymn dicts use the flat Notion-property key shape so existing helpers
 import uuid
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, insert, select
 from sqlalchemy.orm import Session
 
 from db import session_scope
@@ -171,27 +171,45 @@ def delete_hymn(hymn_id, church_id) -> bool:
 def seed_church_from_catalog(church_id, session: Session) -> int:
     """CANONICAL seed: copy every hymn_catalog row into a church's hymns.
 
-    Uses the caller-supplied session (part of create_church's transaction) and
-    does NOT commit. Returns the number of hymns seeded.
+    One Core INSERT over the hymns table with a fresh id per row, in the
+    caller-supplied session (part of create_church's transaction); does NOT
+    commit. No Hymn object is built per row, and every row carries the same
+    keys, None included, so the whole list is one executemany (psycopg2
+    batches it with insertmanyvalues). The ORM form, insert(Hymn), leaves out
+    None values and splits the rows into one statement per null pattern.
+    An empty catalog inserts nothing: an empty parameter list would insert
+    one all-defaults row. Returns the number of hymns seeded.
     """
     cid = _as_uuid(church_id)
-    rows = session.execute(select(HymnCatalog)).scalars().all()
-    count = 0
-    for c in rows:
-        session.add(
-            Hymn(
-                church_id=cid,
-                hymnal=c.hymnal,
-                title=c.title,
-                number=c.number,
-                scripture_refs=c.scripture_refs,
-                theme=c.theme,
-                hymnary_link=c.hymnary_link,
-                audio_url=c.audio_url,
-                text_year=c.text_year,
-                hymnal_count=c.hymnal_count,
-            )
+    catalog = session.execute(
+        select(
+            HymnCatalog.hymnal,
+            HymnCatalog.title,
+            HymnCatalog.number,
+            HymnCatalog.scripture_refs,
+            HymnCatalog.theme,
+            HymnCatalog.hymnary_link,
+            HymnCatalog.audio_url,
+            HymnCatalog.text_year,
+            HymnCatalog.hymnal_count,
         )
-        count += 1
-    session.flush()
-    return count
+    ).all()
+    rows = [
+        {
+            "id": uuid.uuid4(),
+            "church_id": cid,
+            "hymnal": c.hymnal,
+            "title": c.title,
+            "number": c.number,
+            "scripture_refs": c.scripture_refs,
+            "theme": c.theme,
+            "hymnary_link": c.hymnary_link,
+            "audio_url": c.audio_url,
+            "text_year": c.text_year,
+            "hymnal_count": c.hymnal_count,
+        }
+        for c in catalog
+    ]
+    if rows:
+        session.execute(insert(Hymn.__table__), rows)
+    return len(rows)
