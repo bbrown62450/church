@@ -247,6 +247,24 @@ def budget_clock():
     return clock
 
 
+@pytest.fixture(autouse=True)
+def _fresh_lectionary_caches():
+    """usecases.lectionary keeps two process-wide TTL caches and a thread pool
+    (slice 2a). Each test starts with the pool joined and a new pool and new,
+    empty caches, so no cached reading and no straggling worker crosses tests
+    (clarification 39). A test that blocks a worker releases it and calls
+    reset_for_tests() itself in `finally`, while its respx mock still answers.
+
+    Resets only when usecases.lectionary is already imported (the
+    deferred-import rule at the top of this file)."""
+    import sys
+
+    lectionary = sys.modules.get("usecases.lectionary")
+    if lectionary is not None:
+        lectionary.reset_for_tests()
+    yield
+
+
 # --- slice 1: network-free tests and the Postgres test database (F §5.1, §5.3) ---
 
 _LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1")

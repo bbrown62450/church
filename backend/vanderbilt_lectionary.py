@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """
-Fetch Revised Common Lectionary readings by date.
-Primary: Lectio API (http://lectio-api.org) — works reliably.
-Fallback: Vanderbilt Divinity Library CSV (often returns 403 or HTML).
+Revised Common Lectionary readings for one date (slice 2).
+
+Two sources, looked up for exactly the date asked: Lectio (lectio-api.org, by
+date) and the Vanderbilt Divinity Library liturgical-year CSV. This module is
+pure parsing, naming and merging plus the two fetchers and loaders; caching,
+the parallel lookup and the status rules live in usecases/lectionary.py.
 """
 
 import csv
@@ -10,10 +13,12 @@ import logging
 import re
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from typing import Any, Dict, List, Literal, Optional
+from typing import Literal, Optional
 
 import httpx
 
+from cache import CacheableFailure
+from integrations import http
 from scripture_refs import scripture_key, split_alternatives, split_book
 
 logger = logging.getLogger(__name__)
@@ -23,389 +28,11 @@ LECTIO_API_URL = "https://lectio-api.org/api/v1/readings"
 # Liturgical year CSV URLs: 2025-26 (Year A), 2026-27 (Year B), 2027-28 (Year C)
 VANDERBILT_YEAR_URL = "https://lectionary.library.vanderbilt.edu/calendar/{year}/?season=all&download=csv"
 
-# Cache by liturgical year to avoid repeated fetches
-_cache: Dict[str, List[Dict[str, str]]] = {}
-
-
-def _liturgical_year_for_date(d: datetime) -> str:
-    """Return liturgical year string (e.g. '2025-26') for a given date."""
-    # Advent starts late Nov; so 2025-26 runs ~Nov 30 2025 through ~Nov 28 2026
-    if d.month > 11 or (d.month == 11 and d.day >= 29):
-        return f"{d.year}-{str(d.year + 1)[2:]}"
-    return f"{d.year - 1}-{str(d.year)[2:]}"
-
-
-def _parse_csv_date(s: str) -> Optional[datetime]:
-    """Parse Vanderbilt CSV calendar date, e.g. 'Feb 15, 2026' or 'Jan 06, 2027'."""
-    if not s or not s.strip():
-        return None
-    s = s.strip().strip('"')
-    try:
-        return datetime.strptime(s, "%b %d, %Y")
-    except ValueError:
-        try:
-            return datetime.strptime(s, "%B %d, %Y")
-        except ValueError:
-            return None
-
-
-def _normalize_date_for_match(d: datetime) -> datetime:
-    """Return the Sunday on or before d (for matching to lectionary rows)."""
-    weekday = d.weekday()  # 0=Mon, 6=Sun
-    days_since_sunday = (weekday + 1) % 7
-    return d - timedelta(days=days_since_sunday)
-
-
-def _easter_date(year: int) -> date:
-    """Compute Easter Sunday for the given year (Anonymous Gregorian algorithm)."""
-    a = year % 19
-    b = year // 100
-    c = year % 100
-    d = b // 4
-    e = b % 4
-    f = (b + 8) // 25
-    g = (b - f + 1) // 3
-    h = (19 * a + b - d - g + 15) % 30
-    i = c // 4
-    k = c % 4
-    l = (32 + 2 * e + 2 * i - h - k) % 7
-    m = (a + 11 * h + 22 * l) // 451
-    month = (h + l - 7 * m + 114) // 31
-    day = ((h + l - 7 * m + 114) % 31) + 1
-    return date(year, month, day)
-
-
-def _ordinal_sunday_label(ordinal: int, season: str) -> str:
-    """Return e.g. 'First Sunday in Lent', 'Palm Sunday' for 6th in Lent."""
-    ordinals = ("First", "Second", "Third", "Fourth", "Fifth", "Sixth")
-    if season == "Lent" and ordinal == 6:
-        return "Palm Sunday"
-    if ordinal <= 6 and ordinal >= 1:
-        return f"{ordinals[ordinal - 1]} Sunday in {season}"
-    return ""
-
-
-def _liturgical_sunday_name(sunday_date: date, season: str, year: str) -> Optional[str]:
-    """
-    Compute 'Nth Sunday in Season' for common RCL seasons.
-    Returns e.g. 'Fourth Sunday in Lent', 'Palm Sunday', 'First Sunday of Advent'.
-    """
-    y = sunday_date.year
-
-    if season == "Lent":
-        easter = _easter_date(y)
-        palm_sunday = easter - timedelta(days=7)
-        first_sunday_lent = palm_sunday - timedelta(days=35)
-        if first_sunday_lent <= sunday_date <= palm_sunday:
-            weeks = (sunday_date - first_sunday_lent).days // 7
-            return _ordinal_sunday_label(weeks + 1, "Lent")
-    elif season == "Advent":
-        # First Sunday of Advent: Sunday on or after Nov 27 (4th Sun before Christmas)
-        for cand in (date(y, 11, d) for d in range(27, 31)):
-            if cand.weekday() == 6:  # Sunday
-                first_advent = cand
-                break
-        else:
-            first_advent = date(y, 12, 1)
-            while first_advent.weekday() != 6:
-                first_advent += timedelta(days=1)
-        if first_advent <= sunday_date <= date(y, 12, 24):
-            weeks = (sunday_date - first_advent).days // 7
-            if weeks < 4:
-                ordinals = ("First", "Second", "Third", "Fourth")
-                return f"{ordinals[weeks]} Sunday of Advent"
-    elif season == "Epiphany":
-        # First Sunday after Epiphany (Jan 6); last is Transfiguration (Sun before Lent)
-        epiphany = date(y, 1, 6)
-        sun_after_epiphany = epiphany
-        while sun_after_epiphany.weekday() != 6:
-            sun_after_epiphany += timedelta(days=1)
-        if epiphany.weekday() == 6:
-            sun_after_epiphany += timedelta(days=7)
-        easter = _easter_date(y)
-        ash_wed = easter - timedelta(days=46)
-        last_epiphany = ash_wed
-        while last_epiphany.weekday() != 6:
-            last_epiphany -= timedelta(days=1)
-        if sun_after_epiphany <= sunday_date <= last_epiphany:
-            weeks = (sunday_date - sun_after_epiphany).days // 7
-            if weeks == 0:
-                return "Baptism of the Lord"
-            # Last Sunday after Epiphany = Transfiguration
-            first_sun_lent = (easter - timedelta(days=7)) - timedelta(days=35)
-            if sunday_date >= first_sun_lent - timedelta(days=7):
-                return "Transfiguration Sunday"
-            return f"{['Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh', 'Eighth', 'Ninth'][weeks - 1]} Sunday after Epiphany"
-    elif season == "Easter":
-        easter = _easter_date(y)
-        if sunday_date >= easter and sunday_date <= easter + timedelta(days=49):
-            weeks = (sunday_date - easter).days // 7
-            if weeks == 0:
-                return "Easter Sunday"
-            ordinals = ("Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh")
-            if weeks <= 6:
-                return f"{ordinals[weeks - 1]} Sunday of Easter"
-
-    return None
-
-
-def fetch_lectionary_year(year_str: str) -> List[Dict[str, str]]:
-    """Download and parse CSV for one liturgical year. Results cached."""
-    if year_str in _cache:
-        logger.debug("Using cached lectionary for year %s", year_str)
-        return _cache[year_str]
-    url = VANDERBILT_YEAR_URL.format(year=year_str)
-    logger.info("Fetching lectionary CSV for year %s from %s", year_str, url)
-    try:
-        r = httpx.get(
-            url,
-            timeout=20.0,
-            headers={"User-Agent": "Mozilla/5.0 (compatible; WorshipBuilder/1.0)"},
-        )
-        r.raise_for_status()
-        text = r.text
-        logger.info("Lectionary CSV fetched: %d bytes", len(text))
-    except Exception as e:
-        logger.warning("Failed to fetch lectionary: %s", e)
-        _cache[year_str] = []
-        return []
-
-    rows = []
-    lines = [L for L in text.splitlines() if L.strip()]
-    # Find the header line (contains "Calendar Date")
-    start = 0
-    for i, line in enumerate(lines):
-        if "Calendar Date" in line and "Liturgical Date" in line:
-            start = i
-            break
-    if start >= len(lines):
-        _cache[year_str] = []
-        return []
-    reader = csv.DictReader(lines[start:], fieldnames=[
-        "Liturgical Date", "Calendar Date", "First reading", "Psalm",
-        "Second reading", "Gospel", "Art", "Prayer",
-    ])
-    header = next(reader)
-    for row in reader:
-        cal = (row.get("Calendar Date") or "").strip().strip('"')
-        if _parse_csv_date(cal):
-            rows.append(row)
-    _cache[year_str] = rows
-    logger.info("Parsed %d lectionary rows for year %s", len(rows), year_str)
-    return rows
-
-
-def _row_to_reading(row: Dict[str, str]) -> Dict[str, Any]:
-    """Convert a Vanderbilt CSV row to a reading dict."""
-    cal_str = (row.get("Calendar Date") or "").strip().strip('"')
-    first = (row.get("First reading") or "").strip().strip('"')
-    psalm = (row.get("Psalm") or "").strip().strip('"')
-    second = (row.get("Second reading") or "").strip().strip('"')
-    gospel = (row.get("Gospel") or "").strip().strip('"')
-    scriptures = [first, psalm, second, gospel]
-    scriptures = [s for s in scriptures if s and not s.startswith("http")]
-    liturgical_date = (row.get("Liturgical Date") or "").strip().strip('"')
-    return {
-        "liturgical_date": liturgical_date,
-        "calendar_date": cal_str,
-        "first_reading": first,
-        "psalm": psalm,
-        "second_reading": second,
-        "gospel": gospel,
-        "scriptures": scriptures,
-    }
-
-
-def get_readings_for_date(
-    date: datetime,
-) -> List[Dict[str, Any]]:
-    """
-    Get Revised Common Lectionary readings for the Sunday on or before the given date.
-    Returns a list of reading dicts (usually 1, but 2 for Palm Sunday: Palms + Passion).
-    Each dict has: liturgical_date, calendar_date, first_reading, psalm, second_reading, gospel, scriptures.
-    """
-    year_str = _liturgical_year_for_date(date)
-    rows = fetch_lectionary_year(year_str)
-    if not rows:
-        logger.warning("No lectionary rows for year %s", year_str)
-        return []
-
-    target = _normalize_date_for_match(date)
-    target_ts = target.date()
-    logger.info("Looking for readings for date %s (Sunday %s), liturgical year %s", date, target_ts, year_str)
-
-    # Collect ALL rows that match the target date (e.g. Palm Sunday has Palms + Passion)
-    matches = []
-    for row in rows:
-        cal_str = (row.get("Calendar Date") or "").strip().strip('"')
-        row_date = _parse_csv_date(cal_str)
-        if not row_date:
-            continue
-        if row_date.date() == target_ts:
-            reading = _row_to_reading(row)
-            logger.info("Found exact match for %s: liturgical_date=%r", target_ts, reading["liturgical_date"])
-            matches.append(reading)
-
-    if matches:
-        return matches
-
-    # No exact match: try nearest previous Sunday
-    for row in reversed(rows):
-        cal_str = (row.get("Calendar Date") or "").strip().strip('"')
-        row_date = _parse_csv_date(cal_str)
-        if row_date and row_date.date() <= target_ts:
-            reading = _row_to_reading(row)
-            logger.info("Found nearest Sunday match for %s (using %s): liturgical_date=%r", target_ts, row_date.date(), reading["liturgical_date"])
-            return [reading]
-    logger.warning("No lectionary match for date %s", target_ts)
-    return []
-
-
-def _get_readings_from_lectio(date_iso: str) -> Optional[Dict[str, Any]]:
-    """
-    Fetch RCL readings from Lectio API for a given date (YYYY-MM-DD).
-    Returns same format as Vanderbilt: liturgical_date, calendar_date, first_reading, psalm, second_reading, gospel, scriptures.
-    """
-    try:
-        r = httpx.get(
-            LECTIO_API_URL,
-            params={"date": date_iso, "tradition": "rcl"},
-            timeout=15.0,
-        )
-        r.raise_for_status()
-        data = r.json()
-    except Exception as e:
-        logger.warning("Lectio API fetch failed: %s", e)
-        return None
-
-    payload = data.get("data")
-    if not payload:
-        logger.warning("Lectio API returned no data")
-        return None
-
-    readings = payload.get("readings", [])
-    season = (payload.get("season") or "").strip()
-    year = (payload.get("year") or "").strip()
-    day_name = (payload.get("dayName") or "").strip()
-
-    # Build liturgical_date: dayName from API, else "Nth Sunday in Lent" etc., else "Season — Year X"
-    if day_name:
-        liturgical_date = day_name
-    else:
-        try:
-            d = datetime.strptime(date_iso, "%Y-%m-%d").date()
-            computed = _liturgical_sunday_name(d, season, year)
-            liturgical_date = computed if computed else f"{season} — Year {year}"
-        except (ValueError, TypeError):
-            liturgical_date = f"{season} — Year {year}" if (season and year) else (season or "Sunday")
-
-    # Extract readings by type (prefer non-alternative)
-    by_type = {}
-    for rd in readings:
-        if rd.get("isAlternative"):
-            continue
-        t = rd.get("type")
-        if t and t not in by_type:
-            by_type[t] = (rd.get("citation") or "").strip()
-
-    first = by_type.get("first", "")
-    psalm = by_type.get("psalm", "")
-    second = by_type.get("second", "")
-    gospel = by_type.get("gospel", "")
-
-    scriptures = [s for s in [first, psalm, second, gospel] if s]
-
-    # Calendar date in "Mar 15, 2026" format
-    try:
-        d = datetime.strptime(date_iso, "%Y-%m-%d")
-        calendar_date = d.strftime("%b %d, %Y")
-    except ValueError:
-        calendar_date = date_iso
-
-    logger.info("Lectio API: liturgical_date=%r for %s", liturgical_date, date_iso)
-
-    return {
-        "liturgical_date": liturgical_date,
-        "calendar_date": calendar_date,
-        "first_reading": first,
-        "psalm": psalm,
-        "second_reading": second,
-        "gospel": gospel,
-        "scriptures": scriptures,
-    }
-
-
-def get_readings_for_date_string(date_str: str) -> List[Dict[str, Any]]:
-    """
-    Parse a date string (e.g. 'February 15, 2026', 'Feb 15, 2026', '2026-02-15')
-    and return lectionary readings for that Sunday.
-    Returns a list of reading dicts (usually 1, but 2 for Palm Sunday: Palms + Passion).
-    Tries Lectio API first; also checks Vanderbilt CSV for additional reading sets.
-    """
-    date_str = date_str.strip()
-    logger.info("get_readings_for_date_string called with date_str=%r", date_str)
-
-    # Parse to datetime and ISO
-    d = None
-    for fmt in ("%B %d, %Y", "%b %d, %Y", "%Y-%m-%d", "%m/%d/%Y", "%d %B %Y"):
-        try:
-            d = datetime.strptime(date_str, fmt)
-            break
-        except ValueError:
-            continue
-
-    if not d:
-        logger.warning("Could not parse date string %r with any format", date_str)
-        return []
-
-    # Normalize to Sunday on or before (same as Vanderbilt) for consistent Sunday readings
-    target_sunday = _normalize_date_for_match(d)
-    date_iso = target_sunday.strftime("%Y-%m-%d")
-    logger.info("Parsed date -> %s, normalized to Sunday %s", d, date_iso)
-
-    # Try Lectio API (reliable readings)
-    lectio_result = _get_readings_from_lectio(date_iso)
-
-    # Also get Vanderbilt CSV readings (may have additional sets, e.g. Liturgy of the Palms)
-    vanderbilt_results = get_readings_for_date(d)
-    logger.info("Vanderbilt returned %d reading set(s)", len(vanderbilt_results))
-
-    if not lectio_result and not vanderbilt_results:
-        return []
-
-    if not lectio_result:
-        return vanderbilt_results
-
-    if not vanderbilt_results or len(vanderbilt_results) <= 1:
-        # No extra sets from Vanderbilt — just use Lectio
-        return [lectio_result]
-
-    # Multiple Vanderbilt sets (e.g. Palm Sunday: Palms + Passion).
-    # Use Vanderbilt as the base structure, but replace the Passion set with
-    # Lectio data (which has better readings for the main service).
-    result = []
-    replaced = False
-    for v_reading in vanderbilt_results:
-        v_name = v_reading["liturgical_date"].lower()
-        if not replaced and "passion" in v_name:
-            # Replace Vanderbilt Passion entry with Lectio data, keeping the liturgical_date label
-            lectio_result["liturgical_date"] = v_reading["liturgical_date"]
-            result.append(lectio_result)
-            replaced = True
-        else:
-            result.append(v_reading)
-    if not replaced:
-        # Lectio didn't match any Passion entry — append it
-        result.append(lectio_result)
-    logger.info("Merged results: %d reading set(s): %s", len(result), [r["liturgical_date"] for r in result])
-    return result
-
 
 # --- Slice 2 domain: the calendar and occasion names (S Lectionary domain; decision A) ---
 #
 # Pure date arithmetic: no I/O and no clock. Names come from the date alone, never from
-# Lectio's season string. The code above is the Streamlit-era path; Task 7 deletes it
-# (including the private `_easter_date`, which `easter_date` below replaces).
+# Lectio's season string.
 
 ORDINALS: tuple[str, ...] = (
     "First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh",
@@ -617,7 +244,7 @@ def lectio_set_name(day: LectioDay, d: date) -> str:
 # ---------------------------------------------------------------------------
 # Slice 2a (Task 6b): Vanderbilt and Lectio parsing, the draft-limit guard and
 # the merge (S "Lectionary domain": Vanderbilt parsing, Lectio parsing, Merge).
-# Pure: no I/O. Task 7 adds the fetchers and loaders and deletes the old code.
+# Pure: no I/O. The fetchers and loaders follow at the end of the file.
 # ---------------------------------------------------------------------------
 
 MAX_SET_LINES = 20        # ServiceDraft's scripture limit (S "Draft-limit guard")
@@ -995,3 +622,103 @@ def merge(
                 matched.add(index)
                 break
     return sets, (max(matched) if matched else len(sets) - 1)
+
+
+# --- Fetchers and loaders (S "Fetchers", "Loaders"; slice 2a T7) -------------
+# One outbound client (integrations.http). Only httpx.HTTPError and a JSON
+# ValueError are caught (clarification 18): anything else, such as the test
+# suite's no-network RuntimeError, is a bug and surfaces as one.
+
+LECTIO_READ_TIMEOUT = 10.0
+VANDERBILT_READ_TIMEOUT = 15.0
+
+# Media types are compared without their parameters ("; charset=utf-8").
+# Lectio: application/json or any "+json" type. Vanderbilt: S's two types
+# (clarification 19); T1's recorded sidecar is the evidence.
+VANDERBILT_MEDIA_TYPES = frozenset({"text/plain", "text/csv"})
+
+
+class SourceFailed(CacheableFailure):
+    """An expected lectionary source failure: a network error, a timeout, a
+    403/5xx/429, a wrong content type, undecodable JSON or a CSV with no
+    header. The usecase's caches keep it for 5 minutes (S "Loaders").
+
+    `timeout` is True only for an httpx timeout (or the usecase's source
+    deadline), so an all-timeout lookup is a 504 rather than a 502."""
+
+    def __init__(self, *, timeout: bool):
+        super().__init__("lectionary source timed out" if timeout else "lectionary source failed")
+        self.timeout = timeout
+
+
+def _media_type(response: httpx.Response) -> str:
+    """The response's media type, lower-cased, without parameters ("" if absent)."""
+    return response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+
+
+def _get(url: str, *, params: Optional[dict[str, str]], read_timeout: float) -> httpx.Response:
+    try:
+        return http.get(url, params=params, read_timeout=read_timeout)
+    except httpx.HTTPError as e:     # includes the https-only hook's UnsupportedProtocol
+        raise SourceFailed(timeout=isinstance(e, httpx.TimeoutException)) from e
+
+
+def fetch_lectio(d: date) -> Optional[dict]:
+    """GET Lectio for exactly `d`. 404 → None (a definitive none); a 200 JSON
+    object → the payload; anything else → SourceFailed (S "Fetchers")."""
+    response = _get(
+        LECTIO_API_URL,
+        params={"date": d.isoformat(), "tradition": "rcl"},
+        read_timeout=LECTIO_READ_TIMEOUT,
+    )
+    if response.status_code == 404:
+        return None
+    media = _media_type(response)
+    if response.status_code != 200 or not (media == "application/json" or media.endswith("+json")):
+        raise SourceFailed(timeout=False)
+    try:
+        payload = response.json()
+    except ValueError as e:          # JSONDecodeError and UnicodeDecodeError are ValueErrors
+        raise SourceFailed(timeout=False) from e
+    if not isinstance(payload, dict):
+        raise SourceFailed(timeout=False)
+    return payload
+
+
+def fetch_vanderbilt_year(year: str) -> Optional[str]:
+    """GET one liturgical-year CSV ("2025-26"). 404 → None; a 200 text/plain or
+    text/csv → the text; anything else (an HTML 200 included) → SourceFailed."""
+    response = _get(
+        VANDERBILT_YEAR_URL.format(year=year),
+        params=None,
+        read_timeout=VANDERBILT_READ_TIMEOUT,
+    )
+    if response.status_code == 404:
+        return None
+    if response.status_code != 200 or _media_type(response) not in VANDERBILT_MEDIA_TYPES:
+        raise SourceFailed(timeout=False)
+    return response.text
+
+
+def load_vanderbilt_year(year: str) -> list[VRow]:
+    """What the Vanderbilt cache stores: rows (24 h), [] for a 404 (24 h), or a
+    SourceFailed (5 min). An exception that escapes is a bug: not cached."""
+    text = fetch_vanderbilt_year(year)                        # raises SourceFailed
+    if text is None:                                          # 404: definitive none
+        return []
+    try:
+        return parse_vanderbilt_csv(text)
+    except LectionaryFormatError as e:                        # e.g. HTML served as 200
+        raise SourceFailed(timeout=False) from e
+
+
+def load_lectio(d: date) -> Optional[LectioDay]:
+    """What the Lectio cache stores: a LectioDay or None (24 h), or a
+    SourceFailed (5 min). An exception that escapes is a bug: not cached."""
+    payload = fetch_lectio(d)                                 # raises SourceFailed
+    if payload is None:                                       # 404: definitive none
+        return None
+    try:
+        return parse_lectio_payload(payload)                  # None when data/readings are empty
+    except (KeyError, TypeError, ValueError) as e:            # unexpected JSON shape
+        raise SourceFailed(timeout=False) from e

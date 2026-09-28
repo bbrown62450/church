@@ -36,3 +36,42 @@ def load(kind: str, name: str | date) -> Recorded:
     if len(bodies) != 1:
         raise FileNotFoundError(f"{kind}/{stem}: expected one body file, found {sorted(p.name for p in bodies)}")
     return Recorded(status=meta["status"], content_type=meta["content_type"], body=bodies[0].read_bytes())
+
+
+# --- respx routes over the recordings (slice 2a T7) --------------------------
+# The imports sit here, beside the only code that needs them (`date` is T1's
+# top-level import).
+from typing import Callable, Optional  # noqa: E402
+
+import httpx  # noqa: E402
+import respx  # noqa: E402
+
+LECTIO_URL = "https://lectio-api.org/api/v1/readings"
+VANDERBILT_URL = "https://lectionary.library.vanderbilt.edu/calendar/{year}/"
+
+
+def as_response(recorded: Recorded) -> httpx.Response:
+    """A new httpx.Response with the recording's status, Content-Type and body."""
+    return httpx.Response(
+        recorded.status, content=recorded.body, headers={"Content-Type": recorded.content_type}
+    )
+
+
+def answer(recorded: Recorded) -> Callable[[httpx.Request], httpx.Response]:
+    """A respx side effect that answers every call with a new copy of `recorded`."""
+    return lambda request: as_response(recorded)
+
+
+def route_lectio(router: respx.MockRouter, d: date, name: Optional[str] = None) -> respx.Route:
+    """Lectio for exactly `d` answers with lectio/<name>; by default d's own recording."""
+    return router.get(LECTIO_URL, params={"date": d.isoformat()}).mock(
+        side_effect=answer(load("lectio", name or d.isoformat()))
+    )
+
+
+def route_vanderbilt(router: respx.MockRouter, year: str, name: Optional[str] = None) -> respx.Route:
+    """The Vanderbilt file for `year` ("2025-26") answers with vanderbilt/<name>;
+    by default the year's own recording."""
+    return router.get(VANDERBILT_URL.format(year=year)).mock(
+        side_effect=answer(load("vanderbilt", name or year))
+    )
