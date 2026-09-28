@@ -179,8 +179,8 @@ export interface components {
         };
         /**
          * CreateChurchIn
-         * @description The body of POST /churches. A blank name or time zone is left to the
-         *     usecase, whose 422 names the field.
+         * @description The body of POST /churches. A blank name, or a blank or unknown time
+         *     zone, passes this model and gets a 422 that names the field.
          */
         CreateChurchIn: {
             /**
