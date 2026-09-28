@@ -255,6 +255,31 @@ database URL is recorded here.
 | Test churches left in production | Two, owned by A: "1b Invite Test" and "1b Double Tap Test" | 2026-09-28 |
 | Follow-ups | Slice 6b: run checks 2, 3, 4 and 8, the desktop pass of 2–3 and the S Risk 8 chooser observation once the new app has its invite UI. Seed timing: none (under 5 s) | 2026-09-28 |
 
+### Slice 2a record
+
+Slice 2a (the readings backend: `GET /lectionary/readings`, `POST /scripture/passages`,
+`GET /translations` and the new `GET /church` fields) merged as PR #20 with no
+database change, so production stays at `0004_invites_reusable` (head). No page in
+the new app calls the new routes until 2b and 2c, so the live checks were API calls
+from the production site's DevTools with the owner's own account. All 25 upstream
+test fixtures were hand-built, because the build session's network policy blocked
+lectio-api.org, lectionary.library.vanderbilt.edu and bible-api.com; the live calls
+below are the first check against the real sites. No token, key, email address or
+church id is recorded here.
+
+| Step | Result | Date |
+|---|---|---|
+| Merge and deploy | PR #20 merged 2026-09-28 about 21:22 UTC (17:22 EDT), merge commit `8cf0793`. No migration. Railway: the deployment for `8cf0793` Active (owner); `/health/ready` → ok (owner, browser). The pre-deploy and startup log lines were not read. CI on `main` for `8cf0793` (run 36485572541): success | 2026-09-28 |
+| CI on the PR head `16dae79` | Run 36485313947: `backend` 971 passed, 9 skipped; `backend-postgres` green (Alembic cycle, pg_smoke, Postgres-only tests); `frontend` green (lint, typecheck, API types match, 221 tests, build); Vercel preview Ready | 2026-09-28 |
+| ESV on Railway | `ESV_API_KEY` was not set. The owner added it and deployed; `/health/ready` → ok after. ESV is now offered by `/translations` | 2026-09-28 |
+| `GET /church` new fields (AC6) | `timezone` America/New_York, `timezone_valid` true, `bible_translation` null, `effective_translation` web, `effective_translation_label` World English Bible (WEB). The `/me` items check was not recorded | 2026-09-28 |
+| `/translations` | 200, default web, `esv_available` true, items web, kjv, asv, ylt, dra, darby, bbe, oeb-us, webbe, esv | 2026-09-28 |
+| `/lectionary/readings` (AC1, AC2, AC9) | 2026-10-04: ok, not partial, "Nineteenth Sunday after Pentecost" (merged), ending Matthew 21:33-46; the cold lookup took 5.4 s. 2026-11-01: ok, "All Saints Day" (Vanderbilt) and "Twenty-Third Sunday after Pentecost" (merged, ending Matthew 23:1-12), default the second (owner Q2). 2026-03-29: exactly the test's Palm Sunday answer ("Liturgy of the Palms", "Liturgy of the Passion"). Warm lookups about 0.4 s. `date=2026-3-29` → 422 "Not a valid value." Both sources answered on every date, so Vanderbilt's real Content-Type is accepted and the hand-built fixtures matched the real data on these dates | 2026-09-28 |
+| `/scripture/passages` (AC5) | John 3:16 in WEB: 200, ok, "For God so loved the world…". In ESV: 200, ok, with the "(ESV)" credit | 2026-09-28 |
+| API log lines (`lectionary_lookup`) | Not read: the answers above show both sources ok | 2026-09-28 |
+| Streamlit smoke on liturgy-frozen | Not run: skipped by the owner for now. Slice 2a changes no schema, and merges never reach liturgy-frozen | 2026-09-28 |
+| Follow-ups | Run the liturgy-frozen smoke when convenient. Slice 2b: the frontend foundation (builder shell, draft store, `/` → `/builder`); 2c: the Date & readings step UI, where the Saturday vigil question (spec open question 2) is asked | 2026-09-28 |
+
 ## Backups
 
 - **Workflow:** `.github/workflows/backup.yml` (`db-backup`). Daily at 08:37 UTC,
