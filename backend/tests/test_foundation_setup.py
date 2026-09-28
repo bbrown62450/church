@@ -161,13 +161,17 @@ def test_readme_says_hymn_facts_columns_come_from_alembic():
     assert "migrate_add_hymnal" not in readme
 
 
-# --- slice 1a: Railway config-as-code (S backend/railway.toml, F §3.3) --------
+# --- slice 1a: Railway deploy settings (S backend/railway.toml, F §3.3) --------
+# Railway does not read backend/railway.toml for this service (Config as Code
+# is closed to it): the pre-deploy command and the health check path live in
+# Railway → the API service → Settings → Deploy. The file records those values.
 
 def test_railway_toml_runs_migrations_and_checks_readiness():
     import tomllib
 
     config = tomllib.loads((ROOT / "backend" / "railway.toml").read_text(encoding="utf-8"))
-    # Exactly these two settings: the start command stays in backend/Procfile.
+    # Exactly the two values set in the Railway UI (Pre-deploy Command,
+    # Healthcheck Path): the start command stays in backend/Procfile.
     assert config == {"deploy": {
         "preDeployCommand": ["alembic upgrade head"],
         "healthcheckPath": "/health/ready",
