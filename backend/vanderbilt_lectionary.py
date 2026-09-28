@@ -7,10 +7,14 @@ Fallback: Vanderbilt Divinity Library CSV (often returns 403 or HTML).
 
 import csv
 import logging
+import re
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, List, Literal, Optional
+
 import httpx
+
+from scripture_refs import scripture_key, split_alternatives, split_book
 
 logger = logging.getLogger(__name__)
 
@@ -577,10 +581,15 @@ class LectioDay:
     day_name: str | None
 
 
+# A Lectio dayName that is only a Proper number ("Proper 23", "Proper 22 (27)") is never shown
+# (owner decision A: the Proper number is never shown); lectio_set_name falls through past it.
+_PROPER_DAY_NAME = re.compile(r"Proper \d+( \(\d+\))?", re.IGNORECASE)
+
+
 def lectio_set_name(day: LectioDay, d: date) -> str:
     """The name of a Lectio-only set on `d` (S "Names for Lectio-only sets").
 
-    1. Lectio's dayName, when present;
+    1. Lectio's dayName, when present and not just a Proper number;
     2. `sunday_name(d)`, then `weekday_feast_name(d)`: so a weekday never gets a Sunday
        name, and a Sunday Dec 25 or Jan 6 gets its feast name (owner answer Q3);
     3. "{season} — Year {year}", when both are present;
@@ -588,7 +597,7 @@ def lectio_set_name(day: LectioDay, d: date) -> str:
     `merge` (Task 6b) adds " (2)", " (3)" when several sets share a name.
     """
     day_name = (day.day_name or "").strip()
-    if day_name:
+    if day_name and not _PROPER_DAY_NAME.fullmatch(day_name):
         return day_name
     computed = sunday_name(d) or weekday_feast_name(d)
     if computed:
@@ -597,3 +606,305 @@ def lectio_set_name(day: LectioDay, d: date) -> str:
     if season and year:
         return f"{season} — Year {year}"
     return _WEEKDAY_NAMES[d.weekday()]
+
+
+# ---------------------------------------------------------------------------
+# Slice 2a (Task 6b): Vanderbilt and Lectio parsing, the draft-limit guard and
+# the merge (S "Lectionary domain": Vanderbilt parsing, Lectio parsing, Merge).
+# Pure: no I/O. Task 7 adds the fetchers and loaders and deletes the old code.
+# ---------------------------------------------------------------------------
+
+MAX_SET_LINES = 20        # ServiceDraft's scripture limit (S "Draft-limit guard")
+MAX_LINE_CHARS = 200      # ServiceDraft's per-line limit
+MAX_NAME_CHARS = 300      # the Occasion field's limit (S :142; clarification 34)
+
+_VANDERBILT_FIELDS = [
+    "Liturgical Date", "Calendar Date", "First reading", "Psalm",
+    "Second reading", "Gospel", "Art", "Prayer",
+]
+_PROPER_ROW = re.compile(r"Proper \d+ \(\d+\)")
+_COMPOUND_PSALM = re.compile(r"\sPsalms?\s+\d")
+_LEADING_STAR = re.compile(r"^\*\s*")
+_LECTIO_TYPES = ("first", "psalm", "second", "gospel")
+
+
+class LectionaryFormatError(ValueError):
+    """The Vanderbilt body is not the year CSV (for example an HTML page served as 200)."""
+
+
+@dataclass(frozen=True)
+class VRow:
+    """One Vanderbilt CSV row. The reading cells are the raw cell text, trimmed and unquoted."""
+
+    liturgical_date: str
+    calendar_date: date
+    first: str
+    psalm: str
+    second: str
+    gospel: str
+
+
+@dataclass(frozen=True)
+class ReadingSet:
+    """One reading set. `first`..`gospel` feed matching; the API exposes `name`, `scriptures` and `source`.
+
+    For a Vanderbilt set each of the four fields is the cleaned cell text, unsplit; `scriptures` holds the
+    split lines (clarification 12). For a Lectio or merged set they are the Lectio group's citations.
+    """
+
+    name: str
+    first: str
+    psalm: str
+    second: str
+    gospel: str
+    scriptures: tuple[str, ...]
+    source: Literal["lectio", "vanderbilt", "merged"]
+
+
+def _parse_calendar_date(cell: str) -> date | None:
+    """A Vanderbilt calendar date such as "Feb 15, 2026" or "January 06, 2027"; None when it does not parse."""
+    text = (cell or "").strip().strip('"').strip()
+    for fmt in ("%b %d, %Y", "%B %d, %Y"):
+        try:
+            return datetime.strptime(text, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def _field(raw: dict, name: str) -> str:
+    return (raw.get(name) or "").strip().strip('"').strip()
+
+
+def parse_vanderbilt_csv(text: str) -> list[VRow]:
+    """Parse a Vanderbilt year CSV: skip the preamble, use the fixed field names, keep rows whose date parses.
+
+    Raises LectionaryFormatError when no header line exists (an HTML page, an empty body). A line holding
+    markup (`<`) is never the header, so an HTML calendar table with both labels on one line still raises.
+    """
+    lines = [line for line in text.splitlines() if line.strip()]
+    header = next(
+        (i for i, line in enumerate(lines) if "Calendar Date" in line and "Liturgical Date" in line and "<" not in line),
+        None,
+    )
+    if header is None:
+        raise LectionaryFormatError("no Vanderbilt CSV header line")
+    rows: list[VRow] = []
+    for raw in csv.DictReader(lines[header + 1:], fieldnames=_VANDERBILT_FIELDS):
+        calendar_date = _parse_calendar_date(raw.get("Calendar Date") or "")
+        if calendar_date is None:
+            continue
+        rows.append(
+            VRow(
+                liturgical_date=_field(raw, "Liturgical Date"),
+                calendar_date=calendar_date,
+                first=_field(raw, "First reading"),
+                psalm=_field(raw, "Psalm"),
+                second=_field(raw, "Second reading"),
+                gospel=_field(raw, "Gospel"),
+            )
+        )
+    return rows
+
+
+def _clean_text(cell: str) -> str:
+    """A reading cell's text: quotes and whitespace stripped, a link dropped, a leading "* " removed."""
+    text = (cell or "").strip().strip('"').strip()
+    if text.startswith("http"):
+        return ""
+    return _LEADING_STAR.sub("", text)
+
+
+def clean_cell(cell: str) -> list[str]:
+    """The scripture lines in one Vanderbilt reading cell (S "Cell cleanup")."""
+    text = _clean_text(cell)
+    if not text:
+        return []
+    if " - " in text:
+        # The Easter Vigil: " - "-separated segments with headings. Keep every segment that starts with a
+        # book, whole, so each vigil reading stays next to its psalm (11 lines; splitting pairs gives 21).
+        segments = (segment.strip() for segment in text.split(" - "))
+        return [segment for segment in segments if segment and split_book(segment) is not None]
+    match = _COMPOUND_PSALM.search(text)
+    if match:
+        head = text[: match.start()].strip()
+        found = split_book(head)
+        # Split a two-track cell "<reading> Psalm <n>" only when the head is a non-Psalm reading and does
+        # not end in " or", so "Psalm 105:1-11, 45b or Psalm 128" stays whole (clarification 10).
+        if found is not None and found[0].testament != "psalm" and not head.lower().endswith(" or"):
+            return [head, text[match.start():].strip()]
+    return [text]
+
+
+def fits_draft_limits(item: ReadingSet | LectioGroup) -> bool:
+    """True when the set fits the draft: 1-20 lines of 1-200 characters, and a 1-300-character name.
+
+    The name check applies to a ReadingSet only (a Lectio group has no name until `merge` names it).
+    A rejected set is logged at WARNING with its name and lengths, never its readings; it is never truncated.
+    """
+    lines = item.scriptures
+    name = item.name if isinstance(item, ReadingSet) else None
+    fits = (
+        1 <= len(lines) <= MAX_SET_LINES
+        and all(1 <= len(line) <= MAX_LINE_CHARS for line in lines)
+        and (name is None or 1 <= len(name) <= MAX_NAME_CHARS)
+    )
+    if not fits:
+        logger.warning(
+            "reading_set_dropped name=%r name_chars=%d lines=%d line_chars=%s",
+            "(lectio group)" if name is None else name[:80],
+            0 if name is None else len(name),
+            len(lines),
+            [len(line) for line in lines],
+        )
+    return fits
+
+
+def _vanderbilt_name(raw: str, d: date) -> str:
+    """A row's set name: its own text, except a whole-cell "Proper N (M)" on a Sunday (owner decision A)."""
+    if d.weekday() != 6 or not _PROPER_ROW.fullmatch(raw):
+        return raw
+    name = sunday_name(d)
+    if name == "All Saints Day":
+        # The All Saints row keeps that name; the Proper row takes the computed ordinal (clarification 30).
+        name = _ordinary_time_name(d)
+    return name or raw
+
+
+def vanderbilt_sets_on(rows: list[VRow], d: date) -> list[ReadingSet]:
+    """The Vanderbilt sets for exactly `d`, in file order; [] when no row has that date (no nearest row)."""
+    sets: list[ReadingSet] = []
+    for row in rows:
+        if row.calendar_date != d:
+            continue
+        cells = (row.first, row.psalm, row.second, row.gospel)
+        sets.append(
+            ReadingSet(
+                name=_vanderbilt_name(row.liturgical_date, d),
+                first=_clean_text(row.first),
+                psalm=_clean_text(row.psalm),
+                second=_clean_text(row.second),
+                gospel=_clean_text(row.gospel),
+                scriptures=tuple(line for cell in cells for line in clean_cell(cell)),
+                source="vanderbilt",
+            )
+        )
+    return sets
+
+
+def _lectio_group(by_type: dict[str, str]) -> LectioGroup:
+    first, psalm, second, gospel = (by_type.get(kind, "") for kind in _LECTIO_TYPES)
+    return LectioGroup(
+        first=first,
+        psalm=psalm,
+        second=second,
+        gospel=gospel,
+        scriptures=tuple(s for s in (first, psalm, second, gospel) if s),
+    )
+
+
+def parse_lectio_payload(payload: object) -> LectioDay | None:
+    """A Lectio response body as a LectioDay; None when `data` is missing or has no usable readings.
+
+    Alternatives are skipped (parity) and a new group starts when a reading type repeats (Trinity 2026).
+    An unexpected shape raises TypeError, so the loader's except clause covers it (clarification 15);
+    `season` and `year` are coerced with str().
+    """
+    if not isinstance(payload, dict):
+        raise TypeError("Lectio payload is not a JSON object")
+    data = payload.get("data")
+    if not data:
+        return None
+    if not isinstance(data, dict):
+        raise TypeError("Lectio 'data' is not an object")
+    readings = data.get("readings") or []
+    if not isinstance(readings, list):
+        raise TypeError("Lectio 'readings' is not a list")
+    groups: list[dict[str, str]] = []
+    current: dict[str, str] = {}
+    for reading in readings:
+        if not isinstance(reading, dict):
+            raise TypeError("a Lectio reading is not an object")
+        if reading.get("isAlternative"):
+            continue
+        kind = reading.get("type")
+        if kind not in _LECTIO_TYPES:
+            continue
+        citation = reading.get("citation") or ""
+        if not isinstance(citation, str):
+            raise TypeError("a Lectio citation is not a string")
+        if kind in current:
+            groups.append(current)
+            current = {}
+        current[kind] = citation.strip()
+    if current:
+        groups.append(current)
+    if not groups:
+        return None
+    day_name = str(data.get("dayName") or "").strip()
+    return LectioDay(
+        groups=tuple(_lectio_group(group) for group in groups),
+        season=str(data.get("season") or "").strip(),
+        year=str(data.get("year") or "").strip(),
+        day_name=day_name or None,
+    )
+
+
+def _set_from_group(group: LectioGroup, name: str, source: Literal["lectio", "merged"]) -> ReadingSet:
+    return ReadingSet(
+        name=name,
+        first=group.first,
+        psalm=group.psalm,
+        second=group.second,
+        gospel=group.gospel,
+        scriptures=group.scriptures,
+        source=source,
+    )
+
+
+def _lectio_only_sets(lectio: LectioDay, d: date) -> list[ReadingSet]:
+    """Every Lectio group as a set, named by lectio_set_name, the second and later with " (2)", " (3)".
+
+    Each named set is checked again with fits_draft_limits, now that it has a name (clarification 34).
+    """
+    base = lectio_set_name(lectio, d)
+    sets: list[ReadingSet] = []
+    for index, group in enumerate(lectio.groups):
+        name = base if index == 0 else f"{base} ({index + 1})"
+        candidate = _set_from_group(group, name, "lectio")
+        if fits_draft_limits(candidate):
+            sets.append(candidate)
+    return sets
+
+
+def merge(
+    lectio: LectioDay | None, v_sets: list[ReadingSet], d: date
+) -> tuple[list[ReadingSet], int | None]:
+    """Merge the day's Lectio groups into its Vanderbilt sets (S "Merge"); returns (sets, default_index).
+
+    Both inputs have already passed fits_draft_limits. A Lectio group replaces at most one Vanderbilt set,
+    matched by scripture_key(gospel) against each of the set's gospel alternatives, and keeps that set's
+    name; unmatched groups are dropped when Vanderbilt has rows. default_index is None only when sets is [].
+    """
+    has_lectio = lectio is not None and bool(lectio.groups)
+    if not v_sets:
+        if not has_lectio:
+            return [], None
+        sets = _lectio_only_sets(lectio, d)
+        return sets, (len(sets) - 1 if sets else None)
+    sets = list(v_sets)
+    if not has_lectio:
+        return sets, len(sets) - 1
+    matched: set[int] = set()
+    for group in lectio.groups:
+        key = scripture_key(group.gospel)
+        if not key:
+            continue
+        for index, v_set in enumerate(sets):
+            if index in matched:
+                continue
+            if key in {scripture_key(alt) for alt in split_alternatives(v_set.gospel)}:
+                sets[index] = _set_from_group(group, v_set.name, "merged")
+                matched.add(index)
+                break
+    return sets, (max(matched) if matched else len(sets) - 1)
