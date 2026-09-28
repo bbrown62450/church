@@ -53,3 +53,4 @@ def test_api_main_with_every_router_does_not_import_streamlit():
     assert result.returncode == 0, result.stdout + result.stderr
     assert "unmounted: []" in result.stdout
     assert "'api.routes.me'" in result.stdout and "'api.routes.rubric'" in result.stdout
+    assert "'api.routes.churches'" in result.stdout

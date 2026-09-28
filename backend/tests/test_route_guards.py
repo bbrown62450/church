@@ -36,6 +36,7 @@ PUBLIC = {
 }
 USER_SCOPED = {
     ("GET", "/me"),
+    ("POST", "/churches"),
 }
 CHURCH_SCOPED_TODAY = {("GET", "/church"), ("GET", "/rubric"), ("PATCH", "/rubric")}
 

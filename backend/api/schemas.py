@@ -1,8 +1,8 @@
-"""Response models (also documented at /docs)."""
+"""Request and response models (also documented at /docs)."""
 import uuid
 from typing import Generic, Literal, Optional, TypeVar
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 from api.errors import ErrorBody  # noqa: F401  (re-exported: every error response's body, F §1.5)
 
@@ -52,3 +52,13 @@ class RubricModel(BaseModel):
 class RubricOut(BaseModel):
     rubric: RubricModel
     customized: list[str]
+
+
+class CreateChurchIn(BaseModel):
+    """The body of POST /churches. A blank name or time zone is left to the
+    usecase, whose 422 names the field."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field("", max_length=200)
+    timezone: str = Field("", max_length=64)
