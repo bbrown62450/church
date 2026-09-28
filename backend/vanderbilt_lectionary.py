@@ -7,6 +7,7 @@ Fallback: Vanderbilt Divinity Library CSV (often returns 403 or HTML).
 
 import csv
 import logging
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Optional, List, Dict, Any
 import httpx
@@ -394,3 +395,205 @@ def get_readings_for_date_string(date_str: str) -> List[Dict[str, Any]]:
         result.append(lectio_result)
     logger.info("Merged results: %d reading set(s): %s", len(result), [r["liturgical_date"] for r in result])
     return result
+
+
+# --- Slice 2 domain: the calendar and occasion names (S Lectionary domain; decision A) ---
+#
+# Pure date arithmetic: no I/O and no clock. Names come from the date alone, never from
+# Lectio's season string. The code above is the Streamlit-era path; Task 7 deletes it
+# (including the private `_easter_date`, which `easter_date` below replaces).
+
+ORDINALS: tuple[str, ...] = (
+    "First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh",
+    "Eighth", "Ninth", "Tenth", "Eleventh", "Twelfth", "Thirteenth", "Fourteenth",
+    "Fifteenth", "Sixteenth", "Seventeenth", "Eighteenth", "Nineteenth", "Twentieth",
+    "Twenty-First", "Twenty-Second", "Twenty-Third", "Twenty-Fourth",
+    "Twenty-Fifth", "Twenty-Sixth", "Twenty-Seventh", "Twenty-Eighth",
+)
+
+_SUNDAY = 6  # date.weekday()
+_WEEKDAY_NAMES = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+
+_FIXED_FEASTS = {
+    (12, 24): "Christmas Eve",
+    (12, 25): "Nativity of the Lord",
+    (1, 1): "New Year's Day",
+    (1, 6): "Epiphany of the Lord",
+    (11, 1): "All Saints Day",
+}
+_EASTER_FEASTS = {  # days from Easter Sunday
+    -46: "Ash Wednesday",
+    -3: "Maundy Thursday",
+    -2: "Good Friday",
+    -1: "Holy Saturday",
+    39: "Ascension of the Lord",
+}
+
+
+def easter_date(year: int) -> date:
+    """Easter Sunday for `year` (Anonymous Gregorian algorithm)."""
+    a = year % 19
+    b = year // 100
+    c = year % 100
+    d = b // 4
+    e = b % 4
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i = c // 4
+    k = c % 4
+    l = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * l) // 451
+    month = (h + l - 7 * m + 114) // 31
+    day = ((h + l - 7 * m + 114) % 31) + 1
+    return date(year, month, day)
+
+
+def advent_sunday(year: int) -> date:
+    """The First Sunday of Advent in `year`: the Sunday from Nov 27 to Dec 3."""
+    nov27 = date(year, 11, 27)
+    return nov27 + timedelta(days=(_SUNDAY - nov27.weekday()) % 7)
+
+
+def liturgical_year_for(d: date) -> str:
+    """The Vanderbilt year file that holds `d`, e.g. "2025-26" (fixes inv. C2).
+
+    A year file runs from Advent 1 to the day before the next Advent 1.
+    """
+    y = d.year if d >= advent_sunday(d.year) else d.year - 1
+    return f"{y}-{(y + 1) % 100:02d}"
+
+
+def ordinal_word(n: int) -> str:
+    """1 -> "First" ... 28 -> "Twenty-Eighth"; ValueError outside 1-28.
+
+    28 is the largest count after Pentecost in any year (clarification 9).
+    """
+    if not 1 <= n <= len(ORDINALS):
+        raise ValueError(f"no ordinal word for {n}")
+    return ORDINALS[n - 1]
+
+
+def _baptism_of_the_lord(year: int) -> date:
+    """The first Sunday after Jan 6 (Jan 7-13). A Sunday Jan 6 is the Epiphany itself."""
+    jan6 = date(year, 1, 6)
+    return jan6 + timedelta(days=(_SUNDAY - jan6.weekday()) % 7 or 7)
+
+
+def _ordinary_time_name(d: date) -> str | None:
+    """The computed ordinary-time name of a Sunday, ignoring the named days.
+
+    "{Ordinal} Sunday after the Epiphany" from the Baptism of the Lord ("First") to
+    Transfiguration Sunday, and "{Ordinal} Sunday after Pentecost" from Trinity Sunday
+    ("First") to Reign of Christ. None for any other date. `sunday_name` checks the
+    named days first; the Vanderbilt Proper rename (Task 6b) uses this directly when
+    `sunday_name(d)` is "All Saints Day" (clarification 30).
+    """
+    if d.weekday() != _SUNDAY:
+        return None
+    easter = easter_date(d.year)
+    baptism = _baptism_of_the_lord(d.year)
+    transfiguration = easter - timedelta(days=49)
+    if baptism <= d <= transfiguration:
+        return f"{ordinal_word((d - baptism).days // 7 + 1)} Sunday after the Epiphany"
+    pentecost = easter + timedelta(days=49)
+    if pentecost < d < advent_sunday(d.year):
+        return f"{ordinal_word((d - pentecost).days // 7)} Sunday after Pentecost"
+    return None
+
+
+def sunday_name(d: date) -> str | None:
+    """The occasion name of a Sunday, from the date alone; None for any other day.
+
+    Checked in this order: the Christmas season (owner answer Q3), Advent, Lent, Palm
+    Sunday, Easter and its Sundays, the Day of Pentecost; then the named days, which
+    always win over the computed ordinal (decision A); then `_ordinary_time_name`.
+    A Sunday Dec 25 or Jan 6 returns None: `lectio_set_name` then takes
+    "Nativity of the Lord" or "Epiphany of the Lord" from `weekday_feast_name`.
+    """
+    if d.weekday() != _SUNDAY:
+        return None
+    y = d.year
+    if (d.month == 12 and d.day >= 26) or (d.month == 1 and d.day == 1):
+        return "First Sunday after Christmas Day"
+    if d.month == 1 and 2 <= d.day <= 5:
+        return "Second Sunday after Christmas Day"
+    advent1 = advent_sunday(y)
+    if advent1 <= d <= date(y, 12, 24):
+        return f"{ORDINALS[(d - advent1).days // 7]} Sunday of Advent"
+    easter = easter_date(y)
+    palm = easter - timedelta(days=7)
+    lent1 = easter - timedelta(days=42)
+    if lent1 <= d < palm:
+        return f"{ORDINALS[(d - lent1).days // 7]} Sunday in Lent"
+    if d == palm:
+        return "Palm Sunday"
+    if d == easter:
+        return "Easter Sunday"
+    pentecost = easter + timedelta(days=49)
+    if easter < d < pentecost:
+        return f"{ORDINALS[(d - easter).days // 7]} Sunday of Easter"
+    if d == pentecost:
+        return "Day of Pentecost"
+    if d == _baptism_of_the_lord(y):
+        return "Baptism of the Lord"
+    if d == easter - timedelta(days=49):
+        return "Transfiguration Sunday"
+    if d == pentecost + timedelta(days=7):
+        return "Trinity Sunday"
+    if d.month == 11 and d.day == 1:
+        return "All Saints Day"
+    if d == advent1 - timedelta(days=7):
+        return "Reign of Christ"
+    return _ordinary_time_name(d)
+
+
+def weekday_feast_name(d: date) -> str | None:
+    """The feast on `d`, or None. Date-only: a fixed feast on a Sunday is still named."""
+    fixed = _FIXED_FEASTS.get((d.month, d.day))
+    if fixed is not None:
+        return fixed
+    return _EASTER_FEASTS.get((d - easter_date(d.year)).days)
+
+
+@dataclass(frozen=True)
+class LectioGroup:
+    """One Lectio reading group; `scriptures` is the four lines minus blanks (Task 6b parses)."""
+
+    first: str
+    psalm: str
+    second: str
+    gospel: str
+    scriptures: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class LectioDay:
+    """One Lectio date: its groups, plus `season` and `year` ("" when missing) and `dayName`."""
+
+    groups: tuple[LectioGroup, ...]
+    season: str
+    year: str
+    day_name: str | None
+
+
+def lectio_set_name(day: LectioDay, d: date) -> str:
+    """The name of a Lectio-only set on `d` (S "Names for Lectio-only sets").
+
+    1. Lectio's dayName, when present;
+    2. `sunday_name(d)`, then `weekday_feast_name(d)`: so a weekday never gets a Sunday
+       name, and a Sunday Dec 25 or Jan 6 gets its feast name (owner answer Q3);
+    3. "{season} — Year {year}", when both are present;
+    4. the weekday's name ("Sunday" for a Sunday).
+    `merge` (Task 6b) adds " (2)", " (3)" when several sets share a name.
+    """
+    day_name = (day.day_name or "").strip()
+    if day_name:
+        return day_name
+    computed = sunday_name(d) or weekday_feast_name(d)
+    if computed:
+        return computed
+    season, year = day.season.strip(), day.year.strip()
+    if season and year:
+        return f"{season} — Year {year}"
+    return _WEEKDAY_NAMES[d.weekday()]
