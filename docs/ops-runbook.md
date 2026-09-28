@@ -225,6 +225,36 @@ pre-deploy command and the health check path are set in the Railway UI.
 | Keepalive run by hand | https://github.com/bbrown62450/church/actions/runs/36363728870: green, `{"ok":true,"db":"ok"}` from the 1a release | 2026-09-27 |
 | Manual check 1 (at 375 px and on desktop) | Owner's account, on desktop and at 375 px (iPhone SE): sign-in, home shows the church, the church menu lists the churches with the role, the account menu shows name, email and `Role: Owner`, Log out returns to `/login`: all OK. The check with an account in no church (the stub `/welcome`) was skipped by the owner. | 2026-09-27 |
 
+### Slice 1b record
+
+Slice 1b (onboarding: create a church, join by invite) merged as PR #18
+with no database change, so production stays at `0004_invites_reusable`
+(head). The manual checks are `docs/manual-verification.md` → Slice 1,
+items 2–11. They were run on the production app with the owner's own
+Google account (A) only, on desktop and at 375 px (iPhone SE); there were
+no B or C accounts. No invite was created: invites can only be made in
+liturgy-frozen today, and the owner chose not to use it, so the invite-link
+checks (2, 3, 4, 8 and the desktop pass of 2–3) are deferred to slice 6b,
+when the new app gets its invite UI. Joining is covered by the automated
+tests, including the Postgres race tests. No invite code, email address or
+database URL is recorded here.
+
+| Step | Result | Date |
+|---|---|---|
+| Merge and deploy | PR #18 merged 2026-09-28T17:21:43Z (13:21 EDT), merge commit `ef56f59`. No migration, so production stays at `0004_invites_reusable` (head). The Railway deployment for `ef56f59` succeeded (GitHub deployment status), and the new API was live about 105 s after the merge; `/health/ready` → `{"ok":true,"db":"ok"}`. The pre-deploy and startup log lines were not recorded. Vercel Production deployment for `ef56f59`: success | 2026-09-28 |
+| CI and public endpoints | CI on the merge commit `ef56f59` (main): success. Final CI run on the PR head `c2f733d` (run 36457255146): green; `backend` 798 passed, 9 skipped; `backend-postgres` 9 passed, 798 deselected; `frontend` 221 passed in 34 files; build OK. After the deploy: `/health/ready` → `{"ok":true,"db":"ok"}`; signed out, `POST /churches` → 401; `/openapi.json` lists `/invites/preview` | 2026-09-28 |
+| Seed timing (S Risk 3) | CI Postgres (`backend-postgres`, run 36457255146): `hymn seed: 700 rows in 88 ms` (budget 3 s). Production create of "1b Invite Test" (Railway deploy logs): `church_created … hymns_seeded=853 duration_ms=1086` and `POST /churches` 201 Created. Under the 5 s production threshold: no change. The DevTools timing and the `hymn_catalog` count comparison were not recorded | 2026-09-28 |
+| Account chooser (S Risk 8) | Not yet verified. It is observed in check 4 (an email-bound invite opened by the wrong account), which is deferred to slice 6b | 2026-09-28 |
+| Invite-link checks 2, 3, 4, 8 and the desktop pass of 2–3 | Deferred to slice 6b by the owner's choice: invites can only be made in liturgy-frozen today and the owner chose not to use it; the new app has no invite UI until slice 6b. Joining is covered by the automated tests, including the Postgres race tests | 2026-09-28 |
+| 5. Create a church (owner's account, desktop) | Run as A, not as a new account with no church. Create tab: copy, helper and hymnal note OK; the default time zone shown was America/Indianapolis (the computer's zone). "1b Invite Test" → "Creating church…" → home with it active and the toast "Created 1b Invite Test. You're the owner."; the church switcher lists it as Owner, beside First Presbyterian Church | 2026-09-28 |
+| 6. Double tap and blank name (375 px, Slow 4G) | As A at 375 px (iPhone SE): blank name → "Church name is required.", focus in the field, no `churches` request sent; double tap on Slow 4G → exactly one "1b Double Tap Test" church | 2026-09-28 |
+| 7. Switcher "Join or create a church…" (desktop) | A on desktop: switcher → "Join or create a church…" → `/welcome` with the heading "Join or create a church", the "Signed in as" line, "← Back to First Presbyterian Church" and the tabs Join a church (selected) and Create a church; the back link and browser Back OK. After check 5, both churches listed and switching both ways OK. The 375 px part as C (a third church, Member and Owner) was not run: there was no second account and no joined church | 2026-09-28 |
+| 9. Log out, other device | Not run (owner). The landing of an account with no church was not run either | 2026-09-28 |
+| 10. Mobile layout (375 px) | At 375 px (iPhone SE): no sideways scroll and everything fits on `/welcome` (both tabs), `/join` with no code (the "This invite link is incomplete." card with Go to home), and home's church switcher and account menu. The other `/join` cards need an invite and were not checked (see the deferred row). The 16 px input size and 44 px tap targets were not measured by hand; the automated tests cover them | 2026-09-28 |
+| 11. Streamlit smoke on liturgy-frozen (AC17) | Not run: skipped by the owner. Slice 1b changes no schema, and merges never reach liturgy-frozen | 2026-09-28 |
+| Test churches left in production | Two, owned by A: "1b Invite Test" and "1b Double Tap Test" | 2026-09-28 |
+| Follow-ups | Slice 6b: run checks 2, 3, 4 and 8, the desktop pass of 2–3 and the S Risk 8 chooser observation once the new app has its invite UI. Seed timing: none (under 5 s) | 2026-09-28 |
+
 ## Backups
 
 - **Workflow:** `.github/workflows/backup.yml` (`db-backup`). Daily at 08:37 UTC,
