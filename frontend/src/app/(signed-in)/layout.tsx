@@ -1,13 +1,26 @@
 "use client";
 
 /**
- * Layout for every signed-in route (F §4.1, §4.2; S "Layouts (1a)").
+ * Layout for every signed-in route (F §4.1, §4.2, §4.3; S "Layouts (1a)", Routing).
  *
  * - Loads `/me` and shows the shell skeleton until it arrives.
+ * - Follows the post-login path (S Routing; AC14): the path `/login` stored
+ *   before sign-in. It is read once, when the layout mounts, in a `useState`
+ *   initializer; the server has no sessionStorage, and the hydration pass
+ *   renders the skeleton either way because `/me` has not loaded yet, so the
+ *   markup matches. A stored path other than the current one keeps the skeleton
+ *   up until the pathname changes, so the page being left never mounts or sends
+ *   a request; an effect clears the stored path first, then follows it with
+ *   `router.replace`. A stored path equal to the current one is just cleared.
+ *   Clearing before following means a stored path with no route yet
+ *   (`/builder`) redirects once, not on every visit for ten minutes (slice 1b
+ *   clarification 22), and StrictMode's repeated effect finds nothing to follow.
  * - A first load that fails with anything but a 401 shows a full-page
- *   `ErrorState` with Retry. Once `/me` has loaded, a failed background refetch
- *   keeps the loaded shell: a network blip on window focus never replaces a
- *   working page.
+ *   `ErrorState` with Retry. While Retry runs, the error stays on screen with a
+ *   busy, disabled Retry, so a repeat tap does nothing (a refetch of a query
+ *   with no data resets it to pending, so the error Retry was pressed on is
+ *   kept here). Once `/me` has loaded, a failed background refetch keeps the
+ *   loaded shell: a network blip on window focus never replaces a working page.
  * - A 401 anywhere reaches `handleAuthErrors`, which emits
  *   `authEvents.signOutRequired()`. This layout, the event's only subscriber,
  *   answers with one local sign-out that keeps a pending invite and passes the
@@ -18,17 +31,17 @@
  *   again before `router.replace("/login")`.
  * - Pages below it read `/me` with `useMeContext()`.
  *
- * Slice 1b adds the post-login redirect here. A `"use client"` layout cannot
- * export `metadata`; the root layout's title applies.
+ * A `"use client"` layout cannot export `metadata`; the root layout's title applies.
  */
-import { useEffect, type ReactNode } from "react";
-import { usePathname } from "next/navigation";
+import { useEffect, useState, type ReactNode } from "react";
+import { usePathname, useRouter } from "next/navigation";
 
 import { ErrorState } from "@/components/app/error-state";
-import { Skeleton } from "@/components/ui/skeleton";
+import { ShellSkeleton } from "@/components/app/shell-skeleton";
 import { ApiError } from "@/lib/api/client";
 import { isSigningOut, useSignOut, useSigningOut } from "@/lib/auth";
 import { MeProvider } from "@/lib/me-context";
+import { clearPostLoginPath, peekPostLoginPath } from "@/lib/post-login";
 import { authEvents } from "@/lib/queries/auth-events";
 import { useMe } from "@/lib/queries/me";
 
@@ -37,6 +50,16 @@ export default function SignedInLayout({ children }: { children: ReactNode }) {
   const me = useMe({ enabled: !signingOut });
   const signOut = useSignOut();
   const pathname = usePathname();
+  const router = useRouter();
+  // The redirect this mount is making: from the current path to the stored one.
+  const [leaving, setLeaving] = useState<{ from: string } | null>(() => {
+    const target = peekPostLoginPath();
+    return target !== null && target !== pathname ? { from: pathname } : null;
+  });
+  // The error Retry was pressed on, shown (with a busy Retry) while it runs.
+  const [retriedError, setRetriedError] = useState<unknown>(null);
+  // Arrived (or went anywhere else): the page below may render.
+  if (leaving !== null && pathname !== leaving.from) setLeaving(null);
 
   useEffect(
     () =>
@@ -47,12 +70,27 @@ export default function SignedInLayout({ children }: { children: ReactNode }) {
     [signOut, pathname],
   );
 
-  if (signingOut) return <ShellSkeleton />;
+  useEffect(() => {
+    const target = peekPostLoginPath();
+    if (target === null) return;
+    clearPostLoginPath();
+    if (target !== pathname) router.replace(target);
+  }, [pathname, router]);
+
+  if (signingOut || leaving !== null) return <ShellSkeleton />;
   if (me.data) return <MeProvider value={me.data}>{children}</MeProvider>;
-  if (me.isError && !isUnauthenticated(me.error)) {
+  const error = me.isError ? me.error : me.isFetching ? retriedError : null;
+  if (error !== null && !isUnauthenticated(error)) {
     return (
       <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center p-4">
-        <ErrorState error={me.error} onRetry={() => void me.refetch()} />
+        <ErrorState
+          error={error}
+          retrying={me.isFetching}
+          onRetry={() => {
+            setRetriedError(me.error);
+            void me.refetch();
+          }}
+        />
       </main>
     );
   }
@@ -62,22 +100,4 @@ export default function SignedInLayout({ children }: { children: ReactNode }) {
 /** A 401 is already handled: `handleAuthErrors` has started the sign-out. */
 function isUnauthenticated(error: unknown): boolean {
   return error instanceof ApiError && error.status === 401;
-}
-
-/** The shell's shape while `/me` loads or a sign-out runs: a header bar and two cards. */
-function ShellSkeleton() {
-  return (
-    <div role="status" aria-label="Loading" className="min-h-dvh">
-      <div className="border-b">
-        <div className="mx-auto flex max-w-3xl items-center gap-3 px-4 py-3">
-          <Skeleton className="h-8 w-48" />
-          <Skeleton className="ml-auto size-9 rounded-full" />
-        </div>
-      </div>
-      <div className="mx-auto grid max-w-3xl gap-4 p-4">
-        <Skeleton className="h-24 w-full" />
-        <Skeleton className="h-24 w-full" />
-      </div>
-    </div>
-  );
 }

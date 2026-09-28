@@ -1,10 +1,14 @@
-import { screen, waitFor } from "@testing-library/react";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { useMeContext } from "@/lib/me-context";
+import { storePostLoginPath } from "@/lib/post-login";
+import { makeQueryClient } from "@/lib/queries/client";
+import { keys } from "@/lib/queries/keys";
 import { fakeError, installFakeApi } from "@/test/fake-api";
 import { me } from "@/test/fixtures";
-import { supabaseAuth, TEST_ACCESS_TOKEN, testRouter } from "@/test/mocks";
+import { setTestPath, supabaseAuth, TEST_ACCESS_TOKEN, testRouter } from "@/test/mocks";
 import { renderWithProviders } from "@/test/render";
 
 import SignedInLayout from "./layout";
@@ -24,6 +28,11 @@ function renderLayout(path = "/") {
   );
 }
 
+/** The raw post-login entry in sessionStorage (`lib/post-login.ts`). */
+function storedPostLoginPath(): string | null {
+  return window.sessionStorage.getItem("wsb:postLoginPath");
+}
+
 describe("(signed-in) layout", () => {
   it("shows the shell skeleton until /me loads, then gives the children MeContext", async () => {
     const api = installFakeApi({ "GET /me": me() });
@@ -39,7 +48,7 @@ describe("(signed-in) layout", () => {
     expect(api.requests[0].headers["Authorization"]).toBe(`Bearer ${TEST_ACCESS_TOKEN}`);
   });
 
-  it("shows a full-page ErrorState on a 5xx from /me, and Retry refetches it", async () => {
+  it("shows a full-page ErrorState on a 5xx from /me; Retry stays busy while it runs and refetches once", async () => {
     const api = installFakeApi({
       "GET /me": fakeError(500, "internal_error", "Something went wrong."),
     });
@@ -49,9 +58,24 @@ describe("(signed-in) layout", () => {
     expect(screen.queryByText("pat@example.com")).not.toBeInTheDocument();
     expect(api.requests).toHaveLength(1);
 
-    api.set("GET /me", me());
+    let answer!: () => void;
+    const answered = new Promise<void>((resolve) => {
+      answer = resolve;
+    });
+    api.set("GET /me", async () => {
+      await answered;
+      return me();
+    });
     await user.click(screen.getByRole("button", { name: "Retry" }));
 
+    // The error stays on screen with a busy Retry; a second tap sends nothing.
+    const retry = await screen.findByRole("button", { name: "Retry" });
+    await waitFor(() => expect(retry).toBeDisabled());
+    expect(retry).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByText("Something went wrong. (Ref: 4f9a2c1e)")).toBeInTheDocument();
+    await user.click(retry);
+
+    answer();
     expect(await screen.findByText("pat@example.com")).toBeInTheDocument();
     expect(api.requests.filter((r) => r.path === "/me")).toHaveLength(2);
     expect(supabaseAuth.signOut).not.toHaveBeenCalled();
@@ -74,5 +98,84 @@ describe("(signed-in) layout", () => {
     expect(api.requests).toHaveLength(1);
     expect(screen.getByRole("status", { name: "Loading" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+  });
+
+  it("follows a stored /join once, before any child renders, even under StrictMode", async () => {
+    storePostLoginPath("/join");
+    installFakeApi({ "GET /me": me() });
+    setTestPath("/");
+    // StrictMode at the root: React double-invokes effects only there, not for a
+    // <StrictMode> nested inside renderWithProviders' wrapper (see Task 14).
+    const queryClient = makeQueryClient({ queries: { retry: false } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <SignedInLayout>
+          <WhoAmI />
+        </SignedInLayout>
+      </QueryClientProvider>,
+      { reactStrictMode: true },
+    );
+
+    await waitFor(() => expect(testRouter.replace).toHaveBeenCalledWith("/join"));
+    await waitFor(() => expect(queryClient.getQueryData(keys.me())).toBeDefined());
+    expect(testRouter.replace).toHaveBeenCalledTimes(1);
+    expect(storedPostLoginPath()).toBeNull();
+    // /me has loaded, but the page being left never renders.
+    expect(screen.getByRole("status", { name: "Loading" })).toBeInTheDocument();
+    expect(screen.queryByText("pat@example.com")).not.toBeInTheDocument();
+  });
+
+  it("clears a stored path that is the current one and renders the children", async () => {
+    storePostLoginPath("/welcome");
+    installFakeApi({ "GET /me": me() });
+    renderLayout("/welcome");
+
+    expect(await screen.findByText("pat@example.com")).toBeInTheDocument();
+    expect(testRouter.replace).not.toHaveBeenCalled();
+    expect(storedPostLoginPath()).toBeNull();
+  });
+
+  it("clears the stored path before following it, so coming back to / does not redirect again", async () => {
+    storePostLoginPath("/welcome");
+    installFakeApi({ "GET /me": me() });
+    const { rerender } = renderLayout("/");
+
+    await waitFor(() => expect(testRouter.replace).toHaveBeenCalledWith("/welcome"));
+    expect(storedPostLoginPath()).toBeNull();
+    expect(screen.queryByText("pat@example.com")).not.toBeInTheDocument();
+
+    // The redirect arrives: the same layout instance now sees /welcome.
+    setTestPath("/welcome");
+    rerender(
+      <SignedInLayout>
+        <WhoAmI />
+      </SignedInLayout>,
+    );
+    expect(await screen.findByText("pat@example.com")).toBeInTheDocument();
+
+    // Back to /: nothing is stored any more, so nothing redirects.
+    setTestPath("/");
+    rerender(
+      <SignedInLayout>
+        <WhoAmI />
+      </SignedInLayout>,
+    );
+    expect(screen.getByText("pat@example.com")).toBeInTheDocument();
+    expect(testRouter.replace).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the children and shows no Retry when a background /me refetch fails", async () => {
+    const api = installFakeApi({ "GET /me": me() });
+    const { queryClient } = renderLayout();
+    expect(await screen.findByText("pat@example.com")).toBeInTheDocument();
+
+    api.set("GET /me", fakeError(500, "internal_error", "Something went wrong."));
+    await act(() => queryClient.refetchQueries({ queryKey: keys.me() }));
+
+    expect(api.requests.filter((r) => r.path === "/me")).toHaveLength(2);
+    expect(queryClient.getQueryState(keys.me())?.status).toBe("error");
+    expect(screen.getByText("pat@example.com")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: "Loading" })).not.toBeInTheDocument();
   });
 });

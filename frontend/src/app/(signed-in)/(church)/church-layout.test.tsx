@@ -240,6 +240,8 @@ describe("(church) layout", () => {
 
     await waitFor(() => expect(testRouter.replace).toHaveBeenCalledWith("/welcome"));
     expect(churchRequests(api)).toEqual([]);
+    // The (church) layout's own skeleton (the shared ShellSkeleton) is announced too.
+    expect(screen.getByRole("status", { name: "Loading" })).toBeInTheDocument();
   });
 
   it("switching remounts the page and removes the old church's queries", async () => {

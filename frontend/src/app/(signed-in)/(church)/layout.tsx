@@ -28,6 +28,7 @@ import { toast } from "sonner";
 
 import { AppHeader } from "@/components/app/app-header";
 import { ErrorState } from "@/components/app/error-state";
+import { ShellSkeleton } from "@/components/app/shell-skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError } from "@/lib/api/client";
 import { isNoChurchAccess } from "@/lib/api/errors";
@@ -154,20 +155,6 @@ function isHandledElsewhere(error: unknown): boolean {
   return (
     isNoChurchAccess(error) ||
     (error instanceof ApiError && (error.status === 401 || error.code === "aborted"))
-  );
-}
-
-function ShellSkeleton() {
-  return (
-    <div className="min-h-dvh">
-      <div className="border-b">
-        <div className="mx-auto flex max-w-3xl items-center gap-3 px-4 py-3">
-          <Skeleton className="h-8 flex-1" />
-          <Skeleton className="size-8 rounded-full" />
-        </div>
-      </div>
-      <BodySkeleton />
-    </div>
   );
 }
 

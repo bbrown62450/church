@@ -1,6 +1,6 @@
 /**
  * The path to return to after sign-in (S "Storage and URL helpers", F §4.3). `/login` stores a
- * validated `next` before OAuth; the `(signed-in)` layout peeks it once `/me` has loaded and
+ * validated `next` before OAuth; the `(signed-in)` layout reads it when it mounts and
  * clears it before following it (1b clarification 22); `/join` clears it on mount. It lives
  * in sessionStorage (`wsb:postLoginPath`, JSON `{path, at}`) for 10 minutes, and every read
  * goes back through `safeInternalPath`, so a stale, tampered or malformed value is ignored.
