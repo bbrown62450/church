@@ -1,0 +1,31 @@
+{
+  "data": {
+    "date": "2025-12-25",
+    "tradition": "rcl",
+    "season": "Christmas",
+    "year": "A",
+    "dayName": null,
+    "readings": [
+      {
+        "type": "first",
+        "citation": "Isaiah 52:7-10",
+        "isAlternative": false
+      },
+      {
+        "type": "psalm",
+        "citation": "Psalm 98",
+        "isAlternative": false
+      },
+      {
+        "type": "second",
+        "citation": "Hebrews 1:1-4 (5-12)",
+        "isAlternative": false
+      },
+      {
+        "type": "gospel",
+        "citation": "John 1:1-14",
+        "isAlternative": false
+      }
+    ]
+  }
+}

@@ -187,6 +187,110 @@ def _fresh_idempotency_store():
     yield
 
 
+@pytest.fixture(autouse=True)
+def _fresh_http_client():
+    """integrations.http keeps one module-level client, and a test may swap in
+    a MockTransport client with set_http_for_tests (slice 2, F §2.7). Every
+    test starts with the default client restored, so a fake installed by an
+    earlier test, or left there when it failed, never answers for this one.
+
+    Restores only when integrations.http is already imported: a swapped
+    client can exist only then (the deferred-import rule at the top of this
+    file)."""
+    import sys
+
+    http = sys.modules.get("integrations.http")
+    if http is not None:
+        http.set_http_for_tests(None)
+    yield
+
+
+# --- slice 2a: rate limits and upstream budgets (F §1.8; S "Rate-limit buckets", "Upstream budgets") ---
+
+@pytest.fixture(autouse=True)
+def _fresh_rate_limits():
+    """The limiter's buckets and the upstream budgets are process-wide, and a
+    test's users or parts must never spend another test's tokens (slice 2a).
+    Both forget every spent token and go back on time.monotonic.
+
+    Resets only a module already imported: its state can exist only then (the
+    deferred-import rule at the top of this file)."""
+    import sys
+
+    for name in ("api.ratelimit", "integrations.budget"):
+        module = sys.modules.get(name)
+        if module is not None:
+            module.reset_for_tests()
+    yield
+
+
+@pytest.fixture
+def limiter_clock():
+    """Put api.ratelimit on a FakeClock (every caller starts full) and return the clock.
+
+    Nothing moves it but the test (clock.advance), so every wait is exact;
+    _fresh_rate_limits puts the next test back on time.monotonic."""
+    from api import ratelimit
+
+    clock = FakeClock()
+    ratelimit.set_clock_for_tests(clock.now)
+    return clock
+
+
+@pytest.fixture
+def budget_clock():
+    """Put integrations.budget on a FakeClock (every budget starts full) and return the clock."""
+    from integrations import budget
+
+    clock = FakeClock()
+    budget.set_clock_for_tests(clock.now)
+    return clock
+
+
+@pytest.fixture(autouse=True)
+def _fresh_lectionary_caches():
+    """usecases.lectionary keeps two process-wide TTL caches and a thread pool
+    per source (slice 2a). Each test starts with both pools joined and new
+    pools and new, empty caches, so no cached reading and no straggling worker crosses tests
+    (clarification 39). A test that blocks a worker releases it and calls
+    reset_for_tests() itself in `finally`, while its respx mock still answers.
+
+    Resets only when usecases.lectionary is already imported (the
+    deferred-import rule at the top of this file)."""
+    import sys
+
+    lectionary = sys.modules.get("usecases.lectionary")
+    if lectionary is not None:
+        lectionary.reset_for_tests()
+    yield
+
+
+# --- slice 2a: passages (S "Passages"; 2a clarification 39) ---
+
+@pytest.fixture(autouse=True)
+def _fresh_passage_cache():
+    """scripture_fetcher keeps one process-wide bible-api part cache (7 days),
+    and usecases.passages (Task 10) one worker pool (slice 2a). Each test
+    starts with that pool joined and replaced and with a new, empty part
+    cache on time.monotonic, so no part blocked by an earlier test is still
+    running and text or a not-found stored by an earlier test never answers
+    here. This is the only reset for both (the separate pool fixture Task 10
+    added called the same reset a second time and was removed).
+
+    usecases.passages goes first: its reset joins the pool, so a part still
+    running from an earlier test finishes before the cache is replaced, and
+    writes into the old, orphaned cache (2a clarification 39). Resets only a
+    module already imported: its state can exist only then (the
+    deferred-import rule at the top of this file)."""
+    import sys
+
+    for name in ("usecases.passages", "scripture_fetcher"):
+        module = sys.modules.get(name)
+        if module is not None:
+            module.reset_for_tests()
+    yield
+
+
 # --- slice 1: network-free tests and the Postgres test database (F §5.1, §5.3) ---
 
 _LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1")

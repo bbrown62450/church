@@ -69,7 +69,7 @@ describe("stableStringify", () => {
 });
 
 describe("settleOutcome", () => {
-  it("maps any 4xx to client_error and everything else to uncertain", () => {
+  it("maps a 4xx other than 429 to client_error and everything else to uncertain", () => {
     const cases: [unknown, "client_error" | "uncertain"][] = [
       [new ApiError(400, "invite_rejected", "Invalid invite code."), "client_error"],
       [new ApiError(422, "invalid_request", "Unknown timezone.", { fields: { timezone: "Unknown timezone." } }), "client_error"],
@@ -77,8 +77,9 @@ describe("settleOutcome", () => {
         new ApiError(429, "rate_limited", "You've created 5 churches in the last 24 hours. Try again later.", {
           retryAfterSeconds: 60,
         }),
-        "client_error",
+        "uncertain",
       ],
+      [new ApiError(429, "rate_limited", "Too many requests. Try again in 20 seconds.", { retryAfterSeconds: 20 }), "uncertain"],
       [new ApiError(0, "network_error", "Can't reach the server. Check your connection and try again."), "uncertain"],
       [new ApiError(0, "timeout", "This is taking too long. Try again."), "uncertain"],
       [new ApiError(0, "aborted", "The request was cancelled."), "uncertain"],

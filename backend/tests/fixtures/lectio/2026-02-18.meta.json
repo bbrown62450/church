@@ -1,0 +1,7 @@
+{
+  "content_type": "application/json; charset=utf-8",
+  "recorded_at": "2026-09-28T19:44:49+00:00",
+  "status": 200,
+  "synthetic": true,
+  "url": "https://lectio-api.org/api/v1/readings?date=2026-02-18&tradition=rcl"
+}

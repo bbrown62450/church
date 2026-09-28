@@ -1,0 +1,51 @@
+{
+  "data": {
+    "date": "2026-05-31",
+    "tradition": "rcl",
+    "season": "Ordinary Time",
+    "year": "A",
+    "dayName": null,
+    "readings": [
+      {
+        "type": "first",
+        "citation": "Genesis 6:9-22; 7:24; 8:14-19",
+        "isAlternative": false
+      },
+      {
+        "type": "psalm",
+        "citation": "Psalm 46",
+        "isAlternative": false
+      },
+      {
+        "type": "second",
+        "citation": "Romans 1:16-17; 3:22b-28 (29-31)",
+        "isAlternative": false
+      },
+      {
+        "type": "gospel",
+        "citation": "Matthew 7:21-29",
+        "isAlternative": false
+      },
+      {
+        "type": "first",
+        "citation": "Genesis 1:1-2:4a",
+        "isAlternative": false
+      },
+      {
+        "type": "psalm",
+        "citation": "Psalm 8",
+        "isAlternative": false
+      },
+      {
+        "type": "second",
+        "citation": "2 Corinthians 13:11-13",
+        "isAlternative": false
+      },
+      {
+        "type": "gospel",
+        "citation": "Matthew 28:16-20",
+        "isAlternative": false
+      }
+    ]
+  }
+}

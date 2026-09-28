@@ -30,9 +30,71 @@
         "title": "ChurchOut",
         "type": "object"
       },
+      "ChurchProfileOut": {
+        "description": "GET /church: the active church and its profile. A superset of ChurchOut,\nwhich the church list in GET /me keeps.",
+        "properties": {
+          "bible_translation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bible Translation"
+          },
+          "effective_translation": {
+            "title": "Effective Translation",
+            "type": "string"
+          },
+          "effective_translation_label": {
+            "title": "Effective Translation Label",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "owner",
+              "admin",
+              "member"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          },
+          "timezone_valid": {
+            "title": "Timezone Valid",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "role",
+          "timezone",
+          "timezone_valid",
+          "bible_translation",
+          "effective_translation",
+          "effective_translation_label"
+        ],
+        "title": "ChurchProfileOut",
+        "type": "object"
+      },
       "CreateChurchIn": {
         "additionalProperties": false,
-        "description": "The body of POST /churches. A blank name or time zone is left to the\nusecase, whose 422 names the field.",
+        "description": "The body of POST /churches. A blank name, or a blank or unknown time\nzone, passes this model and gets a 422 that names the field.",
         "properties": {
           "name": {
             "default": "",
@@ -187,6 +249,55 @@
         "title": "InvitePreviewOut",
         "type": "object"
       },
+      "LectionaryOut": {
+        "description": "GET /lectionary/readings. `date` echoes the request and is never\nnormalized; `partial` means sets were found but one source failed;\n`default_index` is None exactly when `reading_sets` is empty.",
+        "properties": {
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "default_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Index"
+          },
+          "partial": {
+            "title": "Partial",
+            "type": "boolean"
+          },
+          "reading_sets": {
+            "items": {
+              "$ref": "#/components/schemas/ReadingSetOut"
+            },
+            "title": "Reading Sets",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "no_readings"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "status",
+          "partial",
+          "reading_sets",
+          "default_index"
+        ],
+        "title": "LectionaryOut",
+        "type": "object"
+      },
       "MeOut": {
         "properties": {
           "churches": {
@@ -205,6 +316,158 @@
           "churches"
         ],
         "title": "MeOut",
+        "type": "object"
+      },
+      "PassageOut": {
+        "description": "One ref as sent (trimmed), with every section, whatever loaded.",
+        "properties": {
+          "reference": {
+            "title": "Reference",
+            "type": "string"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/PassageSectionOut"
+            },
+            "title": "Sections",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "not_found",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reference",
+          "status",
+          "sections"
+        ],
+        "title": "PassageOut",
+        "type": "object"
+      },
+      "PassageSectionOut": {
+        "description": "One \" or \" alternative: `ok` only when every part loaded; `text` joins the\nparts that did, or is null when none did (S Status rules).",
+        "properties": {
+          "reference": {
+            "title": "Reference",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "not_found",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          }
+        },
+        "required": [
+          "reference",
+          "status",
+          "text"
+        ],
+        "title": "PassageSectionOut",
+        "type": "object"
+      },
+      "PassagesIn": {
+        "additionalProperties": false,
+        "description": "POST /scripture/passages. An empty list, a blank ref and more than 20\nparts in all are the usecase's 422s, with its exact messages (S Schemas).",
+        "properties": {
+          "refs": {
+            "items": {
+              "maxLength": 200,
+              "type": "string"
+            },
+            "maxItems": 4,
+            "title": "Refs",
+            "type": "array"
+          },
+          "translation": {
+            "maxLength": 20,
+            "title": "Translation",
+            "type": "string"
+          }
+        },
+        "required": [
+          "refs",
+          "translation"
+        ],
+        "title": "PassagesIn",
+        "type": "object"
+      },
+      "PassagesOut": {
+        "properties": {
+          "passages": {
+            "items": {
+              "$ref": "#/components/schemas/PassageOut"
+            },
+            "title": "Passages",
+            "type": "array"
+          },
+          "translation": {
+            "title": "Translation",
+            "type": "string"
+          },
+          "translation_label": {
+            "title": "Translation Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "translation",
+          "translation_label",
+          "passages"
+        ],
+        "title": "PassagesOut",
+        "type": "object"
+      },
+      "ReadingSetOut": {
+        "description": "One set of readings. `scriptures` is in display order (first, psalm,\nsecond, gospel) with compound cells split; the usecase guarantees 1-20\nlines of 1-200 characters and a name of 1-300 (fits_draft_limits).",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "scriptures": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Scriptures",
+            "type": "array"
+          },
+          "source": {
+            "enum": [
+              "lectio",
+              "vanderbilt",
+              "merged"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "scriptures",
+          "source"
+        ],
+        "title": "ReadingSetOut",
         "type": "object"
       },
       "ReadyOut": {
@@ -284,6 +547,51 @@
           "customized"
         ],
         "title": "RubricOut",
+        "type": "object"
+      },
+      "TranslationOut": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label"
+        ],
+        "title": "TranslationOut",
+        "type": "object"
+      },
+      "TranslationsOut": {
+        "description": "GET /translations: the translations this deployment offers, in display\norder. \"default\" is \"web\"; \"esv\" is listed, last, only when it is configured.",
+        "properties": {
+          "default": {
+            "title": "Default",
+            "type": "string"
+          },
+          "esv_available": {
+            "title": "Esv Available",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TranslationOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "default",
+          "esv_available",
+          "items"
+        ],
+        "title": "TranslationsOut",
         "type": "object"
       },
       "UserOut": {
@@ -377,7 +685,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ChurchOut"
+                  "$ref": "#/components/schemas/ChurchProfileOut"
                 }
               }
             },
@@ -743,6 +1051,112 @@
         "summary": "Preview Invite"
       }
     },
+    "/lectionary/readings": {
+      "get": {
+        "operationId": "lectionary_readings_lectionary_readings_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "date",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Date",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LectionaryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Gateway Timeout"
+          }
+        },
+        "summary": "Lectionary Readings"
+      }
+    },
     "/me": {
       "get": {
         "operationId": "me_me_get",
@@ -1002,6 +1416,158 @@
           }
         },
         "summary": "Change Rubric"
+      }
+    },
+    "/scripture/passages": {
+      "post": {
+        "operationId": "scripture_passages_scripture_passages_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PassagesIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PassagesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Scripture Passages"
+      }
+    },
+    "/translations": {
+      "get": {
+        "operationId": "translations_translations_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranslationsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Translations"
       }
     }
   }

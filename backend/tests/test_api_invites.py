@@ -199,7 +199,11 @@ def test_after_accept_get_church_200(world):
     church_id = world.post("accept", world.invite()).json()["church"]["id"]
     r = world.client.get("/church", headers=church_headers(JOINER, uuid.UUID(church_id)))
     assert r.status_code == 200, r.text
-    assert r.json() == {"id": church_id, "name": "Grace", "role": "member"}
+    assert r.json() == {                                # ChurchOut plus slice 2's profile fields
+        "id": church_id, "name": "Grace", "role": "member",
+        "timezone": "America/New_York", "timezone_valid": True, "bible_translation": None,
+        "effective_translation": "web", "effective_translation_label": "World English Bible (WEB)",
+    }
 
 
 def test_logs_hold_no_code_or_email(world, caplog):

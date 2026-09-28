@@ -1,0 +1,41 @@
+{
+  "data": {
+    "date": "2026-04-05",
+    "tradition": "rcl",
+    "season": "Easter",
+    "year": "A",
+    "dayName": null,
+    "readings": [
+      {
+        "type": "first",
+        "citation": "Acts 10:34-43",
+        "isAlternative": false
+      },
+      {
+        "type": "psalm",
+        "citation": "Psalm 118:1-2, 14-24",
+        "isAlternative": false
+      },
+      {
+        "type": "second",
+        "citation": "Colossians 3:1-4",
+        "isAlternative": false
+      },
+      {
+        "type": "gospel",
+        "citation": "John 20:1-18",
+        "isAlternative": false
+      },
+      {
+        "type": "first",
+        "citation": "Jeremiah 31:1-6",
+        "isAlternative": true
+      },
+      {
+        "type": "gospel",
+        "citation": "Matthew 28:1-10",
+        "isAlternative": true
+      }
+    ]
+  }
+}

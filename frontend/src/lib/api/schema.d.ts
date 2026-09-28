@@ -120,6 +120,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/lectionary/readings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lectionary Readings */
+        get: operations["lectionary_readings_lectionary_readings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me": {
         parameters: {
             query?: never;
@@ -158,6 +175,40 @@ export interface paths {
         patch: operations["change_rubric_rubric_patch"];
         trace?: never;
     };
+    "/scripture/passages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Scripture Passages */
+        post: operations["scripture_passages_scripture_passages_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/translations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Translations */
+        get: operations["translations_translations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -178,9 +229,38 @@ export interface components {
             role: "owner" | "admin" | "member";
         };
         /**
+         * ChurchProfileOut
+         * @description GET /church: the active church and its profile. A superset of ChurchOut,
+         *     which the church list in GET /me keeps.
+         */
+        ChurchProfileOut: {
+            /** Bible Translation */
+            bible_translation: string | null;
+            /** Effective Translation */
+            effective_translation: string;
+            /** Effective Translation Label */
+            effective_translation_label: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "owner" | "admin" | "member";
+            /** Timezone */
+            timezone: string;
+            /** Timezone Valid */
+            timezone_valid: boolean;
+        };
+        /**
          * CreateChurchIn
-         * @description The body of POST /churches. A blank name or time zone is left to the
-         *     usecase, whose 422 names the field.
+         * @description The body of POST /churches. A blank name, or a blank or unknown time
+         *     zone, passes this model and gets a 422 that names the field.
          */
         CreateChurchIn: {
             /**
@@ -259,11 +339,103 @@ export interface components {
              */
             role: "member" | "admin";
         };
+        /**
+         * LectionaryOut
+         * @description GET /lectionary/readings. `date` echoes the request and is never
+         *     normalized; `partial` means sets were found but one source failed;
+         *     `default_index` is None exactly when `reading_sets` is empty.
+         */
+        LectionaryOut: {
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Default Index */
+            default_index: number | null;
+            /** Partial */
+            partial: boolean;
+            /** Reading Sets */
+            reading_sets: components["schemas"]["ReadingSetOut"][];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "no_readings";
+        };
         /** MeOut */
         MeOut: {
             /** Churches */
             churches: components["schemas"]["ChurchOut"][];
             user: components["schemas"]["UserOut"];
+        };
+        /**
+         * PassageOut
+         * @description One ref as sent (trimmed), with every section, whatever loaded.
+         */
+        PassageOut: {
+            /** Reference */
+            reference: string;
+            /** Sections */
+            sections: components["schemas"]["PassageSectionOut"][];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "not_found" | "unavailable";
+        };
+        /**
+         * PassageSectionOut
+         * @description One " or " alternative: `ok` only when every part loaded; `text` joins the
+         *     parts that did, or is null when none did (S Status rules).
+         */
+        PassageSectionOut: {
+            /** Reference */
+            reference: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "not_found" | "unavailable";
+            /** Text */
+            text: string | null;
+        };
+        /**
+         * PassagesIn
+         * @description POST /scripture/passages. An empty list, a blank ref and more than 20
+         *     parts in all are the usecase's 422s, with its exact messages (S Schemas).
+         */
+        PassagesIn: {
+            /** Refs */
+            refs: string[];
+            /** Translation */
+            translation: string;
+        };
+        /** PassagesOut */
+        PassagesOut: {
+            /** Passages */
+            passages: components["schemas"]["PassageOut"][];
+            /** Translation */
+            translation: string;
+            /** Translation Label */
+            translation_label: string;
+        };
+        /**
+         * ReadingSetOut
+         * @description One set of readings. `scriptures` is in display order (first, psalm,
+         *     second, gospel) with compound cells split; the usecase guarantees 1-20
+         *     lines of 1-200 characters and a name of 1-300 (fits_draft_limits).
+         */
+        ReadingSetOut: {
+            /** Name */
+            name: string;
+            /** Scriptures */
+            scriptures: string[];
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "lectio" | "vanderbilt" | "merged";
         };
         /** ReadyOut */
         ReadyOut: {
@@ -295,6 +467,26 @@ export interface components {
             /** Customized */
             customized: string[];
             rubric: components["schemas"]["RubricModel"];
+        };
+        /** TranslationOut */
+        TranslationOut: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+        };
+        /**
+         * TranslationsOut
+         * @description GET /translations: the translations this deployment offers, in display
+         *     order. "default" is "web"; "esv" is listed, last, only when it is configured.
+         */
+        TranslationsOut: {
+            /** Default */
+            default: string;
+            /** Esv Available */
+            esv_available: boolean;
+            /** Items */
+            items: components["schemas"]["TranslationOut"][];
         };
         /** UserOut */
         UserOut: {
@@ -337,7 +529,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ChurchOut"];
+                    "application/json": components["schemas"]["ChurchProfileOut"];
                 };
             };
             /** @description Unauthorized */
@@ -607,6 +799,84 @@ export interface operations {
             };
         };
     };
+    lectionary_readings_lectionary_readings_get: {
+        parameters: {
+            query: {
+                date: string;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LectionaryOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Gateway Timeout */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     me_me_get: {
         parameters: {
             query?: never;
@@ -753,6 +1023,117 @@ export interface operations {
             };
             /** @description Forbidden */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    scripture_passages_scripture_passages_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PassagesIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PassagesOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    translations_translations_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranslationsOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

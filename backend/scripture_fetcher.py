@@ -1,24 +1,62 @@
 #!/usr/bin/env python3
-"""Fetch full Bible passage text by reference.
+"""Fetch full Bible passage text by reference (S "Passages"; F §2.3.3, §2.7).
 
 Two sources:
   * bible-api.com — no key, several public-domain translations (default: WEB).
   * api.esv.org   — the ESV, when ESV_API_KEY is configured (register free at
                     https://api.esv.org). ESV text is © Crossway; the short
                     "(ESV)" copyright is kept on the returned text.
+
+A reference is planned into sections and parts (plan_sections, plan_parts):
+one section per " or " alternative, and one part per upstream call inside it
+(" and "-joined readings and ";" pieces are fetched separately, each
+normalized for fetching by scripture_refs.normalize_for_fetch). fetch_part
+makes at most one upstream call; assemble_passage derives every section and
+passage status and text from the parts (S Status rules), so fetch_passage
+here and usecases.passages.load_passages (which runs parts on a pool under a
+deadline) report the same statuses.
+
+bible-api parts are cached for 7 days by (translation, normalized part); a
+not-found answer is cached too, as NOT_FOUND; a text over 64 KB is returned
+but not cached. Transient failures and budget misses are never cached, so
+"Try again" works. ESV text is never cached
+(Crossway terms, F §2.7). Every uncached part first takes a token from the
+process-wide upstream budget (integrations.budget); with none left it is not
+sent and is `unavailable`.
+
+Configuration exception (S; until slice 7): _esv_key() reads ESV_API_KEY from
+the environment at call time, not from api/settings.py.
+
+Logs name the upstream and a reason, never the reference, a body or a query
+string (F §2.5). No FastAPI, no Streamlit (tests/test_no_streamlit_in_core.py).
 """
 
 import logging
 import os
 import re
-from typing import Optional, Dict, Any, List, Tuple
+import time
+from dataclasses import dataclass
+from typing import Dict, List, Literal, Optional, Tuple
+from urllib.parse import quote
+
 import httpx
+
+from cache import TTLCache
+from integrations import budget, http
+from scripture_refs import normalize_for_fetch, split_alternatives, split_book, split_joined, split_parts
 
 logger = logging.getLogger(__name__)
 
 # bible-api.com: GET https://bible-api.com/{passage}?translation=web
 BIBLE_API_BASE = "https://bible-api.com"
 ESV_API_BASE = "https://api.esv.org/v3/passage/text/"
+
+BIBLE_API_READ_TIMEOUT = 10.0
+ESV_READ_TIMEOUT = 10.0
+
+PART_CACHE_MAXSIZE = 2000
+PART_CACHE_TTL_SECONDS = 7 * 24 * 60 * 60   # 604 800
+PART_CACHE_MAX_TEXT_BYTES = 64 * 1024        # a longer text is returned but not cached
 
 DEFAULT_TRANSLATION = "web"
 
@@ -35,6 +73,81 @@ TRANSLATIONS: Dict[str, Tuple[str, str]] = {
     "webbe": ("World English Bible, British (WEBBE)", "bible-api"),
     "esv": ("English Standard Version (ESV)", "esv"),
 }
+
+PartStatus = Literal["ok", "not_found", "unavailable"]
+
+
+@dataclass(frozen=True)
+class Part:
+    """One upstream call: `reference` is the normalized part that was fetched."""
+    reference: str
+    status: PartStatus
+    text: Optional[str]
+
+
+@dataclass(frozen=True)
+class Section:
+    """One " or " alternative, as written; `text` joins its ok parts."""
+    reference: str
+    status: PartStatus
+    text: Optional[str]
+
+
+@dataclass(frozen=True)
+class Passage:
+    """One reference as sent (trimmed), with every section, always."""
+    reference: str
+    status: PartStatus
+    sections: Tuple[Section, ...]
+
+
+class _NotFound:
+    """The part-cache value for a reference the upstream does not have."""
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        return "NOT_FOUND"
+
+
+NOT_FOUND = _NotFound()
+
+
+class _Transient(Exception):
+    """Raised inside the part-cache loader for an upstream failure or a budget
+    miss. TTLCache stores only values and CacheableFailures, so this is never
+    cached; fetch_part turns it into `unavailable` (2a clarification 36)."""
+
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
+
+
+_SKIP_REASONS = ("budget", "no_key")   # the part was never sent
+
+
+class _TooLargeToCache(Exception):
+    """Raised inside the part-cache loader with a text over
+    PART_CACHE_MAX_TEXT_BYTES. TTLCache stores no plain exception, so the text
+    reaches this request (and any request waiting on the same load) without
+    being kept: 2000 entries of unbounded upstream text could otherwise hold
+    an unbounded amount of memory for 7 days."""
+
+    def __init__(self, text: str):
+        super().__init__("too large to cache")
+        self.text = text
+
+_PART_CACHE: "TTLCache[Tuple[str, str], object]" = TTLCache(
+    maxsize=PART_CACHE_MAXSIZE, ttl_ok=PART_CACHE_TTL_SECONDS, ttl_fail=0)
+
+
+def reset_for_tests(clock=time.monotonic) -> None:
+    """Tests: a new, empty part cache on `clock`. A new object rather than
+    clear(), so a part still loading from an earlier test writes into the old,
+    orphaned cache (2a clarification 39)."""
+    global _PART_CACHE
+    _PART_CACHE = TTLCache(maxsize=PART_CACHE_MAXSIZE, ttl_ok=PART_CACHE_TTL_SECONDS,
+                           ttl_fail=0, clock=clock)
 
 
 def _esv_key() -> str:
@@ -62,34 +175,89 @@ def translation_label(translation_id: Optional[str]) -> str:
     return entry[0] if entry else tid
 
 
-def _reference_to_api_param(reference: str) -> str:
-    """Convert a reference like '2 Kings 2:1-12' to URL path format."""
-    s = reference.strip()
-    # Already fine for URL: just lowercase and encode
-    return s.lower().replace(" ", "%20")
+# --- planning (pure) ---
+
+# Spellings scripture_refs accepts that bible-api may not (owner 2026-09-28): a part
+# starting with one is sent under the book's name ("Rm 8:1" -> "Romans 8:1").
+_FETCH_AS_BOOK_NAME = frozenset({"revelations", "mat", "rm", "php", "jdg", "eccles"})
+_LEADING_WORD = re.compile(r"([A-Za-z]+)\.?(?=[\s\d]|$)")
 
 
-def _fetch_bible_api(ref: str, translation: str) -> Optional[str]:
-    ref_param = _reference_to_api_param(ref)
-    url = f"{BIBLE_API_BASE}/{ref_param}"
-    params = {"translation": translation}
+def _book_name_for_fetch(part: str) -> str:
+    match = _LEADING_WORD.match(part)
+    if match and match.group(1).lower() in _FETCH_AS_BOOK_NAME:
+        found = split_book(part)
+        if found is not None:
+            return found[0].name + part[match.end():]
+    return part
+
+
+def plan_sections(reference: str) -> List[Tuple[str, List[str]]]:
+    """[(alternative as written, [normalized parts])], one pair per section.
+
+    Alternatives and parts that come out empty are dropped, so ";" plans to []
+    and a section never has zero parts (2a clarification 33)."""
+    sections = []
+    for alternative in split_alternatives(reference):
+        if not alternative.strip():
+            continue
+        parts = [_book_name_for_fetch(normalize_for_fetch(piece))
+                 for joined in split_joined(alternative)
+                 for piece in split_parts(joined)]
+        parts = [part for part in parts if part]
+        if parts:
+            sections.append((alternative, parts))
+    return sections
+
+
+def plan_parts(reference: str) -> List[List[str]]:
+    """The normalized parts of each section, in order (S "Planning"). The same
+    plan drives fetching, the rate-limit cost and reassembly."""
+    return [parts for _alternative, parts in plan_sections(reference)]
+
+
+# --- one part: one upstream call at most ---
+
+def _bible_api_part(part: str, translation: str) -> object:
+    """The part-cache loader: text, or NOT_FOUND; raises _Transient otherwise."""
+    if not budget.try_acquire("bible_api"):
+        raise _Transient("budget")
+    url = f"{BIBLE_API_BASE}/{quote(part.lower(), safe=':,-')}"
     try:
-        logger.debug("Fetching %s from bible-api (%s)", ref, translation)
-        r = httpx.get(url, params=params, timeout=15.0)
-        r.raise_for_status()
-        data = r.json()
-        return (data.get("text") or "").strip() or None
-    except Exception as e:
-        logger.warning("Failed to fetch %s from bible-api: %s", ref, e)
-        return None
+        response = http.get(url, params={"translation": translation},
+                            read_timeout=BIBLE_API_READ_TIMEOUT)
+    except httpx.TimeoutException:
+        raise _Transient("timeout") from None
+    except httpx.HTTPError:
+        raise _Transient("network") from None
+    if response.status_code == 404:
+        return NOT_FOUND
+    if response.status_code != 200:
+        raise _Transient(f"status_{response.status_code}")
+    try:
+        data = response.json()
+    except ValueError:
+        raise _Transient("bad_json") from None
+    if not isinstance(data, dict):
+        raise _Transient("bad_json")
+    text = data.get("text")
+    if not isinstance(text, str):
+        raise _Transient("bad_json")        # unreadable, never cached (owner decision 1)
+    text = text.strip()
+    if len(text.encode("utf-8")) > PART_CACHE_MAX_TEXT_BYTES:
+        raise _TooLargeToCache(text)        # still shown, just not kept
+    return text or NOT_FOUND
 
 
-def _fetch_esv(ref: str) -> Optional[str]:
+def _esv_part(part: str) -> object:
+    """Text or NOT_FOUND from the ESV API; raises _Transient otherwise. Never cached."""
     key = _esv_key()
     if not key:
-        return None
+        raise _Transient("no_key")
+    if not budget.try_acquire("esv"):
+        raise _Transient("budget")
     params = {
-        "q": ref,
+        "q": part,
         "include-headings": "false",
         "include-footnotes": "false",
         "include-verse-numbers": "false",
@@ -97,94 +265,95 @@ def _fetch_esv(ref: str) -> Optional[str]:
         "include-short-copyright": "true",   # keeps the required "(ESV)" credit
     }
     try:
-        logger.debug("Fetching %s from ESV API", ref)
-        r = httpx.get(
-            ESV_API_BASE,
-            params=params,
-            headers={"Authorization": f"Token {key}"},
-            timeout=15.0,
-        )
-        r.raise_for_status()
-        passages = r.json().get("passages") or []
-        text = "\n\n".join(p.strip() for p in passages if p and p.strip())
-        return text or None
-    except Exception as e:
-        logger.warning("Failed to fetch %s from ESV: %s", ref, e)
-        return None
+        response = http.get(ESV_API_BASE, params=params,
+                            headers={"Authorization": f"Token {key}"},
+                            read_timeout=ESV_READ_TIMEOUT)
+    except httpx.TimeoutException:
+        raise _Transient("timeout") from None
+    except httpx.HTTPError:
+        raise _Transient("network") from None
+    if response.status_code != 200:
+        raise _Transient(f"status_{response.status_code}")
+    try:
+        data = response.json()
+    except ValueError:
+        raise _Transient("bad_json") from None
+    passages = data.get("passages") if isinstance(data, dict) else None
+    if not isinstance(passages, list):
+        raise _Transient("bad_json")        # unreadable is "unavailable", not "not found"
+    text = "\n\n".join(p.strip() for p in passages if isinstance(p, str) and p.strip())
+    return text or NOT_FOUND
 
 
-def _fetch_one_passage(ref: str, translation: str) -> Optional[str]:
-    """Fetch text for a single passage (no semicolons), routed by translation."""
+def fetch_part(part: str, translation: str) -> Part:
+    """One normalized part: the cache (bible-api only), then the budget, then
+    one upstream call. Never raises for an upstream failure (S Status rules)."""
     source = (TRANSLATIONS.get(translation) or (None, "bible-api"))[1]
-    if source == "esv":
-        return _fetch_esv(ref)
-    return _fetch_bible_api(ref, translation)
+    upstream = "esv" if source == "esv" else "bible_api"
+    try:
+        if upstream == "esv":
+            result = _esv_part(part)
+        else:
+            result = _PART_CACHE.get_or_load(
+                (translation, part.lower()), lambda: _bible_api_part(part, translation))
+    except _TooLargeToCache as exc:
+        return Part(part, "ok", exc.text)
+    except _Transient as exc:
+        if exc.reason in _SKIP_REASONS:
+            logger.info("passage_part_skipped reason=%s upstream=%s", exc.reason, upstream)
+        else:
+            logger.warning("passage_part_failed reason=%s upstream=%s", exc.reason, upstream)
+        return Part(part, "unavailable", None)
+    if result is NOT_FOUND:
+        return Part(part, "not_found", None)
+    return Part(part, "ok", result)
 
 
-def _book_name_from_ref(ref: str) -> Optional[str]:
-    """Extract book name from a reference like 'Genesis 2:15-17' or '2 Kings 2:1-12'.
-    Returns e.g. 'Genesis', '2 Kings'. Returns None if no chapter:verse pattern."""
-    # Match optional leading digits (for 1 John, 2 Kings), then name, then space and chapter:verse
-    m = re.match(r"^(.+?)\s+\d+:\d+", ref.strip())
-    if not m:
-        return None
-    return m.group(1).strip()
+# --- statuses and texts (S Status rules; the one derivation) ---
+
+def _combined_status(statuses: List[PartStatus]) -> PartStatus:
+    """ok when every item is ok; else unavailable if any is; else not_found.
+    No items at all is not_found, so an empty plan never reads as ok."""
+    if statuses and all(s == "ok" for s in statuses):
+        return "ok"
+    if "unavailable" in statuses:
+        return "unavailable"
+    return "not_found"
 
 
-def _expand_part(part: str, last_book: Optional[str]) -> str:
-    """If part is just '3:1-7' (chapter:verse), prepend last_book to get 'Genesis 3:1-7'."""
-    part = part.strip()
-    # Looks like "3:1-7" or "3:1" (starts with digit and has colon)
-    if re.match(r"^\d+:\d+", part) and last_book:
-        return f"{last_book} {part}"
-    return part
+def _joined(texts: List[Optional[str]]) -> Optional[str]:
+    return "\n\n".join(t for t in texts if t) or None
 
 
-def fetch_passage(reference: str, translation: str = DEFAULT_TRANSLATION) -> Optional[Dict[str, Any]]:
-    """
-    Fetch passage text for a reference (e.g. '2 Kings 2:1-12', 'Genesis 2:15-17; 3:1-7',
-    'John 3:1-17 or Matthew 17:1-9').
-    Lectionary refs often use semicolons; later parts may omit the book name (e.g. '3:1-7').
-    Gospel readings sometimes offer alternatives joined by " or "; we fetch each and combine.
-    We carry the book name from the first part when a part looks like just chapter:verse.
-    Returns dict with keys: reference, text (combined), or None on total failure.
-    """
+def assemble_passage(reference: str, alternatives: List[str],
+                     parts: List[List[Part]]) -> Passage:
+    """Sections and passage from each alternative's fetched parts, in plan
+    order. `alternatives` and `parts` come from the same plan_sections call."""
+    sections = tuple(
+        Section(
+            reference=alternative,
+            status=_combined_status([p.status for p in section_parts]),
+            text=_joined([p.text for p in section_parts if p.status == "ok"]),
+        )
+        for alternative, section_parts in zip(alternatives, parts, strict=True)
+    )
+    return Passage(reference=reference,
+                   status=_combined_status([s.status for s in sections]),
+                   sections=sections)
+
+
+def fetch_passage(reference: str, translation: str = DEFAULT_TRANSLATION) -> Passage:
+    """Fetch every part of `reference`, one after another (no pool, no
+    deadline; 2a clarification 27), and derive the statuses."""
     ref = reference.strip()
-    if not ref:
-        return None
-    # Handle " or " (alternative gospel choices) - split and process each separately
-    if " or " in ref:
-        alternatives = [p.strip() for p in ref.split(" or ") if p.strip()]
-        logger.info("Fetching %d alternatives for '%s'", len(alternatives), ref)
-        texts = []
-        for alt in alternatives:
-            result = fetch_passage(alt, translation=translation)
-            if result and result.get("text"):
-                texts.append(f"--- {alt} ---\n\n{result['text']}")
-        logger.info("Alternatives fetched: %d/%d ok", len(texts), len(alternatives))
-        if not texts:
-            return None
-        return {"reference": ref, "text": "\n\n".join(texts)}
-    raw_parts = [p.strip() for p in ref.split(";") if p.strip()]
-    if not raw_parts:
-        return None
-    last_book = None
-    texts = []
-    for part in raw_parts:
-        full_ref = _expand_part(part, last_book)
-        if not last_book:
-            last_book = _book_name_from_ref(full_ref)
-        t = _fetch_one_passage(full_ref, translation)
-        if t:
-            texts.append(t)
-    if not texts:
-        return None
-    return {"reference": ref, "text": "\n\n".join(texts)}
+    sections = plan_sections(ref)
+    parts = [[fetch_part(part, translation) for part in section_parts]
+             for _alternative, section_parts in sections]
+    return assemble_passage(ref, [alternative for alternative, _parts in sections], parts)
 
 
 def get_passage_text(reference: str, translation: str = DEFAULT_TRANSLATION) -> Optional[str]:
-    """Return just the combined passage text, or None."""
-    data = fetch_passage(reference, translation=translation)
-    if not data:
-        return None
-    return (data.get("text") or "").strip() or None
+    """The text of the `ok` sections joined with blank lines, or None. Never a
+    sentinel (S; fixes inv. C9). usecases.passages re-exports it for slice 3."""
+    passage = fetch_passage(reference, translation=translation)
+    return _joined([s.text for s in passage.sections if s.status == "ok"])

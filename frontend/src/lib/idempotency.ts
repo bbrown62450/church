@@ -54,7 +54,12 @@ export function createKeyTracker({
  * The `settle` outcome for a failed request (1b clarification 46): a 4xx `ApiError` is a
  * `client_error` (the server answered and stored nothing that a new key could duplicate);
  * status 0 (network error, timeout, cancel), a 5xx or any other thrown value is `uncertain`.
+ * A 429 is `uncertain` too (F §1.8: a 429 is never stored, so the same key is retried after
+ * Retry-After). An earlier try with this key may have succeeded before the limiter refused a
+ * retry, and a new key would then create a duplicate.
  */
 export function settleOutcome(e: unknown): "client_error" | "uncertain" {
-  return e instanceof ApiError && e.status >= 400 && e.status <= 499 ? "client_error" : "uncertain";
+  return e instanceof ApiError && e.status >= 400 && e.status <= 499 && e.status !== 429
+    ? "client_error"
+    : "uncertain";
 }
