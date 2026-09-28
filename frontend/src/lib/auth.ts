@@ -123,8 +123,8 @@ export function useSignOut(): (opts?: SignOutOptions) => Promise<void> {
       if (!keepPendingInvite) removeSession(SESSION_KEYS.pendingInviteCode);
       // auth-js can fail without removing the session: when it cannot load the
       // session first (an expired access token whose refresh failed offline or on a
-      // 5xx) it returns `{ error }` and keeps the refresh-token cookies, and a throw
-      // (e.g. the auth lock timing out) keeps them too. Left alone, the next full
+      // 5xx) it returns `{ error }` and keeps the refresh-token cookies, and an
+      // unexpected auth-js throw keeps them too. Left alone, the next full
       // load's proxy `getUser()` would refresh and sign this browser back in as the
       // same user, so on any failure the cookies go here (owner-approved, 2026-09-27).
       let signedOut = false;

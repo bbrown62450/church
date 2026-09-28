@@ -36,8 +36,12 @@ function cookieNames(): string[] {
     .filter(Boolean);
 }
 
-/** The chunked session cookies `@supabase/ssr`'s browser client writes, plus one that is not Supabase's. */
+/**
+ * The session cookies `@supabase/ssr`'s browser client writes: the usual single
+ * `sb-<ref>-auth-token` and, for a large session, its chunks. Plus one that is not Supabase's.
+ */
 function seedAuthCookies(): void {
+  document.cookie = "sb-testref-auth-token=base64-whole-session; path=/";
   document.cookie = "sb-testref-auth-token.0=base64-chunk-zero; path=/";
   document.cookie = "sb-testref-auth-token.1=chunk-one; path=/";
   document.cookie = "unrelated=keep; path=/";
@@ -101,7 +105,11 @@ describe("useSignOut", () => {
     supabaseAuth.signOut.mockResolvedValue({ error: new Error("offline") });
     seedAuthCookies();
     expect(cookieNames()).toEqual(
-      expect.arrayContaining(["sb-testref-auth-token.0", "sb-testref-auth-token.1"]),
+      expect.arrayContaining([
+        "sb-testref-auth-token",
+        "sb-testref-auth-token.0",
+        "sb-testref-auth-token.1",
+      ]),
     );
     const pat = me();
     const { user } = renderWithProviders(<LogOut />, { me: pat });
@@ -115,7 +123,8 @@ describe("useSignOut", () => {
   });
 
   it("removes the Supabase auth cookies itself when signOut throws (owner-approved)", async () => {
-    supabaseAuth.signOut.mockRejectedValue(new Error("Acquiring the auth lock timed out"));
+    // Any unexpected auth-js throw.
+    supabaseAuth.signOut.mockRejectedValue(new Error("unexpected auth-js failure"));
     seedAuthCookies();
     const pat = me();
     const { user } = renderWithProviders(<LogOut />, { me: pat });
