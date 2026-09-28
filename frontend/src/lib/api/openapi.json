@@ -256,6 +256,126 @@
         "title": "MeOut",
         "type": "object"
       },
+      "PassageOut": {
+        "description": "One ref as sent (trimmed), with every section, whatever loaded.",
+        "properties": {
+          "reference": {
+            "title": "Reference",
+            "type": "string"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/PassageSectionOut"
+            },
+            "title": "Sections",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "not_found",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reference",
+          "status",
+          "sections"
+        ],
+        "title": "PassageOut",
+        "type": "object"
+      },
+      "PassageSectionOut": {
+        "description": "One \" or \" alternative: `ok` only when every part loaded; `text` joins the\nparts that did, or is null when none did (S Status rules).",
+        "properties": {
+          "reference": {
+            "title": "Reference",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "not_found",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          }
+        },
+        "required": [
+          "reference",
+          "status",
+          "text"
+        ],
+        "title": "PassageSectionOut",
+        "type": "object"
+      },
+      "PassagesIn": {
+        "additionalProperties": false,
+        "description": "POST /scripture/passages. An empty list, a blank ref and more than 20\nparts in all are the usecase's 422s, with its exact messages (S Schemas).",
+        "properties": {
+          "refs": {
+            "items": {
+              "maxLength": 200,
+              "type": "string"
+            },
+            "maxItems": 4,
+            "title": "Refs",
+            "type": "array"
+          },
+          "translation": {
+            "maxLength": 20,
+            "title": "Translation",
+            "type": "string"
+          }
+        },
+        "required": [
+          "refs",
+          "translation"
+        ],
+        "title": "PassagesIn",
+        "type": "object"
+      },
+      "PassagesOut": {
+        "properties": {
+          "passages": {
+            "items": {
+              "$ref": "#/components/schemas/PassageOut"
+            },
+            "title": "Passages",
+            "type": "array"
+          },
+          "translation": {
+            "title": "Translation",
+            "type": "string"
+          },
+          "translation_label": {
+            "title": "Translation Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "translation",
+          "translation_label",
+          "passages"
+        ],
+        "title": "PassagesOut",
+        "type": "object"
+      },
       "ReadingSetOut": {
         "description": "One set of readings. `scriptures` is in display order (first, psalm,\nsecond, gospel) with compound cells split; the usecase guarantees 1-20\nlines of 1-200 characters and a name of 1-300 (fits_draft_limits).",
         "properties": {
@@ -1189,6 +1309,92 @@
           }
         },
         "summary": "Change Rubric"
+      }
+    },
+    "/scripture/passages": {
+      "post": {
+        "operationId": "scripture_passages_scripture_passages_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PassagesIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PassagesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Scripture Passages"
       }
     }
   }

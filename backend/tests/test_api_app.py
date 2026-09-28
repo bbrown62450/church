@@ -276,6 +276,7 @@ def test_routes_document_the_error_body():
         ("/invites/preview", "post"): {"400", "401", "422", "503"},
         ("/invites/accept", "post"): {"400", "401", "422", "503"},
         ("/lectionary/readings", "get"): {"401", "422", "429", "502", "503", "504"},
+        ("/scripture/passages", "post"): {"401", "422", "429", "503"},
     }
     for (path, method), statuses in expected.items():
         responses = schema["paths"][path][method]["responses"]

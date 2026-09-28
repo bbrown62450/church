@@ -288,6 +288,26 @@ def _fresh_passage_cache():
     yield
 
 
+# --- slice 2a: the passages pool (S "Passages"; clarification 39) ---
+
+@pytest.fixture(autouse=True)
+def _fresh_passages_pool():
+    """usecases.passages runs every part on one module-level pool. Each test
+    starts with that pool joined (a part blocked by an earlier test's event
+    has finished) and replaced, and with a new part cache, which
+    reset_for_tests() rebuilds after the join, so no straggler writes into
+    this test's cache whatever order the autouse fixtures run in.
+
+    Resets only when usecases.passages is already imported (the
+    deferred-import rule at the top of this file)."""
+    import sys
+
+    passages = sys.modules.get("usecases.passages")
+    if passages is not None:
+        passages.reset_for_tests()
+    yield
+
+
 # --- slice 1: network-free tests and the Postgres test database (F §5.1, §5.3) ---
 
 _LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1")

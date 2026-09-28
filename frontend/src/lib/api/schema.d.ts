@@ -175,6 +175,23 @@ export interface paths {
         patch: operations["change_rubric_rubric_patch"];
         trace?: never;
     };
+    "/scripture/passages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Scripture Passages */
+        post: operations["scripture_passages_scripture_passages_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -305,6 +322,57 @@ export interface components {
             /** Churches */
             churches: components["schemas"]["ChurchOut"][];
             user: components["schemas"]["UserOut"];
+        };
+        /**
+         * PassageOut
+         * @description One ref as sent (trimmed), with every section, whatever loaded.
+         */
+        PassageOut: {
+            /** Reference */
+            reference: string;
+            /** Sections */
+            sections: components["schemas"]["PassageSectionOut"][];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "not_found" | "unavailable";
+        };
+        /**
+         * PassageSectionOut
+         * @description One " or " alternative: `ok` only when every part loaded; `text` joins the
+         *     parts that did, or is null when none did (S Status rules).
+         */
+        PassageSectionOut: {
+            /** Reference */
+            reference: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "not_found" | "unavailable";
+            /** Text */
+            text: string | null;
+        };
+        /**
+         * PassagesIn
+         * @description POST /scripture/passages. An empty list, a blank ref and more than 20
+         *     parts in all are the usecase's 422s, with its exact messages (S Schemas).
+         */
+        PassagesIn: {
+            /** Refs */
+            refs: string[];
+            /** Translation */
+            translation: string;
+        };
+        /** PassagesOut */
+        PassagesOut: {
+            /** Passages */
+            passages: components["schemas"]["PassageOut"][];
+            /** Translation */
+            translation: string;
+            /** Translation Label */
+            translation_label: string;
         };
         /**
          * ReadingSetOut
@@ -898,6 +966,68 @@ export interface operations {
             };
             /** @description Unprocessable Entity */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    scripture_passages_scripture_passages_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PassagesIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PassagesOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

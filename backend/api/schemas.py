@@ -5,7 +5,7 @@ from datetime import date as DateType   # `datetime.date` would be a method here
 from datetime import datetime
 from typing import Annotated, Generic, Literal, Optional, TypeVar
 
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, StringConstraints
 
 from api.errors import ErrorBody  # noqa: F401  (re-exported: every error response's body, F §1.5)
 
@@ -133,3 +133,41 @@ class LectionaryOut(BaseModel):
     partial: bool
     reading_sets: list[ReadingSetOut]
     default_index: Optional[int]
+
+
+# --- slice 2a: passages (S Schemas; POST /scripture/passages) ---
+
+PartStatus = Literal["ok", "not_found", "unavailable"]
+
+
+class PassagesIn(BaseModel):
+    """POST /scripture/passages. An empty list, a blank ref and more than 20
+    parts in all are the usecase's 422s, with its exact messages (S Schemas)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    refs: list[Annotated[str, StringConstraints(max_length=200)]] = Field(max_length=4)   # the UI sends 1
+    translation: str = Field(max_length=20)
+
+
+class PassageSectionOut(BaseModel):
+    """One " or " alternative: `ok` only when every part loaded; `text` joins the
+    parts that did, or is null when none did (S Status rules)."""
+
+    reference: str
+    status: PartStatus
+    text: Optional[str]
+
+
+class PassageOut(BaseModel):
+    """One ref as sent (trimmed), with every section, whatever loaded."""
+
+    reference: str
+    status: PartStatus
+    sections: list[PassageSectionOut]
+
+
+class PassagesOut(BaseModel):
+    translation: str
+    translation_label: str
+    passages: list[PassageOut]          # same order as the request's refs
