@@ -16,8 +16,8 @@ def test_auth_and_tenancy_do_not_import_streamlit():
 
 
 def test_usecases_package_imports_no_fastapi_or_streamlit():
-    # usecases, domain_errors and db.ids are below the API layer (F §2.2).
-    code = ("import sys, usecases, domain_errors, db.ids; "
+    # usecases, domain_errors, db.ids and timezones are below the API layer (F §2.2).
+    code = ("import sys, usecases, domain_errors, db.ids, timezones; "
             "bad = sorted({m.split('.')[0] for m in sys.modules} & {'fastapi', 'starlette', 'streamlit'}); "
             "print(bad); sys.exit(1 if bad else 0)")
     result = subprocess.run(

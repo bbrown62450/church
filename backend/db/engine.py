@@ -65,7 +65,10 @@ def _int_env(name: str, default: int, *, minimum: int) -> int:
 
 def _engine_kwargs(url: str) -> dict:
     """create_engine() keyword arguments for `url`; opens no connection, so tests inspect it."""
-    kwargs = {"pool_pre_ping": True, "future": True}
+    # hide_parameters: an unhandled DB error is logged with its traceback
+    # (api/errors.py), and SQLAlchemy's message would list the bound values,
+    # such as an invite code or an email (AC9, F §2.5; 1b clarification 37).
+    kwargs = {"pool_pre_ping": True, "future": True, "hide_parameters": True}
     if url.startswith("sqlite"):
         # FastAPI runs sync routes in a threadpool; SQLite needs this relaxed.
         kwargs["connect_args"] = {"check_same_thread": False}

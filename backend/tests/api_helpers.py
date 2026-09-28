@@ -102,7 +102,9 @@ def assert_church_isolated(
     for email in (world.outsider, world.a):
         r = client.request(method, path, headers=church_headers(email, world.church_b), json=json)
         assert r.status_code == 403, f"{method} {path} as {email} in church B: {r.status_code} {r.text}"
-        assert _error_without_request_id(r) == NO_CHURCH_ACCESS
+        assert _error_without_request_id(r) == NO_CHURCH_ACCESS, (
+            f"{method} {path} as {email} in church B: {r.text}"
+        )
 
     if resource_path_b is not None:
         r = client.request(method, resource_path_b,
@@ -110,7 +112,9 @@ def assert_church_isolated(
         assert r.status_code == 404, (
             f"{method} {resource_path_b} as {world.a} in church A: {r.status_code} {r.text}"
         )
-        assert r.json()["error"]["code"] == "not_found"
+        assert r.json()["error"]["code"] == "not_found", (
+            f"{method} {resource_path_b} as {world.a} in church A: {r.text}"
+        )
 
     r = client.request(method, path, headers=church_headers(world.a, world.church_a), json=json)
     assert r.status_code not in (401, 403, 404), (

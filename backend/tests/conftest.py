@@ -169,6 +169,24 @@ def _fresh_readiness_memo():
     yield
 
 
+@pytest.fixture(autouse=True)
+def _fresh_idempotency_store():
+    """run_idempotent keeps responses in one process-wide store for 15 minutes
+    (api.idempotency.store; POST /churches is its first real route, 1b). Each
+    test starts with it empty, so nothing an earlier test stored, or left
+    there when it failed, can replay, conflict or count toward MAX_ENTRIES
+    here (the 1a plan's hand-off to 1b).
+
+    Resets only when api.idempotency is already imported: a stored response
+    can exist only then (the deferred-import rule at the top of this file)."""
+    import sys
+
+    idempotency = sys.modules.get("api.idempotency")
+    if idempotency is not None:
+        idempotency.reset_idempotency_for_tests()
+    yield
+
+
 # --- slice 1: network-free tests and the Postgres test database (F §5.1, §5.3) ---
 
 _LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1")
