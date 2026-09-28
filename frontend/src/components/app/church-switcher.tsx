@@ -1,15 +1,18 @@
 "use client";
 
 import { ChevronsUpDownIcon } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 import { buttonVariants } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { roleLabel, type Church } from "@/lib/church";
@@ -22,11 +25,13 @@ type Props = {
 };
 
 /**
- * The header's church menu (S Flow C, F §4.9 item 4): a radio list keyed and
- * selected by id, each row showing the role so same-name churches differ.
- * Slice 1b adds a separator and "Join or create a church…" below the group.
+ * The header's church menu (S Flow C, F §4.1, §4.9 item 4): a radio list keyed
+ * and selected by id, each row showing the role so same-name churches differ,
+ * then a separator and "Join or create a church…", which pushes `/welcome`
+ * (1b clarification 31). A user with one church sees the same menu.
  */
 export function ChurchSwitcher({ churches, activeId, onSelect }: Props) {
+  const router = useRouter();
   const active = churches.find((c) => c.id === activeId) ?? null;
 
   return (
@@ -56,6 +61,8 @@ export function ChurchSwitcher({ churches, activeId, onSelect }: Props) {
             ))}
           </DropdownMenuRadioGroup>
         </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => router.push("/welcome")}>Join or create a church…</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

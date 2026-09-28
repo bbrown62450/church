@@ -1,9 +1,10 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { AppHeader } from "@/components/app/app-header";
 import type { Church, Me } from "@/lib/church";
+import { testRouter } from "@/test/mocks";
 
 const pat: Me["user"] = { id: "u-1", email: "pat@example.com", name: "Pat Doe", picture: null };
 // Two churches with the same name: only the id (and the role shown) tells them apart.
@@ -40,6 +41,37 @@ describe("AppHeader", () => {
     await user.click(screen.getByRole("menuitemradio", { name: "Grace Admin" }));
     expect(onSelectChurch).toHaveBeenLastCalledWith("c-admin");
     expect(onSelectChurch).toHaveBeenCalledTimes(2);
+  });
+
+  it("offers Join or create a church… below the list with one church, and it opens /welcome", async () => {
+    const onSelectChurch = vi.fn();
+    render(
+      <AppHeader
+        user={pat}
+        churches={[graceAdmin]}
+        active={graceAdmin}
+        onSelectChurch={onSelectChurch}
+        onSignOut={vi.fn()}
+      />,
+    );
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole("button", { name: "Active church: Grace" }));
+    const menu = await screen.findByRole("menu");
+    const list = within(menu).getByRole("group", { name: "Your churches" });
+    expect(within(list).getAllByRole("menuitemradio")).toHaveLength(1);
+    const separator = within(menu).getByRole("separator");
+    const item = within(menu).getByRole("menuitem", { name: "Join or create a church…" });
+    // S Flow C order: the church list, a separator, then the item.
+    expect(list.compareDocumentPosition(separator) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(separator.compareDocumentPosition(item) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    await user.click(item);
+    expect(testRouter.push).toHaveBeenCalledTimes(1);
+    expect(testRouter.push).toHaveBeenCalledWith("/welcome");
+    expect(testRouter.replace).not.toHaveBeenCalled();
+    expect(onSelectChurch).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
   });
 
   it("shows the user's name, email and role label in the account menu", async () => {
