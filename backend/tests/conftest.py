@@ -187,6 +187,24 @@ def _fresh_idempotency_store():
     yield
 
 
+@pytest.fixture(autouse=True)
+def _fresh_http_client():
+    """integrations.http keeps one module-level client, and a test may swap in
+    a MockTransport client with set_http_for_tests (slice 2, F §2.7). Every
+    test starts with the default client restored, so a fake installed by an
+    earlier test, or left there when it failed, never answers for this one.
+
+    Restores only when integrations.http is already imported: a swapped
+    client can exist only then (the deferred-import rule at the top of this
+    file)."""
+    import sys
+
+    http = sys.modules.get("integrations.http")
+    if http is not None:
+        http.set_http_for_tests(None)
+    yield
+
+
 # --- slice 1: network-free tests and the Postgres test database (F §5.1, §5.3) ---
 
 _LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1")
