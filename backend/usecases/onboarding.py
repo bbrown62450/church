@@ -234,3 +234,55 @@ def preview_invite(*, user_id: uuid.UUID, user_email: str, code: str,
             email_bound=inv.email is not None,
             already_member=member_role is not None,
         )
+
+
+# --- Invites: accept (S "Accept semantics") ---
+
+
+def accept_invite(*, user_id: uuid.UUID, user_email: str, code: str,
+                  now: datetime | None = None) -> InviteAccepted:
+    """Join the invite's church, or confirm the caller is already in it (S "Accept semantics").
+
+    One session_scope; checks 0-6 exactly as preview_invite. An existing member
+    keeps their role, and only an unaccepted email-bound single-use invite is
+    stamped for them (parity with the removed repos.invites function), so a
+    member opening their own code-only link never burns it. A new member claims
+    a single-use invite first (the conditional UPDATE is the race guard), then
+    gets the clamped role through ON CONFLICT DO NOTHING: a lost claim is "used"
+    unless the caller's own concurrent request won it, and a skipped insert
+    reports already_member. invites.claim and memberships.ensure_membership are
+    called through their modules so tests can patch them (clarification 40).
+    """
+    user_id = as_uuid(user_id)
+    code = _strip_code(code)
+    now = now if now is not None else datetime.now(UTC)
+    with session_scope() as s:
+        inv, church, member_role = _load_invite(s, code, user_id)
+        reason = _evaluate(inv, church, user_id, user_email, member_role, now)
+        if reason is not None:
+            _reject(reason, inv.id if inv is not None else None)
+        invite_id = inv.id
+        if member_role is not None:
+            if inv.email is not None and not inv.reusable and inv.accepted_at is None:
+                invites.claim(inv.id, user_id, now, session=s)   # parity stamp, role unchanged
+            role, already_member = member_role, True
+        else:
+            if not inv.reusable and not invites.claim(inv.id, user_id, now, session=s):
+                s.refresh(inv)   # claim wrote nothing: who holds the invite now?
+                if inv.accepted_by != user_id:
+                    _reject(InviteRejectReason.used, inv.id)
+            role, inserted = memberships.ensure_membership(
+                church["id"], user_id, _clamp_role(inv.role, invite_id=inv.id), session=s
+            )
+            already_member = not inserted
+    logger.info(
+        "invite_accepted invite_id=%s church_id=%s user_id=%s already_member=%s",
+        invite_id, church["id"], user_id, already_member,
+    )
+    name = church["name"]
+    message = f"You're already a member of {name}." if already_member else f"Joined {name}."
+    return InviteAccepted(
+        church=ChurchSummary(id=church["id"], name=name, role=role),
+        already_member=already_member,
+        message=message,
+    )

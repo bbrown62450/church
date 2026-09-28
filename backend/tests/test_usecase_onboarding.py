@@ -16,11 +16,13 @@ from sqlalchemy import func, select, update
 import repos.churches
 import repos.hymns
 import repos.invites
+import repos.memberships
 from db import session_scope
 from db.models import Church, Invite, Membership, User
 from domain_errors import InvalidInput, RateLimited, Rejected
-from repos.churches import get_church, list_user_churches, soft_delete_church
+from repos.churches import create_church, get_church, list_user_churches, soft_delete_church
 from repos.hymns import list_hymns
+from repos.invites import as_utc, create_invite, get_invite_by_code, list_invites
 from repos.memberships import add_membership, get_role, remove_membership
 from usecases import onboarding
 
@@ -208,8 +210,8 @@ INVITE_EXPIRES = datetime(2026, 10, 8, 12, 0)
 
 JOINER_EMAIL = "joiner@example.com"
 
-# Every action that runs the shared checks. T5 adds "accept": onboarding.accept_invite.
-INVITE_ACTIONS = {"preview": onboarding.preview_invite}
+# Every action that runs the shared checks (S "Invite checks"): preview (Task 4), accept (Task 5).
+INVITE_ACTIONS = {"preview": onboarding.preview_invite, "accept": onboarding.accept_invite}
 
 REJECTIONS = {
     "unknown": "Invalid invite code.",
@@ -481,3 +483,233 @@ def test_preview_already_member_flag(invite_world):
     with pytest.raises(Rejected) as exc:
         preview(joiner, JOINER_EMAIL)
     assert exc.value.details == {"reason": "used"}
+
+
+# --- Invites: accept (T5; S "Accept semantics"; AC7, AC8, AC9) ---
+# Ported here, then deleted from their old files: test_invites_repo.py :24, :34, :43
+# (now test_invite_rejections[accept-church_unavailable]), :57, and the accept halves
+# of :76 ([accept-expired]) and :89 ([accept-revoked]); streamlit_tests/test_onboarding.py :30.
+
+
+def _accept(user_id, email, code, **kwargs):
+    return onboarding.accept_invite(user_id=user_id, user_email=email, code=code, **kwargs)
+
+
+def _stamp(code):
+    """(accepted_at as aware UTC or None, accepted_by) of the invite with this code."""
+    row = get_invite_by_code(code)
+    at = row["accepted_at"]
+    return (as_utc(at) if at is not None else None), row["accepted_by"]
+
+
+def _already(church_id, role, name="Grace"):
+    return onboarding.InviteAccepted(
+        onboarding.ChurchSummary(church_id, name, role), True,
+        f"You're already a member of {name}.",
+    )
+
+
+def test_accept_adds_membership_with_invite_role(tmp_db, make_user):
+    owner = make_user(email="o@x.com")
+    joiner = make_user(email="join@x.com")
+    promoted = make_user(email="promoted@x.com")
+    cid = create_church(name="Grace", timezone="UTC", owner_user_id=owner)
+    code = create_invite(church_id=cid, created_by=owner)
+    assert _accept(joiner, "join@x.com", f"  {code}  ") == onboarding.InviteAccepted(   # stripped
+        onboarding.ChurchSummary(cid, "Grace", "member"), False, "Joined Grace.")
+    assert get_role(joiner, cid) == "member"
+    # The granted role is clamped: an invite stored as owner makes an admin, never an owner.
+    owner_code = create_invite(church_id=cid, created_by=owner, role="owner")
+    assert _accept(promoted, "promoted@x.com", owner_code).church.role == "admin"
+    assert get_role(promoted, cid) == "admin"
+
+
+def test_existing_owner_keeps_role(tmp_db, make_user):
+    owner = make_user(email="o@x.com")
+    cid = create_church(name="Grace", timezone="UTC", owner_user_id=owner)
+    code = create_invite(church_id=cid, created_by=owner)
+    assert _accept(owner, "o@x.com", code) == _already(cid, "owner")
+    assert get_role(owner, cid) == "owner"                             # never downgraded
+
+
+def test_single_use_code_only_lifecycle(tmp_db, make_user):
+    owner = make_user(email="o@x.com")
+    first = make_user(email="first@x.com")
+    second = make_user(email="second@x.com")
+    cid = create_church(name="Grace", timezone="UTC", owner_user_id=owner)
+    code = create_invite(church_id=cid, created_by=owner)              # reusable=False
+    now = datetime.now(UTC)
+
+    assert _accept(first, "first@x.com", code, now=now).message == "Joined Grace."
+    assert _stamp(code) == (now, first)
+
+    with pytest.raises(Rejected) as rejected:                          # another user
+        _accept(second, "second@x.com", code)
+    assert rejected.value.details == {"reason": "used"}
+    assert get_role(second, cid) is None
+
+    assert _accept(first, "first@x.com", code) == _already(cid, "member")   # same user again
+    assert _stamp(code) == (now, first)                                # stamped once
+
+    remove_membership(first, cid)                                      # removed member
+    with pytest.raises(Rejected) as rejected:
+        _accept(first, "first@x.com", code)
+    assert rejected.value.details == {"reason": "used"}
+    assert get_role(first, cid) is None
+
+
+def test_reusable_admits_three_users_never_stamped(tmp_db, make_user):
+    owner = make_user(email="o@x.com")
+    cid = create_church(name="Grace", timezone="UTC", owner_user_id=owner)
+    code = create_invite(church_id=cid, created_by=owner, reusable=True)
+    for email in ("a@x.com", "b@x.com", "c@x.com"):
+        user = make_user(email=email)
+        result = _accept(user, email, code)
+        assert (result.already_member, result.message, result.church.role) == (
+            False, "Joined Grace.", "member")
+        assert get_role(user, cid) == "member"
+    assert _stamp(code) == (None, None)
+    assert [i["code"] for i in list_invites(cid)] == [code]            # still listed
+
+
+def test_existing_member_does_not_consume_code_only_single_use(tmp_db, make_user):
+    owner = make_user(email="o@x.com")
+    admin = make_user(email="admin@x.com")
+    newcomer = make_user(email="new@x.com")
+    cid = create_church(name="Grace", timezone="UTC", owner_user_id=owner)
+    add_membership(admin, cid, "admin")
+    code = create_invite(church_id=cid, created_by=admin)             # single-use, code only
+    assert _accept(admin, "admin@x.com", code) == _already(cid, "admin")  # testing own link
+    assert _stamp(code) == (None, None)
+    assert _accept(newcomer, "new@x.com", code).message == "Joined Grace."   # still usable
+
+
+def test_existing_member_stamps_unaccepted_email_bound(tmp_db, make_user):
+    owner = make_user(email="o@x.com")
+    member = make_user(email="m@x.com")
+    cid = create_church(name="Grace", timezone="UTC", owner_user_id=owner)
+    add_membership(member, cid, "member")
+    code = create_invite(church_id=cid, created_by=owner, email="M@x.com", role="admin")
+    now = datetime.now(UTC)
+    assert _accept(member, "m@x.com", code, now=now) == _already(cid, "member")
+    assert _stamp(code) == (now, member)                               # parity stamp
+    assert get_role(member, cid) == "member"                           # role never changed
+
+
+def test_email_bound_case_insensitive_role_honored(tmp_db, make_user):
+    owner = make_user(email="o@x.com")
+    wrong = make_user(email="wrong@x.com")
+    right = make_user(email="right@x.com")
+    cid = create_church(name="C", timezone="UTC", owner_user_id=owner)
+    code = create_invite(church_id=cid, created_by=owner, email="Right@X.com", role="admin")
+
+    with pytest.raises(Rejected) as rejected:                          # mismatched email
+        _accept(wrong, "wrong@x.com", code)
+    assert rejected.value.details == {"reason": "email_mismatch"}
+    assert get_role(wrong, cid) is None
+
+    result = _accept(right, "right@x.com", code)                       # case-insensitive match
+    assert (result.already_member, result.message, result.church.role) == (
+        False, "Joined C.", "admin")                                   # role honored
+    assert get_role(right, cid) == "admin"
+
+    # Clarification 15 (behavior change 6): the same user accepting again is no longer
+    # "used"; "removed member -> used" (test_single_use_code_only_lifecycle) keeps the intent.
+    assert _accept(right, "right@x.com", code) == _already(cid, "admin", name="C")
+
+
+def test_legacy_accepted_email_bound_is_used(tmp_db, make_user):
+    owner = make_user(email="o@x.com")
+    member = make_user(email="m@x.com")
+    cid = create_church(name="Grace", timezone="UTC", owner_user_id=owner)
+    code = create_invite(church_id=cid, created_by=owner, email="m@x.com")
+    # Frozen Streamlit stamps only accepted_at (accepted_by stays NULL) and adds the member.
+    with session_scope() as s:
+        s.execute(update(Invite).where(Invite.code == code)
+                  .values(accepted_at=datetime.now(UTC) - timedelta(hours=1)))
+    add_membership(member, cid, "member")
+    with pytest.raises(Rejected) as rejected:
+        _accept(member, "m@x.com", code)
+    assert rejected.value.details == {"reason": "used"}               # clarification 14
+
+
+def test_accept_reports_already_member_when_insert_skipped(tmp_db, make_user, monkeypatch):
+    owner = make_user(email="o@x.com")
+    joiner = make_user(email="j@x.com")
+    cid = create_church(name="Grace", timezone="UTC", owner_user_id=owner)
+    code = create_invite(church_id=cid, created_by=owner, reusable=True)
+    # A concurrent request by the same user inserted the membership first.
+    monkeypatch.setattr(repos.memberships, "ensure_membership",
+                        lambda church_id, user_id, role, *, session=None: (role, False))
+    assert _accept(joiner, "j@x.com", code) == _already(cid, "member")
+
+
+def test_claim_lost_to_another_user_is_used(tmp_db, make_user, monkeypatch):
+    owner = make_user(email="o@x.com")
+    joiner = make_user(email="j@x.com")
+    rival = make_user(email="rival@x.com")
+    cid = create_church(name="Grace", timezone="UTC", owner_user_id=owner)
+    code = create_invite(church_id=cid, created_by=owner)
+    real_claim = repos.invites.claim
+
+    def rival_won(invite_id, user_id, now, *, session=None):
+        assert real_claim(invite_id, rival, now, session=session)     # the rival's request won
+        return False
+
+    monkeypatch.setattr(repos.invites, "claim", rival_won)
+    with pytest.raises(Rejected) as rejected:
+        _accept(joiner, "j@x.com", code)
+    assert rejected.value.message == "This invite has already been used."
+    assert rejected.value.details == {"reason": "used"}
+    assert get_role(joiner, cid) is None
+
+
+def test_claim_lost_to_own_request_reports_already_member(tmp_db, make_user, monkeypatch):
+    owner = make_user(email="o@x.com")
+    joiner = make_user(email="j@x.com")
+    cid = create_church(name="Grace", timezone="UTC", owner_user_id=owner)
+    code = create_invite(church_id=cid, created_by=owner)
+    real_claim = repos.invites.claim
+    real_ensure = repos.memberships.ensure_membership
+
+    def own_request_won(invite_id, user_id, now, *, session=None):
+        # The caller's own concurrent request stamped the invite and joined first.
+        assert real_claim(invite_id, user_id, now, session=session)
+        real_ensure(cid, user_id, "member", session=session)
+        return False
+
+    monkeypatch.setattr(repos.invites, "claim", own_request_won)
+    assert _accept(joiner, "j@x.com", code) == _already(cid, "member")
+    assert get_role(joiner, cid) == "member"
+    assert _stamp(code)[1] == joiner
+
+
+def test_accept_captured_invite_joins_as_member(tmp_db, make_user):
+    # Port of streamlit_tests/test_onboarding.py::test_accept_captured_invite_joins_as_member.
+    owner = make_user(email="owner@a.org")
+    cid = create_church(name="Grace", timezone="America/New_York", owner_user_id=owner)
+    joiner = make_user(email="joiner@a.org")
+    code = create_invite(church_id=cid, created_by=owner)
+    assert _accept(joiner, "joiner@a.org", code).already_member is False
+    assert any(c["id"] == cid and c["role"] == "member" for c in list_user_churches(joiner))
+
+
+def test_invite_logs_have_ids_not_code_or_email(tmp_db, make_user, caplog):
+    caplog.set_level(logging.INFO, logger="usecases.onboarding")
+    owner = make_user(email="o@x.com")
+    joiner = make_user(email="j@x.com")
+    cid = create_church(name="Grace", timezone="UTC", owner_user_id=owner)
+    code = create_invite(church_id=cid, created_by=owner, email="j@x.com")
+    invite_id = get_invite_by_code(code)["id"]
+
+    onboarding.preview_invite(user_id=joiner, user_email="j@x.com", code=code)
+    _accept(joiner, "j@x.com", code)
+    with pytest.raises(Rejected):
+        _accept(joiner, "j@x.com", "not-a-real-code")
+
+    assert caplog.messages == [
+        f"invite_accepted invite_id={invite_id} church_id={cid} user_id={joiner} already_member=False",
+        "invite_rejected reason=unknown invite_id=none",
+    ]
+    for secret in (code, "not-a-real-code", "j@x.com", "o@x.com"):
+        assert secret not in caplog.text
