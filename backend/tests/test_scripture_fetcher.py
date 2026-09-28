@@ -328,6 +328,16 @@ def test_bible_api_cached_7_days():
     clock.advance(1)                                     # 7 days after the first fetch
     assert sf.fetch_part("Isaiah 50:4-9", "web") == first
     assert len(seen) == 3
+    # A text over 64 KB is returned but never stored, so the cache stays bounded.
+    assert sf.PART_CACHE_MAX_TEXT_BYTES == 64 * 1024
+    huge = "a" * (sf.PART_CACHE_MAX_TEXT_BYTES + 1)
+    at_limit = "b" * sf.PART_CACHE_MAX_TEXT_BYTES
+    seen = _install({"/psalm 119": lambda request: httpx.Response(200, json={"text": huge}),
+                     "/psalm 118": lambda request: httpx.Response(200, json={"text": at_limit})})
+    for _ in range(2):
+        assert sf.fetch_part("Psalm 119", "web") == sf.Part("Psalm 119", "ok", huge)
+        assert sf.fetch_part("Psalm 118", "web") == sf.Part("Psalm 118", "ok", at_limit)
+    assert [r.url.path for r in seen] == ["/psalm 119", "/psalm 118", "/psalm 119"]
 
 
 def test_not_found_cached():

@@ -17,8 +17,9 @@ here and usecases.passages.load_passages (which runs parts on a pool under a
 deadline) report the same statuses.
 
 bible-api parts are cached for 7 days by (translation, normalized part); a
-not-found answer is cached too, as NOT_FOUND. Transient failures and budget
-misses are never cached, so "Try again" works. ESV text is never cached
+not-found answer is cached too, as NOT_FOUND; a text over 64 KB is returned
+but not cached. Transient failures and budget misses are never cached, so
+"Try again" works. ESV text is never cached
 (Crossway terms, F §2.7). Every uncached part first takes a token from the
 process-wide upstream budget (integrations.budget); with none left it is not
 sent and is `unavailable`.
@@ -55,6 +56,7 @@ ESV_READ_TIMEOUT = 10.0
 
 PART_CACHE_MAXSIZE = 2000
 PART_CACHE_TTL_SECONDS = 7 * 24 * 60 * 60   # 604 800
+PART_CACHE_MAX_TEXT_BYTES = 64 * 1024        # a longer text is returned but not cached
 
 DEFAULT_TRANSLATION = "web"
 
@@ -122,6 +124,18 @@ class _Transient(Exception):
 
 
 _SKIP_REASONS = ("budget", "no_key")   # the part was never sent
+
+
+class _TooLargeToCache(Exception):
+    """Raised inside the part-cache loader with a text over
+    PART_CACHE_MAX_TEXT_BYTES. TTLCache stores no plain exception, so the text
+    reaches this request (and any request waiting on the same load) without
+    being kept: 2000 entries of unbounded upstream text could otherwise hold
+    an unbounded amount of memory for 7 days."""
+
+    def __init__(self, text: str):
+        super().__init__("too large to cache")
+        self.text = text
 
 _PART_CACHE: "TTLCache[Tuple[str, str], object]" = TTLCache(
     maxsize=PART_CACHE_MAXSIZE, ttl_ok=PART_CACHE_TTL_SECONDS, ttl_fail=0)
@@ -229,7 +243,10 @@ def _bible_api_part(part: str, translation: str) -> object:
     text = data.get("text")
     if not isinstance(text, str):
         raise _Transient("bad_json")        # unreadable, never cached (owner decision 1)
-    return text.strip() or NOT_FOUND
+    text = text.strip()
+    if len(text.encode("utf-8")) > PART_CACHE_MAX_TEXT_BYTES:
+        raise _TooLargeToCache(text)        # still shown, just not kept
+    return text or NOT_FOUND
 
 
 def _esv_part(part: str) -> object:
@@ -279,6 +296,8 @@ def fetch_part(part: str, translation: str) -> Part:
         else:
             result = _PART_CACHE.get_or_load(
                 (translation, part.lower()), lambda: _bible_api_part(part, translation))
+    except _TooLargeToCache as exc:
+        return Part(part, "ok", exc.text)
     except _Transient as exc:
         if exc.reason in _SKIP_REASONS:
             logger.info("passage_part_skipped reason=%s upstream=%s", exc.reason, upstream)
