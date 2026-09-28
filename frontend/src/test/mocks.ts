@@ -21,6 +21,7 @@ export const testRouter = {
 export const supabaseAuth = {
   getSession: vi.fn(),
   signOut: vi.fn(),
+  signInWithOAuth: vi.fn(),
 };
 
 let pathname = "/";
@@ -43,7 +44,10 @@ export function testSearchParams(): URLSearchParams {
   return searchParams;
 }
 
-/** Back to defaults: path "/", a signed-in session, a successful local sign-out. */
+/**
+ * Back to defaults: path "/", a signed-in session, a successful local sign-out and a
+ * Google sign-in that starts without error (the real one then leaves the page).
+ */
 export function resetTestMocks(): void {
   for (const spy of Object.values(testRouter)) spy.mockReset();
   setTestPath("/");
@@ -54,4 +58,6 @@ export function resetTestMocks(): void {
   });
   supabaseAuth.signOut.mockReset();
   supabaseAuth.signOut.mockResolvedValue({ error: null });
+  supabaseAuth.signInWithOAuth.mockReset();
+  supabaseAuth.signInWithOAuth.mockResolvedValue({ data: {}, error: null });
 }

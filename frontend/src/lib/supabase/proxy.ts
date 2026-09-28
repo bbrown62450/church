@@ -1,9 +1,15 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_PATHS = new Set(["/login", "/auth/callback"]);
+/** Paths a signed-out visitor may open; `/join` shows its own sign-in card (S Flow B). */
+const PUBLIC_PATHS = new Set(["/login", "/auth/callback", "/join"]);
 
-/** Refresh the Supabase session cookie and send signed-out visitors to /login. */
+/**
+ * Refresh the Supabase session cookie and send signed-out visitors to /login,
+ * with `?next=<path>` for any path but `/` (S Routing, proxy and login). The
+ * query is dropped: only the path goes to `/login`, which stores it after
+ * `safeInternalPath` accepts it.
+ */
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
 
@@ -31,10 +37,12 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const isPublic = PUBLIC_PATHS.has(request.nextUrl.pathname);
-  if (!user && !isPublic) {
+  const { pathname } = request.nextUrl;
+  if (!user && !PUBLIC_PATHS.has(pathname)) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
+    url.search = "";
+    if (pathname !== "/") url.searchParams.set("next", pathname);
     return NextResponse.redirect(url);
   }
   return response;

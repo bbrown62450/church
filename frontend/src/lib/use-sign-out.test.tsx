@@ -99,6 +99,29 @@ describe("useSignOut", () => {
     expect(isSigningOut()).toBe(true);
   });
 
+  it("adds select_account=1 when asked, keeping the pending invite (S Flow B email mismatch; clarification 17)", async () => {
+    seedSignedInTab();
+    const pat = me();
+    const { user } = renderWithProviders(
+      <LogOut options={{ keepPendingInvite: true, next: "/join", selectAccount: true }} />,
+      { me: pat, path: "/join" },
+    );
+
+    await user.click(screen.getByRole("button", { name: `Log out ${pat.user.email}` }));
+
+    await waitFor(() => expect(testRouter.replace).toHaveBeenCalledTimes(1));
+    const target = new URL(testRouter.replace.mock.calls[0][0], "http://localhost");
+    expect(target.pathname).toBe("/login");
+    expect([...target.searchParams]).toEqual([
+      ["next", "/join"],
+      ["select_account", "1"],
+    ]);
+    expect(readSession(SESSION_KEYS.pendingInviteCode)).toBe("INVITE-CODE");
+    expect(readSession(SESSION_KEYS.postLoginPath)).toBeNull();
+    expect(readStoredChurchId()).toBeNull();
+    expect(supabaseAuth.signOut).toHaveBeenCalledWith({ scope: "local" });
+  });
+
   it("removes the Supabase auth cookies itself when signOut resolves with an error (owner-approved)", async () => {
     // auth-js returns `{ error }` without removing the session when it cannot load
     // it first, e.g. an expired access token whose refresh failed while offline.

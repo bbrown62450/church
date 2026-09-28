@@ -1,9 +1,11 @@
 /**
  * The browser session for API calls, and the signing-out flag (F §4.5, §4.2).
  *
- * The flag is module state: set once by `beginSignOut()` (Task 19's `useSignOut`
- * calls it first) and cleared only by a full page load, since every sign-in
- * comes back through the Google OAuth redirect. While it is set, no new API
+ * The flag is module state: set once by `beginSignOut()` (`useSignOut` calls it
+ * first) and cleared by `endSignOut()` when `/login` mounts, or by a full page
+ * load. Every sign-out ends on `/login`, so a browser Back into a cached
+ * signed-in page finds the flag down and loads `/me` again (slice 1b
+ * clarification 21). While it is set, no new API
  * request starts (`getAccessToken` rejects with `aborted`), `handleAuthErrors`
  * stays quiet, and the `(signed-in)` layout shows its skeleton, so nothing
  * refetches or re-stores a church during sign-out.
@@ -37,7 +39,7 @@ function signingOutError(): ApiError {
   return new ApiError(0, "aborted", "Signing out.");
 }
 
-/** True from `beginSignOut()` until the next full page load. */
+/** True from `beginSignOut()` until `endSignOut()` or the next full page load. */
 export function isSigningOut(): boolean {
   return signingOut;
 }
@@ -46,6 +48,17 @@ export function isSigningOut(): boolean {
 export function beginSignOut(): void {
   if (signingOut) return;
   signingOut = true;
+  notify();
+}
+
+/**
+ * Ends a sign-out in this tab: clears the flag. `/login` calls it when it
+ * mounts, after `useSignOut` has finished and the signed-in layouts are gone.
+ * Idempotent.
+ */
+export function endSignOut(): void {
+  if (!signingOut) return;
+  signingOut = false;
   notify();
 }
 
@@ -97,6 +110,8 @@ export type SignOutOptions = {
   keepPendingInvite?: boolean;
   /** Where to return after sign-in; used only when `safeInternalPath` accepts it. */
   next?: string;
+  /** Adds `select_account=1`, so `/login` asks Google for its account chooser (S Flow B email mismatch). */
+  selectAccount?: boolean;
 };
 
 /**
@@ -107,14 +122,15 @@ export type SignOutOptions = {
  * session keys (the pending invite only when not asked to keep it), end this
  * browser's Supabase session (`scope: "local"`, never the global default; if
  * that fails, its auth cookies are expired directly) and go to `/login`, with
- * `?next=` when `next` is an allow-listed path. Never rejects. Needs no
+ * `?next=` when `next` is an allow-listed path and `select_account=1` when
+ * `selectAccount` is set. Never rejects. Needs no
  * `ChurchProvider`, so the `/welcome` header can use it.
  */
 export function useSignOut(): (opts?: SignOutOptions) => Promise<void> {
   const queryClient = useQueryClient();
   const router = useRouter();
   return useCallback(
-    async ({ keepPendingInvite = false, next }: SignOutOptions = {}) => {
+    async ({ keepPendingInvite = false, next, selectAccount = false }: SignOutOptions = {}) => {
       beginSignOut();
       await queryClient.cancelQueries();
       queryClient.clear();
@@ -136,7 +152,11 @@ export function useSignOut(): (opts?: SignOutOptions) => Promise<void> {
       }
       if (!signedOut) removeAuthCookies();
       const back = next === undefined ? null : safeInternalPath(next);
-      router.replace(back ? `/login?next=${encodeURIComponent(back)}` : "/login");
+      const query = new URLSearchParams();
+      if (back) query.set("next", back);
+      if (selectAccount) query.set("select_account", "1");
+      const search = query.toString();
+      router.replace(search ? `/login?${search}` : "/login");
     },
     [queryClient, router],
   );
