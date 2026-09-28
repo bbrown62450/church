@@ -25,6 +25,17 @@ class ChurchOut(BaseModel):
     role: Literal["owner", "admin", "member"]
 
 
+class ChurchProfileOut(ChurchOut):
+    """GET /church: the active church and its profile. A superset of ChurchOut,
+    which the church list in GET /me keeps."""
+
+    timezone: str
+    timezone_valid: bool                    # an exact, case-sensitive IANA name
+    bible_translation: Optional[str]        # the stored default, or null when unset
+    effective_translation: str              # the stored default if offered here, else "web"
+    effective_translation_label: str        # its label, for when GET /translations fails
+
+
 class MeOut(BaseModel):
     user: UserOut
     churches: list[ChurchOut]
@@ -89,6 +100,20 @@ class InviteAcceptOut(BaseModel):
     church: ChurchOut
     already_member: bool
     message: str
+
+
+class TranslationOut(BaseModel):
+    id: str
+    label: str
+
+
+class TranslationsOut(BaseModel):
+    """GET /translations: the translations this deployment offers, in display
+    order. "default" is "web"; "esv" is listed, last, only when it is configured."""
+
+    default: str
+    esv_available: bool
+    items: list[TranslationOut]
 
 
 # --- slice 2a: readings (S Schemas) ---

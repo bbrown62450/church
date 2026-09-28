@@ -192,6 +192,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/translations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Translations */
+        get: operations["translations_translations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -210,6 +227,35 @@ export interface components {
              * @enum {string}
              */
             role: "owner" | "admin" | "member";
+        };
+        /**
+         * ChurchProfileOut
+         * @description GET /church: the active church and its profile. A superset of ChurchOut,
+         *     which the church list in GET /me keeps.
+         */
+        ChurchProfileOut: {
+            /** Bible Translation */
+            bible_translation: string | null;
+            /** Effective Translation */
+            effective_translation: string;
+            /** Effective Translation Label */
+            effective_translation_label: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "owner" | "admin" | "member";
+            /** Timezone */
+            timezone: string;
+            /** Timezone Valid */
+            timezone_valid: boolean;
         };
         /**
          * CreateChurchIn
@@ -422,6 +468,26 @@ export interface components {
             customized: string[];
             rubric: components["schemas"]["RubricModel"];
         };
+        /** TranslationOut */
+        TranslationOut: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+        };
+        /**
+         * TranslationsOut
+         * @description GET /translations: the translations this deployment offers, in display
+         *     order. "default" is "web"; "esv" is listed, last, only when it is configured.
+         */
+        TranslationsOut: {
+            /** Default */
+            default: string;
+            /** Esv Available */
+            esv_available: boolean;
+            /** Items */
+            items: components["schemas"]["TranslationOut"][];
+        };
         /** UserOut */
         UserOut: {
             /** Email */
@@ -463,7 +529,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ChurchOut"];
+                    "application/json": components["schemas"]["ChurchProfileOut"];
                 };
             };
             /** @description Unauthorized */
@@ -1028,6 +1094,55 @@ export interface operations {
             };
             /** @description Too Many Requests */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    translations_translations_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranslationsOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

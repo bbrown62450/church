@@ -30,6 +30,68 @@
         "title": "ChurchOut",
         "type": "object"
       },
+      "ChurchProfileOut": {
+        "description": "GET /church: the active church and its profile. A superset of ChurchOut,\nwhich the church list in GET /me keeps.",
+        "properties": {
+          "bible_translation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bible Translation"
+          },
+          "effective_translation": {
+            "title": "Effective Translation",
+            "type": "string"
+          },
+          "effective_translation_label": {
+            "title": "Effective Translation Label",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "owner",
+              "admin",
+              "member"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          },
+          "timezone_valid": {
+            "title": "Timezone Valid",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "role",
+          "timezone",
+          "timezone_valid",
+          "bible_translation",
+          "effective_translation",
+          "effective_translation_label"
+        ],
+        "title": "ChurchProfileOut",
+        "type": "object"
+      },
       "CreateChurchIn": {
         "additionalProperties": false,
         "description": "The body of POST /churches. A blank name, or a blank or unknown time\nzone, passes this model and gets a 422 that names the field.",
@@ -487,6 +549,51 @@
         "title": "RubricOut",
         "type": "object"
       },
+      "TranslationOut": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label"
+        ],
+        "title": "TranslationOut",
+        "type": "object"
+      },
+      "TranslationsOut": {
+        "description": "GET /translations: the translations this deployment offers, in display\norder. \"default\" is \"web\"; \"esv\" is listed, last, only when it is configured.",
+        "properties": {
+          "default": {
+            "title": "Default",
+            "type": "string"
+          },
+          "esv_available": {
+            "title": "Esv Available",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TranslationOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "default",
+          "esv_available",
+          "items"
+        ],
+        "title": "TranslationsOut",
+        "type": "object"
+      },
       "UserOut": {
         "properties": {
           "email": {
@@ -578,7 +685,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ChurchOut"
+                  "$ref": "#/components/schemas/ChurchProfileOut"
                 }
               }
             },
@@ -1395,6 +1502,72 @@
           }
         },
         "summary": "Scripture Passages"
+      }
+    },
+    "/translations": {
+      "get": {
+        "operationId": "translations_translations_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranslationsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Translations"
       }
     }
   }

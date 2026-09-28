@@ -1,9 +1,12 @@
+from dataclasses import asdict
+
 from fastapi import APIRouter, Depends
 
 from api.deps import ActiveChurch, CurrentUser, get_current_user, require_church
 from api.errors import error_responses
-from api.schemas import ChurchOut, MeOut, UserOut
+from api.schemas import ChurchOut, ChurchProfileOut, MeOut, UserOut
 from repos.churches import list_user_churches
+from usecases import church_profile
 
 router = APIRouter()
 
@@ -16,6 +19,9 @@ def me(user: CurrentUser = Depends(get_current_user)) -> MeOut:
     )
 
 
-@router.get("/church", response_model=ChurchOut, responses=error_responses(401, 403, 422, 503))
-def church(active: ActiveChurch = Depends(require_church)) -> ChurchOut:
-    return ChurchOut(id=active.id, name=active.name, role=active.role)
+@router.get("/church", response_model=ChurchProfileOut,
+            responses=error_responses(401, 403, 422, 503))
+def church(active: ActiveChurch = Depends(require_church)) -> ChurchProfileOut:
+    # The usecase gets the id only (F §1.2 rule 1); id, name and role come from the guard.
+    profile = church_profile.get_church_profile(active.id)
+    return ChurchProfileOut(id=active.id, name=active.name, role=active.role, **asdict(profile))

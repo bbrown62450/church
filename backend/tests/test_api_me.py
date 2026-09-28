@@ -77,7 +77,12 @@ def test_church_returns_the_active_church_for_a_member(client, make_user, make_c
     cid = make_church(name="Grace", owner_user_id=me_id)
     r = client.get("/church", headers={**_auth(), "X-Church-Id": str(cid)})
     assert r.status_code == 200
-    assert r.json() == {"id": str(cid), "name": "Grace", "role": "owner"}
+    # Slice 2 adds the profile fields (ChurchProfileOut); make_church's zone is America/New_York.
+    assert r.json() == {
+        "id": str(cid), "name": "Grace", "role": "owner",
+        "timezone": "America/New_York", "timezone_valid": True, "bible_translation": None,
+        "effective_translation": "web", "effective_translation_label": "World English Bible (WEB)",
+    }
 
 
 @pytest.mark.parametrize(

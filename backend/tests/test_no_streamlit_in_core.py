@@ -19,7 +19,7 @@ def test_usecases_package_imports_no_fastapi_or_streamlit():
     # usecases (including usecases.onboarding), domain_errors, db.ids,
     # timezones and slice 2's platform modules (cache, integrations.http) are
     # below the API layer (F §2.2).
-    code = ("import sys, usecases, usecases.onboarding, usecases.lectionary, usecases.passages, vanderbilt_lectionary, domain_errors, db.ids, timezones, "
+    code = ("import sys, usecases, usecases.onboarding, usecases.church_profile, usecases.lectionary, usecases.passages, vanderbilt_lectionary, domain_errors, db.ids, timezones, "
             "cache, integrations.http, "
             "token_bucket, integrations.budget, scripture_refs, scripture_fetcher; "
             "bad = sorted({m.split('.')[0] for m in sys.modules} & {'fastapi', 'starlette', 'streamlit'}); "
@@ -58,3 +58,4 @@ def test_api_main_with_every_router_does_not_import_streamlit():
     assert "'api.routes.me'" in result.stdout and "'api.routes.rubric'" in result.stdout
     assert "'api.routes.churches'" in result.stdout
     assert "'api.routes.invites'" in result.stdout
+    assert "'api.routes.reference'" in result.stdout
