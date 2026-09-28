@@ -432,7 +432,7 @@ def test_parse_csv_html_raises():
             parse_vanderbilt_csv(body)
     header = "Liturgical Date,Calendar Date,First reading,Psalm,Second reading,Gospel,Art,Prayer\n"
     malformed = (
-        # an unbalanced quote makes one field longer than csv's 131,072-character limit
+        # a field over csv's 131,072-character limit (for example after an unbalanced quote)
         header + '"X","Oct 04, 2026","' + "a" * 140_000 + '","","","","",""\n',
         # a reordered header shifts every column
         "Calendar Date,Liturgical Date,First reading,Psalm,Second reading,Gospel,Art,Prayer\n"
@@ -452,6 +452,12 @@ def test_parse_csv_html_raises():
         '"Prayer","Extra"\r\n"X","Oct 04, 2026","Isaiah 5:1-7","","","Matthew 21:33-46","","",""\r\n'
     )
     assert parse_vanderbilt_csv(ok) == [VRow("X", date(2026, 10, 4), "Isaiah 5:1-7", "", "", "Matthew 21:33-46")]
+    # Label case and spacing are not pinned, and the unread Art and Prayer columns may be missing.
+    loose = (
+        "liturgical date,CALENDAR  DATE,First Reading,Psalm,Second Reading,Gospel\n"
+        '"X","Oct 04, 2026","Isaiah 5:1-7","","","Matthew 21:33-46"\n'
+    )
+    assert parse_vanderbilt_csv(loose) == [VRow("X", date(2026, 10, 4), "Isaiah 5:1-7", "", "", "Matthew 21:33-46")]
 
 
 def test_parse_csv_skips_unparseable_dates():
@@ -487,6 +493,7 @@ def test_clean_cell_compound_star_and_http():
     assert clean_cell("See the note Psalm 23") == ["See the note Psalm 23"]
     # A joining " and" or "," is not part of the head; whitespace (newlines, NBSP) collapses to one space.
     assert clean_cell("Deuteronomy 8:7-18 and Psalm 65") == ["Deuteronomy 8:7-18", "Psalm 65"]
+    assert clean_cell("Genesis 1:1 or, Psalm 2") == ["Genesis 1:1 or, Psalm 2"]   # clarification 10 after the strip
     assert clean_cell("Genesis 1:1-5, Psalm 8") == ["Genesis 1:1-5", "Psalm 8"]
     assert clean_cell("Exodus 1:8-2:10  Psalm\xa0124") == ["Exodus 1:8-2:10", "Psalm 124"]
     assert clean_cell("Isaiah 55:1-5 or\nPsalm 145:8-9") == ["Isaiah 55:1-5 or Psalm 145:8-9"]

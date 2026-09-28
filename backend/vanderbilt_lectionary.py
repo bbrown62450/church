@@ -683,10 +683,24 @@ def _field(raw: dict, name: str) -> str:
     return (raw.get(name) or "").strip().strip('"').strip()
 
 
+def _label(text: str) -> str:
+    """A header label compared loosely: case and runs of whitespace are ignored."""
+    return " ".join(text.strip().strip('"').split()).casefold()
+
+
+# Art and Prayer are never read, so a header may stop after Gospel.
+_REQUIRED_LABELS = [_label(name) for name in _VANDERBILT_FIELDS[:6]]
+
+
 def _header_columns(line: str) -> list[str]:
-    """The header line's labels, stripped of a BOM, quotes and whitespace."""
+    """The header line's labels, stripped of a BOM and quotes, compared loosely (`_label`)."""
     (cells,) = csv.reader([line.lstrip("\ufeff")])
-    return [cell.strip().strip('"').strip() for cell in cells]
+    return [_label(cell) for cell in cells]
+
+
+def _is_header_line(line: str) -> bool:
+    folded = " ".join(line.split()).casefold()
+    return "calendar date" in folded and "liturgical date" in folded and "<" not in line
 
 
 def parse_vanderbilt_csv(text: str) -> list[VRow]:
@@ -694,13 +708,14 @@ def parse_vanderbilt_csv(text: str) -> list[VRow]:
 
     Raises LectionaryFormatError when no header line exists (an HTML page, an empty body). A line holding
     markup (`<`) is never the header, so an HTML calendar table with both labels on one line still raises.
-    It also raises when the header's columns are not `_VANDERBILT_FIELDS` in order (extra trailing columns
-    are allowed), when the csv module rejects the body (an unbalanced quote), and when there are data lines
-    but none parses, so a malformed body is never cached as an empty success. A header alone gives [].
+    It also raises when the header's first six labels are not `_VANDERBILT_FIELDS`' in order (case and
+    spacing ignored; Art, Prayer and extra trailing columns are optional), when the csv module rejects the
+    body (a field over its size limit, for example after an unbalanced quote), and when there are data
+    lines but none parses, so a malformed body is never cached as an empty success. A header alone gives [].
     """
     lines = [line for line in text.splitlines() if line.strip()]
     header = next(
-        (i for i, line in enumerate(lines) if "Calendar Date" in line and "Liturgical Date" in line and "<" not in line),
+        (i for i, line in enumerate(lines) if _is_header_line(line)),
         None,
     )
     if header is None:
@@ -708,7 +723,7 @@ def parse_vanderbilt_csv(text: str) -> list[VRow]:
     data_lines = lines[header + 1:]
     rows: list[VRow] = []
     try:
-        if _header_columns(lines[header])[: len(_VANDERBILT_FIELDS)] != _VANDERBILT_FIELDS:
+        if _header_columns(lines[header])[: len(_REQUIRED_LABELS)] != _REQUIRED_LABELS:
             raise LectionaryFormatError("unexpected Vanderbilt CSV columns")
         for raw in csv.DictReader(data_lines, fieldnames=_VANDERBILT_FIELDS):
             calendar_date = _parse_calendar_date(raw.get("Calendar Date") or "")
@@ -760,7 +775,7 @@ def clean_cell(cell: str) -> list[str]:
         # Split a two-track cell "<reading> Psalm <n>" (or "<reading> and Psalm <n>") only when the head is
         # a non-Psalm reading and does not end in " or", so "Psalm 105:1-11, 45b or Psalm 128" stays whole
         # (clarification 10).
-        if found is not None and found[0].testament != "psalm" and not raw_head.lower().endswith(" or"):
+        if found is not None and found[0].testament != "psalm" and not raw_head.lower().endswith(" or") and not head.lower().endswith(" or"):
             return [head, text[match.start():].strip()]
     return [text]
 
