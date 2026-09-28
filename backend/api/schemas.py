@@ -1,9 +1,11 @@
 """Request and response models (also documented at /docs)."""
+import re
 import uuid
+from datetime import date as DateType   # `datetime.date` would be a method here (2a clarification 6)
 from datetime import datetime
-from typing import Generic, Literal, Optional, TypeVar
+from typing import Annotated, Generic, Literal, Optional, TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
 from api.errors import ErrorBody  # noqa: F401  (re-exported: every error response's body, F §1.5)
 
@@ -87,3 +89,47 @@ class InviteAcceptOut(BaseModel):
     church: ChurchOut
     already_member: bool
     message: str
+
+
+# --- slice 2a: readings (S Schemas) ---
+
+_ISO_DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
+
+
+def _iso_date_only(value: object) -> object:
+    """Let only a whole YYYY-MM-DD string through to Pydantic's date parsing.
+
+    Pydantic's lax `date` reads "0" as 1970-01-01 and "2026-03-29T00:00:00"
+    as its day, which would answer for a date nobody asked about. A string of
+    the right shape that is no real date ("2026-02-30") still fails in
+    Pydantic's own parsing. Every failure is "Not a valid value." (api/errors.py).
+    """
+    if isinstance(value, str) and _ISO_DATE.fullmatch(value):
+        return value
+    raise ValueError("Expected a YYYY-MM-DD date.")
+
+
+# A strict calendar date for a query parameter; OpenAPI still says `format: date`.
+IsoDate = Annotated[DateType, BeforeValidator(_iso_date_only)]
+
+
+class ReadingSetOut(BaseModel):
+    """One set of readings. `scriptures` is in display order (first, psalm,
+    second, gospel) with compound cells split; the usecase guarantees 1-20
+    lines of 1-200 characters and a name of 1-300 (fits_draft_limits)."""
+
+    name: str
+    scriptures: list[str]
+    source: Literal["lectio", "vanderbilt", "merged"]
+
+
+class LectionaryOut(BaseModel):
+    """GET /lectionary/readings. `date` echoes the request and is never
+    normalized; `partial` means sets were found but one source failed;
+    `default_index` is None exactly when `reading_sets` is empty."""
+
+    date: DateType
+    status: Literal["ok", "no_readings"]
+    partial: bool
+    reading_sets: list[ReadingSetOut]
+    default_index: Optional[int]

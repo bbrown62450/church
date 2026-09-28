@@ -187,6 +187,55 @@
         "title": "InvitePreviewOut",
         "type": "object"
       },
+      "LectionaryOut": {
+        "description": "GET /lectionary/readings. `date` echoes the request and is never\nnormalized; `partial` means sets were found but one source failed;\n`default_index` is None exactly when `reading_sets` is empty.",
+        "properties": {
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "default_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Index"
+          },
+          "partial": {
+            "title": "Partial",
+            "type": "boolean"
+          },
+          "reading_sets": {
+            "items": {
+              "$ref": "#/components/schemas/ReadingSetOut"
+            },
+            "title": "Reading Sets",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "no_readings"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "status",
+          "partial",
+          "reading_sets",
+          "default_index"
+        ],
+        "title": "LectionaryOut",
+        "type": "object"
+      },
       "MeOut": {
         "properties": {
           "churches": {
@@ -205,6 +254,38 @@
           "churches"
         ],
         "title": "MeOut",
+        "type": "object"
+      },
+      "ReadingSetOut": {
+        "description": "One set of readings. `scriptures` is in display order (first, psalm,\nsecond, gospel) with compound cells split; the usecase guarantees 1-20\nlines of 1-200 characters and a name of 1-300 (fits_draft_limits).",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "scriptures": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Scriptures",
+            "type": "array"
+          },
+          "source": {
+            "enum": [
+              "lectio",
+              "vanderbilt",
+              "merged"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "scriptures",
+          "source"
+        ],
+        "title": "ReadingSetOut",
         "type": "object"
       },
       "ReadyOut": {
@@ -741,6 +822,112 @@
           }
         },
         "summary": "Preview Invite"
+      }
+    },
+    "/lectionary/readings": {
+      "get": {
+        "operationId": "lectionary_readings_lectionary_readings_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "date",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Date",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LectionaryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Gateway Timeout"
+          }
+        },
+        "summary": "Lectionary Readings"
       }
     },
     "/me": {

@@ -120,6 +120,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/lectionary/readings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lectionary Readings */
+        get: operations["lectionary_readings_lectionary_readings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me": {
         parameters: {
             query?: never;
@@ -259,11 +276,52 @@ export interface components {
              */
             role: "member" | "admin";
         };
+        /**
+         * LectionaryOut
+         * @description GET /lectionary/readings. `date` echoes the request and is never
+         *     normalized; `partial` means sets were found but one source failed;
+         *     `default_index` is None exactly when `reading_sets` is empty.
+         */
+        LectionaryOut: {
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Default Index */
+            default_index: number | null;
+            /** Partial */
+            partial: boolean;
+            /** Reading Sets */
+            reading_sets: components["schemas"]["ReadingSetOut"][];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "no_readings";
+        };
         /** MeOut */
         MeOut: {
             /** Churches */
             churches: components["schemas"]["ChurchOut"][];
             user: components["schemas"]["UserOut"];
+        };
+        /**
+         * ReadingSetOut
+         * @description One set of readings. `scriptures` is in display order (first, psalm,
+         *     second, gospel) with compound cells split; the usecase guarantees 1-20
+         *     lines of 1-200 characters and a name of 1-300 (fits_draft_limits).
+         */
+        ReadingSetOut: {
+            /** Name */
+            name: string;
+            /** Scriptures */
+            scriptures: string[];
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "lectio" | "vanderbilt" | "merged";
         };
         /** ReadyOut */
         ReadyOut: {
@@ -598,6 +656,84 @@ export interface operations {
             };
             /** @description Service Unavailable */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    lectionary_readings_lectionary_readings_get: {
+        parameters: {
+            query: {
+                date: string;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LectionaryOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Gateway Timeout */
+            504: {
                 headers: {
                     [name: string]: unknown;
                 };

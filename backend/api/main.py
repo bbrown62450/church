@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.errors import install_error_handlers
 from api.logging_config import configure_logging
 from api.middleware import RequestIdMiddleware, UnhandledErrorMiddleware
-from api.routes import churches, health, invites, me, rubric
+from api.routes import churches, health, invites, lectionary, me, rubric
 from api.settings import get_settings
 from api.startup import check_app_env, describe_database, enforce_production_guards
 from db import get_engine
@@ -59,6 +59,7 @@ def create_app() -> FastAPI:
     app.include_router(rubric.router)
     app.include_router(churches.router)
     app.include_router(invites.router)
+    app.include_router(lectionary.router)
     return app
 
 
