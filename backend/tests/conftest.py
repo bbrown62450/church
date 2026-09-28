@@ -265,6 +265,29 @@ def _fresh_lectionary_caches():
     yield
 
 
+# --- slice 2a: passages (S "Passages"; 2a clarification 39) ---
+
+@pytest.fixture(autouse=True)
+def _fresh_passage_cache():
+    """scripture_fetcher keeps one process-wide bible-api part cache (7 days),
+    and usecases.passages (Task 10) one worker pool (slice 2a). Each test
+    starts with a new, empty part cache on time.monotonic, so text or a
+    not-found stored by an earlier test never answers here.
+
+    usecases.passages goes first: its reset joins the pool, so a part still
+    running from an earlier test finishes before the cache is replaced, and
+    writes into the old, orphaned cache (2a clarification 39). Resets only a
+    module already imported: its state can exist only then (the
+    deferred-import rule at the top of this file)."""
+    import sys
+
+    for name in ("usecases.passages", "scripture_fetcher"):
+        module = sys.modules.get(name)
+        if module is not None:
+            module.reset_for_tests()
+    yield
+
+
 # --- slice 1: network-free tests and the Postgres test database (F §5.1, §5.3) ---
 
 _LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1")
