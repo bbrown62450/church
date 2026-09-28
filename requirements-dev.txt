@@ -2,3 +2,6 @@
 pytest>=8.0
 # backend/tests/test_ops_workflows.py parses workflow YAML
 PyYAML>=6.0
+# backend/tests mock the upstream HTTP calls with respx (slice 2);
+# 0.22 is the first respx release that works with httpx 0.28
+respx>=0.22

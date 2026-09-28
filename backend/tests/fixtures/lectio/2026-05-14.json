@@ -1,0 +1,36 @@
+{
+  "data": {
+    "date": "2026-05-14",
+    "tradition": "rcl",
+    "season": "Easter",
+    "year": "A",
+    "dayName": null,
+    "readings": [
+      {
+        "type": "first",
+        "citation": "Acts 1:1-11",
+        "isAlternative": false
+      },
+      {
+        "type": "psalm",
+        "citation": "Psalm 47",
+        "isAlternative": false
+      },
+      {
+        "type": "second",
+        "citation": "Ephesians 1:15-23",
+        "isAlternative": false
+      },
+      {
+        "type": "gospel",
+        "citation": "Matthew 28:16-20",
+        "isAlternative": false
+      },
+      {
+        "type": "psalm",
+        "citation": "Psalm 93",
+        "isAlternative": true
+      }
+    ]
+  }
+}

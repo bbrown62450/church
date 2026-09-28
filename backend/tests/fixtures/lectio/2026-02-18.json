@@ -1,0 +1,36 @@
+{
+  "data": {
+    "date": "2026-02-18",
+    "tradition": "rcl",
+    "season": "Lent",
+    "year": "A",
+    "dayName": null,
+    "readings": [
+      {
+        "type": "first",
+        "citation": "Joel 2:1-2, 12-17",
+        "isAlternative": false
+      },
+      {
+        "type": "psalm",
+        "citation": "Psalm 51:1-17",
+        "isAlternative": false
+      },
+      {
+        "type": "second",
+        "citation": "2 Corinthians 5:20b-6:10",
+        "isAlternative": false
+      },
+      {
+        "type": "gospel",
+        "citation": "Matthew 6:1-6, 16-21",
+        "isAlternative": false
+      },
+      {
+        "type": "first",
+        "citation": "Isaiah 58:1-12",
+        "isAlternative": true
+      }
+    ]
+  }
+}
