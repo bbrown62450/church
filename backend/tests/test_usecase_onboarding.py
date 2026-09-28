@@ -348,6 +348,34 @@ def test_order_used_beats_email_mismatch(invite_world):
     assert _preview_reason(invite_world, code) == "used"
 
 
+def test_consumer_sees_church_unavailable_after_soft_delete(invite_world):
+    # Check 4's exception looks up the caller's membership in the invite's
+    # church, live or not, so the consumer (still a member) reaches check 5.
+    cid, owner, joiner = invite_world["church_id"], invite_world["owner"], invite_world["joiner"]
+    code = _invite(cid, owner, email=JOINER_EMAIL)
+    _update_invite(code, accepted_at=datetime(2026, 9, 30, 12, 0), accepted_by=joiner)
+    add_membership(joiner, cid, "member")
+    soft_delete_church(cid)   # revokes only pending invites; this one was consumed
+    assert get_church(cid) is None
+    assert repos.invites.get_invite_by_code(code)["revoked"] is False
+    assert get_role(joiner, cid) == "member"
+
+    def preview(user_id, email):
+        with pytest.raises(Rejected) as exc:
+            onboarding.preview_invite(user_id=user_id, user_email=email, code=code, now=INVITE_NOW)
+        return exc.value.message, exc.value.details["reason"]
+
+    assert preview(joiner, JOINER_EMAIL) == ("This church is no longer available.", "church_unavailable")
+    # Anyone else still gets "used": check 4 beats check 5, and beats the
+    # email mismatch (the invite is bound to the joiner's address).
+    assert preview(invite_world["other"], "other@example.com") == (
+        "This invite has already been used.", "used",
+    )
+    # Revoked still beats church_unavailable for the consumer.
+    _update_invite(code, revoked=True)
+    assert preview(joiner, JOINER_EMAIL) == ("This invite has been revoked.", "revoked")
+
+
 @pytest.mark.parametrize(("stored", "granted"), [("owner", "admin"), ("foo", "member")])
 def test_clamp_role(stored, granted, caplog):
     invite_id = uuid.uuid4()

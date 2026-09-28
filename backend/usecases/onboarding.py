@@ -147,12 +147,16 @@ def _load_invite(s, code: str, user_id: uuid.UUID) -> tuple:
 
     Returns (inv, church, member_role): the Invite row or None; its church as
     repos.churches.get_church's dict, None when missing or soft-deleted; and
-    the caller's role there, None when not a member.
+    the caller's role in the invite's church, None when not a member. The
+    role is keyed on the invite, not the live church, so check 4's exception
+    still holds after a soft delete and the consumer gets church_unavailable
+    rather than used. Callers read it for already_member only once check 5
+    has passed.
     """
     inv = invites.find_by_code(code, session=s)
     church = churches.get_church(inv.church_id, session=s) if inv is not None else None
     member_role = (
-        memberships.get_role(user_id, church["id"], session=s) if church is not None else None
+        memberships.get_role(user_id, inv.church_id, session=s) if inv is not None else None
     )
     return inv, church, member_role
 
