@@ -36,7 +36,7 @@ BOOKS: tuple[Book, ...] = (
     Book("Numbers", "ot", ("num",)),
     Book("Deuteronomy", "ot", ("deut",)),
     Book("Joshua", "ot", ("josh",)),
-    Book("Judges", "ot", ("judg",)),
+    Book("Judges", "ot", ("jdg", "judg")),
     Book("Ruth", "ot"),
     Book("1 Samuel", "ot", ("1 sam",)),
     Book("2 Samuel", "ot", ("2 sam",)),
@@ -50,7 +50,7 @@ BOOKS: tuple[Book, ...] = (
     Book("Job", "ot"),
     Book("Psalms", "psalm", ("ps", "psa", "psalm", "pss")),
     Book("Proverbs", "ot", ("prov",)),
-    Book("Ecclesiastes", "ot", ("eccl",)),
+    Book("Ecclesiastes", "ot", ("eccl", "eccles")),
     Book("Song of Songs", "ot", ("canticles", "song", "song of solomon")),
     Book("Isaiah", "ot", ("isa",)),
     Book("Jeremiah", "ot", ("jer",)),
@@ -90,17 +90,17 @@ BOOKS: tuple[Book, ...] = (
     Book("Prayer of Manasseh", "ot", ("pr man",)),
     Book("Psalm 151", "psalm"),
     # New Testament
-    Book("Matthew", "nt", ("matt", "mt")),
+    Book("Matthew", "nt", ("mat", "matt", "mt")),
     Book("Mark", "nt", ("mk",)),
     Book("Luke", "nt", ("lk",)),
     Book("John", "nt", ("jn",)),
     Book("Acts", "nt"),
-    Book("Romans", "nt", ("rom",)),
+    Book("Romans", "nt", ("rm", "rom")),
     Book("1 Corinthians", "nt", ("1 cor",)),
     Book("2 Corinthians", "nt", ("2 cor",)),
     Book("Galatians", "nt", ("gal",)),
     Book("Ephesians", "nt", ("eph",)),
-    Book("Philippians", "nt", ("phil",)),
+    Book("Philippians", "nt", ("phil", "php")),
     Book("Colossians", "nt", ("col",)),
     Book("1 Thessalonians", "nt", ("1 thess",)),
     Book("2 Thessalonians", "nt", ("2 thess",)),
@@ -116,7 +116,7 @@ BOOKS: tuple[Book, ...] = (
     Book("2 John", "nt", ("2 jn",)),
     Book("3 John", "nt", ("3 jn",)),
     Book("Jude", "nt"),
-    Book("Revelation", "nt", ("rev",)),
+    Book("Revelation", "nt", ("rev", "revelations")),
 )
 
 
@@ -247,7 +247,9 @@ def resolve_readings(scriptures: list[str], ot_pick: Optional[str] = "",
     nt_pick = (nt_pick or "").strip()
     if nt_pick not in options["nt"]:
         nt_pick = ""
-    ot = ot_pick or (entries[0] if entries else None)
+    # The automatic OT skips the NT pick, so one reading never fills both slots
+    # (owner, 2026-09-28: Acts picked as NT in Easter season).
+    ot = ot_pick or next((e for e in entries if e != nt_pick), None)
     nt = nt_pick or next((e for e in entries if e != ot and _first_alternative_is_nt(e)), None)
     return ReadingPair(ot=ot, nt=nt, ot_auto=not ot_pick, nt_auto=not nt_pick)
 
