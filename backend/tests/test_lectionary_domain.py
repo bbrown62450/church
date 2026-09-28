@@ -430,6 +430,28 @@ def test_parse_csv_html_raises():
         body = upstream_fixtures.load("vanderbilt", name).body.decode("utf-8", errors="replace")
         with pytest.raises(LectionaryFormatError):
             parse_vanderbilt_csv(body)
+    header = "Liturgical Date,Calendar Date,First reading,Psalm,Second reading,Gospel,Art,Prayer\n"
+    malformed = (
+        # an unbalanced quote makes one field longer than csv's 131,072-character limit
+        header + '"X","Oct 04, 2026","' + "a" * 140_000 + '","","","","",""\n',
+        # a reordered header shifts every column
+        "Calendar Date,Liturgical Date,First reading,Psalm,Second reading,Gospel,Art,Prayer\n"
+        '"Oct 04, 2026","X","Isaiah 5:1-7","","","","",""\n',
+        # a header missing a column
+        "Liturgical Date,Calendar Date,First reading,Psalm,Gospel,Art,Prayer\n"
+        '"X","Oct 04, 2026","Isaiah 5:1-7","","","",""\n',
+        # data rows, none of which parses: never an empty success
+        header + '"X","Sept 27, 2026","Isaiah 5:1-7","","","","",""\n"Y","2026-10-04","","","","","",""\n',
+    )
+    for text in malformed:
+        with pytest.raises(LectionaryFormatError):
+            parse_vanderbilt_csv(text)
+    # A BOM, quoted labels, CRLF and extra trailing header columns are still the header.
+    ok = (
+        '\ufeff"Liturgical Date", "Calendar Date","First reading","Psalm","Second reading","Gospel","Art",'
+        '"Prayer","Extra"\r\n"X","Oct 04, 2026","Isaiah 5:1-7","","","Matthew 21:33-46","","",""\r\n'
+    )
+    assert parse_vanderbilt_csv(ok) == [VRow("X", date(2026, 10, 4), "Isaiah 5:1-7", "", "", "Matthew 21:33-46")]
 
 
 def test_parse_csv_skips_unparseable_dates():
@@ -541,6 +563,12 @@ def test_fits_draft_limits(caplog):
     assert dropped[1] == "reading_set_dropped name='Set' name_chars=3 lines=1 line_chars=[201]"
     assert f"name='{'n' * 80}' name_chars=301 " in dropped[4]
     assert dropped[7] == "reading_set_dropped name='(lectio group)' name_chars=0 lines=1 line_chars=[201]"
+    # A long set logs the first 25 line lengths only.
+    caplog.clear()
+    with caplog.at_level(logging.WARNING):
+        assert not fits_draft_limits(_rs(name="Long", lines=["Psalm 1"] * 30))
+    (long_line,) = [r.getMessage() for r in caplog.records]
+    assert long_line == "reading_set_dropped name='Long' name_chars=4 lines=30 line_chars=" + str([7] * 25)
 
 
 def test_rejected_set_dropped_before_merge_default_without_it():
@@ -657,7 +685,7 @@ def test_lectio_alternatives_skipped():
     assert scripture_key(recorded.groups[0].gospel) == scripture_key("Matthew 21:33-46")
 
 
-def test_lectio_trinity_two_groups():
+def test_lectio_trinity_two_groups(caplog):
     payload = {
         "data": {
             "season": "Ordinary Time",
@@ -678,6 +706,14 @@ def test_lectio_trinity_two_groups():
     day = parse_lectio_payload(payload)
     assert [g.gospel for g in day.groups] == ["Matthew 7:21-29", "Matthew 28:16-20"]
     assert day.groups[1].scriptures == ("Genesis 1:1-2:4a", "Psalm 8", "2 Corinthians 13:11-13", "Matthew 28:16-20")
+    # At most 10 groups are kept; the rest are dropped with one warning that carries counts only.
+    many = {"data": {"readings": [{"type": "gospel", "citation": f"John {n}:1-5"} for n in range(1, 13)]}}
+    caplog.clear()
+    with caplog.at_level(logging.WARNING):
+        day = parse_lectio_payload(many)
+    assert [g.gospel for g in day.groups] == [f"John {n}:1-5" for n in range(1, 11)]
+    (capped,) = [r.getMessage() for r in caplog.records]
+    assert "12" in capped and "10" in capped and "John" not in capped
     # S upstream fact 3: the recorded Trinity response carries Proper 4 then Trinity.
     recorded = _fixture_lectio(date(2026, 5, 31))
     assert [scripture_key(g.gospel) for g in recorded.groups] == [
@@ -716,6 +752,33 @@ def test_lectio_bad_shape_raises():
         {"data": {"season": 7, "year": 2026, "readings": [{"type": "gospel", "citation": "John 3:16"}]}}
     )
     assert (day.season, day.year, day.day_name) == ("7", "2026", None)
+    # Only a string or a (non-bool) int is text; anything else is blank, never its repr.
+    day = parse_lectio_payload(
+        {
+            "data": {
+                "season": 1.5,
+                "year": True,
+                "dayName": {"a": 1},
+                "readings": [{"type": "gospel", "citation": "John 3:16"}],
+            }
+        }
+    )
+    assert (day.season, day.year, day.day_name) == ("", "", None)
+    day = parse_lectio_payload({"data": {"dayName": ["Proper 4"], "readings": [{"type": "gospel", "citation": "J"}]}})
+    assert day.day_name is None
+    # Only isAlternative true skips a reading; the type is matched case-insensitively.
+    day = parse_lectio_payload(
+        {
+            "data": {
+                "readings": [
+                    {"type": "First", "citation": "Isaiah 5:1-7", "isAlternative": "false"},
+                    {"type": "GOSPEL", "citation": "John 3:16", "isAlternative": 1},
+                    {"type": ["gospel"], "citation": "John 4:1"},
+                ]
+            }
+        }
+    )
+    assert day.groups == (_group(first="Isaiah 5:1-7", gospel="John 3:16"),)
 
 
 def test_lectio_names_deduplicated():
@@ -804,6 +867,15 @@ def test_merge_empty_and_single_source_defaults():
     # A Lectio group without a gospel never matches; unmatched groups are dropped.
     no_gospel = LectioDay(groups=(_group(first="Isaiah 5:1-7"),), season="", year="", day_name=None)
     assert merge(no_gospel, [holy_name, new_year], date(2026, 1, 1)) == ([holy_name, new_year], 1)
+    # At most 10 sets come out; a match past the tenth is dropped with them.
+    many = [_rs(name=f"S{n}", gospel=f"John {n}:1-5") for n in range(1, 13)]
+    sets, default = merge(None, many, on)
+    assert (sets, default) == (many[:10], 9)
+    late = LectioDay(groups=(_group(gospel="John 12:1-5"),), season="", year="", day_name=None)
+    assert merge(late, many, on) == (many[:10], 9)
+    early = LectioDay(groups=(_group(gospel="John 3:1-5"),), season="", year="", day_name=None)
+    sets, default = merge(early, many, on)
+    assert (len(sets), default, sets[2].source) == (10, 2, "merged")
 
 
 def test_every_fixture_date_fits_limits():

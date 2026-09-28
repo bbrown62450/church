@@ -617,6 +617,7 @@ def lectio_set_name(day: LectioDay, d: date) -> str:
 MAX_SET_LINES = 20        # ServiceDraft's scripture limit (S "Draft-limit guard")
 MAX_LINE_CHARS = 200      # ServiceDraft's per-line limit
 MAX_NAME_CHARS = 300      # the Occasion field's limit (S :142; clarification 34)
+MAX_SETS = 10             # the most Lectio groups, and merged sets, one date yields (owner decision 1)
 
 _VANDERBILT_FIELDS = [
     "Liturgical Date", "Calendar Date", "First reading", "Psalm",
@@ -676,11 +677,20 @@ def _field(raw: dict, name: str) -> str:
     return (raw.get(name) or "").strip().strip('"').strip()
 
 
+def _header_columns(line: str) -> list[str]:
+    """The header line's labels, stripped of a BOM, quotes and whitespace."""
+    (cells,) = csv.reader([line.lstrip("\ufeff")])
+    return [cell.strip().strip('"').strip() for cell in cells]
+
+
 def parse_vanderbilt_csv(text: str) -> list[VRow]:
     """Parse a Vanderbilt year CSV: skip the preamble, use the fixed field names, keep rows whose date parses.
 
     Raises LectionaryFormatError when no header line exists (an HTML page, an empty body). A line holding
     markup (`<`) is never the header, so an HTML calendar table with both labels on one line still raises.
+    It also raises when the header's columns are not `_VANDERBILT_FIELDS` in order (extra trailing columns
+    are allowed), when the csv module rejects the body (an unbalanced quote), and when there are data lines
+    but none parses, so a malformed body is never cached as an empty success. A header alone gives [].
     """
     lines = [line for line in text.splitlines() if line.strip()]
     header = next(
@@ -689,21 +699,29 @@ def parse_vanderbilt_csv(text: str) -> list[VRow]:
     )
     if header is None:
         raise LectionaryFormatError("no Vanderbilt CSV header line")
+    data_lines = lines[header + 1:]
     rows: list[VRow] = []
-    for raw in csv.DictReader(lines[header + 1:], fieldnames=_VANDERBILT_FIELDS):
-        calendar_date = _parse_calendar_date(raw.get("Calendar Date") or "")
-        if calendar_date is None:
-            continue
-        rows.append(
-            VRow(
-                liturgical_date=_field(raw, "Liturgical Date"),
-                calendar_date=calendar_date,
-                first=_field(raw, "First reading"),
-                psalm=_field(raw, "Psalm"),
-                second=_field(raw, "Second reading"),
-                gospel=_field(raw, "Gospel"),
+    try:
+        if _header_columns(lines[header])[: len(_VANDERBILT_FIELDS)] != _VANDERBILT_FIELDS:
+            raise LectionaryFormatError("unexpected Vanderbilt CSV columns")
+        for raw in csv.DictReader(data_lines, fieldnames=_VANDERBILT_FIELDS):
+            calendar_date = _parse_calendar_date(raw.get("Calendar Date") or "")
+            if calendar_date is None:
+                continue
+            rows.append(
+                VRow(
+                    liturgical_date=_field(raw, "Liturgical Date"),
+                    calendar_date=calendar_date,
+                    first=_field(raw, "First reading"),
+                    psalm=_field(raw, "Psalm"),
+                    second=_field(raw, "Second reading"),
+                    gospel=_field(raw, "Gospel"),
+                )
             )
-        )
+    except csv.Error as e:
+        raise LectionaryFormatError("malformed Vanderbilt CSV") from e
+    if data_lines and not rows:
+        raise LectionaryFormatError("no Vanderbilt CSV row has a calendar date")
     return rows
 
 
@@ -755,7 +773,7 @@ def fits_draft_limits(item: ReadingSet | LectioGroup) -> bool:
             "(lectio group)" if name is None else name[:80],
             0 if name is None else len(name),
             len(lines),
-            [len(line) for line in lines],
+            [len(line) for line in lines[:25]],
         )
     return fits
 
@@ -803,12 +821,22 @@ def _lectio_group(by_type: dict[str, str]) -> LectioGroup:
     )
 
 
+def _lectio_text(value: object) -> str:
+    """A Lectio text field: a string, or an int (not a bool) as its digits; anything else is ""."""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, int) and not isinstance(value, bool):
+        return str(value)
+    return ""
+
+
 def parse_lectio_payload(payload: object) -> LectioDay | None:
     """A Lectio response body as a LectioDay; None when `data` is missing or has no usable readings.
 
-    Alternatives are skipped (parity) and a new group starts when a reading type repeats (Trinity 2026).
+    Alternatives (`isAlternative` exactly true) are skipped (parity) and a new group starts when a reading
+    type repeats (Trinity 2026); the type is matched case-insensitively. At most MAX_SETS groups are kept.
     An unexpected shape raises TypeError, so the loader's except clause covers it (clarification 15);
-    `season` and `year` are coerced with str().
+    `season`, `year` and `dayName` keep a string or an int, and are "" otherwise.
     """
     if not isinstance(payload, dict):
         raise TypeError("Lectio payload is not a JSON object")
@@ -825,11 +853,12 @@ def parse_lectio_payload(payload: object) -> LectioDay | None:
     for reading in readings:
         if not isinstance(reading, dict):
             raise TypeError("a Lectio reading is not an object")
-        if reading.get("isAlternative"):
+        if reading.get("isAlternative") is True:
             continue
         kind = reading.get("type")
-        if kind not in _LECTIO_TYPES:
+        if not isinstance(kind, str) or kind.lower() not in _LECTIO_TYPES:
             continue
+        kind = kind.lower()
         citation = reading.get("citation") or ""
         if not isinstance(citation, str):
             raise TypeError("a Lectio citation is not a string")
@@ -841,11 +870,14 @@ def parse_lectio_payload(payload: object) -> LectioDay | None:
         groups.append(current)
     if not groups:
         return None
-    day_name = str(data.get("dayName") or "").strip()
+    if len(groups) > MAX_SETS:
+        logger.warning("lectio_groups_capped groups=%d kept=%d", len(groups), MAX_SETS)
+        groups = groups[:MAX_SETS]
+    day_name = _lectio_text(data.get("dayName"))
     return LectioDay(
         groups=tuple(_lectio_group(group) for group in groups),
-        season=str(data.get("season") or "").strip(),
-        year=str(data.get("year") or "").strip(),
+        season=_lectio_text(data.get("season")),
+        year=_lectio_text(data.get("year")),
         day_name=day_name or None,
     )
 
@@ -877,6 +909,13 @@ def _lectio_only_sets(lectio: LectioDay, d: date) -> list[ReadingSet]:
     return sets
 
 
+def _cap_sets(sets: list[ReadingSet]) -> list[ReadingSet]:
+    if len(sets) > MAX_SETS:
+        logger.warning("reading_sets_capped sets=%d kept=%d", len(sets), MAX_SETS)
+        return sets[:MAX_SETS]
+    return sets
+
+
 def merge(
     lectio: LectioDay | None, v_sets: list[ReadingSet], d: date
 ) -> tuple[list[ReadingSet], int | None]:
@@ -885,14 +924,15 @@ def merge(
     Both inputs have already passed fits_draft_limits. A Lectio group replaces at most one Vanderbilt set,
     matched by scripture_key(gospel) against each of the set's gospel alternatives, and keeps that set's
     name; unmatched groups are dropped when Vanderbilt has rows. default_index is None only when sets is [].
+    At most MAX_SETS sets come out; the rest are dropped with one warning.
     """
     has_lectio = lectio is not None and bool(lectio.groups)
     if not v_sets:
         if not has_lectio:
             return [], None
-        sets = _lectio_only_sets(lectio, d)
+        sets = _cap_sets(_lectio_only_sets(lectio, d))
         return sets, (len(sets) - 1 if sets else None)
-    sets = list(v_sets)
+    sets = _cap_sets(list(v_sets))
     if not has_lectio:
         return sets, len(sets) - 1
     matched: set[int] = set()
