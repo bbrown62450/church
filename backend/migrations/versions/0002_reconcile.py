@@ -1,7 +1,8 @@
 """Reconcile an existing database with the 0001 baseline (F §3.2 item 3).
 
-Only guarded, idempotent adds, so this is a no-op on production (stamped at
-0001_baseline) and on a fresh database (0001 created everything):
+Only guarded, idempotent adds, so this is a no-op on a fresh database (0001
+created everything) and on production (stamped at 0001_baseline) except
+creating the index if runbook step 6 reports it missing:
 
 - ix_hymns_church_hymnal, which migrate_add_hymnal.py never created;
 - text_year and hymnal_count (INTEGER, nullable) on hymns and hymn_catalog,

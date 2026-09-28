@@ -30,7 +30,7 @@ fails its deploy health check.
 | Revision | What it does |
 |---|---|
 | `0001_baseline` | The 11 tables of `db/models.py`, including `text_year` and `hymnal_count` on `hymns` and `hymn_catalog`, and `ix_hymns_church_hymnal`. Runs only on fresh databases (CI, new local dev); production is stamped at it. |
-| `0002_reconcile` | Guarded adds: `ix_hymns_church_hymnal` (`IF NOT EXISTS`) and the two hymn-facts columns on both hymn tables, only where missing. A no-op on production and on fresh databases; it fixes a stamped local database made before PR #4. |
+| `0002_reconcile` | Guarded adds: `ix_hymns_church_hymnal` (`IF NOT EXISTS`) and the two hymn-facts columns on both hymn tables, only where missing. A no-op on fresh databases, and on production except creating the index if step 6 reports it missing; it fixes a stamped local database made before PR #4. |
 | `0003_lockdown` | Postgres only: row-level security on every `public` table (after the precondition below), and the REVOKEs from `anon` and `authenticated`. Idempotent after the ops lockdown of 2026-09-25. |
 | `0004_invites_reusable` | `invites.reusable` (NOT NULL, default false; existing code-only invites become reusable) and `invites.accepted_by` with the FK `fk_invites_accepted_by_users` (`ON DELETE SET NULL`). |
 
@@ -64,6 +64,10 @@ export DATABASE_URL=sqlite:///../data/app.db
   `../.venv/bin/alembic stamp 0001_baseline && ../.venv/bin/alembic upgrade head`.
   One made before PR #4 (no `text_year`/`hymnal_count`) gets those columns
   from `0002_reconcile`.
+- A database made by `init_db()` after slice 1a (local Streamlit,
+  `import_hymnal.py`) already has head's tables but no revision:
+  `../.venv/bin/alembic stamp head`. (`upgrade head` fails with "table users
+  already exists", and the baseline stamp above stops in `0004`.)
 - `../.venv/bin/alembic current` shows `0004_invites_reusable (head)` when you
   are up to date. If you forget, the API logs the WARNING
   `schema revision <current> != head 0004_invites_reusable` at startup (for a
@@ -180,7 +184,8 @@ read it. Expect, in order:
 - `BEGIN;`, then `SET LOCAL lock_timeout = '5s';` and `SET LOCAL statement_timeout = '60s';`;
 - 0002: `CREATE INDEX IF NOT EXISTS ix_hymns_church_hymnal …` and four
   `ALTER TABLE … ADD COLUMN IF NOT EXISTS …` statements (`text_year` and
-  `hymnal_count` on `hymns` and `hymn_catalog`), no-ops on production;
+  `hymnal_count` on `hymns` and `hymn_catalog`), no-ops on production except
+  creating the index if step 6 reports it missing;
 - 0003: one `DO $$ … $$` block holding the precondition check, `ENABLE ROW
   LEVEL SECURITY` for each table still without it and, when the roles `anon`
   and `authenticated` exist, the `REVOKE ALL ON ALL TABLES …` /
@@ -395,9 +400,13 @@ Server major recorded for slice 1a: 17 (`server_version` 17.6 on 2026-09-25,
 ## Reverting
 
 - Never downgrade production below `0003_lockdown`: that would disable the
-  ops lockdown. To back out `0004` alone, while no deployed code reads its
+  ops lockdown. Back out `0004` only together with reverting the 1a release
+  (next item), once the revert is deployed and no deployed code reads its
   columns: the laptop setup, then
   `../.venv/bin/alembic downgrade 0003_lockdown`, then `unset DATABASE_URL`.
+  With 1a still deployed, the next deploy's pre-deploy command would re-apply
+  `0004`, and any restart would see the schema behind head, so production
+  `/health/ready` would return 503.
 - To revert the 1a release: first clear Railway → the API service →
   Settings → Config-as-code (after a revert `/backend/railway.toml` no longer
   exists, and what Railway does with a path to a missing file is unverified).
