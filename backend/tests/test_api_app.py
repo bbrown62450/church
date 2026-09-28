@@ -273,6 +273,8 @@ def test_routes_document_the_error_body():
         ("/rubric", "get"): {"401", "403", "422", "503"},
         ("/rubric", "patch"): {"401", "403", "422", "503"},
         ("/churches", "post"): {"401", "422", "429", "503"},
+        ("/invites/preview", "post"): {"400", "401", "422", "503"},
+        ("/invites/accept", "post"): {"400", "401", "422", "503"},
     }
     for (path, method), statuses in expected.items():
         responses = schema["paths"][path][method]["responses"]
