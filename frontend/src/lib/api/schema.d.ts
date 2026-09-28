@@ -30,7 +30,7 @@ export interface paths {
         };
         /**
          * Health
-         * @description Liveness: never touches the database. Railway's deploy health check is /health/ready (railway.toml).
+         * @description Liveness: never touches the database. Railway's deploy health check is /health/ready (its Healthcheck Path setting).
          */
         get: operations["health_health_get"];
         put?: never;

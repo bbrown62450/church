@@ -20,14 +20,16 @@ Names, and where each value comes from. Never the secret values themselves.
 
 **Railway, the API service.** Service root `backend`; start command in
 `backend/Procfile`; public URL https://church-production-74ca.up.railway.app;
-deploy health check: `/health/ready` since slice 1a, set in
-`backend/railway.toml` (Settings → Config-as-code path `/backend/railway.toml`)
-and in Settings → Deploy → Healthcheck Path. The same file runs
-`alembic upgrade head` as the pre-deploy command
-(`backend/migrations/README.md`). With it, a deployment whose process never answers
-(for example the `APP_ENV` guard refusing to start) is not promoted and the
-previous one keeps serving. Without it, or if a bad deployment went Active
-anyway, roll back by hand: Deployments → the previous deployment → Redeploy.
+deploy health check: `/health/ready` since slice 1a, and `alembic upgrade head`
+as the pre-deploy command (`backend/migrations/README.md`), both set by hand
+in Settings → Deploy (Healthcheck Path, Pre-deploy Command) since 2026-09-27.
+Railway does not read `/backend/railway.toml` for this service (Config as Code
+is deprecated and closed to services that never used it); the file only
+records the two values. With the health check, a deployment whose process
+never answers (for example the `APP_ENV` guard refusing to start) is not
+promoted and the previous one keeps serving. Without it, or if a bad
+deployment went Active anyway, roll back by hand: Deployments → the previous
+deployment → Redeploy.
 
 | Variable | Value | Since |
 |---|---|---|

@@ -39,10 +39,11 @@ Streamlit) and `cd frontend && npm test`.
 
 **Deploying:**
 
-- **Railway** (service root `backend`; Config-as-code path
-  `/backend/railway.toml`, which runs `alembic upgrade head` before each
-  deploy and sets the deploy health check `/health/ready`): env
-  `DATABASE_URL` (Supabase session pooler), `SUPABASE_URL`, `CORS_ORIGINS`
+- **Railway** (service root `backend`; Settings → Deploy → Pre-deploy
+  Command `alembic upgrade head` and Healthcheck Path `/health/ready`, set
+  by hand in the Railway UI: Railway does not read `/backend/railway.toml`,
+  which only records them): env `DATABASE_URL` (Supabase session pooler),
+  `SUPABASE_URL`, `CORS_ORIGINS`
   (exact Vercel URL, no trailing slash, comma-separated for multiple), plus
   the carried-over `OPENAI_API_KEY` and `GOOGLE_*` gmail.send vars.
 - **Vercel** (project root `frontend`): env `NEXT_PUBLIC_SUPABASE_URL`,
@@ -149,8 +150,9 @@ Tests build their SQLite databases themselves. The Postgres-only tests run
 with `TEST_DATABASE_URL` set to a local, throwaway Postgres
 (`TEST_DATABASE_URL=postgresql://postgres:<password>@localhost:5432/postgres .venv/bin/python -m pytest -m postgres -q`
 from the repo root) and skip without it. Production is migrated by Railway's
-pre-deploy command (`backend/railway.toml`); the one-time stamping runbook and
-the details are in `backend/migrations/README.md`.
+Pre-deploy Command, set in the Railway UI (`backend/railway.toml` only records
+it); the one-time stamping runbook and the details are in
+`backend/migrations/README.md`.
 
 ## One-time migration (Notion + legacy contacts → database)
 

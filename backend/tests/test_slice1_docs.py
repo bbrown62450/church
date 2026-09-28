@@ -123,7 +123,7 @@ def test_migrations_readme_records_the_rls_precondition_and_pg_major():
     reverting = _flat(_section(text, "## Reverting"))
     for needle in ("Never downgrade production below `0003_lockdown`",
                    "../.venv/bin/alembic downgrade 0003_lockdown",
-                   "Config-as-code"):
+                   "Pre-deploy Command"):
         assert needle in reverting, needle
     majors = re.findall(r"^Server major recorded for slice 1a: (\d+) ", text, re.MULTILINE)
     pg_major = str(yaml.safe_load(_read(BACKUP_YML))["jobs"]["dump"]["env"]["PG_MAJOR"])

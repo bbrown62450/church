@@ -27,7 +27,7 @@ class ReadyOut(BaseModel):
 
 @router.get("/health")
 def health() -> dict:
-    """Liveness: never touches the database. Railway's deploy health check is /health/ready (railway.toml)."""
+    """Liveness: never touches the database. Railway's deploy health check is /health/ready (its Healthcheck Path setting)."""
     return {"ok": True}
 
 

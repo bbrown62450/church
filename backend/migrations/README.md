@@ -2,8 +2,9 @@
 
 Since slice 1a, Alembic owns the database schema. The API no longer creates
 tables at startup (`db.init_db()` stays only for the frozen Streamlit app, the
-CLIs and the test fixtures). On Railway, `backend/railway.toml` runs
-`alembic upgrade head` as the pre-deploy command, and in production
+CLIs and the test fixtures). On Railway, the API service runs
+`alembic upgrade head` as its Pre-deploy Command, set in the Railway UI
+(step 7; `backend/railway.toml` only records it), and in production
 `GET /health/ready` answers 503 `db_unavailable` with `details.reason`
 `schema_behind` while the database is behind the release, so such a release
 fails its deploy health check.
@@ -250,19 +251,20 @@ Then `unset DATABASE_URL`.
 
 ### Step 7: Railway settings, immediately before merging
 
-Railway → the project → the API service → Settings:
+Railway → the project → the API service → Settings → Deploy:
 
-1. Config-as-code → Railway config file: `/backend/railway.toml`. Railway
-   reads this path from the repository root, not from the service's root
-   directory (`backend`). Save.
-2. Deploy → Healthcheck Path: `/health/ready` (it was `/health`). Save.
+1. Pre-deploy Command: `alembic upgrade head`. Save.
+2. Healthcheck Path: `/health/ready` (it was `/health`). Save.
 
-`backend/railway.toml` sets `preDeployCommand = ["alembic upgrade head"]` and
-`healthcheckPath = "/health/ready"`; the start command stays in
-`backend/Procfile`. The UI Healthcheck Path is the safety net if Railway ever
-ignores the file. Set both immediately before merging, so the merge deploy is
-the first to read them. The release serving now is not affected: it has had
-`/health/ready` since ops-3.
+Both live in the Railway UI. Railway does not read `/backend/railway.toml`
+for this service: it has deprecated Config as Code, and since 2026-08-28
+services that have never used it cannot opt in (on 2026-09-27 the
+Config-as-code path was entered and never took). The file keeps the same two
+values as a record; change it and the UI together. The start command stays
+in `backend/Procfile`. Set both immediately before merging, so the merge
+deploy is the first to use them. The release serving now is not affected: it
+has had `/health/ready` since ops-3. Do not redeploy it once the Pre-deploy
+Command is set: it has no Alembic, so its pre-deploy step would fail.
 
 ### Step 8: Merge and watch the deploy
 
@@ -289,16 +291,21 @@ unless the last bullet says otherwise):
 - It shows `canceling statement due to lock timeout`: something held a lock
   for more than 5 s (for example an open transaction in the SQL Editor).
   Close it and redeploy.
-- There is no pre-deploy step at all: Railway did not read
-  `/backend/railway.toml`. The new release then starts on a database still at
-  `0001_baseline`: its startup logs `schema revision 0001_baseline != head
+- There is no pre-deploy step at all: the Pre-deploy Command of step 7 is not
+  set. The new release then starts on a database still at `0001_baseline`:
+  its startup logs `schema revision 0001_baseline != head
   0004_invites_reusable` at ERROR, and `/health/ready` answers 503
-  `db_unavailable` with `"reason": "schema_behind"`, so the UI Healthcheck
-  Path of step 7 fails the deploy. If that health check did not apply either,
-  the release is live on a schema behind head (harmless in 1a, which serves
-  no route that reads the new `invites` columns). Either way, at once: the
-  laptop setup, `../.venv/bin/alembic upgrade head` (the same three
-  `Running upgrade` lines), `unset DATABASE_URL`; fix step 7 and redeploy.
+  `db_unavailable` with `"reason": "schema_behind"`, so the Healthcheck Path
+  of step 7 fails the deploy, the previous release keeps serving and the
+  database is untouched. This is exactly what happened on 2026-09-27, when
+  step 7 relied on the Config-as-code path that never took. Set the
+  Pre-deploy Command (step 7), then Deployments → the merge deployment → ⋮ →
+  Redeploy: its pre-deploy step runs the upgrade. If that health check did
+  not apply either, the release is live on a schema behind head (harmless in
+  1a, which serves no route that reads the new `invites` columns): at once,
+  the laptop setup, `../.venv/bin/alembic upgrade head` (the same three
+  `Running upgrade` lines), `unset DATABASE_URL`; then fix step 7 and
+  redeploy.
 
 ### Step 9: Confirm head
 
@@ -408,9 +415,10 @@ Server major recorded for slice 1a: 17 (`server_version` 17.6 on 2026-09-25,
   `0004`, and any restart would see the schema behind head, so production
   `/health/ready` would return 503.
 - To revert the 1a release: first clear Railway → the API service →
-  Settings → Config-as-code (after a revert `/backend/railway.toml` no longer
-  exists, and what Railway does with a path to a missing file is unverified).
-  Keep the UI Healthcheck Path `/health/ready`: the code before 1a has served
-  that route since ops-3. Then revert the merge commit on `main` through a PR
-  (the owner's yes). The schema stays at `0004_invites_reusable`; every 1a
-  change is expand-only, so the older code runs on it.
+  Settings → Deploy → Pre-deploy Command (the code before 1a has no Alembic,
+  so `alembic upgrade head` would fail its pre-deploy step and the revert
+  would never go live). Keep the Healthcheck Path `/health/ready`: the code
+  before 1a has served that route since ops-3. Then revert the merge commit
+  on `main` through a PR (the owner's yes). The schema stays at
+  `0004_invites_reusable`; every 1a change is expand-only, so the older code
+  runs on it.
