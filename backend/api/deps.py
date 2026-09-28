@@ -105,8 +105,8 @@ def require_church(
     x_church_id: Optional[str] = Header(default=None),
 ) -> ActiveChurch:
     validated = validate_active_church(x_church_id, user.id)
-    if validated is None:
-        raise forbidden()
+    if validated is None:   # not a member, or a missing or malformed X-Church-Id
+        raise forbidden(details={"reason": "no_church_access"})
     return ActiveChurch(id=validated["church_id"], name=validated["name"], role=validated["role"])
 
 

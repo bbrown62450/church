@@ -12,7 +12,8 @@ from api.middleware import RequestIdMiddleware, UnhandledErrorMiddleware
 from api.routes import health, me, rubric
 from api.settings import get_settings
 from api.startup import check_app_env, describe_database, enforce_production_guards
-from db import get_engine, init_db
+from db import get_engine
+from db.schema_check import run_startup_checks
 
 load_dotenv()
 configure_logging(get_settings().log_level)
@@ -21,13 +22,15 @@ logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI):
+async def lifespan(app: FastAPI):
     settings = get_settings()
     check_app_env(settings.app_env)
     engine = get_engine()                                   # creating the engine opens no connection
     logger.info("Database: %s", describe_database(engine.url))
     enforce_production_guards(settings, engine)             # before anything touches the database
-    init_db()   # create_all: no-op on existing tables, creates them for local SQLite; removed in slice 1
+    # Alembic owns the schema (F §3.3): no create_all here. Logs, never raises;
+    # /health/ready reads the state (Task 12's gate).
+    app.state.schema_state = run_startup_checks(engine, is_production=settings.is_production)
     if not settings.supabase_url:
         logger.warning("SUPABASE_URL is not set; every authenticated request will return 503.")
     yield

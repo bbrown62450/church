@@ -1,3 +1,4 @@
+import configparser
 import json
 import re
 from pathlib import Path
@@ -106,3 +107,68 @@ def test_missing_error_codes_reads_the_union(tmp_path, content, missing):
     if content is not None:
         path.write_text(content, encoding="utf-8")
     assert _missing_error_codes(path) == missing
+
+
+# --- slice 1a: Alembic, tzdata, exact minor pins and the postgres marker (S Backend 1a) ---
+
+def test_backend_requirements_add_alembic_tzdata_and_exact_minor_pins():
+    lines = {line.strip() for line in (ROOT / "backend" / "requirements.txt").read_text().splitlines()}
+    assert {"alembic>=1.20", "tzdata>=2026.4", "fastapi==0.141.*", "pydantic==2.13.*"} <= lines
+    assert "fastapi>=0.115" not in lines          # replaced by the exact minor pin
+
+
+def test_pytest_ini_declares_the_postgres_marker():
+    ini = configparser.ConfigParser()
+    ini.read(ROOT / "pytest.ini")
+    markers = [line.strip() for line in ini["pytest"]["markers"].splitlines() if line.strip()]
+    assert markers == ["postgres: needs TEST_DATABASE_URL (runs in the backend-postgres CI job)"]
+
+
+# --- slice 1a: Alembic (F §3.1; slice 1 spec, "Alembic setup") ---
+
+def test_alembic_ini_uses_here_paths_and_has_logging_sections():
+    ini = configparser.RawConfigParser()
+    assert ini.read(ROOT / "backend" / "alembic.ini", encoding="utf-8")
+    assert ini.get("alembic", "script_location") == "%(here)s/migrations"
+    assert ini.get("alembic", "prepend_sys_path") == "%(here)s"
+    assert ini.get("alembic", "path_separator") == "os"
+    assert not ini.has_option("alembic", "sqlalchemy.url")    # env.py owns the URL
+    for section in ("loggers", "handlers", "formatters", "logger_root", "logger_sqlalchemy",
+                    "logger_alembic", "handler_console", "formatter_generic"):
+        assert ini.has_section(section), section
+    assert ini.get("handler_console", "args") == "(sys.stderr,)"
+
+
+# --- slice 1a: the one-off schema scripts give way to Alembic (F §3.2; S amendment 2026-09-26) ---
+
+def test_one_off_schema_scripts_are_deleted():
+    backend = ROOT / "backend"
+    for gone in ("migrate_add_hymnal.py", "migrate_add_hymn_facts.py", "tests/test_migrate_hymn_facts.py"):
+        assert not (backend / gone).exists(), gone
+    # The data backfill stays as an ops CLI (data, not schema) and now points at Alembic.
+    backfill = (backend / "backfill_hymn_facts.py").read_text(encoding="utf-8")
+    assert "Run after `alembic upgrade head`" in backfill
+    assert "migrate_add_hymn_facts" not in backfill
+    assert (backend / "hymnary_facts.py").is_file()
+
+
+def test_readme_says_hymn_facts_columns_come_from_alembic():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    section = readme.split("### Service rubric: hymn year and familiarity", 1)[1].split("\n## ", 1)[0]
+    assert "1. The columns come from the Alembic migrations (`alembic upgrade head`)." in section
+    assert "backfill_hymn_facts.py --dry-run" in section            # steps 2 and 3 unchanged
+    assert "migrate_add_hymn_facts" not in readme
+    assert "migrate_add_hymnal" not in readme
+
+
+# --- slice 1a: Railway config-as-code (S backend/railway.toml, F §3.3) --------
+
+def test_railway_toml_runs_migrations_and_checks_readiness():
+    import tomllib
+
+    config = tomllib.loads((ROOT / "backend" / "railway.toml").read_text(encoding="utf-8"))
+    # Exactly these two settings: the start command stays in backend/Procfile.
+    assert config == {"deploy": {
+        "preDeployCommand": ["alembic upgrade head"],
+        "healthcheckPath": "/health/ready",
+    }}

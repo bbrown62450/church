@@ -27,12 +27,21 @@ cd frontend && npm run dev
 ```
 
 Copy `backend/.env.example` → `backend/.env` and `frontend/.env.example` →
-`frontend/.env.local` first. Tests: `.venv/bin/python -m pytest -q` (backend and
+`frontend/.env.local` first. The API does not create tables: create or update
+the local database with
+`(cd backend && DATABASE_URL=sqlite:///../data/app.db ../.venv/bin/alembic upgrade head)`
+the first time and after pulling a new migration (a `data/app.db` made before
+slice 1a needs `../.venv/bin/alembic stamp 0001_baseline` once first, and one
+made by `init_db()` after slice 1a needs `../.venv/bin/alembic stamp head`
+instead of the upgrade, with the same `DATABASE_URL`; see Database → Schema
+migrations). Tests: `.venv/bin/python -m pytest -q` (backend and
 Streamlit) and `cd frontend && npm test`.
 
 **Deploying:**
 
-- **Railway** (service root `backend`, health check `/health`): env
+- **Railway** (service root `backend`; Config-as-code path
+  `/backend/railway.toml`, which runs `alembic upgrade head` before each
+  deploy and sets the deploy health check `/health/ready`): env
   `DATABASE_URL` (Supabase session pooler), `SUPABASE_URL`, `CORS_ORIGINS`
   (exact Vercel URL, no trailing slash, comma-separated for multiple), plus
   the carried-over `OPENAI_API_KEY` and `GOOGLE_*` gmail.send vars.
@@ -118,6 +127,31 @@ allowed, slightly safer alternative to reusing the login client.
 
 Store `DATABASE_URL` in Streamlit secrets (App → Settings → Secrets).
 
+### Schema migrations (Alembic)
+
+Since slice 1a the schema comes from Alembic (`backend/alembic.ini`,
+`backend/migrations/`), and the API no longer creates tables at startup: it
+logs the WARNING `schema revision <current> != head <head>` when the database
+is not at the latest revision. Alembic reads only an exported `DATABASE_URL`,
+never `backend/.env`. For a local database, from `backend/`:
+
+```bash
+cd backend
+export DATABASE_URL=sqlite:///../data/app.db
+../.venv/bin/alembic upgrade head
+```
+
+A local database made by the old `create_all` (before slice 1a) needs stamping first:
+`../.venv/bin/alembic stamp 0001_baseline && ../.venv/bin/alembic upgrade head`.
+One made by `init_db()` after slice 1a (local Streamlit, `import_hymnal.py`)
+already has head's tables: `../.venv/bin/alembic stamp head`.
+Tests build their SQLite databases themselves. The Postgres-only tests run
+with `TEST_DATABASE_URL` set to a local, throwaway Postgres
+(`TEST_DATABASE_URL=postgresql://postgres:<password>@localhost:5432/postgres .venv/bin/python -m pytest -m postgres -q`
+from the repo root) and skip without it. Production is migrated by Railway's
+pre-deploy command (`backend/railway.toml`); the one-time stamping runbook and
+the details are in `backend/migrations/README.md`.
+
 ## One-time migration (Notion + legacy contacts → database)
 
 Import the founder church's existing Notion data (hymns, archive, usage) and
@@ -152,12 +186,9 @@ the repo-root `.env`). Each script first prints `Database: ...` (password
 hidden) before changing anything: check that it shows the Supabase pooler host
 before trusting the rest of its output.
 
-1. **Before merging** code that maps these columns, add them to the deployed
-   database. Both apps select every mapped column and would fail without them:
-
-   ```bash
-   (cd backend && ../.venv/bin/python migrate_add_hymn_facts.py)
-   ```
+1. The columns come from the Alembic migrations (`alembic upgrade head`).
+   Railway applies them before each deploy (`backend/migrations/README.md`);
+   never run Alembic against production outside that runbook.
 
 2. Preview the fill from Hymnary.org's public API. It writes nothing and takes
    about a second per scripture reference:
@@ -178,13 +209,9 @@ before trusting the rest of its output.
    (cd backend && ../.venv/bin/python backfill_hymn_facts.py)
    ```
 
-Steps 2 and 3 can run before or after the merge. Run step 3 again:
-
-- **after the merge**, if steps 2 and 3 ran before it: a church created in
-  between is seeded by the old code, which does not copy these facts;
-- **after importing a hymnal** (`import_hymnal.py`) **or adding hymns** in
-  Settings: new hymns start with both facts unknown, and rank as "unknown
-  year", until the backfill fills them.
+Run step 3 again **after importing a hymnal** (`import_hymnal.py`) **or adding
+hymns** in Settings: new hymns start with both facts unknown, and rank as
+"unknown year", until the backfill fills them.
 
 The backfill covers the shared catalog and every church's hymns, and never
 overwrites a value, so these re-runs are safe.

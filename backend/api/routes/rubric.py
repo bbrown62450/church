@@ -4,7 +4,7 @@ from typing import Any, Dict
 from fastapi import APIRouter, Body, Depends
 
 from api.deps import ActiveChurch, require_admin, require_church
-from api.errors import ApiError
+from api.errors import ApiError, error_responses
 from api.schemas import RubricOut
 from repos.churches import get_church_rubric_overrides, update_church_rubric
 from service_rubric import customized_keys, merge_rubric
@@ -17,12 +17,12 @@ def _rubric_out(church_id) -> RubricOut:
     return RubricOut(rubric=merge_rubric(overrides), customized=customized_keys(overrides))
 
 
-@router.get("/rubric", response_model=RubricOut)
+@router.get("/rubric", response_model=RubricOut, responses=error_responses(401, 403, 422, 503))
 def read_rubric(church: ActiveChurch = Depends(require_church)) -> RubricOut:
     return _rubric_out(church.id)
 
 
-@router.patch("/rubric", response_model=RubricOut)
+@router.patch("/rubric", response_model=RubricOut, responses=error_responses(401, 403, 422, 503))
 def change_rubric(
     patch: Dict[str, Any] = Body(...),
     church: ActiveChurch = Depends(require_admin),

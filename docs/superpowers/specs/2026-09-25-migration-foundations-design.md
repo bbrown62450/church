@@ -67,6 +67,7 @@ The slice specs refined several foundation rules. This pass folds every one of t
 | §1.1 | *(2026-09-26)* `GET`/`PATCH /rubric` (PR #4, already on `main`) keep their top-level path, the one exception to "church sub-resources sit under `/church`". New: `/church/prayer-library` (+ `/voice-profile-draft`) and the reviewer actions `POST /liturgy/review` and `POST /liturgy/revise`. | PR #4, PR #7, PR #8 |
 | §1.3 | *(2026-09-26)* `PATCH /rubric` takes a plain JSON object checked by `service_rubric.validate_patch`, which rejects unknown keys itself, as a declared exception to the model rule. `SermonText {ref ≤200, text ≤20 000}` is shared by `/liturgy/generate`, `/liturgy/review` and `/liturgy/revise`. | PR #4, 4, PR #8 |
 | §1.5 | *(2026-09-26)* New 422 code `invalid_rubric` (PR #4's `PATCH /rubric`). `POST /liturgy/review` returns AI failures and an empty `ai` bucket as `ai_status` inside a 200, like `/liturgy/generate`; `ai_status` is a field, not an error code. | PR #4, PR #8 |
+| §1.5 | *(2026-09-26, owner, slice 1a)* Two framework codes join the registry: `bad_request` (400) and `method_not_allowed` (405), which `api/errors.py` already returns for Starlette's 400 and 405. Any other framework HTTP error keeps its status and gets `bad_request` (4xx) or `internal_error` (5xx), so the old fallback code `error` is gone. `ERROR_CODES` has 29 codes. | 1 |
 | §1.7 | *(2026-09-26)* Since PR #4, `repos.churches._merge_settings` (and so frozen Streamlit's settings writes) locks the church row. | PR #4 |
 | §1.8 | *(2026-09-26)* `ai` bucket: `POST /church/prayer-library/voice-profile-draft` and `POST /liturgy/revise` (dependency, cost 1), and `POST /liturgy/review` (cost 1, only when the AI runs; empty bucket → `ai_status: rate_limited`). Timeout rows added. `POST /liturgy/review` is the second exception to the 504 timeout rule: AI failures come back as `ai_status` inside a 200. | PR #7, PR #8 |
 | §2.8 | *(2026-09-26)* The prompt-size cap: the voice-profile draft never returns it (it cuts each prayer to fit, 6a), and `POST /liturgy/revise` drops the profile, the sermon text and the checklist before returning 422 `prompt_invalid` "This prayer is too long to revise." (slice 4). | 6a, 4, PR #7, PR #8 |
@@ -191,10 +192,11 @@ Rules:
 
 | Status | Codes | When |
 |---|---|---|
-| 400 | `invite_rejected`, `gmail_state_invalid`, `gmail_connect_failed` | Well-formed request that the domain refuses |
+| 400 | `invite_rejected`, `gmail_state_invalid`, `gmail_connect_failed`; `bad_request` (*amendment 2026-09-26, slice 1a*: a 400 from the framework, and the code of any other framework 4xx that has no code of its own) | Well-formed request that the domain refuses |
 | 401 | `unauthenticated` | Missing, invalid or expired token |
 | 403 | `forbidden` | Not a member, wrong role, or an owner-protection rule (with a specific message). A `require_church` 403 (not a member of the church in `X-Church-Id`) carries `details.reason = "no_church_access"`; a role or policy 403 carries no `reason` (slice 1). The client's church fallback (§4.2) keys on that reason. |
 | 404 | `not_found` | Unknown id, or an id from another church |
+| 405 | `method_not_allowed` (*amendment 2026-09-26, slice 1a*) | A known path called with a method it does not support (framework) |
 | 409 | `conflict` (stale write), `last_admin`, `owner_must_transfer`, `invite_exists`, `gmail_not_connected` | Conflicts with current state |
 | 422 | `invalid_request`, `prompt_invalid`, `idempotency_mismatch`, `invalid_rubric` (*amendment 2026-09-26*: PR #4's `PATCH /rubric`; message from `service_rubric`, no `fields`) | Input the user can correct |
 | 429 | `rate_limited` (+ `Retry-After` header and `details.retry_after_seconds`) | §1.8. Always raised as `domain_errors.RateLimited` (§2.2), by the limiter and by slice 1's durable church-create cap alike. |

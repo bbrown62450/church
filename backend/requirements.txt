@@ -1,10 +1,16 @@
 # --- Runtime ---
-fastapi>=0.115
+# fastapi and pydantic are pinned to exact minors so the committed OpenAPI
+# snapshot (frontend/src/lib/api/openapi.json) only changes on purpose.
+fastapi==0.141.*
+pydantic==2.13.*
 uvicorn[standard]>=0.30
 PyJWT[crypto]>=2.8
 SQLAlchemy>=2.0
+alembic>=1.20
 psycopg2-binary>=2.9
 python-dotenv>=1.0.0
+# zoneinfo needs an IANA database; Railway's image may not ship one.
+tzdata>=2026.4
 beautifulsoup4>=4.12.0
 requests>=2.31.0
 httpx>=0.25.0

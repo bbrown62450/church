@@ -17,8 +17,11 @@ jobs:
       - run: python -m pytest -q
 
   backend-postgres:
-    # ON CONFLICT (email), the 3 + 3 pool and concurrent first sign-ins on real
-    # Postgres, in a throwaway container (major matches PG_MAJOR in backup.yml).
+    # Real Postgres in a throwaway container (major matches PG_MAJOR in backup.yml):
+    # the Alembic cycle on an empty database (slice 1a), the ops-2 smoke (ON CONFLICT
+    # (email), the 3 + 3 pool, concurrent first sign-ins), then the
+    # @pytest.mark.postgres tests. pg_smoke runs before the tests because its user
+    # count assumes empty tables; pg_db empties them before each test anyway.
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -34,6 +37,7 @@ jobs:
           --health-retries 20
     env:
       DATABASE_URL: postgresql://postgres:ci-throwaway@localhost:5432/postgres
+      TEST_DATABASE_URL: postgresql://postgres:ci-throwaway@localhost:5432/postgres
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -41,7 +45,22 @@ jobs:
           python-version: "3.11"
           cache: pip
       - run: pip install -r requirements-dev.txt
-      - run: python backend/tests/pg_smoke.py
+      - name: Migrate the empty database to head
+        working-directory: backend
+        run: alembic upgrade head
+      - name: The models match the migrated schema
+        working-directory: backend
+        run: alembic check
+      - name: Every revision downgrades
+        working-directory: backend
+        run: alembic downgrade base
+      - name: Migrate to head again
+        working-directory: backend
+        run: alembic upgrade head
+      - name: Identity smoke (ops-2)
+        run: python backend/tests/pg_smoke.py
+      - name: Postgres-only tests
+        run: python -m pytest -m postgres -q
 
   frontend:
     runs-on: ubuntu-latest
@@ -63,5 +82,7 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
+      - name: API types match the OpenAPI snapshot (F §5.4)
+        run: npm run gen:api && git diff --exit-code src/lib/api/schema.d.ts
       - run: npm test
       - run: npm run build

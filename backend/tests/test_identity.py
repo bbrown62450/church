@@ -197,17 +197,9 @@ def test_upsert_from_claims_delegates_to_ensure_user(tmp_db, monkeypatch):
 
 @pytest.fixture
 def client(tmp_db):
-    from fastapi.testclient import TestClient
+    from tests.api_helpers import make_api_client
 
-    from api.deps import get_verifier
-    from api.main import create_app
-    from api.security import TokenVerifier
-    from tests.jwt_helpers import ISSUER, SIGNING_KEY
-
-    app = create_app()
-    app.dependency_overrides[get_verifier] = lambda: TokenVerifier(
-        lambda _token: SIGNING_KEY.public_key(), issuer=ISSUER)
-    return TestClient(app)
+    return make_api_client()
 
 
 def _auth(email="pastor@example.com", **kwargs):
@@ -224,9 +216,9 @@ def test_ten_sequential_requests_touch_users_once(client, tmp_db):
     assert counts == {"insert": 1, "update": 0, "select": 1}
 
 
-def test_concurrent_first_requests_both_succeed_with_one_id(client, monkeypatch):
-    """F §7.3: StrictMode's double /me for a new email. A barrier makes both
-    requests miss the cache and enter ensure_user together."""
+def _first_requests_at_once(client, monkeypatch, email="first@example.com"):
+    """Two concurrent GET /me for a new email; returns both responses. A barrier
+    makes both requests miss the cache and enter ensure_user together."""
     import api.deps
 
     barrier = threading.Barrier(2)
@@ -236,9 +228,14 @@ def test_concurrent_first_requests_both_succeed_with_one_id(client, monkeypatch)
         return ensure_user(*args, **kwargs)
 
     monkeypatch.setattr(api.deps, "ensure_user", together)
-    headers = _auth(email="first@example.com")
+    headers = _auth(email=email)
     with ThreadPoolExecutor(max_workers=2) as pool:
-        responses = list(pool.map(lambda _: client.get("/me", headers=headers), range(2)))
+        return list(pool.map(lambda _: client.get("/me", headers=headers), range(2)))
+
+
+def test_concurrent_first_requests_both_succeed_with_one_id(client, monkeypatch):
+    """F §7.3: StrictMode's double /me for a new email."""
+    responses = _first_requests_at_once(client, monkeypatch)
     assert [r.status_code for r in responses] == [200, 200]
     assert responses[0].json()["user"]["id"] == responses[1].json()["user"]["id"]
     assert _user_count() == 1
@@ -356,3 +353,24 @@ def test_the_token_is_verified_even_when_the_identity_is_cached(client, bad_toke
     r = client.get("/me", headers=_auth(**bad_token))
     assert r.status_code == 401
     assert r.json()["error"]["code"] == "unauthenticated"
+
+
+# --- the same race on real Postgres (slice 1a; ops handoff, F §7.3) ------------
+
+@pytest.fixture
+def pg_client(pg_db):
+    from tests.api_helpers import make_api_client
+
+    return make_api_client()
+
+
+@pytest.mark.postgres
+def test_concurrent_first_requests_on_postgres_both_succeed_with_one_id(pg_client, monkeypatch):
+    """SQLite serializes writers, so only on Postgres do the two
+    INSERT ... ON CONFLICT (email) statements really overlap: the second waits
+    for the first to commit, inserts nothing and reads the committed row.
+    Runs in CI's backend-postgres job; skipped without TEST_DATABASE_URL."""
+    responses = _first_requests_at_once(pg_client, monkeypatch)
+    assert [r.status_code for r in responses] == [200, 200]
+    assert responses[0].json()["user"]["id"] == responses[1].json()["user"]["id"]
+    assert _user_count() == 1

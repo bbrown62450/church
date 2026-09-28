@@ -394,7 +394,9 @@ def test_postgres_service_parser_reads_service_images():
 
 
 def test_ci_postgres_service_matches_pg_major():
-    # Inert until slice 1 declares a postgres:<N> service container in ci.yml.
+    # ci.yml's backend-postgres job declares the postgres:<N> service (ops-2), and
+    # test_ci_workflow.test_ci_postgres_service_image_is_a_bare_postgres_major keeps
+    # it in that shape, so this check never passes on an empty list.
     # This is the only check of the CI Postgres major (ops spec, slice 1 row).
     majors = _postgres_service_majors(_workflow(CI_YML))
     assert [m for m in majors if m != _pg_major()] == []

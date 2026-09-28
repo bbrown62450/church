@@ -167,3 +167,90 @@ def _fresh_readiness_memo():
     if health is not None:
         health.reset_readiness_for_tests()
     yield
+
+
+# --- slice 1: network-free tests and the Postgres test database (F §5.1, §5.3) ---
+
+_LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1")
+
+
+@pytest.fixture(autouse=True)
+def _no_network(monkeypatch):
+    """Refuse every socket connect, and every psycopg2 connect, that leaves
+    this machine (F §5.3). It patches socket.socket.connect and
+    psycopg2.connect: libpq opens its own C sockets, which the first patch
+    never sees.
+
+    Loopback addresses (the CI Postgres service, a test's own listening socket)
+    and AF_UNIX paths stay allowed. Anything else raises RuntimeError before a
+    packet is sent, so a test that forgot a fake fails loudly instead of
+    calling Google, OpenAI or the production database."""
+    import socket
+
+    real_connect = socket.socket.connect
+
+    def guarded_connect(sock, address):
+        if sock.family != getattr(socket, "AF_UNIX", None):
+            host = address[0] if isinstance(address, tuple) else address
+            if host not in _LOCAL_HOSTS:
+                raise RuntimeError(f"Tests must not open network connections: {host}")
+        return real_connect(sock, address)
+
+    monkeypatch.setattr(socket.socket, "connect", guarded_connect)
+
+    # psycopg2 connects through libpq's own C sockets, which the patch above
+    # never sees; check the host SQLAlchemy (or a test) passes to it instead.
+    import psycopg2
+    from psycopg2.extensions import parse_dsn
+
+    real_pg_connect = psycopg2.connect
+
+    def guarded_pg_connect(dsn=None, connection_factory=None, cursor_factory=None, **kwargs):
+        params = {**(parse_dsn(dsn) if dsn else {}), **kwargs}
+        host = params.get("host") or "localhost"      # no host: libpq uses the local socket
+        if any(h not in _LOCAL_HOSTS for h in str(host).split(",")):
+            raise RuntimeError(f"Tests must not open network connections: {host}")
+        return real_pg_connect(dsn, connection_factory, cursor_factory, **kwargs)
+
+    monkeypatch.setattr(psycopg2, "connect", guarded_pg_connect)
+    yield
+
+
+@pytest.fixture
+def pg_db():
+    """The CI Postgres test database, emptied for this test; yields its Engine.
+
+    Skips unless TEST_DATABASE_URL is set (only the backend-postgres CI job
+    sets it). The URL must be a local, throwaway Postgres
+    (tests.pg_helpers.require_local_test_url). The database is migrated to
+    head with Alembic (so 0003_lockdown's RLS is on), then every table except
+    alembic_version is truncated, so each test starts empty.
+    """
+    import os
+
+    url = os.environ.get("TEST_DATABASE_URL", "").strip()
+    if not url:
+        pytest.skip("TEST_DATABASE_URL is not set (the backend-postgres CI job sets it)")
+
+    from alembic import command
+    from sqlalchemy import inspect, text
+
+    from db import reset_engine_for_tests
+    from db.schema_check import alembic_config
+    from tests.pg_helpers import require_local_test_url
+
+    engine = reset_engine_for_tests(require_local_test_url(url))
+    # Built the way every database is now built: Alembic to head (a no-op
+    # when CI's alembic cycle already got there). A local Postgres whose
+    # tables came from init_db() needs `alembic stamp head` once (tables made
+    # before slice 1a: `alembic stamp 0001_baseline`, then this upgrade).
+    command.upgrade(alembic_config(url=url, configure_logger=False), "head")
+    tables = [name for name in inspect(engine).get_table_names() if name != "alembic_version"]
+    if tables:
+        quoted = ", ".join(f'"{name}"' for name in tables)
+        with engine.begin() as conn:
+            conn.execute(text(f"TRUNCATE {quoted} RESTART IDENTITY CASCADE"))
+    try:
+        yield engine
+    finally:
+        engine.dispose()

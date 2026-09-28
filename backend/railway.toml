@@ -1,0 +1,8 @@
+# Railway config-as-code for the API service (slice 1a, F §3.3).
+# Railway reads this file only when the service's Settings → Config-as-code
+# path is /backend/railway.toml: it does not look under the service's root
+# directory (backend/migrations/README.md, step 7). The start command stays in
+# backend/Procfile.
+[deploy]
+preDeployCommand = ["alembic upgrade head"]
+healthcheckPath = "/health/ready"
