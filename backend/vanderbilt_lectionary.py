@@ -489,7 +489,7 @@ def _ordinary_time_name(d: date) -> str | None:
 
     "{Ordinal} Sunday after the Epiphany" from the Baptism of the Lord ("First") to
     Transfiguration Sunday, and "{Ordinal} Sunday after Pentecost" from Trinity Sunday
-    ("First") to Reign of Christ. None for any other date. `sunday_name` checks the
+    ("First") to Christ the King. None for any other date. `sunday_name` checks the
     named days first; the Vanderbilt Proper rename (Task 6b) uses this directly when
     `sunday_name(d)` is "All Saints Day" (clarification 30).
     """
@@ -512,6 +512,7 @@ def sunday_name(d: date) -> str | None:
     Checked in this order: the Christmas season (owner answer Q3), Advent, Lent, Palm
     Sunday, Easter and its Sundays, the Day of Pentecost; then the named days, which
     always win over the computed ordinal (decision A); then `_ordinary_time_name`.
+    The Sunday before Advent 1 is "Christ the King" (owner decision 2026-09-28).
     A Sunday Dec 25 or Jan 6 returns None: `lectio_set_name` then takes
     "Nativity of the Lord" or "Epiphany of the Lord" from `weekday_feast_name`.
     """
@@ -548,7 +549,7 @@ def sunday_name(d: date) -> str | None:
     if d.month == 11 and d.day == 1:
         return "All Saints Day"
     if d == advent1 - timedelta(days=7):
-        return "Reign of Christ"
+        return "Christ the King"
     return _ordinary_time_name(d)
 
 

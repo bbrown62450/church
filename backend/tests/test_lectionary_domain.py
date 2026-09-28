@@ -108,9 +108,9 @@ def test_sunday_name_table():
         date(2026, 6, 7): "Second Sunday after Pentecost",
         date(2026, 10, 4): "Nineteenth Sunday after Pentecost",
         date(2026, 11, 1): "All Saints Day",
-        date(2026, 11, 22): "Reign of Christ",
-        date(2027, 11, 21): "Reign of Christ",
-        date(2025, 11, 23): "Reign of Christ",
+        date(2026, 11, 22): "Christ the King",
+        date(2027, 11, 21): "Christ the King",
+        date(2025, 11, 23): "Christ the King",
         date(2026, 1, 11): "Baptism of the Lord",
         date(2026, 1, 18): "Second Sunday after the Epiphany",
         date(2026, 2, 15): "Transfiguration Sunday",
@@ -153,7 +153,7 @@ def test_named_days_win_2025_to_2028():
         easter = easter_date(year)
         named = {
             easter + timedelta(days=56): ("Trinity Sunday", "First Sunday after Pentecost"),
-            advent_sunday(year) - timedelta(days=7): ("Reign of Christ", " Sunday after Pentecost"),
+            advent_sunday(year) - timedelta(days=7): ("Christ the King", " Sunday after Pentecost"),
             easter - timedelta(days=49): ("Transfiguration Sunday", " Sunday after the Epiphany"),
         }
         jan6 = date(year, 1, 6)
@@ -211,14 +211,14 @@ def test_ordinal_words_reach_twenty_eighth():
     for bad in (0, 29, -1):
         with pytest.raises(ValueError):
             ordinal_word(bad)
-    # clarification 9: over 1900-2199 the largest n after Pentecost is 28, on Reign of Christ
+    # clarification 9: over 1900-2199 the largest n after Pentecost is 28, on Christ the King
     largest = max(
         (advent_sunday(y) - timedelta(days=7) - (easter_date(y) + timedelta(days=49))).days // 7
         for y in range(FIRST_YEAR, LAST_YEAR + 1)
     )
     assert largest == 28
     assert _ordinary_time_name(date(2008, 11, 23)) == "Twenty-Eighth Sunday after Pentecost"
-    assert sunday_name(date(2008, 11, 23)) == "Reign of Christ"
+    assert sunday_name(date(2008, 11, 23)) == "Christ the King"
 
 
 def test_weekday_feast_name():
@@ -632,8 +632,8 @@ def test_proper_row_renamed_named_rows_kept():
     assert names(date(2026, 5, 31)) == ["Visitation", "Trinity Sunday"]
     # The All Saints row keeps its name; the Proper row takes the computed ordinal (clarification 30).
     assert names(date(2026, 11, 1)) == ["All Saints Day", "Twenty-Third Sunday after Pentecost"]
-    # Reign of Christ is the rename's intended result for the last Proper.
-    assert names(date(2026, 11, 22)) == ["Reign of Christ"]
+    # Christ the King is the rename's intended result for the last Proper.
+    assert names(date(2026, 11, 22)) == ["Christ the King"]
     # Sundays only: a weekday Proper row keeps its text.
     assert names(date(2026, 10, 6)) == ["Proper 22 (27)"]
 
