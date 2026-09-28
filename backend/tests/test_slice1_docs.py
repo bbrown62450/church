@@ -182,10 +182,25 @@ def test_manual_verification_has_the_slice_1_section():
         "Log out",
         "https://liturgy-frozen.streamlit.app",
         "Create invite",
+        # Slice 1b: manual checks 2-11 (plan owner answers 2 and 7).
+        "Slice 1b record",
+        "claude/slice-1b-records",
+        "Settings → Invites",
+        "5 churches in 24 hours",
+        "Join or create a church…",
+        "Joined 1b Invite Test.",
+        "This invite has already been used.",
+        "Church name is required.",
+        "Use a different Google account",
+        "select_account",
+        "You no longer have access to 1b Invite Test.",
+        "This invite has been revoked.",
     ):
         assert needle in section, needle
     assert "liturgy-next" not in section
-    assert section.count("- [ ] ") == 3
+    assert section.count("- [ ] ") == 13
+    assert section.count("- [ ] (after 1a) ") == 3
+    assert section.count("- [ ] (after 1b) ") == 10
     assert "- [x]" not in section
 
 
