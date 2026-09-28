@@ -8,7 +8,7 @@ from db.models import Service, Membership
 from repos.churches import create_church
 from repos.memberships import (
     LastAdminError, get_role, add_membership, set_role,
-    remove_membership, list_members, count_admins,
+    remove_membership, list_members, count_admins, ensure_membership,
 )
 
 
@@ -77,3 +77,26 @@ def test_set_role_demote_ok_when_second_admin_exists(tmp_db, make_user):
     set_role(owner, cid, "member")
     assert get_role(owner, cid) == "member"
     assert count_admins(cid) == 1
+
+
+class _Abort(Exception):
+    """Raised inside a caller's session_scope to roll that transaction back."""
+
+
+def test_ensure_membership_inserts_then_reports_existing(tmp_db, make_user):
+    owner = make_user(email="owner@x.com")
+    joiner = make_user(email="j@x.com")
+    late = make_user(email="late@x.com")
+    cid = create_church(name="C", timezone="UTC", owner_user_id=owner)
+
+    assert ensure_membership(cid, joiner, "admin") == ("admin", True)
+    assert ensure_membership(str(cid), str(joiner), "member") == ("admin", False)  # role kept
+    assert ensure_membership(cid, owner, "member") == ("owner", False)
+    assert get_role(joiner, cid) == "admin"
+
+    with pytest.raises(_Abort):
+        with session_scope() as s:
+            assert ensure_membership(cid, late, "member", session=s) == ("member", True)
+            assert get_role(late, cid, session=s) == "member"
+            raise _Abort
+    assert get_role(late, cid) is None  # the caller's rollback removed it

@@ -1,7 +1,7 @@
 import { CircleAlertIcon } from "lucide-react";
 
+import { PendingButton } from "@/components/app/pending-button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import { describeError } from "@/lib/api/errors";
 
 export type ErrorStateProps = {
@@ -11,10 +11,12 @@ export type ErrorStateProps = {
   onRetry: () => void;
   /** Optional heading above the sentence. */
   title?: string;
+  /** True while the retry runs: Retry is disabled, busy and spinning, so a repeat tap does nothing. */
+  retrying?: boolean;
 };
 
 /** F §4.8 "Query failed": the message inline with a Retry button. An error is never shown as empty. */
-export function ErrorState({ error, onRetry, title }: ErrorStateProps) {
+export function ErrorState({ error, onRetry, title, retrying = false }: ErrorStateProps) {
   const message = describeError(error);
   return (
     <div data-slot="error-state" className="flex flex-col items-start gap-3">
@@ -29,9 +31,15 @@ export function ErrorState({ error, onRetry, title }: ErrorStateProps) {
           <AlertTitle>{message}</AlertTitle>
         )}
       </Alert>
-      <Button variant="outline" size="touch" onClick={() => onRetry()}>
+      <PendingButton
+        variant="outline"
+        size="touch"
+        pending={retrying}
+        pendingLabel="Retry"
+        onClick={() => onRetry()}
+      >
         Retry
-      </Button>
+      </PendingButton>
     </div>
   );
 }

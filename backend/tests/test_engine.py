@@ -153,3 +153,27 @@ def test_postgres_engine_uses_the_pool_size_without_connecting(pool_env):
         assert engine.pool.size() == 3
     finally:
         engine.dispose()
+
+
+# --- slice 1b: bound parameters stay out of error text (AC9, F §2.5; 1b clarification 37) ---
+
+def test_engine_hides_bound_parameters(pool_env, tmp_path):
+    """An unhandled DB error is logged with its traceback (api/errors.py), and
+    SQLAlchemy's message lists the bound values by default: an invite code or
+    an email would reach the logs. Both dialects hide them."""
+    from sqlalchemy.exc import OperationalError
+
+    from db.engine import _engine_kwargs, _make_engine
+
+    assert _engine_kwargs(PG_URL)["hide_parameters"] is True
+    assert _engine_kwargs("sqlite:///data/app.db")["hide_parameters"] is True
+
+    engine = _make_engine(f"sqlite:///{tmp_path / 'h.db'}")
+    try:
+        with engine.connect() as conn, pytest.raises(OperationalError) as exc:
+            conn.execute(text("SELECT id FROM invites WHERE code = :code"), {"code": "SECRET-CODE-123"})
+    finally:
+        engine.dispose()
+    assert "no such table: invites" in str(exc.value)
+    assert "[SQL parameters hidden due to hide_parameters=True]" in str(exc.value)
+    assert "SECRET-CODE-123" not in str(exc.value)

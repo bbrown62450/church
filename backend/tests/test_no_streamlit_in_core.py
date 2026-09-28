@@ -16,8 +16,9 @@ def test_auth_and_tenancy_do_not_import_streamlit():
 
 
 def test_usecases_package_imports_no_fastapi_or_streamlit():
-    # usecases, domain_errors and db.ids are below the API layer (F §2.2).
-    code = ("import sys, usecases, domain_errors, db.ids; "
+    # usecases (including usecases.onboarding), domain_errors, db.ids and
+    # timezones are below the API layer (F §2.2).
+    code = ("import sys, usecases, usecases.onboarding, domain_errors, db.ids, timezones; "
             "bad = sorted({m.split('.')[0] for m in sys.modules} & {'fastapi', 'starlette', 'streamlit'}); "
             "print(bad); sys.exit(1 if bad else 0)")
     result = subprocess.run(
@@ -52,3 +53,5 @@ def test_api_main_with_every_router_does_not_import_streamlit():
     assert result.returncode == 0, result.stdout + result.stderr
     assert "unmounted: []" in result.stdout
     assert "'api.routes.me'" in result.stdout and "'api.routes.rubric'" in result.stdout
+    assert "'api.routes.churches'" in result.stdout
+    assert "'api.routes.invites'" in result.stdout

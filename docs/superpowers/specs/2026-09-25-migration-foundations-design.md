@@ -39,7 +39,7 @@ Non-goals: feature behavior inside a slice (for example the hymn-matching algori
 | D11 | Browser E2E | **No Playwright** during the migration. Every slice ends with a manual smoke checklist at 375 px and on desktop. | With Google-only sign-in, E2E would need either an auth bypass in a public repo or a local Supabase with a provider the backend rejects on purpose. Neither is worth it for one tester. |
 | D12 | Identity writes | `INSERT … ON CONFLICT (email) DO NOTHING`, then select. A 5-minute in-process user cache. `last_login_at` is written at most hourly. | Fixes the first-request 500 and stops every API call being a write (deferred slice-0 issues). |
 | D13 | Unexpected errors | A pure-ASGI catch-all middleware installed *inside* CORS, plus a request id on every response and error body. | Browsers currently see 500s as network errors (deferred slice-0 issue). |
-| D14 | Invite links | The frontend builds `https://<origin>/join?code=…` itself. `/join` is a public route that keeps the code in sessionStorage across sign-in. Whether joining then needs an explicit **Join** tap awaits owner sign-off (§4.3). | Works on localhost and in production with no backend config (owner decision 6). |
+| D14 | Invite links | The frontend builds `https://<origin>/join?code=…` itself. `/join` is a public route that keeps the code in sessionStorage across sign-in. Joining then takes a preview and an explicit **Join** tap (§4.3): Preview then Join approved by the owner on 2026-09-26 (amendment to decision 6). | Works on localhost and in production with no backend config (owner decision 6). |
 | D15 | Slice order | ops → 1 → 2 → 3 → 4 → 5a → 5b → (tester moves) → 6a → 6b → 7. 6b may run in parallel any time after 1. | This is the inventory §5 order. Two changes: the three deferred slice-0 backend fixes move from 1 into ops, and slice 1 also carries the platform foundations (§7). |
 
 ---
@@ -60,7 +60,7 @@ The slice specs refined several foundation rules. This pass folds every one of t
 | §2.6, §3.3 | The Railway health check is `/health/ready`, which in production returns 503 when the schema is behind head. `/health` stays the dependency-free liveness probe. | 1, ops (resolution) |
 | §2.8 | The OpenAI client retries on its own (SDK `max_retries=0`, backoff ≤2 s), accepts an optional `deadline`, and maps `insufficient_quota` to `ai_not_configured` without retrying. | 3 |
 | §3.5 | Revision chain: `0005_services_extras` (plus `ix_services_church_date`), `0006_invites_integrity` (6b-1), then `memberships_one_owner` (6b-2), then slice 7's `normalize_legacy_data`, `contract_after_cutover` and `encrypt_gmail_tokens`. File numbers follow merge order. | 5a, 6b, 7 (resolution) |
-| §4.3 | Preview-then-**Join** on `/join` is **pending owner sign-off before 1b** because it departs from decision 6's wording. The auto-accept fallback is specified. | 1 (resolution) |
+| §4.3 | *(2026-09-26, owner, slice 1b)* Preview then Join approved by the owner on 2026-09-26 (amendment to decision 6): `/join` shows a preview and joins only on an explicit **Join** tap; the auto-accept fallback is withdrawn. *(2026-09-28, slice 1b)* Join goes to `/` until slice 2 redirects `/` to `/builder`; the `(signed-in)` layout, not the root, follows the stored post-login path and clears it before following; step 2 uses slice 1's signed-out copy. | 1 (resolution), 1b |
 | §4.4 | Hymn and hymnal mutations also invalidate `profile`. Service save and delete also invalidate `hymns`. `PATCH /church` with `default_hymnal` also invalidates `hymnals`. New key `hymnal-sources`. Role 403s don't trigger the church fallback. | 3, 5a, 6a, 6b |
 | §4.6 | `editing` gains `date_iso`, and the draft gains `save_key_fingerprint` (a `DRAFT_VERSION` bump with a migration). | 5a |
 | §7.2 | The Combobox pattern moves from slice 3 to slice 1 (`TimezoneCombobox`). | 1, 3, 6a (resolution) |
@@ -75,6 +75,11 @@ The slice specs refined several foundation rules. This pass folds every one of t
 | §3.5 | *(2026-09-26)* Settings keys `rubric` (PR #4; read in 3, 4 and frozen Streamlit; written by `PATCH /rubric`, edited in 6a) and `prayer_library` (PR #7; read in 4, written in 6a). No DDL. | PR #4, PR #7 |
 | §4.1, §4.4 | *(2026-09-26)* Routes `/settings/prayers` and `/settings/rubric`; keys `rubric` and `prayer-library`; a rubric save with `prefer_before_year` also invalidates `hymns`. | 6a |
 | §6.2 | *(2026-09-26)* Frozen Streamlit (cut after PR #4) reads `settings.rubric` and maps `text_year`/`hymnal_count`. It keeps the old season wording; under the §6.1 item 6 contingency, slice 4's `generate_liturgy` wrapper keeps it through a frozen copy of the old constant (`liturgy_prompts.LEGACY_SYSTEM_PROMPT`), and Streamlit's Settings page shows and compares with the same copy (`legacy_default_prompts()`), so the new season guidance reaches only the new app. | PR #4, PR #8, 4 |
+| §1.6 | *(2026-09-28, owner, slice 1b)* The store key `(user_id, method, route template, key)` has no church. That is right for the user-scoped `POST /churches`; 5a `POST /services`, 6b `POST /invites` and 5b `POST /bulletin-emails` must add the resolved church id to the scope or hash it into the body (1a final review, T4-m1). | 1b |
+| §2.3 | *(2026-09-28, owner, slice 1b)* Item 3's example: `usecases.onboarding.accept_invite` returns a typed `InviteAccepted` (`church`, `already_member`, `message`) and raises `Rejected` with `details.reason`, instead of a UI-shaped dict. | 1b |
+| §3.3 | *(2026-09-28, owner, slice 1b)* Railway's Config as Code is closed to this service: the Pre-deploy Command and the Healthcheck Path are set in the Railway UI, and `backend/railway.toml` only records them. | 1a (record), 1b |
+| §6.1 | *(2026-09-28, owner, slice 1b)* Production Streamlit is https://liturgy-frozen.streamlit.app/ (branch `streamlit-frozen`) since 2026-09-26; `liturgy` and `liturgy-next` are deleted, `keep-awake` pings liturgy-frozen, and item 6's contingency is not in effect. | ops (record), 1b |
+| §7.4 | *(2026-09-28, owner, slice 1b)* The invite preview also returns `already_member`. Concurrent accepts: `invites.claim` (a conditional UPDATE) stamps a single-use invite once and `memberships.ensure_membership` inserts with `insert_ignore`, instead of treating an IntegrityError as success; Postgres race tests cover both. | 1b |
 
 ---
 
@@ -227,6 +232,7 @@ Rules:
   - A concurrent request with the same key waits on a per-key lock and receives the stored response.
   - The same key with a different body hash → 422 `idempotency_mismatch`.
   - This is acceptable because there is one uvicorn worker. If `--workers` ever exceeds 1, move the store to a Postgres table first.
+  - **Church scope** (*amendment 2026-09-28, slice 1b*). The key scope has no church. That is right for `POST /churches`, which is user-scoped. A church-scoped route (5a `POST /services`, 6b `POST /invites`, 5b `POST /bulletin-emails`) must add the resolved church id to the scope, or hash it into the body, so that a key sent to two churches never replays one church's answer to the other.
 - **Frontend key rule (one rule for every idempotent POST; slices 1, 5a, 5b).** Because the server stores 4xx answers and rejects a reused key with a different body, a key must never outlive a definitive answer:
   - **Reuse** the key only for a retry with an unchanged body after an uncertain outcome (`network_error`, `timeout`, `aborted`, or any 5xx), or while that request is still in flight (a double tap).
   - **Rotate** to a new key after any 2xx or any 4xx, and whenever the body changes. So a corrected resubmit after a 422 never replays the stored 422 or meets `idempotency_mismatch`.
@@ -412,7 +418,7 @@ Because production Streamlit runs from `streamlit-frozen` (D2, §6), refactors o
    | `usecases/church_admin.py` | permission helpers and validation from `streamlit_views/settings.py` | 6a/6b |
 
    Do not re-export these from Streamlit modules.
-3. **Replace UI-shaped returns with typed results.** For example: `accept_invite` returns `{ok, reason_code, message, church_id}`; suggestion and generation return structured per-slot or per-section results plus typed exceptions instead of placeholder text; the `[Could not load text]` sentinel becomes `None`.
+3. **Replace UI-shaped returns with typed results.** For example: `usecases.onboarding.accept_invite` returns a typed `InviteAccepted` (`church`, `already_member`, `message`) and raises `Rejected` with `details.reason` (*amendment 2026-09-28, slice 1b*); suggestion and generation return structured per-slot or per-section results plus typed exceptions instead of placeholder text; the `[Could not load text]` sentinel becomes `None`.
 4. **Replace process-global caches** (Vanderbilt `_cache`, the audio cache) with `cache.TTLCache`, or delete them (the audio cache goes in 3).
 5. **Configuration:**
    - Configuration comes from `api/settings.py` (or `integrations/*` for clients) and is passed in. Domain modules stop calling `os.getenv` at call time and stop calling `load_dotenv()` at import; remove each one when its module is touched, and finish in 7.
@@ -580,7 +586,7 @@ On `POST /liturgy/generate` these errors reach the client as per-section results
 
 | Where | How |
 |---|---|
-| **Railway** | `backend/railway.toml` with `[deploy] preDeployCommand = ["alembic upgrade head"]` and `healthcheckPath = "/health/ready"` (slice 1). The start command stays in `Procfile`. Railway does not look for the file under the service root (`/backend`), so the service's Config-as-code path is set to `/backend/railway.toml` by hand (slice 1 runbook). A failed migration fails the deploy and the previous release keeps serving; expand-only migrations (§3.4) are what make that safe. **Schema-behind gate:** the deploy health check is `/health/ready`, not `/health`, so that a release that starts on a schema behind head (for example, the pre-deploy command was overridden) gets 503 `db_unavailable` with `details.reason = "schema_behind"` in production (§2.6), fails its health check and never goes live. `/health` stays the dependency-free liveness probe: it touches no database and is never used as the deploy check. |
+| **Railway** | `backend/railway.toml` with `[deploy] preDeployCommand = ["alembic upgrade head"]` and `healthcheckPath = "/health/ready"` (slice 1). The start command stays in `Procfile`. *(Amendment 2026-09-28, slice 1b.)* Railway's Config as Code is closed to this service (services that never used it cannot opt in), so Railway never reads the file: the same Pre-deploy Command and Healthcheck Path are set in the Railway UI (Settings → Deploy), and the file only records them (ops runbook → Alembic stamping record (slice 1a), step 7). A failed migration fails the deploy and the previous release keeps serving; expand-only migrations (§3.4) are what make that safe. **Schema-behind gate:** the deploy health check is `/health/ready`, not `/health`, so that a release that starts on a schema behind head (for example, the pre-deploy command was overridden) gets 503 `db_unavailable` with `details.reason = "schema_behind"` in production (§2.6), fails its health check and never goes live. `/health` stays the dependency-free liveness probe: it touches no database and is never used as the deploy check. |
 | **CI, SQLite (every PR)** | `backend/tests/test_migrations.py`: `upgrade head` on an empty SQLite file, then `compare_metadata` against `Base.metadata` must be empty, then `downgrade base`, then `upgrade head`. Also asserts every revision file defines `downgrade`. |
 | **CI, Postgres (every PR; new job in slice 1)** | Service container at the **same major version as the Supabase project** (slice 1 reads `SHOW server_version` and records it in `migrations/README.md`). Steps: `alembic upgrade head` → `alembic check` → `alembic downgrade base` → `alembic upgrade head` → `pytest -m postgres`. |
 | **Tests** | Fixtures keep `create_all` for speed. `test_migrations.py` guarantees migrations and models agree. |
@@ -724,20 +730,18 @@ Session storage keys use the `wsb:` prefix and go through `lib/storage.ts`, wher
 
 - **Invite (`/join`):**
   1. The page reads `code` and writes `sessionStorage["wsb:pendingInviteCode"]`, then calls `history.replaceState(null, "", "/join")`, so the code leaves the address bar and history.
-  2. Signed out: the page shows "Sign in with Google to join" and sends the user to `/login?next=/join`.
-  3. Signed in: `POST /invites/preview` shows the church and role, then **Join** calls `POST /invites/accept`, clears the key, invalidates `["me"]`, selects the new church, and goes to `/builder`.
+  2. Signed out: the page shows "Sign in with Google to see and accept your invite to Worship Service Builder." and sends the user to `/login?next=/join`.
+  3. Signed in: `POST /invites/preview` shows the church and role, then **Join** calls `POST /invites/accept`, clears the key, invalidates `["me"]`, selects the new church, and goes to `/` (slice 2 makes `/` redirect to `/builder`).
   4. Rejections show the server message plus "Ask for a new invite link."
   5. A signed-in user with churches can join too (owner decision 9).
 
-  **Open item: owner sign-off required before 1b merges.** Step 3's explicit **Join** tap departs from the wording of owner decision 6 ("opening the link (signing in if needed) joins the church"). It is proposed as a safeguard, so that a forwarded or mistaken bearer link never joins anyone silently. This is not settled until the owner answers:
-  - **If the owner approves,** record the approval here, and this step becomes an amendment to decision 6.
-  - **If the owner declines,** step 3 becomes: signed in, `/join` calls `POST /invites/accept` right after sign-in, with no preview and no tap (slice 1's `JoinInvite autoAccept` fallback), then clears the key, invalidates `["me"]`, selects the church and goes to `/builder`. The preview remains only for a code pasted on the Welcome tab. The rejection and email-mismatch cards are unchanged. Slice 1 then updates Flow B, behavior change 4 and the `/join` DOM tests to match.
+  **Amendment to owner decision 6.** Preview then Join approved by the owner on 2026-09-26 (amendment to decision 6). Step 3's explicit **Join** tap departs from the wording of decision 6 ("opening the link (signing in if needed) joins the church") as a safeguard, so that a forwarded or mistaken bearer link never joins anyone silently. There is no auto-accept fallback: a code pasted on the Welcome tab gets the same preview and tap.
 - **Post-login path:**
   - `/login` validates `next` with `safeInternalPath()`:
     - it must start with a single `/`, with no `//`, no `\` and no scheme;
     - its prefix must be one of `/join`, `/builder`, `/services`, `/settings`, `/welcome`.
   - `/login` stores the validated path in `sessionStorage["wsb:postLoginPath"]` before starting OAuth.
-  - `/auth/callback` still redirects to `/`. The root reads, clears and follows the stored path.
+  - `/auth/callback` still redirects to `/`. The `(signed-in)` layout reads the stored path, clears it, then follows it (*amendment 2026-09-28, slice 1b*: not the root, because the `(church)` layout would first send a zero-church user to `/welcome`; clearing before following keeps a path with no route yet from redirecting every visit).
   - Nothing new is added to Supabase's redirect allow-list.
 - **Gmail:**
   1. Before redirecting to Google, the app stores the current path in `sessionStorage["wsb:gmailReturnTo"]` and opens consent **in the same tab**. The draft lives in localStorage, so no work is lost.
@@ -1128,8 +1132,9 @@ After every merge until slice 7, also run one Streamlit check (§6.3).
    - Otherwise (it fixes an app's GitHub coordinates, as the slice 0 spec notes for the entrypoint path): copy the app's secrets, delete the app, then redeploy from `streamlit-frozen` / `app.py` with the **same subdomain** and secrets.
    - Delete `liturgy-stg`: there is no Streamlit development left to stage.
    - The tester's URL stays the same.
+   - *(Amendment 2026-09-28, slice 1b.)* In the event, production moved to https://liturgy-frozen.streamlit.app/ (branch `streamlit-frozen`) on 2026-09-26 and stays there; `liturgy` and `liturgy-next` are deleted, so the tester's URL changed once (ops runbook → Streamlit apps). Item 6's contingency is not in effect.
 3. **Header comment.** On `main`, add a header comment to `app.py`: "FROZEN — production runs from branch streamlit-frozen; deleted in slice 7."
-4. **Keep-awake.** Update `keep-awake.yml` to ping only `liturgy.streamlit.app`.
+4. **Keep-awake.** Update `keep-awake.yml` to ping only the production Streamlit app, https://liturgy-frozen.streamlit.app/ (*amendment 2026-09-28, slice 1b*).
 5. **Policy:**
    - Only **data-safety fixes** (data loss, corruption, leakage, security) go into `streamlit-frozen`, as PRs into that branch; CI runs on them.
    - One planned exception: the switchover banner (§6.3).
@@ -1257,13 +1262,13 @@ graph LR
 | Risk | Slice(s) | Resolution |
 |---|---|---|
 | Repos trust `church_id` | 1 (guard test + isolation helper), then every slice | §1.2 |
-| Global lookups exposed (`get_user_by_email`, `get_invite_by_code`) | 1 (preview returns only church name, role, expiry, email-bound), 6b | Never exposed beyond that |
+| Global lookups exposed (`get_user_by_email`, `get_invite_by_code`) | 1 (preview returns only church name, role, expiry, email-bound and `already_member`: *amendment 2026-09-28, slice 1b*), 6b | Never exposed beyond that |
 | Ownership integrity (admins grant or revoke owner, non-atomic transfer, invite roles, at least one owner) | 6b | `require_owner`, truth-table policy, atomic transfer, CHECK constraint, one-owner check |
 | Invite codes as bearer secrets | 1 (POST bodies, history replace, no logging), 6b (single-use default) | §1.1, §4.3. Vercel request logs will see `/join?code=`; single-use limits the exposure. |
 | Permission parity (members see emails, edit or delete services and hymns, send email) | 5a, 5b, 6a, 6b | Owner decision 5 as specified; service delete needs confirmation |
 | User upsert race | ops | §2.4 |
 | `record_usage` check-then-insert race; NULL-number duplicates | 5a | Replace usage for the date in the save transaction (delete, then insert with ON CONFLICT DO NOTHING) |
-| Concurrent `accept_invite` hits the memberships primary key | 1 | IntegrityError on the membership insert counts as success |
+| Concurrent `accept_invite` hits the memberships primary key | 1 | `claim` (a conditional UPDATE) stamps a single-use invite once, and `ensure_membership` inserts with `insert_ignore`, so a concurrent accept never reaches the primary key; Postgres race tests (*amendment 2026-09-28, slice 1b*) |
 | `_merge_settings` read-modify-write | 6a | `FOR UPDATE` merge (§1.7) |
 | `update_service` last write wins | 5a | `If-Match` → 409 (§1.7) |
 | Non-atomic multi-step writes | 1 (pattern), 5a, 6a, 6b | Usecase-owned transactions (§2.2) |

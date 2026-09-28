@@ -48,4 +48,24 @@ describe("ErrorState", () => {
 
     expect(screen.getByRole("alert")).toHaveTextContent(/^Something went wrong\. \(Ref: 01234567\)$/);
   });
+
+  it("while retrying, Retry is disabled and busy, so a repeat tap does nothing", async () => {
+    const user = userEvent.setup();
+    const onRetry = vi.fn();
+    const { rerender } = render(
+      <ErrorState error={new ApiError(503, "auth_unavailable", "Try again shortly.")} onRetry={onRetry} retrying />,
+    );
+
+    const retry = screen.getByRole("button", { name: "Retry" });
+    expect(retry).toBeDisabled();
+    expect(retry).toHaveAttribute("aria-busy", "true");
+    await user.click(retry);
+    expect(onRetry).not.toHaveBeenCalled();
+
+    rerender(
+      <ErrorState error={new ApiError(503, "auth_unavailable", "Try again shortly.")} onRetry={onRetry} retrying={false} />,
+    );
+    expect(screen.getByRole("button", { name: "Retry" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Retry" })).not.toHaveAttribute("aria-busy");
+  });
 });

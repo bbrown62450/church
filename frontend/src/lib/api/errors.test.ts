@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { ApiError } from "./client";
-import { describeError, isNoChurchAccess } from "./errors";
+import { ApiError, NETWORK_MESSAGE } from "./client";
+import { describeError, errorToastMessage, isNoChurchAccess } from "./errors";
 
 describe("isNoChurchAccess", () => {
   it("is true for a require_church 403", () => {
@@ -44,5 +44,29 @@ describe("describeError", () => {
     expect(describeError(new ApiError(409, "conflict", "Someone else changed this."))).toBe("Someone else changed this.");
     expect(describeError(new TypeError("x is undefined"))).toBe("Something went wrong.");
     expect(describeError("boom")).toBe("Something went wrong.");
+  });
+});
+
+describe("errorToastMessage", () => {
+  it("uses the full sentence for a network error, a timeout or a cancel", () => {
+    expect(errorToastMessage(new ApiError(0, "network_error", NETWORK_MESSAGE))).toBe(
+      "Can't reach the server. Check your connection and try again.",
+    );
+    expect(errorToastMessage(new ApiError(0, "timeout", "This is taking too long. Try again."))).toBe(
+      "This is taking too long. Try again.",
+    );
+    expect(errorToastMessage(new ApiError(0, "aborted", "The request was cancelled."))).toBe("The request was cancelled.");
+  });
+
+  it("falls back to describeError: a 5xx reference, a 4xx message, a generic line", () => {
+    const withRef = new ApiError(500, "internal_error", "Something went wrong.", { requestId: "0123456789abcdef" });
+    expect(errorToastMessage(withRef)).toBe("Something went wrong. (Ref: 01234567)");
+    expect(errorToastMessage(new ApiError(503, "db_unavailable", "The database is not reachable."))).toBe(
+      "Something went wrong.",
+    );
+    expect(errorToastMessage(new ApiError(400, "invite_rejected", "This invite has expired."))).toBe(
+      "This invite has expired.",
+    );
+    expect(errorToastMessage(new TypeError("x is undefined"))).toBe("Something went wrong.");
   });
 });

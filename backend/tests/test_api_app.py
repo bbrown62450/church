@@ -272,10 +272,13 @@ def test_routes_document_the_error_body():
         ("/church", "get"): {"401", "403", "422", "503"},
         ("/rubric", "get"): {"401", "403", "422", "503"},
         ("/rubric", "patch"): {"401", "403", "422", "503"},
+        ("/churches", "post"): {"401", "422", "429", "503"},
+        ("/invites/preview", "post"): {"400", "401", "422", "503"},
+        ("/invites/accept", "post"): {"400", "401", "422", "503"},
     }
     for (path, method), statuses in expected.items():
         responses = schema["paths"][path][method]["responses"]
-        assert set(responses) - {"200"} == statuses, (path, method)
+        assert set(responses) - {"200", "201"} == statuses, (path, method)   # minus the success status
         for status in statuses:
             assert responses[status]["content"]["application/json"]["schema"] == {
                 "$ref": "#/components/schemas/ErrorBody"}

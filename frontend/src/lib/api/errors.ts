@@ -84,3 +84,16 @@ export function describeError(e: unknown): string {
   }
   return e.message;
 }
+
+/**
+ * The sentence a toast shows for a failed mutation (1b clarification 24). A network error,
+ * timeout or cancel keeps its own full sentence, which says what to do ("Can't reach the
+ * server. Check your connection and try again."); anything else is `describeError(e)`.
+ * An inline `ErrorState` keeps `describeError`'s short "Can't reach the server.".
+ */
+export function errorToastMessage(e: unknown): string {
+  if (e instanceof ApiError && (e.code === "network_error" || e.code === "timeout" || e.code === "aborted")) {
+    return e.message;
+  }
+  return describeError(e);
+}
