@@ -117,11 +117,15 @@ class TTLCache(Generic[K, V]):
         flight.value = value
         flight.error = error
         with self._lock:
-            if ttl > 0:
-                self._entries[key] = (self._clock() + ttl, value, error)
-                self._entries.move_to_end(key)
-                while len(self._entries) > self._maxsize:
-                    self._entries.popitem(last=False)
-            if self._flights.get(key) is flight:
-                del self._flights[key]
-        flight.done.set()
+            try:
+                if ttl > 0:
+                    self._entries[key] = (self._clock() + ttl, value, error)
+                    self._entries.move_to_end(key)
+                    while len(self._entries) > self._maxsize:
+                        self._entries.popitem(last=False)
+            finally:
+                # Always end the flight, or its waiters and every later
+                # caller for this key would block forever.
+                if self._flights.get(key) is flight:
+                    del self._flights[key]
+                flight.done.set()
