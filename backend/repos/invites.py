@@ -1,13 +1,13 @@
 import secrets
 from datetime import datetime, timezone, timedelta
-from typing import Optional, Tuple
+from typing import Optional
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from db import session_scope
 from db.ids import as_uuid
-from db.models import Invite, Church, Membership, User
+from db.models import Invite
 
 
 def _normalize_email(email) -> Optional[str]:
@@ -129,52 +129,6 @@ def claim(invite_id, user_id, now: datetime, *, session: Optional[Session] = Non
         return session.execute(stmt).rowcount == 1
     with session_scope() as own:
         return own.execute(stmt).rowcount == 1
-
-
-def accept_invite(code, user_id) -> Tuple[bool, str]:
-    """Accept an invite for user_id. Returns (ok, message). No enumerable
-    difference between distinct failure causes beyond the message text.
-
-    Rejects: unknown/revoked/expired codes; a soft-deleted church; email-bound
-    codes whose email does not match the accepting user, or that were already
-    used (single-use). Accepting when already a member is a no-op success.
-    """
-    now = datetime.now(timezone.utc)
-    with session_scope() as session:
-        inv = session.execute(
-            select(Invite).where(Invite.code == code)
-        ).scalar_one_or_none()
-        if inv is None:
-            return (False, "Invalid invite code.")
-        if inv.revoked:
-            return (False, "This invite has been revoked.")
-        if inv.expires_at is not None and _as_utc(inv.expires_at) < now:
-            return (False, "This invite has expired.")
-
-        email_bound = inv.email is not None
-        if email_bound and inv.accepted_at is not None:
-            return (False, "This invite has already been used.")
-
-        church = session.get(Church, inv.church_id)
-        if church is None or church.deleted_at is not None:
-            return (False, "This church is no longer available.")
-
-        if email_bound:
-            user = session.get(User, user_id)
-            user_email = user.email if user is not None else None
-            if user_email is None or user_email.strip().lower() != inv.email:
-                return (False, "This invite was issued for a different email address.")
-
-        existing = session.get(
-            Membership, {"church_id": inv.church_id, "user_id": user_id}
-        )
-        if existing is None:
-            session.add(Membership(
-                church_id=inv.church_id, user_id=user_id, role=inv.role
-            ))
-        if email_bound:
-            inv.accepted_at = now  # single-use for email-bound invites
-        return (True, f"Joined {church.name}.")
 
 
 def list_invites(church_id) -> list:
