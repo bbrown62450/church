@@ -263,8 +263,13 @@ Config-as-code path was entered and never took). The file keeps the same two
 values as a record; change it and the UI together. The start command stays
 in `backend/Procfile`. Set both immediately before merging, so the merge
 deploy is the first to use them. The release serving now is not affected: it
-has had `/health/ready` since ops-3. Do not redeploy it once the Pre-deploy
-Command is set: it has no Alembic, so its pre-deploy step would fail.
+has had `/health/ready` since ops-3. Railway stages both edits. Its
+staged-changes banner's Deploy redeploys the release serving now, and that
+deploy's pre-deploy step fails (the release has no Alembic) while the
+previous deployment keeps serving. This order has not been tried: on
+2026-09-27 the Healthcheck Path was deployed before the merge (the pre-1a
+release went Active), and the Pre-deploy Command was set after the failed
+merge deploy, then the merge deployment was redeployed (step 8).
 
 ### Step 8: Merge and watch the deploy
 
