@@ -190,6 +190,39 @@ curl -s -X POST https://tbecmwtitsoxzkrvxxxu.supabase.co/graphql/v1 \
 table, and turn the Data API back on. The REVOKEs need no rollback, because no
 app uses those roles.
 
+### Alembic stamping record (slice 1a)
+
+Slice 1a's production runbook (`backend/migrations/README.md` → Production
+runbook, steps 0–10) and its manual check (`docs/manual-verification.md` →
+Slice 1). Step 2 above said yes, so the choice step 3 left to slice 1
+(transferring table ownership or adding policies) never arose, and slice 1a
+needs neither: `postgres`, the role both apps connect as through the session
+pooler, owns every `public` table and has BYPASSRLS. RLS with no policies
+therefore stays deny-all for `anon` and `authenticated` and hides no row from
+the apps. `0003_lockdown` checks that before it changes anything, repeated the
+lockdown idempotently and also enabled RLS on `alembic_version`. If a table is
+ever owned by another role, follow `backend/migrations/README.md` → RLS
+precondition before any migration runs. Steps 7 and 8 went differently from
+the runbook: Railway's Config as Code is closed to this service, so the
+pre-deploy command and the health check path are set in the Railway UI.
+
+| Step | Result | Date |
+|---|---|---|
+| 0. RLS precondition rerun in the SQL Editor (step 2's two queries above) | 11 `public` tables, every one owned by `postgres`; `current_user`, `rolbypassrls`: `postgres`, `true`. Proceed (no ownership transfer, no policy). No table without RLS before the stamp. | 2026-09-27 |
+| 1. Backup | `db-backup` run, green (see Backup run record) | 2026-09-27 |
+| 2. `SHOW server_version;` | `17.6`; major 17 = `PG_MAJOR` and the CI image `postgres:17` | 2026-09-27 |
+| 3. `alembic current` before stamping | No revision; the `Database:` line named the session pooler | 2026-09-27 |
+| 4. `alembic stamp 0001_baseline` | `Running stamp_revision  -> 0001_baseline`; `alembic current` then showed `0001_baseline` | 2026-09-27 |
+| 5. `alembic upgrade 0001_baseline:head --sql` | Read by the owner. `BEGIN;` first, `COMMIT;` last; 0 `CREATE TABLE`, 4 `ADD COLUMN IF NOT EXISTS`, 3 `UPDATE alembic_version`, no `Database:` line; SHA-256 `1988eb3de35d7e0eb651c4c5a8d5c71ff6e0314ff301f91eb2e29ec2f0e0582f`, equal to the reference rendered offline from PR #16's head `2376b6a` | 2026-09-27 |
+| 6. `scripts/schema_drift.py` | `revision: 0001_baseline head: 0004_invites_reusable state: behind`, then `add_column invites.accepted_by`, `add_column invites.reusable`, `add_fk fk_invites_accepted_by_users` and `add_index ix_hymns_church_hymnal` (the index was missing in production; `0002_reconcile` creates it at the deploy); exit 1; no `text_year` or `hymnal_count` | 2026-09-27 |
+| Branch protection on `main` | Required checks `backend`, `backend-postgres`, `frontend` (classic rule, set by the agent on the owner's yes; branches must be up to date; a PR is required, with 0 approvals; admins not enforced); `gh pr checks 16 --required` listed all three, passing | 2026-09-27 |
+| 7. Railway → the API service → Settings, immediately before merging | Deploy → Healthcheck Path `/health/ready` (was `/health`), set in the UI. The Config-as-code path `/backend/railway.toml` was entered and confirmed by the owner, but it never took: Railway has deprecated Config as Code, and since 2026-08-28 "services that have never used Config as Code cannot opt in". So Railway never read the file's pre-deploy command; the owner set Deploy → Pre-deploy Command `alembic upgrade head` in the UI after the first merge deploy (step 8). A staged deploy of the pre-1a release went Active, and `/health/ready` → `{"ok":true,"db":"ok"}` afterwards. | 2026-09-27 |
+| 8. Merge and deploy | PR #16 merged 2026-09-28T00:34:57Z (2026-09-27 20:34 EDT), merge commit `7ea7f55`. First merge deploy (20:35 EDT): no pre-deploy step; startup logged `schema revision 0001_baseline != head 0004_invites_reusable` at ERROR and `Row-level security is off on: alembic_version` at WARNING; the `/health/ready` health check failed (14 attempts, HTTP 503), so Railway kept the previous release serving; the database stayed at `0001_baseline`, with nothing applied. Fix: Settings → Deploy → Pre-deploy Command `alembic upgrade head`, set in the UI; then Redeploy of the merge deployment: Active. The new release serves (`ErrorBody` in `/openapi.json`); `/health/ready` → `{"ok":true,"db":"ok"}`, `/health` → `{"ok":true}`, `/me` signed out → 401 `unauthenticated` with `request_id`; Vercel production Ready; CI on the merge commit green (run 36362737497: `backend`, `backend-postgres`, `frontend`). The redeploy's `Running upgrade` lines were not recorded; step 9 (`alembic current` at `0004_invites_reusable (head)`) shows the upgrade ran. | 2026-09-27 |
+| 9. `alembic current`, `alembic check`, `scripts/schema_drift.py` | `0004_invites_reusable (head)`; `No new upgrade operations detected.`; `revision: 0004_invites_reusable head: 0004_invites_reusable state: current`, exit 0 (run from the owner's laptop) | 2026-09-27 |
+| 10. Streamlit smoke on https://liturgy-frozen.streamlit.app/ | Sign-in, church and hymnal, a saved service and Settings OK; Settings → Invites → Create invite (no email, member) and Revoke worked; the latest invite's `reusable`, `accepted_by`, `revoked`: `false`, `NULL`, `true` (the frozen app's insert got the new server default); no `public` table without RLS (`alembic_version` included); no code pull in its logs after the 20:34 EDT merge, branch still `streamlit-frozen` | 2026-09-27 |
+| Keepalive run by hand | https://github.com/bbrown62450/church/actions/runs/36363728870: green, `{"ok":true,"db":"ok"}` from the 1a release | 2026-09-27 |
+| Manual check 1 (at 375 px and on desktop) | Owner's account, on desktop and at 375 px (iPhone SE): sign-in, home shows the church, the church menu lists the churches with the role, the account menu shows name, email and `Role: Owner`, Log out returns to `/login`: all OK. The check with an account in no church (the stub `/welcome`) was skipped by the owner. | 2026-09-27 |
+
 ## Backups
 
 - **Workflow:** `.github/workflows/backup.yml` (`db-backup`). Daily at 08:37 UTC,
@@ -285,6 +318,7 @@ key file is left on disk.
 | Date | Run | Result |
 |---|---|---|
 | 2026-09-26 (first manual run after ops-1) | https://github.com/bbrown62450/church/actions/runs/36261197972 | Green. Artifact `db-backup` (225,686 bytes, encrypted), expires 2026-10-26. A scan of the public log found no database host, user, URL, `PGPASSWORD` or private-key text; 4 values were masked as `***`. |
+| 2026-09-27 (slice 1a runbook step 1, before stamping) | https://github.com/bbrown62450/church/actions/runs/36362040801 | Green. Artifact `db-backup` (225,690 bytes, encrypted), expires 2026-10-28. The log shows no URL or pooler host. |
 
 ## Keep-alive
 
