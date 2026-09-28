@@ -1,7 +1,9 @@
-"""Slice 1a docs: the Alembic production runbook in backend/migrations/README.md,
-the ops-runbook health-check lines, the README's Alembic notes and the manual
+"""Slice 1 docs: the Alembic production runbook in backend/migrations/README.md,
+the ops-runbook health-check lines, the README's Alembic notes, the manual
 "Slice 1" checks (slice 1 spec → Production runbook, Local dev, Manual checks
-item 1; F §3.3, §5.5).
+items 1–11; F §3.3, §5.5) and slice 1b's foundations amendments (F §4.3
+preview then Join, approved 2026-09-26, and the six docs-only fixes of the
+slice 1b plan's owner answer 3).
 
 Text is compared whitespace-collapsed (`_flat`), so rewrapping a paragraph
 never breaks a test; fenced output blocks are compared exactly.
@@ -17,6 +19,12 @@ RUNBOOK = ROOT / "docs" / "ops-runbook.md"
 README = ROOT / "README.md"
 MANUAL_VERIFICATION = ROOT / "docs" / "manual-verification.md"
 BACKUP_YML = ROOT / ".github" / "workflows" / "backup.yml"
+SPECS = ROOT / "docs" / "superpowers" / "specs"
+FOUNDATIONS = SPECS / "2026-09-25-migration-foundations-design.md"
+SLICE_1_SPEC = SPECS / "2026-09-25-slice-1-onboarding-design.md"
+JOIN_TAP_APPROVAL = (
+    "Preview then Join approved by the owner on 2026-09-26 (amendment to decision 6)"
+)
 
 RUNBOOK_STEPS = (
     "### Step 0: RLS precondition",
@@ -179,6 +187,46 @@ def test_manual_verification_has_the_slice_1_section():
     assert "liturgy-next" not in section
     assert section.count("- [ ] ") == 3
     assert "- [x]" not in section
+
+
+def test_foundations_records_the_join_tap_amendment():
+    # Slice 1b plan, owner answers 1 (behavior change 4 approved on 2026-09-26)
+    # and 3 (six docs-only F fixes); the slice 1 spec closes its open items.
+    text = _read(FOUNDATIONS)
+    flat = _flat(text)
+    d14 = _flat(next(line for line in text.splitlines() if line.startswith("| D14 |")))
+    amendments = _section(text, "## Amendments from slice specs")
+    rows_43 = [_flat(line) for line in amendments.splitlines() if line.startswith("| §4.3 |")]
+    sign_in = _flat(_section(text, "### 4.3 Sign-in continuity"))
+    assert JOIN_TAP_APPROVAL in d14
+    assert len(rows_43) == 1 and JOIN_TAP_APPROVAL in rows_43[0]
+    assert JOIN_TAP_APPROVAL in sign_in
+    for gone in (
+        "owner sign-off",
+        "autoAccept",
+        "Sign in with Google to join",
+        "The root reads, clears and follows",
+        "reason_code",
+        "IntegrityError on the membership insert counts as success",
+        "set to `/backend/railway.toml` by hand",
+        "ping only `liturgy.streamlit.app`",
+    ):
+        assert gone not in flat, gone
+    assert "Sign in with Google to see and accept your invite to Worship Service Builder." in sign_in
+    assert "The `(signed-in)` layout reads the stored path, clears it, then follows it" in sign_in
+    assert "The key scope has no church." in _flat(_section(text, "### 1.6 Idempotency"))
+    assert "Config as Code is closed to this service" in _flat(
+        _section(text, "### 3.3 How migrations run"))
+    assert "https://liturgy-frozen.streamlit.app/" in _section(text, "### 6.1 The freeze (ops slice)")
+    risks = _section(text, "### 7.4 Inventory §4 cross-cutting risks").splitlines()
+    lookups = next(line for line in risks if line.startswith("| Global lookups exposed"))
+    accept = next(line for line in risks if line.startswith("| Concurrent `accept_invite`"))
+    assert "`already_member`" in lookups
+    assert "`claim`" in accept and "`insert_ignore`" in accept
+    slice_1 = _read(SLICE_1_SPEC)
+    for gone in ("autoAccept", "behavior change 4 fallback", "If the owner declines", "Open, owner"):
+        assert gone not in slice_1, gone
+    assert "Resolved (owner, 2026-09-26)" in slice_1
 
 
 def test_readme_documents_alembic_for_local_dev():
