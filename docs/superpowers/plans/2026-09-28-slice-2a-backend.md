@@ -12728,6 +12728,13 @@ What changed while Tasks 1 to 11 were built. The tasks above are left as planned
 - **Passages:** a bible-api 200 whose `text` is not a string, or an ESV 200 of the wrong shape, is `unavailable` and not cached. The 20 s deadline is counted from submission to the pool, microseconds after the request starts.
 - **Idempotency key:** the frontend keeps the key after a 429 (a 429 is never stored), and F §1.6's "rotate after any 4xx" now names that exception.
 - **Logging:** "logs never contain query strings" means our own log lines. Uvicorn's access log records path and query (no secrets travel there). Pool threads copy the request context, so their log lines keep the request id rather than `request_id=-`.
+- **Task 14 Step 6 log gate:** it now finds 7 log calls, not 5. `lectio_groups_capped` and `reading_sets_capped` were added with the caps of 10; both carry counts only.
+- **Task 14 Step 5 `date param` line:** it also lists `('authorization', 'header', False, None)`, which every authenticated route has carried since before 2a.
+- **Lectionary pools (owner decision 1, final review):** Lectio and Vanderbilt each have their own module-level pool of 4 workers (`_LECTIO_POOL`, `_VANDERBILT_POOL`), and a source task not yet started at the deadline is cancelled. With one shared pool, single-flight waiters for one slow Vanderbilt year held every worker, so Lectio lookups queued past the deadline and users got a 504 instead of a partial 200. `reset_for_tests()` joins and rebuilds both pools.
+- **Part cache size:** a bible-api part text over 64 KB (`PART_CACHE_MAX_TEXT_BYTES`) is returned but not cached, so the 2000-entry, 7-day cache stays bounded in memory.
+- **Test fixtures:** `_fresh_passages_pool` (Task 10) was removed as a duplicate. `_fresh_passage_cache` already calls `usecases.passages.reset_for_tests()`, which joins the pool before the part cache is replaced. Where this plan names `_fresh_passages_pool`, read `_fresh_passage_cache`.
+- **httpx pin (known risk, left as is):** `backend/requirements.txt` leaves httpx unpinned (`>=0.25.0`) while the tests use respx (`respx>=0.22` in `requirements-dev.txt`, 0.23.1 installed). A future httpx release could break the respx mocks in CI. Left as is because this plan keeps `backend/requirements.txt` untouched.
+- **Lectio budget (spec's choice):** Lectio has no process-wide upstream budget, and every user shares one Railway IP, so a burst of cold lookups all reach lectio-api.org from one address.
 
 ## Spec coverage
 

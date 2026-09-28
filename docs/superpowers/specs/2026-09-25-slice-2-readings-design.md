@@ -286,7 +286,7 @@ class ChurchProfileOut(ChurchOut):              # ChurchOut = {id, name, role}; 
   - With no sets and no failure, status is `no_readings`.
   - A source *fails* on a network error, a timeout, 403, 5xx, 429, a wrong content type, or a CSV with no header or one the parser rejects (2a build). A source reports *none* on a Lectio 404 or empty `data`, a Vanderbilt 404 for the year file, or a file with no row on that date.
 - **`POST /scripture/passages`** (the same derivation at every level):
-  - **Part** (one upstream call; see `fetch_passage`): `ok` with text; `not_found` (bible-api 404, or ESV returning no passages); or `unavailable` (network, timeout, 5xx, 429, the process-wide upstream budget exhausted, the request deadline reached before the part ran, or a 200 whose body can't be read: a bible-api `text` that is not a string, or an ESV body of the wrong shape; 2a build). An unreadable 200 is not cached.
+  - **Part** (one upstream call; see `fetch_passage`): `ok` with text; `not_found` (bible-api 404, or ESV returning no passages, or a bible-api 200 with empty text); or `unavailable` (network, timeout, 5xx, 429, the process-wide upstream budget exhausted, the request deadline reached before the part ran, or a 200 whose body can't be read: a bible-api `text` that is not a string, or an ESV body of the wrong shape; 2a build). An unreadable 200 is not cached.
   - **Section** (one " or " alternative): `ok` when every part is `ok`; otherwise `unavailable` if any part is `unavailable`; otherwise `not_found`. Its `text` is the texts of its `ok` parts in order, joined with blank lines, or `None` when no part is `ok`. A section with some parts missing therefore keeps the parts that loaded and carries a non-`ok` status.
   - **Passage**: the same rule over its sections. Every section is always returned, with whatever text it has.
 - **Rate-limit body:** `{"error": {"code": "rate_limited", "message": "Too many requests. Try again in {n} seconds.", "request_id": …, "details": {"retry_after_seconds": n}}}`, plus the header `Retry-After: n`. It is slice 1's `domain_errors.RateLimited` rendered by slice 1's `DomainError` handler, which always adds `details.retry_after_seconds` and `Retry-After`; slice 1's durable church cap produces the same shape with its own message.
@@ -584,13 +584,13 @@ def readings_for_date(d: date) -> LectionaryResult
 ```
 
 1. If `d.year` is outside 1900–2199, raise `InvalidInput("Enter a date between 1900 and 2199.", field="date")` (message first, as `DomainError` takes it; 2a plan).
-2. In parallel, on a module-level `ThreadPoolExecutor(max_workers=4)`:
+2. In parallel, each source on its own module-level `ThreadPoolExecutor(max_workers=4)` (2a build: one pool per source):
    - `_LECTIO.get_or_load(d, lambda: load_lectio(d))`, with `TTLCache(maxsize=512, ttl_ok=24 h, ttl_fail=5 min)`;
    - `y = liturgical_year_for(d)`; `_VANDERBILT.get_or_load(y, lambda: load_vanderbilt_year(y))`, with `TTLCache(maxsize=8, 24 h, 5 min)`.
 
    Each source's outcome is `ok` (a value), `none` (`None` / `[]`, a definitive none cached as an ok value for 24 h) or `failed` (a `SourceFailed`, from the loader or re-raised from the cache). The worst case is ~15 s, down from ~35 s sequential (inv. C1).
 
-   **Source deadline (2a plan).** Both futures are awaited with `concurrent.futures.wait(..., timeout=DEADLINE_SECONDS)`, 20 s. A source still running then is `SourceFailed(timeout=True)` for this request; its loader keeps running and caches its own outcome. The ~15 s worst case holds only for an idle pool: single-flight waiters for one Vanderbilt year sit inside the 4 workers, so concurrent cold lookups can queue a Lectio task, and the deadline keeps every request inside the 25 s client timeout, at the cost of a `partial` 200 or a 504 under that load.
+   **Source deadline (2a plan).** Both futures are awaited with `concurrent.futures.wait(..., timeout=DEADLINE_SECONDS)`, 20 s. A source still running then is `SourceFailed(timeout=True)` for this request; its loader keeps running and caches its own outcome. The ~15 s worst case holds only for idle pools: single-flight waiters for one Vanderbilt year sit inside the Vanderbilt pool's 4 workers, so concurrent cold lookups can queue Vanderbilt tasks, and the deadline keeps every request inside the 25 s client timeout. Because each source has its own pool (2a build), those waiters never hold a Lectio worker, so under that load a request still gets Lectio's sets as a `partial` 200 rather than a 504. A source task not yet started at the deadline is cancelled (2a build).
 3. Compute `v_sets = [s for s in vanderbilt_sets_on(rows, d) if fits_draft_limits(s)]`, filter the Lectio groups the same way, and `sets, default = merge(...)`.
 4. Apply the status rules in §API.
    - 502: `UpstreamError("The lectionary couldn't be reached. Enter readings yourself, or try again in a few minutes.", code="upstream_error")` (2a plan: message first, `code=` by keyword)
@@ -611,7 +611,7 @@ No database access. The route is user-guarded because the lectionary is global d
   - This replaces the minimal `%20` encoding (lines 65-69).
 - **ESV part:** `budget.try_acquire("esv")` first (no token → `unavailable`); the parameters are unchanged (lines 91-98), with `q=` the normalized part and a 10 s timeout. `passages: []` → `not_found`.
 - **Cache:**
-  - bible-api parts: `TTLCache(maxsize=2000, ttl_ok=7 days)`, keyed by `(translation, normalized part)`. A not-found result is cached as ok (24 h is enough; use the same cache with value `NOT_FOUND`). Transient failures are **not** cached, so "Try again" works.
+  - bible-api parts: `TTLCache(maxsize=2000, ttl_ok=7 days)`, keyed by `(translation, normalized part)`. A not-found result is cached as ok (24 h is enough; use the same cache with value `NOT_FOUND`). Transient failures are **not** cached, so "Try again" works. A part text over 64 KB is returned but not cached, so the cache stays bounded in memory (2a build).
   - **ESV: never cached** (Crossway terms, F §2.7).
 - **`plan_passages(refs, translation) -> PassagePlan`** (validation; called by the route before it charges the bucket):
   - `refs == []` or any ref blank after trimming → `InvalidInput("Enter a scripture reference.", field="refs")` (2a plan: message first, `field=` by keyword);
