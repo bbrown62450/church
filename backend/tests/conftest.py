@@ -205,6 +205,48 @@ def _fresh_http_client():
     yield
 
 
+# --- slice 2a: rate limits and upstream budgets (F §1.8; S "Rate-limit buckets", "Upstream budgets") ---
+
+@pytest.fixture(autouse=True)
+def _fresh_rate_limits():
+    """The limiter's buckets and the upstream budgets are process-wide, and a
+    test's users or parts must never spend another test's tokens (slice 2a).
+    Both forget every spent token and go back on time.monotonic.
+
+    Resets only a module already imported: its state can exist only then (the
+    deferred-import rule at the top of this file)."""
+    import sys
+
+    for name in ("api.ratelimit", "integrations.budget"):
+        module = sys.modules.get(name)
+        if module is not None:
+            module.reset_for_tests()
+    yield
+
+
+@pytest.fixture
+def limiter_clock():
+    """Put api.ratelimit on a FakeClock (every caller starts full) and return the clock.
+
+    Nothing moves it but the test (clock.advance), so every wait is exact;
+    _fresh_rate_limits puts the next test back on time.monotonic."""
+    from api import ratelimit
+
+    clock = FakeClock()
+    ratelimit.set_clock_for_tests(clock.now)
+    return clock
+
+
+@pytest.fixture
+def budget_clock():
+    """Put integrations.budget on a FakeClock (every budget starts full) and return the clock."""
+    from integrations import budget
+
+    clock = FakeClock()
+    budget.set_clock_for_tests(clock.now)
+    return clock
+
+
 # --- slice 1: network-free tests and the Postgres test database (F §5.1, §5.3) ---
 
 _LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1")
