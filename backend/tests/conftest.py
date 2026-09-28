@@ -271,8 +271,11 @@ def _fresh_lectionary_caches():
 def _fresh_passage_cache():
     """scripture_fetcher keeps one process-wide bible-api part cache (7 days),
     and usecases.passages (Task 10) one worker pool (slice 2a). Each test
-    starts with a new, empty part cache on time.monotonic, so text or a
-    not-found stored by an earlier test never answers here.
+    starts with that pool joined and replaced and with a new, empty part
+    cache on time.monotonic, so no part blocked by an earlier test is still
+    running and text or a not-found stored by an earlier test never answers
+    here. This is the only reset for both (the separate pool fixture Task 10
+    added called the same reset a second time and was removed).
 
     usecases.passages goes first: its reset joins the pool, so a part still
     running from an earlier test finishes before the cache is replaced, and
@@ -285,26 +288,6 @@ def _fresh_passage_cache():
         module = sys.modules.get(name)
         if module is not None:
             module.reset_for_tests()
-    yield
-
-
-# --- slice 2a: the passages pool (S "Passages"; clarification 39) ---
-
-@pytest.fixture(autouse=True)
-def _fresh_passages_pool():
-    """usecases.passages runs every part on one module-level pool. Each test
-    starts with that pool joined (a part blocked by an earlier test's event
-    has finished) and replaced, and with a new part cache, which
-    reset_for_tests() rebuilds after the join, so no straggler writes into
-    this test's cache whatever order the autouse fixtures run in.
-
-    Resets only when usecases.passages is already imported (the
-    deferred-import rule at the top of this file)."""
-    import sys
-
-    passages = sys.modules.get("usecases.passages")
-    if passages is not None:
-        passages.reset_for_tests()
     yield
 
 
