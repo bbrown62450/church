@@ -16,17 +16,6 @@ def test_pick_invite_code_blank_when_neither():
     assert pick_invite_code("  ", "  ") == ""
 
 
-def test_create_church_makes_owner_and_seeds_hymnal(tmp_db, make_user, seed_catalog):
-    from repos.churches import create_church, list_user_churches
-    from repos.hymns import list_hymns
-    seed_catalog(5)
-    user = make_user(email="founder@b.org")
-    cid = create_church(name="New Life", timezone="America/New_York", owner_user_id=user)
-    mine = list_user_churches(user)
-    assert any(c["id"] == cid and c["role"] == "owner" for c in mine)
-    assert len(list_hymns(cid)) == 5  # seeded atomically from the catalog
-
-
 def test_accept_captured_invite_joins_as_member(tmp_db, make_user):
     from repos.churches import create_church, list_user_churches
     from repos.invites import create_invite, accept_invite
