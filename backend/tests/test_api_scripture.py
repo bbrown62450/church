@@ -175,7 +175,9 @@ def test_61st_one_part_call_429(cors_client, calls, limiter_clock):
     body = {"refs": ["John 3:16"], "translation": "web"}
     for n in range(60):
         assert cors_client.post(PATH, json=body, headers=headers).status_code == 200, n
-    _assert_rate_limited(cors_client.post(PATH, json=body, headers=headers), 5)
+    # A part never fetched before, so a 429 that still loaded would show up in `calls`.
+    _assert_rate_limited(cors_client.post(PATH, json={"refs": ["Mark 1:1"], "translation": "web"},
+                                          headers=headers), 5)
     assert calls == ["john 3:16"]
 
 

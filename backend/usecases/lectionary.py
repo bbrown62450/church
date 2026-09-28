@@ -9,6 +9,7 @@ normalization and no nearest row (spec decision 8). No database access.
 """
 from __future__ import annotations
 
+import contextvars
 import dataclasses
 import logging
 import time
@@ -119,8 +120,10 @@ def readings_for_date(d: date) -> LectionaryResult:
         raise InvalidInput(DATE_OUT_OF_RANGE, field="date")
     started = time.monotonic()
     year = liturgical_year_for(d)
-    lectio_future = _POOL.submit(_load, _LECTIO, d, lambda: load_lectio(d))
-    vanderbilt_future = _POOL.submit(_load, _VANDERBILT, year, lambda: load_vanderbilt_year(year))
+    # Each source runs in a copy of this request's context, so its log lines keep the request id.
+    lectio_future = _POOL.submit(contextvars.copy_context().run, _load, _LECTIO, d, lambda: load_lectio(d))
+    vanderbilt_future = _POOL.submit(contextvars.copy_context().run, _load, _VANDERBILT, year,
+                                     lambda: load_vanderbilt_year(year))
     wait((lectio_future, vanderbilt_future), timeout=DEADLINE_SECONDS)
     lectio = _outcome(lectio_future)
     vanderbilt = _outcome(vanderbilt_future)

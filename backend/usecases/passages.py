@@ -15,6 +15,7 @@ scripture_fetcher's, re-exported under the same name.
 No FastAPI, no Streamlit (tests/test_no_streamlit_in_core.py). Exact
 messages come from DomainErrors (usecases/__init__.py).
 """
+import contextvars
 import logging
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass
@@ -125,7 +126,9 @@ def load_passages(plan: PassagePlan, *, deadline: float = DEADLINE_SECONDS) -> P
     finishes in the background, and its own cache entry (if any) still helps
     the next request. The deadline is counted from submission; planning and
     the rate-limit charge before it take microseconds."""
-    futures = [_POOL.submit(scripture_fetcher.fetch_part, part, plan.translation) for part in plan.parts]
+    # Each part runs in a copy of this request's context, so its log lines keep the request id.
+    futures = [_POOL.submit(contextvars.copy_context().run, scripture_fetcher.fetch_part, part, plan.translation)
+               for part in plan.parts]
     _done, not_done = wait(futures, timeout=deadline)
     for future in not_done:
         future.cancel()
