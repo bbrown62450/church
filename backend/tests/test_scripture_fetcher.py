@@ -157,6 +157,11 @@ def test_plan_parts_alternatives_joined_semicolons():
     assert sf.plan_parts("Genesis 1:1-2:4a and Psalm 136:1-9, 23-26") == [
         ["Genesis 1:1-2:4", "Psalm 136:1-9, 23-26"]]
     assert sf.plan_parts("Isaiah 50:4-9a") == [["Isaiah 50:4-9"]]
+    # Spellings only scripture_refs knows are sent under the book's name (owner 2026-09-28 aliases).
+    assert sf.plan_parts("Revelations 21:1-6; Rm 8:1 or Mat 5:1-12") == [
+        ["Revelation 21:1-6", "Romans 8:1"], ["Matthew 5:1-12"]]
+    assert sf.plan_parts("Php 2:5-11 and Jdg 4:1-7") == [["Philippians 2:5-11", "Judges 4:1-7"]]
+    assert sf.plan_parts("Eccles 3:1-13") == [["Ecclesiastes 3:1-13"]]
     assert sf.plan_sections("John 3:1-17 or Matthew 17:1-9") == [
         ("John 3:1-17", ["John 3:1-17"]), ("Matthew 17:1-9", ["Matthew 17:1-9"])]
     for empty in (";", " ; ", "", "   "):
@@ -272,9 +277,14 @@ def test_esv_empty_passages_not_found(monkeypatch):
     assert passage == sf.Passage("Hezekiah 1:1", "not_found", (
         sf.Section("Hezekiah 1:1", "not_found", None),))
     assert len(seen) == 1
+    # An ESV 200 of the wrong shape is unreadable, not "not found" (owner decision 1).
+    for odd in (["a"], {"x": 1}, {"passages": None}):
+        _install({ESV_PATH: lambda request, body=odd: httpx.Response(200, json=body)})
+        assert sf.fetch_part("John 3:16", "esv") == sf.Part("John 3:16", "unavailable", None)
     monkeypatch.delenv("ESV_API_KEY")
+    seen = _install({ESV_PATH: ESV_EMPTY})
     assert sf.fetch_part("John 3:16", "esv") == sf.Part("John 3:16", "unavailable", None)
-    assert len(seen) == 1                                  # no key: nothing is sent
+    assert seen == []                                      # no key: nothing is sent
 
 
 # --- budget and caching ---
@@ -337,7 +347,9 @@ def test_transient_failure_not_cached():
     seen = _install(answers)
     failures = [500, 429, 403, _read_timeout,
                 lambda request: httpx.Response(200, text="<html>busy</html>"),
-                lambda request: httpx.Response(200, json=["not", "an", "object"])]
+                lambda request: httpx.Response(200, json=["not", "an", "object"]),
+                lambda request: httpx.Response(200, json={"reference": "x"}),        # no "text"
+                lambda request: httpx.Response(200, json={"text": 5})]
     for failure in failures:
         answers["/isaiah 50:4-9"] = failure
         assert sf.fetch_part("Isaiah 50:4-9", "web") == sf.Part("Isaiah 50:4-9", "unavailable", None)

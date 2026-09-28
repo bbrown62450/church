@@ -32,6 +32,7 @@ string (F §2.5). No FastAPI, no Streamlit (tests/test_no_streamlit_in_core.py).
 
 import logging
 import os
+import re
 import time
 from dataclasses import dataclass
 from typing import Dict, List, Literal, Optional, Tuple
@@ -41,7 +42,7 @@ import httpx
 
 from cache import TTLCache
 from integrations import budget, http
-from scripture_refs import normalize_for_fetch, split_alternatives, split_joined, split_parts
+from scripture_refs import normalize_for_fetch, split_alternatives, split_book, split_joined, split_parts
 
 logger = logging.getLogger(__name__)
 
@@ -162,6 +163,21 @@ def translation_label(translation_id: Optional[str]) -> str:
 
 # --- planning (pure) ---
 
+# Spellings scripture_refs accepts that bible-api may not (owner 2026-09-28): a part
+# starting with one is sent under the book's name ("Rm 8:1" -> "Romans 8:1").
+_FETCH_AS_BOOK_NAME = frozenset({"revelations", "mat", "rm", "php", "jdg", "eccles"})
+_LEADING_WORD = re.compile(r"([A-Za-z]+)\.?(?=[\s\d]|$)")
+
+
+def _book_name_for_fetch(part: str) -> str:
+    match = _LEADING_WORD.match(part)
+    if match and match.group(1).lower() in _FETCH_AS_BOOK_NAME:
+        found = split_book(part)
+        if found is not None:
+            return found[0].name + part[match.end():]
+    return part
+
+
 def plan_sections(reference: str) -> List[Tuple[str, List[str]]]:
     """[(alternative as written, [normalized parts])], one pair per section.
 
@@ -171,7 +187,7 @@ def plan_sections(reference: str) -> List[Tuple[str, List[str]]]:
     for alternative in split_alternatives(reference):
         if not alternative.strip():
             continue
-        parts = [normalize_for_fetch(piece)
+        parts = [_book_name_for_fetch(normalize_for_fetch(piece))
                  for joined in split_joined(alternative)
                  for piece in split_parts(joined)]
         parts = [part for part in parts if part]
@@ -211,8 +227,9 @@ def _bible_api_part(part: str, translation: str) -> object:
     if not isinstance(data, dict):
         raise _Transient("bad_json")
     text = data.get("text")
-    text = text.strip() if isinstance(text, str) else ""
-    return text or NOT_FOUND
+    if not isinstance(text, str):
+        raise _Transient("bad_json")        # unreadable, never cached (owner decision 1)
+    return text.strip() or NOT_FOUND
 
 
 def _esv_part(part: str) -> object:
@@ -245,10 +262,8 @@ def _esv_part(part: str) -> object:
     except ValueError:
         raise _Transient("bad_json") from None
     passages = data.get("passages") if isinstance(data, dict) else None
-    if passages is None:
-        passages = []
     if not isinstance(passages, list):
-        raise _Transient("bad_json")
+        raise _Transient("bad_json")        # unreadable is "unavailable", not "not found"
     text = "\n\n".join(p.strip() for p in passages if isinstance(p, str) and p.strip())
     return text or NOT_FOUND
 
