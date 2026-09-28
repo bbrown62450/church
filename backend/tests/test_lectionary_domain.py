@@ -261,7 +261,7 @@ def test_lectio_set_name_precedence():
     )
     assert lectio_set_name(day(season="Easter", day_name="  "), date(2026, 4, 5)) == "Easter Sunday"
     # a dayName that is only a Proper number is ignored: the Proper number is never shown (decision A)
-    for proper in ("Proper 23", " proper 22 (27) ", "PROPER 5"):
+    for proper in ("Proper 23", " proper 22 (27) ", "PROPER 5", "Proper 22\xa0(27)", "proper  22(27)"):
         assert lectio_set_name(day(day_name=proper), date(2026, 10, 4)) == "Nineteenth Sunday after Pentecost"
         assert lectio_set_name(day(day_name=proper), date(2026, 9, 29)) == "Ordinary Time — Year A"
     # 2. a Sunday takes sunday_name, never "{season} — Year {year}"
@@ -485,6 +485,15 @@ def test_clean_cell_compound_star_and_http():
         assert clean_cell(blank) == []
     # Nothing is split unless the text before "Psalm <n>" starts with a book.
     assert clean_cell("See the note Psalm 23") == ["See the note Psalm 23"]
+    # A joining " and" or "," is not part of the head; whitespace (newlines, NBSP) collapses to one space.
+    assert clean_cell("Deuteronomy 8:7-18 and Psalm 65") == ["Deuteronomy 8:7-18", "Psalm 65"]
+    assert clean_cell("Genesis 1:1-5, Psalm 8") == ["Genesis 1:1-5", "Psalm 8"]
+    assert clean_cell("Exodus 1:8-2:10  Psalm\xa0124") == ["Exodus 1:8-2:10", "Psalm 124"]
+    assert clean_cell("Isaiah 55:1-5 or\nPsalm 145:8-9") == ["Isaiah 55:1-5 or Psalm 145:8-9"]
+    # " - " splits only a cell with a heading segment (the Vigil); a verse range with spaces stays whole.
+    assert clean_cell("Luke 2:1 - 20") == ["Luke 2:1 - 20"]
+    assert clean_cell("Isaiah 9:2-7 - Isaiah 62:6-12") == ["Isaiah 9:2-7 - Isaiah 62:6-12"]
+    assert clean_cell("Old Testament - Isaiah 9:2-7 - Isaiah 62:6-12") == ["Isaiah 9:2-7", "Isaiah 62:6-12"]
     # S's Thanksgiving Day example: the cleaned cells, in column order.
     row = _vrow(
         "Thanksgiving Day",
@@ -636,6 +645,25 @@ def test_proper_row_renamed_named_rows_kept():
     assert names(date(2026, 11, 22)) == ["Christ the King"]
     # Sundays only: a weekday Proper row keeps its text.
     assert names(date(2026, 10, 6)) == ["Proper 22 (27)"]
+    # Any spelling of a bare Proper number is renamed; repeated names get " (2)", " (3)".
+    variants = [
+        _vrow(text, date(2026, 10, 4), gospel="Matthew 21:33-46")
+        for text in ("Proper 22", "proper 22 (27)", "Proper 22\xa0(27)", " Proper  22(27) ")
+    ]
+    assert [s.name for s in vanderbilt_sets_on(variants, date(2026, 10, 4))] == [
+        "Nineteenth Sunday after Pentecost",
+        "Nineteenth Sunday after Pentecost (2)",
+        "Nineteenth Sunday after Pentecost (3)",
+        "Nineteenth Sunday after Pentecost (4)",
+    ]
+    trinity = [
+        _vrow("Proper 4 (9)", date(2026, 5, 31), gospel="Matthew 7:21-29"),
+        _vrow("Trinity Sunday", date(2026, 5, 31), gospel="Matthew 28:16-20"),
+    ]
+    assert [s.name for s in vanderbilt_sets_on(trinity, date(2026, 5, 31))] == ["Trinity Sunday", "Trinity Sunday (2)"]
+    # The suffixed name is checked again: a 300-character name fits, with " (2)" it does not.
+    long_rows = [_vrow("n" * 300, date(2026, 10, 4), gospel="John 1:1-5")] * 2
+    assert [s.name for s in vanderbilt_sets_on(long_rows, date(2026, 10, 4))] == ["n" * 300]
 
 
 def test_lectio_alternatives_skipped():

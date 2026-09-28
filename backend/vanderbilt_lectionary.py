@@ -582,9 +582,14 @@ class LectioDay:
     day_name: str | None
 
 
-# A Lectio dayName that is only a Proper number ("Proper 23", "Proper 22 (27)") is never shown
-# (owner decision A: the Proper number is never shown); lectio_set_name falls through past it.
-_PROPER_DAY_NAME = re.compile(r"Proper \d+( \(\d+\))?", re.IGNORECASE)
+# A bare Proper number ("Proper 23", "proper 22 (27)", "Proper 22\xa0(27)") is never shown (owner decision A):
+# lectio_set_name falls through past such a dayName and _vanderbilt_name renames such a Sunday row.
+_PROPER = re.compile(r"proper\s+\d+(\s*\(\d+\))?", re.IGNORECASE)
+
+
+def _is_proper(text: str) -> bool:
+    """True when `text`, trimmed and with its whitespace (NBSP included) collapsed, is only a Proper number."""
+    return _PROPER.fullmatch(" ".join(text.split())) is not None
 
 
 def lectio_set_name(day: LectioDay, d: date) -> str:
@@ -598,7 +603,7 @@ def lectio_set_name(day: LectioDay, d: date) -> str:
     `merge` (Task 6b) adds " (2)", " (3)" when several sets share a name.
     """
     day_name = (day.day_name or "").strip()
-    if day_name and not _PROPER_DAY_NAME.fullmatch(day_name):
+    if day_name and not _is_proper(day_name):
         return day_name
     computed = sunday_name(d) or weekday_feast_name(d)
     if computed:
@@ -624,9 +629,9 @@ _VANDERBILT_FIELDS = [
     "Liturgical Date", "Calendar Date", "First reading", "Psalm",
     "Second reading", "Gospel", "Art", "Prayer",
 ]
-_PROPER_ROW = re.compile(r"Proper \d+ \(\d+\)")
 _COMPOUND_PSALM = re.compile(r"\sPsalms?\s+\d")
 _LEADING_STAR = re.compile(r"^\*\s*")
+_JOINER_TAIL = re.compile(r"(\s+and|\s*,)$", re.IGNORECASE)
 _LECTIO_TYPES = ("first", "psalm", "second", "gospel")
 
 
@@ -727,8 +732,8 @@ def parse_vanderbilt_csv(text: str) -> list[VRow]:
 
 
 def _clean_text(cell: str) -> str:
-    """A reading cell's text: quotes and whitespace stripped, a link dropped, a leading "* " removed."""
-    text = (cell or "").strip().strip('"').strip()
+    """A reading cell's text: whitespace collapsed, quotes stripped, a link dropped, a leading "* " removed."""
+    text = " ".join((cell or "").split()).strip('"').strip()
     if text.startswith("http"):
         return ""
     return _LEADING_STAR.sub("", text)
@@ -742,17 +747,27 @@ def clean_cell(cell: str) -> list[str]:
     if " - " in text:
         # The Easter Vigil: " - "-separated segments with headings. Keep every segment that starts with a
         # book, whole, so each vigil reading stays next to its psalm (11 lines; splitting pairs gives 21).
-        segments = (segment.strip() for segment in text.split(" - "))
-        return [segment for segment in segments if segment and split_book(segment) is not None]
+        # Only a cell with a heading (a segment with no book and no digit) is split: "Luke 2:1 - 20" is whole.
+        segments = [segment.strip() for segment in text.split(" - ")]
+        if any(_is_heading(segment) for segment in segments):
+            return [segment for segment in segments if segment and split_book(segment) is not None]
+        return [text]
     match = _COMPOUND_PSALM.search(text)
     if match:
-        head = text[: match.start()].strip()
+        raw_head = text[: match.start()].strip()
+        head = _JOINER_TAIL.sub("", raw_head).strip()
         found = split_book(head)
-        # Split a two-track cell "<reading> Psalm <n>" only when the head is a non-Psalm reading and does
-        # not end in " or", so "Psalm 105:1-11, 45b or Psalm 128" stays whole (clarification 10).
-        if found is not None and found[0].testament != "psalm" and not head.lower().endswith(" or"):
+        # Split a two-track cell "<reading> Psalm <n>" (or "<reading> and Psalm <n>") only when the head is
+        # a non-Psalm reading and does not end in " or", so "Psalm 105:1-11, 45b or Psalm 128" stays whole
+        # (clarification 10).
+        if found is not None and found[0].testament != "psalm" and not raw_head.lower().endswith(" or"):
             return [head, text[match.start():].strip()]
     return [text]
+
+
+def _is_heading(segment: str) -> bool:
+    """A Vigil heading such as "Old Testament": it starts with no book and holds no digit."""
+    return bool(segment) and split_book(segment) is None and not any(ch.isdigit() for ch in segment)
 
 
 def fits_draft_limits(item: ReadingSet | LectioGroup) -> bool:
@@ -780,8 +795,8 @@ def fits_draft_limits(item: ReadingSet | LectioGroup) -> bool:
 
 
 def _vanderbilt_name(raw: str, d: date) -> str:
-    """A row's set name: its own text, except a whole-cell "Proper N (M)" on a Sunday (owner decision A)."""
-    if d.weekday() != 6 or not _PROPER_ROW.fullmatch(raw):
+    """A row's set name: its own text, except a bare Proper number (`_PROPER`) on a Sunday (owner decision A)."""
+    if d.weekday() != 6 or not _is_proper(raw):
         return raw
     name = sunday_name(d)
     if name == "All Saints Day":
@@ -791,23 +806,39 @@ def _vanderbilt_name(raw: str, d: date) -> str:
 
 
 def vanderbilt_sets_on(rows: list[VRow], d: date) -> list[ReadingSet]:
-    """The Vanderbilt sets for exactly `d`, in file order; [] when no row has that date (no nearest row)."""
+    """The Vanderbilt sets for exactly `d`, in file order; [] when no row has that date (no nearest row).
+
+    After the Proper rename a repeated name gets " (2)", " (3)" (as in `_lectio_only_sets`); a set whose
+    suffixed name no longer fits the draft is dropped by fits_draft_limits (clarification 34).
+    """
     sets: list[ReadingSet] = []
+    counts: dict[str, int] = {}
+    used: set[str] = set()
     for row in rows:
         if row.calendar_date != d:
             continue
+        base = _vanderbilt_name(row.liturgical_date, d)
+        name = base
+        if name in used:
+            index = counts.get(base, 1)
+            while name in used:
+                index += 1
+                name = f"{base} ({index})"
+            counts[base] = index
+        used.add(name)
         cells = (row.first, row.psalm, row.second, row.gospel)
-        sets.append(
-            ReadingSet(
-                name=_vanderbilt_name(row.liturgical_date, d),
-                first=_clean_text(row.first),
-                psalm=_clean_text(row.psalm),
-                second=_clean_text(row.second),
-                gospel=_clean_text(row.gospel),
-                scriptures=tuple(line for cell in cells for line in clean_cell(cell)),
-                source="vanderbilt",
-            )
+        candidate = ReadingSet(
+            name=name,
+            first=_clean_text(row.first),
+            psalm=_clean_text(row.psalm),
+            second=_clean_text(row.second),
+            gospel=_clean_text(row.gospel),
+            scriptures=tuple(line for cell in cells for line in clean_cell(cell)),
+            source="vanderbilt",
         )
+        if name != base and not fits_draft_limits(candidate):
+            continue
+        sets.append(candidate)
     return sets
 
 
