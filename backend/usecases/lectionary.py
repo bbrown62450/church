@@ -1,11 +1,13 @@
 """Readings for one date from the two lectionary sources (S `usecases/lectionary.py`).
 
 Lectio (keyed by the date) and Vanderbilt (keyed by the liturgical-year file)
-load in parallel on one module-level pool, each through its own TTLCache: a
+load in parallel, each on its own module-level pool (so waiters for one slow
+Vanderbilt year cannot starve Lectio) and through its own TTLCache: a
 success, including a definitive 404, is kept 24 h; a SourceFailed 5 min;
 anything else is a bug and is not kept (cache.py). Both sources share one
-20 s deadline (clarification 31). Any date is looked up as itself: no
-normalization and no nearest row (spec decision 8). No database access.
+20 s deadline (clarification 31); work not started by then is cancelled.
+Any date is looked up as itself: no normalization and no nearest row (spec
+decision 8). No database access.
 """
 from __future__ import annotations
 
@@ -46,13 +48,13 @@ MAX_YEAR = 2199
 DEADLINE_SECONDS = 20.0       # read at call time, so tests can monkeypatch it
 OK_TTL_SECONDS = 86_400.0     # 24 h
 FAIL_TTL_SECONDS = 300.0      # 5 min
-MAX_WORKERS = 4
+MAX_WORKERS = 4               # per source
 
 T = TypeVar("T")
 
 
-def _new_pool() -> ThreadPoolExecutor:
-    return ThreadPoolExecutor(max_workers=MAX_WORKERS, thread_name_prefix="lectionary")
+def _new_pool(source: str) -> ThreadPoolExecutor:
+    return ThreadPoolExecutor(max_workers=MAX_WORKERS, thread_name_prefix=f"lectionary-{source}")
 
 
 def _new_lectio_cache(clock: Callable[[], float]) -> TTLCache[date, Optional[LectioDay]]:
@@ -63,7 +65,8 @@ def _new_vanderbilt_cache(clock: Callable[[], float]) -> TTLCache[str, list[VRow
     return TTLCache(maxsize=8, ttl_ok=OK_TTL_SECONDS, ttl_fail=FAIL_TTL_SECONDS, clock=clock)
 
 
-_POOL = _new_pool()
+_LECTIO_POOL = _new_pool("lectio")
+_VANDERBILT_POOL = _new_pool("vanderbilt")
 _LECTIO = _new_lectio_cache(time.monotonic)
 _VANDERBILT = _new_vanderbilt_cache(time.monotonic)
 
@@ -103,9 +106,9 @@ def _load(cache: TTLCache, key: object, loader: Callable[[], T]) -> _Outcome:
 
 def _outcome(future: Future) -> _Outcome:
     """The source's outcome, or a timeout failure for this request only when
-    the source is unfinished at the deadline. The running loader carries on
-    and caches its own outcome (clarification 31)."""
-    if future.done():
+    the source is unfinished (or was cancelled unstarted) at the deadline. A
+    running loader carries on and caches its own outcome (clarification 31)."""
+    if future.done() and not future.cancelled():
         return future.result()
     return _Outcome(value=None, failure=SourceFailed(timeout=True), cached=False)
 
@@ -121,10 +124,13 @@ def readings_for_date(d: date) -> LectionaryResult:
     started = time.monotonic()
     year = liturgical_year_for(d)
     # Each source runs in a copy of this request's context, so its log lines keep the request id.
-    lectio_future = _POOL.submit(contextvars.copy_context().run, _load, _LECTIO, d, lambda: load_lectio(d))
-    vanderbilt_future = _POOL.submit(contextvars.copy_context().run, _load, _VANDERBILT, year,
-                                     lambda: load_vanderbilt_year(year))
-    wait((lectio_future, vanderbilt_future), timeout=DEADLINE_SECONDS)
+    lectio_future = _LECTIO_POOL.submit(contextvars.copy_context().run, _load, _LECTIO, d,
+                                        lambda: load_lectio(d))
+    vanderbilt_future = _VANDERBILT_POOL.submit(contextvars.copy_context().run, _load, _VANDERBILT, year,
+                                                lambda: load_vanderbilt_year(year))
+    _done, not_done = wait((lectio_future, vanderbilt_future), timeout=DEADLINE_SECONDS)
+    for future in not_done:
+        future.cancel()                          # only work not yet started; a running one carries on
     lectio = _outcome(lectio_future)
     vanderbilt = _outcome(vanderbilt_future)
 
@@ -158,12 +164,14 @@ def readings_for_date(d: date) -> LectionaryResult:
 
 
 def reset_for_tests(clock: Callable[[], float] = time.monotonic) -> None:
-    """Join the pool, then start over with a new pool and new, empty caches on
+    """Join both pools, then start over with new pools and new, empty caches on
     `clock` (clarification 39). Queued work is cancelled; a running worker is
     waited for, so no straggler from an earlier test holds a worker or writes
     into this test's caches."""
-    global _POOL, _LECTIO, _VANDERBILT
-    _POOL.shutdown(wait=True, cancel_futures=True)
-    _POOL = _new_pool()
+    global _LECTIO_POOL, _VANDERBILT_POOL, _LECTIO, _VANDERBILT
+    _LECTIO_POOL.shutdown(wait=True, cancel_futures=True)
+    _VANDERBILT_POOL.shutdown(wait=True, cancel_futures=True)
+    _LECTIO_POOL = _new_pool("lectio")
+    _VANDERBILT_POOL = _new_pool("vanderbilt")
     _LECTIO = _new_lectio_cache(clock)
     _VANDERBILT = _new_vanderbilt_cache(clock)

@@ -250,8 +250,8 @@ def budget_clock():
 @pytest.fixture(autouse=True)
 def _fresh_lectionary_caches():
     """usecases.lectionary keeps two process-wide TTL caches and a thread pool
-    (slice 2a). Each test starts with the pool joined and a new pool and new,
-    empty caches, so no cached reading and no straggling worker crosses tests
+    per source (slice 2a). Each test starts with both pools joined and new
+    pools and new, empty caches, so no cached reading and no straggling worker crosses tests
     (clarification 39). A test that blocks a worker releases it and calls
     reset_for_tests() itself in `finally`, while its respx mock still answers.
 

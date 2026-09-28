@@ -404,6 +404,32 @@ def test_source_unfinished_at_deadline_is_timeout(router, monkeypatch):
         with pytest.raises(UpstreamTimeout) as caught:
             lectionary.readings_for_date(ADVENT_1_2026)   # both sources held
         assert caught.value.code == "upstream_timeout"
+
+        # A burst of 2026-27 dates while that year's Vanderbilt load is still held:
+        # each request's Vanderbilt lookup waits on the one in-flight load, but those
+        # waiters must not starve Lectio, which answers at once. Every request gets
+        # Lectio's sets, partial, inside the deadline (owner decision 1).
+        day = vl.parse_lectio_payload(json.loads(load("lectio", "2026-03-29").body))
+        monkeypatch.setattr(lectionary, "load_lectio", lambda d: day)
+        burst = [date(2026, 12, 1 + i) for i in range(8)]   # one liturgical year, distinct Lectio keys
+        outcomes = {}
+
+        def lookup(d):
+            try:
+                outcomes[d] = lectionary.readings_for_date(d)
+            except Exception as e:                    # recorded, so the assertion names it
+                outcomes[d] = e
+
+        threads = [threading.Thread(target=lookup, args=(d,)) for d in burst]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(10)
+        got = {d: (o.status, o.partial, [s.source for s in o.reading_sets])
+               if isinstance(o, lectionary.LectionaryResult) else type(o).__name__
+               for d, o in outcomes.items()}
+        want = ("ok", True, ["lectio"] * len(vl.merge(day, [], burst[0])[0]))
+        assert got == {d: want for d in burst}
     finally:
         release.set()
         lectionary.reset_for_tests()                   # join the held workers while respx answers
