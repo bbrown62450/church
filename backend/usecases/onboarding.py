@@ -16,11 +16,12 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
+from typing import NoReturn
 
 from db import session_scope
 from db.ids import as_uuid
-from domain_errors import InvalidInput, RateLimited
-from repos import churches, invites, memberships  # noqa: F401  (invites, memberships: Tasks 4-5)
+from domain_errors import InvalidInput, RateLimited, Rejected
+from repos import churches, invites, memberships
 from timezones import is_valid_timezone
 
 logger = logging.getLogger(__name__)
@@ -115,3 +116,117 @@ def _enforce_create_cap(user_id: uuid.UUID, now: datetime, session) -> None:
     frees_at = created[count - CREATE_CAP] + CREATE_WINDOW
     logger.info("church_create_limited user_id=%s count=%d", user_id, count)
     raise RateLimited(CAP_MESSAGE, retry_after_seconds=(frees_at - now).total_seconds())
+
+
+# --- Invites: the shared checks and the preview (S "Invite checks", "Preview semantics") ---
+
+BLANK_CODE_MESSAGE = "Enter an invite code, or open your invite link again."
+
+REJECT_MESSAGES: dict[InviteRejectReason, str] = {
+    InviteRejectReason.unknown: "Invalid invite code.",
+    InviteRejectReason.revoked: "This invite has been revoked.",
+    InviteRejectReason.expired: "This invite has expired.",
+    InviteRejectReason.used: "This invite has already been used.",
+    InviteRejectReason.church_unavailable: "This church is no longer available.",
+    InviteRejectReason.email_mismatch: "This invite was issued for a different email address.",
+}
+
+_GRANTABLE_ROLES = ("member", "admin")
+
+
+def _strip_code(code: str) -> str:
+    """Check 0: the code, stripped before lookup; blank is the 422 with fields.code."""
+    stripped = (code or "").strip()
+    if not stripped:
+        raise InvalidInput(BLANK_CODE_MESSAGE, field="code")
+    return stripped
+
+
+def _load_invite(s, code: str, user_id: uuid.UUID) -> tuple:
+    """The three reads preview and accept both start from (S accept_invite flow).
+
+    Returns (inv, church, member_role): the Invite row or None; its church as
+    repos.churches.get_church's dict, None when missing or soft-deleted; and
+    the caller's role there, None when not a member.
+    """
+    inv = invites.find_by_code(code, session=s)
+    church = churches.get_church(inv.church_id, session=s) if inv is not None else None
+    member_role = (
+        memberships.get_role(user_id, church["id"], session=s) if church is not None else None
+    )
+    return inv, church, member_role
+
+
+def _clamp_role(role: str | None, *, invite_id) -> str:
+    """The role an invite grants: member/admin as stored, owner -> admin (the
+    F §6.2 repair), anything else -> member. A clamp logs one WARNING with the
+    invite id (never the code), so the bad row can be found and fixed."""
+    if role in _GRANTABLE_ROLES:
+        return role
+    granted = "admin" if role == "owner" else "member"
+    logger.warning("invite_role_clamped invite_id=%s granted=%s", invite_id, granted)
+    return granted
+
+
+def _evaluate(inv, church: dict | None, user_id: uuid.UUID, user_email: str,
+              member_role: str | None, now: datetime) -> InviteRejectReason | None:
+    """Checks 1-6 of S "Invite checks", in that order; None when the invite is good.
+
+    `church` is repos.churches.get_church's dict (None when missing or
+    soft-deleted), `member_role` the caller's role in it (None when not a
+    member), `user_email` CurrentUser.email, `now` an aware datetime.
+    """
+    if inv is None:
+        return InviteRejectReason.unknown
+    if inv.revoked:
+        return InviteRejectReason.revoked
+    if invites.as_utc(inv.expires_at) < now:  # naive (SQLite) == UTC
+        return InviteRejectReason.expired
+    if not inv.reusable and inv.accepted_at is not None:
+        # Consumed: only the user who consumed it, while still a member, may
+        # open it again (it then previews and accepts as already_member). A
+        # removed member, another user, or a legacy stamp with accepted_by
+        # NULL gets "used" (clarification 14).
+        if not (inv.accepted_by == user_id and member_role is not None):
+            return InviteRejectReason.used
+    if church is None:
+        return InviteRejectReason.church_unavailable
+    if inv.email is not None and inv.email.strip().lower() != (user_email or "").strip().lower():
+        return InviteRejectReason.email_mismatch
+    return None
+
+
+def _reject(reason: InviteRejectReason, invite_id) -> NoReturn:
+    """Log one invite_rejected line (ids only: no code, no email) and raise the 400."""
+    logger.info(
+        "invite_rejected reason=%s invite_id=%s",
+        reason.value, invite_id if invite_id is not None else "none",
+    )
+    raise Rejected(
+        REJECT_MESSAGES[reason], code="invite_rejected", details={"reason": reason.value}
+    )
+
+
+def preview_invite(*, user_id: uuid.UUID, user_email: str, code: str,
+                   now: datetime | None = None) -> InvitePreview:
+    """What an invite offers the caller, without using it (S "Preview semantics").
+
+    Read-only: one session_scope, no membership, no stamp. Runs checks 0-6
+    and returns only the five InvitePreview fields, never the invite id, the
+    code, the church id, the creator or the bound email (F §7.4).
+    """
+    user_id = as_uuid(user_id)
+    code = _strip_code(code)
+    now = now if now is not None else datetime.now(UTC)
+    with session_scope() as s:
+        inv, church, member_role = _load_invite(s, code, user_id)
+        reason = _evaluate(inv, church, user_id, user_email, member_role, now)
+        if reason is not None:
+            _reject(reason, inv.id if inv is not None else None)
+        return InvitePreview(
+            church_name=church["name"],
+            role=_clamp_role(inv.role, invite_id=inv.id),
+            expires_at=invites.as_utc(inv.expires_at),
+            email_bound=inv.email is not None,
+            already_member=member_role is not None,
+        )
