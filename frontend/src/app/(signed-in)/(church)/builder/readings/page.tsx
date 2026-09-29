@@ -1,8 +1,8 @@
 "use client";
 
-import { StepPlaceholder } from "@/components/builder/step-placeholder";
+import { ReadingsStep } from "@/components/builder/readings/readings-step";
 
-/** Step: Date & readings. Slice 2c replaces the placeholder with the step (owner answer Q1). */
+/** Step: Date & readings (slice 2c). */
 export default function ReadingsStepPage() {
-  return <StepPlaceholder step="readings" />;
+  return <ReadingsStep />;
 }

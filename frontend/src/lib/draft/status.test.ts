@@ -31,14 +31,14 @@ function withCard(key: keyof DraftV1["liturgy"]["cards"], card: Partial<DraftV1[
 }
 
 describe("steps (S steps.ts)", () => {
-  it("lists the four steps in order, ships none in 2b, and reads a step from its path", () => {
+  it("lists the four steps in order, ships Date & readings (2c), and reads a step from its path", () => {
     expect(STEPS.map((s) => [s.number, s.label, s.href, s.previous, s.next])).toEqual([
       [1, "Date & readings", "/builder/readings", null, "hymns"],
       [2, "Hymns", "/builder/hymns", "readings", "liturgy"],
       [3, "Liturgy", "/builder/liturgy", "hymns", "review"],
       [4, "Review & send", "/builder/review", "liturgy", null],
     ]);
-    expect([...SHIPPED_STEPS]).toEqual([]);
+    expect([...SHIPPED_STEPS]).toEqual(["readings"]);
     expect(stepById("liturgy").label).toBe("Liturgy");
     expect(stepFromPath("/builder/hymns")).toBe("hymns");
     expect(stepFromPath("/builder/review/")).toBe("review");
@@ -51,7 +51,8 @@ describe("steps (S steps.ts)", () => {
 describe("stepStatus (F §4.7)", () => {
   it("shows Soon for unshipped steps and Not in archive for Review", () => {
     const d = testDraft();
-    expect(STEPS.map((s) => stepStatus(d, s.id).kind)).toEqual(["soon", "soon", "soon", "not_in_archive"]);
+    expect(STEPS.map((s) => stepStatus(d, s.id).kind)).toEqual(["incomplete", "soon", "soon", "not_in_archive"]);
+    expect(stepStatus(d, "readings", new Set())).toEqual({ kind: "soon" });
     expect(stepStatus(d, "review", ALL)).toEqual({ kind: "not_in_archive" });
   });
 
@@ -140,7 +141,7 @@ describe("isPristine and the date and translation defaults (owner answer Q2)", (
 describe("stillNeeded (S Review \"Still needed\")", () => {
   it("lists only shipped steps' gaps", () => {
     const fresh = setDate(testDraft(), "");
-    expect(stillNeeded(fresh)).toEqual([]);
+    expect(stillNeeded(fresh, new Set())).toEqual([]);
     expect(stillNeeded(fresh, READINGS)).toEqual([
       { step: "readings", message: "No service date", action: "Choose one" },
       { step: "readings", message: "No occasion", action: "Add one" },
