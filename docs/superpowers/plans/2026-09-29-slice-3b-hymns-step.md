@@ -39,6 +39,30 @@
 - New prose for the owner has no em dashes and no flattery, and leads with the point. Copy quoted from S keeps its own punctuation (for example "Too many requests — try again in {n} s.", "After the sermon — responds to the scripture (NT reading)", "Still working — this can take up to a minute.", "No Opening hymn — Choose one", the Hymnary credit).
 - Ask the owner before any push to a PR, PR creation, marking ready, merging, or any production or settings action. The build of T2-T13 does not wait for T1's owner steps.
 
+### Baselines and counts
+- Starting baselines: frontend **356 passed in 55 files**, typecheck and lint clean; backend **1106 passed, 11 skipped**. If any baseline differs, stop and ask.
+- Planned cumulative counts. Each frontend delta is exactly the number of `it(` blocks the task adds (an edited test counts 0). If a count drifts, stop and find why.
+
+  | After | Frontend tests (delta) | Test files (delta) | Frontend count | Backend |
+  |---|---|---|---|---|
+  | T1 | 0 (no file changes; Task 1b, if added, states its own) | 0 | 356 in 55 | 1106 passed, 11 skipped |
+  | T2 | 0 | 0 | 356 in 55 | **1110** passed, 11 skipped (`test_lectionary_domain.py` +2, `test_hymn_suggest.py` +1, `test_api_hymn_suggestions.py` +1) |
+  | T3 | +3 (`draft/status.test.ts` +1, `draft/fingerprint.test.ts` +1, `draft/store.test.ts` +1) | 0 | 359 in 55 | unchanged |
+  | T4 | +7 (`lib/hymns/picks.test.ts`, new) | +1 | 366 in 56 | unchanged |
+  | T5 | +16 (`filter.test.ts` 6, `labels.test.ts` 4, `match-request.test.ts` 2, `suggest-request.test.ts` 3, `dates.test.ts` +1) | +4 | 382 in 60 | unchanged |
+  | T6 | +6 (`queries/hymns.test.tsx`, new; `keys.test.ts` edited, 0) | +1 | 388 in 61 | unchanged |
+  | T7 | +4 (`components/app/search-combobox.test.tsx`, new) | +1 | 392 in 62 | unchanged |
+  | T8 | +11 (`hymn-label.test.tsx` 2, `hymns-step.test.tsx` 9, both new) | +2 | 403 in 64 | unchanged |
+  | T9 | +4 (`hymns-step.test.tsx`) | 0 | 407 in 64 | unchanged |
+  | T10 | +7 (`hymns-step.test.tsx`) | 0 | 414 in 64 | unchanged |
+  | T11 | +5 (`hymns-step.test.tsx`) | 0 | 419 in 64 | unchanged |
+  | T12 | +2 (`draft/status.test.ts` +1, `builder-shell.test.tsx` +1; two status tests and three shell tests edited, 0) | 0 | 421 in 64 | unchanged |
+  | T13 | 0 | 0 | 421 in 64 | 1110 passed, 11 skipped (one assertion in `test_slice1_docs.py` edited) |
+  | T14, T15 | 0 | 0 | 421 in 64 | 1110 passed, 11 skipped |
+
+- CI `backend-postgres` shows `11 passed, 1110 deselected` after T2 (the Postgres tests are unchanged).
+- The step tests fake only `Date` and wait on the app's real timers (the draft's 400 ms writes, the list and match requests), so `hymns-step.test.tsx` takes about 16 s; one test fakes `setTimeout` as well (the 8-second "Still working" line) and says why, and one waits out a real 1-second `Retry-After`.
+
 ### Code rules (F §4)
 - Every file under `src/app/` that renders is a client component (`"use client"`, F §4.1). Pages and components never call `apiFetch` (F §4.4): the step uses the hooks in `lib/queries/hymns.ts`.
 - Base UI rules (F §4.9): generated components only, hand edits limited to variants; no `asChild` (use `render`, or `buttonVariants` on the element); a Select gets `items`; toasts stay on sonner. The one recorded exception is clarification 4 (the registry is blocked, as in 2b and 2c).
@@ -95,6 +119,91 @@
 | `ScriptureMatches` | T11 | S Hymns for the readings |
 | `"hymns"` in `SHIPPED_STEPS`, the page, `SummaryHymns`, `stillNeeded` rows | T12 | S Builder shell |
 | S and F "(3b plan)" notes, "## Slice 3" checklist, heading pin | T13 | S Manual checks |
+
+## Spec clarifications
+
+The code and F win over S's outline, and the owner's answers over both. Each item says whether the owner would notice it: **[owner-visible]** items are put to the owner in "Questions for the owner" at the end (confirm or change before T2 starts; T1 does not wait); the rest are owner decision 1 (no owner-visible change) or plain readings of S.
+
+1. **The 3b scope and where the tests live.** The scope is the table above. S's Testing table extends `components/builder/summary-panel.test.tsx`, which does not exist: 2c tested the summary, the step bar and "Still needed" in `builder-shell.test.tsx`, so T12 extends that file. The queries get `lib/queries/hymns.test.tsx` (F §5.2: every query module is tested); S's `hymns-step.test.tsx` list is split across T8-T11 by block; `hymn-label.test.tsx` is T8's.
+2. **[owner-visible] What counts as unsaved work (owner answer 1).** Choosing a hymn for a slot, or a hymnal in the Select, makes "New service" ask "Start a new service?" first and keeps the date of the draft when that Sunday passes (the mount-time roll-forward). The Exclude switch and the AI's other ideas never count. `isPristine` already counted the slots; T3 adds the hymnal. Choosing the church's own effective hymnal again stores `null` (T4's `setHymnal`, like 2c's translation), so switching away and back is not unsaved work, and a later change of the church's default flows through. The step never writes the hymnal by itself, even when the stored code has vanished.
+3. **`SearchCombobox` is new.** S expected slice 1 to have built it under `TimezoneCombobox`; slice 1 used the Combobox directly. T7 creates `components/app/search-combobox.tsx`, where the caller ranks and caps the rows (`search`) and Base UI renders only those (`filteredItems`); `TimezoneCombobox` is left as it is.
+4. **`switch.tsx` is rebuilt from the upstream shadcn source**, as 2b and 2c did for their components (the registry, ui.shadcn.com, is blocked from the container). T7 first tries `npx shadcn@latest add switch`, then writes shadcn-ui/ui@`db2db460` `apps/v4/registry/bases/base/ui/switch.tsx` through the installed shadcn 4.21.0 CLI's style transform and Prettier, the pipeline that reproduces 2c's `collapsible.tsx` exactly; the only change is a header comment. S's other "generated" components (`combobox`, `badge`, `alert`) exist already. (Owner decision 1; the exception the owner accepted for 2b and 2c.)
+5. **`formatAbbrevDate`.** S's Files list adds `formatShortDate(iso) -> "Sep 7"` to `lib/dates.ts`, but 2b's `formatShortDate` already returns "October 4" and is used on screen. The new helper is `formatAbbrevDate(iso, contextIso?)`, adding the year only when it differs from the service date's.
+6. **`useSuggestHymns` returns `suggest()`, and the stale checks live in it.** S puts the latest-request, church and mount checks in the mutation's `onSuccess`. T6's hook returns `{suggest, isPending}`; `suggest(body, signal)` resolves `ok`, `error` or `superseded` (never throws), so the button has one place to decide. The date check and the functional `update` stay in the button (T10), which has the draft.
+7. **Loading order** (owner decision 1). The hymn lists are asked for only after `GET /hymnals` answers with at least one hymnal, so an empty church asks for none and its picks show "Not in your hymnal" at once. The toolbar shows skeletons until `GET /hymnals` answers (S: "and the hymnal list"), because a date change refetches the list, and a skeleton would unmount a pending Suggest; the pickers still read "Loading hymnal…" while a list loads.
+8. **[owner-visible] Suggest's network and server errors show as a toast.** S says network errors and 500s "use the global handling (F §4.8)", which in this app is a toast ("Something went wrong. (Ref: …)"); the inline `Alert` holds only the AI and validation codes of S's table. After a 429 the Alert reads "Too many requests — try again in N s." and then "Try again now." once the wait has passed (2c's owner answer D).
+9. **`picks.ts` signatures.** The draft recipes (`setSlot`, `clearSlot`, `setHymnal`, `setExcludeRecent`) take the whole draft, as 2c's readings recipes do, so the screen calls `update((d) => setSlot(d, …))`; the suggestion helpers take the `hymns` block as S names them. `reconcilePick` gets a third argument, the selected hymnal, for a pick with no hymnal (an archived one, 5a); `duplicateSlots` takes the slots.
+10. **`buildSuggestionRequest` takes the church's translation** as a fourth argument (S reads `church.effective_translation` inside, but the function is pure), and the cache reader the button passes is `queryClient.getQueryData(["passage", translation, ref])`. It never fetches.
+11. **[owner-visible] Where recent use shows.** The notice under a pick shows only with a valid service date. A picker row shows its "Used Sep 7" badge only while Exclude is off (while on, the row is hidden and counted). Other ideas always carry their badge. Matches: hidden while Exclude is on; shown with Exclude off, or after **Show them**, they carry their badge (S names the badge only for Exclude off).
+12. **The picker also ignores punctuation**, not only accents and case, so "come thou" finds "Come, Thou Almighty King" (S Picker "Ranking" says accent- and case-insensitive).
+13. **[owner-visible] Counts of one are singular**: "1 hymn is hidden.", "1 more used within 12 weeks is hidden.", "1 recently used match is hidden." and " 1 recently used hymn was left out." S writes only the plural.
+14. **[owner-visible] Names screen readers hear.** Chips are "Use {title} as the opening hymn" and their group "Other ideas for the opening hymn" (the slot in lower case, S's `{slot}`); each match's **Add** button is named "Add {title}", so a list of buttons tells them apart (S names it "Add"); the step's heading is "Hymns" (level 2) with S's line under it.
+15. **Undo toasts.** `useUndoToasts` (a file S does not list, `components/builder/hymns/use-undo-toasts.ts`) keeps the ids of the toasts it showed, dismisses them when the step unmounts, and ignores an Undo whose church is no longer the active one (S "Undo toasts never outlive the step"). A match's **Add** shows its toast only when the slot held a different hymn (S: "If the slot was filled").
+16. **[owner-visible] What changes on screens 2b and 2c built** (S "Builder shell"): the step bar shows Hymns as "0 of 3" … "Complete" instead of "Soon"; Review's "Still needed" adds "No Opening hymn — Choose one" and the like for each empty slot; the summary's Hymns block lists the three slots instead of "Available soon". Liturgy keeps "Soon" and "Available soon".
+17. **The manual checklist** (T13): S's ten checks as "## Slice 3" in `docs/manual-verification.md`, with check 11 for the church season (owner answer 3), check 12 for "New service" (owner answer 1) and "(owner, after 3b)" on the items the guided check covers (owner answer 5). `test_slice1_docs.py` pins the last four `##` headings instead of three.
+18. **No API change.** `schema.d.ts` already has every 3a type, so `npm run gen:api` changes nothing; the only backend changes are T2's prompt line and T13's docs-test edit (and Task 1b's fix, only if T1 finds the code at fault).
+19. **"Hymns for the readings" opens at `md+` as it first renders** (a media query read once), and a phone's rotation does not open or close it (owner decision 1). The request runs while it is closed, so the count shows on its title.
+20. **Test helpers and the feature switch.** `test/fixtures/index.ts` gains `hymnId`, `hymn`, `suggested`, `hymnals` (T4) and `gg2013`, `ph1990`, `twoHymnals`, `hymnListRoute`, `hymnMatch`, `scriptureMatches`, `hymnSuggestions` (T6). `SETTINGS_HYMNS_READY` lives in a new `lib/features.ts` (S lists it); 6a flips it.
+21. **[owner-visible] The church season in the AI prompt (owner answer 3; T2).** The server names the season from the service date (`church_season`: Advent, Christmas Eve, Christmas, Epiphany of the Lord, Season after the Epiphany, Lent, Holy Week, Easter, Day of Pentecost, Season after Pentecost) and adds one guidance line; nothing is read from the request, the clipping and the 24 000-character budget stay, and there is no API change. The member sees it only in which hymns are suggested.
+22. **[owner-visible] What the counts count.** The toolbar's "{n} hymns are hidden." counts every recently used hymn with a title in the selected hymnal; the picker's footer counts only those matching what was typed.
+
+### Risks carried into the plan
+- **Recent use in production** (owner answer 2). Until T1's finding, the switch may hide nothing in production; the owner's check (T15 Step 6) expects what T1 found. 5a records use on every save in the new app.
+- **Live AI.** The suggestions come from `gpt-4.1-mini` through Railway; the tests use fakes. The season line changes the prompt only; if the owner still sees out-of-season hymns (T15 Step 7), that is a follow-up for the prompt, not a 3b blocker.
+- **Real-timer tests.** `hymns-step.test.tsx` waits on real 400 ms writes and one real 1-second `Retry-After`. T14 runs the suite three times and with the clock moved forward; a flaky run is fixed by making the test deterministic, never by retrying.
+- **Turbopack refuses a symlinked `node_modules`**; `npm run build` runs in the real checkout (T14).
+- **The registry stays blocked**; T7 records the attempt and uses clarification 4's file.
+
+## File Structure
+
+All paths are from the repo root. "(church)" means `frontend/src/app/(signed-in)/(church)`; "hymns/" means `frontend/src/components/builder/hymns/`; "lib/hymns/" means `frontend/src/lib/hymns/`.
+
+**Created**
+
+| Path | Responsibility | Task |
+|---|---|---|
+| `docs/superpowers/plans/2026-09-29-slice-3b-hymns-step.md` | this plan | 0 |
+| `lib/hymns/picks.ts` (+ `picks.test.ts`) | `pickFromHymn`, the draft recipes, `reconcilePick`, `applySuggestions`, `swapAlternative`, `duplicateSlots` | T4 |
+| `lib/hymns/hymnal.ts` | `selectHymnal` | T4 |
+| `lib/hymns/filter.ts` (+ `.test.ts`) | `filterHymns`, `foldText`, `PICKER_LIMIT` | T5 |
+| `lib/hymns/labels.ts` (+ `.test.ts`) | `SLOT_META`, notices, badges, `newerYearLabel`, `chipName` | T5 |
+| `lib/hymns/match-request.ts` (+ `.test.ts`) | `cleanRefs`, `buildMatchRefs` | T5 |
+| `lib/hymns/suggest-request.ts` (+ `.test.ts`) | `buildSuggestionRequest` | T5 |
+| `frontend/src/lib/queries/hymns.ts` (+ `.test.tsx`) | `useHymnals`, `useHymnList`, `useHymnLists`, `useScriptureMatches`, `useSuggestHymns` | T6 |
+| `frontend/src/lib/features.ts` | `SETTINGS_HYMNS_READY` | T6 |
+| `frontend/src/components/ui/switch.tsx` | Base UI switch (clarification 4) | T7 |
+| `frontend/src/components/app/search-combobox.tsx` (+ `.test.tsx`) | `SearchCombobox` (clarification 3) | T7 |
+| `hymns/hymns-step.tsx` (+ `hymns-step.test.tsx`) | `HymnsStep` (grows in T9-T11) | T8 |
+| `hymns/hymn-slot-card.tsx` | `HymnSlotCard` | T8 |
+| `hymns/hymn-picker.tsx` | `HymnPicker`, `pickerSearch` | T8 |
+| `hymns/hymn-label.tsx` (+ `hymn-label.test.tsx`) | `HymnLabel` | T8 |
+| `hymns/use-undo-toasts.ts` | `useUndoToasts` | T8 |
+| `hymns/hymns-toolbar.tsx` | `HymnsToolbar`, `ToolbarSkeleton`, `HymnalPicker`, `ExcludeSwitch` | T9 |
+| `hymns/suggest-hymns-button.tsx` | `SuggestHymnsButton`, `suggestErrorMessage` | T10 |
+| `hymns/alternative-chips.tsx` | `AlternativeChips` | T10 |
+| `hymns/scripture-matches.tsx` | `ScriptureMatches` | T11 |
+| `frontend/src/components/builder/summary-hymns.tsx` | `SummaryHymns` | T12 |
+
+**Modified**
+
+| Path | Change | Task |
+|---|---|---|
+| `backend/vanderbilt_lectionary.py`, `backend/hymn_suggest.py`, `backend/usecases/hymns.py` (+ `test_lectionary_domain.py`, `test_hymn_suggest.py`, `test_api_hymn_suggestions.py`) | `church_season`; the season lines in the prompt (owner answer 3) | T2 |
+| `frontend/src/lib/draft/status.ts` (+ `status.test.ts`, `fingerprint.test.ts`, `store.test.ts`) | `isPristine` counts the hymnal (owner answer 1) | T3 |
+| `frontend/src/lib/api/types.ts` | hymn type names | T4 |
+| `frontend/src/test/fixtures/index.ts` | hymn builders (T4); lists, routes and bodies (T6) | T4, T6 |
+| `frontend/src/lib/dates.ts` (+ `dates.test.ts`) | `formatAbbrevDate` | T5 |
+| `frontend/src/lib/queries/keys.ts` (+ `keys.test.ts`), `frontend/src/lib/api/timeouts.ts` | `hymnMatches`; suggestions 90 s | T6 |
+| `frontend/src/lib/draft/steps.ts`, `status.ts` (`stillNeeded`) (+ `status.test.ts`), `frontend/src/components/builder/summary-panel.tsx`, `step-placeholder.tsx` (comment), `builder-shell.test.tsx`, `(church)/builder/hymns/page.tsx` | `"hymns"` ships; the rows, the summary block and the page | T12 |
+| `docs/superpowers/specs/2026-09-25-slice-3-hymns-design.md`, `docs/superpowers/specs/2026-09-25-migration-foundations-design.md` | "(3b plan)" notes, one F amendment row | T13 |
+| `docs/manual-verification.md`, `backend/tests/test_slice1_docs.py` | "## Slice 3"; the heading pin | T13 |
+| `docs/ops-runbook.md` | "Slice 3b record" (the records PR after the merge) | T15 |
+
+**Untouched:** `backend/requirements*.txt`, migrations, `frontend/package.json` and `package-lock.json` (no new dependency: `@base-ui/react` already has the switch), `frontend/src/lib/api/openapi.json` and `schema.d.ts`, `frontend/src/lib/draft/{schema,migrate,mapping,fingerprint,prune,date-effects,readings,store,context}.ts`, every other backend file (unless Task 1b), Streamlit files, CI workflows.
+
+**Task order and checkpoints:** T1 (owner queries, in parallel) and T2 → T3 → … → T13 → T14 → T15. Each of T2-T13 ends in one commit, a review and a backup push. The review checkpoints are stops for the controller, not merges: everything ships in the one 3b PR.
+
+---
 
 ### Task 1: Why no recent use shows (OWNER queries, agent check, decision point) (owner answer 2; S Backend 3.4; Slice 3a record "Follow-ups")
 
