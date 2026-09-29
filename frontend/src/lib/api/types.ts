@@ -26,3 +26,7 @@ export type Lectionary = components["schemas"]["LectionaryOut"];
 export type ReadingSet = components["schemas"]["ReadingSetOut"];
 /** `GET /translations` (slice 2a). */
 export type Translations = components["schemas"]["TranslationsOut"];
+/** `POST /scripture/passages` (slice 2a): one passage per ref sent, each with a section per " or " alternative. */
+export type Passages = components["schemas"]["PassagesOut"];
+export type Passage = components["schemas"]["PassageOut"];
+export type PassageSection = components["schemas"]["PassageSectionOut"];
