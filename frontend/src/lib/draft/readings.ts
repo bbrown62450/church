@@ -6,6 +6,7 @@
  * `normalizePicks` and `setDate`.
  */
 import type { ChurchProfile, Lectionary, Translations } from "@/lib/api/types";
+import { isValidDateIso } from "@/lib/dates";
 import { cleanLines, pickerOptions, resolveReadings, scriptureKey, type ReadingPair } from "@/lib/scripture-refs";
 
 import { onDateChanged } from "./date-effects";
@@ -17,9 +18,11 @@ function withReadings(d: DraftV1, patch: Partial<DraftReadings>): DraftV1 {
 
 /** Sets the date and its origin, then runs the date side effects. Never touches the readings fields. */
 export function setDate(d: DraftV1, iso: string, origin: DraftReadings["date_origin"] = "user"): DraftV1 {
-  if (d.readings.date_iso === iso && d.readings.date_origin === origin) return d;
+  // An impossible date is stored as "", so the saved draft always loads again (F §4.6).
+  const next = iso === "" || isValidDateIso(iso) ? iso : "";
+  if (d.readings.date_iso === next && d.readings.date_origin === origin) return d;
   const prevIso = d.readings.date_iso;
-  return onDateChanged(withReadings(d, { date_iso: iso, date_origin: origin }), prevIso);
+  return onDateChanged(withReadings(d, { date_iso: next, date_origin: origin }), prevIso);
 }
 
 /** Fills occasion and scriptures from set `i` of this date's lookup; clears both picks. */
@@ -29,6 +32,19 @@ export function applyReadingSet(d: DraftV1, lect: Lectionary, i: number): DraftV
   }
   const set = lect.reading_sets[i];
   if (!set) throw new Error(`applyReadingSet: no reading set ${i}`);
+  const r = d.readings;
+  if (
+    r.fields_origin === "lectionary" &&
+    r.occasion === set.name &&
+    r.reading_set?.date_iso === lect.date &&
+    r.reading_set.index === i &&
+    r.selected_ot_ref === "" &&
+    r.selected_nt_ref === "" &&
+    r.scriptures.length === set.scriptures.length &&
+    r.scriptures.every((line, n) => line === set.scriptures[n])
+  ) {
+    return d;
+  }
   return withReadings(d, {
     occasion: set.name,
     scriptures: [...set.scriptures],
@@ -76,6 +92,17 @@ export function commitScriptureLines(d: DraftV1): DraftV1 {
 }
 
 export function clearReadings(d: DraftV1): DraftV1 {
+  const r = d.readings;
+  if (
+    r.fields_origin === "empty" &&
+    r.occasion === "" &&
+    r.scriptures.length === 0 &&
+    r.reading_set === null &&
+    r.selected_ot_ref === "" &&
+    r.selected_nt_ref === ""
+  ) {
+    return d;
+  }
   return withReadings(d, {
     occasion: "",
     scriptures: [],

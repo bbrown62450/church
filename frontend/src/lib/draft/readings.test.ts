@@ -61,6 +61,8 @@ describe("readings transitions (S readings.ts)", () => {
     expect(setDate(chosen, "2026-11-01").liturgy.include_communion).toBe(false);
     expect(onDateChanged(chosen, OCT_4)).toBe(chosen);
     expect(setDate(testDraft(), "").readings.date_iso).toBe("");
+    // An impossible date is stored as "", so the draft always loads again (F §4.6).
+    expect(setDate(testDraft(), "20261-10-04").readings.date_iso).toBe("");
   });
 
   it("applyReadingSet fills the fields for this date only and clears the picks", () => {
@@ -76,6 +78,8 @@ describe("readings transitions (S readings.ts)", () => {
     });
     expect(() => applyReadingSet(testDraft(), lectionary(OCT_11), 0)).toThrow();
     expect(() => applyReadingSet(testDraft(), lectionary(OCT_4), 5)).toThrow();
+    const applied = applyReadingSet(testDraft(), lectionary(OCT_4), 0);
+    expect(applyReadingSet(applied, lectionary(OCT_4), 0)).toBe(applied); // nothing changes
   });
 
   it("shouldAutoApply replaces empty fields and an old date's lectionary fields, never typed or archived ones", () => {
@@ -122,6 +126,7 @@ describe("readings transitions (S readings.ts)", () => {
       selected_ot_ref: "",
       selected_nt_ref: "",
     });
+    expect(clearReadings(cleared)).toBe(cleared); // nothing changes
     const d = filled();
     expect(setPick(d, "ot", "")).toBe(d);
     expect(setTranslation(d, "web", "web")).toBe(d);
