@@ -298,15 +298,18 @@ def _fresh_ai():
     """integrations.openai_client keeps its settings, SDK client, slots and any
     FakeAI installed by set_ai_for_tests for the whole process (slice 3a). Each
     test starts with no fake and the settings read again from the environment,
-    so a fake or a configured key never leaks from an earlier test.
+    so a fake or a configured key never leaks from an earlier test. From Task 13,
+    usecases.hymns first joins and rebuilds its NT-fetch pool, so no fetch an
+    earlier test blocked (and released) is still running.
 
     Resets only when the module is already imported (the deferred-import rule
     at the top of this file)."""
     import sys
 
-    module = sys.modules.get("integrations.openai_client")
-    if module is not None:
-        module.reset_for_tests()
+    for name in ("usecases.hymns", "integrations.openai_client"):
+        module = sys.modules.get(name)
+        if module is not None:
+            module.reset_for_tests()
     yield
 
 

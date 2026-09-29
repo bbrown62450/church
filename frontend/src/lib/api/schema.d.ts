@@ -135,6 +135,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/hymns/suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Suggest Hymns
+         * @description AI fills each empty slot with its top pick and gives every slot 2-4 other
+         *     ideas (owner decision 3; owner answer Q1). Charged to the `ai` bucket
+         *     (40 per 10 min per user, 400 per day per church; F §1.8).
+         */
+        post: operations["suggest_hymns_hymns_suggestions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/invites/accept": {
         parameters: {
             query?: never;
@@ -420,6 +442,45 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** HymnSuggestionIn */
+        HymnSuggestionIn: {
+            current_picks?: components["schemas"]["SlotPicks"];
+            /**
+             * Exclude Recent
+             * @default true
+             */
+            exclude_recent: boolean;
+            /** Hymnal */
+            hymnal?: string | null;
+            /** Nt Text */
+            nt_text?: string | null;
+            /**
+             * Occasion
+             * @default
+             */
+            occasion: string;
+            /** Scriptures */
+            scriptures?: string[];
+            /** Selected Nt Ref */
+            selected_nt_ref?: string | null;
+            /**
+             * Service Date Iso
+             * Format: date
+             */
+            service_date_iso: string;
+        };
+        /** HymnSuggestionsOut */
+        HymnSuggestionsOut: {
+            /** Excluded Recent Count */
+            excluded_recent_count: number;
+            /** Hymnal */
+            hymnal: string;
+            /** Nt Ref */
+            nt_ref: string | null;
+            /** Nt Text Used */
+            nt_text_used: boolean;
+            slots: components["schemas"]["SuggestedSlots"];
+        };
         /** HymnalListOut */
         HymnalListOut: {
             /** Default Hymnal */
@@ -654,6 +715,62 @@ export interface components {
             total_matched: number;
             /** Unparsed Refs */
             unparsed_refs: string[];
+        };
+        /**
+         * SlotPicks
+         * @description Exclusion hints only: never resolved, loaded or echoed, so an id from
+         *     another church or a deleted hymn is ignored, not a 404 (S API notes; the
+         *     declared exception to F §1.2 rules 2 and 5).
+         */
+        SlotPicks: {
+            /** Closing */
+            closing?: string | null;
+            /** Opening */
+            opening?: string | null;
+            /** Response */
+            response?: string | null;
+        };
+        /** SuggestedHymnOut */
+        SuggestedHymnOut: {
+            /** Hymnal */
+            hymnal: string;
+            /** Hymnal Count */
+            hymnal_count: number | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Link */
+            link: string | null;
+            /** Newer Than Preferred */
+            newer_than_preferred: boolean;
+            /** Number */
+            number: number | null;
+            /** Recent Use On */
+            recent_use_on: string | null;
+            /** Scripture Refs */
+            scripture_refs: string | null;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "ai" | "candidates";
+            /** Text Year */
+            text_year: number | null;
+            /** Themes */
+            themes: string[];
+            /** Title */
+            title: string;
+        };
+        /** SuggestedSlots */
+        SuggestedSlots: {
+            /** Closing */
+            closing: components["schemas"]["SuggestedHymnOut"][];
+            /** Opening */
+            opening: components["schemas"]["SuggestedHymnOut"][];
+            /** Response */
+            response: components["schemas"]["SuggestedHymnOut"][];
         };
         /** TranslationOut */
         TranslationOut: {
@@ -1040,6 +1157,96 @@ export interface operations {
             };
             /** @description Service Unavailable */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    suggest_hymns_hymns_suggestions_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-church-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HymnSuggestionIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HymnSuggestionsOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Gateway Timeout */
+            504: {
                 headers: {
                     [name: string]: unknown;
                 };

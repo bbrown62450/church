@@ -9,8 +9,9 @@ from typing import Annotated, Literal, Optional
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
-from api.deps import ActiveChurch, require_church
+from api.deps import ActiveChurch, CurrentUser, get_current_user, require_church
 from api.errors import error_responses
+from api.ratelimit import rate_limit
 from api.schemas import IsoDate, Page
 from usecases import hymns
 
@@ -57,6 +58,49 @@ class ScriptureMatchesOut(BaseModel):
     items: list[HymnMatchOut]          # passage tier first, then chapter tier
 
 
+class SlotPicks(BaseModel):
+    """Exclusion hints only: never resolved, loaded or echoed, so an id from
+    another church or a deleted hymn is ignored, not a 404 (S API notes; the
+    declared exception to F §1.2 rules 2 and 5)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    opening: Optional[uuid.UUID] = None
+    response: Optional[uuid.UUID] = None
+    closing: Optional[uuid.UUID] = None
+
+
+class HymnSuggestionIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    service_date_iso: IsoDate
+    occasion: Annotated[str, StringConstraints(max_length=300)] = ""
+    scriptures: list[Annotated[str, StringConstraints(max_length=200)]] = Field(default_factory=list, max_length=20)
+    selected_nt_ref: Optional[Annotated[str, StringConstraints(max_length=200)]] = None
+    nt_text: Optional[Annotated[str, StringConstraints(max_length=20_000)]] = None
+    hymnal: Optional[Annotated[str, StringConstraints(max_length=20)]] = None
+    exclude_recent: bool = True
+    current_picks: SlotPicks = Field(default_factory=SlotPicks)
+
+
+class SuggestedHymnOut(HymnOut):
+    source: Literal["ai", "candidates"]   # "candidates" = added by the minimum top-up; the UI ignores it
+
+
+class SuggestedSlots(BaseModel):
+    opening: list[SuggestedHymnOut]       # at most 5, best first
+    response: list[SuggestedHymnOut]
+    closing: list[SuggestedHymnOut]
+
+
+class HymnSuggestionsOut(BaseModel):
+    hymnal: str
+    nt_ref: Optional[str]                 # the NT reference used for context
+    nt_text_used: bool
+    excluded_recent_count: int
+    slots: SuggestedSlots
+
+
 def hymn_out(view: hymns.HymnView) -> HymnOut:
     return HymnOut(**asdict(view))
 
@@ -88,3 +132,23 @@ def scripture_matches(payload: ScriptureMatchIn,
     return ScriptureMatchesOut(hymnal=found.hymnal, refs_used=found.refs_used,
                                unparsed_refs=found.unparsed_refs, total_matched=found.total_matched,
                                items=[HymnMatchOut(**asdict(m)) for m in found.items])
+
+
+@router.post("/hymns/suggestions", response_model=HymnSuggestionsOut,
+             dependencies=[Depends(rate_limit("ai"))],
+             responses=error_responses(401, 403, 422, 429, 502, 503, 504))
+def suggest_hymns(payload: HymnSuggestionIn, church: ActiveChurch = Depends(require_church),
+                  user: CurrentUser = Depends(get_current_user)) -> HymnSuggestionsOut:
+    """AI fills each empty slot with its top pick and gives every slot 2-4 other
+    ideas (owner decision 3; owner answer Q1). Charged to the `ai` bucket
+    (40 per 10 min per user, 400 per day per church; F §1.8)."""
+    request = hymns.SuggestionRequest(
+        service_date=payload.service_date_iso, occasion=payload.occasion, scriptures=payload.scriptures,
+        selected_nt_ref=payload.selected_nt_ref, nt_text=payload.nt_text, hymnal=payload.hymnal,
+        exclude_recent=payload.exclude_recent, current_picks=payload.current_picks.model_dump())
+    result = hymns.suggest_hymns(church.id, user.id, request)
+    return HymnSuggestionsOut(
+        hymnal=result.hymnal, nt_ref=result.nt_ref, nt_text_used=result.nt_text_used,
+        excluded_recent_count=result.excluded_recent_count,
+        slots=SuggestedSlots(**{slot: [SuggestedHymnOut(**asdict(v)) for v in views]
+                                for slot, views in result.slots.items()}))

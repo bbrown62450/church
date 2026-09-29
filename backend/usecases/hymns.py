@@ -7,6 +7,9 @@ owner decisions 3 and 9; owner answers of 2026-09-29).
 - list_hymns_page: GET /hymns, each hymn as a HymnView with its recent use
   and the rubric's newer-than-preferred flag.
 - scripture_matches: POST /hymns/scripture-matches.
+- suggest_hymns: POST /hymns/suggestions. Reads in one session that closes
+  before any external call (F §1.8), then the NT text (10 s budget on its
+  own pool), then one OpenAI call, all inside a 75 s deadline.
 
 Every function takes the active church's id only (F §1.2 rule 1) and reads in
 one session. The layer rules are in usecases/__init__.py: no FastAPI,
@@ -15,30 +18,51 @@ through their modules, so a test can patch one function.
 """
 from __future__ import annotations
 
+import contextvars
 import logging
+import time
 import uuid
-from dataclasses import asdict, dataclass
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeout
+from dataclasses import asdict, dataclass, field
 from datetime import date
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from sqlalchemy.orm import Session
 
+import hymn_suggest
 import hymn_usage
 from db import session_scope
-from domain_errors import InvalidInput
+from domain_errors import DomainError, InvalidInput, NotConfigured
 from hymn_ranking import is_newer_than_preferred
 from hymn_search import match_hymns, parse_themes, usage_key
+from integrations import openai_client
 from repos import churches
 from repos import hymns as hymn_repo
 from repos.hymns import HymnalSummary, HymnRecord
-from scripture_refs import parse_refs, split_alternatives
+from scripture_refs import default_nt_ref, parse_refs, split_alternatives
 from service_rubric import merge_rubric
+from usecases import passages
 
 logger = logging.getLogger(__name__)
 
 
 REFS_MESSAGE = "Enter at least one scripture reference."
 HYMNAL_MESSAGE = "That hymnal isn't in this church's library."
+EMPTY_POOL_MESSAGE = "This hymnal has no hymns to suggest from."
+ALL_RECENT_MESSAGE = ("Every hymn in this hymnal was used within 12 weeks of this service. "
+                      "Turn off \u201cExclude\u201d and try again.")
+AI_NOT_CONFIGURED_MESSAGE = "AI suggestions aren't set up on this app yet."
+
+SUGGEST_BUDGET_S = 75.0            # the server deadline for POST /hymns/suggestions (F §1.8)
+NT_FETCH_BUDGET_S = 10.0           # the NT text fetch's share of it
+NT_TRANSLATION = "web"             # never ESV on the server (S Behavior change 8)
+MAX_COMPLETION_TOKENS = 1200
+
+# The NT fetch runs here so its 10 s budget holds although get_passage_text
+# takes no deadline (up to 20 s). An abandoned fetch finishes in the
+# background and still fills slice 2's passage cache.
+_NT_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="nt-fetch")
 
 
 @dataclass(frozen=True)
@@ -212,3 +236,136 @@ def scripture_matches(church_id: uuid.UUID, *, refs: list[str], hymnal: Optional
     return ScriptureMatches(hymnal=code, refs_used=list(result.refs_used),
                             unparsed_refs=list(result.unparsed_refs),
                             total_matched=result.total_matched, items=items)
+
+
+# --- AI suggestions (S Backend 3.6-3.8) ---------------------------------------------
+
+
+@dataclass(frozen=True)
+class SuggestionRequest:
+    service_date: date
+    occasion: str = ""
+    scriptures: list[str] = field(default_factory=list)
+    selected_nt_ref: Optional[str] = None
+    nt_text: Optional[str] = None
+    hymnal: Optional[str] = None
+    exclude_recent: bool = True
+    current_picks: dict[str, Optional[uuid.UUID]] = field(
+        default_factory=lambda: {"opening": None, "response": None, "closing": None})
+
+
+@dataclass(frozen=True)
+class SuggestedView(HymnView):
+    source: str                        # "ai", or "candidates" (the minimum top-up)
+
+
+@dataclass(frozen=True)
+class HymnSuggestions:
+    hymnal: str
+    nt_ref: Optional[str]
+    nt_text_used: bool
+    excluded_recent_count: int
+    slots: dict[str, list[SuggestedView]]
+
+
+def reset_for_tests() -> None:
+    """Tests: join the NT pool (every blocked fetch released first) and build a new one."""
+    global _NT_EXECUTOR
+    _NT_EXECUTOR.shutdown(wait=True)
+    _NT_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="nt-fetch")
+
+
+def _nt_context(client_text: Optional[str], nt_ref: Optional[str], fetch_text: Callable,
+                deadline: float, clock: Callable[[], float]) -> tuple[Optional[str], str]:
+    """(text, source): the client's text, else WEB fetched within NT_FETCH_BUDGET_S
+    and the deadline. A timeout, a failure or no text is (None, ...), never raised."""
+    if (client_text or "").strip():
+        return client_text, "client"
+    if not nt_ref:
+        return None, "none"
+    future = _NT_EXECUTOR.submit(contextvars.copy_context().run, fetch_text, nt_ref, NT_TRANSLATION)
+    try:
+        text = future.result(timeout=max(0.0, min(NT_FETCH_BUDGET_S, deadline - clock())))
+    except FutureTimeout:
+        return None, "timeout"
+    except Exception as exc:                      # the fetch must never fail the suggestions
+        logger.warning("hymn_suggestions nt_fetch_failed error=%s", type(exc).__name__)
+        return None, "none"
+    return (text, "fetched") if (text or "").strip() else (None, "none")
+
+
+def _per_slot(values: dict[str, Any]) -> str:
+    return "/".join(str(values[slot]) for slot in hymn_suggest.SLOTS)
+
+
+def suggest_hymns(church_id: uuid.UUID, user_id: uuid.UUID, req: SuggestionRequest, *,
+                  ai: Any = openai_client, fetch_text: Optional[Callable] = None,
+                  clock: Callable[[], float] = time.monotonic) -> HymnSuggestions:
+    """S Backend 3.6 steps 0-10. user_id is for the rate limit only (the route's
+    dependency charges it); nothing here writes."""
+    started = clock()
+    deadline = started + SUGGEST_BUDGET_S
+    fetch = fetch_text or passages.get_passage_text
+    facts: dict[str, Any] = {"hymnal": "-", "pool": 0, "excluded": 0, "nt_source": "-"}
+    try:
+        with session_scope() as s:                                   # step 1: read, then close
+            code = selected_hymnal(church_id, req.hymnal, s)
+            pool = hymn_repo.list_hymnal_records(church_id, code, session=s) if code else []
+            usage = hymn_usage.usage_near(church_id, req.service_date, session=s)
+            overrides = churches.get_church_rubric_overrides(church_id, session=s)
+        rubric = merge_rubric(overrides)
+        pool = [h for h in pool if (h.title or "").strip()]
+        facts.update(hymnal=code or "-", pool=len(pool))
+        if not pool:                                                  # step 2
+            raise InvalidInput(EMPTY_POOL_MESSAGE, field="hymnal")
+        eligible = ([h for h in pool if usage_key(h.title) not in usage]   # step 3
+                    if req.exclude_recent else pool)
+        excluded = len(pool) - len(eligible)
+        facts["excluded"] = excluded
+        if not eligible:
+            raise InvalidInput(ALL_RECENT_MESSAGE)
+        if not ai.ai_available():                                     # step 4
+            raise NotConfigured(AI_NOT_CONFIGURED_MESSAGE, code="ai_not_configured")
+        nt_ref = (req.selected_nt_ref or "").strip() or default_nt_ref(req.scriptures)   # step 5
+        nt_text, facts["nt_source"] = _nt_context(req.nt_text, nt_ref, fetch, deadline, clock)
+        candidates = hymn_suggest.build_candidates(eligible, req.scriptures, nt_ref=nt_ref,  # step 6
+                                                   current_picks=req.current_picks, rubric=rubric)
+        messages, token_map = hymn_suggest.build_prompt(                                  # step 7
+            candidates, occasion=req.occasion, scriptures=req.scriptures, nt_ref=nt_ref,
+            nt_text=nt_text, rubric=rubric)
+        logger.debug("hymn_suggestions prompt=%r", messages)
+        try:
+            raw = ai.complete(messages, max_completion_tokens=MAX_COMPLETION_TOKENS,     # step 8
+                              json_mode=True, deadline=deadline)
+        except NotConfigured:
+            raise NotConfigured(AI_NOT_CONFIGURED_MESSAGE, code="ai_not_configured") from None
+        parsed = hymn_suggest.parse_suggestion_json(raw)                                  # step 9
+        resolved = hymn_suggest.resolve_suggestions(parsed, token_map, eligible, candidates)
+        final = hymn_suggest.finalize_slots(resolved, req.current_picks, candidates)
+    except DomainError as exc:
+        _log(facts, started, clock, outcome=exc.code)
+        raise
+    year = rubric["prefer_before_year"]
+    slots = {slot: [SuggestedView(**asdict(hymn_view(item.record, usage=usage, prefer_before_year=year)),
+                                  source=item.source) for item in items]
+             for slot, items in final.items()}
+    facts.update(
+        candidates=_per_slot({k: len(v) for k, v in candidates.by_slot.items()}),
+        resolved=_per_slot({k: len(v) for k, v in resolved.items()}),
+        topped_up=_per_slot({k: sum(i.source == "candidates" for i in v) for k, v in final.items()}),
+        modes=_per_slot(candidates.modes),
+        newer_or_unknown=_per_slot({k: sum(r.text_year is None or r.text_year >= year for r in v)
+                                    for k, v in candidates.by_slot.items()}),
+        prefer_before_year=year, prefer_familiar=rubric["prefer_familiar"],
+        rubric_customized=bool(overrides))
+    _log(facts, started, clock, outcome="ok")
+    return HymnSuggestions(hymnal=code, nt_ref=nt_ref, nt_text_used=nt_text is not None,
+                           excluded_recent_count=excluded, slots=slots)
+
+
+def _log(facts: dict[str, Any], started: float, clock: Callable[[], float], *, outcome: str) -> None:
+    """One line per call (S Backend 3.6 step 10, 3.8 "Logs"): counts, modes,
+    the model, the duration and the outcome. Never the prompt, nt_text or titles."""
+    details = " ".join(f"{key}={value}" for key, value in facts.items())
+    logger.info("hymn_suggestions %s model=%s duration_ms=%d outcome=%s", details,
+                openai_client.ai_settings().model or "-", round((clock() - started) * 1000), outcome)
