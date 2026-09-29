@@ -6326,3 +6326,526 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 **Expected:** one commit, 4 files changed.
 
 **Review checkpoint (T13):** every S note says "(3b plan)" and matches the code; nothing else in S or F changed; the checklist items read as the owner will run them; `git show --stat HEAD` lists the four files only.
+
+### Task 14: Whole-branch verification and the slice 3b pull request (owner's yes before the PR is opened and before it is marked ready) (S Testing "Frontend (Vitest)", AC10-AC14, AC20; F §4.1, §4.3, §4.4, §4.9, §4.10, §5.2, §5.4; owner decisions 3, 5; standing rules; clarifications 4, 18)
+
+The whole branch is checked in one place before anyone reviews it: the frontend suite three times and twice more with the clock moved forward, types, lint, the production build and its routes, the backend suite, the generated API files (unchanged), the gates (client components, no link to the old app, no `apiFetch` in components, storage only through `lib/storage.ts`, no raw HTML, `SHIPPED_STEPS` holding `"readings"` and `"hymns"`, only the planned Python changes), the exact list of changed paths, and the exact list of commits against this plan. The branch is already on GitHub from the backup pushes, but no PR exists; on the owner's first yes the agent opens it as a **draft**, so CI runs. When CI is green, the agent reports and, on the owner's second yes, marks it ready. Merging is Task 15, with its own yes.
+
+Below, `<scratch>` is the absolute path of the session's scratchpad directory, and `<N>` is the PR number Step 10 prints; write both out literally. Every `gh` command uses `-R bbrown62450/church`. Never run a bare `git push` or `--force`. If T1 ended in outcome A, Task 1b's commit and files are part of the branch: add them where Steps 6-8 say so, and its tests to every count (name them in the Step 9 message).
+
+**Files:** none changed. A local or CI failure is fixed in its owning task's files (Step 14).
+
+**Interfaces:**
+- Consumes: everything from T2-T13, in particular each task's commit subject (Step 8 reads them from this plan between `### Task 1:` and `### Task 14:`), the cumulative counts (Baselines and counts), `SHIPPED_STEPS` (T12), and CI (`.github/workflows/ci.yml`, unchanged: `backend`, `backend-postgres`, `frontend` with lint, typecheck, `API types match the OpenAPI snapshot (F §5.4)`, test and build).
+- Produces: PR `<N>` (`claude/slice-2-plan-4q33le` → `main`), titled `Slice 3b: the Hymns step`, not a draft after Step 13, CI green on the branch head, its body holding the line `Tests: frontend 356 → 421 in 55 → 64 files; backend 1106 → 1110 passed, 11 → 11 skipped` and ending with `🤖 Generated with [Claude Code](https://claude.com/claude-code)`. Later user: T15.
+
+- [ ] **Step 1 (agent): Bring the branch up to date with `origin/main`**
+
+```bash
+git status --short
+git fetch origin
+git rev-list --count HEAD..origin/main
+git log --oneline -1 origin/main
+git log --oneline --grep '^Plan: slice 3b hymns step' -1
+git rev-list --count origin/claude/slice-2-plan-4q33le..HEAD
+```
+
+**Expected,** in order: nothing (or `?? .claude/`); the fetch prints nothing or only updated refs; `0`; `b47abba Merge pull request #27 from bbrown62450/claude/slice-2-plan-4q33le` (or a later merge the owner made); `<sha> Plan: slice 3b hymns step (S slice 3; owner answers 2026-09-29)`; `0` (every commit was backed up).
+- If the first count is not `0`: `git merge origin/main -m "Merge origin/main into claude/slice-2-plan-4q33le (Task 14)" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"`. On a conflict, run `git merge --abort`, stop and tell the owner which files conflict. Without one, continue: Steps 2-8 run on the merged tree, and any new tests the merge brought change the totals by exactly those (name them in the Step 9 message).
+- If `git status --short` shows anything else, stop: commit it in its owning task or ask.
+
+- [ ] **Step 2 (agent): Run the frontend suite three times and with the clock moved forward, then types and lint**
+
+```bash
+for i in 1 2 3; do (cd frontend && npm test 2>&1 | grep -E "Test Files|Tests |FAIL"); done
+cat > "<scratch>/shift-clock.mjs" <<'JSEOF'
+// Moves the real clock forward by WSB_CLOCK_SHIFT_DAYS days (loaded with NODE_OPTIONS=--import).
+// A test that fakes Date (vi.useFakeTimers + vi.setSystemTime) is unaffected; one that forgot to is caught.
+const offset = Number(process.env.WSB_CLOCK_SHIFT_DAYS ?? "0") * 24 * 60 * 60 * 1000;
+const RealDate = Date;
+function ShiftedDate(...args) {
+  if (!new.target) return new RealDate(RealDate.now() + offset).toString();
+  return args.length === 0 ? new RealDate(RealDate.now() + offset) : new RealDate(...args);
+}
+Object.setPrototypeOf(ShiftedDate, RealDate);
+ShiftedDate.prototype = RealDate.prototype;
+ShiftedDate.now = () => RealDate.now() + offset;
+globalThis.Date = ShiftedDate;
+JSEOF
+for d in 8 400; do echo "clock +$d days"; (cd frontend && WSB_CLOCK_SHIFT_DAYS=$d NODE_OPTIONS="--import <scratch>/shift-clock.mjs" npm test 2>&1 | grep -E "Test Files|Tests |FAIL"); done
+(cd frontend && npm test 2>&1 | grep -cE "Warning:|not wrapped in act")
+(cd frontend && npm run typecheck 2>&1 | tail -1 && npm run lint 2>&1 | tail -1)
+```
+
+**Expected:** three times ` Test Files  64 passed (64)` and `      Tests  421 passed (421)` (baseline 356 in 55; after T3-T12: 359, 366, 382, 388, 392, 403, 407, 414, 419, 421) and no `FAIL`; then `clock +8 days` and `clock +400 days`, each followed by the same two lines and no `FAIL`; `0`; `> tsc --noEmit` and `> eslint` with nothing after. Any other number: find the task whose count drifted. A run that fails even once is a failure (Step 14): make the test deterministic (fake only `Date`, set to `DRAFT_NOW`; await the UI with `findBy`/`waitFor`) rather than retrying it.
+
+- [ ] **Step 3 (agent): Run the backend suite and the Postgres marker count**
+
+```bash
+.venv/bin/python -m pytest -q | tail -1
+.venv/bin/python -m pytest -q -m postgres | tail -1
+```
+
+**Expected:** `1110 passed, 11 skipped in <t>s` (T2 added four tests; T13 edits one assertion); `11 skipped, 1110 deselected in <t>s`.
+
+- [ ] **Step 4 (agent): Build the frontend with CI's placeholder environment**
+
+```bash
+(cd frontend && NEXT_PUBLIC_SUPABASE_URL=https://ci-placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-placeholder NEXT_PUBLIC_API_URL=http://localhost:8000 npm run build 2>&1 | grep -E "Compiled successfully|Error|/builder")
+(cd frontend && node -e 'const m = require("./.next/app-path-routes-manifest.json"); console.log(Object.values(m).sort().join(" "))')
+```
+
+**Expected:** `✓ Compiled successfully in <t>s`, the route table's five builder lines (`├ ○ /builder`, `├ ○ /builder/hymns`, `├ ○ /builder/liturgy`, `├ ○ /builder/readings`, `├ ○ /builder/review`) and no `Error` line; then exactly:
+
+```
+/ /_global-error /_not-found /auth/callback /builder /builder/hymns /builder/liturgy /builder/readings /builder/review /favicon.ico /join /login /welcome
+```
+
+(3b adds no route.) The build must run in the real checkout: Turbopack refuses a symlinked `node_modules`. If it fails only with `Failed to fetch` for a Geist font (no network), say so in the Step 9 message and rely on CI's `frontend` job.
+
+- [ ] **Step 5 (agent): Check the generated API files did not change**
+
+```bash
+(cd frontend && npm run gen:api >/dev/null) && git diff --exit-code --stat frontend/src/lib/api/schema.d.ts; echo "schema diff exit $?"
+git diff --name-only origin/main...HEAD -- frontend/src/lib/api/openapi.json frontend/src/lib/api/schema.d.ts | wc -l
+.venv/bin/python -m pytest -q backend/tests/test_openapi_contract.py 2>&1 | tail -1
+git status --short
+```
+
+**Expected:** `schema diff exit 0`; `0` (3b changes no API; T2 changes only the prompt; clarification 18); `<n> passed in <t>s`; nothing (or `?? .claude/`).
+
+- [ ] **Step 6 (agent): Run the gates**
+
+```bash
+find 'frontend/src/app/(signed-in)' \( -name page.tsx -o -name layout.tsx \) -exec sh -c 'head -1 "$1" | grep -qx "\"use client\";" || echo "not a client component: $1"' _ {} \; ; echo "client components checked: $(find 'frontend/src/app/(signed-in)' \( -name page.tsx -o -name layout.tsx \) | wc -l)"
+grep -rniE "streamlit|liturgy-frozen" frontend/src --include=*.ts --include=*.tsx | grep -vE "\.test\.tsx?:"; echo "old app grep exit $?"
+grep -rn "apiFetch" frontend/src/components frontend/src/app --include=*.ts --include=*.tsx | grep -vE "\.test\.tsx?:"; echo "apiFetch in UI grep exit $?"
+grep -rnE "window\.(local|session)Storage|(local|session)Storage\.(getItem|setItem|removeItem|key|clear)" frontend/src --include=*.ts --include=*.tsx | grep -vE "^frontend/src/lib/storage\.ts:|\.test\.tsx?:|^frontend/src/test/"; echo "storage grep exit $?"
+grep -rn "dangerouslySetInnerHTML" frontend/src --include=*.tsx; echo "raw html grep exit $?"
+grep -rn "new Date(" frontend/src/components/builder/hymns frontend/src/lib/hymns --include=*.ts --include=*.tsx | grep -vE "\.test\.tsx?:"; echo "date grep exit $?"
+grep -n "export const SHIPPED_STEPS" frontend/src/lib/draft/steps.ts
+grep -rn "Available soon" frontend/src --include=*.tsx | grep -v "\.test\.tsx:" | wc -l
+git diff --name-only origin/main...HEAD -- '*.py' backend/requirements.txt requirements-dev.txt backend/migrations .github frontend/package.json frontend/package-lock.json docs/ops-runbook.md
+for c in $(git rev-list origin/main..HEAD); do git show -s --format=%B "$c" | grep -q '^Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>$' || echo "no trailer: $(git show -s --format='%h %s' "$c")"; done; echo "trailer check done"
+```
+
+**Expected,** in order:
+- `client components checked: 10` with no "not a client component" line before it (F §4.1; 3b replaces the hymns page's body);
+- `old app grep exit 1`; `apiFetch in UI grep exit 1` (F §4.4); `storage grep exit 1` (F §4.3; 3b adds no storage key); `raw html grep exit 1`; `date grep exit 1` (F §4.10: the step and `lib/hymns` never parse a date);
+- `34:export const SHIPPED_STEPS: ReadonlySet<StepId> = new Set<StepId>(["readings", "hymns"]);`;
+- `2` (`wc` pads it; "Available soon" lives in `step-placeholder.tsx` and `summary-panel.tsx` only, now for Liturgy and Review);
+- exactly these seven lines, in this order: `backend/hymn_suggest.py`, `backend/tests/test_api_hymn_suggestions.py`, `backend/tests/test_hymn_suggest.py`, `backend/tests/test_lectionary_domain.py`, `backend/tests/test_slice1_docs.py`, `backend/usecases/hymns.py`, `backend/vanderbilt_lectionary.py` (T2 and T13; with Task 1b, also its files; no requirement, migration, workflow, package or runbook change);
+- only `trailer check done`.
+
+Any other output: stop, find the owning task (Step 14) and fix it there. A grep hit may be a false positive (a comment): read the line, and if it is harmless, say why in the Step 9 message rather than bending the code to silence it.
+
+- [ ] **Step 7 (agent): Check the exact list of changed paths**
+
+```bash
+LC_ALL=C sort > "<scratch>/slice3b-expected-paths.txt" <<'EOF'
+backend/hymn_suggest.py
+backend/tests/test_api_hymn_suggestions.py
+backend/tests/test_hymn_suggest.py
+backend/tests/test_lectionary_domain.py
+backend/tests/test_slice1_docs.py
+backend/usecases/hymns.py
+backend/vanderbilt_lectionary.py
+docs/manual-verification.md
+docs/superpowers/plans/2026-09-29-slice-3b-hymns-step.md
+docs/superpowers/specs/2026-09-25-migration-foundations-design.md
+docs/superpowers/specs/2026-09-25-slice-3-hymns-design.md
+frontend/src/app/(signed-in)/(church)/builder/hymns/page.tsx
+frontend/src/components/app/search-combobox.test.tsx
+frontend/src/components/app/search-combobox.tsx
+frontend/src/components/builder/builder-shell.test.tsx
+frontend/src/components/builder/hymns/alternative-chips.tsx
+frontend/src/components/builder/hymns/hymn-label.test.tsx
+frontend/src/components/builder/hymns/hymn-label.tsx
+frontend/src/components/builder/hymns/hymn-picker.tsx
+frontend/src/components/builder/hymns/hymn-slot-card.tsx
+frontend/src/components/builder/hymns/hymns-step.test.tsx
+frontend/src/components/builder/hymns/hymns-step.tsx
+frontend/src/components/builder/hymns/hymns-toolbar.tsx
+frontend/src/components/builder/hymns/scripture-matches.tsx
+frontend/src/components/builder/hymns/suggest-hymns-button.tsx
+frontend/src/components/builder/hymns/use-undo-toasts.ts
+frontend/src/components/builder/step-placeholder.tsx
+frontend/src/components/builder/summary-hymns.tsx
+frontend/src/components/builder/summary-panel.tsx
+frontend/src/components/ui/switch.tsx
+frontend/src/lib/api/timeouts.ts
+frontend/src/lib/api/types.ts
+frontend/src/lib/dates.test.ts
+frontend/src/lib/dates.ts
+frontend/src/lib/draft/fingerprint.test.ts
+frontend/src/lib/draft/status.test.ts
+frontend/src/lib/draft/status.ts
+frontend/src/lib/draft/steps.ts
+frontend/src/lib/draft/store.test.ts
+frontend/src/lib/features.ts
+frontend/src/lib/hymns/filter.test.ts
+frontend/src/lib/hymns/filter.ts
+frontend/src/lib/hymns/hymnal.ts
+frontend/src/lib/hymns/labels.test.ts
+frontend/src/lib/hymns/labels.ts
+frontend/src/lib/hymns/match-request.test.ts
+frontend/src/lib/hymns/match-request.ts
+frontend/src/lib/hymns/picks.test.ts
+frontend/src/lib/hymns/picks.ts
+frontend/src/lib/hymns/suggest-request.test.ts
+frontend/src/lib/hymns/suggest-request.ts
+frontend/src/lib/queries/hymns.test.tsx
+frontend/src/lib/queries/hymns.ts
+frontend/src/lib/queries/keys.test.ts
+frontend/src/lib/queries/keys.ts
+frontend/src/test/fixtures/index.ts
+EOF
+git diff --name-only --no-renames origin/main...HEAD | LC_ALL=C sort > "<scratch>/slice3b-actual-paths.txt"
+wc -l < "<scratch>/slice3b-expected-paths.txt"
+wc -l < "<scratch>/slice3b-actual-paths.txt"
+LC_ALL=C comm -3 "<scratch>/slice3b-expected-paths.txt" "<scratch>/slice3b-actual-paths.txt"
+git diff --name-status --no-renames origin/main...HEAD | cut -c1 | sort | uniq -c
+```
+
+**Expected:** `56`; `56`; `comm` prints nothing; then `  29 A` and `  27 M`. These are the File Structure's paths: 29 created (the plan and 28 frontend files) and 27 modified (17 frontend files, 7 backend files, the two specs and the checklist). With Task 1b, add its paths to the list and to the counts. An indented `comm` line (changed, not listed) means a task touched a file its **Files:** does not name: find it with `git log --format='%h %s' origin/main..HEAD -- '<path>'`; anything under `backend/` other than T2's, T13's and Task 1b's files, `frontend/src/lib/api/openapi.json`, `schema.d.ts`, `package*.json` or `.github/` is a stop. An unindented line means a task's commit is missing.
+
+- [ ] **Step 8 (agent): Check the exact list of commits against this plan**
+
+```bash
+.venv/bin/python - docs/superpowers/plans/2026-09-29-slice-3b-hymns-step.md > "<scratch>/slice3b-plan-subjects.txt" <<'EOF'
+import pathlib, re, sys
+text = "\n" + pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+lines = text.split("\n### Task 1:", 1)[1].split("\n### Task 14:", 1)[0].splitlines()
+for line in lines:
+    m = re.match(r'\s*git commit -m "((?:[^"\\]|\\.)*)"', line)
+    if m:
+        print(re.sub(r"\\(.)", r"\1", m.group(1)))
+EOF
+PLAN=$(git log --format=%H --grep '^Plan: slice 3b hymns step' -1)
+git log --reverse --no-merges --format=%s "$PLAN"..HEAD > "<scratch>/slice3b-branch-subjects.txt"
+wc -l < "<scratch>/slice3b-plan-subjects.txt"
+diff "<scratch>/slice3b-plan-subjects.txt" "<scratch>/slice3b-branch-subjects.txt"; echo "commit list diff exit $?"
+git log --reverse --format='%h %s' origin/main..HEAD
+```
+
+**Expected:** `12` (one commit for each of T2-T13; T1 changes no file); `commit list diff exit 0` with no output before it; the branch's commits oldest first: the plan's own commits (`WIP plan: slice 3b` several times, then `Plan: slice 3b hymns step (S slice 3; owner answers 2026-09-29)`), then the twelve task commits from `<sha> Hymns: the AI prompt names the church season and avoids other seasons' hymns (owner answer 3)` to `<sha> Docs: slice 3b notes in S and F, and the slice 3 manual checklist (S Manual checks; F §4.6, §4.7, §4.9)` (plus a Step 1 merge, if any). A `diff` line is a failure unless it is a `>` line `Fix: … (Task <n> review)` (a review fix), `Fix: … (Task <n>, slice 3b final verification)` (Step 14), `Plan: …` (a plan correction the controller committed) or Task 1b's commit, each named in the Step 9 message.
+
+- [ ] **Step 9 (agent → OWNER): Ask for the go-ahead to open the draft PR**
+
+```bash
+gh auth status 2>&1 | grep -E "Logged in to github.com"
+gh pr list -R bbrown62450/church --head claude/slice-2-plan-4q33le --state open --json number,url
+git rev-list --count origin/main..HEAD
+```
+
+**Expected:** one `✓ Logged in to github.com account <login> (keyring)` line; `[]` (no open PR from this branch; PRs #26 and #27 are merged); the branch's commit count. If `gh` is not logged in, ask the owner to run `gh auth login`. If an open PR exists, stop and ask.
+
+Send the owner exactly this, with `<count>` filled in, and wait for a clear yes:
+
+> Slice 3b is verified locally: frontend 421 tests in 64 files, passing three runs in a row and with the clock moved 8 and 400 days ahead (356 in 55 before); typecheck, lint and the production build are clean; the backend has 1110 passed, 11 skipped (1106 before: the church season in the AI prompt added four tests); the API types did not change; the checks are clean (every page is a client component, no link to the old app, the screens use the query hooks, no new browser storage, Date & readings and Hymns are the steps switched on); changed files (56) and commits (<count>) are as planned, and every commit is already backed up on the branch. May I open the pull request as a **draft** titled "Slice 3b: the Hymns step", so the checks run? I will come back with the results and ask again before marking it ready. Merging stays with you (Task 15).
+
+Add one line per note from Steps 1-8 (a merge from `main`, a skipped font download, a `Fix:` commit, Task 1b, how the switch was made). A no leaves the branch as it is.
+
+- [ ] **Step 10 (agent, on the owner's yes): Write the PR body and open the draft PR**
+
+```bash
+cat > "<scratch>/slice3b-pr-body.md" <<'EOF'
+PR 3b of slice 3: the Hymns step. After it merges, a signed-in member fills the Opening, Response and Closing hymns from the church's hymnal on step 2 of the Service Builder. Spec: docs/superpowers/specs/2026-09-25-slice-3-hymns-design.md (3b). Plan: docs/superpowers/plans/2026-09-29-slice-3b-hymns-step.md. No migration and no API change; one backend change to the AI prompt.
+
+The step
+- Three slot cards, each with a searchable picker (by number or title; two hymns with the same title are told apart) or the chosen hymn with its Listen link, Change and remove with Undo. Notices: used or planned within 12 weeks, not in your hymnal, chosen twice.
+- The toolbar: the hymnal (when the church has two or more), "Exclude hymns used within 12 weeks" (on by default; it hides hymns but never clears a pick), and Suggest hymns: empty slots get the AI's top pick and every slot gets 2 to 4 one-tap other ideas; Cancel; each AI error has its own message.
+- Hymns for the readings: the day's readings matched in the hymnal, grouped, with an extra reference and Add to a slot.
+- Newer hymns show "Written {year}".
+- The step bar counts Hymns (n of 3, then Complete), Review lists each empty slot, and the summary lists the three hymns. Liturgy and Review keep "Available soon".
+
+Backend: the AI prompt now names the church season (from the service date) and asks the model to avoid hymns for another season or feast unless the readings call for them (owner answer 3). @@T1B_LINE@@
+
+Owner answers (2026-09-29): choosing a hymn or a hymnal is unsaved work, the Exclude switch and the ideas are not (1); the recent-use finding is in the plan's Task 1 (2); the church season in the prompt (3); "Written {year}" as designed (4); a guided phone check after the merge (5). @@SWITCH_LINE@@
+
+Tests: frontend 356 → 421 in 55 → 64 files; backend 1106 → 1110 passed, 11 → 11 skipped
+
+After merge (Task 15): a guided check on the owner's phone (about six steps) and a quick look on a computer, then a short "Slice 3b record" in docs/ops-runbook.md.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+EOF
+```
+
+Replace `@@SWITCH_LINE@@` with `The switch is generated from the base-nova registry.` or `The switch is rebuilt from the upstream shadcn source (base-nova, pinned commit), because the build container cannot reach the registry (plan clarification 4).` (T7's commit body says which), and `@@T1B_LINE@@` with `Recent use: <one sentence from Task 1b>.` if T1 ended in outcome A, else delete it (and the space before it). With Task 1b, also change the `Tests:` line to the real counts. Then:
+
+```bash
+grep -c '@@' "<scratch>/slice3b-pr-body.md"
+grep -cx 'Tests: frontend 356 → 421 in 55 → 64 files; backend 1106 → 1110 passed, 11 → 11 skipped' "<scratch>/slice3b-pr-body.md"
+git fetch origin && test "$(git rev-list --count HEAD..origin/main)" = 0 && test "$(git rev-list --count origin/claude/slice-2-plan-4q33le..HEAD)" = 0 && echo "branch is current and backed up"
+gh pr create -R bbrown62450/church --draft --base main --head claude/slice-2-plan-4q33le \
+  --title "Slice 3b: the Hymns step" \
+  --body-file "<scratch>/slice3b-pr-body.md"
+gh pr view claude/slice-2-plan-4q33le -R bbrown62450/church --json number,isDraft,headRefOid,url --jq '"#\(.number) draft=\(.isDraft) \(.headRefOid) \(.url)"'
+git rev-parse HEAD
+```
+
+**Expected:** `0` (grep exits 1); `1`; `branch is current and backed up` (if not: push with `git push origin claude/slice-2-plan-4q33le`, or go back to Step 1 if `main` moved); the PR URL; `#<N> draft=true <sha> https://github.com/bbrown62450/church/pull/<N>` with the same `<sha>` as `git rev-parse HEAD`.
+
+- [ ] **Step 11 (agent): Watch the checks**
+
+Run with `run_in_background: true`:
+
+```bash
+gh pr checks <N> -R bbrown62450/church --watch --interval 30
+```
+
+**Expected** when it exits: exit code 0 and every check `pass`: `backend`, `backend-postgres`, `frontend`, and the Vercel preview. `no checks reported`: run it again. Any `fail`: Step 14.
+
+- [ ] **Step 12 (agent): Read the CI logs and compare**
+
+```bash
+RUN=$(gh run list -R bbrown62450/church --workflow ci.yml --branch claude/slice-2-plan-4q33le --commit "$(git rev-parse HEAD)" --limit 1 --json databaseId --jq '.[0].databaseId'); echo "run $RUN"
+RUN=$(gh run list -R bbrown62450/church --workflow ci.yml --branch claude/slice-2-plan-4q33le --commit "$(git rev-parse HEAD)" --limit 1 --json databaseId --jq '.[0].databaseId'); gh run view "$RUN" -R bbrown62450/church --json jobs --jq '.jobs[] | "\(.name): \(.conclusion)"'
+RUN=$(gh run list -R bbrown62450/church --workflow ci.yml --branch claude/slice-2-plan-4q33le --commit "$(git rev-parse HEAD)" --limit 1 --json databaseId --jq '.[0].databaseId'); JOB=$(gh run view "$RUN" -R bbrown62450/church --json jobs --jq '.jobs[] | select(.name == "frontend") | .databaseId'); gh run view -R bbrown62450/church --job "$JOB" --log | grep -E "Test Files +[0-9]+ passed|Tests +[0-9]+ passed|Compiled successfully|/builder"
+RUN=$(gh run list -R bbrown62450/church --workflow ci.yml --branch claude/slice-2-plan-4q33le --commit "$(git rev-parse HEAD)" --limit 1 --json databaseId --jq '.[0].databaseId'); JOB=$(gh run view "$RUN" -R bbrown62450/church --json jobs --jq '.jobs[] | select(.name == "backend") | .databaseId'); gh run view -R bbrown62450/church --job "$JOB" --log | grep -E "[0-9]+ passed"
+RUN=$(gh run list -R bbrown62450/church --workflow ci.yml --branch claude/slice-2-plan-4q33le --commit "$(git rev-parse HEAD)" --limit 1 --json databaseId --jq '.[0].databaseId'); JOB=$(gh run view "$RUN" -R bbrown62450/church --json jobs --jq '.jobs[] | select(.name == "backend-postgres") | .databaseId'); gh run view -R bbrown62450/church --job "$JOB" --log | grep -E "pg_smoke: OK|[0-9]+ (passed|failed)"
+```
+
+**Expected:** `run <id>`; `backend: success`, `backend-postgres: success`, `frontend: success`; frontend `Test Files  64 passed (64)`, `Tests  421 passed (421)`, `✓ Compiled successfully` and the five `/builder` route lines; backend `1110 passed, 11 skipped in …s`; backend-postgres `pg_smoke: OK` and `11 passed, 1110 deselected` (with any warning count the 3a runs showed). If a required job failed on or after 2026-10-19, first check the runner image (`Image: ubuntu-24.04` expected; GitHub moves `ubuntu-latest` then) and report a setup failure on a new image to the owner before changing any 3b file.
+
+- [ ] **Step 13 (agent → OWNER): Report CI and ask to mark the PR ready**
+
+Send exactly this, with the values filled in, and wait for a clear yes:
+
+> PR #<N> (<url>) is green (run <run id>): frontend 421 tests in 64 files, build OK; backend 1110 passed, 11 skipped; the Postgres job clean; the Vercel preview built. May I mark it ready for review? Merging stays with you (Task 15).
+
+On the yes:
+
+```bash
+gh pr ready <N> -R bbrown62450/church
+gh pr view <N> -R bbrown62450/church --json isDraft,state --jq '"draft=\(.isDraft) \(.state)"'
+```
+
+**Expected:** `✓ Pull request bbrown62450/church#<N> is marked as "ready for review"`, then `draft=false OPEN`. Tell the owner in one line: "PR #<N> is ready for review. Next: Task 15, the merge on your yes, then a guided check on your phone, one step at a time."
+
+- [ ] **Step 14 (agent): Fix any failure in its owning task**
+
+Read the failure (for CI: `gh run view <run-id> -R bbrown62450/church --log-failed | tail -80`), reproduce it locally, and fix it in the task that owns it:
+
+| Failing check or test | Owning task |
+|---|---|
+| `test_lectionary_domain.py` (`church_season`), `test_hymn_suggest.py`, `test_api_hymn_suggestions.py` (the season line) | T2 |
+| `draft/status.test.ts` (`isPristine`), `draft/fingerprint.test.ts`, `draft/store.test.ts` | T3 |
+| `lib/hymns/picks.test.ts`, `lib/api/types.ts`, the `hymn`/`suggested`/`hymnals` fixtures | T4 |
+| `lib/hymns/{filter,labels,match-request,suggest-request}.test.ts`, `dates.test.ts` (`formatAbbrevDate`) | T5 |
+| `queries/hymns.test.tsx`, `keys.test.ts`, `timeouts.ts`, `features.ts`, the list and body fixtures | T6 |
+| `search-combobox.test.tsx`, `switch.tsx` lint or types | T7 |
+| `hymn-label.test.tsx`, `hymns-step.test.tsx` "the Hymns step" and "slot cards" blocks | T8 |
+| its "the toolbar" block | T9 |
+| its "Suggest hymns" block | T10 |
+| its "Hymns for the readings" block | T11 |
+| `status.test.ts` (steps, `stepStatus`, `stillNeeded`), `builder-shell.test.tsx`, the `SHIPPED_STEPS` gate, the hymns route in the build | T12 |
+| the spec or F text, `docs/manual-verification.md`, `test_slice1_docs.py` | T13 |
+| a flaky run in Step 2, or a failure only with the clock moved | the task owning the test: fake only `Date` (set to `DRAFT_NOW`), await the UI with `findBy`/`waitFor`, never sleep in place of a condition |
+| any other existing test, the Vercel preview only | report to the owner before changing anything |
+
+For each fix: change only the owning task's files; rerun Steps 2-8; commit with the subject `Fix: <what> (Task <n>, slice 3b final verification)` and the trailer; have that task re-reviewed; push with `git push origin claude/slice-2-plan-4q33le` (a backup before Step 10; after it, covered by the owner's first yes); after Step 10, repeat Steps 11-12 and send Step 13's message with the new run. An infrastructure failure with no test output gets one `gh run rerun <run-id> -R bbrown62450/church --failed` first.
+
+Expected counts after this task: frontend `421 passed` in 64 files (CI the same); backend `1110 passed, 11 skipped` (CI `backend-postgres`: `11 passed, 1110 deselected`). No commit unless Step 14 needed a fix.
+
+### Task 15: Merge and after (OWNER + agent): the merge, the deploy, a guided check on the phone and a look on a computer, the slice 3b record (S Manual checks, AC10, AC11, AC17, AC20; F §5.5; owner decisions 2, 3, 5; owner answers 2, 5)
+
+3b changes the API's prompt text only (T2) and no migration or Python requirement, so the merge's Railway deploy builds the API with the season line and its pre-deploy `alembic upgrade head` finds the database at head (`0004_invites_reusable`) and runs nothing; no Railway, Supabase or branch-protection setting changes. The Vercel production deploy is the one members see: after it, step 2 of the builder is the real Hymns step. Merges never reach https://liturgy-frozen.streamlit.app/ (owner decision 2). Owner answer 5: a guided check on the phone of six short steps, then a quick look on a computer, given **one at a time** (give one OWNER step, wait for the owner's report or "next", then give the next). The agent writes each result, with its date, into `<scratch>/slice3b-t15-results.md` (not committed); Step 11 fills the record from it, together with T1's finding (without ids). Hymn titles, numbers and suggestions come from the church's hymnal and the live AI, so they may differ from the examples; the owner reports what the page shows.
+
+Below, `<N>` is the PR number (T14), `<merge sha>` the merge commit Step 2 prints, `<scratch>` the scratchpad path; write them out literally. Every `gh` command uses `-R bbrown62450/church`. Pushing, merging, and any settings change each need the owner's explicit yes, asked separately. No token, email address or church id is recorded anywhere.
+
+**Files:**
+- Merge (Steps 1-2): no file changes.
+- Create (not committed): `<scratch>/slice3b-t15-results.md`.
+- Modify (records PR, Step 11, on `claude/slice-2-plan-4q33le` fast-forwarded to `origin/main` after the merge): `docs/ops-runbook.md`: insert `### Slice 3b record` right after `### Slice 3a record`'s table (its last row starts `| Follow-ups | 3b: the Hymns step UI,`) and before `## Backups`. A `###` heading, because `test_ops_workflows.py::test_runbook_has_the_seven_sections_in_order` pins the `##` list.
+- Test: none new.
+
+**Interfaces:**
+- Consumes: PR `<N>` ready and green (T14); the production URLs (owner decision 5); the "## Slice 3" checklist (T13); T1's results file.
+- Produces: 3b live on `main` and in production; the "Slice 3b record" in `docs/ops-runbook.md`. Later user: slice 4's plan (starts from `main` after this).
+
+- [ ] **Step 1 (agent): Check the PR can merge**
+
+```bash
+git fetch origin
+gh pr view <N> -R bbrown62450/church --json state,isDraft,mergeable,mergeStateStatus,headRefOid --jq '"\(.state) draft=\(.isDraft) \(.mergeable) \(.mergeStateStatus) \(.headRefOid)"'
+git rev-parse HEAD
+git rev-list --count HEAD..origin/main
+```
+
+**Expected:** `OPEN draft=false MERGEABLE CLEAN <sha>` with `<sha>` equal to `git rev-parse HEAD`; `0`. If `main` moved (count not `0`, or `BEHIND`): merge it as in T14 Step 1, rerun T14 Steps 2-3 (`421 passed` in 64 files, plus any tests the merge brought; `1110 passed, 11 skipped`), push with the owner's yes, wait for green checks, and run this step again. `BLOCKED`: a required check is not green; fix it (T14 Step 14). Never merge with `--admin`.
+
+- [ ] **Step 2 (agent → OWNER): Ask to merge, then merge**
+
+Send: "PR #<N> is ready, green and up to date with main. May I merge it with a merge commit? After that members see the real Hymns step (Liturgy and Review stay 'Available soon'), and the AI's hymn suggestions name the church season; the database does not change." On a clear yes:
+
+```bash
+gh pr merge <N> --merge -R bbrown62450/church
+gh pr view <N> -R bbrown62450/church --json state,mergeCommit,mergedAt --jq '"\(.state) \(.mergeCommit.oid) \(.mergedAt)"'
+```
+
+**Expected:** `MERGED <merge sha> <UTC time>`. Write the sha and time (UTC and Eastern) into the results file.
+
+- [ ] **Step 3 (agent): Check CI on `main` and the two deployments**
+
+Run the watch with `run_in_background: true`:
+
+```bash
+RUN=$(gh run list -R bbrown62450/church --workflow ci.yml --branch main --commit <merge sha> --limit 1 --json databaseId --jq '.[0].databaseId'); echo "run $RUN"; gh run watch "$RUN" -R bbrown62450/church --exit-status --interval 30 >/dev/null; echo "ci exit $?"
+```
+
+Then:
+
+```bash
+gh api "repos/bbrown62450/church/deployments?sha=<merge sha>" --jq '.[] | "\(.id) \(.environment)"'
+for id in $(gh api "repos/bbrown62450/church/deployments?sha=<merge sha>" --jq '.[].id'); do gh api "repos/bbrown62450/church/deployments/$id/statuses" --jq '"'"$id"' \(.[0].state)"'; done
+curl -sS -o /dev/null -w "%{http_code} %{redirect_url}\n" --max-time 15 https://worship-service-builder.vercel.app/builder/hymns || echo "vercel not reachable from here"
+```
+
+**Expected:** `run <id>` and `ci exit 0`; one deployment per environment (a Vercel `Production` one, and Railway's if it reports one) each ending `success` (a `pending` or `in_progress` state: run the loop again a minute later); the `curl` line either a redirect to sign-in (for example `307 https://worship-service-builder.vercel.app/login?next=%2Fbuilder%2Fhymns`) or `vercel not reachable from here` (the container's network policy; then Step 4 is the check). A `failure` state or a `404`: stop and tell the owner (Step R if the site cannot serve). Ask the owner, once, to glance at Railway's Deploy Logs for the merge's deploy: a health check 200, `AI: configured (model=gpt-4.1-mini)`, and no Traceback or ERROR line. Record the answer.
+
+- [ ] **Step 4 (OWNER, then agent): Phone, step 1 of 6: the step and the readings' hymns**
+
+Send the owner this, and wait for the report:
+
+> On your phone, open https://worship-service-builder.vercel.app (signed in). If next Sunday's readings are not filled in on step 1, tap **⋮** next to Summary, choose **New service**, and wait for them. Then tap **2 Hymns** in the step bar. You should see "Hymns" with three cards (Opening, Response, Closing), each with a search box, and below them **Hymns for the readings** with a number next to it. Tap it: hymns matching the readings appear under "Matches the readings" and "Same chapter". Tap **Add** on one of them and choose **Opening hymn**: it appears in the Opening card. Does it?
+
+Record the answer (and the phone and browser, the Sunday, and the hymn added). Anything wrong: note it, ask for a screenshot, and decide with the owner whether it is a follow-up or needs a fix before going on. "Couldn't load this church's hymnal." here means the API or the database is not answering: record it, check Step 3's deploy, and try again before going on.
+
+- [ ] **Step 5 (OWNER, then agent): Phone, step 2 of 6: searching by number and by title**
+
+> In the **Response** card, tap the search box and type a hymn number you know. That hymn should be first in the list, shown as "#number Title". Then clear it and type part of a title, for example "grace": the matching hymns show with their numbers. Choose one: it fills the Response card, with a ▶ Listen link when Hymnary has a page for it. Did that work?
+
+Record the answer.
+
+- [ ] **Step 6 (OWNER, then agent): Phone, step 3 of 6: recently used hymns**
+
+> Near the top, **Exclude hymns used within 12 weeks** should be on. Under it, does it say how many hymns are hidden? Turn it off, then on again: the hymns you chose stay in their cards. If a chosen hymn was used within 12 weeks, its card says "Used on …" or "Also planned for …". What do you see?
+
+Record the answer, and compare it with T1's finding (recent use exists or not for this church). No hidden count when T1 found no recent use in the window is the expected result, not a failure; note it.
+
+- [ ] **Step 7 (OWNER, then agent): Phone, step 4 of 6: Suggest hymns**
+
+> Tap **Suggest hymns**. It says "Suggesting…" and takes a few seconds. Then the Closing card, which was empty, gets a hymn, and under every card there is "Other ideas" with at least two hymns; any hymn written in 1970 or later shows "Written" and its year. The hymns you chose yourself stay. Tap one of the ideas: it swaps into that card; tap the hymn that went into the ideas: they swap back. Last, look at the suggestions: for a Sunday in the Season after Pentecost there should be no Palm Sunday, Easter, Advent or Christmas hymns. Is that what you see? If any seem out of season, please tell me which.
+
+Record the answer, including any out-of-season hymn by title (owner answer 3). "AI suggestions aren't set up on this app yet." means Railway lost the key: record it and ask the owner to check the variables before going on.
+
+- [ ] **Step 8 (OWNER, then agent): Phone, step 5 of 6: removing with Undo, and the summary**
+
+> On the Opening card, tap the **✕**: the hymn goes and a message says "Removed …" with **Undo**. Tap **Undo**: it comes back. Now the step bar should show Hymns as done, and tapping **Summary** at the top should list "Opening · …", "Response · …" and "Closing · …". Is that right?
+
+Record the answer.
+
+- [ ] **Step 9 (OWNER, then agent): Phone, step 6 of 6: New service asks first**
+
+> Tap **⋮** next to Summary, then **New service**. Because you chose hymns, it should ask "Start a new service?" before clearing anything. Tap **Cancel**: your hymns are still there. Did it ask?
+
+Record the answer.
+
+- [ ] **Step 10 (OWNER, then agent): A quick look on a computer**
+
+> On a computer, open the same address in a wide window and go to Hymns. The summary on the right should list the three hymns, and the step bar should read "1 Date & readings Complete · 2 Hymns Complete · 3 Liturgy Soon · 4 Review & send Not in archive". Remove one hymn with ✕, then click **4 Review & send**: under "Still needed" it should say "No … hymn — Choose one" for that slot. Does it look right?
+
+Record the answer. Optional, only if the owner offers: the liturgy-frozen smoke (sign in, the church and a saved service open). Otherwise record "Not run: 3b changes no data, and merges never reach liturgy-frozen."
+
+- [ ] **Step 11 (agent): Write the slice 3b record**
+
+```bash
+git fetch origin
+git switch claude/slice-2-plan-4q33le
+git merge --ff-only origin/main
+git log --oneline -1
+grep -n '^### Slice 3a record$\|^| Follow-ups | 3b: the Hymns step UI\|^## Backups$' docs/ops-runbook.md
+```
+
+**Expected:** `Fast-forward` (or `Already up to date.`); `<merge sha> Merge pull request #<N> from bbrown62450/claude/slice-2-plan-4q33le`; three lines in that order (the 3a record's heading, its last table row, `## Backups`). Insert, between that last row and `## Backups` (one blank line on each side):
+
+```markdown
+### Slice 3b record
+
+Slice 3b (the Hymns step: three slots filled by number or title, recent use
+within 12 weeks, hymns for the readings, AI suggestions with other ideas,
+"Written {year}" on newer hymns, and the step in the step bar, Review and
+the summary) merged as PR #<N>. The API's AI prompt now names the church
+season; no database change, so production stays at `0004_invites_reusable`
+(head). The owner's check was a guided check on a phone and a look on a
+computer (owner answer 5, 2026-09-29), covering the "(owner, after 3b)"
+items of `docs/manual-verification.md` → "Slice 3" in part. No token, email
+address or church id is recorded here.
+
+| Step | Result | Date |
+|---|---|---|
+| Recent use (Task 1) | <The finding in one or two sentences, without ids: outcome A (fixed in Task 1b), B, C or D, and the owner's choice.> | <date> |
+| Merge and deploy | PR #<N> merged <UTC time> (<Eastern time>), merge commit `<short sha>`. CI on `main` for the merge commit (run <run id>): success. Deployments: <Vercel Production success; Railway success / what the loop showed>. Deploy Logs: <health 200, AI configured (model=gpt-4.1-mini), no Traceback / what the owner saw> | <date> |
+| 1. The step and the readings' hymns (phone: <phone and browser>) | <Three cards; matches grouped; Add → Opening worked. / What the owner saw instead.> | <date> |
+| 2. Search by number and title | <Number first; title search; Response filled; Listen link. / …> | <date> |
+| 3. Recently used hymns | <Switch on; "<n> hymns are hidden." / no hidden count (as Task 1 expects); picks stayed. / …> | <date> |
+| 4. Suggest hymns | <Empty slot filled; at least 2 ideas per slot; swap and swap back; Written {year} shown; no out-of-season hymns. / …> | <date> |
+| 5. Remove, Undo and the summary | <Removed … with Undo; step bar done; summary lists the three hymns. / …> | <date> |
+| 6. New service | <Asked first; Cancel kept the hymns. / …> | <date> |
+| Computer | <Summary column with the hymns; step bar; Still needed row after a removal. / …> | <date> |
+| Streamlit smoke on liturgy-frozen | <OK: sign-in, the church and a saved service. / Not run: 3b changes no data, and merges never reach liturgy-frozen.> | <date> |
+| Follow-ups | <None. / One line per follow-up.> Slice 4: the Liturgy step. 5a: recording hymn use on every save (the new app does not write `hymn_usage` yet). 6a: Settings → Hymns flips `SETTINGS_HYMNS_READY`. | <date> |
+```
+
+Replace every `<…>` from the results files, keeping one alternative where a cell offers two (separated by ` / `). Then:
+
+```bash
+sed -n '/^### Slice 3b record$/,/^## Backups$/p' docs/ops-runbook.md | grep -c '<'
+sed -n '/^### Slice 3b record$/,/^## Backups$/p' docs/ops-runbook.md | grep -Eic '@|bearer|eyJ|postgres(ql)?://|[0-9a-f]{8}-[0-9a-f]{4}-'
+.venv/bin/python -m pytest -q backend/tests/test_ops_workflows.py backend/tests/test_slice1_docs.py backend/tests/test_docs.py 2>&1 | tail -1
+git diff --stat
+git add docs/ops-runbook.md
+git commit -m "Runbook: slice 3b record (merged; the Hymns step is live; owner's guided phone check)" -m "Records the slice 3b merge (PR #<N>): the church season in the AI
+prompt, no database change; CI on main and the deployments; the recent-
+use finding (Task 1); the owner's guided check on a phone (the readings'
+hymns, search, recent use, Suggest, remove and Undo, New service) and a
+look on a computer; the liturgy-frozen smoke or why it was skipped. No
+token, email or church id is recorded.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+**Expected:** `0`; `0`; `89 passed in <t>s`; ` docs/ops-runbook.md | <n> +`; one commit.
+
+- [ ] **Step 12 (agent, on the owner's yes): Push, open and merge the records PR**
+
+Ask: "The slice 3b record is written (docs/ops-runbook.md only). May I push it and open its PR?" On the yes:
+
+```bash
+git push origin claude/slice-2-plan-4q33le
+gh pr create -R bbrown62450/church --base main --head claude/slice-2-plan-4q33le \
+  --title "Runbook: slice 3b record" \
+  --body "Records slice 3b (PR #<N>) in docs/ops-runbook.md → Slice 3b record: the recent-use finding, the merge and deployments, and the owner's guided check on a phone and look on a computer. No token, email or church id is recorded. Docs only.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)"
+gh pr checks claude/slice-2-plan-4q33le -R bbrown62450/church --watch
+```
+
+**Expected:** the push; the PR URL; `backend`, `backend-postgres`, `frontend` and the Vercel preview pass. Then ask: "The records PR is green. May I merge it with a merge commit?" On the yes: `gh pr merge claude/slice-2-plan-4q33le --merge -R bbrown62450/church`, then `gh pr view claude/slice-2-plan-4q33le -R bbrown62450/church --json state --jq .state` → `MERGED`. Report: "Slice 3 is complete and recorded: the Hymns step is live; <n> follow-ups. Slice 4 can start from `main`."
+
+- [ ] **Step R (only if the 3b release must come out): Revert**
+
+Use this only when the production site cannot serve, or the builder breaks sign-in or the church pages, after the merge, and a fix would take too long. 3b wrote nothing to the database and changed no API shape, so a revert is code only; drafts in members' browsers stay valid for 2c's code (3b changed no draft field, and a hymn pick stays in the draft for the Hymns step to show again later). On the owner's yes for each command that leaves this machine:
+
+```bash
+git fetch origin
+git switch -c claude/revert-slice-3b origin/main
+git revert -m 1 --no-commit <merge sha>
+git commit -m "Revert slice 3b (PR #<N>): back to the 3a release" -m "The 3b merge <what failed>. 3b changed no database, API shape or draft
+shape, so nothing else needs undoing; the AI prompt loses its season line.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+(cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
+.venv/bin/python -m pytest -q | tail -1
+git push -u origin claude/revert-slice-3b
+gh pr create -R bbrown62450/church --base main --head claude/revert-slice-3b --title "Revert slice 3b" \
+  --body "Reverts the slice 3b merge (PR #<N>) because <what failed>. No database change to undo.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)"
+gh pr checks claude/revert-slice-3b -R bbrown62450/church --watch
+```
+
+**Expected:** Vitest `Test Files  55 passed (55)`, `Tests  356 passed (356)` (if anything else merged after 3b, it differs by exactly those tests); `1106 passed, 11 skipped`; every check passes. Merge on the owner's yes, then the owner checks that the site signs in and shows the builder with Hymns "Available soon". Record the revert as a row of the slice 3b record (or its own records PR if Step 12 already merged).
+
+Expected counts after this task: frontend `421 passed` in 64 files on `main`; backend `1110 passed, 11 skipped` (CI `backend-postgres`: `11 passed, 1110 deselected`). The records PR adds no test.
