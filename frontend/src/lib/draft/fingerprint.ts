@@ -1,0 +1,45 @@
+/**
+ * Unsaved-changes detection (F §4.6 "Unsaved changes"; S "fingerprint.ts").
+ * `fingerprint` is 32-bit FNV-1a over a stable JSON string (object keys
+ * sorted at every level), as 8 hex digits.
+ */
+import { draftToServicePayload } from "./mapping";
+import type { DraftV1 } from "./schema";
+import { isPristine } from "./status";
+
+function stable(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stable);
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, stable((value as Record<string, unknown>)[key])]),
+    );
+  }
+  return value;
+}
+
+/** JSON with every object's keys sorted, so key order never changes the fingerprint. */
+export function stableStringify(value: unknown): string {
+  return JSON.stringify(stable(value));
+}
+
+/** 32-bit FNV-1a of the UTF-16 code units, as 8 hex digits. */
+export function fnv1a32(text: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+export function fingerprint(payload: unknown): string {
+  return fnv1a32(stableStringify(payload));
+}
+
+/** Never saved: dirty means not pristine. Saved or loaded: the payload differs from what was saved. */
+export function isDirty(draft: DraftV1): boolean {
+  if (draft.saved_fingerprint === null) return !isPristine(draft);
+  return fingerprint(draftToServicePayload(draft)) !== draft.saved_fingerprint;
+}
