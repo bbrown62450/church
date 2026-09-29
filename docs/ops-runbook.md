@@ -326,6 +326,26 @@ part; checks 5, 6, 7, 10, 11 and 13 were not run.
 | Desktop look | The summary column shows the date, occasion and readings with OT and NT marks; no sideways scroll. Owner: looks good | 2026-09-29 |
 | Follow-ups | Slices 3 and 4: whether card toggles, hymnal overrides and hymn alternatives count as unsaved work (owner question). 5a: the Readings-available banner on an archived service (owner question). A date changed away from a rate-limited date and back asks again before Retry-After. Still open: manual checks 5, 6, 7, 10, 11 and 13, including the liturgy-frozen smoke | 2026-09-29 |
 
+### Slice 3a record
+
+Slice 3a (the Hymns step backend: `GET /hymnals`, `GET /hymns`,
+`POST /hymns/scripture-matches`, `POST /hymns/suggestions`, the new OpenAI
+client and two new `GET /church` fields) merged as PR #26 with no database
+change, so production stays at `0004_invites_reusable` (head). No page calls the
+new routes until 3b; the Hymns step still shows "Available soon". The live checks
+were the owner's, from the Railway logs and a signed-in Console snippet.
+
+| Step | Result | Date |
+|---|---|---|
+| Merge and deploy | PR #26 merged 2026-09-29 about 18:43 UTC (14:43 EDT), merge commit `1a1441e`. Deploy Logs: pre-deploy with no `Running upgrade` line; health check 200; first startup line `AI: not configured (OPENAI_API_KEY missing)`, as expected before the key was set; no Traceback or ERROR | 2026-09-29 |
+| CI on `main` | Runs 36614060751 and 36614088233 for `1a1441e`: success. On the PR head `67e3046`: backend 1106 passed, 11 skipped; backend-postgres 11 passed; frontend 356 in 55 files | 2026-09-29 |
+| Scripture sample | The owner's read-only export of `hymn_catalog` (400 rows spread across the catalog) replaced the synthetic sample before the PR was marked ready: 2 798 of 2 798 segments parsed (100 %). `hymn_usage.date_iso`: 90 rows, all 10 characters (`YYYY-MM-DD`) | 2026-09-29 |
+| OpenAI | A separate project and key for this app, set on Railway by the owner (never shared in chat); monthly budget cap $15. The project's allowed-models list held only `gpt-3.5-turbo`, `gpt-4-turbo` and `text-embedding-3-small`; the owner added `gpt-4.1-mini`, the plan's recommendation. `OPENAI_REASONING_EFFORT` not set | 2026-09-29 |
+| Model variable | A stale `OPENAI_MODEL=gpt-3.5-turbo` from the old app was already on Railway, so the first deploy after the key logged `AI: configured (model=gpt-3.5-turbo)`. The owner edited it; the next deploy logged `AI: configured (model=gpt-4.1-mini)` with no part of the key shown | 2026-09-29 |
+| Console check | `/church` 200 (default none, effective GG2013); `/hymnals` 200: GG2013, 853 hymns, 795 with scripture references; `/hymns` 200 in 1411 ms, total 853, 244 newer than preferred, `content-encoding: gzip`; scripture matches for October 4, 2026 200 in 1027 ms, 25 matched, none unparsed; one suggestion 200 in 3940 ms with 5 hymns per slot, three distinct top picks, all from the model, NT text fetched for Matthew 21:33-46 | 2026-09-29 |
+| Streamlit smoke | Not run (optional; merges never reach liturgy-frozen) | 2026-09-29 |
+| Follow-ups | 3b: the Hymns step UI, and whether hymnal changes and hymn alternatives count as unsaved work (owner question). The Console check found no recent use within 12 weeks of October 4 (`recent=0`) although 90 uses are logged: check in 3b whether they are older or belong to another church. The suggestion's response slot included two Palm Sunday hymns on the Nineteenth Sunday after Pentecost: if off-season picks recur in 3b, add church-year guidance to the prompt. Research whether Hymnary.org can supply first lines for title matching (owner answer Q2). Known risk: one member's burst of 40 suggestions can briefly hold most worker threads before `ai_busy` | 2026-09-29 |
+
 ## Backups
 
 - **Workflow:** `.github/workflows/backup.yml` (`db-backup`). Daily at 08:37 UTC,
