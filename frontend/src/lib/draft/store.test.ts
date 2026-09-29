@@ -3,7 +3,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CHURCH_IDS, churchProfile, DRAFT_NOW, lectionary, testDraft, USER_ID } from "@/test/fixtures";
 
 import { draftToServicePayload } from "./mapping";
-import { applyReadingSet, editOccasion, editScriptureLines, setPick, shouldAutoApply } from "./readings";
+import {
+  applyReadingSet,
+  chooseReadingSet,
+  editOccasion,
+  editScriptureLines,
+  setPick,
+  setTranslation,
+  shouldAutoApply,
+} from "./readings";
 import { corruptDraftKey, draftKey, type DraftV1 } from "./schema";
 import { DraftStore, WRITE_DELAY_MS, type DraftNotice, type DraftStorage } from "./store";
 
@@ -148,6 +156,22 @@ describe("DraftStore load (F §4.6 Versioning)", () => {
   });
 });
 
+describe("DraftStore roll-forward and owner answers Q2 and A", () => {
+  it("keeps a passed default date when a reading set was chosen, and rolls one with only a translation picked", () => {
+    const tenDaysLater = clock(new Date(DRAFT_NOW.getTime() + 10 * 86_400_000)); // Friday, October 9
+    const filled = applyReadingSet(testDraft(), lectionary("2026-10-04"), 0);
+    const chosen = chooseReadingSet(filled, lectionary("2026-10-04"), 1);
+    const kept = makeStore(memoryStorage({ [KEY]: JSON.stringify(chosen) }).storage, tenDaysLater.now).store;
+    expect(kept.getSnapshot().draft.readings.date_iso).toBe("2026-10-04");
+    const { store } = makeStore(memoryStorage({ [KEY]: JSON.stringify(filled) }).storage, tenDaysLater.now);
+    expect(store.getSnapshot().draft.readings.date_iso).toBe("2026-10-11"); // the automatic fill alone rolls
+    // Owner answer A: a translation override does not hold the date back, and it is kept.
+    const translated = setTranslation(filled, "kjv", "web");
+    const rolled = makeStore(memoryStorage({ [KEY]: JSON.stringify(translated) }).storage, tenDaysLater.now).store;
+    expect(rolled.getSnapshot().draft.readings).toMatchObject({ date_iso: "2026-10-11", translation: "kjv" });
+  });
+});
+
 describe("DraftStore changes (S store.ts)", () => {
   it("debounces writes, bumps updated_at, and ignores a recipe that returns the same draft", () => {
     const { storage, data, writes } = memoryStorage({ [KEY]: JSON.stringify(testDraft()) });
@@ -232,7 +256,7 @@ describe("DraftStore changes (S store.ts)", () => {
 
   it("adopts another tab's strictly newer draft (normalized) and ignores equal, foreign or broken ones", () => {
     const base = testDraft();
-    const { storage, writes } = memoryStorage({ [KEY]: JSON.stringify(base) });
+    const { storage, writes, data } = memoryStorage({ [KEY]: JSON.stringify(base) });
     const { store, notices } = makeStore(storage);
     const { handleStorageEvent } = store; // bound, like the other public methods
     store.update((d) => editOccasion(d, "Mine")); // a pending write
@@ -242,6 +266,7 @@ describe("DraftStore changes (S store.ts)", () => {
     store.handleStorageEvent(draftKey(USER_ID, CHURCH_IDS.hope), JSON.stringify({ ...mine, church_id: CHURCH_IDS.hope }));
     store.handleStorageEvent(KEY, "{broken");
     store.handleStorageEvent(KEY, null);
+    store.syncFromStorage(); // shown again: the stored draft (base) is older than mine
     expect(store.getSnapshot().draft).toBe(mine);
 
     const filled = applyReadingSet(base, lectionary("2026-10-04"), 0);
@@ -254,5 +279,28 @@ describe("DraftStore changes (S store.ts)", () => {
     expect(notices).toEqual(["adopted"]);
     vi.runAllTimers();
     expect(writes).toEqual([]); // my pending write was dropped: theirs is newer
+
+    // Shown again (slice 2c): the stored draft is read directly, before its storage event arrives.
+    const typed = {
+      ...editOccasion(theirs, "Typed in the other tab"),
+      updated_at: new Date(Date.parse(theirs.updated_at) + 1).toISOString(),
+    };
+    data.set(KEY, JSON.stringify(typed));
+    store.syncFromStorage();
+    expect(store.getSnapshot().draft.readings.occasion).toBe("Typed in the other tab");
+    store.handleStorageEvent(KEY, JSON.stringify(typed)); // the late event is not newer
+    expect(notices).toEqual(["adopted", "adopted"]);
+
+    // A flush that finds a strictly newer stored draft (its event still on the way) adopts it instead of writing.
+    store.update((d) => editOccasion(d, "Mine, stamped earlier")); // this clock is behind the other tab's
+    const later = {
+      ...editOccasion(typed, "Written just before my flush"),
+      updated_at: new Date(Date.parse(typed.updated_at) + 1).toISOString(),
+    };
+    data.set(KEY, JSON.stringify(later));
+    store.flush();
+    expect(writes).toEqual([]);
+    expect(store.getSnapshot().draft.readings.occasion).toBe("Written just before my flush");
+    expect(notices).toEqual(["adopted", "adopted", "adopted"]);
   });
 });

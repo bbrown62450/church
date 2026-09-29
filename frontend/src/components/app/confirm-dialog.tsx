@@ -1,5 +1,7 @@
 "use client";
 
+import type { AlertDialog as AlertDialogPrimitive } from "@base-ui/react/alert-dialog";
+
 import { PendingButton } from "@/components/app/pending-button";
 import {
   AlertDialog,
@@ -18,16 +20,27 @@ export type ConfirmDialogProps = {
   description?: string;
   /** Names the action ("Delete service"), never "OK" (F §4.8). */
   confirmLabel: string;
+  /** "Cancel" unless the screen's copy says otherwise ("Keep mine"). */
+  cancelLabel?: string;
   onConfirm(): void;
   /** While true the confirm button is a disabled "Saving…"; the caller closes the dialog on success. */
   pending?: boolean;
   destructive?: boolean;
+  /** Called by the cancel button only; Escape and a click outside just close. */
+  onCancel?(): void;
+  /**
+   * Where focus goes when the dialog closes (Base UI `finalFocus`): pass one
+   * when the element that opened it may be gone by then, so focus never
+   * drops to the page.
+   */
+  finalFocus?: AlertDialogPrimitive.Popup.Props["finalFocus"];
 };
 
 /**
  * F §4.8 "Destructive or lossy action": a Base UI AlertDialog, controlled with
  * open/onOpenChange (F §4.9 item 6). Confirm is a PendingButton rather than
- * AlertDialogAction so the dialog stays open while the mutation runs.
+ * AlertDialogAction so the dialog stays open while the mutation runs. Both
+ * buttons are 44 px tall on phones (F §4.9), the usual 32 px from `md`.
  */
 export function ConfirmDialog({
   open,
@@ -35,21 +48,28 @@ export function ConfirmDialog({
   title,
   description,
   confirmLabel,
+  cancelLabel = "Cancel",
   onConfirm,
   pending = false,
   destructive = false,
+  onCancel,
+  finalFocus,
 }: ConfirmDialogProps) {
   return (
     <AlertDialog open={open} onOpenChange={(next) => onOpenChange(next)}>
-      <AlertDialogContent>
+      <AlertDialogContent {...(finalFocus === undefined ? {} : { finalFocus })}>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           {description ? <AlertDialogDescription>{description}</AlertDialogDescription> : null}
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel size="touch" className="md:h-8" onClick={onCancel ? () => onCancel() : undefined}>
+            {cancelLabel}
+          </AlertDialogCancel>
           <PendingButton
             pending={pending}
+            size="touch"
+            className="md:h-8"
             variant={destructive ? "destructive" : "default"}
             onClick={() => onConfirm()}
           >

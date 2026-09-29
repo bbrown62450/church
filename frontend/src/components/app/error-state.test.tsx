@@ -68,4 +68,26 @@ describe("ErrorState", () => {
     expect(screen.getByRole("button", { name: "Retry" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Retry" })).not.toHaveAttribute("aria-busy");
   });
+
+  it("shows a screen's own sentence and button label, and can hold the button disabled without the spinner", async () => {
+    const user = userEvent.setup();
+    const onRetry = vi.fn();
+    const props = {
+      error: new ApiError(502, "upstream_error", "Bad gateway", { requestId: "0123456789abcdef" }),
+      onRetry,
+      message: "The lectionary couldn't be reached. Enter readings yourself, or try again in a few minutes.",
+      retryLabel: "Try again",
+    };
+    const { rerender } = render(<ErrorState {...props} retryDisabled />);
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "The lectionary couldn't be reached. Enter readings yourself, or try again in a few minutes.",
+    );
+    expect(screen.getByRole("alert")).not.toHaveTextContent("Ref:");
+    const button = screen.getByRole("button", { name: "Try again" });
+    expect(button).toBeDisabled();
+    expect(button).not.toHaveAttribute("aria-busy");
+    rerender(<ErrorState {...props} />);
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
 });

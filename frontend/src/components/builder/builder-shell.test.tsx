@@ -2,7 +2,9 @@
  * The builder shell (F §4.7, F acceptance 11; S "Builder shell", Testing
  * `builder-shell.test.tsx`; AC17). Every test fixes the clock at Tuesday,
  * September 29, 2026 (only `Date` is faked, so user-event's timers run), so a
- * fresh draft is dated Sunday, October 4, 2026.
+ * fresh draft is dated Sunday, October 4, 2026. The lectionary answers "no
+ * readings" unless a test says otherwise, so drafts keep their fields
+ * (`lectionary-sync.test.tsx` tests the fill).
  */
 import { act, screen, waitFor, within } from "@testing-library/react";
 import type { ReactElement } from "react";
@@ -15,10 +17,20 @@ import LiturgyStepPage from "@/app/(signed-in)/(church)/builder/liturgy/page";
 import ReadingsStepPage from "@/app/(signed-in)/(church)/builder/readings/page";
 import ReviewStepPage from "@/app/(signed-in)/(church)/builder/review/page";
 import { useDraft } from "@/lib/draft/context";
-import { applyReadingSet, editOccasion, setPick } from "@/lib/draft/readings";
+import { applyReadingSet, editOccasion, setPick, setTranslation } from "@/lib/draft/readings";
 import { draftKey, type DraftV1 } from "@/lib/draft/schema";
 import { installFakeApi } from "@/test/fake-api";
-import { church, churchProfile, DRAFT_NOW, lectionary, me, testDraft, USER_ID } from "@/test/fixtures";
+import {
+  church,
+  churchProfile,
+  DRAFT_NOW,
+  lectionary,
+  lectionaryRoute,
+  me,
+  testDraft,
+  translations,
+  USER_ID,
+} from "@/test/fixtures";
 import { testRouter } from "@/test/mocks";
 import { renderWithProviders } from "@/test/render";
 
@@ -48,8 +60,8 @@ function DraftProbe() {
   );
 }
 
-function renderBuilder(page: ReactElement, path: string) {
-  installFakeApi({ "GET /church": churchProfile() });
+function renderBuilder(page: ReactElement, path: string, lookup = lectionaryRoute()) {
+  installFakeApi({ "GET /church": churchProfile(), "GET /lectionary/readings": lookup, "GET /translations": translations() });
   return renderWithProviders(<BuilderLayout>{page}</BuilderLayout>, { me: me(), church: church(), path });
 }
 
@@ -64,7 +76,7 @@ afterEach(() => {
 });
 
 describe("builder shell (F §4.7)", () => {
-  it("renders each step route inside the shell: progress, the placeholder card and the footer links", async () => {
+  it("renders each step route inside the shell: progress, the step or its placeholder card, and the footer links", async () => {
     const cases: [string, ReactElement, number, string, string[]][] = [
       ["/builder/readings", <ReadingsStepPage key="r" />, 1, "Date & readings", ["Next: Hymns"]],
       ["/builder/hymns", <HymnsStepPage key="h" />, 2, "Hymns", ["Back", "Next: Liturgy"]],
@@ -78,7 +90,7 @@ describe("builder shell (F §4.7)", () => {
 
       const steps = within(screen.getByRole("navigation", { name: "Steps" })).getAllByRole("link");
       expect(steps.map((link) => link.textContent)).toEqual([
-        "1 Date & readings Soon",
+        "1 Date & readings 1 of 3", // shipped in 2c: a date, no occasion, no readings
         "2 Hymns Soon",
         "3 Liturgy Soon",
         "4 Review & send Not in archive",
@@ -92,13 +104,28 @@ describe("builder shell (F §4.7)", () => {
       expect(steps.filter((link) => link.getAttribute("aria-current") === "step")).toEqual([steps[number - 1]]);
 
       const card = screen.getByRole("region", { name: label });
-      expect(within(card).getByRole("heading", { name: "Available soon" })).toBeInTheDocument();
-      expect(within(card).getByText("Keep using the current app for this part.")).toBeInTheDocument();
-      expect(within(card).queryByRole("link")).toBeNull(); // no link to the old app (owner answer Q2)
+      if (number === 1) {
+        // Date & readings is the real step from slice 2c.
+        expect(within(card).getByLabelText("Service date")).toHaveValue("2026-10-04");
+        expect(within(card).queryByRole("heading", { name: "Available soon" })).toBeNull();
+      } else {
+        expect(within(card).getByRole("heading", { name: "Available soon" })).toBeInTheDocument();
+        expect(within(card).getByText("Keep using the current app for this part.")).toBeInTheDocument();
+        expect(within(card).queryByRole("link")).toBeNull(); // no link to the old app (owner answer Q2)
+      }
 
       const links = within(screen.getByRole("navigation", { name: "Step navigation" })).getAllByRole("link");
       expect(links.map((link) => link.textContent)).toEqual(footer);
-      expect(screen.queryByRole("heading", { name: "Still needed" })).toBeNull(); // nothing shipped yet
+      // Review lists what the shipped step still needs; the other steps do not.
+      if (number === 4) {
+        const needed = screen.getByRole("region", { name: "Still needed" });
+        expect(within(needed).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+          "No occasion — Add one",
+          "No scripture readings — Add one",
+        ]);
+      } else {
+        expect(screen.queryByRole("heading", { name: "Still needed" })).toBeNull();
+      }
 
       // The frame fills what the header leaves (the (church) layout's flex column), with no hard-coded header height.
       const main = screen.getByRole("main");
@@ -124,7 +151,7 @@ describe("builder shell (F §4.7)", () => {
     }
   });
 
-  it("shows the summary: the date, Available soon for the rest, and where the draft is kept", async () => {
+  it("shows the summary: the date and occasion, the readings, Available soon for the rest, and where the draft is kept", async () => {
     // A controllable (min-width: 64rem) query, so the test can widen the window past lg.
     const wide = { matches: false, listeners: new Set<() => void>() };
     vi.spyOn(window, "matchMedia").mockImplementation(
@@ -145,22 +172,33 @@ describe("builder shell (F §4.7)", () => {
     expect(aside.firstElementChild).toHaveClass("sticky", "top-[var(--app-header-h,4rem)]", "py-4");
     for (const block of ["Date", "Readings", "Hymns", "Liturgy"]) {
       // 44px tap targets on phones (the sheet), compact from lg.
-      expect(within(aside).getByRole("link", { name: block })).toHaveClass("inline-flex", "min-h-11", "items-center", "lg:min-h-0");
+      expect(within(aside).getByRole("link", { name: block })).toHaveClass(
+        "inline-flex",
+        "min-h-11",
+        "min-w-11",
+        "items-center",
+        "lg:min-h-0",
+        "lg:min-w-0",
+      );
     }
     expect(within(aside).getByText("Sunday, October 4, 2026")).toBeInTheDocument();
-    for (const block of ["Readings", "Hymns", "Liturgy"]) {
+    expect(within(aside).getByText("No occasion yet")).toBeInTheDocument();
+    const readings = within(aside).getByRole("link", { name: "Readings" }).closest("h3");
+    expect(readings?.nextElementSibling).toHaveTextContent(/^No readings yet$/);
+    for (const block of ["Hymns", "Liturgy"]) {
       const heading = within(aside).getByRole("link", { name: block }).closest("h3");
       expect(heading?.nextElementSibling).toHaveTextContent(/^Available soon$/);
     }
     expect(within(aside).getByRole("link", { name: "Date" })).toHaveAttribute("href", "/builder/readings");
     expect(within(aside).getByText("Draft saved on this device · Not in archive")).toBeInTheDocument();
-    expect(within(aside).queryByText("No occasion yet")).toBeNull();
 
     // Below lg the same panel opens in a bottom sheet from "Summary".
     await user.click(screen.getByRole("button", { name: "Summary" }));
     const sheet = await screen.findByRole("dialog", { name: "Summary" });
     expect(within(sheet).getByText("Sunday, October 4, 2026")).toBeInTheDocument();
     expect(within(sheet).getByText("Draft saved on this device · Not in archive")).toBeInTheDocument();
+    // The sheet only shows below lg, so its Close is a 44 px square throughout.
+    expect(within(sheet).getByRole("button", { name: "Close" })).toHaveClass("size-11");
     await user.click(within(sheet).getByRole("button", { name: "Close" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
 
@@ -205,7 +243,7 @@ describe("builder shell (F §4.7)", () => {
   });
 
   it("New service asks first when the draft has something to lose; Cancel keeps it, confirming clears it", async () => {
-    const saved = seed(editOccasion(testDraft(), "Harvest Sunday"));
+    const saved = seed(setTranslation(editOccasion(testDraft(), "Harvest Sunday"), "kjv", "web"));
     const { user } = renderBuilder(<DraftProbe />, "/builder/review");
     expect(await screen.findByText(`Probe: Harvest Sunday / ${saved.save_key}`)).toBeInTheDocument();
 
@@ -226,10 +264,22 @@ describe("builder shell (F §4.7)", () => {
     expect(testRouter.push).toHaveBeenCalledWith("/builder/readings");
     await waitFor(() => expect(stored().save_key).not.toBe(saved.save_key));
     expect(stored().readings.occasion).toBe("");
+    expect(stored().readings.translation).toBe("kjv"); // the chosen translation stays (owner answer A)
+
+    // The kept translation alone is nothing to lose, so the next New service resets at once.
+    const before = stored().save_key;
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    await user.click(await screen.findByRole("menuitem", { name: "New service" }));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    await waitFor(() => expect(stored().save_key).not.toBe(before));
   });
 
   it("shows the builder skeleton until the church profile loads", async () => {
-    installFakeApi({ "GET /church": async () => churchProfile() });
+    installFakeApi({
+      "GET /church": async () => churchProfile(),
+      "GET /lectionary/readings": lectionaryRoute(),
+      "GET /translations": translations(),
+    });
     renderWithProviders(
       <BuilderLayout>
         <ReadingsStepPage />
@@ -241,11 +291,31 @@ describe("builder shell (F §4.7)", () => {
   });
 });
 
-describe("the shell once Date & readings ships (slice 2c turns this on)", () => {
+describe("the shell with Date & readings shipped (slice 2c)", () => {
+  it("counts the step Complete once the lectionary fills it, and the summary shows the readings with their chips", async () => {
+    renderBuilder(<ReadingsStepPage />, "/builder/readings", lectionaryRoute(lectionary));
+    const progress = await screen.findByRole("navigation", { name: "Steps" });
+    await waitFor(() =>
+      expect(within(progress).getAllByRole("link")[0]).toHaveTextContent("1 Date & readings Complete"),
+    );
+    const aside = screen.getByRole("complementary", { name: "Summary" });
+    expect(within(aside).getByText("Nineteenth Sunday after Pentecost")).toBeInTheDocument();
+    expect(within(aside).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+      "Isaiah 5:1-7OT (auto)",
+      "Psalm 80:7-15",
+      "Philippians 3:4b-14NT (auto)",
+      "Matthew 21:33-46",
+    ]);
+  });
+
   it("shows the readings status, Still needed rows, the occasion and the bulletin chips", async () => {
     const filled = applyReadingSet(testDraft(), lectionary("2026-10-04"), 0);
     seed(setPick(filled, "nt", "Matthew 21:33-46"));
-    installFakeApi({ "GET /church": churchProfile() });
+    installFakeApi({
+      "GET /church": churchProfile(),
+      "GET /lectionary/readings": lectionaryRoute(),
+      "GET /translations": translations(),
+    });
     renderWithProviders(
       <BuilderLayout>
         <StepProgress current="readings" shipped={READINGS_SHIPPED} />
@@ -269,7 +339,11 @@ describe("the shell once Date & readings ships (slice 2c turns this on)", () => 
 
   it("lists what is missing, each linking to its step", async () => {
     seed(testDraft());
-    installFakeApi({ "GET /church": churchProfile() });
+    installFakeApi({
+      "GET /church": churchProfile(),
+      "GET /lectionary/readings": lectionaryRoute(),
+      "GET /translations": translations(),
+    });
     renderWithProviders(
       <BuilderLayout>
         <StillNeeded shipped={READINGS_SHIPPED} />

@@ -7,21 +7,27 @@
  *   cannot be restored is copied to the corrupt-draft key, a fresh draft
  *   starts, and a "restore_failed" notice follows; when the copy cannot be
  *   written, the stored value is left in place until the user edits. A
- *   pristine draft whose default date has passed rolls forward to the next
- *   Sunday, stamped 1 ms after the stored `updated_at` so it never outranks a
+ *   pristine draft (a translation override aside) whose default date has
+ *   passed rolls forward to the next Sunday, stamped 1 ms after the stored `updated_at` so it never outranks a
  *   newer edit from another tab.
  * - `update(recipe)` applies the recipe to the latest draft, bumps
  *   `updated_at` and schedules a write 400 ms later; a recipe that returns the
- *   same object does nothing. `setLastStep` changes only `last_step` and
+ *   same object does nothing. `autoUpdate(recipe)` is the same for an
+ *   automatic change (the lectionary fill), stamped 1 ms after the current
+ *   `updated_at` instead of now, so it never outranks a real edit made in
+ *   another tab on a copy this tab has not seen yet. `setLastStep` changes only `last_step` and
  *   never bumps `updated_at`. `replace(next)` stores `normalizePicks(next)`.
  * - A failed write switches to memory-only with one "memory_only" notice and
  *   stays pending, so the next flush (hide, pagehide) retries it.
  * - Another tab's write for this key is adopted when its `updated_at` is
- *   strictly newer ("adopted").
+ *   strictly newer ("adopted"), from its `storage` event or, when this tab is
+ *   shown again, from a direct read (`syncFromStorage`, slice 2c). A flush
+ *   that finds a strictly newer stored draft adopts it instead of writing.
  *
  * React wiring (listeners, toasts, flush on hide and unmount) is in
- * `context.tsx`. This class touches storage only in `start`, `flush` and the
- * constructor's single read, so it can be built during a render.
+ * `context.tsx`. This class touches storage only in `start`, `flush`,
+ * `syncFromStorage` and the constructor's single read, so it can be built
+ * during a render.
  */
 import { isValidDateIso, nextSunday, todayIn } from "@/lib/dates";
 import { readLocal, removeLocal, tryWriteLocal } from "@/lib/storage";
@@ -29,7 +35,7 @@ import { readLocal, removeLocal, tryWriteLocal } from "@/lib/storage";
 import { parseStoredDraft } from "./migrate";
 import { normalizePicks, setDate } from "./readings";
 import { churchZone, corruptDraftKey, draftKey, freshDraft, type DraftChurch, type DraftV1, type StepId } from "./schema";
-import { isPristine } from "./status";
+import { isPristine, withoutTranslation } from "./status";
 
 export const WRITE_DELAY_MS = 400;
 
@@ -55,10 +61,16 @@ export type DraftStoreOptions = {
   notify?: (notice: DraftNotice) => void;
 };
 
-/** The pristine draft's passed default date moves to the next Sunday (S "Mount-time roll-forward"). */
+/**
+ * The pristine draft's passed default date moves to the next Sunday (S
+ * "Mount-time roll-forward"). A translation override does not hold the date
+ * back and is kept (owner answer A, 2026-09-29); "New service" ignores it too
+ * (`withoutTranslation`).
+ */
 export function rollForward(draft: DraftV1, today: string): DraftV1 {
   const r = draft.readings;
-  if (r.date_origin !== "default" || !isValidDateIso(r.date_iso) || r.date_iso >= today || !isPristine(draft)) {
+  const pristine = isPristine(withoutTranslation(draft));
+  if (r.date_origin !== "default" || !isValidDateIso(r.date_iso) || r.date_iso >= today || !pristine) {
     return draft;
   }
   return setDate(draft, nextSunday(today), "default");
@@ -155,6 +167,16 @@ export class DraftStore {
     this.schedule();
   };
 
+  /** An automatic change: stamped 1 ms after the current draft, so any real edit (here or in another tab) outranks it. */
+  autoUpdate = (recipe: (d: DraftV1) => DraftV1): void => {
+    const current = this.snapshot.draft;
+    const next = recipe(current);
+    if (next === current) return;
+    const at = Date.parse(current.updated_at);
+    this.set({ ...next, updated_at: (Number.isFinite(at) ? new Date(at + 1) : this.now()).toISOString() });
+    this.schedule();
+  };
+
   replace = (next: DraftV1): void => {
     this.set(normalizePicks({ ...next, updated_at: this.now().toISOString() }));
     this.schedule();
@@ -168,22 +190,25 @@ export class DraftStore {
 
   /** A `storage` event: adopt another tab's strictly newer draft for this key. */
   handleStorageEvent = (key: string | null, newValue: string | null): void => {
-    if (key !== this.key || newValue === null) return;
-    let stored: DraftV1;
-    try {
-      stored = parseStoredDraft(newValue, { userId: this.userId, churchId: this.churchId });
-    } catch {
-      return;
-    }
-    if (!isNewer(stored.updated_at, this.snapshot.draft.updated_at)) return;
-    this.cancelWrite();
-    this.set(normalizePicks(stored));
-    this.notify("adopted");
+    if (key !== this.key) return;
+    this.adoptIfNewer(newValue);
+  };
+
+  /**
+   * The tab is shown again: read the stored draft now and adopt it when it is
+   * strictly newer, before anything on screen (the lectionary fill) acts on
+   * this tab's copy. The other tab's `storage` event may not have arrived yet,
+   * and a fill stamped now would outrank that tab's just-written typing.
+   */
+  syncFromStorage = (): void => {
+    this.adoptIfNewer(this.storage.read(this.key));
   };
 
   /** Writes a scheduled change now (hide, pagehide, unmount). */
   flush = (): void => {
     if (!this.pendingWrite) return;
+    // Another tab's strictly newer draft whose storage event has not arrived yet: take it, never overwrite it.
+    if (this.adoptIfNewer(this.storage.read(this.key))) return;
     this.cancelWrite();
     const ok = this.storage.write(this.key, JSON.stringify(this.snapshot.draft));
     const persistence: Persistence = ok ? "ok" : "memory-only";
@@ -198,6 +223,22 @@ export class DraftStore {
       this.notify("memory_only");
     }
   };
+
+  /** True when the stored draft was strictly newer and is now this tab's. */
+  private adoptIfNewer(raw: string | null): boolean {
+    if (raw === null) return false;
+    let stored: DraftV1;
+    try {
+      stored = parseStoredDraft(raw, { userId: this.userId, churchId: this.churchId });
+    } catch {
+      return false;
+    }
+    if (!isNewer(stored.updated_at, this.snapshot.draft.updated_at)) return false;
+    this.cancelWrite();
+    this.set(normalizePicks(stored));
+    this.notify("adopted");
+    return true;
+  }
 
   private schedule(): void {
     this.pendingWrite = true;
