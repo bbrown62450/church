@@ -10,16 +10,17 @@ import { DraftStore, WRITE_DELAY_MS, type DraftNotice, type DraftStorage } from 
 const GRACE = churchProfile();
 const KEY = draftKey(USER_ID, GRACE.id);
 
-/** A Map-backed storage that records writes; `failWrites` makes every write fail (quota). */
+/** A Map-backed storage that records writes; `failWrites` makes every write fail (quota), `failKeys` only those keys'. */
 function memoryStorage(initial: Record<string, string> = {}) {
   const data = new Map(Object.entries(initial));
   const writes: string[] = [];
-  const storage: DraftStorage & { failWrites: boolean } = {
+  const storage: DraftStorage & { failWrites: boolean; failKeys: Set<string> } = {
     failWrites: false,
+    failKeys: new Set(),
     read: (key) => data.get(key) ?? null,
     write: (key, value) => {
       writes.push(key);
-      if (storage.failWrites) return false;
+      if (storage.failWrites || storage.failKeys.has(key)) return false;
       data.set(key, value);
       return true;
     },
@@ -91,6 +92,20 @@ describe("DraftStore load (F §4.6 Versioning)", () => {
       expect(stored(data).readings.fields_origin).toBe("empty");
       expect(stored(data).save_key).toBe(store.getSnapshot().draft.save_key);
     }
+
+    // The backup cannot be written (quota): the unrestorable draft stays in the main key until the user edits.
+    const raw = JSON.stringify({ ...testDraft(), version: 2 });
+    const { storage, data } = memoryStorage({ [KEY]: raw, [corruptDraftKey(USER_ID, GRACE.id)]: "older backup" });
+    storage.failKeys.add(corruptDraftKey(USER_ID, GRACE.id));
+    const { store, notices } = makeStore(storage);
+    store.start();
+    vi.runAllTimers();
+    expect(data.get(KEY)).toBe(raw);
+    expect(data.has(corruptDraftKey(USER_ID, GRACE.id))).toBe(false); // the old backup was being replaced anyway
+    expect(notices).toEqual(["restore_failed"]);
+    store.update((d) => editOccasion(d, "Harvest"));
+    vi.runAllTimers();
+    expect(stored(data).readings.occasion).toBe("Harvest");
   });
 
   it("normalizes a stale pick left by a refresh while the textarea had focus, and the payload already sends \"\"", () => {
@@ -117,7 +132,15 @@ describe("DraftStore load (F §4.6 Versioning)", () => {
     const rolled = makeStore(memoryStorage({ [KEY]: JSON.stringify(pastPristine) }).storage, tenDaysLater.now).store;
     expect(rolled.getSnapshot().draft.readings).toMatchObject({ date_iso: "2026-10-11", date_origin: "default" });
     expect(rolled.getSnapshot().draft.liturgy.include_communion).toBe(false);
-    expect(rolled.getSnapshot().draft.updated_at).toBe(tenDaysLater.now().toISOString());
+    // Stamped just after the stored draft, not now, so a newer unwritten edit from another tab still wins.
+    const rolledAt = new Date(Date.parse(pastPristine.updated_at) + 1).toISOString();
+    expect(rolled.getSnapshot().draft.updated_at).toBe(rolledAt);
+    const olderTabEdit = {
+      ...editOccasion(pastPristine, "Harvest"),
+      updated_at: new Date(Date.parse(rolledAt) + 86_400_000).toISOString(), // a day later, still before now
+    };
+    rolled.handleStorageEvent(KEY, JSON.stringify(olderTabEdit));
+    expect(rolled.getSnapshot().draft.readings.occasion).toBe("Harvest");
 
     const edited = editOccasion(pastPristine, "Harvest");
     const kept = makeStore(memoryStorage({ [KEY]: JSON.stringify(edited) }).storage, tenDaysLater.now).store;
@@ -189,7 +212,7 @@ describe("DraftStore changes (S store.ts)", () => {
   });
 
   it("switches to memory-only when a write fails, and reports it once", () => {
-    const { storage } = memoryStorage();
+    const { storage, data } = memoryStorage();
     storage.failWrites = true;
     const { store, notices } = makeStore(storage);
     store.start();
@@ -199,16 +222,23 @@ describe("DraftStore changes (S store.ts)", () => {
     store.flush();
     expect(notices).toEqual(["memory_only"]);
     expect(store.getSnapshot().draft.readings.occasion).toBe("Harvest"); // still in memory
+
+    // Storage recovers: the next flush (pagehide, hide) retries the failed write.
+    storage.failWrites = false;
+    store.flush();
+    expect(stored(data).readings.occasion).toBe("Harvest");
+    expect(store.getSnapshot().persistence).toBe("ok");
   });
 
   it("adopts another tab's strictly newer draft (normalized) and ignores equal, foreign or broken ones", () => {
     const base = testDraft();
     const { storage, writes } = memoryStorage({ [KEY]: JSON.stringify(base) });
     const { store, notices } = makeStore(storage);
+    const { handleStorageEvent } = store; // bound, like the other public methods
     store.update((d) => editOccasion(d, "Mine")); // a pending write
     const mine = store.getSnapshot().draft;
 
-    store.handleStorageEvent(KEY, JSON.stringify({ ...mine, readings: { ...mine.readings, occasion: "Same time" } }));
+    handleStorageEvent(KEY, JSON.stringify({ ...mine, readings: { ...mine.readings, occasion: "Same time" } }));
     store.handleStorageEvent(draftKey(USER_ID, CHURCH_IDS.hope), JSON.stringify({ ...mine, church_id: CHURCH_IDS.hope }));
     store.handleStorageEvent(KEY, "{broken");
     store.handleStorageEvent(KEY, null);

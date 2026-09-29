@@ -5,13 +5,17 @@
  *
  * - Load: parse → migrate → validate → `normalizePicks`. A stored value that
  *   cannot be restored is copied to the corrupt-draft key, a fresh draft
- *   starts, and a "restore_failed" notice follows. A pristine draft whose
- *   default date has passed rolls forward to the next Sunday.
+ *   starts, and a "restore_failed" notice follows; when the copy cannot be
+ *   written, the stored value is left in place until the user edits. A
+ *   pristine draft whose default date has passed rolls forward to the next
+ *   Sunday, stamped 1 ms after the stored `updated_at` so it never outranks a
+ *   newer edit from another tab.
  * - `update(recipe)` applies the recipe to the latest draft, bumps
  *   `updated_at` and schedules a write 400 ms later; a recipe that returns the
  *   same object does nothing. `setLastStep` changes only `last_step` and
  *   never bumps `updated_at`. `replace(next)` stores `normalizePicks(next)`.
- * - A failed write switches to memory-only with one "memory_only" notice.
+ * - A failed write switches to memory-only with one "memory_only" notice and
+ *   stays pending, so the next flush (hide, pagehide) retries it.
  * - Another tab's write for this key is adopted when its `updated_at` is
  *   strictly newer ("adopted").
  *
@@ -111,7 +115,10 @@ export class DraftStore {
     }
     const rolled = rollForward(draft, todayIn(churchZone(church), now()));
     if (rolled !== draft) {
-      draft = { ...rolled, updated_at: now().toISOString() };
+      // Just after the stored stamp, not now: a newer unwritten edit from another tab still wins.
+      const storedAt = Date.parse(draft.updated_at);
+      const updatedAt = Number.isFinite(storedAt) ? new Date(storedAt + 1) : now();
+      draft = { ...rolled, updated_at: updatedAt.toISOString() };
       this.pendingWrite = true;
     }
     this.snapshot = { draft, persistence: "ok" };
@@ -131,8 +138,12 @@ export class DraftStore {
     if (this.started) return;
     this.started = true;
     if (this.corruptRaw !== null) {
-      this.storage.write(this.corruptKey, this.corruptRaw);
+      // The old backup is being replaced anyway; removing it first frees its space.
+      this.storage.remove(this.corruptKey);
+      const backedUp = this.storage.write(this.corruptKey, this.corruptRaw);
       this.notify("restore_failed");
+      // Without a backup, keep the unrestorable value in the main key until the user edits.
+      if (!backedUp) this.pendingWrite = false;
     }
     if (this.pendingWrite) this.schedule();
   }
@@ -156,7 +167,7 @@ export class DraftStore {
   };
 
   /** A `storage` event: adopt another tab's strictly newer draft for this key. */
-  handleStorageEvent(key: string | null, newValue: string | null): void {
+  handleStorageEvent = (key: string | null, newValue: string | null): void => {
     if (key !== this.key || newValue === null) return;
     let stored: DraftV1;
     try {
@@ -168,7 +179,7 @@ export class DraftStore {
     this.cancelWrite();
     this.set(normalizePicks(stored));
     this.notify("adopted");
-  }
+  };
 
   /** Writes a scheduled change now (hide, pagehide, unmount). */
   flush = (): void => {
@@ -180,6 +191,8 @@ export class DraftStore {
       this.snapshot = { ...this.snapshot, persistence };
       this.emit();
     }
+    // A failed write stays pending (no timer), so the next flush retries it.
+    if (!ok) this.pendingWrite = true;
     if (!ok && !this.warnedMemoryOnly) {
       this.warnedMemoryOnly = true;
       this.notify("memory_only");
