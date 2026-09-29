@@ -1,0 +1,10 @@
+{
+  "_about": "nextSunday(from) in frontend/src/lib/dates.ts: the first Sunday strictly after `from` (a Sunday gives the following Sunday). TypeScript only (S Testing; F §5.3): the backend never computes it.",
+  "cases": [
+    {"from": "2026-09-25", "expected": "2026-09-27", "why": "a Friday"},
+    {"from": "2026-09-26", "expected": "2026-09-27", "why": "a Saturday"},
+    {"from": "2026-09-27", "expected": "2026-10-04", "why": "a Sunday gives the following Sunday"},
+    {"from": "2026-12-31", "expected": "2027-01-03", "why": "across the year end"},
+    {"from": "2028-02-28", "expected": "2028-03-05", "why": "across a leap day"}
+  ]
+}
