@@ -2,7 +2,9 @@
  * The builder shell (F §4.7, F acceptance 11; S "Builder shell", Testing
  * `builder-shell.test.tsx`; AC17). Every test fixes the clock at Tuesday,
  * September 29, 2026 (only `Date` is faked, so user-event's timers run), so a
- * fresh draft is dated Sunday, October 4, 2026.
+ * fresh draft is dated Sunday, October 4, 2026. The lectionary answers "no
+ * readings" unless a test says otherwise, so drafts keep their fields
+ * (`lectionary-sync.test.tsx` tests the fill).
  */
 import { act, screen, waitFor, within } from "@testing-library/react";
 import type { ReactElement } from "react";
@@ -18,7 +20,7 @@ import { useDraft } from "@/lib/draft/context";
 import { applyReadingSet, editOccasion, setPick, setTranslation } from "@/lib/draft/readings";
 import { draftKey, type DraftV1 } from "@/lib/draft/schema";
 import { installFakeApi } from "@/test/fake-api";
-import { church, churchProfile, DRAFT_NOW, lectionary, me, testDraft, USER_ID } from "@/test/fixtures";
+import { church, churchProfile, DRAFT_NOW, lectionary, lectionaryRoute, me, testDraft, USER_ID } from "@/test/fixtures";
 import { testRouter } from "@/test/mocks";
 import { renderWithProviders } from "@/test/render";
 
@@ -49,7 +51,7 @@ function DraftProbe() {
 }
 
 function renderBuilder(page: ReactElement, path: string) {
-  installFakeApi({ "GET /church": churchProfile() });
+  installFakeApi({ "GET /church": churchProfile(), "GET /lectionary/readings": lectionaryRoute() });
   return renderWithProviders(<BuilderLayout>{page}</BuilderLayout>, { me: me(), church: church(), path });
 }
 
@@ -230,7 +232,7 @@ describe("builder shell (F §4.7)", () => {
   });
 
   it("shows the builder skeleton until the church profile loads", async () => {
-    installFakeApi({ "GET /church": async () => churchProfile() });
+    installFakeApi({ "GET /church": async () => churchProfile(), "GET /lectionary/readings": lectionaryRoute() });
     renderWithProviders(
       <BuilderLayout>
         <ReadingsStepPage />
@@ -246,7 +248,7 @@ describe("the shell once Date & readings ships (slice 2c turns this on)", () => 
   it("shows the readings status, Still needed rows, the occasion and the bulletin chips", async () => {
     const filled = applyReadingSet(testDraft(), lectionary("2026-10-04"), 0);
     seed(setPick(filled, "nt", "Matthew 21:33-46"));
-    installFakeApi({ "GET /church": churchProfile() });
+    installFakeApi({ "GET /church": churchProfile(), "GET /lectionary/readings": lectionaryRoute() });
     renderWithProviders(
       <BuilderLayout>
         <StepProgress current="readings" shipped={READINGS_SHIPPED} />
@@ -270,7 +272,7 @@ describe("the shell once Date & readings ships (slice 2c turns this on)", () => 
 
   it("lists what is missing, each linking to its step", async () => {
     seed(testDraft());
-    installFakeApi({ "GET /church": churchProfile() });
+    installFakeApi({ "GET /church": churchProfile(), "GET /lectionary/readings": lectionaryRoute() });
     renderWithProviders(
       <BuilderLayout>
         <StillNeeded shipped={READINGS_SHIPPED} />

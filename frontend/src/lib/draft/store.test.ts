@@ -256,7 +256,7 @@ describe("DraftStore changes (S store.ts)", () => {
 
   it("adopts another tab's strictly newer draft (normalized) and ignores equal, foreign or broken ones", () => {
     const base = testDraft();
-    const { storage, writes } = memoryStorage({ [KEY]: JSON.stringify(base) });
+    const { storage, writes, data } = memoryStorage({ [KEY]: JSON.stringify(base) });
     const { store, notices } = makeStore(storage);
     const { handleStorageEvent } = store; // bound, like the other public methods
     store.update((d) => editOccasion(d, "Mine")); // a pending write
@@ -266,6 +266,7 @@ describe("DraftStore changes (S store.ts)", () => {
     store.handleStorageEvent(draftKey(USER_ID, CHURCH_IDS.hope), JSON.stringify({ ...mine, church_id: CHURCH_IDS.hope }));
     store.handleStorageEvent(KEY, "{broken");
     store.handleStorageEvent(KEY, null);
+    store.syncFromStorage(); // shown again: the stored draft (base) is older than mine
     expect(store.getSnapshot().draft).toBe(mine);
 
     const filled = applyReadingSet(base, lectionary("2026-10-04"), 0);
@@ -278,5 +279,16 @@ describe("DraftStore changes (S store.ts)", () => {
     expect(notices).toEqual(["adopted"]);
     vi.runAllTimers();
     expect(writes).toEqual([]); // my pending write was dropped: theirs is newer
+
+    // Shown again (slice 2c): the stored draft is read directly, before its storage event arrives.
+    const typed = {
+      ...editOccasion(theirs, "Typed in the other tab"),
+      updated_at: new Date(Date.parse(theirs.updated_at) + 1).toISOString(),
+    };
+    data.set(KEY, JSON.stringify(typed));
+    store.syncFromStorage();
+    expect(store.getSnapshot().draft.readings.occasion).toBe("Typed in the other tab");
+    store.handleStorageEvent(KEY, JSON.stringify(typed)); // the late event is not newer
+    expect(notices).toEqual(["adopted", "adopted"]);
   });
 });

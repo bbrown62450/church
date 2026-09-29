@@ -13,6 +13,8 @@
  * The summary sheet closes when the window widens past `lg`.
  * The church profile is already loaded by the `(church)` layout; until the
  * query has data (tests, a cold cache) a step-shaped skeleton shows.
+ * `<LectionarySync>` looks up the draft's date and fills the readings on
+ * every step (slice 2c).
  */
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
@@ -25,6 +27,7 @@ import { stepFromPath } from "@/lib/draft/steps";
 import { useMeContext } from "@/lib/me-context";
 import { useChurchProfile } from "@/lib/queries/church";
 
+import { LectionarySync } from "./lectionary-sync";
 import { useNewService } from "./new-service-menu-item";
 import { StepFooter } from "./step-footer";
 import { StepHeader } from "./step-header";
@@ -39,7 +42,9 @@ export function BuilderShell({ children }: { children: ReactNode }) {
   if (!profile.data) return <BuilderSkeleton />;
   return (
     <DraftProvider key={`${me.user.id}:${church.id}`} userId={me.user.id} church={profile.data}>
-      <BuilderFrame church={profile.data}>{children}</BuilderFrame>
+      <LectionarySync>
+        <BuilderFrame church={profile.data}>{children}</BuilderFrame>
+      </LectionarySync>
     </DraftProvider>
   );
 }

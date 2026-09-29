@@ -15,7 +15,7 @@ import { useDraft } from "@/lib/draft/context";
 import { editOccasion } from "@/lib/draft/readings";
 import { draftKey } from "@/lib/draft/schema";
 import { type RecordedRequest, installFakeApi } from "@/test/fake-api";
-import { CHURCH_IDS, church, churchProfile, DRAFT_NOW, me, USER_ID } from "@/test/fixtures";
+import { CHURCH_IDS, church, churchProfile, DRAFT_NOW, lectionaryRoute, me, USER_ID } from "@/test/fixtures";
 import { renderWithProviders } from "@/test/render";
 
 const GRACE = churchProfile();
@@ -47,6 +47,7 @@ describe("church switch keeps one draft per church", () => {
     installFakeApi({
       "GET /me": me({ churches: [church(), church({ id: CHURCH_IDS.hope, name: "Hope", role: "member" })] }),
       "GET /church": (req: RecordedRequest) => (req.headers["X-Church-Id"] === HOPE.id ? HOPE : GRACE),
+      "GET /lectionary/readings": lectionaryRoute(), // no readings: the drafts keep what the test types
     });
     storeChurchId(GRACE.id);
     const { user } = renderWithProviders(

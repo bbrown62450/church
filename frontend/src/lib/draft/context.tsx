@@ -5,8 +5,9 @@
  * `BuilderShell` renders the provider for the signed-in user and the active
  * church; the `(church)` layout's keyed remount already gives each church its
  * own provider. The provider wires the store to the browser: another tab's
- * writes (`storage` events), a flush when the page is hidden or left, a flush
- * on unmount (a church switch), and the three toasts.
+ * writes (`storage` events, and a direct read when the page is shown again), a
+ * flush when the page is hidden or left, a flush on unmount (a church switch),
+ * and the three toasts.
  */
 import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { toast } from "sonner";
@@ -57,8 +58,11 @@ export function DraftProvider({
   useEffect(() => {
     store.start();
     const onStorage = (event: StorageEvent) => store.handleStorageEvent(event.key, event.newValue);
+    // Hidden: write now. Shown: take another tab's newer draft before this tab's
+    // lectionary fill can act on a stale copy (its storage event may still be on the way).
     const onVisibility = () => {
       if (document.visibilityState === "hidden") store.flush();
+      else store.syncFromStorage();
     };
     window.addEventListener("storage", onStorage);
     window.addEventListener("pagehide", store.flush);

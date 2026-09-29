@@ -17,11 +17,13 @@
  * - A failed write switches to memory-only with one "memory_only" notice and
  *   stays pending, so the next flush (hide, pagehide) retries it.
  * - Another tab's write for this key is adopted when its `updated_at` is
- *   strictly newer ("adopted").
+ *   strictly newer ("adopted"), from its `storage` event or, when this tab is
+ *   shown again, from a direct read (`syncFromStorage`, slice 2c).
  *
  * React wiring (listeners, toasts, flush on hide and unmount) is in
- * `context.tsx`. This class touches storage only in `start`, `flush` and the
- * constructor's single read, so it can be built during a render.
+ * `context.tsx`. This class touches storage only in `start`, `flush`,
+ * `syncFromStorage` and the constructor's single read, so it can be built
+ * during a render.
  */
 import { isValidDateIso, nextSunday, todayIn } from "@/lib/dates";
 import { readLocal, removeLocal, tryWriteLocal } from "@/lib/storage";
@@ -174,17 +176,18 @@ export class DraftStore {
 
   /** A `storage` event: adopt another tab's strictly newer draft for this key. */
   handleStorageEvent = (key: string | null, newValue: string | null): void => {
-    if (key !== this.key || newValue === null) return;
-    let stored: DraftV1;
-    try {
-      stored = parseStoredDraft(newValue, { userId: this.userId, churchId: this.churchId });
-    } catch {
-      return;
-    }
-    if (!isNewer(stored.updated_at, this.snapshot.draft.updated_at)) return;
-    this.cancelWrite();
-    this.set(normalizePicks(stored));
-    this.notify("adopted");
+    if (key !== this.key) return;
+    this.adoptIfNewer(newValue);
+  };
+
+  /**
+   * The tab is shown again: read the stored draft now and adopt it when it is
+   * strictly newer, before anything on screen (the lectionary fill) acts on
+   * this tab's copy. The other tab's `storage` event may not have arrived yet,
+   * and a fill stamped now would outrank that tab's just-written typing.
+   */
+  syncFromStorage = (): void => {
+    this.adoptIfNewer(this.storage.read(this.key));
   };
 
   /** Writes a scheduled change now (hide, pagehide, unmount). */
@@ -204,6 +207,20 @@ export class DraftStore {
       this.notify("memory_only");
     }
   };
+
+  private adoptIfNewer(raw: string | null): void {
+    if (raw === null) return;
+    let stored: DraftV1;
+    try {
+      stored = parseStoredDraft(raw, { userId: this.userId, churchId: this.churchId });
+    } catch {
+      return;
+    }
+    if (!isNewer(stored.updated_at, this.snapshot.draft.updated_at)) return;
+    this.cancelWrite();
+    this.set(normalizePicks(stored));
+    this.notify("adopted");
+  }
 
   private schedule(): void {
     this.pendingWrite = true;

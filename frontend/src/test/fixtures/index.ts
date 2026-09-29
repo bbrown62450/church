@@ -116,3 +116,13 @@ export function translations(overrides: Partial<Translations> = {}): Translation
     ...overrides,
   };
 }
+
+/** `GET /lectionary/readings` for a date with no readings (an ordinary weekday). */
+export function noReadings(date: string): Lectionary {
+  return lectionary(date, { status: "no_readings", reading_sets: [], default_index: null });
+}
+
+/** A fake-API handler for `GET /lectionary/readings` that answers each date with `answer(date)`. */
+export function lectionaryRoute(answer: (date: string) => Lectionary = noReadings) {
+  return (req: { path: string }) => answer(new URL(req.path, "http://localhost").searchParams.get("date") ?? "");
+}
