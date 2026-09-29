@@ -7,7 +7,10 @@
  * and the summary (a sticky column from `lg`, a bottom sheet below it).
  * The frame grows to fill the `(church)` layout's column below the header
  * (`flex-1`), so it needs no hard-coded header height and the footer sits at
- * the bottom of a short step.
+ * the bottom of a short step. The page's one `<main>` (the `(church)` layout
+ * adds none around a loaded church) holds the header, progress and step; the
+ * footer nav follows it.
+ * The summary sheet closes when the window widens past `lg`.
  * The church profile is already loaded by the `(church)` layout; until the
  * query has data (tests, a cold cache) a step-shaped skeleton shows.
  */
@@ -51,16 +54,32 @@ function BuilderFrame({ church, children }: { church: DraftChurch; children: Rea
     if (current) setLastStep(current);
   }, [current, setLastStep]);
 
+  // The sheet is hidden from `lg` (64rem) but its backdrop is not: close it
+  // when the window widens past `lg` while it is open.
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const wide = window.matchMedia("(min-width: 64rem)");
+    const closeWhenWide = () => {
+      if (wide.matches) setSummaryOpen(false);
+    };
+    wide.addEventListener("change", closeWhenWide);
+    return () => wide.removeEventListener("change", closeWhenWide);
+  }, []);
+
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 lg:grid lg:max-w-6xl lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-6">
       <div className="flex min-w-0 flex-1 flex-col">
-        <StepHeader onOpenSummary={() => setSummaryOpen(true)} onNewService={newService.start} />
-        {current ? <StepProgress current={current} /> : null}
-        <main className="flex-1 py-4">{children}</main>
+        <main className="flex flex-1 flex-col">
+          <StepHeader onOpenSummary={() => setSummaryOpen(true)} onNewService={newService.start} />
+          {current ? <StepProgress current={current} /> : null}
+          <div className="flex-1 py-4">{children}</div>
+        </main>
         {current ? <StepFooter current={current} /> : null}
       </div>
       <aside aria-label="Summary" className="hidden lg:block">
-        <div className="sticky top-20 py-4">
+        {/* Below the sticky AppHeader, whose measured height AppHeader publishes as --app-header-h. */}
+        <div className="sticky top-[var(--app-header-h,4rem)] py-4">
+          <h2 className="sr-only">Summary</h2>
           <SummaryPanel />
         </div>
       </aside>

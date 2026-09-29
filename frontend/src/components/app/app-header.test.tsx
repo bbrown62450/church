@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -113,6 +113,32 @@ describe("AppHeader", () => {
 
   it("shows the app name and no switcher without churches, and still offers Log out", async () => {
     const onSignOut = vi.fn();
+    // The header publishes its height as --app-header-h (the builder's sticky summary sits below it).
+    let height = 61;
+    const heightSpy = vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(() => height);
+    let resized: () => void = () => {};
+    const observerSpy = vi.spyOn(window, "ResizeObserver").mockImplementation(
+      (callback: ResizeObserverCallback) =>
+        ({
+          observe: () => {
+            resized = () => callback([], {} as ResizeObserver);
+          },
+          unobserve: () => {},
+          disconnect: () => {
+            resized = () => {};
+          },
+        }) as unknown as ResizeObserver,
+    );
+    const { unmount } = render(<AppHeader user={pat} onSignOut={onSignOut} />);
+    const root = document.documentElement;
+    expect(root.style.getPropertyValue("--app-header-h")).toBe("61px");
+    height = 97;
+    act(() => resized());
+    expect(root.style.getPropertyValue("--app-header-h")).toBe("97px");
+    unmount();
+    expect(root.style.getPropertyValue("--app-header-h")).toBe("");
+    heightSpy.mockRestore();
+    observerSpy.mockRestore();
     render(<AppHeader user={pat} onSignOut={onSignOut} />);
     const user = userEvent.setup();
 

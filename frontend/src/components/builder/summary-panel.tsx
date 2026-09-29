@@ -19,7 +19,7 @@ function Block({ title, step, onNavigate, children }: { title: string; step: Ste
   return (
     <div className="grid gap-1">
       <h3 className="text-sm font-medium">
-        <Link href={stepById(step).href} onClick={onNavigate} className="underline-offset-4 hover:underline">
+        <Link href={stepById(step).href} onClick={onNavigate} className="inline-flex min-h-11 items-center underline-offset-4 hover:underline lg:min-h-0">
           {title}
         </Link>
       </h3>

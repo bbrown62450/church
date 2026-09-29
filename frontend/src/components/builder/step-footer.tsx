@@ -30,14 +30,14 @@ export function StepFooter({ current }: { current: StepId }) {
     >
       <div className="flex items-center justify-between gap-3">
         {previous ? (
-          <Link href={previous.href} className={buttonVariants({ variant: "outline", size: "touch" })}>
+          <Link href={previous.href} className={cn(buttonVariants({ variant: "outline", size: "touch" }))}>
             Back
           </Link>
         ) : (
           <span />
         )}
         {next ? (
-          <Link href={next.href} className={buttonVariants({ size: "touch" })}>
+          <Link href={next.href} className={cn(buttonVariants({ size: "touch" }))}>
             Next: {next.short}
           </Link>
         ) : null}

@@ -4,7 +4,7 @@
  * September 29, 2026 (only `Date` is faked, so user-event's timers run), so a
  * fresh draft is dated Sunday, October 4, 2026.
  */
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -60,6 +60,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 describe("builder shell (F §4.7)", () => {
@@ -100,17 +101,52 @@ describe("builder shell (F §4.7)", () => {
       expect(screen.queryByRole("heading", { name: "Still needed" })).toBeNull(); // nothing shipped yet
 
       // The frame fills what the header leaves (the (church) layout's flex column), with no hard-coded header height.
-      const column = screen.getByRole("main").parentElement;
+      const main = screen.getByRole("main");
+      const column = main.parentElement;
       expect(column).toHaveClass("flex", "flex-1", "flex-col");
       expect(column?.parentElement).toHaveClass("flex", "flex-1", "flex-col");
       expect(`${column?.className} ${column?.parentElement?.className}`).not.toMatch(/dvh/);
+      // One landmark holds the heading, the progress and the step; the footer follows it. The main
+      // grows (flex-1), so on a short step the sticky footer rests at the bottom of the viewport.
+      expect(within(main).getByRole("heading", { level: 1, name: "Service Builder" })).toBeInTheDocument();
+      expect(within(main).getByRole("navigation", { name: "Steps" })).toBeInTheDocument();
+      expect(within(main).getByRole("region", { name: label })).toBeInTheDocument();
+      expect(main).toHaveClass("flex-1");
+      const footerNav = screen.getByRole("navigation", { name: "Step navigation" });
+      expect(main.contains(footerNav)).toBe(false);
+      expect(main.nextElementSibling).toBe(footerNav);
+      expect(footerNav).toHaveClass("sticky", "bottom-0");
+      // Back keeps the outline border: its classes are merged, not concatenated.
+      for (const link of within(footerNav).getAllByRole("link")) {
+        if (link.textContent === "Back") expect(link.className.split(/\s+/)).not.toContain("border-transparent");
+      }
       unmount();
     }
   });
 
   it("shows the summary: the date, Available soon for the rest, and where the draft is kept", async () => {
-    const { user } = renderBuilder(<HymnsStepPage />, "/builder/hymns");
+    // A controllable (min-width: 64rem) query, so the test can widen the window past lg.
+    const wide = { matches: false, listeners: new Set<() => void>() };
+    vi.spyOn(window, "matchMedia").mockImplementation(
+      (query: string) =>
+        ({
+          get matches() {
+            return query === "(min-width: 64rem)" && wide.matches;
+          },
+          media: query,
+          addEventListener: (_: string, listener: () => void) => wide.listeners.add(listener),
+          removeEventListener: (_: string, listener: () => void) => wide.listeners.delete(listener),
+        }) as unknown as MediaQueryList,
+    );
+    const { user, unmount } = renderBuilder(<HymnsStepPage />, "/builder/hymns");
     const aside = await screen.findByRole("complementary", { name: "Summary" });
+    expect(within(aside).getByRole("heading", { level: 2, name: "Summary" })).toHaveClass("sr-only");
+    // The sticky column clears the header's measured height (AppHeader sets --app-header-h).
+    expect(aside.firstElementChild).toHaveClass("sticky", "top-[var(--app-header-h,4rem)]", "py-4");
+    for (const block of ["Date", "Readings", "Hymns", "Liturgy"]) {
+      // 44px tap targets on phones (the sheet), compact from lg.
+      expect(within(aside).getByRole("link", { name: block })).toHaveClass("inline-flex", "min-h-11", "items-center", "lg:min-h-0");
+    }
     expect(within(aside).getByText("Sunday, October 4, 2026")).toBeInTheDocument();
     for (const block of ["Readings", "Hymns", "Liturgy"]) {
       const heading = within(aside).getByRole("link", { name: block }).closest("h3");
@@ -127,6 +163,18 @@ describe("builder shell (F §4.7)", () => {
     expect(within(sheet).getByText("Draft saved on this device · Not in archive")).toBeInTheDocument();
     await user.click(within(sheet).getByRole("button", { name: "Close" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    // Widening past lg while the sheet is open closes it, so no backdrop is left over the page.
+    await user.click(screen.getByRole("button", { name: "Summary" }));
+    await screen.findByRole("dialog", { name: "Summary" });
+    act(() => {
+      wide.matches = true;
+      for (const listener of wide.listeners) listener();
+    });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(wide.listeners.size).toBeGreaterThan(0);
+    unmount();
+    expect(wide.listeners.size).toBe(0);
   });
 
   it("writes last_step on entry without touching updated_at, and /builder opens that step", async () => {
