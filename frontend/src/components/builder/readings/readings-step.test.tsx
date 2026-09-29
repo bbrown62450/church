@@ -500,3 +500,231 @@ describe("reading sets and the available banner (S UX items 2 and 3)", () => {
     expect(screen.getByLabelText("Occasion")).toHaveValue("Harvest");
   });
 });
+
+// --- readings list and passage text (S UX item 6; AC16) -----------------------------
+
+type Status = "ok" | "not_found" | "unavailable";
+type PassageAnswer = { status: Status; sections: { reference: string; status: Status; text: string | null }[] };
+
+/** One section per " or " alternative, all loaded. */
+function okPassage(reference: string, translation = "web"): PassageAnswer {
+  return {
+    status: "ok",
+    sections: reference.split(/\s+or\s+/i).map((alt) => ({ reference: alt, status: "ok", text: `${alt} (${translation}) text.` })),
+  };
+}
+
+/** `POST /scripture/passages` answering each ref with `answer(ref, translation)` (or a `FakeResponse`). */
+function passagesRoute(answer: (ref: string, translation: string) => PassageAnswer | ReturnType<typeof fakeError> = okPassage) {
+  return (req: RecordedRequest) => {
+    const { refs, translation } = req.body as { refs: string[]; translation: string };
+    const result = answer(refs[0], translation);
+    if ("status" in result && typeof result.status === "number") return result;
+    return {
+      translation,
+      translation_label: translations().items.find((item) => item.id === translation)?.label ?? translation,
+      passages: [{ reference: refs[0], ...(result as PassageAnswer) }],
+    };
+  };
+}
+
+function typedLines(lines: string[]): DraftV1 {
+  return testDraft((d) => ({ ...d, readings: { ...d.readings, fields_origin: "user", occasion: "Harvest", scriptures: lines } }));
+}
+
+/** The row for `reference` in the Readings list. */
+function row(reference: string) {
+  const list = screen.getByRole("region", { name: "Readings" });
+  const item = within(list)
+    .getAllByRole("listitem")
+    .find((li) => li.firstElementChild?.firstElementChild?.textContent === reference);
+  if (!item) throw new Error(`no row for ${reference}`);
+  return within(item);
+}
+
+async function findRow(reference: string) {
+  await waitFor(() => row(reference));
+  return row(reference);
+}
+
+describe("readings list and passage text (S UX item 6)", () => {
+  it("fetches a passage only when its row opens: one reference, in the church's translation", async () => {
+    const { user, api } = renderStep({ passages: passagesRoute() }, applyReadingSet(testDraft(), lectionary("2026-10-04"), 0));
+    const isaiah = await findRow("Isaiah 5:1-7");
+    expect(isaiah.getByText("OT")).toBeInTheDocument();
+    expect(row("Psalm 80:7-15").getByText("Psalm")).toBeInTheDocument();
+    expect(row("Matthew 21:33-46").getByText("NT")).toBeInTheDocument();
+    expect(screen.getByText("Passage text shown in World English Bible (WEB).")).toBeInTheDocument();
+    expect(api.requests.filter((r) => r.method === "POST")).toEqual([]);
+
+    await user.click(isaiah.getByRole("button", { name: "Show text: Isaiah 5:1-7" }));
+    expect(await isaiah.findByText("Isaiah 5:1-7 (web) text.")).toBeInTheDocument();
+    expect(api.requests.filter((r) => r.method === "POST").map((r) => [r.path, r.body, r.headers["X-Church-Id"]])).toEqual([
+      ["/scripture/passages", { refs: ["Isaiah 5:1-7"], translation: "web" }, undefined],
+    ]);
+    await user.click(isaiah.getByRole("button", { name: "Hide text: Isaiah 5:1-7" }));
+    expect(isaiah.queryByText("Isaiah 5:1-7 (web) text.")).toBeNull();
+  });
+
+  it("shows not found, unavailable and partial answers with their copy, and Try again refetches", async () => {
+    const PASSION = "Matthew 26:14-27:66 or Matthew 27:11-54";
+    let isaiahCalls = 0;
+    const { user, api } = renderStep(
+      {
+        passages: passagesRoute((ref, translation) => {
+          if (ref === "Hezekiah 1:1") return { status: "not_found", sections: [{ reference: ref, status: "not_found", text: null }] };
+          if (ref === "Isaiah 50:4-9a") {
+            isaiahCalls += 1;
+            return isaiahCalls === 1
+              ? { status: "unavailable", sections: [{ reference: ref, status: "unavailable", text: null }] }
+              : okPassage(ref, translation);
+          }
+          return {
+            status: "unavailable",
+            sections: [
+              { reference: "Matthew 26:14-27:66", status: "unavailable", text: null },
+              { reference: "Matthew 27:11-54", status: "ok", text: "Jesus stood before the governor." },
+            ],
+          };
+        }),
+      },
+      typedLines(["Hezekiah 1:1", "Isaiah 50:4-9a", PASSION]),
+    );
+    const hezekiah = await findRow("Hezekiah 1:1");
+    const unknown = hezekiah.getByRole("button", { name: "Book not recognized" });
+    expect(unknown).toHaveTextContent("?");
+    expect(unknown).toHaveClass("h-6", "min-w-6"); // a 24 px target on phones
+    expect(row(PASSION).getAllByText("NT")).toHaveLength(2);
+
+    await user.click(hezekiah.getByRole("button", { name: "Show text: Hezekiah 1:1" }));
+    expect(
+      await hezekiah.findByText("Couldn't find this passage. Check the reference, for example “Matthew 17:1-9”."),
+    ).toBeInTheDocument();
+
+    const isaiah = row("Isaiah 50:4-9a");
+    await user.click(isaiah.getByRole("button", { name: "Show text: Isaiah 50:4-9a" }));
+    expect(await isaiah.findByText("Passage text isn't available right now.")).toBeInTheDocument();
+    await user.click(isaiah.getByRole("button", { name: "Try again: Isaiah 50:4-9a" }));
+    expect(await isaiah.findByText("Isaiah 50:4-9a (web) text.")).toBeInTheDocument();
+
+    const passion = row(PASSION);
+    await user.click(passion.getByRole("button", { name: `Show text: ${PASSION}` }));
+    expect(await passion.findByText("Jesus stood before the governor.")).toBeInTheDocument();
+    expect(passion.getByText("Matthew 27:11-54")).toBeInTheDocument(); // each alternative under its own heading
+    expect(passion.getByText("Couldn't load Matthew 26:14-27:66.")).toBeInTheDocument();
+    expect(passion.getByText("Part of this passage couldn't be loaded.")).toBeInTheDocument();
+    const before = api.requests.filter((r) => r.method === "POST").length;
+    await user.click(passion.getByRole("button", { name: `Try again: ${PASSION}` }));
+    await waitFor(() => expect(api.requests.filter((r) => r.method === "POST").length).toBe(before + 1));
+  });
+
+  it("a failed request says the text isn't available, a 429 waits for Retry-After, and a 422 shows the server's message", async () => {
+    const limited = fakeError(429, "rate_limited", "Too many requests. Try again in 1 seconds.", {
+      details: { retry_after_seconds: 1 },
+    });
+    let limitedCalls = 0;
+    const { user } = renderStep(
+      {
+        passages: passagesRoute((ref, translation) => {
+          if (ref === "John 3:16") return fakeError(500, "internal_error", "Something went wrong.");
+          if (ref === "Romans 8:1") {
+            limitedCalls += 1;
+            return limitedCalls === 1 ? limited : okPassage(ref, translation);
+          }
+          return fakeError(422, "invalid_request", "Too many passages in one request.", {
+            fields: { refs: "Too many passages in one request." },
+          });
+        }),
+      },
+      typedLines(["John 3:16", "Romans 8:1", "Psalm 1; Psalm 2; Psalm 3"]),
+    );
+    const john = await findRow("John 3:16");
+    await user.click(john.getByRole("button", { name: "Show text: John 3:16" }));
+    expect(await john.findByText("Passage text isn't available right now.")).toBeInTheDocument();
+    expect(john.getByRole("button", { name: "Try again: John 3:16" })).toBeEnabled();
+
+    const romans = row("Romans 8:1");
+    await user.click(romans.getByRole("button", { name: "Show text: Romans 8:1" }));
+    expect(await romans.findByText("Too many requests — try again in 1 s.")).toBeInTheDocument();
+    const retry = romans.getByRole("button", { name: "Try again: Romans 8:1" });
+    expect(retry).toBeDisabled();
+    await waitFor(() => expect(retry).toBeEnabled(), { timeout: 3_000 });
+    expect(romans.getByText("Try again now.")).toBeInTheDocument(); // owner answer D
+    await user.click(retry);
+    expect(await romans.findByText("Romans 8:1 (web) text.")).toBeInTheDocument();
+
+    const psalms = row("Psalm 1; Psalm 2; Psalm 3");
+    await user.click(psalms.getByRole("button", { name: "Show text: Psalm 1; Psalm 2; Psalm 3" }));
+    expect(await psalms.findByText("Too many passages in one request.")).toBeInTheDocument();
+  });
+
+  it("never opens or sends a line over 200 characters, and editing a line closes its row", async () => {
+    const long = `Genesis 1:1 ${"x".repeat(200)}`;
+    const { user, api } = renderStep({ passages: passagesRoute() }, typedLines(["Mark 1:1-8", long]));
+    const longRow = await findRow(long);
+    // Base UI keeps a disabled trigger focusable, so it is aria-disabled rather than disabled.
+    const longToggle = longRow.getByRole("button", { name: `Show text: ${long}` });
+    expect(longToggle).toHaveAttribute("aria-disabled", "true");
+    await user.click(longToggle);
+
+    const mark = row("Mark 1:1-8");
+    await user.click(mark.getByRole("button", { name: "Show text: Mark 1:1-8" }));
+    await mark.findByText("Mark 1:1-8 (web) text.");
+    fireEvent.change(screen.getByLabelText("Scripture readings"), { target: { value: `Mark 1:1-11\n${long}` } });
+    const edited = await findRow("Mark 1:1-11");
+    expect(edited.getByRole("button", { name: "Show text: Mark 1:1-11" })).toBeInTheDocument();
+    expect(api.requests.filter((r) => r.method === "POST").map((r) => (r.body as { refs: string[] }).refs[0])).toEqual([
+      "Mark 1:1-8",
+    ]);
+  });
+
+  it("Show all text opens every row with at most 3 requests in flight", async () => {
+    let inFlight = 0;
+    let most = 0;
+    const lines = ["Genesis 1:1", "Exodus 3:1", "Psalm 23", "Romans 8:1", "John 1:1"];
+    const { user, api } = renderStep(
+      {
+        passages: async (req: RecordedRequest) => {
+          inFlight += 1;
+          most = Math.max(most, inFlight);
+          await new Promise((resolve) => setTimeout(resolve, 60));
+          inFlight -= 1;
+          return passagesRoute()(req);
+        },
+      },
+      typedLines(lines),
+    );
+    await findRow("John 1:1");
+    await user.click(screen.getByRole("button", { name: "Show all text" }));
+    for (const line of lines) expect(await row(line).findByText(`${line} (web) text.`)).toBeInTheDocument();
+    expect(api.requests.filter((r) => r.method === "POST")).toHaveLength(5);
+    expect(most).toBe(3);
+  });
+
+  it("changing the translation refetches open rows in it and stores the choice", async () => {
+    const { user, api } = renderStep({ passages: passagesRoute() }, typedLines(["Mark 1:1-8"]));
+    const mark = await findRow("Mark 1:1-8");
+    await user.click(mark.getByRole("button", { name: "Show text: Mark 1:1-8" }));
+    await mark.findByText("Mark 1:1-8 (web) text.");
+
+    await user.click(screen.getByRole("combobox", { name: "Bible translation" }));
+    await user.click(await screen.findByRole("option", { name: "King James Version (KJV)" }));
+    expect(await mark.findByText("Mark 1:1-8 (kjv) text.")).toBeInTheDocument();
+    expect(screen.getByText("Passage text shown in King James Version (KJV).")).toBeInTheDocument();
+    expect(api.requests.filter((r) => r.method === "POST").map((r) => (r.body as { translation: string }).translation)).toEqual([
+      "web",
+      "kjv",
+    ]);
+    expect(probe()).toMatch(/\/t=kjv$/);
+  });
+
+  it("with no readings it says what to do, and a failed translation list shows the church's translation", async () => {
+    renderStep({ translations: fakeError(500, "internal_error", "Something went wrong.") });
+    expect(await screen.findByText("Add a reading above to see its text and choose the bulletin readings.")).toBeInTheDocument();
+    const select = screen.getByRole("combobox", { name: "Bible translation" });
+    await waitFor(() => expect(select).toHaveAttribute("data-disabled"));
+    expect(select).toHaveTextContent("World English Bible (WEB)");
+    expect(screen.getByText("Passage text shown in World English Bible (WEB).")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Show all text" })).toBeDisabled();
+  });
+});

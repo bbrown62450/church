@@ -10,6 +10,7 @@ import { useChurchProfile } from "@/lib/queries/church";
 
 import { LectionaryStatus } from "./lectionary-status";
 import { OccasionField } from "./occasion-field";
+import { ReadingsList } from "./readings-list";
 import { ScriptureLinesField } from "./scripture-lines-field";
 import { ServiceDateField } from "./service-date-field";
 
@@ -34,6 +35,7 @@ export function ReadingsStep() {
       <LectionaryStatus onEnterReadings={() => occasionRef.current?.focus()} />
       <OccasionField lect={lect} inputRef={occasionRef} />
       <ScriptureLinesField />
+      <ReadingsList church={profile} />
     </section>
   );
 }
