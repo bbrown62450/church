@@ -290,5 +290,17 @@ describe("DraftStore changes (S store.ts)", () => {
     expect(store.getSnapshot().draft.readings.occasion).toBe("Typed in the other tab");
     store.handleStorageEvent(KEY, JSON.stringify(typed)); // the late event is not newer
     expect(notices).toEqual(["adopted", "adopted"]);
+
+    // A flush that finds a strictly newer stored draft (its event still on the way) adopts it instead of writing.
+    store.update((d) => editOccasion(d, "Mine, stamped earlier")); // this clock is behind the other tab's
+    const later = {
+      ...editOccasion(typed, "Written just before my flush"),
+      updated_at: new Date(Date.parse(typed.updated_at) + 1).toISOString(),
+    };
+    data.set(KEY, JSON.stringify(later));
+    store.flush();
+    expect(writes).toEqual([]);
+    expect(store.getSnapshot().draft.readings.occasion).toBe("Written just before my flush");
+    expect(notices).toEqual(["adopted", "adopted", "adopted"]);
   });
 });

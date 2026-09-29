@@ -6,9 +6,12 @@
  * every step. It looks up the draft's date 400 ms after the date last changed
  * (a date typed segment by segment is looked up once) and, when the answer
  * arrives, fills empty fields or an older date's lectionary fields with the
- * default set. The check runs inside the `update` recipe, against the latest
- * draft, so a keystroke in the same tick is never overwritten; typed and
- * archived fields are never touched.
+ * default set. The fill goes through `autoUpdate`, stamped 1 ms after the
+ * draft it changes, so it never outranks typing from another tab that has not
+ * reached this one yet (two visible tabs, or a storage event that arrives
+ * late). The check runs inside the recipe, against the latest draft, so a
+ * keystroke in the same tick is never overwritten; typed and archived fields
+ * are never touched.
  *
  * Only the visible tab fills (2b build notes): a fill in a hidden tab would
  * write a newer draft, and the visible tab adopting it would drop up to 400 ms
@@ -56,7 +59,7 @@ export function usePageVisible(): boolean {
 }
 
 export function useLectionarySync(): LectionaryLookup {
-  const { draft, update } = useDraft();
+  const { draft, autoUpdate } = useDraft();
   const dateIso = draft.readings.date_iso;
   const lookupDate = useDebouncedValue(dateIso, LOOKUP_DELAY_MS);
   const query = useLectionary(lookupDate);
@@ -66,10 +69,10 @@ export function useLectionarySync(): LectionaryLookup {
 
   useEffect(() => {
     if (!due || !visible || data === undefined) return;
-    update((d) =>
+    autoUpdate((d) =>
       shouldAutoApply(d, data) && data.default_index !== null ? applyReadingSet(d, data, data.default_index) : d,
     );
-  }, [due, visible, data, update]);
+  }, [due, visible, data, autoUpdate]);
 
   return { lookupDate, settled: lookupDate === dateIso, query };
 }

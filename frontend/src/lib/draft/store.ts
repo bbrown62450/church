@@ -12,13 +12,17 @@
  *   newer edit from another tab.
  * - `update(recipe)` applies the recipe to the latest draft, bumps
  *   `updated_at` and schedules a write 400 ms later; a recipe that returns the
- *   same object does nothing. `setLastStep` changes only `last_step` and
+ *   same object does nothing. `autoUpdate(recipe)` is the same for an
+ *   automatic change (the lectionary fill), stamped 1 ms after the current
+ *   `updated_at` instead of now, so it never outranks a real edit made in
+ *   another tab on a copy this tab has not seen yet. `setLastStep` changes only `last_step` and
  *   never bumps `updated_at`. `replace(next)` stores `normalizePicks(next)`.
  * - A failed write switches to memory-only with one "memory_only" notice and
  *   stays pending, so the next flush (hide, pagehide) retries it.
  * - Another tab's write for this key is adopted when its `updated_at` is
  *   strictly newer ("adopted"), from its `storage` event or, when this tab is
- *   shown again, from a direct read (`syncFromStorage`, slice 2c).
+ *   shown again, from a direct read (`syncFromStorage`, slice 2c). A flush
+ *   that finds a strictly newer stored draft adopts it instead of writing.
  *
  * React wiring (listeners, toasts, flush on hide and unmount) is in
  * `context.tsx`. This class touches storage only in `start`, `flush`,
@@ -163,6 +167,16 @@ export class DraftStore {
     this.schedule();
   };
 
+  /** An automatic change: stamped 1 ms after the current draft, so any real edit (here or in another tab) outranks it. */
+  autoUpdate = (recipe: (d: DraftV1) => DraftV1): void => {
+    const current = this.snapshot.draft;
+    const next = recipe(current);
+    if (next === current) return;
+    const at = Date.parse(current.updated_at);
+    this.set({ ...next, updated_at: (Number.isFinite(at) ? new Date(at + 1) : this.now()).toISOString() });
+    this.schedule();
+  };
+
   replace = (next: DraftV1): void => {
     this.set(normalizePicks({ ...next, updated_at: this.now().toISOString() }));
     this.schedule();
@@ -193,6 +207,8 @@ export class DraftStore {
   /** Writes a scheduled change now (hide, pagehide, unmount). */
   flush = (): void => {
     if (!this.pendingWrite) return;
+    // Another tab's strictly newer draft whose storage event has not arrived yet: take it, never overwrite it.
+    if (this.adoptIfNewer(this.storage.read(this.key))) return;
     this.cancelWrite();
     const ok = this.storage.write(this.key, JSON.stringify(this.snapshot.draft));
     const persistence: Persistence = ok ? "ok" : "memory-only";
@@ -208,18 +224,20 @@ export class DraftStore {
     }
   };
 
-  private adoptIfNewer(raw: string | null): void {
-    if (raw === null) return;
+  /** True when the stored draft was strictly newer and is now this tab's. */
+  private adoptIfNewer(raw: string | null): boolean {
+    if (raw === null) return false;
     let stored: DraftV1;
     try {
       stored = parseStoredDraft(raw, { userId: this.userId, churchId: this.churchId });
     } catch {
-      return;
+      return false;
     }
-    if (!isNewer(stored.updated_at, this.snapshot.draft.updated_at)) return;
+    if (!isNewer(stored.updated_at, this.snapshot.draft.updated_at)) return false;
     this.cancelWrite();
     this.set(normalizePicks(stored));
     this.notify("adopted");
+    return true;
   }
 
   private schedule(): void {

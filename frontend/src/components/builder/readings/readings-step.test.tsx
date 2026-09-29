@@ -377,8 +377,12 @@ describe("reading sets and the available banner (S UX items 2 and 3)", () => {
     expect(within(group).getByText(ISAIAH.join(" · "))).toBeInTheDocument();
     expect(within(group).getByText(EASTER.join(" · "))).toBeInTheDocument();
     expect(probe()).toMatch(/^default\/lectionary\//);
+    // The whole card is the tap target (44 px), not only the 16 px radio.
+    const easterCard = within(group).getByText(EASTER.join(" · ")).closest("label");
+    expect(easterCard).toContainElement(cards[1]);
+    expect(easterCard).toHaveClass("flex", "min-h-11", "cursor-pointer", "p-3");
 
-    await user.click(within(group).getByText(EASTER.join(" · ")));
+    await user.click(easterCard as HTMLLabelElement);
     expect(screen.queryByRole("alertdialog")).toBeNull(); // lectionary fields: no question
     await waitFor(() => expect(cards[1]).toBeChecked());
     expect(screen.getByLabelText("Scripture readings")).toHaveValue(EASTER.join("\n"));

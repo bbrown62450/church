@@ -19,6 +19,8 @@ export type DraftApi = {
   draft: DraftV1;
   /** Applies the recipe to the latest draft; a recipe that returns the same object does nothing. */
   update: (recipe: (d: DraftV1) => DraftV1) => void;
+  /** `update` for an automatic change (the lectionary fill): stamped just after the current draft, so a real edit in any tab outranks it. */
+  autoUpdate: (recipe: (d: DraftV1) => DraftV1) => void;
   /** New service; slice 5a's archive load. */
   replace: (next: DraftV1) => void;
   /** Navigation only: never bumps `updated_at`. */
@@ -80,6 +82,7 @@ export function DraftProvider({
       draft: snapshot.draft,
       persistence: snapshot.persistence,
       update: store.update,
+      autoUpdate: store.autoUpdate,
       replace: store.replace,
       setLastStep: store.setLastStep,
     }),
