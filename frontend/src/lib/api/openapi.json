@@ -44,6 +44,28 @@
             ],
             "title": "Bible Translation"
           },
+          "default_hymnal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Hymnal"
+          },
+          "effective_hymnal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Hymnal"
+          },
           "effective_translation": {
             "title": "Effective Translation",
             "type": "string"
@@ -87,7 +109,9 @@
           "timezone_valid",
           "bible_translation",
           "effective_translation",
-          "effective_translation_label"
+          "effective_translation_label",
+          "default_hymnal",
+          "effective_hymnal"
         ],
         "title": "ChurchProfileOut",
         "type": "object"
@@ -172,6 +196,69 @@
           "request_id"
         ],
         "title": "ErrorDetail",
+        "type": "object"
+      },
+      "HymnalListOut": {
+        "properties": {
+          "default_hymnal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Hymnal"
+          },
+          "effective_hymnal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Hymnal"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/HymnalOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items",
+          "default_hymnal",
+          "effective_hymnal"
+        ],
+        "title": "HymnalListOut",
+        "type": "object"
+      },
+      "HymnalOut": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "hymn_count": {
+            "title": "Hymn Count",
+            "type": "integer"
+          },
+          "scripture_ref_count": {
+            "title": "Scripture Ref Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "code",
+          "hymn_count",
+          "scripture_ref_count"
+        ],
+        "title": "HymnalOut",
         "type": "object"
       },
       "InviteAcceptOut": {
@@ -875,6 +962,98 @@
           }
         },
         "summary": "Ready"
+      }
+    },
+    "/hymnals": {
+      "get": {
+        "operationId": "list_hymnals_hymnals_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-church-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Church-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HymnalListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "List Hymnals"
       }
     },
     "/invites/accept": {

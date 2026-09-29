@@ -82,6 +82,7 @@ def test_church_returns_the_active_church_for_a_member(client, make_user, make_c
         "id": str(cid), "name": "Grace", "role": "owner",
         "timezone": "America/New_York", "timezone_valid": True, "bible_translation": None,
         "effective_translation": "web", "effective_translation_label": "World English Bible (WEB)",
+        "default_hymnal": None, "effective_hymnal": None,     # slice 3: no hymns in this church
     }
 
 

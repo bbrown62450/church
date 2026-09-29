@@ -80,6 +80,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/hymnals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Hymnals */
+        get: operations["list_hymnals_hymnals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/invites/accept": {
         parameters: {
             query?: never;
@@ -236,6 +253,10 @@ export interface components {
         ChurchProfileOut: {
             /** Bible Translation */
             bible_translation: string | null;
+            /** Default Hymnal */
+            default_hymnal: string | null;
+            /** Effective Hymnal */
+            effective_hymnal: string | null;
             /** Effective Translation */
             effective_translation: string;
             /** Effective Translation Label */
@@ -297,6 +318,24 @@ export interface components {
             message: string;
             /** Request Id */
             request_id: string;
+        };
+        /** HymnalListOut */
+        HymnalListOut: {
+            /** Default Hymnal */
+            default_hymnal: string | null;
+            /** Effective Hymnal */
+            effective_hymnal: string | null;
+            /** Items */
+            items: components["schemas"]["HymnalOut"][];
+        };
+        /** HymnalOut */
+        HymnalOut: {
+            /** Code */
+            code: string;
+            /** Hymn Count */
+            hymn_count: number;
+            /** Scripture Ref Count */
+            scripture_ref_count: number;
         };
         /** InviteAcceptOut */
         InviteAcceptOut: {
@@ -671,6 +710,65 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReadyOut"];
+                };
+            };
+        };
+    };
+    list_hymnals_hymnals_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-church-id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HymnalListOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };
