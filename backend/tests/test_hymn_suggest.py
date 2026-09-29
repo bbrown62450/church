@@ -84,6 +84,15 @@ def test_the_nt_reading_leads_the_response_list_and_survives_the_cap():
     assert hs.response_refs("Mark 1:9-15", scriptures) == [
         "Mark 1:9-15", "Isaiah 6:1-8", "Psalm 23", "Romans 8:12-17"]
 
+    # With year and familiarity data the NT matches still lead: ranking runs within
+    # each group, never across (owner, 2026-09-29).
+    ranked = [rec(f"OT {n}", n, refs="Isaiah 6:3", year=1850, count=400 + n) for n in range(1, 31)]
+    ranked += [rec(f"Psalm {n}", 100 + n, refs="Psalm 23", year=1850, count=450 + n) for n in range(1, 31)]
+    ranked += [rec(f"Gospel {n}", 200 + n, refs="Mark 1:10", year=1900, count=20) for n in range(1, 6)]
+    response = build(ranked, scriptures, nt_ref="Mark 1:9-15").by_slot["response"]
+    assert sorted(titles(response[:5])) == sorted(f"Gospel {n}" for n in range(1, 6))
+    assert len(response) == 50
+
 
 def test_a_long_theme_list_without_facts_is_sampled_evenly():
     hymns = [rec(f"Joy {n}", n, theme="joy") for n in range(1, 121)]

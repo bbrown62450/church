@@ -118,9 +118,20 @@ def build_candidates(eligible: Sequence[Any], scriptures: Sequence[str], *, nt_r
             focused = [h for h in pool if matches_theme(h, _THEMES[slot])]
         if _has_signal(focused, rubric["prefer_familiar"]):
             modes[slot] = "ranked"
-            focused = hymn_ranking.shortlist(_rank(focused, rubric), limit=SLOT_CAP,
-                                             prefer_before_year=rubric["prefer_before_year"],
-                                             reserve=NEWER_RESERVE, year_of=_year)
+            # Response: hymns for the NT reading come first and are ranked among
+            # themselves, so era and familiarity never push them out of the cut
+            # (owner, 2026-09-29). Other slots rank the whole list.
+            lead = []
+            if slot == "response" and nt_ref:
+                nt_ids = {m.record.id for m in match_hymns(
+                    focused, split_alternatives(nt_ref), limit_per_ref=RESPONSE_LIMIT_PER_REF,
+                    max_results=SLOT_CAP).items}
+                lead = _rank([h for h in focused if h.id in nt_ids], rubric)[:SLOT_CAP]
+            rest = [h for h in focused if h.id not in {x.id for x in lead}]
+            focused = lead + hymn_ranking.shortlist(
+                _rank(rest, rubric), limit=SLOT_CAP - len(lead),
+                prefer_before_year=rubric["prefer_before_year"],
+                reserve=min(NEWER_RESERVE, SLOT_CAP - len(lead)), year_of=_year)
         else:
             modes[slot] = "sampled"
             if len(focused) > SLOT_CAP:
