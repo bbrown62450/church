@@ -4272,3 +4272,1341 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 **Expected:** one commit, 3 files changed.
 
 **Review checkpoint (T8-T9, batch 4):** the step writes the draft only through `update` with T4's recipes and only on a member's action (nothing on load, even for a vanished hymnal); no request goes out before `GET /hymnals` answers, and none for an empty church; a failed load never shows the empty state; titles and links render as text, links only through `safeHttpsUrl`; every Undo toast is dismissed on unmount and checks the church; the switch never touches a slot.
+
+### Task 10: Suggest hymns and the other ideas (S AI suggestion flow, "Other ideas (AI chips)", "Newer-hymn year label", "Stale and cross-church protection"; F D16, §4.8; owner decision 4; AC11, AC20; clarifications 6, 8, 10, 13, 14)
+
+**Suggest hymns** joins the toolbar: a full-width touch button with the Sparkles icon and S's helper, disabled while pending, for a hymnal with no hymns and for an invalid date, with the readings tip when the draft has no scriptures and no occasion. A tap builds the body with `buildSuggestionRequest` (the NT text only from the passage cache, never fetched; clarification 10) and calls T6's `suggest`. While it waits the button reads "Suggesting…", **Cancel** aborts the wait, and after 8 s "Still working — this can take up to a minute." shows. An `ok` answer is applied only if the draft's date is still the request's, with a functional `update` of the latest draft (`applySuggestions`: empty slots only, F D16), so a pick made during the wait is kept; otherwise "The date changed while suggestions were loading. Try again." A `superseded` answer and a cancel change nothing. The outcome lines (ready, with the left-out count; the newer-hymn note when a returned hymn is flagged; nothing picked; the date changed) sit in a `role="status"` region; each error code's copy shows in an `Alert`, a 429 turning to "Try again now." once its wait passes, and a network or server error goes to a toast (clarification 8). A slot the answer left empty says "No suggestion for this slot." for that date. Under each card `AlternativeChips` shows the ideas for the draft's date only: touch-size chips with the live label (recent use, "Written {year}"), named "Use {title} as the opening hymn" (clarification 14), hidden when their hymnal's list no longer has them; a tap is `swapAlternative`.
+
+**Files:**
+- Create: `frontend/src/components/builder/hymns/suggest-hymns-button.tsx`, `frontend/src/components/builder/hymns/alternative-chips.tsx`
+- Modify: `frontend/src/components/builder/hymns/hymns-step.tsx`
+- Test: `frontend/src/components/builder/hymns/hymns-step.test.tsx` (+7)
+
+**Interfaces:**
+- Consumes: `useSuggestHymns`, `keys.passage` (T6, 2c); `buildSuggestionRequest` (T5); `applySuggestions`, `swapAlternative`, `reconcilePick` (T4); `chipName`, `recentUseLabel` (T5); `HymnLabel` (T8); `rateLimitMessage`, `useWaitOver` (2c's `readings/use-wait-over.ts`); `PendingButton`, `Alert`, `errorToastMessage`, `cleanLines`, `useChurchProfile` (the church's translation).
+- Produces:
+  - `SuggestHymnsButton({selectedHymnal, hymnalEmpty, churchTranslation, onNoSuggestion})`; `suggestErrorMessage(error, waitOver?)`; `STILL_WORKING_MS = 8000`, `DATE_CHANGED`, `NOTHING_PICKED`, `NEWER_NOTE`.
+  - `AlternativeChips({slot, ideas, lists, fallbackHymnal, serviceDateIso, showHymnal, onSwap})`.
+  - `HymnsStep` renders `null` until the church profile is loaded (the shell loads it first, as for `ReadingsStep`).
+
+Counts after this task: frontend **414 passed in 64 files**.
+
+- [ ] **Step 1 (agent): Check the starting point**
+
+```bash
+git status --short
+ls frontend/src/components/builder/hymns | tr '\n' ' '; echo
+(cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
+```
+
+**Expected:** nothing (or `?? .claude/`); `hymn-label.test.tsx hymn-label.tsx hymn-picker.tsx hymn-slot-card.tsx hymns-step.test.tsx hymns-step.tsx hymns-toolbar.tsx use-undo-toasts.ts `; ` Test Files  64 passed (64)`, `      Tests  407 passed (407)`.
+
+- [ ] **Step 2 (agent): Write the failing tests**
+
+One test fakes `setTimeout` too, for the 8-second line, and says why (Code rules). Run this script from the repo root:
+
+```bash
+.venv/bin/python - <<'PYEOF'
+from pathlib import Path
+
+
+def edit(path: str, pairs: list[tuple[str, str]]) -> None:
+    p = Path(path)
+    text = p.read_text(encoding="utf-8")
+    for old, new in pairs:
+        assert text.count(old) == 1, f"{path}: anchor not found exactly once: {old[:70]!r}"
+        text = text.replace(old, new)
+    p.write_text(text, encoding="utf-8")
+
+
+edit("frontend/src/components/builder/hymns/hymns-step.test.tsx", [
+    ('''import { Toaster } from "@/components/ui/sonner";
+import type { ChurchProfile } from "@/lib/api/types";
+import { ChurchProvider } from "@/lib/church-context";
+''',
+     '''import { Toaster } from "@/components/ui/sonner";
+import type { ChurchProfile, HymnSuggestionBody } from "@/lib/api/types";
+import { ChurchProvider } from "@/lib/church-context";
+'''),
+    ('''import { pickFromHymn } from "@/lib/hymns/picks";
+import { fakeError, installFakeApi, type FakeHandler, type RecordedRequest } from "@/test/fake-api";
+''',
+     '''import { pickFromHymn } from "@/lib/hymns/picks";
+import { keys } from "@/lib/queries/keys";
+import { fakeError, installFakeApi, type FakeHandler, type RecordedRequest } from "@/test/fake-api";
+'''),
+    ('''  hymnListRoute,
+  lectionaryRoute,
+''',
+     '''  hymnListRoute,
+  hymnSuggestions,
+  lectionaryRoute,
+'''),
+    ('''const KEY = draftKey(USER_ID, church().id);
+const [HOLY, PRAISE, COME, GRACE, , FAITHFUL] = gg2013();
+/** Grace's recent use around October 4, 2026: sung September 6, planned October 18. */
+''',
+     '''const KEY = draftKey(USER_ID, church().id);
+const [HOLY, PRAISE, COME, GRACE, , FAITHFUL, HERE, , SENT] = gg2013();
+/** Grace's recent use around October 4, 2026: sung September 6, planned October 18. */
+'''),
+])
+with open("frontend/src/components/builder/hymns/hymns-step.test.tsx", "a", encoding="utf-8") as f:
+    f.write('''
+// --- AI suggestions (S "AI suggestion flow"; owner decision 4, F D16) -----------------------
+
+/** A button that moves the draft's date, as step 1 would. */
+function DateProbe() {
+  const { update } = useDraft();
+  return (
+    <button type="button" onClick={() => update((d) => setDate(d, "2026-10-11"))}>
+      Move to October 11
+    </button>
+  );
+}
+
+/** A route that answers only when `release` is called. */
+function held(answer: () => unknown) {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  return {
+    handler: async () => {
+      await gate;
+      return answer();
+    },
+    release: () => release(),
+  };
+}
+
+/** Three hymns for each slot, 4 recently used ones left out. */
+const THREE_EACH = () =>
+  hymnSuggestions(
+    { opening: [HOLY, COME, HERE], response: [FAITHFUL, COME, HOLY], closing: [PRAISE, HERE, SENT] },
+    { excluded_recent_count: 4 },
+  );
+
+function ideaNames(slot: "Opening" | "Response" | "Closing"): string[] {
+  const group = within(card(slot)).queryByRole("group", { name: `Other ideas for the ${slot.toLowerCase()} hymn` });
+  return group ? within(group).getAllByRole("button").map((b) => b.getAttribute("aria-label") ?? "") : [];
+}
+
+async function suggestButton() {
+  const button = await screen.findByRole("button", { name: "Suggest hymns" });
+  await waitFor(() => expect(button).toBeEnabled());
+  return button;
+}
+
+describe("Suggest hymns (S AI suggestion flow)", () => {
+  it("fills only the empty slots, keeps the member's pick, and shows at least 2 ideas under every slot", async () => {
+    const readings = {
+      scriptures: ["Isaiah 5:1-7", "Philippians 3:4b-14"],
+      occasion: "Nineteenth Sunday after Pentecost",
+      selected_nt_ref: "Philippians 3:4b-14",
+    };
+    const { user, api, queryClient } = renderStep(draftWith(slots(null, pick(GRACE)), readings), {
+      "POST /hymns/suggestions": THREE_EACH(),
+    });
+    queryClient.setQueryData(keys.passage("web", "Philippians 3:4b-14"), {
+      reference: "Philippians 3:4b-14",
+      status: "ok",
+      sections: [{ reference: "Philippians 3:4b-14", status: "ok", text: "I press on toward the goal." }],
+    });
+    expect(await screen.findByText("Fills empty slots and shows other ideas under each hymn.")).toBeInTheDocument();
+    expect(screen.queryByText(/^Tip:/)).toBeNull();
+    await user.click(await suggestButton());
+    expect(
+      await screen.findByText("Suggestions ready. Tap an idea under a hymn to swap it in. 4 recently used hymns were left out."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Suggestions favor older and familiar hymns. Newer hymns show the year their words were written."),
+    ).toBeInTheDocument();
+    const body = api.requests.find((r) => r.path === "/hymns/suggestions")?.body as HymnSuggestionBody;
+    expect(body).toEqual({
+      service_date_iso: "2026-10-04",
+      occasion: "Nineteenth Sunday after Pentecost",
+      scriptures: ["Isaiah 5:1-7", "Philippians 3:4b-14"],
+      selected_nt_ref: "Philippians 3:4b-14",
+      hymnal: "GG2013",
+      exclude_recent: true,
+      current_picks: { opening: null, response: GRACE.id, closing: null },
+      nt_text: "I press on toward the goal.",
+    });
+    await waitFor(() => expect(stored().hymns.slots).toEqual(slots(pick(HOLY), pick(GRACE), pick(PRAISE)).slots));
+    expect(stored().hymns.alternatives?.for_date_iso).toBe("2026-10-04");
+    expect(ideaNames("Opening")).toEqual([
+      "Use Come, Thou Almighty King as the opening hymn",
+      "Use Here I Am, Lord, written 1981, as the opening hymn",
+    ]);
+    expect(ideaNames("Response")).toHaveLength(3); // a filled slot: 3 ideas, its own pick left out
+    expect(ideaNames("Closing")).toEqual([
+      "Use Here I Am, Lord, written 1981, as the closing hymn",
+      "Use Sent Forth by God's Blessing as the closing hymn",
+    ]);
+    expect(within(card("Response")).getByText("#649 Amazing Grace")).toBeInTheDocument();
+    expect(within(card("Response")).getByText("Used Sep 6")).toBeInTheDocument(); // a recently used idea
+    expect(within(card("Opening")).getAllByText("Written 1981")).toHaveLength(1);
+  });
+
+  it("a tap swaps an idea with the pick and a second tap swaps back; the ideas hide when the date changes", async () => {
+    const { user } = renderStep(testDraft(), { "POST /hymns/suggestions": THREE_EACH() }, <DateProbe />);
+    await user.click(await suggestButton());
+    await screen.findByText(/^Suggestions ready/);
+    const opening = card("Opening");
+    await user.click(within(opening).getByRole("button", { name: "Use Come, Thou Almighty King as the opening hymn" }));
+    expect(await within(opening).findByText("#403 Come, Thou Almighty King")).toBeInTheDocument();
+    expect(ideaNames("Opening")).toEqual([
+      "Use Holy, Holy, Holy! Lord God Almighty as the opening hymn",
+      "Use Here I Am, Lord, written 1981, as the opening hymn",
+    ]);
+    await user.click(
+      within(opening).getByRole("button", { name: "Use Holy, Holy, Holy! Lord God Almighty as the opening hymn" }),
+    );
+    expect(await within(opening).findByText("#1 Holy, Holy, Holy! Lord God Almighty")).toBeInTheDocument();
+    expect(ideaNames("Opening")).toEqual([
+      "Use Come, Thou Almighty King as the opening hymn",
+      "Use Here I Am, Lord, written 1981, as the opening hymn",
+    ]);
+    await user.click(screen.getByRole("button", { name: "Move to October 11" }));
+    await waitFor(() => expect(ideaNames("Opening")).toEqual([]));
+    expect(within(opening).getByText("#1 Holy, Holy, Holy! Lord God Almighty")).toBeInTheDocument(); // the pick stays
+  });
+
+  it("a pick made while the request runs is kept and gets ideas", async () => {
+    const answer = held(THREE_EACH);
+    const { user } = renderStep(testDraft(), { "POST /hymns/suggestions": answer.handler });
+    await user.click(await suggestButton());
+    expect(await screen.findByRole("button", { name: "Suggesting…" })).toBeDisabled();
+    const input = await readyPicker("Response");
+    await user.type(input, "650");
+    await user.click(await screen.findByRole("option", { name: /#650 Amazing Grace/ }));
+    await waitFor(() => expect(stored().hymns.slots.response?.number).toBe(650));
+    answer.release();
+    await screen.findByText(/^Suggestions ready/);
+    await waitFor(() => expect(stored().hymns.slots.opening?.title).toBe("Holy, Holy, Holy! Lord God Almighty"));
+    expect(stored().hymns.slots.response?.number).toBe(650);
+    expect(ideaNames("Response")).toHaveLength(3);
+  });
+
+  it("drops the answer when the date changed during the wait", async () => {
+    const answer = held(THREE_EACH);
+    const { user } = renderStep(testDraft(), { "POST /hymns/suggestions": answer.handler }, <DateProbe />);
+    await user.click(await suggestButton());
+    await screen.findByRole("button", { name: "Suggesting…" });
+    await user.click(screen.getByRole("button", { name: "Move to October 11" }));
+    await waitFor(() => expect(stored().readings.date_iso).toBe("2026-10-11"));
+    answer.release();
+    expect(await screen.findByText("The date changed while suggestions were loading. Try again.")).toBeInTheDocument();
+    expect(stored().hymns.slots).toEqual(testDraft().hymns.slots);
+    expect(stored().hymns.alternatives).toBeNull();
+  });
+
+  it("Cancel stops waiting and returns to idle; after 8 s it says it is still working", async () => {
+    vi.useRealTimers(); // a second useFakeTimers call would keep beforeEach's Date-only fake
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"], shouldAdvanceTime: true });
+    vi.setSystemTime(DRAFT_NOW);
+    const answer = held(THREE_EACH);
+    const { user, api } = renderStep(testDraft(), { "POST /hymns/suggestions": answer.handler });
+    await user.click(await suggestButton());
+    await screen.findByRole("button", { name: "Suggesting…" });
+    expect(screen.queryByText("Still working — this can take up to a minute.")).toBeNull();
+    act(() => {
+      vi.advanceTimersByTime(8_000);
+    });
+    expect(screen.getByText("Still working — this can take up to a minute.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(await screen.findByRole("button", { name: "Suggest hymns" })).toBeEnabled();
+    expect(api.requests.filter((r) => r.path === "/hymns/suggestions")).toHaveLength(1);
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByText(/^Suggestions ready/)).toBeNull();
+    answer.release();
+  });
+
+  it("shows each failure's own copy under the button, and a server error as a toast", async () => {
+    const cases: [ReturnType<typeof fakeError>, string][] = [
+      [
+        fakeError(503, "ai_not_configured", "AI suggestions aren't set up on this app yet."),
+        "AI suggestions aren't set up on this app yet. You can still choose hymns yourself.",
+      ],
+      [fakeError(503, "ai_busy", "The AI service is busy. Try again in a minute."), "The AI service is busy. Try again in a minute."],
+      [fakeError(504, "ai_timeout", "The AI took too long to answer. Try again."), "The AI took too long to answer. Try again."],
+      [
+        fakeError(502, "ai_upstream_error", "The AI service had a problem. Try again."),
+        "The AI service had a problem. Try again in a moment.",
+      ],
+      [
+        fakeError(422, "invalid_request", "This hymnal has no hymns to suggest from."),
+        "This hymnal has no hymns to suggest from.",
+      ],
+    ];
+    for (const [response, copy] of cases) {
+      const { user, unmount } = renderStep(testDraft(), { "POST /hymns/suggestions": response });
+      await user.click(await suggestButton());
+      expect(await screen.findByRole("alert")).toHaveTextContent(copy);
+      expect(stored().hymns.slots).toEqual(testDraft().hymns.slots); // nothing stored
+      unmount();
+    }
+    const limited = renderStep(testDraft(), {
+      "POST /hymns/suggestions": {
+        ...fakeError(429, "rate_limited", "Too many requests.", { details: { retry_after_seconds: 1 } }),
+        headers: { "Retry-After": "1" },
+      },
+    });
+    await limited.user.click(await suggestButton());
+    expect(await screen.findByRole("alert")).toHaveTextContent("Too many requests — try again in 1 s.");
+    expect(await screen.findByText("Try again now.", {}, { timeout: 3_000 })).toBeInTheDocument();
+    limited.unmount();
+
+    const { user } = renderStep(testDraft(), {
+      "POST /hymns/suggestions": fakeError(500, "internal_error", "Something went wrong."),
+    });
+    await user.click(await suggestButton());
+    expect(await screen.findByText("Something went wrong. (Ref: 4f9a2c1e)")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("says when a slot or every slot got nothing, and waits for a valid date; the tip asks for readings first", async () => {
+    const partly = hymnSuggestions({ opening: [HOLY, COME, GRACE], response: [], closing: [PRAISE, GRACE, SENT] });
+    const one = renderStep(testDraft(), { "POST /hymns/suggestions": partly });
+    expect(await screen.findByText("Tip: add the readings in step 1 first — suggestions use them.")).toBeInTheDocument();
+    await one.user.click(await suggestButton());
+    expect(await within(card("Response")).findByText("No suggestion for this slot.")).toBeInTheDocument();
+    expect(within(card("Opening")).queryByText("No suggestion for this slot.")).toBeNull();
+    expect(screen.queryByText(/Suggestions favor older/)).toBeNull(); // no flagged hymn returned
+    one.unmount();
+
+    const none = renderStep(testDraft(), {
+      "POST /hymns/suggestions": hymnSuggestions({ opening: [], response: [], closing: [] }),
+    });
+    await none.user.click(await suggestButton());
+    expect(
+      await screen.findByText("The AI didn't pick any hymns from this hymnal. Try again, or choose hymns yourself."),
+    ).toBeInTheDocument();
+    none.unmount();
+
+    renderStep(setDate(testDraft(), ""));
+    await screen.findByRole("switch", { name: "Exclude hymns used within 12 weeks" });
+    expect(screen.getByRole("button", { name: "Suggest hymns" })).toBeDisabled();
+  });
+});
+''')
+
+print("T10 tests written")
+PYEOF
+```
+
+**Expected:** `T10 tests written`.
+
+- [ ] **Step 3 (agent): Run them and see them fail**
+
+```bash
+(cd frontend && npx vitest run src/components/builder/hymns/hymns-step.test.tsx 2>&1 | grep -E "^ +×|Tests ")
+```
+
+**Expected** (each waits about a second for a button that is not there yet):
+
+```
+   × Suggest hymns (S AI suggestion flow) > fills only the empty slots, keeps the member's pick, and shows at least 2 ideas under every slot <t>ms
+   × Suggest hymns (S AI suggestion flow) > a tap swaps an idea with the pick and a second tap swaps back; the ideas hide when the date changes <t>ms
+   × Suggest hymns (S AI suggestion flow) > a pick made while the request runs is kept and gets ideas <t>ms
+   × Suggest hymns (S AI suggestion flow) > drops the answer when the date changed during the wait <t>ms
+   × Suggest hymns (S AI suggestion flow) > Cancel stops waiting and returns to idle; after 8 s it says it is still working <t>ms
+   × Suggest hymns (S AI suggestion flow) > shows each failure's own copy under the button, and a server error as a toast <t>ms
+   × Suggest hymns (S AI suggestion flow) > says when a slot or every slot got nothing, and waits for a valid date; the tip asks for readings first <t>ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  7 failed | 13 passed (20)
+```
+
+- [ ] **Step 4 (agent): Write Suggest and the ideas, and put them in the step**
+
+Run this script from the repo root:
+
+```bash
+.venv/bin/python - <<'PYEOF'
+from pathlib import Path
+
+
+def edit(path: str, pairs: list[tuple[str, str]]) -> None:
+    p = Path(path)
+    text = p.read_text(encoding="utf-8")
+    for old, new in pairs:
+        assert text.count(old) == 1, f"{path}: anchor not found exactly once: {old[:70]!r}"
+        text = text.replace(old, new)
+    p.write_text(text, encoding="utf-8")
+
+
+Path("frontend/src/components/builder/hymns/alternative-chips.tsx").write_text('''"use client";
+
+import { Button } from "@/components/ui/button";
+import type { Hymn } from "@/lib/api/types";
+import type { HymnPick, Slot } from "@/lib/draft/schema";
+import { chipName, recentUseLabel } from "@/lib/hymns/labels";
+import { reconcilePick } from "@/lib/hymns/picks";
+
+import { HymnLabel } from "./hymn-label";
+
+/**
+ * "Other ideas" under a slot (S "Other ideas (AI chips)"): the AI's other
+ * hymns for this date, each a touch-size chip. A chip shows its live hymn
+ * once its hymnal's list has loaded (with "Used Sep 7" and "Written {year}"
+ * badges), and is hidden when that list no longer has it. A tap swaps it with
+ * the slot's pick, so a second tap swaps back.
+ */
+export function AlternativeChips({
+  slot,
+  ideas,
+  lists,
+  fallbackHymnal,
+  serviceDateIso,
+  showHymnal,
+  onSwap,
+}: {
+  slot: Slot;
+  ideas: readonly HymnPick[];
+  lists: ReadonlyMap<string, readonly Hymn[] | undefined>;
+  fallbackHymnal: string | null;
+  serviceDateIso: string;
+  showHymnal: boolean;
+  onSwap: (hymnId: string) => void;
+}) {
+  const shown = ideas.flatMap((idea) => {
+    const reconciled = reconcilePick(idea, lists, fallbackHymnal);
+    if (reconciled.status === "missing" || idea.hymn_id === null) return [];
+    return [{ idea, hymnId: idea.hymn_id, live: reconciled.status === "ok" ? reconciled.live : null }];
+  });
+  if (shown.length === 0) return null;
+  return (
+    <div className="grid gap-1.5">
+      <p className="text-sm font-medium">Other ideas</p>
+      <div role="group" aria-label={`Other ideas for the ${slot} hymn`} className="flex flex-wrap gap-2">
+        {shown.map(({ idea, hymnId, live }) => (
+          <Button
+            key={hymnId}
+            variant="secondary"
+            size="touch"
+            className="max-w-full min-w-0"
+            aria-label={chipName(live ?? { title: idea.title, newer_than_preferred: false, text_year: null }, slot)}
+            onClick={() => onSwap(hymnId)}
+          >
+            <HymnLabel
+              hymn={live ?? idea}
+              showHymnal={showHymnal}
+              recentBadge={live?.recent_use_on ? recentUseLabel(live.recent_use_on, serviceDateIso) : null}
+              truncate
+            />
+          </Button>
+        ))}
+      </div>
+    </div>
+  );
+}
+''', encoding="utf-8")
+
+edit("frontend/src/components/builder/hymns/hymns-step.tsx", [
+    ('''"use client";
+
+''',
+     '''"use client";
+
+import { useState } from "react";
+
+'''),
+    ('''import type { Hymn } from "@/lib/api/types";
+import { isValidDateIso } from "@/lib/dates";
+''',
+     '''import type { Hymn } from "@/lib/api/types";
+import { useChurch } from "@/lib/church-context";
+import { isValidDateIso } from "@/lib/dates";
+'''),
+    ('''  setSlot,
+  type Reconciled,
+} from "@/lib/hymns/picks";
+import { useHymnals, useHymnLists } from "@/lib/queries/hymns";
+
+import { HymnSlotCard } from "./hymn-slot-card";
+import { ExcludeSwitch, HymnalPicker, HymnsToolbar, ToolbarSkeleton } from "./hymns-toolbar";
+import { useUndoToasts } from "./use-undo-toasts";
+''',
+     '''  setSlot,
+  swapAlternative,
+  type Reconciled,
+} from "@/lib/hymns/picks";
+import { useChurchProfile } from "@/lib/queries/church";
+import { useHymnals, useHymnLists } from "@/lib/queries/hymns";
+
+import { AlternativeChips } from "./alternative-chips";
+import { HymnSlotCard } from "./hymn-slot-card";
+import { ExcludeSwitch, HymnalPicker, HymnsToolbar, ToolbarSkeleton } from "./hymns-toolbar";
+import { SuggestHymnsButton } from "./suggest-hymns-button";
+import { useUndoToasts } from "./use-undo-toasts";
+'''),
+    (''' * are the only writers of the hymnal and the switch. Removing a hymn offers
+ * Undo in a toast that never outlives the step.
+ */
+export function HymnsStep() {
+  const { draft, update } = useDraft();
+''',
+     ''' * are the only writers of the hymnal and the switch. Removing a hymn offers
+ * Undo in a toast that never outlives the step. Suggest fills the empty slots
+ * and puts other ideas under each hymn; the ideas show only for the date they
+ * were suggested for.
+ */
+export function HymnsStep() {
+  const church = useChurch();
+  const profile = useChurchProfile(church.id).data;
+  const { draft, update } = useDraft();
+'''),
+    ('''  const showUndo = useUndoToasts();
+
+''',
+     '''  const showUndo = useUndoToasts();
+  // "No suggestion for this slot." after the last answer, for its date only (component state).
+  const [unsuggested, setUnsuggested] = useState<{ dateIso: string; slots: Slot[] }>({ dateIso: "", slots: [] });
+  if (!profile) return null;
+
+'''),
+    ('''  const hiddenRecent = (selectedList ?? []).filter((h) => h.title.trim() !== "" && h.recent_use_on !== null).length;
+
+''',
+     '''  const hiddenRecent = (selectedList ?? []).filter((h) => h.title.trim() !== "" && h.recent_use_on !== null).length;
+  const ideas = hymns.alternatives?.for_date_iso === dateIso ? hymns.alternatives.by_slot : null;
+  const selectedCount = hymnals?.items.find((h) => h.code === code)?.hymn_count ?? 0;
+
+'''),
+    ('''          />
+        </HymnsToolbar>
+''',
+     '''          />
+          <SuggestHymnsButton
+            selectedHymnal={code}
+            hymnalEmpty={selectedCount === 0}
+            churchTranslation={profile.effective_translation}
+            onNoSuggestion={(noneFor, forDate) => setUnsuggested({ dateIso: forDate, slots: noneFor })}
+          />
+        </HymnsToolbar>
+'''),
+    ('''            onRemove={() => remove(slot, title)}
+          />
+        );
+''',
+     '''            onRemove={() => remove(slot, title)}
+          >
+            {unsuggested.dateIso === dateIso && unsuggested.slots.includes(slot) ? (
+              <p className="text-sm text-muted-foreground">No suggestion for this slot.</p>
+            ) : null}
+            {ideas ? (
+              <AlternativeChips
+                slot={slot}
+                ideas={ideas[slot]}
+                lists={lists.lists}
+                fallbackHymnal={code}
+                serviceDateIso={dateIso}
+                showHymnal={showHymnal}
+                onSwap={(hymnId) => update((d) => ({ ...d, hymns: swapAlternative(d.hymns, slot, hymnId) }))}
+              />
+            ) : null}
+          </HymnSlotCard>
+        );
+'''),
+])
+
+Path("frontend/src/components/builder/hymns/suggest-hymns-button.tsx").write_text('''"use client";
+
+import { useQueryClient } from "@tanstack/react-query";
+import { SparklesIcon } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
+
+import { PendingButton } from "@/components/app/pending-button";
+import { rateLimitMessage, useWaitOver } from "@/components/builder/readings/use-wait-over";
+import { Alert, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import type { ApiError } from "@/lib/api/client";
+import { errorToastMessage } from "@/lib/api/errors";
+import type { HymnSuggestions, Passage } from "@/lib/api/types";
+import { isValidDateIso } from "@/lib/dates";
+import { useDraft } from "@/lib/draft/context";
+import { SLOTS, type Slot } from "@/lib/draft/schema";
+import { applySuggestions } from "@/lib/hymns/picks";
+import { buildSuggestionRequest } from "@/lib/hymns/suggest-request";
+import { useSuggestHymns } from "@/lib/queries/hymns";
+import { keys } from "@/lib/queries/keys";
+import { cleanLines } from "@/lib/scripture-refs";
+
+/** After this long the pending button adds "Still working — this can take up to a minute." (F §4.8). */
+export const STILL_WORKING_MS = 8_000;
+
+export const DATE_CHANGED = "The date changed while suggestions were loading. Try again.";
+export const NOTHING_PICKED = "The AI didn't pick any hymns from this hymnal. Try again, or choose hymns yourself.";
+export const NEWER_NOTE =
+  "Suggestions favor older and familiar hymns. Newer hymns show the year their words were written.";
+
+/**
+ * The inline copy for a failed suggestion (S "AI suggestion flow" 5), keyed on
+ * the error code; null for the errors the app handles globally (network, 500:
+ * a toast, F §4.8). A cancel never reaches here.
+ */
+export function suggestErrorMessage(e: ApiError, waitOver = false): string | null {
+  switch (e.code) {
+    case "ai_not_configured":
+      return "AI suggestions aren't set up on this app yet. You can still choose hymns yourself.";
+    case "ai_busy":
+      return "The AI service is busy. Try again in a minute.";
+    case "ai_timeout":
+      return "The AI took too long to answer. Try again.";
+    case "ai_upstream_error":
+      return "The AI service had a problem. Try again in a moment.";
+    case "invalid_request":
+      return e.message;
+    case "rate_limited":
+      return rateLimitMessage(e, waitOver);
+    case "timeout":
+      return "This is taking too long. Try again.";
+    default:
+      return null;
+  }
+}
+
+type Outcome =
+  | { kind: "ready"; text: string; newer: boolean }
+  | { kind: "none" }
+  | { kind: "date_changed" }
+  | { kind: "error"; error: ApiError };
+
+/** "Suggestions ready…", with " {n} recently used hymns were left out." (plan clarification 13 for one). */
+function readyText(resp: HymnSuggestions): string {
+  const n = resp.excluded_recent_count;
+  const left = n === 0 ? "" : n === 1 ? " 1 recently used hymn was left out." : ` ${n} recently used hymns were left out.`;
+  return `Suggestions ready. Tap an idea under a hymn to swap it in.${left}`;
+}
+
+function SuggestError({ error }: { error: ApiError }) {
+  const over = useWaitOver(error.code === "rate_limited" ? error : null);
+  return (
+    <Alert variant="destructive">
+      <AlertTitle>{suggestErrorMessage(error, over)}</AlertTitle>
+    </Alert>
+  );
+}
+
+/**
+ * "Suggest hymns" (S "AI suggestion flow"). The answer is applied with a
+ * functional update of the latest draft (`applySuggestions`: only empty slots
+ * are filled, F D16), so a pick made during the wait counts. It is dropped when
+ * `useSuggestHymns` reports it superseded (a newer request, the step
+ * unmounted, another church) or the draft's date changed meanwhile. Cancel
+ * aborts the wait; the server finishes and discards it (F §1.8). Messages and
+ * errors live in component state, never in the draft.
+ */
+export function SuggestHymnsButton({
+  selectedHymnal,
+  hymnalEmpty,
+  churchTranslation,
+  onNoSuggestion,
+}: {
+  selectedHymnal: string;
+  /** The selected hymnal has no hymns. */
+  hymnalEmpty: boolean;
+  churchTranslation: string;
+  /** The slots the answer left empty, for "No suggestion for this slot." ([] when a request starts). */
+  onNoSuggestion: (slots: Slot[], dateIso: string) => void;
+}) {
+  const { draft, update } = useDraft();
+  const queryClient = useQueryClient();
+  const { suggest, isPending } = useSuggestHymns();
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const [slow, setSlow] = useState(false);
+  const latest = useRef(draft);
+  const controller = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    latest.current = draft;
+  }, [draft]);
+
+  useEffect(() => () => controller.current?.abort(), []);
+
+  useEffect(() => {
+    if (!isPending) return;
+    const timer = setTimeout(() => setSlow(true), STILL_WORKING_MS);
+    return () => {
+      clearTimeout(timer);
+      setSlow(false);
+    };
+  }, [isPending]);
+
+  const dateValid = isValidDateIso(draft.readings.date_iso);
+  const noReadings = cleanLines(draft.readings.scriptures).length === 0 && draft.readings.occasion.trim() === "";
+
+  async function run() {
+    const body = buildSuggestionRequest(
+      latest.current,
+      selectedHymnal,
+      (translation, ref) => queryClient.getQueryData<Passage>(keys.passage(translation, ref)),
+      churchTranslation,
+    );
+    const date = body.service_date_iso;
+    const own = new AbortController();
+    controller.current = own;
+    setOutcome(null);
+    onNoSuggestion([], date);
+    const result = await suggest(body, own.signal);
+    if (controller.current === own) controller.current = null;
+    if (result.status === "superseded") return;
+    if (result.status === "error") {
+      if (result.error.code === "aborted") return;
+      if (suggestErrorMessage(result.error) === null) toast.error(errorToastMessage(result.error));
+      else setOutcome({ kind: "error", error: result.error });
+      return;
+    }
+    const resp = result.data;
+    if (latest.current.readings.date_iso !== date) {
+      setOutcome({ kind: "date_changed" });
+      return;
+    }
+    update((d) => (d.readings.date_iso === date ? { ...d, hymns: applySuggestions(d.hymns, resp, date) } : d));
+    const empty = SLOTS.filter((slot) => resp.slots[slot].length === 0);
+    if (empty.length === SLOTS.length) {
+      setOutcome({ kind: "none" });
+      return;
+    }
+    onNoSuggestion(empty, date);
+    const newer = SLOTS.some((slot) => resp.slots[slot].some((h) => h.newer_than_preferred));
+    setOutcome({ kind: "ready", text: readyText(resp), newer });
+  }
+
+  return (
+    <div className="grid gap-2">
+      <PendingButton
+        size="touch"
+        className="w-full"
+        pending={isPending}
+        pendingLabel="Suggesting…"
+        disabled={hymnalEmpty || !dateValid}
+        onClick={() => void run()}
+      >
+        <SparklesIcon data-icon="inline-start" aria-hidden="true" />
+        Suggest hymns
+      </PendingButton>
+      {isPending ? (
+        <div className="flex flex-wrap items-center gap-x-3 text-sm text-muted-foreground">
+          {slow ? <p>Still working — this can take up to a minute.</p> : null}
+          <Button variant="link" className="h-11 px-0" onClick={() => controller.current?.abort()}>
+            Cancel
+          </Button>
+        </div>
+      ) : null}
+      <p className="text-sm text-muted-foreground">Fills empty slots and shows other ideas under each hymn.</p>
+      {noReadings ? (
+        <p className="text-sm text-muted-foreground">Tip: add the readings in step 1 first — suggestions use them.</p>
+      ) : null}
+      <div role="status" className="grid gap-1 text-sm">
+        {outcome?.kind === "ready" ? <p>{outcome.text}</p> : null}
+        {outcome?.kind === "ready" && outcome.newer ? <p className="text-muted-foreground">{NEWER_NOTE}</p> : null}
+        {outcome?.kind === "none" ? <p>{NOTHING_PICKED}</p> : null}
+        {outcome?.kind === "date_changed" ? <p>{DATE_CHANGED}</p> : null}
+      </div>
+      {outcome?.kind === "error" ? <SuggestError error={outcome.error} /> : null}
+    </div>
+  );
+}
+''', encoding="utf-8")
+
+print("T10 code written")
+PYEOF
+```
+
+**Expected:** `T10 code written`.
+
+- [ ] **Step 5 (agent): Run the tests, the suite, types and lint**
+
+```bash
+(cd frontend && npx vitest run src/components/builder/hymns 2>&1 | grep -E "Test Files|Tests ")
+(cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
+(cd frontend && npm test 2>&1 | grep -cE "Warning:|not wrapped in act")
+(cd frontend && npm run typecheck 2>&1 | tail -1 && npm run lint 2>&1 | tail -1)
+git status --short
+```
+
+**Expected:** ` Test Files  2 passed (2)`, `      Tests  22 passed (22)`; ` Test Files  64 passed (64)`, `      Tests  414 passed (414)`; `0`; `> tsc --noEmit` and `> eslint` with nothing after them; ` M` for `hymns-step.tsx` and `hymns-step.test.tsx`, `??` for the two new files.
+
+- [ ] **Step 6 (agent): Commit**
+
+```bash
+git add frontend/src/components/builder/hymns/suggest-hymns-button.tsx frontend/src/components/builder/hymns/alternative-chips.tsx frontend/src/components/builder/hymns/hymns-step.tsx frontend/src/components/builder/hymns/hymns-step.test.tsx
+git commit -m "Hymns: Suggest fills empty slots and offers other ideas, with Cancel, the date check and each error's copy (S AI suggestion flow; F D16; AC11)" -m "Suggest sends buildSuggestionRequest's body (NT text from the passage
+cache only) and applies the answer to the latest draft with
+applySuggestions, empty slots only, when the date has not changed; a
+superseded answer or a cancel changes nothing. Suggesting..., Cancel,
+Still working after 8 s; each AI error's copy inline, Try again now.
+after a 429's wait, a server error as a toast. Other ideas show for the
+draft's date only, with their badges; a tap swaps, a second swaps back.
+Frontend 407 -> 414 tests.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+**Expected:** one commit, 4 files changed.
+
+### Task 11: Hymns for the readings (S "Hymns for the readings", Behavior changes 9, 10, 19; AC20; clarifications 11, 13, 14, 15, 19)
+
+`ScriptureMatches` sits under the cards whenever the pickers do. It is a `Collapsible` titled "Hymns for the readings", closed below `md` and open from `md` as it first renders (clarification 19), with the count once loaded, even while closed, because the query lives outside the collapsed content. Its references are `buildMatchRefs(draft scriptures, extra)`; the **Additional scripture** input (`maxLength={200}`, "e.g. Matthew 17") with **Search** or Enter sets the extra reference (component state only). The query runs by itself whenever the references, the selected hymnal or the date change. Results come in "Matches the readings" and "Same chapter", each row a `HymnLabel` with Listen, "Matches {refs}" and an **Add** menu (Opening, Response, Closing hymn; the button is named "Add {title}", clarification 14). Adding over a different hymn shows "{Slot} hymn changed to {title}." with **Undo** through T8's `useUndoToasts` (clarification 15). With Exclude on, recently used matches are hidden behind "{k} recently used matches are hidden." and **Show them**; shown ones carry their badge (clarification 11). Unreadable references, no matches, no references (with **Go to readings**), a hymnal with no scripture references (no request) and a failed search (**Retry**) each have S's copy.
+
+**Files:**
+- Create: `frontend/src/components/builder/hymns/scripture-matches.tsx`
+- Modify: `frontend/src/components/builder/hymns/hymns-step.tsx`
+- Test: `frontend/src/components/builder/hymns/hymns-step.test.tsx` (+5; `renderStep` also answers `POST /hymns/scripture-matches` from now on, since a draft with readings asks for matches)
+
+**Interfaces:**
+- Consumes: `useScriptureMatches` (T6), `buildMatchRefs`, `MAX_REF_LENGTH`, `recentUseLabel`, `SLOT_META` (T5), `HymnLabel`, `useUndoToasts` (T8), `setSlot`, `pickFromHymn` (T4); `Collapsible` (2c), `DropdownMenu`, `Input`, `ErrorState`, `Skeleton`, `Badge`, `next/link`.
+- Produces: `ScriptureMatches({scriptures, hymnal: HymnalSummary, recentForDate, serviceDateIso, excludeRecent, showHymnal, onAdd(slot, match)})`.
+
+Counts after this task: frontend **419 passed in 64 files**.
+
+- [ ] **Step 1 (agent): Check the starting point**
+
+```bash
+git status --short
+ls frontend/src/components/builder/hymns/scripture-matches.tsx 2>&1 | head -1
+(cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
+```
+
+**Expected:** nothing (or `?? .claude/`); `ls: cannot access 'frontend/src/components/builder/hymns/scripture-matches.tsx': No such file or directory`; ` Test Files  64 passed (64)`, `      Tests  414 passed (414)`.
+
+- [ ] **Step 2 (agent): Write the failing tests**
+
+Run this script from the repo root:
+
+```bash
+.venv/bin/python - <<'PYEOF'
+from pathlib import Path
+
+
+def edit(path: str, pairs: list[tuple[str, str]]) -> None:
+    p = Path(path)
+    text = p.read_text(encoding="utf-8")
+    for old, new in pairs:
+        assert text.count(old) == 1, f"{path}: anchor not found exactly once: {old[:70]!r}"
+        text = text.replace(old, new)
+    p.write_text(text, encoding="utf-8")
+
+
+edit("frontend/src/components/builder/hymns/hymns-step.test.tsx", [
+    ('''  hymnListRoute,
+  hymnSuggestions,
+''',
+     '''  hymnListRoute,
+  hymnMatch,
+  hymnSuggestions,
+'''),
+    ('''  me,
+  testDraft,
+''',
+     '''  me,
+  scriptureMatches,
+  testDraft,
+'''),
+    ('''    "GET /hymns": hymnListRoute(undefined, RECENT),
+    ...routes,
+''',
+     '''    "GET /hymns": hymnListRoute(undefined, RECENT),
+    "POST /hymns/scripture-matches": scriptureMatches(),
+    ...routes,
+'''),
+])
+with open("frontend/src/components/builder/hymns/hymns-step.test.tsx", "a", encoding="utf-8") as f:
+    f.write(r'''
+// --- Hymns for the readings (S "Hymns for the readings") ------------------------------------
+
+const LINES = ["Isaiah 5:1-7", "Psalm 80:7-15", "Philippians 3:4b-14", "Matthew 21:33-46"];
+
+/** The section, opened (it starts closed below md, and jsdom's window is narrow). */
+async function openMatches(user: { click: (el: Element) => Promise<void> }) {
+  const trigger = await screen.findByRole("button", { name: /^Hymns for the readings/ });
+  await user.click(trigger);
+  return trigger.closest("[data-slot=collapsible]") as HTMLElement;
+}
+
+describe("Hymns for the readings (S ScriptureMatches)", () => {
+  it("asks for the draft's readings in the selected hymnal; Add → Response hymn sets the slot and Undo restores it", async () => {
+    const { user, api } = renderStep(draftWith(slots(null, pick(GRACE)), { scriptures: LINES }));
+    const trigger = await screen.findByRole("button", { name: "Hymns for the readings 4" }); // the count, while closed
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    const matchCalls = api.requests.filter((r) => r.path === "/hymns/scripture-matches");
+    expect(matchCalls.map((r) => r.body)).toEqual([
+      { refs: LINES, hymnal: "GG2013", recent_for_date: "2026-10-04", max_results: 30 },
+    ]);
+    const section = await openMatches(user);
+    const passage = within(section).getByRole("heading", { name: "Matches the readings" }).nextElementSibling as HTMLElement;
+    expect(within(passage).getByText("#710 Here I Am, Lord")).toBeInTheDocument();
+    expect(within(passage).getByText("Written 1981")).toBeInTheDocument();
+    expect(within(passage).getByText("Matches Isaiah 5:1-7")).toBeInTheDocument();
+    const chapter = within(section).getByRole("heading", { name: "Same chapter" }).nextElementSibling as HTMLElement;
+    expect(within(chapter).getAllByRole("listitem")).toHaveLength(3);
+    await user.click(within(section).getByRole("button", { name: "Add Holy, Holy, Holy! Lord God Almighty" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Response hymn" }));
+    expect(await within(card("Response")).findByText("#1 Holy, Holy, Holy! Lord God Almighty")).toBeInTheDocument();
+    await waitFor(() => expect(stored().hymns.slots.response).toEqual(pick(HOLY)));
+    expect(await screen.findByText("Response hymn changed to Holy, Holy, Holy! Lord God Almighty.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Undo" }));
+    await waitFor(() => expect(stored().hymns.slots.response).toEqual(pick(GRACE)));
+    // Into an empty slot: no toast.
+    await user.click(within(section).getByRole("button", { name: "Add Here I Am, Lord" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Closing hymn" }));
+    await waitFor(() => expect(stored().hymns.slots.closing).toEqual(pick(HERE)));
+    expect(screen.queryByText(/^Closing hymn changed/)).toBeNull();
+  });
+
+  it("searches an extra reference with the readings, and says when one can't be read or nothing matches", async () => {
+    const { user, api } = renderStep(draftWith({}, { scriptures: LINES }), {
+      "POST /hymns/scripture-matches": (req: RecordedRequest) => {
+        const refs = (req.body as { refs: string[] }).refs;
+        return refs.includes("Transfiguration")
+          ? scriptureMatches({ refs_used: refs, unparsed_refs: ["Transfiguration"], total_matched: 0, items: [] })
+          : scriptureMatches();
+      },
+    });
+    const section = await openMatches(user);
+    const extra = within(section).getByLabelText("Additional scripture");
+    expect(extra).toHaveAttribute("placeholder", "e.g. Matthew 17");
+    expect(extra).toHaveAttribute("maxLength", "200");
+    await user.type(extra, "Transfiguration{Enter}");
+    expect(
+      await within(section).findByText("Couldn't read “Transfiguration” as a scripture reference."),
+    ).toBeInTheDocument();
+    expect(
+      within(section).getByText("No hymns in GG2013 match these readings. Try a shorter reference, such as “Matthew 17”."),
+    ).toBeInTheDocument();
+    const last = api.requests.filter((r) => r.path === "/hymns/scripture-matches").at(-1);
+    expect((last?.body as { refs: string[] }).refs).toEqual([...LINES, "Transfiguration"]);
+  });
+
+  it("links to step 1 without references, and never searches a hymnal with no scripture references", async () => {
+    const first = renderStep();
+    const section = await openMatches(first.user);
+    expect(within(section).getByText(/^Add the readings in step 1, or type a scripture reference here\./)).toBeInTheDocument();
+    expect(within(section).getByRole("link", { name: "Go to readings" })).toHaveAttribute("href", "/builder/readings");
+    first.unmount();
+
+    const { user, api } = renderStep(draftWith({ hymnal: "PH1990" }, { scriptures: LINES }), { "GET /hymnals": twoHymnals() });
+    const ph = await openMatches(user);
+    expect(within(ph).getByText("PH1990 has no scripture references, so it can't be searched by scripture.")).toBeInTheDocument();
+    expect(api.requests.some((r) => r.path === "/hymns/scripture-matches")).toBe(false);
+    expect(first.api.requests.some((r) => r.path === "/hymns/scripture-matches")).toBe(false);
+  });
+
+  it("shows Couldn't search the hymnal with Retry when the search fails", async () => {
+    let fail = true;
+    const { user } = renderStep(draftWith({}, { scriptures: LINES }), {
+      "POST /hymns/scripture-matches": () => (fail ? fakeError(500, "internal_error", "Something went wrong.") : scriptureMatches()),
+    });
+    const section = await openMatches(user);
+    expect(await within(section).findByText("Couldn't search the hymnal.")).toBeInTheDocument();
+    fail = false;
+    await user.click(within(section).getByRole("button", { name: "Retry" }));
+    expect(await within(section).findByRole("heading", { name: "Matches the readings" })).toBeInTheDocument();
+  });
+
+  it("with Exclude on hides recently used matches behind Show them; shown, they carry their badge", async () => {
+    const [holy, , come] = gg2013();
+    const recentMatches = scriptureMatches({
+      items: [
+        hymnMatch({ ...holy, recent_use_on: "2026-09-06" }, "passage", ["Isaiah 5:1-7"]),
+        hymnMatch(come, "chapter", ["Isaiah 5:1-7"]),
+        hymnMatch({ ...FAITHFUL, recent_use_on: "2026-10-18" }, "chapter", ["Matthew 21:33-46"]),
+      ],
+    });
+    const { user } = renderStep(draftWith({}, { scriptures: LINES }), { "POST /hymns/scripture-matches": recentMatches });
+    const section = await openMatches(user);
+    expect(await within(section).findByText("2 recently used matches are hidden.")).toBeInTheDocument();
+    expect(within(section).getAllByRole("listitem")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Hymns for the readings 1" })).toBeInTheDocument();
+    await user.click(within(section).getByRole("button", { name: "Show them" }));
+    expect(within(section).getAllByRole("listitem")).toHaveLength(3);
+    expect(within(section).getByText("Used Sep 6")).toBeInTheDocument();
+    expect(within(section).getByText("Planned Oct 18")).toBeInTheDocument();
+    expect(within(section).queryByText(/recently used matches are hidden/)).toBeNull();
+  });
+});
+''')
+
+print("T11 tests written")
+PYEOF
+```
+
+**Expected:** `T11 tests written`.
+
+- [ ] **Step 3 (agent): Run them and see them fail**
+
+```bash
+(cd frontend && npx vitest run src/components/builder/hymns/hymns-step.test.tsx 2>&1 | grep -E "^ +×|Tests ")
+```
+
+**Expected:**
+
+```
+   × Hymns for the readings (S ScriptureMatches) > asks for the draft's readings in the selected hymnal; Add → Response hymn sets the slot and Undo restores it <t>ms
+   × Hymns for the readings (S ScriptureMatches) > searches an extra reference with the readings, and says when one can't be read or nothing matches <t>ms
+   × Hymns for the readings (S ScriptureMatches) > links to step 1 without references, and never searches a hymnal with no scripture references <t>ms
+   × Hymns for the readings (S ScriptureMatches) > shows Couldn't search the hymnal with Retry when the search fails <t>ms
+   × Hymns for the readings (S ScriptureMatches) > with Exclude on hides recently used matches behind Show them; shown, they carry their badge <t>ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  5 failed | 20 passed (25)
+```
+
+- [ ] **Step 4 (agent): Write the matches section and put it in the step**
+
+Run this script from the repo root:
+
+```bash
+.venv/bin/python - <<'PYEOF'
+from pathlib import Path
+
+
+def edit(path: str, pairs: list[tuple[str, str]]) -> None:
+    p = Path(path)
+    text = p.read_text(encoding="utf-8")
+    for old, new in pairs:
+        assert text.count(old) == 1, f"{path}: anchor not found exactly once: {old[:70]!r}"
+        text = text.replace(old, new)
+    p.write_text(text, encoding="utf-8")
+
+
+edit("frontend/src/components/builder/hymns/hymns-step.tsx", [
+    ('''import { buttonVariants } from "@/components/ui/button";
+import type { Hymn } from "@/lib/api/types";
+import { useChurch } from "@/lib/church-context";
+''',
+     '''import { buttonVariants } from "@/components/ui/button";
+import type { Hymn, HymnMatch } from "@/lib/api/types";
+import { useChurch } from "@/lib/church-context";
+'''),
+    ('''import { selectHymnal } from "@/lib/hymns/hymnal";
+import { duplicateNotice, MISSING_NOTICE, recentUseNotice } from "@/lib/hymns/labels";
+import {
+''',
+     '''import { selectHymnal } from "@/lib/hymns/hymnal";
+import { duplicateNotice, MISSING_NOTICE, recentUseNotice, SLOT_META } from "@/lib/hymns/labels";
+import {
+'''),
+    ('''import { ExcludeSwitch, HymnalPicker, HymnsToolbar, ToolbarSkeleton } from "./hymns-toolbar";
+import { SuggestHymnsButton } from "./suggest-hymns-button";
+''',
+     '''import { ExcludeSwitch, HymnalPicker, HymnsToolbar, ToolbarSkeleton } from "./hymns-toolbar";
+import { ScriptureMatches } from "./scripture-matches";
+import { SuggestHymnsButton } from "./suggest-hymns-button";
+'''),
+    (''' * and puts other ideas under each hymn; the ideas show only for the date they
+ * were suggested for.
+ */
+''',
+     ''' * and puts other ideas under each hymn; the ideas show only for the date they
+ * were suggested for. "Hymns for the readings" matches the draft's scriptures
+ * in the selected hymnal; adding one over another hymn offers Undo too.
+ */
+'''),
+    ('''  const ideas = hymns.alternatives?.for_date_iso === dateIso ? hymns.alternatives.by_slot : null;
+  const selectedCount = hymnals?.items.find((h) => h.code === code)?.hymn_count ?? 0;
+
+''',
+     '''  const ideas = hymns.alternatives?.for_date_iso === dateIso ? hymns.alternatives.by_slot : null;
+  const selectedInfo = hymnals?.items.find((h) => h.code === code);
+  const selectedCount = selectedInfo?.hymn_count ?? 0;
+
+'''),
+    ('''    showUndo(`Removed ${title}.`, () => update((d) => setSlot(d, slot, previous)));
+  }
+''',
+     '''    showUndo(`Removed ${title}.`, () => update((d) => setSlot(d, slot, previous)));
+  }
+
+  function addMatch(slot: Slot, match: HymnMatch) {
+    const previous = hymns.slots[slot];
+    update((d) => setSlot(d, slot, pickFromHymn(match)));
+    if (previous && previous.hymn_id !== match.id) {
+      showUndo(`${SLOT_META[slot].title} changed to ${match.title}.`, () => update((d) => setSlot(d, slot, previous)));
+    }
+  }
+'''),
+    ('''      })}
+      <p className="text-xs text-muted-foreground">
+''',
+     '''      })}
+      {pickers && selectedInfo ? (
+        <ScriptureMatches
+          scriptures={draft.readings.scriptures}
+          hymnal={selectedInfo}
+          recentForDate={recentForDate}
+          serviceDateIso={dateIso}
+          excludeRecent={excludeRecent}
+          showHymnal={showHymnal}
+          onAdd={addMatch}
+        />
+      ) : null}
+      <p className="text-xs text-muted-foreground">
+'''),
+])
+
+Path("frontend/src/components/builder/hymns/scripture-matches.tsx").write_text('''"use client";
+
+import { ChevronDownIcon } from "lucide-react";
+import Link from "next/link";
+import { useState, type FormEvent } from "react";
+
+import { ErrorState } from "@/components/app/error-state";
+import { Badge } from "@/components/ui/badge";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
+import type { HymnalSummary, HymnMatch } from "@/lib/api/types";
+import { SLOTS, type Slot } from "@/lib/draft/schema";
+import { recentUseLabel, SLOT_META } from "@/lib/hymns/labels";
+import { buildMatchRefs, MAX_REF_LENGTH } from "@/lib/hymns/match-request";
+import { useScriptureMatches } from "@/lib/queries/hymns";
+import { cn } from "@/lib/utils";
+
+import { HymnLabel } from "./hymn-label";
+
+/** Open from `md` (48rem), closed below it, as the section first renders (S; plan clarification 19). */
+function openAtFirst(): boolean {
+  return typeof window.matchMedia === "function" && window.matchMedia("(min-width: 48rem)").matches;
+}
+
+/** "{k} recently used matches are hidden." (S); "1 recently used match is hidden." for one (plan clarification 13). */
+function hiddenMatchesText(k: number): string {
+  return k === 1 ? "1 recently used match is hidden." : `${k} recently used matches are hidden.`;
+}
+
+/** One match: its label (with "Used Sep 7" when it is shown although recently used), what it matched, and Add. */
+function MatchRow({
+  match,
+  serviceDateIso,
+  showHymnal,
+  onAdd,
+}: {
+  match: HymnMatch;
+  serviceDateIso: string;
+  showHymnal: boolean;
+  onAdd: (slot: Slot) => void;
+}) {
+  const recent = match.recent_use_on ? recentUseLabel(match.recent_use_on, serviceDateIso) : null;
+  return (
+    <li className="flex items-center gap-2 py-1.5">
+      <div className="grid min-w-0 flex-1 gap-0.5">
+        <HymnLabel hymn={match} showHymnal={showHymnal} recentBadge={recent} listen />
+        <p className="text-xs text-muted-foreground wrap-anywhere">Matches {match.matched_refs.join(", ")}</p>
+      </div>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          aria-label={`Add ${match.title}`}
+          className={cn(buttonVariants({ variant: "outline", size: "touch" }), "shrink-0")}
+        >
+          Add
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-auto min-w-44">
+          {SLOTS.map((slot) => (
+            <DropdownMenuItem key={slot} onClick={() => onAdd(slot)} className="min-h-11 md:min-h-8">
+              {SLOT_META[slot].title}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </li>
+  );
+}
+
+/**
+ * "Hymns for the readings" (S `ScriptureMatches`): the draft's scriptures and
+ * an extra reference typed here (component state only), matched in the
+ * selected hymnal. The request runs by itself whenever the references, the
+ * hymnal or the date change, also while the section is closed, so its count
+ * shows. Results come in two groups; each row's Add puts the hymn in a slot.
+ * With Exclude on, recently used matches are hidden behind "Show them".
+ */
+export function ScriptureMatches({
+  scriptures,
+  hymnal,
+  recentForDate,
+  serviceDateIso,
+  excludeRecent,
+  showHymnal,
+  onAdd,
+}: {
+  scriptures: readonly string[];
+  /** The selected hymnal, with its scripture count. */
+  hymnal: HymnalSummary;
+  recentForDate: string | null;
+  serviceDateIso: string;
+  excludeRecent: boolean;
+  showHymnal: boolean;
+  onAdd: (slot: Slot, match: HymnMatch) => void;
+}) {
+  const [open, setOpen] = useState(openAtFirst);
+  const [typed, setTyped] = useState("");
+  const [extra, setExtra] = useState("");
+  const [showRecent, setShowRecent] = useState(false);
+  const refs = buildMatchRefs(scriptures, extra);
+  const searchable = hymnal.scripture_ref_count > 0;
+  const query = useScriptureMatches({ refs, hymnal: hymnal.code, recentForDate, enabled: searchable });
+  const data = searchable && refs.length > 0 ? query.data : undefined;
+  const hideRecent = excludeRecent && !showRecent;
+  const all = data?.items ?? [];
+  const items = hideRecent ? all.filter((m) => m.recent_use_on === null) : all;
+  const hidden = all.length - items.length;
+  const groups = [
+    { title: "Matches the readings", items: items.filter((m) => m.strength === "passage") },
+    { title: "Same chapter", items: items.filter((m) => m.strength === "chapter") },
+  ].filter((g) => g.items.length > 0);
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    setExtra(typed);
+  }
+
+  let body;
+  if (!searchable) {
+    body = (
+      <p className="text-sm text-muted-foreground">
+        {hymnal.code} has no scripture references, so it can&apos;t be searched by scripture.
+      </p>
+    );
+  } else if (refs.length === 0) {
+    body = (
+      <p className="text-sm text-muted-foreground">
+        Add the readings in step 1, or type a scripture reference here.{" "}
+        <Link href="/builder/readings" className="font-medium text-foreground underline underline-offset-4">
+          Go to readings
+        </Link>
+      </p>
+    );
+  } else if (query.isError && !data) {
+    body = (
+      <ErrorState
+        error={query.error}
+        message="Couldn't search the hymnal."
+        retrying={query.isFetching}
+        onRetry={() => void query.refetch()}
+      />
+    );
+  } else if (!data) {
+    body = (
+      <div role="status" aria-label="Searching the hymnal" className="grid gap-2">
+        <Skeleton className="h-8 w-full" />
+        <Skeleton className="h-8 w-full" />
+        <Skeleton className="h-8 w-full" />
+      </div>
+    );
+  } else {
+    body = (
+      <div className="grid gap-3">
+        {data.unparsed_refs.map((ref) => (
+          <p key={ref} className="text-sm text-muted-foreground wrap-anywhere">
+            Couldn&apos;t read “{ref}” as a scripture reference.
+          </p>
+        ))}
+        {all.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No hymns in {hymnal.code} match these readings. Try a shorter reference, such as “Matthew 17”.
+          </p>
+        ) : null}
+        {groups.map((group) => (
+          <div key={group.title} className="grid gap-1">
+            <h4 className="text-sm font-medium">{group.title}</h4>
+            <ul className="divide-y">
+              {group.items.map((match) => (
+                <MatchRow
+                  key={match.id}
+                  match={match}
+                  serviceDateIso={serviceDateIso}
+                  showHymnal={showHymnal}
+                  onAdd={(slot) => onAdd(slot, match)}
+                />
+              ))}
+            </ul>
+          </div>
+        ))}
+        {hidden > 0 ? (
+          <p className="text-sm text-muted-foreground">
+            {hiddenMatchesText(hidden)}{" "}
+            <Button variant="link" className="h-11 px-0" onClick={() => setShowRecent(true)}>
+              Show them
+            </Button>
+          </p>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen} className="grid gap-3 rounded-lg border p-4">
+      <CollapsibleTrigger className="flex min-h-11 items-center gap-2 text-left text-base font-medium">
+        <ChevronDownIcon aria-hidden="true" className={cn("size-4 transition-transform", !open && "-rotate-90")} />
+        <span>Hymns for the readings</span>
+        {data ? <Badge variant="secondary">{items.length}</Badge> : null}
+      </CollapsibleTrigger>
+      <CollapsibleContent className="grid gap-3">
+        <form onSubmit={submit} className="grid gap-1.5">
+          <Label htmlFor="extra-scripture">Additional scripture</Label>
+          <div className="flex gap-2">
+            <Input
+              id="extra-scripture"
+              value={typed}
+              maxLength={MAX_REF_LENGTH}
+              placeholder="e.g. Matthew 17"
+              className="h-11"
+              onChange={(event) => setTyped(event.target.value)}
+            />
+            <Button type="submit" variant="outline" size="touch">
+              Search
+            </Button>
+          </div>
+        </form>
+        {body}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+''', encoding="utf-8")
+
+print("T11 code written")
+PYEOF
+```
+
+**Expected:** `T11 code written`.
+
+- [ ] **Step 5 (agent): Run the tests, the suite, types and lint**
+
+```bash
+(cd frontend && npx vitest run src/components/builder/hymns 2>&1 | grep -E "Test Files|Tests ")
+(cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
+(cd frontend && npm test 2>&1 | grep -cE "Warning:|not wrapped in act")
+(cd frontend && npm run typecheck 2>&1 | tail -1 && npm run lint 2>&1 | tail -1)
+git status --short
+```
+
+**Expected:** ` Test Files  2 passed (2)`, `      Tests  27 passed (27)`; ` Test Files  64 passed (64)`, `      Tests  419 passed (419)`; `0`; `> tsc --noEmit` and `> eslint` with nothing after them; ` M` for `hymns-step.tsx` and `hymns-step.test.tsx`, `??` for `scripture-matches.tsx`.
+
+- [ ] **Step 6 (agent): Commit**
+
+```bash
+git add frontend/src/components/builder/hymns/scripture-matches.tsx frontend/src/components/builder/hymns/hymns-step.tsx frontend/src/components/builder/hymns/hymns-step.test.tsx
+git commit -m "Hymns: Hymns for the readings, grouped, with an extra reference and Add to a slot (S ScriptureMatches; Behavior changes 9, 10, 19)" -m "The draft's readings plus a typed reference (buildMatchRefs) are matched
+in the selected hymnal whenever they, the hymnal or the date change, and
+shown as Matches the readings and Same chapter. Add puts a hymn in a
+slot, with Undo when it replaced another. Recently used matches hide
+behind Show them while Exclude is on. Unreadable references, no matches,
+no references (Go to readings), a hymnal with no scripture references
+and a failed search each have their copy. Frontend 414 -> 419 tests.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+**Expected:** one commit, 3 files changed.
+
+**Review checkpoint (T10-T11, batch 5):** an AI answer is applied only through `applySuggestions` in a functional update and only for the request's date; a superseded or cancelled request changes nothing and shows nothing; no error text from the server's 5xx is shown inline; the ideas show only for the draft's date and hide when their hymn is gone; the matches never send more than 20 references of 200 characters and never search a hymnal with no scripture references; every Undo goes through `useUndoToasts`.
