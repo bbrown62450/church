@@ -134,3 +134,196 @@ def build_candidates(eligible: Sequence[Any], scriptures: Sequence[str], *, nt_r
             focused = focused + pad
         by_slot[slot] = focused
     return Candidates(by_slot=by_slot, modes=modes)
+
+
+# --- the prompt (S Backend 3.6 step 7, 3.8 "Prompt") -------------------------------
+
+
+def _clip(text: str, limit: int) -> str:
+    text = re.sub(r"\s+", " ", text or "").strip()
+    return text[:limit]
+
+
+def _catalogue_line(token: str, record) -> str:
+    number = record.number if record.number is not None else "–"
+    facts = hymn_ranking.facts_note(record, year_of=_year, count_of=_count)
+    return (f"{token} | {_clip(record.title, 80)} | #{number}"
+            + (f" | {facts}" if facts else "")
+            + f" | themes: {_clip(', '.join(parse_themes(record.theme)), 60)}"
+            + f" | scripture: {_clip(record.scripture_refs or '', 60)}")
+
+
+def _preferences(rubric: Mapping[str, Any]) -> str:
+    """PR #4's PREFERENCES line, verbatim (worship_service.py:545-551)."""
+    return (f"Prefer hymns written before {rubric['prefer_before_year']}"
+            + (" and hymns found in many hymnals" if rubric["prefer_familiar"] else "")
+            + "; choose a newer hymn only when it fits clearly better. Each candidate shows when "
+              "its words were written and how many hymnals include it, when known.")
+
+
+def _render(lists: Mapping[str, list], *, occasion: str, scriptures: Sequence[str],
+            nt_ref: Optional[str], nt_text: Optional[str],
+            rubric: Mapping[str, Any]) -> tuple[list[dict], dict[str, Any]]:
+    tokens: dict[uuid.UUID, str] = {}
+    token_map: dict[str, Any] = {}
+    catalogue: list[str] = []
+    for slot in SLOTS:
+        for record in lists[slot]:
+            if record.id not in tokens:
+                token = f"H{len(tokens) + 1}"
+                tokens[record.id] = token
+                token_map[token] = record
+                catalogue.append(_catalogue_line(token, record))
+    readings = "\n".join(f"- {_clip(s, 200)}" for s in scriptures if (s or "").strip()) or "None"
+    excerpt = _clip(nt_text or "", NT_EXCERPT_CHARS) or "(no text loaded)"
+    checklists = "\n\n".join(
+        service_rubric.format_checklist(service_rubric.HYMN_SLOT_LABELS[slot], rubric["hymns"][slot])
+        for slot in service_rubric.HYMN_SLOTS)
+    slot_lines = "\n".join(f"{slot.upper()} CANDIDATES: " + ", ".join(tokens[r.id] for r in lists[slot])
+                           for slot in SLOTS)
+    user = (f"OCCASION: {_clip(occasion, 300) or 'Not specified'}\n"
+            f"SCRIPTURE READINGS:\n{readings}\n"
+            f"NEW TESTAMENT READING (for the response hymn): {nt_ref or 'Not specified'}\n"
+            f"NT PASSAGE TEXT (excerpt): {excerpt}\n\n"
+            f"ROLE REQUIREMENTS (what makes a good hymn for each slot):\n\n{checklists}\n\n"
+            f"PREFERENCES: {_preferences(rubric)}\n\n"
+            "HYMNS:\n" + "\n".join(catalogue) + "\n\n"
+            f"{slot_lines}\n\n{INSTRUCTION}")
+    messages = [{"role": "system", "content": SYSTEM_MESSAGE}, {"role": "user", "content": user}]
+    return messages, token_map
+
+
+def prompt_size(messages: Sequence[Mapping[str, str]]) -> int:
+    return sum(len(m["content"]) for m in messages)
+
+
+def build_prompt(candidates: Candidates, *, occasion: str, scriptures: Sequence[str],
+                 nt_ref: Optional[str], nt_text: Optional[str],
+                 rubric: Mapping[str, Any]) -> tuple[list[dict], dict[str, Any]]:
+    """(messages, {"H1": record, ...}), at most MAX_PROMPT_CHARS in all. While
+    it is longer, the last candidate of the longest slot list (the first such
+    slot on a tie) is dropped, with its catalogue line when no other list uses
+    it. Checklist points are never dropped. Deterministic."""
+    lists = {slot: list(candidates.by_slot[slot]) for slot in SLOTS}
+    while True:
+        messages, token_map = _render(lists, occasion=occasion, scriptures=scriptures,
+                                      nt_ref=nt_ref, nt_text=nt_text, rubric=rubric)
+        if prompt_size(messages) <= MAX_PROMPT_CHARS:
+            return messages, token_map
+        longest = max(SLOTS, key=lambda slot: len(lists[slot]))
+        if not lists[longest]:
+            raise InvalidInput(PROMPT_TOO_LONG_MESSAGE, code="prompt_invalid")
+        lists[longest].pop()
+
+
+# --- the answer (S Backend 3.6 step 9) ---------------------------------------------
+
+
+def parse_suggestion_json(raw: str) -> dict[str, list]:
+    """The AI's JSON object, code fences stripped (parity, worship_service.py:531-535).
+    Each slot's value must be a list; a missing slot is []. Anything else is
+    UpstreamError ai_upstream_error "The AI gave an answer we couldn't use. Try again."."""
+    content = (raw or "").strip()
+    if "```" in content:
+        content = content.split("```")[1]
+        if content.lower().startswith("json"):
+            content = content[4:]
+    try:
+        data = json.loads(content.strip())
+    except (ValueError, TypeError):
+        raise UpstreamError(UNUSABLE_MESSAGE, code="ai_upstream_error") from None
+    if not isinstance(data, dict):
+        raise UpstreamError(UNUSABLE_MESSAGE, code="ai_upstream_error")
+    out: dict[str, list] = {}
+    for slot in SLOTS:
+        value = data.get(slot, [])
+        if not isinstance(value, list):
+            raise UpstreamError(UNUSABLE_MESSAGE, code="ai_upstream_error")
+        out[slot] = value
+    return out
+
+
+_TOKEN = re.compile(r"^H\d+$", re.IGNORECASE)
+
+
+def _number_key(record) -> tuple[int, int]:
+    return (record.number is None, record.number or 0)
+
+
+def resolve_suggestions(parsed: Mapping[str, list], token_map: Mapping[str, Any],
+                        eligible: Sequence[Any], candidates: Candidates) -> dict[str, list]:
+    """Each slot's answer as records, in AI order, without repeats. "H12" (any
+    case) is a candidate token; any other string counts only on an exact
+    normalized-title match within `eligible` (no substring or fuzzy match),
+    preferring that slot's candidates, then the lowest number. Unknown values
+    are dropped. Nothing resolved in any slot is UpstreamError."""
+    by_title: dict[str, list] = {}
+    for record in eligible:
+        by_title.setdefault(normalize_title(record.title), []).append(record)
+    resolved: dict[str, list] = {}
+    for slot in SLOTS:
+        in_slot = {r.id for r in candidates.by_slot.get(slot, [])}
+        out: list = []
+        for value in parsed.get(slot, []):
+            if not isinstance(value, str) or not value.strip():
+                continue
+            text = value.strip()
+            if _TOKEN.match(text):
+                record = token_map.get(text.upper())
+            else:
+                matches = by_title.get(normalize_title(text), [])
+                record = min(matches, key=lambda r: (r.id not in in_slot, *_number_key(r)),
+                             default=None)
+            if record is not None and all(r.id != record.id for r in out):
+                out.append(record)
+        resolved[slot] = out
+    if not any(resolved.values()):
+        raise UpstreamError(UNUSABLE_MESSAGE, code="ai_upstream_error")
+    return resolved
+
+
+@dataclass(frozen=True)
+class Suggested:
+    record: Any
+    source: str                         # "ai", or "candidates" when added by the minimum top-up
+
+
+def finalize_slots(resolved: Mapping[str, list], current_picks: Mapping[str, Optional[uuid.UUID]],
+                   candidates: Candidates) -> dict[str, list[Suggested]]:
+    """S Backend 3.6 step 9 (owner decision 3; owner answer Q1: only empty
+    slots get a top pick). Top picks are distinct and never another slot's
+    current pick; each slot then lists its AI hymns and, when that leaves
+    fewer than MIN_PER_SLOT hymns other than its own pick, the next hymns of
+    its own candidate list; at most MAX_PER_SLOT."""
+    reserved = {pick for pick in current_picks.values() if pick is not None}
+    tops: dict[str, Optional[Suggested]] = {}
+    for slot in SLOTS:
+        tops[slot] = None
+        if current_picks.get(slot) is not None:
+            continue
+        top = next((Suggested(r, "ai") for r in resolved.get(slot, []) if r.id not in reserved), None)
+        if top is None:
+            top = next((Suggested(r, "candidates") for r in candidates.by_slot.get(slot, [])
+                        if r.id not in reserved), None)
+        if top is not None:
+            tops[slot] = top
+            reserved.add(top.record.id)
+    final: dict[str, list[Suggested]] = {}
+    for slot in SLOTS:
+        own = current_picks.get(slot)
+        top = tops[slot]
+        blocked = reserved - {own, top.record.id if top else None}
+        listed: list[Suggested] = [top] if top else []
+        seen = {s.record.id for s in listed}
+        for record in resolved.get(slot, []):
+            if record.id not in blocked and record.id not in seen:
+                listed.append(Suggested(record, "ai"))
+                seen.add(record.id)
+        for record in candidates.by_slot.get(slot, []):
+            if sum(1 for s in listed if s.record.id != own) >= MIN_PER_SLOT:
+                break
+            if record.id not in blocked and record.id not in seen:
+                listed.append(Suggested(record, "candidates"))
+                seen.add(record.id)
+        final[slot] = listed[:MAX_PER_SLOT]
+    return final
