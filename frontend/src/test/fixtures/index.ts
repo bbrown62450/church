@@ -2,8 +2,9 @@
  * Builders for API payloads in tests. Each call returns a fresh object;
  * `overrides` replace top-level fields (pass a whole `user` to change it).
  */
-import type { InviteAccepted, InvitePreview } from "@/lib/api/types";
+import type { ChurchProfile, InviteAccepted, InvitePreview } from "@/lib/api/types";
 import type { Church, Me } from "@/lib/church";
+import { freshDraft, type DraftV1 } from "@/lib/draft/schema";
 
 /** Ids that read well in failure output (valid UUIDs, like the API's). */
 export const CHURCH_IDS = {
@@ -52,4 +53,27 @@ export function inviteAccepted(overrides: Partial<InviteAccepted> = {}): InviteA
     message: "Joined Grace.",
     ...overrides,
   };
+}
+
+// --- slice 2b: the church profile, drafts and lectionary answers ------------------
+
+/** `GET /church` for Grace (slice 2a's `ChurchProfileOut`): New York, WEB. */
+export function churchProfile(overrides: Partial<ChurchProfile> = {}): ChurchProfile {
+  return {
+    ...church(),
+    timezone: "America/New_York",
+    timezone_valid: true,
+    bible_translation: null,
+    effective_translation: "web",
+    effective_translation_label: "World English Bible (WEB)",
+    ...overrides,
+  };
+}
+
+/** Tuesday, September 29, 2026 at noon in New York: the next Sunday is October 4 (a first Sunday). */
+export const DRAFT_NOW = new Date(Date.UTC(2026, 8, 29, 16, 0));
+
+/** Pat's fresh draft for Grace at `DRAFT_NOW`, then `recipe` applied (the recipe may return a new object). */
+export function testDraft(recipe: (d: DraftV1) => DraftV1 = (d) => d): DraftV1 {
+  return recipe(freshDraft({ church: churchProfile(), user: { id: USER_ID }, now: DRAFT_NOW }));
 }
