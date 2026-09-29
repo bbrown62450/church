@@ -6,11 +6,11 @@ import { Button } from "@/components/ui/button";
 import type { ChurchProfile } from "@/lib/api/types";
 import { useDraft } from "@/lib/draft/context";
 import { cleanScriptures, effectiveTranslation } from "@/lib/draft/readings";
+import { MAX_LINE } from "@/lib/draft/status";
 import { useTranslations } from "@/lib/queries/reference";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
 
 import { ReadingRow } from "./reading-row";
-import { MAX_LINE } from "./scripture-lines-field";
 import { TranslationSelect } from "./translation-select";
 
 /** How long the list trails the scripture lines, so typing does not rebuild it on every key. */

@@ -32,7 +32,9 @@ function TryAgain({
 /**
  * An open row's passage text (S UX item 6 table): the first matching state of
  * loading, every section loaded, some text, not found, unavailable or a
- * failed request, a rate limit, or the server's 422. Text renders as React
+ * failed request, a rate limit, or the server's 422. Text already loaded
+ * stays when a later refetch fails (its Try again is still there when the
+ * answer was partial). Text renders as React
  * text with its line breaks kept; " or " alternatives get one headed section
  * each.
  */
@@ -41,10 +43,12 @@ export function PassageText({ reference, translation }: { reference: string; tra
   const limited = query.error?.status === 429 ? query.error : null;
   const waitOver = useWaitOver(limited);
   const retry = () => void query.refetch();
+  /** A refetch of loaded text that hit a 429 waits out Retry-After too. */
+  const waiting = query.isFetching || (limited !== null && !waitOver);
 
   if (query.isPending) return <p className="text-sm text-muted-foreground">Loading text…</p>;
 
-  if (query.isError) {
+  if (query.data === undefined) {
     if (limited) {
       return (
         <div className="grid justify-items-start gap-2">
@@ -77,7 +81,7 @@ export function PassageText({ reference, translation }: { reference: string; tra
     return (
       <div className="grid justify-items-start gap-2">
         <p className="text-sm">Passage text isn&apos;t available right now.</p>
-        <TryAgain reference={reference} onClick={retry} disabled={query.isFetching} />
+        <TryAgain reference={reference} onClick={retry} disabled={waiting} />
       </div>
     );
   }
@@ -98,7 +102,7 @@ export function PassageText({ reference, translation }: { reference: string; tra
         <div className="grid justify-items-start gap-2">
           <p className="text-sm text-muted-foreground">Part of this passage couldn&apos;t be loaded.</p>
           {passage.status === "unavailable" ? (
-            <TryAgain reference={reference} onClick={retry} disabled={query.isFetching} />
+            <TryAgain reference={reference} onClick={retry} disabled={waiting} />
           ) : null}
         </div>
       ) : null}

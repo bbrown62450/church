@@ -6,6 +6,7 @@
  * the draft's writes run on real timers.
  */
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { focusManager, onlineManager } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import BuilderLayout from "@/app/(signed-in)/(church)/builder/layout";
@@ -653,6 +654,7 @@ describe("readings list and passage text (S UX item 6)", () => {
   it("shows not found, unavailable and partial answers with their copy, and Try again refetches", async () => {
     const PASSION = "Matthew 26:14-27:66 or Matthew 27:11-54";
     let isaiahCalls = 0;
+    let passionCalls = 0;
     const { user, api } = renderStep(
       {
         passages: passagesRoute((ref, translation) => {
@@ -663,6 +665,8 @@ describe("readings list and passage text (S UX item 6)", () => {
               ? { status: "unavailable", sections: [{ reference: ref, status: "unavailable", text: null }] }
               : okPassage(ref, translation);
           }
+          passionCalls += 1;
+          if (passionCalls === 2) return fakeError(500, "internal_error", "Something went wrong.");
           return {
             status: "unavailable",
             sections: [
@@ -700,6 +704,10 @@ describe("readings list and passage text (S UX item 6)", () => {
     const before = api.requests.filter((r) => r.method === "POST").length;
     await user.click(passion.getByRole("button", { name: `Try again: ${PASSION}` }));
     await waitFor(() => expect(api.requests.filter((r) => r.method === "POST").length).toBe(before + 1));
+    // That retry fails; the text already loaded stays, with Try again.
+    await waitFor(() => expect(passion.getByRole("button", { name: `Try again: ${PASSION}` })).toBeEnabled());
+    expect(passion.getByText("Jesus stood before the governor.")).toBeInTheDocument();
+    expect(passion.queryByText("Passage text isn't available right now.")).toBeNull();
   });
 
   it("a failed request says the text isn't available, a 429 waits for Retry-After, and a 422 shows the server's message", async () => {
@@ -730,6 +738,19 @@ describe("readings list and passage text (S UX item 6)", () => {
     const romans = row("Romans 8:1");
     await user.click(romans.getByRole("button", { name: "Show text: Romans 8:1" }));
     expect(await romans.findByText("Too many requests — try again in 1 s.")).toBeInTheDocument();
+    expect(romans.getByRole("button", { name: "Try again: Romans 8:1" })).toBeDisabled();
+    // Until Retry-After passes, reopening the row, coming back to the tab or reconnecting asks nothing.
+    await user.click(romans.getByRole("button", { name: "Hide text: Romans 8:1" }));
+    await user.click(romans.getByRole("button", { name: "Show text: Romans 8:1" }));
+    expect(await romans.findByText("Too many requests — try again in 1 s.")).toBeInTheDocument();
+    act(() => {
+      focusManager.setFocused(true);
+      onlineManager.setOnline(false);
+      onlineManager.setOnline(true);
+    });
+    focusManager.setFocused(undefined);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(limitedCalls).toBe(1);
     const retry = romans.getByRole("button", { name: "Try again: Romans 8:1" });
     expect(retry).toBeDisabled();
     await waitFor(() => expect(retry).toBeEnabled(), { timeout: 3_000 });

@@ -204,6 +204,7 @@ All paths are from the repo root. "(church)" means `frontend/src/app/(signed-in)
 | `frontend/src/components/builder/builder-shell.test.tsx` | answers the lookup (T5); the shipped step, `GET /translations`, one new test (T11) | T5, T11 |
 | `frontend/src/components/builder/church-switch.test.tsx` | answers the lookup | T5 |
 | `frontend/src/lib/draft/steps.ts`, `(church)/builder/readings/page.tsx`, `frontend/src/components/builder/step-placeholder.tsx` | `"readings"` shipped; the page renders the step | T11 |
+| `frontend/src/components/builder/summary-panel.tsx`, `summary-sheet.tsx` | long lines wrap (T9-T11 review); 44 px block links and sheet Close (final review) | build notes |
 | `docs/superpowers/specs/2026-09-25-slice-2-readings-design.md`, `docs/superpowers/specs/2026-09-25-migration-foundations-design.md` | "(2c plan)" notes, one F amendment row | T12 |
 | `docs/manual-verification.md`, `backend/tests/test_slice1_docs.py` | "## Slice 2"; the heading pin | T12 |
 
@@ -5622,6 +5623,8 @@ frontend/src/components/builder/readings/service-date-field.tsx
 frontend/src/components/builder/readings/translation-select.tsx
 frontend/src/components/builder/readings/use-wait-over.ts
 frontend/src/components/builder/step-placeholder.tsx
+frontend/src/components/builder/summary-panel.tsx
+frontend/src/components/builder/summary-sheet.tsx
 frontend/src/components/ui/collapsible.tsx
 frontend/src/components/ui/radio-group.tsx
 frontend/src/components/ui/tooltip.tsx
@@ -5652,7 +5655,7 @@ LC_ALL=C comm -3 "<scratch>/slice2c-expected-paths.txt" "<scratch>/slice2c-actua
 git diff --name-status --no-renames origin/main...HEAD | cut -c1 | sort | uniq -c
 ```
 
-**Expected:** `53`; `53`; `comm` prints nothing; then `  28 A` and `  25 M`. These are the File Structure's paths: 28 created (the plan and 27 frontend files) and 25 modified (20 frontend files, the two specs, the checklist and the docs test). An indented `comm` line (changed, not listed) means a task touched a file its **Files:** does not name: find it with `git log --format='%h %s' origin/main..HEAD -- '<path>'`; anything under `backend/` other than `tests/test_slice1_docs.py`, `frontend/src/lib/api/openapi.json`, `schema.d.ts`, `package*.json` or `.github/` is a stop. An unindented line means a task's commit is missing.
+**Expected:** `55`; `55`; `comm` prints nothing; then `  28 A` and `  27 M`. These are the File Structure's paths: 28 created (the plan and 27 frontend files) and 27 modified (22 frontend files, the two specs, the checklist and the docs test); `summary-panel.tsx` and `summary-sheet.tsx` came from the review fixes (build notes). An indented `comm` line (changed, not listed) means a task touched a file its **Files:** does not name: find it with `git log --format='%h %s' origin/main..HEAD -- '<path>'`; anything under `backend/` other than `tests/test_slice1_docs.py`, `frontend/src/lib/api/openapi.json`, `schema.d.ts`, `package*.json` or `.github/` is a stop. An unindented line means a task's commit is missing.
 
 - [ ] **Step 8 (agent): Check the exact list of commits against this plan**
 
@@ -5687,7 +5690,7 @@ git rev-list --count origin/main..HEAD
 
 Send the owner exactly this, with `<count>` filled in, and wait for a clear yes:
 
-> Slice 2c is verified locally: frontend 356 tests in 55 files, passing three runs in a row and with the clock moved 8 and 400 days ahead (299 in 49 before); typecheck, lint and the production build are clean; the backend is unchanged at 971 passed, 9 skipped (one docs test now expects the new "Slice 2" checklist heading); the API types did not change; the checks are clean (every page is a client component, no link to the old app, the screens use the query hooks, the draft goes through the storage helper only, only Date & readings is switched on); changed files (53) and commits (<count>) are as planned, and every commit is already backed up on the branch. May I open the pull request as a **draft** titled "Slice 2c: the Date & readings step", so the checks run? I will come back with the results and ask again before marking it ready. Merging stays with you (Task 14).
+> Slice 2c is verified locally: frontend 356 tests in 55 files, passing three runs in a row and with the clock moved 8 and 400 days ahead (299 in 49 before); typecheck, lint and the production build are clean; the backend is unchanged at 971 passed, 9 skipped (one docs test now expects the new "Slice 2" checklist heading); the API types did not change; the checks are clean (every page is a client component, no link to the old app, the screens use the query hooks, the draft goes through the storage helper only, only Date & readings is switched on); changed files (55) and commits (<count>) are as planned, and every commit is already backed up on the branch. May I open the pull request as a **draft** titled "Slice 2c: the Date & readings step", so the checks run? I will come back with the results and ask again before marking it ready. Merging stays with you (Task 14).
 
 Add one line per note from Steps 1-8 (a merge from `main`, a skipped font download, a `Fix:` commit, how the three Base UI components were made). A no leaves the branch as it is.
 
@@ -6015,6 +6018,7 @@ What changed while Tasks 1 to 11 were built and reviewed (2026-09-29), with each
 - The long date shows only for a date in 1900-2199 or once the date has settled, never "…, 0020" while a year is typed (`0452c6c`).
 - Long unbroken references wrap anywhere (`wrap-anywhere`) in the reading rows, the set cards and the summary; before, the page scrolled sideways (`0452c6c`, T9-T11 review). The readings list forgets open rows whose line is gone, so a line typed back starts closed.
 - The 200-character limit counts the trimmed line in the message, in `stepStatus` and in the row, which had disagreed on a line with spaces at its ends (`0452c6c`).
+- Final-review minors ("Builder: 44 px dialog and summary buttons; passage 429 guards; tidy (owner decision 1)"): `ConfirmDialog`'s two buttons are 44 px tall on phones (`size="touch"`, 32 px from `md`); the summary sheet's Close is a 44 px square (`summary-sheet.tsx` passes `showCloseButton={false}` and renders its own `SheetClose`, so `sheet.tsx` keeps the upstream shape) and each summary block link is at least 44 px wide below `lg` (`min-w-11`); `usePassage` gets the lectionary's 429 guards (no refetch on focus, reconnect or reopening the row before "Try again"), and `PassageText` checks for loaded data before the error, so a failed refetch keeps text already shown (its Try again waits out a 429 too); one helper, `withoutTranslation` (`status.ts`), is used by both the roll-forward and "New service", and the comments no longer say the translation counts for "New service"; the unused re-exports `OCCASION_MAX` and `MAX_READINGS` are gone, and the reading rows and list import `MAX_LINE` from `status.ts`. Assertions in existing tests only; frontend stays 356 in 55 files.
 
 **Owner answers 1-3 (2026-09-29, after the T6-T11 review, "all recommended"; `0452c6c`, owner-visible):** only the question's "Keep mine" button records the date as kept (sessionStorage, the banner hidden for the session; Escape or a click outside only closes it; `ConfirmDialog` gains `onCancel`, called by its cancel button only); after that "Keep mine", "Use the lectionary's readings" is also hidden for that date for the session; and the link also shows on a date with several sets when the cleaned lines differ from the selected set. Frontend 350 → 356 in 55 files.
 

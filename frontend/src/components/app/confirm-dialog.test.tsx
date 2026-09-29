@@ -23,6 +23,10 @@ describe("ConfirmDialog", () => {
 
     const dialog = await screen.findByRole("alertdialog", { name: "Delete this service?" });
     expect(dialog).toHaveAccessibleDescription("Sunday, October 5. This can't be undone.");
+    // 44 px tap targets on phones (F §4.9), the usual 32 px from md.
+    for (const name of ["Cancel", "Delete service"]) {
+      expect(within(dialog).getByRole("button", { name })).toHaveClass("h-11", "md:h-8");
+    }
     await user.click(within(dialog).getByRole("button", { name: "Delete service" }));
     expect(onConfirm).toHaveBeenCalledTimes(1);
     expect(onOpenChange).not.toHaveBeenCalled();

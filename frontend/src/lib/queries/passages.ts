@@ -71,7 +71,9 @@ export function passageText(p: Passage): string | null {
  * `["passage", translation, ref]`, user-scoped, through `passageLimiter`, so
  * the 30 s timeout starts when the request is sent. Every 200 is data, even
  * a `not_found` or `unavailable` passage; the row shows it (S UX item 6).
- * Real request errors (network, timeout, 5xx, 429, 422) keep the defaults.
+ * Real request errors (network, timeout, 5xx, 429, 422) keep the default
+ * retry; after a 429 nothing asks again before "Try again", as for the
+ * lectionary (`useLectionary`).
  */
 export function usePassage(ref: string, translation: string, enabled: boolean): UseQueryResult<Passage, ApiError> {
   const api = useApi();
@@ -88,5 +90,11 @@ export function usePassage(ref: string, translation: string, enabled: boolean): 
       }, signal),
     enabled,
     staleTime: (query) => passageStaleTime(query.state.data),
+    // A 429 must wait out Retry-After, so coming back to the tab, reconnecting or
+    // reopening the row doesn't ask again early (see `useLectionary`).
+    refetchOnWindowFocus: (query) => query.state.error?.status !== 429,
+    refetchOnReconnect: (query) => query.state.error?.status !== 429,
+    refetchOnMount: (query) => query.state.error?.status !== 429,
+    retryOnMount: (query) => query.state.error?.status !== 429,
   });
 }

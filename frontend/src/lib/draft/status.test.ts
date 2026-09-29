@@ -12,7 +12,7 @@ import {
   setTranslation,
 } from "./readings";
 import type { DraftV1, HymnPick, StepId } from "./schema";
-import { isPristine, stepStatus, stillNeeded } from "./status";
+import { isPristine, stepStatus, stillNeeded, withoutTranslation } from "./status";
 import { SHIPPED_STEPS, STEPS, stepById, stepFromPath } from "./steps";
 
 const READINGS: ReadonlySet<StepId> = new Set<StepId>(["readings"]);
@@ -139,6 +139,10 @@ describe("isPristine and the date and translation defaults (owner answer Q2)", (
     expect(isPristine(setTranslation(setTranslation(testDraft(), "kjv", "web"), "web", "web"))).toBe(true);
     const archivedDate = testDraft((d) => ({ ...d, readings: { ...d.readings, date_origin: "archive" } }));
     expect(isPristine(archivedDate)).toBe(true);
+    // New service and roll-forward look past an override with withoutTranslation, which copies.
+    const kjv = setTranslation(testDraft(), "kjv", "web");
+    expect(isPristine(withoutTranslation(kjv))).toBe(true);
+    expect(kjv.readings.translation).toBe("kjv");
   });
 });
 

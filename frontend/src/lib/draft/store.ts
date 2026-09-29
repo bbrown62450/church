@@ -35,7 +35,7 @@ import { readLocal, removeLocal, tryWriteLocal } from "@/lib/storage";
 import { parseStoredDraft } from "./migrate";
 import { normalizePicks, setDate } from "./readings";
 import { churchZone, corruptDraftKey, draftKey, freshDraft, type DraftChurch, type DraftV1, type StepId } from "./schema";
-import { isPristine } from "./status";
+import { isPristine, withoutTranslation } from "./status";
 
 export const WRITE_DELAY_MS = 400;
 
@@ -64,12 +64,12 @@ export type DraftStoreOptions = {
 /**
  * The pristine draft's passed default date moves to the next Sunday (S
  * "Mount-time roll-forward"). A translation override does not hold the date
- * back and is kept (owner answer A, 2026-09-29), though it still counts for
- * "New service" (`isPristine`).
+ * back and is kept (owner answer A, 2026-09-29); "New service" ignores it too
+ * (`withoutTranslation`).
  */
 export function rollForward(draft: DraftV1, today: string): DraftV1 {
   const r = draft.readings;
-  const pristine = isPristine({ ...draft, readings: { ...r, translation: null } });
+  const pristine = isPristine(withoutTranslation(draft));
   if (r.date_origin !== "default" || !isValidDateIso(r.date_iso) || r.date_iso >= today || !pristine) {
     return draft;
   }

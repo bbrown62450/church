@@ -10,8 +10,6 @@ import { editOccasion, selectedSetIndex } from "@/lib/draft/readings";
 import type { DraftV1 } from "@/lib/draft/schema";
 import { OCCASION_MAX } from "@/lib/draft/status";
 
-export { OCCASION_MAX };
-
 /**
  * The name of this date's set the draft shows (`selectedSetIndex`: the set
  * equal to its lines, else the stored index), when that date's lookup is

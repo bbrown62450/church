@@ -8,6 +8,7 @@ import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { useDraft } from "@/lib/draft/context";
 import { isDirty } from "@/lib/draft/fingerprint";
 import { freshDraft, type DraftChurch } from "@/lib/draft/schema";
+import { withoutTranslation } from "@/lib/draft/status";
 import { useMeContext } from "@/lib/me-context";
 
 /**
@@ -32,7 +33,7 @@ export function useNewService(church: DraftChurch): { start: () => void; dialog:
 
   return {
     start: () =>
-      isDirty({ ...draft, readings: { ...draft.readings, translation: null } }) ? setConfirming(true) : reset(),
+      isDirty(withoutTranslation(draft)) ? setConfirming(true) : reset(),
     dialog: (
       <ConfirmDialog
         open={confirming}

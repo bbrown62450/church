@@ -172,7 +172,14 @@ describe("builder shell (F §4.7)", () => {
     expect(aside.firstElementChild).toHaveClass("sticky", "top-[var(--app-header-h,4rem)]", "py-4");
     for (const block of ["Date", "Readings", "Hymns", "Liturgy"]) {
       // 44px tap targets on phones (the sheet), compact from lg.
-      expect(within(aside).getByRole("link", { name: block })).toHaveClass("inline-flex", "min-h-11", "items-center", "lg:min-h-0");
+      expect(within(aside).getByRole("link", { name: block })).toHaveClass(
+        "inline-flex",
+        "min-h-11",
+        "min-w-11",
+        "items-center",
+        "lg:min-h-0",
+        "lg:min-w-0",
+      );
     }
     expect(within(aside).getByText("Sunday, October 4, 2026")).toBeInTheDocument();
     expect(within(aside).getByText("No occasion yet")).toBeInTheDocument();
@@ -190,6 +197,8 @@ describe("builder shell (F §4.7)", () => {
     const sheet = await screen.findByRole("dialog", { name: "Summary" });
     expect(within(sheet).getByText("Sunday, October 4, 2026")).toBeInTheDocument();
     expect(within(sheet).getByText("Draft saved on this device · Not in archive")).toBeInTheDocument();
+    // The sheet only shows below lg, so its Close is a 44 px square throughout.
+    expect(within(sheet).getByRole("button", { name: "Close" })).toHaveClass("size-11");
     await user.click(within(sheet).getByRole("button", { name: "Close" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
 

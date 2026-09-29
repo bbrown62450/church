@@ -4,10 +4,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useDraft } from "@/lib/draft/context";
 import { commitScriptureLines, editScriptureLines } from "@/lib/draft/readings";
+// The limits live with the step status (`status.ts`), which counts a field with a message as not done.
 import { MAX_LINE, MAX_READINGS } from "@/lib/draft/status";
-
-/** The limits live with the step status (`status.ts`), which counts a field with a message as not done. */
-export { MAX_LINE, MAX_READINGS };
 
 /** The inline messages for the raw lines (S UX item 5); blank lines are allowed and not counted, and a line is measured trimmed. */
 export function scriptureProblems(lines: readonly string[]): string[] {

@@ -70,7 +70,10 @@ export function stepStatus(
  * than text, so defaults that later slices fill in (slice 4's benediction)
  * never make a fresh draft look edited. A date the user picked, a reading set
  * chosen in the switcher (which makes the date the user's, `chooseReadingSet`)
- * and a translation override count as work (owner answer Q2, 2026-09-29).
+ * and a translation override count as work here (owner answer Q2,
+ * 2026-09-29). "New service" and the mount-time roll-forward both keep the
+ * translation, so they look past it with `withoutTranslation` (owner answer
+ * A, 2026-09-29).
  */
 export function isPristine(draft: DraftV1): boolean {
   const r = draft.readings;
@@ -91,6 +94,15 @@ export function isPristine(draft: DraftV1): boolean {
     l.custom_elements.length === 0 &&
     draft.editing === null
   );
+}
+
+/**
+ * A copy of the draft with the translation override cleared, for the checks
+ * that keep the translation and so never count it as something to lose:
+ * "New service" (`isDirty`) and the roll-forward (`isPristine`).
+ */
+export function withoutTranslation(draft: DraftV1): DraftV1 {
+  return { ...draft, readings: { ...draft.readings, translation: null } };
 }
 
 export type NeededItem = {

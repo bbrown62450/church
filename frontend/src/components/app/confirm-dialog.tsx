@@ -39,7 +39,8 @@ export type ConfirmDialogProps = {
 /**
  * F §4.8 "Destructive or lossy action": a Base UI AlertDialog, controlled with
  * open/onOpenChange (F §4.9 item 6). Confirm is a PendingButton rather than
- * AlertDialogAction so the dialog stays open while the mutation runs.
+ * AlertDialogAction so the dialog stays open while the mutation runs. Both
+ * buttons are 44 px tall on phones (F §4.9), the usual 32 px from `md`.
  */
 export function ConfirmDialog({
   open,
@@ -62,9 +63,13 @@ export function ConfirmDialog({
           {description ? <AlertDialogDescription>{description}</AlertDialogDescription> : null}
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel onClick={onCancel ? () => onCancel() : undefined}>{cancelLabel}</AlertDialogCancel>
+          <AlertDialogCancel size="touch" className="md:h-8" onClick={onCancel ? () => onCancel() : undefined}>
+            {cancelLabel}
+          </AlertDialogCancel>
           <PendingButton
             pending={pending}
+            size="touch"
+            className="md:h-8"
             variant={destructive ? "destructive" : "default"}
             onClick={() => onConfirm()}
           >

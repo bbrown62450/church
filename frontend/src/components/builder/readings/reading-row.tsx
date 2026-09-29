@@ -4,11 +4,11 @@ import { Badge, badgeVariants } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { MAX_LINE } from "@/lib/draft/status";
 import { classify, splitAlternatives, type Classification, type Testament } from "@/lib/scripture-refs";
 import { cn } from "@/lib/utils";
 
 import { PassageText } from "./passage-text";
-import { MAX_LINE } from "./scripture-lines-field";
 
 const BADGE_TEXT: Record<Testament, string> = { ot: "OT", psalm: "Psalm", nt: "NT" };
 
