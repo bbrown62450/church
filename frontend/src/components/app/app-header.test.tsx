@@ -1,10 +1,10 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { AppHeader } from "@/components/app/app-header";
 import type { Church, Me } from "@/lib/church";
-import { testRouter } from "@/test/mocks";
+import { setTestPath, testRouter } from "@/test/mocks";
 
 const pat: Me["user"] = { id: "u-1", email: "pat@example.com", name: "Pat Doe", picture: null };
 // Two churches with the same name: only the id (and the role shown) tells them apart.
@@ -113,6 +113,32 @@ describe("AppHeader", () => {
 
   it("shows the app name and no switcher without churches, and still offers Log out", async () => {
     const onSignOut = vi.fn();
+    // The header publishes its height as --app-header-h (the builder's sticky summary sits below it).
+    let height = 61;
+    const heightSpy = vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(() => height);
+    let resized: () => void = () => {};
+    const observerSpy = vi.spyOn(window, "ResizeObserver").mockImplementation(
+      (callback: ResizeObserverCallback) =>
+        ({
+          observe: () => {
+            resized = () => callback([], {} as ResizeObserver);
+          },
+          unobserve: () => {},
+          disconnect: () => {
+            resized = () => {};
+          },
+        }) as unknown as ResizeObserver,
+    );
+    const { unmount } = render(<AppHeader user={pat} onSignOut={onSignOut} />);
+    const root = document.documentElement;
+    expect(root.style.getPropertyValue("--app-header-h")).toBe("61px");
+    height = 97;
+    act(() => resized());
+    expect(root.style.getPropertyValue("--app-header-h")).toBe("97px");
+    unmount();
+    expect(root.style.getPropertyValue("--app-header-h")).toBe("");
+    heightSpy.mockRestore();
+    observerSpy.mockRestore();
     render(<AppHeader user={pat} onSignOut={onSignOut} />);
     const user = userEvent.setup();
 
@@ -123,5 +149,28 @@ describe("AppHeader", () => {
     expect(within(menu).queryByText(/^Role:/)).toBeNull();
     await user.click(within(menu).getByRole("menuitem", { name: "Log out" }));
     expect(onSignOut).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the Builder nav item on church pages, current under /builder, and no nav without churches (F §4.2)", () => {
+    setTestPath("/builder/hymns");
+    const { unmount } = render(
+      <AppHeader user={pat} churches={[graceAdmin]} active={graceAdmin} onSelectChurch={vi.fn()} onSignOut={vi.fn()} />,
+    );
+    const nav = screen.getByRole("navigation", { name: "Main" });
+    const links = within(nav).getAllByRole("link");
+    expect(links.map((link) => [link.textContent, link.getAttribute("href")])).toEqual([["Builder", "/builder"]]);
+    expect(links[0]).toHaveAttribute("aria-current", "page");
+    expect(links[0]).toHaveClass("h-11", "md:h-9"); // 44 px tap target on phones (F §4.9)
+    unmount();
+
+    setTestPath("/welcome");
+    const { unmount: unmountWelcome } = render(
+      <AppHeader user={pat} churches={[graceAdmin]} active={graceAdmin} onSelectChurch={vi.fn()} onSignOut={vi.fn()} />,
+    );
+    expect(screen.getByRole("link", { name: "Builder" })).not.toHaveAttribute("aria-current");
+    unmountWelcome();
+
+    render(<AppHeader user={pat} onSignOut={vi.fn()} />);
+    expect(screen.queryByRole("navigation", { name: "Main" })).toBeNull();
   });
 });

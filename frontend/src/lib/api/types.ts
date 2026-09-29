@@ -18,3 +18,11 @@ export type InviteAccepted = components["schemas"]["InviteAcceptOut"];
  * the idempotency fingerprint of a body never depends on a left-out field.
  */
 export type CreateChurchBody = Required<components["schemas"]["CreateChurchIn"]>;
+
+/** `GET /church` (slice 2a): `ChurchOut` plus the profile fields. `/me`'s church items stay `Church`. */
+export type ChurchProfile = components["schemas"]["ChurchProfileOut"];
+/** `GET /lectionary/readings?date=` (slice 2a): the reading sets for exactly that date. */
+export type Lectionary = components["schemas"]["LectionaryOut"];
+export type ReadingSet = components["schemas"]["ReadingSetOut"];
+/** `GET /translations` (slice 2a). */
+export type Translations = components["schemas"]["TranslationsOut"];

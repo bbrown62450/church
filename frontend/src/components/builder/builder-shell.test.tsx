@@ -1,0 +1,286 @@
+/**
+ * The builder shell (F §4.7, F acceptance 11; S "Builder shell", Testing
+ * `builder-shell.test.tsx`; AC17). Every test fixes the clock at Tuesday,
+ * September 29, 2026 (only `Date` is faked, so user-event's timers run), so a
+ * fresh draft is dated Sunday, October 4, 2026.
+ */
+import { act, screen, waitFor, within } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import BuilderLayout from "@/app/(signed-in)/(church)/builder/layout";
+import BuilderIndexPage from "@/app/(signed-in)/(church)/builder/page";
+import HymnsStepPage from "@/app/(signed-in)/(church)/builder/hymns/page";
+import LiturgyStepPage from "@/app/(signed-in)/(church)/builder/liturgy/page";
+import ReadingsStepPage from "@/app/(signed-in)/(church)/builder/readings/page";
+import ReviewStepPage from "@/app/(signed-in)/(church)/builder/review/page";
+import { useDraft } from "@/lib/draft/context";
+import { applyReadingSet, editOccasion, setPick } from "@/lib/draft/readings";
+import { draftKey, type DraftV1 } from "@/lib/draft/schema";
+import { installFakeApi } from "@/test/fake-api";
+import { church, churchProfile, DRAFT_NOW, lectionary, me, testDraft, USER_ID } from "@/test/fixtures";
+import { testRouter } from "@/test/mocks";
+import { renderWithProviders } from "@/test/render";
+
+import { StepProgress } from "./step-progress";
+import { StillNeeded } from "./still-needed";
+import { SummaryPanel } from "./summary-panel";
+
+const KEY = draftKey(USER_ID, church().id);
+const READINGS_SHIPPED = new Set(["readings"] as const);
+
+function seed(draft: DraftV1): DraftV1 {
+  window.localStorage.setItem(KEY, JSON.stringify(draft));
+  return draft;
+}
+
+function stored(): DraftV1 {
+  return JSON.parse(window.localStorage.getItem(KEY) ?? "null") as DraftV1;
+}
+
+/** Shows what the shell's draft holds, as a step page would. */
+function DraftProbe() {
+  const { draft } = useDraft();
+  return (
+    <p>
+      Probe: {draft.readings.occasion || "no occasion"} / {draft.save_key}
+    </p>
+  );
+}
+
+function renderBuilder(page: ReactElement, path: string) {
+  installFakeApi({ "GET /church": churchProfile() });
+  return renderWithProviders(<BuilderLayout>{page}</BuilderLayout>, { me: me(), church: church(), path });
+}
+
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(DRAFT_NOW);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
+
+describe("builder shell (F §4.7)", () => {
+  it("renders each step route inside the shell: progress, the placeholder card and the footer links", async () => {
+    const cases: [string, ReactElement, number, string, string[]][] = [
+      ["/builder/readings", <ReadingsStepPage key="r" />, 1, "Date & readings", ["Next: Hymns"]],
+      ["/builder/hymns", <HymnsStepPage key="h" />, 2, "Hymns", ["Back", "Next: Liturgy"]],
+      ["/builder/liturgy", <LiturgyStepPage key="l" />, 3, "Liturgy", ["Back", "Next: Review"]],
+      ["/builder/review", <ReviewStepPage key="v" />, 4, "Review & send", ["Back"]],
+    ];
+    for (const [path, page, number, label, footer] of cases) {
+      const { unmount } = renderBuilder(page, path);
+      expect(await screen.findByRole("heading", { level: 1, name: "Service Builder" })).toBeInTheDocument();
+      expect(screen.getByText(`Step ${number} of 4 · ${label}`)).toBeInTheDocument();
+
+      const steps = within(screen.getByRole("navigation", { name: "Steps" })).getAllByRole("link");
+      expect(steps.map((link) => link.textContent)).toEqual([
+        "1 Date & readings Soon",
+        "2 Hymns Soon",
+        "3 Liturgy Soon",
+        "4 Review & send Not in archive",
+      ]);
+      expect(steps.map((link) => link.getAttribute("href"))).toEqual([
+        "/builder/readings",
+        "/builder/hymns",
+        "/builder/liturgy",
+        "/builder/review",
+      ]);
+      expect(steps.filter((link) => link.getAttribute("aria-current") === "step")).toEqual([steps[number - 1]]);
+
+      const card = screen.getByRole("region", { name: label });
+      expect(within(card).getByRole("heading", { name: "Available soon" })).toBeInTheDocument();
+      expect(within(card).getByText("Keep using the current app for this part.")).toBeInTheDocument();
+      expect(within(card).queryByRole("link")).toBeNull(); // no link to the old app (owner answer Q2)
+
+      const links = within(screen.getByRole("navigation", { name: "Step navigation" })).getAllByRole("link");
+      expect(links.map((link) => link.textContent)).toEqual(footer);
+      expect(screen.queryByRole("heading", { name: "Still needed" })).toBeNull(); // nothing shipped yet
+
+      // The frame fills what the header leaves (the (church) layout's flex column), with no hard-coded header height.
+      const main = screen.getByRole("main");
+      const column = main.parentElement;
+      expect(column).toHaveClass("flex", "flex-1", "flex-col");
+      expect(column?.parentElement).toHaveClass("flex", "flex-1", "flex-col");
+      expect(`${column?.className} ${column?.parentElement?.className}`).not.toMatch(/dvh/);
+      // One landmark holds the heading, the progress and the step; the footer follows it. The main
+      // grows (flex-1), so on a short step the sticky footer rests at the bottom of the viewport.
+      expect(within(main).getByRole("heading", { level: 1, name: "Service Builder" })).toBeInTheDocument();
+      expect(within(main).getByRole("navigation", { name: "Steps" })).toBeInTheDocument();
+      expect(within(main).getByRole("region", { name: label })).toBeInTheDocument();
+      expect(main).toHaveClass("flex-1");
+      const footerNav = screen.getByRole("navigation", { name: "Step navigation" });
+      expect(main.contains(footerNav)).toBe(false);
+      expect(main.nextElementSibling).toBe(footerNav);
+      expect(footerNav).toHaveClass("sticky", "bottom-0");
+      // Back keeps the outline border: its classes are merged, not concatenated.
+      for (const link of within(footerNav).getAllByRole("link")) {
+        if (link.textContent === "Back") expect(link.className.split(/\s+/)).not.toContain("border-transparent");
+      }
+      unmount();
+    }
+  });
+
+  it("shows the summary: the date, Available soon for the rest, and where the draft is kept", async () => {
+    // A controllable (min-width: 64rem) query, so the test can widen the window past lg.
+    const wide = { matches: false, listeners: new Set<() => void>() };
+    vi.spyOn(window, "matchMedia").mockImplementation(
+      (query: string) =>
+        ({
+          get matches() {
+            return query === "(min-width: 64rem)" && wide.matches;
+          },
+          media: query,
+          addEventListener: (_: string, listener: () => void) => wide.listeners.add(listener),
+          removeEventListener: (_: string, listener: () => void) => wide.listeners.delete(listener),
+        }) as unknown as MediaQueryList,
+    );
+    const { user, unmount } = renderBuilder(<HymnsStepPage />, "/builder/hymns");
+    const aside = await screen.findByRole("complementary", { name: "Summary" });
+    expect(within(aside).getByRole("heading", { level: 2, name: "Summary" })).toHaveClass("sr-only");
+    // The sticky column clears the header's measured height (AppHeader sets --app-header-h).
+    expect(aside.firstElementChild).toHaveClass("sticky", "top-[var(--app-header-h,4rem)]", "py-4");
+    for (const block of ["Date", "Readings", "Hymns", "Liturgy"]) {
+      // 44px tap targets on phones (the sheet), compact from lg.
+      expect(within(aside).getByRole("link", { name: block })).toHaveClass("inline-flex", "min-h-11", "items-center", "lg:min-h-0");
+    }
+    expect(within(aside).getByText("Sunday, October 4, 2026")).toBeInTheDocument();
+    for (const block of ["Readings", "Hymns", "Liturgy"]) {
+      const heading = within(aside).getByRole("link", { name: block }).closest("h3");
+      expect(heading?.nextElementSibling).toHaveTextContent(/^Available soon$/);
+    }
+    expect(within(aside).getByRole("link", { name: "Date" })).toHaveAttribute("href", "/builder/readings");
+    expect(within(aside).getByText("Draft saved on this device · Not in archive")).toBeInTheDocument();
+    expect(within(aside).queryByText("No occasion yet")).toBeNull();
+
+    // Below lg the same panel opens in a bottom sheet from "Summary".
+    await user.click(screen.getByRole("button", { name: "Summary" }));
+    const sheet = await screen.findByRole("dialog", { name: "Summary" });
+    expect(within(sheet).getByText("Sunday, October 4, 2026")).toBeInTheDocument();
+    expect(within(sheet).getByText("Draft saved on this device · Not in archive")).toBeInTheDocument();
+    await user.click(within(sheet).getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    // Widening past lg while the sheet is open closes it, so no backdrop is left over the page.
+    await user.click(screen.getByRole("button", { name: "Summary" }));
+    await screen.findByRole("dialog", { name: "Summary" });
+    act(() => {
+      wide.matches = true;
+      for (const listener of wide.listeners) listener();
+    });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(wide.listeners.size).toBeGreaterThan(0);
+    unmount();
+    expect(wide.listeners.size).toBe(0);
+  });
+
+  it("writes last_step on entry without touching updated_at, and /builder opens that step", async () => {
+    const saved = seed(testDraft());
+    const first = renderBuilder(<HymnsStepPage />, "/builder/hymns");
+    await screen.findByRole("heading", { level: 1, name: "Service Builder" });
+    await waitFor(() => expect(stored().last_step).toBe("hymns"));
+    expect(stored().updated_at).toBe(saved.updated_at);
+    first.unmount();
+
+    renderBuilder(<BuilderIndexPage />, "/builder");
+    await waitFor(() => expect(testRouter.replace).toHaveBeenCalledWith("/builder/hymns"));
+    expect(screen.queryByRole("navigation", { name: "Steps" })).toBeNull();
+    expect(stored().updated_at).toBe(saved.updated_at);
+  });
+
+  it("New service resets a draft with nothing to lose at once, then opens Date & readings", async () => {
+    const saved = seed(testDraft());
+    const { user } = renderBuilder(<DraftProbe />, "/builder/liturgy");
+    expect(await screen.findByText(`Probe: no occasion / ${saved.save_key}`)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    await user.click(await screen.findByRole("menuitem", { name: "New service" }));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(testRouter.push).toHaveBeenCalledWith("/builder/readings");
+    expect(screen.queryByText(`Probe: no occasion / ${saved.save_key}`)).toBeNull();
+    expect(screen.getByText(/^Probe: no occasion \//)).toBeInTheDocument();
+  });
+
+  it("New service asks first when the draft has something to lose; Cancel keeps it, confirming clears it", async () => {
+    const saved = seed(editOccasion(testDraft(), "Harvest Sunday"));
+    const { user } = renderBuilder(<DraftProbe />, "/builder/review");
+    expect(await screen.findByText(`Probe: Harvest Sunday / ${saved.save_key}`)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    await user.click(await screen.findByRole("menuitem", { name: "New service" }));
+    let dialog = await screen.findByRole("alertdialog", { name: "Start a new service?" });
+    expect(within(dialog).getByText("This clears the current draft on this device.")).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(screen.getByText(`Probe: Harvest Sunday / ${saved.save_key}`)).toBeInTheDocument();
+    expect(testRouter.push).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    await user.click(await screen.findByRole("menuitem", { name: "New service" }));
+    dialog = await screen.findByRole("alertdialog", { name: "Start a new service?" });
+    await user.click(within(dialog).getByRole("button", { name: "Start new service" }));
+    expect(await screen.findByText(/^Probe: no occasion \//)).toBeInTheDocument();
+    expect(testRouter.push).toHaveBeenCalledWith("/builder/readings");
+    await waitFor(() => expect(stored().save_key).not.toBe(saved.save_key));
+    expect(stored().readings.occasion).toBe("");
+  });
+
+  it("shows the builder skeleton until the church profile loads", async () => {
+    installFakeApi({ "GET /church": async () => churchProfile() });
+    renderWithProviders(
+      <BuilderLayout>
+        <ReadingsStepPage />
+      </BuilderLayout>,
+      { me: me(), church: church(), path: "/builder/readings" },
+    );
+    expect(screen.getByRole("status", { name: "Loading" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Service Builder" })).toBeInTheDocument();
+  });
+});
+
+describe("the shell once Date & readings ships (slice 2c turns this on)", () => {
+  it("shows the readings status, Still needed rows, the occasion and the bulletin chips", async () => {
+    const filled = applyReadingSet(testDraft(), lectionary("2026-10-04"), 0);
+    seed(setPick(filled, "nt", "Matthew 21:33-46"));
+    installFakeApi({ "GET /church": churchProfile() });
+    renderWithProviders(
+      <BuilderLayout>
+        <StepProgress current="readings" shipped={READINGS_SHIPPED} />
+        <StillNeeded shipped={READINGS_SHIPPED} />
+        <section aria-label="Shipped summary">
+          <SummaryPanel shipped={READINGS_SHIPPED} />
+        </section>
+      </BuilderLayout>,
+      { me: me(), church: church(), path: "/builder/readings" },
+    );
+
+    const progress = (await screen.findAllByRole("navigation", { name: "Steps" }))[1];
+    expect(within(progress).getAllByRole("link")[0]).toHaveTextContent("1 Date & readings Complete");
+    expect(screen.queryByRole("heading", { name: "Still needed" })).toBeNull(); // nothing missing
+
+    const summary = screen.getByRole("region", { name: "Shipped summary" });
+    expect(within(summary).getByText("Nineteenth Sunday after Pentecost")).toBeInTheDocument();
+    const rows = within(summary).getAllByRole("listitem").map((li) => li.textContent);
+    expect(rows).toEqual(["Isaiah 5:1-7OT (auto)", "Psalm 80:7-15", "Philippians 3:4b-14", "Matthew 21:33-46NT"]);
+  });
+
+  it("lists what is missing, each linking to its step", async () => {
+    seed(testDraft());
+    installFakeApi({ "GET /church": churchProfile() });
+    renderWithProviders(
+      <BuilderLayout>
+        <StillNeeded shipped={READINGS_SHIPPED} />
+      </BuilderLayout>,
+      { me: me(), church: church(), path: "/builder/review" },
+    );
+    const section = await screen.findByRole("region", { name: "Still needed" });
+    expect(within(section).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+      "No occasion — Add one",
+      "No scripture readings — Add one",
+    ]);
+    for (const link of within(section).getAllByRole("link")) expect(link).toHaveAttribute("href", "/builder/readings");
+  });
+});

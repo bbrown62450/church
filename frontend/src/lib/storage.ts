@@ -65,3 +65,34 @@ export function writeLocal(key: string, value: string): void {
 export function removeLocal(key: string): void {
   remove("localStorage", key);
 }
+
+/**
+ * Like `writeLocal`, but says whether the value was stored: false when storage
+ * is missing, blocked or full. The draft store needs to know, so it can switch
+ * to memory-only and warn once (F §4.6 "Persistence").
+ */
+export function tryWriteLocal(key: string, value: string): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    window.localStorage.setItem(key, value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Every localStorage key, or [] when storage is missing or blocked (draft pruning). */
+export function localKeys(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const storage = window.localStorage;
+    const keys: string[] = [];
+    for (let i = 0; i < storage.length; i += 1) {
+      const key = storage.key(i);
+      if (key !== null) keys.push(key);
+    }
+    return keys;
+  } catch {
+    return [];
+  }
+}

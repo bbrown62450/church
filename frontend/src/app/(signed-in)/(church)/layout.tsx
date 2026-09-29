@@ -20,6 +20,10 @@
  *    before the 403 on refocus) toasts the same message once.
  * 6. A switch stores the new id. Once the old church is no longer shown, its
  *    `["church", oldId]` queries are cancelled and removed.
+ * 7. The header and the page share a viewport-high flex column, so a page can
+ *    grow into whatever height the header leaves (`flex-1`, as the builder
+ *    does). A page root centred with `mx-auto` also sets `w-full`, since a
+ *    flex item would otherwise shrink to its content (slice 2b).
  */
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -124,7 +128,7 @@ export default function ChurchLayout({ children }: { children: ReactNode }) {
     );
   } else if (profile.isError && !isHandledElsewhere(profile.error)) {
     body = (
-      <main className="mx-auto max-w-3xl p-4">
+      <main className="mx-auto w-full max-w-3xl p-4">
         <ErrorState error={profile.error} onRetry={() => void profile.refetch()} />
       </main>
     );
@@ -133,7 +137,7 @@ export default function ChurchLayout({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="min-h-dvh">
+    <div className="flex min-h-dvh flex-col">
       <AppHeader
         user={me.user}
         churches={me.churches.filter((church) => !excluded.has(church.id))}
@@ -160,7 +164,7 @@ function isHandledElsewhere(error: unknown): boolean {
 
 function BodySkeleton() {
   return (
-    <main className="mx-auto grid max-w-3xl gap-4 p-4" aria-busy="true">
+    <main className="mx-auto grid w-full max-w-3xl gap-4 p-4" aria-busy="true">
       <Skeleton className="h-24 w-full" />
       <Skeleton className="h-24 w-full" />
     </main>

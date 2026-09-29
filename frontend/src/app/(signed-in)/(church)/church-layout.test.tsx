@@ -362,17 +362,19 @@ describe("(church) layout", () => {
     expect(window.sessionStorage.getItem(SESSION_KEYS.pendingInviteCode)).toBe("invite-code-1");
   });
 
-  it("the home page shows the confirmed church from useChurch()", async () => {
+  it("the home page opens the Service Builder (F §4.1: / redirects to /builder)", async () => {
     installFakeApi({ "GET /me": me(), "GET /church": GRACE });
 
     renderShell(<HomePage />);
 
-    expect(
-      await screen.findByText(
-        "Readings, hymns, and liturgy for Grace are coming soon. Until then, keep using the current app.",
-      ),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Church profile, members, and invites are coming later.")).toBeInTheDocument();
+    await waitFor(() => expect(testRouter.replace).toHaveBeenCalledWith("/builder"));
+    expect(testRouter.replace).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/coming soon/)).toBeNull();
+
+    // The header and the page share one viewport-high column (the builder fills what the header leaves);
+    // a page root centred with mx-auto keeps its width there.
+    expect(screen.getByRole("banner").parentElement).toHaveClass("flex", "min-h-dvh", "flex-col");
+    expect(screen.getByRole("main")).toHaveClass("w-full");
   });
 
   it("useApi().church refuses to run outside ChurchProvider", async () => {
