@@ -6,7 +6,7 @@
 
 **Architecture:** Below the API, and importing no FastAPI, Starlette or Streamlit: `integrations/openai_client.py` (settings, `ai_available()`, `complete(...)` with its own capped retry, a deadline, a process-wide semaphore and F §2.8's error mapping, `FakeAI`), `scripture_refs.py` (gains `parse_refs`, `RefSpan`, `spans_overlap`, `same_chapter`, parse-only aliases and the single-chapter books), `hymn_search.py` (pure: `normalize_title`, `usage_key`, `parse_themes`, `match_hymns`, `evenly_spaced`), `hymn_suggest.py` (pure: candidates, prompt, parsing, resolution, final slots), `hymn_ranking.py` (PR #4's ranking, generalized with accessors), `repos/hymns.py` (typed `HymnRecord` reads), `hymn_usage.usage_near` (the recent-use window), and `usecases/hymns.py` (the four usecases, each reading in one session, the suggestion usecase closing it before the NT fetch and the AI call). `api/routes/hymnals.py` and `api/routes/hymns.py` are thin plain-`def` routes. Tests use a `FakeAI`, a fake SDK client built with the SDK's own error types, a patched NT fetcher and the SQLite fixtures; the no-network guard stays on, and the three Postgres-marked tests run in CI's `backend-postgres` job.
 
-**Tech Stack:** Python 3.11 (`.venv`), FastAPI 0.141.1, Pydantic 2.13.5, SQLAlchemy 2.1.1, openai (installed 3.20.0, built on `httpx2`; the requirement becomes `openai>=1.45.0`), Alembic (no new revision), pytest (SQLite locally; `postgres:17` in CI, `-m postgres`); Next 16 / openapi-typescript 7 for the regenerated types only; GitHub Actions (`backend`, `backend-postgres`, `frontend`, all required on `main`), Railway, Vercel, Supabase Postgres, OpenAI.
+**Tech Stack:** Python 3.11 (`.venv`), FastAPI 0.141.1, Pydantic 2.13.5, SQLAlchemy 2.1.1, openai (installed 3.20.0, built on `httpx2`; the requirement becomes `openai>=1.58.0,<4`), Alembic (no new revision), pytest (SQLite locally; `postgres:17` in CI, `-m postgres`); Next 16 / openapi-typescript 7 for the regenerated types only; GitHub Actions (`backend`, `backend-postgres`, `frontend`, all required on `main`), Railway, Vercel, Supabase Postgres, OpenAI.
 
 **Source documents:**
 - Slice spec ("S"): `docs/superpowers/specs/2026-09-25-slice-3-hymns-design.md` (3a is the backend half: API, Models, Backend changes 1-6, Data and migrations, Testing "Backend", AC1-AC9, AC16, AC18-AC20 and the 2026-09-26 rubric amendments).
@@ -18,6 +18,7 @@
 - Facts checked for this plan (tree `720a8b2`, slices 2a, 2b and 2c merged and live, 2026-09-29):
   - Backend baseline `971 passed, 9 skipped`; `-m postgres` on a local Postgres 16: `9 passed, 971 deselected`; frontend `356 passed` in 55 files; Alembic head `0004_invites_reusable`; 4 runbook owner markers; `openai` 3.20.0 (its `chat.completions.create` takes `max_completion_tokens`), `lxml` 6.1.3 installed.
   - `api/ratelimit.py` already defines the `ai` bucket (40 per 600 s per user and 400 per 86 400 s per church) and `rate_limit("ai")` already depends on `require_church`; `scripture_refs.py` already has the deuterocanon, `split_alternatives` and `default_nt_ref`; `usecases/passages.get_passage_text` exists; `Page[T]` exists in `api/schemas.py`.
+  - Review fixes (2026-09-29, after the owner's answers A-D): the plan text was replayed again, Tasks 1-15, onto a clean worktree of `720a8b2`, with the full suite after every task matching the count table, the red runs of the changed tests observed, and the OpenAPI files regenerated and typechecked.
   - Every task's code in this plan was written and run by the planner in a throwaway worktree of `720a8b2`, one commit per task, with every stated count and every red and green run observed. The three Postgres-marked tests ran against a local Postgres 16. The plan text was then replayed onto a clean worktree of `720a8b2`: every Create, Replace, Append, Delete and Run directive below applied in order reproduces each task's tree exactly. Not run while planning: the pushes and CI (Task 16), the owner steps (Tasks 4 Step 1 and 17), and any call to OpenAI (the container cannot reach it).
 
 ## Global Constraints
@@ -31,14 +32,14 @@
 - After any route or schema change, regenerate the OpenAPI files and commit both with the route:
   `.venv/bin/python backend/scripts/export_openapi.py && (cd frontend && npm run gen:api)`
   Then run `(cd frontend && npm run typecheck)`. Never hand-edit either file.
-- Branch: `claude/slice-2-plan-4q33le` (this session's branch), from `720a8b2`. Its first commit is this plan, at `docs/superpowers/plans/2026-09-29-slice-3a-hymns-backend.md`.
+- Branch: `claude/slice-2-plan-4q33le` (this session's branch), from `720a8b2`. Its first two commits are this plan, at `docs/superpowers/plans/2026-09-29-slice-3a-hymns-backend.md`, and its review fixes (`Plan: slice 3a review fixes`).
 - Stage files by name. `.claude/` stays untracked.
 - `main` is protected: the `backend`, `backend-postgres` and `frontend` checks must pass and the branch must be up to date. Before merging, merge `origin/main` and rerun both suites. Run `gh pr merge <N> --merge -R bbrown62450/church` only on the owner's explicit yes.
 - Commit messages end with these two lines (the session's attribution):
   `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
   `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`
 - Commit subjects read "Area: plain words (F §x, S ...)". Use TDD: write the failing test first and quote its failure.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`. It includes the line "Tests: backend 971 → 1095 passed, 9 → 11 skipped; frontend 356 → 356 in 55 files".
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`. It includes the line "Tests: backend 971 → 1101 passed, 9 → 11 skipped; frontend 356 → 356 in 55 files".
 - **The container restarts** (2a, 2b and 2c build notes): uncommitted work can be lost. Commit as soon as a task's checks pass, and after each task's review back the branch up with `git push origin claude/slice-2-plan-4q33le` (owner answer Q5: standing permission for backup pushes, as in slice 2). If `frontend/node_modules` is gone after a restart, `(cd frontend && npm ci)`.
 - **The network is filtered.** OpenAI, hymnary.org, lectio-api.org, Vanderbilt, bible-api.com and Railway are not reachable from the build container; the npm registry and PyPI are. No test may need the network: the AI is `FakeAI` or a fake SDK client, and the NT fetch is patched.
 - **Grep gates exclude tests** and are judged, not obeyed blindly: a hit may be a comment or a test asserting absence. Read the line, and if it is harmless say why in the task's report.
@@ -52,24 +53,24 @@
   | After | Delta | Count |
   |---|---|---|
   | T1 | +7 | 978 passed, 9 skipped |
-  | T2 | +8 | 986 passed, 9 skipped |
-  | T3 | +12 | 998 passed, 9 skipped |
-  | T4 | +13 | 1011 passed, 9 skipped |
-  | T5 | +11 | 1022 passed, 9 skipped |
-  | T6 | +9 | 1031 passed, 9 skipped |
-  | T7 | +8, +1 skipped (Postgres) | 1039 passed, 10 skipped |
-  | T8 | +7 | 1046 passed, 10 skipped |
-  | T9 | +10, +1 skipped (Postgres) | 1056 passed, 11 skipped |
-  | T10 | +10 | 1066 passed, 11 skipped |
-  | T11 | +9 | 1075 passed, 11 skipped |
-  | T12 | +15 | 1090 passed, 11 skipped |
-  | T13 | +17 | 1107 passed, 11 skipped |
-  | T14 | +1 − 13 (the deleted `test_suggest_hymns.py`) | 1095 passed, 11 skipped |
-  | T15 | 0 | 1095 passed, 11 skipped |
+  | T2 | +9 | 987 passed, 9 skipped |
+  | T3 | +14 | 1001 passed, 9 skipped |
+  | T4 | +14 | 1015 passed, 9 skipped |
+  | T5 | +11 | 1026 passed, 9 skipped |
+  | T6 | +9 | 1035 passed, 9 skipped |
+  | T7 | +8, +1 skipped (Postgres) | 1043 passed, 10 skipped |
+  | T8 | +7 | 1050 passed, 10 skipped |
+  | T9 | +10, +1 skipped (Postgres) | 1060 passed, 11 skipped |
+  | T10 | +11 | 1071 passed, 11 skipped |
+  | T11 | +9 | 1080 passed, 11 skipped |
+  | T12 | +15 | 1095 passed, 11 skipped |
+  | T13 | +18 | 1113 passed, 11 skipped |
+  | T14 | +1 − 13 (the deleted `test_suggest_hymns.py`) | 1101 passed, 11 skipped |
+  | T15 | 0 | 1101 passed, 11 skipped |
 
   Each delta equals the number of tests the task adds (or deletes).
 - The frontend stays at 356 in 55 files throughout (T8 edits one test fixture; no test is added).
-- At the end, CI `backend-postgres` shows `11 passed, 1095 deselected, 1 warning` (the 9 existing Postgres tests plus T7's and T9's).
+- At the end, CI `backend-postgres` shows `11 passed, 1101 deselected, 1 warning` (the 9 existing Postgres tests plus T7's and T9's).
 - Table-driven tests loop over their cases inside one test function (no parametrize), so counts stay stable when cases are added.
 
 ### Layering and logging
@@ -82,7 +83,7 @@
 - No references after trimming (`fields.refs`): "Enter at least one scripture reference."
 - Empty pool (`fields.hymnal`): "This hymnal has no hymns to suggest from."
 - Everything recent (no field): "Every hymn in this hymnal was used within 12 weeks of this service. Turn off “Exclude” and try again."
-- `ai_not_configured` (503) on `/hymns/suggestions`: "AI suggestions aren't set up on this app yet." (also for an exhausted quota). The client's own generic copy is "AI isn't set up on this app yet." (clarification 7).
+- `ai_not_configured` (503) on `/hymns/suggestions`: "AI suggestions aren't set up on this app yet." (also for an exhausted quota and for a model OpenAI does not offer, owner answer A). The client's own generic copy is "AI isn't set up on this app yet." (clarification 7).
 - `ai_busy` (503): "The AI service is busy. Try again in a minute."
 - `ai_timeout` (504): "The AI took too long to answer. Try again."
 - `ai_upstream_error` (502): "The AI service had a problem. Try again." or "The AI gave an answer we couldn't use. Try again."
@@ -103,6 +104,7 @@
 
 ### Buckets, budgets and limits
 - `ai` (already defined by 2a): 40 per 600 s per user and 400 per 86 400 s per church, charged once per `POST /hymns/suggestions` by `Depends(rate_limit("ai"))`, which resolves `require_church` (a 403 is never charged). One token comes back every 15 s per user.
+- **Rejected requests still spend an `ai` token** (F §1.8's dependency convention): FastAPI resolves the `rate_limit("ai")` dependency before it validates the body and before the usecase runs, so a Pydantic 422 (for example an extra field) and the usecase's own 422s (an unknown hymnal, an empty pool, everything recent) each cost one token, as does a 503 or 502 from the AI. Only a 401 or 403 (the guard fails first) and a 429 itself cost nothing. `test_a_rejected_request_still_spends_a_token` (T13) pins it. This is accepted: a well-behaved client sends few invalid requests, and charging them keeps a bad client from probing for free.
 - Suggestion budgets: `SUGGEST_BUDGET_S = 75` from the usecase's entry; `NT_FETCH_BUDGET_S = 10` on a 4-worker `nt-fetch` pool; OpenAI: `OPENAI_TIMEOUT_SECONDS` 30 per attempt, `OPENAI_MAX_RETRIES` 1, backoff `min(Retry-After or 1 s, 2 s)`, a retry only with at least 5 s left, 15 s (or remaining − 5 s) to get one of `OPENAI_MAX_CONCURRENCY` 4 slots; `max_completion_tokens` 1 200; prompt at most 24 000 characters.
 - Candidates: `SLOT_CAP` 50 per slot, `NEWER_RESERVE` 10 (owner, 2026-09-26), pad a list below 15 focused hymns to 40; 30 matches per reference for the response slot; `MIN_PER_SLOT` 3, `MAX_PER_SLOT` 5.
 - Request limits: `GET /hymns` `hymnal` ≤ 20, `q` ≤ 100, `limit` 1-2000 (default 50), `offset` ≥ 0, `recent_for_date` strict `YYYY-MM-DD`; `ScriptureMatchIn` refs ≤ 20 of ≤ 200, `hymnal` ≤ 20, `limit_per_ref` 1-100 (50), `max_results` 1-100 (20); `HymnSuggestionIn` `occasion` ≤ 300, `scriptures` ≤ 20 of ≤ 200, `selected_nt_ref` ≤ 200, `nt_text` ≤ 20 000, `hymnal` ≤ 20; `extra="forbid"` everywhere.
@@ -110,9 +112,10 @@
 
 ### Model (owner answer Q3; UNVERIFIED)
 The owner has an OpenAI account with a separate key for this app. After the merge (T17) the owner sets `OPENAI_API_KEY` and `OPENAI_MODEL` on Railway and a monthly budget cap in OpenAI's dashboard; the key is never pasted into chat. S's constraints: a non-reasoning, inexpensive chat model that accepts `response_format: {"type": "json_object"}` and `max_completion_tokens` (a reasoning model can spend the 1 200-token budget on hidden reasoning and answer empty, which becomes `ai_upstream_error`).
-- **Recommendation: `gpt-4.1-mini`** (a non-reasoning chat model; third-party price lists found on 2026-09-29 give $0.40 per million input tokens and $1.60 per million output tokens). One suggestion call is at most about 6 000 input tokens (24 000 characters) plus up to 1 200 output tokens, so roughly $0.005 or less. A cap of $5 a month covers about a thousand suggestions.
+- **Recommendation: `gpt-4.1-mini`** (a non-reasoning chat model; third-party price lists found on 2026-09-29 give $0.40 per million input tokens and $1.60 per million output tokens). One suggestion call is at most about 6 000 input tokens (24 000 characters) plus up to 1 200 output tokens, so roughly $0.005 or less. The owner's cap of $15 a month (owner answer B) covers about three thousand suggestions; the `ai` bucket (400 per church per day) is the other bound.
 - **Fallback: `gpt-4o-mini`**, also non-reasoning and cheaper, if the first is not offered to the owner's project.
-- **Avoid** the GPT-5.x "mini" and "nano" models unless a later slice sends `reasoning_effort: "none"`: they are reasoning models by default, and this client sends no `reasoning_effort`.
+- **Second fallback: `gpt-5-mini` with `OPENAI_REASONING_EFFORT=minimal`** (UNVERIFIED: third-party docs found on 2026-09-29 say the GPT-5 family takes `reasoning_effort` on Chat Completions and that `gpt-5-mini` accepts `minimal`; newer GPT-5.x minis may also accept `none`). The GPT-5 "mini" and "nano" models are reasoning models by default; without a low effort they can spend the 1 200-token budget on hidden reasoning and answer empty (`ai_upstream_error`). The client sends `reasoning_effort` only when `OPENAI_REASONING_EFFORT` is set (T2, T3), like `temperature`, so the non-reasoning models above never receive it.
+- **A retired model.** OpenAI retires models on its own schedule, possibly after the merge. Then every suggestion answers 503 `ai_not_configured` ("AI suggestions aren't set up on this app yet.", owner answer A) and the log has `ERROR AI: model not available (OPENAI_MODEL=<m>)`; the fix is a new `OPENAI_MODEL` on Railway (no code change).
 - **UNVERIFIED.** The build container could not open openai.com or developers.openai.com (egress blocked); the recommendation rests on web search results. One result said GPT-4.1 was retired from the API in February 2026, while OpenAI's retirement notice as quoted elsewhere concerned ChatGPT only. The controller confirms with the owner before T17 Step 4: the owner opens platform.openai.com → the project for this app → Limits (model access) and checks that `gpt-4.1-mini` is listed. The first live suggestion in T17 is the real check. `backend/.env.example` carries `OPENAI_MODEL=gpt-4.1-mini` from T2; if the owner picks another model, T17 Step 4 changes that one line in the records PR.
 
 ### Scripture references data (owner answer Q4)
@@ -136,6 +139,12 @@ The repository holds no real `scripture_refs` data: `data/hymnals/PH1990_hymns.c
 - **Q5: process as in slice 2.** Subagent-driven, reviews, backup pushes, one PR for 3a (and later one for 3b); ask before the PR, before ready and before the merge. The standing permission for invisible safety fixes carries over.
 - The container cannot reach OpenAI or hymnary.org, so every test is network-free (a fake OpenAI client).
 
+### Owner answers to the plan review (2026-09-29, "all recommended", binding)
+- **A: a retired or unknown model reads "not set up".** `NotFoundError` or an error with `code == "model_not_found"` maps to 503 `ai_not_configured` (the route's "AI suggestions aren't set up on this app yet."; 3b's screen adds "You can still choose hymns yourself." per S's copy table), with `ERROR AI: model not available (OPENAI_MODEL=<m>)` in the log and no retry (T3; clarification 26).
+- **B: a $15 monthly budget cap.** The owner sets $15 a month in OpenAI's dashboard (T17 Step 5). When the cap is reached, AI reads "not set up" until the next month; the client does not retry (`insufficient_quota`, T3). The runbook's `OPENAI_API_KEY` row says so (T15).
+- **C: clarification 9 accepted.** The same "other idea" chip may appear under two slots; top picks are always distinct.
+- **D: the real scripture export gates "ready".** T16 walks the owner through the read-only export (T4 Step 1) one step at a time, swaps it in (T4 Step 10) and needs the 98 % check to pass on it before asking to mark the PR ready.
+
 ## Spec clarifications
 
 Code and F win over the outline; each is owner decision 1 unless marked **owner-visible**.
@@ -148,7 +157,7 @@ Code and F win over the outline; each is owner decision 1 unless marked **owner-
 6. **Per-attempt timeout.** Each attempt passes `timeout=openai.Timeout(t, connect=min(5, t))` to `create()` instead of `with_options(timeout=httpx.Timeout(...))`; the effect is the same. The installed SDK (openai 3.20.0) is built on `httpx2`, so `httpx.Timeout` would not be its type; `openai.Timeout` always is. The tests build real SDK exceptions with the SDK's own HTTP module, read from the SDK's annotation of `APIStatusError.response`.
 7. **Client messages are generic.** `openai_client` raises `NotConfigured("AI isn't set up on this app yet.")` and S's busy, timeout and upstream copy; `usecases.hymns` re-raises `NotConfigured` with S's "AI suggestions aren't set up on this app yet.", so the route's copy is exact and slice 4 can use its own ("AI not configured. Type this section yourself.").
 8. **`HymnalCode` is not used on `GET /hymns`.** F §1.3's body names `GET /hymns?hymnal=` as a `HymnalCode` use; S (and F's own amendment row "`hymnal` has no pattern") say slice 3's read filters accept any stored code. S wins: a pattern would hide a CLI-imported code such as `PH 1990`. T15 corrects F's sentence and adds an amendment row. `HymnalCode` is defined for 6a and used by no 3a field.
-9. **(Owner-visible, minor.) The same "other idea" can appear under two slots.** S Testing says that when the AI returns the same five ids for all three slots, "opening keeps them" and the others are topped up "with no id repeated across slots". S §3.6 step 9, the precise rule, blocks only the reserved hymns (the current picks and the top picks) from other slots, so alternatives may repeat across slots, and the opening slot loses the hymns that became the other slots' top picks. The algorithm wins; the test pins its result (tops distinct, never another slot's idea). Recommendation: accept (a repeated chip is a harmless second chance at a good hymn). Listed under "Questions for the owner".
+9. **(Owner-visible, minor; accepted, owner answer C.) The same "other idea" can appear under two slots.** S Testing says that when the AI returns the same five ids for all three slots, "opening keeps them" and the others are topped up "with no id repeated across slots". S §3.6 step 9, the precise rule, blocks only the reserved hymns (the current picks and the top picks) from other slots, so alternatives may repeat across slots, and the opening slot loses the hymns that became the other slots' top picks. The algorithm wins; the test pins its result (tops distinct, never another slot's idea). The owner accepted it on 2026-09-29 (owner answer C).
 10. `hymnal: ""` in a match or suggestion request is a code the church lacks, so it is the hymnal 422 (not "use the effective hymnal"); only `null` asks for the effective one.
 11. `service_date_iso`, `recent_for_date` (query and body) use slice 2's strict `IsoDate`, so `2026-10-4` is a 422 "Not a valid value.", as for `?date=`.
 12. **`GET /church` reads in one session.** `get_church_profile` opens one `session_scope` for the church row and `resolve_default_hymnal`. The four exact-body `/church` tests gain the two fields; `test_api_churches.py`'s create test expects `effective_hymnal: "GG2013"`, because its catalog seed is GG2013.
@@ -165,13 +174,19 @@ Code and F win over the outline; each is owner decision 1 unless marked **owner-
 23. `repos.hymns` adds `HymnalSummary(code, hymn_count, scripture_ref_count)`, which S does not name, for `hymnal_summaries`. Blank hymnal codes are left out, as `list_church_hymnals` does. Titles sort by `lower(coalesce(title, ''))`, so NULL titles sort like "" on both databases.
 24. `ScriptureMatchesOut.hymnal` is `null` only when the church has no hymns; the route then answers 200 with no items (S step 2).
 25. `HymnRecord.link` holds `hymns.hymnary_link`; `audio_url` is never read (inv D8's dead audio).
+26. **(Owner answer A; owner-visible only as the existing "not set up" copy.) A model OpenAI does not offer is `ai_not_configured`.** F §2.8's table has no row for `NotFoundError` (404) or `code == "model_not_found"`, which a retired or mistyped `OPENAI_MODEL` returns; without a row it would be `ai_upstream_error` ("had a problem"), which invites a retry that can never work. `_mapped` checks it after the timeout, quota and rate-limit rows, logs `ERROR AI: model not available (OPENAI_MODEL=<m>)` (the model name is configuration, not a secret) and never retries it (a 4xx). T15 adds the row to F's amendments.
+27. **(Owner decision 1.) `OPENAI_REASONING_EFFORT`, optional.** S says the model must be non-reasoning. The setting keeps a GPT-5-family model usable if the non-reasoning ones are retired: when set (a lowercase word such as `minimal`, `low` or `none`), `complete()` sends `reasoning_effort`; when unset nothing is sent, exactly as for `temperature`. Anything else logs a WARNING and is ignored. `reasoning_effort` first appears in `chat.completions.create` in openai 1.58.0, so the pin is `openai>=1.58.0,<4` (the upper bound keeps a future major release from arriving unreviewed; the installed 3.20.0 satisfies it). While planning, `test_openai_client.py`'s 23 tests also passed with openai 1.58.0 itself on the path (httpx 0.28), so the floor is real, not only the installed release.
+28. **(Owner decision 1.) The parser rejects impossible chapters and dotted verses.** No book has more than 150 chapters, so a chapter above `MAX_CHAPTER = 150` makes the segment unparsed (the whole-book `ff` sentinel excepted). `normalize_book_text` drops periods, so "John 3.16" would read as chapter 316 and "Ps 1.1" as Psalm 11; a segment with a period between digits is therefore unparsed too, and the text fallback still sees it. "Esd 1" stays unparsed: "esd" alone is ambiguous between 1 and 2 Esdras, so no alias is added. `test_impossible_chapters_and_dotted_verses_are_unparsed` (T4) pins all three; the synthetic sample's rate is unchanged.
+29. **(Owner decision 1.) One DEBUG line per scripture-matches call**, counts only (S Risks, "Unknown `scripture_refs` formats in production"): `hymn_matches refs=<n> refs_unparsed=<n> hymns=<n> hymns_with_unparsed=<n> matched=<n>`, computed only when DEBUG is on. Never a title or a reference.
+30. **(Owner decision 1.) The 75 s deadline can be overrun by a few seconds.** httpx applies `openai.Timeout` per phase (connect, each read, write, pool wait), not to a whole attempt, so a response that trickles in can run somewhat past the attempt's timeout. The 15 s between the 75 s server deadline and the 90 s client timeout covers it. T15 adds this note to S §3.7.
 
 ### Risks carried into the plan
-- **Model availability (UNVERIFIED).** If `gpt-4.1-mini` is not offered to the project, every suggestion answers `ai_upstream_error` or `ai_not_configured` until the owner changes `OPENAI_MODEL` (T17 checks with one live suggestion).
-- **Synthetic scripture sample.** Until the owner's export replaces it, the 98 % test proves the parser only against hand-written Hymnary-shaped rows.
+- **Model availability (UNVERIFIED).** If `gpt-4.1-mini` is not offered to the project, every suggestion answers `ai_not_configured` until the owner changes `OPENAI_MODEL` (T17 checks with one live suggestion; fallbacks in "Model").
+- **Model retirement after the merge.** OpenAI can retire the chosen model at any time, weeks or months after 3a ships, with no deploy on our side. It shows up as every suggestion answering 503 "AI suggestions aren't set up on this app yet." (owner answer A) and one `ERROR AI: model not available (OPENAI_MODEL=<m>)` line per call in Railway's logs; the startup line still says `AI: configured (model=<m>)`, because startup makes no call. The fix is an `OPENAI_MODEL` change on Railway (a fallback from "Model", with `OPENAI_REASONING_EFFORT` for a GPT-5-family one); no code change. The runbook's `OPENAI_MODEL` row says this (T15).
+- **Synthetic scripture sample.** Until the owner's export replaces it, the 98 % test proves the parser only against hand-written Hymnary-shaped rows. The export gates marking the PR ready (owner answer D; T16 Step 11).
 - **Frozen `app.py` on `main`** no longer imports after T14 (accepted, owner decision 2).
 - **Same-title false positives** in recent use (owner answer Q2, accepted).
-- **Cost exposure** is bounded by the `ai` bucket (400 per church per day) and the owner's monthly cap; a reached cap reads "not set up", with an ERROR log line.
+- **Cost exposure** is bounded by the `ai` bucket (400 per church per day, rejected requests included) and the owner's $15 monthly cap (owner answer B); a reached cap reads "not set up" until the next month, with an ERROR log line and no retry.
 
 ## File Structure
 
@@ -195,7 +210,7 @@ Code and F win over the outline; each is owner decision 1 unless marked **owner-
 |---|---|
 | `backend/api/schemas.py` | `SectionKey`, `HymnRef`, `SlotHymns`, `HymnalCode` (T1); `ChurchProfileOut` + 2 fields (T8) |
 | `backend/api/main.py` | the startup AI line (T2); mount `hymnals` (T8) and `hymns` (T9); `GZipMiddleware` innermost (T9) |
-| `backend/requirements.txt` | `openai>=1.45.0` (T2); `lxml` removed (T14) |
+| `backend/requirements.txt` | `openai>=1.58.0,<4` (T2); `lxml` removed (T14) |
 | `backend/.env.example` | the `OPENAI_*` block (T2) |
 | `backend/scripture_refs.py` | the parser section (T4) |
 | `backend/repos/hymns.py` | `HymnRecord`, `HymnalSummary`, `hymnal_summaries`, `query_hymns`, `list_hymnal_records` (T6) |
@@ -221,7 +236,7 @@ Code and F win over the outline; each is owner decision 1 unless marked **owner-
 
 **Untouched:** migrations, `app.py`, `ui_helpers.py`, `streamlit_views/*`, `streamlit_tests/*`, CI workflows, every frontend source file except the generated API files and one test fixture.
 
-**Task order and checkpoints:** T1 → T2 → ... → T15 → T16 → T17. Each of T1-T15 ends in one commit (T4 may add a second, the owner's sample), so the branch carries 16 commits (17 with the export) before T16. The review checkpoints at the end of every task are stops for the controller, not merges: everything ships in the one 3a PR.
+**Task order and checkpoints:** T1 → T2 → ... → T15 → T16 → T17. Each of T1-T15 ends in one commit (T4 may add a second, the owner's sample), so with the plan's two commits (the plan and its review fixes) the branch carries 17 commits (18 with the export) before T16. The review checkpoints at the end of every task are stops for the controller, not merges: everything ships in the one 3a PR.
 
 ---
 ### Task 1: Commit the plan, check the baseline, and add the shared hymn models (F §1.3 frozen; S API Models, Testing "Contract and guards"; clarification 8)
@@ -245,14 +260,14 @@ This task commits the plan and adds the three models F §1.3 froze, `SectionKey`
 
 ```bash
 git status --short
-git log --oneline -2
+git log --oneline -3
 .venv/bin/python -m pytest -q | tail -1
-.venv/bin/python -c "import openai, inspect; from openai.resources.chat.completions import Completions; print(openai.__version__, 'max_completion_tokens' in inspect.signature(Completions.create).parameters)"
+.venv/bin/python -c "import openai, inspect; from openai.resources.chat.completions import Completions; p = inspect.signature(Completions.create).parameters; print(openai.__version__, 'max_completion_tokens' in p and 'reasoning_effort' in p)"
 (cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
 grep -n '\[owner' docs/ops-runbook.md | grep -v 'An entry marked' | wc -l
 ```
 
-**Expected:** `git status --short` lists only `?? .claude/` (or nothing); the log shows `<sha> Plan: slice 3a hymns backend (S slice 3; owner answers 2026-09-29)` over `720a8b2 Merge pull request #25 ...`; `971 passed, 9 skipped in <t>s`; `3.20.0 True` (any version ≥ 1.45.0 prints `True`); ` Test Files  55 passed (55)` and `      Tests  356 passed (356)`; `4`. If any differs, stop and ask.
+**Expected:** `git status --short` lists only `?? .claude/` (or nothing); the log shows `<sha> Plan: slice 3a review fixes` over `6218180 Plan: slice 3a hymns backend (S slice 3; owner answers 2026-09-29)` over `720a8b2 Merge pull request #25 ...`; `971 passed, 9 skipped in <t>s`; `3.20.0 True` (any version ≥ 1.58.0 prints `True`); ` Test Files  55 passed (55)` and `      Tests  356 passed (356)`; `4`. If any differs, stop and ask.
 
 - [ ] **Step 2 (agent): Write the failing tests**
 
@@ -429,26 +444,27 @@ Counts after Task 1: backend **978 passed, 9 skipped**; frontend **356 in 55 fil
 
 ### Task 2: The OpenAI client's settings, availability, startup line and fake (F §2.8; S Backend 1 rows 1-2, 3.7 "Startup", Module map `requirements.txt` and `.env.example`; owner answer Q3; AC5 half, AC15 half; clarifications 5, 20)
 
-This task creates `backend/integrations/openai_client.py` without the network call: the settings (`ai_settings()`, read once per process from the environment), `ai_available()`, the startup log line (exactly one of four, never the key), `FakeAI` and `set_ai_for_tests()`, the test hooks, and the module-level `complete()` that routes to a fake or to `_complete`. Here `_complete` only raises `NotConfigured`; Task 3 replaces it with the real call. The lifespan in `api/main.py` logs the AI state once. `requirements.txt` raises the pin to `openai>=1.45.0`, the first release whose `create()` takes `max_completion_tokens` (installed: 3.20.0), and `backend/.env.example` drops the stale `gpt-3.5-turbo` default for the recommended model (see "Model"; UNVERIFIED) and lists the new settings. An autouse fixture resets the module between tests.
+This task creates `backend/integrations/openai_client.py` without the network call: the settings (`ai_settings()`, read once per process from the environment), `ai_available()`, the startup log line (exactly one of four, never the key), `FakeAI` and `set_ai_for_tests()`, the test hooks, and the module-level `complete()` that routes to a fake or to `_complete`. Here `_complete` only raises `NotConfigured`; Task 3 replaces it with the real call. The lifespan in `api/main.py` logs the AI state once. `requirements.txt` raises the pin to `openai>=1.58.0,<4`, the first release whose `create()` takes both `max_completion_tokens` and `reasoning_effort`, below the next major release (installed: 3.20.0), and `backend/.env.example` drops the stale `gpt-3.5-turbo` default for the recommended model (see "Model"; UNVERIFIED) and lists the new settings. An autouse fixture resets the module between tests.
 
 **Decisions recorded in this task:**
 - **T2-1 (clarification 5).** Settings live in the client, not `api/settings.py`.
 - **T2-2.** `AISettings.problem` checks the key first, then ASCII, then the model, so a missing key is reported even when the model is missing too. A non-ASCII key logs ERROR; the other two WARNING (S 3.7).
 - **T2-3.** `OPENAI_TEMPERATURE` must be a number ≥ 0; anything else is ignored with a WARNING and no temperature is sent.
+- **T2-4 (clarification 27).** `OPENAI_REASONING_EFFORT` is optional: stripped and lower-cased, it must be one word of letters (`minimal`, `low`, `none`, ...); anything else is ignored with a WARNING. Task 3 sends it only when set.
 
 **Files:**
 - Create: `backend/integrations/openai_client.py`
 - Modify: `backend/api/main.py` (one import after `from db.schema_check import run_startup_checks`; one line at the end of the lifespan's startup half)
-- Modify: `backend/requirements.txt` (`openai>=1.0.0` → a comment and `openai>=1.45.0`)
+- Modify: `backend/requirements.txt` (`openai>=1.0.0` → a comment and `openai>=1.58.0,<4`)
 - Modify: `backend/.env.example` (the `OPENAI_*` block)
 - Modify: `backend/tests/conftest.py` (autouse `_fresh_ai`, before the slice 1 network-guard section)
 - Modify: `backend/tests/test_no_streamlit_in_core.py` (import list)
-- Test: `backend/tests/test_openai_client.py` (new; 8 tests here, 12 more in Task 3)
+- Test: `backend/tests/test_openai_client.py` (new; 9 tests here, 14 more in Task 3)
 
 **Interfaces:**
 - Consumes: `domain_errors.Busy`, `NotConfigured`, `UpstreamError`, `UpstreamTimeout`; the `openai` package (`openai.OpenAI`, `openai.Timeout`); `api.main.lifespan`; `tests.conftest` patterns (`sys.modules.get` deferred resets).
 - Produces (later users: Task 3, Task 13, slice 4):
-  - `integrations.openai_client.AISettings(api_key, model, timeout_seconds=30.0, max_retries=1, max_concurrency=4, temperature=None)` with `.problem -> str | None`; `load_settings(environ) -> AISettings`; `ai_settings()` (cached).
+  - `integrations.openai_client.AISettings(api_key, model, timeout_seconds=30.0, max_retries=1, max_concurrency=4, temperature=None, reasoning_effort=None)` with `.problem -> str | None`; `load_settings(environ) -> AISettings`; `ai_settings()` (cached).
   - `ai_available() -> bool`; `complete(messages, *, max_completion_tokens: int, json_mode: bool = False, deadline: float | None = None) -> str`.
   - `log_startup_state() -> None`: `INFO AI: configured (model=<m>)`, or `WARNING AI: not configured (OPENAI_API_KEY missing)` / `(OPENAI_MODEL missing)`, or `ERROR AI: not configured (OPENAI_API_KEY is not ASCII)`.
   - `FakeAI(reply="{}", available=True, error=None)` with `.calls` (`[{"messages", "max_completion_tokens", "json_mode", "deadline"}]`); `set_ai_for_tests(fake | None)`; `configure_for_tests(*, settings=None, sdk_client=None, semaphore=None, clock=None, sleep=None)`; `reset_for_tests()`.
@@ -624,6 +640,14 @@ def test_settings_defaults_overrides_and_bad_values(caplog):
     assert caplog.text.count("is not valid") == 4
 
 
+def test_reasoning_effort_is_read_only_when_set(caplog):
+    assert ai.load_settings({"OPENAI_API_KEY": "k", "OPENAI_MODEL": "m"}).reasoning_effort is None
+    assert ai.load_settings({"OPENAI_REASONING_EFFORT": "  "}).reasoning_effort is None
+    assert ai.load_settings({"OPENAI_REASONING_EFFORT": " Minimal "}).reasoning_effort == "minimal"
+    assert ai.load_settings({"OPENAI_REASONING_EFFORT": "very high"}).reasoning_effort is None
+    assert caplog.text.count("is not valid") == 1
+
+
 def test_fake_ai_records_calls_and_takes_over_until_reset():
     fake = ai.FakeAI(reply='{"opening": []}', available=True)
     ai.set_ai_for_tests(fake)
@@ -656,11 +680,12 @@ def test_the_lifespan_logs_the_ai_state_once(tmp_db, caplog, monkeypatch):
 
 
 def test_installed_sdk_takes_max_completion_tokens_and_requirements_pin():
-    # openai>=1.45.0 is the first release whose create() takes max_completion_tokens.
+    # openai>=1.58.0 is the first release whose create() takes both max_completion_tokens
+    # and reasoning_effort; <4 keeps the next major release out until it is reviewed.
     create = openai.OpenAI(api_key="sk-test").chat.completions.create
-    assert "max_completion_tokens" in inspect.signature(create).parameters
+    assert {"max_completion_tokens", "reasoning_effort"} <= set(inspect.signature(create).parameters)
     lines = [line.strip() for line in REQUIREMENTS.read_text().splitlines()]
-    assert "openai>=1.45.0" in lines
+    assert "openai>=1.58.0,<4" in lines
 ````
 
 - [ ] **Step 3 (agent): Run them to see them fail**
@@ -710,6 +735,8 @@ OPENAI_MAX_RETRIES=1
 OPENAI_MAX_CONCURRENCY=4
 # Sent only when set; reasoning models reject a non-default temperature.
 # OPENAI_TEMPERATURE=
+# Sent only when set: only for a reasoning (GPT-5-family) model, e.g. minimal or low.
+# OPENAI_REASONING_EFFORT=
 
 # Carried over for a later slice (Gmail sending).
 GOOGLE_CLIENT_ID=
@@ -757,12 +784,13 @@ load_dotenv()
 
 - ai_settings(): OPENAI_API_KEY (stripped), OPENAI_MODEL (required, no
   default), OPENAI_TIMEOUT_SECONDS (30), OPENAI_MAX_RETRIES (1),
-  OPENAI_MAX_CONCURRENCY (4), OPENAI_TEMPERATURE (unset). A missing key or
-  model, or a key that is not ASCII, means "not configured".
+  OPENAI_MAX_CONCURRENCY (4), OPENAI_TEMPERATURE (unset),
+  OPENAI_REASONING_EFFORT (unset). A missing key or model, or a key that is
+  not ASCII, means "not configured".
 - ai_available() and complete(messages, *, max_completion_tokens,
   json_mode=False, deadline=None) -> str. complete() always sends
-  max_completion_tokens, sends response_format json_object in json_mode and
-  temperature only when it is set. It holds one of OPENAI_MAX_CONCURRENCY
+  max_completion_tokens, sends response_format json_object in json_mode, and
+  temperature and reasoning_effort only when they are set. It holds one of OPENAI_MAX_CONCURRENCY
   slots per call and retries itself (the SDK client has max_retries=0).
 - log_startup_state(): the lifespan's one "AI: ..." line. The key is never
   logged, and no member ever sees configuration detail.
@@ -776,6 +804,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import threading
 import time
 from dataclasses import dataclass, field
@@ -808,6 +837,7 @@ class AISettings:
     max_retries: int = 1
     max_concurrency: int = 4
     temperature: Optional[float] = None
+    reasoning_effort: Optional[str] = None     # e.g. "minimal"; only for a reasoning model
 
     @property
     def problem(self) -> Optional[str]:
@@ -835,6 +865,16 @@ def _number(environ: Mapping[str, str], name: str, default, cast, minimum):
     return value
 
 
+def _reasoning_effort(environ: Mapping[str, str]) -> Optional[str]:
+    raw = (environ.get("OPENAI_REASONING_EFFORT") or "").strip()
+    if not raw:
+        return None
+    if not re.fullmatch(r"[a-z]+", raw.lower()):
+        logger.warning("AI: %s=%r is not valid; using %s", "OPENAI_REASONING_EFFORT", raw, None)
+        return None
+    return raw.lower()
+
+
 def load_settings(environ: Mapping[str, str] = os.environ) -> AISettings:
     temperature = _number(environ, "OPENAI_TEMPERATURE", None, float, 0.0)
     return AISettings(
@@ -844,6 +884,7 @@ def load_settings(environ: Mapping[str, str] = os.environ) -> AISettings:
         max_retries=_number(environ, "OPENAI_MAX_RETRIES", 1, int, 0),
         max_concurrency=_number(environ, "OPENAI_MAX_CONCURRENCY", 4, int, 1),
         temperature=temperature,
+        reasoning_effort=_reasoning_effort(environ),
     )
 
 
@@ -993,9 +1034,11 @@ python-docx>=1.0.0
 
 ````text
 playwright>=1.40.0
-# 1.45.0 is the first release whose chat.completions.create takes
-# max_completion_tokens (integrations/openai_client.py always sends it).
-openai>=1.45.0
+# 1.58.0 is the first release whose chat.completions.create takes both
+# max_completion_tokens (always sent) and reasoning_effort (sent when
+# OPENAI_REASONING_EFFORT is set); <4 keeps the next major release out until
+# it is reviewed (integrations/openai_client.py).
+openai>=1.58.0,<4
 python-docx>=1.0.0
 ````
 
@@ -1008,7 +1051,7 @@ python-docx>=1.0.0
 git status --short
 ```
 
-**Expected:** `11 passed in <t>s` (8 new, 3 import-guard tests); `100 passed in <t>s` (the `.env.example` readers still pass); `986 passed, 9 skipped in <t>s`; then exactly:
+**Expected:** `12 passed in <t>s` (9 new, 3 import-guard tests); `100 passed in <t>s` (the `.env.example` readers still pass); `987 passed, 9 skipped in <t>s`; then exactly:
 
 ```
  M backend/.env.example
@@ -1029,12 +1072,13 @@ git add backend/.env.example backend/api/main.py backend/requirements.txt backen
         backend/tests/test_no_streamlit_in_core.py backend/integrations/openai_client.py backend/tests/test_openai_client.py
 git commit -m "AI: the OpenAI client's settings, startup line and fake (F §2.8; S Backend 3.7; owner answer Q3)" -m "integrations/openai_client.py reads OPENAI_API_KEY (stripped), OPENAI_MODEL
 (required, no default), OPENAI_TIMEOUT_SECONDS, OPENAI_MAX_RETRIES,
-OPENAI_MAX_CONCURRENCY and OPENAI_TEMPERATURE itself (clarification 5), and
+OPENAI_MAX_CONCURRENCY, OPENAI_TEMPERATURE and OPENAI_REASONING_EFFORT itself
+(clarifications 5, 27), and
 the lifespan logs exactly one AI line, never the key. A missing key or
 model, or a non-ASCII key, means not configured. FakeAI and
 set_ai_for_tests keep every test off the network; the autouse _fresh_ai
 fixture resets the module. The real call comes in Task 3. requirements.txt
-pins openai>=1.45.0 (max_completion_tokens); .env.example replaces the
+pins openai>=1.58.0,<4 (max_completion_tokens, reasoning_effort); .env.example replaces the
 stale gpt-3.5-turbo default with the plan's recommended model.
 
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS
@@ -1046,24 +1090,25 @@ git log --oneline -1
 
 Check that no line of the module or the tests prints or logs the key (`grep -n "api_key" backend/integrations/openai_client.py` shows only the settings field, `problem` and the SDK constructor), that `log_startup_state` has exactly four outcomes, and that the model in `.env.example` is the one in "Model" (UNVERIFIED; the controller confirms it with the owner before Task 17). Push the backup.
 
-Counts after Task 2: backend **986 passed, 9 skipped**; frontend **356 in 55 files**.
+Counts after Task 2: backend **987 passed, 9 skipped**; frontend **356 in 55 files**.
 
 ### Task 3: `complete()`: the call, the error mapping, the capped retry and the deadline (F §2.8 as amended; S Backend 3.7 "Retries", "Deadline", "Error mapping"; AC5, AC6, AC18; clarification 6)
 
-This task replaces Task 2's placeholder `_complete` with the real path. A call takes one of `OPENAI_MAX_CONCURRENCY` slots (waiting at most 15 s, or remaining − 5 s with a deadline; `ai_busy` otherwise), sends `max_completion_tokens` always, `response_format` json_object in JSON mode and `temperature` only when set, with each attempt's timeout `min(OPENAI_TIMEOUT_SECONDS, remaining)`. It retries itself (the SDK client has `max_retries=0`) at most `OPENAI_MAX_RETRIES` times, on connection errors (timeouts included), rate limits other than `insufficient_quota` and 5xx, after `min(Retry-After or 1 s, 2 s)`, and only with at least 5 s left. Errors map in F §2.8's order, subclasses first; `insufficient_quota` is `ai_not_configured` with an ERROR line and no retry. No SDK text ever reaches a message. The tests drive a fake SDK client built with the SDK's own exceptions, a `FakeClock`, a recording `sleep` and a recording semaphore.
+This task replaces Task 2's placeholder `_complete` with the real path. A call takes one of `OPENAI_MAX_CONCURRENCY` slots (waiting at most 15 s, or remaining − 5 s with a deadline; `ai_busy` otherwise), sends `max_completion_tokens` always, `response_format` json_object in JSON mode, and `temperature` and `reasoning_effort` only when set, with each attempt's timeout `min(OPENAI_TIMEOUT_SECONDS, remaining)`. It retries itself (the SDK client has `max_retries=0`) at most `OPENAI_MAX_RETRIES` times, on connection errors (timeouts included), rate limits other than `insufficient_quota` and 5xx, after `min(Retry-After or 1 s, 2 s)`, and only with at least 5 s left. Errors map in F §2.8's order, subclasses first; `insufficient_quota` is `ai_not_configured` with an ERROR line and no retry, and so is a model OpenAI does not offer (`NotFoundError` or `code == "model_not_found"`; owner answer A, clarification 26), whose ERROR line names `OPENAI_MODEL`. No SDK text ever reaches a message. The tests drive a fake SDK client built with the SDK's own exceptions, a `FakeClock`, a recording `sleep` and a recording semaphore.
 
 **Decisions recorded in this task:**
 - **T3-1 (clarification 6).** The per-attempt timeout is `create(timeout=openai.Timeout(t, connect=min(5, t)))`.
 - **T3-2.** An attempt with no time left (remaining ≤ 0) is `ai_timeout` without a call. The retry rule "at least 5 s left after the backoff" uses the clock after the failed attempt.
 - **T3-3.** One `ai_call ... outcome=ok` INFO line per successful attempt (model, duration, prompt and completion token counts), one WARNING line with the mapped code and the SDK class name per failure, one INFO line per retry (F §2.8 "Logs").
-- **T3-4.** Two of the 12 new tests pass before this change: `test_real_sdk_client_is_built_with_max_retries_zero` (Task 2's `_State` already builds the client) and `test_not_configured_raises_before_any_call` (the placeholder already raises it). They pin behavior the change must keep.
+- **T3-4.** Two of the 14 new tests pass before this change: `test_real_sdk_client_is_built_with_max_retries_zero` (Task 2's `_State` already builds the client) and `test_not_configured_raises_before_any_call` (the placeholder already raises it). They pin behavior the change must keep.
+- **T3-5 (owner answer A; clarification 26).** `NotFoundError` (404) and any SDK error whose `code` is `model_not_found` map to `ai_not_configured` after the timeout, quota and rate-limit rows and before the key rows, with `ERROR AI: model not available (OPENAI_MODEL=<m>)`. To make it `ai_upstream_error` instead (the other answer the owner was offered), `_mapped` would return `UpstreamError(UPSTREAM_MESSAGE, code="ai_upstream_error")` there and the test's expected code would change; nothing else.
 
 **Files:**
 - Modify: `backend/integrations/openai_client.py` (replace the placeholder `_complete`, the file's last function)
-- Test: `backend/tests/test_openai_client.py` (the import block; 12 tests appended)
+- Test: `backend/tests/test_openai_client.py` (the import block; 14 tests appended)
 
 **Interfaces:**
-- Consumes: Task 2's `_State` (`settings`, `sdk_client`, `semaphore`, `clock`, `sleep`), `configure_for_tests`, `AISettings`, the message constants; `openai.APITimeoutError`, `APIConnectionError`, `RateLimitError`, `AuthenticationError`, `PermissionDeniedError`, `BadRequestError`, `APIStatusError`, `InternalServerError`, `OpenAIError`, `openai.Timeout`; `tests.conftest.FakeClock`.
+- Consumes: Task 2's `_State` (`settings`, `sdk_client`, `semaphore`, `clock`, `sleep`), `configure_for_tests`, `AISettings`, the message constants; `openai.APITimeoutError`, `APIConnectionError`, `RateLimitError`, `AuthenticationError`, `PermissionDeniedError`, `BadRequestError`, `NotFoundError`, `APIStatusError`, `InternalServerError`, `OpenAIError`, `openai.Timeout`; `tests.conftest.FakeClock`.
 - Produces: `complete(...)` as specified above, raising only `NotConfigured("ai_not_configured")`, `Busy("ai_busy")`, `UpstreamTimeout("ai_timeout")` or `UpstreamError("ai_upstream_error")` (later users: Task 13, slice 4).
 
 - [ ] **Step 1 (agent): Confirm Task 2's hand-off**
@@ -1073,7 +1118,7 @@ This task replaces Task 2's placeholder `_complete` with the real path. A call t
 .venv/bin/python -m pytest -q | tail -1
 ```
 
-**Expected:** `m 15.0 2.0`; `986 passed, 9 skipped in <t>s`.
+**Expected:** `m 15.0 2.0`; `987 passed, 9 skipped in <t>s`.
 
 - [ ] **Step 2 (agent): Write the failing tests**
 
@@ -1163,7 +1208,8 @@ def sdk_error(kind: str, **kw) -> Exception:
         return openai.APIConnectionError(request=request)
     classes = {"rate_limit": (openai.RateLimitError, 429), "auth": (openai.AuthenticationError, 401),
                "permission": (openai.PermissionDeniedError, 403),
-               "bad_request": (openai.BadRequestError, 400), "server": (openai.InternalServerError, 500),
+               "bad_request": (openai.BadRequestError, 400), "not_found": (openai.NotFoundError, 404),
+               "server": (openai.InternalServerError, 500),
                "status_502": (openai.APIStatusError, 502)}
     cls, status = classes[kind]
     body = {"code": kw["code"]} if "code" in kw else None
@@ -1234,6 +1280,15 @@ def test_complete_sends_tokens_json_mode_and_temperature_only_when_set():
     assert "response_format" not in call
 
 
+def test_complete_sends_reasoning_effort_only_when_set():
+    sdk, _ = setup("plain")
+    ai.complete(MESSAGES, max_completion_tokens=10)
+    assert "reasoning_effort" not in sdk.calls[0]
+    sdk, _ = setup("plain", reasoning_effort="minimal")
+    ai.complete(MESSAGES, max_completion_tokens=10)
+    assert sdk.calls[0]["reasoning_effort"] == "minimal"
+
+
 def test_not_configured_raises_before_any_call():
     sdk, _ = setup("unused", model="")
     with pytest.raises(NotConfigured) as caught:
@@ -1276,6 +1331,20 @@ def test_insufficient_quota_is_not_configured_after_one_attempt(caplog):
     assert len(sdk.calls) == 1 and sleeps == []
     assert ("ERROR", "AI: quota exhausted (insufficient_quota)") in [
         (r.levelname, r.getMessage()) for r in caplog.records]
+
+
+def test_a_model_openai_does_not_offer_is_not_configured(caplog):
+    caplog.set_level(logging.INFO, logger="integrations.openai_client")
+    for error in (sdk_error("not_found"), sdk_error("not_found", code="model_not_found"),
+                  sdk_error("bad_request", code="model_not_found")):
+        caplog.clear()
+        sdk, sleeps = setup(error, '{"ok": true}', model="retired-model")
+        with pytest.raises(NotConfigured) as caught:
+            ai.complete(MESSAGES, max_completion_tokens=10)
+        assert (caught.value.code, caught.value.message) == ("ai_not_configured", ai.NOT_CONFIGURED_MESSAGE)
+        assert len(sdk.calls) == 1 and sleeps == []
+        assert ("ERROR", "AI: model not available (OPENAI_MODEL=retired-model)") in [
+            (r.levelname, r.getMessage()) for r in caplog.records]
 
 
 def test_a_500_then_success_retries_once():
@@ -1355,23 +1424,25 @@ def test_a_real_semaphore_times_out_as_ai_busy():
 .venv/bin/python -m pytest -q backend/tests/test_openai_client.py 2>&1 | tail -12
 ```
 
-**Expected:** these ten fail, and the other ten (Task 2's eight, and the two named in T3-4) pass:
+**Expected:** these twelve fail, and the other eleven (Task 2's nine, and the two named in T3-4) pass:
 
 ```
 FAILED backend/tests/test_openai_client.py::test_complete_sends_tokens_json_mode_and_temperature_only_when_set
+FAILED backend/tests/test_openai_client.py::test_complete_sends_reasoning_effort_only_when_set
 FAILED backend/tests/test_openai_client.py::test_every_sdk_error_class_maps_to_its_code
 FAILED backend/tests/test_openai_client.py::test_api_timeout_error_is_ai_timeout_not_its_base_class
 FAILED backend/tests/test_openai_client.py::test_insufficient_quota_is_not_configured_after_one_attempt
+FAILED backend/tests/test_openai_client.py::test_a_model_openai_does_not_offer_is_not_configured
 FAILED backend/tests/test_openai_client.py::test_a_500_then_success_retries_once
 FAILED backend/tests/test_openai_client.py::test_retry_after_60_waits_only_2_seconds
 FAILED backend/tests/test_openai_client.py::test_bad_request_is_never_retried_and_retries_stop_at_the_maximum
 FAILED backend/tests/test_openai_client.py::test_the_deadline_shrinks_each_attempt_and_skips_a_late_retry
 FAILED backend/tests/test_openai_client.py::test_the_slot_wait_is_bounded_by_the_deadline
 FAILED backend/tests/test_openai_client.py::test_a_real_semaphore_times_out_as_ai_busy
-10 failed, 10 passed in <t>s
+12 failed, 11 passed in <t>s
 ```
 
-Each fails on the placeholder's `NotConfigured` (or on `pytest.raises(Busy)` getting `NotConfigured`).
+Each fails on the placeholder's `NotConfigured` (or on `pytest.raises(Busy)` getting `NotConfigured`; the model test because the placeholder makes no call and logs nothing).
 
 - [ ] **Step 4 (agent): Write the call, the mapping, the retry and the deadline**
 
@@ -1421,8 +1492,13 @@ def _backoff(exc: BaseException) -> float:
     return min(seconds, MAX_BACKOFF_SECONDS)
 
 
-def _mapped(exc: BaseException) -> Exception:
-    """F §2.8's mapping, subclasses before their bases (S Backend 3.7)."""
+def _is_missing_model(exc: BaseException) -> bool:
+    return isinstance(exc, openai.NotFoundError) or getattr(exc, "code", None) == "model_not_found"
+
+
+def _mapped(exc: BaseException, model: str) -> Exception:
+    """F §2.8's mapping, subclasses before their bases (S Backend 3.7), plus a
+    model OpenAI does not offer (slice 3a plan, clarification 26)."""
     name = type(exc).__name__
     if isinstance(exc, openai.APITimeoutError):
         return UpstreamTimeout(TIMEOUT_MESSAGE, code="ai_timeout")
@@ -1431,6 +1507,9 @@ def _mapped(exc: BaseException) -> Exception:
         return NotConfigured(NOT_CONFIGURED_MESSAGE, code="ai_not_configured")
     if isinstance(exc, openai.RateLimitError):
         return Busy(BUSY_MESSAGE, code="ai_busy")
+    if _is_missing_model(exc):                        # retired or mistyped OPENAI_MODEL
+        logger.error("AI: model not available (OPENAI_MODEL=%s)", model)
+        return NotConfigured(NOT_CONFIGURED_MESSAGE, code="ai_not_configured")
     if isinstance(exc, (openai.AuthenticationError, openai.PermissionDeniedError)):
         logger.error("AI: the OpenAI key was refused (%s)", name)
         return NotConfigured(NOT_CONFIGURED_MESSAGE, code="ai_not_configured")
@@ -1452,6 +1531,8 @@ def _attempt(state: _State, messages, max_completion_tokens: int, json_mode: boo
         kwargs["response_format"] = {"type": "json_object"}
     if settings.temperature is not None:
         kwargs["temperature"] = settings.temperature
+    if settings.reasoning_effort is not None:
+        kwargs["reasoning_effort"] = settings.reasoning_effort
     started = state.clock()
     response = state.sdk_client.chat.completions.create(**kwargs)
     usage = getattr(response, "usage", None)
@@ -1504,7 +1585,7 @@ def _complete(state: _State, messages, max_completion_tokens: int, json_mode: bo
                 if not mapped_later and remaining is not None and remaining - backoff < MIN_RETRY_SECONDS:
                     mapped_later = True
                 if mapped_later:
-                    error = _mapped(exc)
+                    error = _mapped(exc, settings.model)
                     logger.warning("ai_call model=%s outcome=%s error=%s attempts=%d",
                                    settings.model, error.code, type(exc).__name__, retries + 1)
                     raise error from None
@@ -1524,7 +1605,7 @@ def _complete(state: _State, messages, max_completion_tokens: int, json_mode: bo
 git status --short
 ```
 
-**Expected:** `20 passed in <t>s` (under 3 s: `test_a_real_semaphore_times_out_as_ai_busy` waits 0.05 s on a real semaphore, and nothing else waits); `998 passed, 9 skipped in <t>s`; then ` M backend/integrations/openai_client.py` and ` M backend/tests/test_openai_client.py`.
+**Expected:** `23 passed in <t>s` (under 3 s: `test_a_real_semaphore_times_out_as_ai_busy` waits 0.05 s on a real semaphore, and nothing else waits); `1001 passed, 9 skipped in <t>s`; then ` M backend/integrations/openai_client.py` and ` M backend/tests/test_openai_client.py`.
 
 - [ ] **Step 6 (agent): Commit**
 
@@ -1532,13 +1613,15 @@ git status --short
 git add backend/integrations/openai_client.py backend/tests/test_openai_client.py
 git commit -m "AI: complete() with its own capped retry, a deadline and F §2.8's error mapping (F §2.8; S Backend 3.7; AC5, AC6, AC18)" -m "One of OPENAI_MAX_CONCURRENCY slots per call (15 s, or remaining - 5 s,
 then ai_busy); max_completion_tokens always, json_object in JSON mode,
-temperature only when set; each attempt's timeout min(30 s, remaining).
+temperature and reasoning_effort only when set; each attempt's timeout
+min(30 s, remaining).
 The SDK client has max_retries=0: complete() retries once on connection
 errors, rate limits other than insufficient_quota and 5xx, after
 min(Retry-After or 1 s, 2 s), only with 5 s left. APITimeoutError is
 ai_timeout before its APIConnectionError base; insufficient_quota is
-ai_not_configured with an ERROR line and no retry. No SDK text reaches a
-message. Tests build real SDK exceptions with the SDK's HTTP module.
+ai_not_configured with an ERROR line and no retry, as is a model OpenAI
+does not offer (NotFoundError or model_not_found; owner answer A), whose
+ERROR line names OPENAI_MODEL. No SDK text reaches a message. Tests build real SDK exceptions with the SDK's HTTP module.
 
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
@@ -1547,9 +1630,9 @@ git log --oneline -1
 
 - [ ] **Step 7 (controller): Review checkpoint and backup push**
 
-Walk F §2.8's mapping table against `_mapped` in order (the ordering test pins `APITimeoutError`), and S 3.7's worst-case arithmetic against `_complete` (slot wait ≤ 15 s, attempt ≤ 30 s, backoff ≤ 2 s, second attempt only with ≥ 5 s left, all inside the caller's deadline). Push the backup.
+Walk F §2.8's mapping table against `_mapped` in order (the ordering test pins `APITimeoutError`; the model-not-available row is clarification 26), and S 3.7's worst-case arithmetic against `_complete` (slot wait ≤ 15 s, attempt ≤ 30 s, backoff ≤ 2 s, second attempt only with ≥ 5 s left, all inside the caller's deadline). Push the backup.
 
-Counts after Task 3: backend **998 passed, 9 skipped**; frontend **356 in 55 files**.
+Counts after Task 3: backend **1001 passed, 9 skipped**; frontend **356 in 55 files**.
 
 ### Task 4: The scripture reference parser (S Backend 2 "Parsing"; owner decision 9; owner answer Q4; AC3 parser half; clarifications 3, 4)
 
@@ -1557,7 +1640,7 @@ This task adds `parse_refs(text) -> ParsedRefs(spans, unparsed)` to `backend/scr
 
 **Decisions recorded in this task:**
 - **T4-1 (clarification 3).** `PARSE_ALIASES` holds the 30 `_BOOK_ABBREVS` variants `BOOKS` lacks (computed while planning with `normalize_book_text`); `_parse_index()` raises at import if one collides with a `BOOKS` key or names no book. `book_keys(name)` gives every key of a book, for Task 5's text fallback.
-- **T4-2.** A segment is all or nothing: if any item of its location list does not read, the whole segment goes to `unparsed` (normalized text, original case). A range that runs backwards (`5-3`) or chapter 0 does not read.
+- **T4-2.** A segment is all or nothing: if any item of its location list does not read, the whole segment goes to `unparsed` (normalized text, original case). A range that runs backwards (`5-3`), chapter 0, a chapter above `MAX_CHAPTER` (150; the `ff` whole-book end excepted) and a period between digits (`John 3.16`, which would otherwise read as chapter 316) do not read (clarification 28).
 - **T4-3.** A book carries forward only within one " or " alternative.
 - **T4-4.** `split_segments(alternative)` is public, so the 98 % test counts segments the way the parser splits them.
 - **T4-5 (owner answer Q4; clarification 4).** The sample is synthetic until the owner's export replaces it (Step 1 and Step 10).
@@ -1572,9 +1655,9 @@ This task adds `parse_refs(text) -> ParsedRefs(spans, unparsed)` to `backend/scr
 - Produces (later users: Tasks 5, 11, 12):
   - `RefSpan(book: str, start: tuple[int, int], end: tuple[int, int])` (frozen; a whole chapter is verse 0..999, a whole book 1:0..999:999); `ParsedRefs(spans: tuple[RefSpan, ...], unparsed: tuple[str, ...])`.
   - `parse_refs(text: str) -> ParsedRefs` (`lru_cache(maxsize=4096)`); `split_segments(alternative: str) -> list[str]`; `spans_overlap(a, b) -> bool`; `same_chapter(a, b) -> bool`; `book_keys(book_name: str) -> tuple[str, ...]`.
-  - `PARSE_ALIASES: dict[str, str]`, `SINGLE_CHAPTER_BOOKS: frozenset[str]`, `WHOLE_CHAPTER_START = 0`, `WHOLE_CHAPTER_END = 999`, `WHOLE_BOOK_END = 999`.
+  - `PARSE_ALIASES: dict[str, str]`, `SINGLE_CHAPTER_BOOKS: frozenset[str]`, `WHOLE_CHAPTER_START = 0`, `WHOLE_CHAPTER_END = 999`, `WHOLE_BOOK_END = 999`, `MAX_CHAPTER = 150`.
 
-- [ ] **Step 1 (OWNER, optional; the build does not wait): Export a sample of real scripture references**
+- [ ] **Step 1 (OWNER; the build does not wait, but marking the 3a PR ready does, owner answer D): Export a sample of real scripture references**
 
 Ask the owner, in these words:
 
@@ -1609,7 +1692,7 @@ ls backend/tests/fixtures
 .venv/bin/python -c "import sys; sys.path.insert(0, 'backend'); import scripture_refs as s; print(len(s.BOOKS), s.classify('Is 9:6'), s.split_book('Bar 5:5')[0].name)"
 ```
 
-**Expected:** `998 passed, 9 skipped in <t>s`; `README.md`, `bible_api`, `esv`, `lectio`, `shared`, `vanderbilt`, one per line (the recorder's folders: every file there needs a sidecar, which is why the sample goes to `backend/tests/hymn_fixtures/`); `84 unknown Baruch`.
+**Expected:** `1001 passed, 9 skipped in <t>s`; `README.md`, `bible_api`, `esv`, `lectio`, `shared`, `vanderbilt`, one per line (the recorder's folders: every file there needs a sidecar, which is why the sample goes to `backend/tests/hymn_fixtures/`); `84 unknown Baruch`.
 
 - [ ] **Step 3 (agent): Write the sample and the failing tests**
 
@@ -1834,6 +1917,20 @@ def test_garbage_goes_to_unparsed():
     assert parse_refs("Psalm 0").unparsed == ("Psalm 0",)
 
 
+def test_impossible_chapters_and_dotted_verses_are_unparsed():
+    # normalize_book_text drops periods, so "John 3.16" would read as John 316.
+    for text in ("John 3.16", "Ps 1.1", "Ps 23. 1", "John 316", "Genesis 151", "Isaiah 40-160",
+                 "John 3:16-200:1"):
+        assert parse_refs(text) == sr.ParsedRefs((), (text,)), text
+    assert spans("Psalm 150") == [("Psalms", (150, 0), (150, 999))]
+    assert spans("Psalm 119:105") == [("Psalms", (119, 105), (119, 105))]
+    assert spans("Psalm 148ff") == [("Psalms", (148, 0), (999, 999))]
+    assert spans("I Cor. 13:1") == [("1 Corinthians", (13, 1), (13, 1))]
+    # "Esd" alone could be 1 or 2 Esdras, so it names no book.
+    assert parse_refs("Esd 1").unparsed == ("Esd 1",)
+    assert spans("2 Esd 7:1") == [("2 Esdras", (7, 1), (7, 1))]
+
+
 def test_deuterocanon_parses_and_classifies_as_ot():
     cases = {
         "Baruch 5:1-9": ("Baruch", (5, 1), (5, 9)),
@@ -1972,6 +2069,11 @@ SINGLE_CHAPTER_BOOKS = frozenset({
 WHOLE_CHAPTER_START = 0     # verse 0: from the start of the chapter
 WHOLE_CHAPTER_END = 999     # verse 999: to the end of the chapter
 WHOLE_BOOK_END = 999        # chapter 999: to the end of the book
+MAX_CHAPTER = 150           # no book has more chapters (Psalms); a larger one is unparsed
+
+# A period between digits ("John 3.16"): normalize_book_text drops periods, so
+# the segment would read as chapter 316 (or "Ps 1.1" as Psalm 11). Unparsed.
+_DOTTED_VERSE = re.compile(r"\d\s*\.\s*\d")
 
 
 def _parse_index() -> tuple[tuple[str, Book], ...]:
@@ -2055,7 +2157,8 @@ def _item_span(book: Book, item: str, context: Optional[int]) -> Optional[tuple[
     else:                                                   # C, C-C, Cff
         start = (a, WHOLE_CHAPTER_START)
         end = (WHOLE_BOOK_END if ff else (c if c is not None else a), WHOLE_CHAPTER_END)
-    if start[0] < 1 or start > end:
+    last_chapter = start[0] if (ff and end[0] == WHOLE_BOOK_END) else end[0]
+    if start[0] < 1 or start > end or max(start[0], last_chapter) > MAX_CHAPTER:
         return None
     has_verses = b is not None or d is not None or context is not None
     return RefSpan(book.name, start, end), (end[0] if has_verses else None)
@@ -2098,6 +2201,9 @@ def parse_refs(text: str) -> ParsedRefs:
     for alternative in split_alternatives(text):
         book: Optional[Book] = None
         for segment in split_segments(alternative):
+            if _DOTTED_VERSE.search(segment):
+                unparsed.append(segment)
+                continue
             hit = _match_book(segment)
             if hit is not None:
                 book, location = hit
@@ -2132,7 +2238,7 @@ def same_chapter(a: RefSpan, b: RefSpan) -> bool:
 git status --short
 ```
 
-**Expected:** `28 passed in <t>s` (13 new, and slice 2's 15 unchanged: `BOOKS` and the fixture did not move); `1011 passed, 9 skipped in <t>s`; then ` M backend/scripture_refs.py`, `?? backend/tests/hymn_fixtures/`, `?? backend/tests/test_scripture_refs_parse.py`.
+**Expected:** `29 passed in <t>s` (14 new, and slice 2's 15 unchanged: `BOOKS` and the fixture did not move); `1015 passed, 9 skipped in <t>s`; then ` M backend/scripture_refs.py`, `?? backend/tests/hymn_fixtures/`, `?? backend/tests/test_scripture_refs_parse.py`.
 
 - [ ] **Step 7 (agent): Measure the sample's parse rate**
 
@@ -2171,13 +2277,13 @@ git log --oneline -1
 
 Check every row of S's "Required results" parser inputs appears in the tests, that `BOOKS` and `backend/tests/fixtures/shared/scripture_refs.json` have no diff (`git diff HEAD~1 --stat` lists 4 files), and that the README says SYNTHETIC. Push the backup.
 
-- [ ] **Step 10 (agent, when the owner's export arrives, at any later point before Task 16): Swap in the real sample**
+- [ ] **Step 10 (agent, when the owner's export arrives, at any later point, and at the latest in Task 16 Step 11 before the PR is marked ready): Swap in the real sample**
 
 Save the owner's CSV over `backend/tests/hymn_fixtures/scripture_refs_sample.csv`. Keep only the four columns in the order `hymnal,number,title,scripture_refs`, with the header row; if the export has fewer than 100 rows, keep them all and change the `len(rows) >= 100` assertion to the real count in the same commit. In `backend/tests/hymn_fixtures/README.md`, replace the paragraph beginning "Status: SYNTHETIC." with "Status: EXPORTED on <date> from production `hymn_catalog` by the owner (read-only query in the slice 3a plan, Task 4 Step 1). Public hymn metadata only." Then run Step 7's command and `.venv/bin/python -m pytest -q backend/tests/test_scripture_refs_parse.py 2>&1 | tail -1`.
-- If the rate is at least 0.98 and `13 passed`: commit both files with `git commit -m "Tests: the owner's scripture_refs export replaces the synthetic sample (S Data and migrations; AC3; owner answer Q4)"` plus the two trailer lines, and push the backup. Record the rate and the ten most common unparsed shapes for the PR body.
+- If the rate is at least 0.98 and `14 passed`: commit both files with `git commit -m "Tests: the owner's scripture_refs export replaces the synthetic sample (S Data and migrations; AC3; owner answer Q4)"` plus the two trailer lines, and push the backup. Record the rate and the ten most common unparsed shapes for the PR body.
 - If the rate is below 0.98: do not commit and do not change the parser. Report the unparsed list to the controller, who decides with the owner whether to extend `PARSE_ALIASES` or the location grammar (a new clarification) before the PR.
 
-Counts after Task 4: backend **1011 passed, 9 skipped**; frontend **356 in 55 files**.
+Counts after Task 4: backend **1015 passed, 9 skipped**; frontend **356 in 55 files**.
 
 ### Task 5: `hymn_search`: the matcher, the title key, themes and the even sample; the characterization test (S Backend 1 row 4, Backend 2 "Matching" and "Required results", Testing "Characterization first", `test_hymn_search.py`; owner answer Q2; decision 9; AC3; clarifications 1, 16)
 
@@ -2207,7 +2313,7 @@ This task adds the pure module `backend/hymn_search.py`: `normalize_title` and `
 .venv/bin/python -m pytest -q | tail -1
 ```
 
-**Expected:** `RefSpan(book='Matthew', start=(17, 1), end=(17, 8)) ('john', 'jhn', 'joh', 'jn')`; `1011 passed, 9 skipped in <t>s`.
+**Expected:** `RefSpan(book='Matthew', start=(17, 1), end=(17, 8)) ('john', 'jhn', 'joh', 'jn')`; `1015 passed, 9 skipped in <t>s`.
 
 - [ ] **Step 2 (agent): Write the failing tests**
 
@@ -2621,7 +2727,7 @@ def match_hymns(pool: Sequence[Any], refs: Sequence[str], *, limit_per_ref: int 
 git status --short
 ```
 
-**Expected:** `14 passed in <t>s` (9 + 2 new; 3 import-guard tests); `1022 passed, 9 skipped in <t>s`; then `?? backend/hymn_search.py`, `?? backend/tests/test_hymn_match_parity.py`, `?? backend/tests/test_hymn_search.py`, ` M backend/tests/test_no_streamlit_in_core.py`.
+**Expected:** `14 passed in <t>s` (9 + 2 new; 3 import-guard tests); `1026 passed, 9 skipped in <t>s`; then `?? backend/hymn_search.py`, `?? backend/tests/test_hymn_match_parity.py`, `?? backend/tests/test_hymn_search.py`, ` M backend/tests/test_no_streamlit_in_core.py`.
 
 - [ ] **Step 6 (agent): Commit**
 
@@ -2646,7 +2752,7 @@ git log --oneline -1
 
 Compare `REQUIRED` in `test_hymn_search.py` with S's "Required results" table row by row (16 rows), and check that `hymn_search.py` imports only `scripture_refs` and the standard library. Push the backup.
 
-Counts after Task 5: backend **1022 passed, 9 skipped**; frontend **356 in 55 files**.
+Counts after Task 5: backend **1026 passed, 9 skipped**; frontend **356 in 55 files**.
 
 ### Task 6: Typed hymn reads, the ranking accessors and the rubric in the caller's session (S Backend 1 rows `repos/hymns.py`, `hymn_ranking.py`, `repos/churches.py` and their 2026-09-26 amendments; F §1.4, §2.2 rule 3 and item 5; AC19 half; clarification 23)
 
@@ -2679,7 +2785,7 @@ This task adds what the usecases read. `repos/hymns.py` gains `HymnRecord` (the 
 .venv/bin/python -m pytest -q backend/tests/test_hymn_ranking.py backend/tests/test_hymns_repo.py backend/tests/test_churches_repo.py 2>&1 | tail -1
 ```
 
-**Expected:** `1022 passed, 9 skipped in <t>s`; `25 passed in <t>s` (9 + 8 + 8 before this task).
+**Expected:** `1026 passed, 9 skipped in <t>s`; `25 passed in <t>s` (9 + 8 + 8 before this task).
 
 - [ ] **Step 2 (agent): Write the failing tests**
 
@@ -3217,7 +3323,7 @@ def list_hymnal_records(church_id, hymnal: str, *,
 git status --short
 ```
 
-**Expected:** `47 passed in <t>s` (34 in the three files, and PR #4's 13 `test_suggest_hymns.py` tests unchanged, so the flat-dict defaults still hold); `1031 passed, 9 skipped in <t>s`; then ` M` for `backend/hymn_ranking.py`, `backend/repos/churches.py`, `backend/repos/hymns.py`, `backend/tests/test_churches_repo.py`, `backend/tests/test_hymn_ranking.py`, `backend/tests/test_hymns_repo.py`.
+**Expected:** `47 passed in <t>s` (34 in the three files, and PR #4's 13 `test_suggest_hymns.py` tests unchanged, so the flat-dict defaults still hold); `1035 passed, 9 skipped in <t>s`; then ` M` for `backend/hymn_ranking.py`, `backend/repos/churches.py`, `backend/repos/hymns.py`, `backend/tests/test_churches_repo.py`, `backend/tests/test_hymn_ranking.py`, `backend/tests/test_hymns_repo.py`.
 
 - [ ] **Step 6 (agent): Commit**
 
@@ -3241,7 +3347,7 @@ git log --oneline -1
 
 Check that `hymn_ranking.py`'s default accessors give PR #4's behavior (its 9 existing tests unchanged) and that each new repo function filters `Hymn.church_id`. Push the backup.
 
-Counts after Task 6: backend **1031 passed, 9 skipped**; frontend **356 in 55 files**.
+Counts after Task 6: backend **1035 passed, 9 skipped**; frontend **356 in 55 files**.
 
 ### Task 7: The recent-use window around the service date (S Backend 1 row `hymn_usage.py`, 3.4; Testing `test_hymn_usage_window.py`, postgres; owner answer Q2; AC4 window half; clarifications 1, 17)
 
@@ -3261,7 +3367,7 @@ This task adds `RECENT_WEEKS = 12` and `usage_near(church_id, service_date, *, w
 .venv/bin/python -m pytest -q | tail -1
 ```
 
-**Expected:** `1031 passed, 9 skipped in <t>s`.
+**Expected:** `1035 passed, 9 skipped in <t>s`.
 
 - [ ] **Step 2 (agent): Write the failing tests**
 
@@ -3519,7 +3625,7 @@ def usage_near(church_id, service_date: date, *, weeks: int = RECENT_WEEKS,
 git status --short
 ```
 
-**Expected:** `12 passed, 1 skipped in <t>s` (8 new and slice 1's 4; the skip is the Postgres test); `1039 passed, 10 skipped in <t>s`; then ` M backend/hymn_usage.py` and `?? backend/tests/test_hymn_usage_window.py`. With a local throwaway Postgres (for example `TEST_DATABASE_URL=postgresql://postgres:ci-throwaway@localhost:5432/postgres`), `-m postgres backend/tests/test_hymn_usage_window.py` gives `1 passed, 8 deselected`; otherwise CI's `backend-postgres` runs it (Task 16).
+**Expected:** `12 passed, 1 skipped in <t>s` (8 new and slice 1's 4; the skip is the Postgres test); `1043 passed, 10 skipped in <t>s`; then ` M backend/hymn_usage.py` and `?? backend/tests/test_hymn_usage_window.py`. With a local throwaway Postgres (for example `TEST_DATABASE_URL=postgresql://postgres:ci-throwaway@localhost:5432/postgres`), `-m postgres backend/tests/test_hymn_usage_window.py` gives `1 passed, 8 deselected`; otherwise CI's `backend-postgres` runs it (Task 16).
 
 - [ ] **Step 6 (agent): Commit**
 
@@ -3541,7 +3647,7 @@ git log --oneline -1
 
 Check the window bounds against S 3.4 (D − 84 and D + 84 kept, D − 85, D + 85 and D dropped) and that nothing in `usage_near` can raise on a stored value. Push the backup.
 
-Counts after Task 7: backend **1039 passed, 10 skipped**; frontend **356 in 55 files**.
+Counts after Task 7: backend **1043 passed, 10 skipped**; frontend **356 in 55 files**.
 
 ### Task 8: `GET /hymnals` and the `GET /church` hymnal fields (S API rows 1 and 5, Models `HymnalOut`/`HymnalListOut`, Backend 3.1-3.2; Testing `test_api_hymnals.py`; AC1, AC2, AC8; clarifications 12, 13)
 
@@ -3575,7 +3681,7 @@ This task creates `backend/usecases/hymns.py` with `resolve_default_hymnal` (the
 grep -n '"effective_translation": "web", "effective_translation_label"' backend/tests/test_api_churches.py backend/tests/test_api_invites.py backend/tests/test_api_me.py
 ```
 
-**Expected:** `1039 passed, 10 skipped in <t>s`; three lines, at `test_api_churches.py:89`, `test_api_invites.py:205` and `test_api_me.py:84`.
+**Expected:** `1043 passed, 10 skipped in <t>s`; three lines, at `test_api_churches.py:89`, `test_api_invites.py:205` and `test_api_me.py:84`.
 
 - [ ] **Step 2 (agent): Write the failing tests and the fixture change**
 
@@ -4149,7 +4255,7 @@ git diff --numstat -- frontend/src/lib/api
 git status --short
 ```
 
-**Expected:** `1046 passed, 10 skipped in <t>s`; ` Test Files  55 passed (55)` and `      Tests  356 passed (356)`; then ` M` for `backend/api/main.py`, `backend/api/schemas.py`, `backend/tests/test_api_app.py`, `backend/tests/test_api_church_profile.py`, `backend/tests/test_api_churches.py`, `backend/tests/test_api_invites.py`, `backend/tests/test_api_me.py`, `backend/usecases/church_profile.py`, `frontend/src/lib/api/openapi.json`, `frontend/src/lib/api/schema.d.ts`, `frontend/src/test/fixtures/index.ts`, and `??` for `backend/api/routes/hymnals.py`, `backend/tests/test_api_hymnals.py`, `backend/usecases/hymns.py`.
+**Expected:** `1050 passed, 10 skipped in <t>s`; ` Test Files  55 passed (55)` and `      Tests  356 passed (356)`; then ` M` for `backend/api/main.py`, `backend/api/schemas.py`, `backend/tests/test_api_app.py`, `backend/tests/test_api_church_profile.py`, `backend/tests/test_api_churches.py`, `backend/tests/test_api_invites.py`, `backend/tests/test_api_me.py`, `backend/usecases/church_profile.py`, `frontend/src/lib/api/openapi.json`, `frontend/src/lib/api/schema.d.ts`, `frontend/src/test/fixtures/index.ts`, and `??` for `backend/api/routes/hymnals.py`, `backend/tests/test_api_hymnals.py`, `backend/usecases/hymns.py`.
 
 - [ ] **Step 8 (agent): Commit**
 
@@ -4177,7 +4283,7 @@ git log --oneline -1
 
 Check `GET /hymnals` against S's `HymnalListOut` field for field, that `test_route_guards.py` needed no allowlist change, and that the OpenAPI diff adds `/hymnals`, `HymnalOut`, `HymnalListOut` and the two `ChurchProfileOut` properties and nothing else. Push the backup.
 
-Counts after Task 8: backend **1046 passed, 10 skipped**; frontend **356 in 55 files**.
+Counts after Task 8: backend **1050 passed, 10 skipped**; frontend **356 in 55 files**.
 
 ### Task 9: `GET /hymns`, the `HymnOut` read model and GZip (S API row 2, Models `HymnOut`, API notes "ordering" and `q`, Backend 1 row `api/main.py`, 3.3, 3.8 "Read"; F §2.5 as amended; Testing `test_api_hymns.py`, GZip, postgres; AC1, AC8, AC16, AC20; clarifications 11, 22, 25)
 
@@ -4209,7 +4315,7 @@ This task adds the one hymn read model and the list route. `usecases.hymns.HymnV
 .venv/bin/python -m pytest -q | tail -1
 ```
 
-**Expected:** `1046 passed, 10 skipped in <t>s`.
+**Expected:** `1050 passed, 10 skipped in <t>s`.
 
 - [ ] **Step 2 (agent): Write the failing tests**
 
@@ -4798,7 +4904,7 @@ git diff --numstat -- frontend/src/lib/api
 git status --short
 ```
 
-**Expected:** `74 passed, 2 skipped in <t>s` (the skips: this task's Postgres test and `test_api_app.py`'s); the generation lines; numstat exactly `308	0	frontend/src/lib/api/openapi.json` and `125	0	frontend/src/lib/api/schema.d.ts`; `tsc` prints nothing; `1056 passed, 11 skipped in <t>s`; then ` M` for `backend/api/main.py`, `backend/tests/test_api_app.py`, `backend/tests/test_middleware.py`, `backend/usecases/hymns.py`, the two generated files, and `??` for `backend/api/routes/hymns.py`, `backend/tests/test_api_hymns.py`. With a local throwaway Postgres, `-m postgres backend/tests/test_api_hymns.py` gives `1 passed, 10 deselected`.
+**Expected:** `74 passed, 2 skipped in <t>s` (the skips: this task's Postgres test and `test_api_app.py`'s); the generation lines; numstat exactly `308	0	frontend/src/lib/api/openapi.json` and `125	0	frontend/src/lib/api/schema.d.ts`; `tsc` prints nothing; `1060 passed, 11 skipped in <t>s`; then ` M` for `backend/api/main.py`, `backend/tests/test_api_app.py`, `backend/tests/test_middleware.py`, `backend/usecases/hymns.py`, the two generated files, and `??` for `backend/api/routes/hymns.py`, `backend/tests/test_api_hymns.py`. With a local throwaway Postgres, `-m postgres backend/tests/test_api_hymns.py` gives `1 passed, 10 deselected`.
 
 - [ ] **Step 6 (agent): Commit**
 
@@ -4824,14 +4930,14 @@ git log --oneline -1
 
 Check `HymnOut` against S's model field for field, that `test_hymn_out_mapping` is named as 6b's port-ledger target in its module docstring, and that the middleware order in `create_app` is GZip, UnhandledError, RequestId, CORS (added in that order). Push the backup.
 
-Counts after Task 9: backend **1056 passed, 11 skipped**; frontend **356 in 55 files**.
+Counts after Task 9: backend **1060 passed, 11 skipped**; frontend **356 in 55 files**.
 
 ### Task 10: `POST /hymns/scripture-matches` (S API row 3, Models `ScriptureMatchIn`/`HymnMatchOut`/`ScriptureMatchesOut`, API notes "Hymnal resolution", Backend 3.5; Testing `test_api_hymn_matches.py`; AC1, AC3, AC8, AC20; clarifications 10, 24)
 
-This task adds the matches usecase and route. `scripture_matches` trims each ref and splits it on " or " (`clean_refs`); none left is the 422 "Enter at least one scripture reference." on `fields.refs`. `selected_hymnal` resolves `null` to the effective hymnal and refuses a code the church lacks with one message whatever the reason; a church with no hymns answers 200 with no items. In one session it reads the hymnal's records, the usage window when a date is given and the rubric; then `match_hymns` runs and each match becomes a `HymnMatchView` (a `HymnView` plus `strength` and `matched_refs`).
+This task adds the matches usecase and route. `scripture_matches` trims each ref and splits it on " or " (`clean_refs`); none left is the 422 "Enter at least one scripture reference." on `fields.refs`. `selected_hymnal` resolves `null` to the effective hymnal and refuses a code the church lacks with one message whatever the reason; a church with no hymns answers 200 with no items. In one session it reads the hymnal's records, the usage window when a date is given and the rubric; then `match_hymns` runs and each match becomes a `HymnMatchView` (a `HymnView` plus `strength` and `matched_refs`). One DEBUG line per call counts the parsed and unparsed references and the hymns with unparsed `scripture_refs` (clarification 29).
 
 **Files:**
-- Modify: `backend/usecases/hymns.py` (docstring; imports; the two messages; `HymnMatchView`, `ScriptureMatches`, `clean_refs`, `selected_hymnal`, `scripture_matches` appended)
+- Modify: `backend/usecases/hymns.py` (docstring; imports and the module `logger`; the two messages; `HymnMatchView`, `ScriptureMatches`, `clean_refs`, `selected_hymnal`, `scripture_matches` appended)
 - Modify: `backend/api/routes/hymns.py` (imports; `ScriptureMatchIn`, `HymnMatchOut`, `ScriptureMatchesOut`; the route appended)
 - Modify (tests): `backend/tests/test_api_app.py` (map)
 - Test: `backend/tests/test_api_hymn_matches.py` (new)
@@ -4849,7 +4955,7 @@ This task adds the matches usecase and route. `scripture_matches` trims each ref
 .venv/bin/python -m pytest -q | tail -1
 ```
 
-**Expected:** `1056 passed, 11 skipped in <t>s`.
+**Expected:** `1060 passed, 11 skipped in <t>s`.
 
 - [ ] **Step 2 (agent): Write the failing tests**
 
@@ -4875,6 +4981,8 @@ This task adds the matches usecase and route. `scripture_matches` trims each ref
 `ScriptureMatchIn`/`HymnMatchOut`/`ScriptureMatchesOut`, API notes "Hymnal
 resolution", Backend 3.5; Testing `test_api_hymn_matches.py`; AC1, AC3, AC8,
 AC20)."""
+import logging
+
 import pytest
 
 from db import session_scope
@@ -4971,6 +5079,16 @@ def test_recent_use_on_is_set_for_the_date(client, church):
     assert all(h["recent_use_on"] is None for h in post(client, church, {"refs": ["Psalm 23"]})["items"])
 
 
+def test_one_debug_line_counts_parsed_and_unparsed(client, church, caplog):
+    # S Risks, "Unknown scripture_refs formats": counts only, never a title or a reference.
+    add(church, "Readable", "John 3:16")
+    add(church, "Odd", "Genesis 1.1; see the preface")
+    caplog.set_level(logging.DEBUG, logger="usecases.hymns")
+    post(client, church, {"refs": ["John 3", "Transfiguration"]})
+    lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("hymn_matches")]
+    assert lines == ["hymn_matches refs=2 refs_unparsed=1 hymns=2 hymns_with_unparsed=1 matched=1"]
+
+
 def test_an_empty_church_hymnal_is_200_and_empty(client, church):
     assert post(client, church, {"refs": ["John 3:16"]}) == {
         "hymnal": None, "refs_used": ["John 3:16"], "unparsed_refs": [], "total_matched": 0, "items": []}
@@ -5021,7 +5139,7 @@ def test_isolation_and_every_role(client, isolation_world, make_user):
 .venv/bin/python -m pytest -q backend/tests/test_api_hymn_matches.py backend/tests/test_api_app.py 2>&1 | grep -E "^FAILED|passed|failed" | cut -c1-110
 ```
 
-**Expected:** `FAILED` for `test_api_app.py::test_routes_document_the_error_body` and all ten tests of `test_api_hymn_matches.py`, then `11 failed, 25 passed, 1 skipped in <t>s` (the route is a 404).
+**Expected:** `FAILED` for `test_api_app.py::test_routes_document_the_error_body` and all eleven tests of `test_api_hymn_matches.py`, then `12 failed, 25 passed, 1 skipped in <t>s` (the route is a 404).
 
 - [ ] **Step 4 (agent): Write the usecase and the route**
 
@@ -5144,6 +5262,7 @@ through their modules, so a test can patch one function.
 """
 from __future__ import annotations
 
+import logging
 import uuid
 from dataclasses import asdict, dataclass
 from datetime import date
@@ -5159,8 +5278,10 @@ from hymn_search import match_hymns, parse_themes, usage_key
 from repos import churches
 from repos import hymns as hymn_repo
 from repos.hymns import HymnalSummary, HymnRecord
-from scripture_refs import split_alternatives
+from scripture_refs import parse_refs, split_alternatives
 from service_rubric import merge_rubric
+
+logger = logging.getLogger(__name__)
 
 
 REFS_MESSAGE = "Enter at least one scripture reference."
@@ -5327,6 +5448,11 @@ def scripture_matches(church_id: uuid.UUID, *, refs: list[str], hymnal: Optional
                  if recent_for_date is not None else None)
         year = church_rubric(church_id, s)["prefer_before_year"]
     result = match_hymns(records, refs_used, limit_per_ref=limit_per_ref, max_results=max_results)
+    if logger.isEnabledFor(logging.DEBUG):       # counts only (S Risks; clarification 29)
+        logger.debug("hymn_matches refs=%d refs_unparsed=%d hymns=%d hymns_with_unparsed=%d matched=%d",
+                     len(result.refs_used), len(result.unparsed_refs), len(records),
+                     sum(1 for r in records if parse_refs(r.scripture_refs or "").unparsed),
+                     result.total_matched)
     items = [HymnMatchView(**asdict(hymn_view(m.record, usage=usage, prefer_before_year=year)),
                            strength=m.strength, matched_refs=list(m.matched_refs))
              for m in result.items]
@@ -5346,7 +5472,7 @@ git diff --numstat -- frontend/src/lib/api
 git status --short
 ```
 
-**Expected:** `41 passed, 1 skipped in <t>s`; numstat exactly `333	0	frontend/src/lib/api/openapi.json` and `151	0	frontend/src/lib/api/schema.d.ts`; `tsc` prints nothing; `1066 passed, 11 skipped in <t>s`; then ` M` for `backend/api/routes/hymns.py`, `backend/tests/test_api_app.py`, `backend/usecases/hymns.py`, the two generated files, and `?? backend/tests/test_api_hymn_matches.py`.
+**Expected:** `42 passed, 1 skipped in <t>s`; numstat exactly `333	0	frontend/src/lib/api/openapi.json` and `151	0	frontend/src/lib/api/schema.d.ts`; `tsc` prints nothing; `1071 passed, 11 skipped in <t>s`; then ` M` for `backend/api/routes/hymns.py`, `backend/tests/test_api_app.py`, `backend/usecases/hymns.py`, the two generated files, and `?? backend/tests/test_api_hymn_matches.py`.
 
 - [ ] **Step 6 (agent): Commit**
 
@@ -5358,6 +5484,7 @@ scripture reference.' A null hymnal is the effective one; a code the church
 lacks is one 422 message whether it exists elsewhere or nowhere; a church
 with no hymns gets an empty 200. Each match is a HymnOut plus strength and
 matched_refs, with recent_use_on for the date and the rubric's newer flag.
+One DEBUG line per call counts unparsed refs and hymns (clarification 29).
 
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
@@ -5368,7 +5495,7 @@ git log --oneline -1
 
 Check the three models against S, the exact messages, and that a B hymnal code in A's request gets the same message as a code that exists nowhere. Push the backup.
 
-Counts after Task 10: backend **1066 passed, 11 skipped**; frontend **356 in 55 files**.
+Counts after Task 10: backend **1071 passed, 11 skipped**; frontend **356 in 55 files**.
 
 ### Task 11: `hymn_suggest.build_candidates`: ranked, capped, padded candidate lists (S Backend 1 row `hymn_suggest.py`, 3.6 step 6, 3.8 "Ranking and cut"; owner decision 3; AC19; clarification 15)
 
@@ -5393,7 +5520,7 @@ This task starts the pure module `backend/hymn_suggest.py` with the candidate li
 .venv/bin/python -m pytest -q | tail -1
 ```
 
-**Expected:** `1066 passed, 11 skipped in <t>s`.
+**Expected:** `1071 passed, 11 skipped in <t>s`.
 
 - [ ] **Step 2 (agent): Write the failing tests**
 
@@ -5702,7 +5829,7 @@ def build_candidates(eligible: Sequence[Any], scriptures: Sequence[str], *, nt_r
 git status --short
 ```
 
-**Expected:** `9 passed in <t>s`; `1075 passed, 11 skipped in <t>s`; then `?? backend/hymn_suggest.py` and `?? backend/tests/test_hymn_suggest.py`.
+**Expected:** `9 passed in <t>s`; `1080 passed, 11 skipped in <t>s`; then `?? backend/hymn_suggest.py` and `?? backend/tests/test_hymn_suggest.py`.
 
 - [ ] **Step 6 (agent): Commit**
 
@@ -5725,7 +5852,7 @@ git log --oneline -1
 
 Check S 3.8 items 1-4 against `build_candidates` (rank, cut, no-signal exception, ranked pad after the focused hymns) and that the theme sets equal `worship_service.py:367-368`. Push the backup.
 
-Counts after Task 11: backend **1075 passed, 11 skipped**; frontend **356 in 55 files**.
+Counts after Task 11: backend **1080 passed, 11 skipped**; frontend **356 in 55 files**.
 
 ### Task 12: The prompt, the answer's parsing and resolution, and the final slots (S Backend 3.6 steps 7 and 9, 3.8 "Prompt"; owner decision 3; owner answer Q1; AC11 server half, AC19; clarifications 2, 9, 15, 18)
 
@@ -5751,7 +5878,7 @@ This task completes `hymn_suggest.py`. `build_prompt` renders a system message a
 .venv/bin/python -m pytest -q | tail -1
 ```
 
-**Expected:** `1075 passed, 11 skipped in <t>s`.
+**Expected:** `1080 passed, 11 skipped in <t>s`.
 
 - [ ] **Step 2 (agent): Write the failing tests**
 
@@ -6247,7 +6374,7 @@ def finalize_slots(resolved: Mapping[str, list], current_picks: Mapping[str, Opt
 git status --short
 ```
 
-**Expected:** `24 passed in <t>s`; `1090 passed, 11 skipped in <t>s`; then ` M backend/hymn_suggest.py` and ` M backend/tests/test_hymn_suggest.py`.
+**Expected:** `24 passed in <t>s`; `1095 passed, 11 skipped in <t>s`; then ` M backend/hymn_suggest.py` and ` M backend/tests/test_hymn_suggest.py`.
 
 - [ ] **Step 6 (agent): Commit**
 
@@ -6271,7 +6398,7 @@ git log --oneline -1
 
 Walk S step 9 items 1-4 against `finalize_slots`, the PREFERENCES line against `worship_service.py:545-551` (still on the branch until Task 14), and clarification 15's mapping against the tests present. Push the backup.
 
-Counts after Task 12: backend **1090 passed, 11 skipped**; frontend **356 in 55 files**.
+Counts after Task 12: backend **1095 passed, 11 skipped**; frontend **356 in 55 files**.
 
 ### Task 13: `POST /hymns/suggestions` (S API row 4, Models, Backend 3.6-3.8, 4, 6; F §1.8; Testing `test_api_hymn_suggestions.py`, "Isolation and roles", "Rate limit", "Rubric"; owner decision 3; owner answer Q1; AC4-AC8, AC11, AC18-AC20; clarifications 7, 10, 19, 21)
 
@@ -6280,7 +6407,7 @@ This task adds the suggestion usecase and route. `suggest_hymns` sets its 75 s d
 **Decisions recorded in this task:**
 - **T13-1 (clarification 7).** `NotConfigured` from the client is re-raised with "AI suggestions aren't set up on this app yet."
 - **T13-2 (clarification 19).** The NT pool copies the request context; `reset_for_tests()` joins and rebuilds it, and `_fresh_ai` calls it first. The conftest change therefore lands in Step 4 with `reset_for_tests`, not with the tests.
-- **T13-3 (clarification 21).** The rate-limit tests pre-spend tokens with `ratelimit.consume`.
+- **T13-3 (clarification 21).** The rate-limit tests pre-spend tokens with `ratelimit.consume`. `test_a_rejected_request_still_spends_a_token` pins "Buckets": a Pydantic 422 and the usecase's 422 each spend one.
 - **T13-4.** The usecase takes `ai=openai_client` and `fetch_text=None` (resolved at call time to `usecases.passages.get_passage_text`, so a test's `monkeypatch.setattr(passages, "get_passage_text", ...)` reaches it) and `clock=time.monotonic`.
 
 **Files:**
@@ -6304,7 +6431,7 @@ This task adds the suggestion usecase and route. `suggest_hymns` sets its 75 s d
 .venv/bin/python -c "import sys; sys.path.insert(0, 'backend'); from api import ratelimit as r; print(r.BUCKETS['ai'])"
 ```
 
-**Expected:** `1090 passed, 11 skipped in <t>s`; `(Rule(scope='user', capacity=40, per_seconds=600), Rule(scope='church', capacity=400, per_seconds=86400))`.
+**Expected:** `1095 passed, 11 skipped in <t>s`; `(Rule(scope='user', capacity=40, per_seconds=600), Rule(scope='church', capacity=400, per_seconds=86400))`.
 
 - [ ] **Step 2 (agent): Write the failing tests**
 
@@ -6680,6 +6807,20 @@ def test_the_401st_call_by_a_church_in_a_day_is_429(client, church, make_user, m
     other = make_church(name="Other", owner_user_id=make_user(email="other@example.com"))
     hymnal(other, n=3)
     assert suggest(client, other, email="other@example.com")["hymnal"] == "GG2013"
+
+
+def test_a_rejected_request_still_spends_a_token(client, church, owner, fetched, limiter_clock):
+    # F §1.8: rate_limit("ai") is a dependency, resolved before the body is validated
+    # and before the usecase runs, so both kinds of 422 cost a token (plan, "Buckets").
+    hymnal(church, n=3)
+    fake = install()
+    for _ in range(38):
+        ratelimit.consume("ai", user_id=owner, church_id=church)
+    suggest(client, church, {"extra": 1}, status=422)              # Pydantic: the 39th token
+    suggest(client, church, {"hymnal": "NOWHERE"}, status=422)     # the usecase: the 40th
+    r = client.post("/hymns/suggestions", json={"service_date_iso": DATE}, headers=church_headers(EMAIL, church))
+    assert r.status_code == 429, r.text
+    assert fake.calls == []
 ````
 
 **In `backend/tests/test_no_streamlit_in_core.py`, replace:**
@@ -6704,7 +6845,7 @@ def test_the_401st_call_by_a_church_in_a_day_is_429(client, church, make_user, m
 .venv/bin/python -m pytest -q backend/tests/test_api_hymn_suggestions.py backend/tests/test_api_app.py backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -1
 ```
 
-**Expected:** `18 failed, 28 passed, 1 skipped in <t>s`: all 17 new tests (the route is a 404) and `test_routes_document_the_error_body`. The import-guard tests already pass: `hymn_suggest` and `usecases.hymns` exist.
+**Expected:** `19 failed, 28 passed, 1 skipped in <t>s`: all 18 new tests (the route is a 404) and `test_routes_document_the_error_body`. The import-guard tests already pass: `hymn_suggest` and `usecases.hymns` exist.
 
 - [ ] **Step 4 (agent): Write the usecase, the route and the pool reset**
 
@@ -6910,6 +7051,7 @@ Every function takes the active church's id only (F §1.2 rule 1) and reads in
 ````python
 from __future__ import annotations
 
+import logging
 import uuid
 from dataclasses import asdict, dataclass
 from datetime import date
@@ -6959,34 +7101,34 @@ from db import session_scope
 from domain_errors import DomainError, InvalidInput, NotConfigured
 from hymn_ranking import is_newer_than_preferred
 from hymn_search import match_hymns, parse_themes, usage_key
+from integrations import openai_client
 ````
 
 **In `backend/usecases/hymns.py`, replace:**
 
 ````python
-from repos import hymns as hymn_repo
 from repos.hymns import HymnalSummary, HymnRecord
-from scripture_refs import split_alternatives
+from scripture_refs import parse_refs, split_alternatives
 from service_rubric import merge_rubric
+
+logger = logging.getLogger(__name__)
 ````
 
 **with:**
 
 ````python
-from repos import hymns as hymn_repo
-from integrations import openai_client
 from repos.hymns import HymnalSummary, HymnRecord
-from scripture_refs import default_nt_ref, split_alternatives
+from scripture_refs import default_nt_ref, parse_refs, split_alternatives
+from service_rubric import merge_rubric
 from usecases import passages
 
 logger = logging.getLogger(__name__)
-from service_rubric import merge_rubric
 ````
 
 **In `backend/usecases/hymns.py`, replace:**
 
 ````python
-from service_rubric import merge_rubric
+logger = logging.getLogger(__name__)
 
 
 REFS_MESSAGE = "Enter at least one scripture reference."
@@ -7001,7 +7143,7 @@ class DefaultHymnal:
 **with:**
 
 ````python
-from service_rubric import merge_rubric
+logger = logging.getLogger(__name__)
 
 
 REFS_MESSAGE = "Enter at least one scripture reference."
@@ -7176,7 +7318,7 @@ git diff --numstat -- frontend/src/lib/api
 git status --short
 ```
 
-**Expected:** `51 passed, 1 skipped in <t>s` (the hung-fetch test takes about 0.05 s; the whole file runs in a few seconds); numstat exactly `441	0	frontend/src/lib/api/openapi.json` and `207	0	frontend/src/lib/api/schema.d.ts`; `tsc` prints nothing; `1107 passed, 11 skipped in <t>s`; then ` M` for `backend/api/routes/hymns.py`, `backend/tests/conftest.py`, `backend/tests/test_api_app.py`, `backend/tests/test_no_streamlit_in_core.py`, `backend/usecases/hymns.py`, the two generated files, and `?? backend/tests/test_api_hymn_suggestions.py`.
+**Expected:** `52 passed, 1 skipped in <t>s` (the hung-fetch test takes about 0.05 s; the whole file runs in a few seconds); numstat exactly `441	0	frontend/src/lib/api/openapi.json` and `207	0	frontend/src/lib/api/schema.d.ts`; `tsc` prints nothing; `1113 passed, 11 skipped in <t>s`; then ` M` for `backend/api/routes/hymns.py`, `backend/tests/conftest.py`, `backend/tests/test_api_app.py`, `backend/tests/test_no_streamlit_in_core.py`, `backend/usecases/hymns.py`, the two generated files, and `?? backend/tests/test_api_hymn_suggestions.py`.
 
 - [ ] **Step 6 (agent): Run the threaded tests three times**
 
@@ -7184,7 +7326,7 @@ git status --short
 for i in 1 2 3; do .venv/bin/python -m pytest -q backend/tests/test_api_hymn_suggestions.py backend/tests/test_openai_client.py 2>&1 | tail -1; done
 ```
 
-**Expected:** `37 passed in <t>s`, three times. A failure even once is a failure (CI runs each test once).
+**Expected:** `41 passed in <t>s`, three times. A failure even once is a failure (CI runs each test once).
 
 - [ ] **Step 7 (agent): Commit**
 
@@ -7211,7 +7353,7 @@ git log --oneline -1
 
 Walk S 3.6 steps 0-10 against `suggest_hymns` (the order of the 422s and the 503, the read session closed before `_nt_context`, the deadline passed to `complete`), the error table in S API against `test_ai_errors_return_their_code_and_exact_message`, and S 3.7's worst case (75 s deadline; the client leaves about 14 s of the 90 s client timeout). Push the backup.
 
-Counts after Task 13: backend **1107 passed, 11 skipped**; frontend **356 in 55 files**.
+Counts after Task 13: backend **1113 passed, 11 skipped**; frontend **356 in 55 files**.
 
 ### Task 14: Delete the Streamlit-era hymn code and `lxml` (S Backend 1 row `worship_service.py`, `requirements.txt`, 5 "Streamlit coupling removed"; F §2.3; AC9, AC19; owner decision 2; clarifications 14, 15)
 
@@ -7234,7 +7376,7 @@ Everything the old hymn code did now lives in `hymn_search`, `hymn_suggest`, `hy
 grep -rnE "hymns_by_scripture|suggest_hymns_for_service|hymn_display_info|resolve_hymnary_audio_url|_hymnary_audio_url" --include=*.py backend streamlit_tests streamlit_views app.py ui_helpers.py | grep -v "^backend/worship_service.py"
 ```
 
-**Expected:** `1107 passed, 11 skipped in <t>s`; then exactly these hits, and nothing else:
+**Expected:** `1113 passed, 11 skipped in <t>s`; then exactly these hits, and nothing else:
 - `app.py:24`, `:25`, `:26` (the three imported names) and `app.py:690`, `:707`, `:769` (their calls): frozen Streamlit's copy on `main`, which no test imports and which stops importing after this task (owner decision 2);
 - `backend/hymn_ranking.py:31` (a docstring naming `hymn_display_info`; this task rewords it);
 - `backend/tests/test_hymn_suggest.py:7` (a docstring);
@@ -7442,7 +7584,7 @@ grep -n "lxml" backend/requirements.txt
 git status --short
 ```
 
-**Expected:** `15 passed in <t>s` (3 in the parity file and `test_generate_liturgy.py`'s 12, unchanged); the three greps print nothing (clarification 14: `NotionHymnsDB` remains only in the migration-only CLIs); `1095 passed, 11 skipped in <t>s` (1107 + 1 − 13); then ` M backend/hymn_ranking.py`, ` M backend/requirements.txt`, ` M backend/tests/test_hymn_match_parity.py`, `D  backend/tests/test_suggest_hymns.py`, ` M backend/worship_service.py`.
+**Expected:** `15 passed in <t>s` (3 in the parity file and `test_generate_liturgy.py`'s 12, unchanged); the three greps print nothing (clarification 14: `NotionHymnsDB` remains only in the migration-only CLIs); `1101 passed, 11 skipped in <t>s` (1113 + 1 − 13); then ` M backend/hymn_ranking.py`, ` M backend/requirements.txt`, ` M backend/tests/test_hymn_match_parity.py`, `D  backend/tests/test_suggest_hymns.py`, ` M backend/worship_service.py`.
 
 - [ ] **Step 6 (agent): Commit**
 
@@ -7466,11 +7608,11 @@ git log --oneline -1
 
 Read `git show --stat HEAD` (5 files, about 830 lines deleted) and check that `generate_liturgy`'s tests still pass and clarification 15's mapping holds. Push the backup.
 
-Counts after Task 14: backend **1095 passed, 11 skipped**; frontend **356 in 55 files**.
+Counts after Task 14: backend **1101 passed, 11 skipped**; frontend **356 in 55 files**.
 
-### Task 15: Docs: F's decision D16 and amendment rows, S's "(3a plan)" notes and answers, the runbook's OpenAI rows (S open questions 1 and 2; F Decisions, Amendments, §1.3; owner answers Q1-Q3; clarifications 1-4, 8)
+### Task 15: Docs: F's decision D16 and amendment rows, S's "(3a plan)" notes and answers, the runbook's OpenAI rows (S open questions 1 and 2; F Decisions, Amendments, §1.3; owner answers Q1-Q3, A, B; clarifications 1-4, 8, 26, 27, 30)
 
-This task writes the owner's answers and the plan's corrections where the next planner will read them. F's decisions table gains D16 (owner answer Q1), as S asks. F's amendments table gains three rows (the §1.3 `HymnalCode` scope, the §2.8 client details, the title-only usage key), and §1.3's sentence naming `GET /hymns?hymnal=` is corrected. S gains a header note, its usage key, its 5a row, its sample path and "Unchanged on purpose" corrected, both open questions marked answered, and the first-lines follow-up. The runbook's variables table gets the `OPENAI_*` rows (no owner marker). No test changes.
+This task writes the owner's answers and the plan's corrections where the next planner will read them. F's decisions table gains D16 (owner answer Q1), as S asks. F's amendments table gains three rows (the §1.3 `HymnalCode` scope, the §2.8 client details, the title-only usage key), and §1.3's sentence naming `GET /hymns?hymnal=` is corrected. S gains a header note, its usage key, its 5a row, its sample path and "Unchanged on purpose" corrected, both open questions marked answered, the first-lines follow-up, and a §3.7 note that httpx timeouts are per phase (clarification 30). The runbook's variables table gets the `OPENAI_*` rows, with the $15 cap, the retired-model symptom and `OPENAI_REASONING_EFFORT` (owner answers A and B; no owner marker). No test changes.
 
 **Files:**
 - Modify: `docs/superpowers/specs/2026-09-25-migration-foundations-design.md`, `docs/superpowers/specs/2026-09-25-slice-3-hymns-design.md`, `docs/ops-runbook.md`
@@ -7482,9 +7624,10 @@ grep -c '^| D15 | Slice order' docs/superpowers/specs/2026-09-25-migration-found
 grep -c '(for example `GET /hymns?hymnal=`)' docs/superpowers/specs/2026-09-25-migration-foundations-design.md
 grep -c '^1\. \*\*Recent use across hymnals' docs/superpowers/specs/2026-09-25-slice-3-hymns-design.md
 grep -c '^| `OPENAI_API_KEY`, `GOOGLE_CLIENT_ID`' docs/ops-runbook.md
+grep -c 'leaves about 14 s under the 90 000 ms client timeout' docs/superpowers/specs/2026-09-25-slice-3-hymns-design.md
 ```
 
-**Expected:** `1` four times.
+**Expected:** `1` five times.
 
 - [ ] **Step 2 (agent): Write the edits**
 
@@ -7503,9 +7646,10 @@ Checked against Railway → the API service → Variables (names only) and Setti
 ````markdown
 | `DB_POOL_SIZE`, `DB_MAX_OVERFLOW` | `3` and `3` (see Platform limits) | ops-1; read since ops-2 |
 | `ESV_API_KEY` | optional: enables the ESV translation (secret). The new app reads it from the environment (`scripture_fetcher._esv_key()`) until slice 7 moves it into `api/settings.py`; while it is unset, `GET /translations` returns `esv_available: false` and ESV is hidden. | ops-1; read by the new app since slice 2a |
-| `OPENAI_API_KEY` | the new app's own OpenAI key (secret), separate from the Streamlit app's, with a monthly budget cap set in the OpenAI dashboard. Read by `integrations/openai_client.py` since slice 3a. Without it, or without `OPENAI_MODEL`, hymn suggestions answer 503 `ai_not_configured` and the startup log says `AI: not configured (...)`; a reached budget cap reads the same way. | slice 0; read since slice 3a |
-| `OPENAI_MODEL` | required with the key; no default in code. A non-reasoning, inexpensive chat model that accepts `response_format` json_object and `max_completion_tokens` (slice 3a plan, "Model"). The startup log names it: `AI: configured (model=...)`. | slice 3a |
+| `OPENAI_API_KEY` | the new app's own OpenAI key (secret), separate from the Streamlit app's, with a monthly budget cap of $15 set in the OpenAI dashboard (owner, 2026-09-29). Read by `integrations/openai_client.py` since slice 3a. Without it, or without `OPENAI_MODEL`, hymn suggestions answer 503 `ai_not_configured` and the startup log says `AI: not configured (...)`. When the cap is reached, suggestions read "not set up" until the next month, with `ERROR AI: quota exhausted (insufficient_quota)` in the log and no retries. | slice 0; read since slice 3a |
+| `OPENAI_MODEL` | required with the key; no default in code. A non-reasoning, inexpensive chat model that accepts `response_format` json_object and `max_completion_tokens` (slice 3a plan, "Model"). The startup log names it: `AI: configured (model=...)`. If OpenAI retires the model (possible at any time after a deploy), suggestions read "not set up" and each call logs `ERROR AI: model not available (OPENAI_MODEL=...)`: set a model the project offers and redeploy. | slice 3a |
 | `OPENAI_TIMEOUT_SECONDS`, `OPENAI_MAX_RETRIES`, `OPENAI_MAX_CONCURRENCY`, `OPENAI_TEMPERATURE` | optional: defaults 30, 1 and 4, and no temperature sent | slice 3a |
+| `OPENAI_REASONING_EFFORT` | optional; unset by default, and then nothing is sent. Set it (for example `minimal` or `low`) only for a reasoning (GPT-5-family) model, which otherwise can spend its answer budget on hidden reasoning and answer "had a problem". | slice 3a |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI` | carried over for a later slice (secrets) | slice 0 |
 
 Checked against Railway → the API service → Variables (names only) and Settings → Deploy → Healthcheck Path:
@@ -7545,7 +7689,7 @@ Checked against Railway → the API service → Variables (names only) and Setti
 | §4.6, §4.7, §4.8 | *(2026-09-29, slice 2c plan)* `isPristine` also counts a date the user picked, a reading set chosen in the switcher (which makes a default date the user's) and a translation override (owner answer Q2), so "New service" asks after them; the roll-forward keeps a picked or chosen date but not for a translation alone, which "New service" keeps (review answer A). Date & readings counts as done only with no field showing an error (review answer E). The lectionary fills only in the tab on screen, and a tab shown again first re-reads the stored draft and adopts it when newer. Date & readings ships (`SHIPPED_STEPS` holds "readings"). `ErrorState` takes a screen's own `message`, `retryLabel` and `retryDisabled`, and `ConfirmDialog` a `cancelLabel`, for the slice spec's "Try again" and "Keep mine". | 2c |
 | §4.6, §4.8 | *(2026-09-29, slice 2c build)* "New service" leaves the translation override out of its question, since the fresh draft keeps it; `isPristine` still counts it. The lectionary's automatic fill is stamped 1 ms after the draft it changes (`DraftStore.autoUpdate`), not now, and a flush that finds a strictly newer stored draft adopts it instead of writing over it, so an automatic change never outranks another tab's edit. A lookup rate limited by a 429 is not asked again on focus, reconnect or mount before its `Retry-After`. `ConfirmDialog` also takes `onCancel` (called by its cancel button only) and `finalFocus`. | 2c |
 | §1.3 | *(2026-09-29, slice 3a plan)* `HymnalCode` is not used on `GET /hymns?hymnal=` after all: slice 3's read filters (`GET /hymns`, `ScriptureMatchIn.hymnal`, `HymnSuggestionIn.hymnal`) take any stored code up to 20 characters, as the slice 3 spec says, so a CLI-imported code such as `PH 1990` can still be listed. `HymnalCode` stays for 6a's new or admin-managed codes. | 3a |
-| §2.8 | *(2026-09-29, slice 3a plan)* The `OPENAI_*` settings are read in `integrations/openai_client.py` (`ai_settings()`), not `api/settings.py`, so the integration imports nothing from the API layer; a bad number falls back to its default with a WARNING. Each attempt's timeout is passed to `create(timeout=openai.Timeout(t, connect=min(5, t)))`. The client's own messages are generic; a caller that wants its own `ai_not_configured` wording (hymn suggestions: "AI suggestions aren't set up on this app yet.") catches `NotConfigured` and raises its own. | 3a |
+| §2.8 | *(2026-09-29, slice 3a plan)* The `OPENAI_*` settings are read in `integrations/openai_client.py` (`ai_settings()`), not `api/settings.py`, so the integration imports nothing from the API layer; a bad number falls back to its default with a WARNING. Each attempt's timeout is passed to `create(timeout=openai.Timeout(t, connect=min(5, t)))`. The client's own messages are generic; a caller that wants its own `ai_not_configured` wording (hymn suggestions: "AI suggestions aren't set up on this app yet.") catches `NotConfigured` and raises its own. A model OpenAI does not offer (`NotFoundError`, or `code == "model_not_found"`) maps to `ai_not_configured` with an ERROR line naming `OPENAI_MODEL`, and is not retried (owner answer A). An optional `OPENAI_REASONING_EFFORT` is sent as `reasoning_effort` only when set, for a reasoning model; the pin is `openai>=1.58.0,<4`. | 3a |
 | §4.4 | *(2026-09-29, owner answer Q2, slice 3a plan)* Recent use is matched on the normalized hymn title alone (`hymn_search.usage_key`), across numbers and hymnals. 5a keeps writing `hymn_usage` rows with number and title; the reader ignores the number. | 3a |
 
 ---
@@ -7625,6 +7769,18 @@ Checked against Railway → the API service → Variables (names only) and Setti
 **In `docs/superpowers/specs/2026-09-25-slice-3-hymns-design.md`, replace:**
 
 ````markdown
+The total is about 76 s, which matches F §1.8's "~75 s" and leaves about 14 s under the 90 000 ms client timeout. The concurrency slot is held only for the attempts and the backoff, all inside the deadline.
+````
+
+**with:**
+
+````markdown
+The total is about 76 s, which matches F §1.8's "~75 s" and leaves about 14 s under the 90 000 ms client timeout. The concurrency slot is held only for the attempts and the backoff, all inside the deadline. (3a plan: httpx applies an attempt's timeout per phase, to the connect, each read, the write and the pool wait, not to the attempt as a whole, so a response that arrives slowly in pieces can run a few seconds past the 75 s deadline; the gap under the 90 s client timeout covers that.)
+````
+
+**In `docs/superpowers/specs/2026-09-25-slice-3-hymns-design.md`, replace:**
+
+````markdown
   - Usage rows written by Streamlit's Prepare (ISO `date_iso` from `record_usage`) are read correctly.
   - Streamlit ignores `default_hymnal`, and its settings merge preserves unknown keys (F §6.2).
 - **Production data assumption to verify before building the parser.** Nobody has checked the actual `scripture_refs` formats in production. Before implementing §2, the owner runs a read-only query against production and commits the output as `backend/tests/fixtures/hymns/scripture_refs_sample.txt`:
@@ -7689,7 +7845,7 @@ git diff --stat
 .venv/bin/python -m pytest -q | tail -1
 ```
 
-**Expected:** `89 passed in <t>s`; `4`; three files, about 16 insertions and 8 deletions; `1095 passed, 11 skipped in <t>s`.
+**Expected:** `89 passed in <t>s`; `4`; three files, 18 insertions and 9 deletions; `1101 passed, 11 skipped in <t>s`.
 
 - [ ] **Step 4 (agent): Commit**
 
@@ -7701,8 +7857,11 @@ asked; three amendment rows record the HymnalCode scope, the OpenAI
 client's settings and messages, and the title-only usage key (owner answer
 Q2), and §1.3's sentence stops naming GET /hymns as a HymnalCode user. The
 slice 3 spec marks both open questions answered, corrects the usage key,
-the 5a row and the sample path, and records the first-lines follow-up. The
-runbook lists OPENAI_API_KEY, OPENAI_MODEL and the optional settings.
+the 5a row and the sample path, records the first-lines follow-up, and
+notes in §3.7 that httpx timeouts are per phase (the 15 s gap covers a small
+overrun). The runbook lists OPENAI_API_KEY (with the $15 cap), OPENAI_MODEL
+(with the retired-model symptom) and the optional settings, including
+OPENAI_REASONING_EFFORT.
 
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
@@ -7713,11 +7872,11 @@ git log --oneline -1
 
 Read the three diffs: no em dash in new prose outside quoted spec copy, D16's wording matches owner answer Q1, and the follow-up says the first-lines source is unverified. Push the backup.
 
-Counts after Task 15: backend **1095 passed, 11 skipped**; frontend **356 in 55 files**.
+Counts after Task 15: backend **1101 passed, 11 skipped**; frontend **356 in 55 files**.
 
-### Task 16: Whole-branch verification and the slice 3a pull request (owner's yes before the PR is opened and before it is marked ready) (S Testing, AC1-AC9, AC16, AC18-AC20; F §2.2, §2.5, §5.4; owner decisions 2, 4; owner answers Q3-Q5)
+### Task 16: Whole-branch verification and the slice 3a pull request (owner's yes before the PR is opened and before it is marked ready) (S Testing, AC1-AC9, AC16, AC18-AC20; F §2.2, §2.5, §5.4; owner decisions 2, 4; owner answers Q3-Q5, D)
 
-The whole branch is checked in one place: both suites, the Postgres marker count, the threaded tests three times, types, lint, the frontend build, the generated API files, the layering, log and AC9 gates, the exact changed paths and the exact commits. The branch is already on `origin` (the backup pushes), so on the owner's first yes the agent opens the PR as a draft, waits for CI, reports, and on the second yes marks it ready. Merging is Task 17.
+The whole branch is checked in one place: both suites, the Postgres marker count, the threaded tests three times, types, lint, the frontend build, the generated API files, the layering, log and AC9 gates, the exact changed paths and the exact commits. The branch is already on `origin` (the backup pushes), so on the owner's first yes the agent opens the PR as a draft, waits for CI and reports. **The PR is not marked ready until the owner's real scripture export has replaced the synthetic sample and passes the 98 % check** (owner answer D; Step 11); then, on the second yes, the agent marks it ready. Merging is Task 17.
 
 Below, `<scratch>` is the session's scratchpad directory and `<N>` the PR number Step 9 prints; write both out literally. Every `gh` command uses `-R bbrown62450/church`.
 
@@ -7742,7 +7901,7 @@ git log --oneline origin/main..HEAD | tail -1
 for i in 1 2 3; do .venv/bin/python -m pytest -q backend/tests/test_api_hymn_suggestions.py backend/tests/test_openai_client.py backend/tests/test_usecase_passages.py 2>&1 | tail -1; done
 ```
 
-**Expected:** `1095 passed, 11 skipped in <t>s`; `11 skipped, 1095 deselected in <t>s` (no `TEST_DATABASE_URL` here; nine earlier Postgres tests plus Task 7's and Task 9's); `<n> passed in <t>s` three times with no failure. If a local throwaway Postgres is available, `TEST_DATABASE_URL=postgresql://postgres:<password>@localhost:5432/postgres .venv/bin/python -m pytest -q -m postgres` gives `11 passed, 1095 deselected, 1 warning`.
+**Expected:** `1101 passed, 11 skipped in <t>s`; `11 skipped, 1101 deselected in <t>s` (no `TEST_DATABASE_URL` here; nine earlier Postgres tests plus Task 7's and Task 9's); `<n> passed in <t>s` three times with no failure. If a local throwaway Postgres is available, `TEST_DATABASE_URL=postgresql://postgres:<password>@localhost:5432/postgres .venv/bin/python -m pytest -q -m postgres` gives `11 passed, 1101 deselected, 1 warning`.
 
 - [ ] **Step 3 (agent): Frontend tests, types, lint and build**
 
@@ -7779,7 +7938,7 @@ grep -rnE "hymns_by_scripture|suggest_hymns_for_service|hymn_display_info|_hymna
 grep -rn "api_key" backend/integrations/openai_client.py
 ```
 
-**Expected:** the first grep prints nothing. The second lists every log call: in `usecases/hymns.py` the NT-fetch failure warning (class name only), the DEBUG prompt line and the one `hymn_suggestions` INFO line; in `openai_client.py` the settings warning, the four startup lines, the quota and key-refused ERROR lines, and the `ai_call` lines (model, counts, class names); in `hymn_usage.py` the DEBUG skipped count. Read each: none formats a title, `nt_text`, a key, a prompt at INFO or an SDK message. The third prints nothing. The fourth shows only the settings field, `problem`, `load_settings` and the SDK constructor.
+**Expected:** the first grep prints nothing. The second lists every log call: in `usecases/hymns.py` the DEBUG `hymn_matches` counts line, the NT-fetch failure warning (class name only), the DEBUG prompt line and the one `hymn_suggestions` INFO line; in `openai_client.py` the two settings warnings (numbers, reasoning effort), the four startup lines, the quota, model-not-available (it names `OPENAI_MODEL`, which is configuration, not a secret) and key-refused ERROR lines, and the `ai_call` lines (model, counts, class names); in `hymn_usage.py` the DEBUG skipped count. Read each: none formats a title, `nt_text`, a key, a prompt at INFO or an SDK message. The third prints nothing. The fourth shows only the settings field, `problem`, `load_settings` and the SDK constructor.
 
 - [ ] **Step 6 (agent): The exact changed paths**
 
@@ -7796,11 +7955,11 @@ git diff --name-status origin/main | sort -k2
 git log --reverse --format=%s origin/main..HEAD
 ```
 
-**Expected:** the plan's commit, then the fifteen subjects of Tasks 1-15 in order (plus Task 4 Step 10's, if the export arrived, and any fix commits the reviews made, each named in Step 8's message).
+**Expected:** the plan's two commits (`Plan: slice 3a hymns backend ...`, `Plan: slice 3a review fixes`), then the fifteen subjects of Tasks 1-15 in order (plus Task 4 Step 10's, if the export arrived, and any fix commits the reviews made, each named in Step 8's message).
 
 - [ ] **Step 8 (agent): Ask the owner to open the pull request**
 
-Tell the owner, in one message: "Slice 3a (the hymns backend) is ready for a pull request: four new church-scoped routes (hymnals, hymns, scripture matches, AI suggestions), two new fields on the church profile, the OpenAI client, and the old Streamlit-era hymn code removed. Nothing changes on screen, there is no database change, and liturgy-frozen is not affected. Tests: backend 971 → 1095 passed, 9 → 11 skipped; frontend 356 → 356. The scripture sample is <synthetic / your export of <date>, <rate> parsed>. May I open the pull request as a draft so CI runs?"
+Tell the owner, in one message: "Slice 3a (the hymns backend) is ready for a pull request: four new church-scoped routes (hymnals, hymns, scripture matches, AI suggestions), two new fields on the church profile, the OpenAI client, and the old Streamlit-era hymn code removed. Nothing changes on screen, there is no database change, and liturgy-frozen is not affected. Tests: backend 971 → 1101 passed, 9 → 11 skipped; frontend 356 → 356. The scripture sample is <still the made-up (synthetic) one, so before I ask to mark the PR ready I will walk you through exporting your real one / your export of <date>, <rate> parsed>. May I open the pull request as a draft so CI runs?"
 
 - [ ] **Step 9 (agent, on the owner's yes): Open the draft PR**
 
@@ -7811,7 +7970,13 @@ gh pr create -R bbrown62450/church --draft --base main --head claude/slice-2-pla
   --body-file <scratch>/slice3a-pr-body.md
 ```
 
-Write `<scratch>/slice3a-pr-body.md` first, with: a summary (the Goal paragraph in plain words); the four routes and the two `/church` fields; the owner answers Q1-Q4 and where each landed; the owner-visible clarifications (1, 2, 9) and the model recommendation (UNVERIFIED, confirmed in Task 17); the scripture sample line (synthetic, or the export's date, row count and parse rate); the owner's `hymn_usage.date_iso` length counts from Task 4 Step 1 (or "not run"); the line `Tests: backend 971 → 1095 passed, 9 → 11 skipped; frontend 356 → 356 in 55 files`; "No migration; production stays at 0004_invites_reusable. After the merge the owner sets OPENAI_API_KEY and OPENAI_MODEL on Railway (Task 17)."; then `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS` on the last lines.
+Write `<scratch>/slice3a-pr-body.md` first. While the sample is synthetic, its first lines, above the summary, are exactly:
+
+```
+> **Scripture sample: SYNTHETIC.** The 98 % parse test (AC3) currently runs on 100 hand-written rows in Hymnary.org's shape, not on production data. This PR stays a draft until the owner's read-only export of `hymn_catalog` replaces `backend/tests/hymn_fixtures/scripture_refs_sample.csv` and passes the 98 % check (owner answer D; plan Task 16 Step 11).
+```
+
+(When the export has already been swapped in, the first line instead reads `> **Scripture sample: EXPORTED on <date>**, <rows> rows, <rate> of segments parsed.`) Then: a summary (the Goal paragraph in plain words); the four routes and the two `/church` fields; the owner answers Q1-Q4 and A-D and where each landed; the owner-visible clarifications (1, 2, 9, 26) and the model recommendation with its fallbacks (UNVERIFIED, confirmed in Task 17); the scripture sample line (synthetic, or the export's date, row count and parse rate); the owner's `hymn_usage.date_iso` length counts from Task 4 Step 1 (or "not run"); the line `Tests: backend 971 → 1101 passed, 9 → 11 skipped; frontend 356 → 356 in 55 files`; "No migration; production stays at 0004_invites_reusable. After the merge the owner sets OPENAI_API_KEY and OPENAI_MODEL on Railway (Task 17)."; then `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS` on the last lines.
 
 **Expected:** the push prints `Everything up-to-date` or the new commits; `gh` prints the PR URL. Record `<N>`.
 
@@ -7822,11 +7987,22 @@ gh pr checks <N> -R bbrown62450/church --watch
 gh run view $(gh run list --branch claude/slice-2-plan-4q33le --workflow ci --limit 1 -R bbrown62450/church --json databaseId --jq '.[0].databaseId') -R bbrown62450/church --log | grep -E '[0-9]+ passed' | sed -E 's/^.*Z //'
 ```
 
-**Expected:** `backend`, `backend-postgres`, `frontend` and the Vercel preview pass; the log lines include `1095 passed, 11 skipped` (`backend`), `11 passed, 1095 deselected, 1 warning` (`backend-postgres`) and `Tests  356 passed (356)` (`frontend`). A CI-only failure is fixed in the owning task's files, pushed on the standing backup permission, and this step reruns.
+**Expected:** `backend`, `backend-postgres`, `frontend` and the Vercel preview pass; the log lines include `1101 passed, 11 skipped` (`backend`), `11 passed, 1101 deselected, 1 warning` (`backend-postgres`) and `Tests  356 passed (356)` (`frontend`). A CI-only failure is fixed in the owning task's files, pushed on the standing backup permission, and this step reruns.
 
-- [ ] **Step 11 (agent): Ask, then mark ready**
+- [ ] **Step 11 (agent + OWNER): The owner's scripture export gates "ready" (owner answer D)**
 
-Tell the owner: "PR #<N> is green on CI (backend 1095 passed, 11 skipped; Postgres 11 passed; frontend 356). May I mark it ready for review?" On the yes:
+Skip this step only if Task 4 Step 10 has already swapped in the owner's export and it passed. Otherwise walk the owner through Task 4 Step 1's two read-only queries **one step at a time**, waiting for each reply before sending the next:
+1. "Before I ask to mark the pull request ready, I need a sample of your real hymn scripture references (public hymn information only: hymnal, number, title and references; no names or emails). Please open https://supabase.com/dashboard and choose the project `worship-staging`. Tell me when you see it."
+2. "Click SQL Editor on the left, then New query. Tell me when you have an empty query box."
+3. "Paste this and click Run. It only reads; nothing is changed:" followed by Task 4 Step 1's first query, then "Tell me how many rows it shows."
+4. "Under the results, choose Export, then Download CSV, and attach the file here (or paste its contents)."
+5. "One more read-only query, for the pull request: click New query, paste this and click Run, then tell me the rows it shows:" followed by Task 4 Step 1's second query.
+
+Then run Task 4 Step 10. If the rate is at least 0.98 and `test_scripture_refs_parse.py` passes, push the commit (standing backup permission), wait for CI as in Step 10, and edit the PR body's first line to the EXPORTED form (`gh pr edit <N> -R bbrown62450/church --body-file <scratch>/slice3a-pr-body.md`). If the rate is below 0.98, stop: Task 4 Step 10 says what to report, and the PR stays a draft until the controller and the owner decide. The PR is marked ready on the synthetic sample only if the owner explicitly says so in reply to a question that names the risk ("the parser has only been tested on made-up references"); record that answer in the PR body.
+
+- [ ] **Step 12 (agent): Ask, then mark ready**
+
+Tell the owner: "PR #<N> is green on CI (backend 1101 passed, 11 skipped; Postgres 11 passed; frontend 356), and the scripture test passes on your real export (<rate> of <segments> references read). May I mark it ready for review?" On the yes:
 
 ```bash
 gh pr ready <N> -R bbrown62450/church
@@ -7877,17 +8053,18 @@ gh api "repos/bbrown62450/church/deployments?sha=<merge sha>" --jq '.[] | [.id, 
 
 "In OpenAI, for this app:
 1. Go to https://platform.openai.com and choose the project you use for this app (top left).
-2. Settings → Limits (or Billing → Limits): set a monthly budget you are comfortable with (for example $5 to $10). When it is reached, suggestions will say 'not set up' until the next month.
-3. On the same Limits page, find the list of models this project may use, and tell me whether `gpt-4.1-mini` is listed. If it is not, tell me whether `gpt-4o-mini` is.
+2. Settings → Limits (or Billing → Limits): set the monthly budget to $15, as you chose. When it is reached, suggestions will say 'not set up' until the next month; the app does not keep retrying.
+3. On the same Limits page, find the list of models this project may use, and tell me whether `gpt-4.1-mini` is listed. If it is not, tell me whether `gpt-4o-mini` is, and if neither is, whether `gpt-5-mini` is.
 4. API keys: create a new secret key for this app (or use the separate one you already made). Copy it somewhere safe for the next step. Please do not paste it here."
 
-Record which model is available. If neither is, stop and ask the controller (the plan's "Model" note is UNVERIFIED).
+Record which model is available, in the plan's order: `gpt-4.1-mini`, then `gpt-4o-mini`, then **`gpt-5-mini` with `OPENAI_REASONING_EFFORT=minimal`** (a reasoning model: without the low effort it can spend its whole answer budget thinking and answer "had a problem"; UNVERIFIED, from third-party docs of 2026-09-29, so the first live suggestion in Step 7 is the check, and `low` is the value to try if `minimal` is refused). If none is listed, stop and ask the controller (the plan's "Model" note is UNVERIFIED).
 
 - [ ] **Step 6 (OWNER): Set the two variables on Railway**
 
 "Railway → the API service (`church`) → Variables:
 1. If `OPENAI_API_KEY` is already there, open its menu → Edit and paste your new key as the value; otherwise + New Variable, name `OPENAI_API_KEY`, value your new key.
 2. + New Variable, name `OPENAI_MODEL`, value `<the model from Step 5>`.
+   (Only if the model is `gpt-5-mini`: + New Variable, name `OPENAI_REASONING_EFFORT`, value `minimal`.)
 3. Click Deploy (Railway holds variable edits until you deploy) and wait for the new deployment to be Active.
 4. In its Deploy Logs, find the `AI:` line. Tell me exactly what it says. It should be `AI: configured (model=<the model>)`, and it must not show any part of the key."
 
@@ -7950,7 +8127,7 @@ If it says `not configured (OPENAI_API_KEY is not ASCII)`, the key was mangled w
 
 "Then, in the Network tab, click the row whose name starts `hymns?hymnal=` → Headers → Response Headers, and tell me whether `content-encoding: gzip` is there. Please copy all the Console lines to me (they hold hymn titles and counts only)."
 
-The agent checks: `/church`'s two values equal `/hymnals`' (AC2); `/hymns` status 200 with `total` equal to that hymnal's `hymn_count`; `content-encoding: gzip` (AC16); matches 200 with `unparsed=[]`; suggestions 200 with 3-5 hymns per slot, distinct first hymns, and the model's answer used (`source` mostly `ai`). A 502 `ai_upstream_error` means the model answered unusably (reasoning model or bad JSON): ask the controller, and suggest `gpt-4o-mini` in Step 6. A 503 `ai_not_configured` means the key or model is missing, refused or out of budget: check Step 6 and the `AI:` line. The snippet takes the church the app has selected (`localStorage["activeChurchId"]`, `ACTIVE_CHURCH_KEY` in `frontend/src/lib/storage.ts`), or the first church from `/me` when none is stored.
+The agent checks: `/church`'s two values equal `/hymnals`' (AC2); `/hymns` status 200 with `total` equal to that hymnal's `hymn_count`; `content-encoding: gzip` (AC16); matches 200 with `unparsed=[]`; suggestions 200 with 3-5 hymns per slot, distinct first hymns, and the model's answer used (`source` mostly `ai`). A 502 `ai_upstream_error` means the model answered unusably (a reasoning model without `OPENAI_REASONING_EFFORT`, or bad JSON): ask the controller, and suggest the next model from Step 5 in Step 6. A 503 `ai_not_configured` means the key or model is missing, refused, out of budget or not offered: ask the owner whether Deploy Logs show `AI: model not available (OPENAI_MODEL=...)` (pick the next model from Step 5), `AI: quota exhausted` (the cap) or `AI: the OpenAI key was refused` (repeat Step 6.1), and check the `AI:` startup line. The snippet takes the church the app has selected (`localStorage["activeChurchId"]`, `ACTIVE_CHURCH_KEY` in `frontend/src/lib/storage.ts`), or the first church from `/me` when none is stored.
 
 - [ ] **Step 8 (OWNER, optional): Streamlit smoke on liturgy-frozen**
 
@@ -7958,13 +8135,13 @@ The agent checks: `/church`'s two values equal `/hymnals`' (AC2); `/hymns` statu
 
 - [ ] **Step 9 (agent): The slice 3a record (records PR, on the owner's yes)**
 
-On a branch `claude/slice-3a-records` from `origin/main`, insert `### Slice 3a record` after `### Slice 2c record`'s table and before `## Backups` in `docs/ops-runbook.md`: a short paragraph (3a merged as PR #<N> with no database change; no page calls the routes until 3b; the checks were the owner's) and a table with dated rows for: Merge and deploy (merge sha, pre-deploy with no upgrade, health check, the first `AI:` line); CI on `main` (the three jobs' counts); OpenAI (a separate project key set on Railway, a monthly cap set, the model chosen and whether it was the plan's recommendation; never the key); `AI: configured (model=...)`; the Console results (hymnals and counts, `/hymns` total and time, gzip, matches, one suggestion's outcome); the scripture sample (synthetic, or exported on <date> with its parse rate) and the `date_iso` counts; the Streamlit smoke (run or skipped); Follow-ups: first-line matching research on Hymnary.org (owner answer Q2), 3b (the Hymns step UI and the owner's question on whether hymnal changes and alternatives count as unsaved work), and anything the checks found. If the owner chose a model other than `gpt-4.1-mini`, change `backend/.env.example`'s `OPENAI_MODEL=` line in the same PR. Check the section has no `<`, no email, token, key or church id (`grep -Eic '@|bearer|eyJ|sk-|[0-9a-f]{8}-[0-9a-f]{4}-'` prints 0), and that `test_docs.py`, `test_slice1_docs.py` and `test_ops_workflows.py` still pass (`89 passed`). Commit with the two trailer lines. Ask the owner before pushing and opening the PR, and again before merging it.
+On a branch `claude/slice-3a-records` from `origin/main`, insert `### Slice 3a record` after `### Slice 2c record`'s table and before `## Backups` in `docs/ops-runbook.md`: a short paragraph (3a merged as PR #<N> with no database change; no page calls the routes until 3b; the checks were the owner's) and a table with dated rows for: Merge and deploy (merge sha, pre-deploy with no upgrade, health check, the first `AI:` line); CI on `main` (the three jobs' counts); OpenAI (a separate project key set on Railway, the $15 monthly cap set, the model chosen, whether it was the plan's recommendation, and `OPENAI_REASONING_EFFORT` if set; never the key); `AI: configured (model=...)`; the Console results (hymnals and counts, `/hymns` total and time, gzip, matches, one suggestion's outcome); the scripture sample (synthetic, or exported on <date> with its parse rate) and the `date_iso` counts; the Streamlit smoke (run or skipped); Follow-ups: first-line matching research on Hymnary.org (owner answer Q2), 3b (the Hymns step UI and the owner's question on whether hymnal changes and alternatives count as unsaved work), and anything the checks found. If the owner chose a model other than `gpt-4.1-mini`, change `backend/.env.example`'s `OPENAI_MODEL=` line in the same PR (and, for `gpt-5-mini`, uncomment `OPENAI_REASONING_EFFORT=minimal`). Check the section has no `<`, no email, token, key or church id (`grep -Eic '@|bearer|eyJ|sk-|[0-9a-f]{8}-[0-9a-f]{4}-'` prints 0), and that `test_docs.py`, `test_slice1_docs.py` and `test_ops_workflows.py` still pass (`89 passed`). Commit with the two trailer lines. Ask the owner before pushing and opening the PR, and again before merging it.
 
 - [ ] **Step R (only if the 3a release must come out): Revert**
 
 Use this only if the release cannot serve or breaks the church pages (for example `GET /church` failing) and a fix would take too long. No database step: 3a adds no revision and writes nothing. On the owner's yes for each outward action: `git switch -c claude/revert-slice-3a origin/main`, `git revert -m 1 <merge sha>` (commit with the two trailer lines), run both suites (expected `971 passed, 9 skipped`, and 356 frontend tests), push, open a PR titled "Revert slice 3a", wait for green, merge on the yes. The OpenAI variables can stay on Railway; the reverted code does not read them. Record the revert in the slice 3a record.
 
-Expected counts after this task: backend `1095 passed, 11 skipped` on `main` (CI `backend-postgres`: `11 passed, 1095 deselected, 1 warning`); frontend `356 passed` in 55 files. The records PR adds no test.
+Expected counts after this task: backend `1101 passed, 11 skipped` on `main` (CI `backend-postgres`: `11 passed, 1101 deselected, 1 warning`); frontend `356 passed` in 55 files. The records PR adds no test.
 
 ---
 
@@ -7992,9 +8169,9 @@ S = `docs/superpowers/specs/2026-09-25-slice-3-hymns-design.md`; F = foundations
 |---|---|---|
 | 1 | The four routes exist, depend on `require_church`, match S's models, are in the OpenAPI snapshot and `schema.d.ts`; no allowlist change | T8, T9, T10, T13 (routes, regenerated files, `test_route_guards.py` unchanged), T16 Step 4 |
 | 2 | `GET /church`'s two fields equal `GET /hymnals`' | T8 (`test_get_church_returns_the_same_two_values`), T17 Step 7 |
-| 3 | The required-results table; ≥ 98 % of the production sample parses | T4 (parser, sample), T5 (`test_required_results_table`); the real export at T4 Step 10 (owner answer Q4) |
+| 3 | The required-results table; ≥ 98 % of the production sample parses | T4 (parser, sample), T5 (`test_required_results_table`); the real export at T4 Step 10 (owner answer Q4), required before the PR is marked ready (owner answer D; T16 Step 11) |
 | 4 | With exclusion on, nothing in [D − 84, D + 84] minus {D} reaches the prompt or response; D excludes nothing | T7 (window), T13 (`test_exclude_recent_leaves_recent_hymns_out_of_prompt_and_answer`) |
-| 5 | Every OpenAI call through `complete`, with `max_completion_tokens` and `json_mode`; `FakeAI` tests; the seven SDK classes and `insufficient_quota` mapped in order; `openai>=1.45.0`; no socket | T2, T3, T13 (`FakeAI`), the no-network guard |
+| 5 | Every OpenAI call through `complete`, with `max_completion_tokens` and `json_mode`; `FakeAI` tests; the seven SDK classes and `insufficient_quota` mapped in order; `openai>=1.58.0,<4`; no socket | T2, T3, T13 (`FakeAI`), the no-network guard |
 | 6 | Exact codes and messages; no upstream text or configuration detail | T3 (`test_every_sdk_error_class_maps_to_its_code`), T10, T13 (`test_ai_errors_return_their_code_and_exact_message`, 422 tests) |
 | 7 | The 41st suggestion by a user in 10 minutes is 429 with `Retry-After` | T13 (`test_the_41st_call_by_a_user_in_ten_minutes_is_429`, and the church's 401st) |
 | 8 | Church isolation on all four routes | T8, T9, T10, T13 (isolation tests; `current_picks` from B ignored and never echoed) |
@@ -8033,9 +8210,4 @@ S = `docs/superpowers/specs/2026-09-25-slice-3-hymns-design.md`; F = foundations
 
 ## Questions for the owner
 
-The owner's answers of 2026-09-29 (Q1-Q5) are binding and already in the plan. These remain; each has a recommendation.
-
-1. **The same "other idea" under two slots (clarification 9).** When the AI suggests the same hymns for every slot, each slot still gets a different top pick, but one hymn may appear as an "Other idea" chip under two slots. Recommended: accept (it is the spec's own rule, and a repeated chip is a harmless second chance). The alternative, never repeating a chip across slots, would leave some slots with fewer chips.
-2. **The model (owner answer Q3; UNVERIFIED).** Recommended: `gpt-4.1-mini`, with `gpt-4o-mini` as the fallback, and a monthly cap of $5 to $10. Please confirm in OpenAI (Task 17 Step 5) that the model is available to the project before setting it on Railway.
-3. **The scripture sample (owner answer Q4).** Please run the read-only export in Task 4 Step 1 when convenient; until then the parser is tested on a made-up sample.
-4. **Carried to 3b (from the 2c build notes):** whether changing the hymnal and the AI's alternative chips count as unsaved work for "New service". Not needed for 3a.
+None open. The owner's answers of 2026-09-29 (Q1-Q5, and A-D to the plan review) are binding and recorded under "Owner decisions". Owner steps still to come: the scripture export (T4 Step 1, gating "ready" in T16 Step 11) and the OpenAI key, $15 cap and model (T17 Steps 5-6).
