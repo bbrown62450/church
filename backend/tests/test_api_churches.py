@@ -87,6 +87,7 @@ def test_create_201_listed_in_me_and_usable(client, seed_catalog):
     assert usable.json() == {                           # ChurchOut plus slice 2's profile fields
         **body, "timezone": "America/Chicago", "timezone_valid": True, "bible_translation": None,
         "effective_translation": "web", "effective_translation_label": "World English Bible (WEB)",
+        "default_hymnal": None, "effective_hymnal": "GG2013",  # slice 3: the seeded catalog is GG2013
     }
     with session_scope() as s:
         assert s.get(Church, church_id).timezone == "America/Chicago"

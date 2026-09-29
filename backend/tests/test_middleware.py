@@ -6,6 +6,7 @@ import re
 import pytest
 from fastapi import APIRouter
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.testclient import TestClient
 
 from api import settings as settings_mod
@@ -151,12 +152,12 @@ def test_an_error_after_the_response_started_is_reraised_without_a_second_start(
     assert [m["type"] for m in sent] == ["http.response.start"]
 
 
-def test_middleware_order_is_cors_then_request_id_then_unhandled_error():
+def test_middleware_order_is_cors_then_request_id_then_unhandled_error_then_gzip():
     # Starlette makes the last middleware added the outermost; user_middleware
-    # lists them outermost first (F §2.5; slice 3 appends GZip innermost).
+    # lists them outermost first (F §2.5; slice 3 added GZip innermost).
     app = create_app()
     assert [m.cls for m in app.user_middleware] == [
-        CORSMiddleware, RequestIdMiddleware, UnhandledErrorMiddleware,
+        CORSMiddleware, RequestIdMiddleware, UnhandledErrorMiddleware, GZipMiddleware,
     ]
 
 

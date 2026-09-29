@@ -57,7 +57,7 @@ export function inviteAccepted(overrides: Partial<InviteAccepted> = {}): InviteA
 
 // --- slice 2b: the church profile, drafts and lectionary answers ------------------
 
-/** `GET /church` for Grace (slice 2a's `ChurchProfileOut`): New York, WEB. */
+/** `GET /church` for Grace (`ChurchProfileOut`, slices 2a and 3a): New York, WEB, GG2013. */
 export function churchProfile(overrides: Partial<ChurchProfile> = {}): ChurchProfile {
   return {
     ...church(),
@@ -66,6 +66,8 @@ export function churchProfile(overrides: Partial<ChurchProfile> = {}): ChurchPro
     bible_translation: null,
     effective_translation: "web",
     effective_translation_label: "World English Bible (WEB)",
+    default_hymnal: null,
+    effective_hymnal: "GG2013",
     ...overrides,
   };
 }

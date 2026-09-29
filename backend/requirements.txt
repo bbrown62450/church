@@ -14,9 +14,12 @@ tzdata>=2026.4
 beautifulsoup4>=4.12.0
 requests>=2.31.0
 httpx>=0.25.0
-lxml>=4.9.0
 playwright>=1.40.0
-openai>=1.0.0
+# 1.58.0 is the first release whose chat.completions.create takes both
+# max_completion_tokens (always sent) and reasoning_effort (sent when
+# OPENAI_REASONING_EFFORT is set); <4 keeps the next major release out until
+# it is reviewed (integrations/openai_client.py).
+openai>=1.58.0,<4
 python-docx>=1.0.0
 
 # --- migration only (one-time Notion -> Postgres import; NOT a runtime dependency) ---

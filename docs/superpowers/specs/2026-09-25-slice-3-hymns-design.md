@@ -12,6 +12,7 @@
 - The shared `HymnRef`, `SlotHymns` and `SectionKey` shapes are **frozen in F §1.3**. This slice lands first and creates them with exactly that shape (§API Models).
 - Owner decisions 3 and 9.
 - **Amendment 2026-09-26: the service rubric (PR #4).** `docs/superpowers/specs/2026-09-25-service-rubric-design.md`, merged to `main` on 2026-09-26, changed `worship_service.suggest_hymns_for_service`, which this slice replaces. Its behavior is now current behavior (inv §1 D10, D8 amendment) and is **carried over, not dropped**: rubric-aware ranking, the rubric's slot checklists and the year/familiarity facts in the prompt, and year and familiarity on every hymn DTO. PR #4 left one screen change to this slice: the "newer hymn" year label. The additions are marked "Amendment 2026-09-26" below; the main ones are §Backend 3.8, §User experience "Newer-hymn year label", the `HymnOut` fields in §API Models, and the Testing and Acceptance additions.
+- **Notes from planning 3a** (`docs/superpowers/plans/2026-09-29-slice-3a-hymns-backend.md`, 2026-09-29) are marked "(3a plan)" where they are made. The owner answered open questions 1 and 2 on 2026-09-29 (answers Q1 and Q2 below). Changes made while building 3a (the plan's "Build notes (3a build)") are marked "(3a build)".
 
 ---
 
@@ -59,7 +60,7 @@ Foundation pieces this slice builds (F §7.2 row 3):
 
 | Item | Slice | Interface this slice leaves for it |
 |---|---|---|
-| Hymn usage recording ("replace that date's usage on Save") | 5a | The exclusion reads `hymn_usage` with the `(number, normalized title)` key in §Backend 3.4, and 5a writes rows with the same key. |
+| Hymn usage recording ("replace that date's usage on Save") | 5a | The exclusion reads `hymn_usage` by the normalized title alone (§Backend 3.4; owner answer Q2, 3a plan), and 5a keeps writing rows with number and title. |
 | `services.hymns` slot storage, the `services.hymnal` column, the docx "First/Second/Third Hymn" labels, `#None` | 5a | `draft.hymns.slots` and `draft.hymns.hymnal` (F §4.6). The payload hymnal rule is in "Interfaces with other slices", row 5a. |
 | Mapping legacy archived picks to hymn ids (`serviceToDraft`) | 5a | `GET /hymns?hymnal=…&limit=2000` supplies `(hymnal, number, title)` for resolution. This step shows "Not in your hymnal" for any `hymn_id: null` pick. |
 | `{opening_hymn}` / `{hymns}` in liturgy prompts | 4 | The opening slot is the opening hymn. There is no positional compaction. |
@@ -410,6 +411,7 @@ Notes on the models:
   - `q` (trimmed; empty means no filter): **1 to 6 digits** → `number = int(q) OR lower(title) LIKE %q%`; otherwise, including longer digit strings, `lower(title) LIKE %lower(q)%`, built with `.contains(…, autoescape=True)`. The digit cap keeps a long all-digit `q` from binding an integer above 2^63, which raises `OverflowError` (a 500) on SQLite.
   - `hymnal` filters exactly. An unknown hymnal returns an empty page, not an error, because this is a list filter.
   - `total` counts every row matching the filter, blank titles included (6a must be able to fix them).
+  - (3a build; owner decision 1.) Only ASCII digits count as a number (`q=²` was a 500, and Arabic-Indic digits matched numbers). `offset` is at most 1 000 000 (422 `invalid_request` above it): the largest hymnal has about 1 000 hymns, and the cap keeps the value inside what every database accepts.
 - **Hymnal resolution for matches and suggestions:** `hymnal: null` means `effective_hymnal`. A value not among the church's hymnals raises `InvalidInput(field="hymnal")`. The message is the same whether the code exists in another church or nowhere, so nothing leaks.
 - **`current_picks`** are used only as exclusion hints (§3.6 steps 6 and 9). Ids that are not in this church's hymnal are ignored silently, and nothing about them is returned.
   - **Declared exception to F §1.2 rules 2 and 5.** Rule 2 returns 404 for another church's id because the route would otherwise resolve or act on it. These ids are never resolved, loaded, echoed or used to reveal anything; they are only compared against this church's pool. A stale pick of a deleted hymn is also normal draft state, and a 404 would break Suggest for it. So no 404 is raised, and the 404 half of `assert_church_isolated` (`resource_path_b`) is not used for any slice-3 route (none has a resolved path or body id). The isolation tests instead assert that B's id is ignored and never echoed (§Testing).
@@ -465,6 +467,8 @@ If the F §6.1 contingency is in force (Streamlit still runs from `main`), keep 
    - After an item that has verses, a bare number means a verse in the same chapter. Otherwise a bare number is a chapter.
    - Single-chapter books (Obadiah, Philemon, 2 John, 3 John, Jude, and the single-chapter deuterocanonical books in step 4): `N` and `N-M` are verses of chapter 1.
    - A book with no location means the whole book: chapters 1–999.
+   - (3a build; owner answer B, 2026-09-29.) A chapter-only `ff` ("Psalm 148ff") means that chapter only, `(148, 0)-(148, 999)`, not that chapter to the end of the book. A verse `ff` ("Luke 4:14ff") is unchanged. Such a span, and a whole-book span of a book with more than one chapter ("Psalms"), is marked `broad` (`RefSpan.broad`, left out of equality); a whole-book span of a one-chapter book ("Jude") is not.
+   - (3a build; owner decision 1.) Psalm 151 is a single-chapter book too, and a book name may be followed by `:`, so "Psalm 151:1" is Psalm 151 verse 1, not an unparsed Psalm chapter 151. A chapter above 150, or a period between digits ("John 3.16"), makes the segment unparsed (3a plan).
 6. **Span:** each item becomes `RefSpan(book, start=(c1, v1), end=(c2, v2))`. A whole-chapter start is `v1 = 0` and a whole-chapter end is `v2 = 999`.
 7. Anything else goes to `unparsed`, as normalized text.
 
@@ -472,7 +476,9 @@ If the F §6.1 contingency is in force (Streamlit still runs from `main`), keep 
 - For a query span Q and a hymn span H of the **same canonical book**:
   - **passage**: `Q.start <= H.end and H.start <= Q.end`, compared as tuples;
   - **chapter**: otherwise, if the chapter ranges `[Q.c1, Q.c2]` and `[H.c1, H.c2]` intersect.
+  - (3a build; owner answer B.) A `broad` hymn span (step 5) never gives **passage**, only **chapter** at most, so a hymn tagged "Psalms" or "Psalm 148ff" no longer counts as matching every verse.
 - **Unparsed hymn segments** fall back to a boundary-aware text test, which yields **chapter** at most. The pattern is `(?<![0-9A-Za-z])(?<!\d )` + a book alias + `\s*` + the chapter + `(?![0-9])`, tried for each query span's book aliases and first chapter. So "Psalm 1" never hits "Psalm 119", and "John 3" never hits "1 John 3".
+  - (3a build; owner decision 1.) The fallback reads a dotted verse ("John 3.16") as `3:16` before normalizing; it tries each of the query span's chapters, from the first up to ten more, so a range's middle chapters match; an ordinal inside the text ("see I John 3") becomes its digit, so it is 1 John, never John 3; and book aliases of 2 characters or fewer ("is", "jn", "ps") are not tried, so "this is 9" is not Isaiah 9.
 - A hymn's strength is its best across all query spans. `matched_refs` lists every query ref that matched it.
 - **Ordering:** passage tier before chapter tier. Within a tier, by the index of the first matching query ref, then pool order (hymnal order).
 - **Limits:** `limit_per_ref` caps matches attributed to each query ref (a hymn counts once, at its first ref). `max_results` truncates after ordering.
@@ -504,7 +510,7 @@ If the F §6.1 contingency is in force (Streamlit still runs from `main`), keep 
 #### 3.1 `resolve_default_hymnal(church_id, *, session=None) -> DefaultHymnal(default_hymnal, effective_hymnal)`
 
 - `stored = churches.settings.get("default_hymnal")`. It counts only as a non-empty string after `strip()`; any other value counts as unset.
-- `codes = [s.code for s in hymnal_summaries(church_id)]`, in alphabetical order.
+- `codes = [s.code for s in hymnal_summaries(church_id)]`, in alphabetical order. (3a build: codepoint order, sorted in Python as Streamlit's `sorted()` does, so the fallback does not depend on the Postgres collation; an `en` collation put "ab" before "Zz". `GET /hymns`' own `ORDER BY hymnal` still uses the database collation.)
 - `effective = stored if stored in codes else (codes[0] if codes else None)`. The alphabetical fallback matches Streamlit (app.py:650).
 - `GET /hymnals` and `GET /church` both use this function, so the two can never disagree.
 
@@ -523,8 +529,8 @@ One session: `query_hymns`. If `recent_for_date` is given, also `usage_near(chur
   1. **SQL (index-friendly, deliberately wide):** `date_iso >= 'D-84' AND date_iso < 'D+85'` as string comparisons. This keeps datetime-shaped values on D+84 (they sort after `'D+84'`), and drops NULL, `""` and most junk.
   2. **Python (exact):** `day = date_iso[:10]`, parsed with `date.fromisoformat`. A value that still fails to parse (for example `2026-8-2`) is skipped and counted, and the count is logged at DEBUG. Then `D-84 <= day <= D+84 and day != D` is applied to the parsed date, so a datetime-shaped value on D itself is excluded too.
 
-  Nothing in this path raises on bad stored data, so a stray row can never turn `GET /hymns?recent_for_date=` or a suggestion call into a 500.
-- **Key:** `usage_key(number, title) = (number, normalize_title(title))`. `normalize_title` collapses whitespace, strips and casefolds. The key is the same as `is_hymn_recently_used` today (hymn_usage.py:45-47), just more tolerant of whitespace.
+  Nothing in this path raises on bad stored data, so a stray row can never turn `GET /hymns?recent_for_date=` or a suggestion call into a 500. (3a build: the window is clamped at `date.min` and `date.max`, so `recent_for_date=0001-01-01` or `9999-12-31` is a 200, not a 500.)
+- **Key:** `usage_key(title)`, the title alone (owner answer Q2, 2026-09-29; 3a plan). `normalize_title` applies NFKC, collapses whitespace, strips and casefolds. So a hymn sung from GG2013 is flagged when the same title is picked from PH1990 under another number; two different hymns with the same title are also flagged, which the owner accepted. `usage_near` returns `dict[str, date]`. (3a build; owner answer A, 2026-09-29.) `usage_key` also ignores punctuation: after NFKC, curly apostrophes read as `'`, hyphens and dashes as a space, everything else that is not a letter, digit, `_` or space is removed, whitespace is collapsed, the text is casefolded, and a leading "oh " reads as "o ". Leading articles stay. So "Come, Thou Long-Expected Jesus" and "Come Thou Long Expected Jesus", "Amazing Grace" and "Amazing Grace!", and "O God, Our Help in Ages Past" and "Oh God Our Help in Ages Past" are one hymn for recent use. `normalize_title` is unchanged, because the exact-title resolution of an AI answer (§3.6 step 9) uses it.
 - **Value:** the usage date nearest D; ties go to the earlier date. The UI labels a date before D "Used on …" and a date after D "Also planned for …".
 - Uses the index `ix_hymn_usage_church_date`. It reads rows written by either app (frozen Streamlit Prepare, and 5a Save).
 
@@ -545,7 +551,7 @@ One session: `query_hymns`. If `recent_for_date` is given, also `usage_near(chur
 5. **NT context:**
    - `nt_ref = req.selected_nt_ref or scripture_refs.default_nt_ref(req.scriptures)`.
    - If `req.nt_text` is non-blank, use it (`nt_source = "client"`).
-   - Otherwise, if `nt_ref` is set, the fetch runs as `future = _NT_EXECUTOR.submit(fetch_text, nt_ref, "web")` on a module-level `ThreadPoolExecutor(max_workers=4, thread_name_prefix="nt-fetch")`, and the usecase waits `future.result(timeout=min(NT_FETCH_BUDGET_S, remaining))` with `NT_FETCH_BUDGET_S = 10`. This enforces the 10 s budget even though slice 2's `get_passage_text` takes no deadline and can take up to 20 s (F §1.8). On timeout the usecase continues without text (`nt_source = "timeout"`). The abandoned fetch finishes in the background, and its result still fills slice 2's 7-day passage cache for the next request. Any other failure, or `None`, also means no text (`nt_source = "none"`); it is logged, not raised.
+   - Otherwise, if `nt_ref` is set, the fetch runs as `future = _NT_EXECUTOR.submit(fetch_text, nt_ref, "web")` on a module-level `ThreadPoolExecutor(max_workers=4, thread_name_prefix="nt-fetch")`, and the usecase waits `future.result(timeout=min(NT_FETCH_BUDGET_S, remaining))` with `NT_FETCH_BUDGET_S = 10`. This enforces the 10 s budget even though slice 2's `get_passage_text` takes no deadline and can take up to 20 s (F §1.8). On timeout the usecase continues without text (`nt_source = "timeout"`). The abandoned fetch finishes in the background, and its result still fills slice 2's 7-day passage cache for the next request. Any other failure, or `None`, also means no text (`nt_source = "none"`); it is logged, not raised. (3a build: the fetch takes the first alternative of `nt_ref` only, and skips the fetch (`nt_source = "skipped"`) when that alternative has more than `NT_MAX_PARTS = 4` parts, so one suggestion cannot drain the shared bible-api budget; on timeout a fetch that has not started is cancelled. Only 1 500 characters are used in any case.)
    - The text is truncated to 1 500 characters for the prompt (parity, worship_service.py:497).
    - The server always fetches WEB, never ESV (see Behavior changes 8).
 6. **Candidates** (`hymn_suggest.build_candidates(eligible, refs, *, nt_ref, current_picks)`), one list per slot, each at most `SLOT_CAP = 50`:
@@ -558,15 +564,15 @@ One session: `query_hymns`. If `recent_for_date` is given, also `usage_near(chur
 7. **Prompt** (`build_prompt`), deterministic and at most 24 000 characters (F §2.8):
    - a system message: "You help a church choose hymns for a worship service. Reply with JSON only.";
    - a user message containing:
-     - `OCCASION`, `SCRIPTURE READINGS`, `NEW TESTAMENT READING` and `NT PASSAGE TEXT (excerpt)` (parity fields);
+     - `OCCASION`, `SCRIPTURE READINGS`, `NEW TESTAMENT READING` and `NT PASSAGE TEXT (excerpt)` (parity fields); (3a build: the NT reading is put on one line and clipped to 200 characters, so a reference cannot add lines to the prompt);
      - the ROLE REQUIREMENTS text for the three slots (parity, worship_service.py:508-511); *amendment 2026-09-26:* since PR #4 the parity text **is** the church's three rubric slot checklists plus the PREFERENCES line (§3.8);
-     - one `HYMNS` catalogue listing every distinct candidate once: `H{k} | {title ≤80} | #{number or –} | themes: {≤60} | scripture: {≤60}`, with tokens `H1…Hn` in first-seen order; *amendment 2026-09-26:* `| {facts}` follows the number when either fact is known (§3.8);
+     - one `HYMNS` catalogue listing every distinct candidate once: `H{k} | {title ≤80} | #{number or –} | themes: {≤60} | scripture: {≤60}`, with tokens `H1…Hn` in first-seen order; *amendment 2026-09-26:* `| {facts}` follows the number when either fact is known (§3.8); (3a build: a `|` in the title, themes or scripture field becomes `/`, so a catalogue field cannot fake another field);
      - `OPENING CANDIDATES: H…, …`, and the same for RESPONSE and CLOSING;
      - `Return {"opening": [ids], "response": [ids], "closing": [ids]}, with exactly 5 ids per slot (all of that slot's ids if it lists fewer than 5), best first, using only ids listed for that slot, and never the same hymn in two slots.`
    - If the result exceeds 24 000 characters, drop the last candidate of the longest slot list (and its catalogue line when no other list uses it), and repeat. `build_prompt` returns `(messages, token_map)`.
 8. **Call:** `raw = ai.complete(messages, max_completion_tokens=1200, json_mode=True, deadline=deadline)`. Errors map as in §3.7. `temperature` is sent only when `OPENAI_TEMPERATURE` is set.
 9. **Parse and resolve:**
-   - `parse_suggestion_json(raw)` strips code fences (parity, worship_service.py:531-535) and runs `json.loads`. It requires a dict whose slot values are lists. Anything else → `UpstreamError("ai_upstream_error", "The AI gave an answer we couldn't use. Try again.")`.
+   - `parse_suggestion_json(raw)` strips code fences (parity, worship_service.py:531-535) and runs `json.loads`. It requires a dict whose slot values are lists. Anything else → `UpstreamError("ai_upstream_error", "The AI gave an answer we couldn't use. Try again.")`. (3a build: an answer nested too deeply for `json.loads` (`RecursionError`) is the same error, not a 500.)
    - `resolve_suggestions(parsed, token_map, eligible)` maps `^H\d+$` tokens (case-insensitive) to records.
      - A non-token string resolves only by **exact** `normalize_title` equality within `eligible`. When titles collide, the one that appears in that slot's candidate list wins, then the lowest number.
      - There is no substring or fuzzy matching (inv D7), and unknown values are dropped.
@@ -579,7 +585,7 @@ One session: `query_hymns`. If `recent_for_date` is given, also `usage_near(chur
      4. Cap the list at `MAX_PER_SLOT`.
 
      The client then shows an empty slot's top pick plus 2–4 chips, and a filled slot's 3–4 chips (its own pick filtered out).
-10. **Logs** (F §2.5): hymnal, pool size, excluded count, candidate count per slot, resolved count per slot, topped-up count per slot, `nt_source` (`client`, `fetched`, `timeout`, `none`), model, duration and outcome code. Never the prompt, `nt_text` or titles, except prompts at DEBUG.
+10. **Logs** (F §2.5): hymnal, pool size, excluded count, candidate count per slot, resolved count per slot, topped-up count per slot, `nt_source` (`client`, `fetched`, `timeout`, `skipped`, `none`), model, duration and outcome code. Never the prompt, `nt_text` or titles, except prompts at DEBUG. (3a build: the DEBUG prompt replaces the NT passage text line with `[omitted]`, so `nt_text` is never logged (§6); an unexpected exception still writes the line, with `outcome=internal_error`.)
 
 #### 3.7 OpenAI client specifics for this slice
 
@@ -596,6 +602,10 @@ One session: `query_hymns`. If `recent_for_date` is given, also `usage_near(chur
   5. `BadRequestError` → `UpstreamError("ai_upstream_error")`;
   6. `APIConnectionError` → `UpstreamError("ai_upstream_error")`;
   7. any other `APIStatusError` → `UpstreamError("ai_upstream_error")`.
+
+  (3a plan; owner answer A, 2026-09-29.) A model OpenAI does not offer, `NotFoundError` or an error whose `code` is `"model_not_found"` (a retired or mistyped `OPENAI_MODEL`), maps to `NotConfigured("ai_not_configured")`, checked after rows 1-3, with ERROR `AI: model not available (OPENAI_MODEL=<m>)` and no retry. Members see "AI suggestions aren't set up on this app yet."; the fix is a new `OPENAI_MODEL` on Railway. Each attempt's timeout is passed as `create(timeout=openai.Timeout(t, connect=min(5, t)))`, not `with_options(timeout=httpx.Timeout(...))`, since the installed SDK is built on `httpx2` (F §2.8 amendment).
+
+  (3a build; owner decision 1.) The key is left out of the settings' repr; a `nan` or `inf` numeric `OPENAI_*` setting falls back to its default like any other bad number; a reply with no choices is `UpstreamError("ai_upstream_error")`; and a deadline already passed before an attempt still logs its `ai_call` line (outcome `ai_timeout`, "no time left").
 - **Startup (lifespan)** logs exactly one of:
   - INFO `AI: configured (model=<name>)`;
   - WARNING `AI: not configured (OPENAI_API_KEY missing)`;
@@ -603,7 +613,7 @@ One session: `query_hymns`. If `recent_for_date` is given, also `usage_near(chur
   - ERROR `AI: not configured (OPENAI_API_KEY is not ASCII)`.
 
   The key is never printed.
-- **Worst case on the server** for `POST /hymns/suggestions` (unchanged by the 2026-09-26 amendment: the rubric read is one more JSON key in the read phase): everything from the read phase to the last OpenAI attempt runs inside the 75 s deadline set in §3.6 step 0. Inside it, the NT fetch takes ≤ 10 s, the semaphore wait ≤ 15 s, attempt 1 ≤ 30 s, the backoff ≤ 2 s, and attempt 2 gets whatever remains (at least 5 s, or no retry). Mapping the response afterwards is in memory (< 1 s). The total is about 76 s, which matches F §1.8's "~75 s" and leaves about 14 s under the 90 000 ms client timeout. The concurrency slot is held only for the attempts and the backoff, all inside the deadline.
+- **Worst case on the server** for `POST /hymns/suggestions` (unchanged by the 2026-09-26 amendment: the rubric read is one more JSON key in the read phase): everything from the read phase to the last OpenAI attempt runs inside the 75 s deadline set in §3.6 step 0. Inside it, the NT fetch takes ≤ 10 s, the semaphore wait ≤ 15 s, attempt 1 ≤ 30 s, the backoff ≤ 2 s, and attempt 2 gets whatever remains (at least 5 s, or no retry). Mapping the response afterwards is in memory (< 1 s). The total is about 76 s, which matches F §1.8's "~75 s" and leaves about 14 s under the 90 000 ms client timeout. The concurrency slot is held only for the attempts and the backoff, all inside the deadline. (3a plan: httpx applies an attempt's timeout per phase, to the connect, each read, the write and the pool wait, not to the attempt as a whole, so a response that arrives slowly in pieces can run a few seconds past the 75 s deadline; the gap under the 90 s client timeout covers that.)
 
 #### 3.8 Service rubric in suggestions (amendment 2026-09-26, PR #4)
 
@@ -611,6 +621,7 @@ PR #4's behavior (inv §1 D10) is carried into the new pipeline. It reuses `serv
 - **Read.** `rubric = merge_rubric(get_church_rubric_overrides(church_id, session=s))` in the read phase (§3.6 step 1), and in `list_hymns_page` and `scripture_matches` for the `newer_than_preferred` flag. It is read fresh on every request with no cache (parity: app.py reads it on every click). Invalid stored values fall back to the defaults, as `merge_rubric` guarantees, so a bad stored rubric can never fail a request.
 - **Ranking and cut** (replaces the "Capping" rule in §3.6 step 6; padding keeps its even sample, now ranked (item 4), and the other-slots rule is unchanged):
   1. Each slot's focused list (response: the `match_hymns` order, with the NT reading first; opening and closing: theme matches in hymnal order) is ranked with `hymn_ranking.rank_candidates(list, prefer_before_year=…, prefer_familiar=…, year_of=…, count_of=…)`. The sort is stable, so the slice's own order still breaks ties within an era and familiarity level.
+     - (3a build; owner, 2026-09-29.) Ranking the whole response list before the 50-hymn cut could push every hymn for the NT reading out of it. So a ranked response list puts the hymns that match the NT reading first, ranked among themselves (at most 50), and then ranks the rest and cuts them with `shortlist` into the remaining places, with a reserve of `min(10, remaining places)`. Opening and closing, and a response list with no ranking signal (item 3), are unchanged.
   2. A ranked list longer than `SLOT_CAP` (50) is cut with `hymn_ranking.shortlist(ranked, limit=SLOT_CAP, prefer_before_year=…, reserve=NEWER_RESERVE)`, where `NEWER_RESERVE = 10`, the same one-in-five share as PR #4's 12 of 60. The owner approved 10 of 50 for the new app (Beau, 2026-09-26; index §4). Up to 10 places therefore go to the best unknown-year and newer hymns, so the age preference never acts as a filter.
   3. **No-signal exception.** When no hymn in the list has a known `text_year`, and either `prefer_familiar` is off or no hymn has a known `hymnal_count`, ranking changes nothing. An opening or closing list is then still reduced with `evenly_spaced`, as before, so a hymnal without facts (PH1990 today) does not fall back to its first 50 hymns, which are all Advent hymns. A response list is truncated as before.
   4. Padding (fewer than 15 focused hymns → 40): pad hymns are an even sample of the rest of `eligible` (§3.6 step 6), which removes the Advent bias. The sample is then ranked with `hymn_ranking.rank_candidates` (the church's `prefer_before_year` and `prefer_familiar`, with the same accessors as item 1) and appended **after** the ranked focused hymns. So focused hymns still come first for the minimum top-up (§3.6 step 9), and within the pad, older and familiar hymns come first, as the rubric spec's ranked fallback requires. With no facts, ranking changes nothing and the pad is the plain even sample. This replaces PR #4's fallback of the whole ranked hymnal, which kept the Advent bias for PH1990.
@@ -678,7 +689,7 @@ Every route calls its usecase with `church.id` only (F §1.2 rule 1).
 - **Compatibility with frozen Streamlit:** nothing is written, so there is nothing to break.
   - Usage rows written by Streamlit's Prepare (ISO `date_iso` from `record_usage`) are read correctly.
   - Streamlit ignores `default_hymnal`, and its settings merge preserves unknown keys (F §6.2).
-- **Production data assumption to verify before building the parser.** Nobody has checked the actual `scripture_refs` formats in production. Before implementing §2, the owner runs a read-only query against production and commits the output as `backend/tests/fixtures/hymns/scripture_refs_sample.txt`:
+- **Production data assumption to verify before building the parser.** Nobody has checked the actual `scripture_refs` formats in production. Before implementing §2, the owner runs a read-only query against production and commits the output as `backend/tests/fixtures/hymns/scripture_refs_sample.txt` (3a plan: `backend/tests/hymn_fixtures/scripture_refs_sample.csv`, columns `hymnal,number,title,scripture_refs`, because every file under `backend/tests/fixtures/*/` needs a recorder sidecar; the plan's Task 4 gives the owner's query, and a synthetic stand-in keeps the build moving until the export arrives):
 
   ```sql
   select distinct scripture_refs from hymn_catalog where coalesce(scripture_refs, '') <> '' order by 1 limit 400;
@@ -893,7 +904,7 @@ Unchanged on purpose:
 - the Hymnary credit caption;
 - the slot captions;
 - free-text hymns stay removed (owner decision 9);
-- the usage key stays `(number, title)`, with no hymnal dimension (see Risks).
+- the usage key has no hymnal dimension. (3a plan: it is now the title alone, owner answer Q2; see Open question 1.)
 
 ---
 
@@ -1011,7 +1022,8 @@ Run on the production Vercel URL, at 375 px (iPhone SE in device mode) and on de
 ## Risks and open questions
 
 **Risks (with mitigations):**
-- **Unknown `scripture_refs` formats in production.** Parser recall could drop silently. Mitigations: sample export plus the 98 % parse test before implementation (§Data), the boundary-aware text fallback for unparsed segments, and logging of the unparsed count per request at DEBUG.
+- **Unknown `scripture_refs` formats in production.** Parser recall could drop silently. Mitigations: sample export plus the 98 % parse test before implementation (§Data), the boundary-aware text fallback for unparsed segments, and logging of the unparsed count per request at DEBUG. (3a build: the build used a synthetic, Hymnary-shaped sample; the owner's read-only export, with the `hymn_usage.date_iso` check in §Data, must replace it and pass the 98 % test before the 3a PR is marked ready (plan Task 16 Step 11; owner answer D). Shapes left for the export to show: "vv.", "(paraphrase)", "and" or "&" between references, and a book carried across " or ".)
+- **NUL characters (3a build; follow-up).** A `\x00` in a query value or body text reaches Postgres, which rejects it in text columns, so the request is a 500 instead of a 422. It is an app-wide concern, not slice 3's alone, and is left to a separate follow-up across all routes (for example one shared validator).
 - **Model choice and cost.** `OPENAI_MODEL` must support `response_format: json_object` and `max_completion_tokens`. A reasoning model can spend the 1 200-token budget on reasoning and return empty content, which becomes `ai_upstream_error`. Mitigations: pick a non-reasoning, inexpensive chat model; use a separate Railway key; set a monthly budget cap in the OpenAI dashboard. Together with the `ai` bucket, this bounds cost exposure. When the cap is reached, OpenAI returns 429 `insufficient_quota`, which maps to `ai_not_configured` with an ERROR log (§3.7), so members see "not set up" rather than "busy", and nothing retries.
 - **Candidate top-up quality.** When the AI returns fewer than 3 usable hymns for a slot, the extra alternatives come from the server's own candidate order (scripture matches for response, theme matches for opening and closing, then the even sample). These are reasonable but not AI-ranked. They carry `source: "candidates"` and are counted in the logs, so a model that often under-answers is visible.
 - **Payload size.** One hymnal of about 850 rows is about 200 KB uncompressed and about 35 KB gzipped, refetched when stale on focus. If mobile data use becomes a complaint, raise `staleTime` for the hymn-list key (hymn edits already invalidate it).
@@ -1020,8 +1032,8 @@ Run on the production Vercel URL, at 375 px (iPhone SE in device mode) and on de
 - **Sparse hymn facts (amendment 2026-09-26).** Until 6a, facts come only from the ops backfill, which matches through scripture references. PH1990 hymns (no references) and hymns added after the last run stay unknown, so they rank in the middle and never get the year label. Mitigation: the no-signal sampling rule (§3.8) and the README's "re-run after importing or adding hymns" step. Per-hymn editing of the facts is in 6a's hymn dialog (owner, 2026-09-26; index §6 question 23), not part of 3.
 
 **Open questions:**
-1. **Recent use across hymnals.** Usage is matched on `(number, normalized title)`, as today, so a hymn sung from GG2013 is not flagged when the same text is picked from PH1990 under a different number. Should the match use the normalized title alone, with more matches but occasional false positives for different hymns with the same title? This spec keeps the current key until the owner decides. It is a one-line change in `usage_key`.
-2. **"Fill each slot" versus "fill each empty slot" (decision 3).** Decision 3 says "fill each slot with the top pick". This spec reads that as "fill each *empty* slot": a hymn the user already chose is never overwritten, and a filled slot gains 3–4 chips instead, so the AI's top pick is one tap away. This is an interpretation, not a confirmed decision.
+1. **Recent use across hymnals.** *Answered 2026-09-29 (owner answer Q2): match on the normalized title alone; `usage_key` changed in 3a.* Follow-up (owner): Glory to God often titles hymns by their first line, so a first-line match would catch more; no first-line data is stored today. Research later whether Hymnary.org can supply first lines (its scripture API, which `hymnary_facts.py` already calls, keys results by first line; unverified for hymns without scripture references). The original question: Usage is matched on `(number, normalized title)`, as today, so a hymn sung from GG2013 is not flagged when the same text is picked from PH1990 under a different number. Should the match use the normalized title alone, with more matches but occasional false positives for different hymns with the same title? This spec keeps the current key until the owner decides. It is a one-line change in `usage_key`.
+2. **"Fill each slot" versus "fill each empty slot" (decision 3).** *Answered 2026-09-29 (owner answer Q1): only empty slots; recorded in F's decisions table as D16.* Decision 3 says "fill each slot with the top pick". This spec reads that as "fill each *empty* slot": a hymn the user already chose is never overwritten, and a filled slot gains 3–4 chips instead, so the AI's top pick is one tap away. This is an interpretation, not a confirmed decision.
    - **When it is decided:** the question is put to the owner **before 3b starts** (together with slice 4's question on Generate for custom elements, which must be answered before 4b). The answer is recorded in F's decisions table, and this spec follows that entry.
    - **If the answer is "overwrite every slot",** the change is small and lands in 3b: `applySuggestions` takes `[0]` for every slot and puts the previous pick first among the chips; the server's `finalize_slots` stops treating current picks as reserved for their own slot (a small backend change shipped with 3b, with its `test_hymn_suggest.py` cases updated); and AC 11, Behavior change 4, the toolbar helper "Fills empty slots…" and the `picks.test.ts` / `hymns-step.test.tsx` cases change with it.
    - **If the answer is "empty slots only", or before it arrives,** 3a builds `finalize_slots` as specified here, and nothing changes.

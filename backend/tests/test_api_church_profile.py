@@ -57,6 +57,8 @@ def test_new_fields_including_label(client, make_user, make_church, no_esv_key):
         "bible_translation": "kjv",
         "effective_translation": "kjv",
         "effective_translation_label": "King James Version (KJV)",
+        "default_hymnal": None,
+        "effective_hymnal": None,
     }
 
 
@@ -131,7 +133,7 @@ def test_me_church_items_unchanged(client, make_user, make_church):
     assert ok["schema"] == {"$ref": "#/components/schemas/ChurchProfileOut"}
     assert set(components["ChurchProfileOut"]["required"]) == {
         "id", "name", "role", "timezone", "timezone_valid", "bible_translation",
-        "effective_translation", "effective_translation_label"}
+        "effective_translation", "effective_translation_label", "default_hymnal", "effective_hymnal"}
 
 
 def test_church_deleted_after_guard_is_403(client, make_user, make_church, monkeypatch):

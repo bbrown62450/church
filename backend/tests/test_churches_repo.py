@@ -156,3 +156,15 @@ def test_recent_owned_creations_skips_old_and_admin_only(tmp_db, make_user):
     # A non-UTC `since` means the same instant (SQLite compares naive UTC text).
     eastern = since.astimezone(timezone(timedelta(hours=-4)))
     assert recent_owned_creations(owner, since=eastern) == [NOW - timedelta(hours=2)]
+
+
+def test_rubric_overrides_read_in_the_callers_session(tmp_db, make_user):
+    """Slice 3 reads the rubric in the same session as the hymns (F §2.2 rule 3)."""
+    from repos.churches import get_church_rubric_overrides, update_church_rubric
+
+    cid = create_church(name="Grace", timezone="America/New_York", owner_user_id=make_user())
+    update_church_rubric(cid, {"prefer_before_year": 1900})
+    with session_scope() as s:
+        assert get_church_rubric_overrides(cid, session=s) == {"prefer_before_year": 1900}
+    assert get_church_rubric_overrides(cid) == {"prefer_before_year": 1900}
+    assert get_church_rubric_overrides(uuid.uuid4()) == {}

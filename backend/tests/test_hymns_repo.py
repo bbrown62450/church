@@ -1,11 +1,20 @@
+import uuid
+
+import pytest
 from sqlalchemy import event, select
 
 from db import session_scope
 from db.models import Hymn, HymnCatalog
+from domain_errors import NotFound
 from repos.hymns import (
+    HymnalSummary,
+    HymnRecord,
     add_hymn,
     delete_hymn,
+    hymnal_summaries,
+    list_hymnal_records,
     list_hymns,
+    query_hymns,
     seed_church_from_catalog,
     update_hymn,
 )
@@ -184,3 +193,108 @@ def test_seed_with_empty_catalog_inserts_nothing(tmp_db, make_user, make_church)
         assert seed_church_from_catalog(cid, session) == 0
     assert inserts == []
     assert list_hymns(cid) == []
+
+
+# --- slice 3a: typed reads (S Backend 1 "repos/hymns.py"; F §1.4) -------------------
+
+def _hymn(church_id, hymnal, title, number=None, refs=None, **extra):
+    with session_scope() as s:
+        row = Hymn(church_id=church_id, hymnal=hymnal, title=title, number=number,
+                   scripture_refs=refs, **extra)
+        s.add(row)
+        s.flush()
+        return row.id
+
+
+def _titles(records):
+    return [(r.hymnal, r.number, r.title) for r in records]
+
+
+def test_query_hymns_maps_records_and_orders_nulls_last(tmp_db, make_church):
+    cid = make_church()
+    _hymn(cid, "PH1990", "Zion", 5)
+    _hymn(cid, "GG2013", "no number b")
+    _hymn(cid, "GG2013", "Holy", 2, refs="Isaiah 6:3", theme="Praise",
+          hymnary_link="https://hymnary.org/hymn/GG2013/2", text_year=1826, hymnal_count=1322)
+    _hymn(cid, "GG2013", "No number A")
+    _hymn(cid, "GG2013", "Abide", 10)
+    records, total = query_hymns(cid, limit=2000)
+    assert total == 5
+    assert _titles(records) == [("GG2013", 2, "Holy"), ("GG2013", 10, "Abide"),
+                                ("GG2013", None, "No number A"), ("GG2013", None, "no number b"),
+                                ("PH1990", 5, "Zion")]
+    holy = records[0]
+    assert isinstance(holy, HymnRecord) and isinstance(holy.id, uuid.UUID)
+    assert (holy.link, holy.scripture_refs, holy.theme, holy.text_year, holy.hymnal_count) == (
+        "https://hymnary.org/hymn/GG2013/2", "Isaiah 6:3", "Praise", 1826, 1322)
+
+
+def test_query_hymns_filters_by_hymnal_number_and_escaped_title(tmp_db, make_church):
+    cid = make_church()
+    _hymn(cid, "GG2013", "Joy to the World", 134)
+    _hymn(cid, "GG2013", "Psalm 134", 999)
+    _hymn(cid, "GG2013", "100% Sure", 1)
+    _hymn(cid, "GG2013", "100 Sure", 2)
+    _hymn(cid, "GG2013", "snake_case", 3)
+    _hymn(cid, "GG2013", "snakeXcase", 4)
+    _hymn(cid, "PH1990", "Joy to the World", 40)
+    assert _titles(query_hymns(cid, hymnal="PH1990")[0]) == [("PH1990", 40, "Joy to the World")]
+    assert query_hymns(cid, hymnal="NOPE") == ([], 0)
+    assert {r.number for r in query_hymns(cid, q="134")[0]} == {134, 999}     # number or title
+    assert [r.title for r in query_hymns(cid, q=" JOY ", hymnal="GG2013")[0]] == ["Joy to the World"]
+    assert [r.title for r in query_hymns(cid, q="100%")[0]] == ["100% Sure"]
+    assert [r.title for r in query_hymns(cid, q="e_c")[0]] == ["snake_case"]
+    assert query_hymns(cid, q="   ")[1] == 7                                     # blank q: no filter
+
+
+def test_long_digit_q_uses_the_title_branch_only(tmp_db, make_church):
+    cid = make_church()
+    _hymn(cid, "GG2013", "Hymn 123456", 123456)
+    _hymn(cid, "GG2013", "Other", 7)
+    assert [r.number for r in query_hymns(cid, q="123456")[0]] == [123456]    # 6 digits: number too
+    assert query_hymns(cid, q="9" * 30) == ([], 0)                             # no OverflowError
+    assert [r.number for r in query_hymns(cid, q="1234567")[0]] == []
+
+
+def test_query_hymns_pages_counts_blank_titles_and_is_church_scoped(tmp_db, make_church):
+    a, b = make_church(name="A"), make_church(name="B")
+    for n in range(1, 6):
+        _hymn(a, "GG2013", f"Hymn {n}", n)
+    _hymn(a, "GG2013", None, 6)
+    _hymn(a, "GG2013", "  ", 7)
+    _hymn(b, "GG2013", "Church B only", 1)
+    page, total = query_hymns(a, limit=2, offset=2)
+    assert total == 7
+    assert [r.number for r in page] == [3, 4]
+    assert [r.number for r in query_hymns(a, limit=10, offset=5)[0]] == [6, 7]
+    assert "Church B only" not in [r.title for r in query_hymns(a, limit=100)[0]]
+    with pytest.raises(NotFound):
+        query_hymns("not-a-uuid")
+
+
+def test_hymnal_summaries_count_hymns_and_scripture_refs(tmp_db, make_church):
+    cid, other = make_church(name="A"), make_church(name="B")
+    _hymn(cid, "PH1990", "One", 1)
+    _hymn(cid, "GG2013", "Two", 2, refs="John 3:16")
+    _hymn(cid, "GG2013", "Three", 3, refs="   ")
+    _hymn(cid, "GG2013", "Four", 4)
+    _hymn(cid, "", "Blank code", 5)
+    _hymn(other, "ZZ", "Other church", 1)
+    assert hymnal_summaries(cid) == [HymnalSummary("GG2013", 3, 1), HymnalSummary("PH1990", 1, 0)]
+    assert hymnal_summaries(make_church(name="Empty")) == []
+    # Codepoint order, as Streamlit's sorted() (owner decision 1): upper case before lower.
+    _hymn(cid, "ab", "Lower", 1)
+    _hymn(cid, "Zz", "Upper", 1)
+    assert [h.code for h in hymnal_summaries(cid)] == ["GG2013", "PH1990", "Zz", "ab"]
+
+
+def test_list_hymnal_records_in_hymnal_order_in_the_callers_session(tmp_db, make_church):
+    cid = make_church()
+    _hymn(cid, "GG2013", "B", 2)
+    _hymn(cid, "GG2013", "A", None)
+    _hymn(cid, "GG2013", "C", 1)
+    _hymn(cid, "PH1990", "D", 1)
+    with session_scope() as s:
+        records = list_hymnal_records(cid, "GG2013", session=s)
+        assert [r.title for r in records] == ["C", "B", "A"]
+        assert hymnal_summaries(cid, session=s)[0].code == "GG2013"

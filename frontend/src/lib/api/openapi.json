@@ -44,6 +44,28 @@
             ],
             "title": "Bible Translation"
           },
+          "default_hymnal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Hymnal"
+          },
+          "effective_hymnal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Hymnal"
+          },
           "effective_translation": {
             "title": "Effective Translation",
             "type": "string"
@@ -87,7 +109,9 @@
           "timezone_valid",
           "bible_translation",
           "effective_translation",
-          "effective_translation_label"
+          "effective_translation_label",
+          "default_hymnal",
+          "effective_hymnal"
         ],
         "title": "ChurchProfileOut",
         "type": "object"
@@ -172,6 +196,419 @@
           "request_id"
         ],
         "title": "ErrorDetail",
+        "type": "object"
+      },
+      "HymnMatchOut": {
+        "properties": {
+          "hymnal": {
+            "title": "Hymnal",
+            "type": "string"
+          },
+          "hymnal_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hymnal Count"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link"
+          },
+          "matched_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Matched Refs",
+            "type": "array"
+          },
+          "newer_than_preferred": {
+            "title": "Newer Than Preferred",
+            "type": "boolean"
+          },
+          "number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Number"
+          },
+          "recent_use_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recent Use On"
+          },
+          "scripture_refs": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scripture Refs"
+          },
+          "strength": {
+            "enum": [
+              "passage",
+              "chapter"
+            ],
+            "title": "Strength",
+            "type": "string"
+          },
+          "text_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text Year"
+          },
+          "themes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Themes",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "hymnal",
+          "title",
+          "number",
+          "link",
+          "scripture_refs",
+          "themes",
+          "recent_use_on",
+          "text_year",
+          "hymnal_count",
+          "newer_than_preferred",
+          "strength",
+          "matched_refs"
+        ],
+        "title": "HymnMatchOut",
+        "type": "object"
+      },
+      "HymnOut": {
+        "properties": {
+          "hymnal": {
+            "title": "Hymnal",
+            "type": "string"
+          },
+          "hymnal_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hymnal Count"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link"
+          },
+          "newer_than_preferred": {
+            "title": "Newer Than Preferred",
+            "type": "boolean"
+          },
+          "number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Number"
+          },
+          "recent_use_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recent Use On"
+          },
+          "scripture_refs": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scripture Refs"
+          },
+          "text_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text Year"
+          },
+          "themes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Themes",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "hymnal",
+          "title",
+          "number",
+          "link",
+          "scripture_refs",
+          "themes",
+          "recent_use_on",
+          "text_year",
+          "hymnal_count",
+          "newer_than_preferred"
+        ],
+        "title": "HymnOut",
+        "type": "object"
+      },
+      "HymnSuggestionIn": {
+        "additionalProperties": false,
+        "properties": {
+          "current_picks": {
+            "$ref": "#/components/schemas/SlotPicks"
+          },
+          "exclude_recent": {
+            "default": true,
+            "title": "Exclude Recent",
+            "type": "boolean"
+          },
+          "hymnal": {
+            "anyOf": [
+              {
+                "maxLength": 20,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hymnal"
+          },
+          "nt_text": {
+            "anyOf": [
+              {
+                "maxLength": 20000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nt Text"
+          },
+          "occasion": {
+            "default": "",
+            "maxLength": 300,
+            "title": "Occasion",
+            "type": "string"
+          },
+          "scriptures": {
+            "items": {
+              "maxLength": 200,
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Scriptures",
+            "type": "array"
+          },
+          "selected_nt_ref": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Nt Ref"
+          },
+          "service_date_iso": {
+            "format": "date",
+            "title": "Service Date Iso",
+            "type": "string"
+          }
+        },
+        "required": [
+          "service_date_iso"
+        ],
+        "title": "HymnSuggestionIn",
+        "type": "object"
+      },
+      "HymnSuggestionsOut": {
+        "properties": {
+          "excluded_recent_count": {
+            "title": "Excluded Recent Count",
+            "type": "integer"
+          },
+          "hymnal": {
+            "title": "Hymnal",
+            "type": "string"
+          },
+          "nt_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nt Ref"
+          },
+          "nt_text_used": {
+            "title": "Nt Text Used",
+            "type": "boolean"
+          },
+          "slots": {
+            "$ref": "#/components/schemas/SuggestedSlots"
+          }
+        },
+        "required": [
+          "hymnal",
+          "nt_ref",
+          "nt_text_used",
+          "excluded_recent_count",
+          "slots"
+        ],
+        "title": "HymnSuggestionsOut",
+        "type": "object"
+      },
+      "HymnalListOut": {
+        "properties": {
+          "default_hymnal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Hymnal"
+          },
+          "effective_hymnal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Hymnal"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/HymnalOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items",
+          "default_hymnal",
+          "effective_hymnal"
+        ],
+        "title": "HymnalListOut",
+        "type": "object"
+      },
+      "HymnalOut": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "hymn_count": {
+            "title": "Hymn Count",
+            "type": "integer"
+          },
+          "scripture_ref_count": {
+            "title": "Scripture Ref Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "code",
+          "hymn_count",
+          "scripture_ref_count"
+        ],
+        "title": "HymnalOut",
         "type": "object"
       },
       "InviteAcceptOut": {
@@ -316,6 +753,37 @@
           "churches"
         ],
         "title": "MeOut",
+        "type": "object"
+      },
+      "Page_HymnOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/HymnOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "Page[HymnOut]",
         "type": "object"
       },
       "PassageOut": {
@@ -547,6 +1015,305 @@
           "customized"
         ],
         "title": "RubricOut",
+        "type": "object"
+      },
+      "ScriptureMatchIn": {
+        "additionalProperties": false,
+        "description": "POST /hymns/scripture-matches. Refs blank after trimming are the usecase's\n422 \"Enter at least one scripture reference.\" (fields.refs).",
+        "properties": {
+          "hymnal": {
+            "anyOf": [
+              {
+                "maxLength": 20,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hymnal"
+          },
+          "limit_per_ref": {
+            "default": 50,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Limit Per Ref",
+            "type": "integer"
+          },
+          "max_results": {
+            "default": 20,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Max Results",
+            "type": "integer"
+          },
+          "recent_for_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recent For Date"
+          },
+          "refs": {
+            "items": {
+              "maxLength": 200,
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Refs",
+            "type": "array"
+          }
+        },
+        "title": "ScriptureMatchIn",
+        "type": "object"
+      },
+      "ScriptureMatchesOut": {
+        "properties": {
+          "hymnal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hymnal"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/HymnMatchOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "refs_used": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Refs Used",
+            "type": "array"
+          },
+          "total_matched": {
+            "title": "Total Matched",
+            "type": "integer"
+          },
+          "unparsed_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unparsed Refs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "hymnal",
+          "refs_used",
+          "unparsed_refs",
+          "total_matched",
+          "items"
+        ],
+        "title": "ScriptureMatchesOut",
+        "type": "object"
+      },
+      "SlotPicks": {
+        "additionalProperties": false,
+        "description": "Exclusion hints only: never resolved, loaded or echoed, so an id from\nanother church or a deleted hymn is ignored, not a 404 (S API notes; the\ndeclared exception to F \u00a71.2 rules 2 and 5).",
+        "properties": {
+          "closing": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closing"
+          },
+          "opening": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Opening"
+          },
+          "response": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response"
+          }
+        },
+        "title": "SlotPicks",
+        "type": "object"
+      },
+      "SuggestedHymnOut": {
+        "properties": {
+          "hymnal": {
+            "title": "Hymnal",
+            "type": "string"
+          },
+          "hymnal_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hymnal Count"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link"
+          },
+          "newer_than_preferred": {
+            "title": "Newer Than Preferred",
+            "type": "boolean"
+          },
+          "number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Number"
+          },
+          "recent_use_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recent Use On"
+          },
+          "scripture_refs": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scripture Refs"
+          },
+          "source": {
+            "enum": [
+              "ai",
+              "candidates"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "text_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text Year"
+          },
+          "themes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Themes",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "hymnal",
+          "title",
+          "number",
+          "link",
+          "scripture_refs",
+          "themes",
+          "recent_use_on",
+          "text_year",
+          "hymnal_count",
+          "newer_than_preferred",
+          "source"
+        ],
+        "title": "SuggestedHymnOut",
+        "type": "object"
+      },
+      "SuggestedSlots": {
+        "properties": {
+          "closing": {
+            "items": {
+              "$ref": "#/components/schemas/SuggestedHymnOut"
+            },
+            "title": "Closing",
+            "type": "array"
+          },
+          "opening": {
+            "items": {
+              "$ref": "#/components/schemas/SuggestedHymnOut"
+            },
+            "title": "Opening",
+            "type": "array"
+          },
+          "response": {
+            "items": {
+              "$ref": "#/components/schemas/SuggestedHymnOut"
+            },
+            "title": "Response",
+            "type": "array"
+          }
+        },
+        "required": [
+          "opening",
+          "response",
+          "closing"
+        ],
+        "title": "SuggestedSlots",
         "type": "object"
       },
       "TranslationOut": {
@@ -875,6 +1642,501 @@
           }
         },
         "summary": "Ready"
+      }
+    },
+    "/hymnals": {
+      "get": {
+        "operationId": "list_hymnals_hymnals_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-church-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Church-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HymnalListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "List Hymnals"
+      }
+    },
+    "/hymns": {
+      "get": {
+        "description": "Ordered by hymnal, number (nulls last), title, id. `q` of 1-6 digits also\nmatches the number. An unknown hymnal is an empty page.",
+        "operationId": "list_hymns_hymns_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "hymnal",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 20,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hymnal"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 2000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 1000000,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "recent_for_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Recent For Date"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-church-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Church-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_HymnOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "List Hymns"
+      }
+    },
+    "/hymns/scripture-matches": {
+      "post": {
+        "operationId": "scripture_matches_hymns_scripture_matches_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-church-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Church-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScriptureMatchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScriptureMatchesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Scripture Matches"
+      }
+    },
+    "/hymns/suggestions": {
+      "post": {
+        "description": "AI fills each empty slot with its top pick and gives every slot 2-4 other\nideas (owner decision 3; owner answer Q1). Charged to the `ai` bucket\n(40 per 10 min per user, 400 per day per church; F \u00a71.8).",
+        "operationId": "suggest_hymns_hymns_suggestions_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-church-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Church-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HymnSuggestionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HymnSuggestionsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Gateway Timeout"
+          }
+        },
+        "summary": "Suggest Hymns"
       }
     },
     "/invites/accept": {
