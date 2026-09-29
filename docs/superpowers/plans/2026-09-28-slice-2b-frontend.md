@@ -18,8 +18,9 @@
   - Frontend baseline `221 passed` in 34 files; `npm run typecheck` and `npm run lint` clean; backend baseline `971 passed, 9 skipped`.
   - `frontend/src/lib/api/schema.d.ts` already has `ChurchProfileOut`, `LectionaryOut`, `ReadingSetOut`, `TranslationsOut` and the passage types (2a).
   - `zod` 4.6.5 is in `node_modules` (through `eslint-config-next` and `shadcn`) but not in `package.json`.
-  - The build container reaches registry.npmjs.org and Google Fonts, but not ui.shadcn.com (`CONNECT tunnel failed, response 403`, checked 2026-09-28), nor Railway or the three reading sites.
+  - The build container reaches registry.npmjs.org, Google Fonts and raw.githubusercontent.com (checked 2026-09-29), but not ui.shadcn.com (`CONNECT tunnel failed, response 403`, checked 2026-09-28), nor Railway or the three reading sites.
   - Every task's code below was written and run by the plan's writer in a throwaway worktree at `864ebcd` (hard-linked `node_modules`): the full suite ran three times at `299 passed` in 49 files, typecheck and lint were clean, `next build` listed the five new routes, and the backend suite stayed at `971 passed, 9 skipped`. Then T1–T11 were replayed from this document onto a second clean worktree at `864ebcd` (every "Create" and "Replace" block, and each described edit): after each task the suite gave exactly the count in the table below, the result was byte-identical to the tested code, and T11's script and T12's path, lockfile and API checks gave their stated outputs. Not run while planning: a successful `shadcn add` (the registry is blocked; its failure message was recorded), the pushes and CI (T12), and the OWNER steps (T13).
+  - Review fixes (2026-09-29, owner decision 1 and the owner's answers A, B and C): the draft-provider test fakes `Date`, T12 also runs the suite with the clock moved forward, `sheet` and `badge` are rebuilt from the upstream source with the summary's sizing moved into `SummarySheet`, the builder fills a flex column instead of subtracting a fixed header height, the prune comment says when it runs, Python's `normalize_book_text` cases are pinned in TypeScript, and the memory-only warning has the owner's copy. T1–T11 were replayed from this document again onto a clean worktree at `864ebcd`: `299 passed` in 49 files, typecheck and lint clean, `next build` listed the five builder routes, and the suite also passed with the real clock moved 0, 8 and 400 days forward (before the fix, `context.test.tsx`'s adoption test failed at +8 and +400 days).
   - Where S and the code or F disagreed, the code and F won; each case is a numbered clarification below.
 
 ## Global Constraints
@@ -34,7 +35,7 @@
 - Branch: `claude/slice-2-plan-4q33le`, cut from `origin/main` at `864ebcd`. The first commit is this plan, at `docs/superpowers/plans/2026-09-28-slice-2b-frontend.md`.
 - Stage files by name (paths with parentheses in single quotes). `.claude/` stays untracked.
 - `main` is protected: the `backend`, `backend-postgres` and `frontend` checks must pass and the branch must be up to date. Merge only with `gh pr merge <N> --merge -R bbrown62450/church`, only on the owner's explicit yes.
-- Commits end with a blank line and `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Subjects read "Area: plain words (F §x, S …)". Use TDD: write the failing test first and quote its failure.
+- Commits end with a blank line and `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. When the session's attribution asks for it, a `Claude-Session: <url>` line may stand immediately before that final `Co-Authored-By` line (every commit template below allows it; T12 Step 6's trailer check matches the `Co-Authored-By` line anywhere in the message, and Step 8 compares subjects only). Subjects read "Area: plain words (F §x, S …)". Use TDD: write the failing test first and quote its failure.
 - **Backup push after every task** (owner answer Q3): right after each task's commit, `git push origin claude/slice-2-plan-4q33le` (never `--force`; there is no open PR, so the push asks nobody; Vercel may build a preview). A fix asked for by the task's review is a new commit, `Fix: <what> (Task <n> review)`, pushed the same way (never an amend of a pushed commit); T12 Step 8 lists it. The container can restart and lose uncommitted work, so commit as soon as a task's checks pass. If the push is refused because the remote moved, stop and ask the controller.
 - The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and includes the line "Tests: frontend 221 → 299 in 34 → 49 files; backend 971 → 971 passed, 9 → 9 skipped".
 - New prose for the owner has no em dashes. Code strings copied from S (for example "No occasion — Add one", "Too many requests — try again in N s.") keep theirs.
@@ -77,7 +78,7 @@
 - Footer: "Back", "Next: Hymns", "Next: Liturgy", "Next: Review".
 - Summary blocks: "Date", "Readings", "Hymns", "Liturgy"; "Sunday, October 4, 2026"; "No occasion yet"; "No readings yet"; "Available soon"; chips "OT", "OT (auto)", "NT", "NT (auto)"; status line "Draft saved on this device · Not in archive" or "Draft not saved on this device · Not in archive".
 - Still needed: heading "Still needed"; rows "No service date — Choose one", "No occasion — Add one", "No scripture readings — Add one".
-- Toasts: "We couldn't restore your unsaved draft." (error), "This browser isn't saving your draft. Don't refresh until you save." (warning), "Updated from another tab." (info).
+- Toasts: "We couldn't restore your unsaved draft." (error), "This browser isn't saving your draft. Don't refresh or close this tab, or you'll lose your changes." (warning; owner answer B6 replaces S's and F's "Don't refresh until you save.", clarification 33), "Updated from another tab." (info).
 - Nav: `aria-label` "Main", item "Builder".
 
 ## Owner decisions
@@ -94,6 +95,14 @@
 - **Q3: same process as 2a.** Subagent-driven, one task at a time with review, a backup push to `claude/slice-2-plan-4q33le` after each task, one PR; the owner is asked before the PR is opened, before it is marked ready, and before it is merged. The standing permission (owner decision 1) carries over; each use is recorded.
 - **Q4: automated tests plus a short look by the owner after merge.** T13's owner steps are few and short (phone and desktop: the builder, the step bar, Summary, New service). There is no long manual checklist in 2b; `docs/manual-verification.md` is untouched (clarification 29).
 - Also binding: the spec's open question 2 (Saturday vigil) stays with 2c.
+
+### Owner answers (2026-09-29, binding for the plan)
+
+The owner answered the plan's questions (listed, as asked, at the end):
+- **A: rebuild `sheet` and `badge` from the upstream shadcn source**, not from memory. T8 Step 3 holds the files rebuilt from raw.githubusercontent.com (base-nova `sheet.tsx`, `badge.tsx` and `style-nova.css` at a pinned commit) with their provenance; `npx shadcn@latest add` is still tried first (clarification 3).
+- **B1–B5: yes, as written.** B5: on a phone every church page gets a full-width nav row holding one item, "Builder" (F §4.2 requires the nav; clarification 16).
+- **B6: the recommended copy.** The memory-only toast reads "This browser isn't saving your draft. Don't refresh or close this tab, or you'll lose your changes." everywhere (the provider, its test, and "(2b plan)" notes in S and F by T11), since F's "Don't refresh until you save." names a Save that arrives in 5a (clarification 33).
+- **C: yes.** A short "Slice 2b record" in the runbook after the merge (T13 Steps 7–8).
 
 ### The 2b / 2c split (S line 5 is authoritative)
 S line 5 gives 2b "`lib/dates.ts`, `lib/scripture-refs.ts`, the draft store, the builder shell with all four step routes, `/` → `/builder`", and 2c "the Date & readings step UI".
@@ -114,11 +123,11 @@ S line 5 gives 2b "`lib/dates.ts`, `lib/scripture-refs.ts`, the draft store, the
 
 ## Spec clarifications
 
-The code and F win over S's outline. Each item says whether the owner would notice it: **[owner-visible]** items are listed again in the controller's questions at the end; the rest are owner decision 1 (no owner-visible change) or plain readings of S.
+The code and F win over S's outline. Each item says whether the owner would notice it: **[owner-visible]** items were put to the owner in the questions at the end (all answered 2026-09-29); the rest are owner decision 1 (no owner-visible change) or plain readings of S.
 
 1. **The 2b / 2c split** is the table above. S's Testing table names `readings-step.test.tsx`, `passages.test.ts` and `use-debounced-value.test.ts`; those are 2c's.
 2. **[owner-visible] Date & readings in 2b (owner answer Q1).** `SHIPPED_STEPS` is empty in 2b, so every step shows the placeholder card; the progress reads "Soon" for Date & readings, Hymns and Liturgy and "Not in archive" for Review; Review's "Still needed" section is hidden (it lists only shipped steps, and none has shipped); the summary's Readings, Hymns and Liturgy blocks say "Available soon"; the Date block shows the draft's date ("Sunday, October 4, 2026", the next Sunday in the church's zone) without the occasion line. Reason: shipping "readings" with the placeholder would make "Still needed" say "No occasion — Add one" for a field nobody can reach, and it keeps 2c's hand-off the same one-line switch slices 3, 4 and 5a make (add the step to `SHIPPED_STEPS`, replace its page). The readings status, rows, occasion line and chips are already built and tested (T9) behind `SHIPPED_STEPS`.
-3. **Base UI `sheet` and `badge` (a recorded exception to F §4.9.1, like 1a's owner Q3 combobox).** T8 first runs `npx shadcn@latest add sheet badge`. The container's network policy blocks ui.shadcn.com (checked 2026-09-28), so that is expected to fail with a network error; T8 then uses the hand-written files in this plan: thin wrappers over `@base-ui/react/dialog` and `@base-ui/react/use-render` with the base-nova exports, each headed by a comment naming this clarification. They look and behave like the generated ones, and a later `shadcn add` (from a machine that reaches the registry) can replace them. **Owner question A** asks for the yes the controller needs before T8 (recommended: yes). If the owner says no, T8 stops at its Step 3 and the owner generates the two files instead.
+3. **Base UI `sheet` and `badge` (a recorded exception to F §4.9.1, like 1a's owner Q3 combobox).** T8 first runs `npx shadcn@latest add sheet badge`. The container's network policy blocks ui.shadcn.com (checked 2026-09-28), so that is expected to fail with a network error; T8 then uses the files in this plan, **rebuilt from the upstream shadcn source** (owner answer A, 2026-09-29): the base-nova `sheet.tsx` and `badge.tsx` and `style-nova.css` from raw.githubusercontent.com at a pinned commit, put through the installed shadcn CLI's own transforms and Prettier's Tailwind class order (T8 Step 3 records the provenance and the check). The same pipeline reproduces the repo's generated `alert-dialog.tsx` and `card.tsx` byte for byte, so the content should match a later `shadcn add`, though exact whitespace parity is not guaranteed (the CLI leaves some long `cn(` calls unwrapped), and the upstream sheet animates with Base UI's starting and ending styles where `alert-dialog.tsx` uses tw-animate classes. Each file's only change is a comment naming this clarification. `sheet.tsx` keeps upstream's shape: the summary's `max-h-[85dvh]` and rounded top are in `SummarySheet`'s own `className` (T9). A later `shadcn add` (from a machine that reaches the registry) can replace both files.
 4. **`zod` is added by editing two lines** of `package.json` and `package-lock.json` (and dropping `"dev": true` from the `node_modules/zod` entry), not with `npm install`. The container's npm 10.9.7 rewrites the lockfile when it installs (it drops every `"libc"` field, about 130 lines), which could change which optional native packages CI and Vercel install. `npm ci --dry-run` confirms the edited lockfile is in sync. (Owner decision 1.)
 5. **`DraftV1` in 2b is F §4.6's shape without 5a's two fields** (`save_key_fingerprint`, `editing.date_iso`). F §4.6 says 5a adds them with a `DRAFT_VERSION` bump and a tested migration; S's "the complete `DraftV1`" means the hymns and liturgy sections are included, which they are.
 6. **`lib/storage.ts` gains `tryWriteLocal(key, value): boolean` and `localKeys()`.** S says every draft read and write goes through `lib/storage.ts` and that a storage exception switches to memory-only; the existing `writeLocal` swallows the exception, so the store could not tell. `prune.ts` needs to list keys. Both keep the try/catch rule.
@@ -131,12 +140,12 @@ The code and F win over S's outline. Each item says whether the owner would noti
 13. **`stepStatus` already computes the hymns and liturgy counts of F §4.7** (three slots; enabled cards with text), gated by `SHIPPED_STEPS`, so slices 3 and 4 add their step id rather than rewrite the function. Review stays "Not in archive" until 5a: its "Saved" / "Unsaved changes" rule needs `isDirty`, and `status.ts` cannot import `fingerprint.ts` (which imports `status.ts`) without a cycle; 5a changes it. `stillNeeded` has the readings rows only; 3 and 4 add theirs (S Hand-offs).
 14. **A readings date counts only inside 1900–2199** (`hasServiceDate`), the range the lookup accepts and the one S's "Enter a date between 1900 and 2199." enforces.
 15. **Desktop column or bottom sheet is decided by CSS** (`hidden lg:block` on the column, `lg:hidden` on the "Summary" button and the sheet), not by `matchMedia`. jsdom renders both, so tests scope by landmark ("Summary" complementary, "Summary" dialog). S's "(the `matchMedia` shim)" is not needed.
-16. **[owner-visible] `AppNav` shows on church pages only** (with the church switcher), not on `/welcome`, and the header's content width grows from `max-w-3xl` to `max-w-6xl` so it lines up with the desktop builder. `AppNav` is one `<nav aria-label="Main">`, placed by the header's CSS grid under the switcher below `md` and between the switcher and the account menu from `md`.
+16. **[owner-visible] `AppNav` shows on church pages only** (owner answers B4, B5) (with the church switcher), not on `/welcome`, and the header's content width grows from `max-w-3xl` to `max-w-6xl` so it lines up with the desktop builder. `AppNav` is one `<nav aria-label="Main">`, placed by the header's CSS grid under the switcher below `md` and between the switcher and the account menu from `md`.
 17. **The `(church)` home test is replaced.** `church-layout.test.tsx`'s "the home page shows the confirmed church from useChurch()" checked the slice-0 placeholder cards; it becomes "the home page opens the Service Builder" (the count does not change).
 18. **`church-switch.test.tsx` lives in `src/components/builder/`** (2b), not `builder/readings/`: it tests the store and the shell's keyed remount, not the readings step.
 19. **`next_sunday.json`** is `backend/tests/fixtures/shared/next_sunday.json` (S, F §5.3) with S's four cases plus a leap-day case, in `{"_about", "cases": [{from, expected, why}]}`. No backend code or test reads it; `backend/tests/fixtures/README.md` is not edited (the recorder rewrites it from `record_fixtures.py`, which 2b does not change), and the file's `_about` says what it is.
 20. **Set comparisons use `scriptureKey` per line** (`selectedSetIndex`, `showAvailableBanner`), so "Luke 2:1-14 (15-20)" and "Luke 2:1-14, (15-20)" count as the same reading; S says "equal".
-21. **`pruneDrafts` keeps a draft whose `updated_at` cannot be read**; the store backs it up and starts fresh when that church's builder opens. It runs after every `/me` load (cheap and idempotent), not only the first.
+21. **`pruneDrafts` keeps a draft whose `updated_at` cannot be read**; the store backs it up and starts fresh when that church's builder opens. It runs on `/me`'s first load and whenever `/me`'s data changes (a refetch that returns equal data keeps the same object, so it does not rerun then); it is cheap and idempotent.
 22. **`useKeyboardOpen` counts text inputs, textareas and editable elements**; date, time, checkbox, radio, range, file and button inputs and read-only fields do not open a keyboard, so the footer stays.
 23. **The mount-time roll-forward bumps `updated_at`** (it changes the draft) and is written with the first write.
 24. **`BuilderShell` reads the profile with `useChurchProfile(church.id)`**, whose type widens from `Church` to `ChurchProfile` (`GET /church` has returned the profile since 2a). `useChurch()` stays `{id, name, role}` (S Hand-offs row 1). Until the query has data, a step-shaped skeleton shows (S "Builder first render").
@@ -148,12 +157,14 @@ The code and F win over S's outline. Each item says whether the owner would noti
 30. **Links styled as buttons keep the link role** (`<Link className={buttonVariants(…)}>`, as `ChurchSwitcher` does), rather than `<Button render={<Link/>} nativeButton={false}>`, which gives a link the button role.
 31. **The placeholder is a `<section>` named after the step** ("Date & readings", …) holding the `EmptyState`; `EmptyState` keeps its own `h2` "Available soon".
 32. **`freshDraft` takes an optional `now`** (tests pass `DRAFT_NOW`); the store takes an injectable `now` and storage adapter, so `store.test.ts` runs in the node project without a browser.
+33. **[owner-visible] Memory-only warning copy (owner answer B6, 2026-09-29).** S and F say "This browser isn't saving your draft. Don't refresh until you save.", but there is no Save until 5a. The toast reads "This browser isn't saving your draft. Don't refresh or close this tab, or you'll lose your changes."; T11 notes it in S and F.
+34. **The builder fills what the header leaves (review fix, owner decision 1).** With `AppNav`'s phone row the header is about two rows tall, so a `min-h-[calc(100dvh-3.5rem)]` builder would scroll about 3rem on every phone page. Instead the `(church)` layout is a viewport-high flex column (`flex min-h-dvh flex-col`) and the builder frame is `flex-1`, with no header height written anywhere. Its own `<main>`s and the home page's add `w-full`, since a flex item centred with `mx-auto` would otherwise shrink to its content. T9's and T10's tests pin the classes (jsdom has no layout).
 
 ### Risks carried into the plan
 - **A live builder with nothing to fill in.** Members see four "Available soon" cards until 2c. Owner answer Q1 accepts this; the summary still shows next Sunday's date.
 - **Drafts are now stored for every member who opens the builder.** Each is small (one fresh draft per user per church) and pruned after 30 days or when the member leaves the church.
-- **Hand-written `sheet` and `badge`** (clarification 3): a later `shadcn add` may differ in class names; the tests do not depend on classes.
-- **Clock-dependent tests** fake only `Date`; a test that forgets it would pass or fail with the calendar. T12 runs the suite three times.
+- **`sheet` and `badge` rebuilt from the upstream source** (clarification 3): a later `shadcn add` may differ in whitespace or, if upstream changes, in classes; the tests do not depend on their classes.
+- **Clock-dependent tests** fake only `Date`; a test that forgets it would pass or fail with the calendar. T12 Step 2 runs the suite three times and then with the real clock moved 8 and 400 days forward (a small `Date` preload), so such a test fails there.
 - **Turbopack refuses a symlinked `node_modules`** (seen while planning); `npm run build` must run in the real checkout (T12 does).
 
 
@@ -180,7 +191,7 @@ All paths are from the repo root. "(church)" means `frontend/src/app/(signed-in)
 | `frontend/src/lib/draft/store.ts` (+ test) | `DraftStore`, `rollForward`, `browserDraftStorage`, `WRITE_DELAY_MS` | T6 |
 | `frontend/src/lib/draft/context.tsx` (+ `context.test.tsx`) | `DraftProvider`, `useDraft`, `DRAFT_MESSAGES` | T7 |
 | `frontend/src/lib/draft/prune.ts` (+ test) | `pruneDrafts`, `PRUNE_AFTER_MS` | T7 |
-| `frontend/src/components/ui/sheet.tsx`, `frontend/src/components/ui/badge.tsx` | Base UI sheet and badge (generated, or clarification 3's hand-written files) | T8 |
+| `frontend/src/components/ui/sheet.tsx`, `frontend/src/components/ui/badge.tsx` | Base UI sheet and badge (generated, or clarification 3's files rebuilt from the upstream source) | T8 |
 | `frontend/src/lib/use-keyboard-open.ts` (+ `.test.tsx`) | `useKeyboardOpen`, `isTextEntry` | T8 |
 | `frontend/src/components/builder/step-placeholder.tsx` | the "Available soon" card | T9 |
 | `frontend/src/components/builder/still-needed.tsx` | Review's "Still needed" list | T9 |
@@ -206,6 +217,7 @@ All paths are from the repo root. "(church)" means `frontend/src/app/(signed-in)
 | `frontend/src/app/(signed-in)/layout.tsx`, `frontend/src/app/(signed-in)/signed-in-layout.test.tsx` | prune after `/me` | T7 |
 | `frontend/src/lib/queries/church.ts` | `useChurchProfile` typed `ChurchProfile` (clarification 24) | T9 |
 | `(church)/page.tsx`, `(church)/church-layout.test.tsx` | `/` → `/builder` (clarification 17) | T10 |
+| `(church)/layout.tsx` | a viewport-high flex column the page fills below the header (clarification 34) | T10 |
 | `frontend/src/components/app/app-header.tsx`, `frontend/src/components/app/app-header.test.tsx` | renders `AppNav`; wider content (clarification 16) | T10 |
 | `docs/superpowers/specs/2026-09-25-slice-2-readings-design.md` | "(2b plan)" corrections | T11 |
 | `docs/superpowers/specs/2026-09-25-migration-foundations-design.md` | one amendment row | T11 |
@@ -747,6 +759,31 @@ describe("lib/scripture-refs against shared/scripture_refs.json", () => {
       FIXTURE.books,
     );
     for (const b of BOOKS) for (const alias of b.aliases) expect(normalizeBookText(alias)).toBe(alias);
+
+    // The 19 cases of backend/tests/test_scripture_refs.py::test_normalize_book_text, pinned here too.
+    const normalizeCases: [string, string][] = [
+      ["  *1 John 3:1-3", "1 john 3:1-3"],
+      ["* Acts 2:14a", "acts 2:14a"],
+      ["Gen.  1:1", "gen 1:1"],
+      ["I Cor. 13:1", "1 cor 13:1"],
+      ["II Kings 2:1-12", "2 kings 2:1-12"],
+      ["III John 1", "3 john 1"],
+      ["IV Maccabees 1:1", "4 maccabees 1:1"],
+      ["First Samuel 3", "1 samuel 3"],
+      ["Second Corinthians 5", "2 corinthians 5"],
+      ["Third John", "3 john"],
+      ["Fourth Maccabees", "4 maccabees"],
+      ["1st Peter 2", "1 peter 2"],
+      ["2nd Timothy", "2 timothy"],
+      ["3rd John", "3 john"],
+      ["4th Maccabees", "4 maccabees"],
+      ["1john 3:16", "1 john 3:16"],
+      ["Isaiah 9:2", "isaiah 9:2"],
+      ["Iv", "iv"],
+      ["  Psalm   23  ", "psalm 23"],
+    ];
+    expect(normalizeCases).toHaveLength(19);
+    for (const [raw, expected] of normalizeCases) expect(normalizeBookText(raw), raw).toBe(expected);
   });
 
   it("splitAlternatives", () => {
@@ -1102,7 +1139,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 git push origin claude/slice-2-plan-4q33le
 ```
 
-**Review checkpoint (T2):** the reviewer diffs `BOOKS` against `backend/scripture_refs.py` (the test also pins it against the fixture), and checks that `resolveReadings` mirrors the Python lines 1:1 (pick validity, the OT skipping the NT pick, the effective-OT comparison on whole lines).
+**Review checkpoint (T2):** the reviewer diffs `BOOKS` against `backend/scripture_refs.py` (the test also pins it against the fixture, and loops over the 19 `test_normalize_book_text` cases of `backend/tests/test_scripture_refs.py` inside the same test), and checks that `resolveReadings` mirrors the Python lines 1:1 (pick validity, the OT skipping the NT pick, the effective-OT comparison on whole lines).
 
 ### Task 3: The draft schema, the fresh draft and migrations (F §4.6 "Shape", "Fresh draft", "Versioning"; S "Draft store" `schema.ts`, `freshDraft`, `migrate.ts`; clarifications 5, 7, 32)
 
@@ -3305,9 +3342,9 @@ git push origin claude/slice-2-plan-4q33le
 
 **Review checkpoint (T6):** nothing writes during construction (only `start`, timers and `flush`); `update` returns early on the same object; `setLastStep` never touches `updated_at`; adoption requires a strictly newer `updated_at`, cancels this tab's pending write and normalizes picks; the one memory-only notice.
 
-### Task 7: `DraftProvider` and `useDraft`, the toasts, and pruning after `/me` (F §4.6 "Persistence", "When the draft is cleared or replaced" items 3 and 4; S "store.ts / context.tsx", "prune.ts", "Other states and messages", Testing `store.test.ts` flush half and `prune.test.ts`; AC10; clarifications 21, 25, 26)
+### Task 7: `DraftProvider` and `useDraft`, the toasts, and pruning after `/me` (F §4.6 "Persistence", "When the draft is cleared or replaced" items 3 and 4; S "store.ts / context.tsx", "prune.ts", "Other states and messages", Testing `store.test.ts` flush half and `prune.test.ts`; AC10; clarifications 21, 25, 26, 33)
 
-`DraftProvider` builds one `DraftStore` for the user and church, exposes S's `DraftApi` through `useDraft()`, and connects the store to the browser: `storage` events from other tabs, a flush when the page is hidden or left, a flush on unmount (a church switch), and the three toasts. `pruneDrafts` removes this user's drafts older than 30 days and those for churches they left, with their backups; the `(signed-in)` layout calls it whenever `/me` loads.
+`DraftProvider` builds one `DraftStore` for the user and church, exposes S's `DraftApi` through `useDraft()`, and connects the store to the browser: `storage` events from other tabs, a flush when the page is hidden or left, a flush on unmount (a church switch), and the three toasts. `pruneDrafts` removes this user's drafts older than 30 days and those for churches they left, with their backups; the `(signed-in)` layout calls it on `/me`'s first load and whenever its data changes.
 
 **Files:**
 - Create: `frontend/src/lib/draft/context.tsx`, `frontend/src/lib/draft/prune.ts`
@@ -3342,7 +3379,7 @@ import { act, render, renderHook, screen } from "@testing-library/react";
 import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 
-import { churchProfile, testDraft, USER_ID } from "@/test/fixtures";
+import { churchProfile, DRAFT_NOW, testDraft, USER_ID } from "@/test/fixtures";
 
 import { DRAFT_MESSAGES, DraftProvider, useDraft } from "./context";
 import { editOccasion } from "./readings";
@@ -3386,12 +3423,18 @@ describe("DraftProvider and useDraft (F §4.6 Persistence)", () => {
   let toastInfo: MockInstance<typeof toast.info>;
 
   beforeEach(() => {
+    // The test drafts are dated for DRAFT_NOW (next Sunday October 4, 2026).
+    // With the real clock, from October 5 the store would roll a pristine
+    // draft forward with a real `updated_at`, newer than "the other tab's".
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(DRAFT_NOW);
     toastError = vi.spyOn(toast, "error").mockImplementation(() => 0);
     toastWarning = vi.spyOn(toast, "warning").mockImplementation(() => 0);
     toastInfo = vi.spyOn(toast, "info").mockImplementation(() => 0);
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -3452,7 +3495,7 @@ describe("DraftProvider and useDraft (F §4.6 Persistence)", () => {
     expect(screen.getByText("Occasion: Harvest")).toBeInTheDocument();
     expect(toastWarning).toHaveBeenCalledTimes(1);
     expect(toastWarning).toHaveBeenCalledWith(
-      "This browser isn't saving your draft. Don't refresh until you save.",
+      "This browser isn't saving your draft. Don't refresh or close this tab, or you'll lose your changes.",
       expect.anything(),
     );
   });
@@ -3588,7 +3631,8 @@ export type DraftApi = {
 
 export const DRAFT_MESSAGES = {
   restore_failed: "We couldn't restore your unsaved draft.",
-  memory_only: "This browser isn't saving your draft. Don't refresh until you save.",
+  // Owner answer B6 (2026-09-29): F's "Don't refresh until you save." named a Save that 5a adds.
+  memory_only: "This browser isn't saving your draft. Don't refresh or close this tab, or you'll lose your changes.",
   adopted: "Updated from another tab.",
 } as const satisfies Record<DraftNotice, string>;
 
@@ -3708,9 +3752,9 @@ In `frontend/src/app/(signed-in)/layout.tsx`, make three edits.
 First, in the header comment, after the line that starts ` * - Pages below it read`, add:
 
 ```tsx
- * - Once `/me` has loaded (and after every refetch), it prunes this user's
- *   unsaved drafts: older than 30 days, or for churches they no longer belong
- *   to (F §4.6 items 3 and 4; slice 2b).
+ * - On `/me`'s first load and whenever its data changes, it prunes this
+ *   user's unsaved drafts: older than 30 days, or for churches they no longer
+ *   belong to (F §4.6 items 3 and 4; slice 2b).
 ```
 
 Second, add `import { pruneDrafts } from "@/lib/draft/prune";` above `import { MeProvider } from "@/lib/me-context";`.
@@ -3719,6 +3763,8 @@ Third, insert this just before the effect that begins `useEffect(() => {` follow
 
 ```tsx
   const loaded = me.data;
+  // On first load and whenever /me's data changes (TanStack Query keeps the
+  // same object when a refetch returns equal data, so this does not rerun then).
   useEffect(() => {
     if (loaded) pruneDrafts(loaded.user.id, loaded.churches.map((church) => church.id));
   }, [loaded]);
@@ -3744,21 +3790,21 @@ update, replace, setLastStep, persistence). The provider writes at once
 when the page is hidden or left and on unmount, adopts another tab's newer
 draft (\"Updated from another tab.\"), and shows the restore and
 memory-only toasts. The (signed-in) layout prunes the user's drafts older
-than 30 days and for churches they left whenever /me loads. Frontend
-280 -> 288.
+than 30 days and for churches they left on /me's first load and
+whenever its data changes. Frontend 280 -> 288.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 git push origin claude/slice-2-plan-4q33le
 ```
 
-**Review checkpoint (T7):** the listeners are removed on unmount and the store flushes then; `start()` is idempotent under StrictMode; `pruneDrafts` never touches another user's keys or `activeChurchId`; the layout effect depends only on `me.data`.
+**Review checkpoint (T7):** the listeners are removed on unmount and the store flushes then; `start()` is idempotent under StrictMode; `pruneDrafts` never touches another user's keys or `activeChurchId`; the layout effect depends only on `me.data`, and its comments say it runs on `/me`'s first load and whenever the data changes; `context.test.tsx` fakes `Date` at `DRAFT_NOW`.
 
-### Task 8: The `sheet` and `badge` components, and the keyboard-open hook (F §4.8 "Mobile", §4.9 items 1, 6; S "Frontend changes" Base UI list, "Builder shell" `useKeyboardOpen()`; clarifications 3, 22; owner question A)
+### Task 8: The `sheet` and `badge` components, and the keyboard-open hook (F §4.8 "Mobile", §4.9 items 1, 6; S "Frontend changes" Base UI list, "Builder shell" `useKeyboardOpen()`; clarifications 3, 22; owner answer A)
 
 The summary's bottom sheet needs Base UI's `sheet`, and its bulletin chips need `badge` (S lists both among the components to generate; `radio-group`, `collapsible` and `tooltip` are 2c's). `useKeyboardOpen()` is the focus-based hook the step footer uses to hide below `md` while the iOS keyboard is up; slice 4 reuses it.
 
 **Files:**
-- Create: `frontend/src/components/ui/sheet.tsx`, `frontend/src/components/ui/badge.tsx` (generated, or clarification 3's hand-written files)
+- Create: `frontend/src/components/ui/sheet.tsx`, `frontend/src/components/ui/badge.tsx` (generated, or clarification 3's files rebuilt from the upstream source)
 - Create: `frontend/src/lib/use-keyboard-open.ts`
 - Test: `frontend/src/lib/use-keyboard-open.test.tsx` (new, 1 test). The sheet and badge are exercised by T9's shell tests.
 
@@ -3794,27 +3840,39 @@ git status --short
 - **Network failure** (expected: this container cannot reach ui.shadcn.com; while planning it printed `Request to https://ui.shadcn.com/r/styles/base-nova/sheet.json failed, reason: Request was cancelled.` and changed no file): go to Step 3.
 - **Anything else** (the registry answers that an item does not exist, or the CLI changes other files): stop and ask the controller.
 
-- [ ] **Step 3 (agent, with owner answer A = yes): Write the hand-written `sheet` and `badge` (clarification 3)**
+- [ ] **Step 3 (agent, owner answer A): Write `sheet` and `badge` as rebuilt from the upstream shadcn source (clarification 3)**
 
-Only after a network failure in Step 2, and only with the owner's yes to question A (the controller has it from the plan review). If the answer was no, stop here and tell the controller: the owner generates the two files instead.
+Only after a network failure in Step 2. Owner answer A (2026-09-29): use these files, rebuilt from the upstream shadcn source rather than written from memory.
+
+Provenance. The build container reaches raw.githubusercontent.com (checked 2026-09-29). The plan's writer fetched, at shadcn-ui/ui commit `db2db460a26fa84fb65c8d903b213925fbdee9ed` (`main` on 2026-09-29), `apps/v4/registry/bases/base/ui/sheet.tsx`, `apps/v4/registry/bases/base/ui/badge.tsx` and `apps/v4/registry/styles/style-nova.css`, and ran them through the transforms of the installed shadcn CLI (4.21.0, `shadcn/utils`: `transformStyle` inlines each `cn-*` class from `style-nova.css`, `transformIcons` turns the registry's `IconPlaceholder` into lucide's `XIcon` as `components.json` asks, `transformFont` turns `cn-font-heading` into `font-heading`), mapped the registry import `@/registry/bases/base/ui/button` to `@/components/ui/button`, and formatted with Prettier 3 and `prettier-plugin-tailwindcss` against `src/app/globals.css` (no semicolons, `trailingComma: "es5"`). The same pipeline reproduces the repo's generated `alert-dialog.tsx` and `card.tsx` byte for byte, and `button.tsx` except its hand-added `touch` size; on `dropdown-menu.tsx`, `select.tsx` and `combobox.tsx` it gives the same classes and differs only in line wrapping (the CLI leaves some long `cn(` calls unwrapped) and the RTL marker the CLI drops. So these two files should match a later `shadcn add` in content, though not necessarily in whitespace, and the upstream sheet's motion (Base UI's `data-starting-style`/`data-ending-style` with CSS transitions) differs from the tw-animate classes `alert-dialog.tsx` uses, because upstream's sheet does. Adaptation: only the comment at the top of each file. The summary's height limit and rounded top belong to `SummarySheet` (T9), not to `sheet.tsx`.
+
+Optional check that the upstream files are unchanged at that commit (skip it if the host is unreachable; the code below is the record):
+
+```bash
+C=db2db460a26fa84fb65c8d903b213925fbdee9ed
+for f in apps/v4/registry/bases/base/ui/sheet.tsx apps/v4/registry/bases/base/ui/badge.tsx apps/v4/registry/styles/style-nova.css; do curl -fsS "https://raw.githubusercontent.com/shadcn-ui/ui/$C/$f" | sha256sum | cut -c1-64; done
+```
+
+**Expected:** `5816119da5f3468b0b91d2c65bcf6befe1d769b7867e236b9f18db83908581cb`, `cad65ac68df79093dc7e9655a94cc60011a2f82b45fc42a0ad74a6e6323c4389`, `5d5751579c015b61e77cf0822862a43ac79f3e6fed236a17624be8e6d1ebea1d`.
 
 Create `frontend/src/components/ui/sheet.tsx`:
 
 ```tsx
 "use client"
 
-// Hand-written thin wrapper over @base-ui/react/dialog, in the shape of the
-// base-nova registry's `sheet`: the recorded exception to F §4.9.1 for slice
-// 2b (plan clarification 3), used only when `npx shadcn@latest add sheet`
-// cannot reach the registry. Replace it with the generated file when the
-// registry is reachable; the exports and props below match it.
+// Rebuilt from the upstream shadcn source (plan clarification 3, owner answer
+// A, 2026-09-29): shadcn-ui/ui@db2db460 apps/v4/registry/bases/base/ui/sheet.tsx
+// with apps/v4/registry/styles/style-nova.css, through the shadcn 4.21.0 CLI's
+// own style, icon and font transforms and Prettier's Tailwind class order. The
+// only changes from that output are this comment. Replace it with the file
+// `npx shadcn@latest add sheet` generates when the registry is reachable.
 
 import * as React from "react"
 import { Dialog as SheetPrimitive } from "@base-ui/react/dialog"
 import { cn } from "cn"
-import { XIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { XIcon } from "lucide-react"
 
 function Sheet({ ...props }: SheetPrimitive.Root.Props) {
   return <SheetPrimitive.Root data-slot="sheet" {...props} />
@@ -3837,7 +3895,7 @@ function SheetOverlay({ className, ...props }: SheetPrimitive.Backdrop.Props) {
     <SheetPrimitive.Backdrop
       data-slot="sheet-overlay"
       className={cn(
-        "fixed inset-0 z-50 bg-black/10 duration-100 supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
+        "fixed inset-0 z-50 bg-black/10 transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0 supports-backdrop-filter:backdrop-blur-xs",
         className
       )}
       {...props}
@@ -3862,11 +3920,7 @@ function SheetContent({
         data-slot="sheet-content"
         data-side={side}
         className={cn(
-          "fixed z-50 flex flex-col gap-4 bg-popover text-popover-foreground shadow-lg outline-none duration-200 data-open:animate-in data-closed:animate-out",
-          "data-[side=bottom]:inset-x-0 data-[side=bottom]:bottom-0 data-[side=bottom]:max-h-[85dvh] data-[side=bottom]:rounded-t-xl data-[side=bottom]:border-t data-[side=bottom]:data-open:slide-in-from-bottom data-[side=bottom]:data-closed:slide-out-to-bottom",
-          "data-[side=top]:inset-x-0 data-[side=top]:top-0 data-[side=top]:border-b data-[side=top]:data-open:slide-in-from-top data-[side=top]:data-closed:slide-out-to-top",
-          "data-[side=left]:inset-y-0 data-[side=left]:left-0 data-[side=left]:h-full data-[side=left]:w-3/4 data-[side=left]:border-r data-[side=left]:sm:max-w-sm data-[side=left]:data-open:slide-in-from-left data-[side=left]:data-closed:slide-out-to-left",
-          "data-[side=right]:inset-y-0 data-[side=right]:right-0 data-[side=right]:h-full data-[side=right]:w-3/4 data-[side=right]:border-l data-[side=right]:sm:max-w-sm data-[side=right]:data-open:slide-in-from-right data-[side=right]:data-closed:slide-out-to-right",
+          "fixed z-50 flex flex-col gap-4 bg-popover bg-clip-padding text-sm text-popover-foreground shadow-lg transition duration-200 ease-in-out data-ending-style:opacity-0 data-starting-style:opacity-0 data-[side=bottom]:inset-x-0 data-[side=bottom]:bottom-0 data-[side=bottom]:h-auto data-[side=bottom]:border-t data-[side=bottom]:data-ending-style:translate-y-[2.5rem] data-[side=bottom]:data-starting-style:translate-y-[2.5rem] data-[side=left]:inset-y-0 data-[side=left]:left-0 data-[side=left]:h-full data-[side=left]:w-3/4 data-[side=left]:border-r data-[side=left]:data-ending-style:translate-x-[-2.5rem] data-[side=left]:data-starting-style:translate-x-[-2.5rem] data-[side=right]:inset-y-0 data-[side=right]:right-0 data-[side=right]:h-full data-[side=right]:w-3/4 data-[side=right]:border-l data-[side=right]:data-ending-style:translate-x-[2.5rem] data-[side=right]:data-starting-style:translate-x-[2.5rem] data-[side=top]:inset-x-0 data-[side=top]:top-0 data-[side=top]:h-auto data-[side=top]:border-b data-[side=top]:data-ending-style:translate-y-[-2.5rem] data-[side=top]:data-starting-style:translate-y-[-2.5rem] data-[side=left]:sm:max-w-sm data-[side=right]:sm:max-w-sm",
           className
         )}
         {...props}
@@ -3875,7 +3929,13 @@ function SheetContent({
         {showCloseButton && (
           <SheetPrimitive.Close
             data-slot="sheet-close"
-            render={<Button variant="ghost" size="icon-sm" className="absolute top-3 right-3" />}
+            render={
+              <Button
+                variant="ghost"
+                className="absolute top-3 right-3"
+                size="icon-sm"
+              />
+            }
           >
             <XIcon />
             <span className="sr-only">Close</span>
@@ -3890,7 +3950,7 @@ function SheetHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="sheet-header"
-      className={cn("flex flex-col gap-1 p-4", className)}
+      className={cn("flex flex-col gap-0.5 p-4", className)}
       {...props}
     />
   )
@@ -3910,13 +3970,19 @@ function SheetTitle({ className, ...props }: SheetPrimitive.Title.Props) {
   return (
     <SheetPrimitive.Title
       data-slot="sheet-title"
-      className={cn("font-heading text-base font-medium text-foreground", className)}
+      className={cn(
+        "font-heading text-base font-medium text-foreground",
+        className
+      )}
       {...props}
     />
   )
 }
 
-function SheetDescription({ className, ...props }: SheetPrimitive.Description.Props) {
+function SheetDescription({
+  className,
+  ...props
+}: SheetPrimitive.Description.Props) {
   return (
     <SheetPrimitive.Description
       data-slot="sheet-description"
@@ -3941,10 +4007,12 @@ export {
 Create `frontend/src/components/ui/badge.tsx`:
 
 ```tsx
-// Hand-written in the shape of the base-nova registry's `badge`: the recorded
-// exception to F §4.9.1 for slice 2b (plan clarification 3), used only when
-// `npx shadcn@latest add badge` cannot reach the registry. Replace it with the
-// generated file when the registry is reachable.
+// Rebuilt from the upstream shadcn source (plan clarification 3, owner answer
+// A, 2026-09-29): shadcn-ui/ui@db2db460 apps/v4/registry/bases/base/ui/badge.tsx
+// with apps/v4/registry/styles/style-nova.css, through the shadcn 4.21.0 CLI's
+// own style transform and Prettier's Tailwind class order. The only change
+// from that output is this comment. Replace it with the file
+// `npx shadcn@latest add badge` generates when the registry is reachable.
 
 import { mergeProps } from "@base-ui/react/merge-props"
 import { useRender } from "@base-ui/react/use-render"
@@ -3952,15 +4020,19 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "cn"
 
 const badgeVariants = cva(
-  "group/badge inline-flex h-5 w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-4xl border border-transparent px-2 py-0.5 text-xs font-medium whitespace-nowrap transition-all focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 [&>svg]:pointer-events-none [&>svg]:size-3!",
+  "group/badge inline-flex h-5 w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-4xl border border-transparent px-2 py-0.5 text-xs font-medium whitespace-nowrap transition-all focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3!",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground",
-        secondary: "bg-secondary text-secondary-foreground",
-        destructive: "bg-destructive/10 text-destructive dark:bg-destructive/20",
-        outline: "border-border text-foreground",
-        ghost: "hover:bg-muted hover:text-muted-foreground",
+        default: "bg-primary text-primary-foreground [a]:hover:bg-primary/80",
+        secondary:
+          "bg-secondary text-secondary-foreground [a]:hover:bg-secondary/80",
+        destructive:
+          "bg-destructive/10 text-destructive focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:focus-visible:ring-destructive/40 [a]:hover:bg-destructive/20",
+        outline:
+          "border-border text-foreground [a]:hover:bg-muted [a]:hover:text-muted-foreground",
+        ghost:
+          "hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted/50",
         link: "text-primary underline-offset-4 hover:underline",
       },
     },
@@ -3980,7 +4052,7 @@ function Badge({
     defaultTagName: "span",
     props: mergeProps<"span">(
       {
-        className: cn(badgeVariants({ className, variant })),
+        className: cn(badgeVariants({ variant }), className),
       },
       props
     ),
@@ -4111,7 +4183,7 @@ export function useKeyboardOpen(): boolean {
 
 - [ ] **Step 8 (agent): Commit and back up**
 
-Replace `<how>` with `generated with npx shadcn@latest add sheet badge` or `hand-written (the registry was blocked; plan clarification 3, owner answer A)`:
+Replace `<how>` with `generated with npx shadcn@latest add sheet badge` or `rebuilt from the upstream shadcn source at db2db460 (the registry was blocked; plan clarification 3, owner answer A)`:
 
 ```bash
 git add frontend/src/components/ui/sheet.tsx frontend/src/components/ui/badge.tsx frontend/src/lib/use-keyboard-open.ts frontend/src/lib/use-keyboard-open.test.tsx
@@ -4124,9 +4196,9 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 git push origin claude/slice-2-plan-4q33le
 ```
 
-**Review checkpoint (T8):** the commit body says how the two components were made; if hand-written, each file starts with the clarification 3 comment and imports only installed Base UI parts; the hook uses `useSyncExternalStore` (no state set inside an effect) and returns false on the server.
+**Review checkpoint (T8):** the commit body says how the two components were made; if rebuilt, each file is Step 3's text exactly (its only change from the transformed upstream source is the clarification 3 comment) and imports only installed Base UI parts; the hook uses `useSyncExternalStore` (no state set inside an effect) and returns false on the server.
 
-### Task 9: The builder shell and all four step routes (F §4.7, §4.8, acceptance 11; S "Builder shell", "Steps 2–4 (placeholders)", "SummaryPanel", "New service", "Other states and messages" first row, Testing `builder-shell.test.tsx`; AC11, AC17; owner answers Q1, Q2; clarifications 2, 10–16, 24, 25, 27, 30, 31)
+### Task 9: The builder shell and all four step routes (F §4.7, §4.8, acceptance 11; S "Builder shell", "Steps 2–4 (placeholders)", "SummaryPanel", "New service", "Other states and messages" first row, Testing `builder-shell.test.tsx`; AC11, AC17; owner answers Q1, Q2; clarifications 2, 3, 10–16, 24, 25, 27, 30, 31, 34)
 
 This is the page members will see. `BuilderShell` (the builder layout) loads the draft for the signed-in user and the active church, writes `last_step` on every step route without touching `updated_at`, and lays out `StepHeader` ("Service Builder", "Summary" below `lg`, the "More actions" menu with "New service"), `StepProgress`, the step, the sticky `StepFooter`, and `SummaryPanel` (a sticky right column from `lg`, the `SummarySheet` below it). `/builder` redirects to `last_step`. The four step pages show `StepPlaceholder` (Date & readings too, owner answer Q1); Review adds `StillNeeded`, which stays empty until a step ships. The readings status, "Still needed" rows, occasion line and OT/NT chips are built now behind `SHIPPED_STEPS` and tested with `shipped` passed in, so 2c only switches them on.
 
@@ -4159,7 +4231,7 @@ grep -n "UseQueryResult<" frontend/src/lib/queries/church.ts
 
 - [ ] **Step 2 (agent): Write the failing test**
 
-Create `frontend/src/components/builder/builder-shell.test.tsx`. It covers S Testing's row: the four routes inside the shell; the progress statuses and "Soon"; the summary's blocks saying "Available soon"; the footer links; the Summary sheet; New service confirming only when there is something to lose; `/builder/hymns` then `/builder` redirecting to `/builder/hymns` with `updated_at` unchanged; the first-render skeleton; and, with "readings" passed as shipped, the readings status, "Still needed" rows, occasion line and chips. (`AppNav` is T10's.)
+Create `frontend/src/components/builder/builder-shell.test.tsx`. It covers S Testing's row: the four routes inside the shell; the progress statuses and "Soon"; the summary's blocks saying "Available soon"; the footer links; the Summary sheet; the frame filling the column below the header with no hard-coded header height (clarification 34); New service confirming only when there is something to lose; `/builder/hymns` then `/builder` redirecting to `/builder/hymns` with `updated_at` unchanged; the first-render skeleton; and, with "readings" passed as shipped, the readings status, "Still needed" rows, occasion line and chips. (`AppNav` is T10's.)
 
 ```tsx
 /**
@@ -4262,6 +4334,12 @@ describe("builder shell (F §4.7)", () => {
       const links = within(screen.getByRole("navigation", { name: "Step navigation" })).getAllByRole("link");
       expect(links.map((link) => link.textContent)).toEqual(footer);
       expect(screen.queryByRole("heading", { name: "Still needed" })).toBeNull(); // nothing shipped yet
+
+      // The frame fills what the header leaves (the (church) layout's flex column), with no hard-coded header height.
+      const column = screen.getByRole("main").parentElement;
+      expect(column).toHaveClass("flex", "flex-1", "flex-col");
+      expect(column?.parentElement).toHaveClass("flex", "flex-1", "flex-col");
+      expect(`${column?.className} ${column?.parentElement?.className}`).not.toMatch(/dvh/);
       unmount();
     }
   });
@@ -4701,11 +4779,15 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 
 import { SummaryPanel } from "./summary-panel";
 
-/** The summary below `lg`, opened from the "Summary" button (S "Builder shell"; F §4.7, §4.9 item 6). */
+/**
+ * The summary below `lg`, opened from the "Summary" button (S "Builder shell";
+ * F §4.7, §4.9 item 6). Its height limit and rounded top are set here, so
+ * `sheet.tsx` keeps the upstream shape (plan clarification 3).
+ */
 export function SummarySheet({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   return (
     <Sheet open={open} onOpenChange={(next) => onOpenChange(next)}>
-      <SheetContent side="bottom" className="lg:hidden">
+      <SheetContent side="bottom" className="max-h-[85dvh] rounded-t-xl lg:hidden">
         <SheetHeader>
           <SheetTitle>Summary</SheetTitle>
         </SheetHeader>
@@ -4822,6 +4904,9 @@ Create `frontend/src/components/builder/builder-shell.tsx`:
  * the draft for the signed-in user and the active church, writes `last_step`
  * on every step route, and lays out: header, progress, the step, the footer,
  * and the summary (a sticky column from `lg`, a bottom sheet below it).
+ * The frame grows to fill the `(church)` layout's column below the header
+ * (`flex-1`), so it needs no hard-coded header height and the footer sits at
+ * the bottom of a short step.
  * The church profile is already loaded by the `(church)` layout; until the
  * query has data (tests, a cold cache) a step-shaped skeleton shows.
  */
@@ -4866,8 +4951,8 @@ function BuilderFrame({ church, children }: { church: DraftChurch; children: Rea
   }, [current, setLastStep]);
 
   return (
-    <div className="mx-auto w-full max-w-2xl px-4 lg:grid lg:max-w-6xl lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-6">
-      <div className="flex min-h-[calc(100dvh-3.5rem)] min-w-0 flex-col">
+    <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 lg:grid lg:max-w-6xl lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-6">
+      <div className="flex min-w-0 flex-1 flex-col">
         <StepHeader onOpenSummary={() => setSummaryOpen(true)} onNewService={newService.start} />
         {current ? <StepProgress current={current} /> : null}
         <main className="flex-1 py-4">{children}</main>
@@ -5026,14 +5111,14 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 git push origin claude/slice-2-plan-4q33le
 ```
 
-**Review checkpoint (T9):** every page and layout starts with `"use client"`; the placeholder has no link; `setLastStep` runs only for step paths; New service uses `isDirty` (clarification 10) and pushes `/builder/readings`; the summary column and the sheet render the same `SummaryPanel`; the footer hides below `md` only while `useKeyboardOpen()` is true; text is React text only.
+**Review checkpoint (T9):** every page and layout starts with `"use client"`; the placeholder has no link; `setLastStep` runs only for step paths; New service uses `isDirty` (clarification 10) and pushes `/builder/readings`; the summary column and the sheet render the same `SummaryPanel`; `SummarySheet` sets its own `max-h-[85dvh] rounded-t-xl` (`sheet.tsx` is unchanged from T8); the frame is `flex-1` with no `100dvh` arithmetic (clarification 34); the footer hides below `md` only while `useKeyboardOpen()` is true; text is React text only.
 
-### Task 10: `/` opens the builder, `AppNav` in the header, and one draft per church (F §4.1, §4.2, §4.6 "Key", acceptance 10; S "Routes and files" first line, Hand-offs row 2 "AppNav", Testing `church-switch.test.tsx`; AC10, AC17; clarifications 16–18, 27)
+### Task 10: `/` opens the builder, `AppNav` in the header, and one draft per church (F §4.1, §4.2, §4.6 "Key", acceptance 10; S "Routes and files" first line, Hand-offs row 2 "AppNav", Testing `church-switch.test.tsx`; AC10, AC17; clarifications 16–18, 27, 34)
 
-The last code task. `/` stops showing the slice-0 placeholder cards and redirects to `/builder` (the `(signed-in)` layout has already followed any stored post-login path, so an invite link or `/login?next=` still wins). `AppNav` arrives with its one item, "Builder", placed by `AppHeader`'s grid: a segmented row under the header on a phone, a link row between the church switcher and the account menu from `md`. A church-switch test runs the real layouts around the builder to show each church keeps its own draft.
+The last code task. `/` stops showing the slice-0 placeholder cards and redirects to `/builder` (the `(signed-in)` layout has already followed any stored post-login path, so an invite link or `/login?next=` still wins). `AppNav` arrives with its one item, "Builder", placed by `AppHeader`'s grid: a segmented row under the header on a phone, a link row between the church switcher and the account menu from `md`. The `(church)` layout becomes a viewport-high flex column, so the builder fills whatever height the header leaves (clarification 34). A church-switch test runs the real layouts around the builder to show each church keeps its own draft.
 
 **Files:**
-- Modify: `frontend/src/app/(signed-in)/(church)/page.tsx` (redirect), `frontend/src/app/(signed-in)/(church)/church-layout.test.tsx` (one test replaced)
+- Modify: `frontend/src/app/(signed-in)/(church)/page.tsx` (redirect), `frontend/src/app/(signed-in)/(church)/church-layout.test.tsx` (one test replaced), `frontend/src/app/(signed-in)/(church)/layout.tsx` (a flex column the page fills, clarification 34)
 - Create: `frontend/src/components/app/app-nav.tsx`
 - Modify: `frontend/src/components/app/app-header.tsx`, `frontend/src/components/app/app-header.test.tsx` (+1 test)
 - Test: `frontend/src/components/builder/church-switch.test.tsx` (new, 1 test)
@@ -5068,6 +5153,11 @@ In `frontend/src/app/(signed-in)/(church)/church-layout.test.tsx`, replace the w
     await waitFor(() => expect(testRouter.replace).toHaveBeenCalledWith("/builder"));
     expect(testRouter.replace).toHaveBeenCalledTimes(1);
     expect(screen.queryByText(/coming soon/)).toBeNull();
+
+    // The header and the page share one viewport-high column (the builder fills what the header leaves);
+    // a page root centred with mx-auto keeps its width there.
+    expect(screen.getByRole("banner").parentElement).toHaveClass("flex", "min-h-dvh", "flex-col");
+    expect(screen.getByRole("main")).toHaveClass("w-full");
   });
 ```
 
@@ -5214,7 +5304,7 @@ export default function HomePage() {
   }, [router]);
 
   return (
-    <main className="mx-auto grid max-w-2xl gap-4 p-4" aria-busy="true">
+    <main className="mx-auto grid w-full max-w-2xl gap-4 p-4" aria-busy="true">
       <Skeleton className="h-8 w-48" />
       <Skeleton className="h-40 w-full" />
     </main>
@@ -5321,6 +5411,21 @@ export function AppHeader({ user, churches, active = null, onSelectChurch, onSig
 }
 ```
 
+Then let the page fill what the header leaves (clarification 34): the phone header is now two rows, so the builder cannot subtract a fixed header height. In `frontend/src/app/(signed-in)/(church)/layout.tsx`, make four edits:
+
+1. In the header comment, after item 6's last line (it ends `queries are cancelled and removed.`), add:
+
+```tsx
+ * 7. The header and the page share a viewport-high flex column, so a page can
+ *    grow into whatever height the header leaves (`flex-1`, as the builder
+ *    does). A page root centred with `mx-auto` also sets `w-full`, since a
+ *    flex item would otherwise shrink to its content (slice 2b).
+```
+
+2. Change `<div className="min-h-dvh">` (around `<AppHeader`) to `<div className="flex min-h-dvh flex-col">`.
+3. Change the error body's `<main className="mx-auto max-w-3xl p-4">` to `<main className="mx-auto w-full max-w-3xl p-4">`.
+4. Change `BodySkeleton`'s `<main className="mx-auto grid max-w-3xl gap-4 p-4" aria-busy="true">` to `<main className="mx-auto grid w-full max-w-3xl gap-4 p-4" aria-busy="true">`.
+
 - [ ] **Step 6 (agent): Run the tests, the suite, types and lint**
 
 ```bash
@@ -5335,12 +5440,13 @@ grep -rn "coming soon\|coming later" frontend/src --include=*.tsx; echo "placeho
 - [ ] **Step 7 (agent): Commit and back up**
 
 ```bash
-git add 'frontend/src/app/(signed-in)/(church)/page.tsx' 'frontend/src/app/(signed-in)/(church)/church-layout.test.tsx' frontend/src/components/app/app-nav.tsx frontend/src/components/app/app-header.tsx frontend/src/components/app/app-header.test.tsx frontend/src/components/builder/church-switch.test.tsx
+git add 'frontend/src/app/(signed-in)/(church)/page.tsx' 'frontend/src/app/(signed-in)/(church)/church-layout.test.tsx' 'frontend/src/app/(signed-in)/(church)/layout.tsx' frontend/src/components/app/app-nav.tsx frontend/src/components/app/app-header.tsx frontend/src/components/app/app-header.test.tsx frontend/src/components/builder/church-switch.test.tsx
 git commit -m "Builder: home opens the builder, AppNav in the header, one draft per church (F §4.1, §4.2, acceptance 10; S Routes; AC17)" -m "/ now redirects to /builder instead of showing the slice-0 placeholder
 cards. The header gains AppNav with its first item, Builder: a segmented
 row under the header on a phone, a link row next to the account menu from
 md; it shows on church pages only, and the header content widens to match
-the desktop builder. A test runs the real layouts around the builder to
+the desktop builder. The church layout becomes a flex column, so the
+builder fills whatever height the two-row phone header leaves. A test runs the real layouts around the builder to
 show that switching church opens that church's own draft and switching
 back restores the first. Frontend 297 -> 299.
 
@@ -5348,11 +5454,11 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 git push origin claude/slice-2-plan-4q33le
 ```
 
-**Review checkpoint (T10):** the home page is a client component that only redirects; `AppNav` marks `aria-current="page"` for `/builder` and its sub-paths; `/welcome`'s header has no nav; the church-switch test really remounts (the probe shows each church's draft), and Grace's edit was written when its builder unmounted.
+**Review checkpoint (T10):** the home page is a client component that only redirects; `AppNav` marks `aria-current="page"` for `/builder` and its sub-paths; `/welcome`'s header has no nav; the church-switch test really remounts (the probe shows each church's draft), and Grace's edit was written when its builder unmounted; the `(church)` layout's change is the flex column, the comment's item 7 and `w-full` on its two `<main>`s, nothing else.
 
-### Task 11: Docs: the "(2b plan)" corrections to S and one F amendment row (S top, Builder shell, Frontend changes, Draft store, Testing, Manual checks; F Amendments, §4.7; owner answers Q1, Q2; clarifications 1–5, 8–10, 18, 29)
+### Task 11: Docs: the "(2b plan)" corrections to S and one F amendment row (S top, Builder shell, Frontend changes, Draft store, Testing, Manual checks; F Amendments, §4.7; owner answers Q1, Q2, B6; clarifications 1–5, 8–10, 18, 29, 33)
 
-S and F are the documents 2c, 3, 4 and 5a will read, so they must say what 2b actually built. S gains eleven short "(2b plan)" notes where the plan departs from or sharpens its text; F gains one amendment row (the index F keeps of slice changes) and a note in §4.7. No code changes, and no docs test pins these lines (`test_slice1_docs.py` reads other F sections; its count stays the same).
+S and F are the documents 2c, 3, 4 and 5a will read, so they must say what 2b actually built. S gains twelve short "(2b plan)" notes where the plan departs from or sharpens its text; F gains one amendment row (the index F keeps of slice changes) and notes in §4.6 (the memory-only warning copy, owner answer B6) and §4.7. No code changes, and no docs test pins these lines (`test_slice1_docs.py` reads other F sections; its count stays the same).
 
 **Files:**
 - Modify: `docs/superpowers/specs/2026-09-25-slice-2-readings-design.md`, `docs/superpowers/specs/2026-09-25-migration-foundations-design.md`
@@ -5418,7 +5524,7 @@ edit(S, [
      "`isDirty(draft)`, which equals \"not pristine\" until 5a saves drafts.)"),
     ("`select`, `dropdown-menu` and `skeleton` already exist from slice 0.)",
      "`select`, `dropdown-menu` and `skeleton` already exist from slice 0.) (2b plan: 2b adds `sheet` and `badge`, "
-     "hand-written thin wrappers over Base UI when the registry cannot be reached, a recorded exception to "
+     "rebuilt from the upstream shadcn source when the registry cannot be reached, a recorded exception to "
      "F §4.9.1; `textarea` exists from slice 1; `radio-group`, `collapsible` and `tooltip` are 2c's.)"),
     ("- **`schema.ts`:** the zod schema for `DraftV1` exactly as in F §4.6, with `DRAFT_VERSION = 1`.",
      "- **`schema.ts`:** the zod schema for `DraftV1` exactly as in F §4.6, with `DRAFT_VERSION = 1`. (2b plan: "
@@ -5436,6 +5542,10 @@ edit(S, [
      "### Manual checks (append to `docs/manual-verification.md`; at 375 px and on desktop, on the production URL)\n\n"
      "(2b plan: 2c appends these, and updates `backend/tests/test_slice1_docs.py`, which pins the file's last two "
      "`##` headings. 2b adds none: its after-merge look is the owner's short check in the 2b plan's Task 13.)\n"),
+    ("Don't refresh until you save.\" (F §4.6) |",
+     "Don't refresh until you save.\" (F §4.6) (2b plan: the toast reads \"This browser isn't saving your draft. "
+     "Don't refresh or close this tab, or you'll lose your changes.\", owner answer B6, 2026-09-29, since there is "
+     "no Save until 5a.) |"),
 ])
 
 edit(F, [
@@ -5450,13 +5560,17 @@ edit(F, [
      "shell until their slice fills them.",
      "Steps 2-4 render an \"Available soon — keep using the current app for this part\" card inside the working "
      "shell until their slice fills them. *(2026-09-28, slice 2b plan: step 1 too, until slice 2c.)*"),
+    ("one-time warning: \"This browser isn't saving your draft. Don't refresh until you save.\"",
+     "one-time warning: \"This browser isn't saving your draft. Don't refresh until you save.\" *(2026-09-29, "
+     "slice 2b plan: the copy is \"This browser isn't saving your draft. Don't refresh or close this tab, or "
+     "you'll lose your changes.\", owner answer B6, since there is no Save until 5a.)*"),
 ])
 print("docs edited")
 PYEOF
 git diff --stat
 ```
 
-**Expected:** `docs edited`; ` .../2026-09-25-migration-foundations-design.md |  3 ++-`, ` .../specs/2026-09-25-slice-2-readings-design.md | 21 ++++++++++++---------`, ` 2 files changed, 14 insertions(+), 10 deletions(-)`. An `AssertionError` names the anchor that moved: read that part of the spec, fix the anchor in this step (not the spec's other text), and run the step again from a clean file (`git checkout -- <file>`).
+**Expected:** `docs edited`; ` .../2026-09-25-migration-foundations-design.md |  5 +++--`, ` .../specs/2026-09-25-slice-2-readings-design.md | 23 +++++++++++++----------`, ` 2 files changed, 16 insertions(+), 12 deletions(-)`. An `AssertionError` names the anchor that moved: read that part of the spec, fix the anchor in this step (not the spec's other text), and run the step again from a clean file (`git checkout -- <file>`).
 
 - [ ] **Step 3 (agent): Check the result**
 
@@ -5469,7 +5583,7 @@ grep -c 'new Set(\["readings"\])' docs/superpowers/specs/2026-09-25-slice-2-read
 git diff -U0 docs | grep '^+' | grep -v '^+++' | grep -c '—'
 ```
 
-**Expected:** `11`; `2`; `0` (grep exits 1: S no longer says `SHIPPED_STEPS = new Set(["readings"])`); `89 passed in <t>s`; `971 passed, 9 skipped in <t>s`; `1` (the only em dash on an added line is F §4.7's existing copy "Available soon — keep using the current app for this part", on the line that gains the note; the new prose has none).
+**Expected:** `12`; `3`; `0` (grep exits 1: S no longer says `SHIPPED_STEPS = new Set(["readings"])`); `89 passed in <t>s`; `971 passed, 9 skipped in <t>s`; `1` (the only em dash on an added line is F §4.7's existing copy "Available soon — keep using the current app for this part", on the line that gains the note; the new prose has none).
 
 - [ ] **Step 4 (agent): Commit and back up**
 
@@ -5480,8 +5594,9 @@ precisely than written: the 2b/2c split, Date & readings on the Available
 soon card until 2c (SHIPPED_STEPS empty; owner answers Q1 and Q2), the
 memory-only status line, New service's isDirty check, sheet and badge,
 DraftV1 without 5a's fields, the storage helpers and first write, the
-church-switch test's place, and the manual checks left to 2c. F gains one
-amendment row and a note in §4.7.
+church-switch test's place, the manual checks left to 2c, and the
+memory-only warning's new copy (owner answer B6). F gains one amendment
+row and notes in §4.6 and §4.7.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 git push origin claude/slice-2-plan-4q33le
@@ -5491,7 +5606,7 @@ git push origin claude/slice-2-plan-4q33le
 
 ### Task 12: Whole-branch verification and the slice 2b pull request (owner's yes before the PR is opened and before it is marked ready) (S Testing "Frontend", AC8, AC10–AC12, AC17; F §4.1, §4.3, §4.9, §4.10, §5.2, §5.4; owner decisions 3, 4; owner answers Q1–Q3; clarifications 3, 4, 29)
 
-The whole branch is checked in one place before anyone reviews it: the frontend suite three times (so a clock- or timing-dependent test shows up here and not in CI), types, lint, the production build and its routes, the backend suite (unchanged), the generated API files (unchanged), the gates (client components, no link to the old app, storage only through `lib/storage.ts`, no raw HTML, `SHIPPED_STEPS` empty, no Python or workflow change), the exact list of changed paths, and the exact list of commits against this plan. The branch is already on GitHub from the backup pushes (owner answer Q3), but no PR exists; on the owner's first yes the agent opens it as a **draft**, so CI runs. When CI is green, the agent reports and, on the owner's second yes, marks it ready. Merging is Task 13, with its own yes.
+The whole branch is checked in one place before anyone reviews it: the frontend suite three times and twice more with the clock moved forward (so a clock- or timing-dependent test shows up here and not in CI), types, lint, the production build and its routes, the backend suite (unchanged), the generated API files (unchanged), the gates (client components, no link to the old app, storage only through `lib/storage.ts`, no raw HTML, `SHIPPED_STEPS` empty, no Python or workflow change), the exact list of changed paths, and the exact list of commits against this plan. The branch is already on GitHub from the backup pushes (owner answer Q3), but no PR exists; on the owner's first yes the agent opens it as a **draft**, so CI runs. When CI is green, the agent reports and, on the owner's second yes, marks it ready. Merging is Task 13, with its own yes.
 
 Below, `<scratch>` is the absolute path of the session's scratchpad directory, and `<N>` is the PR number Step 10 prints; write both out literally. Every `gh` command uses `-R bbrown62450/church`. Never run a bare `git push` or `--force`.
 
@@ -5516,15 +5631,30 @@ git rev-list --count origin/claude/slice-2-plan-4q33le..HEAD
 - If the first count is not `0`: `git merge origin/main -m "Merge origin/main into claude/slice-2-plan-4q33le (Task 12)" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"`. On a conflict, run `git merge --abort`, stop and tell the owner which files conflict. Without one, continue: Steps 2–8 run on the merged tree, and any new tests the merge brought change the totals by exactly those (name them in the Step 9 message).
 - If `git status --short` shows anything else, stop: commit it in its owning task or ask.
 
-- [ ] **Step 2 (agent): Run the frontend suite three times, then types and lint**
+- [ ] **Step 2 (agent): Run the frontend suite three times and with the clock moved forward, then types and lint**
 
 ```bash
 for i in 1 2 3; do (cd frontend && npm test 2>&1 | grep -E "Test Files|Tests |FAIL"); done
+cat > "<scratch>/shift-clock.mjs" <<'JSEOF'
+// Moves the real clock forward by WSB_CLOCK_SHIFT_DAYS days (loaded with NODE_OPTIONS=--import).
+// A test that fakes Date (vi.useFakeTimers + vi.setSystemTime) is unaffected; one that forgot to is caught.
+const offset = Number(process.env.WSB_CLOCK_SHIFT_DAYS ?? "0") * 24 * 60 * 60 * 1000;
+const RealDate = Date;
+function ShiftedDate(...args) {
+  if (!new.target) return new RealDate(RealDate.now() + offset).toString();
+  return args.length === 0 ? new RealDate(RealDate.now() + offset) : new RealDate(...args);
+}
+Object.setPrototypeOf(ShiftedDate, RealDate);
+ShiftedDate.prototype = RealDate.prototype;
+ShiftedDate.now = () => RealDate.now() + offset;
+globalThis.Date = ShiftedDate;
+JSEOF
+for d in 8 400; do echo "clock +$d days"; (cd frontend && WSB_CLOCK_SHIFT_DAYS=$d NODE_OPTIONS="--import <scratch>/shift-clock.mjs" npm test 2>&1 | grep -E "Test Files|Tests |FAIL"); done
 (cd frontend && npm test 2>&1 | grep -cE "Warning:|not wrapped in act")
 (cd frontend && npm run typecheck 2>&1 | tail -1 && npm run lint 2>&1 | tail -1)
 ```
 
-**Expected:** three times ` Test Files  49 passed (49)` and `      Tests  299 passed (299)` (baseline 221 in 34; after T1–T11: 230, 240, 247, 256, 268, 280, 288, 289, 297, 299, 299) and no `FAIL`; `0`; `> tsc --noEmit` and `> eslint` with nothing after. Any other number: find the task whose count drifted. A run that fails even once in three is a failure (Step 14): make the test deterministic rather than retrying it.
+**Expected:** three times ` Test Files  49 passed (49)` and `      Tests  299 passed (299)` (baseline 221 in 34; after T1–T11: 230, 240, 247, 256, 268, 280, 288, 289, 297, 299, 299) and no `FAIL`; then `clock +8 days` and `clock +400 days`, each followed by the same two lines and no `FAIL` (the preload moves the real clock, so a test that depends on today's date without faking `Date` fails here rather than in CI once the test drafts' Sunday has passed; +8 days is past October 4, 2026, +400 days past a year end); `0`; `> tsc --noEmit` and `> eslint` with nothing after. Any other number: find the task whose count drifted. A run that fails even once is a failure (Step 14): make the test deterministic (fake only `Date`, set to `DRAFT_NOW`) rather than retrying it.
 
 - [ ] **Step 3 (agent): Run the backend suite and the Postgres marker count**
 
@@ -5585,7 +5715,7 @@ for c in $(git rev-list origin/main..HEAD); do git show -s --format=%B "$c" | gr
 - `0` (`wc` pads it: no Python, requirement, migration, workflow, manual-checklist or runbook change);
 - `frontend/package.json:1` and `frontend/package-lock.json:1`;
 - `4` (the lockfile diff: the `tw-animate-css` line gains a comma, the zod line, and the dropped `"dev": true`; clarification 4);
-- only `trailer check done`.
+- only `trailer check done` (a `Claude-Session: <url>` line just before the trailer does not matter: the check matches the exact `Co-Authored-By` line anywhere in the message).
 
 Any other output: stop, find the owning task (Step 14) and fix it there.
 
@@ -5606,6 +5736,7 @@ frontend/src/app/(signed-in)/(church)/builder/page.tsx
 frontend/src/app/(signed-in)/(church)/builder/readings/page.tsx
 frontend/src/app/(signed-in)/(church)/builder/review/page.tsx
 frontend/src/app/(signed-in)/(church)/church-layout.test.tsx
+frontend/src/app/(signed-in)/(church)/layout.tsx
 frontend/src/app/(signed-in)/(church)/page.tsx
 frontend/src/app/(signed-in)/layout.tsx
 frontend/src/app/(signed-in)/signed-in-layout.test.tsx
@@ -5665,7 +5796,7 @@ LC_ALL=C comm -3 "<scratch>/slice2b-expected-paths.txt" "<scratch>/slice2b-actua
 git diff --name-status --no-renames origin/main...HEAD | cut -c1 | sort | uniq -c
 ```
 
-**Expected:** `64`; `64`; `comm` prints nothing; then `  49 A` and `  15 M`. These are the File Structure's paths: 49 created (the plan, the fixture, 47 frontend files) and 15 modified (13 frontend files and the two specs). An indented `comm` line (changed, not listed) means a task touched a file its **Files:** does not name: find it with `git log --format='%h %s' origin/main..HEAD -- '<path>'`; anything under `backend/` other than the fixture, `frontend/src/lib/api/`, `.github/` or `docs/manual-verification.md` is a stop. An unindented line means a task's commit is missing.
+**Expected:** `65`; `65`; `comm` prints nothing; then `  49 A` and `  16 M`. These are the File Structure's paths: 49 created (the plan, the fixture, 47 frontend files) and 16 modified (14 frontend files and the two specs). An indented `comm` line (changed, not listed) means a task touched a file its **Files:** does not name: find it with `git log --format='%h %s' origin/main..HEAD -- '<path>'`; anything under `backend/` other than the fixture, `frontend/src/lib/api/`, `.github/` or `docs/manual-verification.md` is a stop. An unindented line means a task's commit is missing.
 
 - [ ] **Step 8 (agent): Check the exact list of commits against this plan**
 
@@ -5700,7 +5831,7 @@ git rev-list --count origin/main..HEAD
 
 Send the owner exactly this message, with `<count>` filled in, and wait for a clear yes:
 
-> Slice 2b is verified locally: frontend 299 tests in 49 files, passing three runs in a row (221 in 34 before); typecheck, lint and the production build are clean, and the build lists the five builder pages; the backend is unchanged at 971 passed, 9 skipped; the API types did not change; the checks are clean (every page is a client component, no link to the old app, the draft goes through the storage helper only, all four steps on "Available soon" until 2c); changed files (64) and commits (<count>) are as planned, and every commit is already backed up on the branch. May I open the pull request as a **draft** titled "Slice 2b frontend foundation: builder shell, draft store, dates and scripture refs", so the checks run? I will come back with the results and ask again before marking it ready. Merging stays with you (Task 13).
+> Slice 2b is verified locally: frontend 299 tests in 49 files, passing three runs in a row and with the clock moved 8 and 400 days ahead (221 in 34 before); typecheck, lint and the production build are clean, and the build lists the five builder pages; the backend is unchanged at 971 passed, 9 skipped; the API types did not change; the checks are clean (every page is a client component, no link to the old app, the draft goes through the storage helper only, all four steps on "Available soon" until 2c); changed files (65) and commits (<count>) are as planned, and every commit is already backed up on the branch. May I open the pull request as a **draft** titled "Slice 2b frontend foundation: builder shell, draft store, dates and scripture refs", so the checks run? I will come back with the results and ask again before marking it ready. Merging stays with you (Task 13).
 
 Add one line per note from Steps 1–8 (a merge from `main`, a skipped font download, a `Fix:` commit, how `sheet` and `badge` were made). A no leaves the branch as it is.
 
@@ -5725,7 +5856,7 @@ Libraries
 - `src/lib/scripture-refs.ts`, the TypeScript port of `backend/scripture_refs.py`, passing every case of `backend/tests/fixtures/shared/scripture_refs.json`.
 - `zod` becomes a direct dependency (two lockfile lines). `sheet` and `badge`: @SHEET_LINE@
 
-Standing-permission choices (owner decision 1: no owner-visible change) that differ from the spec's text: a draft stored under another user's or church's key is treated as unrestorable; a fresh draft is written when the builder opens; `replace` also sets `updated_at`; `lib/storage.ts` gains `tryWriteLocal` and `localKeys`; zod added by editing the lockfile rather than `npm install`. Owner-visible choices the owner accepted with the plan: the memory-only status line reads "Draft not saved on this device · Not in archive"; a finished step reads "Complete" with a check; the header nav shows on church pages only and the header content is wider on desktop.
+Standing-permission choices (owner decision 1: no owner-visible change) that differ from the spec's text: a draft stored under another user's or church's key is treated as unrestorable; a fresh draft is written when the builder opens; `replace` also sets `updated_at`; `lib/storage.ts` gains `tryWriteLocal` and `localKeys`; zod added by editing the lockfile rather than `npm install`. Owner-visible choices the owner accepted with the plan (2026-09-29): until 2c the summary shows the date and "Available soon" and the step bar says "Soon"; the memory-only status line reads "Draft not saved on this device · Not in archive"; a finished step reads "Complete" with a check; the header nav shows on church pages only (on a phone as its own full-width row holding "Builder") and the header content is wider on desktop; the memory-only warning reads "This browser isn't saving your draft. Don't refresh or close this tab, or you'll lose your changes." (there is no Save until 5a). The church layout is now a flex column, so the builder fills the screen below the two-row phone header without extra scrolling.
 
 Not in 2b (slice 2c): the Date & readings step itself, the lectionary, translation and passage queries, the automatic lectionary fill, and the slice 2 manual checklist.
 
@@ -5737,7 +5868,7 @@ After merge (Task 13): a short look by the owner on a phone and on desktop (the 
 EOF
 ```
 
-If the owner changed any answer to question B, adjust the "Owner-visible choices" sentence to match. Replace `@SHEET_LINE@` with `generated from the base-nova registry.` or `hand-written thin wrappers over Base UI, because the build container cannot reach the registry (plan clarification 3, owner answer A).` (T8's commit body says which), then:
+The "Owner-visible choices" sentence matches the owner's answers of 2026-09-29 (B1–B6); if the owner later changes one, adjust it. Replace `@SHEET_LINE@` with `generated from the base-nova registry.` or `rebuilt from the upstream shadcn source (base-nova, pinned commit), because the build container cannot reach the registry (plan clarification 3, owner answer A).` (T8's commit body says which), then:
 
 ```bash
 grep -c '@SHEET_LINE@' "<scratch>/slice2b-pr-body.md"
@@ -5804,9 +5935,9 @@ Read the failure (for CI: `gh run view <run-id> -R bbrown62450/church --log-fail
 | `draft/context.test.tsx`, `draft/prune.test.ts`, `signed-in-layout.test.tsx` | T7 |
 | `use-keyboard-open.test.tsx`, `sheet.tsx`/`badge.tsx` lint or types | T8 |
 | `builder-shell.test.tsx`, the builder routes in the build, the client-component gate, the "Available soon" count | T9 |
-| `church-layout.test.tsx`, `app-header.test.tsx`, `church-switch.test.tsx`, the old-app gate | T10 |
+| `church-layout.test.tsx`, `app-header.test.tsx`, `church-switch.test.tsx`, the `(church)` layout, the old-app gate | T10 |
 | the spec or F text, `test_slice1_docs.py` | T11 |
-| a flaky run in Step 2 | the task owning the test: fake only `Date` for the calendar, await the UI with `findBy`/`waitFor`, never sleep |
+| a flaky run in Step 2, or a failure only with the clock moved | the task owning the test: fake only `Date` (set to `DRAFT_NOW`) for the calendar, await the UI with `findBy`/`waitFor`, never sleep |
 | any other existing test, the backend suite, the Vercel preview only | report to the owner before changing anything |
 
 For each fix: change only the owning task's files; rerun Steps 2–8; commit with the subject `Fix: <what> (Task <n>, slice 2b final verification)` and the trailer; have that task re-reviewed; push with `git push origin claude/slice-2-plan-4q33le` (a backup before Step 10; after it, covered by the owner's first yes); after Step 10, repeat Steps 11–12 and send Step 13's message with the new run. An infrastructure failure with no test output gets one `gh run rerun <run-id> -R bbrown62450/church --failed` first.
@@ -5989,7 +6120,7 @@ Expected counts after this task: frontend `299 passed` in 49 files on `main`; ba
 ## Lessons carried from the 2a build (P2a "Build notes")
 
 - **The container restarts.** Uncommitted work can be lost: commit as soon as a task's checks pass, and back the branch up with `git push origin claude/slice-2-plan-4q33le` after every task's review (owner answer Q3). If `node_modules` is gone after a restart, `(cd frontend && npm ci)`.
-- **The network is filtered.** The npm registry and Google Fonts are reachable; ui.shadcn.com, Railway and the three reading sites are not. No test may need the network (the fake API throws on any unhandled request); T8 plans for the blocked registry (clarification 3), T12 Step 4 for a font fetch failure, and T13 Step 3 for an unreachable Vercel.
+- **The network is filtered.** The npm registry, Google Fonts and raw.githubusercontent.com are reachable; ui.shadcn.com, Railway and the three reading sites are not. No test may need the network (the fake API throws on any unhandled request); T8 plans for the blocked registry (clarification 3), T12 Step 4 for a font fetch failure, and T13 Step 3 for an unreachable Vercel.
 - **Grep gates are judged, not obeyed blindly.** A gate that matches may be a false positive (a comment, a test's own fixture text): read the line, and if it is harmless, say why in the task's report rather than bending the code to silence it. The gates in T12 already exclude test files and comments where 2a's did not.
 - **Counts are exact.** Every task states its cumulative count; a drift means a missing or extra test, found before moving on.
 - **Owner steps one at a time, in plain words** (P2a Task 15), and every outward action (PR, ready, merge, settings) on its own yes.
@@ -6041,12 +6172,16 @@ S = `docs/superpowers/specs/2026-09-25-slice-2-readings-design.md`; F = foundati
 | Behavior changes 5, 6, 13, 15 (UI halves), 16, 17 | 2c on T4's transitions |
 | Open question 2 (Saturday vigil) | 2c (owner) |
 
-## Questions for the owner (the controller asks these before T1)
+## Questions for the owner (answered 2026-09-29)
 
-- **A. Hand-written `sheet` and `badge` if the component registry stays blocked (clarification 3).** The build container cannot reach the shadcn registry. Recommended: yes, use the plan's hand-written versions (they look and behave the same and can be swapped for generated ones later). If no, you would run one command on your own computer during Task 8.
-- **B. Please confirm these small visible choices (recommended: accept all):**
+No question is open. The owner's answers are binding (Owner decisions, "Owner answers (2026-09-29)"); the questions as asked are kept here for the record.
+
+- **A. `sheet` and `badge` while the component registry is blocked (clarification 3): hand-written from memory, or rebuilt from the upstream shadcn source on raw.githubusercontent.com?** The build container cannot reach ui.shadcn.com, but it does reach raw.githubusercontent.com, where `apps/v4/registry/bases/base/ui/sheet.tsx`, `badge.tsx` and `apps/v4/registry/styles/style-nova.css` are. Recommended: rebuilt from upstream (the real source, put through the installed CLI's own transforms). Caveat: exact parity with a CLI install is not certain: the repo's `alert-dialog.tsx` uses tw-animate classes while upstream's sheet uses CSS transitions, and the CLI's line wrapping varies. **Answer: rebuilt from upstream** (T8 Step 3 records the provenance).
+- **B. Please confirm these small visible choices (recommended: accept all):** **Answer: all yes (B1–B5 as written; B6 the recommended copy).**
   1. Until 2c, the summary shows next Sunday's date and "Available soon" for Readings, Hymns and Liturgy; the step bar says "Soon" for the first three steps and "Not in archive" for Review; Review's "Still needed" list stays hidden (clarification 2).
   2. If a browser will not save the draft, the summary's last line reads "Draft not saved on this device · Not in archive" (clarification 11).
   3. A finished step will read "Complete" with a check mark (clarification 12; first seen in 2c).
   4. The "Builder" link shows on church pages only (not on the Join or create page), and the header's content spreads wider on a computer to line up with the builder (clarification 16).
-- **C. A short "Slice 2b record" in the runbook after the merge (T13 Steps 7–8), as for 2a?** Recommended: yes (one docs-only PR, two yeses).
+  5. On a phone, every church page gets a full-width nav row under the header holding a single item, "Builder" (F §4.2 requires the nav; clarification 16).
+  6. F's memory-only warning, "This browser isn't saving your draft. Don't refresh until you save.", refers to a Save that does not exist until 5a. Recommended instead: "This browser isn't saving your draft. Don't refresh or close this tab, or you'll lose your changes." **Answer: the recommended copy** (clarification 33).
+- **C. A short "Slice 2b record" in the runbook after the merge (T13 Steps 7–8), as for 2a?** Recommended: yes (one docs-only PR, two yeses). **Answer: yes.**
