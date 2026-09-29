@@ -6,14 +6,20 @@ writes are scoped to a validated `church_id`; writes are idempotent per
 (church_id, date_iso, hymn_number, hymn_title) so re-preparing a bulletin
 never inflates the exclusion set.
 """
+import logging
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from db import session_scope
+from db.ids import as_uuid
 from db.models import HymnUsage
+from hymn_search import usage_key
+
+logger = logging.getLogger(__name__)
 
 
 def _as_uuid(value: Any) -> uuid.UUID:
@@ -111,3 +117,62 @@ def is_hymn_recently_used(
 ) -> bool:
     """True if this hymn (number, title) is in the recent-usage set."""
     return _hymn_key(number, title) in recent_set
+
+
+# --- slice 3a: the recent-use window around a service date (S Backend 3.4) --------
+
+RECENT_WEEKS = 12
+
+
+def usage_near(church_id, service_date: date, *, weeks: int = RECENT_WEEKS,
+               session: Optional[Session] = None) -> Dict[str, date]:
+    """{usage_key(title): the usage date nearest `service_date`} for the church's
+    usage in [D - weeks, D + weeks], both ends inclusive, D itself excluded.
+
+    The key is the normalized title alone (owner answer Q2, 2026-09-29), so a
+    hymn sung from one hymnal counts when it is picked from another. Ties go
+    to the earlier date. date_iso is not always YYYY-MM-DD (Notion imports
+    stored "" or a datetime), so SQL keeps a deliberately wide string range and
+    Python applies the exact window to date_iso[:10]; a value that still does
+    not parse is skipped and counted at DEBUG. Nothing here raises on stored data.
+    """
+    cid = as_uuid(church_id)
+    low = service_date - timedelta(days=7 * weeks)
+    high = service_date + timedelta(days=7 * weeks)
+
+    def work(s: Session):
+        return s.execute(
+            select(HymnUsage.date_iso, HymnUsage.hymn_title).where(
+                HymnUsage.church_id == cid,
+                HymnUsage.date_iso >= low.isoformat(),
+                HymnUsage.date_iso < (high + timedelta(days=1)).isoformat(),
+            )
+        ).all()
+
+    if session is not None:
+        rows = work(session)
+    else:
+        with session_scope() as own:
+            rows = work(own)
+
+    nearest: Dict[str, date] = {}
+    skipped = 0
+    for date_iso, title in rows:
+        try:
+            day = date.fromisoformat((date_iso or "")[:10])
+        except ValueError:
+            skipped += 1
+            continue
+        if not (low <= day <= high) or day == service_date:
+            continue
+        key = usage_key(title)
+        if not key:
+            continue
+        best = nearest.get(key)
+        distance = abs((day - service_date).days)
+        if (best is None or distance < abs((best - service_date).days)
+                or (distance == abs((best - service_date).days) and day < best)):
+            nearest[key] = day
+    if skipped:
+        logger.debug("usage_near skipped %d usage rows with an unreadable date_iso", skipped)
+    return nearest
