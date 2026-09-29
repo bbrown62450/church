@@ -97,6 +97,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/hymns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Hymns
+         * @description Ordered by hymnal, number (nulls last), title, id. `q` of 1-6 digits also
+         *     matches the number. An unknown hymnal is an empty page.
+         */
+        get: operations["list_hymns_hymns_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/invites/accept": {
         parameters: {
             query?: never;
@@ -319,6 +340,34 @@ export interface components {
             /** Request Id */
             request_id: string;
         };
+        /** HymnOut */
+        HymnOut: {
+            /** Hymnal */
+            hymnal: string;
+            /** Hymnal Count */
+            hymnal_count: number | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Link */
+            link: string | null;
+            /** Newer Than Preferred */
+            newer_than_preferred: boolean;
+            /** Number */
+            number: number | null;
+            /** Recent Use On */
+            recent_use_on: string | null;
+            /** Scripture Refs */
+            scripture_refs: string | null;
+            /** Text Year */
+            text_year: number | null;
+            /** Themes */
+            themes: string[];
+            /** Title */
+            title: string;
+        };
         /** HymnalListOut */
         HymnalListOut: {
             /** Default Hymnal */
@@ -407,6 +456,17 @@ export interface components {
             /** Churches */
             churches: components["schemas"]["ChurchOut"][];
             user: components["schemas"]["UserOut"];
+        };
+        /** Page[HymnOut] */
+        Page_HymnOut_: {
+            /** Items */
+            items: components["schemas"]["HymnOut"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
         };
         /**
          * PassageOut
@@ -733,6 +793,71 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HymnalListOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_hymns_hymns_get: {
+        parameters: {
+            query?: {
+                hymnal?: string | null;
+                q?: string | null;
+                limit?: number;
+                offset?: number;
+                recent_for_date?: string | null;
+            };
+            header?: {
+                "x-church-id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_HymnOut_"];
                 };
             };
             /** @description Unauthorized */

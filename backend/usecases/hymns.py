@@ -4,6 +4,8 @@ owner decisions 3 and 9; owner answers of 2026-09-29).
 - resolve_default_hymnal: the stored default_hymnal and the effective one
   (GET /hymnals and GET /church both use it, so they never disagree).
 - hymnal_overview: GET /hymnals.
+- list_hymns_page: GET /hymns, each hymn as a HymnView with its recent use
+  and the rubric's newer-than-preferred flag.
 
 Every function takes the active church's id only (F §1.2 rule 1) and reads in
 one session. The layer rules are in usecases/__init__.py: no FastAPI,
@@ -14,14 +16,19 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from datetime import date
 from typing import Any, Optional
 
 from sqlalchemy.orm import Session
 
+import hymn_usage
 from db import session_scope
+from hymn_ranking import is_newer_than_preferred
+from hymn_search import parse_themes, usage_key
 from repos import churches
 from repos import hymns as hymn_repo
-from repos.hymns import HymnalSummary
+from repos.hymns import HymnalSummary, HymnRecord
+from service_rubric import merge_rubric
 
 
 @dataclass(frozen=True)
@@ -72,3 +79,64 @@ def hymnal_overview(church_id: uuid.UUID) -> HymnalOverview:
         resolved = _resolve(_settings(church_id, s), [item.code for item in items])
     return HymnalOverview(items=items, default_hymnal=resolved.default_hymnal,
                           effective_hymnal=resolved.effective_hymnal)
+
+
+@dataclass(frozen=True)
+class HymnView:
+    """HymnOut's fields (S API Models): one read model for every route that returns hymns."""
+
+    id: uuid.UUID
+    hymnal: str
+    title: str                         # stripped; "" when NULL
+    number: Optional[int]
+    link: Optional[str]                # hymnary_link verbatim; the client renders it only via safeHttpsUrl
+    scripture_refs: Optional[str]
+    themes: list[str]
+    recent_use_on: Optional[date]      # the usage date nearest the service date; None without a date
+    text_year: Optional[int]
+    hymnal_count: Optional[int]
+    newer_than_preferred: bool         # text_year known and >= the rubric's prefer_before_year
+
+
+@dataclass(frozen=True)
+class HymnPage:
+    items: list[HymnView]
+    total: int
+    limit: int
+    offset: int
+
+
+def church_rubric(church_id: uuid.UUID, session: Session) -> dict:
+    """The church's merged rubric, read fresh (S Backend 3.8). merge_rubric
+    falls back to the defaults for any invalid stored value."""
+    return merge_rubric(churches.get_church_rubric_overrides(church_id, session=session))
+
+
+def hymn_view(record: HymnRecord, *, usage: Optional[dict[str, date]],
+              prefer_before_year: int) -> HymnView:
+    return HymnView(
+        id=record.id,
+        hymnal=record.hymnal,
+        title=(record.title or "").strip(),
+        number=record.number,
+        link=record.link,
+        scripture_refs=record.scripture_refs,
+        themes=parse_themes(record.theme),
+        recent_use_on=usage.get(usage_key(record.title)) if usage is not None else None,
+        text_year=record.text_year,
+        hymnal_count=record.hymnal_count,
+        newer_than_preferred=is_newer_than_preferred(record.text_year, prefer_before_year),
+    )
+
+
+def list_hymns_page(church_id: uuid.UUID, *, hymnal: Optional[str], q: Optional[str], limit: int,
+                    offset: int, recent_for_date: Optional[date]) -> HymnPage:
+    """S Backend 3.3: one session for the page, the usage window and the rubric."""
+    with session_scope() as s:
+        records, total = hymn_repo.query_hymns(church_id, hymnal=hymnal, q=q, limit=limit,
+                                               offset=offset, session=s)
+        usage = (hymn_usage.usage_near(church_id, recent_for_date, session=s)
+                 if recent_for_date is not None else None)
+        year = church_rubric(church_id, s)["prefer_before_year"]
+    return HymnPage(items=[hymn_view(r, usage=usage, prefer_before_year=year) for r in records],
+                    total=total, limit=limit, offset=offset)
