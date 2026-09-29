@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import contextvars
 import logging
+import re
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -41,6 +42,7 @@ from repos import churches
 from repos import hymns as hymn_repo
 from repos.hymns import HymnalSummary, HymnRecord
 from scripture_refs import default_nt_ref, parse_refs, split_alternatives
+import scripture_fetcher
 from service_rubric import merge_rubric
 from usecases import passages
 
@@ -57,6 +59,7 @@ AI_NOT_CONFIGURED_MESSAGE = "AI suggestions aren't set up on this app yet."
 SUGGEST_BUDGET_S = 75.0            # the server deadline for POST /hymns/suggestions (F §1.8)
 NT_FETCH_BUDGET_S = 10.0           # the NT text fetch's share of it
 NT_TRANSLATION = "web"             # never ESV on the server (S Behavior change 8)
+NT_MAX_PARTS = 4                   # the fetch takes the first alternative only, and skips it past this
 MAX_COMPLETION_TOKENS = 1200
 
 # The NT fetch runs here so its 10 s budget holds although get_passage_text
@@ -283,15 +286,26 @@ def _nt_context(client_text: Optional[str], nt_ref: Optional[str], fetch_text: C
         return client_text, "client"
     if not nt_ref:
         return None, "none"
-    future = _NT_EXECUTOR.submit(contextvars.copy_context().run, fetch_text, nt_ref, NT_TRANSLATION)
+    # One suggestion must not drain the shared bible-api budget (review 3a T13-14).
+    sections = scripture_fetcher.plan_sections(nt_ref)
+    if not sections or len(sections[0][1]) > NT_MAX_PARTS:
+        return None, "skipped"
+    future = _NT_EXECUTOR.submit(contextvars.copy_context().run, fetch_text,
+                                 sections[0][0].strip(), NT_TRANSLATION)
     try:
         text = future.result(timeout=max(0.0, min(NT_FETCH_BUDGET_S, deadline - clock())))
     except FutureTimeout:
+        future.cancel()                           # a fetch not yet started never runs late
         return None, "timeout"
     except Exception as exc:                      # the fetch must never fail the suggestions
         logger.warning("hymn_suggestions nt_fetch_failed error=%s", type(exc).__name__)
         return None, "none"
     return (text, "fetched") if (text or "").strip() else (None, "none")
+
+
+def _without_nt_text(messages: list[dict]) -> list[dict]:
+    return [{**m, "content": re.sub(r"(?m)^(NT PASSAGE TEXT \(excerpt\):).*$", r"\1 [omitted]",
+                                    m.get("content") or "")} for m in messages]
 
 
 def _per_slot(values: dict[str, Any]) -> str:
@@ -333,7 +347,8 @@ def suggest_hymns(church_id: uuid.UUID, user_id: uuid.UUID, req: SuggestionReque
         messages, token_map = hymn_suggest.build_prompt(                                  # step 7
             candidates, occasion=req.occasion, scriptures=req.scriptures, nt_ref=nt_ref,
             nt_text=nt_text, rubric=rubric)
-        logger.debug("hymn_suggestions prompt=%r", messages)
+        if logger.isEnabledFor(logging.DEBUG):                    # nt_text is never logged (S §6)
+            logger.debug("hymn_suggestions prompt=%r", _without_nt_text(messages))
         try:
             raw = ai.complete(messages, max_completion_tokens=MAX_COMPLETION_TOKENS,     # step 8
                               json_mode=True, deadline=deadline)
@@ -344,6 +359,9 @@ def suggest_hymns(church_id: uuid.UUID, user_id: uuid.UUID, req: SuggestionReque
         final = hymn_suggest.finalize_slots(resolved, req.current_picks, candidates)
     except DomainError as exc:
         _log(facts, started, clock, outcome=exc.code)
+        raise
+    except Exception:
+        _log(facts, started, clock, outcome="internal_error")    # one line per call (S 3.6 step 10)
         raise
     year = rubric["prefer_before_year"]
     slots = {slot: [SuggestedView(**asdict(hymn_view(item.record, usage=usage, prefer_before_year=year)),

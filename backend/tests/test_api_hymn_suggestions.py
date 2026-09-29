@@ -366,3 +366,31 @@ def test_a_rejected_request_still_spends_a_token(client, church, owner, fetched,
     r = client.post("/hymns/suggestions", json={"service_date_iso": DATE}, headers=church_headers(EMAIL, church))
     assert r.status_code == 429, r.text
     assert fake.calls == []
+
+
+def test_a_many_part_nt_reference_fetches_one_short_alternative_at_most(client, church, fetched):
+    hymnal(church)
+    install()
+    suggest(client, church, {"selected_nt_ref": ";".join(f"Mk {n}" for n in range(1, 9))})
+    suggest(client, church, {"selected_nt_ref": "Mark 1:9-15 or Luke 3:15-22"})
+    assert fetched == [("Mark 1:9-15", "web")]
+
+
+def test_an_unexpected_error_still_writes_one_log_line(client, church, fetched, caplog):
+    hymnal(church)
+    install(reply=lambda messages: (_ for _ in ()).throw(RuntimeError("boom")))
+    caplog.set_level("INFO", logger="usecases.hymns")
+    body = suggest(client, church, {"selected_nt_ref": "Mark 1:9-15"}, status=500)
+    assert body["error"]["code"] == "internal_error"
+    lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("hymn_suggestions ")]
+    assert len(lines) == 1 and lines[0].endswith("outcome=internal_error")
+
+
+def test_the_debug_prompt_log_leaves_out_the_nt_text(client, church, fetched, caplog):
+    hymnal(church)
+    install()
+    caplog.set_level("DEBUG", logger="usecases.hymns")
+    suggest(client, church, {"selected_nt_ref": "Mark 1:9-15", "nt_text": "SECRET PASSAGE WORDS"})
+    logged = " ".join(r.getMessage() for r in caplog.records)
+    assert "prompt=" in logged and "SECRET PASSAGE WORDS" not in logged
+    assert "NT PASSAGE TEXT (excerpt): [omitted]" in logged

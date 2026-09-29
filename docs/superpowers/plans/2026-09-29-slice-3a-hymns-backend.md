@@ -39,7 +39,7 @@
   `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
   `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`
 - Commit subjects read "Area: plain words (F §x, S ...)". Use TDD: write the failing test first and quote its failure.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`. It includes the line "Tests: backend 971 → 1103 passed, 9 → 11 skipped; frontend 356 → 356 in 55 files".
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`. It includes the line "Tests: backend 971 → 1106 passed, 9 → 11 skipped; frontend 356 → 356 in 55 files".
 - **The container restarts** (2a, 2b and 2c build notes): uncommitted work can be lost. Commit as soon as a task's checks pass, and after each task's review back the branch up with `git push origin claude/slice-2-plan-4q33le` (owner answer Q5: standing permission for backup pushes, as in slice 2). If `frontend/node_modules` is gone after a restart, `(cd frontend && npm ci)`.
 - **The network is filtered.** OpenAI, hymnary.org, lectio-api.org, Vanderbilt, bible-api.com and Railway are not reachable from the build container; the npm registry and PyPI are. No test may need the network: the AI is `FakeAI` or a fake SDK client, and the NT fetch is patched.
 - **Grep gates exclude tests** and are judged, not obeyed blindly: a hit may be a comment or a test asserting absence. Read the line, and if it is harmless say why in the task's report.
@@ -67,10 +67,11 @@
   | T13 | +18 | 1115 passed, 11 skipped |
   | T14 | +1 − 13 (the deleted `test_suggest_hymns.py`) | 1103 passed, 11 skipped |
   | T15 | 0 | 1103 passed, 11 skipped |
+  | T13-14 review (3a build) | +3 | 1106 passed, 11 skipped |
 
   Each delta equals the number of tests the task adds (or deletes). The two "3a build review" rows are the review fixes recorded under "Build notes (3a build)"; the numbers after them are the observed counts.
 - The frontend stays at 356 in 55 files throughout (T8 edits one test fixture; no test is added).
-- At the end, CI `backend-postgres` shows `11 passed, 1103 deselected, 1 warning` (the 9 existing Postgres tests plus T7's and T9's).
+- At the end, CI `backend-postgres` shows `11 passed, 1106 deselected, 1 warning` (the 9 existing Postgres tests plus T7's and T9's).
 - Table-driven tests loop over their cases inside one test function (no parametrize), so counts stay stable when cases are added.
 
 ### Layering and logging
@@ -7902,7 +7903,7 @@ git log --oneline origin/main..HEAD | tail -1
 for i in 1 2 3; do .venv/bin/python -m pytest -q backend/tests/test_api_hymn_suggestions.py backend/tests/test_openai_client.py backend/tests/test_usecase_passages.py 2>&1 | tail -1; done
 ```
 
-**Expected:** `1103 passed, 11 skipped in <t>s`; `11 skipped, 1103 deselected in <t>s` (no `TEST_DATABASE_URL` here; nine earlier Postgres tests plus Task 7's and Task 9's); `<n> passed in <t>s` three times with no failure. If a local throwaway Postgres is available, `TEST_DATABASE_URL=postgresql://postgres:<password>@localhost:5432/postgres .venv/bin/python -m pytest -q -m postgres` gives `11 passed, 1103 deselected, 1 warning`.
+**Expected:** `1106 passed, 11 skipped in <t>s`; `11 skipped, 1106 deselected in <t>s` (no `TEST_DATABASE_URL` here; nine earlier Postgres tests plus Task 7's and Task 9's); `<n> passed in <t>s` three times with no failure. If a local throwaway Postgres is available, `TEST_DATABASE_URL=postgresql://postgres:<password>@localhost:5432/postgres .venv/bin/python -m pytest -q -m postgres` gives `11 passed, 1106 deselected, 1 warning`.
 
 - [ ] **Step 3 (agent): Frontend tests, types, lint and build**
 
@@ -7960,7 +7961,7 @@ git log --reverse --format=%s origin/main..HEAD
 
 - [ ] **Step 8 (agent): Ask the owner to open the pull request**
 
-Tell the owner, in one message: "Slice 3a (the hymns backend) is ready for a pull request: four new church-scoped routes (hymnals, hymns, scripture matches, AI suggestions), two new fields on the church profile, the OpenAI client, and the old Streamlit-era hymn code removed. Nothing changes on screen, there is no database change, and liturgy-frozen is not affected. Tests: backend 971 → 1103 passed, 9 → 11 skipped; frontend 356 → 356. The scripture sample is <still the made-up (synthetic) one, so before I ask to mark the PR ready I will walk you through exporting your real one / your export of <date>, <rate> parsed>. May I open the pull request as a draft so CI runs?"
+Tell the owner, in one message: "Slice 3a (the hymns backend) is ready for a pull request: four new church-scoped routes (hymnals, hymns, scripture matches, AI suggestions), two new fields on the church profile, the OpenAI client, and the old Streamlit-era hymn code removed. Nothing changes on screen, there is no database change, and liturgy-frozen is not affected. Tests: backend 971 → 1106 passed, 9 → 11 skipped; frontend 356 → 356. The scripture sample is <still the made-up (synthetic) one, so before I ask to mark the PR ready I will walk you through exporting your real one / your export of <date>, <rate> parsed>. May I open the pull request as a draft so CI runs?"
 
 - [ ] **Step 9 (agent, on the owner's yes): Open the draft PR**
 
@@ -7977,7 +7978,7 @@ Write `<scratch>/slice3a-pr-body.md` first. While the sample is synthetic, its f
 > **Scripture sample: SYNTHETIC.** The 98 % parse test (AC3) currently runs on 100 hand-written rows in Hymnary.org's shape, not on production data. This PR stays a draft until the owner's read-only export of `hymn_catalog` replaces `backend/tests/hymn_fixtures/scripture_refs_sample.csv` and passes the 98 % check (owner answer D; plan Task 16 Step 11).
 ```
 
-(When the export has already been swapped in, the first line instead reads `> **Scripture sample: EXPORTED on <date>**, <rows> rows, <rate> of segments parsed.`) Then: a summary (the Goal paragraph in plain words); the four routes and the two `/church` fields; the owner answers Q1-Q4 and A-D and where each landed; the owner-visible clarifications (1, 2, 9, 26) and the model recommendation with its fallbacks (UNVERIFIED, confirmed in Task 17); the scripture sample line (synthetic, or the export's date, row count and parse rate); the owner's `hymn_usage.date_iso` length counts from Task 4 Step 1 (or "not run"); the line `Tests: backend 971 → 1103 passed, 9 → 11 skipped; frontend 356 → 356 in 55 files`; "No migration; production stays at 0004_invites_reusable. After the merge the owner sets OPENAI_API_KEY and OPENAI_MODEL on Railway (Task 17)."; then `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS` on the last lines.
+(When the export has already been swapped in, the first line instead reads `> **Scripture sample: EXPORTED on <date>**, <rows> rows, <rate> of segments parsed.`) Then: a summary (the Goal paragraph in plain words); the four routes and the two `/church` fields; the owner answers Q1-Q4 and A-D and where each landed; the owner-visible clarifications (1, 2, 9, 26) and the model recommendation with its fallbacks (UNVERIFIED, confirmed in Task 17); the scripture sample line (synthetic, or the export's date, row count and parse rate); the owner's `hymn_usage.date_iso` length counts from Task 4 Step 1 (or "not run"); the line `Tests: backend 971 → 1106 passed, 9 → 11 skipped; frontend 356 → 356 in 55 files`; "No migration; production stays at 0004_invites_reusable. After the merge the owner sets OPENAI_API_KEY and OPENAI_MODEL on Railway (Task 17)."; then `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS` on the last lines.
 
 **Expected:** the push prints `Everything up-to-date` or the new commits; `gh` prints the PR URL. Record `<N>`.
 
@@ -7988,7 +7989,7 @@ gh pr checks <N> -R bbrown62450/church --watch
 gh run view $(gh run list --branch claude/slice-2-plan-4q33le --workflow ci --limit 1 -R bbrown62450/church --json databaseId --jq '.[0].databaseId') -R bbrown62450/church --log | grep -E '[0-9]+ passed' | sed -E 's/^.*Z //'
 ```
 
-**Expected:** `backend`, `backend-postgres`, `frontend` and the Vercel preview pass; the log lines include `1103 passed, 11 skipped` (`backend`), `11 passed, 1103 deselected, 1 warning` (`backend-postgres`) and `Tests  356 passed (356)` (`frontend`). A CI-only failure is fixed in the owning task's files, pushed on the standing backup permission, and this step reruns.
+**Expected:** `backend`, `backend-postgres`, `frontend` and the Vercel preview pass; the log lines include `1106 passed, 11 skipped` (`backend`), `11 passed, 1106 deselected, 1 warning` (`backend-postgres`) and `Tests  356 passed (356)` (`frontend`). A CI-only failure is fixed in the owning task's files, pushed on the standing backup permission, and this step reruns.
 
 - [ ] **Step 11 (agent + OWNER): The owner's scripture export gates "ready" (owner answer D)**
 
@@ -8003,7 +8004,7 @@ Then run Task 4 Step 10. If the rate is at least 0.98 and `test_scripture_refs_p
 
 - [ ] **Step 12 (agent): Ask, then mark ready**
 
-Tell the owner: "PR #<N> is green on CI (backend 1103 passed, 11 skipped; Postgres 11 passed; frontend 356), and the scripture test passes on your real export (<rate> of <segments> references read). May I mark it ready for review?" On the yes:
+Tell the owner: "PR #<N> is green on CI (backend 1106 passed, 11 skipped; Postgres 11 passed; frontend 356), and the scripture test passes on your real export (<rate> of <segments> references read). May I mark it ready for review?" On the yes:
 
 ```bash
 gh pr ready <N> -R bbrown62450/church
@@ -8142,7 +8143,7 @@ On a branch `claude/slice-3a-records` from `origin/main`, insert `### Slice 3a r
 
 Use this only if the release cannot serve or breaks the church pages (for example `GET /church` failing) and a fix would take too long. No database step: 3a adds no revision and writes nothing. On the owner's yes for each outward action: `git switch -c claude/revert-slice-3a origin/main`, `git revert -m 1 <merge sha>` (commit with the two trailer lines), run both suites (expected `971 passed, 9 skipped`, and 356 frontend tests), push, open a PR titled "Revert slice 3a", wait for green, merge on the yes. The OpenAI variables can stay on Railway; the reverted code does not read them. Record the revert in the slice 3a record.
 
-Expected counts after this task: backend `1103 passed, 11 skipped` on `main` (CI `backend-postgres`: `11 passed, 1103 deselected, 1 warning`); frontend `356 passed` in 55 files. The records PR adds no test.
+Expected counts after this task: backend `1106 passed, 11 skipped` on `main` (CI `backend-postgres`: `11 passed, 1106 deselected, 1 warning`); frontend `356 passed` in 55 files. The records PR adds no test.
 
 ---
 
@@ -8177,6 +8178,7 @@ Filled in while Tasks 1-15 are built: each change from the plan as written, its 
 - **Review of T10-T12 (owner decision 1, not owner-visible).** The prompt's NEW TESTAMENT READING line is put on one line and clipped to 200 characters (`_clip`), so `selected_nt_ref` cannot add lines to the prompt; a `|` in a catalogue line's title, themes or scripture field becomes `/` (`_field`), so a hymn field cannot fake the number or facts field; `parse_suggestion_json` also catches `RecursionError`, so a deeply nested answer is 502 `ai_upstream_error`, not a 500. No test count change (assertions added to existing tests).
 - **Review of T10-T12: owner answer of 2026-09-29 (owner-visible in which hymns are offered).** Ranking the whole response list by era and familiarity before the 50-hymn cut could drop every hymn matching the NT reading. The owner chose: in a ranked response list, hymns matching the NT reading come first, ranked among themselves (at most 50), and the rest are ranked and cut with `shortlist` into the remaining places, with a reserve of `min(NEWER_RESERVE, remaining places)`. Opening, closing and a sampled (no-signal) response list are unchanged. Commit `5eb0f43`, with assertions added to an existing `test_hymn_suggest.py` test (no count change). S §3.8 item 1 carries it as a "(3a build)" note.
 - **Counts in the task prose.** The count table was updated with the two review rows; the prose of Tasks 12-17 (the PR body and the owner message included) and the PR-body line in Global Constraints kept the plan's first numbers (1095, 1113, 1101, and 41 for the threaded pair in T13 Step 6). Task 15 corrected them to the table's 1097, 1115, 1103 and 42.
+- **T13-14 review fixes (owner decision 1; not owner-visible).** The NT fetch in `_nt_context` takes the first alternative only and is skipped (`nt_source=skipped`) past `NT_MAX_PARTS = 4` parts, since a 200-character `selected_nt_ref` could make 37 bible-api calls and empty the shared 15-per-30 s budget for every church; a timed-out fetch that has not started is cancelled. An unexpected exception still writes the `hymn_suggestions` line (`outcome=internal_error`). The DEBUG prompt log replaces the NT passage text with `[omitted]` (S §6). +3 tests, 1106 passed; the later prose counts now read 1106. Recorded as a known risk, not fixed: one member's 40-request `ai` burst can briefly hold most of AnyIO's 40 worker threads (up to 10 s NT fetch plus 15 s slot wait each) before `ai_busy`; this follows from F §1.8's bucket size. S §3.4's key formula no longer says `normalize_title`.
 - **Written to S and F by Task 15.** S carries "(3a build)" notes for answers A and B (§3.4 key; §2 step 5 and "Matching"), the text-fallback fixes and Psalm 151 (§2), the codepoint hymnal order (§3.1), `q`'s ASCII digits and the `offset` cap (API notes), the date clamp (§3.4), the prompt hardening (§3.6 steps 7 and 9), the client hardening (§3.7, with owner answer A's retired-model row as a "(3a plan)" note), the NT-first response candidates (§3.8 item 1), the export gate and the deferred shapes (Risks), and the NUL follow-up (Risks). F's amendments gain a §2.8 row (client hardening) and a §4.4 row (answer A's key). So Task 15's commit is larger than Step 3's "three files, 18 insertions and 9 deletions", which counts the plan's own edits only, and it also changes this plan.
 
 ## Spec coverage
