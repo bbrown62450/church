@@ -18,6 +18,8 @@ export type ConfirmDialogProps = {
   description?: string;
   /** Names the action ("Delete service"), never "OK" (F §4.8). */
   confirmLabel: string;
+  /** "Cancel" unless the screen's copy says otherwise ("Keep mine"). */
+  cancelLabel?: string;
   onConfirm(): void;
   /** While true the confirm button is a disabled "Saving…"; the caller closes the dialog on success. */
   pending?: boolean;
@@ -35,6 +37,7 @@ export function ConfirmDialog({
   title,
   description,
   confirmLabel,
+  cancelLabel = "Cancel",
   onConfirm,
   pending = false,
   destructive = false,
@@ -47,7 +50,7 @@ export function ConfirmDialog({
           {description ? <AlertDialogDescription>{description}</AlertDialogDescription> : null}
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>{cancelLabel}</AlertDialogCancel>
           <PendingButton
             pending={pending}
             variant={destructive ? "destructive" : "default"}

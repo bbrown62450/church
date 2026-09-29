@@ -60,4 +60,23 @@ describe("ConfirmDialog", () => {
     expect(openChanges).toEqual([false]);
     expect(onConfirm).not.toHaveBeenCalled();
   });
+
+  it("names the cancel button when the screen's copy asks for it", async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    render(
+      <ConfirmDialog
+        open
+        onOpenChange={onOpenChange}
+        title="Replace your readings?"
+        confirmLabel="Replace readings"
+        cancelLabel="Keep mine"
+        onConfirm={() => {}}
+      />,
+    );
+    const dialog = await screen.findByRole("alertdialog", { name: "Replace your readings?" });
+    expect(within(dialog).queryByRole("button", { name: "Cancel" })).toBeNull();
+    await user.click(within(dialog).getByRole("button", { name: "Keep mine" }));
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
 });

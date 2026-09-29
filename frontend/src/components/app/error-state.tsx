@@ -13,11 +13,25 @@ export type ErrorStateProps = {
   title?: string;
   /** True while the retry runs: Retry is disabled, busy and spinning, so a repeat tap does nothing. */
   retrying?: boolean;
+  /** A screen's own sentence instead of `describeError`'s (slice 2c: the lectionary's copy). */
+  message?: string;
+  /** The button's label: "Retry" unless the screen's copy names it ("Try again"). */
+  retryLabel?: string;
+  /** Disables the button without the spinner, for example while a rate limit's wait runs. */
+  retryDisabled?: boolean;
 };
 
 /** F §4.8 "Query failed": the message inline with a Retry button. An error is never shown as empty. */
-export function ErrorState({ error, onRetry, title, retrying = false }: ErrorStateProps) {
-  const message = describeError(error);
+export function ErrorState({
+  error,
+  onRetry,
+  title,
+  retrying = false,
+  message: ownMessage,
+  retryLabel = "Retry",
+  retryDisabled = false,
+}: ErrorStateProps) {
+  const message = ownMessage ?? describeError(error);
   return (
     <div data-slot="error-state" className="flex flex-col items-start gap-3">
       <Alert variant="destructive">
@@ -35,10 +49,11 @@ export function ErrorState({ error, onRetry, title, retrying = false }: ErrorSta
         variant="outline"
         size="touch"
         pending={retrying}
-        pendingLabel="Retry"
+        pendingLabel={retryLabel}
+        disabled={retryDisabled}
         onClick={() => onRetry()}
       >
-        Retry
+        {retryLabel}
       </PendingButton>
     </div>
   );
