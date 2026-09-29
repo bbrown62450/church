@@ -5,6 +5,7 @@ for Streamlit's hymn_display_from_flat."""
 import uuid
 
 import pytest
+from sqlalchemy import delete
 
 from api import settings as settings_mod
 from db import session_scope
@@ -222,3 +223,11 @@ def test_ordering_and_q_escaping_on_postgres(pg_db):
                             ("GG2013", None, "A no number"), ("GG2013", None, "b no number")]
     assert [h["title"] for h in get(client, church_id, q="100%")["items"]] == ["100% Sure"]
     assert get(client, church_id, q="9" * 30)["total"] == 0
+    # Hymnal codes in codepoint order, as Streamlit's sorted(), whatever the
+    # database collation (owner decision 1): "Zz" before "ab", so "Zz" is the fallback.
+    add(church_id, "Upper", 1, hymnal="Zz")
+    add(church_id, "Lower", 1, hymnal="ab")
+    with session_scope() as s:
+        s.execute(delete(Hymn).where(Hymn.church_id == church_id, Hymn.hymnal == "GG2013"))
+    hymnals = client.get("/hymnals", headers=church_headers(EMAIL, church_id)).json()
+    assert ([h["code"] for h in hymnals["items"]], hymnals["effective_hymnal"]) == (["Zz", "ab"], "Zz")

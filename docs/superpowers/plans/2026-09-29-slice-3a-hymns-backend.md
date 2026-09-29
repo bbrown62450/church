@@ -54,23 +54,23 @@
   |---|---|---|
   | T1 | +7 | 978 passed, 9 skipped |
   | T2 | +9 | 987 passed, 9 skipped |
-  | T3 | +14 | 1001 passed, 9 skipped |
-  | T4 | +14 | 1015 passed, 9 skipped |
-  | T5 | +11 | 1026 passed, 9 skipped |
-  | T6 | +9 | 1035 passed, 9 skipped |
-  | T7 | +8, +1 skipped (Postgres) | 1043 passed, 10 skipped |
-  | T8 | +7 | 1050 passed, 10 skipped |
-  | T9 | +10, +1 skipped (Postgres) | 1060 passed, 11 skipped |
-  | T10 | +11 | 1071 passed, 11 skipped |
-  | T11 | +9 | 1080 passed, 11 skipped |
-  | T12 | +15 | 1095 passed, 11 skipped |
-  | T13 | +18 | 1113 passed, 11 skipped |
-  | T14 | +1 − 13 (the deleted `test_suggest_hymns.py`) | 1101 passed, 11 skipped |
-  | T15 | 0 | 1101 passed, 11 skipped |
+  | T3 | +14, +1 (3a build review of T1-T3) | 1002 passed, 9 skipped |
+  | T4 | +14 | 1016 passed, 9 skipped |
+  | T5 | +11, +1 (3a build review of T4-T9) | 1028 passed, 9 skipped |
+  | T6 | +9 | 1037 passed, 9 skipped |
+  | T7 | +8, +1 skipped (Postgres) | 1045 passed, 10 skipped |
+  | T8 | +7 | 1052 passed, 10 skipped |
+  | T9 | +10, +1 skipped (Postgres) | 1062 passed, 11 skipped |
+  | T10 | +11 | 1073 passed, 11 skipped |
+  | T11 | +9 | 1082 passed, 11 skipped |
+  | T12 | +15 | 1097 passed, 11 skipped |
+  | T13 | +18 | 1115 passed, 11 skipped |
+  | T14 | +1 − 13 (the deleted `test_suggest_hymns.py`) | 1103 passed, 11 skipped |
+  | T15 | 0 | 1103 passed, 11 skipped |
 
-  Each delta equals the number of tests the task adds (or deletes).
+  Each delta equals the number of tests the task adds (or deletes). The two "3a build review" rows are the review fixes recorded under "Build notes (3a build)"; the numbers after them are the observed counts.
 - The frontend stays at 356 in 55 files throughout (T8 edits one test fixture; no test is added).
-- At the end, CI `backend-postgres` shows `11 passed, 1101 deselected, 1 warning` (the 9 existing Postgres tests plus T7's and T9's).
+- At the end, CI `backend-postgres` shows `11 passed, 1103 deselected, 1 warning` (the 9 existing Postgres tests plus T7's and T9's).
 - Table-driven tests loop over their cases inside one test function (no parametrize), so counts stay stable when cases are added.
 
 ### Layering and logging
@@ -176,9 +176,10 @@ Code and F win over the outline; each is owner decision 1 unless marked **owner-
 25. `HymnRecord.link` holds `hymns.hymnary_link`; `audio_url` is never read (inv D8's dead audio).
 26. **(Owner answer A; owner-visible only as the existing "not set up" copy.) A model OpenAI does not offer is `ai_not_configured`.** F §2.8's table has no row for `NotFoundError` (404) or `code == "model_not_found"`, which a retired or mistyped `OPENAI_MODEL` returns; without a row it would be `ai_upstream_error` ("had a problem"), which invites a retry that can never work. `_mapped` checks it after the timeout, quota and rate-limit rows, logs `ERROR AI: model not available (OPENAI_MODEL=<m>)` (the model name is configuration, not a secret) and never retries it (a 4xx). T15 adds the row to F's amendments.
 27. **(Owner decision 1.) `OPENAI_REASONING_EFFORT`, optional.** S says the model must be non-reasoning. The setting keeps a GPT-5-family model usable if the non-reasoning ones are retired: when set (a lowercase word such as `minimal`, `low` or `none`), `complete()` sends `reasoning_effort`; when unset nothing is sent, exactly as for `temperature`. Anything else logs a WARNING and is ignored. `reasoning_effort` first appears in `chat.completions.create` in openai 1.58.0, so the pin is `openai>=1.58.0,<4` (the upper bound keeps a future major release from arriving unreviewed; the installed 3.20.0 satisfies it). While planning, `test_openai_client.py`'s 23 tests also passed with openai 1.58.0 itself on the path (httpx 0.28), so the floor is real, not only the installed release.
-28. **(Owner decision 1.) The parser rejects impossible chapters and dotted verses.** No book has more than 150 chapters, so a chapter above `MAX_CHAPTER = 150` makes the segment unparsed (the whole-book `ff` sentinel excepted). `normalize_book_text` drops periods, so "John 3.16" would read as chapter 316 and "Ps 1.1" as Psalm 11; a segment with a period between digits is therefore unparsed too, and the text fallback still sees it. "Esd 1" stays unparsed: "esd" alone is ambiguous between 1 and 2 Esdras, so no alias is added. `test_impossible_chapters_and_dotted_verses_are_unparsed` (T4) pins all three; the synthetic sample's rate is unchanged.
+28. **(Owner decision 1.) The parser rejects impossible chapters and dotted verses.** No book has more than 150 chapters, so a chapter above `MAX_CHAPTER = 150` makes the segment unparsed. (A chapter-only `ff` once ran to a whole-book sentinel; since the 3a build it is that chapter only, owner answer B in "Build notes (3a build)".) `normalize_book_text` drops periods, so "John 3.16" would read as chapter 316 and "Ps 1.1" as Psalm 11; a segment with a period between digits is therefore unparsed too, and the text fallback still sees it. "Esd 1" stays unparsed: "esd" alone is ambiguous between 1 and 2 Esdras, so no alias is added. `test_impossible_chapters_and_dotted_verses_are_unparsed` (T4) pins all three; the synthetic sample's rate is unchanged.
 29. **(Owner decision 1.) One DEBUG line per scripture-matches call**, counts only (S Risks, "Unknown `scripture_refs` formats in production"): `hymn_matches refs=<n> refs_unparsed=<n> hymns=<n> hymns_with_unparsed=<n> matched=<n>`, computed only when DEBUG is on. Never a title or a reference.
 30. **(Owner decision 1.) The 75 s deadline can be overrun by a few seconds.** httpx applies `openai.Timeout` per phase (connect, each read, write, pool wait), not to a whole attempt, so a response that trickles in can run somewhat past the attempt's timeout. The 15 s between the 75 s server deadline and the 90 s client timeout covers it. T15 adds this note to S §3.7.
+31. **(Owner decision 1; 3a build.) `GET /hymns` caps `offset` at 1 000 000** (`le=1_000_000`, 422 `invalid_request` above it). S gives no upper bound; an unbounded offset only makes the database walk past rows no church has (the largest hymnal is about 1 000 hymns), and a cap keeps the parameter inside what every database accepts. `test_limit_offset_and_total` pins 1 000 000 as 200 and 1 000 001 as 422.
 
 ### Risks carried into the plan
 - **Model availability (UNVERIFIED).** If `gpt-4.1-mini` is not offered to the project, every suggestion answers `ai_not_configured` until the owner changes `OPENAI_MODEL` (T17 checks with one live suggestion; fallbacks in "Model").
@@ -8158,6 +8159,20 @@ Expected counts after this task: backend `1101 passed, 11 skipped` on `main` (CI
 ## Build notes (3a build)
 
 Filled in while Tasks 1-15 are built: each change from the plan as written, its reason, and whether the owner saw it. Task 15 (or a follow-up docs commit before Task 16) writes those that alter S or F as "(3a build)" notes.
+
+- **Review of T1-T3 (owner decision 1, not owner-visible).** The key is left out of `AISettings`' repr; a `nan` or `inf` numeric `OPENAI_*` setting falls back to its default; a reply with no choices is `ai_upstream_error`; a deadline already passed logs its `ai_call` line. +1 test (T3's row).
+- **Review of T4-T9: owner answers of 2026-09-29 (owner-visible).**
+  - **A. The recent-use key ignores punctuation.** `hymn_search.usage_key` is now: NFKC; `’` and `‘` as `'`; hyphens and dashes (`- ‐ ‑ – —`) as a space; everything matching `[^\w\s]` removed; whitespace collapsed; casefolded; a leading `oh ` as `o `. Leading articles are kept ("The Church's One Foundation" and "Church's One Foundation" stay two hymns). So "Come, Thou Long-Expected Jesus" / "…Long Expected…", "The Lord's My Shepherd" / "The Lord’s…", "Holy, Holy, Holy! Lord…" / "Holy, Holy, Holy, Lord…", "Amazing Grace" / "Amazing Grace!" and "O God, Our Help…" / "Oh God Our Help…" are one hymn for recent use. `normalize_title` is unchanged, because exact-title resolution of an AI answer uses it. `usage_near`'s keys change accordingly (`"come thou almighty king"`), which S §3.4's "the usage key" covers.
+  - **B. A whole-book tag and a chapter-only `ff` tag rank "chapter" at most.** `RefSpan` gains `broad` (default false, left out of equality). It is set on a whole-book span of a book with more than one chapter ("Psalms"; "Jude" alone stays a passage-capable span, since the book is one chapter) and on a chapter-only `ff` ("Psalm 148ff"), which now means that chapter only, `(148, 0)-(148, 999)`, instead of chapter 148 to the end of the book. `match_hymns` never gives a broad hymn span "passage". A verse `ff` ("Luke 4:14ff", "Jude 3ff") is unchanged. S Backend 2 step 5 ("`ff` … to the end of the chapter") already reads this way for verses; T15 adds the chapter-only and whole-book rules to S.
+- **Review of T4-T9: invisible fixes (owner decision 1, not owner-visible).**
+  - The text fallback reads a dotted verse ("John 3.16") as `3:16` before normalizing, so it still names chapter 3; it tries each of the query's chapters from the first up to ten more (a range's middle chapters now match); an ordinal inside the text (`i ii iii first second third 1st 2nd 3rd` before a letter) becomes its digit, so "see I John 3" is 1 John and never John 3; and book keys of 2 characters or fewer ("is", "jn", "ps", …) are not tried, so "this is 9" is not Isaiah 9.
+  - Psalm 151 joins `SINGLE_CHAPTER_BOOKS`, and a book key may be followed by `:` (dropped), so "Psalm 151:1" is Psalm 151 verse 1 instead of an unparsed Psalm chapter 151.
+  - `query_hymns` matches `number` only for ASCII digits: `q=²` was a 500 (`int("²")`), and Arabic-Indic digits matched numbers.
+  - `usage_near` clamps its ±84-day window at `date.min` and `date.max`, and at `date.max` drops the SQL upper bound, so `recent_for_date=9999-12-31` or `0001-01-01` is a 200, not a 500.
+  - `GET /hymns` caps `offset` at 1 000 000 (clarification 31).
+  - `hymnal_summaries` sorts codes in Python (codepoint order, as Streamlit's `sorted()`), so the effective-hymnal fallback no longer depends on the Postgres collation (an `en` collation put "ab" before "Zz"). SQLite has no "C" collation, so `.collate("C")` was not used. The Postgres test was seen failing on an ICU `en` database before the fix. `GET /hymns`' own `ORDER BY hymnal` still uses the database collation (unchanged).
+  - `test_isolation_and_every_role` pins that church A asking for church B's hymnal code gets exactly the response for a code that does not exist.
+- **Not fixed here: NUL characters.** A `\x00` in a query value or body is an app-wide concern (Postgres rejects it in text), left to a separate follow-up across all routes.
 
 ## Spec coverage
 

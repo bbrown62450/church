@@ -19,7 +19,7 @@ class HymnalOut(BaseModel):
 
 
 class HymnalListOut(BaseModel):
-    items: list[HymnalOut]             # ORDER BY code
+    items: list[HymnalOut]             # by code, in codepoint order
     default_hymnal: Optional[str]      # churches.settings["default_hymnal"] verbatim, or null
     effective_hymnal: Optional[str]    # default_hymnal if it is in items; else items[0].code; else null
 
