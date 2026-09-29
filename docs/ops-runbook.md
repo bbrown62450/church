@@ -280,6 +280,23 @@ church id is recorded here.
 | Streamlit smoke on liturgy-frozen | Not run: skipped by the owner for now. Slice 2a changes no schema, and merges never reach liturgy-frozen | 2026-09-28 |
 | Follow-ups | Run the liturgy-frozen smoke when convenient. Slice 2b: the frontend foundation (builder shell, draft store, `/` → `/builder`); 2c: the Date & readings step UI, where the Saturday vigil question (spec open question 2) is asked | 2026-09-28 |
 
+### Slice 2b record
+
+Slice 2b (the frontend foundation: the Service Builder shell, the draft saved on
+this device, date and scripture-reference helpers, `/` → `/builder`) merged as
+PR #22 with no backend or database change, so production stays at
+`0004_invites_reusable` (head). Every step, Date & readings included, shows the
+"Available soon" card until 2c (owner answer Q1). Per owner answer Q4 the checks
+are the automated tests plus a short look by the owner on phone and desktop.
+
+| Step | Result | Date |
+|---|---|---|
+| Merge and deploy | PR #22 merged 2026-09-29 about 01:56 UTC (21:56 EDT on 2026-09-28), merge commit `c021a7f`. CI on `main` for `c021a7f` (run 36510209152): success. Vercel deployed; the owner's look below ran on production | 2026-09-29 |
+| CI on the PR head `b12e463` | Run 36510043116: `backend`, `backend-postgres` and `frontend` green; frontend 299 tests in 49 files (221 in 34 before), also green locally with the clock moved +8 and +400 days; backend unchanged at 971 passed, 9 skipped | 2026-09-29 |
+| Phone look | `/` opens Service Builder at "Step 1 of 4 · Date & readings" with the "Available soon" card, the "Builder" row under the header and Back/Next at the bottom. Summary opens as a bottom sheet with Sunday, October 4, 2026, "Available soon" blocks and "Draft saved on this device · Not in archive". Next: Hymns moves to step 2; Back has its outline. Owner: looks good | 2026-09-29 |
+| Desktop look | Summary in the right column, the four named steps in the step bar, "Builder" in the header. New service on an untouched draft resets at once and opens Date & readings. Owner: looks good | 2026-09-29 |
+| Follow-ups | 2c: the Date & readings step; add `"readings"` to `SHIPPED_STEPS`; count a user-picked date as unsaved and ask the owner about card toggles and overrides; auto-fill readings only in the visible tab; the Saturday vigil question. 5a: the owner question about the Readings-available banner on an archived service. Still open from 2a: the liturgy-frozen smoke | 2026-09-29 |
+
 ## Backups
 
 - **Workflow:** `.github/workflows/backup.yml` (`db-backup`). Daily at 08:37 UTC,
