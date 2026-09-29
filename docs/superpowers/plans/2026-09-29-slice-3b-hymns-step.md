@@ -6413,7 +6413,7 @@ git diff -U0 docs backend | grep '^+' | grep -v '^+++' | grep -c '—'
 git diff --stat
 ```
 
-**Expected:** `15` (the marker sentence and fourteen notes); `2`; `12`; `9`; `89 passed in <t>s`; `1110 passed, 11 skipped in <t>s`; `2` (the only em dashes on added lines are S's own copy "Too many requests — try again in … s." in check 5 and F §4.7's existing "Available soon — keep using the current app for this part" on the line that gains a note; the new prose has none); four files changed, `26 insertions(+), 13 deletions(-)` in the three edited files plus the 29 checklist lines.
+**Expected:** `15` (the marker sentence and fourteen notes); `2`; `12`; `9`; `89 passed in <t>s`; `1110 passed, 11 skipped in <t>s`; `2` (the only em dashes on added lines are S's own copy "Too many requests — try again in … s." in check 5 and F §4.7's existing "Available soon — keep using the current app for this part" on the line that gains a note; the new prose has none); `4 files changed, 55 insertions(+), 13 deletions(-)`.
 
 - [ ] **Step 5 (agent): Commit**
 
@@ -6958,3 +6958,91 @@ gh pr checks claude/revert-slice-3b -R bbrown62450/church --watch
 **Expected:** Vitest `Test Files  55 passed (55)`, `Tests  356 passed (356)` (if anything else merged after 3b, it differs by exactly those tests); `1106 passed, 11 skipped`; every check passes. Merge on the owner's yes, then the owner checks that the site signs in and shows the builder with Hymns "Available soon". Record the revert as a row of the slice 3b record (or its own records PR if Step 12 already merged).
 
 Expected counts after this task: frontend `421 passed` in 64 files on `main`; backend `1110 passed, 11 skipped` (CI `backend-postgres`: `11 passed, 1110 deselected`). The records PR adds no test.
+
+---
+
+## Lessons carried from the slice 2 and 3a builds (P2c, P3a "Build notes")
+
+- **The container restarts.** Uncommitted work can be lost: commit as soon as a task's checks pass, and back the branch up with `git push origin claude/slice-2-plan-4q33le` after every task's review. If `node_modules` is gone after a restart, `(cd frontend && npm ci)`.
+- **The network is filtered.** The npm registry, PyPI and raw.githubusercontent.com are reachable; ui.shadcn.com, Railway, OpenAI, Supabase and the reading sites are not. No test may need the network (the fake API fails a test on any unhandled request, which is why T11 and T12 add the matches and hymn answers to existing tests); T7 plans for the blocked registry, T14 Step 4 for a font fetch failure, and T15 Step 3 for an unreachable Vercel.
+- **Tests that depend on the date fake `Date`** (`DRAFT_NOW`, Tuesday, September 29, 2026). T14 runs the suite with the real clock moved 8 and 400 days forward. Calling `vi.useFakeTimers` a second time keeps the first call's `toFake` list: call `vi.useRealTimers()` first (T10's "Still working" test).
+- **Don't prove absence by sleeping.** Wait for a positive condition that comes after, then check the absence (T8's church-switch Undo test waits for a later write in the other church).
+- **Turbopack refuses a symlinked `node_modules`**; a throwaway worktree copies it with `cp -al`.
+- **Grep gates exclude tests** and are judged, not obeyed blindly: a hit may be a comment; read the line and explain it in the report.
+- **Counts are exact.** Every task states its cumulative count; a drift means a missing or extra test, found before moving on.
+- **Owner steps one at a time, in plain words**, and every outward action (PR, ready, merge, settings) on its own yes.
+
+## Build notes (3b build)
+
+Filled in while Tasks 1-13 are built: each change from the plan as written, its reason, and whether the owner saw it. Task 13 (or a follow-up docs commit before Task 14) writes those that alter S or F as "(3b build)" notes.
+
+**Plan fixes made while finishing this plan (2026-09-29, before the build):**
+- The plan was written in two sessions. The first wrote the header, Global Constraints, Owner decisions and Tasks 1-5, but not the "Baselines and counts" table, the "Spec clarifications" that Tasks 2-5 cite (2, 5, 9, 10, 12, 21), the risks or the File Structure; the second added them without changing Tasks 1-5, keeping the numbers those tasks already cite. It also added T4-T5's review checkpoint.
+- Tasks 2-13 were then replayed mechanically from this document onto a clean worktree at `b47abba` (every script in order); see "Facts checked for this plan".
+
+**T1's finding (owner answer 2):** <outcome A, B, C or D, in one sentence, without ids; the owner's choice; Task 1b's commit if any.>
+
+**Review fixes under owner decision 1 (no owner-visible change unless marked):**
+- <none yet>
+
+**Owner answers during the build:**
+- <none yet>
+
+**Carried to later slices:**
+- (4) The Liturgy step adds `"liturgy"` to `SHIPPED_STEPS` and replaces the summary's Liturgy block; `SummaryHymns` is its model.
+- (5a) The new app records hymn use on every save (`hymn_usage`), so the recent-use window no longer depends on the old app's Word copies; archived picks with `hymn_id: null` show "Not in your hymnal" until 5a maps them.
+- (6a) Settings → Hymns flips `SETTINGS_HYMNS_READY`, invalidates the hymns, hymnals and profile keys on every hymn change, and reuses `SearchCombobox` if it wants a long list.
+
+## Spec coverage
+
+S = `docs/superpowers/specs/2026-09-25-slice-3-hymns-design.md`; F = foundations. Items owned by 3a or later slices are listed so nothing is dropped silently.
+
+### Acceptance criteria
+
+| AC | What it requires | Task(s) |
+|---|---|---|
+| 1-9, 15, 16, 18, 19 | The four routes, the OpenAI client, the matcher, the window, errors, rate limit, isolation, deletions, gzip, deadline, rubric | 3a (done); T2 adds the season line to 19's prompt |
+| 10 | `/builder/hymns` replaces the placeholder; "n of 3", then ✓; three slots at 375 px; the summary lists the slots; "Still needed" lists each empty one | T8-T11 (the step), T12 (the shell), T15 Steps 4-10 (deployed) |
+| 11 | Suggest fills only empty slots, 2-4 ideas per slot, a tap swaps both ways, ideas hide after a date change | T4 (`applySuggestions`, `swapAlternative`), T10 (the flow), T15 Step 7 |
+| 12 | Toggling exclusion never changes `draft.hymns.slots`; a recent pick shows its notice | T9 ("exclusion never clears a pick"), T8 (notices) |
+| 13 | A deleted or `hymn_id: null` pick shows "Not in your hymnal…", never crashes or disappears | T4 (`reconcilePick`), T8 |
+| 14 | A load failure shows Retry, not the empty state; an empty hymnal shows the empty state | T8 |
+| 17 | The manual checklist on production at 375 px and on desktop; the Streamlit smoke | T13 (checklist), T15 (guided owner check, optional smoke) |
+| 20 | "Written {year}" on exactly the flagged hymns in the picker, cards, chips and matches | T5 (`newerYearLabel`, `chipName`), T8 (`HymnLabel`), T10, T11, T15 Step 7 |
+
+### S sections
+
+| S item | Task(s) |
+|---|---|
+| Layout (375 px), Slot cards (titles, filled, empty, live data, remove, Undo toasts, notices) | T8 |
+| Other ideas (AI chips) | T10 |
+| Picker (`HymnPicker` over `SearchCombobox`), ranking and hints | T5 (`filterHymns`), T7, T8 |
+| Toolbar (hymnal Select, selected hymnal, notes, Exclude switch) | T4 (`selectHymnal`), T9 |
+| Toolbar (Suggest), AI suggestion flow 1-5 | T6 (`useSuggestHymns`), T10 |
+| Hymns for the readings | T5 (`buildMatchRefs`), T6, T11 |
+| Newer-hymn year label | T5, T8, T10, T11 |
+| Whole-step states | T8 (loading, failed, empty), T9 (toolbar skeleton) |
+| Builder shell: Hymns status and summary; Frontend "Builder shell" | T12 |
+| Frontend Files | T4-T12 (clarifications 3-5) |
+| Queries; "Client timeouts" | T6 |
+| Draft usage | T3 (owner answer 1), T4 |
+| Pure-function contracts, `buildMatchRefs`, `buildSuggestionRequest` | T4, T5 (clarifications 9, 10) |
+| Stale and cross-church protection | T6, T8 (`useUndoToasts`), T10 |
+| Behavior changes 1-5, 10-13, 15, 16, 19, 20 (screen halves) | T8-T12 |
+| Backend 3.6 step 7 (the prompt) | T2 (owner answer 3) |
+| Backend 3.4 (the recent-use window, as found in production) | T1 (owner answer 2) |
+| Testing "Frontend (Vitest)" and the port-ledger rows | T4-T12 (clarification 1) |
+| Manual checks 1-10 | T13 (appended with 11 and 12), T15 (owner) |
+| Interfaces rows 2, 5a, 6a (the screen's halves) | T12 (row 2), T4 and T9 (row 5a: the hymnal is sent as stored), T6 (row 6a: `SETTINGS_HYMNS_READY`, the matches key under the hymns prefix) |
+
+## Questions for the owner
+
+The owner's answers of 2026-09-29 (1-5, "all recommended") are binding and already in the plan. These plan choices are visible to the owner; each has a recommendation. They do not hold up the build: the plan is written as recommended, and a different answer changes the named task before or during its build.
+
+1. **Suggest's network and server errors show as a pop-up message** ("Something went wrong. (Ref: …)"), as everywhere else in the app, while the AI's own problems show in the box under the button (clarification 8). Recommended: as written.
+2. **Where "used within 12 weeks" shows** (clarification 11): under a chosen hymn only when the service date is valid; on picker rows only while Exclude is off; always on other ideas; on hymns for the readings whenever they are shown, also after **Show them**. Recommended: as written.
+3. **Counts of one read naturally**: "1 hymn is hidden.", "1 more used within 12 weeks is hidden.", "1 recently used match is hidden." and "1 recently used hymn was left out." (clarification 13). Recommended: accept.
+4. **Screen-reader names** (clarification 14): the ideas are read as "Use Amazing Grace as the opening hymn", and each **Add** button in Hymns for the readings as "Add Amazing Grace". Recommended: accept.
+5. **Screens already built now include Hymns** (clarification 16): the step bar counts Hymns, Review lists "No Opening hymn — Choose one" and the like, and the summary lists the three hymns. Recommended: as written (this is what the slice 3 spec asks).
+6. **The two hidden counts** (clarification 22): the toolbar counts every recently used hymn in the hymnal; the picker's list counts only those matching what was typed. Recommended: as written.
+7. **What makes "New service" ask, and the church season** (clarifications 2 and 21): these follow owner answers 1 and 3 exactly; they are listed so the phone check (T15 Steps 7 and 9) can confirm them.
