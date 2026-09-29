@@ -5610,3 +5610,719 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 **Expected:** one commit, 3 files changed.
 
 **Review checkpoint (T10-T11, batch 5):** an AI answer is applied only through `applySuggestions` in a functional update and only for the request's date; a superseded or cancelled request changes nothing and shows nothing; no error text from the server's 5xx is shown inline; the ideas show only for the draft's date and hide when their hymn is gone; the matches never send more than 20 references of 200 characters and never search a hymnal with no scripture references; every Undo goes through `useUndoToasts`.
+
+### Task 12: Turn the step on: `"hymns"` ships, its route renders the step, Still needed and the summary list the hymns (S "Builder shell", "Builder shell: Hymns status and summary"; F §4.7; AC10; clarifications 1, 16)
+
+`SHIPPED_STEPS` gains `"hymns"`, so the step bar shows Hymns as "n of 3" (filled slots; a pick shown as "Not in your hymnal" still counts), then "Complete", instead of "Soon" (`stepStatus` already counts the slots, 2b). `stillNeeded` adds one row per empty slot in slot order, "No Opening hymn — Choose one" and so on, each linking to `/builder/hymns`. The summary's Hymns block becomes `SummaryHymns`: three rows from the draft's snapshot only ("Opening · #403 Come, Thou Almighty King", or muted "No Opening hymn"), so the shell never loads a hymnal on other steps; Liturgy keeps "Available soon". `/builder/hymns` renders `HymnsStep` instead of `StepPlaceholder`, which stays for Liturgy and Review. S puts the summary cases in `summary-panel.test.tsx`; 2c tested the summary in `builder-shell.test.tsx`, so this task extends that file (clarification 1). The shell tests now answer `GET /hymnals` and `GET /hymns`, since the hymns route loads the real step.
+
+**Files:**
+- Create: `frontend/src/components/builder/summary-hymns.tsx`
+- Modify: `frontend/src/lib/draft/steps.ts`, `frontend/src/lib/draft/status.ts` (`stillNeeded`), `frontend/src/components/builder/summary-panel.tsx`, `frontend/src/components/builder/step-placeholder.tsx` (comment), `frontend/src/app/(signed-in)/(church)/builder/hymns/page.tsx`
+- Test: `frontend/src/lib/draft/status.test.ts` (+1; two tests edited), `frontend/src/components/builder/builder-shell.test.tsx` (+1; three tests edited)
+
+**Interfaces:**
+- Consumes: `HymnsStep` (T8-T11), `SLOT_META`, `hymnText` (T5), `stepStatus`, `StepProgress`, `StillNeeded`, `SummaryPanel` (2b, 2c).
+- Produces: `SHIPPED_STEPS = new Set(["readings", "hymns"])`; `stillNeeded` hymn rows `{step: "hymns", message: "No {Opening|Response|Closing} hymn", action: "Choose one"}`; `SummaryHymns()`. Later users: slice 4 (adds `"liturgy"`), 5a (`"review"`).
+
+Counts after this task: frontend **421 passed in 64 files**.
+
+- [ ] **Step 1 (agent): Check the starting point**
+
+```bash
+git status --short
+grep -n "export const SHIPPED_STEPS" frontend/src/lib/draft/steps.ts
+(cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
+```
+
+**Expected:** nothing (or `?? .claude/`); `34:export const SHIPPED_STEPS: ReadonlySet<StepId> = new Set<StepId>(["readings"]);`; ` Test Files  64 passed (64)`, `      Tests  419 passed (419)`.
+
+- [ ] **Step 2 (agent): Write the failing tests**
+
+Run this script from the repo root:
+
+```bash
+.venv/bin/python - <<'PYEOF'
+from pathlib import Path
+
+
+def edit(path: str, pairs: list[tuple[str, str]]) -> None:
+    p = Path(path)
+    text = p.read_text(encoding="utf-8")
+    for old, new in pairs:
+        assert text.count(old) == 1, f"{path}: anchor not found exactly once: {old[:70]!r}"
+        text = text.replace(old, new)
+    p.write_text(text, encoding="utf-8")
+
+
+edit("frontend/src/components/builder/builder-shell.test.tsx", [
+    ('''import { draftKey, type DraftV1 } from "@/lib/draft/schema";
+import { installFakeApi } from "@/test/fake-api";
+''',
+     '''import { draftKey, type DraftV1 } from "@/lib/draft/schema";
+import { pickFromHymn, setSlot } from "@/lib/hymns/picks";
+import { installFakeApi } from "@/test/fake-api";
+'''),
+    ('''  DRAFT_NOW,
+  lectionary,
+''',
+     '''  DRAFT_NOW,
+  gg2013,
+  hymnals,
+  hymnListRoute,
+  lectionary,
+'''),
+    ('''function renderBuilder(page: ReactElement, path: string, lookup = lectionaryRoute()) {
+  installFakeApi({ "GET /church": churchProfile(), "GET /lectionary/readings": lookup, "GET /translations": translations() });
+  return renderWithProviders(<BuilderLayout>{page}</BuilderLayout>, { me: me(), church: church(), path });
+''',
+     '''function renderBuilder(page: ReactElement, path: string, lookup = lectionaryRoute()) {
+  installFakeApi({
+    "GET /church": churchProfile(),
+    "GET /lectionary/readings": lookup,
+    "GET /translations": translations(),
+    "GET /hymnals": hymnals(),
+    "GET /hymns": hymnListRoute(),
+  });
+  return renderWithProviders(<BuilderLayout>{page}</BuilderLayout>, { me: me(), church: church(), path });
+'''),
+    ('''        "1 Date & readings 1 of 3", // shipped in 2c: a date, no occasion, no readings
+        "2 Hymns Soon",
+        "3 Liturgy Soon",
+''',
+     '''        "1 Date & readings 1 of 3", // shipped in 2c: a date, no occasion, no readings
+        "2 Hymns 0 of 3", // shipped in 3b: no hymn chosen
+        "3 Liturgy Soon",
+'''),
+    ('''        expect(within(card).queryByRole("heading", { name: "Available soon" })).toBeNull();
+      } else {
+''',
+     '''        expect(within(card).queryByRole("heading", { name: "Available soon" })).toBeNull();
+      } else if (number === 2) {
+        // Hymns is the real step from slice 3b.
+        expect(within(card).getByText("Choose an opening, response and closing hymn.")).toBeInTheDocument();
+        expect(within(card).queryByRole("heading", { name: "Available soon" })).toBeNull();
+      } else {
+'''),
+    ('''      expect(links.map((link) => link.textContent)).toEqual(footer);
+      // Review lists what the shipped step still needs; the other steps do not.
+      if (number === 4) {
+''',
+     '''      expect(links.map((link) => link.textContent)).toEqual(footer);
+      // Review lists what the shipped steps still need; the other steps do not.
+      if (number === 4) {
+'''),
+    ('''          "No scripture readings — Add one",
+        ]);
+      } else {
+''',
+     '''          "No scripture readings — Add one",
+          "No Opening hymn — Choose one",
+          "No Response hymn — Choose one",
+          "No Closing hymn — Choose one",
+        ]);
+        const links = within(needed).getAllByRole("link").map((link) => link.getAttribute("href"));
+        expect(links).toEqual(["/builder/readings", "/builder/readings", "/builder/hymns", "/builder/hymns", "/builder/hymns"]);
+      } else {
+'''),
+    ('''
+  it("shows the summary: the date and occasion, the readings, Available soon for the rest, and where the draft is kept", async () => {
+    // A controllable (min-width: 64rem) query, so the test can widen the window past lg.
+''',
+     '''
+  it("shows the summary: the date and occasion, the readings, the hymns, Available soon for liturgy, and where the draft is kept", async () => {
+    // A controllable (min-width: 64rem) query, so the test can widen the window past lg.
+'''),
+    ('''    expect(readings?.nextElementSibling).toHaveTextContent(/^No readings yet$/);
+    for (const block of ["Hymns", "Liturgy"]) {
+      const heading = within(aside).getByRole("link", { name: block }).closest("h3");
+      expect(heading?.nextElementSibling).toHaveTextContent(/^Available soon$/);
+    }
+    expect(within(aside).getByRole("link", { name: "Date" })).toHaveAttribute("href", "/builder/readings");
+''',
+     '''    expect(readings?.nextElementSibling).toHaveTextContent(/^No readings yet$/);
+    const hymnsBlock = within(aside).getByRole("link", { name: "Hymns" }).closest("h3");
+    expect(hymnsBlock?.nextElementSibling).toHaveTextContent(/^No Opening hymnNo Response hymnNo Closing hymn$/);
+    const liturgy = within(aside).getByRole("link", { name: "Liturgy" }).closest("h3");
+    expect(liturgy?.nextElementSibling).toHaveTextContent(/^Available soon$/);
+    expect(within(aside).getByRole("link", { name: "Date" })).toHaveAttribute("href", "/builder/readings");
+'''),
+    ('''    expect(within(aside).getByText("Nineteenth Sunday after Pentecost")).toBeInTheDocument();
+    expect(within(aside).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+      "Isaiah 5:1-7OT (auto)",
+''',
+     '''    expect(within(aside).getByText("Nineteenth Sunday after Pentecost")).toBeInTheDocument();
+    const readingsBlock = within(aside).getByRole("link", { name: "Readings" }).closest("h3")?.nextElementSibling as HTMLElement;
+    expect(within(readingsBlock).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+      "Isaiah 5:1-7OT (auto)",
+'''),
+])
+with open("frontend/src/components/builder/builder-shell.test.tsx", "a", encoding="utf-8") as f:
+    f.write('''
+describe("the shell with Hymns shipped (slice 3b)", () => {
+  it("counts Hymns n of 3, then Complete, and the summary lists the three slots in the column and the sheet", async () => {
+    const [, praise, come, grace] = gg2013();
+    seed(setSlot(setSlot(testDraft(), "opening", pickFromHymn(come)), "closing", pickFromHymn(praise)));
+    function FillResponse() {
+      const { update } = useDraft();
+      return (
+        <button type="button" onClick={() => update((d) => setSlot(d, "response", pickFromHymn(grace)))}>
+          Fill Response
+        </button>
+      );
+    }
+    const { user } = renderBuilder(
+      <>
+        <ReviewStepPage />
+        <FillResponse />
+      </>,
+      "/builder/review",
+    );
+    const progress = await screen.findByRole("navigation", { name: "Steps" });
+    expect(within(progress).getAllByRole("link")[1]).toHaveTextContent("2 Hymns 2 of 3");
+    const aside = screen.getByRole("complementary", { name: "Summary" });
+    const hymnsBlock = within(aside).getByRole("link", { name: "Hymns" }).closest("h3")?.nextElementSibling as HTMLElement;
+    expect(within(hymnsBlock).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+      "Opening · #403 Come, Thou Almighty King",
+      "No Response hymn",
+      "Closing · #35 Praise, My Soul, the King of Heaven",
+    ]);
+    expect(within(aside).getByRole("link", { name: "Hymns" })).toHaveAttribute("href", "/builder/hymns");
+    expect(hymnsBlock).not.toHaveTextContent("Available soon");
+    const needed = screen.getByRole("region", { name: "Still needed" });
+    expect(within(needed).getAllByRole("listitem").map((li) => li.textContent)).toContain("No Response hymn — Choose one");
+
+    await user.click(screen.getByRole("button", { name: "Fill Response" }));
+    await waitFor(() => expect(within(progress).getAllByRole("link")[1]).toHaveTextContent("2 Hymns Complete"));
+    expect(within(needed).queryByText(/hymn — Choose one/)).toBeNull();
+    // Below lg the same rows show in the bottom sheet.
+    await user.click(screen.getByRole("button", { name: "Summary" }));
+    const sheet = await screen.findByRole("dialog", { name: "Summary" });
+    expect(within(sheet).getByText("Response · #649 Amazing Grace")).toBeInTheDocument();
+    expect(within(sheet).getByText("Opening · #403 Come, Thou Almighty King")).toBeInTheDocument();
+  });
+});
+''')
+
+edit("frontend/src/lib/draft/status.test.ts", [
+    ('''describe("steps (S steps.ts)", () => {
+  it("lists the four steps in order, ships Date & readings (2c), and reads a step from its path", () => {
+    expect(STEPS.map((s) => [s.number, s.label, s.href, s.previous, s.next])).toEqual([
+''',
+     '''describe("steps (S steps.ts)", () => {
+  it("lists the four steps in order, ships Date & readings (2c) and Hymns (3b), and reads a step from its path", () => {
+    expect(STEPS.map((s) => [s.number, s.label, s.href, s.previous, s.next])).toEqual([
+'''),
+    ('''    ]);
+    expect([...SHIPPED_STEPS]).toEqual(["readings"]);
+    expect(stepById("liturgy").label).toBe("Liturgy");
+''',
+     '''    ]);
+    expect([...SHIPPED_STEPS]).toEqual(["readings", "hymns"]);
+    expect(stepById("liturgy").label).toBe("Liturgy");
+'''),
+    ('''    const d = testDraft();
+    expect(STEPS.map((s) => stepStatus(d, s.id).kind)).toEqual(["incomplete", "soon", "soon", "not_in_archive"]);
+    expect(stepStatus(d, "readings", new Set())).toEqual({ kind: "soon" });
+''',
+     '''    const d = testDraft();
+    expect(STEPS.map((s) => stepStatus(d, s.id).kind)).toEqual(["incomplete", "incomplete", "soon", "not_in_archive"]);
+    expect(stepStatus(d, "readings", new Set())).toEqual({ kind: "soon" });
+'''),
+    ('''    expect(stillNeeded(applyReadingSet(testDraft(), lectionary("2026-10-04"), 0), READINGS)).toEqual([]);
+  });
+});
+''',
+     '''    expect(stillNeeded(applyReadingSet(testDraft(), lectionary("2026-10-04"), 0), READINGS)).toEqual([]);
+  });
+
+  it("counts the hymns step n of 3 and lists each empty slot once it ships (slice 3b)", () => {
+    const filled = applyReadingSet(testDraft(), lectionary("2026-10-04"), 0);
+    const withSlots = (slots: Partial<DraftV1["hymns"]["slots"]>) => ({
+      ...filled,
+      hymns: { ...filled.hymns, slots: { ...filled.hymns.slots, ...slots } },
+    });
+    expect(stepStatus(filled, "hymns")).toEqual({ kind: "incomplete", done: 0, total: 3 });
+    expect(stepStatus(withSlots({ opening: HYMN, closing: HYMN }), "hymns")).toEqual({ kind: "incomplete", done: 2, total: 3 });
+    const archived = { ...HYMN, hymn_id: null }; // shown as "Not in your hymnal", still a pick
+    const all = withSlots({ opening: HYMN, response: archived, closing: HYMN });
+    expect(stepStatus(all, "hymns")).toEqual({ kind: "complete" });
+    expect(stillNeeded(filled)).toEqual([
+      { step: "hymns", message: "No Opening hymn", action: "Choose one" },
+      { step: "hymns", message: "No Response hymn", action: "Choose one" },
+      { step: "hymns", message: "No Closing hymn", action: "Choose one" },
+    ]);
+    expect(stillNeeded(withSlots({ response: HYMN }))).toEqual([
+      { step: "hymns", message: "No Opening hymn", action: "Choose one" },
+      { step: "hymns", message: "No Closing hymn", action: "Choose one" },
+    ]);
+    expect(stillNeeded(all)).toEqual([]);
+    expect(stillNeeded(filled, READINGS)).toEqual([]); // before 3b: no hymn rows
+    expect(stillNeeded(filled).some((item) => item.step === "liturgy")).toBe(false); // liturgy not shipped
+  });
+});
+'''),
+])
+
+print("T12 tests written")
+PYEOF
+```
+
+**Expected:** `T12 tests written`.
+
+- [ ] **Step 3 (agent): Run them and see them fail**
+
+```bash
+(cd frontend && npx vitest run src/lib/draft/status.test.ts src/components/builder/builder-shell.test.tsx 2>&1 | grep -E "^ +×|Tests ")
+```
+
+**Expected:**
+
+```
+   × steps (S steps.ts) > lists the four steps in order, ships Date & readings (2c) and Hymns (3b), and reads a step from its path <t>ms
+   × stepStatus (F §4.7) > shows Soon for unshipped steps and Not in archive for Review <t>ms
+   × stillNeeded (S Review "Still needed") > counts the hymns step n of 3 and lists each empty slot once it ships (slice 3b) <t>ms
+   × builder shell (F §4.7) > renders each step route inside the shell: progress, the step or its placeholder card, and the footer links <t>ms
+   × builder shell (F §4.7) > shows the summary: the date and occasion, the readings, the hymns, Available soon for liturgy, and where the draft is kept <t>ms
+   × the shell with Hymns shipped (slice 3b) > counts Hymns n of 3, then Complete, and the summary lists the three slots in the column and the sheet <t>ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  6 failed | 14 passed (20)
+```
+
+- [ ] **Step 4 (agent): Ship the step**
+
+Run this script from the repo root:
+
+```bash
+.venv/bin/python - <<'PYEOF'
+from pathlib import Path
+
+
+def edit(path: str, pairs: list[tuple[str, str]]) -> None:
+    p = Path(path)
+    text = p.read_text(encoding="utf-8")
+    for old, new in pairs:
+        assert text.count(old) == 1, f"{path}: anchor not found exactly once: {old[:70]!r}"
+        text = text.replace(old, new)
+    p.write_text(text, encoding="utf-8")
+
+
+edit("frontend/src/app/(signed-in)/(church)/builder/hymns/page.tsx", [
+    ('''
+import { StepPlaceholder } from "@/components/builder/step-placeholder";
+
+/** Step: Hymns. Slice 3 replaces the placeholder. */
+export default function HymnsStepPage() {
+  return <StepPlaceholder step="hymns" />;
+}
+''',
+     '''
+import { HymnsStep } from "@/components/builder/hymns/hymns-step";
+
+/** Step: Hymns (slice 3b). */
+export default function HymnsStepPage() {
+  return <HymnsStep />;
+}
+'''),
+])
+
+edit("frontend/src/components/builder/step-placeholder.tsx", [
+    (''' * F §4.7). Slice 2b also used it for Date & readings until slice 2c (owner
+ * answer Q1, 2026-09-28). Slices 3, 4 and 5a each replace their step's use,
+ * and 5a deletes this component. No link to the old app (owner answer Q2).
+ */
+''',
+     ''' * F §4.7). Slice 2b also used it for Date & readings until slice 2c (owner
+ * answer Q1, 2026-09-28), and Hymns used it until slice 3b. Slices 4 and 5a
+ * replace their steps' use, and 5a deletes this component. No link to the old
+ * app (owner answer Q2).
+ */
+'''),
+])
+
+Path("frontend/src/components/builder/summary-hymns.tsx").write_text('''"use client";
+
+import { useDraft } from "@/lib/draft/context";
+import { SLOTS } from "@/lib/draft/schema";
+import { hymnText, SLOT_META } from "@/lib/hymns/labels";
+
+/**
+ * The summary's Hymns block (slice 3 S "Builder shell"; F §4.7): the three
+ * slots in order, "Opening · #403 Come, Thou Almighty King" or, muted, "No
+ * Opening hymn". It reads only the draft's snapshot, so the shell never loads
+ * a hymnal on other steps.
+ */
+export function SummaryHymns() {
+  const { draft } = useDraft();
+  return (
+    <ul className="grid gap-1">
+      {SLOTS.map((slot) => {
+        const pick = draft.hymns.slots[slot];
+        const name = SLOT_META[slot].name;
+        return pick ? (
+          <li key={slot} className="wrap-anywhere text-foreground">
+            {name} · {hymnText(pick)}
+          </li>
+        ) : (
+          <li key={slot}>No {name} hymn</li>
+        );
+      })}
+    </ul>
+  );
+}
+''', encoding="utf-8")
+
+edit("frontend/src/components/builder/summary-panel.tsx", [
+    ('''import { splitAlternatives } from "@/lib/scripture-refs";
+
+''',
+     '''import { splitAlternatives } from "@/lib/scripture-refs";
+
+import { SummaryHymns } from "./summary-hymns";
+
+'''),
+    (''' * `lg`, the bottom sheet below it. Each block links to its step. The Readings
+ * block and the occasion line show once "readings" ships (slice 2c); slices 3
+ * and 4 replace the Hymns and Liturgy blocks, and 5a wires the archive half
+ * of the status line.
+ */
+''',
+     ''' * `lg`, the bottom sheet below it. Each block links to its step. The Readings
+ * block and the occasion line show once "readings" ships (slice 2c), the three
+ * hymns once "hymns" ships (slice 3b); slice 4 replaces the Liturgy block, and
+ * 5a wires the archive half of the status line.
+ */
+'''),
+    ('''  const readingsShipped = shipped.has("readings");
+  const lines = cleanScriptures(draft);
+''',
+     '''  const readingsShipped = shipped.has("readings");
+  const hymnsShipped = shipped.has("hymns");
+  const lines = cleanScriptures(draft);
+'''),
+    ('''      <Block title="Hymns" step="hymns" onNavigate={onNavigate}>
+        <Soon />
+      </Block>
+''',
+     '''      <Block title="Hymns" step="hymns" onNavigate={onNavigate}>
+        {hymnsShipped ? <SummaryHymns /> : <Soon />}
+      </Block>
+'''),
+])
+
+edit("frontend/src/lib/draft/status.ts", [
+    ('''
+import { SECTION_KEYS, SLOTS, type DraftV1, type StepId } from "./schema";
+import { SHIPPED_STEPS } from "./steps";
+''',
+     '''
+import { SECTION_KEYS, SLOTS, type DraftV1, type Slot, type StepId } from "./schema";
+import { SHIPPED_STEPS } from "./steps";
+'''),
+    ('''
+export type NeededItem = {
+''',
+     '''
+/** The slot names in "No Opening hymn" (the same words as `lib/hymns/labels.ts` `SLOT_META`). */
+const SLOT_NAMES: Record<Slot, string> = { opening: "Opening", response: "Response", closing: "Closing" };
+
+export type NeededItem = {
+'''),
+    ('''
+/** What Review lists under "Still needed", from shipped steps only; slices 3 and 4 add their rows. */
+export function stillNeeded(draft: DraftV1, shipped: ReadonlySet<StepId> = SHIPPED_STEPS): NeededItem[] {
+''',
+     '''
+/**
+ * What Review lists under "Still needed", from shipped steps only: the
+ * readings' gaps (2c), then one row per empty hymn slot in slot order (3b,
+ * F §4.7's wording). Slice 4 adds the liturgy's rows.
+ */
+export function stillNeeded(draft: DraftV1, shipped: ReadonlySet<StepId> = SHIPPED_STEPS): NeededItem[] {
+'''),
+    ('''  }
+  return items;
+''',
+     '''  }
+  if (shipped.has("hymns")) {
+    for (const slot of SLOTS) {
+      if (draft.hymns.slots[slot] !== null) continue;
+      items.push({ step: "hymns", message: `No ${SLOT_NAMES[slot]} hymn`, action: "Choose one" });
+    }
+  }
+  return items;
+'''),
+])
+
+edit("frontend/src/lib/draft/steps.ts", [
+    (''' * in archive"), and `stillNeeded` ignores it. Slice 2b shipped none (owner
+ * answer Q1, 2026-09-28); slice 2c ships "readings". Slice 3 adds "hymns",
+ * slice 4 "liturgy", 5a "review".
+ */
+''',
+     ''' * in archive"), and `stillNeeded` ignores it. Slice 2b shipped none (owner
+ * answer Q1, 2026-09-28); slice 2c ships "readings" and slice 3b "hymns".
+ * Slice 4 adds "liturgy", 5a "review".
+ */
+'''),
+    ('''
+export const SHIPPED_STEPS: ReadonlySet<StepId> = new Set<StepId>(["readings"]);
+
+''',
+     '''
+export const SHIPPED_STEPS: ReadonlySet<StepId> = new Set<StepId>(["readings", "hymns"]);
+
+'''),
+])
+
+print("T12 code written")
+PYEOF
+```
+
+**Expected:** `T12 code written`.
+
+- [ ] **Step 5 (agent): Run the tests, the suite, types and lint**
+
+```bash
+(cd frontend && npx vitest run src/lib/draft/status.test.ts src/components/builder 2>&1 | grep -E "Test Files|Tests ")
+(cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
+(cd frontend && npm test 2>&1 | grep -cE "Warning:|not wrapped in act")
+(cd frontend && npm run typecheck 2>&1 | tail -1 && npm run lint 2>&1 | tail -1)
+git status --short
+```
+
+**Expected:** ` Test Files  7 passed (7)`, `      Tests  87 passed (87)`; ` Test Files  64 passed (64)`, `      Tests  421 passed (421)`; `0`; `> tsc --noEmit` and `> eslint` with nothing after them; seven ` M` files and `?? frontend/src/components/builder/summary-hymns.tsx`.
+
+- [ ] **Step 6 (agent): Commit**
+
+```bash
+git add frontend/src/lib/draft/steps.ts frontend/src/lib/draft/status.ts frontend/src/lib/draft/status.test.ts frontend/src/components/builder/summary-hymns.tsx frontend/src/components/builder/summary-panel.tsx frontend/src/components/builder/step-placeholder.tsx frontend/src/components/builder/builder-shell.test.tsx 'frontend/src/app/(signed-in)/(church)/builder/hymns/page.tsx'
+git commit -m "Builder: Hymns ships; the step bar, Still needed and the summary show the three hymns (F §4.7; S Builder shell; AC10)" -m "SHIPPED_STEPS holds \"hymns\", so the step bar counts the filled slots
+(n of 3, then Complete), Review lists No Opening hymn and the like for
+each empty slot, and the summary lists Opening, Response and Closing
+from the draft's snapshot (No ... hymn when empty). /builder/hymns
+renders the Hymns step; Liturgy and Review keep Available soon.
+Frontend 419 -> 421 tests in 64 files.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+**Expected:** one commit, 8 files changed.
+
+**Review checkpoint (T12):** only `"readings"` and `"hymns"` are shipped; Liturgy still shows "Soon" and "Available soon" with no link; `SummaryHymns` reads the draft only (no query); the shell tests assert the new rows rather than dropping the old checks.
+
+### Task 13: Docs: the "(3b plan)" notes in S, one F amendment row, the slice 3 checklist and its heading pin (S top, Toolbar, Hymns for the readings, Backend 3.6, Frontend changes, Testing, Manual checks; F Amendments, §4.7; owner answers 1, 3, 5; clarifications 1-7, 9, 10, 13, 14, 17, 21)
+
+S and F are what slices 4, 5a and 6a will read, so they must say what 3b built. S gains the marker sentence and fourteen "(3b plan)" notes; F gains one amendment row and a note in §4.7. `docs/manual-verification.md` gains "## Slice 3" (S's ten checks, check 11 for the church season, check 12 for "New service", and "(owner, after 3b)" on the items the guided check covers), and `backend/tests/test_slice1_docs.py`, which pins the file's last three `##` headings, pins the last four (clarification 17). No code changes.
+
+**Files:**
+- Modify: `docs/superpowers/specs/2026-09-25-slice-3-hymns-design.md`, `docs/superpowers/specs/2026-09-25-migration-foundations-design.md`, `docs/manual-verification.md`, `backend/tests/test_slice1_docs.py`
+- Test: none new; `backend/tests/test_ops_workflows.py`, `test_slice1_docs.py` and `test_docs.py` must still pass (89).
+
+**Interfaces:**
+- Consumes: the clarifications above and the code of T2-T12.
+- Produces: S and F as later slices read them; the checklist T15 runs from.
+
+Counts after this task: frontend **421 passed in 64 files**; backend **1110 passed, 11 skipped**.
+
+- [ ] **Step 1 (agent): Check the starting point**
+
+```bash
+git status --short
+grep -c "(3b plan" docs/superpowers/specs/2026-09-25-slice-3-hymns-design.md
+grep -c "^## Slice 3$" docs/manual-verification.md
+.venv/bin/python -m pytest -q backend/tests/test_ops_workflows.py backend/tests/test_slice1_docs.py backend/tests/test_docs.py 2>&1 | tail -1
+```
+
+**Expected:** nothing (or `?? .claude/`); `0` (grep exits 1); `0` (grep exits 1); `89 passed in <t>s`.
+
+- [ ] **Step 2 (agent): Apply the S, F and docs-test edits**
+
+Each anchor must match exactly once, or the script stops before writing that file. Run this script from the repo root:
+
+```bash
+.venv/bin/python - <<'PYEOF'
+from pathlib import Path
+
+S = Path("docs/superpowers/specs/2026-09-25-slice-3-hymns-design.md")
+F = Path("docs/superpowers/specs/2026-09-25-migration-foundations-design.md")
+T1DOCS = Path("backend/tests/test_slice1_docs.py")
+
+
+def edit(path: Path, pairs: list[tuple[str, str]]) -> None:
+    text = path.read_text(encoding="utf-8")
+    for old, new in pairs:
+        assert text.count(old) == 1, f"{path}: anchor not found exactly once: {old[:70]!r}"
+        text = text.replace(old, new)
+    path.write_text(text, encoding="utf-8")
+
+
+edit(S, [
+    ('Changes made while building 3a (the plan\'s "Build notes (3a build)") are marked "(3a build)".\n',
+     'Changes made while building 3a (the plan\'s "Build notes (3a build)") are marked "(3a build)". Notes from '
+     'planning 3b (`docs/superpowers/plans/2026-09-29-slice-3b-hymns-step.md`, 2026-09-29) are marked "(3b plan)"; '
+     'the owner\'s answers of that day are its owner answers 1-5.\n'),
+    ("while it loads the toolbar shows skeletons, and on error the `ErrorState` below applies, so nothing is resolved "
+     "from missing data.\n",
+     "while it loads the toolbar shows skeletons, and on error the `ErrorState` below applies, so nothing is resolved "
+     "from missing data. (3b plan: the skeletons show until `GET /hymnals` answers; the hymn lists are asked for only "
+     "after it, and not at all for a church with no hymnals, whose picks show \"Not in your hymnal\" at once. A date "
+     "change refetches the list without hiding the toolbar, so a pending suggestion is not lost.)\n"),
+    ('  - When on and `n > 0` hidden hymns in the selected hymnal: "{n} hymns are hidden."\n',
+     '  - When on and `n > 0` hidden hymns in the selected hymnal: "{n} hymns are hidden." (3b plan: "1 hymn is '
+     'hidden." for one; likewise "1 more used within 12 weeks is hidden.", "1 recently used match is hidden." and '
+     '" 1 recently used hymn was left out.")\n'),
+    ('If the slot was filled, the toast "{Slot} hymn changed to {title}." offers **Undo**.\n',
+     'If the slot was filled, the toast "{Slot} hymn changed to {title}." offers **Undo**. (3b plan: the button is '
+     'named "Add {title}" for screen readers, and the toast shows only when the slot held another hymn.)\n'),
+    ('"{k} recently used matches are hidden. [Show them]", a local toggle. With exclusion off, they show a badge.\n',
+     '"{k} recently used matches are hidden. [Show them]", a local toggle. With exclusion off, they show a badge. '
+     '(3b plan: matches shown with **Show them** carry the badge too.)\n'),
+    ("     - `OCCASION`, `SCRIPTURE READINGS`, `NEW TESTAMENT READING` and `NT PASSAGE TEXT (excerpt)` (parity fields); "
+     "(3a build: the NT reading is put on one line and clipped to 200 characters, so a reference cannot add lines to "
+     "the prompt);\n",
+     "     - `OCCASION`, `SCRIPTURE READINGS`, `NEW TESTAMENT READING` and `NT PASSAGE TEXT (excerpt)` (parity fields); "
+     "(3a build: the NT reading is put on one line and clipped to 200 characters, so a reference cannot add lines to "
+     "the prompt); (3b plan, owner answer 3: `CHURCH SEASON: {season}` follows `OCCASION`, computed on the server "
+     "from the service date by `vanderbilt_lectionary.church_season`, and a `SEASON:` line after PREFERENCES asks the "
+     "model to avoid Advent, Christmas, Palm Sunday and Holy Week or Easter hymns outside their season unless the "
+     "readings or occasion call for them; the 24 000-character budget is unchanged);\n"),
+    ("src/components/ui/{combobox,switch,badge,alert}.tsx   generated: npx shadcn@latest add combobox switch badge alert\n",
+     "src/components/ui/{combobox,switch,badge,alert}.tsx   generated: npx shadcn@latest add combobox switch badge alert\n"
+     "                                                      (3b plan: combobox, badge and alert exist already; switch\n"
+     "                                                      is rebuilt from the upstream source, the registry being\n"
+     "                                                      blocked, as in 2b and 2c)\n"),
+    ("                                                      The timezone picker is slice 1's TimezoneCombobox (6a reuses that), not\n"
+     "                                                      this component\n",
+     "                                                      The timezone picker is slice 1's TimezoneCombobox (6a reuses that), not\n"
+     "                                                      this component (3b plan: slice 1 used the Combobox directly,\n"
+     "                                                      so 3b creates it; the caller ranks the rows)\n"),
+    ('src/lib/dates.ts            + formatShortDate(iso) -> "Sep 7" (adds the year when it differs from the service year)\n',
+     'src/lib/dates.ts            + formatShortDate(iso) -> "Sep 7" (adds the year when it differs from the service year)\n'
+     '                            (3b plan: named formatAbbrevDate(iso, contextIso); 2b\'s formatShortDate already\n'
+     '                            returns "October 4")\n'),
+    ("- Changing `slots` or `hymnal` does mark it dirty, which is correct because both are archived in 5a. Only user "
+     "actions change them.\n",
+     "- Changing `slots` or `hymnal` does mark it dirty, which is correct because both are archived in 5a. Only user "
+     "actions change them. (3b plan, owner answer 1: `isPristine` now counts `hymnal` as it counted the slots, so "
+     "\"New service\" asks first and the roll-forward keeps the date; `setHymnal` stores `null` when the member "
+     "chooses the church's effective hymnal, so switching away and back is not unsaved work. `exclude_recent` and "
+     "`alternatives` count nowhere.)\n"),
+    ("- `reconcilePick(pick, lists: Map<hymnal, HymnOut[] | undefined>)` returns one of:\n",
+     "- `reconcilePick(pick, lists: Map<hymnal, HymnOut[] | undefined>)` returns one of (3b plan: a third argument, "
+     "the selected hymnal, is used for a pick with no hymnal; the draft recipes `setSlot`, `clearSlot`, `setHymnal` "
+     "and `setExcludeRecent` take the whole draft):\n"),
+    ("### `buildSuggestionRequest(draft, selectedHymnal, getCachedPassage)`\n",
+     "### `buildSuggestionRequest(draft, selectedHymnal, getCachedPassage)`\n\n"
+     "(3b plan: a fourth argument, the church's `effective_translation`, since the function is pure.)\n"),
+    ("- The client uses `createLatestTracker` (`src/lib/latest.ts`), so an older response never overwrites a newer one.\n",
+     "- The client uses `createLatestTracker` (`src/lib/latest.ts`), so an older response never overwrites a newer one.\n"
+     "- (3b plan: the tracker, the church check and the mount check live in `useSuggestHymns`, whose `suggest()` "
+     "resolves `ok`, `error` or `superseded`; the button checks the date and applies.)\n"),
+    ("| dom `components/builder/summary-panel.test.tsx` (slice 2's file, extended) |",
+     "| dom `components/builder/summary-panel.test.tsx` (slice 2's file, extended) (3b plan: slice 2 tests the summary "
+     "in `builder-shell.test.tsx`, which 3b extends) |"),
+    ("### Manual checks (appended to `docs/manual-verification.md`, F §5.5)\n",
+     "### Manual checks (appended to `docs/manual-verification.md`, F §5.5)\n\n"
+     "(3b plan: appended as \"## Slice 3\" with check 11 for the church season (owner answer 3) and check 12 for "
+     "\"New service\" (owner answer 1); `test_slice1_docs.py` pins the last four `##` headings. The owner's guided "
+     "check after the merge runs the items marked \"(owner, after 3b)\".)\n"),
+])
+
+ROW_3A = "`normalize_title`, which resolves an AI answer's exact title, is unchanged. | 3a |\n"
+edit(F, [
+    (ROW_3A,
+     ROW_3A
+     + "| §4.6, §4.7, §4.9 | *(2026-09-29, slice 3b plan)* `isPristine` also counts a chosen hymnal (owner answer 1), "
+     "so \"New service\" asks after a hymn or a hymnal is chosen and the roll-forward keeps that draft's date; choosing "
+     "the church's effective hymnal stores `null`. The Exclude switch and the AI's other ideas never count. Hymns ships "
+     "(`SHIPPED_STEPS` holds \"readings\" and \"hymns\"): the step bar counts it, Review lists each empty slot, and the "
+     "summary lists the three hymns. The generic long-list picker is `components/app/search-combobox.tsx` (slice 1's "
+     "time-zone picker uses the Combobox directly), and the kit gains `switch`. | 3b |\n"),
+    ("*(2026-09-29, slice 2c plan: step 1 ships in 2c.)*",
+     "*(2026-09-29, slice 2c plan: step 1 ships in 2c.)* *(2026-09-29, slice 3b plan: step 2 ships in 3b.)*"),
+])
+
+edit(T1DOCS, [
+    ('    # Slice 2c appends "## Slice 2" after this section (slice 2 spec, Manual checks).\n'
+     '    assert re.findall(r"^## .+$", text, re.MULTILINE)[-3:] == ["## Ops slice", "## Slice 1", "## Slice 2"]\n',
+     '    # Slices 2c and 3b append "## Slice 2" and "## Slice 3" after this section (their specs, Manual checks).\n'
+     '    headings = re.findall(r"^## .+$", text, re.MULTILINE)[-4:]\n'
+     '    assert headings == ["## Ops slice", "## Slice 1", "## Slice 2", "## Slice 3"]\n'),
+])
+print("docs edited")
+PYEOF
+```
+
+**Expected:** `docs edited`. An `AssertionError` names the anchor that moved: read that part of the file, fix the anchor in this step (not the file's other text), and run the step again from a clean file (`git checkout -- <file>`).
+
+- [ ] **Step 3 (agent): Append the slice 3 checklist**
+
+Append to `docs/manual-verification.md` (the block starts with one empty line):
+
+```markdown
+
+## Slice 3
+
+Run on the production URLs: https://worship-service-builder.vercel.app (at
+375 px in Chrome device mode, iPhone SE, and on desktop) and
+https://liturgy-frozen.streamlit.app, the production Streamlit app. These are
+the slice 3 spec's manual checks 1-10 (slice 3 spec → Manual checks), with
+check 11 for the church season in the AI prompt (owner answer 3, 2026-09-29)
+and check 12 for "New service" (owner answer 1). After the 3b merge the
+owner's guided check (owner answer 5: about six steps on the phone, given one
+at a time, then a quick look on a computer) covers the items marked "(owner,
+after 3b)", some of them in part; its result goes into `docs/ops-runbook.md` →
+"Slice 3b record", which says what ran. The rest can be run at any time and
+recorded the same way. Hymn titles, numbers and suggestions come from the
+church's own hymnal and the live AI, so record what the page shows, never an
+email address or a church id.
+
+- [ ] (owner, after 3b) **1.** Open Hymns with readings for a real Sunday. "Hymns for the readings" shows matches in "Matches the readings" and "Same chapter". **Add** → **Opening hymn** fills the Opening card.
+- [ ] (owner, after 3b) **2.** Search a picker by number and by part of a title. Two hymns with the same title are both listed, with different numbers, and either can be chosen.
+- [ ] (owner, after 3b) **3.** Turn **Exclude hymns used within 12 weeks** off and on. A recently used pick stays, with its "Used on …" notice. The "… hymns are hidden." count changes with the switch.
+- [ ] (owner, after 3b) **4.** **Suggest hymns**: empty slots fill and every slot shows at least 2 ideas. Tap an idea, then tap the hymn it replaced: they swap back. Choose a slot yourself, suggest again: your pick stays.
+- [ ] **5.** Tap **Cancel** during a suggestion: the button is back to "Suggest hymns". Suggest 41 times quickly (or lower the limit in a local run): "Too many requests — try again in … s.", then "Try again now." once the wait has passed.
+- [ ] **6.** In a church with two hymnals: switch hymnals with **Hymnal**; the picks keep their hymnal badges. With PH1990 the "no scripture references" notes show.
+- [ ] (owner, after 3b) **7.** Refresh the page mid-step: picks, ideas and the switch survive. Switch church and back: each church keeps its own draft. The step bar shows "n of 3", then "Complete", for Hymns, and the summary (bottom sheet at 375 px, right column on desktop) lists the three hymns or "No {Slot} hymn", with no "Available soon" in its Hymns block. Review lists each empty slot under "Still needed".
+- [ ] (owner, after 3b) **8.** At 375 px: no sideways scroll, the ideas wrap, a picker's list is usable with the keyboard open, and the sticky footer does not cover the last card.
+- [ ] **9.** Regression: sign in, switch church, open every shipped nav item; the Streamlit smoke check on https://liturgy-frozen.streamlit.app: load the church, load an archived service, open Settings (F §6.3).
+- [ ] (owner, after 3b) **10.** In GG2013, **Suggest hymns** for a real Sunday: the ideas lean older and familiar, and any hymn written in 1970 or later shows "Written {year}". A picker search for a known modern hymn shows the badge; a nineteenth-century hymn does not.
+- [ ] (owner, after 3b) **11.** On a Sunday in the Season after Pentecost (for example 2026-10-04), **Suggest hymns** offers no Palm Sunday, Holy Week, Easter, Advent or Christmas hymns unless the readings call for one.
+- [ ] (owner, after 3b) **12.** After choosing a hymn or a hymnal, **New service** asks "Start a new service?". Turning the Exclude switch or getting ideas alone does not make it ask.
+```
+
+- [ ] **Step 4 (agent): Check the result**
+
+```bash
+grep -c "(3b plan" docs/superpowers/specs/2026-09-25-slice-3-hymns-design.md
+grep -c "slice 3b plan" docs/superpowers/specs/2026-09-25-migration-foundations-design.md
+sed -n '/^## Slice 3$/,$p' docs/manual-verification.md | grep -cE "^- \[ \] "
+grep -c "^- \[ \] (owner, after 3b) " docs/manual-verification.md
+.venv/bin/python -m pytest -q backend/tests/test_ops_workflows.py backend/tests/test_slice1_docs.py backend/tests/test_docs.py 2>&1 | tail -1
+.venv/bin/python -m pytest -q | tail -1
+git diff -U0 docs backend | grep '^+' | grep -v '^+++' | grep -c '—'
+git diff --stat
+```
+
+**Expected:** `15` (the marker sentence and fourteen notes); `2`; `12`; `9`; `89 passed in <t>s`; `1110 passed, 11 skipped in <t>s`; `2` (the only em dashes on added lines are S's own copy "Too many requests — try again in … s." in check 5 and F §4.7's existing "Available soon — keep using the current app for this part" on the line that gains a note; the new prose has none); four files changed, `26 insertions(+), 13 deletions(-)` in the three edited files plus the 29 checklist lines.
+
+- [ ] **Step 5 (agent): Commit**
+
+```bash
+git add docs/superpowers/specs/2026-09-25-slice-3-hymns-design.md docs/superpowers/specs/2026-09-25-migration-foundations-design.md docs/manual-verification.md backend/tests/test_slice1_docs.py
+git commit -m "Docs: slice 3b notes in S and F, and the slice 3 manual checklist (S Manual checks; F §4.6, §4.7, §4.9)" -m "Marks \"(3b plan)\" in the slice 3 spec where 3b built something more
+precisely than written: the toolbar's loading, the singular counts, the
+Add button's name and the matches' badge, the church season in the
+prompt (owner answer 3), the switch and SearchCombobox, formatAbbrevDate,
+what isPristine counts (owner answer 1), reconcilePick's and
+buildSuggestionRequest's extra arguments, where the latest tracker lives,
+the summary tests' file and the checklist. F gains an amendment row and a
+§4.7 note. docs/manual-verification.md gains \"## Slice 3\", and
+test_slice1_docs.py pins its last four headings.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+**Expected:** one commit, 4 files changed.
+
+**Review checkpoint (T13):** every S note says "(3b plan)" and matches the code; nothing else in S or F changed; the checklist items read as the owner will run them; `git show --stat HEAD` lists the four files only.
