@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import BuilderLayout from "@/app/(signed-in)/(church)/builder/layout";
 import { useLectionaryLookup } from "@/components/builder/lectionary-sync";
+import type { Lectionary } from "@/lib/api/types";
 import { useDraft } from "@/lib/draft/context";
 import { applyReadingSet, editOccasion, setDate, setPick } from "@/lib/draft/readings";
 import { draftKey, type DraftV1 } from "@/lib/draft/schema";
@@ -339,5 +340,163 @@ describe("lectionary status (S UX item 2)", () => {
       vi.advanceTimersByTime(8_000);
     });
     expect(screen.getByText("Still working — this can take up to a minute.")).toBeInTheDocument();
+  });
+});
+
+// --- reading sets and the available banner (S UX items 2 and 3; AC14, AC15) ------
+
+const EASTER = ["Acts 10:34-43", "Psalm 118:1-2, 14-24", "Colossians 3:1-4", "John 20:1-18"];
+
+/** Two sets with the same name: only their index tells them apart. */
+function twins(date: string): Lectionary {
+  const answer = lectionary(date);
+  return { ...answer, reading_sets: answer.reading_sets.map((set) => ({ ...set, name: "Nativity of the Lord" })) };
+}
+
+const OCT_11 = ["Isaiah 25:1-9", "Psalm 23", "Philippians 4:1-9", "Matthew 22:1-14"];
+
+/** October 4 has the two fixture sets; October 11 and 18 have one set each, with their own lines. */
+function october(date: string): Lectionary {
+  const own: Record<string, [string, string[]]> = {
+    "2026-10-11": ["Twentieth Sunday after Pentecost", OCT_11],
+    "2026-10-18": ["Twenty-First Sunday after Pentecost", ["Isaiah 45:1-7", "Psalm 96:1-9", "1 Thessalonians 1:1-10", "Matthew 22:15-22"]],
+  };
+  const answer = lectionary(date);
+  if (!own[date]) return answer;
+  const [name, scriptures] = own[date];
+  return { ...answer, reading_sets: [{ name, scriptures, source: "merged" }], default_index: 0 };
+}
+
+describe("reading sets and the available banner (S UX items 2 and 3)", () => {
+  it("shows one card per set, keyed by index, and choosing another applies it and makes the date the user's", async () => {
+    const { user } = renderStep({ lookup: lectionaryRoute(twins) });
+    const group = await screen.findByRole("radiogroup", { name: "This date has more than one set of readings" });
+    const cards = within(group).getAllByRole("radio");
+    expect(cards).toHaveLength(2);
+    await waitFor(() => expect(cards[0]).toBeChecked());
+    expect(within(group).getByText(ISAIAH.join(" · "))).toBeInTheDocument();
+    expect(within(group).getByText(EASTER.join(" · "))).toBeInTheDocument();
+    expect(probe()).toMatch(/^default\/lectionary\//);
+
+    await user.click(within(group).getByText(EASTER.join(" · ")));
+    expect(screen.queryByRole("alertdialog")).toBeNull(); // lectionary fields: no question
+    await waitFor(() => expect(cards[1]).toBeChecked());
+    expect(screen.getByLabelText("Scripture readings")).toHaveValue(EASTER.join("\n"));
+    expect(probe()).toMatch(/^user\/lectionary\//);
+  });
+
+  it("asks before a set replaces typed readings: Keep mine keeps them, Replace readings replaces them", async () => {
+    const { user } = renderStep({ lookup: lectionaryRoute(october) }, testDraft((d) => editOccasion(d, "Harvest")));
+    const group = await screen.findByRole("radiogroup", { name: "This date has more than one set of readings" });
+    await user.click(within(group).getByText(EASTER.join(" · ")));
+    let dialog = await screen.findByRole("alertdialog", { name: "Replace your readings?" });
+    expect(dialog).toHaveAccessibleDescription(
+      "Your occasion and scripture list will be replaced with “Resurrection of the Lord” from the lectionary.",
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Keep mine" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(screen.getByLabelText("Occasion")).toHaveValue("Harvest");
+    // The switcher's Keep mine only closes its question; the banner stays (owner answer C).
+    expect(screen.getByText("Readings for October 4, 2026 are available.")).toBeInTheDocument();
+
+    await user.click(within(group).getByText(EASTER.join(" · ")));
+    dialog = await screen.findByRole("alertdialog", { name: "Replace your readings?" });
+    await user.click(within(dialog).getByRole("button", { name: "Replace readings" }));
+    await waitFor(() => expect(screen.getByLabelText("Occasion")).toHaveValue("Resurrection of the Lord"));
+    expect(probe()).toMatch(/^user\/lectionary\//);
+  });
+
+  it("after typing, a new date shows the banner instead of replacing; Use them asks, then replaces", async () => {
+    const { user } = renderStep({ lookup: lectionaryRoute(october) });
+    const occasion = await screen.findByLabelText("Occasion");
+    await waitFor(() => expect(occasion).toHaveValue("Nineteenth Sunday after Pentecost"));
+    await user.clear(occasion);
+    await user.type(occasion, "Harvest");
+    fireEvent.change(screen.getByLabelText("Service date"), { target: { value: "2026-10-11" } });
+    const banner = await screen.findByText("Readings for October 11, 2026 are available.");
+    expect(banner.closest("[role=status]")).not.toBeNull(); // an offer, not an alert
+    expect(occasion).toHaveValue("Harvest");
+
+    await user.click(screen.getByRole("button", { name: "Use them" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "Replace your readings?" });
+    expect(dialog).toHaveAccessibleDescription(
+      "Your occasion and scripture list will be replaced with “Twentieth Sunday after Pentecost” from the lectionary.",
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Replace readings" }));
+    await waitFor(() => expect(occasion).toHaveValue("Twentieth Sunday after Pentecost"));
+    expect(screen.queryByText("Readings for October 11, 2026 are available.")).toBeNull();
+  });
+
+  it("deleting the Psalm line of this date's set raises no banner; Keep mine hides it for that date for the session", async () => {
+    const { user } = renderStep({ lookup: lectionaryRoute(october) });
+    const lines = await screen.findByLabelText("Scripture readings");
+    await waitFor(() => expect(lines).toHaveValue(ISAIAH.join("\n")));
+    fireEvent.change(lines, { target: { value: [ISAIAH[0], ISAIAH[2], ISAIAH[3]].join("\n") } });
+    expect(probe()).toMatch(/\/user\//);
+    // Once the edit is written (400 ms later), still no banner.
+    await waitFor(() => expect(JSON.parse(window.localStorage.getItem(KEY) ?? "{}").readings.scriptures).toHaveLength(3));
+    expect(screen.queryByText(/are available\.$/)).toBeNull();
+
+    fireEvent.change(screen.getByLabelText("Service date"), { target: { value: "2026-10-11" } });
+    await user.click(await screen.findByRole("button", { name: "Use them" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "Replace your readings?" });
+    await user.click(within(dialog).getByRole("button", { name: "Keep mine" }));
+    await waitFor(() => expect(screen.queryByText("Readings for October 11, 2026 are available.")).toBeNull());
+
+    fireEvent.change(screen.getByLabelText("Service date"), { target: { value: "2026-10-18" } });
+    expect(await screen.findByText("Readings for October 18, 2026 are available.")).toBeInTheDocument();
+
+    // Back on October 11 the banner stays hidden: remembered for the tab's session (owner answer C).
+    fireEvent.change(screen.getByLabelText("Service date"), { target: { value: "2026-10-11" } });
+    await waitFor(() => expect(screen.getByTestId("lookup-date")).toHaveTextContent("2026-10-11"));
+    expect(screen.queryByText(/are available\.$/)).toBeNull();
+    expect(JSON.parse(window.sessionStorage.getItem(`wsb:readingsKeptMine:${church().id}`) ?? "[]")).toEqual([
+      "2026-10-11",
+    ]);
+  });
+
+  it("on a one-set date, edited readings can go back to the lectionary's, asking first (owner answer B)", async () => {
+    const { user } = renderStep({ lookup: lectionaryRoute(october) }, setDate(testDraft(), "2026-10-11"));
+    const lines = await screen.findByLabelText("Scripture readings");
+    await waitFor(() => expect(lines).toHaveValue(OCT_11.join("\n")));
+    expect(screen.queryByRole("button", { name: "Use the lectionary's readings" })).toBeNull(); // the set's own lines
+
+    fireEvent.change(lines, { target: { value: "Isaiah 25:1-9\nPsalm 23" } });
+    await user.click(await screen.findByRole("button", { name: "Use the lectionary's readings" }));
+    let dialog = await screen.findByRole("alertdialog", { name: "Replace your readings?" });
+    await user.click(within(dialog).getByRole("button", { name: "Keep mine" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(lines).toHaveValue("Isaiah 25:1-9\nPsalm 23");
+
+    await user.click(screen.getByRole("button", { name: "Use the lectionary's readings" }));
+    dialog = await screen.findByRole("alertdialog", { name: "Replace your readings?" });
+    await user.click(within(dialog).getByRole("button", { name: "Replace readings" }));
+    await waitFor(() => expect(lines).toHaveValue(OCT_11.join("\n")));
+    expect(screen.queryByRole("button", { name: "Use the lectionary's readings" })).toBeNull();
+    expect(probe()).toMatch(/\/lectionary\//);
+  });
+
+  it("an archived service keeps its fields on its own date, and is offered the readings after a date change", async () => {
+    const archived = testDraft((d) => ({
+      ...d,
+      readings: {
+        ...d.readings,
+        date_origin: "archive",
+        fields_origin: "archive",
+        reading_set: null,
+        occasion: "Harvest",
+        scriptures: ["Joel 2:21-27"],
+      },
+    }));
+    const { lookups } = renderStep({ lookup: lectionaryRoute(october) }, archived);
+    const group = await screen.findByRole("radiogroup", { name: "This date has more than one set of readings" });
+    for (const radio of within(group).getAllByRole("radio")) expect(radio).not.toBeChecked(); // neither set is these lines
+    expect(lookups()).toEqual(["/lectionary/readings?date=2026-10-04"]);
+    expect(screen.getByLabelText("Occasion")).toHaveValue("Harvest");
+    expect(screen.queryByText(/are available\.$/)).toBeNull();
+
+    fireEvent.change(screen.getByLabelText("Service date"), { target: { value: "2026-10-11" } });
+    expect(await screen.findByText("Readings for October 11, 2026 are available.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Occasion")).toHaveValue("Harvest");
   });
 });
