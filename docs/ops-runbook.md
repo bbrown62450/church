@@ -297,6 +297,31 @@ are the automated tests plus a short look by the owner on phone and desktop.
 | Desktop look | Summary in the right column, the four named steps in the step bar, "Builder" in the header. New service on an untouched draft resets at once and opens Date & readings. Owner: looks good | 2026-09-29 |
 | Follow-ups | 2c: the Date & readings step; add `"readings"` to `SHIPPED_STEPS`; count a user-picked date as unsaved and ask the owner about card toggles and overrides; auto-fill readings only in the visible tab; the Saturday vigil question. 5a: the owner question about the Readings-available banner on an archived service. Still open from 2a: the liturgy-frozen smoke | 2026-09-29 |
 
+### Slice 2c record
+
+Slice 2c (the Date & readings step: lectionary lookup and automatic fill, the
+set switcher, Occasion and Scripture readings, passage text by translation and
+the bulletin OT and NT picks) merged as PR #24 with no backend or database
+change, so production stays at `0004_invites_reusable` (head). Hymns, Liturgy
+and Review still show "Available soon". Per owner answer Q3 the checks are the
+automated tests plus the owner's guided six-step phone check and a desktop look,
+on production with live lectionary and Bible text. They cover
+`docs/manual-verification.md` "## Slice 2" checks 1, 2, 3, 4, 8, 9, 12 and 14 in
+part; checks 5, 6, 7, 10, 11 and 13 were not run.
+
+| Step | Result | Date |
+|---|---|---|
+| Merge and deploy | PR #24 merged 2026-09-29 about 14:23 UTC (10:23 EDT), merge commit `d660cb1`. CI on `main` for `d660cb1` (run 36582341516): success. Vercel deployed; the checks below ran on production | 2026-09-29 |
+| CI on the PR head `c676a9b` | Run 36581969543: `backend`, `backend-postgres` and `frontend` green; frontend 356 tests in 55 files (299 in 49 before), also green locally with the clock moved +8 and +400 days; backend unchanged at 971 passed, 9 skipped | 2026-09-29 |
+| 1. Next Sunday | Opens on Date & readings dated Sunday, October 4, 2026, "Nineteenth Sunday after Pentecost" with four readings ending Matthew 21:33-46; the step shows Complete. Owner: looks good | 2026-09-29 |
+| 2. A day with no readings | Tuesday, October 6, 2026: "No lectionary readings for …" with Enter readings, the note that the readings are from October 4 with Clear readings; Clear empties the fields. Owner: looks good | 2026-09-29 |
+| 3. Two sets | Palm Sunday, March 21, 2027: two cards with the Passion set selected; tapping Palms switches the readings. Owner: looks good | 2026-09-29 |
+| 4. Your own reading | A typed line changes the caption to "Edited from the lectionary (…)"; on October 11 "Readings for … are available." appears, Use them asks "Replace your readings?", Keep mine keeps the lines. Owner: looks good | 2026-09-29 |
+| 5. Bible text | After New service, Show text on Isaiah 5:1-7 loads; switching to King James and ESV changes the text, ESV ending "(ESV)". Owner: looks good | 2026-09-29 |
+| 6. Bulletin readings | Automatic Isaiah 5:1-7 and Philippians 3:4b-14; picking Psalm 80:7-15 then Use automatic restores it; New service with only a translation change starts over without asking and keeps the translation. Owner: looks good | 2026-09-29 |
+| Desktop look | The summary column shows the date, occasion and readings with OT and NT marks; no sideways scroll. Owner: looks good | 2026-09-29 |
+| Follow-ups | Slices 3 and 4: whether card toggles, hymnal overrides and hymn alternatives count as unsaved work (owner question). 5a: the Readings-available banner on an archived service (owner question). A date changed away from a rate-limited date and back asks again before Retry-After. Still open: manual checks 5, 6, 7, 10, 11 and 13, including the liturgy-frozen smoke | 2026-09-29 |
+
 ## Backups
 
 - **Workflow:** `.github/workflows/backup.yml` (`db-backup`). Daily at 08:37 UTC,
