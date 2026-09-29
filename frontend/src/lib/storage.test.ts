@@ -3,10 +3,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ACTIVE_CHURCH_KEY,
   SESSION_KEYS,
+  localKeys,
   readLocal,
   readSession,
   removeLocal,
   removeSession,
+  tryWriteLocal,
   writeLocal,
   writeSession,
 } from "./storage";
@@ -96,5 +98,22 @@ describe("storage", () => {
     expect(() => writeLocal("k", "v")).not.toThrow();
     expect(() => removeSession("k")).not.toThrow();
     expect(() => removeLocal("k")).not.toThrow();
+  });
+
+  it("tryWriteLocal says whether it stored the value, and localKeys lists keys (slice 2b drafts)", () => {
+    vi.stubGlobal("window", { sessionStorage: memoryStorage(), localStorage: memoryStorage() });
+    expect(tryWriteLocal("wsb:draft:u:c", "{}")).toBe(true);
+    writeLocal(ACTIVE_CHURCH_KEY, "c");
+    writeSession("session-only", "x");
+    expect(readLocal("wsb:draft:u:c")).toBe("{}");
+    expect(localKeys().sort()).toEqual([ACTIVE_CHURCH_KEY, "wsb:draft:u:c"]);
+
+    vi.stubGlobal("window", { sessionStorage: throwingStorage(), localStorage: throwingStorage() });
+    expect(tryWriteLocal("k", "v")).toBe(false);
+    expect(localKeys()).toEqual([]);
+
+    vi.unstubAllGlobals();
+    expect(tryWriteLocal("k", "v")).toBe(false);
+    expect(localKeys()).toEqual([]);
   });
 });
