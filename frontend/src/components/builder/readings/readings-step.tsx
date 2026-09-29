@@ -8,6 +8,7 @@ import { todayIn } from "@/lib/dates";
 import { churchZone } from "@/lib/draft/schema";
 import { useChurchProfile } from "@/lib/queries/church";
 
+import { LectionaryStatus } from "./lectionary-status";
 import { OccasionField } from "./occasion-field";
 import { ScriptureLinesField } from "./scripture-lines-field";
 import { ServiceDateField } from "./service-date-field";
@@ -30,6 +31,7 @@ export function ReadingsStep() {
   return (
     <section aria-label="Date & readings" className="grid gap-6">
       <ServiceDateField today={today} />
+      <LectionaryStatus onEnterReadings={() => occasionRef.current?.focus()} />
       <OccasionField lect={lect} inputRef={occasionRef} />
       <ScriptureLinesField />
     </section>
