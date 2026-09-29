@@ -88,6 +88,8 @@ The slice specs refined several foundation rules. This pass folds every one of t
 | §2.5 | *(2026-09-28, slice 2a build)* "No query strings in logs" covers our own log lines; uvicorn's access log records path and query. Thread-pool log lines keep the request id. | 2a |
 | §4.2, §4.6, §4.7 | *(2026-09-28, slice 2b plan)* The builder ships live with every step on the "Available soon" card until its slice turns it on: `SHIPPED_STEPS` starts empty and slice 2c adds "readings" (owner answer Q1). The draft store writes through `lib/storage.ts`'s `tryWriteLocal`, which reports a failed write; a fresh draft is written when the builder opens; "New service" confirms when the draft `isDirty`. `AppNav` shows on church pages only. | 2b |
 | §4.6 | *(2026-09-29, slice 2b build)* The fingerprint hashes the stable JSON's UTF-8 bytes. A draft whose backup cannot be written stays in its key until the user edits; a failed write is retried on the next flush. | 2b |
+| §4.6, §4.7, §4.8 | *(2026-09-29, slice 2c plan)* `isPristine` also counts a date the user picked, a reading set chosen in the switcher (which makes a default date the user's) and a translation override (owner answer Q2), so "New service" asks after them; the roll-forward keeps a picked or chosen date but not for a translation alone, which "New service" keeps (review answer A). Date & readings counts as done only with no field showing an error (review answer E). The lectionary fills only in the tab on screen, and a tab shown again first re-reads the stored draft and adopts it when newer. Date & readings ships (`SHIPPED_STEPS` holds "readings"). `ErrorState` takes a screen's own `message`, `retryLabel` and `retryDisabled`, and `ConfirmDialog` a `cancelLabel`, for the slice spec's "Try again" and "Keep mine". | 2c |
+| §4.6, §4.8 | *(2026-09-29, slice 2c build)* "New service" leaves the translation override out of its question, since the fresh draft keeps it; `isPristine` still counts it. The lectionary's automatic fill is stamped 1 ms after the draft it changes (`DraftStore.autoUpdate`), not now, and a flush that finds a strictly newer stored draft adopts it instead of writing over it, so an automatic change never outranks another tab's edit. A lookup rate limited by a 429 is not asked again on focus, reconnect or mount before its `Retry-After`. `ConfirmDialog` also takes `onCancel` (called by its cancel button only) and `finalFocus`. | 2c |
 
 ---
 
@@ -982,7 +984,7 @@ The draft is **not** cleared by save, download, email, church switch, logout or 
   - `StepFooter` holds Back and Next links. On mobile it is sticky at the bottom with `pb-[env(safe-area-inset-bottom)]`.
   - Review has no Next. It lists what is missing, each linking to its step ("No Response hymn — Choose one").
   - Only Save, Download and Email are disabled, and only when the date is invalid.
-- **Slice 2 ships all four routes.** Steps 2-4 render an "Available soon — keep using the current app for this part" card inside the working shell until their slice fills them. *(2026-09-28, slice 2b plan: step 1 too, until slice 2c.)*
+- **Slice 2 ships all four routes.** Steps 2-4 render an "Available soon — keep using the current app for this part" card inside the working shell until their slice fills them. *(2026-09-28, slice 2b plan: step 1 too, until slice 2c.)* *(2026-09-29, slice 2c plan: step 1 ships in 2c.)*
 - **`SummaryPanel`** shows:
   - date and occasion;
   - readings, with the OT and NT choices marked;

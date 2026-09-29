@@ -6002,6 +6002,31 @@ Expected counts after this task: frontend `356 passed` in 55 files on `main`; ba
 - **Counts are exact.** Every task states its cumulative count; a drift means a missing or extra test, found before moving on.
 - **Owner steps one at a time, in plain words**, and every outward action (PR, ready, merge, settings) on its own yes.
 
+## Build notes (2c build)
+
+What changed while Tasks 1 to 11 were built and reviewed (2026-09-29), with each change's reason and whether the owner saw it. T12 wrote those that alter S or F as "(2c build)" notes (S: New service, the long date, Rate limited, the banner and the link, the line limit, the reading rows, `useLectionarySync()`, `isPristine`; F: one amendment row).
+
+**Review fixes under owner decision 1 (no owner-visible change unless marked):**
+- "New service" leaves the translation out of its question (`d09fc46`, T1-T3 review, **owner-visible**, a bug fix). It keeps the translation in the fresh draft (review answer A) while `isPristine` counts it (Q2), so after one translation choice every "New service" asked first, even on a blank draft. It now asks on `isDirty` of the draft with `translation: null`; `isPristine` itself is unchanged, and the roll-forward already ignored the translation. So owner answer Q2's third case (a translation) no longer makes "New service" ask; the checklist's check 14 says so.
+- A lookup that failed with a 429 is not refetched on window focus or reconnect before its `Retry-After` (`d09fc46`, T1-T3 review), nor when the lookup mounts again (`refetchOnMount`, `retryOnMount`; `0452c6c`). A lookup or passage text counts as rate limited when `error.status === 429`, whatever its code (`0452c6c`).
+- The lectionary's automatic fill goes through the new `DraftStore.autoUpdate`, stamped 1 ms after the `updated_at` of the draft it changes instead of now, and a flush that finds a strictly newer stored draft adopts it instead of writing over it (`864e383`, T4-T5 review). Before, a fill stamped now could outrank a real edit from another tab that had not arrived yet (a late `storage` event, or two windows on screen). Two multi-tab tests and a test of the in-recipe `shouldAutoApply` re-check were added; the reading-set card (its label) is the 44 px tap target.
+- Focus never drops to the page (`0452c6c`, T6-T8 review): when the banner's or the link's question closes, focus returns to what opened it or, when that is gone, to the status area (`tabIndex={-1}`; `ConfirmDialog` gains `finalFocus`); "Clear readings" moves focus to Occasion; a "Try again" that brings an answer moves it to the status area.
+- A set choice or the link re-checks `fields_origin` inside the update, so fields typed meanwhile are never replaced without asking; no "Use the lectionary's readings" over empty fields, which the automatic fill handles (`0452c6c`).
+- The long date shows only for a date in 1900-2199 or once the date has settled, never "…, 0020" while a year is typed (`0452c6c`).
+- Long unbroken references wrap anywhere (`wrap-anywhere`) in the reading rows, the set cards and the summary; before, the page scrolled sideways (`0452c6c`, T9-T11 review). The readings list forgets open rows whose line is gone, so a line typed back starts closed.
+- The 200-character limit counts the trimmed line in the message, in `stepStatus` and in the row, which had disagreed on a line with spaces at its ends (`0452c6c`).
+
+**Owner answers 1-3 (2026-09-29, after the T6-T11 review, "all recommended"; `0452c6c`, owner-visible):** only the question's "Keep mine" button records the date as kept (sessionStorage, the banner hidden for the session; Escape or a click outside only closes it; `ConfirmDialog` gains `onCancel`, called by its cancel button only); after that "Keep mine", "Use the lectionary's readings" is also hidden for that date for the session; and the link also shows on a date with several sets when the cleaned lines differ from the selected set. Frontend 350 → 356 in 55 files.
+
+**Process notes:**
+- T1-T3 review minor, left as it is: a passage "Try again" goes back through the 3-at-a-time limiter's queue like any request, so it can wait behind other open rows. The JSDoc does not say so yet.
+- T12's checklist differs from Step 3's text above: check 4 adds "Keep mine" and "Use the lectionary's readings", check 12 a long reference with no spaces, check 14 the translation case (first bullet above), and the intro spells out owner answer Q3's shape.
+
+**Carried to later slices:**
+- (3, 4) Whether card on/off toggles, hymnal overrides and hymn alternatives count as unsaved work (`isPristine`), a question for the owner when those slices are planned (P2b build notes; clarification 2).
+- (5a) Editing an archived service on its own date raises the "Readings available" banner. A spec question for the owner (carried from the 2b build notes).
+- (later) Moving the date away from a rate-limited date and back asks the lectionary again for it before its `Retry-After` is over (focus, reconnect and remounting the step no longer do). The server answers 429 again, so the member sees the same message; left after the `0452c6c` fix round.
+
 ## Spec coverage
 
 S = `docs/superpowers/specs/2026-09-25-slice-2-readings-design.md`; F = foundations. Items owned by later slices are listed so nothing is dropped silently.

@@ -8,7 +8,7 @@
 
 2a deploys first; every change is additive (foundations §1.11).
 
-Corrections made while planning 2a (`docs/superpowers/plans/2026-09-28-slice-2a-backend.md`, 2026-09-28) are marked "(2a plan)" where they are made. Corrections made during the 2a build (2026-09-28), where the code or an owner decision changed what is written here, are marked "(2a build)". Corrections made while planning 2b (`docs/superpowers/plans/2026-09-28-slice-2b-frontend.md`, 2026-09-28) are marked "(2b plan)". Corrections made during the 2b build (2026-09-29) are marked "(2b build)".
+Corrections made while planning 2a (`docs/superpowers/plans/2026-09-28-slice-2a-backend.md`, 2026-09-28) are marked "(2a plan)" where they are made. Corrections made during the 2a build (2026-09-28), where the code or an owner decision changed what is written here, are marked "(2a build)". Corrections made while planning 2b (`docs/superpowers/plans/2026-09-28-slice-2b-frontend.md`, 2026-09-28) are marked "(2b plan)". Corrections made during the 2b build (2026-09-29) are marked "(2b build)". Corrections made while planning 2c (`docs/superpowers/plans/2026-09-29-slice-2c-readings-step.md`, 2026-09-29) are marked "(2c plan)". Corrections made during the 2c build (2026-09-29) are marked "(2c build)".
 
 **Inputs**
 - Inventory (cited as "inv."): §1 C1–C10; A7 (the readings and translation part); the §2.2 rows for `/lectionary/readings`, `/translations`, `/scripture/passages` and `/church`; §3 rows app.py:69-102, 371-377, 428-464, 481-489, 556-597 and vanderbilt_lectionary.py:22; §4 "Time and date" and "External APIs"; §5 row 2; §7 questions 1, 6 and 14.
@@ -108,7 +108,7 @@ The draft survives a refresh and is kept separately for each church. The four-st
   - **Hymns** and **Liturgy:** "Available soon". Slice 3 replaces the Hymns block with the three slots ("#{number} {title}" or "No Opening hymn"); slice 4 replaces the Liturgy block with "n of m liturgy sections ready", communion yes or no, and the number of custom elements (F §4.7).
   - **Status line:** "Draft saved on this device · Not in archive"; in memory-only mode, "Draft not saved on this device" (2b plan: followed by " · Not in archive", as F §4.7 keeps the two halves). 5a wires the archive half ("In archive (saved 10:42) · Unsaved changes").
 - **New service** (overflow menu):
-  - If the draft is pristine (see `isPristine` below), it resets immediately. (2b plan: the check is F §4.6's `isDirty(draft)`, which equals "not pristine" until 5a saves drafts.)
+  - If the draft is pristine (see `isPristine` below), it resets immediately. (2b plan: the check is F §4.6's `isDirty(draft)`, which equals "not pristine" until 5a saves drafts.) (2c build: the check leaves out the translation override, because the fresh draft keeps it (owner answer A), so a translation choice alone never makes "New service" ask.)
   - Otherwise a `ConfirmDialog` opens: title **"Start a new service?"**, body **"This clears the current draft on this device."**, confirm **"Start new service"**, cancel "Cancel".
   - Afterwards it goes to `/builder/readings`.
 
@@ -116,9 +116,9 @@ The draft survives a refresh and is kept separately for each church. The four-st
 
 1. **Service date** card
    - A native `<input type="date">` labelled **"Service date"**, with the help text "Readings and the occasion load automatically for this date." Every date is allowed.
-   - Below the input, the long date, for example **"Sunday, October 4, 2026"** (`formatLongDate`).
+   - Below the input, the long date, for example **"Sunday, October 4, 2026"** (`formatLongDate`). (2c build: only for a date in 1900-2199 or once the date has settled, so "…, 0020" never shows while a year is typed.)
    - When the date is not a Sunday, an info line: **"Not a Sunday. We'll look for this day's own readings, such as Ash Wednesday, Christmas Eve or Good Friday."**
-   - When the date is not the next Sunday, a text button: **"Use next Sunday (October 4)"**.
+   - When the date is not the next Sunday, a text button: **"Use next Sunday (October 4)"**. (2c plan: it puts back the default date with `date_origin: "default"`, so it is not counted as the user's choice; owner answer Q2, 2026-09-29. While a date is typed the field keeps what was typed, even an impossible date stored as "", and "Enter a date between 1900 and 2199." waits until the date has settled; owner answer F.)
    - An empty or invalid input shows the inline message **"Choose a service date."** No lookup runs, and the draft keeps `date_iso: ""`.
    - A date before today (church timezone) shows the muted note **"This date has passed."** It is not blocking.
    - A year outside 1900–2199 shows **"Enter a date between 1900 and 2199."** No lookup runs.
@@ -130,8 +130,8 @@ The draft survives a refresh and is kept separately for each church. The four-st
      - Choosing a set when `fields_origin` is `empty` or `lectionary` applies it immediately.
      - When `fields_origin` is `user` or `archive`, it opens the **Replace** confirmation (see 3).
    - **No readings** (`status: "no_readings"`): an info callout, **"No lectionary readings for Tuesday, September 29, 2026. Enter the occasion and readings below."**, with an **"Enter readings"** link button that moves focus to the Occasion field. Focus never moves on its own, so a keystroke meant for the date input can't land in Occasion.
-   - **Unavailable** (502/504/network/timeout): `ErrorState` with **"The lectionary couldn't be reached. Enter readings yourself, or try again in a few minutes."** and a **"Try again"** button, which refetches.
-   - **Rate limited** (429): `ErrorState` with the F §4.8 copy **"Too many requests — try again in N s."**; its **"Try again"** button is disabled until `retryAfterSeconds` have passed, then refetches. The fields are untouched and manual entry keeps working.
+   - **Unavailable** (502/504/network/timeout): `ErrorState` with **"The lectionary couldn't be reached. Enter readings yourself, or try again in a few minutes."** and a **"Try again"** button, which refetches. (2c plan: every failure other than a 429 shows it, and an answer already on screen wins over a failed background refetch.)
+   - **Rate limited** (429): `ErrorState` with the F §4.8 copy **"Too many requests — try again in N s."**; its **"Try again"** button is disabled until `retryAfterSeconds` have passed, then refetches. The fields are untouched and manual entry keeps working. (2c plan: N is the `Retry-After` value as sent; it does not count down. Once the wait has passed, the text reads "Try again now."; owner answer D, 2026-09-29.) (2c build: a lookup counts as rate limited when its status is 429, whatever the error code, and passage text likewise. A 429 is not asked again on window focus, on reconnect or when the lookup mounts again, so leaving the step and coming back waits out the `Retry-After` too. Known gap: moving the date away and back still asks again for that date before the wait is over.)
    - **Partial** (`partial: true`, shown together with the set UI): the muted note "One lectionary source didn't respond, so other reading options for this date may be missing."
    - **Stale fields.** Shown together with "No readings" or "Unavailable" when `fields_origin == "lectionary"` and `reading_set.date_iso != date_iso`: **"These readings are from {set name} ({Month D, YYYY}), not {Month D, YYYY}."** with a **"Clear readings"** button. The fields stay as they are until the user clears them (F §4.6: a lookup failure or empty result leaves the fields untouched).
 3. **Readings available banner** (`showAvailableBanner`). F §4.6 limits it to new readings for a *changed* date, so ordinary edits never raise it. It shows when the lookup for the current date returned sets, no set's references equal the draft's cleaned scriptures, and:
@@ -140,7 +140,7 @@ The draft survives a refresh and is kept separately for each church. The four-st
    - It never shows for `empty` or `lectionary` fields, which auto-fill instead.
    - Text: **"Readings for {Month D, YYYY} are available."** with a **"Use them"** button.
    - "Use them" opens a `ConfirmDialog`: title **"Replace your readings?"**, body **"Your occasion and scripture list will be replaced with “{set name}” from the lectionary."**, confirm **"Replace readings"**, cancel **"Keep mine"**.
-   - Confirming applies the default set, or the set chosen in the switcher. "Keep mine" also hides the banner for this date until the date changes (component state keyed by `date_iso`; not stored).
+   - Confirming applies the default set, or the set chosen in the switcher. "Keep mine" also hides the banner for this date until the date changes (component state keyed by `date_iso`; not stored). (2c plan, owner answers B and C, 2026-09-29: the banner's "Keep mine" is remembered per date until the tab closes, in sessionStorage through `lib/storage.ts` (not the draft), and the switcher's own question does not set it. On a date with exactly one set whose lines differ from the draft's, a "Use the lectionary's readings" link applies it, asking first over typed or archived fields.) (2c build, owner answers 1-3, 2026-09-29: only the question's **"Keep mine"** button records the date; Escape or a click outside only closes the question, and the banner can show again. After that "Keep mine", "Use the lectionary's readings" is also hidden for that date for the session. The link also shows on a date with several sets, when the cleaned lines differ from the selected set (the one chosen, or the stored set for this date); it applies that set at once over lectionary fields and asks first over typed or archived ones. It never shows over empty fields, which the automatic fill handles. A set choice or the link re-checks `fields_origin` inside the update, so fields typed meanwhile are never replaced without asking. When the question closes, focus returns to what opened it or, when that is gone, to the status area; "Clear readings" moves focus to Occasion, and a "Try again" that brings an answer moves it to the status area, so focus never drops to the page.)
 4. **Occasion**
    - Text input labelled **"Occasion"**, help "Printed as the bulletin's title. Filled from the lectionary; edit if needed.", placeholder "e.g. Third Sunday of Easter". Maximum 300 characters: "Too long (max 300 characters)."
    - An origin caption under the field:
@@ -148,7 +148,7 @@ The draft survives a refresh and is kept separately for each church. The four-st
      | Draft state | Caption |
      |---|---|
      | `lectionary` | "From the Revised Common Lectionary: {set name}" |
-     | `user`, with a reading set for this date | "Edited from the lectionary ({set name})" |
+     | `user`, with a reading set for this date | "Edited from the lectionary ({set name})" (2c plan: "Edited from the lectionary" while that date's lookup is not loaded) |
      | `user`, no reading set | "Entered by you" |
      | `archive` | "From the saved service" |
      | `empty` | none |
@@ -156,7 +156,7 @@ The draft survives a refresh and is kept separately for each church. The four-st
    - Textarea labelled **"Scripture readings"**, help "One reference per line, for example Matthew 17:1-9. Filled from the lectionary; edit if needed.", placeholder "Matthew 17:1-9". It is 5 rows tall and grows with its content.
    - Validation:
      - "Up to 20 readings." (more than 20 non-blank lines)
-     - "Line {n} is too long (max 200 characters)."
+     - "Line {n} is too long (max 200 characters)." (2c build: a line is measured trimmed, here, in `stepStatus` and in its reading row alike.)
    - Blank lines are allowed while typing and are dropped from everything derived.
    - The lectionary never produces a line that breaks these limits (the backend guarantees ≤ 20 lines of ≤ 200 characters per set; see "Vanderbilt parsing"), so these messages only ever describe what the user typed.
 6. **Readings list** (heading **"Readings"**). It is derived from the cleaned scriptures, debounced 400 ms.
@@ -165,8 +165,8 @@ The draft survives a refresh and is kept separately for each church. The four-st
      - The caption "Passage text shown in {label}."
      - A **"Show all text"** button. It expands every row; at most **3 passage requests are in flight** at once (a client-side limiter in `lib/queries/passages.ts`; each request's 30 s timeout starts when it leaves the queue).
    - One row per reference:
-     - the reference (wrapping, `break-words`);
-     - a testament badge: **OT**, **Psalm** or **NT**, or **?** with the tooltip "Book not recognized". A line with " or " alternatives shows one badge per alternative;
+     - the reference (wrapping, `break-words`); (2c build: `wrap-anywhere`, here, in the set cards and in the summary, so a long unbroken reference never scrolls the page sideways. The list forgets open rows whose line is gone, so a line typed back starts closed.)
+     - a testament badge: **OT**, **Psalm** or **NT**, or **?** with the tooltip "Book not recognized" (2c plan: phones do not open tooltips, so "Book not recognized" is also the badge's accessible name). A line with " or " alternatives shows one badge per alternative;
      - a **"Show text" / "Hide text"** toggle. Expanded state is keyed by the reference text, so editing a line collapses its row and nothing is fetched until the row is opened again. A line longer than 200 characters has the toggle disabled (the textarea already shows its error) and is never sent.
    - Expanded passage states. Each section (one per " or " alternative) has a `status` and the text of the parts that loaded (see "Status rules"). The row picks the first matching line:
 
@@ -697,7 +697,7 @@ src/lib/queries/  lectionary.ts reference.ts passages.ts (+ ChurchProfile type u
 
 - Component names are listed above; **file names are kebab-case** like slice 1's (`builder-shell.tsx`, `readings-step.tsx`, `bulletin-readings-picker.tsx`).
 - Add `zod` (F §4.11).
-- Generate these Base UI components if slice 1 hasn't: `radio-group`, `textarea`, `badge`, `sheet`, `collapsible`, `tooltip`. (`input`, `label` and `alert` come from slice 1; `select`, `dropdown-menu` and `skeleton` already exist from slice 0.) (2b plan: 2b adds `sheet` and `badge`, rebuilt from the upstream shadcn source when the registry cannot be reached, a recorded exception to F §4.9.1; `textarea` exists from slice 1; `radio-group`, `collapsible` and `tooltip` are 2c's.)
+- Generate these Base UI components if slice 1 hasn't: `radio-group`, `textarea`, `badge`, `sheet`, `collapsible`, `tooltip`. (`input`, `label` and `alert` come from slice 1; `select`, `dropdown-menu` and `skeleton` already exist from slice 0.) (2b plan: 2b adds `sheet` and `badge`, rebuilt from the upstream shadcn source when the registry cannot be reached, a recorded exception to F §4.9.1; `textarea` exists from slice 1; `radio-group`, `collapsible` and `tooltip` are 2c's.) (2c plan: the registry is still unreachable, so 2c rebuilds `radio-group`, `collapsible` and `tooltip` from the upstream source the same way.)
 - Every page is a client component (F §4.1).
 
 ### `lib/dates.ts` (F §4.10)
@@ -787,13 +787,13 @@ Both suites run `backend/tests/fixtures/shared/scripture_refs.json` (F §5.3). T
 - **`useLectionarySync()`**, mounted in `BuilderShell` so it runs whichever step is showing:
   - it watches `useDebouncedValue(draft.readings.date_iso, 400)`, which starts at the current value (no delay on mount) and then trails every date change by 400 ms (a `replace` included; harmless, and 5a prefetches the loaded date anyway), so intermediate dates typed segment by segment are never looked up or charged to the rate limit;
   - it runs `useLectionary(debouncedDate)`; while `debouncedDate !== date_iso` the status area shows Loading;
-  - when data arrives it calls `update(d => shouldAutoApply(d, data) ? applyReadingSet(d, data, data.default_index!) : d)`. The check runs inside the recipe, against the **latest** draft, so a keystroke in the same tick is never overwritten; returning `d` unchanged is a no-op.
+  - when data arrives it calls `update(d => shouldAutoApply(d, data) ? applyReadingSet(d, data, data.default_index!) : d)`. The check runs inside the recipe, against the **latest** draft, so a keystroke in the same tick is never overwritten; returning `d` unchanged is a no-op. (2c plan: only the tab on screen fills (`document.visibilityState === "visible"`); a hidden tab fills when it is shown, because a tab that adopts another tab's newer draft drops up to 400 ms of its own typing (2b build notes). A tab shown again first re-reads the stored draft and adopts it when newer (`DraftStore.syncFromStorage()`), so it never fills over typing another tab wrote as it was hidden. The hook lives in `components/builder/lectionary-sync.tsx`, and `<LectionarySync>` shares its lookup with the step.) (2c build: the fill goes through `DraftStore.autoUpdate`, which stamps the changed draft 1 ms after the draft it changes instead of now, and a flush that finds a strictly newer stored draft adopts it instead of writing over it. So an automatic fill never outranks a real edit from another tab that has not reached this one yet (a late `storage` event, or two tabs on screen).)
 
   The query key is per date and `applyReadingSet` requires `lect.date === date_iso`, so a late response for an old date never applies to a new one.
 - **`status.ts`:**
   - `stepStatus(draft)` per F §4.7;
   - `isPristine(draft)` means "nothing the user would lose", defined by **origins, not text**, so defaults filled by later slices never make a fresh draft look edited (F §4.6: dirty means content *beyond its defaults*):
-    - readings: `fields_origin` is `empty` or `lectionary`; both picks `""`;
+    - readings: `fields_origin` is `empty` or `lectionary`; both picks `""`; (2c plan, owner answer Q2, 2026-09-29: also `date_origin !== "user"` and `translation === null`. Choosing a set in the switcher makes a `default` date the user's (`chooseReadingSet`), so "New service" asks after a picked date, a chosen reading set or a translation, and the mount-time roll-forward keeps the date of a draft with a picked date or a chosen set. A translation override alone does not hold the date back, and "New service" keeps it; owner answer A.) (2c build: "New service" asks on `isPristine` of the draft with its translation set to `null`, so a translation alone never makes it ask; `isPristine` itself still counts the translation.)
     - hymns: every slot `null`;
     - liturgy: every card's `origin` is `empty` or `default` (the text of a `default` card, such as slice 4's church benediction, is ignored; an `empty` card has empty text); `communion_origin === "default"`; empty `sermon_title`; no `custom_elements`;
     - `editing === null`.
@@ -915,7 +915,7 @@ Fixtures in `backend/tests/fixtures/`, recorded by `scripts/record_fixtures.py`:
 | `lib/dates.test.ts` | `next_sunday.json`; `todayIn` at `2026-09-27T02:30Z` → LA "2026-09-26", UTC "2026-09-27", and an invalid tz falls back; formats; `isFirstSundayOfMonth` (2026-10-04 true, 2026-10-11 false, 2026-10-01 Thursday false); invalid ISO strings |
 | `lib/dates.guard.test.ts` | F acceptance 12 |
 | `lib/scripture-refs.test.ts` | `scripture_refs.json` read with `fs` from `../backend/tests/fixtures/shared/` (includes the `resolve_readings` mixed and stale-pick cases) |
-| `lib/use-debounced-value.test.ts` | Initial value immediate; trails changes by 400 ms; only the last of several quick changes is emitted (fake timers) |
+| `lib/use-debounced-value.test.ts` (2c plan: `.test.tsx`, since it renders the hook in jsdom) | Initial value immediate; trails changes by 400 ms; only the last of several quick changes is emitted (fake timers) |
 | `lib/queries/passages.test.ts` | `createLimiter(3)`: a 4th task waits until one settles; a rejection frees its slot. `passageText` joins only `ok` sections and returns null when there are none. |
 | `lib/draft/schema.test.ts`, `migrate.test.ts` | Round-trip; corrupt JSON, schema-invalid data and a future version → backup key written, fresh draft, toast |
 | `lib/draft/readings.test.ts` | Every transition and selector. `shouldAutoApply` for each origin. Stale detection. Auto-apply replaces the lectionary fields of an old date but never `user` or `archive` fields. Picks reset on apply. The communion effect only while its origin is `default`. `setTranslation` stores null when the value equals the default. `effectivePicks` never returns a Psalm as NT, and with the Easter lines and OT pick Psalm 118 gives NT Acts (as `resolveReadings` does). `normalizePicks` / `commitScriptureLines` clear only picks that are no longer options and return the same object otherwise; `editScriptureLines` never clears picks. **`showAvailableBanner`:** `user` after a date change → shown; `user` after editing a line of this date's set (same `reading_set.date_iso`) → **not** shown; `user` typed with `reading_set: null` and sets for this date → shown; `archive` on its archived date (`date_origin: "archive"`) → not shown; `archive` after a date change → shown; `empty` / `lectionary` → never. |
@@ -928,7 +928,7 @@ Fixtures in `backend/tests/fixtures/`, recorded by `scripts/record_fixtures.py`:
 
 ### Manual checks (append to `docs/manual-verification.md`; at 375 px and on desktop, on the production URL)
 
-(2b plan: 2c appends these, and updates `backend/tests/test_slice1_docs.py`, which pins the file's last two `##` headings. 2b adds none: its after-merge look is the owner's short check in the 2b plan's Task 13.)
+(2b plan: 2c appends these, and updates `backend/tests/test_slice1_docs.py`, which pins the file's last two `##` headings. 2b adds none: its after-merge look is the owner's short check in the 2b plan's Task 13.) (2c plan: appended as "## Slice 2", with a Saturday added to check 2 and a check 14 for "New service"; `test_slice1_docs.py` now pins the last three `##` headings. The owner's guided check after the merge runs the items marked "(owner, after 2c)".)
 
 1. A new church with no draft opens `/` → `/builder/readings`, dated next Sunday in the church's timezone, with the occasion and readings filled.
 2. Change the date to Ash Wednesday 2027 (2027-02-10): "Ash Wednesday". Good Friday 2027 (2027-03-26): readings found. Thanksgiving (2026-11-26): four lines. A plain Tuesday: the manual-entry prompt, plus the stale note with "Clear readings".
@@ -988,4 +988,4 @@ Fixtures in `backend/tests/fixtures/`, recorded by `scripts/record_fixtures.py`:
 
 **Open questions for the owner** (not covered by decisions 1–9)
 1. ~~Occasion names for ordinary-time Sundays.~~ **Decided (owner decision A).** Ordinary-time Sunday names are computed descriptively — "Nth Sunday after Pentecost" and "Nth Sunday after the Epiphany" — never the RCL "Proper N (M)" designation, with named days (Trinity Sunday, All Saints on a Sunday, Christ the King (owner, 2026-09-28; 2a build), Baptism of the Lord, Transfiguration) always winning. See "Ordinary-time occasion names" above. The field is still always editable, and the Proper number still drives Lectio/Vanderbilt matching internally.
-2. **Saturday vigil and Sunday-eve services.** Vanderbilt lists the Easter Vigil on the Sunday date, so a Saturday service date finds nothing and falls back to manual entry (decision 8). Should a Saturday offer a one-tap "Use Sunday {Month D}'s readings"? The default is no; it can be added later without changing the draft shape.
+2. **Saturday vigil and Sunday-eve services.** Vanderbilt lists the Easter Vigil on the Sunday date, so a Saturday service date finds nothing and falls back to manual entry (decision 8). Should a Saturday offer a one-tap "Use Sunday {Month D}'s readings"? The default is no; it can be added later without changing the draft shape. (2c plan: **closed: no**, owner answer Q1, 2026-09-29. A Saturday falls back to manual entry like any date without readings.)

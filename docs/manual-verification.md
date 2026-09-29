@@ -121,3 +121,34 @@ Slice 1b regression pass (F §5.5), after the items above: sign in, switch
 church, open home (1b ships no nav items). Optional clean-up: as C in
 liturgy-frozen, Settings → Danger zone deletes "1b Test C", "1b Test C2" and
 "1b Test C3" (soft deletes; they still count toward C's cap for 24 hours).
+
+## Slice 2
+
+Run on the production URLs: https://worship-service-builder.vercel.app (at
+375 px in Chrome device mode, iPhone SE, and on desktop) and
+https://liturgy-frozen.streamlit.app, the production Streamlit app. These are
+the slice 2 spec's manual checks 1-13 (slice 2 spec → Manual checks), with a
+Saturday added to check 2 (owner answer Q1, 2026-09-29: no one-tap Sunday
+readings) and check 14 for "New service" (owner answer Q2). After the 2c merge
+the owner's guided check (owner answer Q3: about six steps on the phone, given
+one at a time, then a quick look on a computer) covers the
+items marked "(owner, after 2c)", some of them in part; its result goes into
+`docs/ops-runbook.md` → "Slice 2c record", which says what ran. The rest can
+be run at any time and recorded the same way. Reading texts and dates come from the live
+lectionary and Bible sites, so record what the page shows, never an email
+address or a church id.
+
+- [ ] (owner, after 2c) **1.** A church with no draft on this device opens `/` → `/builder/readings`, dated next Sunday in the church's time zone, with the occasion and readings filled and the step bar showing Date & readings as Complete.
+- [ ] (owner, after 2c) **2.** Change the date to a plain Tuesday: "No lectionary readings for …" with **Enter readings**, plus the note "These readings are from … not …" with **Clear readings**; focus stays on the date. A Saturday (for example 2026-10-10) also falls back to manual entry. Ash Wednesday 2027 (2027-02-10) shows "Ash Wednesday"; Good Friday 2027 (2027-03-26) finds readings; Thanksgiving (2026-11-26) shows four lines.
+- [ ] (owner, after 2c) **3.** Palm Sunday 2027 (2027-03-21): two set cards under "This date has more than one set of readings", with the Passion set selected; tapping the Palms card changes the readings.
+- [ ] (owner, after 2c) **4.** Type an occasion or a reading of your own: the caption reads "Entered by you" or "Edited from the lectionary (…)". Change the date: "Readings for … are available." appears; **Use them** asks "Replace your readings?" first; **Keep mine** there hides the banner and the "Use the lectionary's readings" link for that date until the tab closes (Escape only closes the question). On another date, after typing over its readings, "Use the lectionary's readings" puts them back, asking first. On a date whose readings filled themselves, delete the Psalm line: no banner.
+- [ ] **5.** Easter Day 2026 (2026-04-05): choose the Easter Vigil set: 11 lines, no heading lines, no "too long" message; **Show text** on "Romans 6:3-11 and Psalm 114" loads both passages.
+- [ ] **6.** On desktop, type a date digit by digit: one lookup in DevTools → Network, and focus never jumps to Occasion.
+- [ ] **7.** Refresh on every step: the draft is kept. A second tab edits: the first tab shows "Updated from another tab." Switch church and back: the drafts are separate.
+- [ ] (owner, after 2c) **8.** **Show text** on "Isaiah 50:4-9a": the text loads. Switch **Bible translation**: the text changes. ESV is offered (production has the key).
+- [ ] (owner, after 2c) **9.** Bulletin readings: the automatic New Testament reading is the epistle, never the Psalm. With Easter-season lines, the automatic Old Testament reading is the first line (Acts) and the New Testament one the epistle; pick the Psalm as the Old Testament reading and the New Testament one becomes Acts; **Use automatic** undoes it. Edit a picked line and leave the field: the pick goes back to automatic. Edit a picked line and refresh without leaving the field: after the reload the pick is automatic.
+- [ ] **10.** Go to Hymns, then open `/builder`: it lands on Hymns. With a second tab open, moving between steps in one tab shows no "Updated from another tab." in the other.
+- [ ] **11.** With the network off (DevTools offline) on a new date: "The lectionary couldn't be reached. …" with **Try again**; back online, **Try again** recovers.
+- [ ] (owner, after 2c) **12.** At 375 px: no sideways scroll, even with a long reference typed without spaces; the footer stays at the bottom above the home indicator; inputs do not zoom on iOS. On desktop: the summary sits in the right column with the readings and their OT and NT marks.
+- [ ] **13.** Regression: sign in, switch church, open the Builder nav item; the Streamlit smoke check on https://liturgy-frozen.streamlit.app (F §6.3).
+- [ ] (owner, after 2c) **14.** After picking a date or choosing a reading set, **New service** asks "Start a new service?". On an untouched draft it starts over at once, and so it does when only the Bible translation was changed, keeping that translation (2c build).
