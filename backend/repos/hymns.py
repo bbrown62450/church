@@ -4,12 +4,14 @@ Public hymn dicts use the flat Notion-property key shape so existing helpers
 (hymn_utils.get_property_value, worship_service.*) consume them unchanged.
 """
 import uuid
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import delete, insert, select
+from sqlalchemy import case, delete, func, insert, or_, select
 from sqlalchemy.orm import Session
 
 from db import session_scope
+from db.ids import as_uuid
 from db.models import Hymn, HymnCatalog
 
 
@@ -213,3 +215,110 @@ def seed_church_from_catalog(church_id, session: Session) -> int:
     if rows:
         session.execute(insert(Hymn.__table__), rows)
     return len(rows)
+
+
+# --- slice 3a: typed reads for the new app (S Backend 1 "repos/hymns.py") ----------
+# Church-scoped, ids through db.ids.as_uuid (F §2.2 item 5), each in the
+# caller's session or its own. list_hymns and list_church_hymnals above stay
+# for the CLI and frozen Streamlit.
+
+
+@dataclass(frozen=True)
+class HymnRecord:
+    id: uuid.UUID
+    hymnal: str
+    title: Optional[str]
+    number: Optional[int]
+    link: Optional[str]
+    scripture_refs: Optional[str]
+    theme: Optional[str]
+    text_year: Optional[int]
+    hymnal_count: Optional[int]
+
+
+@dataclass(frozen=True)
+class HymnalSummary:
+    code: str
+    hymn_count: int
+    scripture_ref_count: int      # hymns whose scripture_refs is not blank
+
+
+_RECORD_COLUMNS = (Hymn.id, Hymn.hymnal, Hymn.title, Hymn.number, Hymn.hymnary_link,
+                   Hymn.scripture_refs, Hymn.theme, Hymn.text_year, Hymn.hymnal_count)
+
+# hymnal, number (NULLs last on SQLite and Postgres alike), title, id (F §1.4).
+_ORDER = (Hymn.hymnal.asc(), Hymn.number.asc().nulls_last(),
+          func.lower(func.coalesce(Hymn.title, "")).asc(), Hymn.id.asc())
+
+
+def _record(row) -> HymnRecord:
+    return HymnRecord(id=row.id, hymnal=row.hymnal, title=row.title, number=row.number,
+                      link=row.hymnary_link, scripture_refs=row.scripture_refs, theme=row.theme,
+                      text_year=row.text_year, hymnal_count=row.hymnal_count)
+
+
+def _in(session: Optional[Session], work):
+    if session is not None:
+        return work(session)
+    with session_scope() as own:
+        return work(own)
+
+
+def hymnal_summaries(church_id, *, session: Optional[Session] = None) -> list[HymnalSummary]:
+    """Each hymnal code in the church (blank codes left out), ORDER BY code."""
+    cid = as_uuid(church_id)
+    has_refs = case((func.trim(func.coalesce(Hymn.scripture_refs, "")) != "", 1), else_=0)
+
+    def work(s: Session) -> list[HymnalSummary]:
+        rows = s.execute(
+            select(Hymn.hymnal, func.count(), func.coalesce(func.sum(has_refs), 0))
+            .where(Hymn.church_id == cid, Hymn.hymnal != "")
+            .group_by(Hymn.hymnal).order_by(Hymn.hymnal)
+        ).all()
+        return [HymnalSummary(code, int(count), int(refs)) for code, count, refs in rows]
+
+    return _in(session, work)
+
+
+def query_hymns(church_id, *, hymnal: Optional[str] = None, q: Optional[str] = None,
+                limit: int = 50, offset: int = 0,
+                session: Optional[Session] = None) -> tuple[list[HymnRecord], int]:
+    """One page of the church's hymns and the total matching the filter.
+
+    `hymnal` filters exactly. `q` (trimmed; empty = no filter) of 1-6 digits
+    also matches `number`; otherwise, and always as well, lower(title)
+    contains lower(q), with % and _ escaped. Blank titles are included.
+    """
+    cid = as_uuid(church_id)
+    conditions = [Hymn.church_id == cid]
+    if hymnal is not None:
+        conditions.append(Hymn.hymnal == hymnal)
+    text = (q or "").strip()
+    if text:
+        title_match = func.lower(Hymn.title).contains(text.lower(), autoescape=True)
+        if text.isdigit() and len(text) <= 6:       # 7+ digits could overflow an integer bind
+            conditions.append(or_(Hymn.number == int(text), title_match))
+        else:
+            conditions.append(title_match)
+
+    def work(s: Session) -> tuple[list[HymnRecord], int]:
+        total = s.execute(select(func.count()).select_from(Hymn).where(*conditions)).scalar_one()
+        rows = s.execute(select(*_RECORD_COLUMNS).where(*conditions)
+                         .order_by(*_ORDER).limit(limit).offset(offset)).all()
+        return [_record(r) for r in rows], int(total)
+
+    return _in(session, work)
+
+
+def list_hymnal_records(church_id, hymnal: str, *,
+                        session: Optional[Session] = None) -> list[HymnRecord]:
+    """Every hymn of one hymnal of the church, in hymnal order."""
+    cid = as_uuid(church_id)
+
+    def work(s: Session) -> list[HymnRecord]:
+        rows = s.execute(select(*_RECORD_COLUMNS)
+                         .where(Hymn.church_id == cid, Hymn.hymnal == hymnal)
+                         .order_by(*_ORDER)).all()
+        return [_record(r) for r in rows]
+
+    return _in(session, work)

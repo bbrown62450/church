@@ -189,9 +189,10 @@ def set_church_prompts(church_id, prompts: dict) -> None:
     _merge_settings(church_id, {"liturgy_prompts": cleaned})
 
 
-def get_church_rubric_overrides(church_id) -> dict:
-    """The church's stored rubric overrides ({} when it uses all defaults)."""
-    church = get_church(church_id)
+def get_church_rubric_overrides(church_id, *, session: Optional[Session] = None) -> dict:
+    """The church's stored rubric overrides ({} when it uses all defaults).
+    Reads in the caller's `session` or in its own scope (slice 3, F §2.2 rule 3)."""
+    church = get_church(church_id, session=session)
     if not church:
         return {}
     stored = (church.get("settings") or {}).get("rubric")
