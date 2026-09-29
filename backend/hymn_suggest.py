@@ -144,13 +144,18 @@ def _clip(text: str, limit: int) -> str:
     return text[:limit]
 
 
+def _field(text: str, limit: int) -> str:
+    """A catalogue field: one line, clipped, with "|" replaced so it can't fake another field."""
+    return _clip((text or "").replace("|", "/"), limit)
+
+
 def _catalogue_line(token: str, record) -> str:
     number = record.number if record.number is not None else "–"
     facts = hymn_ranking.facts_note(record, year_of=_year, count_of=_count)
-    return (f"{token} | {_clip(record.title, 80)} | #{number}"
+    return (f"{token} | {_field(record.title, 80)} | #{number}"
             + (f" | {facts}" if facts else "")
-            + f" | themes: {_clip(', '.join(parse_themes(record.theme)), 60)}"
-            + f" | scripture: {_clip(record.scripture_refs or '', 60)}")
+            + f" | themes: {_field(', '.join(parse_themes(record.theme)), 60)}"
+            + f" | scripture: {_field(record.scripture_refs or '', 60)}")
 
 
 def _preferences(rubric: Mapping[str, Any]) -> str:
@@ -183,7 +188,7 @@ def _render(lists: Mapping[str, list], *, occasion: str, scriptures: Sequence[st
                            for slot in SLOTS)
     user = (f"OCCASION: {_clip(occasion, 300) or 'Not specified'}\n"
             f"SCRIPTURE READINGS:\n{readings}\n"
-            f"NEW TESTAMENT READING (for the response hymn): {nt_ref or 'Not specified'}\n"
+            f"NEW TESTAMENT READING (for the response hymn): {_clip(nt_ref or '', 200) or 'Not specified'}\n"
             f"NT PASSAGE TEXT (excerpt): {excerpt}\n\n"
             f"ROLE REQUIREMENTS (what makes a good hymn for each slot):\n\n{checklists}\n\n"
             f"PREFERENCES: {_preferences(rubric)}\n\n"
@@ -230,7 +235,7 @@ def parse_suggestion_json(raw: str) -> dict[str, list]:
             content = content[4:]
     try:
         data = json.loads(content.strip())
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, RecursionError):
         raise UpstreamError(UNUSABLE_MESSAGE, code="ai_upstream_error") from None
     if not isinstance(data, dict):
         raise UpstreamError(UNUSABLE_MESSAGE, code="ai_upstream_error")
