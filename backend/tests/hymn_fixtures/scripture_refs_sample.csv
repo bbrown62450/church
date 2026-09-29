@@ -1,101 +1,401 @@
 hymnal,number,title,scripture_refs
-SYNTHETIC,1,"Holy, Holy, Holy! Lord God Almighty",Isaiah 6:3; Revelation 4:8-11
-SYNTHETIC,2,Praise to the Lord the Almighty,Psalm 103:1-6; Psalm 150
-SYNTHETIC,3,All People That on Earth Do Dwell,Psalm 100
-SYNTHETIC,4,O God Our Help in Ages Past,Psalm 90:1-5
-SYNTHETIC,5,A Mighty Fortress Is Our God,Psalm 46
-SYNTHETIC,6,The Lord's My Shepherd,Psalm 23
-SYNTHETIC,7,Joyful Joyful We Adore Thee,Psalm 148; Luke 2:10-11
-SYNTHETIC,8,Come Thou Long-Expected Jesus,Haggai 2:7; Isaiah 40:1-5
-SYNTHETIC,9,O Come O Come Emmanuel,Isaiah 7:14; Matthew 1:23
-SYNTHETIC,10,Hark the Herald Angels Sing,Luke 2:8-14
-SYNTHETIC,11,Silent Night,Luke 2:1-20
-SYNTHETIC,12,Joy to the World,Psalm 98:4-9
-SYNTHETIC,13,O Little Town of Bethlehem,Micah 5:2; Matthew 2:1-6
-SYNTHETIC,14,We Three Kings,Matthew 2:1-12
-SYNTHETIC,15,Songs of Thankfulness and Praise,Matthew 3:13-17; John 2:1-11
-SYNTHETIC,16,Beneath the Cross of Jesus,Galatians 6:14; Isaiah 32:2
-SYNTHETIC,17,When I Survey the Wondrous Cross,Galatians 6:14; Philippians 3:7-8
-SYNTHETIC,18,Were You There,John 19:16-42
-SYNTHETIC,19,Christ the Lord Is Risen Today,Matthew 28:1-10; 1 Corinthians 15:55-57
-SYNTHETIC,20,The Strife Is O'er,1 Corinthians 15:54-57
-SYNTHETIC,21,Come Ye Faithful Raise the Strain,Exodus 15:1-21
-SYNTHETIC,22,Crown Him with Many Crowns,Revelation 19:12
-SYNTHETIC,23,Come Down O Love Divine,Romans 5:5
-SYNTHETIC,24,Spirit of the Living God,Acts 2:1-4; Galatians 5:22-23
-SYNTHETIC,25,Breathe on Me Breath of God,John 20:22; Ezekiel 37:1-14
-SYNTHETIC,26,The Church's One Foundation,1 Corinthians 3:11; Ephesians 5:25-27
-SYNTHETIC,27,Be Thou My Vision,Psalm 119:105
-SYNTHETIC,28,Amazing Grace,Ephesians 2:8-9; 1 Chronicles 17:16-17
-SYNTHETIC,29,Great Is Thy Faithfulness,Lamentations 3:22-23
-SYNTHETIC,30,It Is Well with My Soul,Philippians 4:7; 2 Kings 4:26
-SYNTHETIC,31,Guide Me O Thou Great Jehovah,Exodus 13:21-22; Psalm 78:24
-SYNTHETIC,32,Lift High the Cross,1 Corinthians 1:18; John 12:32
-SYNTHETIC,33,For All the Saints,Hebrews 12:1-2; Revelation 7:9-17
-SYNTHETIC,34,The King of Love My Shepherd Is,Psalm 23; John 10:11
-SYNTHETIC,35,Let All Mortal Flesh Keep Silence,Habakkuk 2:20
-SYNTHETIC,36,Now Thank We All Our God,Sirach 50:22-24
-SYNTHETIC,37,Here I Am Lord,Isaiah 6:8; 1 Samuel 3:1-10
-SYNTHETIC,38,Lord of the Dance,John 1:14
-SYNTHETIC,39,Morning Has Broken,Lamentations 3:22-23
-SYNTHETIC,40,All Creatures of Our God and King,Psalm 148
-SYNTHETIC,41,Take My Life and Let It Be,Romans 12:1-2
-SYNTHETIC,42,My Hope Is Built on Nothing Less,Matthew 7:24-27; 1 Corinthians 3:11
-SYNTHETIC,43,Blessed Assurance,Hebrews 10:22
-SYNTHETIC,44,What a Friend We Have in Jesus,John 15:13-15; Philippians 4:6
-SYNTHETIC,45,Rock of Ages,Exodus 33:22; Isaiah 26:4
-SYNTHETIC,46,Abide with Me,Luke 24:29
-SYNTHETIC,47,Of the Father's Love Begotten,Revelation 1:8; John 1:1-5
-SYNTHETIC,48,Love Divine All Loves Excelling,1 John 4:7-21; 2 Corinthians 3:18
-SYNTHETIC,49,O for a Thousand Tongues to Sing,Psalm 35:28; Acts 2:4
-SYNTHETIC,50,Jesus Shall Reign,Psalm 72:8-19
-SYNTHETIC,51,Lead On O King Eternal,Psalm 24:7-10
-SYNTHETIC,52,O Jesus I Have Promised,Matthew 16:24; John 12:26
-SYNTHETIC,53,The God of Abraham Praise,Exodus 3:6; Revelation 4:8
-SYNTHETIC,54,Tell Out My Soul,Luke 1:46-55
-SYNTHETIC,55,My Soul Gives Glory to My God,Luke 1:46b-55
-SYNTHETIC,56,Canticle of the Turning,Luke 1:46-55; Isaiah 61:1-3
-SYNTHETIC,57,By the Babylonian Rivers,Psalm 137:1-6
-SYNTHETIC,58,Out of the Depths,Psalm 130
-SYNTHETIC,59,Wake Awake for Night Is Flying,Matthew 25:1-13
-SYNTHETIC,60,Lo He Comes with Clouds Descending,Revelation 1:7
-SYNTHETIC,61,Arise Your Light Is Come,Isaiah 60:1-6
-SYNTHETIC,62,Christ Is Made the Sure Foundation,Ephesians 2:20-22; 1 Peter 2:4-7
-SYNTHETIC,63,Sing Praise to God Who Reigns Above,Deuteronomy 32:3-4
-SYNTHETIC,64,Song of Hope,Romans 15:13
-SYNTHETIC,65,God of Grace and God of Glory,Joshua 1:9; 2 Timothy 1:7
-SYNTHETIC,66,We Are One in the Spirit,John 17:20-23; Ephesians 4:4-6
-SYNTHETIC,67,Go Tell It on the Mountain,Luke 2:8-20; Isaiah 40:9
-SYNTHETIC,68,Hosanna Loud Hosanna,Matthew 21:1-11; Mark 11:1-11; Luke 19:28-40
-SYNTHETIC,69,Ah Holy Jesus,Isaiah 53:4-6
-SYNTHETIC,70,O Sacred Head Now Wounded,Isaiah 53:3-6; Matthew 27:27-31
-SYNTHETIC,71,Jesus Christ Is Risen Today,Mark 16:1-8
-SYNTHETIC,72,Thine Is the Glory,1 Corinthians 15:55-57; John 20:1-18
-SYNTHETIC,73,Alleluia Sing to Jesus,Revelation 5:9
-SYNTHETIC,74,Hail Thee Festival Day,Acts 1:9-11
-SYNTHETIC,75,Holy Spirit Truth Divine,John 16:13
-SYNTHETIC,76,Come Holy Ghost Our Souls Inspire,Acts 2:1-21; Romans 8:26
-SYNTHETIC,77,Glorious Things of Thee Are Spoken,Psalm 87:3; Isaiah 33:20-21
-SYNTHETIC,78,This Is My Father's World,Psalm 24:1; Psalm 50:10-12
-SYNTHETIC,79,We Gather Together,Psalm 106:47
-SYNTHETIC,80,Come Ye Thankful People Come,Mark 4:26-29; Matthew 13:24-30
-SYNTHETIC,81,Let Us Break Bread Together,Acts 2:42-47; 1 Corinthians 11:23-26
-SYNTHETIC,82,Una Espiga,John 6:35; Matthew 26:26-29
-SYNTHETIC,83,Baptized in Water,Romans 6:3-11; Galatians 3:27
-SYNTHETIC,84,Wash O God Our Sons and Daughters,Titus 3:5
-SYNTHETIC,85,Where Charity and Love Prevail,1 John 4:16; John 13:34-35
-SYNTHETIC,86,Blest Be the Tie That Binds,Ephesians 4:1-3; Colossians 3:12-15
-SYNTHETIC,87,The Lord Bless You and Keep You,Numbers 6:24-26
-SYNTHETIC,88,Go My Children with My Blessing,Numbers 6:24-26; Matthew 28:20
-SYNTHETIC,89,God Be with You Till We Meet Again,2 Corinthians 13:11-14
-SYNTHETIC,90,Savior Again to Thy Dear Name,Luke 24:36
-SYNTHETIC,91,In the Bleak Midwinter,Luke 2:7; Matthew 2:11
-SYNTHETIC,92,Wisdom Freely Calling,Wisdom of Solomon 7:22-30; Proverbs 8
-SYNTHETIC,93,Song of the Three Children,Song of the Three 35-65
-SYNTHETIC,94,Traditional Doxology,Traditional
-SYNTHETIC,95,Bless the Lord My Soul,Psalm 103:1-5
-SYNTHETIC,96,Shall We Gather at the River,Revelation 22:1-5
-SYNTHETIC,97,I Love to Tell the Story,Psalm 66:16; Mark 16:15
-SYNTHETIC,98,Lord Speak to Me,Romans 14:7; Isaiah 50:4
-SYNTHETIC,99,Here O My Lord I See Thee,1 Corinthians 13:12; Luke 22:14-20
-SYNTHETIC,100,Christ Be Beside Me,Psalm 139:5-12; Matthew 28:20
+GG2013,411,God is here today (Dios está aquí),Deuteronomy 31:6; Luke 9:28-36; Ephesians 1:3-23; Ephesians 4:1-6; Hebrews 13:8
+GG2013,618,"O love, how deep, how broad, how high",Matthew 3:13; Matthew 4:1-11; Matthew 27:27-31; Mark 1:9-13; Mark 10:46-52; Mark 15:17-20; Mark 15:37; Luke 4:1-13; John 3:16-17; Romans 5:8; 2 Corinthians 8:9; Ephesians 3:18-19; Philippians 2:7; 1 John 4:10
+GG2013,201,A prophet-woman broke a jar,1 Kings 17:8-16; Proverbs 31:25-31; Joel 2:28-32; Matthew 26:6-16; Matthew 28:1-10; Mark 14:3-9; Mark 16:1-10; Luke 7:36-50; Luke 24:10; John 12:1-8; John 20:1-18; Acts 2:17-18; 1 Corinthians 12:7-11
+GG2013,499,Bread of the world in mercy broken,Psalm 51:17; Matthew 26:26-29; Luke 22:17-20; Luke 24:30; John 6:51; John 6:58; Romans 6:1-11; 1 Corinthians 11:23-28
+GG2013,803,My Shepherd Will Supply My Need (Psalm 23),Psalm 23; Isaiah 40:11; Matthew 14:13-21; Matthew 18:10-14; Mark 6:30-34; Luke 15:3-7; John 6:1-14; John 10:1-30; Hebrews 13:6
+GG2013,382,Heaven is singing for joy (El cielo canta alegría),Psalm 8:4-5; Isaiah 61:1-2; Zephaniah 3:17-18; Luke 4:19; Luke 15:7; 1 John 4:12
+GG2013,420,"Lord, to you my soul is lifted",Psalm 25; Deuteronomy 4:31; Nehemiah 9:31
+GG2013,418,Softly and tenderly Jesus is calling,Isaiah 55:7; Matthew 11:28; Mark 10:46-52; Luke 15:11-32; 1 Thessalonians 5:24; 1 John 1:9; Revelation 3:20; Revelation 22:17
+GG2013,676,Day is Done,Psalm 4:8; Psalm 42:8; Psalm 139:12; Psalm 145:18; John 1:4-5; Ephesians 4:4-5; 1 Thessalonians 4:14
+GG2013,133,"O come, all ye faithful",Psalm 95:6; Matthew 2:1-11; Luke 2:9-15; John 1:1-5; John 1:14
+GG2013,726,Will You Come and Follow Me (The Summons),Isaiah 6:8; Matthew 4:19; Matthew 8:22; Matthew 16:24-26; Matthew 19:27-30; Mark 1:16-21; Mark 8:34-38; Luke 5:1-11; Luke 9:23-26; Luke 9:61-62; Luke 19:1-10; John 1:41-42; John 10:27-30; John 12:24-26; John 20:21; John 21:15-19
+GG2013,262,"Since our great high priest, Christ Jesus",Philippians 2:6-11; Hebrews 1:3-4; Hebrews 2:10; Hebrews 4:14-16; Hebrews 9:24; Hebrews 12:2
+GG2013,187,"Savior, like a shepherd lead us",Psalm 23:1-3; Psalm 103:10-12; Proverbs 8:17; Isaiah 40:11; Ezekiel 34:14-15; Ezekiel 34:23; Micah 7:7; John 6:37; John 10:4; John 10:14-16; John 10:27; John 13:1; 1 Corinthians 6:19-20; 1 Corinthians 7:23; Ephesians 2:4-5; Titus 3:5; Hebrews 4:16; Hebrews 13:20-21
+GG2013,769,For Everyone Born,2 Samuel 9:7; Micah 6:8; Luke 14:15-24
+GG2013,438,"Rock of Ages, cleft for me",Exodus 33:22; Psalm 61:1-8; Psalm 78:35; John 19:34; Acts 4:12; Romans 5:6-11; 1 Corinthians 3:11; 1 Corinthians 10:4; Ephesians 2:8-9; Ephesians 2:13; Colossians 3:1-11; 1 John 5:1-6
+GG2013,768,Somos el cuerpo de Cristo (We Are the Body of Christ),Romans 12:1-8; 1 Corinthians 12:12-31
+GG2013,244,This joyful Eastertide,Job 19:25-27; Matthew 28:1-10; Mark 16:1-8; Luke 24:1-12; John 10:1-8; Romans 6:1-11; Romans 8:37-39; 1 Corinthians 15; 1 Thessalonians 4:13-18; Revelation 14:13
+GG2013,272,"God, You Rule with Royal Bearing (Psalm 93)",Psalm 93
+GG2013,680,Soft Rains of Spring Flow,Psalm 1:3; Psalm 1:6; Psalm 33:1; Proverbs 16:3; Proverbs 19:21; Isaiah 46:10; Jeremiah 29:11; Lamentations 3:40; Philippians 3:13-14; Colossians 3:17; James 4:13-15
+GG2013,135,"There’s a Star in the East (Rise Up, Shepherd, and Follow)",Luke 2:8-16
+GG2013,86,The people who walked in darkness,Isaiah 9:2-7; Malachi 4:2; Matthew 4:16
+GG2013,107,"Awake! Awake, and greet the new morn",Isaiah 2:4; Isaiah 7:14; Isaiah 9:6; Isaiah 12:6; Isaiah 26:9; Isaiah 35:5-6; Isaiah 60:1-11; Isaiah 61:1-2; Matthew 1:23; Matthew 11:5; Matthew 15:29-31; Luke 2; Luke 4:18-19
+GG2013,833,O Love that wilt not let me go,2 Samuel 22:29; Psalm 30:5; Psalm 36:9; Isaiah 60:19; Jeremiah 31:3; Matthew 16:24; John 8:12; John 15:9-11; Romans 8:35-39; Galatians 6:14; Ephesians 3:17-19; Revelation 21:4
+GG2013,503,"Lord, we have come at your own invitation",Psalm 143:10; Matthew 22:1-14; Matthew 26:26-30; Luke 22:17-20; 1 Corinthians 11:23-26; 2 Corinthians 5:20; Ephesians 1:4; Ephesians 3:16; 2 Thessalonians 2:13; 1 Peter 4:10-11
+GG2013,474,As a Child Rests (Psalm 131),Psalm 131
+GG2013,147,The First Nowell,Matthew 2:1-12; Luke 2:8-20; Galatians 4:4-5; Ephesians 1:7-8
+GG2013,314,"Longing for Light, We Wait in Darkness (Christ, Be Our Light)",Isaiah 56:7-9; Matthew 5:14; John 8:12; John 9:5; John 14:25-27; John 21:15-17; 1 Corinthians 12:4-11
+GG2013,426,"Search me, O God, and know my heart (主上帝，求祢鑒察我)",Psalm 139
+GG2013,161,Woman in the night,Matthew 9:20-22; Matthew 27:55-56; Matthew 28:1; Mark 5:25-34; Mark 15:40-41; Mark 16:1; Luke 2:1-20; Luke 8:43-48; Luke 9:6; Luke 9:11; Luke 23:49; Luke 24:1; John 4:1-26; John 12:3; John 20:1-18
+GG2013,177,I Will Come to You (You Are Mine),Psalm 9:9; Psalm 46:10; Isaiah 43; Isaiah 49:16; John 14:27
+GG2013,267,"Come, Christians, join to sing",Psalm 30:4; Psalm 67:3; Psalm 95:1-2; Psalm 145:2; Psalm 150:6; Colossians 3:16; Hebrews 13:15; Revelation 5:11-13
+GG2013,41,"O worship the King, all glorious above!",Deuteronomy 31:6; Deuteronomy 31:8; Joshua 1:5; 2 Samuel 22:11-22; 1 Chronicles 16:29; 1 Chronicles 29:11-13; Psalm 18:10-11; Psalm 21:13; Psalm 46:1; Psalm 47:6-7; Psalm 84:11; Psalm 91:4; Psalm 103:14; Psalm 104:1-28; Psalm 145:1-13; Daniel 7:9; Luke 1:78; John 4:23; 1 Timothy 6:15-16
+GG2013,701,"Lord, Prepare Me (Sanctuary)",Psalm 24:3-4; Romans 12:1-2; 1 Corinthians 3:16-17; 1 Corinthians 6:19; 2 Corinthians 6:16; Philippians 4:4-7
+GG2013,688,"Spirit of God, descend upon my heart",Deuteronomy 6:5; Job 32:8; Psalm 51:10-12; Psalm 145:18; Matthew 3:16; Matthew 7:7-8; Mark 1:10; Mark 12:30; Luke 3:22; Luke 10:27; Luke 11:9-10; Luke 18:1-8; John 1:32-33; Romans 5:5; Galatians 5:25-26; Ephesians 3:16
+GG2013,38,To Bless the Earth (Psalm 65),Psalm 65; Isaiah 55:12
+GG2013,524,The Rice of Life,John 3:16; John 6:35; John 6:51; John 21:15-17; Colossians 3:11
+GG2013,755,Alleluia! Laud and Blessing (Psalms 111 and 112),Psalm 111; Psalm 112
+GG2013,669,Let's sing unto the Lord (Cantemos al Señor),Genesis 1:1-25; Psalm 8:3; Psalm 19; Psalm 95:1-3; Psalm 148
+GG2013,713,Touch the earth lightly,Genesis 1:26-30; Genesis 2:4-20; Genesis 15:1; Psalm 8:5-10
+GG2013,319,"Men of Faith, Rise Up and Sing (Shout to the North)",Psalm 33:13-14; Isaiah 40:31; Luke 13:29; Acts 10:35-36; Romans 8:14-17; 1 Corinthians 12:13; 2 Corinthians 12:10; Ephesians 4:1-6; 1 Peter 2:17
+GG2013,122,"Silent night, holy night!",Matthew 1:23; Matthew 2:9-10; Luke 1:77-79; Luke 2:6-20
+GG2013,5,God the sculptor of the mountains,Genesis 1:14-16; Exodus 13:21-14:31; Psalm 139:13-16; Isaiah 5:1-7; Jeremiah 18:1-12; Matthew 1:18-22; Matthew 13:24-58; Matthew 21:12-17; Mark 4:26-29; Mark 11:15-19; Luke 2:1-7; Luke 2:41-52; Luke 19:45-46; John 2:13-25; John 14:6
+GG2013,483,"Dearest Jesus, we are here",Matthew 18:3; John 3:5; John 14:6; John 15:1; John 21:15
+GG2013,318,In Christ there is now east or west,Psalm 33:13; Psalm 133:1; Luke 13:29; Acts 10:35; Acts 17:26; Romans 8:14-17; Romans 12:5; 1 Corinthians 12:13; Galatians 3:26-28; Ephesians 4:1-6; Colossians 3:11; James 2:1; 1 Peter 2:17
+GG2013,358,Steal Away,Psalm 27:5; 1 Corinthians 15:51-52; Philippians 1:19-26; Revelation 16:17-18; Revelation 18:4
+GG2013,702,Christ be beside me,Psalm 3:3; Psalm 139:7-8; Matthew 28:20; Luke 24:32; Colossians 1:27
+GG2013,385,All People That on Earth Do Dwell (Psalm 100),Psalm 100; Psalm 67:3; Psalm 79:13; Psalm 98:3-4; Psalm 118:19; Psalm 148:11-13; Psalm 150:6
+GG2013,281,"Holy Spirit, Come to Us (Veni Sancte Spiritus)",Romans 5:5
+GG2013,301,Let Us Build a House (All Are Welcome),Deuteronomy 4:9; Psalm 122:1; Psalm 127:1; Luke 4:14-30; Acts 2:17-18; 1 Corinthians 3:11-12; 1 Corinthians 11:23-26; Galatians 6:2
+GG2013,851,"Come, bring your burdens to God (Woza nomthwalo wakho)",Psalm 68:19; Matthew 11:25-30
+GG2013,283,"Come, O Holy Spirit, come (Wa wa wa Emimimo)",Psalm 104:30; John 16:7-15; Acts 2:1-4
+GG2013,468,"In My Life (Lord, Be Glorified)",Psalm 24:10; Isaiah 66:5; 1 Corinthians 6:19-20; 1 Corinthians 10:31; Ephesians 3:21
+GG2013,723,"Lord, Speak for Me, for I Am Yours (Psalm 26)",Psalm 26; James 3:1-12
+GG2013,330,Our Help Is in the Name of God (Psalm 124),Psalm 124
+GG2013,324,For all the faithful women,Exodus 15:19-21; Ruth 1:8-18; 1 Samuel 1:1-2:10; Luke 1:26-38; Luke 10:38-42; John 4:1-42; John 20:1-18; Acts 9:36; 2 Timothy 1:5; Hebrews 12:1; Revelation 7:9-17
+GG2013,454,Take the saving word of God (Dawk'yah towgyah thawy báht-awm),Psalm 1:2; Psalm 119:105
+GG2013,246,Christ Is Alive!,Romans 6:5-11
+GG2013,357,The days are surely coming,Jeremiah 33:13-16; Matthew 24:29-36; Matthew 25:31-46; Mark 13:24-32; Luke 21:25-36; 1 Thessalonians 4:13-18; Revelation 22
+GG2013,409,God Is Here!,Isaiah 42:1; 1 Corinthians 11:2; 1 Corinthians 12:27-31; 2 Corinthians 4:5; 2 Thessalonians 2:15; Titus 2:11-14; 1 Peter 2:9-10
+GG2013,346,For the healing of the nations,Genesis 1:27; Amos 5:24; John 17:20-23; James 2:9; Revelation 21; Revelation 22:1-5
+GG2013,717,For the life that you have given,Deuteronomy 6:4-5; Matthew 19:14; Matthew 22:37; Mark 12:29; Romans 12:1; 1 Corinthians 12:4-6; 1 Corinthians 12:12-13; 2 Corinthians 9:7; James 1:17
+GG2013,628,"Praise, I will praise you, Lord (Je louerai l'Éternel de tout mon coeur)",Psalm 9:1-2; Zephaniah 3:14-20
+GG2013,315,In the midst of new dimensions,Genesis 9:7-17; Numbers 14:14; 1 Corinthians 13:4; 2 Corinthians 9:6-8; Philippians 4:12; Colossians 3:12-17; 1 Timothy 6:17-18; Hebrews 6:9-12; 1 Peter 1:13-16; 1 Peter 5:5-6
+GG2013,626,As the Deer,Psalm 18:1; Psalm 28:7; Psalm 42:1-7; Psalm 46:1; Psalm 63:1; Psalm 103:5; Psalm 107:9; Psalm 143:6; Luke 23:3; John 4:14
+GG2013,622,"I will exalt my God, my King (Te exaltaré, mi Dios, mi Rey)",Psalm 145
+GG2013,469,"Lord, listen to your children praying",Psalm 17:6; 2 Corinthians 13:14; James 5:16
+GG2013,456,"Listen, God Is Calling (Neno lake Mungu)",Matthew 28:19-20; Mark 16:15-16; Luke 24:45-48; 1 Corinthians 15:58; 2 Thessalonians 2:14
+GG2013,787,God weeps with us who weep and mourn,Job 19:25-27; Psalm 94:19; Isaiah 41:8-10; Matthew 5:4; John 14:1-3; Romans 8:31-39; Romans 12:15; Romans 14:7-9; 2 Corinthians 1:3-4; 2 Corinthians 5:1
+GG2013,306,Blest be the tie that binds,Psalm 133:1; Matthew 18:20; John 13:34-35; Romans 12:5; Romans 15:1-2; 1 Corinthians 12:27; Galatians 3:28; Galatians 6:2; Colossians 2:2; Hebrews 4:16; Hebrews 13:1; 1 Peter 3:8; 1 John 1:7
+GG2013,149,All Hail to God’s Anointed (Psalm 72),Psalm 72; 2 Samuel 7:12; 1 Kings 3:9; Psalm 122; Psalm 132; Isaiah 61:1-2; Hosea 6:1-3; Luke 1:68-79; Luke 4:18; Acts 10:38; Philippians 2:9
+GG2013,256,These things did Thomas count as real,John 20:19-31; 1 Corinthians 15:3-8
+GG2013,824,There Is a Place of Quiet Rest (Near to the Heart of God),Exodus 33:14; 1 Kings 19:1-15; Psalm 34:18; Psalm 73:28; Matthew 11:28-30; John 10:28; Acts 17:27; Philippians 4:7; Hebrews 4:16; James 4:8
+GG2013,678,Our Darkness Is Never Darkness in Your Sight (La ténèbre n'est point ténèbre devant toi),Psalm 139:12; John 8:12; 1 John 1:5
+GG2013,549,May the Love of the Lord (唯 願 神 的 愛 撫 慰 你 的 靈),Numbers 6:24-26; 1 John 3:1
+GG2013,60,"Your endless love, your mighty acts",Psalm 106
+GG2013,360,Christ is coming! Let creation,Romans 8:18-25; 1 Corinthians 15:25; Titus 2:13; Revelation 1:7; Revelation 22:20
+GG2013,380,"God Is Our Help, Refuge, and Strength (하나님은 피난처요) (Psalm 46)",Psalm 46; Deuteronomy 4:7; Psalm 48:8; Psalm 93:3-4
+GG2013,407,"Spirit divine, attend our prayers",Genesis 1:2-4; Psalm 23:3; Isaiah 11:2; Ezekiel 36:27; Matthew 3:11; Matthew 3:16; John 14:16-17; Acts 1:8; Acts 2:1-4; Acts 4:31; Acts 9:31; Romans 8:9; Galatians 5:25; Ephesians 4:25-27; Hebrews 12:18-29
+GG2013,139,What shall we call him,Psalm 51:15; Luke 1:31-33; Luke 2:7; John 3:16
+GG2013,762,When the Poor Ones (Cuando el pobre),Isaiah 58:6-7; Matthew 25:34-40; Mark 12:38-44; Luke 24:13-35; Hebrews 13:2; James 2:15-17
+GG2013,25,"O Lord, Our God, How Excellent (Psalm 8)",Psalm 8; Genesis 1:26-27; Matthew 21:16; Hebrews 2:6-8
+GG2013,634,To God Be the Glory,Psalm 29:2; Psalm 71:19; Psalm 72:18-19; Psalm 96:8; Psalm 118:19; Psalm 126:2-3; Psalm 138:5; John 1:14; John 3:16-17; John 10:9; John 14:6; 1 Corinthians 10:31; 1 Corinthians 15:3; Galatians 1:5; Colossians 1:14; 1 Timothy 1:15-17; 1 Peter 1:2-3; 1 John 3:2
+GG2013,210,"Lord, Why Have You Forsaken Me (Psalm 22)",Psalm 22; Psalm 69:1-21; Matthew 27:39-40; Matthew 27:46; Mark 15:34
+GG2013,520,I will bless the Lord at all times,Psalm 34
+GG2013,239,"Good Christians all, rejoice and sing!",Matthew 28:1-7; John 10:17; Acts 4:33; Acts 13:32-33
+GG2013,785,"In deepest night, in darkest days",Psalm 23:2-4; Psalm 94:19; Isaiah 43:2; Isaiah 61:2; Matthew 5:4; John 11:35; John 14:1-3; Romans 8:31-39; Romans 12:15; 2 Corinthians 1:3-4
+GG2013,788,"To You, O Lord, We Lift Our Eyes (Psalm 123)",Psalm 123
+GG2013,541,God be with you till we meet again,Genesis 5:24; Exodus 33:14; Deuteronomy 8:3; Deuteronomy 33:27; Psalm 57:1; Psalm 73:23-24; Psalm 91:4; Psalm 95:7; Song of Solomon 2:4; Isaiah 40:11; Nahum 1:7; John 6:32-35; John 6:48-51; John 6:58; John 10:1-18; Acts 20:32; 1 Thessalonians 5:23-24
+GG2013,842,The Lord Is My Light (Psalm 27),Psalm 27
+GG2013,368,We Fall Down,Isaiah 6:3; Revelation 4:8-11
+GG2013,725,"O Jesus, I have promised",1 Samuel 3:10; Psalm 48:14; Psalm 119:151; Luke 9:23-24; Luke 9:57-62; John 12:26; John 14:3; John 15:14; Romans 6:12-23; Romans 12:11; 2 Corinthians 5:15; Colossians 3:24; 1 Peter 2:25; Revelation 14:13
+GG2013,234,"Come, You Faithful, Raise the Strain",Exodus 13:3; Exodus 14:15-22; Exodus 14:29; Exodus 15:1-21; Isaiah 9:2; Isaiah 61:3; Luke 20:27-38; John 6:40; Acts 2:24-28; Romans 6:9-10; 1 Corinthians 15:54-57; Colossians 1:11-14
+GG2013,793,"O Christ, the Healer",Psalm 102:1-7; Amos 6:1-7; Mark 1:30-34; Mark 5:15; Mark 6:1-13; Luke 17:11-19; Romans 1:28-32; Ephesians 4; James 5:13-16
+GG2013,778,As Pants the Deer for Living Streams (Psalms 42 and 43),Psalm 42; Psalm 43; Psalm 63:1; Psalm 143:6; John 4:14
+GG2013,504,We come as guests invited,Matthew 26:26-30; Mark 14:22-25; Luke 22:17-20; John 6:35-58; John 15:5; 1 Corinthians 11:23-26
+GG2013,36,For the fruit of all creation,Deuteronomy 26:2-3; Matthew 20:1-16; Matthew 25:37-45; Mark 4:26-29; Luke 15:31-32; Galatians 5:22-23; Ephesians 6:9
+GG2013,321,The Church’s One Foundation,Isaiah 2:4; Micah 4:1-3; Matthew 16:15-18; Matthew 24:31; Mark 13:27; John 3:5; Acts 2:42; Acts 2:47; Acts 20:28; 1 Corinthians 3:11; 1 Corinthians 10:17; Ephesians 1:22-23; Ephesians 2:19-22; Ephesians 4:4-6; Ephesians 5:23; Ephesians 5:25-27; Colossians 1:18; Hebrews 3:1-6; Hebrews 9:28; Hebrews 12:1; Revelation 5:9; Revelation 7:14; Revelation 21:2; Revelation 21:9
+GG2013,353,My hope is built on nothing less,Psalm 40:2; Psalm 125:1; Isaiah 61:10; Matthew 7:24-28; Matthew 14:22-23; Matthew 24:31; Mark 6:45-52; Luke 6:46-49; John 6:16-21; Acts 4:11-12; Romans 5:1-5; 1 Corinthians 3:11; 1 Thessalonians 4:16-17; 1 Timothy 2:5; Hebrews 6:17-19; 1 Peter 3:15; Revelation 19:8
+GG2013,419,Lord who may dwell within your house,Psalm 15; Exodus 20:1-17; Psalm 24:3-6; Isaiah 1:10-17; Isaiah 33:14-16
+GG2013,647,Give Thanks,Psalm 28:7; Psalm 75:1; Psalm 126:3; Joel 3:10; 2 Corinthians 6:10; 2 Corinthians 12:10
+GG2013,730,I sing a song of the saints of God,Psalm 22:4-5; Matthew 10:32; Luke 12:8; Acts 20:32; 1 Timothy 6:12; Hebrews 11:4-12; Hebrews 11:17-38; Hebrews 12:1; James 1:12; Revelation 2:10; Revelation 14:13
+GG2013,52,When Israel was in Egypt's land,Exodus 3:7-12; Exodus 5:1; Exodus 8:1; Exodus 11:4-5; Exodus 12:35-36
+GG2013,813,"God, My Help and Hiding Place (Psalm 71)",Psalm 71
+GG2013,72,By the Babylonian Rivers (Psalm 137),Psalm 137; Isaiah 24:8
+GG2013,786,"Why stand so far away, my God?",Psalm 10
+GG2013,818,By Gracious Powers,Psalm 116:13; Matthew 10:26-33; Matthew 20:22; Mark 10:38; John 18:11; Romans 10:5-15
+GG2013,459,O Word of God incarnate,Psalm 119:105; Psalm 119:130; Psalm 119:160; Isaiah 40:8; Matthew 5:16; Mark 13:31; John 1:1-5; John 1:14; John 5:39; 1 Corinthians 13:12; 2 Peter 1:19; Revelation 1:3
+GG2013,131,In the heavens shone a star,Matthew 2:9; Luke 2:1-20
+GG2013,410,God is calling through the whisper,Deuteronomy 30:19-20; 1 Kings 19:11-12; Job 26; Psalm 24:1-2; Psalm 37; Isaiah 30:21; Zechariah 2:13; Matthew 10:27; Matthew 11:28; Mark 1:14-20; John 10:3-4
+GG2013,106,"Prepare the way, O Zion",Psalm 24:7-10; Isaiah 40:3-5; Isaiah 52:8; Zechariah 9:9; Matthew 3:3; Matthew 21:1-9; Mark 11:1-10; Luke 3:4-6; Luke 19:29-38; John 12:12-15; Revelation 14:1
+GG2013,765,May the God of Hope Go With Us (Song of Hope/Canto de esperanza),Psalm 42:5; Psalm 67; Isaiah 9:2; Isaiah 40:31; Isaiah 42:1-7; Isaiah 42:16; Isaiah 51:4; John 8:12; Romans 15:13; 1 John 3:14-18
+GG2013,64,I Long for Your Commandments (Psalm 119),Psalm 119
+GG2013,185,Lonely the Boat (캄캄한 밤),Psalm 107:23-32; Matthew 8:23-27; Matthew 14:22-23; Mark 4:36-41; Mark 6:45-52; Luke 8:22-25; John 6:16-21; John 14:27; John 16:33
+GG2013,656,We've come this far by faith,1 Samuel 7:12; 1 Chronicles 17:16; 2 Corinthians 5:7; 2 Timothy 4:7
+GG2013,342,"Judge Eternal, throned in splendor",Psalm 72; Isaiah 65:1-9; Amos 5:18-24; Mark 6:14-29; Romans 8:22-25
+GG2013,428,Before I take the body of my Lord,Mark 9:38-50; Luke 18:9-14; John 13:1-17; Romans 7:15-25; 1 Corinthians 11:27-32; 1 John 1:9
+GG2013,374,"O holy city, seen of John",Isaiah 25:8; Matthew 23:1-12; Hebrews 12:18-29; Revelation 3:12; Revelation 21:1-22:5
+GG2013,767,Together we serve,Psalm 119:105; Matthew 5:14; Matthew 25:34-40; Ephesians 4:11-16; Philippians 2:4-5; 2 Thessalonians 3:6-13
+GG2013,644,"Give thanks, O Christian people",Proverbs 29:7; 1 Corinthians 12:4-11; 1 Corinthians 15:15-18; 2 Corinthians 9:6-15; Galatians 6:2; Ephesians 4:11-13; 1 Thessalonians 4:16-17
+GG2013,47,Bless All Who Trust in God (Psalm 128),Psalm 128
+GG2013,637,O Sing to the Lord (Cantai ao Senhor),Exodus 15:20; Judges 7:18; Psalm 149:1; Psalm 150
+GG2013,243,Be not afraid,Matthew 28:5-6
+GG2013,782,"Hear My Prayer, O God (Psalm 143)",Psalm 143
+GG2013,709,"God, we honor you",Psalm 100; Psalm 134; Psalm 150:6; Acts 20:35; Romans 12:8; 2 Corinthians 9:7
+GG2013,225,"Sing, my tongue, the glorious battle",Genesis 3:6; Psalm 98:1-2; Isaiah 52:9-10; Isaiah 53:7; John 3:13-17; John 19:30; 1 Corinthians 1:18-24; Galatians 4:4; Ephesians 4:8
+GG2013,271,The Lord Almighty Reigns (Psalm 93),Psalm 93
+GG2013,539,We Will Go Out with Joy,Isaiah 55:12; Romans 14:17; Philippians 4:4; Colossians 1:21-22
+GG2013,293,"Loving Spirit, loving Spirit",Psalm 16:11; Isaiah 66:13; Ezekiel 36:26-27; Luke 11:11-13; Romans 5:5; 1 Corinthians 1:21-22; Galatians 4:6; Ephesians 1:11-14; Ephesians 4:30; Philippians 2:13; Colossians 1:9-10; 2 Thessalonians 2:13-15
+GG2013,519,You Are My Strength When I Am Weak (You Are My All in All),Psalm 46:1; Isaiah 46:4; Matthew 13:44-45; John 1:29; 1 Corinthians 15:28; 2 Corinthians 12:10; Ephesians 4:4-5; Revelation 4:11; Revelation 5:12
+GG2013,436,"God of compassion, in mercy befriend us",Psalm 51:1; Isaiah 63:7-9
+GG2013,28,"You Are Before Me, Lord (Psalm 139)",Psalm 139; Jeremiah 23:23-24
+GG2013,749,Come! Live in the light!,Micah 6:8; John 1:4-9; John 3:19-21
+GG2013,491,You have put on Christ,Romans 6:1-14; Galatians 3:27; Ephesians 4:1-6
+GG2013,230,Joyful is the dark,Genesis 1:2; Exodus 20:18-21; 1 Kings 8:10-13; Psalm 18:8-12; Mark 15:46-47; Luke 2:1-8
+GG2013,825,"Swing Low, Sweet Chariot",2 Kings 2:11
+GG2013,371,New Songs of Celebration Render (Psalm 98),Psalm 98; Psalm 96:1; Isaiah 44:23; Isaiah 52:10
+GG2013,295,Go to the World!,Psalm 30:5; Matthew 28:18-20; Mark 16:15-18; Luke 24:45-49; Acts 1:8; James 1:22-25; Revelation 7:12; Revelation 19:4
+GG2013,722,"Lord, speak to me that I may speak",Exodus 16:4-5; Exodus 16:31; 1 Samuel 3:10; Psalm 119:12-13; Isaiah 50:4; Matthew 18:12-14; Matthew 28:19-20; Luke 15:4-6; John 6:48-51; John 13:15; Romans 6:13; Romans 12:1-2; Romans 14:7; 2 Timothy 2:2; Revelation 22:4
+GG2013,548,May God Support You All Your Days (Psalm 20),Psalm 20; Psalm 145:14-20; Proverbs 16:3; Isaiah 58:11; John 16:13; Romans 12:12; Colossians 3:17; 1 Thessalonians 5:16-24
+GG2013,828,"More love to thee, O Christ",Deuteronomy 6:5; Psalm 116; John 21:15; Philippians 1:9; Philippians 1:20-24; 2 Thessalonians 3:5; 1 John 4:19
+GG2013,617,"Blest Be God, Praised Forever (Rab ki hove sanaa hameshaa)",Psalm 150
+GG2013,812,"O Save Me, God, and Hear My Cry (Psalm 54)",Psalm 54
+GG2013,827,"O Morning Star, how fair and bright",Psalm 45; Isaiah 11:1; Luke 2:11; Ephesians 5:8-14; 2 Peter 1:19; Jude 1:21; Revelation 22:16
+GG2013,446,"How Blest, Those Whose Transgressions (Psalm 32)",Psalm 32; Romans 4:6-8
+GG2013,496,"Bread of heaven, on thee we feed",John 6:32-35; John 6:41-48; John 6:51-54; John 15:1; John 15:5; Romans 11:33-35; 1 Corinthians 10:16
+GG2013,801,"The Lord's My Shepherd, I'll Not Want (Psalm 23)",Psalm 23
+GG2013,166,"Lord, who throughout these forty days",Psalm 16:11; Isaiah 55:7; Matthew 4:1-11; Mark 1:12-13; Luke 4:1-13; Romans 6:6-23; 1 Corinthians 9:24-10:13; Ephesians 6:10-20; Hebrews 4:14-16
+GG2013,821,My life flows on in endless song,Psalm 18:2; Psalm 19:4; Psalm 46:1-7; Psalm 92:15; Matthew 7:24; John 7:38; 2 Corinthians 5:14-17; Philippians 3:21; Philippians 4:8-9
+GG2013,444,Forgive Our Sins as We Forgive,Matthew 5:21-24; Matthew 6:9-15; Matthew 18:21-35; Mark 11:24-25; Ephesians 4:25-27; Colossians 3:13-14
+GG2013,611,"Joyful, joyful, we adore thee",1 Chronicles 16:23-33; Job 38:7; Psalm 32:11; Psalm 33; Psalm 98; Psalm 103:22; Psalm 104; Psalm 145:10; Psalm 148; Isaiah 43:1-7; Habakkuk 3:18; Malachi 4:2; Luke 19:38; 2 Corinthians 2:14; 1 John 1:5-7
+GG2013,298,"Lord, you give the great commission",Matthew 26:26-28; Matthew 28:19-20; Luke 9:2; Luke 10:9; Luke 23:34; 1 Corinthians 11:23-25
+GG2013,235,"O sons and daughters, let us sing",Matthew 28:1-9; Mark 16:1-6; Luke 24:1-12; John 20:19-29; 2 Corinthians 6:18
+GG2013,70,What does the Lord require of you?,Isaiah 1:10-17; Amos 8:1-12; Micah 6:6-8; Zechariah 7:9-10; Matthew 23:23; Mark 12:38-44; Luke 12:42
+GG2013,532,Sheaves of Wheat (Una espiga),Isaiah 25:6-9; Matthew 26:26-30; Mark 14:22-26; Luke 22:19-20; Romans 15:5-6; 1 Corinthians 11:23-26; Ephesians 4:1-6; Titus 3:3-7
+GG2013,708,We give thee but thine own,Genesis 28:22; Leviticus 27:30-33; 1 Chronicles 29:14; Haggai 2:8; Malachi 3:8-10; Matthew 6:1-4; Matthew 25:34-40; 1 Corinthians 16:2; 2 Corinthians 9:6-8; James 1:17-27; 1 Peter 4:10
+GG2013,154,Jesus entered Egypt,Deuteronomy 10:19; Hosea 11:1; Matthew 2:13-15; Matthew 25:34-40; Hebrews 13:2
+GG2013,800,Sometimes a light surprises,2 Samuel 23:4-5; Psalm 30:5; Habakkuk 3:17-19; Malachi 4:2; Matthew 6:28; Matthew 6:34; Romans 15:13
+GG2013,816,If thou but trust in God to guide thee,Deuteronomy 31:8; Psalm 27:14; Psalm 42:5; Psalm 46:1; Psalm 46:10; Psalm 55:22-23; Psalm 62:1-2; Proverbs 3:5-6; Isaiah 40:29; Isaiah 58:11; Jeremiah 17:5-10; Matthew 7:24; Luke 6:48; John 16:13; Philippians 4:19
+GG2013,113,Angels we have heard on high,Luke 2:8-14
+GG2013,53,"O God, Who Gives Us Life",Exodus 13:21; Exodus 20:1-17; Psalm 139; Isaiah 42:5; Jeremiah 31:31-34; John 3:16; John 4:14; Romans 8:1-11; 2 Corinthians 5:17
+GG2013,698,"Take, O take me as I am",Psalm 45; 2 Corinthians 1:22; Ephesians 1:13-14; Ephesians 4:30; 1 Timothy 2:1-7; 2 Timothy 2:19
+GG2013,69,"I, the Lord of Sea and Sky (Here I Am, Lord)",Exodus 2:23-24; Exodus 3:7-8; 1 Samuel 3:1-10; Isaiah 6:8; Isaiah 42:5-9; Isaiah 42:16; Ezekiel 11:19-20; John 6:35; John 6:51
+GG2013,537,When at This Table,John 12:26; Romans 12:1; Romans 14:19; 1 Corinthians 11:23-26; 1 Corinthians 12:4-11; 2 Corinthians 9:6-9; Ephesians 4:1-13; Hebrews 9:14; 1 Peter 4:8-11
+GG2013,296,Go in grace and make disciples,Isaiah 58:6-11; Matthew 28:19-20; Mark 6:30-44; Mark 16:15-18; Luke 24:45-49; Acts 2:1-4
+GG2013,458,Thy Word Is a Lamp unto My Feet,Psalm 119:105
+GG2013,250,In the bulb there is a flower,Genesis 1:14; Genesis 9:13-17; Psalm 1:3; Psalm 30:5; Ecclesiastes 3:1-8; John 12:24; 1 Corinthians 15:51
+GG2013,98,To a maid whose name was Mary,Luke 1:28-38
+GG2013,66,Every Time I Feel the Spirit,Exodus 19:16-18; Luke 11:13
+GG2013,434,"Restore in us, o God",Job 33:26; Psalm 51:10-12; Romans 8:18-23; 1 Corinthians 13:12; 1 Corinthians 15:55; 2 Corinthians 5:14-17; Galatians 5:22-23; 2 Timothy 1:7
+GG2013,345,In an age of twisted values,Luke 5:27-32; 1 Corinthians 13:4; 2 Corinthians 9:6-8; Ephesians 2:6-7; Philippians 4:12; Colossians 3:12-17; 1 Timothy 6:17-18; Hebrews 6:9-12; 1 Peter 1:13-16; 1 Peter 5:5-6
+GG2013,9,The Play of the Godhead,Genesis 1:1; Matthew 7:17-20; John 1:1; John 16:5-16
+GG2013,744,"Arise, your light is come!",Isaiah 40:31; Isaiah 60:1-3; Isaiah 61:1-2; John 8:12; John 12:35-36; Ephesians 5:14
+GG2013,286,"Breathe on me, Breath of God",Genesis 2:7; Job 33:4; Ezekiel 36:27; Ezekiel 37:9; John 3:5-7; John 11:26; John 17:26; John 20:22; Acts 19:1-7; Romans 8:9-11; 2 Corinthians 3:18; Galatians 5:22-25; 1 John 4:11-13
+GG2013,796,"We come to you for healing, Lord",Psalm 103; Psalm 130; Isaiah 53:4-5; Matthew 8:17; Matthew 11:28; Mark 1:34; Mark 5:23; Mark 9:24; Luke 4:40-41; Luke 8:43-48; Luke 17:11-19; John 11:17-27; Romans 8:30-39; 1 Corinthians 12:7-10; Hebrews 11:1; James 4:13-15; James 5:13-16
+GG2013,196,"All Glory, Laud, and Honor",Psalm 24:7-10; Psalm 29:1; Psalm 118:25-27; Zechariah 9:9; Matthew 21:1-17; Mark 11:1-10; Luke 19:29-38; John 12:12-16; Revelation 5:12-13; Revelation 7:9-12
+GG2013,515,I Come with Joy,Matthew 8:11; 1 Corinthians 10:16-17; 1 Corinthians 11:23-26; Colossians 3:14-15
+GG2013,394,Christ is made the sure foundation,1 Kings 8:27-30; Psalm 18:6; Matthew 21:42; Mark 12:10; Luke 20:17; John 2:13-16; Acts 4:11; 1 Corinthians 3:11; Ephesians 1:22-23; Ephesians 2:20-22; Colossians 1:18; 2 Timothy 2:12; 2 Timothy 2:19; 1 Peter 2:4-7; Revelation 21
+GG2013,128,"Infant holy, infant lowly",Luke 2:6-20; Revelation 17:14
+GG2013,332,The right hand of God,Exodus 15:6; Deuteronomy 33:2; Psalm 17:7; Psalm 18:35; Psalm 20:6; Psalm 44:1-3; Psalm 45:4; Psalm 48:10; Psalm 63:6-8; Psalm 80:15; Psalm 80:17; Psalm 98:1-3; Psalm 118:15-16; Psalm 138:7; Psalm 139:7-12; Isaiah 41:10; Isaiah 48:13; Acts 5:31
+GG2013,473,"Shepherd me, O God",Psalm 23
+GG2013,100,My Soul Cries Out with a Joyful Shout (Canticle of the Turning),Luke 1:46-55
+GG2013,629,"Jesus, the very thought of thee",1 Samuel 2:8; Psalm 34:18; Psalm 51:17; Psalm 66:2; Psalm 104:34; Isaiah 57:15; Matthew 7:7-8; Luke 11:9-10; John 12:1-8; John 15:9; Acts 2:28; Acts 4:12; Romans 15:13; 1 Corinthians 2:9; 1 Corinthians 13:12; Ephesians 3:17; Ephesians 3:19; Philippians 1:21; 1 Thessalonians 2:19-20; 1 Peter 1:8-9; 1 Peter 1:21
+GG2013,733,We all are one in mission,Matthew 28:19-20; Romans 12:4-8; 1 Corinthians 12; Ephesians 4:11-13
+GG2013,463,How Firm a Foundation,Deuteronomy 31:6; Joshua 1:9; Psalm 46:1; Psalm 62:7; Isaiah 28:16; Isaiah 41:10; Isaiah 43:1-7; Matthew 14:22-23; Mark 4:35-41; Luke 8:22-25; Luke 21:33; Acts 2:27; Romans 9:1-5; 1 Corinthians 3:11; 2 Corinthians 12:9; 2 Timothy 2:19; Hebrews 6:18; Hebrews 13:5-6; 1 Peter 1:7; 1 Peter 2:6; 1 Peter 4:12; 2 Peter 1:4
+GG2013,704,"Jesus, who for my sake walked (나를위해험한산길오르신그발)",Mark 14:3-9; Luke 7:36-50; Acts 2:22-33; 1 Corinthians 15:51-54
+GG2013,142,’Twas in the Moon of Wintertime,Matthew 2:9-11; Luke 2:6-20
+GG2013,523,You Satisfy the Hungry Heart,Matthew 26:26-30; Luke 22:17-20; John 6:33-34; John 10:1-6; 1 Corinthians 10:16-17; 1 Corinthians 11:23-26; Ephesians 3:17; Colossians 3:16-17; Hebrews 13:5
+GG2013,50,Deep in the shadows of the past,Exodus 3:13-14; Acts 7:2-53; Romans 9:1-5; 2 Timothy 3:15-17
+GG2013,76,Do Not Be Afraid,Psalm 103:11-12; Isaiah 40:3; Isaiah 43; Matthew 10; John 14:27; Revelation 7:17
+GG2013,753,Make Me a Channel of Your Peace (Prayer of St. Francis),Isaiah 6:8; Matthew 5:9; Matthew 5:14-16; Matthew 5:43-44; Matthew 6:12; Matthew 10:39; Luke 11:4; John 12:24; John 14:27; John 21:15-17; Acts 1:8; Acts 22:15; Romans 14:7; Galatians 6:7-10; 2 Timothy 2:21
+GG2013,331,"God of the ages, whose almighty hand",Exodus 13:15; Psalm 22:4; Psalm 29:11; Psalm 33:12; Psalm 44:1-4; Psalm 77:14; Psalm 90:1-2; Psalm 147:12-15; Proverbs 14:34; Isaiah 40:25-26; Amos 8:4-7; 1 Timothy 2:1-2
+GG2013,327,From All That Dwell Below the Skies (Psalm  117),Psalm 117; 2 Samuel 6:1-19; Psalm 66:1; Psalm 67:3; Psalm 72:5-17; Psalm 113:1-2; Psalm 145:21; Psalm 150:6; 1 Peter 2:9; Revelation 7:9-12
+GG2013,383,"Dream On, Dream On (꿈을 꾸세 평화의 자녀)",Isaiah 11:6-9; Isaiah 40:29-31; Ephesians 2:14-16; Colossians 1:20
+GG2013,402,"How lovely, Lord, how lovely",Psalm 84; Isaiah 40:29-31; Luke 12:32-34; John 2:13-17; 1 Timothy 6:6-10; Hebrews 13:5
+GG2013,792,There Is a Balm in Gilead,Deuteronomy 31:6-8; Joshua 1:9; Psalm 42:5; Psalm 42:11; Psalm 43:5; Jeremiah 8:22; Jeremiah 46:11; Jeremiah 51:8; Lamentations 5:21; Habakkuk 3:2; Luke 4:18; 2 Corinthians 5:14
+GG2013,193,"Jesus, take us to the mountain",Matthew 17:1-9; Mark 9:2-9; Luke 9:28-36
+GG2013,80,You Shall Go Out with Joy (The Trees of the Field),Psalm 98:8; Psalm 148:7-12; Isaiah 44:23; Isaiah 55:12
+GG2013,168,"Within your shelter, loving God",Psalm 91; Matthew 4:5-7; Luke 4:9-11
+GG2013,806,I'll Praise My Maker (Psalm 146),Psalm 146; 1 Kings 17:17-24; 2 Kings 4:42-44; Psalm 68:5-6; Psalm 72:12-14; Psalm 84:12; Psalm 104:33; Psalm 124:8; Psalm 130:5-8; Psalm 136:10-24; Psalm 145:14; Psalm 147:10-11; Psalm 149:2; Proverbs 16:20; Isaiah 29:19; Isaiah 40:21-31; Isaiah 61:1-4; Matthew 20:29-34; Mark 8:22-26; Luke 4:18-19; Luke 7:18-23; Luke 18:35-43; John 9:1-12
+GG2013,180,"Silence! Frenzied, Unclean Spirit",Mark 1:21-28; Luke 4:31-37
+GG2013,207,Sharing Paschal Bread and Wine (Shadows Lengthen into Night),Matthew 26:20-25; Matthew 26:31; Matthew 26:33-35; Matthew 26:36-41; Matthew 26:42-45; Matthew 26:47-50; Mark 14:48-50; Luke 22:54-62; Luke 23:33-34; Luke 23:44-46; John 18:1-27; John 19:18
+GG2013,453,"Open your ears, O faithful people",Deuteronomy 5:1; Deuteronomy 6:4-9; Psalm 78; Jeremiah 2:4
+GG2013,841,God is my strong salvation,Psalm 27; Exodus 15:2; 2 Samuel 22:29; Psalm 29:11; Isaiah 26:3; Micah 7:8; Romans 8:31; Ephesians 6:10; 2 Thessalonians 3:3
+GG2013,7,"Mothering God, you gave me birth",Genesis 1:1-5; Matthew 26:26-29; Mark 14:22-25; Luke 22:15-20; Ephesians 3:16-21
+GG2013,338,O beautiful for spacious skies,Psalm 33:12; Psalm 65:9-13; Hebrews 11:16; James 1:17
+GG2013,784,By the Waters of Babylon (Psalm 137),Psalm 137; Lamentations 2:8
+GG2013,1,"Holy, Holy, Holy! Lord God Almighty!",Isaiah 6:1-3; Revelation 4:8-11
+GG2013,681,This Is the Day the Lord Hath Made (Psalm 118),Psalm 118; Genesis 1:3-5; Exodus 20:8-11; Leviticus 23:1-3; 1 Chronicles 16:31; Psalm 38:22; Psalm 96:11; Zechariah 9:9; Matthew 12:8; Matthew 21:5; Matthew 21:9; Mark 11:9; Ephesians 2:4-6; 2 Timothy 2:8
+GG2013,111,"""From heaven above to earth I come",Exodus 3:7; Psalm 40:9; Psalm 48:2; Psalm 145:19; Luke 2:8-14; Luke 2:32
+GG2013,242,Day of Delight and Beauty Unbounded,Psalm 30:11; Psalm 150:6; Isaiah 25:6-10; Malachi 4:2; Matthew 28:6-10; Matthew 28:19; Mark 16:6; John 12:24; John 19:34; Colossians 1:27; 1 Peter 3:8-21; Revelation 22:1-17
+GG2013,29,"O God, You Search Me (Psalm 139)",Psalm 139
+GG2013,619,"Praise, My Soul, the God of Heaven (Psalm 103)",Psalm 103; 1 Chronicles 29:10-13; Nehemiah 9:17; Psalm 36:5; Psalm 47:6; Psalm 91:12; Psalm 145:8; Psalm 148:2; Lamentations 5:19; Daniel 4:37; Joel 2:13; Jonah 4:2; Nahum 1:3; Matthew 18:10; 1 Timothy 1:17; Revelation 5:9; Revelation 7:9
+GG2013,484,"Out of Deep, Unordered Water",Genesis 1:1-7; Genesis 1:21; Genesis 1:25-27; Exodus 14:22; 1 Corinthians 10:1-2; Ephesians 1:13; Revelation 22:1-5
+GG2013,404,What Is This Place,Matthew 18:20; Acts 2:1-3; Acts 2:17-21; Romans 16:5; 1 Corinthians 11:23-26
+GG2013,63,The Lord Is God,Deuteronomy 6:4-9; Matthew 22:38; Mark 12:28-29; Luke 10:26-28
+GG2013,347,Let all mortal flesh keep silence,Psalm 2:11; Psalm 89:5-7; Isaiah 9:1-3; Habakkuk 2:20; Zechariah 2:13; Matthew 2:11; Luke 1:77-79; John 1:4-5; John 1:14; John 6:22-35; John 6:35-58; Philippians 2:6-7; Philippians 2:12; Revelation 4:8-11; Revelation 19:11-16
+GG2013,55,"Come like Driving Wind, O God (Psalm 68)",Psalm 68
+GG2013,126,"Jesus, Jesus, O what a wonderful child",Luke 2:8-14; Luke 2:27-35; Luke 2:40-52
+GG2013,352,My Lord! What a Morning,Matthew 24:29-30; Mark 13:24-26; 1 Corinthians 15:51-52; Revelation 6:12-17
+GG2013,216,Beneath the cross of Jesus,Isaiah 4:6; Isaiah 25:4-5; Isaiah 32:2; Luke 9:23; John 19:25; 1 Corinthians 1:17-18; Galatians 6:14; Philippians 3:3-11
+GG2013,731,Give thanks for those whose faith is firm,Psalm 84:5; Matthew 5:1-12; 1 Corinthians 13:13; 2 Timothy 3:10-17; Hebrews 10:32-39; Hebrews 12:2
+GG2013,45,I to the Hills Will Lift My Eyes (Psalm 121),Psalm 121; Deuteronomy 28:6
+GG2013,807,When we must bear persistent pain,Deuteronomy 31:6; Job 42:5; Psalm 6; Isaiah 48:10; John 9:1-3; Romans 8:28-29; Romans 14:8; 2 Corinthians 1:3-5; 2 Corinthians 12:7-10; Hebrews 4:15; James 1:2-4
+GG2013,522,I am the bread of life,John 6:35-58; John 6:44; John 6:51; John 6:53; John 11:25; John 11:27
+GG2013,662,"Christ, whose glory fills the skies",Proverbs 4:18; Lamentations 3:22-23; Malachi 4:2; Luke 1:78; John 1:4-9; John 8:12; John 12:46; Acts 9:3-5; 2 Corinthians 4:6; Hebrews 1:3; 2 Peter 1:19; Revelation 21:23
+GG2013,502,We who once were dead,John 6:35; John 8:12; Romans 6:1-11; 1 Corinthians 11:23-26; Colossians 2:13-15; 1 Thessalonians 4:16
+GG2013,838,Standing on the Promises,Joshua 21:45; Acts 2:38-39; Romans 4:20-21; 2 Corinthians 1:20-22; 2 Corinthians 7:1; Galatians 3:14-22; Galatians 3:29; Ephesians 6:14-17; Hebrews 9:15; Hebrews 10:23; James 1:12; 2 Peter 1:3-4; 1 John 2:25
+GG2013,396,"Brethren, we have met to worship",Exodus 16:4; Exodus 16:31; Deuteronomy 8:16; 1 Chronicles 16:29; Psalm 29:2; Psalm 95:6-7; Psalm 119:2; Psalm 122:1; Ezekiel 34:26; Zechariah 4:6; Matthew 22:37; Luke 4:18-19; Luke 12:35-37; Luke 22:30; John 4:23-24; John 6:58; John 10:18; Philippians 1:12-13; 1 John 3:11; 1 John 4:19-21; Revelation 2:17; Revelation 21:5
+GG2013,99,My Soul Gives Glory to My God (Song of Mary),Luke 1:46-55
+GG2013,325,By all your saints still striving,Matthew 3:1-6; Matthew 4:18-22; Matthew 16:13-20; Matthew 28:1-10; Mark 1:16-18; Mark 8:27-30; Mark 10:35-45; Mark 16:1-9; Luke 9:18-27; Luke 21:1-12; John 1:35-44; John 20:1-18; 2 Timothy 4:8; Hebrews 13:7; Revelation 1:1-3; Revelation 7:9-17
+GG2013,748,"Go with Us, Lord",Psalm 23:3; Psalm 73:24; Romans 12:1; 2 Corinthians 5:14-15
+GG2013,337,My country 'tis of thee,Psalm 33:12; Proverbs 14:34; Hebrews 11:13-16
+GG2013,290,O day of joy and wonder!,Acts 2:1-12; Acts 2:14-36; 1 Corinthians 12:4-11
+GG2013,351,All who love and serve your city,Psalm 90:12; Proverbs 21:13; Isaiah 1:21-26; Isaiah 54:11-14; Jeremiah 29:1-7; Ezekiel 48:35; Matthew 23:37; Luke 19:41; John 9:4; John 14:27; Ephesians 2:13-22; Hebrews 9:27-29; 2 Peter 3:9
+GG2013,823,Shall tribulation or distress,Matthew 5:1-12; Romans 8:31-39; Romans 12:9-21
+GG2013,741,Guide My Feet,1 Corinthians 9:24-27; 2 Timothy 2:5; Hebrews 12:1-3
+GG2013,457,How happy are the saints of God,Psalm 1
+GG2013,846,Fight the Good Fight,Psalm 25:15; Psalm 27:8; Psalm 55:22; Isaiah 40:21-31; Malachi 3:6; Mark 5:36; Romans 8:37; 1 Corinthians 9:24-26; 1 Corinthians 15:57-58; Ephesians 6:10-20; Philippians 1:27-30; Philippians 3:14; 1 Timothy 6:12; 2 Timothy 2:3-5; 2 Timothy 4:7; Hebrews 10:23; Hebrews 12:1-2; James 1:12; 1 Peter 5:7-9; Revelation 2:10
+GG2013,421,"Have Mercy, God, upon My Life (Psalm 51)",Psalm 51
+GG2013,530,"One Bread, One Body",1 Corinthians 3:9; 1 Corinthians 10:16-17; 1 Corinthians 12:1-31; Galatians 3:28
+GG2013,720,Jesus calls us; o'er the tumult,Matthew 4:18-20; Matthew 10:37-38; Matthew 16:24; Mark 1:16-18; Luke 5:32; Luke 9:57-62; John 10:3-5; John 10:27; John 12:26; John 21:15-17; Romans 12:1; 2 Timothy 1:9
+GG2013,223,When I survey the wondrous cross,Matthew 26:28; John 19:2; John 19:17-18; John 19:32-34; Romans 5:6-11; Romans 12:1; 1 Corinthians 1:17-18; 1 Corinthians 1:31; 1 Corinthians 2:2; Galatians 2:20; Galatians 6:14; Philippians 3:3-11; Hebrews 9:12-16; 1 Peter 2:24; 1 John 2:15-16
+GG2013,794,"O Savior, in this quiet place",Luke 18:9-14; 1 Timothy 2:1-2; James 5:13-16
+GG2013,706,Commit your way to God the Lord,Psalm 37
+GG2013,159,O sing a song of Bethlehem,Matthew 8:26; Matthew 14:25; Matthew 27:32-54; Mark 4:39; Mark 6:48; Mark 15:21-39; Luke 2:8-14; Luke 8:24; Luke 23:26-48; John 6:19; John 19:17-37; Acts 5:30; Acts 10:39-40; Acts 13:29-30
+GG2013,531,"Seed, Scattered and Sown",Matthew 3:12; Matthew 13:1-30; Mark 4:1-20; Luke 8:4-15; John 12:24; 1 Corinthians 10:16; 1 Corinthians 11:23-26
+GG2013,289,On Pentecost they gathered,Acts 2:1-11
+GG2013,673,"Jesus, light of joy, surround us",Genesis 1:14-18; Psalm 18:28; Psalm 27:1; John 1:4-8; John 8:12; John 12:35-36
+GG2013,192,"Lord, the Light of Your Love Is Shining (Shine, Jesus, Shine)",Isaiah 9:2; Isaiah 60:1-11; Matthew 17:1-8; Mark 9:2-8; Luke 9:28-36; John 1:3-5; John 8:12; John 9:5; John 12:46; Acts 2:3; 2 Corinthians 3:1-6; 1 Peter 2:9-10
+GG2013,167,Forty days and forty nights,Matthew 4:1-11; Luke 4:1-13; Hebrews 2:17-18; Hebrews 4:15-16
+GG2013,757,Today we all are called to be disciples,Genesis 1:1; Genesis 1:27-30; Genesis 2:15; Psalm 8:6-8; Proverbs 22:8; Isaiah 2:4; Isaiah 42:7; Amos 5:24; Micah 4:1-3; Matthew 25:34-40; Matthew 28:19-20; John 13:34-35; Colossians 3:17; James 3:17-18; 1 John 3:16-18
+GG2013,121,O little town of Bethlehem,Job 38:7; Isaiah 7:14; Isaiah 9:2; Micah 5:2; Matthew 1:23; Matthew 2:1-12; Luke 2:1-7; Luke 2:11; Luke 2:14; John 1:9; John 3:16
+GG2013,27,Sacred the body,Romans 12:1; 1 Corinthians 3:16; 1 Corinthians 6:19-20; Galatians 3:28
+GG2013,666,O Splendor of God's glory bright,Genesis 1:1-3; Malachi 4:2; John 1:1-9; John 8:12; 2 Corinthians 4:6; Hebrews 1:3
+GG2013,642,Christians everywhere shall sing now and always,Psalm 66; Psalm 113; Psalm 148
+GG2013,268,Crown him with many crowns,Psalm 22:16; Psalm 45:6; Psalm 46:9; Psalm 72:5-17; Isaiah 2:4; Isaiah 9:6-7; Isaiah 53:4-5; Micah 4:3; Matthew 25:31; John 20:20; Romans 8:34; Romans 14:9; 2 Corinthians 5:15; Hebrews 2:7-10; Hebrews 12:2; 1 John 2:25; Revelation 1:5-6; Revelation 5; Revelation 7:9-12; Revelation 19:1; Revelation 19:12
+GG2013,651,I Waited Patiently for God (Psalm 40),Psalm 40
+GG2013,781,"Hear my cry, O God, and save me!",Psalm 77
+GG2013,737,"Lord, Jesus, You Shall Be My Song (Jésus, je voudrais te chanter)",Acts 2:38-41; Romans 15:5-6; Galatians 6:2; Ephesians 4:3-6; Colossians 3:12-17; James 3:1-12
+GG2013,388,Come all you people (Uyai mose),Psalm 95:6
+GG2013,79,Light dawns on a weary world,Isaiah 35; Isaiah 55:12; Revelation 21:1-8
+GG2013,448,Peace of God be with you (As-salaamu lakum),John 14:27; John 17:9-10; Philippians 4:7
+GG2013,89,"For You, O Lord, My Soul in Stillness Waits (My Soul in Stillness Waits)",Psalm 25:5; Psalm 27:13-14; Psalm 39:8; Psalm 62:5-6; Psalm 95; Psalm 137; Isaiah 65:24; Matthew 7:7-8; 1 John 5:14
+GG2013,253,Alleluia! Christ Is Arisen (¡Aleluya! Cristo resucitó),Matthew 28:1-10; Mark 16:1-11; Mark 16:14; Luke 24:1-10; Luke 24:30-32; John 20:10-20; John 20:24-28
+GG2013,365,God reigns! Let earth rejoice!,Psalm 97
+GG2013,494,"Jesus, thou joy of loving hearts",Psalm 36:9; Psalm 100:5; Psalm 107:9; Isaiah 55:1-7; Isaiah 58:10; Jeremiah 29:13; Matthew 7:7-11; Mark 14:22-25; Luke 11:9-10; John 1:4-5; John 4:10-14; John 6:22-35; John 6:35-58; John 12:35-36; John 14:1; John 15:10-11; Acts 2:21; Acts 26:18; 1 Corinthians 1:9; 2 Corinthians 4:6; Ephesians 3:17; Philippians 4:19; Colossians 1:13; 1 Thessalonians 5:4-8; Hebrews 11:6; 1 Peter 1:8-9; 1 Peter 2:9; 2 Peter 1:3; Revelation 7:17
+GG2013,215,What Wondrous Love Is This,John 3:16; Ephesians 5:2
+GG2013,501,"Feed us, Lord",Matthew 26:27-29; Mark 14:22-23; Luke 22:19-23; John 6:35; 1 Corinthians 11:23-25
+GG2013,150,As with gladness men of old,Exodus 25:17; Exodus 25:22; 2 Chronicles 29:30; Matthew 2:1-12; Ephesians 1:3-4
+GG2013,186,"Come Now, You Blessed, Eat at My Table",Matthew 25:31-40
+GG2013,112,On Christmas night all Christians sing,Isaiah 9:2; Isaiah 52:7; Isaiah 53:5; Luke 2:1-20; John 1:5-14; John 8:32-36; Acts 13:38-39; Acts 26:18; Romans 5:20; Romans 8:2; Ephesians 5:19
+GG2013,431,"Forgive Us, Lord (Perdón, Señor)",Matthew 6:12-13; Romans 6:19-23
+GG2013,671,"O radiant Light, O Sun divine",Psalm 19:1-6; Psalm 42:8; Psalm 92:2; Psalm 136:7-9; John 1:4-5; John 6:40; 2 Corinthians 4:6; Philippians 2:9-11
+GG2013,221,"O sacred head, now wounded",Isaiah 53:3-5; Isaiah 63:9; Zechariah 12:10; Matthew 27:26-50; Mark 15:17-18; Luke 24:26; John 19:2-3; Romans 5:6-8; 2 Corinthians 5:14-15; Philippians 2:8; Hebrews 2:9; 1 Peter 2:24; 1 Peter 3:18; 1 John 4:19
+GG2013,760,"Bring many names, beautiful and good",Genesis 1:27; Genesis 32:22-31
+GG2013,117,While Shepherds Watched Their Flocks,Luke 2:8-14; Romans 1:3
+GG2013,362,"Rejoice! Rejoice, believers",Matthew 25:1-13; Revelation 20; Revelation 21
+GG2013,414,Be still and know that I am God,Psalm 46:10
+GG2013,90,"Wait for the Lord, whose day is near",Psalm 27
+GG2013,245,Christ the Lord Is Risen Today!,Matthew 28:1-10; 1 Corinthians 15:54-57
+GG2013,241,"Woman, weeping in the garden",Matthew 28:1-10; Mark 16:1-8; Luke 24:1-7; John 20:1-18
+GG2013,313,"Lord, make us more holy",Leviticus 19:1-2; Romans 12:9-12; Ephesians 4:1-3; Colossians 4:12-14; Hebrews 12:14; 1 Peter 1:13-23; 2 Peter 3:11-14; Revelation 2:10
+GG2013,424,Out of the Depths (Psalm 130),Psalm 130; Psalm 40:1-4; Psalm 40:11-12; Psalm 71:2; Psalm 120:1; Habakkuk 2:3-4; Galatians 2:16; Ephesians 2:8-9
+GG2013,732,"Rejoice in God's saints, today and all days!",Psalm 16:3; Psalm 30:4; Psalm 31:23; Psalm 34:9; Psalm 37:28; Psalm 52:9; Psalm 89:5; Psalm 145:10; Psalm 149; Isaiah 43:1-3; Mark 8:34; Mark 10:21; Mark 10:45; Luke 5:16; Luke 9:23; Luke 11:1; Romans 12:15; 2 Thessalonians 1:10; Hebrews 11; Hebrews 12:1-2
+GG2013,486,"Child of blessing, child of promise",1 Samuel 1:27-28; Proverbs 22:6; Mark 10:13-16; John 3:3-5; Ephesians 1:13
+GG2013,171,A Sower came from ancient hills,Matthew 13:3-8; Matthew 13:18-23; Matthew 27:31-35; Matthew 27:45-50; Matthew 27:57-61; Matthew 28:1-5; Mark 4:3-20; Mark 15:20-25; Mark 15:42-47; Mark 16:1-6; Luke 8:5-15; Luke 23:33; Luke 23:44-46; Luke 23:50-56; Luke 24:1-8; John 1:14; John 1:17; John 12:24; John 19:16-18; John 19:28-30; John 19:38-42; John 20:1-18
+GG2013,727,Will You Let Me Be Your Servant (The Servant Song),Matthew 25:34-46; Mark 9:35-37; Mark 10:43-45; John 13:1-18; Romans 12:3-21; Philippians 2:1-11; Colossians 1:24-29
+GG2013,408,"There’s a Sweet, Sweet Spirit",Psalm 133:1; Matthew 3:16; Mark 1:10; Luke 3:22; John 1:32-33; Ephesians 3:16-19
+GG2013,829,My faith looks up to thee,Psalm 73:24; Psalm 112:4; Psalm 118:8; Isaiah 25:8; Isaiah 35:10; Isaiah 42:16; Isaiah 51:11; Isaiah 58:10; John 1:29; Acts 26:18; Romans 1:17; Romans 5:1-2; 2 Corinthians 12:9; Ephesians 3:12; Hebrews 12:2; 1 Peter 2:9; Revelation 7:17; Revelation 21:4
+GG2013,12,"Immortal, invisible, God only wise",Exodus 33:20; Job 23:1-17; Job 37:21-24; Psalm 27:1; Psalm 36:6; Psalm 90:5-6; Psalm 104:1-5; Psalm 121:3-4; Psalm 147:8; Isaiah 6:2-3; Daniel 7:9; Luke 10:21-22; John 1:1-14; John 8:12; Acts 17:25; Romans 16:27; 1 Corinthians 8:6; 2 Corinthians 4:6; 1 Timothy 1:17; 1 Timothy 6:15-16; James 1:10-17; 1 John 1:5; Revelation 21:23
+GG2013,49,The God of Abraham praise,Genesis 31:49; Exodus 3:6; Exodus 13:14; Exodus 15:2; Deuteronomy 34:1-12; Psalm 16:11; Psalm 22:23; Psalm 106:48; Psalm 145:1-3; Isaiah 6:3; Jeremiah 23:36; Lamentations 5:19; Daniel 7:9; Malachi 3:6; John 8:58; John 17:24; Romans 4:20-21; Romans 9:1-5; 2 Corinthians 3:3; Galatians 3:7-9; Philippians 2:9-10; Hebrews 1:1; Hebrews 13:8; Revelation 1:4; Revelation 1:8; Revelation 4:8; Revelation 5:13; Revelation 11:17
+GG2013,625,O Lord My God (How Great Thou Art),Deuteronomy 3:24; Psalm 8:3; Psalm 19:1; Psalm 48:1; Psalm 145:3; John 14:3; Acts 4:24; Romans 1:20; Romans 5:6; Romans 8:32; 1 Thessalonians 4:16-17
+GG2013,37,Let all things now living,Genesis 1:2; Exodus 13:21; Numbers 9:16; Deuteronomy 1:33; 1 Chronicles 16:31-34; Nehemiah 9:19; Job 26; Job 38; Psalm 95:1-6; Psalm 100:3; Psalm 145; Song of Solomon 2:4; Ephesians 5:19-20; Colossians 3:16; Hebrews 1:3
+GG2013,513,This Is the Feast of Victory,1 Corinthians 15:54-56; Revelation 5:9-10; Revelation 5:12-14; Revelation 7:10; Revelation 7:12
+GG2013,219,They Crucified My Lord (He Never Said a Mumbalin’ Word),Isaiah 53:7; John 19:17-18; John 19:30; John 19:34; Acts 2:23
+GG2013,776,"O God, Be Gracious (Psalm 4)",Psalm 4
+GG2013,87,"""Comfort, comfort now my people",Psalm 42; Isaiah 40:1-8; Matthew 4:16; Mark 1:1-8
+GG2013,478,"Save Me, O God; I Sink in Floods (Psalm 69)",Psalm 69
+GG2013,222,Rejected and Despised,Isaiah 52:13-53:12; Matthew 18:21-35; Luke 23:34; Acts 8:26-39
+GG2013,174,Come and seek the ways of Wisdom,Psalm 85:10; Psalm 111:10; Proverbs 1:7; Proverbs 1:20-21; Proverbs 2:6-9; Proverbs 3:13; Proverbs 3:17-18; Proverbs 4:5; Proverbs 4:7; Proverbs 7:4; Proverbs 8:1-8; Proverbs 9:10; John 1:14; James 1:5
+GG2013,653,Give Thanks to  God Who Hears Our Cries (Psalm 107),Psalm 107
+GG2013,615,Praise to the Lord (하나님을 찬양하세),John 17:21; Ephesians 4:3; Philippians 2:10-11
+GG2013,495,"Thee we adore, O hidden Savior, thee",Matthew 26:26-30; Luke 22:17-20; John 6:53-58; Acts 20:28; 1 Corinthians 11:23-26; 2 Corinthians 3:12-18
+GG2013,109,Blest Be the God of Israel (Song of Zechariah),Luke 1:68-79
+GG2013,533,"In the singing, in the silence",Matthew 26:26-29; Mark 14:22-24; Luke 22:17-22; John 6:32; 1 Corinthians 11:23-26
+GG2013,754,Help us accept each other,Leviticus 19:18; Matthew 18:21; John 3:21; John 13:34-35; John 15:12; Romans 15:7; Ephesians 4:15; 1 John 3:23
+GG2013,110,Love Has Come,Matthew 1:18-2:12; Luke 2:1-20; Acts 4:20
+GG2013,203,"Jesu, Jesu, Fill Us with Your Love",Leviticus 19:18; Matthew 22:34-40; Mark 12:28-34; John 13:1-7; Romans 13:9
+GG2013,373,O Day of Peace,Isaiah 2:2-4; Isaiah 11:6-9; Isaiah 65:17-25; Micah 4:1-3
+GG2013,269,"Lead on, O King eternal!",Isaiah 48:17; John 18:36; 1 Corinthians 15:56-58; Galatians 6:14; Ephesians 6:10-20; Philippians 1:27-30; 1 Timothy 6:12; 2 Timothy 2:3-4; 2 Timothy 4:7-8
+GG2013,132,"Good Christian friends, rejoice",Luke 1:77-79; Luke 2:7; Luke 2:10-20; Ephesians 1:3-12; 1 Timothy 1:15
+GG2013,465,What a friend we have in Jesus,Psalm 6:9; Psalm 27:10; Psalm 55:22; Proverbs 18:24; Matthew 11:28; Mark 11:24; John 15:13-16; Romans 12:12; Ephesians 3:12; Philippians 4:6; 1 Thessalonians 5:17; Hebrews 4:15; James 5:13-20; 1 Peter 5:7; 1 John 5:14-15
+GG2013,497,Break now the bread of Christ's sacrifice,Psalm 119:105; Matthew 14:14-21; Matthew 26:26-28; Mark 6:34-44; Mark 14:22-24; Luke 9:11-17; Luke 22:19-20; John 6:5-14; John 6:25-59; 1 Corinthians 5:7-8; 1 Corinthians 11:23-26; Galatians 2:20
+GG2013,303,"God the Spirit, guide and guardian",Isaiah 61:1; Acts 20:28; 1 Corinthians 12:27-28; 2 Corinthians 1:21-22; Ephesians 4:11-13; Colossians 3:12-17; Hebrews 13:7; 1 Peter 5:1-3; 2 Peter 1:3-11
+GG2013,441,Hear the good news of salvation (Wotanin waste nahon po),Isaiah 53:5-12; Luke 13:1-9; 1 Corinthians 15:3; 1 Peter 2:24; 1 John 1:9
+GG2013,169,Dear Lord and Father of mankind,1 Kings 9:1-13; 1 Kings 19:11-12; Isaiah 26:3; Isaiah 30:15; Matthew 4:18-22; Mark 1:16-20; Mark 2:14; Mark 5:15; Luke 5:11; Luke 6:12; Ephesians 4:6; 2 Timothy 1:9; 1 Peter 2:9; 1 John 1:9
+GG2013,61,"Your Law, O Lord, Is Perfect (Psalm 19)",Psalm 19; Deuteronomy 5:33; Psalm 104:34; Psalm 119:1-8
+GG2013,214,"You Are My Refuge, Faithful God (Psalm 31)",Psalm 31; Luke 23:46
+GG2013,236,The Strife Is O’er,Psalm 45:3-4; Psalm 96:1-2; Psalm 145:13; Isaiah 25:7-9; Isaiah 53:5; Mark 10:34; Luke 24:6; Romans 6:9-10; 1 Corinthians 15:51-57; 1 Peter 2:24; Revelation 1:18; Revelation 19:1-2
+GG2013,677,"The Day Thou Gavest, Lord, Is Ended",Psalm 42:8; Psalm 92:2; Psalm 93:1-3; Psalm 113:1-6; Psalm 145:13; Isaiah 45:22-23; Lamentations 5:19; Matthew 16:18; Luke 1:33; Ephesians 3:10; Ephesians 3:20-21
+GG2013,101,No Wind at the Window,Luke 1:26-38
+GG2013,13,The Mighty God with Power Speaks (Psalm 50),Psalm 50
+GG2013,667,When morning gilds the skies,1 Chronicles 23:30; Psalm 5:3; Psalm 30:4-5; Psalm 57:8; Psalm 59:16-17; Psalm 112:4; Psalm 148; Matthew 28:9; Philippians 4:4-7; 1 Thessalonians 5:16-18; James 5:13-20; 2 Peter 1:19; 2 Peter 2:9; Revelation 5:12
+GG2013,208,O Blest Are They Who in Their Love (Psalm 41),Psalm 41
+GG2013,151,We three kings of Orient are,Psalm 72:10; Isaiah 9:7; Isaiah 60:3; Matthew 2:1-12; Mark 1:14-20; Luke 1:33
+GG2013,413,Come into God’s Presence,Psalm 100:2; Luke 2:14; Ephesians 5:19; Philippians 2:11; Colossians 3:16; Revelation 5:12
+GG2013,8,"Eternal Father, strong to save",Genesis 1:1-3; Job 38:8-11; Psalm 57:1; Psalm 89:8-9; Psalm 91:2; Psalm 95:5; Psalm 107:23-32; Matthew 8:23-27; Matthew 14:24-33; Mark 4:36-41; Mark 6:47-52; Luke 8:26-37; John 6:16-21; 2 Peter 2:9
+GG2013,771,What is the World Like,Matthew 6:10; Matthew 13:31-32; Matthew 25:1-13; Mark 4:31-32; Luke 10:30-37; Luke 15:11-32; 1 Corinthians 12:12-13
+GG2013,639,O Sing a New Song (Psalm 96),Psalm 96; 1 Chronicles 16:22-33
+GG2013,120,Where Shepherds Lately Knelt,Isaiah 9:6; Luke 2:8-14; Romans 1:3
+GG2013,481,I believe in God the Father,Matthew 28:19; Romans 6:17; Romans 10:8-9; 1 Timothy 6:12-13; 2 Timothy 2:8; 2 Timothy 4:1; 1 John 5:9-13
+GG2013,509,"All who hunger, gather gladly",Exodus 16; Psalm 34:8; John 6:48-51
+GG2013,772,Live into Hope,Isaiah 61:1-3; Luke 4:16-20
+GG2013,674,"I Call, O Lord, on You (Psalm 141)",Psalm 141
+GG2013,381,"Arise, O Lord Our God, Arise (Psalm 132)",Psalm 132
+GG2013,115,Away in a Manger,Matthew 2:9; Mark 10:13-16; Luke 2:7; Luke 2:12; Luke 2:16
+GG2013,759,"O God, We Bear the Imprint",Genesis 1:27; Colossians 3:10-11
+GG2013,322,We are one in Christ Jesus (Somos uno en Cristo),1 Corinthians 12:13; Galatians 3:27-29; Ephesians 4:4-6
+GG2013,832,There's no other place I can hide,Psalm 62:1-2; Psalm 62:5-8; Psalm 130:5; Isaiah 40:31; Matthew 26:64; Luke 21:25-28; Acts 2:17
+GG2013,392,"Jesus, we are here (Jesu, tawa pano)",Isaiah 6:8; Mark 14:31
+GG2013,521,In Remembrance of Me,Luke 22:19; 1 Corinthians 11:24-25
+GG2013,475,"Come, thou Fount of every blessing",1 Samuel 7:12; Psalm 36:9; Psalm 68:19; Psalm 119:10; Zechariah 13:1; Romans 5:2; Romans 7:15-25; Romans 8:12-14; 2 Corinthians 1:20; Ephesians 1:3; Ephesians 1:13-14; Ephesians 2:7-8
+GG2013,650,O beauty ever ancient,Psalm 29:2; Psalm 96:6; Philippians 4:8
+GG2013,649,"Amazing Grace, How Sweet the Sound",1 Chronicles 17:16-17; Ephesians 2:8-9
+GG2013,830,"Jesus, priceless treasure",Deuteronomy 33:27; Psalm 42:1-2; Psalm 46:2-3; Psalm 62:1-8; Psalm 84:2; Isaiah 35:10; Matthew 8:23-27; Matthew 13:44-46; Mark 4:35-41; Luke 8:22-25; John 10:28-29; Romans 8:31-39; Hebrews 9:14; 1 Peter 1:19; 1 John 1:3
+GG2013,71,Therefore you shall draw water with rejoicing,Psalm 9:9; Psalm 18:2; Psalm 27:1; Psalm 56:11; Psalm 68:5; Psalm 144:2; Proverbs 23:11; Isaiah 12:2-6; Isaiah 49:8-16; John 4:13; Psalm 56:4
+GG2013,162,"O carpenter, why leave the bench",Matthew 13:55; Mark 6:1-6; Luke 4:16-28
+GG2013,65,"Guide me, O thou great Jehovah",Exodus 13:21-22; Exodus 17:6; Exodus 40:38; Numbers 20:8-11; Deuteronomy 1:33; Exodus 14:26-31; Exodus 16:4-18; Joshua 6:20; Nehemiah 9:19-20; Psalm 18:2; Psalm 28:7; Psalm 34:1-4; Psalm 78:15-16; Psalm 78:52; Psalm 139:10; Zechariah 13:1; John 4:14; John 6:35-38; John 6:48-51; 1 Corinthians 10:1-4; Hebrews 11:13-14; 1 Peter 2:11; Revelation 7:9-17; Revelation 22:1-2
+GG2013,83,"Come, thou long-expected Jesus",Psalm 34:17-19; Isaiah 52:7; Isaiah 61:1-2; Daniel 7:13-14; Haggai 2:7; Malachi 3:1-4; Matthew 1:21-23; Matthew 2:2; Luke 1:32-35; Luke 2:1-7; Luke 2:32; Luke 4:18; Isaiah 9:6-7
+GG2013,505,"The Trumpets Sound, the Angels Sing (The Feast Is Ready)",John 2:1-11; John 6:35; 1 Corinthians 15:52; 1 Thessalonians 4:16; Revelation 7:15-17
+GG2013,423,"Create in Me a Clean Heart, O God (Psalm 51)",Psalm 51
+GG2013,23,"God, you spin the whirling planets",Genesis 1; Genesis 2; 2 Corinthians 5:17-20
+GG2013,3,Womb of life and source of being,Genesis 1:1-2; Psalm 23; Isaiah 49:8-16; John 1:14; John 14:26; John 20:19-23; Hebrews 5:1-10
+GG2013,129,"Lo, How a Rose E’er Blooming",Song of Solomon 2:1; Isaiah 11:1; Isaiah 11:10; Isaiah 35:1-2; Isaiah 53:2; Luke 2:7-20
+GG2013,17,"Sing praise to God, you heavens!",Psalm 148
+GG2013,393,O day of rest and gladness,Genesis 1:3; Genesis 2:2-3; Leviticus 23:3; Psalm 116:7; Psalm 118:24; Isaiah 6:3; Isaiah 66:23; Matthew 28:1; Mark 16:2; Luke 24:1; John 20:19-22; Acts 2:1-4; Acts 20:7; Romans 10:5-15; Hebrews 4:9-10
+GG2013,500,Be known to us in breaking bread,Luke 24:30-35; 1 Corinthians 11:23-26; Ephesians 3:17-19
+GG2013,44,Like a mother who has borne us,Hosea 11:1-9; Matthew 22:37-40; Matthew 25:31-46; Mark 12:29-31; 2 Timothy 1:8-10
+GG2013,691,"Lord, when I came into this life",Isaiah 49:1-3; Jeremiah 1:5; Luke 17:5-6; Romans 1:16-17; Galatians 1:15; 2 Thessalonians 1:11-12; 2 Peter 1:3-11
+GG2013,57,"Tremble, O tremble!",Psalm 99
+GG2013,42,"Your Faithfulness, O Lord, Is Sure (Psalm 145)",Psalm 145; Psalm 104:5-30; Lamentations 3:22-23
+GG2013,335,The Foolish in Their Hearts Deny (Psalm 14),Psalm 14; Psalm 53; Romans 3:23
+GG2013,277,"Hail Thee, Festival Day!",Psalm 150:6; Isaiah 11:2; John 1:3-5; John 3:16; John 14:27; Acts 2:1-4; 1 John 1:9
+GG2013,220,Go to dark Gethsemane,Matthew 10:38; Matthew 16:24; Matthew 26:36-45; Mark 8:34; Mark 14:32-42; Mark 15:1; Luke 9:23; Luke 14:27; Luke 22:44; Luke 23:33; Luke 24:1; John 18:1-40; John 19; John 20:1-18; 1 Corinthians 15:22; Philippians 2:7-11; Colossians 4:2; Hebrews 2:18; Hebrews 4:15; Hebrews 12:2; 1 Peter 2:21; 1 Peter 4:12-13
+GG2013,229,In the darkness of the morning,Matthew 28:1-10; Mark 16:1-8; Luke 24:1-10; John 20:1-18
+GG2013,31,Let us with a gladsome mind,Psalm 136; Genesis 1:3; Psalm 63:3; Psalm 100:5; Psalm 106:1; Psalm 107:9; Psalm 107:31; Psalm 118:1-2; Psalm 118:29; Psalm 145:9; Psalm 146:6-9; James 1:17
+GG2013,728,Somebody's Knocking at Your Door,Matthew 7:7-8; Luke 11:9-11; John 11:28; Revelation 3:20
+GG2013,127,"Hark! The Herald Angels Sing (Jesus, the Light of the World)",Psalm 67:4; Isaiah 7:14; Isaiah 9:6-7; Micah 5:2; Habakkuk 2:11; Malachi 4:2; Matthew 1:22-23; Luke 2:11; Luke 2:13-14; John 1:4-5; John 1:14; John 3:3-17; John 2:11; John 10:10; 2 Corinthians 5:19; Galatians 4:4-6; Philippians 2:8; Hebrews 1:6
+GG2013,237,Christ Jesus Lay in Death’s Strong Bands,Isaiah 25:8; Hosea 13:14; Matthew 28:6-9; John 6:55; 1 Corinthians 5:7-8; 1 Corinthians 15:26-28; 1 Corinthians 15:54-57
+GG2013,412,"God, reveal your presence",Exodus 15:11-13; Psalm 47:7; Psalm 95:6; Isaiah 6:2-3; Habakkuk 2:20; 2 Corinthians 9:8; Revelation 4:8-11; Revelation 7:9-12
+GG2013,668,Golden breaks the dawn,Psalm 5:3; Psalm 50:1-2; Psalm 59:16-17; Psalm 112:4-9; Lamentations 3:22-23; Matthew 6:11-12; Philippians 4:4-9; 1 Thessalonians 5:16-18
+GG2013,734,Hope of the World,Matthew 9:36; Matthew 12:21; John 6:35-51; Romans 8:24; Romans 15:13; 1 Corinthians 15:57; Galatians 4:6; Colossians 1:27; 1 Timothy 1:1; 1 Peter 1:3
+GG2013,406,We Are Standing on Holy Ground (Holy Ground),Genesis 28:12-17; Exodus 3:5; Mark 9:2-9; Acts 7:33; Hebrews 12:22
+GG2013,348,"Lo, he comes with clouds descending",Daniel 7:13-14; Zechariah 12:10; Zechariah 14:9; Matthew 16:27-28; Matthew 24:30; Matthew 25:31-46; Mark 13:26-27; Mark 14:62; Luke 21:27-28; Luke 21:31; Acts 1:9-11; 1 Thessalonians 4:16-17; 2 Thessalonians 1:7-10; Titus 2:13; Hebrews 9:28; Revelation 1:7-8
+GG2013,157,I Danced in the Morning,Matthew 11:17; Mark 1:14-20; Mark 2:1-12; Mark 3:1-6; John 15:4
+GG2013,707,"Take Thou Our Minds, Dear Lord",Deuteronomy 6:5; Matthew 22:37; Luke 10:27; John 8:32; Romans 5:5; 2 Corinthians 10:5; Philippians 2:15
+GG2013,366,"Love divine, all loves excelling",Psalm 34:1; Psalm 51:12; Psalm 106:4; Isaiah 57:15; Micah 7:18; Malachi 3:1; Matthew 11:28-29; Matthew 14:14; Luke 24:51-53; John 14:16-17; John 14:21; John 20:22; Romans 7:24-25; Romans 8:1-5; 2 Corinthians 3:18; 2 Corinthians 5:17; Galatians 5:1; Ephesians 5:27; Philippians 1:6; Hebrews 4:3-11; 2 Peter 3:13-14; 1 John 4:7-21; Jude 1:24-25; Revelation 1:8; Revelation 4:10; Revelation 7:15; Revelation 21:3-6; Revelation 22:13
+GG2013,447,We Are Forgiven,Matthew 6:12-15; Luke 11:4; Acts 10:43; Colossians 2:13-15; 1 John 1:9
+GG2013,631,In the Presence of Your People (Psalm 22),Psalm 22
+GG2013,228,Were You There,Isaiah 53:3; Matthew 27:35-60; Mark 15:24-25; Mark 15:46; Luke 23:33; Luke 23:50-53; John 19:16-18; John 19:34; John 19:41-42; Philippians 2:8
+GG2013,328,"Praise God, All You Nations (Da n’ase) (Psalm 117)",Psalm 117; Deuteronomy 4:7; Psalm 48:8; Psalm 93:3-4
+GG2013,143,"Angels, from the realms of glory",Job 38:7; Haggai 2:7; Malachi 3:1; Matthew 2:1-12; Luke 2:6-20; John 1:9; Hebrews 1:6
+GG2013,450,"Be thou my vision, O Lord of my heart",Psalm 17:15; Psalm 73:25; Psalm 139:17-18; Matthew 13:44; Matthew 19:21; John 14:20; John 15:4-5; John 17:21; 1 Corinthians 8:6; 2 Corinthians 3:1-6; Philippians 3:7; 1 John 4:13
+GG2013,266,Joy to the World,Genesis 3:17-18; Psalm 96; Psalm 98:4-9; Isaiah 52:7-10; Isaiah 55:12-13; Malachi 3:1-4; Matthew 24:14; Luke 2:10-11; Romans 5:20; Galatians 3:13; Revelation 11:15; Revelation 22:3
+GG2013,311,"Here, O Lord, your servants gather",John 10:9; John 14:6; Romans 10:12-13; Ephesians 2:13-19
+GG2013,451,"Open my eyes, that I may see",Exodus 4:12; Psalm 40:6; Psalm 40:8; Psalm 51:15; Psalm 119:18; Proverbs 15:31; Matthew 11:15; Matthew 13:16; Mark 8:18; Luke 10:23-24; John 8:32; Romans 5:5; Ephesians 1:18-19; Ephesians 4:15; Colossians 1:9; 1 John 5:9-13
+GG2013,181,"Silence! Frenzied, Unclean Spirit",Mark 1:21-28; Luke 4:31-37
+GG2013,510,"We Gather Here in Jesus' Name (Come, Share the Lord)",Matthew 6:12; Matthew 18:20; Matthew 26:26-29; Mark 14:22-25; Luke 11:4; Luke 22:17-20; Luke 24:13-35; 1 Corinthians 11:23-26; 1 Corinthians 12:12-13; 1 Thessalonians 4:16-18
+GG2013,695,"Change my heart, O God (Cámbiame, Señor) (항 상 진 실 케)",Psalm 51:10; Isaiah 64:8; Jeremiah 18:1-6; Ezekiel 36:26
+GG2013,114,Away in a Manger,Matthew 2:9; Mark 10:13-16; Luke 2:7; Luke 2:12; Luke 2:16
+GG2013,34,"Bless the Lord, My Soul and Being! (Psalm 104)",Psalm 104; Genesis 1
+GG2013,488,I Was There to Hear Your Borning Cry,Isaiah 46:3-4; Psalm 139:13-16
+GG2013,204,Stay with Me,Matthew 26:36-38; Mark 14:32-34
+GG2013,355,"O Hear Our Cry, O Lord (Psalm 80)",Psalm 80; Numbers 6:25; 2 Kings 17:1-6
+GG2013,350,Keep your lamps trimmed and burning,Matthew 25:1-13; Galatians 6:9; 1 Thessalonians 5:2
+GG2013,170,You walk along our shoreline,Matthew 4:18-22; Mark 1:16-20; Luke 5:4-11; Romans 15:5; Ephesians 4:1-13
+GG2013,721,"Lord, you have come to the lakeshore (Tú has venido a la orilla)",Psalm 139:23-24; Matthew 4:18-22; Mark 1:16-20; Luke 5:1-11; John 1:35-42; Galatians 6:7-10
+GG2013,655,What Shall I Render to the Lord (Psalm 116),Psalm 116; Psalm 8:4
+GG2013,285,Like the Murmur of the Dove’s Song,Ezekiel 37:5-6; John 15:1-17; John 16:7-15; Acts 2:1-11; Romans 12:3-8; Romans 15:1-7; 1 Corinthians 1:10-17; 1 Corinthians 2:4-16; 1 Corinthians 3:1-10; Ephesians 3:16; Philippians 1:27-30; John 3:8
+GG2013,108,Of the Father’s Love Begotten,Psalm 113:2; Psalm 145:1; Psalm 150:6; Matthew 1:20; John 1:1; John 1:14; Philippians 2:7-11; Colossians 1:15-20; Hebrews 13:8; Revelation 1:8; Revelation 4:8; Revelation 21:6; Revelation 22:13
