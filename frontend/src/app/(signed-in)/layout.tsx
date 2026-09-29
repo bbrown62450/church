@@ -30,6 +30,9 @@
  *   `ChurchProvider`, so nothing refetches the cleared cache or stores a church
  *   again before `router.replace("/login")`.
  * - Pages below it read `/me` with `useMeContext()`.
+ * - On `/me`'s first load and whenever its data changes, it prunes this
+ *   user's unsaved drafts: older than 30 days, or for churches they no longer
+ *   belong to (F §4.6 items 3 and 4; slice 2b).
  *
  * A `"use client"` layout cannot export `metadata`; the root layout's title applies.
  */
@@ -40,6 +43,7 @@ import { ErrorState } from "@/components/app/error-state";
 import { ShellSkeleton } from "@/components/app/shell-skeleton";
 import { ApiError } from "@/lib/api/client";
 import { isSigningOut, useSignOut, useSigningOut } from "@/lib/auth";
+import { pruneDrafts } from "@/lib/draft/prune";
 import { MeProvider } from "@/lib/me-context";
 import { clearPostLoginPath, peekPostLoginPath } from "@/lib/post-login";
 import { authEvents } from "@/lib/queries/auth-events";
@@ -69,6 +73,13 @@ export default function SignedInLayout({ children }: { children: ReactNode }) {
       }),
     [signOut, pathname],
   );
+
+  const loaded = me.data;
+  // On first load and whenever /me's data changes (TanStack Query keeps the
+  // same object when a refetch returns equal data, so this does not rerun then).
+  useEffect(() => {
+    if (loaded) pruneDrafts(loaded.user.id, loaded.churches.map((church) => church.id));
+  }, [loaded]);
 
   useEffect(() => {
     const target = peekPostLoginPath();

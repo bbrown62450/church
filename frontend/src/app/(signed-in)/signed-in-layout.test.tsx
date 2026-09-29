@@ -2,12 +2,13 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
+import { draftKey } from "@/lib/draft/schema";
 import { useMeContext } from "@/lib/me-context";
 import { storePostLoginPath } from "@/lib/post-login";
 import { makeQueryClient } from "@/lib/queries/client";
 import { keys } from "@/lib/queries/keys";
 import { fakeError, installFakeApi } from "@/test/fake-api";
-import { me } from "@/test/fixtures";
+import { CHURCH_IDS, me, USER_ID } from "@/test/fixtures";
 import { setTestPath, supabaseAuth, TEST_ACCESS_TOKEN, testRouter } from "@/test/mocks";
 import { renderWithProviders } from "@/test/render";
 
@@ -177,5 +178,19 @@ describe("(signed-in) layout", () => {
     expect(screen.getByText("pat@example.com")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
     expect(screen.queryByRole("status", { name: "Loading" })).not.toBeInTheDocument();
+  });
+
+  it("prunes the user's drafts for churches they left once /me loads (F §4.6 item 4)", async () => {
+    const left = draftKey(USER_ID, CHURCH_IDS.hope); // Pat is a member of Grace only
+    const kept = draftKey(USER_ID, CHURCH_IDS.grace);
+    const draft = JSON.stringify({ version: 1, updated_at: new Date().toISOString() });
+    window.localStorage.setItem(left, draft);
+    window.localStorage.setItem(kept, draft);
+    installFakeApi({ "GET /me": me() });
+    renderLayout();
+
+    expect(await screen.findByText("pat@example.com")).toBeInTheDocument();
+    await waitFor(() => expect(window.localStorage.getItem(left)).toBeNull());
+    expect(window.localStorage.getItem(kept)).toBe(draft);
   });
 });
