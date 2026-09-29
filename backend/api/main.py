@@ -14,6 +14,7 @@ from api.settings import get_settings
 from api.startup import check_app_env, describe_database, enforce_production_guards
 from db import get_engine
 from db.schema_check import run_startup_checks
+from integrations import openai_client
 
 load_dotenv()
 configure_logging(get_settings().log_level)
@@ -33,6 +34,7 @@ async def lifespan(app: FastAPI):
     app.state.schema_state = run_startup_checks(engine, is_production=settings.is_production)
     if not settings.supabase_url:
         logger.warning("SUPABASE_URL is not set; every authenticated request will return 503.")
+    openai_client.log_startup_state()                       # one "AI: ..." line, never the key
     yield
 
 

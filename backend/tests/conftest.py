@@ -291,6 +291,25 @@ def _fresh_passage_cache():
     yield
 
 
+# --- slice 3a: the OpenAI client (F §2.8; S Backend 3.7) ---
+
+@pytest.fixture(autouse=True)
+def _fresh_ai():
+    """integrations.openai_client keeps its settings, SDK client, slots and any
+    FakeAI installed by set_ai_for_tests for the whole process (slice 3a). Each
+    test starts with no fake and the settings read again from the environment,
+    so a fake or a configured key never leaks from an earlier test.
+
+    Resets only when the module is already imported (the deferred-import rule
+    at the top of this file)."""
+    import sys
+
+    module = sys.modules.get("integrations.openai_client")
+    if module is not None:
+        module.reset_for_tests()
+    yield
+
+
 # --- slice 1: network-free tests and the Postgres test database (F §5.1, §5.3) ---
 
 _LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1")
