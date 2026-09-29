@@ -2,7 +2,7 @@
  * Builders for API payloads in tests. Each call returns a fresh object;
  * `overrides` replace top-level fields (pass a whole `user` to change it).
  */
-import type { ChurchProfile, InviteAccepted, InvitePreview, Lectionary } from "@/lib/api/types";
+import type { ChurchProfile, InviteAccepted, InvitePreview, Lectionary, Translations } from "@/lib/api/types";
 import type { Church, Me } from "@/lib/church";
 import { freshDraft, type DraftV1 } from "@/lib/draft/schema";
 
@@ -97,6 +97,22 @@ export function lectionary(date: string, overrides: Partial<Lectionary> = {}): L
       },
     ],
     default_index: 0,
+    ...overrides,
+  };
+}
+
+// --- slice 2c: reference data and lookups for the Date & readings step ---------
+
+/** `GET /translations` with ESV configured (production has the key): WEB, KJV and ESV. */
+export function translations(overrides: Partial<Translations> = {}): Translations {
+  return {
+    default: "web",
+    esv_available: true,
+    items: [
+      { id: "web", label: "World English Bible (WEB)" },
+      { id: "kjv", label: "King James Version (KJV)" },
+      { id: "esv", label: "English Standard Version (ESV)" },
+    ],
     ...overrides,
   };
 }
