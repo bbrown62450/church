@@ -10,7 +10,9 @@ authoritative: change it first, then both ports.
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Literal, Optional
 
 Testament = Literal["ot", "psalm", "nt"]
@@ -337,3 +339,194 @@ def scripture_key(ref: str) -> str:
     """A comparison key: normalize_for_fetch, lower-case, then remove
     whitespace, commas, periods and parentheses."""
     return re.sub(r"[\s,.()]", "", normalize_for_fetch(ref).lower())
+
+
+# ---- Parsing for hymn matching (slice 3; Python only) ------------------------
+#
+# parse_refs reads a query reference or a hymn's scripture_refs field into
+# book/chapter/verse spans (S Backend 2, owner decision 9). It reads the same
+# BOOKS as classify, plus PARSE_ALIASES: the old matcher's abbreviations
+# (worship_service._BOOK_ABBREVS) that BOOKS lacks. They live here, not in
+# BOOKS, so the shared fixture and the TypeScript port stay unchanged (slice 3a
+# plan, clarification 3); "is" (Isaiah) is one, which split_book and classify
+# still do not accept.
+
+PARSE_ALIASES: dict[str, str] = {
+    "ge": "Genesis", "gn": "Genesis", "nm": "Numbers", "dt": "Deuteronomy",
+    "jos": "Joshua", "est": "Esther", "prv": "Proverbs", "ecc": "Ecclesiastes",
+    "sos": "Song of Songs", "is": "Isaiah", "jr": "Jeremiah", "ezk": "Ezekiel",
+    "dnl": "Daniel", "ob": "Obadiah", "jon": "Jonah", "zep": "Zephaniah",
+    "zec": "Zechariah", "mrk": "Mark", "luk": "Luke", "jhn": "John", "joh": "John",
+    "1 thes": "1 Thessalonians", "2 thes": "2 Thessalonians", "phm": "Philemon",
+    "jm": "James", "1 jhn": "1 John", "2 jhn": "2 John", "3 jhn": "3 John",
+    "jud": "Jude", "rv": "Revelation",
+}
+
+# N and N-M are verses of chapter 1 in these books.
+SINGLE_CHAPTER_BOOKS = frozenset({
+    "Obadiah", "Philemon", "2 John", "3 John", "Jude", "Song of the Three",
+    "Letter of Jeremiah", "Susanna", "Bel and the Dragon", "Prayer of Manasseh",
+})
+
+WHOLE_CHAPTER_START = 0     # verse 0: from the start of the chapter
+WHOLE_CHAPTER_END = 999     # verse 999: to the end of the chapter
+WHOLE_BOOK_END = 999        # chapter 999: to the end of the book
+MAX_CHAPTER = 150           # no book has more chapters (Psalms); a larger one is unparsed
+
+# A period between digits ("John 3.16"): normalize_book_text drops periods, so
+# the segment would read as chapter 316 (or "Ps 1.1" as Psalm 11). Unparsed.
+_DOTTED_VERSE = re.compile(r"\d\s*\.\s*\d")
+
+
+def _parse_index() -> tuple[tuple[str, Book], ...]:
+    by_name = {book.name: book for book in BOOKS}
+    index = dict(_ALIASES)
+    for alias, name in PARSE_ALIASES.items():
+        if alias in index:
+            raise ValueError(f"parse alias {alias!r} is already a BOOKS key")
+        index[alias] = by_name[name]                 # KeyError: not a BOOKS name
+    for name in SINGLE_CHAPTER_BOOKS:
+        by_name[name]                                # KeyError: not a BOOKS name
+    return tuple(sorted(index.items(), key=lambda kv: (-len(kv[0]), kv[0])))
+
+
+_PARSE_INDEX = _parse_index()
+
+
+def book_keys(book_name: str) -> tuple[str, ...]:
+    """Every normalized key that names the book (BOOKS and PARSE_ALIASES), longest first."""
+    return tuple(key for key, book in _PARSE_INDEX if book.name == book_name)
+
+
+@dataclass(frozen=True)
+class RefSpan:
+    """One passage: canonical book, (chapter, verse) start and end, inclusive.
+    A whole chapter runs from verse 0 to verse 999; a whole book from 1:0 to 999:999."""
+
+    book: str
+    start: tuple[int, int]
+    end: tuple[int, int]
+
+
+@dataclass(frozen=True)
+class ParsedRefs:
+    spans: tuple[RefSpan, ...]
+    unparsed: tuple[str, ...]        # normalized text of segments that could not be read
+
+
+def _match_book(segment: str) -> Optional[tuple[Book, str]]:
+    """The longest book key at the start of the normalized segment, followed by
+    the end, a space or a digit, and the rest (normalized, trimmed)."""
+    text = normalize_book_text(segment)
+    for key, book in _PARSE_INDEX:
+        if text.startswith(key):
+            after = text[len(key):]
+            if after == "" or after[0] == " " or after[0] in "0123456789":
+                return book, after.strip()
+    return None
+
+
+_ITEM = re.compile(
+    r"(?P<a>\d+)[a-d]?"
+    r"(?::(?P<b>\d+)[a-d]?)?"
+    r"(?:(?P<ff>ff?)|-(?P<c>\d+)[a-d]?(?::(?P<d>\d+)[a-d]?)?)?"
+)
+
+
+def _item_span(book: Book, item: str, context: Optional[int]) -> Optional[tuple[RefSpan, Optional[int]]]:
+    """One location item and the chapter a following bare number belongs to (or None)."""
+    m = _ITEM.fullmatch(item.replace(" ", ""))
+    if not m:
+        return None
+    a, b, c, d = (int(g) if g else None for g in m.group("a", "b", "c", "d"))
+    ff = bool(m.group("ff"))
+    if b is not None:                                       # C:V, C:V-V, C:V-C:V, C:Vff
+        start = (a, b)
+        if ff:
+            end = (a, WHOLE_CHAPTER_END)
+        elif c is None:
+            end = (a, b)
+        elif d is None:
+            end = (a, c)
+        else:
+            end = (c, d)
+    elif d is not None:                                     # C-C:V
+        start, end = (a, WHOLE_CHAPTER_START), (c, d)
+    elif book.name in SINGLE_CHAPTER_BOOKS or context is not None:   # verses
+        chapter = 1 if book.name in SINGLE_CHAPTER_BOOKS else context
+        start = (chapter, a)
+        end = (chapter, WHOLE_CHAPTER_END if ff else (c if c is not None else a))
+    else:                                                   # C, C-C, Cff
+        start = (a, WHOLE_CHAPTER_START)
+        end = (WHOLE_BOOK_END if ff else (c if c is not None else a), WHOLE_CHAPTER_END)
+    last_chapter = start[0] if (ff and end[0] == WHOLE_BOOK_END) else end[0]
+    if start[0] < 1 or start > end or max(start[0], last_chapter) > MAX_CHAPTER:
+        return None
+    has_verses = b is not None or d is not None or context is not None
+    return RefSpan(book.name, start, end), (end[0] if has_verses else None)
+
+
+def _segment_spans(book: Book, location: str) -> Optional[list[RefSpan]]:
+    if not location:
+        return [RefSpan(book.name, (1, WHOLE_CHAPTER_START), (WHOLE_BOOK_END, WHOLE_CHAPTER_END))]
+    spans: list[RefSpan] = []
+    context: Optional[int] = None
+    for item in location.split(","):
+        found = _item_span(book, item.strip(), context)
+        if found is None:
+            return None
+        span, context = found
+        spans.append(span)
+    return spans
+
+
+def split_segments(alternative: str) -> list[str]:
+    """Split on ";" and newlines, and on "," when the text after it starts with a book."""
+    out: list[str] = []
+    for piece in re.split(r"[;\n]", alternative):
+        piece = re.sub(r"\s+", " ", piece).strip()
+        start = 0
+        for m in re.finditer(",", piece):
+            if _match_book(piece[m.end():]) is not None:
+                out.append(piece[start:m.start()].strip())
+                start = m.end()
+        out.append(piece[start:].strip())
+    return [s for s in out if s]
+
+
+@lru_cache(maxsize=4096)
+def parse_refs(text: str) -> ParsedRefs:
+    """Every passage in `text` (S Backend 2 steps 1-7). Pure and cached on the raw string."""
+    text = unicodedata.normalize("NFKC", text or "").replace("–", "-").replace("—", "-")
+    spans: list[RefSpan] = []
+    unparsed: list[str] = []
+    for alternative in split_alternatives(text):
+        book: Optional[Book] = None
+        for segment in split_segments(alternative):
+            if _DOTTED_VERSE.search(segment):
+                unparsed.append(segment)
+                continue
+            hit = _match_book(segment)
+            if hit is not None:
+                book, location = hit
+            elif book is not None:
+                location = normalize_book_text(segment)
+            else:
+                unparsed.append(segment)
+                continue
+            found = _segment_spans(book, location)
+            if found is None:
+                unparsed.append(segment)
+            else:
+                spans.extend(found)
+    return ParsedRefs(tuple(spans), tuple(unparsed))
+
+
+def spans_overlap(a: RefSpan, b: RefSpan) -> bool:
+    """Same book and the passages share at least one verse."""
+    return a.book == b.book and a.start <= b.end and b.start <= a.end
+
+
+def same_chapter(a: RefSpan, b: RefSpan) -> bool:
+    """Same book and the chapter ranges intersect."""
+    return a.book == b.book and a.start[0] <= b.end[0] and b.start[0] <= a.end[0]
