@@ -196,3 +196,43 @@ class PassagesOut(BaseModel):
     translation: str
     translation_label: str
     passages: list[PassageOut]          # same order as the request's refs
+
+
+# --- slice 3a: shared hymn and liturgy models (F §1.3, frozen; S "API Models") ---
+# Created here because slice 3 lands first. No slice-3 route uses them, so they
+# stay out of the OpenAPI snapshot until slice 4 adds a route that does. Slices
+# 4 and 5a import them unchanged and never redefine, tighten or loosen them.
+
+SectionKey = Literal["call_to_worship", "opening_prayer", "prayer_of_confession", "assurance",
+                     "prayer_for_illumination", "prayers_of_the_people", "offertory_prayer",
+                     "benediction"]
+
+
+class HymnRef(BaseModel):
+    """One slot's hymn (F §1.3). hymn_id null = an archived snapshot, used as
+    sent; for a non-null id the server reads title, number and hymnal from
+    the database and ignores the client's copy."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    hymn_id: Optional[uuid.UUID] = None
+    title: str = Field(default="", max_length=300)
+    number: Optional[int] = Field(default=None, ge=0, le=100_000)
+    # No pattern: a pick echoes hymns.hymnal from the database, and codes written
+    # by CLI imports were never pattern-checked (F §1.3).
+    hymnal: Optional[str] = Field(default=None, max_length=20)
+
+
+class SlotHymns(BaseModel):
+    """The three hymn slots (F §1.3): slice 4's GenerateLiturgyIn.hymns, 5a's ServiceDraft.hymns."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    opening: Optional[HymnRef] = None
+    response: Optional[HymnRef] = None
+    closing: Optional[HymnRef] = None
+
+
+# Only for parameters that name a NEW or admin-managed hymnal code (6a). Never
+# on HymnRef and never on slice 3's read filters, which accept any stored code.
+HymnalCode = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_-]{2,20}$")]
