@@ -6127,7 +6127,23 @@ Expected counts after this task: frontend `299 passed` in 49 files on `main`; ba
 
 ## Build notes (2b build)
 
-Left for the controller: what changed while Tasks 1 to 11 were built (as P2a did), with each change's reason and whether the owner saw it. T11 writes any that alter S or F.
+What changed while Tasks 1 to 11 were built (2026-09-29), with each change's reason and whether the owner saw it. T11 wrote those that alter S or F as "(2b build)" notes.
+
+**Review fixes under owner decision 1 (no owner-visible change unless marked):**
+- `created_at` and `updated_at` must parse as ISO datetimes with an offset, and an error thrown inside a migration step is wrapped in `DraftRestoreError`, so both become a restore failure (backup, fresh draft, toast) instead of a crash (`e69388e`, T3 review).
+- `setDate` stores an impossible date such as `2026-02-30` as `""`, so the saved draft always loads again; `applyReadingSet` and `clearReadings` return the same draft when nothing would change, so they are no-ops for `update` (`2d1ae11`, T4 review).
+- `fingerprint` is the standard 32-bit FNV-1a over the stable JSON's UTF-8 bytes (`TextEncoder`), not its UTF-16 code units, so a future Python side can match it (`96c27bb`, T5 review).
+- The store keeps an unbackupable draft: when the corrupt-draft backup cannot be written, the stored value stays in the main key until the user edits. A failed write stays pending and is retried on the next flush. The mount-time roll-forward is stamped 1 ms after the stored `updated_at`, so it never outranks a newer edit from another tab. `handleStorageEvent` is a bound arrow function, so it can be passed as a listener (`fda325f`, T6 review).
+- Builder review fixes (`705127e`, T9 review): the Back button's border now matches the design (**owner-visible**, a bug fix toward the agreed look); an open Summary sheet closes when the window widens to `lg`; `AppHeader` publishes its measured height as `--app-header-h`, which the sticky desktop summary uses as its `top` (clarification 34 still holds for the page height); one `<main>` landmark wraps the step header, progress and content; the summary has a screen-reader-only "Summary" `h2`; the summary's block title links are 44 px tap targets below `lg`.
+
+**Process notes:**
+- T10 Step 6's "coming soon" grep gate gave a false positive: its only hit was a test asserting the text is absent. T12 should exclude test files from that gate.
+- T1 minors left as they are: the `new Date(...)` guard misses template literals and `Date.parse`; `addDays` accepts a non-integer `n`; `toIso` is unchecked past year 9999; `formatServiceDate` builds its `Intl` formatter per call. T7 minor: `prune` can remove an open builder's stale (over 30 days) stored draft when `/me` changes; the next edit writes it back.
+
+**Carried to later slices:**
+- (2c) `isPristine` ignores a user-picked date: it should also require `date_origin !== "user"`, or "New service" resets without asking after the user has chosen a date. Ask the owner whether card on/off toggles, translation and hymnal overrides, and hymn alternatives count as unsaved work.
+- (2c) Auto-apply the lectionary only in the visible tab: adopting a newer tab's draft drops up to 400 ms of this tab's unwritten typing (the spec's "strictly newer `updated_at`" rule), so an auto-apply in a hidden tab must not start that adoption while the user types in the visible one.
+- (5a) Editing an archived service on its own date raises the "Readings available" banner. A spec question for the owner.
 
 ## Spec coverage
 

@@ -4,10 +4,11 @@
 - **2a** backend: outbound HTTP client, TTL cache, rate limiter, `scripture_refs.py`, lectionary and passage refactors, the four API changes.
 - **2b** frontend foundation: `lib/dates.ts`, `lib/scripture-refs.ts`, the draft store, the builder shell with all four step routes, `/` → `/builder`.
 - **2c** the Date & readings step UI.
+- (2b plan) The split in detail: 2b also ships every pure draft module (`readings.ts`, `date-effects.ts`, `status.ts`, `mapping.ts`, `fingerprint.ts`, `prune.ts`), `useKeyboardOpen`, `AppNav` and the `sheet` and `badge` components; 2c ships the three query modules (`lectionary.ts`, `reference.ts`, `passages.ts`), `use-debounced-value.ts`, `useLectionarySync()`, the step's components, `radio-group`, `collapsible` and `tooltip`, and adds `"readings"` to `SHIPPED_STEPS`.
 
 2a deploys first; every change is additive (foundations §1.11).
 
-Corrections made while planning 2a (`docs/superpowers/plans/2026-09-28-slice-2a-backend.md`, 2026-09-28) are marked "(2a plan)" where they are made. Corrections made during the 2a build (2026-09-28), where the code or an owner decision changed what is written here, are marked "(2a build)".
+Corrections made while planning 2a (`docs/superpowers/plans/2026-09-28-slice-2a-backend.md`, 2026-09-28) are marked "(2a plan)" where they are made. Corrections made during the 2a build (2026-09-28), where the code or an owner decision changed what is written here, are marked "(2a build)". Corrections made while planning 2b (`docs/superpowers/plans/2026-09-28-slice-2b-frontend.md`, 2026-09-28) are marked "(2b plan)". Corrections made during the 2b build (2026-09-29) are marked "(2b build)".
 
 **Inputs**
 - Inventory (cited as "inv."): §1 C1–C10; A7 (the readings and translation part); the §2.2 rows for `/lectionary/readings`, `/translations`, `/scripture/passages` and `/church`; §3 rows app.py:69-102, 371-377, 428-464, 481-489, 556-597 and vanderbilt_lectionary.py:22; §4 "Time and date" and "External APIs"; §5 row 2; §7 questions 1, 6 and 14.
@@ -90,14 +91,14 @@ The draft survives a refresh and is kept separately for each church. The four-st
   - `StepProgress`: the line "Step 1 of 4 · Date & readings" above four segments;
   - the step content;
   - `StepFooter`, sticky at the bottom with `pb-[env(safe-area-inset-bottom)]`: "Back" on the left and "Next: Hymns" on the right. Below `md`, while a text input or textarea has focus, the footer hides, so the iOS keyboard doesn't stack on it (`useKeyboardOpen()`, focus-based; slice 4 reuses it).
-- **Desktop (≥ 1024 px):** `grid-cols-[minmax(0,1fr)_20rem] gap-6 max-w-6xl`. `SummaryPanel` is sticky in the right column and the "Summary" button is hidden. `StepProgress` shows four labelled steps: "1 Date & readings · 2 Hymns · 3 Liturgy · 4 Review & send".
+- **Desktop (≥ 1024 px):** `grid-cols-[minmax(0,1fr)_20rem] gap-6 max-w-6xl`. `SummaryPanel` is sticky in the right column and the "Summary" button is hidden. (2b build: it sticks below the header at `top: var(--app-header-h)`, which `AppHeader` publishes from its measured height; an open Summary sheet closes when the window widens to 1024 px; one `<main>` wraps the step header, progress and content, and the summary has a screen-reader "Summary" heading.) `StepProgress` shows four labelled steps: "1 Date & readings · 2 Hymns · 3 Liturgy · 4 Review & send".
 - **Step status** comes from `lib/draft/status.ts` (F §4.7):
   - Readings: `complete` (✓), or `incomplete` with "n of 3", counting a valid date, a non-empty occasion and at least one scripture.
   - Hymns and Liturgy: the muted label "Soon" until their slice adds them to `SHIPPED_STEPS` (slice 3 adds `"hymns"`, slice 4 adds `"liturgy"`; see Hand-offs).
   - Review: "Not in archive" until 5a adds `"review"` and shows "Saved" or "Unsaved changes".
   - Every step is tappable (F D9).
 - **Footer labels:** readings → "Next: Hymns"; hymns → "Back" / "Next: Liturgy"; liturgy → "Back" / "Next: Review"; review → "Back" only.
-- **Steps 2–4 (placeholders):** an `EmptyState` card with the title **"Available soon"** and the body **"Keep using the current app for this part."** Slice 3 replaces the Hymns card, slice 4 the Liturgy card, and 5a the Review card, deleting `StepPlaceholder`. Review also shows **"Still needed"**, a list built only from shipped steps, with each row linking to its step:
+- **Steps 2–4 (placeholders):** an `EmptyState` card with the title **"Available soon"** and the body **"Keep using the current app for this part."** Slice 3 replaces the Hymns card, slice 4 the Liturgy card, and 5a the Review card, deleting `StepPlaceholder`. (2b plan: until 2c, Date & readings shows the same card and `"readings"` is not in `SHIPPED_STEPS`, owner answer Q1, 2026-09-28; the card has no link to the old app, owner answer Q2. With no step shipped, "Still needed" is hidden and the summary's Date block shows only the date.) Review also shows **"Still needed"**, a list built only from shipped steps, with each row linking to its step:
   - "No service date — Choose one"
   - "No occasion — Add one"
   - "No scripture readings — Add one"
@@ -105,9 +106,9 @@ The draft survives a refresh and is kept separately for each church. The four-st
   - **Date:** "Sunday, October 4, 2026", then the occasion or "No occasion yet".
   - **Readings:** each reading on its own line, with "OT" and "NT" chips on the bulletin readings. An automatic choice shows "OT (auto)".
   - **Hymns** and **Liturgy:** "Available soon". Slice 3 replaces the Hymns block with the three slots ("#{number} {title}" or "No Opening hymn"); slice 4 replaces the Liturgy block with "n of m liturgy sections ready", communion yes or no, and the number of custom elements (F §4.7).
-  - **Status line:** "Draft saved on this device · Not in archive"; in memory-only mode, "Draft not saved on this device". 5a wires the archive half ("In archive (saved 10:42) · Unsaved changes").
+  - **Status line:** "Draft saved on this device · Not in archive"; in memory-only mode, "Draft not saved on this device" (2b plan: followed by " · Not in archive", as F §4.7 keeps the two halves). 5a wires the archive half ("In archive (saved 10:42) · Unsaved changes").
 - **New service** (overflow menu):
-  - If the draft is pristine (see `isPristine` below), it resets immediately.
+  - If the draft is pristine (see `isPristine` below), it resets immediately. (2b plan: the check is F §4.6's `isDirty(draft)`, which equals "not pristine" until 5a saves drafts.)
   - Otherwise a `ConfirmDialog` opens: title **"Start a new service?"**, body **"This clears the current draft on this device."**, confirm **"Start new service"**, cancel "Cancel".
   - Afterwards it goes to `/builder/readings`.
 
@@ -192,7 +193,7 @@ The draft survives a refresh and is kept separately for each church. The four-st
 |---|---|
 | Builder first render | `Skeleton` shaped like the step while the draft loads (synchronous from localStorage; the church profile is already loaded by the `(church)` layout) |
 | Draft could not be restored | Start fresh, back up the raw value, toast "We couldn't restore your unsaved draft." (F §4.6) |
-| Storage unavailable | A one-time toast plus the summary status: "This browser isn't saving your draft. Don't refresh until you save." (F §4.6) |
+| Storage unavailable | A one-time toast plus the summary status: "This browser isn't saving your draft. Don't refresh until you save." (F §4.6) (2b plan: the toast reads "This browser isn't saving your draft. Don't refresh or close this tab, or you'll lose your changes.", owner answer B6, 2026-09-29, since there is no Save until 5a.) |
 | Another tab changed this draft | Adopt the newer `updated_at`, toast "Updated from another tab." |
 | Translations list failed | The translation select is disabled and shows the profile's `effective_translation_label`. Passage text uses `church.effective_translation` until the list loads: `effectiveTranslation` only honours a stored override it can see in the list. The override stays in the draft. |
 | 401 / church 403 / 500 | Global handling (F §4.4, §4.8) |
@@ -696,7 +697,7 @@ src/lib/queries/  lectionary.ts reference.ts passages.ts (+ ChurchProfile type u
 
 - Component names are listed above; **file names are kebab-case** like slice 1's (`builder-shell.tsx`, `readings-step.tsx`, `bulletin-readings-picker.tsx`).
 - Add `zod` (F §4.11).
-- Generate these Base UI components if slice 1 hasn't: `radio-group`, `textarea`, `badge`, `sheet`, `collapsible`, `tooltip`. (`input`, `label` and `alert` come from slice 1; `select`, `dropdown-menu` and `skeleton` already exist from slice 0.)
+- Generate these Base UI components if slice 1 hasn't: `radio-group`, `textarea`, `badge`, `sheet`, `collapsible`, `tooltip`. (`input`, `label` and `alert` come from slice 1; `select`, `dropdown-menu` and `skeleton` already exist from slice 0.) (2b plan: 2b adds `sheet` and `badge`, rebuilt from the upstream shadcn source when the registry cannot be reached, a recorded exception to F §4.9.1; `textarea` exists from slice 1; `radio-group`, `collapsible` and `tooltip` are 2c's.)
 - Every page is a client component (F §4.1).
 
 ### `lib/dates.ts` (F §4.10)
@@ -732,7 +733,7 @@ Both suites run `backend/tests/fixtures/shared/scripture_refs.json` (F §5.3). T
 
 ### Draft store (`lib/draft/`, F §4.6)
 
-- **`schema.ts`:** the zod schema for `DraftV1` exactly as in F §4.6, with `DRAFT_VERSION = 1`.
+- **`schema.ts`:** the zod schema for `DraftV1` exactly as in F §4.6, with `DRAFT_VERSION = 1`. (2b plan: without 5a's `save_key_fingerprint` and `editing.date_iso`, which 5a adds with its version bump.)
   - Strings are bounded generously (≤ 20 000) so a stored draft is never rejected for length. UI limits live in the components.
   - `readings.date_iso` accepts `""` or a valid ISO date.
   - `readings.scriptures` holds **raw lines** (blanks allowed while typing). `cleanLines()` derives everything else.
@@ -751,12 +752,12 @@ Both suites run `backend/tests/fixtures/shared/scripture_refs.json` (F §5.3). T
   export function useDraft(): DraftApi;
   ```
 
-  - Load: parse → `migrate` → validate → `normalizePicks`. On failure, back up to `wsb:draft-corrupt:{userId}:{churchId}`, start fresh, and toast.
+  - Load: parse → `migrate` → validate → `normalizePicks`. On failure, back up to `wsb:draft-corrupt:{userId}:{churchId}`, start fresh, and toast. (2b build: `created_at` and `updated_at` must parse as ISO datetimes with an offset; an error thrown inside a migration step counts as a restore failure; when the backup cannot be written, the stored value is left in the main key until the user edits.)
   - Write-through with a 400 ms debounce, flushed on `visibilitychange` (hidden), `pagehide` and unmount (church switch).
   - `storage` events for the same key adopt a strictly newer `updated_at` (after `normalizePicks`) and toast.
   - `replace(next)` stores `normalizePicks(next)`.
-  - Storage exceptions switch to `memory-only` and show a one-time toast.
-  - Every read and write goes through `lib/storage.ts` (slice 1).
+  - Storage exceptions switch to `memory-only` and show a one-time toast. (2b build: the failed write stays pending, so the next flush retries it.)
+  - Every read and write goes through `lib/storage.ts` (slice 1). (2b plan: it gains `tryWriteLocal`, which reports a failed write, and `localKeys`. A fresh or repaired draft is written when the builder opens; `replace` also sets `updated_at`; a stored draft whose user or church differs from its key is treated as unrestorable.)
   - **`setLastStep(step)`** sets `last_step` when it differs and schedules the normal debounced write, but does **not** bump `updated_at`. So navigating never resets the 30-day prune clock, and because other tabs adopt only a strictly newer `updated_at`, it never triggers "Updated from another tab." (Another tab keeps its own `last_step` in memory and may overwrite it on its next write; the last-visited step is a convenience, not data.) `BuilderShell` calls it in an effect on every step route entry, with the step taken from the pathname. `/builder` then `router.replace`s to `/builder/${draft.last_step}`.
 - **`normalizePicks(d)`** (`readings.ts`): sets `selected_ot_ref` / `selected_nt_ref` to `""` when they are not in `pickerOptions(cleanLines(scriptures))` for their side, and returns `d` itself when nothing changes. Called on load, adoption and `replace`, by `commitScriptureLines`, and implied by `applyReadingSet` / `clearReadings` (which clear picks).
 - **`freshDraft({church, user, now?})`**, where `church` is the profile (`id`, `timezone`, `timezone_valid`) and `user` is `useMeContext().user`:
@@ -764,7 +765,7 @@ Both suites run `backend/tests/fixtures/shared/scripture_refs.json` (F §5.3). T
   - hymns `{hymnal: null, exclude_recent: true, slots: all null, alternatives: null}`;
   - liturgy: `sermon_title: ""`, `include_communion = isFirstSundayOfMonth(date_iso)`, `communion_origin: "default"`, the 8 cards `{enabled: key !== "prayers_of_the_people", text: "", origin: "empty"}` except `benediction`, which is `origin: "default"`, and `custom_elements: []`;
   - `last_step: "readings"`, `save_key: crypto.randomUUID()`, `editing: null`, `saved_fingerprint: null`.
-- **Mount-time roll-forward:** if `date_origin === "default"`, `date_iso < todayIn(tz)` and `isPristine(draft)`, then `setDate(nextSunday(today), "default")`. A non-pristine draft keeps its date and shows "This date has passed."
+- **Mount-time roll-forward:** if `date_origin === "default"`, `date_iso < todayIn(tz)` and `isPristine(draft)`, then `setDate(nextSunday(today), "default")`. A non-pristine draft keeps its date and shows "This date has passed." (2b build: the rolled draft's `updated_at` is the stored one plus 1 ms, not now, so it never outranks a newer edit from another tab.)
 - **`prune.ts`** (called once by the `(signed-in)` layout after `/me` loads):
   - removes `wsb:draft:{userId}:*` entries whose `updated_at` is more than 30 days old;
   - removes entries for churches not in `me.churches`;
@@ -773,12 +774,12 @@ Both suites run `backend/tests/fixtures/shared/scripture_refs.json` (F §5.3). T
 
   | Function | Effect |
   |---|---|
-  | `setDate(d, iso, origin = "user")` | Sets `date_iso` and `date_origin`, then runs `onDateChanged(d, prevIso)` from `date-effects.ts`. Slice 2's effect: while `communion_origin === "default"`, `include_communion = isFirstSundayOfMonth(iso)` (false for a weekday). It does not touch the readings fields, `editing` or hymns. |
+  | `setDate(d, iso, origin = "user")` | Sets `date_iso` and `date_origin`, then runs `onDateChanged(d, prevIso)` from `date-effects.ts`. Slice 2's effect: while `communion_origin === "default"`, `include_communion = isFirstSundayOfMonth(iso)` (false for a weekday). It does not touch the readings fields, `editing` or hymns. (2b build: an impossible date such as `2026-02-30` is stored as `""`, so the saved draft always loads again.) |
   | `applyReadingSet(d, lect, i)` | Requires `lect.date === d.readings.date_iso`. Sets `occasion = set.name`, `scriptures = [...set.scriptures]`, `fields_origin: "lectionary"`, `reading_set: {date_iso: lect.date, index: i}`, and clears both picks. |
   | `shouldAutoApply(d, lect)` | True when `lect.date === date_iso`, the status is `ok`, there are sets, and either `fields_origin === "empty"` or (`fields_origin === "lectionary"` and `reading_set?.date_iso !== date_iso`). |
   | `editOccasion(d, s)` / `editScriptureLines(d, raw)` | Stores the value and sets `fields_origin: "user"`. The textarea keeps its raw text, split on `\n`. Picks are not touched while the user types. |
   | `commitScriptureLines(d)` | Runs when the textarea loses focus: `normalizePicks(d)`. (A refresh or tab close while the textarea has focus skips it; the next load normalizes instead, and every consumer resolves through `resolveReadings` meanwhile.) |
-  | `clearReadings(d)` | Empty occasion and scriptures, `fields_origin: "empty"`, `reading_set: null`, picks `""`. |
+  | `clearReadings(d)` | Empty occasion and scriptures, `fields_origin: "empty"`, `reading_set: null`, picks `""`. (2b build: it and `applyReadingSet` return `d` itself when nothing would change, so an unchanged apply or clear is a no-op.) |
   | `setPick(d, "ot" \| "nt", ref \| "")` | Explicit pick, or `""` for automatic. |
   | `setTranslation(d, id, churchEffective)` | Stores `null` when `id === churchEffective`, so later default changes flow through. |
   | Selectors | `cleanScriptures`; `readingsStale` (`lectionary` origin and `reading_set.date_iso !== date_iso`); `showAvailableBanner(d, lect)` (the rule in UX item 3: sets for this date, none equal to the cleaned scriptures, and `user` with `reading_set?.date_iso !== date_iso` or `archive` with `date_origin !== "archive"`); `selectedSetIndex(d, lect)`; `effectivePicks(d)` = `resolveReadings(d.readings.scriptures, d.readings.selected_ot_ref, d.readings.selected_nt_ref)` (`{ot, nt, otAuto, ntAuto}`; 5a's `docReadings` delegates to the same function, so they cannot differ); `effectiveTranslation(d, church, translations)` (the draft value if it is in the loaded list, else `church.effective_translation`). |
@@ -797,7 +798,7 @@ Both suites run `backend/tests/fixtures/shared/scripture_refs.json` (F §5.3). T
     - liturgy: every card's `origin` is `empty` or `default` (the text of a `default` card, such as slice 4's church benediction, is ignored; an `empty` card has empty text); `communion_origin === "default"`; empty `sermon_title`; no `custom_elements`;
     - `editing === null`.
   - `stillNeeded(draft, SHIPPED_STEPS)`.
-- **`steps.ts`:** `STEPS` (id, label, href, next and previous) and `SHIPPED_STEPS = new Set(["readings"])`. Slice 3 adds `"hymns"`, slice 4 `"liturgy"` and 5a `"review"` (Hand-offs); an unshipped step shows "Soon" (Review: "Not in archive") and `stillNeeded` ignores it.
+- **`steps.ts`:** `STEPS` (id, label, href, next and previous) and `SHIPPED_STEPS`, empty in 2b (2b plan, owner answer Q1); 2c adds `"readings"`. Slice 3 adds `"hymns"`, slice 4 `"liturgy"` and 5a `"review"` (Hand-offs); an unshipped step shows "Soon" (Review: "Not in archive") and `stillNeeded` ignores it.
 - **`mapping.ts`** (provisional; **5a owns and replaces it**): `draftToServicePayload(draft)` per F §4.6. It takes only the draft, matching 5a's signature.
   - Trimmed, non-blank scriptures.
   - **Picks:** `selected_ot_ref` / `selected_nt_ref` are the explicit values of `resolveReadings(...)`, i.e. `otAuto ? "" : ot`. A pick that is no longer an option is sent as `""`, whatever the stored draft says. 5a's replacement must keep this.
@@ -805,7 +806,7 @@ Both suites run `backend/tests/fixtures/shared/scripture_refs.json` (F §5.3). T
   - Typed as a hand-written `ServiceDraftPayload` matching inv. §2.1 plus `hymnal` (F §1.3).
   - Slice 2 uses it only for `fingerprint`.
 - **`fingerprint.ts`:**
-  - `fingerprint(payload)`: FNV-1a over stable JSON.
+  - `fingerprint(payload)`: FNV-1a over stable JSON. (2b build: standard 32-bit FNV-1a over the UTF-8 bytes, as 8 hex digits, so another language can match it.)
   - `isDirty(draft)`: `saved_fingerprint === null ? !isPristine(draft) : fingerprint(draftToServicePayload(draft)) !== saved_fingerprint`. In slice 2 nothing is saved yet, so dirty means not pristine.
 
 ### Queries (TanStack Query, F §4.4)
@@ -923,9 +924,11 @@ Fixtures in `backend/tests/fixtures/`, recorded by `scripts/record_fixtures.py`:
 | `lib/draft/status.test.ts`, `mapping.test.ts`, `fingerprint.test.ts` | "2 of 3"; `stillNeeded` limited to shipped steps; `isPristine`: a fresh draft → true; **a fresh draft with the benediction card `{text: "Halverson", origin: "default"}` → true**; a card with origin `typed`, `ai` or `archive` → false; `communion_origin: "user"` → false; a pick, a hymn slot, a sermon title, a custom element, `editing`, or `user` fields → false. The provisional payload trims and drops blanks and sends a stale pick as `""`; fingerprint is stable under key order; `isDirty` with and without `saved_fingerprint`; a fresh draft with the default benediction text is not dirty. |
 | `builder/builder-shell.test.tsx` | The four routes render inside the shell; StepProgress status and "Soon" for steps not in `SHIPPED_STEPS`; the summary's Hymns and Liturgy blocks say "Available soon" (slices 3, 4 and 5a change these assertions when they turn their steps on); footer links; the Summary sheet opens below `lg` (the `matchMedia` shim); New service confirms only when not pristine; **visiting `/builder/hymns` then `/builder` redirects to `/builder/hymns`**, and that navigation leaves `updated_at` unchanged; `AppNav` shows "Builder" as a link row at `md` and a segmented row below it |
 | `builder/readings/readings-step.test.tsx` (`installFakeApi`) | Fresh draft → `GET /lectionary/readings?date=<next Sunday>` with no `X-Church-Id`, and the fields fill. Two sets → radio cards, and choosing one applies it. After typing in Occasion, changing the date shows the "available" banner instead of replacing, and "Use them" → confirm → replaced. **Deleting the Psalm line of the auto-filled set on the same date shows no banner.** Changing the date twice within 400 ms (fake timers) → one request, for the last date. `no_readings` → prompt with "Enter readings", focus stays on the date input, and clicking "Enter readings" focuses Occasion. 502 → ErrorState, and "Try again" refetches. 429 → the rate-limit ErrorState with "Try again" disabled until `Retry-After` elapses. The stale note plus "Clear readings". Out-of-range year → no request. Expanding a row POSTs `{refs: [ref], translation}`; `not_found`, `unavailable` and a partial response (one section with text, one `unavailable`) show their copy, the partial one with its text, "Part of this passage couldn't be loaded." and "Try again", which refetches. A line over 200 characters has "Show text" disabled and sends nothing. "Show all text" on 5 rows keeps at most 3 requests in flight. Changing the translation refetches expanded rows. `/translations` failing → the select is disabled and shows `effective_translation_label`. Bulletin selects show "Automatic: Philippians 3:4b-14" and never a Psalm; picking OT "Psalm 118:1-2, 14-24" on the Easter lines changes the NT placeholder to "Automatic: Acts 10:34-43". |
-| `builder/readings/church-switch.test.tsx` | Edit under church A; remount under church B → B's fresh draft; back to A → A's edits restored |
+| `builder/church-switch.test.tsx` (2b plan: in 2b, since it tests the store and the shell) | Edit under church A; remount under church B → B's fresh draft; back to A → A's edits restored |
 
 ### Manual checks (append to `docs/manual-verification.md`; at 375 px and on desktop, on the production URL)
+
+(2b plan: 2c appends these, and updates `backend/tests/test_slice1_docs.py`, which pins the file's last two `##` headings. 2b adds none: its after-merge look is the owner's short check in the 2b plan's Task 13.)
 
 1. A new church with no draft opens `/` → `/builder/readings`, dated next Sunday in the church's timezone, with the occasion and readings filled.
 2. Change the date to Ash Wednesday 2027 (2027-02-10): "Ash Wednesday". Good Friday 2027 (2027-03-26): readings found. Thanksgiving (2026-11-26): four lines. A plain Tuesday: the manual-entry prompt, plus the stale note with "Clear readings".

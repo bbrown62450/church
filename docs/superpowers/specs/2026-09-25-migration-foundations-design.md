@@ -86,6 +86,8 @@ The slice specs refined several foundation rules. This pass folds every one of t
 | §1.8 | *(2026-09-28, slice 2a)* The `church_create` test rule counts requests, not creates: a test that makes more than 3 `POST /churches` requests as one user (422s and replays count) advances the limiter's test clock or resets it. Slice 1's 6th-create test makes its five creates through the repo, so it is unchanged. | 2a |
 | §1.6 | *(2026-09-28, slice 2a build)* The frontend key rule keeps the key after a 429 (a 429 is never stored), and rotates it after any other 4xx. | 2a |
 | §2.5 | *(2026-09-28, slice 2a build)* "No query strings in logs" covers our own log lines; uvicorn's access log records path and query. Thread-pool log lines keep the request id. | 2a |
+| §4.2, §4.6, §4.7 | *(2026-09-28, slice 2b plan)* The builder ships live with every step on the "Available soon" card until its slice turns it on: `SHIPPED_STEPS` starts empty and slice 2c adds "readings" (owner answer Q1). The draft store writes through `lib/storage.ts`'s `tryWriteLocal`, which reports a failed write; a fresh draft is written when the builder opens; "New service" confirms when the draft `isDirty`. `AppNav` shows on church pages only. | 2b |
+| §4.6 | *(2026-09-29, slice 2b build)* The fingerprint hashes the stable JSON's UTF-8 bytes. A draft whose backup cannot be written stays in its key until the user edits; a failed write is retried on the next flush. | 2b |
 
 ---
 
@@ -912,7 +914,7 @@ type DraftV1 = {
 **Persistence:**
 - Write-through with a 400 ms debounce, flushed on `visibilitychange` (hidden) and `pagehide`.
 - A `storage` event for the same key (another tab) adopts the newer `updated_at` and toasts "Updated from another tab."
-- If storage throws (quota, private mode), the draft stays in memory with a one-time warning: "This browser isn't saving your draft. Don't refresh until you save."
+- If storage throws (quota, private mode), the draft stays in memory with a one-time warning: "This browser isn't saving your draft. Don't refresh until you save." *(2026-09-29, slice 2b plan: the copy is "This browser isn't saving your draft. Don't refresh or close this tab, or you'll lose your changes.", owner answer B6, since there is no Save until 5a.)* *(2026-09-29, slice 2b build: the failed write stays pending and the next flush retries it.)*
 
 **Versioning:**
 1. Parse the JSON.
@@ -921,11 +923,11 @@ type DraftV1 = {
 4. On any failure (corrupt, invalid, or a *future* version after a rollback):
    - copy the raw value to `wsb:draft-corrupt:{userId}:{churchId}` (one slot, overwritten);
    - start fresh;
-   - toast "We couldn't restore your unsaved draft."
+   - toast "We couldn't restore your unsaved draft." *(2026-09-29, slice 2b build: if the backup cannot be written, the raw value stays in the main key until the user edits.)*
 5. Every change to `DraftV1` bumps the version and adds a migration with a unit test.
 
 **Unsaved changes:**
-- `fingerprint(draftToServicePayload(draft))` is FNV-1a over a stable JSON string of the `ServiceDraft` payload.
+- `fingerprint(draftToServicePayload(draft))` is FNV-1a over a stable JSON string of the `ServiceDraft` payload. *(2026-09-29, slice 2b build: standard 32-bit FNV-1a over the string's UTF-8 bytes, not its UTF-16 code units, so a Python side can match it.)*
 - `dirty = fingerprint !== saved_fingerprint`. A never-saved draft counts as dirty once it has any content beyond its defaults.
 
 **When the draft is cleared or replaced:**
@@ -980,7 +982,7 @@ The draft is **not** cleared by save, download, email, church switch, logout or 
   - `StepFooter` holds Back and Next links. On mobile it is sticky at the bottom with `pb-[env(safe-area-inset-bottom)]`.
   - Review has no Next. It lists what is missing, each linking to its step ("No Response hymn — Choose one").
   - Only Save, Download and Email are disabled, and only when the date is invalid.
-- **Slice 2 ships all four routes.** Steps 2-4 render an "Available soon — keep using the current app for this part" card inside the working shell until their slice fills them.
+- **Slice 2 ships all four routes.** Steps 2-4 render an "Available soon — keep using the current app for this part" card inside the working shell until their slice fills them. *(2026-09-28, slice 2b plan: step 1 too, until slice 2c.)*
 - **`SummaryPanel`** shows:
   - date and occasion;
   - readings, with the OT and NT choices marked;
