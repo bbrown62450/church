@@ -34,5 +34,8 @@ export function useLectionary(dateIso: string): UseQueryResult<Lectionary, ApiEr
     enabled: canLookUp(dateIso),
     staleTime: (query) => lectionaryStaleTime(query.state.data),
     retry: 0,
+    // A 429 must wait out Retry-After, so coming back to the tab doesn't ask again early.
+    refetchOnWindowFocus: (query) => query.state.error?.status !== 429,
+    refetchOnReconnect: (query) => query.state.error?.status !== 429,
   });
 }

@@ -229,6 +229,13 @@ describe("builder shell (F §4.7)", () => {
     await waitFor(() => expect(stored().save_key).not.toBe(saved.save_key));
     expect(stored().readings.occasion).toBe("");
     expect(stored().readings.translation).toBe("kjv"); // the chosen translation stays (owner answer A)
+
+    // The kept translation alone is nothing to lose, so the next New service resets at once.
+    const before = stored().save_key;
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    await user.click(await screen.findByRole("menuitem", { name: "New service" }));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    await waitFor(() => expect(stored().save_key).not.toBe(before));
   });
 
   it("shows the builder skeleton until the church profile loads", async () => {
