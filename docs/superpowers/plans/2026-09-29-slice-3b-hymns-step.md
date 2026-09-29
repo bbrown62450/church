@@ -20,7 +20,7 @@
   - The build container reaches registry.npmjs.org, PyPI and raw.githubusercontent.com, but not ui.shadcn.com, Railway, OpenAI, Supabase or the reading sites. No test needs the network.
   - Every task's code below was written and run by the plan's writer in a throwaway worktree at `b47abba` (hard-linked `node_modules`, `cp -al`; `.venv` linked), one commit per task, with every stated count, every "see them fail" output and typecheck and lint observed. Not run while planning: a successful `shadcn add` (the registry is blocked; T7 records the failure), the pushes and CI (T14), and the OWNER steps (T1, T15).
   - Where S and the code or F disagreed, the code and F won unless an owner answer says otherwise; each case is a numbered clarification below.
-  - When the plan was finished (second session, 2026-09-29), T2-T13 were replayed mechanically from this document onto a clean worktree at `b47abba` (every script in order, T13's checklist appended): after each task the tree was identical to the tree the code was written in, the suite gave exactly the count in the table with typecheck and lint clean, and each "see them fail" step printed the output quoted in it (timings as `<t>`, paths as `<repo>`). On that tree the full suite also passed at `421 passed` in 64 files with the real clock moved 8 and 400 days forward, with no `act` warnings; `next build` compiled and listed the five builder routes; the backend stayed at `1110 passed, 11 skipped`.
+  - When the plan was finished (second session, 2026-09-29), T2-T13 were replayed mechanically from this document onto a clean worktree at `b47abba` (every script in order, T13's checklist appended): after each task the tree was identical to the tree the code was written in, the suite gave exactly the count in the table with typecheck and lint clean, and each "see them fail" step printed the output quoted in it (timings as `<t>`, paths as `<repo>`). On that tree the full suite also passed at `427 passed` in 64 files with the real clock moved 8 and 400 days forward, with no `act` warnings; `next build` compiled and listed the five builder routes; the backend stayed at `1110 passed, 11 skipped`.
 
 ## Global Constraints
 
@@ -36,7 +36,7 @@
 - `main` is protected: the `backend`, `backend-postgres` and `frontend` checks must pass and the branch must be up to date. Merge only with `gh pr merge <N> --merge -R bbrown62450/church`, only on the owner's explicit yes.
 - Commits end with a blank line and `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`; when the session's attribution asks for it, a `Claude-Session: <url>` line stands immediately before or after that line (T14's trailer check matches the `Co-Authored-By` line anywhere in the message, and its commit-list check compares subjects only). Subjects read "Area: plain words (S …, owner answer …)". Use TDD: write the failing test first and quote its failure.
 - **Backup push after every task** (standing rule, as in 2a-3a): the controller pushes the working branch after each task's commit and review with `git push origin claude/slice-2-plan-4q33le` (never `--force`; there is no open PR, so the push asks nobody; Vercel may build a preview). A fix asked for by a task's review is a new commit, `Fix: <what> (Task <n> review)`, pushed the same way, never an amend of a pushed commit; T14 lists it. The container can restart and lose uncommitted work, so commit as soon as a task's checks pass. If the push is refused because the remote moved, stop and ask the controller.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and includes the line given in T14 ("Tests: frontend 356 → 421 in 55 → 64 files; backend 1106 → 1110 passed, 11 → 11 skipped").
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and includes the line given in T14 ("Tests: frontend 356 → 427 in 55 → 64 files; backend 1106 → 1110 passed, 11 → 11 skipped").
 - New prose for the owner has no em dashes and no flattery, and leads with the point. Copy quoted from S keeps its own punctuation (for example "Too many requests — try again in {n} s.", "After the sermon — responds to the scripture (NT reading)", "Still working — this can take up to a minute.", "No Opening hymn — Choose one", the Hymnary credit).
 - Ask the owner before any push to a PR, PR creation, marking ready, merging, or any production or settings action. The build of T2-T13 does not wait for T1's owner steps.
 
@@ -49,17 +49,17 @@
   | T1 | 0 (no file changes; Task 1b, if added, states its own) | 0 | 356 in 55 | 1106 passed, 11 skipped |
   | T2 | 0 | 0 | 356 in 55 | **1110** passed, 11 skipped (`test_lectionary_domain.py` +2, `test_hymn_suggest.py` +1, `test_api_hymn_suggestions.py` +1) |
   | T3 | +3 (`draft/status.test.ts` +1, `draft/fingerprint.test.ts` +1, `draft/store.test.ts` +1) | 0 | 359 in 55 | unchanged |
-  | T4 | +7 (`lib/hymns/picks.test.ts`, new) | +1 | 366 in 56 | unchanged |
-  | T5 | +16 (`filter.test.ts` 6, `labels.test.ts` 4, `match-request.test.ts` 2, `suggest-request.test.ts` 3, `dates.test.ts` +1) | +4 | 382 in 60 | unchanged |
-  | T6 | +6 (`queries/hymns.test.tsx`, new; `keys.test.ts` edited, 0) | +1 | 388 in 61 | unchanged |
-  | T7 | +4 (`components/app/search-combobox.test.tsx`, new) | +1 | 392 in 62 | unchanged |
-  | T8 | +11 (`hymn-label.test.tsx` 2, `hymns-step.test.tsx` 9, both new) | +2 | 403 in 64 | unchanged |
-  | T9 | +4 (`hymns-step.test.tsx`) | 0 | 407 in 64 | unchanged |
-  | T10 | +7 (`hymns-step.test.tsx`) | 0 | 414 in 64 | unchanged |
-  | T11 | +5 (`hymns-step.test.tsx`) | 0 | 419 in 64 | unchanged |
-  | T12 | +2 (`draft/status.test.ts` +1, `builder-shell.test.tsx` +1; two status tests and three shell tests edited, 0) | 0 | 421 in 64 | unchanged |
-  | T13 | 0 | 0 | 421 in 64 | 1110 passed, 11 skipped (one assertion in `test_slice1_docs.py` edited) |
-  | T14, T15 | 0 | 0 | 421 in 64 | 1110 passed, 11 skipped |
+  | T4 | +8 (`lib/hymns/picks.test.ts`, new) | +1 | 367 in 56 | unchanged |
+  | T5 | +18 (`filter.test.ts` 6, `labels.test.ts` 4, `match-request.test.ts` 3, `suggest-request.test.ts` 4, `dates.test.ts` +1) | +4 | 385 in 60 | unchanged |
+  | T6 | +6 (`queries/hymns.test.tsx`, new; `keys.test.ts` edited, 0) | +1 | 391 in 61 | unchanged |
+  | T7 | +4 (`components/app/search-combobox.test.tsx`, new) | +1 | 395 in 62 | unchanged |
+  | T8 | +14 (`hymn-label.test.tsx` 3, `hymns-step.test.tsx` 11, both new) | +2 | 409 in 64 | unchanged |
+  | T9 | +4 (`hymns-step.test.tsx`) | 0 | 413 in 64 | unchanged |
+  | T10 | +7 (`hymns-step.test.tsx`; T8's refetch test extended, 0) | 0 | 420 in 64 | unchanged |
+  | T11 | +5 (`hymns-step.test.tsx`; the Add test extended, 0) | 0 | 425 in 64 | unchanged |
+  | T12 | +2 (`draft/status.test.ts` +1, `builder-shell.test.tsx` +1; two status tests and three shell tests edited, 0) | 0 | 427 in 64 | unchanged |
+  | T13 | 0 | 0 | 427 in 64 | 1110 passed, 11 skipped (one assertion in `test_slice1_docs.py` edited) |
+  | T14, T15 | 0 | 0 | 427 in 64 | 1110 passed, 11 skipped |
 
 - CI `backend-postgres` shows `11 passed, 1110 deselected` after T2 (the Postgres tests are unchanged).
 - The step tests fake only `Date` and wait on the app's real timers (the draft's 400 ms writes, the list and match requests), so `hymns-step.test.tsx` takes about 16 s; one test fakes `setTimeout` as well (the 8-second "Still working" line) and says why, and one waits out a real 1-second `Retry-After`.
@@ -870,7 +870,7 @@ The pure core of the step, before any screen: what a pick stores (`pickFromHymn`
 **Files:**
 - Create: `frontend/src/lib/hymns/picks.ts`, `frontend/src/lib/hymns/hymnal.ts`
 - Modify: `frontend/src/lib/api/types.ts` (hymn type names), `frontend/src/test/fixtures/index.ts` (hymn builders)
-- Test: `frontend/src/lib/hymns/picks.test.ts` (new, 7; `selectHymnal`'s cases are here, as S's Testing table puts them)
+- Test: `frontend/src/lib/hymns/picks.test.ts` (new, 8; `selectHymnal`'s cases are here, as S's Testing table puts them)
 
 **Interfaces:**
 - Consumes: `HymnalListOut`, `HymnOut`, `Page_HymnOut_`, `ScriptureMatchIn`, `ScriptureMatchesOut`, `HymnMatchOut`, `HymnSuggestionIn`, `HymnSuggestionsOut`, `SuggestedHymnOut` (`schema.d.ts`, 3a); `DraftV1`, `HymnPick`, `Slot`, `SLOTS` (`lib/draft/schema.ts`).
@@ -880,7 +880,7 @@ The pure core of the step, before any screen: what a pick stores (`pickFromHymn`
   - `hymnal.ts`: `type SelectedHymnal = {code: string | null; stale: boolean}`; `selectHymnal(stored, hymnals)`. Later users: T8, T9.
   - fixtures: `hymnId(n)` (a valid uuid ending in `n`), `hymn(overrides)` (#403 "Come, Thou Almighty King", GG2013), `suggested(overrides)` (`source: "ai"`), `hymnals(overrides)` (GG2013 only, 853 hymns, 795 with references). Later users: T5-T12.
 
-Counts after this task: frontend **366 passed in 56 files**.
+Counts after this task: frontend **367 passed in 56 files**.
 
 - [ ] **Step 1 (agent): Check the starting point**
 
@@ -1357,7 +1357,7 @@ PYEOF
 git status --short
 ```
 
-**Expected:** ` Test Files  1 passed (1)`, `      Tests  7 passed (7)`; ` Test Files  56 passed (56)`, `      Tests  366 passed (366)`; `> tsc --noEmit` and `> eslint` with nothing after them; ` M` for `types.ts` and `fixtures/index.ts`, `?? frontend/src/lib/hymns/`.
+**Expected:** ` Test Files  1 passed (1)`, `      Tests  8 passed (8)`; ` Test Files  56 passed (56)`, `      Tests  367 passed (367)`; `> tsc --noEmit` and `> eslint` with nothing after them; ` M` for `types.ts` and `fixtures/index.ts`, `?? frontend/src/lib/hymns/`.
 
 - [ ] **Step 6 (agent): Commit**
 
@@ -1368,7 +1368,7 @@ stored as null, owner answer 1), setExcludeRecent, reconcilePick (ok,
 loading or missing, with the selected hymnal for a pick with none),
 applySuggestions (empty slots only, F D16), swapAlternative (a second tap
 swaps back) and duplicateSlots; selectHymnal (stored, effective, or stale).
-Type names for the 3a routes and hymn fixtures. Frontend 359 -> 366.
+Type names for the 3a routes and hymn fixtures. Frontend 359 -> 367.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -1382,7 +1382,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 **Files:**
 - Create: `frontend/src/lib/hymns/filter.ts`, `labels.ts`, `match-request.ts`, `suggest-request.ts`
 - Modify: `frontend/src/lib/dates.ts` (`formatAbbrevDate`)
-- Test: `frontend/src/lib/hymns/filter.test.ts` (new, 6), `labels.test.ts` (new, 4), `match-request.test.ts` (new, 2), `suggest-request.test.ts` (new, 3), `frontend/src/lib/dates.test.ts` (+1)
+- Test: `frontend/src/lib/hymns/filter.test.ts` (new, 6), `labels.test.ts` (new, 4), `match-request.test.ts` (new, 3), `suggest-request.test.ts` (new, 4), `frontend/src/lib/dates.test.ts` (+1)
 
 **Interfaces:**
 - Consumes: `Hymn`, `HymnSuggestionBody`, `Passage` (T4, 2a); `passageText` (`lib/queries/passages.ts`, 2c); `formatServiceDate`, `parseIsoDate` (2b).
@@ -1393,7 +1393,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - `match-request.ts`: `MAX_REFS = 20`, `MAX_REF_LENGTH = 200`, `clipChars(s, n)` (the first `n` code points), `cleanRefs(list, {max, maxLen})`, `buildMatchRefs(scriptures, extraRef)`. Later users: T10 (through `suggest-request.ts`), T11.
   - `suggest-request.ts`: `buildSuggestionRequest(draft, selectedHymnal, getCachedPassage, churchTranslation) -> HymnSuggestionBody`. Later user: T10.
 
-Counts after this task: frontend **382 passed in 60 files**.
+Counts after this task: frontend **385 passed in 60 files**.
 
 - [ ] **Step 1 (agent): Check the starting point**
 
@@ -1403,7 +1403,7 @@ grep -c "formatAbbrevDate" frontend/src/lib/dates.ts
 (cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
 ```
 
-**Expected:** nothing (or `?? .claude/`); `0` (grep exits 1); ` Test Files  56 passed (56)`, `      Tests  366 passed (366)`.
+**Expected:** nothing (or `?? .claude/`); `0` (grep exits 1); ` Test Files  56 passed (56)`, `      Tests  367 passed (367)`.
 
 - [ ] **Step 2 (agent): Write the failing tests**
 
@@ -1709,7 +1709,7 @@ Error: Cannot find module './suggest-request' imported from '<repo>/frontend/src
  FAIL  |unit| src/lib/dates.test.ts > lib/dates > formatAbbrevDate gives the short month and day, with the year only when it differs (slice 3b)
 TypeError: (0 , formatAbbrevDate) is not a function
  Test Files  5 failed | 1 passed (6)
-      Tests  1 failed | 14 passed (15)
+      Tests  1 failed | 15 passed (16)
 ```
 
 (Each "Cannot find module" is followed by a "Caused by:" line the grep also prints.)
@@ -1994,7 +1994,7 @@ PYEOF
 (cd frontend && npx vitest run src/lib/dates.guard.test.ts 2>&1 | grep -E "Tests ")
 ```
 
-**Expected:** ` Test Files  6 passed (6)`, `      Tests  30 passed (30)`; ` Test Files  60 passed (60)`, `      Tests  382 passed (382)`; `> tsc --noEmit` and `> eslint` with nothing after them; the date guard still passes (`Tests  <n> passed`).
+**Expected:** ` Test Files  6 passed (6)`, `      Tests  33 passed (33)`; ` Test Files  60 passed (60)`, `      Tests  385 passed (385)`; `> tsc --noEmit` and `> eslint` with nothing after them; the date guard still passes (`Tests  <n> passed`).
 
 - [ ] **Step 6 (agent): Commit**
 
@@ -2007,7 +2007,7 @@ shows 50 and counts recent hymns it hides. labels.ts holds the slot copy,
 notices, badges and \"Written {year}\". buildMatchRefs and
 buildSuggestionRequest keep requests inside the server's limits; NT text
 comes only from the passage cache, never ESV. formatAbbrevDate gives
-\"Sep 7\". Frontend 366 -> 382 tests in 60 files.
+\"Sep 7\". Frontend 367 -> 385 tests in 60 files.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -2039,7 +2039,7 @@ The step never calls `apiFetch` (F §4.4); it reads through five hooks in `lib/q
   - fixtures: `gg2013()` (nine hymns in hymnal order: #1, #35 with no link, #403, #649 and #650 "Amazing Grace" (#650's link is `http:`), #700, #710 "Here I Am, Lord" written 1981 and flagged newer, #800 with a blank title, and "Sent Forth by God's Blessing" with no number), `ph1990()` (two hymns, no scripture references), `twoHymnals()`, `hymnListRoute(lists?, recent?)` (a `GET /hymns` handler that sets `recent_use_on` from a title → date map when `recent_for_date` is sent), `hymnMatch(h, strength, refs)`, `scriptureMatches(overrides)` (October 4, 2026's readings: one passage match, three chapter matches), `hymnSuggestions(slots, overrides)`.
   - Later users: T8-T12.
 
-Counts after this task: frontend **388 passed in 61 files**.
+Counts after this task: frontend **391 passed in 61 files**.
 
 - [ ] **Step 1 (agent): Check the starting point**
 
@@ -2049,7 +2049,7 @@ ls frontend/src/lib/queries/hymns.ts frontend/src/lib/features.ts 2>&1 | head -2
 (cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
 ```
 
-**Expected:** nothing (or `?? .claude/`); two `No such file or directory` lines; ` Test Files  60 passed (60)`, `      Tests  382 passed (382)`.
+**Expected:** nothing (or `?? .claude/`); two `No such file or directory` lines; ` Test Files  60 passed (60)`, `      Tests  385 passed (385)`.
 
 - [ ] **Step 2 (agent): Write the failing tests and the fixtures**
 
@@ -2649,7 +2649,7 @@ PYEOF
 git status --short
 ```
 
-**Expected:** ` Test Files  2 passed (2)`, `      Tests  8 passed (8)`; ` Test Files  61 passed (61)`, `      Tests  388 passed (388)`; `> tsc --noEmit` and `> eslint` with nothing after them; ` M` for `keys.ts`, `keys.test.ts`, `timeouts.ts` and `fixtures/index.ts`, `??` for `hymns.ts`, `hymns.test.tsx` and `features.ts`.
+**Expected:** ` Test Files  2 passed (2)`, `      Tests  8 passed (8)`; ` Test Files  61 passed (61)`, `      Tests  391 passed (391)`; `> tsc --noEmit` and `> eslint` with nothing after them; ` M` for `keys.ts`, `keys.test.ts`, `timeouts.ts` and `fixtures/index.ts`, `??` for `hymns.ts`, `hymns.test.tsx` and `features.ts`.
 
 - [ ] **Step 6 (agent): Commit**
 
@@ -2661,7 +2661,7 @@ useScriptureMatches (a query under the hymns prefix, 30 results) and
 useSuggestHymns, whose suggest() resolves ok, error or superseded: a
 newer request, an unmounted step or another church drops the answer.
 POST /hymns/suggestions gets 90 s; SETTINGS_HYMNS_READY is false until
-6a. Fixtures for the step's tests. Frontend 382 -> 388 tests in 61 files.
+6a. Fixtures for the step's tests. Frontend 385 -> 391 tests in 61 files.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -2682,7 +2682,7 @@ The toolbar's Exclude toggle is a Base UI `Switch`, which the kit does not have 
   - `components/ui/switch.tsx`: `Switch` (Base UI `Switch.Root` props: `checked`, `onCheckedChange`, `disabled`, `id`; renders `role="switch"`, and `aria-disabled` when disabled; `size` `"sm" | "default"`). The switch is smaller than 44 px; T9 puts it in a `min-h-11` row with a `Label` tied to it by `htmlFor`, so the whole row is the touch target (Global Constraints). Later user: T9.
   - `components/app/search-combobox.tsx`: `type SearchResult<T> = {shown: readonly T[]; footer: readonly string[]}`; `SearchCombobox<T>({label, labelHidden?, items, search, itemKey, itemText, renderItem?, value, onValueChange, placeholder?, disabled?, autoFocus?, onDismiss?, id?})`. The input is 44 px (`h-11`) and `text-base md:text-sm` (the generated `ComboboxInput`); each row is 44 px below `md`. Later user: T8.
 
-Counts after this task: frontend **392 passed in 62 files**.
+Counts after this task: frontend **395 passed in 62 files**.
 
 - [ ] **Step 1 (agent): Check the starting point**
 
@@ -2692,7 +2692,7 @@ ls frontend/src/components/ui/ | tr '\n' ' '; echo
 (cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
 ```
 
-**Expected:** nothing (or `?? .claude/`); `alert-dialog.tsx alert.tsx avatar.tsx badge.tsx button.test.tsx button.tsx card.tsx collapsible.tsx combobox.tsx dropdown-menu.tsx input-group.tsx input.tsx label.tsx radio-group.tsx select.tsx sheet.tsx skeleton.tsx sonner.tsx tabs.tsx textarea.tsx tooltip.tsx` (no `switch.tsx`); ` Test Files  61 passed (61)`, `      Tests  388 passed (388)`.
+**Expected:** nothing (or `?? .claude/`); `alert-dialog.tsx alert.tsx avatar.tsx badge.tsx button.test.tsx button.tsx card.tsx collapsible.tsx combobox.tsx dropdown-menu.tsx input-group.tsx input.tsx label.tsx radio-group.tsx select.tsx sheet.tsx skeleton.tsx sonner.tsx tabs.tsx textarea.tsx tooltip.tsx` (no `switch.tsx`); ` Test Files  61 passed (61)`, `      Tests  391 passed (391)`.
 
 - [ ] **Step 2 (agent): Write the failing test**
 
@@ -3068,7 +3068,7 @@ PYEOF
 git status --short
 ```
 
-**Expected:** ` Test Files  1 passed (1)`, `      Tests  4 passed (4)`; ` Test Files  62 passed (62)`, `      Tests  392 passed (392)`; `> tsc --noEmit` and `> eslint` with nothing after them; three `??` files.
+**Expected:** ` Test Files  1 passed (1)`, `      Tests  4 passed (4)`; ` Test Files  62 passed (62)`, `      Tests  395 passed (395)`; `> tsc --noEmit` and `> eslint` with nothing after them; three `??` files.
 
 - [ ] **Step 7 (agent): Commit**
 
@@ -3079,7 +3079,7 @@ passes, F §4.9 item 5) with the caller's hints in the footer; Base UI
 handles focus, highlight and the keyboard; Escape or focus leaving calls
 onDismiss. switch.tsx is rebuilt from the upstream shadcn source
 (base-nova, pinned commit) because the build container cannot reach the
-registry (plan clarification 4). Frontend 388 -> 392 tests in 62 files.
+registry (plan clarification 4). Frontend 391 -> 395 tests in 62 files.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -3094,7 +3094,7 @@ The first screen of the step, rendered by the tests inside the real builder layo
 
 **Files:**
 - Create: `frontend/src/components/builder/hymns/hymns-step.tsx`, `hymn-slot-card.tsx`, `hymn-picker.tsx`, `hymn-label.tsx`, `use-undo-toasts.ts`
-- Test: `frontend/src/components/builder/hymns/hymn-label.test.tsx` (new, 2), `frontend/src/components/builder/hymns/hymns-step.test.tsx` (new, 9)
+- Test: `frontend/src/components/builder/hymns/hymn-label.test.tsx` (new, 3), `frontend/src/components/builder/hymns/hymns-step.test.tsx` (new, 11)
 
 **Interfaces:**
 - Consumes: `useHymnals`, `useHymnLists` (T6); `SearchCombobox` (T7); `selectHymnal`, `pickFromHymn`, `setSlot`, `clearSlot`, `reconcilePick`, `duplicateSlots` (T4); `filterHymns`, `PICKER_LIMIT`, `SLOT_META`, `MISSING_NOTICE`, `hymnText`, `recentUseLabel`, `recentUseNotice`, `duplicateNotice`, `newerYearLabel` (T5); `SETTINGS_HYMNS_READY` (T6); `useDraft`, `EmptyState`, `ErrorState`, `Badge`, `Button`, `buttonVariants`, `safeHttpsUrl`, sonner's `toast`.
@@ -3105,7 +3105,7 @@ The first screen of the step, rendered by the tests inside the real builder layo
   - `HymnLabel({hymn: LabelHymn, showHymnal?, recentBadge?, listen?, truncate?})`: the title then badges that never shrink (hymnal, recent use, "Written {year}"), then the Listen link, in a row that wraps (badges to a second line at 375 px) except with `truncate` (a chip); `type LabelHymn` (a live `Hymn` or a draft `HymnPick`). Later users: T10, T11.
   - `useUndoToasts(): (message, undo) => void`. Later user: T11.
 
-Counts after this task: frontend **403 passed in 64 files**.
+Counts after this task: frontend **409 passed in 64 files**.
 
 - [ ] **Step 1 (agent): Check the starting point**
 
@@ -3115,7 +3115,7 @@ ls frontend/src/components/builder/hymns 2>&1 | head -1
 (cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
 ```
 
-**Expected:** nothing (or `?? .claude/`); `ls: cannot access 'frontend/src/components/builder/hymns': No such file or directory`; ` Test Files  62 passed (62)`, `      Tests  392 passed (392)`.
+**Expected:** nothing (or `?? .claude/`); `ls: cannot access 'frontend/src/components/builder/hymns': No such file or directory`; ` Test Files  62 passed (62)`, `      Tests  395 passed (395)`.
 
 - [ ] **Step 2 (agent): Write the failing tests**
 
@@ -4100,7 +4100,7 @@ PYEOF
 git status --short
 ```
 
-**Expected:** ` Test Files  2 passed (2)`, `      Tests  11 passed (11)`; ` Test Files  64 passed (64)`, `      Tests  403 passed (403)`; `0`; `> tsc --noEmit` and `> eslint` with nothing after them; `?? frontend/src/components/builder/hymns/`.
+**Expected:** ` Test Files  2 passed (2)`, `      Tests  14 passed (14)`; ` Test Files  64 passed (64)`, `      Tests  409 passed (409)`; `0`; `> tsc --noEmit` and `> eslint` with nothing after them; `?? frontend/src/components/builder/hymns/`.
 
 - [ ] **Step 6 (agent): Commit**
 
@@ -4114,7 +4114,7 @@ hymnal, Also chosen as. Change swaps in a focused picker; the remove
 button offers Undo in a toast dismissed when the step unmounts and
 ignored after a church switch or once the slot is filled again. A failed
 first load shows Retry, a failed refetch keeps the pickers, an empty
-hymnal the empty state. Labels wrap at 375 px. Frontend 392 -> 403 tests in 64 files.
+hymnal the empty state. Labels wrap at 375 px. Frontend 395 -> 409 tests in 64 files.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -4134,7 +4134,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Consumes: `Switch` (T7), `Select` and its parts, `Skeleton`, `Label`; `setHymnal`, `setExcludeRecent` (T4).
 - Produces: `HymnsToolbar({children})`, `ToolbarSkeleton()`, `HymnalPicker({hymnals, selected, stale, storedCode, onChange})`, `ExcludeSwitch({on, hidden, dateValid, onChange})`, `hiddenCountText(n)`. Later user: T10 (Suggest joins the toolbar).
 
-Counts after this task: frontend **407 passed in 64 files**.
+Counts after this task: frontend **413 passed in 64 files**.
 
 - [ ] **Step 1 (agent): Check the starting point**
 
@@ -4144,7 +4144,7 @@ ls frontend/src/components/builder/hymns/hymns-toolbar.tsx 2>&1 | head -1
 (cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
 ```
 
-**Expected:** nothing (or `?? .claude/`); `ls: cannot access 'frontend/src/components/builder/hymns/hymns-toolbar.tsx': No such file or directory`; ` Test Files  64 passed (64)`, `      Tests  403 passed (403)`.
+**Expected:** nothing (or `?? .claude/`); `ls: cannot access 'frontend/src/components/builder/hymns/hymns-toolbar.tsx': No such file or directory`; ` Test Files  64 passed (64)`, `      Tests  409 passed (409)`.
 
 - [ ] **Step 2 (agent): Write the failing tests**
 
@@ -4304,7 +4304,7 @@ PYEOF
    × the toolbar (S Toolbar) > the Exclude switch counts the hidden hymns, and is off without a valid date <t>ms
    × the toolbar (S Toolbar) > exclusion never clears a pick: the switch hides recent hymns from the picker and keeps a recent pick with its notice <t>ms
 ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
-      Tests  4 failed | 9 passed (13)
+      Tests  4 failed | 11 passed (15)
 ```
 
 - [ ] **Step 4 (agent): Write the toolbar and put it in the step**
@@ -4551,7 +4551,7 @@ PYEOF
 git status --short
 ```
 
-**Expected:** ` Test Files  2 passed (2)`, `      Tests  15 passed (15)`; ` Test Files  64 passed (64)`, `      Tests  407 passed (407)`; `0`; `> tsc --noEmit` and `> eslint` with nothing after them; ` M` for `hymns-step.tsx` and `hymns-step.test.tsx`, `??` for `hymns-toolbar.tsx`.
+**Expected:** ` Test Files  2 passed (2)`, `      Tests  18 passed (18)`; ` Test Files  64 passed (64)`, `      Tests  413 passed (413)`; `0`; `> tsc --noEmit` and `> eslint` with nothing after them; ` M` for `hymns-step.tsx` and `hymns-step.test.tsx`, `??` for `hymns-toolbar.tsx`.
 
 - [ ] **Step 6 (agent): Commit**
 
@@ -4562,7 +4562,7 @@ git commit -m "Hymns: the toolbar's hymnal select and Exclude switch; exclusion 
 their own. A vanished stored code is noted and never written; a hymnal
 with no scripture references is noted. The Exclude switch writes only
 exclude_recent, counts the hidden hymns, and waits for a valid date.
-Toggling it never changes a slot (AC12). Frontend 403 -> 407 tests.
+Toggling it never changes a slot (AC12). Frontend 409 -> 413 tests.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -4587,7 +4587,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - `AlternativeChips({slot, ideas, lists, fallbackHymnal, serviceDateIso, showHymnal, onSwap})`.
   - `HymnsStep` renders `null` until the church profile is loaded (the shell loads it first, as for `ReadingsStep`).
 
-Counts after this task: frontend **414 passed in 64 files**.
+Counts after this task: frontend **420 passed in 64 files**.
 
 - [ ] **Step 1 (agent): Check the starting point**
 
@@ -4597,7 +4597,7 @@ ls frontend/src/components/builder/hymns | tr '\n' ' '; echo
 (cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
 ```
 
-**Expected:** nothing (or `?? .claude/`); `hymn-label.test.tsx hymn-label.tsx hymn-picker.tsx hymn-slot-card.tsx hymns-step.test.tsx hymns-step.tsx hymns-toolbar.tsx use-undo-toasts.ts `; ` Test Files  64 passed (64)`, `      Tests  407 passed (407)`.
+**Expected:** nothing (or `?? .claude/`); `hymn-label.test.tsx hymn-label.tsx hymn-picker.tsx hymn-slot-card.tsx hymns-step.test.tsx hymns-step.tsx hymns-toolbar.tsx use-undo-toasts.ts `; ` Test Files  64 passed (64)`, `      Tests  413 passed (413)`.
 
 - [ ] **Step 2 (agent): Write the failing tests**
 
@@ -4932,6 +4932,7 @@ PYEOF
 **Expected** (each waits about a second for a button that is not there yet):
 
 ```
+   × the Hymns step (S User experience) > keeps the pickers, the toolbar and a pending Suggest when a background refetch fails after loading <t>ms
    × Suggest hymns (S AI suggestion flow) > fills only the empty slots, keeps the member's pick, and shows at least 2 ideas under every slot <t>ms
    × Suggest hymns (S AI suggestion flow) > a tap swaps an idea with the pick and a second tap swaps back; the ideas hide when the date changes <t>ms
    × Suggest hymns (S AI suggestion flow) > a pick made while the request runs is kept and gets ideas <t>ms
@@ -4939,8 +4940,8 @@ PYEOF
    × Suggest hymns (S AI suggestion flow) > Cancel stops waiting and returns to idle; after 8 s it says it is still working <t>ms
    × Suggest hymns (S AI suggestion flow) > shows each failure's own copy under the button, and a server error as a toast <t>ms
    × Suggest hymns (S AI suggestion flow) > says when a slot or every slot got nothing, and waits for a valid date; the tip asks for readings first <t>ms
-⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
-      Tests  7 failed | 13 passed (20)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  8 failed | 14 passed (22)
 ```
 
 - [ ] **Step 4 (agent): Write Suggest and the ideas, and put them in the step**
@@ -5353,7 +5354,7 @@ PYEOF
 git status --short
 ```
 
-**Expected:** ` Test Files  2 passed (2)`, `      Tests  22 passed (22)`; ` Test Files  64 passed (64)`, `      Tests  414 passed (414)`; `0`; `> tsc --noEmit` and `> eslint` with nothing after them; ` M` for `hymns-step.tsx` and `hymns-step.test.tsx`, `??` for the two new files.
+**Expected:** ` Test Files  2 passed (2)`, `      Tests  25 passed (25)`; ` Test Files  64 passed (64)`, `      Tests  420 passed (420)`; `0`; `> tsc --noEmit` and `> eslint` with nothing after them; ` M` for `hymns-step.tsx` and `hymns-step.test.tsx`, `??` for the two new files.
 
 - [ ] **Step 6 (agent): Commit**
 
@@ -5366,7 +5367,7 @@ superseded answer or a cancel changes nothing. Suggesting..., Cancel,
 Still working after 8 s; each AI error's copy inline, Try again now.
 after a 429's wait, a server error as a toast. Other ideas show for the
 draft's date only, with their badges; a tap swaps, a second swaps back.
-Frontend 407 -> 414 tests.
+Frontend 413 -> 420 tests.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -5386,7 +5387,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Consumes: `useScriptureMatches` (T6), `buildMatchRefs`, `MAX_REF_LENGTH`, `recentUseLabel`, `SLOT_META` (T5), `HymnLabel`, `useUndoToasts` (T8), `setSlot`, `pickFromHymn` (T4); `Collapsible` (2c), `DropdownMenu`, `Input`, `ErrorState`, `Skeleton`, `Badge`, `next/link`.
 - Produces: `ScriptureMatches({scriptures, hymnal: HymnalSummary, recentForDate, serviceDateIso, excludeRecent, showHymnal, onAdd(slot, match)})`.
 
-Counts after this task: frontend **419 passed in 64 files**.
+Counts after this task: frontend **425 passed in 64 files**.
 
 - [ ] **Step 1 (agent): Check the starting point**
 
@@ -5396,7 +5397,7 @@ ls frontend/src/components/builder/hymns/scripture-matches.tsx 2>&1 | head -1
 (cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
 ```
 
-**Expected:** nothing (or `?? .claude/`); `ls: cannot access 'frontend/src/components/builder/hymns/scripture-matches.tsx': No such file or directory`; ` Test Files  64 passed (64)`, `      Tests  414 passed (414)`.
+**Expected:** nothing (or `?? .claude/`); `ls: cannot access 'frontend/src/components/builder/hymns/scripture-matches.tsx': No such file or directory`; ` Test Files  64 passed (64)`, `      Tests  420 passed (420)`.
 
 - [ ] **Step 2 (agent): Write the failing tests**
 
@@ -5564,10 +5565,10 @@ describe("Hymns for the readings (S ScriptureMatches)", () => {
     expect(within(section).getByText("Used Sep 6")).toBeInTheDocument();
     expect(within(section).getByText("Planned Oct 18")).toBeInTheDocument();
     expect(within(section).queryByText(/recently used matches are hidden/)).toBeNull();
-    expect(within(section).getByText(/^2 recently used matches are shown\\./)).toBeInTheDocument();
+    expect(within(section).getByText(/^2 recently used matches are shown\./)).toBeInTheDocument();
     await user.click(within(section).getByRole("button", { name: "Hide them" }));
     expect(within(section).getAllByRole("listitem")).toHaveLength(1);
-    expect(within(section).getByText(/^2 recently used matches are hidden\\./)).toBeInTheDocument();
+    expect(within(section).getByText(/^2 recently used matches are hidden\./)).toBeInTheDocument();
     expect(within(section).getByRole("button", { name: "Show them" })).toBeInTheDocument();
   });
 });
@@ -5588,13 +5589,13 @@ PYEOF
 **Expected:**
 
 ```
-   × Hymns for the readings (S ScriptureMatches) > asks for the draft's readings in the selected hymnal; Add → Response hymn sets the slot and Undo restores it <t>ms
+   × Hymns for the readings (S ScriptureMatches) > asks for the draft's readings in the selected hymnal; Add → Response hymn sets the slot and Undo restores it until the slot changes again <t>ms
    × Hymns for the readings (S ScriptureMatches) > searches an extra reference with the readings, and says when one can't be read or nothing matches <t>ms
    × Hymns for the readings (S ScriptureMatches) > links to step 1 without references, and never searches a hymnal with no scripture references <t>ms
    × Hymns for the readings (S ScriptureMatches) > shows Couldn't search the hymnal with Retry when the search fails <t>ms
-   × Hymns for the readings (S ScriptureMatches) > with Exclude on hides recently used matches behind Show them; shown, they carry their badge <t>ms
+   × Hymns for the readings (S ScriptureMatches) > with Exclude on hides recently used matches behind Show them; shown, they carry their badge; Hide them hides them again <t>ms
 ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
-      Tests  5 failed | 20 passed (25)
+      Tests  5 failed | 22 passed (27)
 ```
 
 - [ ] **Step 4 (agent): Write the matches section and put it in the step**
@@ -5949,7 +5950,7 @@ PYEOF
 git status --short
 ```
 
-**Expected:** ` Test Files  2 passed (2)`, `      Tests  27 passed (27)`; ` Test Files  64 passed (64)`, `      Tests  419 passed (419)`; `0`; `> tsc --noEmit` and `> eslint` with nothing after them; ` M` for `hymns-step.tsx` and `hymns-step.test.tsx`, `??` for `scripture-matches.tsx`.
+**Expected:** ` Test Files  2 passed (2)`, `      Tests  30 passed (30)`; ` Test Files  64 passed (64)`, `      Tests  425 passed (425)`; `0`; `> tsc --noEmit` and `> eslint` with nothing after them; ` M` for `hymns-step.tsx` and `hymns-step.test.tsx`, `??` for `scripture-matches.tsx`.
 
 - [ ] **Step 6 (agent): Commit**
 
@@ -5962,7 +5963,7 @@ slot, with Undo when it replaced another, until the slot changes again.
 Recently used matches hide behind Show them (a toggle, Hide them) while
 Exclude is on. Unreadable references, no matches,
 no references (Go to readings), a hymnal with no scripture references
-and a failed search each have their copy. Frontend 414 -> 419 tests.
+and a failed search each have their copy. Frontend 420 -> 425 tests.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -5984,7 +5985,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Consumes: `HymnsStep` (T8-T11), `SLOT_META`, `hymnText` (T5), `stepStatus`, `StepProgress`, `StillNeeded`, `SummaryPanel` (2b, 2c).
 - Produces: `SHIPPED_STEPS = new Set(["readings", "hymns"])`; `stillNeeded` hymn rows `{step: "hymns", message: "No {Opening|Response|Closing} hymn", action: "Choose one"}`; `SummaryHymns()`. Later users: slice 4 (adds `"liturgy"`), 5a (`"review"`).
 
-Counts after this task: frontend **421 passed in 64 files**.
+Counts after this task: frontend **427 passed in 64 files**.
 
 - [ ] **Step 1 (agent): Check the starting point**
 
@@ -5994,7 +5995,7 @@ grep -n "export const SHIPPED_STEPS" frontend/src/lib/draft/steps.ts
 (cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
 ```
 
-**Expected:** nothing (or `?? .claude/`); `34:export const SHIPPED_STEPS: ReadonlySet<StepId> = new Set<StepId>(["readings"]);`; ` Test Files  64 passed (64)`, `      Tests  419 passed (419)`.
+**Expected:** nothing (or `?? .claude/`); `34:export const SHIPPED_STEPS: ReadonlySet<StepId> = new Set<StepId>(["readings"]);`; ` Test Files  64 passed (64)`, `      Tests  425 passed (425)`.
 
 - [ ] **Step 2 (agent): Write the failing tests**
 
@@ -6450,7 +6451,7 @@ PYEOF
 git status --short
 ```
 
-**Expected:** ` Test Files  7 passed (7)`, `      Tests  87 passed (87)`; ` Test Files  64 passed (64)`, `      Tests  421 passed (421)`; `0`; `> tsc --noEmit` and `> eslint` with nothing after them; seven ` M` files and `?? frontend/src/components/builder/summary-hymns.tsx`.
+**Expected:** ` Test Files  7 passed (7)`, `      Tests  90 passed (90)`; ` Test Files  64 passed (64)`, `      Tests  427 passed (427)`; `0`; `> tsc --noEmit` and `> eslint` with nothing after them; seven ` M` files and `?? frontend/src/components/builder/summary-hymns.tsx`.
 
 - [ ] **Step 6 (agent): Commit**
 
@@ -6461,7 +6462,7 @@ git commit -m "Builder: Hymns ships; the step bar, Still needed and the summary 
 each empty slot, and the summary lists Opening, Response and Closing
 from the draft's snapshot (No ... hymn when empty). /builder/hymns
 renders the Hymns step; Liturgy and Review keep Available soon.
-Frontend 419 -> 421 tests in 64 files.
+Frontend 425 -> 427 tests in 64 files.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -6482,7 +6483,7 @@ S and F are what slices 4, 5a and 6a will read, so they must say what 3b built. 
 - Consumes: the clarifications above and the code of T2-T12.
 - Produces: S and F as later slices read them; the checklist T15 runs from.
 
-Counts after this task: frontend **421 passed in 64 files**; backend **1110 passed, 11 skipped**.
+Counts after this task: frontend **427 passed in 64 files**; backend **1110 passed, 11 skipped**.
 
 - [ ] **Step 1 (agent): Check the starting point**
 
@@ -6697,7 +6698,7 @@ Below, `<scratch>` is the absolute path of the session's scratchpad directory, a
 
 **Interfaces:**
 - Consumes: everything from T2-T13, in particular each task's commit subject (Step 8 reads them from this plan between `### Task 1:` and `### Task 14:`), the cumulative counts (Baselines and counts), `SHIPPED_STEPS` (T12), and CI (`.github/workflows/ci.yml`, unchanged: `backend`, `backend-postgres`, `frontend` with lint, typecheck, `API types match the OpenAPI snapshot (F §5.4)`, test and build).
-- Produces: PR `<N>` (`claude/slice-2-plan-4q33le` → `main`), titled `Slice 3b: the Hymns step`, not a draft after Step 13, CI green on the branch head, its body holding the line `Tests: frontend 356 → 421 in 55 → 64 files; backend 1106 → 1110 passed, 11 → 11 skipped` and ending with `🤖 Generated with [Claude Code](https://claude.com/claude-code)`. Later user: T15.
+- Produces: PR `<N>` (`claude/slice-2-plan-4q33le` → `main`), titled `Slice 3b: the Hymns step`, not a draft after Step 13, CI green on the branch head, its body holding the line `Tests: frontend 356 → 427 in 55 → 64 files; backend 1106 → 1110 passed, 11 → 11 skipped` and ending with `🤖 Generated with [Claude Code](https://claude.com/claude-code)`. Later user: T15.
 
 - [ ] **Step 1 (agent): Bring the branch up to date with `origin/main`**
 
@@ -6737,7 +6738,7 @@ for d in 8 400; do echo "clock +$d days"; (cd frontend && WSB_CLOCK_SHIFT_DAYS=$
 (cd frontend && npm run typecheck 2>&1 | tail -1 && npm run lint 2>&1 | tail -1)
 ```
 
-**Expected:** three times ` Test Files  64 passed (64)` and `      Tests  421 passed (421)` (baseline 356 in 55; after T3-T12: 359, 366, 382, 388, 392, 403, 407, 414, 419, 421) and no `FAIL`; then `clock +8 days` and `clock +400 days`, each followed by the same two lines and no `FAIL`; `0`; `> tsc --noEmit` and `> eslint` with nothing after. Any other number: find the task whose count drifted. A run that fails even once is a failure (Step 14): make the test deterministic (fake only `Date`, set to `DRAFT_NOW`; await the UI with `findBy`/`waitFor`) rather than retrying it.
+**Expected:** three times ` Test Files  64 passed (64)` and `      Tests  427 passed (427)` (baseline 356 in 55; after T3-T12: 359, 367, 385, 391, 395, 409, 413, 420, 425, 427) and no `FAIL`; then `clock +8 days` and `clock +400 days`, each followed by the same two lines and no `FAIL`; `0`; `> tsc --noEmit` and `> eslint` with nothing after. Any other number: find the task whose count drifted. A run that fails even once is a failure (Step 14): make the test deterministic (fake only `Date`, set to `DRAFT_NOW`; await the UI with `findBy`/`waitFor`) rather than retrying it.
 
 - [ ] **Step 3 (agent): Run the backend suite and the Postgres marker count**
 
@@ -6902,7 +6903,7 @@ git rev-list --count origin/main..HEAD
 
 Send the owner exactly this, with `<count>` filled in, and wait for a clear yes:
 
-> Slice 3b is verified locally: frontend 421 tests in 64 files, passing three runs in a row and with the clock moved 8 and 400 days ahead (356 in 55 before); typecheck, lint and the production build are clean; the backend has 1110 passed, 11 skipped (1106 before: the church season in the AI prompt added four tests); the API types did not change; the checks are clean (every page is a client component, no link to the old app, the screens use the query hooks, no new browser storage, Date & readings and Hymns are the steps switched on); changed files (56) and commits (<count>) are as planned, and every commit is already backed up on the branch. May I open the pull request as a **draft** titled "Slice 3b: the Hymns step", so the checks run? I will come back with the results and ask again before marking it ready. Merging stays with you (Task 15).
+> Slice 3b is verified locally: frontend 427 tests in 64 files, passing three runs in a row and with the clock moved 8 and 400 days ahead (356 in 55 before); typecheck, lint and the production build are clean; the backend has 1110 passed, 11 skipped (1106 before: the church season in the AI prompt added four tests); the API types did not change; the checks are clean (every page is a client component, no link to the old app, the screens use the query hooks, no new browser storage, Date & readings and Hymns are the steps switched on); changed files (56) and commits (<count>) are as planned, and every commit is already backed up on the branch. May I open the pull request as a **draft** titled "Slice 3b: the Hymns step", so the checks run? I will come back with the results and ask again before marking it ready. Merging stays with you (Task 15).
 
 Add one line per note from Steps 1-8 (a merge from `main`, a skipped font download, a `Fix:` commit, Task 1b, how the switch was made). A no leaves the branch as it is.
 
@@ -6923,7 +6924,7 @@ Backend: the AI prompt now names the church season (from the service date) and a
 
 Owner answers (2026-09-29): choosing a hymn or a hymnal is unsaved work, the Exclude switch and the ideas are not (1); the recent-use finding is in the plan's Task 1 (2); the church season in the prompt (3); "Written {year}" as designed (4); a guided phone check after the merge (5). @@SWITCH_LINE@@
 
-Tests: frontend 356 → 421 in 55 → 64 files; backend 1106 → 1110 passed, 11 → 11 skipped
+Tests: frontend 356 → 427 in 55 → 64 files; backend 1106 → 1110 passed, 11 → 11 skipped
 
 After merge (Task 15): a guided check on the owner's phone (about six steps) and a quick look on a computer, then a short "Slice 3b record" in docs/ops-runbook.md.
 
@@ -6935,7 +6936,7 @@ Replace `@@SWITCH_LINE@@` with `The switch is generated from the base-nova regis
 
 ```bash
 grep -c '@@' "<scratch>/slice3b-pr-body.md"
-grep -cx 'Tests: frontend 356 → 421 in 55 → 64 files; backend 1106 → 1110 passed, 11 → 11 skipped' "<scratch>/slice3b-pr-body.md"
+grep -cx 'Tests: frontend 356 → 427 in 55 → 64 files; backend 1106 → 1110 passed, 11 → 11 skipped' "<scratch>/slice3b-pr-body.md"
 git fetch origin && test "$(git rev-list --count HEAD..origin/main)" = 0 && test "$(git rev-list --count origin/claude/slice-2-plan-4q33le..HEAD)" = 0 && echo "branch is current and backed up"
 gh pr create -R bbrown62450/church --draft --base main --head claude/slice-2-plan-4q33le \
   --title "Slice 3b: the Hymns step" \
@@ -6966,13 +6967,13 @@ RUN=$(gh run list -R bbrown62450/church --workflow ci.yml --branch claude/slice-
 RUN=$(gh run list -R bbrown62450/church --workflow ci.yml --branch claude/slice-2-plan-4q33le --commit "$(git rev-parse HEAD)" --limit 1 --json databaseId --jq '.[0].databaseId'); JOB=$(gh run view "$RUN" -R bbrown62450/church --json jobs --jq '.jobs[] | select(.name == "backend-postgres") | .databaseId'); gh run view -R bbrown62450/church --job "$JOB" --log | grep -E "pg_smoke: OK|[0-9]+ (passed|failed)"
 ```
 
-**Expected:** `run <id>`; `backend: success`, `backend-postgres: success`, `frontend: success`; frontend `Test Files  64 passed (64)`, `Tests  421 passed (421)`, `✓ Compiled successfully` and the five `/builder` route lines; backend `1110 passed, 11 skipped in …s`; backend-postgres `pg_smoke: OK` and `11 passed, 1110 deselected` (with any warning count the 3a runs showed). If a required job failed on or after 2026-10-19, first check the runner image (`Image: ubuntu-24.04` expected; GitHub moves `ubuntu-latest` then) and report a setup failure on a new image to the owner before changing any 3b file.
+**Expected:** `run <id>`; `backend: success`, `backend-postgres: success`, `frontend: success`; frontend `Test Files  64 passed (64)`, `Tests  427 passed (427)`, `✓ Compiled successfully` and the five `/builder` route lines; backend `1110 passed, 11 skipped in …s`; backend-postgres `pg_smoke: OK` and `11 passed, 1110 deselected` (with any warning count the 3a runs showed). If a required job failed on or after 2026-10-19, first check the runner image (`Image: ubuntu-24.04` expected; GitHub moves `ubuntu-latest` then) and report a setup failure on a new image to the owner before changing any 3b file.
 
 - [ ] **Step 13 (agent → OWNER): Report CI and ask to mark the PR ready**
 
 Send exactly this, with the values filled in, and wait for a clear yes:
 
-> PR #<N> (<url>) is green (run <run id>): frontend 421 tests in 64 files, build OK; backend 1110 passed, 11 skipped; the Postgres job clean; the Vercel preview built. May I mark it ready for review? Merging stays with you (Task 15).
+> PR #<N> (<url>) is green (run <run id>): frontend 427 tests in 64 files, build OK; backend 1110 passed, 11 skipped; the Postgres job clean; the Vercel preview built. May I mark it ready for review? Merging stays with you (Task 15).
 
 On the yes:
 
@@ -7006,7 +7007,7 @@ Read the failure (for CI: `gh run view <run-id> -R bbrown62450/church --log-fail
 
 For each fix: change only the owning task's files; rerun Steps 2-8; commit with the subject `Fix: <what> (Task <n>, slice 3b final verification)` and the trailer; have that task re-reviewed; push with `git push origin claude/slice-2-plan-4q33le` (a backup before Step 10; after it, covered by the owner's first yes); after Step 10, repeat Steps 11-12 and send Step 13's message with the new run. An infrastructure failure with no test output gets one `gh run rerun <run-id> -R bbrown62450/church --failed` first.
 
-Expected counts after this task: frontend `421 passed` in 64 files (CI the same); backend `1110 passed, 11 skipped` (CI `backend-postgres`: `11 passed, 1110 deselected`). No commit unless Step 14 needed a fix.
+Expected counts after this task: frontend `427 passed` in 64 files (CI the same); backend `1110 passed, 11 skipped` (CI `backend-postgres`: `11 passed, 1110 deselected`). No commit unless Step 14 needed a fix.
 
 ### Task 15: Merge and after (OWNER + agent): the merge, the deploy, a guided check on the phone and a look on a computer, the slice 3b record (S Manual checks, AC10, AC11, AC17, AC20; F §5.5; owner decisions 2, 3, 5; owner answers 2, 5)
 
@@ -7033,7 +7034,7 @@ git rev-parse HEAD
 git rev-list --count HEAD..origin/main
 ```
 
-**Expected:** `OPEN draft=false MERGEABLE CLEAN <sha>` with `<sha>` equal to `git rev-parse HEAD`; `0`. If `main` moved (count not `0`, or `BEHIND`): merge it as in T14 Step 1, rerun T14 Steps 2-3 (`421 passed` in 64 files, plus any tests the merge brought; `1110 passed, 11 skipped`), push with the owner's yes, wait for green checks, and run this step again. `BLOCKED`: a required check is not green; fix it (T14 Step 14). Never merge with `--admin`.
+**Expected:** `OPEN draft=false MERGEABLE CLEAN <sha>` with `<sha>` equal to `git rev-parse HEAD`; `0`. If `main` moved (count not `0`, or `BEHIND`): merge it as in T14 Step 1, rerun T14 Steps 2-3 (`427 passed` in 64 files, plus any tests the merge brought; `1110 passed, 11 skipped`), push with the owner's yes, wait for green checks, and run this step again. `BLOCKED`: a required check is not green; fix it (T14 Step 14). Never merge with `--admin`.
 
 - [ ] **Step 2 (agent → OWNER): Ask to merge, then merge**
 
@@ -7208,7 +7209,7 @@ gh pr checks claude/revert-slice-3b -R bbrown62450/church --watch
 
 **Expected:** Vitest `Test Files  55 passed (55)`, `Tests  356 passed (356)` (if anything else merged after 3b, it differs by exactly those tests); `1106 passed, 11 skipped`; every check passes. Merge on the owner's yes, then the owner checks that the site signs in and shows the builder with Hymns "Available soon". Record the revert as a row of the slice 3b record (or its own records PR if Step 12 already merged).
 
-Expected counts after this task: frontend `421 passed` in 64 files on `main`; backend `1110 passed, 11 skipped` (CI `backend-postgres`: `11 passed, 1110 deselected`). The records PR adds no test.
+Expected counts after this task: frontend `427 passed` in 64 files on `main`; backend `1110 passed, 11 skipped` (CI `backend-postgres`: `11 passed, 1110 deselected`). The records PR adds no test.
 
 ---
 
