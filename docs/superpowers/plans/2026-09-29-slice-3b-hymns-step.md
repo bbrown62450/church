@@ -1812,3 +1812,1075 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 **Expected:** one commit, 10 files changed.
 
+**Review checkpoint (T4-T5, batch 2):** the draft recipes return the same object when nothing changes; `setHymnal` stores `null` for the effective hymnal; `applySuggestions` never touches a filled slot (F D16) and dates the ideas; `filterHymns` never lists a blank title and counts what exclusion hides; `buildMatchRefs` and `buildSuggestionRequest` stay inside `ScriptureMatchIn` and `HymnSuggestionIn`'s limits; nothing outside `lib/dates.ts` parses a date-only value; the counts match.
+
+### Task 6: The hymn queries: hymnals, lists, scripture matches and suggestions, church-scoped (S Queries, "Stale and cross-church protection", "Client timeouts"; F §4.4, §1.8; clarifications 6, 20)
+
+The step never calls `apiFetch` (F §4.4); it reads through five hooks in `lib/queries/hymns.ts`, all on the church client, so every request carries `X-Church-Id`. `useHymnals` is `GET /hymnals`; `useHymnList` and `useHymnLists` are `GET /hymns?hymnal=…&limit=2000&recent_for_date=…` under one key shape, so the selected hymnal and each pick's hymnal share the cache (at most four lists); `useScriptureMatches` posts the matches as a query keyed under the hymns prefix, so 6a's invalidation refreshes them. `useSuggestHymns` returns `suggest(body, signal)`, which resolves to `ok`, `error` or `superseded`: each call is tracked with `createLatestTracker` and records its church, so an older answer never overwrites a newer one and nothing reaches a step that unmounted or a church that changed (clarification 6). The suggestion call gets its 90 s client timeout, `lib/features.ts` holds `SETTINGS_HYMNS_READY = false` for the empty-hymnal state, and the fixtures gain the hymnal lists, a `GET /hymns` route and the match and suggestion bodies the step tests use (clarification 20).
+
+**Files:**
+- Create: `frontend/src/lib/queries/hymns.ts`, `frontend/src/lib/features.ts`
+- Modify: `frontend/src/lib/queries/keys.ts` (`hymnMatches`), `frontend/src/lib/api/timeouts.ts` (90 s), `frontend/src/test/fixtures/index.ts` (hymn lists and bodies)
+- Test: `frontend/src/lib/queries/hymns.test.tsx` (new, 6), `frontend/src/lib/queries/keys.test.ts` (one test edited, 0)
+
+**Interfaces:**
+- Consumes: `useApi`, `useChurchMutation` (`lib/queries/client.ts`), `useChurch`, `createLatestTracker` (`lib/latest.ts`), `keys.hymns`, `keys.hymnals`; the T4 type names.
+- Produces:
+  - `keys.hymnMatches(id, params)` → `["church", id, "hymns", "matches", params]`.
+  - `HYMN_LIST_LIMIT = 2000`, `MAX_LISTS = 4`, `MATCH_RESULTS = 30`.
+  - `useHymnals(): UseQueryResult<Hymnals, ApiError>`.
+  - `useHymnList(hymnal | null, recentForDate | null): UseQueryResult<Hymn[], ApiError>` (the page's `items`).
+  - `useHymnLists(hymnals: (string | null)[], recentForDate): {lists: Map<string, Hymn[] | undefined>; failed: ReadonlySet<string>; fetching: boolean; retry(): void}`.
+  - `useScriptureMatches({refs, hymnal, recentForDate, enabled}): UseQueryResult<ScriptureMatches, ApiError>` (no request without refs or hymnal, or with `enabled` false).
+  - `type SuggestOutcome = {status: "ok"; data} | {status: "error"; error: ApiError} | {status: "superseded"}`; `useSuggestHymns(): {suggest(body, signal?): Promise<SuggestOutcome>; isPending: boolean}`.
+  - `SETTINGS_HYMNS_READY` in `lib/features.ts`.
+  - fixtures: `gg2013()` (nine hymns in hymnal order: #1, #35 with no link, #403, #649 and #650 "Amazing Grace" (#650's link is `http:`), #700, #710 "Here I Am, Lord" written 1981 and flagged newer, #800 with a blank title, and "Sent Forth by God's Blessing" with no number), `ph1990()` (two hymns, no scripture references), `twoHymnals()`, `hymnListRoute(lists?, recent?)` (a `GET /hymns` handler that sets `recent_use_on` from a title → date map when `recent_for_date` is sent), `hymnMatch(h, strength, refs)`, `scriptureMatches(overrides)` (October 4, 2026's readings: one passage match, three chapter matches), `hymnSuggestions(slots, overrides)`.
+  - Later users: T8-T12.
+
+Counts after this task: frontend **388 passed in 61 files**.
+
+- [ ] **Step 1 (agent): Check the starting point**
+
+```bash
+git status --short
+ls frontend/src/lib/queries/hymns.ts frontend/src/lib/features.ts 2>&1 | head -2
+(cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
+```
+
+**Expected:** nothing (or `?? .claude/`); two `No such file or directory` lines; ` Test Files  60 passed (60)`, `      Tests  382 passed (382)`.
+
+- [ ] **Step 2 (agent): Write the failing tests and the fixtures**
+
+Run this script from the repo root:
+
+```bash
+.venv/bin/python - <<'PYEOF'
+from pathlib import Path
+
+
+def edit(path: str, pairs: list[tuple[str, str]]) -> None:
+    p = Path(path)
+    text = p.read_text(encoding="utf-8")
+    for old, new in pairs:
+        assert text.count(old) == 1, f"{path}: anchor not found exactly once: {old[:70]!r}"
+        text = text.replace(old, new)
+    p.write_text(text, encoding="utf-8")
+
+
+Path("frontend/src/lib/queries/hymns.test.tsx").write_text('''/**
+ * The Hymns step's queries (S Queries, "Stale and cross-church protection";
+ * F §4.4, §1.8): every request is church-scoped (`X-Church-Id`), every key
+ * sits under ["church", id, "hymns"] or ["church", id, "hymnals"], the
+ * suggestion call waits up to 90 s, and an older or orphaned answer is never
+ * handed to the step.
+ */
+import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
+import { act, renderHook, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
+import { describe, expect, it } from "vitest";
+
+import { timeoutFor } from "@/lib/api/timeouts";
+import { ChurchProvider } from "@/lib/church-context";
+import { installFakeApi } from "@/test/fake-api";
+import {
+  church,
+  CHURCH_IDS,
+  gg2013,
+  hymnals,
+  hymnListRoute,
+  hymnSuggestions,
+  scriptureMatches,
+} from "@/test/fixtures";
+
+import { makeQueryClient } from "./client";
+import { useHymnals, useHymnList, useHymnLists, useScriptureMatches, useSuggestHymns } from "./hymns";
+import { keys } from "./keys";
+
+const GRACE = CHURCH_IDS.grace;
+const BODY = { service_date_iso: "2026-10-04", occasion: "", exclude_recent: true };
+
+function render<T>(hook: () => T, queryClient: QueryClient = makeQueryClient({ queries: { retry: false } })) {
+  function Wrapper({ children }: { children: ReactNode }) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <ChurchProvider value={church()}>{children}</ChurchProvider>
+      </QueryClientProvider>
+    );
+  }
+  return { ...renderHook(hook, { wrapper: Wrapper }), queryClient };
+}
+
+/** A route that answers only when `release` is called. */
+function held(answer: unknown) {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  return {
+    handler: async () => {
+      await gate;
+      return answer;
+    },
+    release: () => release(),
+  };
+}
+
+describe("hymn queries (S Queries)", () => {
+  it("loads the hymnals and one hymnal's whole list for a service date, as the church", async () => {
+    const api = installFakeApi({ "GET /hymnals": hymnals(), "GET /hymns": hymnListRoute() });
+    const { result, queryClient } = render(() => ({ hymnals: useHymnals(), list: useHymnList("GG2013", "2026-10-04") }));
+    await waitFor(() => expect(result.current.list.isSuccess && result.current.hymnals.isSuccess).toBe(true));
+    expect(api.requests.map((r) => r.path).sort()).toEqual([
+      "/hymnals",
+      "/hymns?hymnal=GG2013&limit=2000&recent_for_date=2026-10-04",
+    ]);
+    expect(api.requests.every((r) => r.headers["X-Church-Id"] === GRACE)).toBe(true);
+    expect(result.current.list.data).toEqual(gg2013());
+    expect(queryClient.getQueryData(keys.hymnals(GRACE))).toEqual(hymnals());
+    const listKey = keys.hymns(GRACE, { hymnal: "GG2013", limit: 2000, recent_for_date: "2026-10-04" });
+    expect(queryClient.getQueryData(listKey)).toMatchObject({ total: gg2013().length });
+  });
+
+  it("sends no recent_for_date without a valid date, and nothing without a hymnal", async () => {
+    const api = installFakeApi({ "GET /hymns": hymnListRoute() });
+    const none = render(() => useHymnList(null, "2026-10-04"));
+    expect(none.result.current.fetchStatus).toBe("idle");
+    const { result } = render(() => useHymnList("GG2013", null));
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(api.requests.map((r) => r.path)).toEqual(["/hymns?hymnal=GG2013&limit=2000"]);
+  });
+
+  it("useHymnLists loads each distinct hymnal once, at most four, sharing the single list's cache", async () => {
+    const api = installFakeApi({ "GET /hymns": hymnListRoute({ GG2013: gg2013(), PH1990: [], A: [], B: [], C: [] }) });
+    const { result } = render(() => ({
+      lists: useHymnLists(["GG2013", "PH1990", null, "GG2013", "A", "B", "C"], "2026-10-04"),
+      single: useHymnList("GG2013", "2026-10-04"),
+    }));
+    await waitFor(() => expect([...result.current.lists.lists.values()].every((l) => l !== undefined)).toBe(true));
+    expect([...result.current.lists.lists.keys()]).toEqual(["GG2013", "PH1990", "A", "B"]);
+    expect(api.requests.filter((r) => r.path.includes("hymnal=GG2013"))).toHaveLength(1);
+    expect(result.current.single.data).toEqual(result.current.lists.lists.get("GG2013"));
+    expect(result.current.lists.failed.size).toBe(0);
+  });
+
+  it("posts the scripture matches with 30 results, keyed under the hymns prefix, and not without references", async () => {
+    const api = installFakeApi({ "POST /hymns/scripture-matches": scriptureMatches() });
+    const idle = render(() => useScriptureMatches({ refs: [], hymnal: "GG2013", recentForDate: null, enabled: true }));
+    expect(idle.result.current.fetchStatus).toBe("idle");
+    const params = { refs: ["Isaiah 5:1-7"], hymnal: "GG2013", recentForDate: "2026-10-04", enabled: true };
+    const { result, queryClient } = render(() => useScriptureMatches(params));
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(api.requests).toHaveLength(1);
+    expect(api.requests[0].body).toEqual({
+      refs: ["Isaiah 5:1-7"],
+      hymnal: "GG2013",
+      recent_for_date: "2026-10-04",
+      max_results: 30,
+    });
+    expect(api.requests[0].headers["X-Church-Id"]).toBe(GRACE);
+    const key = keys.hymnMatches(GRACE, { refs: ["Isaiah 5:1-7"], hymnal: "GG2013", recent_for_date: "2026-10-04" });
+    expect(key.slice(0, 3)).toEqual(["church", GRACE, "hymns"]);
+    expect(queryClient.getQueryData(key)).toEqual(scriptureMatches());
+  });
+
+  it("posts a suggestion as the church with a 90-second timeout; Cancel's signal ends it as aborted", async () => {
+    const answer = hymnSuggestions({ opening: [], response: [], closing: [] });
+    const api = installFakeApi({ "POST /hymns/suggestions": answer });
+    const { result } = render(() => useSuggestHymns());
+    let outcome: unknown;
+    await act(async () => {
+      outcome = await result.current.suggest(BODY, new AbortController().signal);
+    });
+    expect(outcome).toEqual({ status: "ok", data: answer });
+    expect(api.requests[0].body).toEqual(BODY);
+    expect(api.requests[0].headers["X-Church-Id"]).toBe(GRACE);
+    const cancelled = new AbortController();
+    cancelled.abort();
+    await act(async () => {
+      outcome = await result.current.suggest(BODY, cancelled.signal);
+    });
+    expect(outcome).toMatchObject({ status: "error", error: { code: "aborted" } });
+    expect(timeoutFor("POST", "/hymns/suggestions")).toBe(90_000);
+    expect(timeoutFor("GET", "/hymns?hymnal=GG2013")).toBe(20_000);
+  });
+
+  it("never hands over an older answer after a newer request, or any answer after the step unmounts", async () => {
+    const first = held(hymnSuggestions({ opening: gg2013().slice(0, 1), response: [], closing: [] }));
+    const second = hymnSuggestions({ opening: gg2013().slice(2, 3), response: [], closing: [] });
+    const api = installFakeApi({ "POST /hymns/suggestions": first.handler });
+    const { result, unmount } = render(() => useSuggestHymns());
+    let older!: Promise<unknown>;
+    act(() => {
+      older = result.current.suggest(BODY);
+    });
+    await waitFor(() => expect(result.current.isPending).toBe(true));
+    api.set("POST /hymns/suggestions", second);
+    let newer: unknown;
+    await act(async () => {
+      newer = await result.current.suggest(BODY);
+    });
+    expect(newer).toEqual({ status: "ok", data: second });
+    first.release();
+    await act(async () => {
+      expect(await older).toEqual({ status: "superseded" });
+    });
+
+    const late = held(second);
+    api.set("POST /hymns/suggestions", late.handler);
+    let orphan!: Promise<unknown>;
+    act(() => {
+      orphan = result.current.suggest(BODY);
+    });
+    await waitFor(() => expect(api.requests).toHaveLength(3));
+    unmount();
+    late.release();
+    expect(await orphan).toEqual({ status: "superseded" });
+  });
+});
+''', encoding="utf-8")
+
+edit("frontend/src/lib/queries/keys.test.ts", [
+    ('''      keys.hymns(id, { q: "grace" }),
+      keys.hymnals(id),
+''',
+     '''      keys.hymns(id, { q: "grace" }),
+      keys.hymnMatches(id, { refs: ["Mark 1"] }),
+      keys.hymnals(id),
+'''),
+    ('''      ["hymns", { q: "grace" }],
+      ["hymnals"],
+''',
+     '''      ["hymns", { q: "grace" }],
+      ["hymns", "matches", { refs: ["Mark 1"] }],
+      ["hymnals"],
+'''),
+])
+
+edit("frontend/src/test/fixtures/index.ts", [
+    ('''  Hymn,
+  Hymnals,
+  InviteAccepted,
+''',
+     '''  Hymn,
+  HymnMatch,
+  Hymnals,
+  HymnPage,
+  HymnSuggestions,
+  InviteAccepted,
+'''),
+    ('''  Lectionary,
+  SuggestedHymn,
+''',
+     '''  Lectionary,
+  ScriptureMatches,
+  SuggestedHymn,
+'''),
+])
+with open("frontend/src/test/fixtures/index.ts", "a", encoding="utf-8") as f:
+    f.write('''
+/**
+ * Grace's GG2013 list as `GET /hymns?hymnal=GG2013&limit=2000` returns it, in
+ * hymnal order: #403 (`hymn()`), two hymns with the same title, one newer than
+ * the church prefers (#710, written 1981), one with no number (last), one
+ * with a link that is not https (#650), and one with a blank title (never listed).
+ */
+export function gg2013(): Hymn[] {
+  return [
+    hymn({ number: 1, title: "Holy, Holy, Holy! Lord God Almighty", scripture_refs: "Revelation 4:8-11", text_year: 1826 }),
+    hymn({ number: 35, title: "Praise, My Soul, the King of Heaven", link: null, scripture_refs: "Psalm 103", text_year: 1834 }),
+    hymn(),
+    hymn({ number: 649, title: "Amazing Grace", scripture_refs: "Ephesians 2:8", text_year: 1779 }),
+    hymn({ number: 650, title: "Amazing Grace", link: "http://hymnary.org/text/amazing_grace", text_year: 1779 }),
+    hymn({ number: 700, title: "Great Is Thy Faithfulness", scripture_refs: "Lamentations 3:22-23", text_year: 1923 }),
+    hymn({ number: 710, title: "Here I Am, Lord", scripture_refs: "Isaiah 6:8", text_year: 1981, newer_than_preferred: true }),
+    hymn({ number: 800, title: " " }),
+    hymn({ id: hymnId(9999), number: null, title: "Sent Forth by God's Blessing", link: null, text_year: 1964 }),
+  ];
+}
+
+/** Grace's PH1990 list: no scripture references, as in production's PH1990. */
+export function ph1990(): Hymn[] {
+  return [
+    hymn({ id: hymnId(10_001), hymnal: "PH1990", number: 1, title: "Come, Thou Long-Expected Jesus", link: null }),
+    hymn({ id: hymnId(10_276), hymnal: "PH1990", number: 276, title: "Great Is Thy Faithfulness", link: null }),
+  ];
+}
+
+/** `GET /hymnals` with GG2013 and PH1990 (605 hymns, none with scripture references). */
+export function twoHymnals(): Hymnals {
+  return hymnals({
+    items: [
+      { code: "GG2013", hymn_count: 853, scripture_ref_count: 795 },
+      { code: "PH1990", hymn_count: 605, scripture_ref_count: 0 },
+    ],
+  });
+}
+
+/**
+ * A fake-API handler for `GET /hymns`: each hymnal's list from `lists`, and,
+ * when `recent_for_date` is sent, `recent_use_on` from `recent` (title → date).
+ */
+export function hymnListRoute(
+  lists: Record<string, Hymn[]> = { GG2013: gg2013(), PH1990: ph1990() },
+  recent: Record<string, string> = {},
+) {
+  return (req: { path: string }): HymnPage => {
+    const query = new URL(req.path, "http://localhost").searchParams;
+    const dated = query.get("recent_for_date") !== null;
+    const items = (lists[query.get("hymnal") ?? ""] ?? []).map((h) => ({
+      ...h,
+      recent_use_on: dated ? (recent[h.title] ?? null) : null,
+    }));
+    return { items, total: items.length, limit: Number(query.get("limit") ?? 50), offset: 0 };
+  };
+}
+
+/** A `HymnMatchOut`: a hymn with its strength and the query references it matched. */
+export function hymnMatch(h: Hymn, strength: HymnMatch["strength"], matched: string[]): HymnMatch {
+  return { ...h, strength, matched_refs: matched };
+}
+
+/** `POST /hymns/scripture-matches` for the readings of October 4, 2026, unless overridden. */
+export function scriptureMatches(overrides: Partial<ScriptureMatches> = {}): ScriptureMatches {
+  const [holy, , come, grace, , , here] = gg2013();
+  const items = [
+    hymnMatch(here, "passage", ["Isaiah 5:1-7"]),
+    hymnMatch(come, "chapter", ["Isaiah 5:1-7"]),
+    hymnMatch(holy, "chapter", ["Matthew 21:33-46"]),
+    hymnMatch(grace, "chapter", ["Philippians 3:4b-14"]),
+  ];
+  return {
+    hymnal: "GG2013",
+    refs_used: ["Isaiah 5:1-7", "Psalm 80:7-15", "Philippians 3:4b-14", "Matthew 21:33-46"],
+    unparsed_refs: [],
+    total_matched: items.length,
+    items,
+    ...overrides,
+  };
+}
+
+/** `POST /hymns/suggestions`: each slot's hymns in order, all `source: "ai"`, unless overridden. */
+export function hymnSuggestions(
+  slots: Record<"opening" | "response" | "closing", Hymn[]>,
+  overrides: Partial<HymnSuggestions> = {},
+): HymnSuggestions {
+  const out = (list: Hymn[]): SuggestedHymn[] => list.map((h) => suggested(h));
+  return {
+    hymnal: "GG2013",
+    nt_ref: "Philippians 3:4b-14",
+    nt_text_used: false,
+    excluded_recent_count: 0,
+    slots: { opening: out(slots.opening), response: out(slots.response), closing: out(slots.closing) },
+    ...overrides,
+  };
+}
+''')
+
+print("T6 tests written")
+PYEOF
+```
+
+**Expected:** `T6 tests written`.
+
+- [ ] **Step 3 (agent): Run them and see them fail**
+
+```bash
+(cd frontend && npx vitest run src/lib/queries/hymns.test.tsx src/lib/queries/keys.test.ts 2>&1 | grep -E "^ (FAIL|×)|Error:|TypeError|Tests |Test Files")
+```
+
+**Expected:**
+
+```
+ FAIL  |dom| src/lib/queries/hymns.test.tsx [ src/lib/queries/hymns.test.tsx ]
+Error: Failed to resolve import "./hymns" from "src/lib/queries/hymns.test.tsx". Does the file exist?
+ FAIL  |unit| src/lib/queries/keys.test.ts > keys > starts every church-scoped key with ['church', id]
+TypeError: keys.hymnMatches is not a function
+ Test Files  2 failed (2)
+      Tests  1 failed | 1 passed (2)
+```
+
+- [ ] **Step 4 (agent): Write the queries, the key, the timeout and the feature switch**
+
+Run this script from the repo root:
+
+```bash
+.venv/bin/python - <<'PYEOF'
+from pathlib import Path
+
+
+def edit(path: str, pairs: list[tuple[str, str]]) -> None:
+    p = Path(path)
+    text = p.read_text(encoding="utf-8")
+    for old, new in pairs:
+        assert text.count(old) == 1, f"{path}: anchor not found exactly once: {old[:70]!r}"
+        text = text.replace(old, new)
+    p.write_text(text, encoding="utf-8")
+
+
+edit("frontend/src/lib/api/timeouts.ts", [
+    ('''  "POST /scripture/passages": 30_000,
+};
+''',
+     '''  "POST /scripture/passages": 30_000,
+  // Slice 3 (S API; F §1.8): the server answers within its 75 s deadline.
+  "POST /hymns/suggestions": 90_000,
+};
+'''),
+])
+
+Path("frontend/src/lib/features.ts").write_text('''/**
+ * Switches for screens that ship in later slices (slice 3 S Interfaces row 6a).
+ * The slice that ships a screen flips its switch in the same pull request.
+ */
+
+/** Settings → Hymns (slice 6a). Until then the empty-hymnal state names the current app instead of linking. */
+export const SETTINGS_HYMNS_READY = false;
+''', encoding="utf-8")
+
+Path("frontend/src/lib/queries/hymns.ts").write_text('''/**
+ * The Hymns step's queries (S Queries; F §4.4). All church-scoped
+ * (`api.church`, so every request carries `X-Church-Id`), keyed under
+ * ["church", id, "hymns"] or ["church", id, "hymnals"], with F §4.4's
+ * defaults (30 s stale, refetch on focus, one retry for a retryable error).
+ */
+import { useQueries, useQuery, type UseQueryResult } from "@tanstack/react-query";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import { ApiError } from "@/lib/api/client";
+import type {
+  Hymn,
+  Hymnals,
+  HymnPage,
+  HymnSuggestionBody,
+  HymnSuggestions,
+  ScriptureMatchBody,
+  ScriptureMatches,
+} from "@/lib/api/types";
+import { useChurch } from "@/lib/church-context";
+import { createLatestTracker } from "@/lib/latest";
+
+import { useApi, useChurchMutation, type Api } from "./client";
+import { keys } from "./keys";
+
+/** A whole hymnal in one page (the largest has about 1 000 hymns; S API). */
+export const HYMN_LIST_LIMIT = 2000;
+/** At most this many hymnal lists at once: the selected one plus the picks' (S Queries). */
+export const MAX_LISTS = 4;
+/** Match results asked for (S Queries). */
+export const MATCH_RESULTS = 30;
+
+/** `GET /hymnals`: the church's hymnals, the stored default and the effective one. */
+export function useHymnals(): UseQueryResult<Hymnals, ApiError> {
+  const api = useApi();
+  const church = useChurch();
+  return useQuery<Hymnals, ApiError>({
+    queryKey: keys.hymnals(church.id),
+    queryFn: ({ signal }) => api.church<Hymnals>("/hymnals", { signal }),
+  });
+}
+
+function hymnListQuery(api: Api, churchId: string, hymnal: string, recentForDate: string | null) {
+  const params = { hymnal, limit: HYMN_LIST_LIMIT, recent_for_date: recentForDate };
+  const search = new URLSearchParams({ hymnal, limit: String(HYMN_LIST_LIMIT) });
+  if (recentForDate !== null) search.set("recent_for_date", recentForDate);
+  return {
+    queryKey: keys.hymns(churchId, params),
+    queryFn: ({ signal }: { signal: AbortSignal }) => api.church<HymnPage>(`/hymns?${search}`, { signal }),
+    select: (page: HymnPage): Hymn[] => page.items,
+  };
+}
+
+/**
+ * One hymnal's whole list (`GET /hymns?hymnal=…&limit=2000&recent_for_date=…`).
+ * No request without a hymnal; `recentForDate` is null when the draft's date
+ * is not valid, and is then left out (S Queries).
+ */
+export function useHymnList(hymnal: string | null, recentForDate: string | null): UseQueryResult<Hymn[], ApiError> {
+  const api = useApi();
+  const church = useChurch();
+  return useQuery({ ...hymnListQuery(api, church.id, hymnal ?? "", recentForDate), enabled: hymnal !== null });
+}
+
+export type HymnLists = {
+  /** Each hymnal's list; undefined while it loads or when it failed. */
+  lists: Map<string, Hymn[] | undefined>;
+  /** The hymnals whose list failed. */
+  failed: ReadonlySet<string>;
+  /** True while any of them is being fetched (a Retry's spinner). */
+  fetching: boolean;
+  /** Asks again for every list that failed. */
+  retry: () => void;
+};
+
+/**
+ * Several hymnals' lists (the selected one and every pick's), each distinct
+ * non-null code once, at most `MAX_LISTS`, so a pick from another hymnal can
+ * show its live title and be checked. The same keys as `useHymnList`, so the
+ * two share the cache.
+ */
+export function useHymnLists(hymnals: readonly (string | null)[], recentForDate: string | null): HymnLists {
+  const api = useApi();
+  const church = useChurch();
+  const codes = [...new Set(hymnals.filter((code): code is string => code !== null))].slice(0, MAX_LISTS);
+  const results = useQueries({ queries: codes.map((code) => hymnListQuery(api, church.id, code, recentForDate)) });
+  return {
+    lists: new Map(codes.map((code, i) => [code, results[i].data] as const)),
+    failed: new Set(codes.filter((_, i) => results[i].isError)),
+    fetching: results.some((r) => r.isFetching),
+    retry: () => {
+      for (const r of results) if (r.isError) void r.refetch();
+    },
+  };
+}
+
+export type MatchParams = {
+  /** From `buildMatchRefs`, never the raw draft lines. */
+  refs: string[];
+  /** The selected hymnal. */
+  hymnal: string | null;
+  recentForDate: string | null;
+  /** False for a hymnal with no scripture references. */
+  enabled: boolean;
+};
+
+/**
+ * `POST /hymns/scripture-matches` as a query (S Queries): it runs again
+ * whenever the references, the hymnal or the date change; nothing is sent
+ * without references or a hymnal, or when `enabled` is false.
+ */
+export function useScriptureMatches({ refs, hymnal, recentForDate, enabled }: MatchParams): UseQueryResult<ScriptureMatches, ApiError> {
+  const api = useApi();
+  const church = useChurch();
+  return useQuery<ScriptureMatches, ApiError>({
+    queryKey: keys.hymnMatches(church.id, { refs, hymnal, recent_for_date: recentForDate }),
+    queryFn: ({ signal }) => {
+      const json: Omit<ScriptureMatchBody, "limit_per_ref"> = { refs, hymnal, recent_for_date: recentForDate, max_results: MATCH_RESULTS };
+      return api.church<ScriptureMatches>("/hymns/scripture-matches", { method: "POST", json, signal });
+    },
+    enabled: enabled && refs.length > 0 && hymnal !== null,
+  });
+}
+
+export type SuggestOutcome =
+  | { status: "ok"; data: HymnSuggestions }
+  | { status: "error"; error: ApiError }
+  /** A newer request started, the step unmounted or the church changed: apply nothing, show nothing. */
+  | { status: "superseded" };
+
+/**
+ * `POST /hymns/suggestions` (S "Stale and cross-church protection"): a 90 s
+ * timeout (`timeouts.ts`) and the caller's signal (Cancel). Each call is
+ * tracked with `createLatestTracker` and records the church it was sent for,
+ * so an older answer never overwrites a newer one and no answer reaches a
+ * step that unmounted (a church switch remounts it). The caller still checks
+ * the draft's date before applying. Nothing is invalidated: it writes nothing.
+ */
+export function useSuggestHymns(): {
+  suggest: (body: HymnSuggestionBody, signal?: AbortSignal) => Promise<SuggestOutcome>;
+  isPending: boolean;
+} {
+  const api = useApi();
+  const church = useChurch();
+  const [tracker] = useState(createLatestTracker);
+  const mounted = useRef(false);
+  const currentChurch = useRef(church.id);
+  const mutation = useChurchMutation<HymnSuggestions, ApiError, { body: HymnSuggestionBody; signal?: AbortSignal }>({
+    mutationFn: ({ body, signal }) =>
+      api.church<HymnSuggestions>("/hymns/suggestions", { method: "POST", json: body, signal }),
+  });
+  const { mutateAsync } = mutation;
+
+  useEffect(() => {
+    currentChurch.current = church.id;
+  }, [church.id]);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  const suggest = useCallback(
+    async (body: HymnSuggestionBody, signal?: AbortSignal): Promise<SuggestOutcome> => {
+      const isLatest = tracker.begin();
+      const sentFor = church.id;
+      const current = () => mounted.current && isLatest() && currentChurch.current === sentFor;
+      try {
+        const data = await mutateAsync({ body, signal });
+        return current() ? { status: "ok", data } : { status: "superseded" };
+      } catch (e) {
+        if (!current()) return { status: "superseded" };
+        const error = e instanceof ApiError ? e : new ApiError(0, "unknown", "Something went wrong.");
+        return { status: "error", error };
+      }
+    },
+    [tracker, church.id, mutateAsync],
+  );
+
+  return { suggest, isPending: mutation.isPending };
+}
+''', encoding="utf-8")
+
+edit("frontend/src/lib/queries/keys.ts", [
+    ('''  hymns: (id: string, params: object) => ["church", id, "hymns", params] as const,
+  hymnals: (id: string) => ["church", id, "hymnals"] as const,
+''',
+     '''  hymns: (id: string, params: object) => ["church", id, "hymns", params] as const,
+  /** Under the hymns prefix, so a hymn change (6a) refreshes the matches too (slice 3 S Queries). */
+  hymnMatches: (id: string, params: object) => ["church", id, "hymns", "matches", params] as const,
+  hymnals: (id: string) => ["church", id, "hymnals"] as const,
+'''),
+])
+
+print("T6 code written")
+PYEOF
+```
+
+**Expected:** `T6 code written`.
+
+- [ ] **Step 5 (agent): Run the tests, the suite, types and lint**
+
+```bash
+(cd frontend && npx vitest run src/lib/queries/hymns.test.tsx src/lib/queries/keys.test.ts 2>&1 | grep -E "Test Files|Tests ")
+(cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
+(cd frontend && npm run typecheck 2>&1 | tail -1 && npm run lint 2>&1 | tail -1)
+git status --short
+```
+
+**Expected:** ` Test Files  2 passed (2)`, `      Tests  8 passed (8)`; ` Test Files  61 passed (61)`, `      Tests  388 passed (388)`; `> tsc --noEmit` and `> eslint` with nothing after them; ` M` for `keys.ts`, `keys.test.ts`, `timeouts.ts` and `fixtures/index.ts`, `??` for `hymns.ts`, `hymns.test.tsx` and `features.ts`.
+
+- [ ] **Step 6 (agent): Commit**
+
+```bash
+git add frontend/src/lib/queries/hymns.ts frontend/src/lib/queries/hymns.test.tsx frontend/src/lib/queries/keys.ts frontend/src/lib/queries/keys.test.ts frontend/src/lib/api/timeouts.ts frontend/src/lib/features.ts frontend/src/test/fixtures/index.ts
+git commit -m "Queries: hymnals, hymn lists, scripture matches and suggestions, church-scoped (S Queries; F §4.4, §1.8)" -m "useHymnals, useHymnList and useHymnLists (one key shape, so the selected
+hymnal and the picks' hymnals share the cache, at most four lists),
+useScriptureMatches (a query under the hymns prefix, 30 results) and
+useSuggestHymns, whose suggest() resolves ok, error or superseded: a
+newer request, an unmounted step or another church drops the answer.
+POST /hymns/suggestions gets 90 s; SETTINGS_HYMNS_READY is false until
+6a. Fixtures for the step's tests. Frontend 382 -> 388 tests in 61 files.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+**Expected:** one commit, 7 files changed. The controller reviews it and backs the branch up.
+
+### Task 7: The Base UI switch and the generic long-list SearchCombobox (F §4.9 items 1 and 5; S Frontend changes "Files"; clarifications 3, 4)
+
+The toolbar's Exclude toggle is a Base UI `Switch`, which the kit does not have yet, and the hymn picker needs the generic long-list component F §4.9 item 5 describes. S expected slice 1 to have built `SearchCombobox` under `TimezoneCombobox`; slice 1 used the Combobox directly, so this task creates `components/app/search-combobox.tsx` and leaves `TimezoneCombobox` alone (clarification 3). The caller ranks and caps the rows (`search`), so the list shows exactly the caller's order, Base UI renders only the rows it is given (`filteredItems`) and handles focus, highlight and the keyboard, and the footer shows the caller's hints. Escape, or focus leaving the field and its list, calls `onDismiss` ("Change" puts the row back). The registry is blocked from the container, so after trying `shadcn add switch` the task writes `switch.tsx` rebuilt from the upstream source exactly as 2b and 2c did (clarification 4). S also lists `combobox`, `badge` and `alert` as generated here; all three exist already (slice 1 and 2b).
+
+**Files:**
+- Create: `frontend/src/components/ui/switch.tsx` (generated, or clarification 4's file), `frontend/src/components/app/search-combobox.tsx`
+- Test: `frontend/src/components/app/search-combobox.test.tsx` (new, 4). The switch is exercised by T9.
+
+**Interfaces:**
+- Consumes: `@base-ui/react/switch` (installed with `@base-ui/react` 1.8.0), `cn` from `"cn"` (as the other generated files import it), `Combobox`, `ComboboxInput`, `ComboboxContent`, `ComboboxList`, `ComboboxItem` (`components/ui/combobox.tsx`), `Label`.
+- Produces:
+  - `components/ui/switch.tsx`: `Switch` (Base UI `Switch.Root` props: `checked`, `onCheckedChange`, `disabled`, `id`; renders `role="switch"`, and `aria-disabled` when disabled; `size` `"sm" | "default"`). Later user: T9.
+  - `components/app/search-combobox.tsx`: `type SearchResult<T> = {shown: readonly T[]; footer: readonly string[]}`; `SearchCombobox<T>({label, labelHidden?, items, search, itemKey, itemText, renderItem?, value, onValueChange, placeholder?, disabled?, autoFocus?, onDismiss?, id?})`. The input is 44 px (`h-11`) and `text-base md:text-sm` (the generated `ComboboxInput`); each row is 44 px below `md`. Later user: T8.
+
+Counts after this task: frontend **392 passed in 62 files**.
+
+- [ ] **Step 1 (agent): Check the starting point**
+
+```bash
+git status --short
+ls frontend/src/components/ui/ | tr '\n' ' '; echo
+(cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
+```
+
+**Expected:** nothing (or `?? .claude/`); `alert-dialog.tsx alert.tsx avatar.tsx badge.tsx button.test.tsx button.tsx card.tsx collapsible.tsx combobox.tsx dropdown-menu.tsx input-group.tsx input.tsx label.tsx radio-group.tsx select.tsx sheet.tsx skeleton.tsx sonner.tsx tabs.tsx textarea.tsx tooltip.tsx` (no `switch.tsx`); ` Test Files  61 passed (61)`, `      Tests  388 passed (388)`.
+
+- [ ] **Step 2 (agent): Write the failing test**
+
+Run this script from the repo root:
+
+```bash
+.venv/bin/python - <<'PYEOF'
+from pathlib import Path
+
+
+def edit(path: str, pairs: list[tuple[str, str]]) -> None:
+    p = Path(path)
+    text = p.read_text(encoding="utf-8")
+    for old, new in pairs:
+        assert text.count(old) == 1, f"{path}: anchor not found exactly once: {old[:70]!r}"
+        text = text.replace(old, new)
+    p.write_text(text, encoding="utf-8")
+
+
+Path("frontend/src/components/app/search-combobox.test.tsx").write_text('''/**
+ * `SearchCombobox` (F §4.9 item 5; slice 3 S Testing
+ * `components/app/search-combobox.test.tsx`): opens on click, shows the
+ * caller's results and hints, selects with the keyboard, and gives the row
+ * back on Escape or when focus leaves.
+ */
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { useState } from "react";
+import { describe, expect, it, vi } from "vitest";
+
+import { SearchCombobox, type SearchResult } from "./search-combobox";
+
+type Item = { id: string; name: string };
+
+const ITEMS: Item[] = Array.from({ length: 70 }, (_, i) => ({ id: `i${i}`, name: `Item ${String(i).padStart(2, "0")}` }));
+
+/** The caller's rules: contains, at most 50, with the hints a hymn picker would give. */
+function search(query: string): SearchResult<Item> {
+  const q = query.trim().toLowerCase();
+  const matches = ITEMS.filter((item) => item.name.toLowerCase().includes(q));
+  const footer =
+    q === "" ? [`Type to search ${ITEMS.length} items.`]
+    : matches.length === 0 ? [`No items match “${query.trim()}”.`]
+    : matches.length > 50 ? [`Showing 50 of ${matches.length}.`]
+    : [];
+  return { shown: matches.slice(0, 50), footer: q === "item 0" ? [...footer, "2 more are hidden."] : footer };
+}
+
+function Host({ onChange, onDismiss }: { onChange?: (item: Item) => void; onDismiss?: () => void }) {
+  const [value, setValue] = useState<Item | null>(null);
+  return (
+    <>
+      <SearchCombobox
+        label="Opening hymn"
+        items={ITEMS}
+        search={search}
+        itemKey={(item) => item.id}
+        itemText={(item) => item.name}
+        value={value}
+        onValueChange={(item) => {
+          setValue(item);
+          onChange?.(item);
+        }}
+        placeholder="Search by title or number"
+        onDismiss={onDismiss}
+      />
+      <button type="button">Elsewhere</button>
+    </>
+  );
+}
+
+describe("SearchCombobox", () => {
+  it("opens on click and shows at most the caller's 50 with its hint", async () => {
+    const user = userEvent.setup();
+    render(<Host />);
+    const input = screen.getByRole("combobox", { name: "Opening hymn" });
+    expect(input).toHaveAttribute("placeholder", "Search by title or number");
+    expect(screen.queryByRole("listbox")).toBeNull();
+    await user.click(input);
+    const listbox = await screen.findByRole("listbox");
+    expect(within(listbox).getAllByRole("option")).toHaveLength(50);
+    expect(screen.getByText("Type to search 70 items.")).toBeInTheDocument();
+  });
+
+  it("shows the caller's order and footers: no match, and hidden ones", async () => {
+    const user = userEvent.setup();
+    render(<Host />);
+    const input = screen.getByRole("combobox", { name: "Opening hymn" });
+    await user.type(input, "item 0");
+    const listbox = await screen.findByRole("listbox");
+    expect(within(listbox).getAllByRole("option").map((o) => o.textContent)).toEqual(ITEMS.slice(0, 10).map((i) => i.name));
+    expect(screen.getByText("2 more are hidden.")).toBeInTheDocument();
+    await user.clear(input);
+    await user.type(input, "zzz");
+    expect(screen.queryByRole("option")).toBeNull();
+    expect(screen.getByText("No items match “zzz”.")).toBeInTheDocument();
+  });
+
+  it("selects with the keyboard and shows the chosen item's text", async () => {
+    const onChange = vi.fn();
+    const user = userEvent.setup();
+    render(<Host onChange={onChange} />);
+    const input = screen.getByRole("combobox", { name: "Opening hymn" });
+    await user.type(input, "item 42");
+    await screen.findByRole("option", { name: "Item 42" });
+    await user.keyboard("{ArrowDown}{Enter}");
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith({ id: "i42", name: "Item 42" });
+    expect(input).toHaveValue("Item 42");
+  });
+
+  it("calls onDismiss on Escape and when focus leaves, but not when an option is clicked", async () => {
+    const onDismiss = vi.fn();
+    const onChange = vi.fn();
+    const user = userEvent.setup();
+    render(<Host onDismiss={onDismiss} onChange={onChange} />);
+    const input = screen.getByRole("combobox", { name: "Opening hymn" });
+    await user.type(input, "item 07");
+    await user.click(await screen.findByRole("option", { name: "Item 07" }));
+    expect(onChange).toHaveBeenCalledWith({ id: "i7", name: "Item 07" });
+    expect(onDismiss).not.toHaveBeenCalled();
+    await user.click(input);
+    await user.keyboard("{Escape}");
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+    await user.click(input);
+    // While the list is open the rest of the page is hidden from the accessibility tree, so find it by text.
+    await user.click(screen.getByText("Elsewhere"));
+    expect(onDismiss).toHaveBeenCalledTimes(2);
+  });
+});
+''', encoding="utf-8")
+
+print("T7 tests written")
+PYEOF
+```
+
+**Expected:** `T7 tests written`.
+
+- [ ] **Step 3 (agent): Run it and see it fail**
+
+```bash
+(cd frontend && npx vitest run src/components/app/search-combobox.test.tsx 2>&1 | grep -E "^ (FAIL|×)|Error:|Tests |Test Files")
+```
+
+**Expected:**
+
+```
+ FAIL  |dom| src/components/app/search-combobox.test.tsx [ src/components/app/search-combobox.test.tsx ]
+Error: Failed to resolve import "./search-combobox" from "src/components/app/search-combobox.test.tsx". Does the file exist?
+ Test Files  1 failed (1)
+      Tests  no tests
+```
+
+- [ ] **Step 4 (agent): Try to generate the switch (network)**
+
+```bash
+(cd frontend && timeout 120 npx shadcn@latest add switch < /dev/null 2>&1 | tail -8)
+git status --short
+```
+
+`< /dev/null` means no prompt can wait for input. Never pass `--overwrite` (F §4.9 item 1).
+- **It works** (the CLI lists `src/components/ui/switch.tsx` as created and `git status` shows that one new file besides the test; revert any change to an existing file with `git checkout -- <file>`): Step 5's script must then not write `switch.tsx`, so delete its `Path("frontend/src/components/ui/switch.tsx").write_text(...)` statement before running it, and note "generated" for the commit.
+- **Network failure** (expected: this container cannot reach ui.shadcn.com; 2b's and 2c's attempts printed `Request to https://ui.shadcn.com/r/styles/base-nova/….json failed, reason: Request was cancelled.` and changed no file): run Step 5 as written.
+- **Anything else** (the registry answers that the item does not exist, or the CLI changes other files): stop and ask the controller.
+
+- [ ] **Step 5 (agent, clarification 4): Write the switch and SearchCombobox**
+
+Provenance of `switch.tsx`: at shadcn-ui/ui commit `db2db460a26fa84fb65c8d903b213925fbdee9ed` (the commit 2b and 2c pinned), the plan's writer fetched `apps/v4/registry/bases/base/ui/switch.tsx` (sha256 `87aaf20b3209fabbcf0a9520c8b34733ddf2c91524c80ec72ed3dd3684f1bca3`) and `apps/v4/registry/styles/style-nova.css` (sha256 `5d5751579c015b61e77cf0822862a43ac79f3e6fed236a17624be8e6d1ebea1d`) from raw.githubusercontent.com, ran the file through the installed shadcn 4.21.0 CLI's `createStyleMap` and `transformStyle`, and formatted it with Prettier 3 and `prettier-plugin-tailwindcss` (`semi: false`, `trailingComma: "es5"`, `tailwindFunctions: ["cn", "cva"]`, `tailwindStylesheet: src/app/globals.css`), the pipeline that reproduces 2c's `collapsible.tsx` exactly after its header comment. The only change from that output is the header comment. Optional check that the upstream file is unchanged (skip it if the host is unreachable; the code below is the record):
+
+```bash
+curl -fsS "https://raw.githubusercontent.com/shadcn-ui/ui/db2db460a26fa84fb65c8d903b213925fbdee9ed/apps/v4/registry/bases/base/ui/switch.tsx" | sha256sum | cut -c1-64
+```
+
+**Expected:** `87aaf20b3209fabbcf0a9520c8b34733ddf2c91524c80ec72ed3dd3684f1bca3`.
+
+Run this script from the repo root:
+
+```bash
+.venv/bin/python - <<'PYEOF'
+from pathlib import Path
+
+
+def edit(path: str, pairs: list[tuple[str, str]]) -> None:
+    p = Path(path)
+    text = p.read_text(encoding="utf-8")
+    for old, new in pairs:
+        assert text.count(old) == 1, f"{path}: anchor not found exactly once: {old[:70]!r}"
+        text = text.replace(old, new)
+    p.write_text(text, encoding="utf-8")
+
+
+Path("frontend/src/components/app/search-combobox.tsx").write_text('''"use client";
+
+import { useId, useState, type ReactNode } from "react";
+
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from "@/components/ui/combobox";
+import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
+
+export type SearchResult<T> = {
+  /** What the list shows for the query, best first (the caller caps it, F §4.9 item 5). */
+  shown: readonly T[];
+  /** Hint lines under the list ("Type to search 853 hymns.", "No hymns match …"). */
+  footer: readonly string[];
+};
+
+export type SearchComboboxProps<T> = {
+  label: string;
+  /** Hide the label visually (a card heading already names the field); it stays the input's name. */
+  labelHidden?: boolean;
+  /** Every item; `search` picks what shows. */
+  items: readonly T[];
+  search: (query: string) => SearchResult<T>;
+  itemKey: (item: T) => string;
+  /** The text for the input once an item is chosen, and the option's name. */
+  itemText: (item: T) => string;
+  /** The option's content; defaults to `itemText`. */
+  renderItem?: (item: T) => ReactNode;
+  value: T | null;
+  onValueChange: (item: T) => void;
+  placeholder?: string;
+  disabled?: boolean;
+  autoFocus?: boolean;
+  /** Escape, or focus leaving the field and its list ("Change" puts the row back). */
+  onDismiss?: () => void;
+  id?: string;
+};
+
+/**
+ * A searchable long list (F §4.9 item 5; slice 3's hymn picker). The caller
+ * filters and ranks (`search`), so the list shows exactly its order; Base UI
+ * only renders the items it is given (`filteredItems`) and handles focus,
+ * highlight and keyboard selection. The footer holds the caller's hints.
+ */
+export function SearchCombobox<T>({
+  label,
+  labelHidden = false,
+  items,
+  search,
+  itemKey,
+  itemText,
+  renderItem,
+  value,
+  onValueChange,
+  placeholder,
+  disabled = false,
+  autoFocus = false,
+  onDismiss,
+  id,
+}: SearchComboboxProps<T>) {
+  const generatedId = useId();
+  const inputId = id ?? generatedId;
+  // What the user has typed since the list opened ("" = nothing yet).
+  const [query, setQuery] = useState("");
+  const result = search(query);
+
+  return (
+    <div className="grid gap-1.5">
+      <Label htmlFor={inputId} className={cn(labelHidden && "sr-only")}>
+        {label}
+      </Label>
+      <Combobox
+        items={items}
+        filteredItems={result.shown}
+        itemToStringLabel={itemText}
+        isItemEqualToValue={(a: T, b: T) => itemKey(a) === itemKey(b)}
+        value={value}
+        onValueChange={(next) => {
+          if (next !== null) onValueChange(next as T);
+        }}
+        onInputValueChange={(next, details) => setQuery(details.reason === "input-change" ? next : "")}
+        onOpenChange={(open) => {
+          if (!open) setQuery("");
+        }}
+        disabled={disabled}
+      >
+        <ComboboxInput
+          id={inputId}
+          placeholder={placeholder}
+          disabled={disabled}
+          autoFocus={autoFocus}
+          className="h-11 w-full *:data-[slot=input-group-control]:h-full"
+          onKeyDown={(event) => {
+            if (event.key === "Escape") onDismiss?.();
+          }}
+          onBlur={(event) => {
+            const next = event.relatedTarget;
+            const inList = next instanceof Element && next.closest("[data-slot=combobox-content]") !== null;
+            if (!inList) onDismiss?.();
+          }}
+        />
+        <ComboboxContent>
+          <ComboboxList>
+            {(item: T) => (
+              <ComboboxItem key={itemKey(item)} value={item} className="min-h-11 md:min-h-8">
+                {renderItem ? renderItem(item) : itemText(item)}
+              </ComboboxItem>
+            )}
+          </ComboboxList>
+          {result.footer.length > 0 ? (
+            <div className="grid gap-0.5 border-t px-2 py-1.5 text-xs text-muted-foreground">
+              {result.footer.map((line) => (
+                <p key={line}>{line}</p>
+              ))}
+            </div>
+          ) : null}
+        </ComboboxContent>
+      </Combobox>
+    </div>
+  );
+}
+''', encoding="utf-8")
+
+Path("frontend/src/components/ui/switch.tsx").write_text('''"use client"
+
+// Rebuilt from the upstream shadcn source (slice 3b plan clarification 4, as
+// slices 2b and 2c did): shadcn-ui/ui@db2db460
+// apps/v4/registry/bases/base/ui/switch.tsx with
+// apps/v4/registry/styles/style-nova.css, through the shadcn 4.21.0 CLI's own
+// style transform and Prettier's Tailwind class order. The only change from
+// that output is this comment. Replace it with the file
+// `npx shadcn@latest add switch` generates when the registry is reachable.
+
+import { Switch as SwitchPrimitive } from "@base-ui/react/switch"
+import { cn } from "cn"
+
+function Switch({
+  className,
+  size = "default",
+  ...props
+}: SwitchPrimitive.Root.Props & {
+  size?: "sm" | "default"
+}) {
+  return (
+    <SwitchPrimitive.Root
+      data-slot="switch"
+      data-size={size}
+      className={cn(
+        "peer group/switch relative inline-flex shrink-0 items-center rounded-full border border-transparent transition-all outline-none group-has-[:focus-visible]/field-label:border-transparent group-has-[:focus-visible]/field-label:ring-0 after:absolute after:-inset-x-3 after:-inset-y-2 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 data-[size=default]:h-[18.4px] data-[size=default]:w-[32px] data-[size=sm]:h-[14px] data-[size=sm]:w-[24px] dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 data-checked:bg-primary data-unchecked:bg-input dark:data-unchecked:bg-input/80 data-disabled:cursor-not-allowed data-disabled:opacity-50",
+        className
+      )}
+      {...props}
+    >
+      <SwitchPrimitive.Thumb
+        data-slot="switch-thumb"
+        className="pointer-events-none block rounded-full bg-background ring-0 transition-transform group-data-[size=default]/switch:size-4 group-data-[size=sm]/switch:size-3 group-data-[size=default]/switch:data-checked:translate-x-[calc(100%-2px)] group-data-[size=sm]/switch:data-checked:translate-x-[calc(100%-2px)] dark:data-checked:bg-primary-foreground group-data-[size=default]/switch:data-unchecked:translate-x-0 group-data-[size=sm]/switch:data-unchecked:translate-x-0 dark:data-unchecked:bg-foreground"
+      />
+    </SwitchPrimitive.Root>
+  )
+}
+
+export { Switch }
+''', encoding="utf-8")
+
+print("T7 code written")
+PYEOF
+```
+
+**Expected:** `T7 code written`.
+
+- [ ] **Step 6 (agent): Run the test, the suite, types and lint**
+
+```bash
+(cd frontend && npx vitest run src/components/app/search-combobox.test.tsx 2>&1 | grep -E "Test Files|Tests ")
+(cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
+(cd frontend && npm run typecheck 2>&1 | tail -1 && npm run lint 2>&1 | tail -1)
+git status --short
+```
+
+**Expected:** ` Test Files  1 passed (1)`, `      Tests  4 passed (4)`; ` Test Files  62 passed (62)`, `      Tests  392 passed (392)`; `> tsc --noEmit` and `> eslint` with nothing after them; three `??` files.
+
+- [ ] **Step 7 (agent): Commit**
+
+```bash
+git add frontend/src/components/ui/switch.tsx frontend/src/components/app/search-combobox.tsx frontend/src/components/app/search-combobox.test.tsx
+git commit -m "UI: the Base UI switch and the generic long-list SearchCombobox (F §4.9 items 1, 5; S Frontend changes)" -m "SearchCombobox renders the caller's ranked rows (at most what the caller
+passes, F §4.9 item 5) with the caller's hints in the footer; Base UI
+handles focus, highlight and the keyboard; Escape or focus leaving calls
+onDismiss. switch.tsx is rebuilt from the upstream shadcn source
+(base-nova, pinned commit) because the build container cannot reach the
+registry (plan clarification 4). Frontend 388 -> 392 tests in 62 files.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+If Step 4 generated the switch, replace the sentence about the rebuild with "switch.tsx is generated from the base-nova registry." **Expected:** one commit, 3 files changed.
+
+**Review checkpoint (T6-T7, batch 3):** every hook uses `api.church` and a key under `["church", id, …]`; `useSuggestHymns` never resolves `ok` for an older or orphaned call, and turns every failure into a value; `switch.tsx` differs from the upstream output only in its header; `SearchCombobox` holds no hymn logic.
