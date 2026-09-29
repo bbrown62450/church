@@ -13,7 +13,8 @@ import { useMeContext } from "@/lib/me-context";
 /**
  * "New service" (S "New service"; F §4.6 item 1): a draft with nothing to
  * lose resets at once; otherwise "Start a new service?" asks first. Either
- * way the builder then opens Date & readings.
+ * way the builder then opens Date & readings. The fresh draft keeps the
+ * chosen Bible translation (owner answer A, 2026-09-29).
  */
 export function useNewService(church: DraftChurch): { start: () => void; dialog: ReactNode } {
   const { draft, replace } = useDraft();
@@ -22,7 +23,8 @@ export function useNewService(church: DraftChurch): { start: () => void; dialog:
   const [confirming, setConfirming] = useState(false);
 
   function reset() {
-    replace(freshDraft({ church, user: me.user }));
+    const fresh = freshDraft({ church, user: me.user });
+    replace({ ...fresh, readings: { ...fresh.readings, translation: draft.readings.translation } });
     setConfirming(false);
     router.push("/builder/readings");
   }

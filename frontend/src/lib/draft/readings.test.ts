@@ -5,6 +5,7 @@ import { churchProfile, lectionary, testDraft } from "@/test/fixtures";
 import { onDateChanged } from "./date-effects";
 import {
   applyReadingSet,
+  chooseReadingSet,
   clearReadings,
   commitScriptureLines,
   editOccasion,
@@ -80,6 +81,20 @@ describe("readings transitions (S readings.ts)", () => {
     expect(() => applyReadingSet(testDraft(), lectionary(OCT_4), 5)).toThrow();
     const applied = applyReadingSet(testDraft(), lectionary(OCT_4), 0);
     expect(applyReadingSet(applied, lectionary(OCT_4), 0)).toBe(applied); // nothing changes
+  });
+
+  it("chooseReadingSet applies the chosen set and makes a default date the user's (owner answer Q2)", () => {
+    const chosen = chooseReadingSet(filled(), lectionary(OCT_4), 1);
+    expect(chosen.readings).toMatchObject({
+      occasion: "Resurrection of the Lord",
+      fields_origin: "lectionary",
+      reading_set: { date_iso: OCT_4, index: 1 },
+      date_origin: "user",
+    });
+    const shown = filled();
+    expect(chooseReadingSet(shown, lectionary(OCT_4), 0)).toBe(shown); // already shown: nothing changes
+    const archivedDate = testDraft((d) => ({ ...d, readings: { ...d.readings, date_origin: "archive" } }));
+    expect(chooseReadingSet(archivedDate, lectionary(OCT_4), 0).readings.date_origin).toBe("archive");
   });
 
   it("shouldAutoApply replaces empty fields and an old date's lectionary fields, never typed or archived ones", () => {

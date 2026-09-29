@@ -3,7 +3,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CHURCH_IDS, churchProfile, DRAFT_NOW, lectionary, testDraft, USER_ID } from "@/test/fixtures";
 
 import { draftToServicePayload } from "./mapping";
-import { applyReadingSet, editOccasion, editScriptureLines, setPick, shouldAutoApply } from "./readings";
+import {
+  applyReadingSet,
+  chooseReadingSet,
+  editOccasion,
+  editScriptureLines,
+  setPick,
+  setTranslation,
+  shouldAutoApply,
+} from "./readings";
 import { corruptDraftKey, draftKey, type DraftV1 } from "./schema";
 import { DraftStore, WRITE_DELAY_MS, type DraftNotice, type DraftStorage } from "./store";
 
@@ -145,6 +153,22 @@ describe("DraftStore load (F §4.6 Versioning)", () => {
     const edited = editOccasion(pastPristine, "Harvest");
     const kept = makeStore(memoryStorage({ [KEY]: JSON.stringify(edited) }).storage, tenDaysLater.now).store;
     expect(kept.getSnapshot().draft.readings.date_iso).toBe("2026-10-04");
+  });
+});
+
+describe("DraftStore roll-forward and owner answers Q2 and A", () => {
+  it("keeps a passed default date when a reading set was chosen, and rolls one with only a translation picked", () => {
+    const tenDaysLater = clock(new Date(DRAFT_NOW.getTime() + 10 * 86_400_000)); // Friday, October 9
+    const filled = applyReadingSet(testDraft(), lectionary("2026-10-04"), 0);
+    const chosen = chooseReadingSet(filled, lectionary("2026-10-04"), 1);
+    const kept = makeStore(memoryStorage({ [KEY]: JSON.stringify(chosen) }).storage, tenDaysLater.now).store;
+    expect(kept.getSnapshot().draft.readings.date_iso).toBe("2026-10-04");
+    const { store } = makeStore(memoryStorage({ [KEY]: JSON.stringify(filled) }).storage, tenDaysLater.now);
+    expect(store.getSnapshot().draft.readings.date_iso).toBe("2026-10-11"); // the automatic fill alone rolls
+    // Owner answer A: a translation override does not hold the date back, and it is kept.
+    const translated = setTranslation(filled, "kjv", "web");
+    const rolled = makeStore(memoryStorage({ [KEY]: JSON.stringify(translated) }).storage, tenDaysLater.now).store;
+    expect(rolled.getSnapshot().draft.readings).toMatchObject({ date_iso: "2026-10-11", translation: "kjv" });
   });
 });
 

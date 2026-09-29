@@ -2,7 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import { lectionary, testDraft } from "@/test/fixtures";
 
-import { applyReadingSet, editOccasion, editScriptureLines, setDate, setPick } from "./readings";
+import {
+  applyReadingSet,
+  chooseReadingSet,
+  editOccasion,
+  editScriptureLines,
+  setDate,
+  setPick,
+  setTranslation,
+} from "./readings";
 import type { DraftV1, HymnPick, StepId } from "./schema";
 import { isPristine, stepStatus, stillNeeded } from "./status";
 import { SHIPPED_STEPS, STEPS, stepById, stepFromPath } from "./steps";
@@ -62,6 +70,14 @@ describe("stepStatus (F §4.7)", () => {
       done: 2,
       total: 3,
     });
+    // Owner answer E: a field showing its message does not count.
+    const twoOf3 = { kind: "incomplete", done: 2, total: 3 };
+    expect(stepStatus(editOccasion(full, "x".repeat(301)), "readings", READINGS)).toEqual(twoOf3);
+    expect(stepStatus(editOccasion(full, "x".repeat(300)), "readings", READINGS)).toEqual({ kind: "complete" });
+    const lines = (n: number) => Array.from({ length: n }, (_, i) => `Psalm ${i + 1}`).join("\n\n");
+    expect(stepStatus(editScriptureLines(full, lines(21)), "readings", READINGS)).toEqual(twoOf3);
+    expect(stepStatus(editScriptureLines(full, lines(20)), "readings", READINGS)).toEqual({ kind: "complete" });
+    expect(stepStatus(editScriptureLines(full, `Mark 1:1\n${"y".repeat(201)}`), "readings", READINGS)).toEqual(twoOf3);
   });
 
   it("counts filled hymn slots and enabled liturgy cards with text once those steps ship", () => {
@@ -95,8 +111,29 @@ describe("isPristine (S status.ts)", () => {
       ["editing", testDraft((d) => ({ ...d, editing: { service_id: "s1", saved_at: "2026-09-29T16:00:00Z" } }))],
       ["user fields", editOccasion(testDraft(), "Harvest")],
       ["archive fields", testDraft((d) => ({ ...d, readings: { ...d.readings, fields_origin: "archive" } }))],
+      // Owner answer Q2 (2026-09-29): a picked date, a chosen reading set and a translation override.
+      ["a picked date", setDate(testDraft(), "2026-10-11")],
+      ["the same date picked by hand", setDate(testDraft(), "2026-10-04")],
+      [
+        "a chosen reading set",
+        chooseReadingSet(applyReadingSet(testDraft(), lectionary("2026-10-04"), 0), lectionary("2026-10-04"), 1),
+      ],
+      ["a translation", setTranslation(testDraft(), "kjv", "web")],
     ];
     for (const [name, d] of cases) expect(isPristine(d), name).toBe(false);
+  });
+});
+
+describe("isPristine and the date and translation defaults (owner answer Q2)", () => {
+  it("stays true for the default date, a lectionary fill of it, Use next Sunday and the church's own translation", () => {
+    const filled = applyReadingSet(testDraft(), lectionary("2026-10-04"), 0);
+    expect(isPristine(filled)).toBe(true);
+    // "Use next Sunday" sets the date with origin "default"; the church's translation is stored as null.
+    expect(isPristine(setDate(setDate(testDraft(), "2026-10-11"), "2026-10-04", "default"))).toBe(true);
+    expect(isPristine(setTranslation(testDraft(), "web", "web"))).toBe(true);
+    expect(isPristine(setTranslation(setTranslation(testDraft(), "kjv", "web"), "web", "web"))).toBe(true);
+    const archivedDate = testDraft((d) => ({ ...d, readings: { ...d.readings, date_origin: "archive" } }));
+    expect(isPristine(archivedDate)).toBe(true);
   });
 });
 

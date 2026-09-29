@@ -7,8 +7,8 @@
  *   cannot be restored is copied to the corrupt-draft key, a fresh draft
  *   starts, and a "restore_failed" notice follows; when the copy cannot be
  *   written, the stored value is left in place until the user edits. A
- *   pristine draft whose default date has passed rolls forward to the next
- *   Sunday, stamped 1 ms after the stored `updated_at` so it never outranks a
+ *   pristine draft (a translation override aside) whose default date has
+ *   passed rolls forward to the next Sunday, stamped 1 ms after the stored `updated_at` so it never outranks a
  *   newer edit from another tab.
  * - `update(recipe)` applies the recipe to the latest draft, bumps
  *   `updated_at` and schedules a write 400 ms later; a recipe that returns the
@@ -55,10 +55,16 @@ export type DraftStoreOptions = {
   notify?: (notice: DraftNotice) => void;
 };
 
-/** The pristine draft's passed default date moves to the next Sunday (S "Mount-time roll-forward"). */
+/**
+ * The pristine draft's passed default date moves to the next Sunday (S
+ * "Mount-time roll-forward"). A translation override does not hold the date
+ * back and is kept (owner answer A, 2026-09-29), though it still counts for
+ * "New service" (`isPristine`).
+ */
 export function rollForward(draft: DraftV1, today: string): DraftV1 {
   const r = draft.readings;
-  if (r.date_origin !== "default" || !isValidDateIso(r.date_iso) || r.date_iso >= today || !isPristine(draft)) {
+  const pristine = isPristine({ ...draft, readings: { ...r, translation: null } });
+  if (r.date_origin !== "default" || !isValidDateIso(r.date_iso) || r.date_iso >= today || !pristine) {
     return draft;
   }
   return setDate(draft, nextSunday(today), "default");

@@ -20,6 +20,11 @@ function counted(done: number, total: number): StepStatus {
   return done === total ? { kind: "complete" } : { kind: "incomplete", done, total };
 }
 
+/** Date & readings' field limits (S UX items 4 and 5); the step shows a message past each. */
+export const OCCASION_MAX = 300;
+export const MAX_READINGS = 20;
+export const MAX_LINE = 200;
+
 /** A date the lectionary lookup and the archive accept. */
 export function hasServiceDate(draft: DraftV1): boolean {
   return isValidDateIso(draft.readings.date_iso) && inSupportedRange(draft.readings.date_iso);
@@ -27,7 +32,10 @@ export function hasServiceDate(draft: DraftV1): boolean {
 
 /**
  * F §4.7: readings count a valid date, a non-empty occasion and at least one
- * scripture ("n of 3"); hymns the three slots; liturgy the enabled cards that
+ * scripture ("n of 3"), and a field whose message shows (an occasion over 300
+ * characters; more than 20 readings or a line over 200) does not count, so
+ * the step is never "Complete" with an error on screen (owner answer E,
+ * 2026-09-29); hymns the three slots; liturgy the enabled cards that
  * have text. Review reads "Not in archive" until 5a adds "Saved" and
  * "Unsaved changes". An unshipped step (other than Review) is "Soon".
  */
@@ -40,7 +48,11 @@ export function stepStatus(
   if (!shipped.has(step)) return { kind: "soon" };
   if (step === "readings") {
     const r = draft.readings;
-    const done = [hasServiceDate(draft), r.occasion.trim() !== "", cleanLines(r.scriptures).length > 0];
+    const scripturesOk =
+      cleanLines(r.scriptures).length > 0 &&
+      r.scriptures.filter((line) => line.trim() !== "").length <= MAX_READINGS &&
+      r.scriptures.every((line) => line.length <= MAX_LINE);
+    const done = [hasServiceDate(draft), r.occasion.trim() !== "" && r.occasion.length <= OCCASION_MAX, scripturesOk];
     return counted(done.filter(Boolean).length, 3);
   }
   if (step === "hymns") {
@@ -53,12 +65,16 @@ export function stepStatus(
 /**
  * "Nothing the user would lose" (S "status.ts"), decided by origins rather
  * than text, so defaults that later slices fill in (slice 4's benediction)
- * never make a fresh draft look edited.
+ * never make a fresh draft look edited. A date the user picked, a reading set
+ * chosen in the switcher (which makes the date the user's, `chooseReadingSet`)
+ * and a translation override count as work (owner answer Q2, 2026-09-29).
  */
 export function isPristine(draft: DraftV1): boolean {
   const r = draft.readings;
   const l = draft.liturgy;
   return (
+    r.date_origin !== "user" &&
+    r.translation === null &&
     (r.fields_origin === "empty" || r.fields_origin === "lectionary") &&
     r.selected_ot_ref === "" &&
     r.selected_nt_ref === "" &&

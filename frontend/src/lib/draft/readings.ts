@@ -55,6 +55,18 @@ export function applyReadingSet(d: DraftV1, lect: Lectionary, i: number): DraftV
   });
 }
 
+/**
+ * The set switcher's choice (S UX item 2): applies set `i` like
+ * `applyReadingSet`, and a choice that changes the draft also makes a
+ * `default` date the user's (owner answer Q2, 2026-09-29), so "New service"
+ * asks first and the mount-time roll-forward keeps the date.
+ */
+export function chooseReadingSet(d: DraftV1, lect: Lectionary, i: number): DraftV1 {
+  const next = applyReadingSet(d, lect, i);
+  if (next === d || next.readings.date_origin !== "default") return next;
+  return withReadings(next, { date_origin: "user" });
+}
+
 /** Auto-fill applies only to empty fields, or to lectionary fields from another date. */
 export function shouldAutoApply(d: DraftV1, lect: Lectionary): boolean {
   const r = d.readings;

@@ -15,7 +15,7 @@ import LiturgyStepPage from "@/app/(signed-in)/(church)/builder/liturgy/page";
 import ReadingsStepPage from "@/app/(signed-in)/(church)/builder/readings/page";
 import ReviewStepPage from "@/app/(signed-in)/(church)/builder/review/page";
 import { useDraft } from "@/lib/draft/context";
-import { applyReadingSet, editOccasion, setPick } from "@/lib/draft/readings";
+import { applyReadingSet, editOccasion, setPick, setTranslation } from "@/lib/draft/readings";
 import { draftKey, type DraftV1 } from "@/lib/draft/schema";
 import { installFakeApi } from "@/test/fake-api";
 import { church, churchProfile, DRAFT_NOW, lectionary, me, testDraft, USER_ID } from "@/test/fixtures";
@@ -205,7 +205,7 @@ describe("builder shell (F §4.7)", () => {
   });
 
   it("New service asks first when the draft has something to lose; Cancel keeps it, confirming clears it", async () => {
-    const saved = seed(editOccasion(testDraft(), "Harvest Sunday"));
+    const saved = seed(setTranslation(editOccasion(testDraft(), "Harvest Sunday"), "kjv", "web"));
     const { user } = renderBuilder(<DraftProbe />, "/builder/review");
     expect(await screen.findByText(`Probe: Harvest Sunday / ${saved.save_key}`)).toBeInTheDocument();
 
@@ -226,6 +226,7 @@ describe("builder shell (F §4.7)", () => {
     expect(testRouter.push).toHaveBeenCalledWith("/builder/readings");
     await waitFor(() => expect(stored().save_key).not.toBe(saved.save_key));
     expect(stored().readings.occasion).toBe("");
+    expect(stored().readings.translation).toBe("kjv"); // the chosen translation stays (owner answer A)
   });
 
   it("shows the builder skeleton until the church profile loads", async () => {
