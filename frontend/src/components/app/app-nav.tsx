@@ -26,7 +26,7 @@ export function AppNav({ className }: { className?: string }) {
                 href={item.href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "flex h-9 items-center justify-center rounded-md px-3 text-sm font-medium text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  "flex h-11 items-center justify-center rounded-md px-3 md:h-9 text-sm font-medium text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   "aria-[current=page]:bg-background aria-[current=page]:text-foreground aria-[current=page]:shadow-sm",
                   "md:aria-[current=page]:bg-muted md:aria-[current=page]:shadow-none",
                 )}

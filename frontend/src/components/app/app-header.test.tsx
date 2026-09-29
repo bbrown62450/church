@@ -160,6 +160,7 @@ describe("AppHeader", () => {
     const links = within(nav).getAllByRole("link");
     expect(links.map((link) => [link.textContent, link.getAttribute("href")])).toEqual([["Builder", "/builder"]]);
     expect(links[0]).toHaveAttribute("aria-current", "page");
+    expect(links[0]).toHaveClass("h-11", "md:h-9"); // 44 px tap target on phones (F §4.9)
     unmount();
 
     setTestPath("/welcome");
