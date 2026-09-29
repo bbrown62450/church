@@ -2884,3 +2884,1391 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 If Step 4 generated the switch, replace the sentence about the rebuild with "switch.tsx is generated from the base-nova registry." **Expected:** one commit, 3 files changed.
 
 **Review checkpoint (T6-T7, batch 3):** every hook uses `api.church` and a key under `["church", id, …]`; `useSuggestHymns` never resolves `ok` for an older or orphaned call, and turns every failure into a value; `switch.tsx` differs from the upstream output only in its header; `SearchCombobox` holds no hymn logic.
+
+### Task 8: The step: slot cards, the picker and the hymn label, with the loading, empty and error states (S Slot cards, Picker, "Newer-hymn year label", Whole-step states, "Undo toasts never outlive the step"; F §4.8; AC13, AC14, AC20; clarifications 7, 11, 13, 14, 15)
+
+The first screen of the step, rendered by the tests inside the real builder layout (the route still shows the placeholder until T12). `HymnsStep` shows the heading and its line, then the three slot cards from the draft's snapshot at once. It asks for `GET /hymnals`, resolves the selected hymnal with `selectHymnal` (never writing it back), and then asks for the selected hymnal's list and each pick's hymnal's list (clarification 7). A card with a pick shows `HymnLabel` (the live hymn once its list has loaded, the snapshot until then; a rename never touches the draft), the ▶ Listen link for an https page only, ✕ and **Change**, which puts the focused picker in the row until Escape or focus leaves. An empty card shows `HymnPicker`: `SearchCombobox` over the selected list, ranked by `filterHymns`, with S's footer hints, "Loading hymnal…" while the list loads, and a recent-use badge on rows when Exclude is off. Under a pick sit the notices: recent use (only with a valid date), "Not in your hymnal. Choose a replacement." for a pick whose id is null or gone, and "Also chosen as…". ✕ clears the slot and shows "Removed {title}." with **Undo** through `useUndoToasts`, which dismisses every toast it showed when the step unmounts and ignores an Undo from another church (clarification 15). A failed `GET /hymnals` or selected list shows "Couldn't load this church's hymnal." with **Retry** in place of the pickers, never the empty state; a church with no hymnals shows the empty state, asks for no list, and marks each existing pick "Not in your hymnal". The Hymnary credit closes the step. The toolbar comes in T9, Suggest and the ideas in T10, the matches in T11.
+
+**Files:**
+- Create: `frontend/src/components/builder/hymns/hymns-step.tsx`, `hymn-slot-card.tsx`, `hymn-picker.tsx`, `hymn-label.tsx`, `use-undo-toasts.ts`
+- Test: `frontend/src/components/builder/hymns/hymn-label.test.tsx` (new, 2), `frontend/src/components/builder/hymns/hymns-step.test.tsx` (new, 9)
+
+**Interfaces:**
+- Consumes: `useHymnals`, `useHymnLists` (T6); `SearchCombobox` (T7); `selectHymnal`, `pickFromHymn`, `setSlot`, `clearSlot`, `reconcilePick`, `duplicateSlots` (T4); `filterHymns`, `PICKER_LIMIT`, `SLOT_META`, `MISSING_NOTICE`, `hymnText`, `recentUseLabel`, `recentUseNotice`, `duplicateNotice`, `newerYearLabel` (T5); `SETTINGS_HYMNS_READY` (T6); `useDraft`, `EmptyState`, `ErrorState`, `Badge`, `Button`, `buttonVariants`, `safeHttpsUrl`, sonner's `toast`.
+- Produces:
+  - `HymnsStep()` (grows in T9-T11). Later users: T9-T12.
+  - `HymnSlotCard({slot, pick, reconciled, list, pickerAvailable, excludeRecent, serviceDateIso, showHymnal, onChoose, onRemove, notices, children?})`: a `section` named by its title ("Opening hymn"); `children` go under the notices (T10's ideas).
+  - `HymnPicker({label, list, excludeRecent, serviceDateIso, showHymnal, onChoose, autoFocus?, onDismiss?})` and `pickerSearch(items, query, excludeRecent): SearchResult<Hymn>`.
+  - `HymnLabel({hymn: LabelHymn, showHymnal?, recentBadge?, listen?, truncate?})`: the title then badges that never shrink (hymnal, recent use, "Written {year}"), then the Listen link; `type LabelHymn` (a live `Hymn` or a draft `HymnPick`). Later users: T10, T11.
+  - `useUndoToasts(): (message, undo) => void`. Later user: T11.
+
+Counts after this task: frontend **403 passed in 64 files**.
+
+- [ ] **Step 1 (agent): Check the starting point**
+
+```bash
+git status --short
+ls frontend/src/components/builder/hymns 2>&1 | head -1
+(cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
+```
+
+**Expected:** nothing (or `?? .claude/`); `ls: cannot access 'frontend/src/components/builder/hymns': No such file or directory`; ` Test Files  62 passed (62)`, `      Tests  392 passed (392)`.
+
+- [ ] **Step 2 (agent): Write the failing tests**
+
+The step tests render `<HymnsStep />` inside the real `BuilderLayout` with a `<Toaster />`, against the fake API (`GET /church`, `GET /lectionary/readings` answering "no readings", `GET /hymnals`, and `GET /hymns` with Grace's recent use around October 4, 2026: "Great Is Thy Faithfulness" sung September 6, "Praise, My Soul, the King of Heaven" planned October 18). They fake only `Date`. Run this script from the repo root:
+
+```bash
+.venv/bin/python - <<'PYEOF'
+from pathlib import Path
+
+
+def edit(path: str, pairs: list[tuple[str, str]]) -> None:
+    p = Path(path)
+    text = p.read_text(encoding="utf-8")
+    for old, new in pairs:
+        assert text.count(old) == 1, f"{path}: anchor not found exactly once: {old[:70]!r}"
+        text = text.replace(old, new)
+    p.write_text(text, encoding="utf-8")
+
+
+Path("frontend/src/components/builder/hymns").mkdir(parents=True, exist_ok=True)
+Path("frontend/src/components/builder/hymns/hymn-label.test.tsx").write_text('''/** `HymnLabel` (S "Filled slot", "Newer-hymn year label"; Testing `hymn-label.test.tsx`; AC20). */
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+
+import { hymn } from "@/test/fixtures";
+
+import { HymnLabel } from "./hymn-label";
+
+describe("HymnLabel", () => {
+  it("shows #number and title, the hymnal when asked, and a Listen link only for an https page", () => {
+    const { rerender } = render(<HymnLabel hymn={hymn()} showHymnal listen />);
+    expect(screen.getByText("#403 Come, Thou Almighty King")).toBeInTheDocument();
+    expect(screen.getByText("GG2013")).toBeInTheDocument();
+    const listen = screen.getByRole("link", { name: "Listen to Come, Thou Almighty King on Hymnary.org" });
+    expect(listen).toHaveAttribute("href", "https://hymnary.org/hymn/GG2013/403");
+    expect(listen).toHaveAttribute("target", "_blank");
+    expect(listen).toHaveAttribute("rel", "noopener noreferrer");
+    rerender(<HymnLabel hymn={hymn({ number: null, link: "http://hymnary.org/x" })} listen />);
+    expect(screen.getByText("Come, Thou Almighty King")).toBeInTheDocument();
+    expect(screen.queryByRole("link")).toBeNull(); // not https: no link
+    expect(screen.queryByText("GG2013")).toBeNull();
+    rerender(<HymnLabel hymn={hymn({ link: "javascript:alert(1)" })} listen />);
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+
+  it("adds Written {year} only for a flagged hymn, and at 375 px the title truncates while the badges stay whole", () => {
+    const newer = hymn({ title: "Here I Am, Lord", number: 710, text_year: 1981, newer_than_preferred: true });
+    const { rerender } = render(<HymnLabel hymn={newer} recentBadge="Used Sep 6" truncate />);
+    expect(screen.getByText("#710 Here I Am, Lord")).toHaveClass("truncate", "min-w-0");
+    expect(screen.getByText("Written 1981")).toHaveClass("shrink-0");
+    expect(screen.getByText("Used Sep 6")).toHaveClass("shrink-0");
+    rerender(<HymnLabel hymn={hymn({ text_year: 1757, newer_than_preferred: false })} />);
+    expect(screen.queryByText(/^Written/)).toBeNull();
+    rerender(<HymnLabel hymn={{ title: "Snapshot", number: 5, hymnal: "GG2013" }} />); // a draft pick has no year
+    expect(screen.queryByText(/^Written/)).toBeNull();
+  });
+});
+''', encoding="utf-8")
+
+Path("frontend/src/components/builder/hymns").mkdir(parents=True, exist_ok=True)
+Path("frontend/src/components/builder/hymns/hymns-step.test.tsx").write_text('''/**
+ * The Hymns step (S "User experience", Testing `hymns-step.test.tsx`; F §4.6,
+ * §4.8). The step runs inside the real builder layout against the fake API.
+ * The clock is Tuesday, September 29, 2026 (only `Date` is faked), so a fresh
+ * draft is dated Sunday, October 4, 2026, and the lectionary answers "no
+ * readings", so the readings stay as each test seeds them.
+ */
+import { act, screen, waitFor, within } from "@testing-library/react";
+import type { ReactNode } from "react";
+import { toast } from "sonner";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import BuilderLayout from "@/app/(signed-in)/(church)/builder/layout";
+import { Toaster } from "@/components/ui/sonner";
+import type { ChurchProfile } from "@/lib/api/types";
+import { ChurchProvider } from "@/lib/church-context";
+import { useDraft } from "@/lib/draft/context";
+import { editOccasion } from "@/lib/draft/readings";
+import { draftKey, type DraftV1, type HymnPick } from "@/lib/draft/schema";
+import { pickFromHymn } from "@/lib/hymns/picks";
+import { fakeError, installFakeApi, type FakeHandler, type RecordedRequest } from "@/test/fake-api";
+import {
+  church,
+  CHURCH_IDS,
+  churchProfile,
+  DRAFT_NOW,
+  gg2013,
+  hymnals,
+  hymnListRoute,
+  lectionaryRoute,
+  me,
+  testDraft,
+  USER_ID,
+} from "@/test/fixtures";
+import { renderWithProviders } from "@/test/render";
+
+import { HymnsStep } from "./hymns-step";
+
+const KEY = draftKey(USER_ID, church().id);
+const [HOLY, PRAISE, COME, GRACE, , FAITHFUL] = gg2013();
+/** Grace's recent use around October 4, 2026: sung September 6, planned October 18. */
+const RECENT = { "Great Is Thy Faithfulness": "2026-09-06", "Praise, My Soul, the King of Heaven": "2026-10-18" };
+
+const pick = pickFromHymn;
+
+function draftWith(hymns: Partial<DraftV1["hymns"]> = {}, readings: Partial<DraftV1["readings"]> = {}): DraftV1 {
+  return testDraft((d) => ({ ...d, readings: { ...d.readings, ...readings }, hymns: { ...d.hymns, ...hymns } }));
+}
+
+function slots(opening: HymnPick | null, response: HymnPick | null = null, closing: HymnPick | null = null) {
+  return { slots: { opening, response, closing } };
+}
+
+function stored(key = KEY): DraftV1 {
+  return JSON.parse(window.localStorage.getItem(key) ?? "null") as DraftV1;
+}
+
+/** The step in the builder layout, with a Toaster for toast text; `routes` replace the defaults. */
+function renderStep(draft: DraftV1 = testDraft(), routes: Record<string, FakeHandler> = {}, extra: ReactNode = null) {
+  window.localStorage.setItem(KEY, JSON.stringify(draft));
+  const api = installFakeApi({
+    "GET /church": churchProfile(),
+    "GET /lectionary/readings": lectionaryRoute(),
+    "GET /hymnals": hymnals(),
+    "GET /hymns": hymnListRoute(undefined, RECENT),
+    ...routes,
+  });
+  const view = renderWithProviders(
+    <>
+      <BuilderLayout>
+        <HymnsStep />
+        {extra}
+      </BuilderLayout>
+      <Toaster />
+    </>,
+    { me: me(), church: church(), path: "/builder/hymns" },
+  );
+  return { ...view, api };
+}
+
+function card(slot: "Opening" | "Response" | "Closing") {
+  return screen.getByRole("region", { name: `${slot} hymn` });
+}
+
+/** The slot's picker once its hymnal has loaded. */
+async function readyPicker(slot: "Opening" | "Response" | "Closing") {
+  const input = await within(await screen.findByRole("region", { name: `${slot} hymn` })).findByRole("combobox", {
+    name: `${slot} hymn`,
+  });
+  await waitFor(() => expect(input).toBeEnabled());
+  return input;
+}
+
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(DRAFT_NOW);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
+
+describe("the Hymns step (S User experience)", () => {
+  it("shows the draft's picks before the hymnal loads, with the pickers waiting, then the live hymn", async () => {
+    let release!: () => void;
+    const loaded = new Promise<void>((resolve) => (release = resolve));
+    const listRoute = hymnListRoute(undefined, RECENT);
+    const snapshot = { ...pick(COME), title: "Come, Thou Almighty King (old title)" };
+    renderStep(draftWith(slots(snapshot)), {
+      "GET /hymns": async (req: RecordedRequest) => {
+        await loaded;
+        return listRoute(req);
+      },
+    });
+    expect(await screen.findByRole("heading", { level: 2, name: "Hymns" })).toBeInTheDocument();
+    expect(screen.getByText("Choose an opening, response and closing hymn.")).toBeInTheDocument();
+    const opening = card("Opening");
+    expect(within(opening).getByText("Gathering / call to worship")).toBeInTheDocument();
+    expect(within(opening).getByText("#403 Come, Thou Almighty King (old title)")).toBeInTheDocument();
+    const response = within(card("Response")).getByRole("combobox", { name: "Response hymn" });
+    expect(response).toBeDisabled();
+    expect(response).toHaveAttribute("placeholder", "Loading hymnal…");
+    expect(within(card("Response")).getByText("After the sermon — responds to the scripture (NT reading)")).toBeInTheDocument();
+    expect(within(card("Closing")).getByText("Joyful / sending")).toBeInTheDocument();
+    release();
+    // The live title shows; the draft keeps its snapshot (a rename never marks it dirty).
+    expect(await within(opening).findByText("#403 Come, Thou Almighty King")).toBeInTheDocument();
+    await waitFor(() => expect(response).toHaveAttribute("placeholder", "Search by title or number"));
+    expect(stored().hymns.slots.opening?.title).toBe("Come, Thou Almighty King (old title)");
+    expect(within(opening).getByRole("link", { name: "Listen to Come, Thou Almighty King on Hymnary.org" })).toHaveAttribute(
+      "href",
+      "https://hymnary.org/hymn/GG2013/403",
+    );
+    expect(
+      screen.getByText(
+        "Hymn information and links courtesy of Hymnary.org. Individual hymns may carry their own copyright — see each hymn's page.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("writes the chosen hymn to the draft, and every request names the church", async () => {
+    const { user, api } = renderStep();
+    const input = await readyPicker("Opening");
+    await user.type(input, "403");
+    await user.click(await screen.findByRole("option", { name: /#403 Come, Thou Almighty King/ }));
+    expect(await within(card("Opening")).findByText("#403 Come, Thou Almighty King")).toBeInTheDocument();
+    await waitFor(() => expect(stored().hymns.slots.opening).toEqual(pick(COME)));
+    const churchCalls = api.requests.filter((r) => !r.path.startsWith("/lectionary"));
+    expect(churchCalls.map((r) => r.path)).toEqual(
+      expect.arrayContaining(["/church", "/hymnals", "/hymns?hymnal=GG2013&limit=2000&recent_for_date=2026-10-04"]),
+    );
+    expect(churchCalls.every((r) => r.headers["X-Church-Id"] === church().id)).toBe(true);
+  });
+
+  it("shows the empty-hymnal state instead of the pickers; a pick still shows, as not in the hymnal", async () => {
+    const { api } = renderStep(draftWith(slots(pick(COME))), { "GET /hymnals": hymnals({ items: [], effective_hymnal: null }) });
+    expect(await screen.findByRole("heading", { name: "This church's hymnal is empty" })).toBeInTheDocument();
+    expect(screen.getByText("Add hymns in the current app under Settings → Hymns.")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Settings/ })).toBeNull(); // Settings → Hymns ships in 6a
+    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(within(card("Opening")).getByText("#403 Come, Thou Almighty King")).toBeInTheDocument();
+    expect(within(card("Opening")).getByText("Not in your hymnal. Choose a replacement.")).toBeInTheDocument();
+    expect(api.requests.some((r) => r.path.startsWith("/hymns"))).toBe(false);
+  });
+
+  it("shows Couldn't load this church's hymnal with Retry when the list fails, never the empty state", async () => {
+    let fail = true;
+    const listRoute = hymnListRoute(undefined, RECENT);
+    const { user } = renderStep(draftWith(slots(pick(COME))), {
+      "GET /hymns": (req: RecordedRequest) => (fail ? fakeError(500, "internal_error", "Something went wrong.") : listRoute(req)),
+    });
+    expect(await screen.findByText("Couldn't load this church's hymnal.")).toBeInTheDocument();
+    expect(screen.queryByText("This church's hymnal is empty")).toBeNull();
+    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(within(card("Opening")).getByText("#403 Come, Thou Almighty King")).toBeInTheDocument(); // the snapshot stays
+    fail = false;
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await readyPicker("Response")).toBeInTheDocument();
+    expect(screen.queryByText("Couldn't load this church's hymnal.")).toBeNull();
+  });
+});
+
+describe("slot cards (S Slot cards, Notices)", () => {
+  it("marks a deleted or unresolved pick Not in your hymnal, without crashing or dropping it", async () => {
+    const gone = { ...pick(COME), hymn_id: "00000000-0000-4000-8000-000000009998" };
+    const archived = { hymn_id: null, title: "Be Thou My Vision", number: 339, hymnal: "GG2013" };
+    renderStep(draftWith(slots(gone, archived)));
+    const opening = await screen.findByRole("region", { name: "Opening hymn" });
+    expect(await within(opening).findByText("Not in your hymnal. Choose a replacement.")).toBeInTheDocument();
+    expect(within(opening).getByText("#403 Come, Thou Almighty King")).toBeInTheDocument(); // the snapshot
+    expect(within(card("Response")).getByText("#339 Be Thou My Vision")).toBeInTheDocument();
+    expect(within(card("Response")).getByText("Not in your hymnal. Choose a replacement.")).toBeInTheDocument();
+    expect(stored().hymns.slots).toEqual(slots(gone, archived).slots);
+  });
+
+  it("notes a hymn used before or planned after the service, and the same hymn in two slots", async () => {
+    renderStep(draftWith(slots(pick(PRAISE), pick(FAITHFUL), pick(PRAISE))));
+    const opening = await screen.findByRole("region", { name: "Opening hymn" });
+    expect(
+      await within(opening).findByText("Also planned for October 18, 2026 — within 12 weeks of this service."),
+    ).toBeInTheDocument();
+    expect(within(opening).getByText("Also chosen as the Closing hymn.")).toBeInTheDocument();
+    expect(within(card("Closing")).getByText("Also chosen as the Opening hymn.")).toBeInTheDocument();
+    expect(
+      within(card("Response")).getByText("Used on September 6, 2026 — within 12 weeks of this service."),
+    ).toBeInTheDocument();
+    expect(within(card("Response")).queryByText(/Also chosen/)).toBeNull();
+  });
+
+  it("Change puts a focused picker in the row until Escape; choosing replaces the hymn, and same titles are told apart", async () => {
+    const { user } = renderStep(draftWith(slots(pick(COME))));
+    const opening = await screen.findByRole("region", { name: "Opening hymn" });
+    await readyPicker("Response");
+    await user.click(within(opening).getByRole("button", { name: "Change" }));
+    const input = within(opening).getByRole("combobox", { name: "Opening hymn" });
+    await waitFor(() => expect(input).toHaveFocus());
+    await user.keyboard("{Escape}");
+    expect(await within(opening).findByText("#403 Come, Thou Almighty King")).toBeInTheDocument();
+    await user.click(within(opening).getByRole("button", { name: "Change" }));
+    await user.type(within(opening).getByRole("combobox", { name: "Opening hymn" }), "amazing");
+    const options = await screen.findAllByRole("option", { name: /Amazing Grace/ });
+    expect(options.map((o) => o.textContent)).toEqual(["#649 Amazing Grace", "#650 Amazing Grace"]);
+    await user.click(options[1]);
+    expect(await within(opening).findByText("#650 Amazing Grace")).toBeInTheDocument();
+    await waitFor(() => expect(stored().hymns.slots.opening?.number).toBe(650));
+    // #650's link is not https, so it has no Listen link.
+    expect(within(opening).queryByRole("link")).toBeNull();
+  });
+
+  it("✕ removes the hymn with a Removed toast whose Undo puts it back", async () => {
+    const { user } = renderStep(draftWith(slots(pick(GRACE))));
+    const opening = await screen.findByRole("region", { name: "Opening hymn" });
+    await user.click(await within(opening).findByRole("button", { name: "Remove Amazing Grace" }));
+    expect(within(opening).getByRole("combobox", { name: "Opening hymn" })).toBeInTheDocument();
+    await waitFor(() => expect(stored().hymns.slots.opening).toBeNull());
+    expect(await screen.findByText("Removed Amazing Grace.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Undo" }));
+    expect(await within(opening).findByText("#649 Amazing Grace")).toBeInTheDocument();
+    await waitFor(() => expect(stored().hymns.slots.opening).toEqual(pick(GRACE)));
+  });
+
+  it("Undo after a church switch: the toast is dismissed and its handler changes no draft", async () => {
+    const shown = vi.spyOn(toast, "message");
+    const dismissed = vi.spyOn(toast, "dismiss");
+    const hope: ChurchProfile = churchProfile({ id: CHURCH_IDS.hope, name: "Hope" });
+    const hopeKey = draftKey(USER_ID, hope.id);
+    window.localStorage.setItem(KEY, JSON.stringify(draftWith(slots(pick(HOLY)))));
+    installFakeApi({
+      "GET /church": (req: RecordedRequest) => (req.headers["X-Church-Id"] === hope.id ? hope : churchProfile()),
+      "GET /lectionary/readings": lectionaryRoute(),
+      "GET /hymnals": hymnals(),
+      "GET /hymns": hymnListRoute(undefined, RECENT),
+    });
+    function Typist() {
+      const { update } = useDraft();
+      return (
+        <button type="button" onClick={() => update((d) => editOccasion(d, "Harvest at Hope"))}>
+          Type an occasion
+        </button>
+      );
+    }
+    const tree = (c: ChurchProfile) => (
+      <ChurchProvider key={c.id} value={c}>
+        <BuilderLayout>
+          <HymnsStep />
+          <Typist />
+        </BuilderLayout>
+      </ChurchProvider>
+    );
+    const { user, rerender } = renderWithProviders(tree(churchProfile()), { me: me(), path: "/builder/hymns" });
+    const opening = await screen.findByRole("region", { name: "Opening hymn" });
+    await user.click(await within(opening).findByRole("button", { name: "Remove Holy, Holy, Holy! Lord God Almighty" }));
+    await waitFor(() => expect(stored().hymns.slots.opening).toBeNull());
+    const [, options] = shown.mock.calls[0];
+    const undo = (options?.action as unknown as { onClick: () => void }).onClick;
+    const id = shown.mock.results[0].value;
+
+    rerender(tree(hope)); // the (church) layout remounts under the other church
+    await screen.findByRole("region", { name: "Opening hymn" });
+    expect(dismissed).toHaveBeenCalledWith(id);
+    act(() => undo());
+    // A later write in Hope lands after any write the Undo could have caused (the same 400 ms delay).
+    await user.click(screen.getByRole("button", { name: "Type an occasion" }));
+    await waitFor(() => expect(stored(hopeKey)?.readings.occasion).toBe("Harvest at Hope"));
+    expect(stored(hopeKey).hymns.slots.opening).toBeNull();
+    expect(stored().hymns.slots.opening).toBeNull(); // Grace's draft is not written either
+  });
+});
+''', encoding="utf-8")
+
+print("T8 tests written")
+PYEOF
+```
+
+**Expected:** `T8 tests written`.
+
+- [ ] **Step 3 (agent): Run them and see them fail**
+
+```bash
+(cd frontend && npx vitest run src/components/builder/hymns 2>&1 | grep -E "^ (FAIL|×)|Error:|Tests |Test Files")
+```
+
+**Expected:**
+
+```
+ FAIL  |dom| src/components/builder/hymns/hymn-label.test.tsx [ src/components/builder/hymns/hymn-label.test.tsx ]
+Error: Failed to resolve import "./hymn-label" from "src/components/builder/hymns/hymn-label.test.tsx". Does the file exist?
+ FAIL  |dom| src/components/builder/hymns/hymns-step.test.tsx [ src/components/builder/hymns/hymns-step.test.tsx ]
+Error: Failed to resolve import "./hymns-step" from "src/components/builder/hymns/hymns-step.test.tsx". Does the file exist?
+ Test Files  2 failed (2)
+      Tests  no tests
+```
+
+- [ ] **Step 4 (agent): Write the step, the card, the picker, the label and the Undo toasts**
+
+Run this script from the repo root:
+
+```bash
+.venv/bin/python - <<'PYEOF'
+from pathlib import Path
+
+
+def edit(path: str, pairs: list[tuple[str, str]]) -> None:
+    p = Path(path)
+    text = p.read_text(encoding="utf-8")
+    for old, new in pairs:
+        assert text.count(old) == 1, f"{path}: anchor not found exactly once: {old[:70]!r}"
+        text = text.replace(old, new)
+    p.write_text(text, encoding="utf-8")
+
+
+Path("frontend/src/components/builder/hymns").mkdir(parents=True, exist_ok=True)
+Path("frontend/src/components/builder/hymns/hymn-label.tsx").write_text('''"use client";
+
+import { PlayIcon } from "lucide-react";
+
+import { Badge } from "@/components/ui/badge";
+import type { Hymn } from "@/lib/api/types";
+import { hymnText, newerYearLabel } from "@/lib/hymns/labels";
+import { safeHttpsUrl } from "@/lib/urls";
+import { cn } from "@/lib/utils";
+
+/** What a label needs: a live hymn, or a draft snapshot (no link, no year). */
+export type LabelHymn = Pick<Hymn, "title" | "number"> & { hymnal: string | null } &
+  Partial<Pick<Hymn, "link" | "text_year" | "newer_than_preferred">>;
+
+/**
+ * One hymn as the step shows it everywhere (S "Filled slot", "Newer-hymn year
+ * label"): "#n Title", then small badges that never shrink (the hymnal when
+ * the church has 2+, the recent use, "Written {year}" for a flagged hymn), so
+ * at 375 px the title truncates first. With `listen`, a ▶ link to the hymn's
+ * Hymnary.org page when the link is https (`safeHttpsUrl`), else none.
+ */
+export function HymnLabel({
+  hymn,
+  showHymnal = false,
+  recentBadge = null,
+  listen = false,
+  truncate = false,
+}: {
+  hymn: LabelHymn;
+  showHymnal?: boolean;
+  recentBadge?: string | null;
+  listen?: boolean;
+  truncate?: boolean;
+}) {
+  const year =
+    hymn.newer_than_preferred !== undefined && hymn.text_year !== undefined
+      ? newerYearLabel({ newer_than_preferred: hymn.newer_than_preferred, text_year: hymn.text_year })
+      : null;
+  const href = listen ? safeHttpsUrl(hymn.link) : null;
+  return (
+    <span className="flex min-w-0 items-center gap-1.5">
+      <span className={cn("min-w-0", truncate ? "truncate" : "wrap-anywhere")}>{hymnText(hymn)}</span>
+      {showHymnal && hymn.hymnal ? (
+        <Badge variant="outline" className="shrink-0">
+          {hymn.hymnal}
+        </Badge>
+      ) : null}
+      {recentBadge ? (
+        <Badge variant="secondary" className="shrink-0">
+          {recentBadge}
+        </Badge>
+      ) : null}
+      {year ? (
+        <Badge variant="outline" className="shrink-0 text-muted-foreground">
+          {year}
+        </Badge>
+      ) : null}
+      {href ? (
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`Listen to ${hymn.title} on Hymnary.org`}
+          className="inline-flex size-11 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:text-foreground md:size-8"
+        >
+          <PlayIcon aria-hidden="true" className="size-4" />
+        </a>
+      ) : null}
+    </span>
+  );
+}
+''', encoding="utf-8")
+
+Path("frontend/src/components/builder/hymns").mkdir(parents=True, exist_ok=True)
+Path("frontend/src/components/builder/hymns/hymn-picker.tsx").write_text('''"use client";
+
+import { SearchCombobox, type SearchResult } from "@/components/app/search-combobox";
+import type { Hymn } from "@/lib/api/types";
+import { filterHymns, PICKER_LIMIT } from "@/lib/hymns/filter";
+import { hymnText, recentUseLabel } from "@/lib/hymns/labels";
+
+import { HymnLabel } from "./hymn-label";
+
+/** The picker's rows and the hints in its footer (S Picker "Hints in the list footer"). */
+export function pickerSearch(items: readonly Hymn[], query: string, excludeRecent: boolean): SearchResult<Hymn> {
+  const result = filterHymns(items, query, { excludeRecent });
+  const q = query.trim();
+  const footer: string[] = [];
+  if (q === "") footer.push(`Type to search ${result.totalMatches} hymns.`);
+  else if (result.totalMatches === 0) footer.push(`No hymns match “${q}”.`);
+  else if (result.totalMatches > PICKER_LIMIT) {
+    footer.push(`Showing ${PICKER_LIMIT} of ${result.totalMatches} — keep typing to narrow.`);
+  }
+  if (result.hiddenRecent === 1) footer.push("1 more used within 12 weeks is hidden.");
+  else if (result.hiddenRecent > 1) footer.push(`${result.hiddenRecent} more used within 12 weeks are hidden.`);
+  return { shown: result.shown, footer };
+}
+
+/**
+ * A slot's hymn picker (S "Picker"): the selected hymnal's list through
+ * `SearchCombobox`, ranked by `filterHymns`. Rows show "#n Title", the year
+ * badge of a newer hymn and, when Exclude is off, a "Used Sep 7" or "Planned
+ * Oct 18" badge. While the list loads the input is disabled with "Loading hymnal…".
+ */
+export function HymnPicker({
+  label,
+  list,
+  excludeRecent,
+  serviceDateIso,
+  showHymnal,
+  onChoose,
+  autoFocus = false,
+  onDismiss,
+}: {
+  label: string;
+  /** The selected hymnal's hymns; undefined while they load. */
+  list: readonly Hymn[] | undefined;
+  excludeRecent: boolean;
+  serviceDateIso: string;
+  showHymnal: boolean;
+  onChoose: (h: Hymn) => void;
+  autoFocus?: boolean;
+  onDismiss?: () => void;
+}) {
+  const loading = list === undefined;
+  return (
+    <SearchCombobox<Hymn>
+      label={label}
+      labelHidden
+      items={list ?? []}
+      search={(query) => pickerSearch(list ?? [], query, excludeRecent)}
+      itemKey={(h) => h.id}
+      itemText={hymnText}
+      renderItem={(h) => (
+        <HymnLabel
+          hymn={h}
+          showHymnal={showHymnal}
+          recentBadge={!excludeRecent && h.recent_use_on ? recentUseLabel(h.recent_use_on, serviceDateIso) : null}
+        />
+      )}
+      value={null}
+      onValueChange={onChoose}
+      placeholder={loading ? "Loading hymnal…" : "Search by title or number"}
+      disabled={loading}
+      autoFocus={autoFocus}
+      onDismiss={onDismiss}
+    />
+  );
+}
+''', encoding="utf-8")
+
+Path("frontend/src/components/builder/hymns").mkdir(parents=True, exist_ok=True)
+Path("frontend/src/components/builder/hymns/hymn-slot-card.tsx").write_text('''"use client";
+
+import { InfoIcon, XIcon } from "lucide-react";
+import { useState, type ReactNode } from "react";
+
+import { Button } from "@/components/ui/button";
+import type { Hymn } from "@/lib/api/types";
+import type { HymnPick, Slot } from "@/lib/draft/schema";
+import { SLOT_META } from "@/lib/hymns/labels";
+import type { Reconciled } from "@/lib/hymns/picks";
+
+import { HymnLabel } from "./hymn-label";
+import { HymnPicker } from "./hymn-picker";
+
+export type SlotCardProps = {
+  slot: Slot;
+  /** The draft's snapshot. */
+  pick: HymnPick | null;
+  /** The pick against the loaded lists (`reconcilePick`); the live hymn wins when found. */
+  reconciled: Reconciled | null;
+  /** The selected hymnal's list for the picker; undefined while it loads. */
+  list: readonly Hymn[] | undefined;
+  /** False when an error or the empty hymnal replaces the pickers. */
+  pickerAvailable: boolean;
+  excludeRecent: boolean;
+  serviceDateIso: string;
+  showHymnal: boolean;
+  onChoose: (h: Hymn) => void;
+  /** ✕: the step clears the slot and offers Undo. */
+  onRemove: () => void;
+  /** Under the pick, in muted text; none changes the pick (S "Notices"). */
+  notices: readonly string[];
+  /** Under the notices: "No suggestion for this slot." and the other ideas (slice 3b T10). */
+  children?: ReactNode;
+};
+
+/**
+ * One slot (S "Slot cards"): its title and caption; a filled slot shows the
+ * hymn (live when its list has loaded, the draft's snapshot until then) with
+ * its ▶ Listen link, ✕ and Change, which puts the focused picker in the row's
+ * place until Escape or focus leaves; an empty slot shows the picker. The
+ * notices sit under the pick.
+ */
+export function HymnSlotCard({
+  slot,
+  pick,
+  reconciled,
+  list,
+  pickerAvailable,
+  excludeRecent,
+  serviceDateIso,
+  showHymnal,
+  onChoose,
+  onRemove,
+  notices,
+  children,
+}: SlotCardProps) {
+  const meta = SLOT_META[slot];
+  const [changing, setChanging] = useState(false);
+  const headingId = `slot-${slot}-title`;
+  const live = reconciled?.status === "ok" ? reconciled.live : null;
+  const picker = (autoFocus: boolean) => (
+    <HymnPicker
+      label={meta.title}
+      list={list}
+      excludeRecent={excludeRecent}
+      serviceDateIso={serviceDateIso}
+      showHymnal={showHymnal}
+      autoFocus={autoFocus}
+      onDismiss={autoFocus ? () => setChanging(false) : undefined}
+      onChoose={(h) => {
+        setChanging(false);
+        onChoose(h);
+      }}
+    />
+  );
+
+  return (
+    <section aria-labelledby={headingId} className="grid gap-3 rounded-lg border p-4">
+      <div>
+        <h3 id={headingId} className="text-base font-medium">
+          {meta.title}
+        </h3>
+        <p className="text-sm text-muted-foreground">{meta.caption}</p>
+      </div>
+      {pick === null ? (
+        pickerAvailable ? picker(false) : null
+      ) : changing && pickerAvailable ? (
+        picker(true)
+      ) : (
+        <div className="grid gap-2">
+          <div className="flex min-w-0 items-center gap-1">
+            <div className="min-w-0 flex-1 font-medium">
+              <HymnLabel hymn={live ?? pick} showHymnal={showHymnal} listen />
+            </div>
+            <Button
+              variant="ghost"
+              size="icon-lg"
+              className="size-11 shrink-0 md:size-8"
+              aria-label={`Remove ${(live ?? pick).title}`}
+              onClick={() => onRemove()}
+            >
+              <XIcon aria-hidden="true" />
+            </Button>
+          </div>
+          {pickerAvailable ? (
+            <div>
+              <Button variant="outline" size="touch" onClick={() => setChanging(true)}>
+                Change
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      )}
+      {notices.length > 0 ? (
+        <ul className="grid gap-1 text-sm text-muted-foreground">
+          {notices.map((notice) => (
+            <li key={notice} className="flex gap-1.5">
+              <InfoIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+              <span>{notice}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {children}
+    </section>
+  );
+}
+''', encoding="utf-8")
+
+Path("frontend/src/components/builder/hymns").mkdir(parents=True, exist_ok=True)
+Path("frontend/src/components/builder/hymns/hymns-step.tsx").write_text('''"use client";
+
+import { EmptyState } from "@/components/app/empty-state";
+import { ErrorState } from "@/components/app/error-state";
+import { buttonVariants } from "@/components/ui/button";
+import type { Hymn } from "@/lib/api/types";
+import { isValidDateIso } from "@/lib/dates";
+import { useDraft } from "@/lib/draft/context";
+import { SLOTS, type Slot } from "@/lib/draft/schema";
+import { SETTINGS_HYMNS_READY } from "@/lib/features";
+import { selectHymnal } from "@/lib/hymns/hymnal";
+import { duplicateNotice, MISSING_NOTICE, recentUseNotice } from "@/lib/hymns/labels";
+import { clearSlot, duplicateSlots, pickFromHymn, reconcilePick, setSlot, type Reconciled } from "@/lib/hymns/picks";
+import { useHymnals, useHymnLists } from "@/lib/queries/hymns";
+
+import { HymnSlotCard } from "./hymn-slot-card";
+import { useUndoToasts } from "./use-undo-toasts";
+
+/** The empty-hymnal state (S "Whole-step states"); the link waits for Settings → Hymns (6a). */
+function EmptyHymnal() {
+  return (
+    <EmptyState
+      title="This church's hymnal is empty"
+      description={
+        SETTINGS_HYMNS_READY
+          ? "Add hymns on the Settings → Hymns page to choose hymns here."
+          : "Add hymns in the current app under Settings → Hymns."
+      }
+      action={
+        SETTINGS_HYMNS_READY ? (
+          <a href="/settings/hymns" className={buttonVariants({ size: "touch" })}>
+            Open Settings → Hymns
+          </a>
+        ) : undefined
+      }
+    />
+  );
+}
+
+const MISSING: Reconciled = { status: "missing" };
+
+/**
+ * Step 2, Hymns (S "User experience"). It reads and writes only the draft
+ * (F §4.6). The slot cards show the draft's picks at once; the pickers wait
+ * for `GET /hymnals` and the selected hymnal's list, with no full-page
+ * spinner. The selected hymnal is resolved only from a loaded `GET /hymnals`
+ * and never written back (S Toolbar). Removing a hymn offers Undo in a toast
+ * that never outlives the step.
+ */
+export function HymnsStep() {
+  const { draft, update } = useDraft();
+  const hymnalsQuery = useHymnals();
+  const hymns = draft.hymns;
+  const dateIso = draft.readings.date_iso;
+  const dateValid = isValidDateIso(dateIso);
+  const recentForDate = dateValid ? dateIso : null;
+  const hymnals = hymnalsQuery.data;
+  const empty = hymnals !== undefined && hymnals.items.length === 0;
+  const selected = hymnals && !empty ? selectHymnal(hymns.hymnal, hymnals) : null;
+  const code = selected?.code ?? null;
+  // The picks' hymnals too (a pick keeps its own), once GET /hymnals has answered with some.
+  const listed = selected === null ? [] : [code, ...SLOTS.map((slot) => hymns.slots[slot]?.hymnal ?? null)];
+  const lists = useHymnLists(listed, recentForDate);
+  const showUndo = useUndoToasts();
+
+  const selectedList = code === null ? undefined : lists.lists.get(code);
+  const failed = hymnalsQuery.isError || (code !== null && lists.failed.has(code));
+  const pickers = !failed && !empty;
+  const showHymnal = (hymnals?.items.length ?? 0) >= 2;
+  const excludeRecent = hymns.exclude_recent && dateValid;
+  const duplicates = duplicateSlots(hymns.slots);
+
+  function notices(slot: Slot, reconciled: Reconciled | null): string[] {
+    const out: string[] = [];
+    if (reconciled?.status === "ok" && dateValid && reconciled.live.recent_use_on) {
+      out.push(recentUseNotice(reconciled.live.recent_use_on, dateIso));
+    }
+    if (reconciled?.status === "missing") out.push(MISSING_NOTICE);
+    const duplicate = duplicateNotice(duplicates[slot]);
+    if (duplicate) out.push(duplicate);
+    return out;
+  }
+
+  function choose(slot: Slot, h: Hymn) {
+    update((d) => setSlot(d, slot, pickFromHymn(h)));
+  }
+
+  function remove(slot: Slot, title: string) {
+    const previous = hymns.slots[slot];
+    if (!previous) return;
+    update((d) => clearSlot(d, slot));
+    showUndo(`Removed ${title}.`, () => update((d) => setSlot(d, slot, previous)));
+  }
+
+  return (
+    <section aria-labelledby="hymns-step-title" className="grid gap-6">
+      <div>
+        <h2 id="hymns-step-title" className="text-lg font-semibold">
+          Hymns
+        </h2>
+        <p className="text-sm text-muted-foreground">Choose an opening, response and closing hymn.</p>
+      </div>
+      {failed ? (
+        <ErrorState
+          error={hymnalsQuery.error}
+          message="Couldn't load this church's hymnal."
+          retrying={hymnalsQuery.isFetching || lists.fetching}
+          onRetry={() => {
+            if (hymnalsQuery.isError) void hymnalsQuery.refetch();
+            else lists.retry();
+          }}
+        />
+      ) : empty ? (
+        <EmptyHymnal />
+      ) : null}
+      {SLOTS.map((slot) => {
+        const pick = hymns.slots[slot];
+        const reconciled = pick === null ? null : empty ? MISSING : reconcilePick(pick, lists.lists, code);
+        const title = reconciled?.status === "ok" ? reconciled.live.title : (pick?.title ?? "");
+        return (
+          <HymnSlotCard
+            key={slot}
+            slot={slot}
+            pick={pick}
+            reconciled={reconciled}
+            notices={notices(slot, reconciled)}
+            list={selectedList}
+            pickerAvailable={pickers}
+            excludeRecent={excludeRecent}
+            serviceDateIso={dateIso}
+            showHymnal={showHymnal}
+            onChoose={(h) => choose(slot, h)}
+            onRemove={() => remove(slot, title)}
+          />
+        );
+      })}
+      <p className="text-xs text-muted-foreground">
+        Hymn information and links courtesy of Hymnary.org. Individual hymns may carry their own copyright — see each
+        hymn&apos;s page.
+      </p>
+    </section>
+  );
+}
+''', encoding="utf-8")
+
+Path("frontend/src/components/builder/hymns").mkdir(parents=True, exist_ok=True)
+Path("frontend/src/components/builder/hymns/use-undo-toasts.ts").write_text('''"use client";
+
+import { useCallback, useEffect, useRef } from "react";
+import { toast } from "sonner";
+
+import { useChurch } from "@/lib/church-context";
+
+/**
+ * Toasts with Undo that never outlive the step (S "Undo toasts never outlive
+ * the step"). Sonner's toasts live outside the `(church)` layout, so a closure
+ * over `update` could act after a church switch. Two guards: every toast this
+ * step showed is dismissed when it unmounts, and each Undo checks that the step
+ * is still mounted for the church it was shown in.
+ */
+export function useUndoToasts(): (message: string, undo: () => void) => void {
+  const church = useChurch();
+  const shown = useRef(new Set<string | number>());
+  const mounted = useRef(false);
+  const currentChurch = useRef(church.id);
+
+  useEffect(() => {
+    currentChurch.current = church.id;
+  }, [church.id]);
+
+  useEffect(() => {
+    const ids = shown.current;
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      for (const id of ids) toast.dismiss(id);
+      ids.clear();
+    };
+  }, []);
+
+  return useCallback(
+    (message: string, undo: () => void) => {
+      const captured = church.id;
+      const id = toast.message(message, {
+        action: {
+          label: "Undo",
+          onClick: () => {
+            if (mounted.current && currentChurch.current === captured) undo();
+          },
+        },
+      });
+      shown.current.add(id);
+    },
+    [church.id],
+  );
+}
+''', encoding="utf-8")
+
+print("T8 code written")
+PYEOF
+```
+
+**Expected:** `T8 code written`.
+
+- [ ] **Step 5 (agent): Run the tests, the suite, types and lint**
+
+```bash
+(cd frontend && npx vitest run src/components/builder/hymns 2>&1 | grep -E "Test Files|Tests ")
+(cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
+(cd frontend && npm test 2>&1 | grep -cE "Warning:|not wrapped in act")
+(cd frontend && npm run typecheck 2>&1 | tail -1 && npm run lint 2>&1 | tail -1)
+git status --short
+```
+
+**Expected:** ` Test Files  2 passed (2)`, `      Tests  11 passed (11)`; ` Test Files  64 passed (64)`, `      Tests  403 passed (403)`; `0`; `> tsc --noEmit` and `> eslint` with nothing after them; `?? frontend/src/components/builder/hymns/`.
+
+- [ ] **Step 6 (agent): Commit**
+
+```bash
+git add frontend/src/components/builder/hymns
+git commit -m "Hymns: the step's slot cards, picker and hymn label, with loading, empty and error states (S Slot cards, Picker, Whole-step states; AC13, AC14)" -m "HymnsStep shows the three cards from the draft at once; the pickers wait
+for GET /hymnals and the selected hymnal's list (Loading hymnal...).
+A pick shows its live title, number, Listen link (https only), Written
+{year} for a newer hymn, and its notices: recent use, Not in your
+hymnal, Also chosen as. Change swaps in a focused picker; the remove
+button offers Undo in a toast dismissed when the step unmounts and
+ignored after a church switch. A failed load shows Retry, an empty
+hymnal the empty state. Frontend 392 -> 403 tests in 64 files.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+**Expected:** one commit, 7 files changed.
+
+### Task 9: The toolbar: the hymnal select and the Exclude switch; exclusion never clears a pick (S Toolbar, Behavior changes 3, 11, 19; AC12; owner answer 1; clarifications 2, 7, 13, 22)
+
+`HymnsToolbar` sits between the heading and the cards once `GET /hymnals` has answered (skeletons until then; clarification 7). `HymnalPicker` shows the Base UI `Select` (with an `items` map, F §4.9) only when the church has two or more hymnals, labelled "{code} · {hymn_count} hymns" with S's helper; choosing calls `setHymnal`, which stores `null` for the effective hymnal (owner answer 1, clarification 2), and the picks keep their own hymnal. Its notes show whatever the Select: a stored code the church no longer has ("… Showing {effective} instead.", with nothing written) and a hymnal with no scripture references. `ExcludeSwitch` writes only `exclude_recent`, shows "{n} hymns are hidden." for the selected hymnal's recent hymns when on (clarifications 13, 22), and is disabled with "Pick a valid date in step 1 to check recent use." for an invalid date. The picker already hides recent hymns while it is on (T8); this task's test is the port ledger's "exclusion never clears a pick".
+
+**Files:**
+- Create: `frontend/src/components/builder/hymns/hymns-toolbar.tsx`
+- Modify: `frontend/src/components/builder/hymns/hymns-step.tsx`
+- Test: `frontend/src/components/builder/hymns/hymns-step.test.tsx` (+4)
+
+**Interfaces:**
+- Consumes: `Switch` (T7), `Select` and its parts, `Skeleton`, `Label`; `setHymnal`, `setExcludeRecent` (T4).
+- Produces: `HymnsToolbar({children})`, `ToolbarSkeleton()`, `HymnalPicker({hymnals, selected, stale, storedCode, onChange})`, `ExcludeSwitch({on, hidden, dateValid, onChange})`, `hiddenCountText(n)`. Later user: T10 (Suggest joins the toolbar).
+
+Counts after this task: frontend **407 passed in 64 files**.
+
+- [ ] **Step 1 (agent): Check the starting point**
+
+```bash
+git status --short
+ls frontend/src/components/builder/hymns/hymns-toolbar.tsx 2>&1 | head -1
+(cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
+```
+
+**Expected:** nothing (or `?? .claude/`); `ls: cannot access 'frontend/src/components/builder/hymns/hymns-toolbar.tsx': No such file or directory`; ` Test Files  64 passed (64)`, `      Tests  403 passed (403)`.
+
+- [ ] **Step 2 (agent): Write the failing tests**
+
+Run this script from the repo root:
+
+```bash
+.venv/bin/python - <<'PYEOF'
+from pathlib import Path
+
+
+def edit(path: str, pairs: list[tuple[str, str]]) -> None:
+    p = Path(path)
+    text = p.read_text(encoding="utf-8")
+    for old, new in pairs:
+        assert text.count(old) == 1, f"{path}: anchor not found exactly once: {old[:70]!r}"
+        text = text.replace(old, new)
+    p.write_text(text, encoding="utf-8")
+
+
+edit("frontend/src/components/builder/hymns/hymns-step.test.tsx", [
+    ('''import { useDraft } from "@/lib/draft/context";
+import { editOccasion } from "@/lib/draft/readings";
+import { draftKey, type DraftV1, type HymnPick } from "@/lib/draft/schema";
+''',
+     '''import { useDraft } from "@/lib/draft/context";
+import { editOccasion, setDate } from "@/lib/draft/readings";
+import { draftKey, type DraftV1, type HymnPick } from "@/lib/draft/schema";
+'''),
+    ('''  testDraft,
+  USER_ID,
+''',
+     '''  testDraft,
+  twoHymnals,
+  USER_ID,
+'''),
+])
+with open("frontend/src/components/builder/hymns/hymns-step.test.tsx", "a", encoding="utf-8") as f:
+    f.write('''
+describe("the toolbar (S Toolbar)", () => {
+  it("switches hymnals from the select, keeping the picks, and notes a hymnal with no scripture references", async () => {
+    // One hymnal (production today): no select.
+    const one = renderStep(draftWith(slots(pick(COME))));
+    await screen.findByRole("switch", { name: "Exclude hymns used within 12 weeks" });
+    expect(screen.queryByRole("combobox", { name: "Hymnal" })).toBeNull();
+    expect(within(card("Opening")).queryByText("GG2013")).toBeNull();
+    one.unmount();
+
+    const { user, api } = renderStep(draftWith(slots(pick(COME))), { "GET /hymnals": twoHymnals() });
+    const select = await screen.findByRole("combobox", { name: "Hymnal" });
+    expect(select).toHaveTextContent("GG2013 · 853 hymns");
+    expect(screen.getByText("Which hymnal to choose hymns from for this service.")).toBeInTheDocument();
+    expect(within(card("Opening")).getByText("GG2013")).toBeInTheDocument(); // 2+ hymnals: each pick shows its hymnal
+    await user.click(select);
+    await user.click(await screen.findByRole("option", { name: "PH1990 · 605 hymns" }));
+    await waitFor(() => expect(stored().hymns.hymnal).toBe("PH1990"));
+    expect(stored().hymns.slots.opening).toEqual(pick(COME)); // picks keep their own hymnal
+    await waitFor(() =>
+      expect(api.requests.map((r) => r.path)).toContain("/hymns?hymnal=PH1990&limit=2000&recent_for_date=2026-10-04"),
+    );
+    expect(
+      await screen.findByText("PH1990 has no scripture references, so scripture matches and AI response picks will be weaker."),
+    ).toBeInTheDocument();
+    const input = await readyPicker("Response");
+    await user.type(input, "long");
+    expect(await screen.findByRole("option", { name: /#1 Come, Thou Long-Expected Jesus/ })).toBeInTheDocument();
+    // Choosing the effective hymnal again stores null, so it is not unsaved work (owner answer 1).
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("combobox", { name: "Hymnal" }));
+    await user.click(await screen.findByRole("option", { name: "GG2013 · 853 hymns" }));
+    await waitFor(() => expect(stored().hymns.hymnal).toBeNull());
+  });
+
+  it("keeps a vanished stored hymnal in the draft and shows the effective one, writing nothing, also while GET /hymnals fails", async () => {
+    const saved = draftWith({ hymnal: "HYMNAL1982" });
+    const first = renderStep(saved, { "GET /hymnals": fakeError(500, "internal_error", "Something went wrong.") });
+    expect(await screen.findByText("Couldn't load this church's hymnal.")).toBeInTheDocument();
+    expect(first.api.requests.some((r) => r.path.startsWith("/hymns"))).toBe(false);
+    first.unmount();
+    expect(stored().hymns).toEqual(saved.hymns);
+    expect(stored().updated_at).toBe(saved.updated_at);
+
+    const { api } = renderStep(saved);
+    expect(
+      await screen.findByText("HYMNAL1982 is no longer in your church's hymnals. Showing GG2013 instead."),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(api.requests.map((r) => r.path)).toContain("/hymns?hymnal=GG2013&limit=2000&recent_for_date=2026-10-04"),
+    );
+    expect(stored().hymns.hymnal).toBe("HYMNAL1982");
+    expect(stored().updated_at).toBe(saved.updated_at); // no write, so not dirty
+  });
+
+  it("the Exclude switch counts the hidden hymns, and is off without a valid date", async () => {
+    const { user, unmount } = renderStep();
+    const exclude = await screen.findByRole("switch", { name: "Exclude hymns used within 12 weeks" });
+    expect(exclude).toBeChecked();
+    expect(
+      screen.getByText("Hides hymns sung in the 12 weeks before this service or planned in the 12 weeks after it. 2 hymns are hidden."),
+    ).toBeInTheDocument();
+    await user.click(exclude);
+    await waitFor(() => expect(stored().hymns.exclude_recent).toBe(false));
+    expect(screen.queryByText(/hymns are hidden/)).toBeNull();
+    unmount();
+
+    const { api } = renderStep(setDate(testDraft(), ""));
+    const off = await screen.findByRole("switch", { name: "Exclude hymns used within 12 weeks" });
+    expect(off).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByText("Pick a valid date in step 1 to check recent use.")).toBeInTheDocument();
+    expect(api.requests.map((r) => r.path)).toContain("/hymns?hymnal=GG2013&limit=2000"); // no recent_for_date
+  });
+
+  it("exclusion never clears a pick: the switch hides recent hymns from the picker and keeps a recent pick with its notice", async () => {
+    const { user } = renderStep(draftWith(slots(pick(FAITHFUL))));
+    const opening = await screen.findByRole("region", { name: "Opening hymn" });
+    expect(
+      await within(opening).findByText("Used on September 6, 2026 — within 12 weeks of this service."),
+    ).toBeInTheDocument();
+    const input = await readyPicker("Response");
+    await user.type(input, "great");
+    expect(await screen.findByText("No hymns match “great”.")).toBeInTheDocument();
+    expect(screen.getByText("1 more used within 12 weeks is hidden.")).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    const exclude = screen.getByRole("switch", { name: "Exclude hymns used within 12 weeks" });
+    await user.click(exclude);
+    await waitFor(() => expect(stored().hymns.exclude_recent).toBe(false));
+    await user.clear(input);
+    await user.type(input, "great");
+    const option = await screen.findByRole("option", { name: /#700 Great Is Thy Faithfulness/ });
+    expect(within(option).getByText("Used Sep 6")).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    await user.click(exclude);
+    await waitFor(() => expect(stored().hymns.exclude_recent).toBe(true));
+    expect(stored().hymns.slots).toEqual(slots(pick(FAITHFUL)).slots); // AC12: toggling never touched a slot
+    expect(within(opening).getByText("#700 Great Is Thy Faithfulness")).toBeInTheDocument();
+    expect(within(opening).getByText("Used on September 6, 2026 — within 12 weeks of this service.")).toBeInTheDocument();
+  });
+});
+''')
+
+print("T9 tests written")
+PYEOF
+```
+
+**Expected:** `T9 tests written`.
+
+- [ ] **Step 3 (agent): Run them and see them fail**
+
+```bash
+(cd frontend && npx vitest run src/components/builder/hymns/hymns-step.test.tsx 2>&1 | grep -E "^ +×|Tests ")
+```
+
+**Expected** (each waits about a second for a switch or a note that is not there yet):
+
+```
+   × the toolbar (S Toolbar) > switches hymnals from the select, keeping the picks, and notes a hymnal with no scripture references <t>ms
+   × the toolbar (S Toolbar) > keeps a vanished stored hymnal in the draft and shows the effective one, writing nothing, also while GET /hymnals fails <t>ms
+   × the toolbar (S Toolbar) > the Exclude switch counts the hidden hymns, and is off without a valid date <t>ms
+   × the toolbar (S Toolbar) > exclusion never clears a pick: the switch hides recent hymns from the picker and keeps a recent pick with its notice <t>ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  4 failed | 9 passed (13)
+```
+
+- [ ] **Step 4 (agent): Write the toolbar and put it in the step**
+
+Run this script from the repo root:
+
+```bash
+.venv/bin/python - <<'PYEOF'
+from pathlib import Path
+
+
+def edit(path: str, pairs: list[tuple[str, str]]) -> None:
+    p = Path(path)
+    text = p.read_text(encoding="utf-8")
+    for old, new in pairs:
+        assert text.count(old) == 1, f"{path}: anchor not found exactly once: {old[:70]!r}"
+        text = text.replace(old, new)
+    p.write_text(text, encoding="utf-8")
+
+
+edit("frontend/src/components/builder/hymns/hymns-step.tsx", [
+    ('''import { duplicateNotice, MISSING_NOTICE, recentUseNotice } from "@/lib/hymns/labels";
+import { clearSlot, duplicateSlots, pickFromHymn, reconcilePick, setSlot, type Reconciled } from "@/lib/hymns/picks";
+import { useHymnals, useHymnLists } from "@/lib/queries/hymns";
+''',
+     '''import { duplicateNotice, MISSING_NOTICE, recentUseNotice } from "@/lib/hymns/labels";
+import {
+  clearSlot,
+  duplicateSlots,
+  pickFromHymn,
+  reconcilePick,
+  setExcludeRecent,
+  setHymnal,
+  setSlot,
+  type Reconciled,
+} from "@/lib/hymns/picks";
+import { useHymnals, useHymnLists } from "@/lib/queries/hymns";
+'''),
+    ('''import { HymnSlotCard } from "./hymn-slot-card";
+import { useUndoToasts } from "./use-undo-toasts";
+''',
+     '''import { HymnSlotCard } from "./hymn-slot-card";
+import { ExcludeSwitch, HymnalPicker, HymnsToolbar, ToolbarSkeleton } from "./hymns-toolbar";
+import { useUndoToasts } from "./use-undo-toasts";
+'''),
+    (''' * spinner. The selected hymnal is resolved only from a loaded `GET /hymnals`
+ * and never written back (S Toolbar). Removing a hymn offers Undo in a toast
+ * that never outlives the step.
+ */
+''',
+     ''' * spinner. The selected hymnal is resolved only from a loaded `GET /hymnals`
+ * and never written back (S Toolbar); the toolbar's Select and Exclude switch
+ * are the only writers of the hymnal and the switch. Removing a hymn offers
+ * Undo in a toast that never outlives the step.
+ */
+'''),
+    ('''  const duplicates = duplicateSlots(hymns.slots);
+
+''',
+     '''  const duplicates = duplicateSlots(hymns.slots);
+  const hiddenRecent = (selectedList ?? []).filter((h) => h.title.trim() !== "" && h.recent_use_on !== null).length;
+
+'''),
+    ('''        <EmptyHymnal />
+      ) : null}
+      {SLOTS.map((slot) => {
+''',
+     '''        <EmptyHymnal />
+      ) : hymnals === undefined || code === null || selected === null ? (
+        <ToolbarSkeleton />
+      ) : (
+        <HymnsToolbar>
+          <HymnalPicker
+            hymnals={hymnals}
+            selected={code}
+            stale={selected.stale}
+            storedCode={hymns.hymnal}
+            onChange={(next) => update((d) => setHymnal(d, next, hymnals.effective_hymnal))}
+          />
+          <ExcludeSwitch
+            on={hymns.exclude_recent}
+            hidden={hiddenRecent}
+            dateValid={dateValid}
+            onChange={(on) => update((d) => setExcludeRecent(d, on))}
+          />
+        </HymnsToolbar>
+      )}
+      {SLOTS.map((slot) => {
+'''),
+])
+
+Path("frontend/src/components/builder/hymns/hymns-toolbar.tsx").write_text('''"use client";
+
+import type { ReactNode } from "react";
+
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
+import type { Hymnals } from "@/lib/api/types";
+
+/** "4 hymns are hidden." (S Toolbar); "1 hymn is hidden." for one (plan clarification 13). */
+export function hiddenCountText(n: number): string {
+  return n === 1 ? "1 hymn is hidden." : `${n} hymns are hidden.`;
+}
+
+/** The toolbar while `GET /hymnals` loads (S "Whole-step states": skeletons, no spinner; plan clarification 7). */
+export function ToolbarSkeleton() {
+  return (
+    <div role="status" aria-label="Loading the hymnal" className="grid gap-3">
+      <Skeleton className="h-11 w-full" />
+      <Skeleton className="h-11 w-full" />
+    </div>
+  );
+}
+
+/**
+ * The Hymnal select, shown only with 2+ hymnals, and the notes that go with
+ * the selected hymnal (S Toolbar): a stored code the church no longer has
+ * (shown even when the select is hidden), and a hymnal with no scripture
+ * references. Choosing writes the draft's hymnal; picks keep their own.
+ */
+export function HymnalPicker({
+  hymnals,
+  selected,
+  stale,
+  storedCode,
+  onChange,
+}: {
+  hymnals: Hymnals;
+  selected: string;
+  stale: boolean;
+  storedCode: string | null;
+  onChange: (code: string) => void;
+}) {
+  const items: Record<string, string> = Object.fromEntries(
+    hymnals.items.map((h) => [h.code, `${h.code} · ${h.hymn_count} hymns`]),
+  );
+  const current = hymnals.items.find((h) => h.code === selected);
+  return (
+    <div className="grid gap-2">
+      {hymnals.items.length >= 2 ? (
+        <>
+          <Label id="hymnal-label">Hymnal</Label>
+          <Select
+            value={selected}
+            items={items}
+            onValueChange={(value) => {
+              if (typeof value === "string") onChange(value);
+            }}
+          >
+            <SelectTrigger
+              aria-labelledby="hymnal-label"
+              aria-describedby="hymnal-help"
+              className="h-11 w-full sm:w-80 data-[size=default]:h-11"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {hymnals.items.map((h) => (
+                <SelectItem key={h.code} value={h.code}>
+                  {items[h.code]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p id="hymnal-help" className="text-sm text-muted-foreground">
+            Which hymnal to choose hymns from for this service.
+          </p>
+        </>
+      ) : null}
+      {stale && storedCode ? (
+        <p className="text-sm">
+          {storedCode} is no longer in your church&apos;s hymnals. Showing {selected} instead.
+        </p>
+      ) : null}
+      {current && current.scripture_ref_count === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          {current.code} has no scripture references, so scripture matches and AI response picks will be weaker.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * "Exclude hymns used within 12 weeks" (S Toolbar). It writes only
+ * `exclude_recent`; it never changes a slot or an idea (AC12). Disabled when
+ * the draft's date is not valid.
+ */
+export function ExcludeSwitch({
+  on,
+  hidden,
+  dateValid,
+  onChange,
+}: {
+  on: boolean;
+  /** Hymns in the selected hymnal used within 12 weeks of the service. */
+  hidden: number;
+  dateValid: boolean;
+  onChange: (on: boolean) => void;
+}) {
+  return (
+    <div className="grid gap-1">
+      <div className="flex min-h-11 items-center gap-3">
+        <Switch
+          id="exclude-recent"
+          checked={on}
+          disabled={!dateValid}
+          onCheckedChange={(checked) => onChange(checked)}
+          aria-describedby="exclude-recent-help"
+        />
+        <Label htmlFor="exclude-recent">Exclude hymns used within 12 weeks</Label>
+      </div>
+      <p id="exclude-recent-help" className="text-sm text-muted-foreground">
+        {dateValid
+          ? "Hides hymns sung in the 12 weeks before this service or planned in the 12 weeks after it."
+          : "Pick a valid date in step 1 to check recent use."}
+        {dateValid && on && hidden > 0 ? ` ${hiddenCountText(hidden)}` : null}
+      </p>
+    </div>
+  );
+}
+
+/** The toolbar's frame: the hymnal, the switch, then Suggest (slice 3b T10). */
+export function HymnsToolbar({ children }: { children: ReactNode }) {
+  return <div className="grid gap-4 rounded-lg border p-4">{children}</div>;
+}
+''', encoding="utf-8")
+
+print("T9 code written")
+PYEOF
+```
+
+**Expected:** `T9 code written`.
+
+- [ ] **Step 5 (agent): Run the tests, the suite, types and lint**
+
+```bash
+(cd frontend && npx vitest run src/components/builder/hymns 2>&1 | grep -E "Test Files|Tests ")
+(cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
+(cd frontend && npm test 2>&1 | grep -cE "Warning:|not wrapped in act")
+(cd frontend && npm run typecheck 2>&1 | tail -1 && npm run lint 2>&1 | tail -1)
+git status --short
+```
+
+**Expected:** ` Test Files  2 passed (2)`, `      Tests  15 passed (15)`; ` Test Files  64 passed (64)`, `      Tests  407 passed (407)`; `0`; `> tsc --noEmit` and `> eslint` with nothing after them; ` M` for `hymns-step.tsx` and `hymns-step.test.tsx`, `??` for `hymns-toolbar.tsx`.
+
+- [ ] **Step 6 (agent): Commit**
+
+```bash
+git add frontend/src/components/builder/hymns/hymns-toolbar.tsx frontend/src/components/builder/hymns/hymns-step.tsx frontend/src/components/builder/hymns/hymns-step.test.tsx
+git commit -m "Hymns: the toolbar's hymnal select and Exclude switch; exclusion never clears a pick (S Toolbar; AC12)" -m "The Hymnal select shows with 2+ hymnals and writes the draft's hymnal
+(null for the church's effective one, owner answer 1); picks keep
+their own. A vanished stored code is noted and never written; a hymnal
+with no scripture references is noted. The Exclude switch writes only
+exclude_recent, counts the hidden hymns, and waits for a valid date.
+Toggling it never changes a slot (AC12). Frontend 403 -> 407 tests.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+**Expected:** one commit, 3 files changed.
+
+**Review checkpoint (T8-T9, batch 4):** the step writes the draft only through `update` with T4's recipes and only on a member's action (nothing on load, even for a vanished hymnal); no request goes out before `GET /hymnals` answers, and none for an empty church; a failed load never shows the empty state; titles and links render as text, links only through `safeHttpsUrl`; every Undo toast is dismissed on unmount and checks the church; the switch never touches a slot.
