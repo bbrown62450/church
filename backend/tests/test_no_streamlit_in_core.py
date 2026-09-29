@@ -21,7 +21,7 @@ def test_usecases_package_imports_no_fastapi_or_streamlit():
     # below the API layer (F §2.2).
     code = ("import sys, usecases, usecases.onboarding, usecases.church_profile, usecases.lectionary, usecases.passages, vanderbilt_lectionary, domain_errors, db.ids, timezones, "
             "cache, integrations.http, "
-            "token_bucket, integrations.budget, scripture_refs, scripture_fetcher, integrations.openai_client; "
+            "token_bucket, integrations.budget, scripture_refs, scripture_fetcher, integrations.openai_client, hymn_search; "
             "bad = sorted({m.split('.')[0] for m in sys.modules} & {'fastapi', 'starlette', 'streamlit'}); "
             "print(bad); sys.exit(1 if bad else 0)")
     result = subprocess.run(
