@@ -96,3 +96,143 @@
 | `"hymns"` in `SHIPPED_STEPS`, the page, `SummaryHymns`, `stillNeeded` rows | T12 | S Builder shell |
 | S and F "(3b plan)" notes, "## Slice 3" checklist, heading pin | T13 | S Manual checks |
 
+### Task 1: Why no recent use shows (OWNER queries, agent check, decision point) (owner answer 2; S Backend 3.4; Slice 3a record "Follow-ups")
+
+The 3a Console check asked `GET /hymns?hymnal=GG2013&recent_for_date=2026-10-04` and found no hymn with `recent_use_on` although `hymn_usage` holds 90 rows (all `YYYY-MM-DD`), and the owner has prepared services in the old app within the last 90 days. The new code reads correctly on inspection: `hymn_usage.usage_near` keeps rows of the active church whose date is within D-84 to D+84 days, D itself excluded, keyed by `usage_key(title)` (`backend/hymn_usage.py`; tests in `test_hymn_usage_window.py`). The frozen app (`origin/streamlit-frozen`, `app.py` lines 1018 and 1041) writes `hymn_usage` only on **Prepare bulletin copy** or **Prepare pastor's copy**, never on Save, with the church from its own session. So the suspects are: the rows belong to another church id than the new app's; the old app writes to another database; or no Word copy was prepared in the window. This task finds out with four read-only queries, run one at a time by the owner in the Supabase project the new app uses, and one Console look at the new app's church. It changes no file. **Nothing else waits for it:** T2-T13 are built meanwhile, and the decision in Step 7 either adds a fix task (Task 1b) to this branch or records a data question for the owner.
+
+Church ids appear in this task only as their first 8 characters, and only in chat and the results file; nothing with a church id, an email or a token is committed or put in the runbook.
+
+**Files:**
+- Create (not committed): `<scratch>/slice3b-t1-results.md` (`<scratch>` is the session's scratchpad directory; write it out literally).
+- No repository file changes, unless Step 7 outcome A adds Task 1b.
+
+**Interfaces:**
+- Consumes: `hymn_usage.usage_near`, `usecases.hymns.list_hymns_page` (3a); the production database (read only).
+- Produces: the recent-use finding and its outcome (A-D below), written into the results file and, at T15, into "Slice 3b record" (without ids). Later users: T15 Step 11; Task 1b if outcome A.
+
+- [ ] **Step 1 (agent): Check the reader once more, locally**
+
+```bash
+.venv/bin/python -m pytest -q backend/tests/test_hymn_usage_window.py 2>&1 | tail -1
+grep -n "def usage_near" -A 40 backend/hymn_usage.py | grep "church_id ==\|date_iso <\|day == service_date"
+git fetch -q origin streamlit-frozen && git show origin/streamlit-frozen:app.py | grep -n "record_usage" | head -3
+```
+
+**Expected:** `8 passed, 1 skipped in <t>s`; three lines of `usage_near`: `152-` (the church filter and the lower string bound), `154-` (the upper bound) and `173-` (the exact window, D itself excluded); three lines of the frozen app: `35:` (the import) and `1018:` and `1041:` (the two Prepare buttons). Start the results file with today's date and "Reader checked: OK".
+
+- [ ] **Step 2 (OWNER): Query 1 of 4, recent use per church**
+
+Send the owner exactly this and wait for the result:
+
+> To find out why the new app shows no recently used hymns, could you run four short read-only queries, one at a time? They change nothing and show no names of people or emails.
+> 1. Open https://supabase.com/dashboard, choose the project `worship-staging`, then **SQL Editor** on the left.
+> 2. Click **New query**, paste this, and click **Run**:
+>
+> ```sql
+> select left(u.church_id::text, 8) as church, c.name, count(*) as uses,
+>        min(u.date_iso) as first_date, max(u.date_iso) as last_date,
+>        max(u.recorded_at) as last_recorded
+> from hymn_usage u left join churches c on c.id = u.church_id
+> group by 1, 2 order by uses desc;
+> ```
+>
+> 3. Please paste the rows here (or send a screenshot of them).
+
+Write the rows into the results file. Then send Step 3.
+
+- [ ] **Step 3 (OWNER): Query 2 of 4, the churches**
+
+> Thanks. Next query, same way (New query, paste, Run), and paste the rows:
+>
+> ```sql
+> select left(id::text, 8) as church, name, created_at, deleted_at
+> from churches order by created_at;
+> ```
+
+Write the rows into the results file.
+
+- [ ] **Step 4 (OWNER): Query 3 of 4, the ten most recent uses**
+
+> Next one:
+>
+> ```sql
+> select u.date_iso, u.hymn_number, u.hymn_title, left(u.church_id::text, 8) as church, u.recorded_at
+> from hymn_usage u
+> order by u.date_iso desc nulls last, u.recorded_at desc
+> limit 10;
+> ```
+
+Write the rows into the results file (hymn titles and numbers are public hymn data).
+
+- [ ] **Step 5 (OWNER): Query 4 of 4, the most recent saved services**
+
+> Last query. It shows whether recent work in the old app reached this database at all:
+>
+> ```sql
+> select s.service_date_iso, left(s.church_id::text, 8) as church, s.saved_at,
+>        jsonb_array_length(coalesce(s.hymns::jsonb, '[]'::jsonb)) as hymns
+> from services s
+> order by s.saved_at desc
+> limit 10;
+> ```
+
+Write the rows into the results file. If the query fails with `cannot get array length of a scalar` or `of an object`, ask the owner to run it again with the `jsonb_array_length(...) as hymns` part and the comma before it removed.
+
+- [ ] **Step 6 (OWNER): The new app's church, from the Console**
+
+> Thank you. One more look, in the new app this time. On https://worship-service-builder.vercel.app, signed in, open DevTools (⌥⌘I) → Console, paste this and press Return (type `allow pasting` first if Chrome asks). It reads your sign-in from this site, calls only the app's API, prints no token and changes nothing. Please paste the lines it prints.
+
+```js
+(async () => {
+  const API = "https://church-production-74ca.up.railway.app";
+  const jar = {};
+  for (const pair of document.cookie.split("; ")) {
+    const i = pair.indexOf("=");
+    if (i > 0) jar[pair.slice(0, i)] = decodeURIComponent(pair.slice(i + 1));
+  }
+  const names = Object.keys(jar).filter((k) => /^sb-.+-auth-token(\.\d+)?$/.test(k));
+  const whole = names.find((k) => !/\.\d+$/.test(k));
+  let raw = whole ? jar[whole]
+    : names.sort((a, b) => Number(a.split(".").pop()) - Number(b.split(".").pop())).map((k) => jar[k]).join("");
+  if (!raw) { console.log("No sign-in found. Sign in, reload, then run this again."); return; }
+  if (raw.startsWith("base64-")) {
+    const bytes = Uint8Array.from(atob(raw.slice(7).replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
+    raw = new TextDecoder().decode(bytes);
+  }
+  const token = JSON.parse(raw).access_token;
+  const me = await (await fetch(API + "/me", { headers: { Authorization: "Bearer " + token } })).json();
+  for (const c of me.churches) console.log(`member of ${c.id.slice(0, 8)} ${c.name} (${c.role})`);
+  const churchId = localStorage.getItem("activeChurchId") || (me.churches[0] || {}).id;
+  const headers = { Authorization: "Bearer " + token, "X-Church-Id": churchId };
+  const church = await (await fetch(API + "/church", { headers })).json();
+  console.log(`active church ${church.id.slice(0, 8)} ${church.name} effective_hymnal=${church.effective_hymnal}`);
+  for (const day of ["2026-10-04", "2026-08-02", "2026-06-07"]) {
+    const r = await fetch(`${API}/hymns?hymnal=${encodeURIComponent(church.effective_hymnal)}&limit=2000&recent_for_date=${day}`, { headers });
+    const b = await r.json();
+    const recent = (b.items || []).filter((h) => h.recent_use_on);
+    console.log(`recent around ${day}: ${r.status} ${recent.length} ${JSON.stringify(recent.slice(0, 3).map((h) => [h.number, h.title, h.recent_use_on]))}`);
+  }
+})();
+```
+
+Write the lines into the results file.
+
+- [ ] **Step 7 (agent): Compare, decide, and report**
+
+Compare the active church's 8-character prefix (Step 6) with the `church` column of Steps 2-5, and the usage dates with the windows the Console asked about (October 4, 2026 covers July 12 to December 27, 2026; August 2 covers May 10 to October 25; June 7 covers March 15 to August 30). Then pick exactly one outcome and write it, with its evidence, into the results file:
+
+| Outcome | What the rows show | What happens |
+|---|---|---|
+| **A. The new code is wrong** | The active church has usage rows inside a window (Step 2 or 4), but that window's Console line shows 0 recent hymns | The controller adds **Task 1b** to this plan (a "Plan: slice 3b recent-use fix (Task 1b)" commit): first a failing test in `backend/tests/test_hymn_usage_window.py` or `test_api_hymns.py` built from the row shapes found (titles, numbers, dates, anything unusual such as spaces or a hymnal-specific title), then the smallest fix in `backend/hymn_usage.py` or `backend/usecases/hymns.py`, with its count added to the table, reviewed and backed up like any task. Tell the owner in one line what was wrong. |
+| **B. Another church** | The recent rows (Step 4) belong to a church prefix other than the active one (for example a second church of the same name, or one with `deleted_at` set) | No code change. Record it; the controller asks the owner (below). |
+| **C. No Word copies prepared** | No usage rows after some date, although Step 5 shows services saved recently for the active church | No code change: the old app records use only when a Word copy is prepared. Record it; the controller asks the owner. |
+| **D. Another database** | Neither usage (Step 4) nor saved services (Step 5) show the owner's recent work | No code change. Ask the owner to compare, without sending either value, the host part of `DATABASE_URL` in the liturgy-frozen app's Secrets (share.streamlit.io → the app → Settings → Secrets) and in Railway's Variables: does each contain `tbecmwtitsoxzkrvxxxu`? Record the answer; the controller asks the owner. |
+
+For B, C and D, send the owner this, filled in, and wait (the build carries on):
+
+> What I found about recent hymn use: <one or two plain sentences, for example "the old app last recorded hymns on July 5, and only when a Word copy is prepared, so nothing after that counts as used">. The new app reads the history correctly; no code change is needed for it. Options: (1) leave it, since slice 5a will record hymns every time a service is saved in the new app; (2) <an option that fits, for example "move the rows filed under the old church to the current one", which would be a small separate data task with its own review>. Which would you like?
+
+Record the owner's answer in the results file. T15 carries the finding (without ids) into "Slice 3b record".
+
+Counts after this task: unchanged (frontend 356 in 55 files; backend 1106 passed, 11 skipped), unless Task 1b is added.
+
