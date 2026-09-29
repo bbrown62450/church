@@ -4,7 +4,7 @@
 
 **Goal:** Ship PR 2c of slice 2, the Date & readings step, live. After it merges, a signed-in member who opens https://worship-service-builder.vercel.app lands on step 1 of the Service Builder with next Sunday (in the church's time zone) already filled in: the occasion and the lectionary readings, looked up 400 ms after the date settles. The member can pick any date (weekday feasts are found; any other date falls back to typing), choose between several reading sets, type their own occasion and readings without the app ever overwriting them, read the passage text in a chosen translation, and pick the bulletin's Old and New Testament readings, where a Psalm is never the automatic New Testament reading. The step bar counts Date & readings ("1 of 3", then "Complete"), Review lists what is still needed, and the summary shows the occasion and readings with their OT and NT marks. Hymns, Liturgy and Review keep the "Available soon" card with no link to the old app. "New service" now asks first after the member picked a date, chose a reading set or chose a translation (owner answer Q2). The backend does not change (one docs test pins one more heading), there is no migration, and production Streamlit (https://liturgy-frozen.streamlit.app/, branch `streamlit-frozen`) is untouched.
 
-**Architecture:** 2b built every pure piece (the draft store, the readings transitions and selectors, `lib/dates.ts`, `lib/scripture-refs.ts`); 2c adds the queries and the screen. `src/lib/queries/` gains `lectionary.ts` (`useLectionary`), `reference.ts` (`useTranslations`) and `passages.ts` (`usePassage`, the 3-at-a-time `passageLimiter`, `passageText` for slice 3). `src/lib/use-debounced-value.ts` trails a value by 400 ms. `src/components/builder/lectionary-sync.tsx` holds `useLectionarySync()`: `BuilderShell` renders `<LectionarySync>` inside `DraftProvider`, so on every step the draft's date is looked up once it settles and empty or older lectionary fields are filled, in the visible tab only; the step reads the same lookup through `useLectionaryLookup()`. `src/components/builder/readings/` holds the step: `ReadingsStep` stacks `ServiceDateField`, `LectionaryStatus` (loading, the set switcher `ReadingSetPicker`, no readings, unavailable, rate limited, partial, stale fields, the "Readings … are available" banner and `ReplaceReadingsDialog`), `OccasionField`, `ScriptureLinesField`, `ReadingsList` (`TranslationSelect`, `ReadingRow`, `PassageText`) and `BulletinReadingsPicker`. `readings.ts` gains `chooseReadingSet` and `status.ts`'s `isPristine` counts a picked date, a chosen set and a translation (owner answer Q2). Base UI's `radio-group`, `collapsible` and `tooltip` are added; the slice 1 kit's `ErrorState` and `ConfirmDialog` gain label options. Last, `SHIPPED_STEPS` gains `"readings"` and the readings route renders the step. Every page stays a client component (F §4.1).
+**Architecture:** 2b built every pure piece (the draft store, the readings transitions and selectors, `lib/dates.ts`, `lib/scripture-refs.ts`); 2c adds the queries and the screen. `src/lib/queries/` gains `lectionary.ts` (`useLectionary`), `reference.ts` (`useTranslations`) and `passages.ts` (`usePassage`, the 3-at-a-time `passageLimiter`, `passageText` for slice 3). `src/lib/use-debounced-value.ts` trails a value by 400 ms. `src/components/builder/lectionary-sync.tsx` holds `useLectionarySync()`: `BuilderShell` renders `<LectionarySync>` inside `DraftProvider`, so on every step the draft's date is looked up once it settles and empty or older lectionary fields are filled, in the visible tab only (a tab shown again first re-reads the stored draft, `DraftStore.syncFromStorage()`, so it never fills over another tab's newer typing); the step reads the same lookup through `useLectionaryLookup()`. `src/components/builder/readings/` holds the step: `ReadingsStep` stacks `ServiceDateField`, `LectionaryStatus` (loading, the set switcher `ReadingSetPicker`, no readings, unavailable, rate limited, partial, stale fields, the "Readings … are available" banner and `ReplaceReadingsDialog`), `OccasionField`, `ScriptureLinesField`, `ReadingsList` (`TranslationSelect`, `ReadingRow`, `PassageText`) and `BulletinReadingsPicker`. `readings.ts` gains `chooseReadingSet` and `status.ts`'s `isPristine` counts a picked date, a chosen set and a translation (owner answer Q2). Base UI's `radio-group`, `collapsible` and `tooltip` are added; the slice 1 kit's `ErrorState` and `ConfirmDialog` gain label options. Last, `SHIPPED_STEPS` gains `"readings"` and the readings route renders the step. Every page stays a client component (F §4.1).
 
 **Tech Stack:** Next 16.3.6 (App Router, Turbopack), React 19.2.8, TypeScript 5, Tailwind 4, Base UI 1.8 (shadcn "base-nova"), TanStack Query 5, sonner, zod 4.6.5, Vitest 3.2.7 (`unit` node and `dom` jsdom projects) with Testing Library; the backend (Python 3.11, FastAPI) is not changed; GitHub Actions (`backend`, `backend-postgres`, `frontend`, all required on `main`), Vercel (frontend), Railway (API), Supabase Postgres.
 
@@ -18,7 +18,8 @@
   - Frontend baseline `299 passed` in 49 files; `npm run typecheck` and `npm run lint` clean; backend baseline `971 passed, 9 skipped`.
   - The route bodies the client reads: `GET /lectionary/readings` answers 200 `LectionaryOut` (`status` `ok` or `no_readings`), 422 `invalid_request` (`fields.date`), 429 `rate_limited` (`Retry-After`, `details.retry_after_seconds`), 502 `upstream_error` / 504 `upstream_timeout` with "The lectionary couldn't be reached. Enter readings yourself, or try again in a few minutes."; `POST /scripture/passages` answers 200 with per-passage and per-section `ok`/`not_found`/`unavailable` (upstream failures are data, never 5xx), 422 with `fields.refs` ("Too many passages in one request." for more than 20 parts), 429 as above; `GET /translations` lists `web` first and `esv` last when configured. `apiFetch` already reads `Retry-After` (or `details.retry_after_seconds`) into `ApiError.retryAfterSeconds`.
   - The build container reaches registry.npmjs.org and raw.githubusercontent.com (checked 2026-09-29) but not ui.shadcn.com (`CONNECT tunnel failed, response 403`), Railway or the reading sites. No test needs the network.
-  - Every task's code below was written and run by the plan's writer in a throwaway worktree at `0f6fcbc` (hard-linked `node_modules`, `cp -al`). Then T1-T12 were replayed mechanically from this document onto two further clean worktrees at `0f6fcbc` (every "Create", "Replace" and "Append" block, each import-block replacement and each edit script, in order): after each task the suite gave exactly the count in the table below with typecheck and lint clean, each "see them fail" step printed the output quoted in it (timings shown as `<t>`), and the two replays produced the same tree. On the replayed tree the full suite ran three times at `345 passed` in 55 files, and with the real clock moved 0, 8 and 400 days forward, with no `act` warnings; `next build` compiled and listed the five builder routes; `npm run gen:api` changed nothing; T13's gates and T12's checks gave their stated outputs; the backend suite stayed at `971 passed, 9 skipped`. Not run while planning: a successful `shadcn add` (the registry is blocked; T4 records the failure message), the pushes and CI (T13), and the OWNER steps (T14).
+  - Every task's code below was written and run by the plan's writer in a throwaway worktree at `0f6fcbc` (hard-linked `node_modules`, `cp -al`). Then T1-T12 were replayed mechanically from this document onto two further clean worktrees at `0f6fcbc` (every "Create", "Replace" and "Append" block, each import-block replacement and each edit script, in order): after each task the suite gave exactly the count in the table below with typecheck and lint clean, each "see them fail" step printed the output quoted in it (timings shown as `<t>`), and the two replays produced the same tree. On the replayed tree the full suite ran three times at `346 passed` in 55 files, and with the real clock moved 0, 8 and 400 days forward, with no `act` warnings; `next build` compiled and listed the five builder routes; `npm run gen:api` changed nothing; T13's gates and T12's checks gave their stated outputs; the backend suite stayed at `971 passed, 9 skipped`. Not run while planning: a successful `shadcn add` (the registry is blocked; T4 records the failure message), the pushes and CI (T13), and the OWNER steps (T14).
+  - After the plan review (2026-09-29, the "Plan: slice 2c review fixes and owner answers" commit), T1-T12 were replayed again the same way onto a clean worktree at `0f6fcbc`: every task gave the count in the table, typecheck and lint stayed clean, and the replayed `frontend/src` was identical to the tree the fixes were written in; the full suite passed at `346 passed` in 55 files three times, including with the real clock moved 8 and 400 days forward, with no `act` warnings, and `next build` compiled and listed the five builder routes. The review's changes are clarifications 7, 8, 10, 13-15 and 21, the accepted translation case in clarification 2, the test rule in "Code rules", and the review questions at the end.
   - Where S and the code or F disagreed, the code and F won; each case is a numbered clarification below.
 
 ## Global Constraints
@@ -35,7 +36,7 @@
 - `main` is protected: the `backend`, `backend-postgres` and `frontend` checks must pass and the branch must be up to date. Merge only with `gh pr merge <N> --merge -R bbrown62450/church`, only on the owner's explicit yes.
 - Commits end with a blank line and `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. When the session's attribution asks for it, a `Claude-Session: <url>` line stands immediately before that final `Co-Authored-By` line (every commit template below allows it; T13 Step 6's trailer check matches the `Co-Authored-By` line anywhere in the message, and Step 8 compares subjects only). Subjects read "Area: plain words (F §x, S …)". Use TDD: write the failing test first and quote its failure.
 - **Backup push after every task** (owner answer Q4, as in 2a and 2b): right after each task's commit, `git push origin claude/slice-2-plan-4q33le` (never `--force`; there is no open PR, so the push asks nobody; Vercel may build a preview). A fix asked for by the task's review is a new commit, `Fix: <what> (Task <n> review)`, pushed the same way (never an amend of a pushed commit); T13 Step 8 lists it. The container can restart and lose uncommitted work, so commit as soon as a task's checks pass. If the push is refused because the remote moved, stop and ask the controller.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and includes the line "Tests: frontend 299 → 345 in 49 → 55 files; backend 971 → 971 passed, 9 → 9 skipped".
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and includes the line "Tests: frontend 299 → 346 in 49 → 55 files; backend 971 → 971 passed, 9 → 9 skipped".
 - New prose for the owner has no em dashes. Code strings copied from S (for example "Too many requests — try again in N s.", "None — choose one", "Still working — this can take up to a minute.") keep theirs.
 
 ### Baselines and counts
@@ -48,14 +49,14 @@
   | T2 | +7 (`use-debounced-value.test.tsx` 3, `queries/lectionary.test.tsx` 3, `queries/reference.test.tsx` 1) | +3 | 309 in 52 |
   | T3 | +3 (`queries/passages.test.ts`) | +1 | 312 in 53 |
   | T4 | +2 (`error-state.test.tsx` +1, `confirm-dialog.test.tsx` +1) | 0 | 314 in 53 |
-  | T5 | +5 (`builder/lectionary-sync.test.tsx`; `builder-shell.test.tsx` and `church-switch.test.tsx` edited, 0) | +1 | 319 in 54 |
-  | T6 | +5 (`builder/readings/readings-step.test.tsx`, new) | +1 | 324 in 55 |
-  | T7 | +5 (`readings-step.test.tsx`) | 0 | 329 in 55 |
-  | T8 | +5 (`readings-step.test.tsx`) | 0 | 334 in 55 |
-  | T9 | +7 (`readings-step.test.tsx`) | 0 | 341 in 55 |
-  | T10 | +3 (`readings-step.test.tsx`) | 0 | 344 in 55 |
-  | T11 | +1 (`builder-shell.test.tsx` +1; `status.test.ts` and two shell tests edited, 0) | 0 | 345 in 55 |
-  | T12 | 0 | 0 | 345 in 55 |
+  | T5 | +6 (`builder/lectionary-sync.test.tsx`; `builder-shell.test.tsx`, `church-switch.test.tsx` and `draft/store.test.ts` edited, 0) | +1 | 320 in 54 |
+  | T6 | +5 (`builder/readings/readings-step.test.tsx`, new) | +1 | 325 in 55 |
+  | T7 | +5 (`readings-step.test.tsx`) | 0 | 330 in 55 |
+  | T8 | +5 (`readings-step.test.tsx`) | 0 | 335 in 55 |
+  | T9 | +7 (`readings-step.test.tsx`) | 0 | 342 in 55 |
+  | T10 | +3 (`readings-step.test.tsx`) | 0 | 345 in 55 |
+  | T11 | +1 (`builder-shell.test.tsx` +1; `status.test.ts` and two shell tests edited, 0) | 0 | 346 in 55 |
+  | T12 | 0 | 0 | 346 in 55 |
 
 - The backend stays at 971 passed, 9 skipped throughout. T12 edits one assertion in `backend/tests/test_slice1_docs.py` (the last `##` headings of `docs/manual-verification.md`); no test is added or removed. CI `backend-postgres` shows `9 passed, 971 deselected, 1 warning`.
 - The readings-step tests fake only `Date` and run the 400 ms lookup delay, the draft's 400 ms writes, the list's 400 ms trail and two 1-second rate-limit waits on real timers, so `readings-step.test.tsx` takes about 6 s. One test fakes `setTimeout` as well (the 8-second "Still working" line) and says why.
@@ -69,6 +70,7 @@
 - Inputs are `text-base md:text-sm` (the generated `Input`, `Textarea`) so iOS does not zoom; primary actions and toggles are 44 px (`size="touch"`, `h-11`).
 - DOM tests that depend on "today" fake only `Date` (`vi.useFakeTimers({ toFake: ["Date"] })` plus `vi.setSystemTime(DRAFT_NOW)`), so user-event's and the app's timers keep running. A test that must fake `setTimeout` too calls `vi.useRealTimers()` first: a second `useFakeTimers` call keeps the first call's Date-only fake.
 - Grep gates exclude test files (P2b build notes).
+- A test never proves that something did not happen by sleeping: it first waits for a positive condition that comes after it (a later request, the lookup's settled date, the draft's write), then checks the absence.
 
 ### Messages (verbatim, from S and F)
 - Service date: label "Service date"; help "Readings and the occasion load automatically for this date."; "Choose a service date."; "Enter a date between 1900 and 2199."; "This date has passed."; "Not a Sunday. We'll look for this day's own readings, such as Ash Wednesday, Christmas Eve or Good Friday."; button "Use next Sunday ({Month D})".
@@ -114,25 +116,26 @@ S line 7 (a 2b plan note) gives 2c "the three query modules (`lectionary.ts`, `r
 The code and F win over S's outline. Each item says whether the owner would notice it: **[owner-visible]** items are put to the owner in "Questions for the owner" at the end (confirm or change before T1 starts); the rest are owner decision 1 (no owner-visible change) or plain readings of S.
 
 1. **The 2c scope** is the table above. S's Testing table names `use-debounced-value.test.ts`; it is `use-debounced-value.test.tsx`, because it renders the hook in jsdom (the `dom` project runs `*.test.tsx`). T2 also adds `queries/lectionary.test.tsx` and `queries/reference.test.tsx` (F §5.2: every query module is tested), and T5 puts the fill and debounce cases of S's `readings-step.test.tsx` into `builder/lectionary-sync.test.tsx`, since the sync lives in the shell and runs on every step.
-2. **[owner-visible] What counts as unsaved work (owner answer Q2).** `isPristine` (and so `isDirty` until 5a saves drafts) is false after: a date the member picked (typed or picked in the date field; `date_origin: "user"`); a reading set chosen in the switcher (`chooseReadingSet` makes a `default` date the user's; the draft shape does not change); a translation other than the church's (`readings.translation` not null; choosing the church's own translation again stores `null` and counts as untouched). Not counted: "Use next Sunday", which puts back the default date with `date_origin: "default"`; the automatic fill; "Use them" on the banner (it only appears after a picked date or typed readings, which already count); "Clear readings" of stale lectionary fields. Consequences: "New service" asks "Start a new service?" in those cases, and a draft with any of them keeps its date after that Sunday passes (it shows "This date has passed." instead of moving to the next Sunday). Card toggles, hymnal overrides and hymn alternatives are slices 3 and 4's to decide (P2b build notes).
+2. **[owner-visible] What counts as unsaved work (owner answer Q2).** `isPristine` (and so `isDirty` until 5a saves drafts) is false after: a date the member picked (typed or picked in the date field; `date_origin: "user"`); a reading set chosen in the switcher (`chooseReadingSet` makes a `default` date the user's; the draft shape does not change); a translation other than the church's (`readings.translation` not null; choosing the church's own translation again stores `null` and counts as untouched). Not counted: "Use next Sunday", which puts back the default date with `date_origin: "default"`; the automatic fill; "Use them" on the banner (it only appears after a picked date or typed readings, which already count); "Clear readings" of stale lectionary fields. Consequences: "New service" asks "Start a new service?" in those cases, and a draft with any of them keeps its date after that Sunday passes (it shows "This date has passed." instead of moving to the next Sunday). Card toggles, hymnal overrides and hymn alternatives are slices 3 and 4's to decide (P2b build notes). Accepted, not fixed: a stored translation override that the translations list no longer offers (for example ESV after the server loses its key) still counts as work, although the screen shows the church's translation (`effectiveTranslation`). `isPristine` is a pure function of the draft, used by the store's mount-time roll-forward before any list is loaded and by `isDirty`; letting it see the list would mean passing the list through the store and `fingerprint.ts`. The effect is only that "New service" asks once more than needed, and such a draft keeps its date (owner decision 1).
 3. **[owner-visible] No Saturday one-tap (owner answer Q1).** A Saturday finds no readings (Vanderbilt lists the Vigil on the Sunday), so it shows "No lectionary readings for Saturday, …" with "Enter readings". S open question 2 is closed as "no" (T12).
 4. **`radio-group`, `collapsible` and `tooltip` are rebuilt from the upstream shadcn source**, as 2b did for `sheet` and `badge` (P2b clarification 3, owner answer A): T4 first runs `npx shadcn@latest add radio-group collapsible tooltip`; the registry (ui.shadcn.com) is blocked from the container (`CONNECT tunnel failed, response 403`, checked 2026-09-29), so T4 uses the files in this plan: shadcn-ui/ui@`db2db460` `apps/v4/registry/bases/base/ui/{radio-group,collapsible,tooltip}.tsx` with `style-nova.css` (sha256 recorded in T4), through the installed shadcn 4.21.0 CLI's `transformStyle` and Prettier 3 with `prettier-plugin-tailwindcss` (`tailwindFunctions: ["cn", "cva"]`). The same pipeline reproduces 2b's `badge.tsx` byte for byte (after its header comment). Each file's only change is a header comment. A later `shadcn add` can replace them. (Owner decision 1; the same exception the owner accepted for 2b.)
 5. **`ErrorState` gains `message`, `retryLabel` and `retryDisabled`; `ConfirmDialog` gains `cancelLabel`** (slice 1's kit, defaults unchanged). S's copy needs "Try again" (F §4.8 says "Retry"), the lectionary's own sentence (a 502's `describeError` would read "Something went wrong. (Ref: …)"), a disabled button without a spinner while a rate limit's wait runs, and "Keep mine". The kit's existing tests are unchanged; one new test each.
 6. **`useLectionarySync` lives in `components/builder/lectionary-sync.tsx`**, with `<LectionarySync>` (rendered by `BuilderShell` inside `DraftProvider`) sharing one lookup (one debounce, one query) with the step through `useLectionaryLookup()`. S puts the hook in `BuilderShell` and gives it no file. The fill's effect depends on "an automatic fill is due" computed from the current draft, so it also refills after "New service" on the same date; the recipe checks `shouldAutoApply` again against the latest draft (S).
-7. **Only the tab on screen fills** (2b build notes; binding). `usePageVisible()` reads `document.visibilityState` through `useSyncExternalStore`; a hidden tab keeps the answer and fills when it is shown (T5 tests it). (Owner decision 1.)
-8. **Any failure other than a 429 shows the lectionary's "couldn't be reached" copy** (S names 502, 504, network and timeout; a 422 cannot happen for a date the client sends, and a 500 is the same to the member). An answer already on screen wins over a failed background refetch (a partial answer is refetched after 5 minutes). The stale-fields note shows with "No readings" and "Unavailable", as S says, not with the rate-limit card. (Owner decision 1.)
+7. **Only the tab on screen fills** (2b build notes; binding). `usePageVisible()` reads `document.visibilityState` through `useSyncExternalStore`; a hidden tab keeps the answer and fills when it is shown (T5 tests it). A tab that is shown again could fill its stale copy before the other tab's `storage` event arrives, and its fill, stamped later, would then outrank and overwrite the typing the other tab wrote as it was hidden. So `DraftProvider`'s `visibilitychange` listener, which already flushes on hide, calls the new `DraftStore.syncFromStorage()` on show: it re-reads the stored draft and adopts it when strictly newer, in the same event and before React renders the fill's effect (T5 tests a storage event that arrives only after the tab is shown). This touches `store.ts` and `context.tsx`, which 2c otherwise leaves alone. (Owner decision 1.)
+8. **Any failure other than a 429 shows the lectionary's "couldn't be reached" copy** (S names 502, 504, network and timeout; a 422 cannot happen for a date the client sends, and a 500 is the same to the member). An answer already on screen wins over a failed background refetch (a partial answer is refetched after 5 minutes). The stale-fields note shows with "No readings" and "Unavailable", as S says, and also with the rate-limit card and for an empty or out-of-range date (where it is the only thing the status area shows); without a valid date to name, the sentence ends after the set: "These readings are from {set name} ({Month D, YYYY})." (Owner decision 1.)
 9. **[owner-visible] The rate-limit number does not count down.** "Too many requests — try again in N s." shows the server's `Retry-After` as sent, and "Try again" turns on after N seconds (for the lectionary and for passage text). A live countdown would be announced every second by screen readers.
-10. **[owner-visible] Occasion caption while the lookup is not loaded.** "Edited from the lectionary ({set name})" needs the set's name from that date's lookup; right after a refresh, before the lookup answers, the caption reads "Edited from the lectionary". A lectionary-filled occasion's caption falls back to the occasion itself, which is the set's name.
+10. **[owner-visible] Occasion caption while the lookup is not loaded.** "Edited from the lectionary ({set name})" needs the set's name from that date's lookup; right after a refresh, before the lookup answers, the caption reads "Edited from the lectionary". The name is found with `selectedSetIndex` (the set equal to the draft's lines, else the stored index), so a refetch that lists the sets in another order never names the wrong set; a lectionary-filled occasion's caption uses the occasion itself, which is the set's name (owner decision 1).
 11. **[owner-visible] The date field keeps the browser's picker within 1900-2199** (`min`/`max`); a typed year outside still shows "Enter a date between 1900 and 2199." and looks nothing up. An impossible date (a five-digit year) is stored as `""` (2b build) and asks "Choose a service date.".
 12. **[owner-visible] Scripture line messages.** "Up to 20 readings." when more than 20 non-blank lines; for lines over 200 characters, the first one is named ("Line 3 is too long (max 200 characters)."), not every one.
-13. **[owner-visible] The "?" badge on phones.** Base UI tooltips open on hover and keyboard focus, not on a tap, so on a phone the badge shows "?" only; "Book not recognized" is also its accessible name, so screen readers say it.
-14. **Readings rows.** The list trails the textarea by 400 ms (S "debounced 400 ms"). Rows are keyed by position and text; open rows are remembered by reference text in component state, so leaving the step closes them, and "Show all text" is disabled while there are no readings. A closed row unmounts its text, so its request is cancelled (and dropped from the limiter's queue if it had not started). A line over 200 characters has its toggle `aria-disabled` (Base UI keeps a disabled trigger focusable) and is never sent. (Owner decision 1.)
-15. **"Use them" uses `applyReadingSet`, the switcher `chooseReadingSet`.** The banner's set is the one the switcher shows (`selectedSetIndex`), else the lookup's default. A dialog confirmed after the date moved does nothing (the recipe checks the date). "Keep mine" hides the banner for this date in component state (S).
+13. **[owner-visible] The "?" badge on phones.** Base UI tooltips open on hover and keyboard focus, not on a tap, so on a phone the badge shows "?" only; "Book not recognized" is also its accessible name, so screen readers say it. Its target is at least 24 by 24 px on phones (`h-6 min-w-6`, back to the badge's 20 px from `sm`).
+14. **Readings rows.** The list trails the textarea by 400 ms (S "debounced 400 ms"). Rows are keyed by position and text; open rows are remembered by reference text in component state, so leaving the step closes them, and "Show all text" is disabled while there are no readings. A closed row unmounts its text, so its request is cancelled (and dropped from the limiter's queue if it had not started). A line over 200 characters has its toggle `aria-disabled` (Base UI keeps a disabled trigger focusable) and is never sent. Each row's buttons are named with the reference ("Show text: Mark 1:1-8", "Hide text: …", "Try again: …"), so a screen reader's button list tells them apart. (Owner decision 1.)
+15. **"Use them" uses `applyReadingSet`, the switcher `chooseReadingSet`.** The banner's set is the one the switcher shows (`selectedSetIndex`), else the lookup's default. A dialog confirmed after the date moved does nothing, and neither does a switcher choice that lands after it (both recipes check the date, so `chooseReadingSet` never sees another date's lookup). "Keep mine" hides the banner for this date in component state (S).
 16. **The translation select is disabled until the list loads**, as well as when it fails (S names the failure), showing the church's `effective_translation_label`. It never stores the church's own translation (2b's `setTranslation`).
 17. **Test helpers.** `test/fixtures/index.ts` gains `translations()` (T2), `noReadings(date)` and `lectionaryRoute(answer)` (T5). From T5 every builder test answers `GET /lectionary/readings` (the fake API fails a test on an unhandled request); the 2b shell and church-switch tests answer "no readings", so their drafts keep what they type. From T11 the shell tests also answer `GET /translations`.
 18. **[owner-visible] What changes on screens 2b built** (the owner accepted this for 2c with 2b's owner answer Q1): the step bar shows Date & readings as "1 of 3", "2 of 3" or "Complete"; Review shows "Still needed" with the missing readings rows; the summary's Date block adds the occasion ("No occasion yet") and its Readings block lists the readings with "OT (auto)" / "NT" marks instead of "Available soon".
 19. **The manual checklist** (T12): S's thirteen checks as "## Slice 2" in `docs/manual-verification.md`, with a Saturday added to check 2 (Q1), check 14 for "New service" (Q2), and "(owner, after 2c)" on the items the guided check covers (Q3). `test_slice1_docs.py` pins the last three `##` headings (`## Ops slice`, `## Slice 1`, `## Slice 2`) instead of two; its slice 1 section checks are unchanged (its `_section` stops at the next `##`).
 20. **No backend change.** S's 2c items are all frontend; `schema.d.ts` already has every type (2a), so `npm run gen:api` changes nothing. T12's only Python edit is the docs test's heading assertion.
+21. **Screen-reader roles and names** (owner decision 1). The "No lectionary readings" callout and the "Readings … are available" banner are information, so they use `role="status"` (polite) instead of the `Alert` component's default `role="alert"`; the lectionary's failure and rate-limit states keep `alert` (`ErrorState`). "Use automatic" is named for its side ("Use automatic Old Testament reading", "Use automatic New Testament reading"); the row buttons as in clarification 14.
 
 ### Risks carried into the plan
 - **Live data.** The fixtures are synthetic (2a build); the lectionary and Bible sites are reached only from Railway. The owner's guided check (T14) is the first look at real answers in the new screen; a data surprise is a follow-up, not a 2c blocker, unless the step cannot be used.
@@ -180,13 +183,14 @@ All paths are from the repo root. "(church)" means `frontend/src/app/(signed-in)
 | `frontend/src/lib/api/types.ts` | `Passages`, `Passage`, `PassageSection` | T3 |
 | `frontend/src/components/app/error-state.tsx`, `confirm-dialog.tsx` (+ tests) | label options (clarification 5) | T4 |
 | `frontend/src/components/builder/builder-shell.tsx` | renders `<LectionarySync>` | T5 |
+| `frontend/src/lib/draft/store.ts`, `context.tsx` (+ `store.test.ts`) | `syncFromStorage()`, called when the tab is shown again (clarification 7) | T5 |
 | `frontend/src/components/builder/builder-shell.test.tsx` | answers the lookup (T5); the shipped step, `GET /translations`, one new test (T11) | T5, T11 |
 | `frontend/src/components/builder/church-switch.test.tsx` | answers the lookup | T5 |
 | `frontend/src/lib/draft/steps.ts`, `(church)/builder/readings/page.tsx`, `frontend/src/components/builder/step-placeholder.tsx` | `"readings"` shipped; the page renders the step | T11 |
 | `docs/superpowers/specs/2026-09-25-slice-2-readings-design.md`, `docs/superpowers/specs/2026-09-25-migration-foundations-design.md` | "(2c plan)" notes, one F amendment row | T12 |
 | `docs/manual-verification.md`, `backend/tests/test_slice1_docs.py` | "## Slice 2"; the heading pin | T12 |
 
-**Untouched:** every Python file except `backend/tests/test_slice1_docs.py`, `backend/requirements*.txt`, migrations, `frontend/package.json` and `package-lock.json` (no new dependency: `@base-ui/react` already has radio, collapsible and tooltip), `frontend/src/lib/api/openapi.json` and `schema.d.ts`, `frontend/src/lib/draft/{schema,store,context,migrate,mapping,fingerprint,prune,date-effects}.ts(x)`, `docs/ops-runbook.md` until T14's record, Streamlit files, CI workflows.
+**Untouched:** every Python file except `backend/tests/test_slice1_docs.py`, `backend/requirements*.txt`, migrations, `frontend/package.json` and `package-lock.json` (no new dependency: `@base-ui/react` already has radio, collapsible and tooltip), `frontend/src/lib/api/openapi.json` and `schema.d.ts`, `frontend/src/lib/draft/{schema,migrate,mapping,fingerprint,prune,date-effects}.ts`, `docs/ops-runbook.md` until T14's record, Streamlit files, CI workflows.
 
 **Task order and checkpoints:** T1 → T2 → … → T12 → T13 → T14. Each of T1-T12 ends in one commit, a review and a backup push (owner answer Q4). With the plan commit, the branch carries 13 commits before T13. The review checkpoints are stops for the controller, not merges: everything ships in the one 2c PR.
 
@@ -1583,20 +1587,21 @@ If Step 2 generated the files, replace the body's first sentence with "radio-gro
 
 ### Task 5: The lectionary lookup and automatic fill on every step, in the visible tab only (S "useLectionarySync", UX item 2 "400 ms", AC14; F §4.6 "Never destroy typed input"; 2b build notes; clarifications 6, 7, 17)
 
-`BuilderShell` renders `<LectionarySync>` inside `DraftProvider`. It debounces the draft's date by 400 ms, runs `useLectionary` for the debounced date, and when an answer for the current date arrives and `shouldAutoApply` says so (empty fields, or lectionary fields from another date), it applies the default set with `update(recipe)`, re-checking against the latest draft inside the recipe. It fills only while the tab is on screen; a hidden tab fills when it is shown (the 2b build note: adopting another tab's newer draft drops up to 400 ms of this tab's typing). `useLectionaryLookup()` hands the step the same lookup (T6-T8). The 2b shell and church-switch tests start answering the lookup with "no readings", so their drafts keep their fields.
+`BuilderShell` renders `<LectionarySync>` inside `DraftProvider`. It debounces the draft's date by 400 ms, runs `useLectionary` for the debounced date, and when an answer for the current date arrives and `shouldAutoApply` says so (empty fields, or lectionary fields from another date), it applies the default set with `update(recipe)`, re-checking against the latest draft inside the recipe. It fills only while the tab is on screen; a hidden tab fills when it is shown (the 2b build note: adopting another tab's newer draft drops up to 400 ms of this tab's typing), after `DraftProvider` has re-read the stored draft on that same `visibilitychange` (`DraftStore.syncFromStorage()`, clarification 7), so a tab shown again never fills over the typing another tab wrote as it was hidden. `useLectionaryLookup()` hands the step the same lookup (T6-T8). The 2b shell and church-switch tests start answering the lookup with "no readings", so their drafts keep their fields.
 
 **Files:**
 - Create: `frontend/src/components/builder/lectionary-sync.tsx`
-- Modify: `frontend/src/components/builder/builder-shell.tsx`, `frontend/src/test/fixtures/index.ts` (`noReadings`, `lectionaryRoute`)
-- Test: `frontend/src/components/builder/lectionary-sync.test.tsx` (new, 5 tests); `frontend/src/components/builder/builder-shell.test.tsx` and `church-switch.test.tsx` (answer the lookup; 0 new)
+- Modify: `frontend/src/components/builder/builder-shell.tsx`, `frontend/src/test/fixtures/index.ts` (`noReadings`, `lectionaryRoute`), `frontend/src/lib/draft/store.ts` (`syncFromStorage`), `frontend/src/lib/draft/context.tsx` (calls it when the tab is shown)
+- Test: `frontend/src/components/builder/lectionary-sync.test.tsx` (new, 6 tests); `frontend/src/components/builder/builder-shell.test.tsx` and `church-switch.test.tsx` (answer the lookup; 0 new); `frontend/src/lib/draft/store.test.ts` (assertions added to the storage-event test; 0 new)
 
 **Interfaces:**
-- Consumes: `useDraft` (2b), `applyReadingSet`, `shouldAutoApply` (2b), `useLectionary` (T2), `useDebouncedValue` (T2).
+- Consumes: `useDraft`, `DraftStore` (2b), `applyReadingSet`, `shouldAutoApply` (2b), `useLectionary` (T2), `useDebouncedValue` (T2).
 - Produces:
+  - `DraftStore.syncFromStorage(): void` (re-reads the stored draft and adopts it when strictly newer, like a `storage` event); `DraftProvider` calls it on `visibilitychange` to visible.
   - `LOOKUP_DELAY_MS = 400`; `usePageVisible(): boolean`; `useLectionarySync(): LectionaryLookup`; `<LectionarySync>{children}</LectionarySync>`; `useLectionaryLookup(): LectionaryLookup` (throws outside `<LectionarySync>`), where `LectionaryLookup = { lookupDate: string; settled: boolean; query: UseQueryResult<Lectionary, ApiError> }` (`settled` is false while the draft's date is ahead of `lookupDate`). Later users: T6-T8.
   - `noReadings(date): Lectionary` and `lectionaryRoute(answer = noReadings)` (a fake-API handler answering each `?date=`) in `@/test/fixtures`. Later users: T6-T11.
 
-Counts after this task: frontend **319 passed in 54 files**.
+Counts after this task: frontend **320 passed in 54 files**.
 
 - [ ] **Step 1 (agent): Check the starting point**
 
@@ -1817,21 +1822,105 @@ describe("useLectionarySync (S useLectionarySync)", () => {
     });
     expect(await screen.findByText("Occasion: Nineteenth Sunday after Pentecost")).toBeInTheDocument();
   });
+
+  it("a tab shown again first takes another tab's newer draft, so its fill never overwrites that tab's typing", async () => {
+    let state: DocumentVisibilityState = "hidden";
+    vi.spyOn(document, "visibilityState", "get").mockImplementation(() => state);
+    const { lookups } = renderSync(lectionaryRoute(byDate));
+    await waitFor(() => expect(lookups()).toHaveLength(1));
+    await waitFor(() => expect(window.localStorage.getItem(KEY)).not.toBeNull()); // this tab's first write
+    expect(screen.getByText("Occasion: none")).toBeInTheDocument();
+
+    // The other tab typed an occasion and wrote it as it was hidden; its storage event comes
+    // only after this tab's visibilitychange. This tab's clock is later, so a fill here would win.
+    const theirs = JSON.stringify({
+      ...editOccasion(testDraft(), "Harvest Sunday"),
+      updated_at: new Date(DRAFT_NOW.getTime() + 1_000).toISOString(),
+    });
+    window.localStorage.setItem(KEY, theirs);
+    vi.setSystemTime(DRAFT_NOW.getTime() + 2_000);
+    state = "visible";
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    act(() => {
+      window.dispatchEvent(new StorageEvent("storage", { key: KEY, newValue: theirs }));
+    });
+    expect(await screen.findByText("Occasion: Harvest Sunday")).toBeInTheDocument();
+    expect(screen.getByText("Filled for: nothing")).toBeInTheDocument();
+    expect(JSON.parse(window.localStorage.getItem(KEY) ?? "{}").readings.occasion).toBe("Harvest Sunday");
+  });
 });
 ```
+
+Then run this edit script from the repo root (the store's half of the visible-tab rule, clarification 7):
+
+```bash
+.venv/bin/python - <<'PYEOF'
+from pathlib import Path
+
+
+def edit(path: str, pairs: list[tuple[str, str]]) -> None:
+    p = Path(path)
+    text = p.read_text(encoding="utf-8")
+    for old, new in pairs:
+        assert text.count(old) == 1, f"{path}: anchor not found exactly once: {old[:70]!r}"
+        text = text.replace(old, new)
+    p.write_text(text, encoding="utf-8")
+
+
+edit("frontend/src/lib/draft/store.test.ts", [
+    ('''  it("adopts another tab's strictly newer draft (normalized) and ignores equal, foreign or broken ones", () => {
+    const base = testDraft();
+    const { storage, writes } = memoryStorage({ [KEY]: JSON.stringify(base) });''',
+     '''  it("adopts another tab's strictly newer draft (normalized) and ignores equal, foreign or broken ones", () => {
+    const base = testDraft();
+    const { storage, writes, data } = memoryStorage({ [KEY]: JSON.stringify(base) });'''),
+    ('''    store.handleStorageEvent(KEY, null);
+    expect(store.getSnapshot().draft).toBe(mine);
+''', '''    store.handleStorageEvent(KEY, null);
+    store.syncFromStorage(); // shown again: the stored draft (base) is older than mine
+    expect(store.getSnapshot().draft).toBe(mine);
+'''),
+    ('''    vi.runAllTimers();
+    expect(writes).toEqual([]); // my pending write was dropped: theirs is newer
+  });''', '''    vi.runAllTimers();
+    expect(writes).toEqual([]); // my pending write was dropped: theirs is newer
+
+    // Shown again (slice 2c): the stored draft is read directly, before its storage event arrives.
+    const typed = {
+      ...editOccasion(theirs, "Typed in the other tab"),
+      updated_at: new Date(Date.parse(theirs.updated_at) + 1).toISOString(),
+    };
+    data.set(KEY, JSON.stringify(typed));
+    store.syncFromStorage();
+    expect(store.getSnapshot().draft.readings.occasion).toBe("Typed in the other tab");
+    store.handleStorageEvent(KEY, JSON.stringify(typed)); // the late event is not newer
+    expect(notices).toEqual(["adopted", "adopted"]);
+  });'''),
+])
+print("T5 store test edited")
+PYEOF
+```
+
+**Expected:** `T5 store test edited`.
 
 - [ ] **Step 4 (agent): Run them and see them fail**
 
 ```bash
-(cd frontend && npx vitest run src/components/builder/lectionary-sync.test.tsx 2>&1 | grep -E "^ FAIL|Error:|Tests ")
+(cd frontend && npx vitest run src/components/builder/lectionary-sync.test.tsx src/lib/draft/store.test.ts 2>&1 | grep -E "^ FAIL|^ +×|Error:|Tests ")
 ```
 
 **Expected:**
 
 ```
+   × DraftStore changes (S store.ts) > adopts another tab's strictly newer draft (normalized) and ignores equal, foreign or broken ones <t>ms
  FAIL  |dom| src/components/builder/lectionary-sync.test.tsx [ src/components/builder/lectionary-sync.test.tsx ]
 Error: Failed to resolve import "./lectionary-sync" from "src/components/builder/lectionary-sync.test.tsx". Does the file exist?
-      Tests  no tests
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  |unit| src/lib/draft/store.test.ts > DraftStore changes (S store.ts) > adopts another tab's strictly newer draft (normalized) and ignores equal, foreign or broken ones
+TypeError: store.syncFromStorage is not a function
+      Tests  1 failed | 11 passed (12)
 ```
 
 - [ ] **Step 5 (agent): Write the sync**
@@ -1853,7 +1942,10 @@ Create `frontend/src/components/builder/lectionary-sync.tsx`:
  *
  * Only the visible tab fills (2b build notes): a fill in a hidden tab would
  * write a newer draft, and the visible tab adopting it would drop up to 400 ms
- * of its own unwritten typing. A hidden tab fills when it becomes visible.
+ * of its own unwritten typing. A hidden tab fills when it becomes visible,
+ * after `DraftProvider` has re-read the stored draft on that same
+ * `visibilitychange` (`syncFromStorage`), so the fill never acts on a stale
+ * copy and outranks the other tab's just-written typing.
  *
  * `useLectionaryLookup()` gives the step the same lookup (one query, one
  * debounce) for its status area.
@@ -1928,6 +2020,98 @@ export function useLectionaryLookup(): LectionaryLookup {
 }
 ```
 
+Then run this edit script from the repo root. `DraftProvider` already listens for `visibilitychange` (to flush when hidden); when the tab is shown it now calls `syncFromStorage()`, which re-reads the stored draft and adopts it when it is strictly newer. Both listeners run in the same event, before React renders, so the fill's effect sees the adopted draft:
+
+```bash
+.venv/bin/python - <<'PYEOF'
+from pathlib import Path
+
+
+def edit(path: str, pairs: list[tuple[str, str]]) -> None:
+    p = Path(path)
+    text = p.read_text(encoding="utf-8")
+    for old, new in pairs:
+        assert text.count(old) == 1, f"{path}: anchor not found exactly once: {old[:70]!r}"
+        text = text.replace(old, new)
+    p.write_text(text, encoding="utf-8")
+
+
+edit("frontend/src/lib/draft/store.ts", [
+    (''' * - Another tab's write for this key is adopted when its `updated_at` is
+ *   strictly newer ("adopted").''', ''' * - Another tab's write for this key is adopted when its `updated_at` is
+ *   strictly newer ("adopted"), from its `storage` event or, when this tab is
+ *   shown again, from a direct read (`syncFromStorage`, slice 2c).'''),
+    (''' * `context.tsx`. This class touches storage only in `start`, `flush` and the
+ * constructor's single read, so it can be built during a render.''', ''' * `context.tsx`. This class touches storage only in `start`, `flush`,
+ * `syncFromStorage` and the constructor's single read, so it can be built
+ * during a render.'''),
+    ('''  /** A `storage` event: adopt another tab's strictly newer draft for this key. */
+  handleStorageEvent = (key: string | null, newValue: string | null): void => {
+    if (key !== this.key || newValue === null) return;
+    let stored: DraftV1;
+    try {
+      stored = parseStoredDraft(newValue, { userId: this.userId, churchId: this.churchId });
+    } catch {
+      return;
+    }
+    if (!isNewer(stored.updated_at, this.snapshot.draft.updated_at)) return;
+    this.cancelWrite();
+    this.set(normalizePicks(stored));
+    this.notify("adopted");
+  };
+''', '''  /** A `storage` event: adopt another tab's strictly newer draft for this key. */
+  handleStorageEvent = (key: string | null, newValue: string | null): void => {
+    if (key !== this.key) return;
+    this.adoptIfNewer(newValue);
+  };
+
+  /**
+   * The tab is shown again: read the stored draft now and adopt it when it is
+   * strictly newer, before anything on screen (the lectionary fill) acts on
+   * this tab's copy. The other tab's `storage` event may not have arrived yet,
+   * and a fill stamped now would outrank that tab's just-written typing.
+   */
+  syncFromStorage = (): void => {
+    this.adoptIfNewer(this.storage.read(this.key));
+  };
+'''),
+    ('''  private schedule(): void {''', '''  private adoptIfNewer(raw: string | null): void {
+    if (raw === null) return;
+    let stored: DraftV1;
+    try {
+      stored = parseStoredDraft(raw, { userId: this.userId, churchId: this.churchId });
+    } catch {
+      return;
+    }
+    if (!isNewer(stored.updated_at, this.snapshot.draft.updated_at)) return;
+    this.cancelWrite();
+    this.set(normalizePicks(stored));
+    this.notify("adopted");
+  }
+
+  private schedule(): void {'''),
+])
+
+edit("frontend/src/lib/draft/context.tsx", [
+    (''' * writes (`storage` events), a flush when the page is hidden or left, a flush
+ * on unmount (a church switch), and the three toasts.''', ''' * writes (`storage` events, and a direct read when the page is shown again), a
+ * flush when the page is hidden or left, a flush on unmount (a church switch),
+ * and the three toasts.'''),
+    ('''    const onVisibility = () => {
+      if (document.visibilityState === "hidden") store.flush();
+    };''', '''    // Hidden: write now. Shown: take another tab's newer draft before this tab's
+    // lectionary fill can act on a stale copy (its storage event may still be on the way).
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") store.flush();
+      else store.syncFromStorage();
+    };'''),
+])
+print("T5 store and provider edited")
+PYEOF
+```
+
+**Expected:** `T5 store and provider edited`.
+
 - [ ] **Step 6 (agent): Mount it in the shell**
 
 Run this edit script from the repo root:
@@ -1979,27 +2163,29 @@ PYEOF
 git status --short
 ```
 
-**Expected:** `Test Files  3 passed (3)`, `Tests  14 passed (14)` (8 shell, 1 church switch, 5 sync); the suite ` Test Files  54 passed (54)`, `      Tests  319 passed (319)`; `0`; `> tsc --noEmit` and `> eslint` with nothing after them; four ` M` files (the shell, its test, the church-switch test, the fixtures) and two `??` files.
+**Expected:** `Test Files  3 passed (3)`, `Tests  15 passed (15)` (8 shell, 1 church switch, 6 sync); the suite ` Test Files  54 passed (54)`, `      Tests  320 passed (320)`; `0`; `> tsc --noEmit` and `> eslint` with nothing after them; seven ` M` files (the shell, its test, the church-switch test, the fixtures, `store.ts`, `context.tsx`, `store.test.ts`) and two `??` files.
 
 - [ ] **Step 8 (agent): Commit and back up**
 
 ```bash
-git add frontend/src/components/builder/lectionary-sync.tsx frontend/src/components/builder/lectionary-sync.test.tsx frontend/src/components/builder/builder-shell.tsx frontend/src/components/builder/builder-shell.test.tsx frontend/src/components/builder/church-switch.test.tsx frontend/src/test/fixtures/index.ts
+git add frontend/src/components/builder/lectionary-sync.tsx frontend/src/components/builder/lectionary-sync.test.tsx frontend/src/components/builder/builder-shell.tsx frontend/src/components/builder/builder-shell.test.tsx frontend/src/components/builder/church-switch.test.tsx frontend/src/test/fixtures/index.ts frontend/src/lib/draft/store.ts frontend/src/lib/draft/context.tsx frontend/src/lib/draft/store.test.ts
 git commit -m "Builder: look up the draft's date and fill the readings on every step, in the visible tab only (S useLectionarySync; AC14)" -m "LectionarySync, inside the shell's DraftProvider, looks the date up 400 ms
 after it last changed and fills empty fields, or an older date's
 lectionary fields, with the default set; the recipe re-checks against the
 latest draft, and typed or archived fields are never touched. A hidden tab
 waits until it is shown, so it never writes a draft that would make the
-visible tab drop its typing (2b build notes). The step reads the same
-lookup through useLectionaryLookup. Frontend 314 -> 319 tests in 54 files.
+visible tab drop its typing (2b build notes); when it is shown, the draft
+store first re-reads the stored draft (syncFromStorage), so it never fills
+over another tab's newer typing. The step reads the same lookup through
+useLectionaryLookup. Frontend 314 -> 320 tests in 54 files.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 git push origin claude/slice-2-plan-4q33le
 ```
 
-**Expected:** one commit, 6 files changed; the push line.
+**Expected:** one commit, 9 files changed; the push line.
 
-**Review checkpoint (T5):** the reviewer checks that the effect re-checks `shouldAutoApply` inside the recipe, that nothing fills while `document.visibilityState` is not `visible`, that a failure or `no_readings` never changes the fields, and that the lookup sends no `X-Church-Id`.
+**Review checkpoint (T5):** the reviewer checks that the effect re-checks `shouldAutoApply` inside the recipe, that nothing fills while `document.visibilityState` is not `visible`, that a tab shown again adopts a newer stored draft before it fills (`syncFromStorage`, and the new test's late storage event), that a failure or `no_readings` never changes the fields, and that the lookup sends no `X-Church-Id`.
 
 ### Task 6: The Date & readings step: service date, occasion and scripture lines (S UX items 1, 4 and 5; F §4.8 "Mobile", §4.10; clarifications 10-12)
 
@@ -2018,7 +2204,7 @@ The step component starts here, rendered by the tests inside the real builder la
   - `ReadingsStep()`: a `<section aria-label="Date & readings">`, extended by T7, T9 and T10 and routed by T11.
   - `readings-step.test.tsx` helpers used by T7-T10: `renderStep({ lookup?, translations?, passages? }, seed?)` (returns the render result plus `api` and `lookups()`), `step()` (queries inside the step, away from the summary), `probe()` (the draft's `date_origin/fields_origin/ot=…/nt=…/t=…`), `KEY`, `ISAIAH`.
 
-Counts after this task: frontend **324 passed in 55 files**.
+Counts after this task: frontend **325 passed in 55 files**.
 
 - [ ] **Step 1 (agent): Check the starting point**
 
@@ -2028,7 +2214,7 @@ test ! -e frontend/src/components/builder/readings && echo "no readings folder y
 (cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
 ```
 
-**Expected:** nothing (or `?? .claude/`); `no readings folder yet`; `Test Files  54 passed (54)`, `Tests  319 passed (319)`.
+**Expected:** nothing (or `?? .claude/`); `no readings folder yet`; `Test Files  54 passed (54)`, `Tests  320 passed (320)`.
 
 - [ ] **Step 2 (agent): Write the failing tests**
 
@@ -2046,8 +2232,9 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import BuilderLayout from "@/app/(signed-in)/(church)/builder/layout";
+import { useLectionaryLookup } from "@/components/builder/lectionary-sync";
 import { useDraft } from "@/lib/draft/context";
-import { applyReadingSet, setPick } from "@/lib/draft/readings";
+import { applyReadingSet, editOccasion, setPick } from "@/lib/draft/readings";
 import { draftKey, type DraftV1 } from "@/lib/draft/schema";
 import { installFakeApi, type FakeHandler } from "@/test/fake-api";
 import {
@@ -2063,19 +2250,24 @@ import {
 } from "@/test/fixtures";
 import { renderWithProviders } from "@/test/render";
 
+import { occasionCaption } from "./occasion-field";
 import { ReadingsStep } from "./readings-step";
 const KEY = draftKey(USER_ID, church().id);
 const ISAIAH = ["Isaiah 5:1-7", "Psalm 80:7-15", "Philippians 3:4b-14", "Matthew 21:33-46"];
 
-/** The draft's picks and origins, which the step does not print. */
+/** The draft's picks and origins, and the date the lookup has settled on, which the step does not print. */
 function DraftProbe() {
   const { draft } = useDraft();
+  const { lookupDate } = useLectionaryLookup();
   const r = draft.readings;
   return (
-    <p data-testid="probe">
-      {r.date_origin}/{r.fields_origin}/ot={r.selected_ot_ref || "auto"}/nt={r.selected_nt_ref || "auto"}/t=
-      {r.translation ?? "church"}
-    </p>
+    <>
+      <p data-testid="probe">
+        {r.date_origin}/{r.fields_origin}/ot={r.selected_ot_ref || "auto"}/nt={r.selected_nt_ref || "auto"}/t=
+        {r.translation ?? "church"}
+      </p>
+      <p data-testid="lookup-date">{lookupDate}</p>
+    </>
   );
 }
 
@@ -2166,8 +2358,12 @@ describe("service date (S UX item 1)", () => {
     fireEvent.change(input, { target: { value: "1850-06-02" } });
     expect(screen.getByText("Enter a date between 1900 and 2199.")).toBeInTheDocument();
     expect(step().getByText("Sunday, June 2, 1850")).toBeInTheDocument();
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    expect(lookups()).toEqual(["/lectionary/readings?date=2026-10-04"]);
+    // The lookup settles on 1850 and sends nothing; the next date's lookup is the next request.
+    await waitFor(() => expect(screen.getByTestId("lookup-date")).toHaveTextContent("1850-06-02"));
+    fireEvent.change(input, { target: { value: "2026-10-11" } });
+    await waitFor(() =>
+      expect(lookups()).toEqual(["/lectionary/readings?date=2026-10-04", "/lectionary/readings?date=2026-10-11"]),
+    );
   });
 });
 
@@ -2185,6 +2381,15 @@ describe("occasion and scripture lines (S UX items 4 and 5)", () => {
 
     fireEvent.change(screen.getByLabelText("Service date"), { target: { value: "2026-10-11" } });
     expect(screen.getByText("Entered by you")).toBeInTheDocument();
+
+    // After a refetch that lists the sets in another order, the caption follows the lines, not the stored index.
+    const october4 = lectionary("2026-10-04");
+    const reordered = { ...october4, reading_sets: [...october4.reading_sets].reverse() };
+    const edited = editOccasion(applyReadingSet(testDraft(), october4, 0), "Harvest");
+    expect(occasionCaption(edited, reordered)).toBe("Edited from the lectionary (Nineteenth Sunday after Pentecost)");
+    expect(occasionCaption(applyReadingSet(testDraft(), october4, 1), reordered)).toBe(
+      "From the Revised Common Lectionary: Resurrection of the Lord",
+    );
   });
 
   it("says where archived fields came from, and shows no caption for empty ones", async () => {
@@ -2237,7 +2442,7 @@ describe("occasion and scripture lines (S UX items 4 and 5)", () => {
 
 ```
  FAIL  |dom| src/components/builder/readings/readings-step.test.tsx [ src/components/builder/readings/readings-step.test.tsx ]
-Error: Failed to resolve import "./readings-step" from "src/components/builder/readings/readings-step.test.tsx". Does the file exist?
+Error: Failed to resolve import "./occasion-field" from "src/components/builder/readings/readings-step.test.tsx". Does the file exist?
       Tests  no tests
 ```
 
@@ -2338,16 +2543,21 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { Lectionary } from "@/lib/api/types";
 import { useDraft } from "@/lib/draft/context";
-import { editOccasion } from "@/lib/draft/readings";
+import { editOccasion, selectedSetIndex } from "@/lib/draft/readings";
 import type { DraftV1 } from "@/lib/draft/schema";
 
 export const OCCASION_MAX = 300;
 
-/** The name of the set that filled the fields, when the lookup for that date is loaded. */
+/**
+ * The name of this date's set the draft shows (`selectedSetIndex`: the set
+ * equal to its lines, else the stored index), when that date's lookup is
+ * loaded. Found by the lines first, so a refetch that lists the sets in
+ * another order never names the wrong one.
+ */
 export function readingSetName(d: DraftV1, lect: Lectionary | undefined): string | null {
-  const set = d.readings.reading_set;
-  if (!set || !lect || lect.date !== set.date_iso) return null;
-  return lect.reading_sets[set.index]?.name ?? null;
+  if (!lect) return null;
+  const index = selectedSetIndex(d, lect);
+  return index === null ? null : (lect.reading_sets[index]?.name ?? null);
 }
 
 /** The caption under Occasion (S UX item 4 table). */
@@ -2355,7 +2565,8 @@ export function occasionCaption(d: DraftV1, lect: Lectionary | undefined): strin
   const r = d.readings;
   switch (r.fields_origin) {
     case "lectionary":
-      return `From the Revised Common Lectionary: ${readingSetName(d, lect) ?? r.occasion}`;
+      // Lectionary fields hold the set's own name as the occasion.
+      return `From the Revised Common Lectionary: ${r.occasion}`;
     case "user": {
       if (r.reading_set?.date_iso !== r.date_iso) return "Entered by you";
       const name = readingSetName(d, lect);
@@ -2526,7 +2737,7 @@ export function ReadingsStep() {
 git status --short
 ```
 
-**Expected:** `Test Files  1 passed (1)`, `Tests  5 passed (5)`; the suite ` Test Files  55 passed (55)`, `      Tests  324 passed (324)`; `> tsc --noEmit` and `> eslint` with nothing after them; `?? frontend/src/components/builder/readings/`.
+**Expected:** `Test Files  1 passed (1)`, `Tests  5 passed (5)`; the suite ` Test Files  55 passed (55)`, `      Tests  325 passed (325)`; `> tsc --noEmit` and `> eslint` with nothing after them; `?? frontend/src/components/builder/readings/`.
 
 - [ ] **Step 6 (agent): Commit and back up**
 
@@ -2537,7 +2748,7 @@ when it is empty, refuses years outside 1900-2199 (no lookup), notes a
 passed date and a weekday, and offers Use next Sunday, which puts the
 default date back. Occasion and Scripture readings store typed text as
 the user's, with their limits and the origin caption; leaving the lines
-drops a bulletin pick that is no longer a line. Frontend 319 -> 324 tests
+drops a bulletin pick that is no longer a line. Frontend 320 -> 325 tests
 in 55 files.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
@@ -2550,7 +2761,7 @@ git push origin claude/slice-2-plan-4q33le
 
 ### Task 7: The lectionary status: loading, no readings, unavailable, rate limited, partial and stale fields (S UX item 2; F §4.8; AC14 "never changes the fields", "never moves focus"; clarifications 5, 8, 9)
 
-Directly under the date, exactly one of these shows: Loading (also while the date settles, with "Still working — this can take up to a minute." after 8 s), No readings (with "Enter readings", which moves focus to Occasion; focus never moves on its own), Unavailable (the lectionary's own sentence and "Try again"), or Rate limited ("Too many requests — try again in N s.", "Try again" disabled until N seconds pass); an answer with sets shows the partial note when a source failed (T8 adds the set switcher and the banner). Lectionary fields from another date stay, with "These readings are from … not …" and "Clear readings", next to No readings or Unavailable. A date the lookup refuses shows nothing here (the date field explains).
+Directly under the date, exactly one of these shows: Loading (also while the date settles, with "Still working — this can take up to a minute." after 8 s), No readings (with "Enter readings", which moves focus to Occasion; focus never moves on its own), Unavailable (the lectionary's own sentence and "Try again"), or Rate limited ("Too many requests — try again in N s.", "Try again" disabled until N seconds pass); an answer with sets shows the partial note when a source failed (T8 adds the set switcher and the banner). Lectionary fields from another date stay, with "These readings are from … not …" and "Clear readings", next to No readings, Unavailable or Rate limited, and alone for a date the lookup refuses (the date field explains the date; with no valid date the sentence ends after the set). No readings is a `role="status"` callout, not an alert (clarification 21).
 
 **Files:**
 - Create: `frontend/src/components/builder/readings/lectionary-status.tsx`, `frontend/src/components/builder/readings/use-wait-over.ts`
@@ -2563,7 +2774,7 @@ Directly under the date, exactly one of these shows: Loading (also while the dat
   - `use-wait-over.ts`: `retryAfter(error): number` (at least 1), `rateLimitMessage(error): string`, `useWaitOver(error: ApiError | null): boolean`. Later user: T9 (`PassageText`).
   - `lectionary-status.tsx`: `LECTIONARY_UNAVAILABLE`, `STILL_WORKING_MS = 8_000`, `LectionaryStatus({ onEnterReadings })`. T8 replaces the file with the set switcher and the banner added.
 
-Counts after this task: frontend **329 passed in 55 files**.
+Counts after this task: frontend **330 passed in 55 files**.
 
 - [ ] **Step 1 (agent): Check the starting point**
 
@@ -2573,7 +2784,7 @@ test ! -e frontend/src/components/builder/readings/lectionary-status.tsx && echo
 (cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
 ```
 
-**Expected:** nothing (or `?? .claude/`); `no T7 files yet`; `Test Files  55 passed (55)`, `Tests  324 passed (324)`.
+**Expected:** nothing (or `?? .claude/`); `no T7 files yet`; `Test Files  55 passed (55)`, `Tests  325 passed (325)`.
 
 - [ ] **Step 2 (agent): Write the failing tests**
 
@@ -2591,8 +2802,9 @@ import { act, fireEvent, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import BuilderLayout from "@/app/(signed-in)/(church)/builder/layout";
+import { useLectionaryLookup } from "@/components/builder/lectionary-sync";
 import { useDraft } from "@/lib/draft/context";
-import { applyReadingSet, setDate, setPick } from "@/lib/draft/readings";
+import { applyReadingSet, editOccasion, setDate, setPick } from "@/lib/draft/readings";
 import { draftKey, type DraftV1 } from "@/lib/draft/schema";
 import { fakeError, installFakeApi, type FakeHandler, type RecordedRequest } from "@/test/fake-api";
 import {
@@ -2609,6 +2821,7 @@ import {
 } from "@/test/fixtures";
 import { renderWithProviders } from "@/test/render";
 
+import { occasionCaption } from "./occasion-field";
 import { ReadingsStep } from "./readings-step";
 ```
 
@@ -2641,7 +2854,9 @@ describe("lectionary status (S UX item 2)", () => {
     const date = await screen.findByLabelText("Service date");
     date.focus();
     fireEvent.change(date, { target: { value: "2026-09-29" } });
-    expect(await screen.findByText("No lectionary readings for Tuesday, September 29, 2026.")).toBeInTheDocument();
+    const none = await screen.findByText("No lectionary readings for Tuesday, September 29, 2026.");
+    expect(none.closest("[role=status]")).not.toBeNull(); // information, not an alert
+    expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.getByText("Enter the occasion and readings below.")).toBeInTheDocument();
     expect(date).toHaveFocus();
     await user.click(screen.getByRole("button", { name: "Enter readings" }));
@@ -2678,12 +2893,19 @@ describe("lectionary status (S UX item 2)", () => {
     const limited = fakeError(429, "rate_limited", "Too many requests. Try again in 1 seconds.", {
       details: { retry_after_seconds: 1 },
     });
-    const { user, lookups } = renderStep({
-      lookup: inTurn({ ...limited, headers: { ...limited.headers, "Retry-After": "1" } }, lectionaryRoute(lectionary)),
-    });
+    const { user, lookups } = renderStep(
+      {
+        lookup: inTurn({ ...limited, headers: { ...limited.headers, "Retry-After": "1" } }, lectionaryRoute(lectionary)),
+      },
+      staleDraft(),
+    );
     expect(await screen.findByRole("alert")).toHaveTextContent("Too many requests — try again in 1 s.");
+    expect(
+      screen.getByText("These readings are from Nineteenth Sunday after Pentecost (October 4, 2026), not September 29, 2026."),
+    ).toBeInTheDocument(); // the stale note shows while rate limited too
     const retry = screen.getByRole("button", { name: "Try again" });
     expect(retry).toBeDisabled();
+    await user.clear(screen.getByLabelText("Occasion"));
     await user.type(screen.getByLabelText("Occasion"), "Harvest");
     expect(screen.getByLabelText("Occasion")).toHaveValue("Harvest");
     await waitFor(() => expect(retry).toBeEnabled(), { timeout: 3_000 });
@@ -2699,7 +2921,18 @@ describe("lectionary status (S UX item 2)", () => {
       "These readings are from Nineteenth Sunday after Pentecost (October 4, 2026), not September 29, 2026.",
     );
     expect(screen.getByLabelText("Scripture readings")).toHaveValue(ISAIAH.join("\n"));
+    // The note stays without a date, or with one the lookup refuses.
+    const date = screen.getByLabelText("Service date");
+    fireEvent.change(date, { target: { value: "" } });
+    expect(
+      screen.getByText("These readings are from Nineteenth Sunday after Pentecost (October 4, 2026)."),
+    ).toBeInTheDocument();
+    fireEvent.change(date, { target: { value: "1850-06-02" } });
+    expect(
+      screen.getByText("These readings are from Nineteenth Sunday after Pentecost (October 4, 2026), not June 2, 1850."),
+    ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Clear readings" }));
+    expect(screen.queryByText(/^These readings are from/)).toBeNull();
     expect(note).not.toBeInTheDocument();
     expect(screen.getByLabelText("Occasion")).toHaveValue("");
     expect(screen.getByLabelText("Scripture readings")).toHaveValue("");
@@ -2786,7 +3019,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { ApiError } from "@/lib/api/client";
-import { formatLongDate, formatServiceDate } from "@/lib/dates";
+import { formatLongDate, formatServiceDate, isValidDateIso } from "@/lib/dates";
 import { useDraft } from "@/lib/draft/context";
 import { clearReadings, readingsStale } from "@/lib/draft/readings";
 import { canLookUp } from "@/lib/queries/lectionary";
@@ -2830,16 +3063,22 @@ function RateLimited({ error, onRetry, retrying }: { error: ApiError; onRetry: (
   );
 }
 
-/** "These readings are from …" with "Clear readings" (S UX item 2, stale fields). */
+/**
+ * "These readings are from …" with "Clear readings" (S UX item 2, stale
+ * fields). Without a valid date to name, the sentence stops after the set.
+ */
 function StaleFields() {
   const { draft, update } = useDraft();
   const set = draft.readings.reading_set;
   if (!readingsStale(draft) || !set) return null;
+  const dateIso = draft.readings.date_iso;
+  const from = `${draft.readings.occasion} (${formatServiceDate(set.date_iso)})`;
   return (
     <div className="grid justify-items-start gap-2">
       <p className="text-sm">
-        These readings are from {draft.readings.occasion} ({formatServiceDate(set.date_iso)}), not{" "}
-        {formatServiceDate(draft.readings.date_iso)}.
+        {isValidDateIso(dateIso)
+          ? `These readings are from ${from}, not ${formatServiceDate(dateIso)}.`
+          : `These readings are from ${from}.`}
       </p>
       <Button type="button" variant="outline" size="touch" onClick={() => update(clearReadings)}>
         Clear readings
@@ -2852,13 +3091,14 @@ function StaleFields() {
  * What the lectionary said about the draft's date (S UX item 2): exactly one
  * of Loading, the reading sets, No readings, Unavailable or Rate limited,
  * directly under the date, plus the partial note and the stale-fields note.
- * Nothing shows for a date the lookup refuses (the date field explains).
- * Focus never moves on its own; "Enter readings" moves it to Occasion.
+ * For a date the lookup refuses only the stale-fields note can show (the date
+ * field explains the date). Focus never moves on its own; "Enter readings"
+ * moves it to Occasion.
  */
 export function LectionaryStatus({ onEnterReadings }: { onEnterReadings: () => void }) {
   const { draft } = useDraft();
   const { lookupDate, settled, query } = useLectionaryLookup();
-  if (!canLookUp(draft.readings.date_iso)) return null;
+  if (!canLookUp(draft.readings.date_iso)) return <StaleFields />;
   const retry = () => void query.refetch();
 
   if (!settled || query.isPending) return <Loading lookupDate={draft.readings.date_iso} />;
@@ -2867,7 +3107,12 @@ export function LectionaryStatus({ onEnterReadings }: { onEnterReadings: () => v
   const lect = query.data;
   if (lect === undefined) {
     if (query.error?.code === "rate_limited") {
-      return <RateLimited error={query.error} onRetry={retry} retrying={query.isFetching} />;
+      return (
+        <div className="grid gap-3">
+          <RateLimited error={query.error} onRetry={retry} retrying={query.isFetching} />
+          <StaleFields />
+        </div>
+      );
     }
     return (
       <div className="grid gap-3">
@@ -2886,7 +3131,7 @@ export function LectionaryStatus({ onEnterReadings }: { onEnterReadings: () => v
   if (lect.status === "no_readings" || lect.reading_sets.length === 0) {
     return (
       <div className="grid gap-3">
-        <Alert>
+        <Alert role="status">
           <InfoIcon aria-hidden="true" />
           <AlertTitle>No lectionary readings for {formatLongDate(lookupDate)}.</AlertTitle>
           <AlertDescription>
@@ -2963,7 +3208,7 @@ export function ReadingsStep() {
 git status --short
 ```
 
-**Expected:** `Test Files  1 passed (1)`, `Tests  10 passed (10)`; the suite ` Test Files  55 passed (55)`, `      Tests  329 passed (329)`; `> tsc --noEmit` and `> eslint` with nothing after them; ` M` for `readings-step.tsx` and its test, `??` for the two new files.
+**Expected:** `Test Files  1 passed (1)`, `Tests  10 passed (10)`; the suite ` Test Files  55 passed (55)`, `      Tests  330 passed (330)`; `> tsc --noEmit` and `> eslint` with nothing after them; ` M` for `readings-step.tsx` and its test, `??` for the two new files.
 
 - [ ] **Step 6 (agent): Commit and back up**
 
@@ -2974,7 +3219,7 @@ working after 8 s. No readings names the day and offers Enter readings,
 which focuses Occasion; focus never moves on its own. A failure shows the
 lectionary's own sentence with Try again; a 429 waits for Retry-After
 before Try again turns on. Lectionary fields from another date stay, with
-a note and Clear readings. Frontend 324 -> 329 tests in 55 files.
+a note and Clear readings. Frontend 325 -> 330 tests in 55 files.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 git push origin claude/slice-2-plan-4q33le
@@ -2986,7 +3231,7 @@ git push origin claude/slice-2-plan-4q33le
 
 ### Task 8: Several reading sets, the "available" banner and "Replace your readings?" (S UX items 2 and 3; F §4.6 "Never destroy typed input"; AC14, AC15; owner answer Q2; clarification 15)
 
-When a date has more than one set, a radio group ("This date has more than one set of readings") shows one card per set, keyed by index (two sets with the same name stay distinct), selected by `selectedSetIndex` (2b). Over empty or lectionary fields a choice applies at once through `chooseReadingSet` (T1); over typed or archived fields it asks "Replace your readings?" first. After typing, a changed date shows "Readings for {date} are available." with "Use them" (`showAvailableBanner`, 2b), which asks the same question; "Keep mine" hides the banner for that date until the date changes. An archived service on its own date keeps its fields and shows no banner. The partial note stays.
+When a date has more than one set, a radio group ("This date has more than one set of readings") shows one card per set, keyed by index (two sets with the same name stay distinct), selected by `selectedSetIndex` (2b). Over empty or lectionary fields a choice applies at once through `chooseReadingSet` (T1), unless the date moved meanwhile; over typed or archived fields it asks "Replace your readings?" first. After typing, a changed date shows "Readings for {date} are available." (a `role="status"` callout) with "Use them" (`showAvailableBanner`, 2b), which asks the same question; "Keep mine" hides the banner for that date until the date changes. An archived service on its own date keeps its fields and shows no banner. The partial note stays.
 
 **Files:**
 - Create: `frontend/src/components/builder/readings/reading-set-picker.tsx`, `frontend/src/components/builder/readings/replace-readings-dialog.tsx`
@@ -2997,7 +3242,7 @@ When a date has more than one set, a radio group ("This date has more than one s
 - Consumes: `RadioGroup`, `RadioGroupItem` (T4), `ConfirmDialog` with `cancelLabel` (T4), `chooseReadingSet` (T1), `applyReadingSet`, `selectedSetIndex`, `showAvailableBanner` (2b).
 - Produces: `ReadingSetPicker({ lect, selected, onChoose })`, `ReplaceReadingsDialog({ setName, onConfirm, onKeep })` (closed while `setName` is null; Escape and the backdrop keep the readings), and `LectionaryStatus` rendering them.
 
-Counts after this task: frontend **334 passed in 55 files**.
+Counts after this task: frontend **335 passed in 55 files**.
 
 - [ ] **Step 1 (agent): Check the starting point**
 
@@ -3007,7 +3252,7 @@ test ! -e frontend/src/components/builder/readings/reading-set-picker.tsx && ech
 (cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
 ```
 
-**Expected:** nothing (or `?? .claude/`); `no T8 files yet`; `Test Files  55 passed (55)`, `Tests  329 passed (329)`.
+**Expected:** nothing (or `?? .claude/`); `no T8 files yet`; `Test Files  55 passed (55)`, `Tests  330 passed (330)`.
 
 - [ ] **Step 2 (agent): Write the failing tests**
 
@@ -3025,6 +3270,7 @@ import { act, fireEvent, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import BuilderLayout from "@/app/(signed-in)/(church)/builder/layout";
+import { useLectionaryLookup } from "@/components/builder/lectionary-sync";
 import type { Lectionary } from "@/lib/api/types";
 import { useDraft } from "@/lib/draft/context";
 import { applyReadingSet, editOccasion, setDate, setPick } from "@/lib/draft/readings";
@@ -3044,6 +3290,7 @@ import {
 } from "@/test/fixtures";
 import { renderWithProviders } from "@/test/render";
 
+import { occasionCaption } from "./occasion-field";
 import { ReadingsStep } from "./readings-step";
 ```
 
@@ -3117,7 +3364,8 @@ describe("reading sets and the available banner (S UX items 2 and 3)", () => {
     await user.clear(occasion);
     await user.type(occasion, "Harvest");
     fireEvent.change(screen.getByLabelText("Service date"), { target: { value: "2026-10-11" } });
-    expect(await screen.findByText("Readings for October 11, 2026 are available.")).toBeInTheDocument();
+    const banner = await screen.findByText("Readings for October 11, 2026 are available.");
+    expect(banner.closest("[role=status]")).not.toBeNull(); // an offer, not an alert
     expect(occasion).toHaveValue("Harvest");
 
     await user.click(screen.getByRole("button", { name: "Use them" }));
@@ -3136,7 +3384,8 @@ describe("reading sets and the available banner (S UX items 2 and 3)", () => {
     await waitFor(() => expect(lines).toHaveValue(ISAIAH.join("\n")));
     fireEvent.change(lines, { target: { value: [ISAIAH[0], ISAIAH[2], ISAIAH[3]].join("\n") } });
     expect(probe()).toMatch(/\/user\//);
-    await new Promise((resolve) => setTimeout(resolve, 450));
+    // Once the edit is written (400 ms later), still no banner.
+    await waitFor(() => expect(JSON.parse(window.localStorage.getItem(KEY) ?? "{}").readings.scriptures).toHaveLength(3));
     expect(screen.queryByText(/are available\.$/)).toBeNull();
 
     fireEvent.change(screen.getByLabelText("Service date"), { target: { value: "2026-10-11" } });
@@ -3299,7 +3548,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { ApiError } from "@/lib/api/client";
 import type { Lectionary } from "@/lib/api/types";
-import { formatLongDate, formatServiceDate } from "@/lib/dates";
+import { formatLongDate, formatServiceDate, isValidDateIso } from "@/lib/dates";
 import { useDraft } from "@/lib/draft/context";
 import {
   applyReadingSet,
@@ -3352,16 +3601,22 @@ function RateLimited({ error, onRetry, retrying }: { error: ApiError; onRetry: (
   );
 }
 
-/** "These readings are from …" with "Clear readings" (S UX item 2, stale fields). */
+/**
+ * "These readings are from …" with "Clear readings" (S UX item 2, stale
+ * fields). Without a valid date to name, the sentence stops after the set.
+ */
 function StaleFields() {
   const { draft, update } = useDraft();
   const set = draft.readings.reading_set;
   if (!readingsStale(draft) || !set) return null;
+  const dateIso = draft.readings.date_iso;
+  const from = `${draft.readings.occasion} (${formatServiceDate(set.date_iso)})`;
   return (
     <div className="grid justify-items-start gap-2">
       <p className="text-sm">
-        These readings are from {draft.readings.occasion} ({formatServiceDate(set.date_iso)}), not{" "}
-        {formatServiceDate(draft.readings.date_iso)}.
+        {isValidDateIso(dateIso)
+          ? `These readings are from ${from}, not ${formatServiceDate(dateIso)}.`
+          : `These readings are from ${from}.`}
       </p>
       <Button type="button" variant="outline" size="touch" onClick={() => update(clearReadings)}>
         Clear readings
@@ -3387,8 +3642,10 @@ function ReadingSets({ lect }: { lect: Lectionary }) {
   const origin = draft.readings.fields_origin;
 
   function choose(index: number) {
-    if (origin === "empty" || origin === "lectionary") update((d) => chooseReadingSet(d, lect, index));
-    else setAsking({ index, from: "switcher" });
+    if (origin === "empty" || origin === "lectionary") {
+      // Like replace(): a choice that lands after the date moved does nothing.
+      update((d) => (d.readings.date_iso !== lect.date ? d : chooseReadingSet(d, lect, index)));
+    } else setAsking({ index, from: "switcher" });
   }
 
   function replace() {
@@ -3410,7 +3667,7 @@ function ReadingSets({ lect }: { lect: Lectionary }) {
         </p>
       ) : null}
       {banner ? (
-        <Alert>
+        <Alert role="status">
           <InfoIcon aria-hidden="true" />
           <AlertTitle>Readings for {formatServiceDate(lect.date)} are available.</AlertTitle>
           <AlertDescription>
@@ -3442,13 +3699,14 @@ function ReadingSets({ lect }: { lect: Lectionary }) {
  * What the lectionary said about the draft's date (S UX item 2): exactly one
  * of Loading, the reading sets, No readings, Unavailable or Rate limited,
  * directly under the date, plus the partial note and the stale-fields note.
- * Nothing shows for a date the lookup refuses (the date field explains).
- * Focus never moves on its own; "Enter readings" moves it to Occasion.
+ * For a date the lookup refuses only the stale-fields note can show (the date
+ * field explains the date). Focus never moves on its own; "Enter readings"
+ * moves it to Occasion.
  */
 export function LectionaryStatus({ onEnterReadings }: { onEnterReadings: () => void }) {
   const { draft } = useDraft();
   const { lookupDate, settled, query } = useLectionaryLookup();
-  if (!canLookUp(draft.readings.date_iso)) return null;
+  if (!canLookUp(draft.readings.date_iso)) return <StaleFields />;
   const retry = () => void query.refetch();
 
   if (!settled || query.isPending) return <Loading lookupDate={draft.readings.date_iso} />;
@@ -3457,7 +3715,12 @@ export function LectionaryStatus({ onEnterReadings }: { onEnterReadings: () => v
   const lect = query.data;
   if (lect === undefined) {
     if (query.error?.code === "rate_limited") {
-      return <RateLimited error={query.error} onRetry={retry} retrying={query.isFetching} />;
+      return (
+        <div className="grid gap-3">
+          <RateLimited error={query.error} onRetry={retry} retrying={query.isFetching} />
+          <StaleFields />
+        </div>
+      );
     }
     return (
       <div className="grid gap-3">
@@ -3476,7 +3739,7 @@ export function LectionaryStatus({ onEnterReadings }: { onEnterReadings: () => v
   if (lect.status === "no_readings" || lect.reading_sets.length === 0) {
     return (
       <div className="grid gap-3">
-        <Alert>
+        <Alert role="status">
           <InfoIcon aria-hidden="true" />
           <AlertTitle>No lectionary readings for {formatLongDate(lookupDate)}.</AlertTitle>
           <AlertDescription>
@@ -3504,7 +3767,7 @@ export function LectionaryStatus({ onEnterReadings }: { onEnterReadings: () => v
 git status --short
 ```
 
-**Expected:** `Test Files  1 passed (1)`, `Tests  15 passed (15)`; the suite ` Test Files  55 passed (55)`, `      Tests  334 passed (334)`; `> tsc --noEmit` and `> eslint` with nothing after them; ` M` for `lectionary-status.tsx` and the test, `??` for the two new files.
+**Expected:** `Test Files  1 passed (1)`, `Tests  15 passed (15)`; the suite ` Test Files  55 passed (55)`, `      Tests  335 passed (335)`; `> tsc --noEmit` and `> eslint` with nothing after them; ` M` for `lectionary-status.tsx` and the test, `??` for the two new files.
 
 - [ ] **Step 6 (agent): Commit and back up**
 
@@ -3515,7 +3778,7 @@ choice applies at once over lectionary or empty fields and makes a default
 date the user's (owner answer Q2); over typed or archived fields it asks
 Replace your readings? first. After typing, a new date's readings are
 offered by a banner; Keep mine hides it until the date changes. An
-archived service on its own date keeps its fields. Frontend 329 -> 334
+archived service on its own date keeps its fields. Frontend 330 -> 335
 tests in 55 files.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
@@ -3524,11 +3787,11 @@ git push origin claude/slice-2-plan-4q33le
 
 **Expected:** one commit, 4 files changed; the push line.
 
-**Review checkpoint (T8):** the reviewer checks the index keys, that typed and archived fields change only through a confirmed dialog, that the banner rule is 2b's `showAvailableBanner` unchanged, and that a dialog confirmed after the date moved does nothing.
+**Review checkpoint (T8):** the reviewer checks the index keys, that typed and archived fields change only through a confirmed dialog, that the banner rule is 2b's `showAvailableBanner` unchanged, and that a dialog confirmed, or a set chosen, after the date moved does nothing.
 
 ### Task 9: The readings list, passage text and the translation (S UX item 6, "Other states" translations row; F §4.8, §4.9 items 3, 6; AC16; clarifications 13, 14, 16)
 
-Under "Readings", the "Bible translation" select (disabled, showing the church's translation, until the list loads or when it fails), "Passage text shown in {label}." and "Show all text"; then one row per cleaned line, 400 ms behind the textarea. Each row shows the reference, a badge per " or " alternative (OT, Psalm, NT, or "?" with "Book not recognized") and "Show text" / "Hide text". Only open rows fetch, three at a time (T3); a line over 200 characters cannot be opened and is never sent; editing a line closes its row. The text follows S's table: loading, all loaded (one headed section per alternative), some text ("Couldn't load {reference}." and "Part of this passage couldn't be loaded.", with "Try again" when unavailable), not found, unavailable or a failed request, a 429 (wait, then "Try again"), a 422 (the server's message). Changing the translation refetches the open rows and stores the choice only when it differs from the church's.
+Under "Readings", the "Bible translation" select (disabled, showing the church's translation, until the list loads or when it fails), "Passage text shown in {label}." and "Show all text"; then one row per cleaned line, 400 ms behind the textarea. Each row shows the reference, a badge per " or " alternative (OT, Psalm, NT, or "?" with "Book not recognized", 24 px on phones) and "Show text" / "Hide text" (named "Show text: {reference}" for screen readers, as is each row's "Try again"). Only open rows fetch, three at a time (T3); a line over 200 characters cannot be opened and is never sent; editing a line closes its row. The text follows S's table: loading, all loaded (one headed section per alternative), some text ("Couldn't load {reference}." and "Part of this passage couldn't be loaded.", with "Try again" when unavailable), not found, unavailable or a failed request, a 429 (wait, then "Try again"), a 422 (the server's message). Changing the translation refetches the open rows and stores the choice only when it differs from the church's.
 
 **Files:**
 - Create: `frontend/src/components/builder/readings/translation-select.tsx`, `passage-text.tsx`, `reading-row.tsx`, `readings-list.tsx`
@@ -3539,7 +3802,7 @@ Under "Readings", the "Bible translation" select (disabled, showing the church's
 - Consumes: `useTranslations` (T2), `usePassage` (T3), `useDebouncedValue` (T2), `useWaitOver`, `rateLimitMessage` (T7), `MAX_LINE` (T6), `Collapsible*`, `Tooltip*` (T4), `Select*`, `Badge`/`badgeVariants`, `Button`/`buttonVariants`, `cleanScriptures`, `effectiveTranslation`, `setTranslation` (2b), `classify`, `splitAlternatives` (2b).
 - Produces: `TranslationSelect({ church, translations })`, `PassageText({ reference, translation })`, `ReadingRow({ reference, translation, open, onOpenChange })`, `LIST_DELAY_MS = 400`, `ReadingsList({ church })`.
 
-Counts after this task: frontend **341 passed in 55 files**.
+Counts after this task: frontend **342 passed in 55 files**.
 
 - [ ] **Step 1 (agent): Check the starting point**
 
@@ -3549,7 +3812,7 @@ test ! -e frontend/src/components/builder/readings/readings-list.tsx && echo "no
 (cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
 ```
 
-**Expected:** nothing (or `?? .claude/`); `no T9 files yet`; `Test Files  55 passed (55)`, `Tests  334 passed (334)`.
+**Expected:** nothing (or `?? .claude/`); `no T9 files yet`; `Test Files  55 passed (55)`, `Tests  335 passed (335)`.
 
 - [ ] **Step 2 (agent): Write the failing tests**
 
@@ -3613,12 +3876,12 @@ describe("readings list and passage text (S UX item 6)", () => {
     expect(screen.getByText("Passage text shown in World English Bible (WEB).")).toBeInTheDocument();
     expect(api.requests.filter((r) => r.method === "POST")).toEqual([]);
 
-    await user.click(isaiah.getByRole("button", { name: "Show text" }));
+    await user.click(isaiah.getByRole("button", { name: "Show text: Isaiah 5:1-7" }));
     expect(await isaiah.findByText("Isaiah 5:1-7 (web) text.")).toBeInTheDocument();
     expect(api.requests.filter((r) => r.method === "POST").map((r) => [r.path, r.body, r.headers["X-Church-Id"]])).toEqual([
       ["/scripture/passages", { refs: ["Isaiah 5:1-7"], translation: "web" }, undefined],
     ]);
-    await user.click(isaiah.getByRole("button", { name: "Hide text" }));
+    await user.click(isaiah.getByRole("button", { name: "Hide text: Isaiah 5:1-7" }));
     expect(isaiah.queryByText("Isaiah 5:1-7 (web) text.")).toBeNull();
   });
 
@@ -3647,28 +3910,30 @@ describe("readings list and passage text (S UX item 6)", () => {
       typedLines(["Hezekiah 1:1", "Isaiah 50:4-9a", PASSION]),
     );
     const hezekiah = await findRow("Hezekiah 1:1");
-    expect(hezekiah.getByRole("button", { name: "Book not recognized" })).toHaveTextContent("?");
+    const unknown = hezekiah.getByRole("button", { name: "Book not recognized" });
+    expect(unknown).toHaveTextContent("?");
+    expect(unknown).toHaveClass("h-6", "min-w-6"); // a 24 px target on phones
     expect(row(PASSION).getAllByText("NT")).toHaveLength(2);
 
-    await user.click(hezekiah.getByRole("button", { name: "Show text" }));
+    await user.click(hezekiah.getByRole("button", { name: "Show text: Hezekiah 1:1" }));
     expect(
       await hezekiah.findByText("Couldn't find this passage. Check the reference, for example “Matthew 17:1-9”."),
     ).toBeInTheDocument();
 
     const isaiah = row("Isaiah 50:4-9a");
-    await user.click(isaiah.getByRole("button", { name: "Show text" }));
+    await user.click(isaiah.getByRole("button", { name: "Show text: Isaiah 50:4-9a" }));
     expect(await isaiah.findByText("Passage text isn't available right now.")).toBeInTheDocument();
-    await user.click(isaiah.getByRole("button", { name: "Try again" }));
+    await user.click(isaiah.getByRole("button", { name: "Try again: Isaiah 50:4-9a" }));
     expect(await isaiah.findByText("Isaiah 50:4-9a (web) text.")).toBeInTheDocument();
 
     const passion = row(PASSION);
-    await user.click(passion.getByRole("button", { name: "Show text" }));
+    await user.click(passion.getByRole("button", { name: `Show text: ${PASSION}` }));
     expect(await passion.findByText("Jesus stood before the governor.")).toBeInTheDocument();
     expect(passion.getByText("Matthew 27:11-54")).toBeInTheDocument(); // each alternative under its own heading
     expect(passion.getByText("Couldn't load Matthew 26:14-27:66.")).toBeInTheDocument();
     expect(passion.getByText("Part of this passage couldn't be loaded.")).toBeInTheDocument();
     const before = api.requests.filter((r) => r.method === "POST").length;
-    await user.click(passion.getByRole("button", { name: "Try again" }));
+    await user.click(passion.getByRole("button", { name: `Try again: ${PASSION}` }));
     await waitFor(() => expect(api.requests.filter((r) => r.method === "POST").length).toBe(before + 1));
   });
 
@@ -3693,21 +3958,21 @@ describe("readings list and passage text (S UX item 6)", () => {
       typedLines(["John 3:16", "Romans 8:1", "Psalm 1; Psalm 2; Psalm 3"]),
     );
     const john = await findRow("John 3:16");
-    await user.click(john.getByRole("button", { name: "Show text" }));
+    await user.click(john.getByRole("button", { name: "Show text: John 3:16" }));
     expect(await john.findByText("Passage text isn't available right now.")).toBeInTheDocument();
-    expect(john.getByRole("button", { name: "Try again" })).toBeEnabled();
+    expect(john.getByRole("button", { name: "Try again: John 3:16" })).toBeEnabled();
 
     const romans = row("Romans 8:1");
-    await user.click(romans.getByRole("button", { name: "Show text" }));
+    await user.click(romans.getByRole("button", { name: "Show text: Romans 8:1" }));
     expect(await romans.findByText("Too many requests — try again in 1 s.")).toBeInTheDocument();
-    const retry = romans.getByRole("button", { name: "Try again" });
+    const retry = romans.getByRole("button", { name: "Try again: Romans 8:1" });
     expect(retry).toBeDisabled();
     await waitFor(() => expect(retry).toBeEnabled(), { timeout: 3_000 });
     await user.click(retry);
     expect(await romans.findByText("Romans 8:1 (web) text.")).toBeInTheDocument();
 
     const psalms = row("Psalm 1; Psalm 2; Psalm 3");
-    await user.click(psalms.getByRole("button", { name: "Show text" }));
+    await user.click(psalms.getByRole("button", { name: "Show text: Psalm 1; Psalm 2; Psalm 3" }));
     expect(await psalms.findByText("Too many passages in one request.")).toBeInTheDocument();
   });
 
@@ -3716,15 +3981,16 @@ describe("readings list and passage text (S UX item 6)", () => {
     const { user, api } = renderStep({ passages: passagesRoute() }, typedLines(["Mark 1:1-8", long]));
     const longRow = await findRow(long);
     // Base UI keeps a disabled trigger focusable, so it is aria-disabled rather than disabled.
-    expect(longRow.getByRole("button", { name: "Show text" })).toHaveAttribute("aria-disabled", "true");
-    await user.click(longRow.getByRole("button", { name: "Show text" }));
+    const longToggle = longRow.getByRole("button", { name: `Show text: ${long}` });
+    expect(longToggle).toHaveAttribute("aria-disabled", "true");
+    await user.click(longToggle);
 
     const mark = row("Mark 1:1-8");
-    await user.click(mark.getByRole("button", { name: "Show text" }));
+    await user.click(mark.getByRole("button", { name: "Show text: Mark 1:1-8" }));
     await mark.findByText("Mark 1:1-8 (web) text.");
     fireEvent.change(screen.getByLabelText("Scripture readings"), { target: { value: `Mark 1:1-11\n${long}` } });
     const edited = await findRow("Mark 1:1-11");
-    expect(edited.getByRole("button", { name: "Show text" })).toBeInTheDocument();
+    expect(edited.getByRole("button", { name: "Show text: Mark 1:1-11" })).toBeInTheDocument();
     expect(api.requests.filter((r) => r.method === "POST").map((r) => (r.body as { refs: string[] }).refs[0])).toEqual([
       "Mark 1:1-8",
     ]);
@@ -3756,7 +4022,7 @@ describe("readings list and passage text (S UX item 6)", () => {
   it("changing the translation refetches open rows in it and stores the choice", async () => {
     const { user, api } = renderStep({ passages: passagesRoute() }, typedLines(["Mark 1:1-8"]));
     const mark = await findRow("Mark 1:1-8");
-    await user.click(mark.getByRole("button", { name: "Show text" }));
+    await user.click(mark.getByRole("button", { name: "Show text: Mark 1:1-8" }));
     await mark.findByText("Mark 1:1-8 (web) text.");
 
     await user.click(screen.getByRole("combobox", { name: "Bible translation" }));
@@ -3880,9 +4146,25 @@ import { usePassage } from "@/lib/queries/passages";
 
 import { rateLimitMessage, useWaitOver } from "./use-wait-over";
 
-function TryAgain({ onClick, disabled = false }: { onClick: () => void; disabled?: boolean }) {
+/** "Try again", named with the reference ("Try again: Mark 1:1-8"), since every open row can show one. */
+function TryAgain({
+  reference,
+  onClick,
+  disabled = false,
+}: {
+  reference: string;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
   return (
-    <Button type="button" variant="outline" size="touch" disabled={disabled} onClick={onClick}>
+    <Button
+      type="button"
+      variant="outline"
+      size="touch"
+      disabled={disabled}
+      aria-label={`Try again: ${reference}`}
+      onClick={onClick}
+    >
       Try again
     </Button>
   );
@@ -3908,7 +4190,7 @@ export function PassageText({ reference, translation }: { reference: string; tra
       return (
         <div className="grid justify-items-start gap-2">
           <p className="text-sm">{rateLimitMessage(limited)}</p>
-          <TryAgain onClick={retry} disabled={!waitOver || query.isFetching} />
+          <TryAgain reference={reference} onClick={retry} disabled={!waitOver || query.isFetching} />
         </div>
       );
     }
@@ -3916,7 +4198,7 @@ export function PassageText({ reference, translation }: { reference: string; tra
     return (
       <div className="grid justify-items-start gap-2">
         <p className="text-sm">Passage text isn&apos;t available right now.</p>
-        <TryAgain onClick={retry} disabled={query.isFetching} />
+        <TryAgain reference={reference} onClick={retry} disabled={query.isFetching} />
       </div>
     );
   }
@@ -3936,7 +4218,7 @@ export function PassageText({ reference, translation }: { reference: string; tra
     return (
       <div className="grid justify-items-start gap-2">
         <p className="text-sm">Passage text isn&apos;t available right now.</p>
-        <TryAgain onClick={retry} disabled={query.isFetching} />
+        <TryAgain reference={reference} onClick={retry} disabled={query.isFetching} />
       </div>
     );
   }
@@ -3956,7 +4238,9 @@ export function PassageText({ reference, translation }: { reference: string; tra
       {passage.status !== "ok" ? (
         <div className="grid justify-items-start gap-2">
           <p className="text-sm text-muted-foreground">Part of this passage couldn&apos;t be loaded.</p>
-          {passage.status === "unavailable" ? <TryAgain onClick={retry} disabled={query.isFetching} /> : null}
+          {passage.status === "unavailable" ? (
+            <TryAgain reference={reference} onClick={retry} disabled={query.isFetching} />
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -3981,12 +4265,18 @@ import { MAX_LINE } from "./scripture-lines-field";
 
 const BADGE_TEXT: Record<Testament, string> = { ot: "OT", psalm: "Psalm", nt: "NT" };
 
-/** OT, Psalm or NT; an unknown book is "?" with the tooltip "Book not recognized" (also its accessible name). */
+/**
+ * OT, Psalm or NT; an unknown book is "?" with the tooltip "Book not
+ * recognized" (also its accessible name), at least 24 px square on phones.
+ */
 function TestamentBadge({ testament }: { testament: Classification }) {
   if (testament !== "unknown") return <Badge variant="secondary">{BADGE_TEXT[testament]}</Badge>;
   return (
     <Tooltip>
-      <TooltipTrigger aria-label="Book not recognized" className={cn(badgeVariants({ variant: "outline" }))}>
+      <TooltipTrigger
+        aria-label="Book not recognized"
+        className={cn(badgeVariants({ variant: "outline" }), "h-6 min-w-6 sm:h-5 sm:min-w-0")}
+      >
         ?
       </TooltipTrigger>
       <TooltipContent>Book not recognized</TooltipContent>
@@ -3996,7 +4286,8 @@ function TestamentBadge({ testament }: { testament: Classification }) {
 
 /**
  * One reading (S UX item 6): the reference, a badge per " or " alternative,
- * and "Show text" / "Hide text". The text loads only while the row is open. A
+ * and "Show text" / "Hide text", named with the reference for screen readers
+ * ("Show text: Mark 1:1-8"). The text loads only while the row is open. A
  * line over 200 characters cannot be opened and is never sent.
  */
 export function ReadingRow({
@@ -4011,6 +4302,7 @@ export function ReadingRow({
   onOpenChange: (open: boolean) => void;
 }) {
   const tooLong = reference.length > MAX_LINE;
+  const action = open && !tooLong ? "Hide text" : "Show text";
   return (
     <li className="grid gap-2 border-b py-3 last:border-b-0">
       <div className="flex flex-wrap items-start gap-2">
@@ -4024,12 +4316,13 @@ export function ReadingRow({
       <Collapsible open={open && !tooLong} onOpenChange={onOpenChange} disabled={tooLong}>
         <CollapsibleTrigger
           disabled={tooLong}
+          aria-label={`${action}: ${reference}`}
           className={cn(
             buttonVariants({ variant: "outline", size: "touch" }),
             "justify-self-start aria-disabled:pointer-events-none aria-disabled:opacity-50",
           )}
         >
-          {open && !tooLong ? "Hide text" : "Show text"}
+          {action}
         </CollapsibleTrigger>
         <CollapsibleContent className="pt-2">
           <PassageText reference={reference} translation={translation} />
@@ -4180,7 +4473,7 @@ export function ReadingsStep() {
 git status --short
 ```
 
-**Expected:** `Test Files  1 passed (1)`, `Tests  22 passed (22)`; the suite ` Test Files  55 passed (55)`, `      Tests  341 passed (341)`; `> tsc --noEmit` and `> eslint` with nothing after them; ` M` for `readings-step.tsx` and its test, `??` for the four new files.
+**Expected:** `Test Files  1 passed (1)`, `Tests  22 passed (22)`; the suite ` Test Files  55 passed (55)`, `      Tests  342 passed (342)`; `> tsc --noEmit` and `> eslint` with nothing after them; ` M` for `readings-step.tsx` and its test, `??` for the four new files.
 
 - [ ] **Step 6 (agent): Commit and back up**
 
@@ -4192,7 +4485,7 @@ sent, and editing a line closes its row. Passage text shows every state
 in the spec's table with its copy and Try again. The translation select
 refetches open rows and stores only a choice that differs from the
 church's; when the list fails it shows the church's translation. Frontend
-334 -> 341 tests in 55 files.
+335 -> 342 tests in 55 files.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 git push origin claude/slice-2-plan-4q33le
@@ -4204,7 +4497,7 @@ git push origin claude/slice-2-plan-4q33le
 
 ### Task 10: The bulletin readings (S UX item 7, Behavior change 15; spec decision 9; AC8 on screen)
 
-"Bulletin readings" has an "Old Testament reading" select (options classified `ot`, `psalm` or `unknown`) and a "New Testament reading" select (`nt` only), from `pickerOptions` over the cleaned lines. No pick means automatic: the placeholder reads "Automatic: {ref}" from `effectivePicks` (the one `resolveReadings` rule the payload and, from 5a, the Word file use), or "None — choose one". A pick shows "Use automatic", which clears it. A Psalm is never the automatic New Testament reading; with the Easter lines and the Old Testament pick "Psalm 118:1-2, 14-24", the automatic New Testament reading becomes "Acts 10:34-43".
+"Bulletin readings" has an "Old Testament reading" select (options classified `ot`, `psalm` or `unknown`) and a "New Testament reading" select (`nt` only), from `pickerOptions` over the cleaned lines. No pick means automatic: the placeholder reads "Automatic: {ref}" from `effectivePicks` (the one `resolveReadings` rule the payload and, from 5a, the Word file use), or "None — choose one". A pick shows "Use automatic" (named "Use automatic Old Testament reading" or "… New Testament reading"), which clears it. A Psalm is never the automatic New Testament reading; with the Easter lines and the Old Testament pick "Psalm 118:1-2, 14-24", the automatic New Testament reading becomes "Acts 10:34-43".
 
 **Files:**
 - Create: `frontend/src/components/builder/readings/bulletin-readings-picker.tsx`
@@ -4215,7 +4508,7 @@ git push origin claude/slice-2-plan-4q33le
 - Consumes: `effectivePicks`, `setPick` (2b), `cleanLines`, `pickerOptions` (2b), `Select*`, `Label`, `Button`.
 - Produces: `BulletinReadingsPicker()`.
 
-Counts after this task: frontend **344 passed in 55 files**.
+Counts after this task: frontend **345 passed in 55 files**.
 
 - [ ] **Step 1 (agent): Check the starting point**
 
@@ -4225,7 +4518,7 @@ test ! -e frontend/src/components/builder/readings/bulletin-readings-picker.tsx 
 (cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
 ```
 
-**Expected:** nothing (or `?? .claude/`); `no T10 files yet`; `Test Files  55 passed (55)`, `Tests  341 passed (341)`.
+**Expected:** nothing (or `?? .claude/`); `no T10 files yet`; `Test Files  55 passed (55)`, `Tests  342 passed (342)`.
 
 - [ ] **Step 2 (agent): Write the failing tests**
 
@@ -4242,7 +4535,7 @@ describe("bulletin readings (S UX item 7)", () => {
     const nt = screen.getByRole("combobox", { name: "New Testament reading" });
     expect(ot).toHaveTextContent("Automatic: Isaiah 5:1-7");
     expect(nt).toHaveTextContent("Automatic: Philippians 3:4b-14");
-    expect(screen.queryByRole("button", { name: "Use automatic" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Use automatic/ })).toBeNull();
 
     await user.click(nt);
     const options = await screen.findAllByRole("option");
@@ -4266,7 +4559,7 @@ describe("bulletin readings (S UX item 7)", () => {
     expect(ot).toHaveTextContent("Psalm 118:1-2, 14-24");
     expect(probe()).toContain("/ot=Psalm 118:1-2, 14-24/");
 
-    await user.click(screen.getByRole("button", { name: "Use automatic" }));
+    await user.click(screen.getByRole("button", { name: "Use automatic Old Testament reading" }));
     await waitFor(() => expect(ot).toHaveTextContent("Automatic: Acts 10:34-43"));
     expect(nt).toHaveTextContent("Automatic: Colossians 3:1-4");
     expect(probe()).toContain("/ot=auto/");
@@ -4353,7 +4646,13 @@ function PickSelect({
       </Select>
       {pick !== "" ? (
         <div>
-          <Button type="button" variant="link" className="h-11 px-0" onClick={() => update((d) => setPick(d, side, ""))}>
+          <Button
+            type="button"
+            variant="link"
+            className="h-11 px-0"
+            aria-label={`Use automatic ${label}`}
+            onClick={() => update((d) => setPick(d, side, ""))}
+          >
             Use automatic
           </Button>
         </div>
@@ -4459,7 +4758,7 @@ export function ReadingsStep() {
 git status --short
 ```
 
-**Expected:** `Test Files  1 passed (1)`, `Tests  25 passed (25)`; the suite ` Test Files  55 passed (55)`, `      Tests  344 passed (344)`; `> tsc --noEmit` and `> eslint` with nothing after them; ` M` for `readings-step.tsx` and its test, `?? frontend/src/components/builder/readings/bulletin-readings-picker.tsx`.
+**Expected:** `Test Files  1 passed (1)`, `Tests  25 passed (25)`; the suite ` Test Files  55 passed (55)`, `      Tests  345 passed (345)`; `> tsc --noEmit` and `> eslint` with nothing after them; ` M` for `readings-step.tsx` and its test, `?? frontend/src/components/builder/readings/bulletin-readings-picker.tsx`.
 
 - [ ] **Step 6 (agent): Commit and back up**
 
@@ -4469,7 +4768,7 @@ git commit -m "Readings step: the bulletin's Old and New Testament readings, nev
 from the same resolveReadings rule the payload uses (or None — choose
 one), and Use automatic clears a pick. With the Easter lines, picking
 Psalm 118 as the Old Testament reading makes Acts the automatic New
-Testament reading. Frontend 341 -> 344 tests in 55 files.
+Testament reading. Frontend 342 -> 345 tests in 55 files.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 git push origin claude/slice-2-plan-4q33le
@@ -4491,7 +4790,7 @@ git push origin claude/slice-2-plan-4q33le
 - Consumes: `ReadingsStep` (T6-T10), `SummaryPanel`, `StepProgress`, `StillNeeded` (2b, unchanged).
 - Produces: `SHIPPED_STEPS = new Set(["readings"])`. Later users: slices 3, 4 and 5a add their steps (S Hand-offs).
 
-Counts after this task: frontend **345 passed in 55 files**.
+Counts after this task: frontend **346 passed in 55 files**.
 
 - [ ] **Step 1 (agent): Check the starting point**
 
@@ -4501,7 +4800,7 @@ grep -n "export const SHIPPED_STEPS" frontend/src/lib/draft/steps.ts
 (cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
 ```
 
-**Expected:** nothing (or `?? .claude/`); `34:export const SHIPPED_STEPS: ReadonlySet<StepId> = new Set<StepId>([]);`; `Test Files  55 passed (55)`, `Tests  344 passed (344)`.
+**Expected:** nothing (or `?? .claude/`); `34:export const SHIPPED_STEPS: ReadonlySet<StepId> = new Set<StepId>([]);`; `Test Files  55 passed (55)`, `Tests  345 passed (345)`.
 
 - [ ] **Step 2 (agent): Write the failing tests**
 
@@ -4728,7 +5027,7 @@ export default function ReadingsStepPage() {
 git status --short
 ```
 
-**Expected:** `Test Files  5 passed (5)`, `Tests  48 passed (48)` (8 status, 9 shell, 1 church switch, 5 sync, 25 step); the suite ` Test Files  55 passed (55)`, `      Tests  345 passed (345)`; `0`; `> tsc --noEmit` and `> eslint` with nothing after them; five ` M` files.
+**Expected:** `Test Files  5 passed (5)`, `Tests  49 passed (49)` (8 status, 9 shell, 1 church switch, 6 sync, 25 step); the suite ` Test Files  55 passed (55)`, `      Tests  346 passed (346)`; `0`; `> tsc --noEmit` and `> eslint` with nothing after them; five ` M` files.
 
 - [ ] **Step 6 (agent): Commit and back up**
 
@@ -4738,7 +5037,7 @@ git commit -m "Builder: Date & readings ships; its route renders the step (F §4
 Complete), Review lists what it still needs and the summary shows the
 occasion and the readings with their OT and NT marks. /builder/readings
 renders the Date & readings step. Hymns, Liturgy and Review keep the
-Available soon card with no link. Frontend 344 -> 345 tests in 55 files.
+Available soon card with no link. Frontend 345 -> 346 tests in 55 files.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 git push origin claude/slice-2-plan-4q33le
@@ -4760,7 +5059,7 @@ S and F are what slices 3, 4 and 5a will read, so they must say what 2c built. S
 - Consumes: the clarifications above and the code of T1-T11.
 - Produces: S and F as slices 3, 4 and 5a will read them; the checklist T14 runs from.
 
-Counts after this task: frontend **345 passed in 55 files**; backend **971 passed, 9 skipped**.
+Counts after this task: frontend **346 passed in 55 files**; backend **971 passed, 9 skipped**.
 
 - [ ] **Step 1 (agent): Check the starting point**
 
@@ -4820,7 +5119,8 @@ edit(S, [
     ("returning `d` unchanged is a no-op.\n",
      "returning `d` unchanged is a no-op. (2c plan: only the tab on screen fills (`document.visibilityState === "
      "\"visible\"`); a hidden tab fills when it is shown, because a tab that adopts another tab's newer draft drops "
-     "up to 400 ms of its own typing (2b build notes). The hook lives in `components/builder/lectionary-sync.tsx`, "
+     "up to 400 ms of its own typing (2b build notes). A tab shown again first re-reads the stored draft and adopts it "
+     "when newer (`DraftStore.syncFromStorage()`), so it never fills over typing another tab wrote as it was hidden. The hook lives in `components/builder/lectionary-sync.tsx`, "
      "and `<LectionarySync>` shares its lookup with the step.)\n"),
     ("    - readings: `fields_origin` is `empty` or `lectionary`; both picks `\"\"`;\n",
      "    - readings: `fields_origin` is `empty` or `lectionary`; both picks `\"\"`; (2c plan, owner answer Q2, "
@@ -4845,7 +5145,7 @@ edit(F, [
      "| §4.6, §4.7, §4.8 | *(2026-09-29, slice 2c plan)* `isPristine` also counts a date the user picked, a reading "
      "set chosen in the switcher (which makes a default date the user's) and a translation override (owner answer "
      "Q2), so \"New service\" asks after them and the roll-forward keeps their date. The lectionary fills only in the "
-     "tab on screen. Date & readings ships (`SHIPPED_STEPS` holds \"readings\"). `ErrorState` takes a screen's own "
+     "tab on screen, and a tab shown again first re-reads the stored draft and adopts it when newer. Date & readings ships (`SHIPPED_STEPS` holds \"readings\"). `ErrorState` takes a screen's own "
      "`message`, `retryLabel` and `retryDisabled`, and `ConfirmDialog` a `cancelLabel`, for the slice spec's \"Try "
      "again\" and \"Keep mine\". | 2c |\n"),
     ("*(2026-09-28, slice 2b plan: step 1 too, until slice 2c.)*",
@@ -4943,8 +5243,8 @@ Below, `<scratch>` is the absolute path of the session's scratchpad directory, a
 **Files:** none changed. A local or CI failure is fixed in its owning task's files (Step 14).
 
 **Interfaces:**
-- Consumes: everything from T1-T12, in particular each task's commit subject (Step 8 reads them from this plan between `### Task 1:` and `### Task 13:`), the cumulative counts (302, 309, 312, 314, 319, 324, 329, 334, 341, 344, 345, 345 after T1-T12), `SHIPPED_STEPS` (T11), and CI (`.github/workflows/ci.yml`, unchanged: `backend`, `backend-postgres`, `frontend` with lint, typecheck, `API types match the OpenAPI snapshot (F §5.4)`, test and build).
-- Produces: PR `<N>` (`claude/slice-2-plan-4q33le` → `main`), titled `Slice 2c: the Date & readings step`, not a draft after Step 13, CI green on the branch head, its body holding the line `Tests: frontend 299 → 345 in 49 → 55 files; backend 971 → 971 passed, 9 → 9 skipped` and ending with `🤖 Generated with [Claude Code](https://claude.com/claude-code)`. Later user: T14.
+- Consumes: everything from T1-T12, in particular each task's commit subject (Step 8 reads them from this plan between `### Task 1:` and `### Task 13:`), the cumulative counts (302, 309, 312, 314, 320, 325, 330, 335, 342, 345, 346, 346 after T1-T12), `SHIPPED_STEPS` (T11), and CI (`.github/workflows/ci.yml`, unchanged: `backend`, `backend-postgres`, `frontend` with lint, typecheck, `API types match the OpenAPI snapshot (F §5.4)`, test and build).
+- Produces: PR `<N>` (`claude/slice-2-plan-4q33le` → `main`), titled `Slice 2c: the Date & readings step`, not a draft after Step 13, CI green on the branch head, its body holding the line `Tests: frontend 299 → 346 in 49 → 55 files; backend 971 → 971 passed, 9 → 9 skipped` and ending with `🤖 Generated with [Claude Code](https://claude.com/claude-code)`. Later user: T14.
 
 - [ ] **Step 1 (agent): Bring the branch up to date with `origin/main`**
 
@@ -4984,7 +5284,7 @@ for d in 8 400; do echo "clock +$d days"; (cd frontend && WSB_CLOCK_SHIFT_DAYS=$
 (cd frontend && npm run typecheck 2>&1 | tail -1 && npm run lint 2>&1 | tail -1)
 ```
 
-**Expected:** three times ` Test Files  55 passed (55)` and `      Tests  345 passed (345)` (baseline 299 in 49; after T1-T12: 302, 309, 312, 314, 319, 324, 329, 334, 341, 344, 345, 345) and no `FAIL`; then `clock +8 days` and `clock +400 days`, each followed by the same two lines and no `FAIL` (+8 days is past Sunday, October 4, 2026, the test drafts' date; +400 days is past a year end); `0`; `> tsc --noEmit` and `> eslint` with nothing after. Any other number: find the task whose count drifted. A run that fails even once is a failure (Step 14): make the test deterministic (fake only `Date`, set to `DRAFT_NOW`; await the UI with `findBy`/`waitFor`) rather than retrying it.
+**Expected:** three times ` Test Files  55 passed (55)` and `      Tests  346 passed (346)` (baseline 299 in 49; after T1-T12: 302, 309, 312, 314, 320, 325, 330, 335, 342, 345, 346, 346) and no `FAIL`; then `clock +8 days` and `clock +400 days`, each followed by the same two lines and no `FAIL` (+8 days is past Sunday, October 4, 2026, the test drafts' date; +400 days is past a year end); `0`; `> tsc --noEmit` and `> eslint` with nothing after. Any other number: find the task whose count drifted. A run that fails even once is a failure (Step 14): make the test deterministic (fake only `Date`, set to `DRAFT_NOW`; await the UI with `findBy`/`waitFor`) rather than retrying it.
 
 - [ ] **Step 3 (agent): Run the backend suite and the Postgres marker count**
 
@@ -5086,12 +5386,14 @@ frontend/src/components/ui/radio-group.tsx
 frontend/src/components/ui/tooltip.tsx
 frontend/src/lib/api/timeouts.ts
 frontend/src/lib/api/types.ts
+frontend/src/lib/draft/context.tsx
 frontend/src/lib/draft/readings.test.ts
 frontend/src/lib/draft/readings.ts
 frontend/src/lib/draft/status.test.ts
 frontend/src/lib/draft/status.ts
 frontend/src/lib/draft/steps.ts
 frontend/src/lib/draft/store.test.ts
+frontend/src/lib/draft/store.ts
 frontend/src/lib/queries/lectionary.test.tsx
 frontend/src/lib/queries/lectionary.ts
 frontend/src/lib/queries/passages.test.ts
@@ -5109,7 +5411,7 @@ LC_ALL=C comm -3 "<scratch>/slice2c-expected-paths.txt" "<scratch>/slice2c-actua
 git diff --name-status --no-renames origin/main...HEAD | cut -c1 | sort | uniq -c
 ```
 
-**Expected:** `50`; `50`; `comm` prints nothing; then `  28 A` and `  22 M`. These are the File Structure's paths: 28 created (the plan and 27 frontend files) and 22 modified (17 frontend files, the two specs, the checklist and the docs test). An indented `comm` line (changed, not listed) means a task touched a file its **Files:** does not name: find it with `git log --format='%h %s' origin/main..HEAD -- '<path>'`; anything under `backend/` other than `tests/test_slice1_docs.py`, `frontend/src/lib/api/openapi.json`, `schema.d.ts`, `package*.json` or `.github/` is a stop. An unindented line means a task's commit is missing.
+**Expected:** `52`; `52`; `comm` prints nothing; then `  28 A` and `  24 M`. These are the File Structure's paths: 28 created (the plan and 27 frontend files) and 24 modified (19 frontend files, the two specs, the checklist and the docs test). An indented `comm` line (changed, not listed) means a task touched a file its **Files:** does not name: find it with `git log --format='%h %s' origin/main..HEAD -- '<path>'`; anything under `backend/` other than `tests/test_slice1_docs.py`, `frontend/src/lib/api/openapi.json`, `schema.d.ts`, `package*.json` or `.github/` is a stop. An unindented line means a task's commit is missing.
 
 - [ ] **Step 8 (agent): Check the exact list of commits against this plan**
 
@@ -5144,7 +5446,7 @@ git rev-list --count origin/main..HEAD
 
 Send the owner exactly this, with `<count>` filled in, and wait for a clear yes:
 
-> Slice 2c is verified locally: frontend 345 tests in 55 files, passing three runs in a row and with the clock moved 8 and 400 days ahead (299 in 49 before); typecheck, lint and the production build are clean; the backend is unchanged at 971 passed, 9 skipped (one docs test now expects the new "Slice 2" checklist heading); the API types did not change; the checks are clean (every page is a client component, no link to the old app, the screens use the query hooks, the draft goes through the storage helper only, only Date & readings is switched on); changed files (50) and commits (<count>) are as planned, and every commit is already backed up on the branch. May I open the pull request as a **draft** titled "Slice 2c: the Date & readings step", so the checks run? I will come back with the results and ask again before marking it ready. Merging stays with you (Task 14).
+> Slice 2c is verified locally: frontend 346 tests in 55 files, passing three runs in a row and with the clock moved 8 and 400 days ahead (299 in 49 before); typecheck, lint and the production build are clean; the backend is unchanged at 971 passed, 9 skipped (one docs test now expects the new "Slice 2" checklist heading); the API types did not change; the checks are clean (every page is a client component, no link to the old app, the screens use the query hooks, the draft goes through the storage helper only, only Date & readings is switched on); changed files (52) and commits (<count>) are as planned, and every commit is already backed up on the branch. May I open the pull request as a **draft** titled "Slice 2c: the Date & readings step", so the checks run? I will come back with the results and ask again before marking it ready. Merging stays with you (Task 14).
 
 Add one line per note from Steps 1-8 (a merge from `main`, a skipped font download, a `Fix:` commit, how the three Base UI components were made). A no leaves the branch as it is.
 
@@ -5163,7 +5465,7 @@ The step
 
 Owner answers (2026-09-29): no Saturday one-tap (Q1); "New service" asks after a picked date, a chosen reading set or a chosen translation (Q2); a guided phone check after the merge (Q3). The lectionary fills only in the tab on screen (2b build notes). @@COMPONENTS_LINE@@
 
-Tests: frontend 299 → 345 in 49 → 55 files; backend 971 → 971 passed, 9 → 9 skipped
+Tests: frontend 299 → 346 in 49 → 55 files; backend 971 → 971 passed, 9 → 9 skipped
 
 After merge (Task 14): a guided check on the owner's phone (about six steps) and a quick look on a computer, then a short "Slice 2c record" in docs/ops-runbook.md.
 
@@ -5175,7 +5477,7 @@ Replace `@@COMPONENTS_LINE@@` with `The radio group, collapsible and tooltip are
 
 ```bash
 grep -c '@@COMPONENTS_LINE@@' "<scratch>/slice2c-pr-body.md"
-grep -cx 'Tests: frontend 299 → 345 in 49 → 55 files; backend 971 → 971 passed, 9 → 9 skipped' "<scratch>/slice2c-pr-body.md"
+grep -cx 'Tests: frontend 299 → 346 in 49 → 55 files; backend 971 → 971 passed, 9 → 9 skipped' "<scratch>/slice2c-pr-body.md"
 git fetch origin && test "$(git rev-list --count HEAD..origin/main)" = 0 && test "$(git rev-list --count origin/claude/slice-2-plan-4q33le..HEAD)" = 0 && echo "branch is current and backed up"
 gh pr create -R bbrown62450/church --draft --base main --head claude/slice-2-plan-4q33le \
   --title "Slice 2c: the Date & readings step" \
@@ -5206,13 +5508,13 @@ RUN=$(gh run list -R bbrown62450/church --workflow ci.yml --branch claude/slice-
 RUN=$(gh run list -R bbrown62450/church --workflow ci.yml --branch claude/slice-2-plan-4q33le --commit "$(git rev-parse HEAD)" --limit 1 --json databaseId --jq '.[0].databaseId'); JOB=$(gh run view "$RUN" -R bbrown62450/church --json jobs --jq '.jobs[] | select(.name == "backend-postgres") | .databaseId'); gh run view -R bbrown62450/church --job "$JOB" --log | grep -E "pg_smoke: OK|[0-9]+ (passed|failed)"
 ```
 
-**Expected:** `run <id>`; `backend: success`, `backend-postgres: success`, `frontend: success`; frontend `Test Files  55 passed (55)`, `Tests  345 passed (345)`, `✓ Compiled successfully` and the five `/builder` route lines; backend `971 passed, 9 skipped in …s`; backend-postgres `pg_smoke: OK` and `9 passed, 971 deselected, 1 warning in …s`. If a required job failed on or after 2026-10-19, first check the runner image (`Image: ubuntu-24.04` expected; GitHub moves `ubuntu-latest` then) and report a setup failure on a new image to the owner before changing any 2c file.
+**Expected:** `run <id>`; `backend: success`, `backend-postgres: success`, `frontend: success`; frontend `Test Files  55 passed (55)`, `Tests  346 passed (346)`, `✓ Compiled successfully` and the five `/builder` route lines; backend `971 passed, 9 skipped in …s`; backend-postgres `pg_smoke: OK` and `9 passed, 971 deselected, 1 warning in …s`. If a required job failed on or after 2026-10-19, first check the runner image (`Image: ubuntu-24.04` expected; GitHub moves `ubuntu-latest` then) and report a setup failure on a new image to the owner before changing any 2c file.
 
 - [ ] **Step 13 (agent → OWNER): Report CI and ask to mark the PR ready**
 
 Send exactly this, with the values filled in, and wait for a clear yes:
 
-> PR #<N> (<url>) is green (run <run id>): frontend 345 tests in 55 files, build OK; backend 971 passed, 9 skipped; the Postgres job clean; the Vercel preview built. May I mark it ready for review? Merging stays with you (Task 14).
+> PR #<N> (<url>) is green (run <run id>): frontend 346 tests in 55 files, build OK; backend 971 passed, 9 skipped; the Postgres job clean; the Vercel preview built. May I mark it ready for review? Merging stays with you (Task 14).
 
 On the yes:
 
@@ -5246,7 +5548,7 @@ Read the failure (for CI: `gh run view <run-id> -R bbrown62450/church --log-fail
 
 For each fix: change only the owning task's files; rerun Steps 2-8; commit with the subject `Fix: <what> (Task <n>, slice 2c final verification)` and the trailer; have that task re-reviewed; push with `git push origin claude/slice-2-plan-4q33le` (a backup before Step 10; after it, covered by the owner's first yes); after Step 10, repeat Steps 11-12 and send Step 13's message with the new run. An infrastructure failure with no test output gets one `gh run rerun <run-id> -R bbrown62450/church --failed` first.
 
-Expected counts after this task: frontend `345 passed` in 55 files (CI the same); backend `971 passed, 9 skipped` (CI `backend-postgres`: `9 passed, 971 deselected, 1 warning`). No commit unless Step 14 needed a fix.
+Expected counts after this task: frontend `346 passed` in 55 files (CI the same); backend `971 passed, 9 skipped` (CI `backend-postgres`: `9 passed, 971 deselected, 1 warning`). No commit unless Step 14 needed a fix.
 
 ### Task 14: Merge and after (OWNER + agent): the merge, the deploy, a guided check on the phone and a look on a computer, the slice 2c record (S Manual checks, AC18; F §5.5; owner decisions 2, 3; owner answers Q3, Q4)
 
@@ -5273,7 +5575,7 @@ git rev-parse HEAD
 git rev-list --count HEAD..origin/main
 ```
 
-**Expected:** `OPEN draft=false MERGEABLE CLEAN <sha>` with `<sha>` equal to `git rev-parse HEAD`; `0`. If `main` moved (count not `0`, or `BEHIND`): merge it as in T13 Step 1, rerun T13 Steps 2-3 (`345 passed` in 55 files, plus any tests the merge brought; `971 passed, 9 skipped`), push with the owner's yes, wait for green checks, and run this step again. `BLOCKED`: a required check is not green; fix it (T13 Step 14). Never merge with `--admin`.
+**Expected:** `OPEN draft=false MERGEABLE CLEAN <sha>` with `<sha>` equal to `git rev-parse HEAD`; `0`. If `main` moved (count not `0`, or `BEHIND`): merge it as in T13 Step 1, rerun T13 Steps 2-3 (`346 passed` in 55 files, plus any tests the merge brought; `971 passed, 9 skipped`), push with the owner's yes, wait for green checks, and run this step again. `BLOCKED`: a required check is not green; fix it (T13 Step 14). Never merge with `--admin`.
 
 - [ ] **Step 2 (agent → OWNER): Ask to merge, then merge**
 
@@ -5445,7 +5747,7 @@ gh pr checks claude/revert-slice-2c -R bbrown62450/church --watch
 
 **Expected:** Vitest `Test Files  49 passed (49)`, `Tests  299 passed (299)` (if anything else merged after 2c, it differs by exactly those tests); `971 passed, 9 skipped`; every check passes. Merge on the owner's yes, then the owner checks that the site signs in and shows the builder with "Available soon". Record the revert as a row of the slice 2c record (or its own records PR if Step 12 already merged).
 
-Expected counts after this task: frontend `345 passed` in 55 files on `main`; backend `971 passed, 9 skipped` (CI `backend-postgres`: `9 passed, 971 deselected, 1 warning`). The records PR adds no test.
+Expected counts after this task: frontend `346 passed` in 55 files on `main`; backend `971 passed, 9 skipped` (CI `backend-postgres`: `9 passed, 971 deselected, 1 warning`). The records PR adds no test.
 
 ---
 
@@ -5512,3 +5814,14 @@ The owner's answers of 2026-09-29 (Q1-Q4) are binding and already in the plan. T
 5. **Only the first too-long scripture line is named** ("Line 3 is too long (max 200 characters)."), not every one (clarification 12). Recommended: accept.
 6. **On a phone the unknown-book badge shows only "?"**: tooltips do not open on a tap, though screen readers say "Book not recognized" (clarification 13). Recommended: accept; a tap-to-explain could come later.
 7. **Screens 2b built now include Date & readings** (clarification 18): the step bar counts it, Review lists "No occasion — Add one" and similar rows when something is missing, and the summary shows the occasion and the readings with OT and NT marks. Recommended: as written (this is what 2b's owner answer Q1 deferred to 2c).
+
+### Review questions (asked 2026-09-29; answers pending)
+
+The plan review raised six owner-visible questions. The plan is written as before on each until the owner answers; the answers are recorded here and folded into the tasks.
+
+- **A.** Should the mount-time roll-forward ignore a translation override (move a passed default date anyway), and should "New service" keep the chosen translation?
+- **B.** On a date with one reading set, after typing, is there a way back to the lectionary readings (the banner shows only after a date change, and the switcher only for two or more sets)?
+- **C.** Should "Keep mine" be remembered per date for the session (not only while the step is on screen), and apply to the banner only (not to a declined switcher choice)?
+- **D.** After a rate limit's wait ends, what should the text say (it still reads "try again in N s.")?
+- **E.** Should Date & readings stop showing "Complete" while one of its fields shows an error (occasion too long, too many readings, a line too long)?
+- **F.** While a date is typed: show "Enter a date between 1900 and 2199." only for the settled date (not while the year is half typed), and should a fifth year digit keep the field instead of emptying it?
