@@ -725,3 +725,1090 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 **Review checkpoint (T1-T3, batch 1):** T1's queries are read only, one per step, with no email or full id; T1's decision table leaves the build unblocked; T2 as in its checkpoint; T3 changes one condition, the switch and the ideas count nowhere, and the counts match.
 
+### Task 4: The step's draft transitions, the suggestion helpers and the selected hymnal (S "Pure-function contracts", Toolbar "selected hymnal", "Live data"; F D16; owner answer 1; clarifications 2, 9)
+
+The pure core of the step, before any screen: what a pick stores (`pickFromHymn`), the four draft recipes the screen calls through `update` (`setSlot`, `clearSlot`, `setHymnal`, `setExcludeRecent`), how a pick meets its hymnal's loaded list (`reconcilePick`), how an AI answer lands (`applySuggestions`, empty slots only, F D16), a tap on an idea (`swapAlternative`), the "Also chosen as…" check (`duplicateSlots`) and the selected hymnal (`selectHymnal`). `setHymnal` stores `null` for the church's effective hymnal, like 2c's `setTranslation`, so switching away and back is not unsaved work (owner answer 1; clarification 2). `lib/api/types.ts` gains app-facing names for the 3a types, and the test fixtures gain `hymnId`, `hymn`, `suggested` and `hymnals`.
+
+**Files:**
+- Create: `frontend/src/lib/hymns/picks.ts`, `frontend/src/lib/hymns/hymnal.ts`
+- Modify: `frontend/src/lib/api/types.ts` (hymn type names), `frontend/src/test/fixtures/index.ts` (hymn builders)
+- Test: `frontend/src/lib/hymns/picks.test.ts` (new, 7; `selectHymnal`'s cases are here, as S's Testing table puts them)
+
+**Interfaces:**
+- Consumes: `HymnalListOut`, `HymnOut`, `Page_HymnOut_`, `ScriptureMatchIn`, `ScriptureMatchesOut`, `HymnMatchOut`, `HymnSuggestionIn`, `HymnSuggestionsOut`, `SuggestedHymnOut` (`schema.d.ts`, 3a); `DraftV1`, `HymnPick`, `Slot`, `SLOTS` (`lib/draft/schema.ts`).
+- Produces:
+  - `lib/api/types.ts`: `Hymnals`, `HymnalSummary`, `Hymn`, `HymnPage`, `ScriptureMatchBody`, `ScriptureMatches`, `HymnMatch`, `HymnSuggestionBody`, `HymnSuggestions`, `SuggestedHymn`.
+  - `picks.ts`: `pickFromHymn(h) -> HymnPick`; `setSlot(d, slot, pick | null)`, `clearSlot(d, slot)`, `setHymnal(d, code, effective)`, `setExcludeRecent(d, on)` (each `DraftV1 -> DraftV1`, the same object when nothing changes); `type Reconciled = {status: "ok"; live: Hymn} | {status: "loading"} | {status: "missing"}`; `reconcilePick(pick, lists: ReadonlyMap<string, readonly Hymn[] | undefined>, fallbackHymnal: string | null)`; `applySuggestions(hymns, resp, dateIso) -> hymns`; `swapAlternative(hymns, slot, hymnId) -> hymns`; `duplicateSlots(slots) -> Record<Slot, Slot[]>`. Later users: T8-T11.
+  - `hymnal.ts`: `type SelectedHymnal = {code: string | null; stale: boolean}`; `selectHymnal(stored, hymnals)`. Later users: T8, T9.
+  - fixtures: `hymnId(n)` (a valid uuid ending in `n`), `hymn(overrides)` (#403 "Come, Thou Almighty King", GG2013), `suggested(overrides)` (`source: "ai"`), `hymnals(overrides)` (GG2013 only, 853 hymns, 795 with references). Later users: T5-T12.
+
+Counts after this task: frontend **366 passed in 56 files**.
+
+- [ ] **Step 1 (agent): Check the starting point**
+
+```bash
+git status --short
+ls frontend/src/lib/hymns 2>&1 | head -1
+(cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
+```
+
+**Expected:** nothing (or `?? .claude/`); `ls: cannot access 'frontend/src/lib/hymns': No such file or directory`; ` Test Files  55 passed (55)`, `      Tests  359 passed (359)`.
+
+- [ ] **Step 2 (agent): Write the failing tests and the fixtures**
+
+Run this script from the repo root:
+
+```bash
+.venv/bin/python - <<'PYEOF'
+from pathlib import Path
+
+
+def edit(path: str, pairs: list[tuple[str, str]]) -> None:
+    p = Path(path)
+    text = p.read_text(encoding="utf-8")
+    for old, new in pairs:
+        assert text.count(old) == 1, f"{path}: anchor not found exactly once: {old[:70]!r}"
+        text = text.replace(old, new)
+    p.write_text(text, encoding="utf-8")
+
+
+edit("frontend/src/test/fixtures/index.ts", [
+    ('import type { ChurchProfile, InviteAccepted, InvitePreview, Lectionary, Translations } from "@/lib/api/types";',
+     'import type {\n  ChurchProfile,\n  Hymn,\n  Hymnals,\n  InviteAccepted,\n  InvitePreview,\n  Lectionary,\n'
+     '  SuggestedHymn,\n  Translations,\n} from "@/lib/api/types";'),
+])
+with open("frontend/src/test/fixtures/index.ts", "a", encoding="utf-8") as f:
+    f.write('''
+// --- slice 3b: hymns and hymnals ------------------------------------------------
+
+/** A readable, valid hymn id: `hymnId(403)` is "00000000-0000-4000-8000-000000000403". */
+export function hymnId(n: number): string {
+  return `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+}
+
+/** One `HymnOut` (slice 3a): #403 "Come, Thou Almighty King" in GG2013 unless overridden; the id follows the number. */
+export function hymn(overrides: Partial<Hymn> = {}): Hymn {
+  const number = overrides.number === undefined ? 403 : overrides.number;
+  return {
+    id: hymnId(number ?? 0),
+    hymnal: "GG2013",
+    title: "Come, Thou Almighty King",
+    number,
+    link: `https://hymnary.org/hymn/GG2013/${number ?? ""}`,
+    scripture_refs: null,
+    themes: [],
+    recent_use_on: null,
+    text_year: null,
+    hymnal_count: null,
+    newer_than_preferred: false,
+    ...overrides,
+  };
+}
+
+/** One `SuggestedHymnOut`: `hymn(overrides)` with `source` "ai" unless overridden. */
+export function suggested(overrides: Partial<SuggestedHymn> = {}): SuggestedHymn {
+  return { source: "ai", ...hymn(overrides), ...overrides };
+}
+
+/** `GET /hymnals` for Grace: GG2013 only (production, slice 3a record), no stored default. */
+export function hymnals(overrides: Partial<Hymnals> = {}): Hymnals {
+  return {
+    items: [{ code: "GG2013", hymn_count: 853, scripture_ref_count: 795 }],
+    default_hymnal: null,
+    effective_hymnal: "GG2013",
+    ...overrides,
+  };
+}
+''')
+
+Path("frontend/src/lib/hymns").mkdir(parents=True, exist_ok=True)
+Path("frontend/src/lib/hymns/picks.test.ts").write_text('''import { describe, expect, it } from "vitest";
+
+import type { Hymn, HymnSuggestions } from "@/lib/api/types";
+import type { DraftV1, HymnPick } from "@/lib/draft/schema";
+import { hymn, hymnals, suggested, testDraft } from "@/test/fixtures";
+
+import { selectHymnal } from "./hymnal";
+import {
+  applySuggestions,
+  clearSlot,
+  duplicateSlots,
+  pickFromHymn,
+  reconcilePick,
+  setExcludeRecent,
+  setHymnal,
+  setSlot,
+  swapAlternative,
+} from "./picks";
+
+const HOLY = hymn({ number: 1, title: "Holy, Holy, Holy" });
+const PRAISE = hymn({ number: 35, title: "Praise, My Soul, the King of Heaven" });
+const GRACE = hymn({ number: 649, title: "Amazing Grace" });
+const KING = hymn({ number: 403 });
+const pick = (h: Hymn): HymnPick => pickFromHymn(h);
+
+function answer(slots: Partial<HymnSuggestions["slots"]>): HymnSuggestions {
+  return {
+    hymnal: "GG2013",
+    nt_ref: null,
+    nt_text_used: false,
+    excluded_recent_count: 0,
+    slots: { opening: [], response: [], closing: [], ...slots },
+  };
+}
+
+function withSlots(slots: Partial<DraftV1["hymns"]["slots"]>): DraftV1["hymns"] {
+  const d = testDraft();
+  return { ...d.hymns, slots: { ...d.hymns.slots, ...slots } };
+}
+
+describe("draft transitions (S Pure-function contracts)", () => {
+  it("pickFromHymn keeps the id, title, number and hymnal; each setter returns the same draft when nothing changes", () => {
+    expect(pickFromHymn(KING)).toEqual({
+      hymn_id: KING.id,
+      title: "Come, Thou Almighty King",
+      number: 403,
+      hymnal: "GG2013",
+    });
+    const d = testDraft();
+    const opened = setSlot(d, "opening", pick(KING));
+    expect(opened.hymns.slots.opening).toEqual(pick(KING));
+    expect(setSlot(opened, "opening", pick(KING))).toBe(opened);
+    expect(clearSlot(opened, "opening").hymns.slots.opening).toBeNull();
+    expect(clearSlot(d, "closing")).toBe(d);
+    // The church's effective hymnal is stored as null, so "New service" never counts it (clarification 2).
+    expect(setHymnal(d, "GG2013", "GG2013")).toBe(d);
+    const ph = setHymnal(d, "PH1990", "GG2013");
+    expect(ph.hymns.hymnal).toBe("PH1990");
+    expect(setHymnal(ph, "GG2013", "GG2013").hymns.hymnal).toBeNull();
+    expect(setExcludeRecent(d, true)).toBe(d);
+    expect(setExcludeRecent(d, false).hymns.exclude_recent).toBe(false);
+    expect(setHymnal(opened, "PH1990", "GG2013").hymns.slots.opening).toEqual(pick(KING)); // picks are kept
+  });
+});
+
+describe("applySuggestions (S AI suggestion flow; owner decision 3, F D16)", () => {
+  it("fills only empty slots, gives filled slots ideas without their own pick, caps ideas at 4 and dates them", () => {
+    const five = [HOLY, PRAISE, GRACE, KING, hymn({ number: 7 })].map((h) => suggested(h));
+    const hymns = withSlots({ response: pick(GRACE) });
+    const next = applySuggestions(hymns, answer({ opening: five, response: five, closing: [] }), "2026-10-04");
+    expect(next.slots.opening).toEqual(pick(HOLY));
+    expect(next.slots.response).toEqual(pick(GRACE)); // the member's pick stays
+    expect(next.slots.closing).toBeNull(); // nothing returned for it
+    expect(next.alternatives).toEqual({
+      for_date_iso: "2026-10-04",
+      by_slot: {
+        opening: [PRAISE, GRACE, KING, hymn({ number: 7 })].map(pick),
+        response: [HOLY, PRAISE, KING, hymn({ number: 7 })].map(pick),
+        closing: [],
+      },
+    });
+    expect(next.exclude_recent).toBe(hymns.exclude_recent);
+  });
+
+  it("gives at least 2 ideas from a 3-hymn answer: a pick plus 2 for an empty slot, 3 for a filled one", () => {
+    const three = [HOLY, PRAISE, GRACE].map((h) => suggested(h));
+    const next = applySuggestions(withSlots({ closing: pick(KING) }), answer({ opening: three, closing: three }), "2026-10-04");
+    expect(next.slots.opening).toEqual(pick(HOLY));
+    expect(next.alternatives?.by_slot.opening).toHaveLength(2);
+    expect(next.alternatives?.by_slot.closing).toEqual([HOLY, PRAISE, GRACE].map(pick));
+  });
+});
+
+describe("swapAlternative (S Other ideas)", () => {
+  it("swaps an idea into the slot and the previous pick into its place, so a second tap swaps back", () => {
+    const base = applySuggestions(
+      withSlots({ opening: pick(KING) }),
+      answer({ opening: [HOLY, PRAISE, GRACE].map((h) => suggested(h)) }),
+      "2026-10-04",
+    );
+    const once = swapAlternative(base, "opening", HOLY.id);
+    expect(once.slots.opening).toEqual(pick(HOLY));
+    expect(once.alternatives?.by_slot.opening).toEqual([KING, PRAISE, GRACE].map(pick));
+    const twice = swapAlternative(once, "opening", KING.id);
+    expect(twice).toEqual(base);
+    // Into an empty slot the idea just moves up; an unknown id or no ideas changes nothing.
+    const empty = { ...base, slots: { ...base.slots, opening: null } };
+    const moved = swapAlternative(empty, "opening", PRAISE.id);
+    expect(moved.slots.opening).toEqual(pick(PRAISE));
+    expect(moved.alternatives?.by_slot.opening).toEqual([HOLY, GRACE].map(pick));
+    expect(swapAlternative(base, "opening", "nope")).toBe(base);
+    const none = withSlots({});
+    expect(swapAlternative(none, "opening", HOLY.id)).toBe(none);
+  });
+});
+
+describe("reconcilePick and duplicateSlots (S Live data, notices)", () => {
+  it("finds the live hymn, waits for a list still loading, and reports a missing one", () => {
+    const lists = new Map<string, readonly Hymn[] | undefined>([
+      ["GG2013", [KING, HOLY]],
+      ["PH1990", undefined],
+    ]);
+    const renamed = { ...pick(KING), title: "Come, Thou Almighty King (old title)" };
+    expect(reconcilePick(renamed, lists, "GG2013")).toEqual({ status: "ok", live: KING });
+    expect(reconcilePick({ ...pick(KING), hymnal: "PH1990" }, lists, "GG2013")).toEqual({ status: "loading" });
+    expect(reconcilePick({ ...pick(KING), hymn_id: null }, lists, "GG2013")).toEqual({ status: "missing" });
+    expect(reconcilePick(pick(GRACE), lists, "GG2013")).toEqual({ status: "missing" });
+    // A pick with no hymnal (an archived one, 5a) is looked up in the selected hymnal.
+    expect(reconcilePick({ ...pick(HOLY), hymnal: null }, lists, "GG2013")).toEqual({ status: "ok", live: HOLY });
+    expect(reconcilePick({ ...pick(HOLY), hymnal: "XX" }, lists, "GG2013")).toEqual({ status: "loading" });
+  });
+
+  it("names the other slots that hold the same hymn", () => {
+    expect(duplicateSlots({ opening: pick(KING), response: pick(HOLY), closing: pick(KING) })).toEqual({
+      opening: ["closing"],
+      response: [],
+      closing: ["opening"],
+    });
+    const archived = { ...pick(KING), hymn_id: null };
+    expect(duplicateSlots({ opening: archived, response: archived, closing: null })).toEqual({
+      opening: [],
+      response: [],
+      closing: [],
+    });
+  });
+});
+
+describe("selectHymnal (S Toolbar)", () => {
+  it("uses the stored code when it is listed, the effective hymnal for null, and marks a vanished code stale", () => {
+    const two = hymnals({
+      items: [
+        { code: "GG2013", hymn_count: 853, scripture_ref_count: 795 },
+        { code: "PH1990", hymn_count: 605, scripture_ref_count: 0 },
+      ],
+    });
+    expect(selectHymnal("PH1990", two)).toEqual({ code: "PH1990", stale: false });
+    expect(selectHymnal(null, two)).toEqual({ code: "GG2013", stale: false });
+    expect(selectHymnal("XX1900", two)).toEqual({ code: "GG2013", stale: true });
+    expect(selectHymnal(null, hymnals({ items: [], effective_hymnal: null }))).toEqual({ code: null, stale: false });
+  });
+});
+''', encoding="utf-8")
+print("T4 tests written")
+PYEOF
+```
+
+**Expected:** `T4 tests written`.
+
+- [ ] **Step 3 (agent): Run them and see them fail**
+
+```bash
+(cd frontend && npx vitest run src/lib/hymns/picks.test.ts 2>&1 | grep -E "^ (FAIL|×)|Error:|Tests |Test Files")
+```
+
+**Expected:**
+
+```
+ FAIL  |unit| src/lib/hymns/picks.test.ts [ src/lib/hymns/picks.test.ts ]
+Error: Cannot find module './hymnal' imported from '<repo>/frontend/src/lib/hymns/picks.test.ts'
+ Test Files  1 failed (1)
+      Tests  no tests
+```
+
+- [ ] **Step 4 (agent): Write the types, `picks.ts` and `hymnal.ts`**
+
+Run this script from the repo root:
+
+```bash
+.venv/bin/python - <<'PYEOF'
+from pathlib import Path
+
+types = Path("frontend/src/lib/api/types.ts")
+text = types.read_text(encoding="utf-8")
+text += '''
+/** `GET /hymnals` (slice 3a): the church's hymnals with counts, the stored default and the effective one. */
+export type Hymnals = components["schemas"]["HymnalListOut"];
+export type HymnalSummary = components["schemas"]["HymnalOut"];
+/** One hymn as every hymn route returns it (`HymnOut`, slice 3a). */
+export type Hymn = components["schemas"]["HymnOut"];
+/** `GET /hymns` (slice 3a): one page of hymns. */
+export type HymnPage = components["schemas"]["Page_HymnOut_"];
+/** `POST /hymns/scripture-matches` (slice 3a): the request body and the answer. */
+export type ScriptureMatchBody = components["schemas"]["ScriptureMatchIn"];
+export type ScriptureMatches = components["schemas"]["ScriptureMatchesOut"];
+export type HymnMatch = components["schemas"]["HymnMatchOut"];
+/** `POST /hymns/suggestions` (slice 3a): the request body and the answer. */
+export type HymnSuggestionBody = components["schemas"]["HymnSuggestionIn"];
+export type HymnSuggestions = components["schemas"]["HymnSuggestionsOut"];
+export type SuggestedHymn = components["schemas"]["SuggestedHymnOut"];
+'''
+types.write_text(text, encoding="utf-8")
+
+Path("frontend/src/lib/hymns/picks.ts").write_text('''/**
+ * The Hymns step's draft transitions and selectors (S "Pure-function
+ * contracts"; F §4.6). Pure: each returns the same object when nothing
+ * changes, so `update(recipe)` stays a no-op. The draft recipes (`setSlot`,
+ * `clearSlot`, `setHymnal`, `setExcludeRecent`) take the whole draft; the
+ * suggestion helpers take the `hymns` block, as S names them.
+ */
+import type { Hymn, HymnSuggestions } from "@/lib/api/types";
+import { SLOTS, type DraftV1, type HymnPick, type Slot } from "@/lib/draft/schema";
+
+type HymnsBlock = DraftV1["hymns"];
+
+/** What a slot stores for a hymn: its id and a snapshot of its title, number and hymnal. */
+export function pickFromHymn(h: Pick<Hymn, "id" | "title" | "number" | "hymnal">): HymnPick {
+  return { hymn_id: h.id, title: h.title, number: h.number, hymnal: h.hymnal };
+}
+
+function samePick(a: HymnPick | null, b: HymnPick | null): boolean {
+  if (a === null || b === null) return a === b;
+  return a.hymn_id === b.hymn_id && a.title === b.title && a.number === b.number && a.hymnal === b.hymnal;
+}
+
+function withHymns(d: DraftV1, patch: Partial<HymnsBlock>): DraftV1 {
+  return { ...d, hymns: { ...d.hymns, ...patch } };
+}
+
+/** Sets one slot (the picker, a match's "Add", Undo). */
+export function setSlot(d: DraftV1, slot: Slot, pick: HymnPick | null): DraftV1 {
+  if (samePick(d.hymns.slots[slot], pick)) return d;
+  return withHymns(d, { slots: { ...d.hymns.slots, [slot]: pick } });
+}
+
+/** The ✕ button. */
+export function clearSlot(d: DraftV1, slot: Slot): DraftV1 {
+  return setSlot(d, slot, null);
+}
+
+/**
+ * The hymnal Select. The church's effective hymnal is stored as `null`, like
+ * the translation (2c), so choosing it again is not unsaved work and a later
+ * default change flows through (owner answer 1; clarification 2). Picks are
+ * never touched.
+ */
+export function setHymnal(d: DraftV1, code: string, effective: string | null): DraftV1 {
+  const hymnal = code === effective ? null : code;
+  return d.hymns.hymnal === hymnal ? d : withHymns(d, { hymnal });
+}
+
+/** The Exclude switch. It never changes a slot or an idea (AC12). */
+export function setExcludeRecent(d: DraftV1, on: boolean): DraftV1 {
+  return d.hymns.exclude_recent === on ? d : withHymns(d, { exclude_recent: on });
+}
+
+export type Reconciled = { status: "ok"; live: Hymn } | { status: "loading" } | { status: "missing" };
+
+/**
+ * A pick against its hymnal's loaded list (S "Live data"): the live hymn, or
+ * "loading" while that list is not loaded, or "missing" when the pick has no
+ * id or its id is not in the list. A pick with no hymnal (an archived one,
+ * 5a) is looked up in `fallbackHymnal`, the selected one.
+ */
+export function reconcilePick(
+  pick: HymnPick,
+  lists: ReadonlyMap<string, readonly Hymn[] | undefined>,
+  fallbackHymnal: string | null,
+): Reconciled {
+  if (pick.hymn_id === null) return { status: "missing" };
+  const code = pick.hymnal ?? fallbackHymnal;
+  const list = code === null ? undefined : lists.get(code);
+  if (list === undefined) return { status: "loading" };
+  const live = list.find((h) => h.id === pick.hymn_id);
+  return live ? { status: "ok", live } : { status: "missing" };
+}
+
+/**
+ * The AI's answer applied to the latest hymns (S "AI suggestion flow" 2; F
+ * D16): an empty slot takes the first hymn and its ideas are the next ones (2
+ * to 4); a filled slot keeps its pick and its ideas are the answer without it
+ * (3 to 4). The ideas are dated, so they hide when the service date changes.
+ */
+export function applySuggestions(hymns: HymnsBlock, resp: HymnSuggestions, dateIso: string): HymnsBlock {
+  const slots = { ...hymns.slots };
+  const bySlot = { opening: [], response: [], closing: [] } as Record<Slot, HymnPick[]>;
+  for (const slot of SLOTS) {
+    const list = resp.slots[slot];
+    const current = slots[slot];
+    if (current === null) {
+      if (list.length > 0) slots[slot] = pickFromHymn(list[0]);
+      bySlot[slot] = list.slice(1, 5).map(pickFromHymn);
+    } else {
+      bySlot[slot] = list.filter((h) => h.id !== current.hymn_id).slice(0, 4).map(pickFromHymn);
+    }
+  }
+  return { ...hymns, slots, alternatives: { for_date_iso: dateIso, by_slot: bySlot } };
+}
+
+/**
+ * A tap on an idea (S "Other ideas"): the slot takes it and the previous pick
+ * takes its place among the ideas, unless there was none or it already is an
+ * idea; so a second tap swaps back.
+ */
+export function swapAlternative(hymns: HymnsBlock, slot: Slot, hymnId: string): HymnsBlock {
+  const ideas = hymns.alternatives?.by_slot[slot] ?? [];
+  const at = ideas.findIndex((idea) => idea.hymn_id === hymnId);
+  if (hymns.alternatives === null || at < 0) return hymns;
+  const previous = hymns.slots[slot];
+  const keepPrevious = previous !== null && !ideas.some((idea) => idea.hymn_id === previous.hymn_id);
+  const next = keepPrevious ? ideas.map((idea, i) => (i === at ? previous : idea)) : ideas.filter((_, i) => i !== at);
+  return {
+    ...hymns,
+    slots: { ...hymns.slots, [slot]: ideas[at] },
+    alternatives: { ...hymns.alternatives, by_slot: { ...hymns.alternatives.by_slot, [slot]: next } },
+  };
+}
+
+/** For each slot, the other slots holding the same hymn (the "Also chosen as…" notice). */
+export function duplicateSlots(slots: DraftV1["hymns"]["slots"]): Record<Slot, Slot[]> {
+  const result = { opening: [], response: [], closing: [] } as Record<Slot, Slot[]>;
+  for (const slot of SLOTS) {
+    const id = slots[slot]?.hymn_id ?? null;
+    if (id === null) continue;
+    result[slot] = SLOTS.filter((other) => other !== slot && slots[other]?.hymn_id === id);
+  }
+  return result;
+}
+''', encoding="utf-8")
+
+Path("frontend/src/lib/hymns/hymnal.ts").write_text('''/**
+ * The selected hymnal (S Toolbar): resolved only from a loaded `GET /hymnals`
+ * answer, never from missing data. The step never writes the result back to
+ * the draft, so a vanished code never marks a service dirty on its own.
+ */
+import type { Hymnals } from "@/lib/api/types";
+
+export type SelectedHymnal = {
+  /** The hymnal the list, matches and suggestions use; null only when the church has no hymnals. */
+  code: string | null;
+  /** True when the stored code is no longer one of the church's hymnals. */
+  stale: boolean;
+};
+
+export function selectHymnal(stored: string | null, hymnals: Hymnals): SelectedHymnal {
+  if (stored !== null && hymnals.items.some((item) => item.code === stored)) return { code: stored, stale: false };
+  return { code: hymnals.effective_hymnal, stale: stored !== null };
+}
+''', encoding="utf-8")
+print("T4 code written")
+PYEOF
+```
+
+**Expected:** `T4 code written`.
+
+- [ ] **Step 5 (agent): Run the tests, the suite, types and lint**
+
+```bash
+(cd frontend && npx vitest run src/lib/hymns/picks.test.ts 2>&1 | grep -E "Test Files|Tests ")
+(cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
+(cd frontend && npm run typecheck 2>&1 | tail -1 && npm run lint 2>&1 | tail -1)
+git status --short
+```
+
+**Expected:** ` Test Files  1 passed (1)`, `      Tests  7 passed (7)`; ` Test Files  56 passed (56)`, `      Tests  366 passed (366)`; `> tsc --noEmit` and `> eslint` with nothing after them; ` M` for `types.ts` and `fixtures/index.ts`, `?? frontend/src/lib/hymns/`.
+
+- [ ] **Step 6 (agent): Commit**
+
+```bash
+git add frontend/src/lib/api/types.ts frontend/src/test/fixtures/index.ts frontend/src/lib/hymns/picks.ts frontend/src/lib/hymns/hymnal.ts frontend/src/lib/hymns/picks.test.ts
+git commit -m "Hymns: the step's draft transitions, suggestion helpers and the selected hymnal (S Pure-function contracts)" -m "pickFromHymn, setSlot, clearSlot, setHymnal (the effective hymnal is
+stored as null, owner answer 1), setExcludeRecent, reconcilePick (ok,
+loading or missing, with the selected hymnal for a pick with none),
+applySuggestions (empty slots only, F D16), swapAlternative (a second tap
+swaps back) and duplicateSlots; selectHymnal (stored, effective, or stale).
+Type names for the 3a routes and hymn fixtures. Frontend 359 -> 366.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+**Expected:** one commit, 5 files changed.
+
+### Task 5: The picker's search, the step's words, and the two request builders (S Picker "Ranking", Slot cards "Notices", "Newer-hymn year label", `buildMatchRefs`, `buildSuggestionRequest`; clarifications 5, 10, 12)
+
+`filterHymns` is the picker's search: numbers by exact, then prefix, then titles containing the digits; words by title start, then word start, then anywhere, ignoring accents, case and punctuation (clarification 12); hymnal order within a group; blank titles never listed; at most 50 shown; with `excludeRecent`, recent hymns are left out and counted. `labels.ts` holds S's copy for slots, notices, badges, the newer-hymn label and the ideas' accessible names. `formatAbbrevDate` ("Sep 7", with the year when it differs from the service's) joins `lib/dates.ts`; S calls it `formatShortDate`, which 2b already uses for "October 4" (clarification 5). `buildMatchRefs` and `buildSuggestionRequest` keep every request inside the server's limits, and the suggestion request reads passage text only from the cache (clarification 10).
+
+**Files:**
+- Create: `frontend/src/lib/hymns/filter.ts`, `labels.ts`, `match-request.ts`, `suggest-request.ts`
+- Modify: `frontend/src/lib/dates.ts` (`formatAbbrevDate`)
+- Test: `frontend/src/lib/hymns/filter.test.ts` (new, 6), `labels.test.ts` (new, 4), `match-request.test.ts` (new, 2), `suggest-request.test.ts` (new, 3), `frontend/src/lib/dates.test.ts` (+1)
+
+**Interfaces:**
+- Consumes: `Hymn`, `HymnSuggestionBody`, `Passage` (T4, 2a); `passageText` (`lib/queries/passages.ts`, 2c); `formatServiceDate`, `parseIsoDate` (2b).
+- Produces:
+  - `formatAbbrevDate(iso, contextIso?) -> string` in `lib/dates.ts`.
+  - `filter.ts`: `PICKER_LIMIT = 50`; `foldText(text)`; `type FilterResult = {shown: Hymn[]; totalMatches: number; hiddenRecent: number}`; `filterHymns(items, query, {excludeRecent})`. Later users: T7, T8.
+  - `labels.ts`: `SLOT_META: Record<Slot, {title, caption, name}>`, `MISSING_NOTICE`, `hymnText(h)`, `recentUseLabel(dateIso, serviceIso)`, `recentUseNotice(dateIso, serviceIso)`, `duplicateNotice(others)`, `newerYearLabel(h)`, `chipName(h, slot)`. Later users: T8-T12.
+  - `match-request.ts`: `MAX_REFS = 20`, `MAX_REF_LENGTH = 200`, `cleanRefs(list, {max, maxLen})`, `buildMatchRefs(scriptures, extraRef)`. Later user: T11.
+  - `suggest-request.ts`: `buildSuggestionRequest(draft, selectedHymnal, getCachedPassage, churchTranslation) -> HymnSuggestionBody`. Later user: T10.
+
+Counts after this task: frontend **382 passed in 60 files**.
+
+- [ ] **Step 1 (agent): Check the starting point**
+
+```bash
+git status --short
+grep -c "formatAbbrevDate" frontend/src/lib/dates.ts
+(cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
+```
+
+**Expected:** nothing (or `?? .claude/`); `0` (grep exits 1); ` Test Files  56 passed (56)`, `      Tests  366 passed (366)`.
+
+- [ ] **Step 2 (agent): Write the failing tests**
+
+Run this script from the repo root:
+
+```bash
+.venv/bin/python - <<'PYEOF'
+from pathlib import Path
+
+
+def edit(path: str, pairs: list[tuple[str, str]]) -> None:
+    p = Path(path)
+    text = p.read_text(encoding="utf-8")
+    for old, new in pairs:
+        assert text.count(old) == 1, f"{path}: anchor not found exactly once: {old[:70]!r}"
+        text = text.replace(old, new)
+    p.write_text(text, encoding="utf-8")
+
+
+edit("frontend/src/lib/dates.test.ts", [
+    ("  addDays,\n  formatLongDate,\n", "  addDays,\n  formatAbbrevDate,\n  formatLongDate,\n"),
+    ('''  it("isFirstSundayOfMonth is true only for a Sunday on days 1-7", () => {''',
+     '''  it("formatAbbrevDate gives the short month and day, with the year only when it differs (slice 3b)", () => {
+    expect(formatAbbrevDate("2026-09-07", "2026-10-04")).toBe("Sep 7");
+    expect(formatAbbrevDate("2026-10-18")).toBe("Oct 18");
+    expect(formatAbbrevDate("2025-12-28", "2026-01-04")).toBe("Dec 28, 2025");
+    expect(formatAbbrevDate("2027-01-03", "2026-12-27")).toBe("Jan 3, 2027");
+    expect(formatAbbrevDate("2026-05-31", "not a date")).toBe("May 31");
+    expect(formatAbbrevDate("2026-9-7", "2026-10-04")).toBe("");
+  });
+
+  it("isFirstSundayOfMonth is true only for a Sunday on days 1-7", () => {'''),
+])
+
+Path("frontend/src/lib/hymns/filter.test.ts").write_text('''import { describe, expect, it } from "vitest";
+
+import type { Hymn } from "@/lib/api/types";
+import { hymn, hymnId } from "@/test/fixtures";
+
+import { filterHymns, PICKER_LIMIT } from "./filter";
+
+const numbers = (r: { shown: Hymn[] }) => r.shown.map((h) => h.number);
+
+describe("filterHymns (S Picker ranking)", () => {
+  it("ranks an exact number first, then numbers that start with the digits, then titles containing them", () => {
+    const items = [
+      hymn({ number: 1403, title: "Lord, Speak to Me" }),
+      hymn({ number: 40, title: "Hymn of Promise" }),
+      hymn({ number: 403, title: "Come, Thou Almighty King" }),
+      hymn({ number: 12, title: "Psalm 40: I Waited Patiently" }),
+      hymn({ number: 4030, title: "Another" }),
+    ];
+    expect(numbers(filterHymns(items, "403", { excludeRecent: false }))).toEqual([403, 4030]);
+    expect(numbers(filterHymns(items, " 40 ", { excludeRecent: false }))).toEqual([40, 403, 4030, 12]);
+  });
+
+  it("matches titles by start, then word start, then anywhere, ignoring accents, case and punctuation", () => {
+    const items = [
+      hymn({ number: 1, title: "Now Thank We All Our God" }),
+      hymn({ number: 2, title: "Thanks to God Whose Word Was Spoken" }),
+      hymn({ number: 3, title: "Unthankful Hearts" }),
+      hymn({ number: 4, title: "Jésus, Joy of Our Desiring" }),
+      hymn({ number: 5, title: "Come, Thou Almighty King" }),
+    ];
+    expect(numbers(filterHymns(items, "THANK", { excludeRecent: false }))).toEqual([2, 1, 3]);
+    expect(numbers(filterHymns(items, "jesus", { excludeRecent: false }))).toEqual([4]);
+    expect(numbers(filterHymns(items, "come thou", { excludeRecent: false }))).toEqual([5]);
+    expect(numbers(filterHymns(items, "", { excludeRecent: false }))).toEqual([1, 2, 3, 4, 5]); // hymnal order
+  });
+
+  it("shows at most 50 and counts every match", () => {
+    const items = Array.from({ length: 120 }, (_, i) => hymn({ number: i + 1, title: `Grace ${i + 1}` }));
+    const all = filterHymns(items, "grace", { excludeRecent: false });
+    expect(PICKER_LIMIT).toBe(50);
+    expect(all.shown).toHaveLength(50);
+    expect(all.totalMatches).toBe(120);
+    expect(all.shown[0].number).toBe(1);
+  });
+
+  it("blank titles never listed", () => {
+    const items = [hymn({ number: 1, title: "" }), hymn({ number: 2, title: "   " }), hymn({ number: 3, title: "Amazing Grace" })];
+    expect(numbers(filterHymns(items, "", { excludeRecent: false }))).toEqual([3]);
+    expect(numbers(filterHymns(items, "1", { excludeRecent: false }))).toEqual([]);
+  });
+
+  it("same title stays distinct by id", () => {
+    const items = [
+      hymn({ id: hymnId(9001), number: 188, title: "Jesus Loves Me" }),
+      hymn({ id: hymnId(9002), number: 189, title: "Jesus Loves Me" }),
+    ];
+    const r = filterHymns(items, "jesus loves", { excludeRecent: false });
+    expect(r.shown.map((h) => [h.id, h.number])).toEqual([
+      [hymnId(9001), 188],
+      [hymnId(9002), 189],
+    ]);
+  });
+
+  it("with excludeRecent, hides recently used hymns and counts them", () => {
+    const items = [
+      hymn({ number: 1, title: "Holy, Holy, Holy", recent_use_on: "2026-09-06" }),
+      hymn({ number: 2, title: "Holy Spirit, Truth Divine" }),
+      hymn({ number: 3, title: "Holy God, We Praise Your Name", recent_use_on: "2026-10-18" }),
+    ];
+    const hidden = filterHymns(items, "holy", { excludeRecent: true });
+    expect(numbers(hidden)).toEqual([2]);
+    expect(hidden).toMatchObject({ totalMatches: 1, hiddenRecent: 2 });
+    expect(filterHymns(items, "holy", { excludeRecent: false })).toMatchObject({ totalMatches: 3, hiddenRecent: 0 });
+  });
+});
+''', encoding="utf-8")
+
+Path("frontend/src/lib/hymns/labels.test.ts").write_text('''import { describe, expect, it } from "vitest";
+
+import { hymn } from "@/test/fixtures";
+
+import {
+  chipName,
+  duplicateNotice,
+  hymnText,
+  newerYearLabel,
+  recentUseLabel,
+  recentUseNotice,
+  SLOT_META,
+} from "./labels";
+
+describe("hymn labels (S Slot cards, Newer-hymn year label)", () => {
+  it("names the slots and shows a hymn as #number title", () => {
+    expect(SLOT_META.opening).toEqual({ title: "Opening hymn", caption: "Gathering / call to worship", name: "Opening" });
+    expect(SLOT_META.response.caption).toBe("After the sermon — responds to the scripture (NT reading)");
+    expect(SLOT_META.closing).toEqual({ title: "Closing hymn", caption: "Joyful / sending", name: "Closing" });
+    expect(hymnText({ number: 403, title: "Come, Thou Almighty King" })).toBe("#403 Come, Thou Almighty King");
+    expect(hymnText({ number: null, title: "Were You There" })).toBe("Were You There");
+  });
+
+  it("says Used on for a date before the service and Also planned for after it", () => {
+    expect(recentUseNotice("2026-09-07", "2026-10-04")).toBe("Used on September 7, 2026 — within 12 weeks of this service.");
+    expect(recentUseNotice("2026-10-18", "2026-10-04")).toBe(
+      "Also planned for October 18, 2026 — within 12 weeks of this service.",
+    );
+    expect(recentUseLabel("2026-09-07", "2026-10-04")).toBe("Used Sep 7");
+    expect(recentUseLabel("2026-10-18", "2026-10-04")).toBe("Planned Oct 18");
+    expect(recentUseLabel("2025-12-28", "2026-01-04")).toBe("Used Dec 28, 2025");
+  });
+
+  it("labels a newer hymn with its year, and names ideas for screen readers", () => {
+    const newer = hymn({ title: "Here I Am, Lord", text_year: 1981, newer_than_preferred: true });
+    expect(newerYearLabel(newer)).toBe("Written 1981");
+    expect(newerYearLabel(hymn({ text_year: 1826 }))).toBeNull();
+    expect(newerYearLabel(hymn({ text_year: null, newer_than_preferred: true }))).toBeNull();
+    expect(chipName(newer, "response")).toBe("Use Here I Am, Lord, written 1981, as the response hymn");
+    expect(chipName(hymn({ text_year: 1826 }), "opening")).toBe("Use Come, Thou Almighty King as the opening hymn");
+  });
+
+  it("names the other slots that hold the same hymn", () => {
+    expect(duplicateNotice(["closing"])).toBe("Also chosen as the Closing hymn.");
+    expect(duplicateNotice(["opening", "closing"])).toBe("Also chosen as the Opening and Closing hymns.");
+    expect(duplicateNotice([])).toBeNull();
+  });
+});
+''', encoding="utf-8")
+
+Path("frontend/src/lib/hymns/match-request.test.ts").write_text('''import { describe, expect, it } from "vitest";
+
+import { buildMatchRefs, cleanRefs } from "./match-request";
+
+describe("cleanRefs and buildMatchRefs (S buildMatchRefs)", () => {
+  it("trims, drops blanks, cuts each line to 200 and keeps at most the first max", () => {
+    expect(cleanRefs(["  Mark 1:9-15 ", "", "   ", "Psalm 25"], { max: 20, maxLen: 200 })).toEqual(["Mark 1:9-15", "Psalm 25"]);
+    const long = "Isaiah 40:1-11 " + "x".repeat(485);
+    expect(cleanRefs([long], { max: 20, maxLen: 200 })[0]).toHaveLength(200);
+    const many = Array.from({ length: 25 }, (_, i) => `Psalm ${i + 1}`);
+    expect(cleanRefs(many, { max: 20, maxLen: 200 })).toHaveLength(20);
+  });
+
+  it("puts the extra reference last, keeps it with 25 readings, and never sends it twice", () => {
+    const many = Array.from({ length: 25 }, (_, i) => `Psalm ${i + 1}`);
+    const refs = buildMatchRefs(many, "  Matthew 17 ");
+    expect(refs).toHaveLength(20);
+    expect(refs.at(-1)).toBe("Matthew 17");
+    expect(refs[18]).toBe("Psalm 19");
+    expect(buildMatchRefs(["Mark 1:9-15", "Psalm 25"], "Psalm 25")).toEqual(["Mark 1:9-15", "Psalm 25"]);
+    expect(buildMatchRefs(["Mark 1:9-15"], "   ")).toEqual(["Mark 1:9-15"]);
+    expect(buildMatchRefs([], "x".repeat(500))).toEqual(["x".repeat(200)]);
+  });
+});
+''', encoding="utf-8")
+
+Path("frontend/src/lib/hymns/suggest-request.test.ts").write_text('''import { describe, expect, it } from "vitest";
+
+import type { Passage } from "@/lib/api/types";
+import { editOccasion, editScriptureLines, setPick, setTranslation } from "@/lib/draft/readings";
+import type { DraftV1 } from "@/lib/draft/schema";
+import { hymn, testDraft } from "@/test/fixtures";
+
+import { pickFromHymn, setSlot } from "./picks";
+import { buildSuggestionRequest } from "./suggest-request";
+
+const LINES = "Isaiah 5:1-7\\nPsalm 80:7-15\\nPhilippians 3:4b-14\\nMatthew 21:33-46";
+
+function passage(ref: string, text: string | null): Passage {
+  return { reference: ref, status: text ? "ok" : "unavailable", sections: [{ reference: ref, status: text ? "ok" : "unavailable", text }] };
+}
+
+/** A cache holding the Matthew text in `translation` only. */
+function cache(translation: string) {
+  return (t: string, ref: string) => (t === translation && ref === "Matthew 21:33-46" ? passage(ref, "The parable of the tenants.") : undefined);
+}
+
+function draft(recipe: (d: DraftV1) => DraftV1 = (d) => d): DraftV1 {
+  return recipe(editScriptureLines(editOccasion(testDraft(), "Nineteenth Sunday after Pentecost"), LINES));
+}
+
+describe("buildSuggestionRequest (S buildSuggestionRequest)", () => {
+  it("sends the cached NT text only with a chosen NT reading, a translation other than ESV and text in the cache", () => {
+    const picked = draft((d) => setPick(d, "nt", "Matthew 21:33-46"));
+    expect(buildSuggestionRequest(picked, "GG2013", cache("web"), "web").nt_text).toBe("The parable of the tenants.");
+    expect(buildSuggestionRequest(draft(), "GG2013", cache("web"), "web").nt_text).toBeUndefined(); // automatic NT
+    expect(buildSuggestionRequest(picked, "GG2013", cache("web"), "esv")).not.toHaveProperty("nt_text"); // church ESV
+    const esv = setTranslation(picked, "esv", "web");
+    expect(buildSuggestionRequest(esv, "GG2013", cache("esv"), "web").nt_text).toBeUndefined(); // chosen ESV
+    const kjv = setTranslation(picked, "kjv", "web");
+    expect(buildSuggestionRequest(kjv, "GG2013", cache("kjv"), "web").nt_text).toBe("The parable of the tenants.");
+    expect(buildSuggestionRequest(kjv, "GG2013", cache("web"), "web").nt_text).toBeUndefined(); // not cached in KJV
+    const failed = (_t: string, ref: string) => passage(ref, null);
+    expect(buildSuggestionRequest(picked, "GG2013", failed, "web").nt_text).toBeUndefined();
+    const long = (_t: string, ref: string) => passage(ref, "y".repeat(25_000));
+    expect(buildSuggestionRequest(picked, "GG2013", long, "web").nt_text).toHaveLength(20_000);
+  });
+
+  it("trims and caps the readings, the occasion and the NT reading; a blank NT reading is null", () => {
+    const lines = ["  Mark 1:9-15  ", "", ...Array.from({ length: 24 }, (_, i) => `Psalm ${i + 1}`)].join("\\n");
+    const d = editOccasion(editScriptureLines(testDraft(), lines), `  ${"o".repeat(400)}  `);
+    const body = buildSuggestionRequest(d, "GG2013", () => undefined, "web");
+    expect(body.scriptures).toHaveLength(20);
+    expect(body.scriptures?.[0]).toBe("Mark 1:9-15");
+    expect(body.occasion).toBe("o".repeat(300));
+    expect(body.selected_nt_ref).toBeNull();
+    const spaced = { ...d, readings: { ...d.readings, selected_nt_ref: "   " } };
+    expect(buildSuggestionRequest(spaced, "GG2013", () => undefined, "web").selected_nt_ref).toBeNull();
+    const longRef = { ...d, readings: { ...d.readings, selected_nt_ref: ` ${"M".repeat(250)} ` } };
+    expect(buildSuggestionRequest(longRef, "GG2013", () => undefined, "web").selected_nt_ref).toBe("M".repeat(200));
+  });
+
+  it("sends the selected hymnal, the date, the Exclude switch and the slots' ids as exclusion hints", () => {
+    const king = hymn({ number: 403 });
+    const d = setSlot({ ...draft(), hymns: { ...draft().hymns, hymnal: "XX1900", exclude_recent: false } }, "response", pickFromHymn(king));
+    expect(buildSuggestionRequest(d, "GG2013", () => undefined, "web")).toEqual({
+      service_date_iso: "2026-10-04",
+      occasion: "Nineteenth Sunday after Pentecost",
+      scriptures: ["Isaiah 5:1-7", "Psalm 80:7-15", "Philippians 3:4b-14", "Matthew 21:33-46"],
+      selected_nt_ref: null,
+      hymnal: "GG2013",
+      exclude_recent: false,
+      current_picks: { opening: null, response: king.id, closing: null },
+    });
+  });
+});
+''', encoding="utf-8")
+print("T5 tests written")
+PYEOF
+```
+
+**Expected:** `T5 tests written`.
+
+- [ ] **Step 3 (agent): Run them and see them fail**
+
+```bash
+(cd frontend && npx vitest run src/lib/dates.test.ts src/lib/hymns 2>&1 | grep -E "^ (FAIL|×)|Error:|Tests |Test Files")
+```
+
+**Expected** (`<repo>` is the checkout's absolute path):
+
+```
+ FAIL  |unit| src/lib/hymns/filter.test.ts [ src/lib/hymns/filter.test.ts ]
+Error: Cannot find module './filter' imported from '<repo>/frontend/src/lib/hymns/filter.test.ts'
+ FAIL  |unit| src/lib/hymns/labels.test.ts [ src/lib/hymns/labels.test.ts ]
+Error: Cannot find module './labels' imported from '<repo>/frontend/src/lib/hymns/labels.test.ts'
+ FAIL  |unit| src/lib/hymns/match-request.test.ts [ src/lib/hymns/match-request.test.ts ]
+Error: Cannot find module './match-request' imported from '<repo>/frontend/src/lib/hymns/match-request.test.ts'
+ FAIL  |unit| src/lib/hymns/suggest-request.test.ts [ src/lib/hymns/suggest-request.test.ts ]
+Error: Cannot find module './suggest-request' imported from '<repo>/frontend/src/lib/hymns/suggest-request.test.ts'
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  |unit| src/lib/dates.test.ts > lib/dates > formatAbbrevDate gives the short month and day, with the year only when it differs (slice 3b)
+TypeError: (0 , formatAbbrevDate) is not a function
+ Test Files  5 failed | 1 passed (6)
+      Tests  1 failed | 14 passed (15)
+```
+
+(Each "Cannot find module" is followed by a "Caused by:" line the grep also prints.)
+
+- [ ] **Step 4 (agent): Write the four modules and `formatAbbrevDate`**
+
+Run this script from the repo root:
+
+```bash
+.venv/bin/python - <<'PYEOF'
+from pathlib import Path
+
+
+def edit(path: str, pairs: list[tuple[str, str]]) -> None:
+    p = Path(path)
+    text = p.read_text(encoding="utf-8")
+    for old, new in pairs:
+        assert text.count(old) == 1, f"{path}: anchor not found exactly once: {old[:70]!r}"
+        text = text.replace(old, new)
+    p.write_text(text, encoding="utf-8")
+
+
+edit("frontend/src/lib/dates.ts", [
+    ('''/** "October 4"; "" for an invalid date. */
+export function formatShortDate(iso: string): string {
+  const p = parseIsoDate(iso);
+  return p ? `${MONTHS[p.m - 1]} ${p.d}` : "";
+}
+''', '''/** "October 4"; "" for an invalid date. */
+export function formatShortDate(iso: string): string {
+  const p = parseIsoDate(iso);
+  return p ? `${MONTHS[p.m - 1]} ${p.d}` : "";
+}
+
+/**
+ * "Sep 7" (slice 3b's recent-use badges); "Dec 28, 2025" when the year differs
+ * from `contextIso`'s (the service date) and `contextIso` is a valid date; ""
+ * for an invalid date.
+ */
+export function formatAbbrevDate(iso: string, contextIso?: string): string {
+  const p = parseIsoDate(iso);
+  if (!p) return "";
+  const text = `${MONTHS[p.m - 1].slice(0, 3)} ${p.d}`;
+  const context = contextIso === undefined ? null : parseIsoDate(contextIso);
+  return context && context.y !== p.y ? `${text}, ${p.y}` : text;
+}
+'''),
+])
+
+Path("frontend/src/lib/hymns/filter.ts").write_text('''/**
+ * The hymn picker's search (S Picker "Ranking"): pure, over one hymnal's list.
+ *
+ * - All digits: the exact number first, then numbers that start with the
+ *   digits, then titles containing them.
+ * - Otherwise: titles that start with the words, then titles with a word that
+ *   starts with them, then titles containing them. Accents, case and
+ *   punctuation are ignored ("come thou" finds "Come, Thou Almighty King";
+ *   clarification 12).
+ * - Within each group, hymnal order. Blank titles are never listed. With
+ *   `excludeRecent`, hymns with a recent use are left out and counted.
+ */
+import type { Hymn } from "@/lib/api/types";
+
+/** F §4.9 item 5: a long list renders at most this many matches. */
+export const PICKER_LIMIT = 50;
+
+export type FilterResult = {
+  /** At most PICKER_LIMIT matches, best first. */
+  shown: Hymn[];
+  /** Every match after the exclusion. */
+  totalMatches: number;
+  /** Matches left out because they were used within 12 weeks. */
+  hiddenRecent: number;
+};
+
+/** Lower case, accents removed, anything but letters and digits as one space. */
+export function foldText(text: string): string {
+  return text
+    .normalize("NFKD")
+    .replace(/\\p{M}+/gu, "")
+    .toLowerCase()
+    .replace(/[^\\p{L}\\p{N}]+/gu, " ")
+    .trim();
+}
+
+function rank(h: Hymn, q: string, digits: boolean): number {
+  if (digits) {
+    const number = h.number === null ? "" : String(h.number);
+    if (number === q) return 0;
+    if (number.startsWith(q)) return 1;
+    return foldText(h.title).includes(q) ? 2 : -1;
+  }
+  const title = foldText(h.title);
+  if (title.startsWith(q)) return 0;
+  if (title.includes(` ${q}`)) return 1;
+  return title.includes(q) ? 2 : -1;
+}
+
+export function filterHymns(items: readonly Hymn[], query: string, { excludeRecent }: { excludeRecent: boolean }): FilterResult {
+  const trimmed = query.trim();
+  const digits = /^[0-9]+$/.test(trimmed);
+  const q = digits ? trimmed : foldText(trimmed);
+  const groups: Hymn[][] = [[], [], []];
+  let hiddenRecent = 0;
+  for (const h of items) {
+    if (h.title.trim() === "") continue;
+    const group = q === "" ? 0 : rank(h, q, digits);
+    if (group < 0) continue;
+    if (excludeRecent && h.recent_use_on !== null) {
+      hiddenRecent += 1;
+      continue;
+    }
+    groups[group].push(h);
+  }
+  const matches = groups.flat();
+  return { shown: matches.slice(0, PICKER_LIMIT), totalMatches: matches.length, hiddenRecent };
+}
+''', encoding="utf-8")
+
+Path("frontend/src/lib/hymns/labels.ts").write_text('''/**
+ * The Hymns step's words (S Slot cards, notices, chips, "Newer-hymn year
+ * label"). Pure; dates go through `lib/dates.ts`.
+ */
+import type { Hymn } from "@/lib/api/types";
+import { formatAbbrevDate, formatServiceDate } from "@/lib/dates";
+import type { Slot } from "@/lib/draft/schema";
+
+export const SLOT_META: Record<Slot, { title: string; caption: string; name: string }> = {
+  opening: { title: "Opening hymn", caption: "Gathering / call to worship", name: "Opening" },
+  response: { title: "Response hymn", caption: "After the sermon — responds to the scripture (NT reading)", name: "Response" },
+  closing: { title: "Closing hymn", caption: "Joyful / sending", name: "Closing" },
+};
+
+export const MISSING_NOTICE = "Not in your hymnal. Choose a replacement.";
+
+/** "#403 Come, Thou Almighty King", or the title alone when the number is null. */
+export function hymnText(h: { number: number | null; title: string }): string {
+  return h.number === null ? h.title : `#${h.number} ${h.title}`;
+}
+
+/** The badge on a picker row or idea: "Used Sep 7" before the service, "Planned Oct 18" after it. */
+export function recentUseLabel(dateIso: string, serviceDateIso: string): string {
+  return `${dateIso < serviceDateIso ? "Used" : "Planned"} ${formatAbbrevDate(dateIso, serviceDateIso)}`;
+}
+
+/** The notice under a pick (only when the service date is valid). */
+export function recentUseNotice(dateIso: string, serviceDateIso: string): string {
+  const day = formatServiceDate(dateIso);
+  return dateIso < serviceDateIso
+    ? `Used on ${day} — within 12 weeks of this service.`
+    : `Also planned for ${day} — within 12 weeks of this service.`;
+}
+
+/** "Also chosen as the Closing hymn." / "… the Opening and Closing hymns."; null when no other slot. */
+export function duplicateNotice(others: readonly Slot[]): string | null {
+  if (others.length === 0) return null;
+  const names = others.map((slot) => SLOT_META[slot].name);
+  return others.length === 1
+    ? `Also chosen as the ${names[0]} hymn.`
+    : `Also chosen as the ${names.slice(0, -1).join(", ")} and ${names.at(-1)} hymns.`;
+}
+
+/** "Written 1985" for a hymn the server flags as newer than the church prefers; else null (amendment 2026-09-26). */
+export function newerYearLabel(h: Pick<Hymn, "newer_than_preferred" | "text_year">): string | null {
+  return h.newer_than_preferred && h.text_year !== null ? `Written ${h.text_year}` : null;
+}
+
+/** An idea's accessible name: "Use {title} as the opening hymn", with ", written {year}," for a flagged hymn. */
+export function chipName(h: Pick<Hymn, "title" | "newer_than_preferred" | "text_year">, slot: Slot): string {
+  const year = newerYearLabel(h) === null ? "" : `, written ${h.text_year},`;
+  return `Use ${h.title}${year} as the ${slot} hymn`;
+}
+''', encoding="utf-8")
+
+Path("frontend/src/lib/hymns/match-request.ts").write_text('''/**
+ * The references a scripture-match request sends (S `buildMatchRefs`), within
+ * `ScriptureMatchIn`'s limits (at most 20, each at most 200 characters), so a
+ * long typed line can never cause a 422 that Retry cannot clear.
+ */
+export const MAX_REFS = 20;
+export const MAX_REF_LENGTH = 200;
+
+/** Each item trimmed, blanks dropped, each cut to `maxLen`, the first `max` kept. */
+export function cleanRefs(list: readonly string[], { max, maxLen }: { max: number; maxLen: number }): string[] {
+  return list
+    .map((line) => line.trim().slice(0, maxLen).trim())
+    .filter((line) => line !== "")
+    .slice(0, max);
+}
+
+/** The cleaned draft scriptures (19 at most when there is an extra reference), then the extra one, never twice. */
+export function buildMatchRefs(scriptures: readonly string[], extraRef: string): string[] {
+  const [extra] = cleanRefs([extraRef], { max: 1, maxLen: MAX_REF_LENGTH });
+  if (extra === undefined) return cleanRefs(scriptures, { max: MAX_REFS, maxLen: MAX_REF_LENGTH });
+  const base = cleanRefs(scriptures, { max: MAX_REFS - 1, maxLen: MAX_REF_LENGTH });
+  return base.includes(extra) ? base : [...base, extra];
+}
+''', encoding="utf-8")
+
+Path("frontend/src/lib/hymns/suggest-request.ts").write_text('''/**
+ * The `POST /hymns/suggestions` body (S `buildSuggestionRequest`). Pure: the
+ * step passes a reader of the passage cache (`queryClient.getQueryData`), so
+ * building a request never fetches a passage.
+ */
+import type { HymnSuggestionBody, Passage } from "@/lib/api/types";
+import type { DraftV1 } from "@/lib/draft/schema";
+import { passageText } from "@/lib/queries/passages";
+
+import { cleanRefs, MAX_REF_LENGTH, MAX_REFS } from "./match-request";
+
+export const MAX_OCCASION = 300;
+export const MAX_NT_TEXT = 20_000;
+
+/**
+ * `nt_text` goes only when all hold: an NT reading was chosen in step 1, the
+ * translation shown (`draft.readings.translation ?? churchTranslation`) is
+ * not ESV (Crossway's terms), and that reading's text is already cached under
+ * `["passage", translation, ref]` with `ref` exactly as stored.
+ */
+export function buildSuggestionRequest(
+  draft: DraftV1,
+  selectedHymnal: string,
+  getCachedPassage: (translation: string, ref: string) => Passage | undefined,
+  churchTranslation: string,
+): HymnSuggestionBody {
+  const r = draft.readings;
+  const ntRef = r.selected_nt_ref.trim().slice(0, MAX_REF_LENGTH);
+  const body: HymnSuggestionBody = {
+    service_date_iso: r.date_iso,
+    occasion: r.occasion.trim().slice(0, MAX_OCCASION),
+    scriptures: cleanRefs(r.scriptures, { max: MAX_REFS, maxLen: MAX_REF_LENGTH }),
+    selected_nt_ref: ntRef === "" ? null : ntRef,
+    hymnal: selectedHymnal,
+    exclude_recent: draft.hymns.exclude_recent,
+    current_picks: {
+      opening: draft.hymns.slots.opening?.hymn_id ?? null,
+      response: draft.hymns.slots.response?.hymn_id ?? null,
+      closing: draft.hymns.slots.closing?.hymn_id ?? null,
+    },
+  };
+  const translation = r.translation ?? churchTranslation;
+  if (ntRef !== "" && translation !== "esv") {
+    const cached = getCachedPassage(translation, r.selected_nt_ref);
+    const text = cached ? passageText(cached) : null;
+    if (text) body.nt_text = text.slice(0, MAX_NT_TEXT);
+  }
+  return body;
+}
+''', encoding="utf-8")
+print("T5 code written")
+PYEOF
+```
+
+**Expected:** `T5 code written`.
+
+- [ ] **Step 5 (agent): Run the tests, the suite, types and lint**
+
+```bash
+(cd frontend && npx vitest run src/lib/dates.test.ts src/lib/hymns 2>&1 | grep -E "Test Files|Tests ")
+(cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
+(cd frontend && npm run typecheck 2>&1 | tail -1 && npm run lint 2>&1 | tail -1)
+(cd frontend && npx vitest run src/lib/dates.guard.test.ts 2>&1 | grep -E "Tests ")
+```
+
+**Expected:** ` Test Files  6 passed (6)`, `      Tests  30 passed (30)`; ` Test Files  60 passed (60)`, `      Tests  382 passed (382)`; `> tsc --noEmit` and `> eslint` with nothing after them; the date guard still passes (`Tests  <n> passed`).
+
+- [ ] **Step 6 (agent): Commit**
+
+```bash
+git add frontend/src/lib/dates.ts frontend/src/lib/dates.test.ts frontend/src/lib/hymns/filter.ts frontend/src/lib/hymns/filter.test.ts frontend/src/lib/hymns/labels.ts frontend/src/lib/hymns/labels.test.ts frontend/src/lib/hymns/match-request.ts frontend/src/lib/hymns/match-request.test.ts frontend/src/lib/hymns/suggest-request.ts frontend/src/lib/hymns/suggest-request.test.ts
+git commit -m "Hymns: search ranking, labels, and the match and suggestion request builders (S Picker, Frontend)" -m "filterHymns ranks numbers (exact, prefix, then titles with the digits)
+and words (start, word start, anywhere; accents, case and punctuation
+ignored), keeps hymnal order within a group, never lists a blank title,
+shows 50 and counts recent hymns it hides. labels.ts holds the slot copy,
+notices, badges and \"Written {year}\". buildMatchRefs and
+buildSuggestionRequest keep requests inside the server's limits; NT text
+comes only from the passage cache, never ESV. formatAbbrevDate gives
+\"Sep 7\". Frontend 366 -> 382 tests in 60 files.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+**Expected:** one commit, 10 files changed.
+
