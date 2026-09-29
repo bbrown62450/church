@@ -728,3 +728,50 @@ describe("readings list and passage text (S UX item 6)", () => {
     expect(screen.getByRole("button", { name: "Show all text" })).toBeDisabled();
   });
 });
+
+// --- bulletin readings (S UX item 7; AC8 on screen) ----------------------------------
+
+describe("bulletin readings (S UX item 7)", () => {
+  it("offers only NT lines for NT, and the automatic NT is the epistle, never the Psalm", async () => {
+    const { user } = renderStep({}, applyReadingSet(testDraft(), lectionary("2026-10-04"), 0));
+    const ot = await screen.findByRole("combobox", { name: "Old Testament reading" });
+    const nt = screen.getByRole("combobox", { name: "New Testament reading" });
+    expect(ot).toHaveTextContent("Automatic: Isaiah 5:1-7");
+    expect(nt).toHaveTextContent("Automatic: Philippians 3:4b-14");
+    expect(screen.queryByRole("button", { name: /^Use automatic/ })).toBeNull();
+
+    await user.click(nt);
+    const options = await screen.findAllByRole("option");
+    expect(options.map((option) => option.textContent)).toEqual(["Philippians 3:4b-14", "Matthew 21:33-46"]);
+    await user.click(screen.getByRole("option", { name: "Matthew 21:33-46" }));
+    await waitFor(() => expect(nt).toHaveTextContent("Matthew 21:33-46"));
+    expect(probe()).toContain("/nt=Matthew 21:33-46/");
+    expect(ot).toHaveTextContent("Automatic: Isaiah 5:1-7");
+  });
+
+  it("with the Easter lines, picking Psalm 118 as the OT makes the automatic NT Acts; Use automatic clears the pick", async () => {
+    const { user } = renderStep({}, applyReadingSet(testDraft(), lectionary("2026-10-04"), 1));
+    const ot = await screen.findByRole("combobox", { name: "Old Testament reading" });
+    const nt = screen.getByRole("combobox", { name: "New Testament reading" });
+    expect(ot).toHaveTextContent("Automatic: Acts 10:34-43");
+    expect(nt).toHaveTextContent("Automatic: Colossians 3:1-4");
+
+    await user.click(ot);
+    await user.click(await screen.findByRole("option", { name: "Psalm 118:1-2, 14-24" }));
+    await waitFor(() => expect(nt).toHaveTextContent("Automatic: Acts 10:34-43"));
+    expect(ot).toHaveTextContent("Psalm 118:1-2, 14-24");
+    expect(probe()).toContain("/ot=Psalm 118:1-2, 14-24/");
+
+    await user.click(screen.getByRole("button", { name: "Use automatic Old Testament reading" }));
+    await waitFor(() => expect(ot).toHaveTextContent("Automatic: Acts 10:34-43"));
+    expect(nt).toHaveTextContent("Automatic: Colossians 3:1-4");
+    expect(probe()).toContain("/ot=auto/");
+  });
+
+  it("says None — choose one when a side has no reading", async () => {
+    renderStep({}, typedLines(["Isaiah 9:2-7", "Psalm 96"]));
+    const nt = await screen.findByRole("combobox", { name: "New Testament reading" });
+    expect(nt).toHaveTextContent("None — choose one");
+    expect(screen.getByRole("combobox", { name: "Old Testament reading" })).toHaveTextContent("Automatic: Isaiah 9:2-7");
+  });
+});

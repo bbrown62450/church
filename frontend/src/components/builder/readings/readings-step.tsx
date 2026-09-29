@@ -8,6 +8,7 @@ import { todayIn } from "@/lib/dates";
 import { churchZone } from "@/lib/draft/schema";
 import { useChurchProfile } from "@/lib/queries/church";
 
+import { BulletinReadingsPicker } from "./bulletin-readings-picker";
 import { LectionaryStatus } from "./lectionary-status";
 import { OccasionField } from "./occasion-field";
 import { ReadingsList } from "./readings-list";
@@ -36,6 +37,7 @@ export function ReadingsStep() {
       <OccasionField lect={lect} inputRef={occasionRef} />
       <ScriptureLinesField />
       <ReadingsList church={profile} />
+      <BulletinReadingsPicker />
     </section>
   );
 }
