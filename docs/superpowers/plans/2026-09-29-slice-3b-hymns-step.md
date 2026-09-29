@@ -70,7 +70,7 @@
 - Date-only values stay `YYYY-MM-DD` strings; nothing outside `lib/dates.ts` calls `new Date(` on a date-only value (`dates.guard.test.ts`, F acceptance 12).
 - Browser storage goes through `lib/storage.ts` only (F §4.3); 3b adds no storage key.
 - Hymn titles, references and server messages render as React text only (`react/no-danger` is an error); links render only through `safeHttpsUrl` with `target="_blank" rel="noopener noreferrer"`.
-- Inputs are `text-base md:text-sm` (the generated `Input`) so iOS does not zoom; primary actions and toggles are 44 px (`size="touch"`, `h-11`).
+- Inputs are `text-base md:text-sm` (the generated `Input`) so iOS does not zoom; primary actions and toggles are 44 px (`size="touch"`, `h-11`). The generated switch itself is smaller, so a toggle meets 44 px through its clickable row: a `min-h-11` row whose `Label` names the switch by `htmlFor`, so a tap on the words toggles it (T7, T9).
 - DOM tests that depend on "today" fake only `Date` (`vi.useFakeTimers({ toFake: ["Date"] })` plus `vi.setSystemTime(DRAFT_NOW)`), so user-event's and the app's timers keep running. A test that must fake `setTimeout` too (the 8-second "Still working" line) calls `vi.useRealTimers()` first and says why.
 - A test never proves that something did not happen by sleeping: it first waits for a positive condition that comes after it, then checks the absence.
 - Grep gates exclude test files.
@@ -136,7 +136,7 @@ The code and F win over S's outline, and the owner's answers over both. Each ite
 9. **`picks.ts` signatures.** The draft recipes (`setSlot`, `clearSlot`, `setHymnal`, `setExcludeRecent`) take the whole draft, as 2c's readings recipes do, so the screen calls `update((d) => setSlot(d, …))`; the suggestion helpers take the `hymns` block as S names them. `reconcilePick` gets a third argument, the selected hymnal, for a pick with no hymnal (an archived one, 5a); `duplicateSlots` takes the slots.
 10. **`buildSuggestionRequest` takes the church's translation** as a fourth argument (S reads `church.effective_translation` inside, but the function is pure), and the cache reader the button passes is `queryClient.getQueryData(["passage", translation, ref])`. It never fetches.
 11. **[owner-visible] Where recent use shows.** The notice under a pick shows only with a valid service date. A picker row shows its "Used Sep 7" badge only while Exclude is off (while on, the row is hidden and counted). Other ideas always carry their badge. Matches: hidden while Exclude is on; shown with Exclude off, or after **Show them**, they carry their badge (S names the badge only for Exclude off).
-12. **The picker also ignores punctuation**, not only accents and case, so "come thou" finds "Come, Thou Almighty King" (S Picker "Ranking" says accent- and case-insensitive).
+12. **[owner-visible] The picker also ignores punctuation**, not only accents and case, so "come thou" finds "Come, Thou Almighty King" (S Picker "Ranking" says accent- and case-insensitive).
 13. **[owner-visible] Counts of one are singular**: "1 hymn is hidden.", "1 more used within 12 weeks is hidden.", "1 recently used match is hidden." and " 1 recently used hymn was left out." S writes only the plural.
 14. **[owner-visible] Names screen readers hear.** Chips are "Use {title} as the opening hymn" and their group "Other ideas for the opening hymn" (the slot in lower case, S's `{slot}`); each match's **Add** button is named "Add {title}", so a list of buttons tells them apart (S names it "Add"); the step's heading is "Hymns" (level 2) with S's line under it.
 15. **Undo toasts.** `useUndoToasts` (a file S does not list, `components/builder/hymns/use-undo-toasts.ts`) keeps the ids of the toasts it showed, dismisses them when the step unmounts, and ignores an Undo whose church is no longer the active one (S "Undo toasts never outlive the step"). A match's **Add** shows its toast only when the slot held a different hymn (S: "If the slot was filled").
@@ -147,6 +147,10 @@ The code and F win over S's outline, and the owner's answers over both. Each ite
 20. **Test helpers and the feature switch.** `test/fixtures/index.ts` gains `hymnId`, `hymn`, `suggested`, `hymnals` (T4) and `gg2013`, `ph1990`, `twoHymnals`, `hymnListRoute`, `hymnMatch`, `scriptureMatches`, `hymnSuggestions` (T6). `SETTINGS_HYMNS_READY` lives in a new `lib/features.ts` (S lists it); 6a flips it.
 21. **[owner-visible] The church season in the AI prompt (owner answer 3; T2).** The server names the season from the service date (`church_season`: Advent, Christmas Eve, Christmas, Epiphany of the Lord, Season after the Epiphany, Lent, Holy Week, Easter, Day of Pentecost, Season after Pentecost) and adds one guidance line; nothing is read from the request, the clipping and the 24 000-character budget stay, and there is no API change. The member sees it only in which hymns are suggested.
 22. **[owner-visible] What the counts count.** The toolbar's "{n} hymns are hidden." counts every recently used hymn with a title in the selected hymnal; the picker's footer counts only those matching what was typed.
+23. **[owner-visible] The same hymn in all three slots.** Each card names both other slots in one plural line, for example "Also chosen as the Opening and Closing hymns." under the Response hymn (T5's `duplicateNotice`); S writes only the singular "Also chosen as the {Opening|Response|Closing} hymn.".
+24. **[owner-visible] "Show them" is a toggle** (S: "a local toggle"). Once shown, the line reads "{k} recently used matches are shown." ("1 recently used match is shown." for one) with **Hide them**, which hides them again (T11).
+25. **[owner-visible] Suggest never puts one hymn in two slots.** An empty slot takes the first suggested hymn that no other slot holds once the slots before it are filled, so a slot emptied while the request ran does not repeat another slot's hymn; when every hymn returned is held elsewhere the slot stays empty and they become its ideas (T4's `applySuggestions`).
+26. **[owner-visible] Undo only undoes its own change.** **Undo** after ✕ puts the hymn back only while the slot is still empty, and **Undo** after a match's **Add** only while the slot still holds the added hymn; if the member has chosen another hymn since, Undo does nothing (no message) (T8, T11).
 
 ### Risks carried into the plan
 - **Recent use in production** (owner answer 2). Until T1's finding, the switch may hide nothing in production; the owner's check (T15 Step 6) expects what T1 found. 5a records use on every save in the new app.
@@ -199,6 +203,8 @@ All paths are from the repo root. "(church)" means `frontend/src/app/(signed-in)
 | `docs/superpowers/specs/2026-09-25-slice-3-hymns-design.md`, `docs/superpowers/specs/2026-09-25-migration-foundations-design.md` | "(3b plan)" notes, one F amendment row | T13 |
 | `docs/manual-verification.md`, `backend/tests/test_slice1_docs.py` | "## Slice 3"; the heading pin | T13 |
 | `docs/ops-runbook.md` | "Slice 3b record" (the records PR after the merge) | T15 |
+
+**Counts:** 30 created (this plan and 29 frontend files) and 26 modified (16 frontend files, 7 backend files and 3 docs) in the 3b PR; T14 Step 7 checks the exact list. The runbook's "Slice 3b record" is its own records PR (T15).
 
 **Untouched:** `backend/requirements*.txt`, migrations, `frontend/package.json` and `package-lock.json` (no new dependency: `@base-ui/react` already has the switch), `frontend/src/lib/api/openapi.json` and `schema.d.ts`, `frontend/src/lib/draft/{schema,migrate,mapping,fingerprint,prune,date-effects,readings,store,context}.ts`, every other backend file (unless Task 1b), Streamlit files, CI workflows.
 
@@ -266,13 +272,16 @@ Write the rows into the results file.
 > Next one:
 >
 > ```sql
-> select u.date_iso, u.hymn_number, u.hymn_title, left(u.church_id::text, 8) as church, u.recorded_at
+> select u.date_iso, u.hymn_number, u.hymn_title,
+>        (select string_agg(distinct h.title, ' | ') from hymns h
+>         where h.church_id = u.church_id and h.number = u.hymn_number) as hymnal_titles,
+>        left(u.church_id::text, 8) as church, u.recorded_at
 > from hymn_usage u
 > order by u.date_iso desc nulls last, u.recorded_at desc
 > limit 10;
 > ```
 
-Write the rows into the results file (hymn titles and numbers are public hymn data).
+Write the rows into the results file (hymn titles and numbers are public hymn data). `hymnal_titles` is the church's own title for the same number (all of them, `|`-separated, when its hymnals disagree), for Step 7's title check.
 
 - [ ] **Step 5 (OWNER): Query 4 of 4, the most recent saved services**
 
@@ -280,13 +289,13 @@ Write the rows into the results file (hymn titles and numbers are public hymn da
 >
 > ```sql
 > select s.service_date_iso, left(s.church_id::text, 8) as church, s.saved_at,
->        jsonb_array_length(coalesce(s.hymns::jsonb, '[]'::jsonb)) as hymns
+>        case when jsonb_typeof(s.hymns::jsonb) = 'array' then jsonb_array_length(s.hymns::jsonb) end as hymns
 > from services s
 > order by s.saved_at desc
 > limit 10;
 > ```
 
-Write the rows into the results file. If the query fails with `cannot get array length of a scalar` or `of an object`, ask the owner to run it again with the `jsonb_array_length(...) as hymns` part and the comma before it removed.
+Write the rows into the results file. `services.hymns` is a `JSON` column (`backend/db/models.py`, `Service.hymns`), so `::jsonb` casts it; the `case` counts it only when it is an array, and shows an empty cell for an object, a scalar or no hymns, so the query cannot fail on its shape.
 
 - [ ] **Step 6 (OWNER): The new app's church, from the Console**
 
@@ -329,11 +338,29 @@ Write the lines into the results file.
 
 - [ ] **Step 7 (agent): Compare, decide, and report**
 
-Compare the active church's 8-character prefix (Step 6) with the `church` column of Steps 2-5, and the usage dates with the windows the Console asked about (October 4, 2026 covers July 12 to December 27, 2026; August 2 covers May 10 to October 25; June 7 covers March 15 to August 30). Then pick exactly one outcome and write it, with its evidence, into the results file:
+Compare the active church's 8-character prefix (Step 6) with the `church` column of Steps 2-5, and the usage dates with the windows the Console asked about (October 4, 2026 covers July 12 to December 27, 2026; August 2 covers May 10 to October 25; June 7 covers March 15 to August 30).
+
+Before choosing outcome A, rule out a title mismatch: the reader keys a use by `usage_key(title)` alone (punctuation, case and a leading "Oh" ignored), so a use recorded under a title the hymnal spells differently never shows. Put Step 4's rows of the active church into this check, each as `(hymn_title, hymnal_titles)`, and run it from the repo root:
+
+```bash
+(cd backend && ../.venv/bin/python - <<'PYEOF'
+from hymn_search import usage_key
+
+rows = [  # from Step 4: (hymn_title, hymnal_titles), for the active church's rows only
+    ("<hymn_title>", "<hymnal_titles>"),
+]
+for used, listed in rows:
+    titles = [t.strip() for t in (listed or "").split("|")]
+    print(any(usage_key(used) == usage_key(t) for t in titles), repr(used), repr(listed))
+PYEOF
+)
+```
+
+Every line should start with `True`. A `False` line (or an empty `hymnal_titles`) means the use was recorded under a title or number the church's hymnal does not have: that is a data finding, not outcome A. Write the pairs into the results file and ask the owner as for B-D (an option to offer: matching recent use by number as well, as its own task). Then pick exactly one outcome and write it, with its evidence, into the results file:
 
 | Outcome | What the rows show | What happens |
 |---|---|---|
-| **A. The new code is wrong** | The active church has usage rows inside a window (Step 2 or 4), but that window's Console line shows 0 recent hymns | The controller adds **Task 1b** to this plan (a "Plan: slice 3b recent-use fix (Task 1b)" commit): first a failing test in `backend/tests/test_hymn_usage_window.py` or `test_api_hymns.py` built from the row shapes found (titles, numbers, dates, anything unusual such as spaces or a hymnal-specific title), then the smallest fix in `backend/hymn_usage.py` or `backend/usecases/hymns.py`, with its count added to the table, reviewed and backed up like any task. Tell the owner in one line what was wrong. |
+| **A. The new code is wrong** | The active church has usage rows inside a window (Step 2 or 4) whose titles all pass the title check, but that window's Console line shows 0 recent hymns | The controller adds **Task 1b** to this plan (a "Plan: slice 3b recent-use fix (Task 1b)" commit): first a failing test in `backend/tests/test_hymn_usage_window.py` or `test_api_hymns.py` built from the row shapes found (titles, numbers, dates, anything unusual such as spaces or a hymnal-specific title), then the smallest fix in `backend/hymn_usage.py` or `backend/usecases/hymns.py`, with its count added to the table, reviewed and backed up like any task. Tell the owner in one line what was wrong. |
 | **B. Another church** | The recent rows (Step 4) belong to a church prefix other than the active one (for example a second church of the same name, or one with `deleted_at` set) | No code change. Record it; the controller asks the owner (below). |
 | **C. No Word copies prepared** | No usage rows after some date, although Step 5 shows services saved recently for the active church | No code change: the old app records use only when a Word copy is prepared. Record it; the controller asks the owner. |
 | **D. Another database** | Neither usage (Step 4) nor saved services (Step 5) show the owner's recent work | No code change. Ask the owner to compare, without sending either value, the host part of `DATABASE_URL` in the liturgy-frozen app's Secrets (share.streamlit.io → the app → Settings → Secrets) and in Railway's Variables: does each contain `tbecmwtitsoxzkrvxxxu`? Record the answer; the controller asks the owner. |
@@ -348,7 +375,7 @@ Counts after this task: unchanged (frontend 356 in 55 files; backend 1106 passed
 
 ### Task 2: The church season in the AI prompt (owner answer 3; S Backend 3.6 step 7, §6 "Tenancy"; clarification 21)
 
-The live suggestion for "Nineteenth Sunday after Pentecost" (Matthew 21:33-46) put "All Glory, Laud, and Honor" and "Hosanna, loud hosanna" in the response slot. The prompt now names the church season, computed on the server from the service date with the lectionary module's own calendar (`easter_date`, `advent_sunday`, already tested), and adds one guidance line. `vanderbilt_lectionary.church_season(d)` returns exactly one of nine labels for every date: "Advent", "Christmas Eve", "Christmas", "Epiphany of the Lord", "Season after the Epiphany", "Lent", "Holy Week", "Easter", "Day of Pentecost" or "Season after Pentecost". `hymn_suggest.build_prompt` gains `season: str = ""` (keyword, default kept so every existing caller and test is unchanged); the user message gets `CHURCH SEASON: {season}` right after `OCCASION`, one line clipped to 60 characters ("Not specified" when empty), and `SEASON: {SEASON_GUIDANCE}` after the PREFERENCES line. The label comes from the server, never from the request, and goes through the same `_clip` as every other field; the 24 000-character budget is unchanged (candidates are trimmed first, as before). `usecases.hymns.suggest_hymns` passes `season=church_season(req.service_date)`. No API change, so `openapi.json` and `schema.d.ts` stay as they are.
+The live suggestion for "Nineteenth Sunday after Pentecost" (Matthew 21:33-46) put "All Glory, Laud, and Honor" and "Hosanna, loud hosanna" in the response slot. The prompt now names the church season, computed on the server from the service date with the lectionary module's own calendar (`easter_date`, `advent_sunday`, already tested), and adds one guidance line. `vanderbilt_lectionary.church_season(d)` returns exactly one of ten labels for every date: "Advent", "Christmas Eve", "Christmas", "Epiphany of the Lord", "Season after the Epiphany", "Lent", "Holy Week", "Easter", "Day of Pentecost" or "Season after Pentecost". `hymn_suggest.build_prompt` gains `season: str = ""` (keyword, default kept so every existing caller and test is unchanged); the user message gets `CHURCH SEASON: {season}` right after `OCCASION`, one line clipped to 60 characters ("Not specified" when empty), and `SEASON: {SEASON_GUIDANCE}` after the PREFERENCES line. The label comes from the server, never from the request, and goes through the same `_clip` as every other field; the 24 000-character budget is unchanged (candidates are trimmed first, as before). `usecases.hymns.suggest_hymns` passes `season=church_season(req.service_date)`. No API change, so `openapi.json` and `schema.d.ts` stay as they are.
 
 **Files:**
 - Modify: `backend/vanderbilt_lectionary.py` (`church_season`), `backend/hymn_suggest.py` (`SEASON_GUIDANCE`, `_render`, `build_prompt`), `backend/usecases/hymns.py` (one import, one argument)
@@ -634,7 +661,7 @@ git status --short
 
 ```bash
 git add backend/vanderbilt_lectionary.py backend/hymn_suggest.py backend/usecases/hymns.py backend/tests/test_lectionary_domain.py backend/tests/test_hymn_suggest.py backend/tests/test_api_hymn_suggestions.py
-git commit -m "Hymns: the AI prompt names the church season and avoids other seasons' hymns (owner answer 3)" -m "church_season(d) names one of nine seasons from the service date with
+git commit -m "Hymns: the AI prompt names the church season and avoids other seasons' hymns (owner answer 3)" -m "church_season(d) names one of ten seasons from the service date with
 the lectionary calendar. build_prompt gains season= (default \"\"), adds
 CHURCH SEASON after OCCASION and a SEASON guidance line after
 PREFERENCES: avoid Advent, Christmas, Palm Sunday and Holy Week or Easter
@@ -838,7 +865,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ### Task 4: The step's draft transitions, the suggestion helpers and the selected hymnal (S "Pure-function contracts", Toolbar "selected hymnal", "Live data"; F D16; owner answer 1; clarifications 2, 9)
 
-The pure core of the step, before any screen: what a pick stores (`pickFromHymn`), the four draft recipes the screen calls through `update` (`setSlot`, `clearSlot`, `setHymnal`, `setExcludeRecent`), how a pick meets its hymnal's loaded list (`reconcilePick`), how an AI answer lands (`applySuggestions`, empty slots only, F D16), a tap on an idea (`swapAlternative`), the "Also chosen as…" check (`duplicateSlots`) and the selected hymnal (`selectHymnal`). `setHymnal` stores `null` for the church's effective hymnal, like 2c's `setTranslation`, so switching away and back is not unsaved work (owner answer 1; clarification 2). `lib/api/types.ts` gains app-facing names for the 3a types, and the test fixtures gain `hymnId`, `hymn`, `suggested` and `hymnals`.
+The pure core of the step, before any screen: what a pick stores (`pickFromHymn`), the four draft recipes the screen calls through `update` (`setSlot`, `clearSlot`, `setHymnal`, `setExcludeRecent`), how a pick meets its hymnal's loaded list (`reconcilePick`), how an AI answer lands (`applySuggestions`, empty slots only, F D16, each taking the first hymn no other slot holds, clarification 25), a tap on an idea (`swapAlternative`), the "Also chosen as…" check (`duplicateSlots`) and the selected hymnal (`selectHymnal`). `setHymnal` stores `null` for the church's effective hymnal, like 2c's `setTranslation`, so switching away and back is not unsaved work (owner answer 1; clarification 2). `lib/api/types.ts` gains app-facing names for the 3a types, and the test fixtures gain `hymnId`, `hymn`, `suggested` and `hymnals`.
 
 **Files:**
 - Create: `frontend/src/lib/hymns/picks.ts`, `frontend/src/lib/hymns/hymnal.ts`
@@ -1350,7 +1377,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ### Task 5: The picker's search, the step's words, and the two request builders (S Picker "Ranking", Slot cards "Notices", "Newer-hymn year label", `buildMatchRefs`, `buildSuggestionRequest`; clarifications 5, 10, 12)
 
-`filterHymns` is the picker's search: numbers by exact, then prefix, then titles containing the digits; words by title start, then word start, then anywhere, ignoring accents, case and punctuation (clarification 12); hymnal order within a group; blank titles never listed; at most 50 shown; with `excludeRecent`, recent hymns are left out and counted. `labels.ts` holds S's copy for slots, notices, badges, the newer-hymn label and the ideas' accessible names. `formatAbbrevDate` ("Sep 7", with the year when it differs from the service's) joins `lib/dates.ts`; S calls it `formatShortDate`, which 2b already uses for "October 4" (clarification 5). `buildMatchRefs` and `buildSuggestionRequest` keep every request inside the server's limits, and the suggestion request reads passage text only from the cache (clarification 10).
+`filterHymns` is the picker's search: numbers by exact, then prefix, then titles containing the digits; words by title start, then word start, then anywhere, ignoring accents, case and punctuation (clarification 12); hymnal order within a group; blank titles never listed; at most 50 shown; with `excludeRecent`, recent hymns are left out and counted. `labels.ts` holds S's copy for slots, notices, badges, the newer-hymn label and the ideas' accessible names. `formatAbbrevDate` ("Sep 7", with the year when it differs from the service's) joins `lib/dates.ts`; S calls it `formatShortDate`, which 2b already uses for "October 4" (clarification 5). `buildMatchRefs` and `buildSuggestionRequest` keep every request inside the server's limits, cutting by characters as the server counts them (`clipChars`, code points, so an emoji is never split) and sending only UUID-shaped ids in `current_picks`, and the suggestion request reads passage text only from the cache (clarification 10).
 
 **Files:**
 - Create: `frontend/src/lib/hymns/filter.ts`, `labels.ts`, `match-request.ts`, `suggest-request.ts`
@@ -1363,7 +1390,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - `formatAbbrevDate(iso, contextIso?) -> string` in `lib/dates.ts`.
   - `filter.ts`: `PICKER_LIMIT = 50`; `foldText(text)`; `type FilterResult = {shown: Hymn[]; totalMatches: number; hiddenRecent: number}`; `filterHymns(items, query, {excludeRecent})`. Later users: T7, T8.
   - `labels.ts`: `SLOT_META: Record<Slot, {title, caption, name}>`, `MISSING_NOTICE`, `hymnText(h)`, `recentUseLabel(dateIso, serviceIso)`, `recentUseNotice(dateIso, serviceIso)`, `duplicateNotice(others)`, `newerYearLabel(h)`, `chipName(h, slot)`. Later users: T8-T12.
-  - `match-request.ts`: `MAX_REFS = 20`, `MAX_REF_LENGTH = 200`, `cleanRefs(list, {max, maxLen})`, `buildMatchRefs(scriptures, extraRef)`. Later user: T11.
+  - `match-request.ts`: `MAX_REFS = 20`, `MAX_REF_LENGTH = 200`, `clipChars(s, n)` (the first `n` code points), `cleanRefs(list, {max, maxLen})`, `buildMatchRefs(scriptures, extraRef)`. Later users: T10 (through `suggest-request.ts`), T11.
   - `suggest-request.ts`: `buildSuggestionRequest(draft, selectedHymnal, getCachedPassage, churchTranslation) -> HymnSuggestionBody`. Later user: T10.
 
 Counts after this task: frontend **382 passed in 60 files**.
@@ -2652,7 +2679,7 @@ The toolbar's Exclude toggle is a Base UI `Switch`, which the kit does not have 
 **Interfaces:**
 - Consumes: `@base-ui/react/switch` (installed with `@base-ui/react` 1.8.0), `cn` from `"cn"` (as the other generated files import it), `Combobox`, `ComboboxInput`, `ComboboxContent`, `ComboboxList`, `ComboboxItem` (`components/ui/combobox.tsx`), `Label`.
 - Produces:
-  - `components/ui/switch.tsx`: `Switch` (Base UI `Switch.Root` props: `checked`, `onCheckedChange`, `disabled`, `id`; renders `role="switch"`, and `aria-disabled` when disabled; `size` `"sm" | "default"`). Later user: T9.
+  - `components/ui/switch.tsx`: `Switch` (Base UI `Switch.Root` props: `checked`, `onCheckedChange`, `disabled`, `id`; renders `role="switch"`, and `aria-disabled` when disabled; `size` `"sm" | "default"`). The switch is smaller than 44 px; T9 puts it in a `min-h-11` row with a `Label` tied to it by `htmlFor`, so the whole row is the touch target (Global Constraints). Later user: T9.
   - `components/app/search-combobox.tsx`: `type SearchResult<T> = {shown: readonly T[]; footer: readonly string[]}`; `SearchCombobox<T>({label, labelHidden?, items, search, itemKey, itemText, renderItem?, value, onValueChange, placeholder?, disabled?, autoFocus?, onDismiss?, id?})`. The input is 44 px (`h-11`) and `text-base md:text-sm` (the generated `ComboboxInput`); each row is 44 px below `md`. Later user: T8.
 
 Counts after this task: frontend **392 passed in 62 files**.
@@ -3063,7 +3090,7 @@ If Step 4 generated the switch, replace the sentence about the rebuild with "swi
 
 ### Task 8: The step: slot cards, the picker and the hymn label, with the loading, empty and error states (S Slot cards, Picker, "Newer-hymn year label", Whole-step states, "Undo toasts never outlive the step"; F §4.8; AC13, AC14, AC20; clarifications 7, 11, 13, 14, 15)
 
-The first screen of the step, rendered by the tests inside the real builder layout (the route still shows the placeholder until T12). `HymnsStep` shows the heading and its line, then the three slot cards from the draft's snapshot at once. It asks for `GET /hymnals`, resolves the selected hymnal with `selectHymnal` (never writing it back), and then asks for the selected hymnal's list and each pick's hymnal's list (clarification 7). A card with a pick shows `HymnLabel` (the live hymn once its list has loaded, the snapshot until then; a rename never touches the draft), the ▶ Listen link for an https page only, ✕ and **Change**, which puts the focused picker in the row until Escape or focus leaves. An empty card shows `HymnPicker`: `SearchCombobox` over the selected list, ranked by `filterHymns`, with S's footer hints, "Loading hymnal…" while the list loads, and a recent-use badge on rows when Exclude is off. Under a pick sit the notices: recent use (only with a valid date), "Not in your hymnal. Choose a replacement." for a pick whose id is null or gone, and "Also chosen as…". ✕ clears the slot and shows "Removed {title}." with **Undo** through `useUndoToasts`, which dismisses every toast it showed when the step unmounts and ignores an Undo from another church (clarification 15). A failed `GET /hymnals` or selected list shows "Couldn't load this church's hymnal." with **Retry** in place of the pickers, never the empty state; a church with no hymnals shows the empty state, asks for no list, and marks each existing pick "Not in your hymnal". The Hymnary credit closes the step. The toolbar comes in T9, Suggest and the ideas in T10, the matches in T11.
+The first screen of the step, rendered by the tests inside the real builder layout (the route still shows the placeholder until T12). `HymnsStep` shows the heading and its line, then the three slot cards from the draft's snapshot at once. It asks for `GET /hymnals`, resolves the selected hymnal with `selectHymnal` (never writing it back), and then asks for the selected hymnal's list and each pick's hymnal's list (clarification 7). A card with a pick shows `HymnLabel` (the live hymn once its list has loaded, the snapshot until then; a rename never touches the draft), the ▶ Listen link for an https page only, ✕ and **Change**, which puts the focused picker in the row until Escape or focus leaves (disabled until the selected list has loaded, so it never focuses a disabled field). After ✕ focus moves to the new picker, and after a choice from **Change** back to **Change**. A label's row wraps, so at 375 px a long title breaks and its badges move to a second line; only a chip (T10) keeps one line and truncates the title. An empty card shows `HymnPicker`: `SearchCombobox` over the selected list, ranked by `filterHymns`, with S's footer hints, "Loading hymnal…" while the list loads, and a recent-use badge on rows when Exclude is off. Under a pick sit the notices: recent use (only with a valid date), "Not in your hymnal. Choose a replacement." for a pick whose id is null or gone, and "Also chosen as…". ✕ clears the slot and shows "Removed {title}." with **Undo** through `useUndoToasts`, which dismisses every toast it showed when the step unmounts and ignores an Undo from another church (clarification 15); the Undo puts the hymn back only while the slot is still empty (clarification 26). A failed `GET /hymnals` or selected list shows "Couldn't load this church's hymnal." with **Retry** in place of the pickers, never the empty state, but only while nothing has loaded: TanStack Query v5 keeps the data of a failed background refetch, so the pickers (and, from T9-T10, the toolbar and a pending Suggest) stay; a church with no hymnals shows the empty state, asks for no list, and marks each existing pick "Not in your hymnal". The Hymnary credit closes the step. The toolbar comes in T9, Suggest and the ideas in T10, the matches in T11.
 
 **Files:**
 - Create: `frontend/src/components/builder/hymns/hymns-step.tsx`, `hymn-slot-card.tsx`, `hymn-picker.tsx`, `hymn-label.tsx`, `use-undo-toasts.ts`
@@ -3075,7 +3102,7 @@ The first screen of the step, rendered by the tests inside the real builder layo
   - `HymnsStep()` (grows in T9-T11). Later users: T9-T12.
   - `HymnSlotCard({slot, pick, reconciled, list, pickerAvailable, excludeRecent, serviceDateIso, showHymnal, onChoose, onRemove, notices, children?})`: a `section` named by its title ("Opening hymn"); `children` go under the notices (T10's ideas).
   - `HymnPicker({label, list, excludeRecent, serviceDateIso, showHymnal, onChoose, autoFocus?, onDismiss?})` and `pickerSearch(items, query, excludeRecent): SearchResult<Hymn>`.
-  - `HymnLabel({hymn: LabelHymn, showHymnal?, recentBadge?, listen?, truncate?})`: the title then badges that never shrink (hymnal, recent use, "Written {year}"), then the Listen link; `type LabelHymn` (a live `Hymn` or a draft `HymnPick`). Later users: T10, T11.
+  - `HymnLabel({hymn: LabelHymn, showHymnal?, recentBadge?, listen?, truncate?})`: the title then badges that never shrink (hymnal, recent use, "Written {year}"), then the Listen link, in a row that wraps (badges to a second line at 375 px) except with `truncate` (a chip); `type LabelHymn` (a live `Hymn` or a draft `HymnPick`). Later users: T10, T11.
   - `useUndoToasts(): (message, undo) => void`. Later user: T11.
 
 Counts after this task: frontend **403 passed in 64 files**.
@@ -4085,8 +4112,9 @@ A pick shows its live title, number, Listen link (https only), Written
 {year} for a newer hymn, and its notices: recent use, Not in your
 hymnal, Also chosen as. Change swaps in a focused picker; the remove
 button offers Undo in a toast dismissed when the step unmounts and
-ignored after a church switch. A failed load shows Retry, an empty
-hymnal the empty state. Frontend 392 -> 403 tests in 64 files.
+ignored after a church switch or once the slot is filled again. A failed
+first load shows Retry, a failed refetch keeps the pickers, an empty
+hymnal the empty state. Labels wrap at 375 px. Frontend 392 -> 403 tests in 64 files.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -4545,7 +4573,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ### Task 10: Suggest hymns and the other ideas (S AI suggestion flow, "Other ideas (AI chips)", "Newer-hymn year label", "Stale and cross-church protection"; F D16, §4.8; owner decision 4; AC11, AC20; clarifications 6, 8, 10, 13, 14)
 
-**Suggest hymns** joins the toolbar: a full-width touch button with the Sparkles icon and S's helper, disabled while pending, for a hymnal with no hymns and for an invalid date, with the readings tip when the draft has no scriptures and no occasion. A tap builds the body with `buildSuggestionRequest` (the NT text only from the passage cache, never fetched; clarification 10) and calls T6's `suggest`. While it waits the button reads "Suggesting…", **Cancel** aborts the wait, and after 8 s "Still working — this can take up to a minute." shows. An `ok` answer is applied only if the draft's date is still the request's, with a functional `update` of the latest draft (`applySuggestions`: empty slots only, F D16), so a pick made during the wait is kept; otherwise "The date changed while suggestions were loading. Try again." A `superseded` answer and a cancel change nothing. The outcome lines (ready, with the left-out count; the newer-hymn note when a returned hymn is flagged; nothing picked; the date changed) sit in a `role="status"` region; each error code's copy shows in an `Alert`, a 429 turning to "Try again now." once its wait passes, and a network or server error goes to a toast (clarification 8). A slot the answer left empty says "No suggestion for this slot." for that date. Under each card `AlternativeChips` shows the ideas for the draft's date only: touch-size chips with the live label (recent use, "Written {year}"), named "Use {title} as the opening hymn" (clarification 14), hidden when their hymnal's list no longer has them; a tap is `swapAlternative`.
+**Suggest hymns** joins the toolbar: a full-width touch button with the Sparkles icon and S's helper, disabled while pending, for a hymnal with no hymns and for an invalid date, with the readings tip when the draft has no scriptures and no occasion. A tap builds the body with `buildSuggestionRequest` (the NT text only from the passage cache, never fetched; clarification 10) and calls T6's `suggest`. While it waits the button reads "Suggesting…", **Cancel** aborts the wait, and after 8 s "Still working — this can take up to a minute." shows in an `aria-live="polite"` line, so a screen reader hears it. An `ok` answer is applied only if the draft's date is still the request's, with a functional `update` of the latest draft (`applySuggestions`: empty slots only, F D16), so a pick made during the wait is kept; otherwise "The date changed while suggestions were loading. Try again." A `superseded` answer and a cancel change nothing. The outcome lines (ready, with the left-out count; the newer-hymn note when a returned hymn is flagged; nothing picked; the date changed) sit in a `role="status"` region; each error code's copy shows in an `Alert`, a 429 turning to "Try again now." once its wait passes, and a network or server error goes to a toast (clarification 8). A slot the answer left empty says "No suggestion for this slot." for that date. Under each card `AlternativeChips` shows the ideas for the draft's date only: touch-size chips with the live label (recent use, "Written {year}"), named "Use {title} as the opening hymn" (clarification 14), hidden when their hymnal's list no longer has them; a tap is `swapAlternative`.
 
 **Files:**
 - Create: `frontend/src/components/builder/hymns/suggest-hymns-button.tsx`, `frontend/src/components/builder/hymns/alternative-chips.tsx`
@@ -5347,7 +5375,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ### Task 11: Hymns for the readings (S "Hymns for the readings", Behavior changes 9, 10, 19; AC20; clarifications 11, 13, 14, 15, 19)
 
-`ScriptureMatches` sits under the cards whenever the pickers do. It is a `Collapsible` titled "Hymns for the readings", closed below `md` and open from `md` as it first renders (clarification 19), with the count once loaded, even while closed, because the query lives outside the collapsed content. Its references are `buildMatchRefs(draft scriptures, extra)`; the **Additional scripture** input (`maxLength={200}`, "e.g. Matthew 17") with **Search** or Enter sets the extra reference (component state only). The query runs by itself whenever the references, the selected hymnal or the date change. Results come in "Matches the readings" and "Same chapter", each row a `HymnLabel` with Listen, "Matches {refs}" and an **Add** menu (Opening, Response, Closing hymn; the button is named "Add {title}", clarification 14). Adding over a different hymn shows "{Slot} hymn changed to {title}." with **Undo** through T8's `useUndoToasts` (clarification 15). With Exclude on, recently used matches are hidden behind "{k} recently used matches are hidden." and **Show them**; shown ones carry their badge (clarification 11). Unreadable references, no matches, no references (with **Go to readings**), a hymnal with no scripture references (no request) and a failed search (**Retry**) each have S's copy.
+`ScriptureMatches` sits under the cards whenever the pickers do. It is a `Collapsible` titled "Hymns for the readings", closed below `md` and open from `md` as it first renders (clarification 19), with the count once loaded, even while closed, because the query lives outside the collapsed content. Its references are `buildMatchRefs(draft scriptures, extra)`; the **Additional scripture** input (`maxLength={200}`, "e.g. Matthew 17") with **Search** or Enter sets the extra reference (component state only). The query runs by itself whenever the references, the selected hymnal or the date change. Results come in "Matches the readings" and "Same chapter", each row a `HymnLabel` with Listen, "Matches {refs}" and an **Add** menu (Opening, Response, Closing hymn; the button is named "Add {title}", clarification 14). Adding over a different hymn shows "{Slot} hymn changed to {title}." with **Undo** through T8's `useUndoToasts` (clarification 15), which acts only while the slot still holds the added hymn (clarification 26). With Exclude on, recently used matches are hidden behind "{k} recently used matches are hidden." and **Show them**, a local toggle: once shown the line reads "… are shown." with **Hide them** (clarification 24); shown ones carry their badge (clarification 11). `openAtFirst` reads `window` only when it exists. Unreadable references, no matches, no references (with **Go to readings**, a link at least 44 px tall), a hymnal with no scripture references (no request) and a failed search (**Retry**) each have S's copy.
 
 **Files:**
 - Create: `frontend/src/components/builder/hymns/scripture-matches.tsx`
@@ -5629,10 +5657,10 @@ import { SuggestHymnsButton } from "./suggest-hymns-button";
   const selectedCount = selectedInfo?.hymn_count ?? 0;
 
 '''),
-    ('''    showUndo(`Removed ${title}.`, () => update((d) => setSlot(d, slot, previous)));
+    ('''    showUndo(`Removed ${title}.`, () => update((d) => (d.hymns.slots[slot] === null ? setSlot(d, slot, previous) : d)));
   }
 ''',
-     '''    showUndo(`Removed ${title}.`, () => update((d) => setSlot(d, slot, previous)));
+     '''    showUndo(`Removed ${title}.`, () => update((d) => (d.hymns.slots[slot] === null ? setSlot(d, slot, previous) : d)));
   }
 
   function addMatch(slot: Slot, match: HymnMatch) {
@@ -5930,8 +5958,9 @@ git add frontend/src/components/builder/hymns/scripture-matches.tsx frontend/src
 git commit -m "Hymns: Hymns for the readings, grouped, with an extra reference and Add to a slot (S ScriptureMatches; Behavior changes 9, 10, 19)" -m "The draft's readings plus a typed reference (buildMatchRefs) are matched
 in the selected hymnal whenever they, the hymnal or the date change, and
 shown as Matches the readings and Same chapter. Add puts a hymn in a
-slot, with Undo when it replaced another. Recently used matches hide
-behind Show them while Exclude is on. Unreadable references, no matches,
+slot, with Undo when it replaced another, until the slot changes again.
+Recently used matches hide behind Show them (a toggle, Hide them) while
+Exclude is on. Unreadable references, no matches,
 no references (Go to readings), a hymnal with no scripture references
 and a failed search each have their copy. Frontend 414 -> 419 tests.
 
@@ -6507,7 +6536,7 @@ edit(S, [
      'named "Add {title}" for screen readers, and the toast shows only when the slot held another hymn.)\n'),
     ('"{k} recently used matches are hidden. [Show them]", a local toggle. With exclusion off, they show a badge.\n',
      '"{k} recently used matches are hidden. [Show them]", a local toggle. With exclusion off, they show a badge. '
-     '(3b plan: matches shown with **Show them** carry the badge too.)\n'),
+     '(3b plan: matches shown with **Show them** carry the badge too, and **Hide them** hides them again.)\n'),
     ("     - `OCCASION`, `SCRIPTURE READINGS`, `NEW TESTAMENT READING` and `NT PASSAGE TEXT (excerpt)` (parity fields); "
      "(3a build: the NT reading is put on one line and clipped to 200 characters, so a reference cannot add lines to "
      "the prompt);\n",
@@ -6615,11 +6644,11 @@ email address or a church id.
 - [ ] **5.** Tap **Cancel** during a suggestion: the button is back to "Suggest hymns". Suggest 41 times quickly (or lower the limit in a local run): "Too many requests — try again in … s.", then "Try again now." once the wait has passed.
 - [ ] **6.** In a church with two hymnals: switch hymnals with **Hymnal**; the picks keep their hymnal badges. With PH1990 the "no scripture references" notes show.
 - [ ] (owner, after 3b) **7.** Refresh the page mid-step: picks, ideas and the switch survive. Switch church and back: each church keeps its own draft. The step bar shows "n of 3", then "Complete", for Hymns, and the summary (bottom sheet at 375 px, right column on desktop) lists the three hymns or "No {Slot} hymn", with no "Available soon" in its Hymns block. Review lists each empty slot under "Still needed".
-- [ ] (owner, after 3b) **8.** At 375 px: no sideways scroll, the ideas wrap, a picker's list is usable with the keyboard open, and the sticky footer does not cover the last card.
+- [ ] (owner, after 3b) **8.** At 375 px: no sideways scroll, the ideas wrap, a picker's list is usable with the keyboard open, and the sticky footer does not cover the last card. A row with every badge (a long title with its hymnal, "Used …" and "Written …", in a picker list, on a card and in Hymns for the readings) moves its badges to a second line instead of widening the page; an idea stays one line, its title shortened.
 - [ ] **9.** Regression: sign in, switch church, open every shipped nav item; the Streamlit smoke check on https://liturgy-frozen.streamlit.app: load the church, load an archived service, open Settings (F §6.3).
 - [ ] (owner, after 3b) **10.** In GG2013, **Suggest hymns** for a real Sunday: the ideas lean older and familiar, and any hymn written in 1970 or later shows "Written {year}". A picker search for a known modern hymn shows the badge; a nineteenth-century hymn does not.
 - [ ] (owner, after 3b) **11.** On a Sunday in the Season after Pentecost (for example 2026-10-04), **Suggest hymns** offers no Palm Sunday, Holy Week, Easter, Advent or Christmas hymns unless the readings call for one.
-- [ ] (owner, after 3b) **12.** After choosing a hymn or a hymnal, **New service** asks "Start a new service?". Turning the Exclude switch or getting ideas alone does not make it ask.
+- [ ] (owner, after 3b) **12.** After choosing a hymn or a hymnal, **New service** asks "Start a new service?". Turning Exclude on or off does not make it ask; Suggest fills empty slots, which does.
 ```
 
 - [ ] **Step 4 (agent): Check the result**
@@ -6838,7 +6867,7 @@ LC_ALL=C comm -3 "<scratch>/slice3b-expected-paths.txt" "<scratch>/slice3b-actua
 git diff --name-status --no-renames origin/main...HEAD | cut -c1 | sort | uniq -c
 ```
 
-**Expected:** `56`; `56`; `comm` prints nothing; then `  29 A` and `  27 M`. These are the File Structure's paths: 29 created (the plan and 28 frontend files) and 27 modified (17 frontend files, 7 backend files, the two specs and the checklist). With Task 1b, add its paths to the list and to the counts. An indented `comm` line (changed, not listed) means a task touched a file its **Files:** does not name: find it with `git log --format='%h %s' origin/main..HEAD -- '<path>'`; anything under `backend/` other than T2's, T13's and Task 1b's files, `frontend/src/lib/api/openapi.json`, `schema.d.ts`, `package*.json` or `.github/` is a stop. An unindented line means a task's commit is missing.
+**Expected:** `56`; `56`; `comm` prints nothing; then `     30 A` and `     26 M`. These are the File Structure's paths: 30 created (the plan and 29 frontend files) and 26 modified (16 frontend files, 7 backend files, and 3 docs: the two specs and the checklist). With Task 1b, add its paths to the list and to the counts. An indented `comm` line (changed, not listed) means a task touched a file its **Files:** does not name: find it with `git log --format='%h %s' origin/main..HEAD -- '<path>'`; anything under `backend/` other than T2's, T13's and Task 1b's files, `frontend/src/lib/api/openapi.json`, `schema.d.ts`, `package*.json` or `.github/` is a stop. An unindented line means a task's commit is missing.
 
 - [ ] **Step 8 (agent): Check the exact list of commits against this plan**
 
@@ -7069,7 +7098,7 @@ Record the answer.
 
 - [ ] **Step 9 (OWNER, then agent): Phone, step 6 of 6: New service asks first**
 
-> Tap **⋮** next to Summary, then **New service**. Because you chose hymns, it should ask "Start a new service?" before clearing anything. Tap **Cancel**: your hymns are still there. Did it ask?
+> Tap **⋮** next to Summary, then **New service**. Because you chose hymns, it should ask "Start a new service?" before clearing anything. (Turning Exclude on or off does not make it ask; Suggest fills empty slots, which does.) Tap **Cancel**: your hymns are still there. Did it ask?
 
 Record the answer.
 
@@ -7202,6 +7231,22 @@ Filled in while Tasks 1-13 are built: each change from the plan as written, its 
 - The plan was written in two sessions. The first wrote the header, Global Constraints, Owner decisions and Tasks 1-5, but not the "Baselines and counts" table, the "Spec clarifications" that Tasks 2-5 cite (2, 5, 9, 10, 12, 21), the risks or the File Structure; the second added them without changing Tasks 1-5, keeping the numbers those tasks already cite. It also added T4-T5's review checkpoint.
 - Tasks 2-13 were then replayed mechanically from this document onto a clean worktree at `b47abba` (every script in order); see "Facts checked for this plan".
 
+**Plan review fixes (2026-09-29, before the build).** Each fix was written and checked in the replay tree (tests, typecheck, lint), then carried into the task's scripts, and T2-T13 were replayed again from this document; the counts below are the new ones. **[owner-visible]** marks what the owner would notice.
+- (Important 1) T8 `HymnsStep`: a failed background refetch no longer replaces the step with "Couldn't load this church's hymnal." TanStack Query v5 keeps `data` with `isError`, so `failed` is now `(hymnalsQuery.isError && hymnals === undefined) || (code !== null && lists.failed.has(code) && selectedList === undefined)`, and Retry refetches `GET /hymnals` only while it has no data. New T8 test (+1): after loading, a refetch answers 500 and the picker still works; T10 extends it (0) with a pending Suggest that stays mounted and still lands.
+- (Important 2) T14 Step 7 expected `30 A` and `26 M` (the plan and 29 frontend files created; 16 frontend, 7 backend and 3 docs files modified), checked with `git diff --name-status b47abba` on the replay tree plus the plan; the File Structure now states the counts.
+- (Important 3) **[owner-visible]** `HymnLabel` wraps (`flex-wrap`) everywhere but a chip, so at 375 px a long title breaks and its badges move to a second line on cards, picker rows and match rows instead of widening the page; a chip (`truncate`) keeps one line with whole badges. New `hymn-label.test.tsx` test (+1); T13's manual check 8 gains a row-with-every-badge line.
+- (M1) **[owner-visible]** T4 `applySuggestions`: an empty slot takes the first returned hymn that no other slot holds once the slots before it are filled, so a slot emptied while the request ran never repeats another slot's hymn (clarification 25). New `picks.test.ts` test (+1).
+- (M2) **[owner-visible]** T8 and T11 Undo: the ✕ toast's Undo acts only while the slot is still empty, and a match's Add toast only while the slot still holds the added hymn; otherwise nothing happens and no message shows (clarification 26). New T8 test (+1); T11's Add test extended (0).
+- (M3) **[owner-visible]** T13 check 12 and T15 Step 9 now say "Turning Exclude on or off does not make it ask; Suggest fills empty slots, which does."
+- (M4) T11 `openAtFirst` checks `typeof window !== "undefined"` first.
+- (M5) T5 `clipChars` cuts by code points (as the server's `len` counts), used by `cleanRefs` and every cut in `buildSuggestionRequest` (occasion, NT reading, NT text); `current_picks` sends only UUID-shaped ids, others as null. New `match-request.test.ts` and `suggest-request.test.ts` tests (+2).
+- (M6) Accessibility: after ✕ focus moves to the new picker, and after a choice from **Change** back to **Change** (T8); **Change** is disabled until the selected list has loaded, so it never mounts a disabled, auto-focused field (T8); "Still working — this can take up to a minute." sits in an `aria-live="polite"` line (T10); "Go to readings" is at least 44 px tall (`min-h-11`, T11). Existing tests extended (0).
+- (M7) Global Constraints and T7: a toggle meets 44 px through its clickable `min-h-11` label row, not the switch itself.
+- (M8) **[owner-visible]** Clarification 12 (the search ignores punctuation) is marked owner-visible, and new clarifications 23 (the plural "Also chosen as the Opening and Closing hymns.") and 24 (**Show them** is a toggle: "{k} recently used matches are shown." with **Hide them**, T11, test extended) join "Questions for the owner" item 8 with 25 and 26.
+- (M9) T2's prose and commit body say ten season labels, as listed.
+- (M10) T1: Query 3 also shows the church's own title for each used number, and Step 7 checks each used title against it with `usage_key` before outcome A can be chosen (a mismatch is a data finding for the owner); Query 4 counts `services.hymns` (a `JSON` column in `backend/db/models.py`) with `case when jsonb_typeof(...) = 'array'`, so it cannot fail on the column's shape and needs no rerun.
+- Counts: T4 +8, T5 +18, T8 +14; frontend 356 → 427 in 55 → 64 files (was 421); backend unchanged.
+
 **T1's finding (owner answer 2):** <outcome A, B, C or D, in one sentence, without ids; the owner's choice; Task 1b's commit if any.>
 
 **Review fixes under owner decision 1 (no owner-visible change unless marked):**
@@ -7268,3 +7313,4 @@ The owner's answers of 2026-09-29 (1-5, "all recommended") are binding and alrea
 5. **Screens already built now include Hymns** (clarification 16): the step bar counts Hymns, Review lists "No Opening hymn — Choose one" and the like, and the summary lists the three hymns. Recommended: as written (this is what the slice 3 spec asks).
 6. **The two hidden counts** (clarification 22): the toolbar counts every recently used hymn in the hymnal; the picker's list counts only those matching what was typed. Recommended: as written.
 7. **What makes "New service" ask, and the church season** (clarifications 2 and 21): these follow owner answers 1 and 3 exactly; they are listed so the phone check (T15 Steps 7 and 9) can confirm them.
+8. **Small wording and behavior choices from the plan review** (clarifications 12 and 23-26): the picker ignores punctuation ("come thou" finds "Come, Thou Almighty King"); a hymn in all three slots reads "Also chosen as the Opening and Closing hymns."; **Show them** becomes **Hide them** once the matches are shown ("2 recently used matches are shown."); Suggest never puts one hymn in two slots; and **Undo** does nothing once another hymn has been chosen for that slot. Recommended: accept.
