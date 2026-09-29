@@ -14,7 +14,6 @@ tzdata>=2026.4
 beautifulsoup4>=4.12.0
 requests>=2.31.0
 httpx>=0.25.0
-lxml>=4.9.0
 playwright>=1.40.0
 # 1.58.0 is the first release whose chat.completions.create takes both
 # max_completion_tokens (always sent) and reasoning_effort (sent when

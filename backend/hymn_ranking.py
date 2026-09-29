@@ -28,7 +28,7 @@ def _flat_count(hymn: Any) -> Optional[int]:
 
 def is_newer_than_preferred(year: Optional[int], prefer_before_year: Optional[int]) -> bool:
     """True when the words' year is known and not before the preferred year
-    (the rule PR #4's hymn_display_info used for its newer_than_preferred)."""
+    (PR #4's rule for newer_than_preferred, moved here from worship_service)."""
     return year is not None and prefer_before_year is not None and year >= prefer_before_year
 
 
