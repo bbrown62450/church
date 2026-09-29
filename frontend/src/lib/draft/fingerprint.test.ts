@@ -18,6 +18,8 @@ describe("fingerprint and isDirty (F §4.6 Unsaved changes)", () => {
     expect(fnv1a32("")).toBe("811c9dc5");
     expect(fnv1a32("a")).toBe("e40c292c");
     expect(fnv1a32("foobar")).toBe("bf9cf968");
+    // UTF-8 bytes, so a server-side FNV-1a over the same JSON would match.
+    expect(fnv1a32("é")).toBe("1e9de8c1");
     expect(fingerprint({ a: 1 })).toBe(fnv1a32('{"a":1}'));
   });
 

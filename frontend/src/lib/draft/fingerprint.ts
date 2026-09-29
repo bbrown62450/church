@@ -1,7 +1,7 @@
 /**
  * Unsaved-changes detection (F §4.6 "Unsaved changes"; S "fingerprint.ts").
- * `fingerprint` is 32-bit FNV-1a over a stable JSON string (object keys
- * sorted at every level), as 8 hex digits.
+ * `fingerprint` is 32-bit FNV-1a over the UTF-8 bytes of a stable JSON
+ * string (object keys sorted at every level), as 8 hex digits.
  */
 import { draftToServicePayload } from "./mapping";
 import type { DraftV1 } from "./schema";
@@ -24,11 +24,13 @@ export function stableStringify(value: unknown): string {
   return JSON.stringify(stable(value));
 }
 
-/** 32-bit FNV-1a of the UTF-16 code units, as 8 hex digits. */
+const utf8 = new TextEncoder();
+
+/** 32-bit FNV-1a of the UTF-8 bytes, as 8 hex digits (standard FNV-1a, so any language can match it). */
 export function fnv1a32(text: string): string {
   let hash = 0x811c9dc5;
-  for (let i = 0; i < text.length; i += 1) {
-    hash ^= text.charCodeAt(i);
+  for (const byte of utf8.encode(text)) {
+    hash ^= byte;
     hash = Math.imul(hash, 0x01000193);
   }
   return (hash >>> 0).toString(16).padStart(8, "0");
