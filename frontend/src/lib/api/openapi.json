@@ -198,6 +198,133 @@
         "title": "ErrorDetail",
         "type": "object"
       },
+      "HymnMatchOut": {
+        "properties": {
+          "hymnal": {
+            "title": "Hymnal",
+            "type": "string"
+          },
+          "hymnal_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hymnal Count"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link"
+          },
+          "matched_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Matched Refs",
+            "type": "array"
+          },
+          "newer_than_preferred": {
+            "title": "Newer Than Preferred",
+            "type": "boolean"
+          },
+          "number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Number"
+          },
+          "recent_use_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recent Use On"
+          },
+          "scripture_refs": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scripture Refs"
+          },
+          "strength": {
+            "enum": [
+              "passage",
+              "chapter"
+            ],
+            "title": "Strength",
+            "type": "string"
+          },
+          "text_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text Year"
+          },
+          "themes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Themes",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "hymnal",
+          "title",
+          "number",
+          "link",
+          "scripture_refs",
+          "themes",
+          "recent_use_on",
+          "text_year",
+          "hymnal_count",
+          "newer_than_preferred",
+          "strength",
+          "matched_refs"
+        ],
+        "title": "HymnMatchOut",
+        "type": "object"
+      },
       "HymnOut": {
         "properties": {
           "hymnal": {
@@ -775,6 +902,110 @@
           "customized"
         ],
         "title": "RubricOut",
+        "type": "object"
+      },
+      "ScriptureMatchIn": {
+        "additionalProperties": false,
+        "description": "POST /hymns/scripture-matches. Refs blank after trimming are the usecase's\n422 \"Enter at least one scripture reference.\" (fields.refs).",
+        "properties": {
+          "hymnal": {
+            "anyOf": [
+              {
+                "maxLength": 20,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hymnal"
+          },
+          "limit_per_ref": {
+            "default": 50,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Limit Per Ref",
+            "type": "integer"
+          },
+          "max_results": {
+            "default": 20,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Max Results",
+            "type": "integer"
+          },
+          "recent_for_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recent For Date"
+          },
+          "refs": {
+            "items": {
+              "maxLength": 200,
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Refs",
+            "type": "array"
+          }
+        },
+        "title": "ScriptureMatchIn",
+        "type": "object"
+      },
+      "ScriptureMatchesOut": {
+        "properties": {
+          "hymnal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hymnal"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/HymnMatchOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "refs_used": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Refs Used",
+            "type": "array"
+          },
+          "total_matched": {
+            "title": "Total Matched",
+            "type": "integer"
+          },
+          "unparsed_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unparsed Refs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "hymnal",
+          "refs_used",
+          "unparsed_refs",
+          "total_matched",
+          "items"
+        ],
+        "title": "ScriptureMatchesOut",
         "type": "object"
       },
       "TranslationOut": {
@@ -1362,6 +1593,108 @@
           }
         },
         "summary": "List Hymns"
+      }
+    },
+    "/hymns/scripture-matches": {
+      "post": {
+        "operationId": "scripture_matches_hymns_scripture_matches_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-church-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Church-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScriptureMatchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScriptureMatchesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Scripture Matches"
       }
     },
     "/invites/accept": {

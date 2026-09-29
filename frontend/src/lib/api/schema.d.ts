@@ -118,6 +118,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/hymns/scripture-matches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Scripture Matches */
+        post: operations["scripture_matches_hymns_scripture_matches_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/invites/accept": {
         parameters: {
             query?: never;
@@ -339,6 +356,41 @@ export interface components {
             message: string;
             /** Request Id */
             request_id: string;
+        };
+        /** HymnMatchOut */
+        HymnMatchOut: {
+            /** Hymnal */
+            hymnal: string;
+            /** Hymnal Count */
+            hymnal_count: number | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Link */
+            link: string | null;
+            /** Matched Refs */
+            matched_refs: string[];
+            /** Newer Than Preferred */
+            newer_than_preferred: boolean;
+            /** Number */
+            number: number | null;
+            /** Recent Use On */
+            recent_use_on: string | null;
+            /** Scripture Refs */
+            scripture_refs: string | null;
+            /**
+             * Strength
+             * @enum {string}
+             */
+            strength: "passage" | "chapter";
+            /** Text Year */
+            text_year: number | null;
+            /** Themes */
+            themes: string[];
+            /** Title */
+            title: string;
         };
         /** HymnOut */
         HymnOut: {
@@ -566,6 +618,42 @@ export interface components {
             /** Customized */
             customized: string[];
             rubric: components["schemas"]["RubricModel"];
+        };
+        /**
+         * ScriptureMatchIn
+         * @description POST /hymns/scripture-matches. Refs blank after trimming are the usecase's
+         *     422 "Enter at least one scripture reference." (fields.refs).
+         */
+        ScriptureMatchIn: {
+            /** Hymnal */
+            hymnal?: string | null;
+            /**
+             * Limit Per Ref
+             * @default 50
+             */
+            limit_per_ref: number;
+            /**
+             * Max Results
+             * @default 20
+             */
+            max_results: number;
+            /** Recent For Date */
+            recent_for_date?: string | null;
+            /** Refs */
+            refs?: string[];
+        };
+        /** ScriptureMatchesOut */
+        ScriptureMatchesOut: {
+            /** Hymnal */
+            hymnal: string | null;
+            /** Items */
+            items: components["schemas"]["HymnMatchOut"][];
+            /** Refs Used */
+            refs_used: string[];
+            /** Total Matched */
+            total_matched: number;
+            /** Unparsed Refs */
+            unparsed_refs: string[];
         };
         /** TranslationOut */
         TranslationOut: {
@@ -858,6 +946,69 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Page_HymnOut_"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    scripture_matches_hymns_scripture_matches_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-church-id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScriptureMatchIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScriptureMatchesOut"];
                 };
             };
             /** @description Unauthorized */

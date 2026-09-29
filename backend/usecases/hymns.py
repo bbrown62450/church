@@ -6,6 +6,7 @@ owner decisions 3 and 9; owner answers of 2026-09-29).
 - hymnal_overview: GET /hymnals.
 - list_hymns_page: GET /hymns, each hymn as a HymnView with its recent use
   and the rubric's newer-than-preferred flag.
+- scripture_matches: POST /hymns/scripture-matches.
 
 Every function takes the active church's id only (F §1.2 rule 1) and reads in
 one session. The layer rules are in usecases/__init__.py: no FastAPI,
@@ -14,8 +15,9 @@ through their modules, so a test can patch one function.
 """
 from __future__ import annotations
 
+import logging
 import uuid
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import date
 from typing import Any, Optional
 
@@ -23,12 +25,20 @@ from sqlalchemy.orm import Session
 
 import hymn_usage
 from db import session_scope
+from domain_errors import InvalidInput
 from hymn_ranking import is_newer_than_preferred
-from hymn_search import parse_themes, usage_key
+from hymn_search import match_hymns, parse_themes, usage_key
 from repos import churches
 from repos import hymns as hymn_repo
 from repos.hymns import HymnalSummary, HymnRecord
+from scripture_refs import parse_refs, split_alternatives
 from service_rubric import merge_rubric
+
+logger = logging.getLogger(__name__)
+
+
+REFS_MESSAGE = "Enter at least one scripture reference."
+HYMNAL_MESSAGE = "That hymnal isn't in this church's library."
 
 
 @dataclass(frozen=True)
@@ -140,3 +150,65 @@ def list_hymns_page(church_id: uuid.UUID, *, hymnal: Optional[str], q: Optional[
         year = church_rubric(church_id, s)["prefer_before_year"]
     return HymnPage(items=[hymn_view(r, usage=usage, prefer_before_year=year) for r in records],
                     total=total, limit=limit, offset=offset)
+
+
+@dataclass(frozen=True)
+class HymnMatchView(HymnView):
+    strength: str                      # "passage" or "chapter"
+    matched_refs: list[str]            # the query refs (after the " or " split) that matched
+
+
+@dataclass(frozen=True)
+class ScriptureMatches:
+    hymnal: Optional[str]
+    refs_used: list[str]
+    unparsed_refs: list[str]
+    total_matched: int
+    items: list[HymnMatchView]
+
+
+def clean_refs(refs: list[str]) -> list[str]:
+    """Trimmed, blanks dropped, each split on " or " (any case), in order."""
+    return [alternative for ref in refs for alternative in split_alternatives(ref or "")]
+
+
+def selected_hymnal(church_id: uuid.UUID, requested: Optional[str], session: Session) -> Optional[str]:
+    """None asks for the effective hymnal (None when the church has none). A code
+    the church lacks is InvalidInput on `hymnal`, with the same message whether
+    it exists in another church or nowhere (S API notes)."""
+    codes = [summary.code for summary in hymn_repo.hymnal_summaries(church_id, session=session)]
+    if requested is None:
+        return _resolve(_settings(church_id, session), codes).effective_hymnal
+    if requested not in codes:
+        raise InvalidInput(HYMNAL_MESSAGE, field="hymnal")
+    return requested
+
+
+def scripture_matches(church_id: uuid.UUID, *, refs: list[str], hymnal: Optional[str],
+                      recent_for_date: Optional[date], limit_per_ref: int,
+                      max_results: int) -> ScriptureMatches:
+    """S Backend 3.5: passage tier first, then chapter; every hymn a HymnView."""
+    refs_used = clean_refs(refs)
+    if not refs_used:
+        raise InvalidInput(REFS_MESSAGE, field="refs")
+    with session_scope() as s:
+        code = selected_hymnal(church_id, hymnal, s)
+        if code is None:
+            return ScriptureMatches(hymnal=None, refs_used=refs_used, unparsed_refs=[],
+                                    total_matched=0, items=[])
+        records = hymn_repo.list_hymnal_records(church_id, code, session=s)
+        usage = (hymn_usage.usage_near(church_id, recent_for_date, session=s)
+                 if recent_for_date is not None else None)
+        year = church_rubric(church_id, s)["prefer_before_year"]
+    result = match_hymns(records, refs_used, limit_per_ref=limit_per_ref, max_results=max_results)
+    if logger.isEnabledFor(logging.DEBUG):       # counts only (S Risks; clarification 29)
+        logger.debug("hymn_matches refs=%d refs_unparsed=%d hymns=%d hymns_with_unparsed=%d matched=%d",
+                     len(result.refs_used), len(result.unparsed_refs), len(records),
+                     sum(1 for r in records if parse_refs(r.scripture_refs or "").unparsed),
+                     result.total_matched)
+    items = [HymnMatchView(**asdict(hymn_view(m.record, usage=usage, prefer_before_year=year)),
+                           strength=m.strength, matched_refs=list(m.matched_refs))
+             for m in result.items]
+    return ScriptureMatches(hymnal=code, refs_used=list(result.refs_used),
+                            unparsed_refs=list(result.unparsed_refs),
+                            total_matched=result.total_matched, items=items)

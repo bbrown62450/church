@@ -280,6 +280,7 @@ def test_routes_document_the_error_body():
         ("/scripture/passages", "post"): {"401", "422", "429", "503"},
         ("/hymnals", "get"): {"401", "403", "422", "503"},
         ("/hymns", "get"): {"401", "403", "422", "503"},
+        ("/hymns/scripture-matches", "post"): {"401", "403", "422", "503"},
     }
     for (path, method), statuses in expected.items():
         responses = schema["paths"][path][method]["responses"]
