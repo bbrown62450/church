@@ -233,8 +233,121 @@ def complete(messages: Sequence[Mapping[str, str]], *, max_completion_tokens: in
     return _complete(_current(), messages, max_completion_tokens, json_mode, deadline)
 
 
+def _remaining(state: _State, deadline: Optional[float]) -> Optional[float]:
+    return None if deadline is None else deadline - state.clock()
+
+
+def _is_quota(exc: BaseException) -> bool:
+    return isinstance(exc, openai.RateLimitError) and getattr(exc, "code", None) == "insufficient_quota"
+
+
+def _retryable(exc: BaseException) -> bool:
+    if _is_quota(exc):
+        return False
+    if isinstance(exc, (openai.APIConnectionError, openai.RateLimitError)):
+        return True                                   # APITimeoutError is an APIConnectionError
+    return isinstance(exc, openai.APIStatusError) and exc.status_code >= 500
+
+
+def _backoff(exc: BaseException) -> float:
+    """min(Retry-After or 1 s, 2 s)."""
+    seconds = 1.0
+    response = getattr(exc, "response", None)
+    raw = response.headers.get("retry-after") if response is not None else None
+    if raw:
+        try:
+            seconds = max(0.0, float(raw))
+        except ValueError:
+            seconds = 1.0
+    return min(seconds, MAX_BACKOFF_SECONDS)
+
+
+def _is_missing_model(exc: BaseException) -> bool:
+    return isinstance(exc, openai.NotFoundError) or getattr(exc, "code", None) == "model_not_found"
+
+
+def _mapped(exc: BaseException, model: str) -> Exception:
+    """F §2.8's mapping, subclasses before their bases (S Backend 3.7), plus a
+    model OpenAI does not offer (slice 3a plan, clarification 26)."""
+    name = type(exc).__name__
+    if isinstance(exc, openai.APITimeoutError):
+        return UpstreamTimeout(TIMEOUT_MESSAGE, code="ai_timeout")
+    if _is_quota(exc):
+        logger.error("AI: quota exhausted (insufficient_quota)")
+        return NotConfigured(NOT_CONFIGURED_MESSAGE, code="ai_not_configured")
+    if isinstance(exc, openai.RateLimitError):
+        return Busy(BUSY_MESSAGE, code="ai_busy")
+    if _is_missing_model(exc):                        # retired or mistyped OPENAI_MODEL
+        logger.error("AI: model not available (OPENAI_MODEL=%s)", model)
+        return NotConfigured(NOT_CONFIGURED_MESSAGE, code="ai_not_configured")
+    if isinstance(exc, (openai.AuthenticationError, openai.PermissionDeniedError)):
+        logger.error("AI: the OpenAI key was refused (%s)", name)
+        return NotConfigured(NOT_CONFIGURED_MESSAGE, code="ai_not_configured")
+    # BadRequestError, APIConnectionError, any other APIStatusError, and
+    # anything else the SDK raises.
+    return UpstreamError(UPSTREAM_MESSAGE, code="ai_upstream_error")
+
+
+def _attempt(state: _State, messages, max_completion_tokens: int, json_mode: bool,
+             timeout: float) -> str:
+    settings = state.settings
+    kwargs: dict[str, Any] = {
+        "model": settings.model,
+        "messages": [dict(m) for m in messages],
+        "max_completion_tokens": max_completion_tokens,
+        "timeout": openai.Timeout(timeout, connect=min(CONNECT_TIMEOUT_SECONDS, timeout)),
+    }
+    if json_mode:
+        kwargs["response_format"] = {"type": "json_object"}
+    if settings.temperature is not None:
+        kwargs["temperature"] = settings.temperature
+    if settings.reasoning_effort is not None:
+        kwargs["reasoning_effort"] = settings.reasoning_effort
+    started = state.clock()
+    response = state.sdk_client.chat.completions.create(**kwargs)
+    usage = getattr(response, "usage", None)
+    logger.info("ai_call model=%s duration_ms=%d prompt_tokens=%s completion_tokens=%s outcome=ok",
+                settings.model, round((state.clock() - started) * 1000),
+                getattr(usage, "prompt_tokens", "-"), getattr(usage, "completion_tokens", "-"))
+    return response.choices[0].message.content or ""
+
 
 def _complete(state: _State, messages, max_completion_tokens: int, json_mode: bool,
               deadline: Optional[float]) -> str:
-    """Task 3 replaces this with the call, the error mapping, the retries and the deadline."""
-    raise NotConfigured(NOT_CONFIGURED_MESSAGE, code="ai_not_configured")
+    settings = state.settings
+    if settings.problem is not None:
+        raise NotConfigured(NOT_CONFIGURED_MESSAGE, code="ai_not_configured")
+    remaining = _remaining(state, deadline)
+    wait = (SEMAPHORE_WAIT_SECONDS if remaining is None
+            else min(SEMAPHORE_WAIT_SECONDS, remaining - DEADLINE_MARGIN_SECONDS))
+    acquired = (state.semaphore.acquire(timeout=wait) if wait > 0
+                else state.semaphore.acquire(blocking=False))
+    if not acquired:
+        logger.warning("ai_call model=%s outcome=ai_busy (no free slot)", settings.model)
+        raise Busy(BUSY_MESSAGE, code="ai_busy")
+    try:
+        retries = 0
+        while True:
+            remaining = _remaining(state, deadline)
+            timeout = settings.timeout_seconds if remaining is None else min(settings.timeout_seconds, remaining)
+            if timeout <= 0:
+                raise UpstreamTimeout(TIMEOUT_MESSAGE, code="ai_timeout")
+            try:
+                return _attempt(state, messages, max_completion_tokens, json_mode, timeout)
+            except openai.OpenAIError as exc:
+                mapped_later = retries >= settings.max_retries or not _retryable(exc)
+                backoff = 0.0 if mapped_later else _backoff(exc)
+                remaining = _remaining(state, deadline)
+                if not mapped_later and remaining is not None and remaining - backoff < MIN_RETRY_SECONDS:
+                    mapped_later = True
+                if mapped_later:
+                    error = _mapped(exc, settings.model)
+                    logger.warning("ai_call model=%s outcome=%s error=%s attempts=%d",
+                                   settings.model, error.code, type(exc).__name__, retries + 1)
+                    raise error from None
+                logger.info("ai_call model=%s retry error=%s backoff_s=%.1f",
+                            settings.model, type(exc).__name__, backoff)
+                state.sleep(backoff)
+                retries += 1
+    finally:
+        state.semaphore.release()
