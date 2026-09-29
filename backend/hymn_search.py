@@ -1,9 +1,9 @@
 """Pure hymn helpers for slice 3 (S Backend 1 and 2; owner decision 9; owner
 answer Q2 of 2026-09-29):
 
-- normalize_title and usage_key: the recent-use key is the normalized title
-  alone, so a hymn sung from one hymnal is recognized when it is picked from
-  another under a different number (owner answer Q2).
+- normalize_title and usage_key: the recent-use key is the title alone,
+  punctuation ignored, so a hymn sung from one hymnal is recognized when it is
+  picked from another under a different number (owner answers Q2 and A).
 - parse_themes: a hymn's theme field (None, a list, "A, B", "A; B" or a
   Postgres array literal '{A,"B c"}') as a clean list.
 - match_hymns: scripture matching on parsed book/chapter/verse spans, in two
@@ -34,9 +34,20 @@ def normalize_title(title: Optional[str]) -> str:
     return re.sub(r"\s+", " ", text).strip().casefold()
 
 
+_DASHES = re.compile(r"[-‐‑–—]")
+
+
 def usage_key(title: Optional[str]) -> str:
-    """The recent-use key: the normalized title alone (owner answer Q2)."""
-    return normalize_title(title)
+    """The recent-use key: the title alone (owner answer Q2), ignoring
+    punctuation (owner answer A, 2026-09-29): NFKC; curly apostrophes as "'";
+    hyphens and dashes as spaces; everything but letters, digits, "_" and
+    spaces removed; whitespace collapsed; casefolded; a leading "oh " as "o ".
+    Leading articles stay. normalize_title is unchanged (exact-title resolution)."""
+    text = unicodedata.normalize("NFKC", title or "").replace("’", "'").replace("‘", "'")
+    text = _DASHES.sub(" ", text)
+    text = re.sub(r"[^\w\s]", "", text)
+    text = re.sub(r"\s+", " ", text).strip().casefold()
+    return "o " + text[3:] if text.startswith("oh ") else text
 
 
 def _split_array_literal(body: str) -> list[str]:
@@ -104,21 +115,37 @@ class MatchResult:
     unparsed_refs: tuple[str, ...]
 
 
+_DOTTED = re.compile(r"(\d)\s*\.\s*(\d)")
+_MID_ORDINAL = re.compile(r"(?<![0-9a-z])(iii|ii|i|first|second|third|1st|2nd|3rd) (?=[a-z])")
+_ORDINAL_DIGIT = {"i": "1", "ii": "2", "iii": "3", "first": "1", "second": "2", "third": "3",
+                  "1st": "1", "2nd": "2", "3rd": "3"}
+_FALLBACK_CHAPTERS = 11          # a query range's first chapter and the next ten
+
+
 def _text_fallback(query: RefSpan, hymn_text: str) -> bool:
     """A boundary-aware test on a hymn segment the parser could not read: the
-    query's book (any key) and first chapter, never inside a longer number or
-    after "1 " (so "Psalm 1" never hits "Psalm 119", "John 3" never "1 John 3")."""
-    text = scripture_refs.normalize_book_text(hymn_text)
-    chapter = str(query.start[0])
+    query's book (any key longer than 2 characters) and one of its chapters
+    (the first 11), never inside a longer number or after "1 " (so "Psalm 1"
+    never hits "Psalm 119", "John 3" never "1 John 3"). A dotted verse
+    ("3.16") reads as "3:16", and an ordinal inside the text ("see I John")
+    as its digit (owner decision 1)."""
+    text = scripture_refs.normalize_book_text(_DOTTED.sub(r"\1:\2", hymn_text))
+    text = _MID_ORDINAL.sub(lambda m: _ORDINAL_DIGIT[m.group(1)] + " ", text)
+    first = query.start[0]
+    last = min(query.end[0], first + _FALLBACK_CHAPTERS - 1)
+    chapters = "|".join(str(c) for c in range(first, last + 1))
     for key in scripture_refs.book_keys(query.book):
-        pattern = r"(?<![0-9a-z])(?<!\d )" + re.escape(key) + r"\s*" + chapter + r"(?![0-9])"
+        if len(key) <= 2:
+            continue
+        pattern = r"(?<![0-9a-z])(?<!\d )" + re.escape(key) + r"\s*(?:" + chapters + r")(?![0-9])"
         if re.search(pattern, text):
             return True
     return False
 
 
 def _strength(query: tuple[RefSpan, ...], hymn: scripture_refs.ParsedRefs) -> Optional[Strength]:
-    if any(spans_overlap(q, h) for q in query for h in hymn.spans):
+    # A whole-book or chapter-only "ff" hymn tag is too broad for "passage" (owner answer B).
+    if any(spans_overlap(q, h) for q in query for h in hymn.spans if not h.broad):
         return "passage"
     if any(same_chapter(q, h) for q in query for h in hymn.spans):
         return "chapter"

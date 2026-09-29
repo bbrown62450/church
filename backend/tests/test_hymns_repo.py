@@ -282,6 +282,10 @@ def test_hymnal_summaries_count_hymns_and_scripture_refs(tmp_db, make_church):
     _hymn(other, "ZZ", "Other church", 1)
     assert hymnal_summaries(cid) == [HymnalSummary("GG2013", 3, 1), HymnalSummary("PH1990", 1, 0)]
     assert hymnal_summaries(make_church(name="Empty")) == []
+    # Codepoint order, as Streamlit's sorted() (owner decision 1): upper case before lower.
+    _hymn(cid, "ab", "Lower", 1)
+    _hymn(cid, "Zz", "Upper", 1)
+    assert [h.code for h in hymnal_summaries(cid)] == ["GG2013", "PH1990", "Zz", "ab"]
 
 
 def test_list_hymnal_records_in_hymnal_order_in_the_callers_session(tmp_db, make_church):

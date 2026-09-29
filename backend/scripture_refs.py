@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Literal, Optional
 
@@ -362,10 +362,12 @@ PARSE_ALIASES: dict[str, str] = {
     "jud": "Jude", "rv": "Revelation",
 }
 
-# N and N-M are verses of chapter 1 in these books.
+# N and N-M are verses of chapter 1 in these books. Psalm 151 is one too, so
+# "Psalm 151:1" (the key, then ":") is its verse 1 (owner decision 1).
 SINGLE_CHAPTER_BOOKS = frozenset({
     "Obadiah", "Philemon", "2 John", "3 John", "Jude", "Song of the Three",
     "Letter of Jeremiah", "Susanna", "Bel and the Dragon", "Prayer of Manasseh",
+    "Psalm 151",
 })
 
 WHOLE_CHAPTER_START = 0     # verse 0: from the start of the chapter
@@ -401,11 +403,16 @@ def book_keys(book_name: str) -> tuple[str, ...]:
 @dataclass(frozen=True)
 class RefSpan:
     """One passage: canonical book, (chapter, verse) start and end, inclusive.
-    A whole chapter runs from verse 0 to verse 999; a whole book from 1:0 to 999:999."""
+    A whole chapter runs from verse 0 to verse 999; a whole book from 1:0 to 999:999.
+    `broad` marks a whole-book reference (of a book with more than one chapter)
+    and a chapter-only "ff" ("Psalm 148ff", chapter 148 only): hymn matching
+    ranks them "chapter" at most (owner answer B, 2026-09-29). It is left out
+    of equality, so the span itself still compares by book, start and end."""
 
     book: str
     start: tuple[int, int]
     end: tuple[int, int]
+    broad: bool = field(default=False, compare=False)
 
 
 @dataclass(frozen=True)
@@ -416,13 +423,16 @@ class ParsedRefs:
 
 def _match_book(segment: str) -> Optional[tuple[Book, str]]:
     """The longest book key at the start of the normalized segment, followed by
-    the end, a space or a digit, and the rest (normalized, trimmed)."""
+    the end, a space, a digit or a ":" (dropped, so "Psalm 151:1" is Psalm 151
+    verse 1), and the rest (normalized, trimmed)."""
     text = normalize_book_text(segment)
     for key, book in _PARSE_INDEX:
         if text.startswith(key):
             after = text[len(key):]
             if after == "" or after[0] == " " or after[0] in "0123456789":
                 return book, after.strip()
+            if after[0] == ":":
+                return book, after[1:].strip()
     return None
 
 
@@ -440,6 +450,7 @@ def _item_span(book: Book, item: str, context: Optional[int]) -> Optional[tuple[
         return None
     a, b, c, d = (int(g) if g else None for g in m.group("a", "b", "c", "d"))
     ff = bool(m.group("ff"))
+    broad = False
     if b is not None:                                       # C:V, C:V-V, C:V-C:V, C:Vff
         start = (a, b)
         if ff:
@@ -456,19 +467,20 @@ def _item_span(book: Book, item: str, context: Optional[int]) -> Optional[tuple[
         chapter = 1 if book.name in SINGLE_CHAPTER_BOOKS else context
         start = (chapter, a)
         end = (chapter, WHOLE_CHAPTER_END if ff else (c if c is not None else a))
-    else:                                                   # C, C-C, Cff
+    else:                                                   # C, C-C, Cff (that chapter only)
         start = (a, WHOLE_CHAPTER_START)
-        end = (WHOLE_BOOK_END if ff else (c if c is not None else a), WHOLE_CHAPTER_END)
-    last_chapter = start[0] if (ff and end[0] == WHOLE_BOOK_END) else end[0]
-    if start[0] < 1 or start > end or max(start[0], last_chapter) > MAX_CHAPTER:
+        end = (c if c is not None else a, WHOLE_CHAPTER_END)
+        broad = ff                                          # owner answer B
+    if start[0] < 1 or start > end or end[0] > MAX_CHAPTER:
         return None
     has_verses = b is not None or d is not None or context is not None
-    return RefSpan(book.name, start, end), (end[0] if has_verses else None)
+    return RefSpan(book.name, start, end, broad), (end[0] if has_verses else None)
 
 
 def _segment_spans(book: Book, location: str) -> Optional[list[RefSpan]]:
     if not location:
-        return [RefSpan(book.name, (1, WHOLE_CHAPTER_START), (WHOLE_BOOK_END, WHOLE_CHAPTER_END))]
+        return [RefSpan(book.name, (1, WHOLE_CHAPTER_START), (WHOLE_BOOK_END, WHOLE_CHAPTER_END),
+                        broad=book.name not in SINGLE_CHAPTER_BOOKS)]
     spans: list[RefSpan] = []
     context: Optional[int] = None
     for item in location.split(","):

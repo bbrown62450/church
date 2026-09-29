@@ -28,6 +28,11 @@ def test_window_is_84_days_each_side_inclusive_and_excludes_the_service_date(tmp
     _use(cid, "2026-12-28", "Too late")
     _use(cid, "2026-10-04", "Same day")
     assert usage_near(cid, D) == {"edge before": date(2026, 7, 12), "edge after": date(2026, 12, 27)}
+    # Owner decision 1: the window is clamped at date.min and date.max, not an OverflowError.
+    _use(cid, "9999-12-30", "Last days")
+    _use(cid, "0001-01-02", "First days")
+    assert usage_near(cid, date.max) == {"last days": date(9999, 12, 30)}
+    assert usage_near(cid, date.min) == {"first days": date(1, 1, 2)}
 
 
 def test_nearest_date_wins_and_ties_go_to_the_earlier_date(tmp_db, make_church):
@@ -46,7 +51,7 @@ def test_the_key_is_the_title_alone_across_numbers_and_hymnals(tmp_db, make_chur
     _use(cid, "2026-09-27", "Come, Thou Almighty King", number=403)
     _use(cid, "2026-09-13", "Nameless", number=None)
     near = usage_near(cid, D)
-    assert near["come, thou almighty king"] == date(2026, 9, 27)
+    assert near["come thou almighty king"] == date(2026, 9, 27)
     assert near["nameless"] == date(2026, 9, 13)
 
 
@@ -55,7 +60,7 @@ def test_title_whitespace_and_case_are_tolerated(tmp_db, make_church):
     _use(cid, "2026-09-27", "  Come,  Thou ALMIGHTY King ")
     _use(cid, "2026-09-20", "")
     _use(cid, "2026-09-20", None)
-    assert usage_near(cid, D) == {"come, thou almighty king": date(2026, 9, 27)}
+    assert usage_near(cid, D) == {"come thou almighty king": date(2026, 9, 27)}
 
 
 def test_usage_is_church_scoped(tmp_db, make_church):

@@ -84,6 +84,29 @@ def test_unparsed_hymn_text_falls_back_on_word_boundaries():
     assert strengths(match_hymns(hymns, ["John 3:16"])) == [("h3", "chapter")]
     # The fallback never yields more than "chapter".
     assert strengths(match_hymns(pool("Psalm 23 (metrical)"), ["Psalm 23:1"])) == [("h0", "chapter")]
+    # Owner decision 1: a dotted verse still names its chapter; every chapter of
+    # a query range (up to 11) is tried; a mid-string ordinal is a digit, so
+    # "see I John 3" is 1 John, not John; a key of 2 characters or fewer is not tried.
+    assert strengths(match_hymns(pool("cf. John 3.16"), ["John 3:16"])) == [("h0", "chapter")]
+    assert strengths(match_hymns(pool("Isaiah 41 (paraphrase)"), ["Isaiah 40-42"])) == [("h0", "chapter")]
+    assert match_hymns(pool("Isaiah 52 (paraphrase)"), ["Isaiah 40-60"]).items == ()
+    assert match_hymns(pool("see I John 3 (echo)"), ["John 3:16"]).items == ()
+    assert match_hymns(pool("see III John 1 (echo)", "and 2nd John 1"), ["John 1:1"]).items == ()
+    assert strengths(match_hymns(pool("see First John 3 (echo)"), ["1 John 3"])) == [("h0", "chapter")]
+    assert match_hymns(pool("this is 9 (note)"), ["Isaiah 9"]).items == ()
+
+
+def test_whole_book_and_chapter_only_ff_tags_rank_as_chapter_at_most():
+    """Owner answer B (2026-09-29): a whole-book tag and a chapter-only "ff" tag
+    never make a passage match; "Psalm 148ff" is chapter 148 only."""
+    assert strengths(match_hymns(pool("Psalms"), ["Psalm 23:1-6"])) == [("h0", "chapter")]
+    assert strengths(match_hymns(pool("Psalm 148ff"), ["Psalm 148:1-6"])) == [("h0", "chapter")]
+    assert match_hymns(pool("Psalm 148ff"), ["Psalm 150"]).items == ()
+    assert strengths(match_hymns(pool("Psalm 148"), ["Psalm 148:1-6"])) == [("h0", "passage")]
+    assert strengths(match_hymns(pool("Luke 4:14ff"), ["Luke 4:16-21"])) == [("h0", "passage")]
+    assert strengths(match_hymns(pool("Jude"), ["Jude 24-25"])) == [("h0", "passage")]  # one chapter
+    # Owner decision 1: Psalm 151 is one chapter, and "Psalm 151:1" names it.
+    assert strengths(match_hymns(pool("Psalm 151:1"), ["Psalm 151 1-7"])) == [("h0", "passage")]
 
 
 def test_blank_titles_and_blank_refs_are_skipped():
@@ -108,6 +131,16 @@ def test_normalize_title_and_usage_key_is_the_title_alone():
     assert normalize_title("ＡＢＣ") == "abc"                       # NFKC
     # Owner answer Q2 (2026-09-29): the same title matches across numbers and hymnals.
     assert usage_key("Amazing Grace") == usage_key(" amazing  grace ")
+    # Owner answer A (2026-09-29): punctuation, hyphens, curly quotes and "Oh" do not split a title.
+    for one, other in (("Come, Thou Long-Expected Jesus", "Come, Thou Long Expected Jesus"),
+                       ("The Lord's My Shepherd", "The Lord’s My Shepherd"),
+                       ("Holy, Holy, Holy! Lord God Almighty", "Holy, Holy, Holy, Lord God Almighty"),
+                       ("Amazing Grace", "Amazing Grace!"),
+                       ("O God, Our Help in Ages Past", "Oh God Our Help in Ages Past")):
+        assert usage_key(one) == usage_key(other), (one, other)
+    assert usage_key("The Church's One Foundation") != usage_key("Church's One Foundation")   # articles stay
+    assert usage_key("Come, Thou Long-Expected Jesus") == "come thou long expected jesus"
+    assert normalize_title("Amazing Grace!") == "amazing grace!"          # exact-title resolution unchanged
 
 
 def test_evenly_spaced_is_deterministic_and_in_range():

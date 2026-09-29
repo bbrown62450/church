@@ -101,7 +101,11 @@ def test_impossible_chapters_and_dotted_verses_are_unparsed():
         assert parse_refs(text) == sr.ParsedRefs((), (text,)), text
     assert spans("Psalm 150") == [("Psalms", (150, 0), (150, 999))]
     assert spans("Psalm 119:105") == [("Psalms", (119, 105), (119, 105))]
-    assert spans("Psalm 148ff") == [("Psalms", (148, 0), (999, 999))]
+    assert spans("Psalm 148ff") == [("Psalms", (148, 0), (148, 999))]      # owner answer B: that chapter only
+    assert parse_refs("Psalm 148ff").spans[0].broad and parse_refs("Psalms").spans[0].broad
+    assert not any(parse_refs(t).spans[0].broad for t in ("Psalm 148", "Jude", "Jude 3ff", "Luke 4:14ff"))
+    assert spans("Psalm 151:1") == [("Psalm 151", (1, 1), (1, 1))]         # owner decision 1
+    assert spans("Psalm 151 1-7") == [("Psalm 151", (1, 1), (1, 7))]
     assert spans("I Cor. 13:1") == [("1 Corinthians", (13, 1), (13, 1))]
     # "Esd" alone could be 1 or 2 Esdras, so it names no book.
     assert parse_refs("Esd 1").unparsed == ("Esd 1",)

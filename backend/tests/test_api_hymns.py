@@ -86,12 +86,18 @@ def test_a_30_digit_q_is_200_and_a_6_digit_q_still_matches_numbers(client, churc
     add(church, "Six digits", 123456)
     assert get(client, church, q="9" * 30)["total"] == 0          # the title branch only: no OverflowError
     assert [h["number"] for h in get(client, church, q="123456")["items"]] == [123456]
+    # Owner decision 1: only ASCII digits match numbers ("²" and Arabic-Indic digits
+    # pass str.isdigit but int() rejects "²"); both are title searches and 200.
+    add(church, "Squared ²", 2)
+    assert [h["title"] for h in get(client, church, q="²")["items"]] == ["Squared ²"]
+    assert get(client, church, q="١٢٣٤٥٦")["total"] == 0
 
 
 def test_limit_offset_and_total(client, church):
     for n in range(1, 8):
         add(church, f"Hymn {n}", n)
     assert get(client, church, limit=2000)["total"] == 7
+    assert get(client, church, offset=1_000_000)["items"] == []     # the cap itself (owner decision 1)
     page = get(client, church, limit=3, offset=3)
     assert ([h["number"] for h in page["items"]], page["total"]) == ([4, 5, 6], 7)
     r = client.get("/hymns", params={"limit": 2001}, headers=church_headers(EMAIL, church))
@@ -99,7 +105,8 @@ def test_limit_offset_and_total(client, church):
     assert (r.json()["error"]["message"], r.json()["error"]["fields"]) == (
         "The request was not valid.", {"limit": "Not a valid value."})
     for bad in ({"limit": 0}, {"offset": -1}, {"recent_for_date": "2026-10-4"},
-                {"recent_for_date": "2026-02-30"}, {"q": "x" * 101}, {"hymnal": "H" * 21}):
+                {"recent_for_date": "2026-02-30"}, {"q": "x" * 101}, {"hymnal": "H" * 21},
+                {"offset": 1_000_001}):
         r = client.get("/hymns", params=bad, headers=church_headers(EMAIL, church))
         assert r.status_code == 422, (bad, r.text)
         assert r.json()["error"]["fields"], bad
@@ -116,6 +123,9 @@ def test_recent_for_date_sets_recent_use_on_and_tolerates_bad_stored_dates(clien
     assert {h["title"]: h["recent_use_on"] for h in body["items"]} == {
         "Come, Thou Almighty King": "2026-09-27", "Holy": "2026-08-02"}
     assert all(h["recent_use_on"] is None for h in get(client, church)["items"])
+    # Owner decision 1: the window is clamped at the calendar's ends, not a 500.
+    for edge in ("9999-12-31", "0001-01-01"):
+        assert all(h["recent_use_on"] is None for h in get(client, church, recent_for_date=edge)["items"])
 
 
 def test_hymn_out_mapping(client, church):
@@ -158,6 +168,11 @@ def test_isolation_and_every_role(client, isolation_world, make_user):
     add(world.church_a, "A's hymn", 1)
     add(world.church_b, "B's hymn", 1)
     assert_church_isolated(client, "GET", "/hymns", world=world)
+    add(world.church_b, "B's own hymnal", 2, hymnal="BONLY")
+    own_code = client.get("/hymns", params={"hymnal": "BONLY"}, headers=church_headers(world.a, world.church_a))
+    no_code = client.get("/hymns", params={"hymnal": "NOSUCH"}, headers=church_headers(world.a, world.church_a))
+    assert (own_code.status_code, own_code.json()) == (no_code.status_code, no_code.json()) == (
+        200, {"items": [], "total": 0, "limit": 50, "offset": 0})
     assert [h["title"] for h in get(client, world.church_a, email=world.a)["items"]] == ["A's hymn"]
     for role in ("admin", "member"):
         email = f"{role}@example.com"

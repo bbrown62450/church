@@ -265,7 +265,11 @@ def _in(session: Optional[Session], work):
 
 
 def hymnal_summaries(church_id, *, session: Optional[Session] = None) -> list[HymnalSummary]:
-    """Each hymnal code in the church (blank codes left out), ORDER BY code."""
+    """Each hymnal code in the church (blank codes left out), in codepoint order.
+
+    Sorted in Python, as Streamlit's sorted(), so the effective-hymnal fallback
+    agrees on Postgres, whose collation may not order by codepoint (owner
+    decision 1); SQLite has no "C" collation to ask for."""
     cid = as_uuid(church_id)
     has_refs = case((func.trim(func.coalesce(Hymn.scripture_refs, "")) != "", 1), else_=0)
 
@@ -273,9 +277,10 @@ def hymnal_summaries(church_id, *, session: Optional[Session] = None) -> list[Hy
         rows = s.execute(
             select(Hymn.hymnal, func.count(), func.coalesce(func.sum(has_refs), 0))
             .where(Hymn.church_id == cid, Hymn.hymnal != "")
-            .group_by(Hymn.hymnal).order_by(Hymn.hymnal)
+            .group_by(Hymn.hymnal)
         ).all()
-        return [HymnalSummary(code, int(count), int(refs)) for code, count, refs in rows]
+        return sorted((HymnalSummary(code, int(count), int(refs)) for code, count, refs in rows),
+                      key=lambda summary: summary.code)
 
     return _in(session, work)
 
@@ -296,7 +301,8 @@ def query_hymns(church_id, *, hymnal: Optional[str] = None, q: Optional[str] = N
     text = (q or "").strip()
     if text:
         title_match = func.lower(Hymn.title).contains(text.lower(), autoescape=True)
-        if text.isdigit() and len(text) <= 6:       # 7+ digits could overflow an integer bind
+        # ASCII digits only: "²" and Arabic-Indic digits pass isdigit() (owner decision 1).
+        if text.isascii() and text.isdigit() and len(text) <= 6:   # 7+ could overflow an integer bind
             conditions.append(or_(Hymn.number == int(text), title_match))
         else:
             conditions.append(title_match)

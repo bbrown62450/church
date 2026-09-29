@@ -67,7 +67,7 @@ def list_hymns(
     hymnal: Optional[str] = Query(None, max_length=20),
     q: Optional[str] = Query(None, max_length=100),
     limit: int = Query(50, ge=1, le=2000),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000),        # plan clarification (owner decision 1)
     recent_for_date: Optional[IsoDate] = Query(None),
 ) -> Page[HymnOut]:
     """Ordered by hymnal, number (nulls last), title, id. `q` of 1-6 digits also
