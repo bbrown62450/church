@@ -62,4 +62,24 @@ describe("useLectionary", () => {
     expect(lectionaryStaleTime(undefined)).toBe(LECTIONARY_STALE_MS);
     expect([LECTIONARY_STALE_MS, PARTIAL_LECTIONARY_STALE_MS]).toEqual([86_400_000, 300_000]);
   });
+
+  it("after a 429, a second screen looking up the same date waits for Retry-After instead of asking again", async () => {
+    const api = installFakeApi({
+      "GET /lectionary/readings": fakeError(429, "rate_limited", "Too many requests. Try again in 30 seconds.", {
+        details: { retry_after_seconds: 30 },
+      }),
+    });
+    const first = renderLectionary("2026-10-04");
+    await waitFor(() => expect(first.result.current.error?.status).toBe(429));
+    const second = renderLectionary("2026-10-04", first.queryClient);
+    expect(second.result.current.error?.status).toBe(429);
+    // A later lookup's request comes after anything the second mount would have sent.
+    renderLectionary("2026-10-11", first.queryClient);
+    await waitFor(() => expect(api.requests.map((r) => r.path)).toContain("/lectionary/readings?date=2026-10-11"));
+    expect(api.requests.map((r) => r.path)).toEqual([
+      "/lectionary/readings?date=2026-10-04",
+      "/lectionary/readings?date=2026-10-11",
+    ]);
+  });
 });
+

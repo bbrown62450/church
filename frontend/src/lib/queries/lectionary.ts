@@ -34,8 +34,12 @@ export function useLectionary(dateIso: string): UseQueryResult<Lectionary, ApiEr
     enabled: canLookUp(dateIso),
     staleTime: (query) => lectionaryStaleTime(query.state.data),
     retry: 0,
-    // A 429 must wait out Retry-After, so coming back to the tab doesn't ask again early.
+    // A 429 must wait out Retry-After, so coming back to the tab, reconnecting or
+    // another screen mounting the lookup doesn't ask again early. With no answer
+    // yet, a mount asks again under `retryOnMount`; with one, under `refetchOnMount`.
     refetchOnWindowFocus: (query) => query.state.error?.status !== 429,
     refetchOnReconnect: (query) => query.state.error?.status !== 429,
+    refetchOnMount: (query) => query.state.error?.status !== 429,
+    retryOnMount: (query) => query.state.error?.status !== 429,
   });
 }

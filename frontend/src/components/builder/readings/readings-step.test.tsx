@@ -139,12 +139,15 @@ describe("service date (S UX item 1)", () => {
     expect(input).toHaveValue("20261-10-04");
     expect(screen.getByText("Choose a service date.")).toBeInTheDocument();
 
+    fireEvent.change(input, { target: { value: "0020-06-02" } }); // a year half typed
     fireEvent.change(input, { target: { value: "1850-06-02" } });
-    expect(step().getByText("Sunday, June 2, 1850")).toBeInTheDocument();
-    expect(screen.queryByText("Enter a date between 1900 and 2199.")).toBeNull(); // not while it may still be typed
+    // Neither the message nor the long date while it may still be typed (no "…, 0020" flashing by).
+    expect(screen.queryByText("Enter a date between 1900 and 2199.")).toBeNull();
+    expect(step().queryByText("Sunday, June 2, 1850")).toBeNull();
     // The lookup settles on 1850 and sends nothing; the next date's lookup is the next request.
     await waitFor(() => expect(screen.getByTestId("lookup-date")).toHaveTextContent("1850-06-02"));
     expect(screen.getByText("Enter a date between 1900 and 2199.")).toBeInTheDocument();
+    expect(step().getByText("Sunday, June 2, 1850")).toBeInTheDocument();
     expect(input).toHaveAttribute("aria-invalid", "true");
     fireEvent.change(input, { target: { value: "2026-10-11" } });
     await waitFor(() =>
@@ -205,6 +208,8 @@ describe("occasion and scripture lines (S UX items 4 and 5)", () => {
     const lines = screen.getByLabelText("Scripture readings");
     fireEvent.change(lines, { target: { value: `Isaiah 5:1-7\n${"y".repeat(201)}` } });
     expect(screen.getByText("Line 2 is too long (max 200 characters).")).toBeInTheDocument();
+    fireEvent.change(lines, { target: { value: `Isaiah 5:1-7\n  ${"y".repeat(200)}  ` } }); // the trimmed line counts
+    expect(screen.queryByText(/is too long/)).toBeNull();
     fireEvent.change(lines, { target: { value: Array.from({ length: 21 }, (_, i) => `Psalm ${i + 1}`).join("\n\n") } });
     expect(screen.getByText("Up to 20 readings.")).toBeInTheDocument();
 
@@ -269,9 +274,12 @@ describe("lectionary status (S UX item 2)", () => {
     expect(screen.getByLabelText("Occasion")).toHaveValue("Nineteenth Sunday after Pentecost"); // untouched
 
     await user.click(screen.getByRole("button", { name: "Try again" }));
-    expect(
-      await screen.findByText("One lectionary source didn't respond, so other reading options for this date may be missing."),
-    ).toBeInTheDocument();
+    const partial = await screen.findByText(
+      "One lectionary source didn't respond, so other reading options for this date may be missing.",
+    );
+    // The button is gone, so focus moves to the answer rather than dropping to the page.
+    await waitFor(() => expect(document.activeElement).toHaveAttribute("tabindex", "-1"));
+    expect(document.activeElement).toContainElement(partial);
     expect(lookups()).toEqual(["/lectionary/readings?date=2026-09-29", "/lectionary/readings?date=2026-09-29"]);
     await waitFor(() => expect(screen.getByLabelText("Occasion")).toHaveValue("Nineteenth Sunday after Pentecost"));
     expect(screen.queryByText(/^These readings are from/)).toBeNull(); // refilled for September 29
@@ -305,6 +313,16 @@ describe("lectionary status (S UX item 2)", () => {
     expect(screen.getByLabelText("Occasion")).toHaveValue("Harvest"); // typed fields are never replaced
   });
 
+  it("a 429 is a rate limit whatever its code, for the lookup and for passage text", async () => {
+    const base = fakeError(429, "too_many_requests", "Slow down.");
+    const limited = { ...base, headers: { ...base.headers, "Retry-After": "1" } };
+    const { user } = renderStep({ lookup: limited, passages: passagesRoute(() => limited) }, typedLines(["Romans 8:1"]));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Too many requests — try again in 1 s.");
+    const romans = await findRow("Romans 8:1");
+    await user.click(romans.getByRole("button", { name: "Show text: Romans 8:1" }));
+    expect(await romans.findByText("Too many requests — try again in 1 s.")).toBeInTheDocument();
+  });
+
   it("stale fields stay until Clear readings empties them", async () => {
     const { user } = renderStep({ lookup: lectionaryRoute(noReadings) }, staleDraft());
     const note = await screen.findByText(
@@ -322,6 +340,7 @@ describe("lectionary status (S UX item 2)", () => {
       screen.getByText("These readings are from Nineteenth Sunday after Pentecost (October 4, 2026), not June 2, 1850."),
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Clear readings" }));
+    expect(screen.getByLabelText("Occasion")).toHaveFocus(); // not dropped to the page with the button
     expect(screen.queryByText(/^These readings are from/)).toBeNull();
     expect(note).not.toBeInTheDocument();
     expect(screen.getByLabelText("Occasion")).toHaveValue("");
@@ -381,6 +400,7 @@ describe("reading sets and the available banner (S UX items 2 and 3)", () => {
     const easterCard = within(group).getByText(EASTER.join(" · ")).closest("label");
     expect(easterCard).toContainElement(cards[1]);
     expect(easterCard).toHaveClass("flex", "min-h-11", "cursor-pointer", "p-3");
+    expect(within(group).getByText(EASTER.join(" · "))).toHaveClass("wrap-anywhere"); // never widens the page
 
     await user.click(easterCard as HTMLLabelElement);
     expect(screen.queryByRole("alertdialog")).toBeNull(); // lectionary fields: no question
@@ -478,6 +498,66 @@ describe("reading sets and the available banner (S UX items 2 and 3)", () => {
     await waitFor(() => expect(lines).toHaveValue(OCT_11.join("\n")));
     expect(screen.queryByRole("button", { name: "Use the lectionary's readings" })).toBeNull();
     expect(probe()).toMatch(/\/lectionary\//);
+  });
+
+  it("only the banner's Keep mine remembers the date, and it hides the lectionary link too; Escape just closes (owner answers 1, 2)", async () => {
+    const { user } = renderStep({ lookup: lectionaryRoute(october) });
+    const occasion = await screen.findByLabelText("Occasion");
+    await waitFor(() => expect(occasion).toHaveValue("Nineteenth Sunday after Pentecost"));
+    fireEvent.change(screen.getByLabelText("Scripture readings"), { target: { value: "Joel 2:21-27" } });
+    fireEvent.change(screen.getByLabelText("Service date"), { target: { value: "2026-10-11" } });
+    await user.click(await screen.findByRole("button", { name: "Use them" }));
+    await screen.findByRole("alertdialog", { name: "Replace your readings?" });
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(screen.getByText("Readings for October 11, 2026 are available.")).toBeInTheDocument();
+    expect(window.sessionStorage.getItem(`wsb:readingsKeptMine:${church().id}`)).toBeNull();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Use them" })).toHaveFocus());
+
+    await user.click(screen.getByRole("button", { name: "Use them" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "Replace your readings?" });
+    await user.click(within(dialog).getByRole("button", { name: "Keep mine" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(screen.queryByText(/are available\.$/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Use the lectionary's readings" })).toBeNull();
+    expect(screen.getByLabelText("Scripture readings")).toHaveValue("Joel 2:21-27");
+    // The banner went with its button; focus lands on the status area, not the page.
+    await waitFor(() => expect(document.activeElement).toHaveAttribute("tabindex", "-1"));
+    expect(JSON.parse(window.sessionStorage.getItem(`wsb:readingsKeptMine:${church().id}`) ?? "[]")).toEqual([
+      "2026-10-11",
+    ]);
+  });
+
+  it("on a date with several sets, lines edited away from the chosen set can go back to it, asking first (owner answer 3)", async () => {
+    const { user } = renderStep({ lookup: lectionaryRoute(october) });
+    const lines = await screen.findByLabelText("Scripture readings");
+    await waitFor(() => expect(lines).toHaveValue(ISAIAH.join("\n")));
+    expect(screen.queryByRole("button", { name: "Use the lectionary's readings" })).toBeNull();
+    const group = screen.getByRole("radiogroup", { name: "This date has more than one set of readings" });
+    await user.click(within(group).getByText(EASTER.join(" · ")));
+    await waitFor(() => expect(lines).toHaveValue(EASTER.join("\n")));
+
+    fireEvent.change(lines, { target: { value: EASTER.slice(0, 2).join("\n") } });
+    await user.click(await screen.findByRole("button", { name: "Use the lectionary's readings" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "Replace your readings?" });
+    expect(dialog).toHaveAccessibleDescription(
+      "Your occasion and scripture list will be replaced with “Resurrection of the Lord” from the lectionary.",
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Replace readings" }));
+    await waitFor(() => expect(lines).toHaveValue(EASTER.join("\n")));
+    expect(screen.queryByRole("button", { name: "Use the lectionary's readings" })).toBeNull();
+    // The link went with the question; focus lands in the status area (here its checked set), not the page.
+    await waitFor(() => expect(document.activeElement).toHaveAttribute("aria-checked", "true"));
+  });
+
+  it("offers no lectionary link over empty fields, which the automatic fill handles", async () => {
+    // A hidden tab never fills, so the empty fields stay empty for the check.
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    const { lookups } = renderStep({ lookup: lectionaryRoute(october) }, setDate(testDraft(), "2026-10-11"));
+    await waitFor(() => expect(lookups()).toEqual(["/lectionary/readings?date=2026-10-11"]));
+    await waitFor(() => expect(screen.queryByText("Looking up the lectionary…")).toBeNull());
+    expect(probe()).toContain("/empty/");
+    expect(screen.queryByRole("button", { name: "Use the lectionary's readings" })).toBeNull();
   });
 
   it("an archived service keeps its fields on its own date, and is offered the readings after a date change", async () => {
@@ -667,6 +747,9 @@ describe("readings list and passage text (S UX item 6)", () => {
     const { user, api } = renderStep({ passages: passagesRoute() }, typedLines(["Mark 1:1-8", long]));
     const longRow = await findRow(long);
     // Base UI keeps a disabled trigger focusable, so it is aria-disabled rather than disabled.
+    // A long unbroken line wraps anywhere rather than widening the page.
+    expect(longRow.getByText(long)).toHaveClass("wrap-anywhere");
+    expect(within(screen.getByRole("complementary")).getByText(long)).toHaveClass("wrap-anywhere"); // the summary too
     const longToggle = longRow.getByRole("button", { name: `Show text: ${long}` });
     expect(longToggle).toHaveAttribute("aria-disabled", "true");
     await user.click(longToggle);
@@ -677,6 +760,11 @@ describe("readings list and passage text (S UX item 6)", () => {
     fireEvent.change(screen.getByLabelText("Scripture readings"), { target: { value: `Mark 1:1-11\n${long}` } });
     const edited = await findRow("Mark 1:1-11");
     expect(edited.getByRole("button", { name: "Show text: Mark 1:1-11" })).toBeInTheDocument();
+    // Typed back, the line's row stays closed: the edit forgot it was open.
+    fireEvent.change(screen.getByLabelText("Scripture readings"), { target: { value: `Mark 1:1-8\n${long}` } });
+    const retyped = await findRow("Mark 1:1-8");
+    expect(retyped.getByRole("button", { name: "Show text: Mark 1:1-8" })).toBeInTheDocument();
+    expect(retyped.queryByText("Mark 1:1-8 (web) text.")).toBeNull();
     expect(api.requests.filter((r) => r.method === "POST").map((r) => (r.body as { refs: string[] }).refs[0])).toEqual([
       "Mark 1:1-8",
     ]);

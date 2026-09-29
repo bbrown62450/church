@@ -9,11 +9,11 @@ import { MAX_LINE, MAX_READINGS } from "@/lib/draft/status";
 /** The limits live with the step status (`status.ts`), which counts a field with a message as not done. */
 export { MAX_LINE, MAX_READINGS };
 
-/** The inline messages for the raw lines (S UX item 5); blank lines are allowed and not counted. */
+/** The inline messages for the raw lines (S UX item 5); blank lines are allowed and not counted, and a line is measured trimmed. */
 export function scriptureProblems(lines: readonly string[]): string[] {
   const problems: string[] = [];
   if (lines.filter((line) => line.trim() !== "").length > MAX_READINGS) problems.push("Up to 20 readings.");
-  const long = lines.findIndex((line) => line.length > MAX_LINE);
+  const long = lines.findIndex((line) => line.trim().length > MAX_LINE);
   if (long >= 0) problems.push(`Line ${long + 1} is too long (max 200 characters).`);
   return problems;
 }

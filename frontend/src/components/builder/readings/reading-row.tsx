@@ -53,7 +53,7 @@ export function ReadingRow({
   return (
     <li className="grid gap-2 border-b py-3 last:border-b-0">
       <div className="flex flex-wrap items-start gap-2">
-        <span className="min-w-0 flex-1 break-words">{reference}</span>
+        <span className="min-w-0 flex-1 wrap-anywhere">{reference}</span>
         <span className="flex flex-wrap gap-1">
           {splitAlternatives(reference).map((alternative, i) => (
             <TestamentBadge key={`${i}:${alternative}`} testament={classify(alternative)} />
@@ -71,7 +71,7 @@ export function ReadingRow({
         >
           {action}
         </CollapsibleTrigger>
-        <CollapsibleContent className="pt-2">
+        <CollapsibleContent className="pt-2 wrap-anywhere">
           <PassageText reference={reference} translation={translation} />
         </CollapsibleContent>
       </Collapsible>

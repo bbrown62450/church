@@ -19,7 +19,7 @@ export const LIST_DELAY_MS = 400;
 /**
  * "Readings" (S UX item 6): the translation, then one row per cleaned line,
  * 400 ms behind the textarea. Open rows are keyed by their reference text, so
- * editing a line closes its row. "Show all text" opens every row that can be
+ * editing a line closes its row, and one typed back later starts closed. "Show all text" opens every row that can be
  * sent; the passage limiter keeps 3 requests in flight.
  */
 export function ReadingsList({ church }: { church: ChurchProfile }) {
@@ -29,6 +29,15 @@ export function ReadingsList({ church }: { church: ChurchProfile }) {
   const joined = useDebouncedValue(cleanScriptures(draft).join("\n"), LIST_DELAY_MS);
   const lines = joined === "" ? [] : joined.split("\n");
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set());
+  // When the lines change, forget open rows whose line is gone, during render
+  // (not in an effect), so a line typed back later starts closed and a
+  // reopened row never renders, even once, to fetch its text again.
+  const [openFor, setOpenFor] = useState(joined);
+  if (openFor !== joined) {
+    setOpenFor(joined);
+    const kept = [...open].filter((reference) => lines.includes(reference));
+    if (kept.length !== open.size) setOpen(new Set(kept));
+  }
 
   function setRow(reference: string, next: boolean) {
     setOpen((current) => {

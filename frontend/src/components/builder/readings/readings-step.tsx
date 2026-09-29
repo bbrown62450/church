@@ -33,7 +33,7 @@ export function ReadingsStep() {
   return (
     <section aria-label="Date & readings" className="grid gap-6">
       <ServiceDateField today={today} />
-      <LectionaryStatus onEnterReadings={() => occasionRef.current?.focus()} />
+      <LectionaryStatus focusOccasion={() => occasionRef.current?.focus()} />
       <OccasionField lect={lect} inputRef={occasionRef} />
       <ScriptureLinesField />
       <ReadingsList church={profile} />

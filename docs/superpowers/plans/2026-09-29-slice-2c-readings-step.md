@@ -37,7 +37,7 @@
 - `main` is protected: the `backend`, `backend-postgres` and `frontend` checks must pass and the branch must be up to date. Merge only with `gh pr merge <N> --merge -R bbrown62450/church`, only on the owner's explicit yes.
 - Commits end with a blank line and `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. When the session's attribution asks for it, a `Claude-Session: <url>` line stands immediately before that final `Co-Authored-By` line (every commit template below allows it; T13 Step 6's trailer check matches the `Co-Authored-By` line anywhere in the message, and Step 8 compares subjects only). Subjects read "Area: plain words (F §x, S …)". Use TDD: write the failing test first and quote its failure.
 - **Backup push after every task** (owner answer Q4, as in 2a and 2b): right after each task's commit, `git push origin claude/slice-2-plan-4q33le` (never `--force`; there is no open PR, so the push asks nobody; Vercel may build a preview). A fix asked for by the task's review is a new commit, `Fix: <what> (Task <n> review)`, pushed the same way (never an amend of a pushed commit); T13 Step 8 lists it. The container can restart and lose uncommitted work, so commit as soon as a task's checks pass. If the push is refused because the remote moved, stop and ask the controller.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and includes the line "Tests: frontend 299 → 347 in 49 → 55 files; backend 971 → 971 passed, 9 → 9 skipped".
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and includes the line "Tests: frontend 299 → 356 in 49 → 55 files; backend 971 → 971 passed, 9 → 9 skipped".
 - New prose for the owner has no em dashes. Code strings copied from S (for example "Too many requests — try again in N s.", "None — choose one", "Still working — this can take up to a minute.") keep theirs.
 
 ### Baselines and counts
@@ -58,6 +58,8 @@
   | T10 | +3 (`readings-step.test.tsx`) | 0 | 346 in 55 |
   | T11 | +1 (`builder-shell.test.tsx` +1; `status.test.ts` and two shell tests edited, 0) | 0 | 347 in 55 |
   | T12 | 0 | 0 | 347 in 55 |
+  | Review fixes (T1-T8) | +3 (`builder/lectionary-sync.test.tsx` +3; `builder-shell.test.tsx`, `draft/store.test.ts` and `readings-step.test.tsx` edited, 0) | 0 | 350 in 55 |
+  | Owner answers 1-3 and review fixes (T4-T10) | +6 (`readings-step.test.tsx` +4, `confirm-dialog.test.tsx` +1, `queries/lectionary.test.tsx` +1; `draft/status.test.ts` and five `readings-step.test.tsx` tests edited, 0) | 0 | 356 in 55 |
 
 - The backend stays at 971 passed, 9 skipped throughout. T12 edits one assertion in `backend/tests/test_slice1_docs.py` (the last `##` headings of `docs/manual-verification.md`); no test is added or removed. CI `backend-postgres` shows `9 passed, 971 deselected, 1 warning`.
 - The readings-step tests fake only `Date` and run the 400 ms lookup delay, the draft's 400 ms writes, the list's 400 ms trail and two 1-second rate-limit waits on real timers, so `readings-step.test.tsx` takes about 6 s. One test fakes `setTimeout` as well (the 8-second "Still working" line) and says why.
@@ -76,7 +78,7 @@
 ### Messages (verbatim, from S and F)
 - Service date: label "Service date"; help "Readings and the occasion load automatically for this date."; "Choose a service date."; "Enter a date between 1900 and 2199."; "This date has passed."; "Not a Sunday. We'll look for this day's own readings, such as Ash Wednesday, Christmas Eve or Good Friday."; button "Use next Sunday ({Month D})".
 - Lectionary: "Looking up the lectionary…"; after 8 s "Still working — this can take up to a minute."; legend "This date has more than one set of readings"; "No lectionary readings for {Weekday, Month D, YYYY}." with "Enter the occasion and readings below." and button "Enter readings"; "The lectionary couldn't be reached. Enter readings yourself, or try again in a few minutes." with "Try again"; "Too many requests — try again in N s." with "Try again", then "Try again now." once the wait has passed (owner answer D; also for passage text); "One lectionary source didn't respond, so other reading options for this date may be missing."; "These readings are from {set name} ({Month D, YYYY}), not {Month D, YYYY}." with "Clear readings".
-- Banner and dialog: "Readings for {Month D, YYYY} are available." with "Use them"; title "Replace your readings?", body "Your occasion and scripture list will be replaced with “{set name}” from the lectionary.", confirm "Replace readings", cancel "Keep mine"; on a one-set date whose lines differ from the set, the link "Use the lectionary's readings" (owner answer B).
+- Banner and dialog: "Readings for {Month D, YYYY} are available." with "Use them"; title "Replace your readings?", body "Your occasion and scripture list will be replaced with “{set name}” from the lectionary.", confirm "Replace readings", cancel "Keep mine"; when the lines differ from the date's only set or its selected set, the link "Use the lectionary's readings" (owner answers B and 3).
 - Occasion: label "Occasion"; help "Printed as the bulletin's title. Filled from the lectionary; edit if needed."; placeholder "e.g. Third Sunday of Easter"; "Too long (max 300 characters)."; captions "From the Revised Common Lectionary: {set name}", "Edited from the lectionary ({set name})", "Entered by you", "From the saved service".
 - Scripture readings: label "Scripture readings"; help "One reference per line, for example Matthew 17:1-9. Filled from the lectionary; edit if needed."; placeholder "Matthew 17:1-9"; "Up to 20 readings."; "Line {n} is too long (max 200 characters)."
 - Readings list: heading "Readings"; "Bible translation"; help "For the passage text shown here. The bulletin lists the references, not the verse text."; "Passage text shown in {label}."; "Show all text"; "Show text" / "Hide text"; badges "OT", "Psalm", "NT", "?" ("Book not recognized"); "Loading text…"; "Couldn't load {reference}."; "Part of this passage couldn't be loaded."; "Couldn't find this passage. Check the reference, for example “Matthew 17:1-9”."; "Passage text isn't available right now."; the server's 422 message "Too many passages in one request."; empty "Add a reading above to see its text and choose the bulletin readings."
@@ -104,6 +106,11 @@
   - **E.** `stepStatus` shows Date & readings "Complete" only when no field shows an error (an occasion over 300 characters, more than 20 readings, a line over 200, or a date that is empty, impossible or out of range); such a field does not count toward "n of 3". "Still needed" is unchanged (T1).
   - **F.** The date field shows "Enter a date between 1900 and 2199." only for the settled (400 ms) date, and never empties while typing: the raw input stays in component state, and an impossible date stores `""` without resetting what is on screen (T6; clarification 11).
   - **G.** Clarifications 3, 9-13 and 18 are accepted as written.
+- **Owner answers 1-3 (2026-09-29, after the T6-T11 review, "all recommended"):**
+  - **1.** On the banner's "Replace your readings?" question, only the "Keep mine" button records the date as kept (sessionStorage, the banner hidden for the session); Escape or a click outside only closes it, and the banner can show again (T8; `ConfirmDialog` gains `onCancel`, called by its cancel button only).
+  - **2.** After that "Keep mine" for a date, "Use the lectionary's readings" is also hidden for that date for the session (T8).
+  - **3.** On a date with several sets, "Use the lectionary's readings" shows when the cleaned scriptures differ from the selected set (the one chosen, or `reading_set` for this date); it applies that set at once over empty or lectionary fields and asks "Replace your readings?" over typed or archived ones, as answer B does for a one-set date (T8).
+  - **Review fixes with no owner-visible change (owner decision 1):** when the banner or link question closes, after "Clear readings" and after a "Try again" that brings an answer, focus never drops to the page (`ConfirmDialog` gains `finalFocus`; the question returns focus to what opened it or, when that is gone, to the status area, `tabIndex={-1}`, whose first control Base UI picks; "Clear readings" focuses Occasion); a lookup is rate limited when `error.status === 429`, whatever its code (also passage text), and a 429 is not asked again when the lookup mounts again (`refetchOnMount` and `retryOnMount`); a set choice or the link re-checks `fields_origin` inside the update, so fields typed meanwhile are never replaced without asking; no "Use the lectionary's readings" over empty fields (the automatic fill handles them); the long date shows only for a date in range or settled (never "…, 0020" while a year is typed); long lines wrap anywhere (`wrap-anywhere`) in the reading rows, the set cards and the summary; the readings list forgets open rows whose line is gone, so a line typed back starts closed; and the 200-character limit counts the trimmed line in the message, `stepStatus` and the row. Frontend 350 → 356 in 55 files.
 - **Carried from the 2b build notes (binding):** the automatic fill runs only in the visible tab (`document.visibilityState === "visible"`), because adopting another tab's newer draft drops up to 400 ms of this tab's unwritten typing (T5); `"readings"` joins `SHIPPED_STEPS` and the readings route renders the step instead of `StepPlaceholder` (T11); Hymns, Liturgy and Review keep "Available soon" with no link to the old app. The 5a question (an archived service edited on its own date raises the banner) stays with 5a.
 
 ### The 2c scope (S lines 5 and 7 are authoritative)
@@ -3370,7 +3377,7 @@ git push origin claude/slice-2-plan-4q33le
 
 ### Task 8: Several reading sets, the "available" banner and "Replace your readings?" (S UX items 2 and 3; F §4.6 "Never destroy typed input"; AC14, AC15; owner answer Q2; clarification 15)
 
-When a date has more than one set, a radio group ("This date has more than one set of readings") shows one card per set, keyed by index (two sets with the same name stay distinct), selected by `selectedSetIndex` (2b). Over empty or lectionary fields a choice applies at once through `chooseReadingSet` (T1), unless the date moved meanwhile; over typed or archived fields it asks "Replace your readings?" first. After typing, a changed date shows "Readings for {date} are available." (a `role="status"` callout) with "Use them" (`showAvailableBanner`, 2b), which asks the same question; "Keep mine" hides the banner for that date until the date changes. An archived service on its own date keeps its fields and shows no banner. The partial note stays.
+When a date has more than one set, a radio group ("This date has more than one set of readings") shows one card per set, keyed by index (two sets with the same name stay distinct), selected by `selectedSetIndex` (2b). Over empty or lectionary fields a choice applies at once through `chooseReadingSet` (T1), unless the date moved meanwhile; over typed or archived fields it asks "Replace your readings?" first. After typing, a changed date shows "Readings for {date} are available." (a `role="status"` callout) with "Use them" (`showAvailableBanner`, 2b), which asks the same question; "Keep mine" hides the banner for that date until the tab closes (sessionStorage, owner answer C). An archived service on its own date keeps its fields and shows no banner. The partial note stays.
 
 **Files:**
 - Create: `frontend/src/components/builder/readings/reading-set-picker.tsx`, `frontend/src/components/builder/readings/replace-readings-dialog.tsx`
@@ -5476,8 +5483,8 @@ Below, `<scratch>` is the absolute path of the session's scratchpad directory, a
 **Files:** none changed. A local or CI failure is fixed in its owning task's files (Step 14).
 
 **Interfaces:**
-- Consumes: everything from T1-T12, in particular each task's commit subject (Step 8 reads them from this plan between `### Task 1:` and `### Task 13:`), the cumulative counts (302, 309, 312, 314, 320, 325, 330, 336, 343, 346, 347, 347 after T1-T12), `SHIPPED_STEPS` (T11), and CI (`.github/workflows/ci.yml`, unchanged: `backend`, `backend-postgres`, `frontend` with lint, typecheck, `API types match the OpenAPI snapshot (F §5.4)`, test and build).
-- Produces: PR `<N>` (`claude/slice-2-plan-4q33le` → `main`), titled `Slice 2c: the Date & readings step`, not a draft after Step 13, CI green on the branch head, its body holding the line `Tests: frontend 299 → 347 in 49 → 55 files; backend 971 → 971 passed, 9 → 9 skipped` and ending with `🤖 Generated with [Claude Code](https://claude.com/claude-code)`. Later user: T14.
+- Consumes: everything from T1-T12, in particular each task's commit subject (Step 8 reads them from this plan between `### Task 1:` and `### Task 13:`), the cumulative counts (302, 309, 312, 314, 320, 325, 330, 336, 343, 346, 347, 347 after T1-T12; 350 after the T1-T8 review fixes; 356 after owner answers 1-3), `SHIPPED_STEPS` (T11), and CI (`.github/workflows/ci.yml`, unchanged: `backend`, `backend-postgres`, `frontend` with lint, typecheck, `API types match the OpenAPI snapshot (F §5.4)`, test and build).
+- Produces: PR `<N>` (`claude/slice-2-plan-4q33le` → `main`), titled `Slice 2c: the Date & readings step`, not a draft after Step 13, CI green on the branch head, its body holding the line `Tests: frontend 299 → 356 in 49 → 55 files; backend 971 → 971 passed, 9 → 9 skipped` and ending with `🤖 Generated with [Claude Code](https://claude.com/claude-code)`. Later user: T14.
 
 - [ ] **Step 1 (agent): Bring the branch up to date with `origin/main`**
 
@@ -5517,7 +5524,7 @@ for d in 8 400; do echo "clock +$d days"; (cd frontend && WSB_CLOCK_SHIFT_DAYS=$
 (cd frontend && npm run typecheck 2>&1 | tail -1 && npm run lint 2>&1 | tail -1)
 ```
 
-**Expected:** three times ` Test Files  55 passed (55)` and `      Tests  347 passed (347)` (baseline 299 in 49; after T1-T12: 302, 309, 312, 314, 320, 325, 330, 336, 343, 346, 347, 347) and no `FAIL`; then `clock +8 days` and `clock +400 days`, each followed by the same two lines and no `FAIL` (+8 days is past Sunday, October 4, 2026, the test drafts' date; +400 days is past a year end); `0`; `> tsc --noEmit` and `> eslint` with nothing after. Any other number: find the task whose count drifted. A run that fails even once is a failure (Step 14): make the test deterministic (fake only `Date`, set to `DRAFT_NOW`; await the UI with `findBy`/`waitFor`) rather than retrying it.
+**Expected:** three times ` Test Files  55 passed (55)` and `      Tests  356 passed (356)` (baseline 299 in 49; after T1-T12: 302, 309, 312, 314, 320, 325, 330, 336, 343, 346, 347, 347; then 350 after the review fixes and 356 after owner answers 1-3) and no `FAIL`; then `clock +8 days` and `clock +400 days`, each followed by the same two lines and no `FAIL` (+8 days is past Sunday, October 4, 2026, the test drafts' date; +400 days is past a year end); `0`; `> tsc --noEmit` and `> eslint` with nothing after. Any other number: find the task whose count drifted. A run that fails even once is a failure (Step 14): make the test deterministic (fake only `Date`, set to `DRAFT_NOW`; await the UI with `findBy`/`waitFor`) rather than retrying it.
 
 - [ ] **Step 3 (agent): Run the backend suite and the Postgres marker count**
 
@@ -5680,7 +5687,7 @@ git rev-list --count origin/main..HEAD
 
 Send the owner exactly this, with `<count>` filled in, and wait for a clear yes:
 
-> Slice 2c is verified locally: frontend 347 tests in 55 files, passing three runs in a row and with the clock moved 8 and 400 days ahead (299 in 49 before); typecheck, lint and the production build are clean; the backend is unchanged at 971 passed, 9 skipped (one docs test now expects the new "Slice 2" checklist heading); the API types did not change; the checks are clean (every page is a client component, no link to the old app, the screens use the query hooks, the draft goes through the storage helper only, only Date & readings is switched on); changed files (53) and commits (<count>) are as planned, and every commit is already backed up on the branch. May I open the pull request as a **draft** titled "Slice 2c: the Date & readings step", so the checks run? I will come back with the results and ask again before marking it ready. Merging stays with you (Task 14).
+> Slice 2c is verified locally: frontend 356 tests in 55 files, passing three runs in a row and with the clock moved 8 and 400 days ahead (299 in 49 before); typecheck, lint and the production build are clean; the backend is unchanged at 971 passed, 9 skipped (one docs test now expects the new "Slice 2" checklist heading); the API types did not change; the checks are clean (every page is a client component, no link to the old app, the screens use the query hooks, the draft goes through the storage helper only, only Date & readings is switched on); changed files (53) and commits (<count>) are as planned, and every commit is already backed up on the branch. May I open the pull request as a **draft** titled "Slice 2c: the Date & readings step", so the checks run? I will come back with the results and ask again before marking it ready. Merging stays with you (Task 14).
 
 Add one line per note from Steps 1-8 (a merge from `main`, a skipped font download, a `Fix:` commit, how the three Base UI components were made). A no leaves the branch as it is.
 
@@ -5699,7 +5706,7 @@ The step
 
 Owner answers (2026-09-29): no Saturday one-tap (Q1); "New service" asks after a picked date, a chosen reading set or a chosen translation (Q2); a guided phone check after the merge (Q3). The lectionary fills only in the tab on screen (2b build notes). @@COMPONENTS_LINE@@
 
-Tests: frontend 299 → 347 in 49 → 55 files; backend 971 → 971 passed, 9 → 9 skipped
+Tests: frontend 299 → 356 in 49 → 55 files; backend 971 → 971 passed, 9 → 9 skipped
 
 After merge (Task 14): a guided check on the owner's phone (about six steps) and a quick look on a computer, then a short "Slice 2c record" in docs/ops-runbook.md.
 
@@ -5711,7 +5718,7 @@ Replace `@@COMPONENTS_LINE@@` with `The radio group, collapsible and tooltip are
 
 ```bash
 grep -c '@@COMPONENTS_LINE@@' "<scratch>/slice2c-pr-body.md"
-grep -cx 'Tests: frontend 299 → 347 in 49 → 55 files; backend 971 → 971 passed, 9 → 9 skipped' "<scratch>/slice2c-pr-body.md"
+grep -cx 'Tests: frontend 299 → 356 in 49 → 55 files; backend 971 → 971 passed, 9 → 9 skipped' "<scratch>/slice2c-pr-body.md"
 git fetch origin && test "$(git rev-list --count HEAD..origin/main)" = 0 && test "$(git rev-list --count origin/claude/slice-2-plan-4q33le..HEAD)" = 0 && echo "branch is current and backed up"
 gh pr create -R bbrown62450/church --draft --base main --head claude/slice-2-plan-4q33le \
   --title "Slice 2c: the Date & readings step" \
@@ -5742,13 +5749,13 @@ RUN=$(gh run list -R bbrown62450/church --workflow ci.yml --branch claude/slice-
 RUN=$(gh run list -R bbrown62450/church --workflow ci.yml --branch claude/slice-2-plan-4q33le --commit "$(git rev-parse HEAD)" --limit 1 --json databaseId --jq '.[0].databaseId'); JOB=$(gh run view "$RUN" -R bbrown62450/church --json jobs --jq '.jobs[] | select(.name == "backend-postgres") | .databaseId'); gh run view -R bbrown62450/church --job "$JOB" --log | grep -E "pg_smoke: OK|[0-9]+ (passed|failed)"
 ```
 
-**Expected:** `run <id>`; `backend: success`, `backend-postgres: success`, `frontend: success`; frontend `Test Files  55 passed (55)`, `Tests  347 passed (347)`, `✓ Compiled successfully` and the five `/builder` route lines; backend `971 passed, 9 skipped in …s`; backend-postgres `pg_smoke: OK` and `9 passed, 971 deselected, 1 warning in …s`. If a required job failed on or after 2026-10-19, first check the runner image (`Image: ubuntu-24.04` expected; GitHub moves `ubuntu-latest` then) and report a setup failure on a new image to the owner before changing any 2c file.
+**Expected:** `run <id>`; `backend: success`, `backend-postgres: success`, `frontend: success`; frontend `Test Files  55 passed (55)`, `Tests  356 passed (356)`, `✓ Compiled successfully` and the five `/builder` route lines; backend `971 passed, 9 skipped in …s`; backend-postgres `pg_smoke: OK` and `9 passed, 971 deselected, 1 warning in …s`. If a required job failed on or after 2026-10-19, first check the runner image (`Image: ubuntu-24.04` expected; GitHub moves `ubuntu-latest` then) and report a setup failure on a new image to the owner before changing any 2c file.
 
 - [ ] **Step 13 (agent → OWNER): Report CI and ask to mark the PR ready**
 
 Send exactly this, with the values filled in, and wait for a clear yes:
 
-> PR #<N> (<url>) is green (run <run id>): frontend 347 tests in 55 files, build OK; backend 971 passed, 9 skipped; the Postgres job clean; the Vercel preview built. May I mark it ready for review? Merging stays with you (Task 14).
+> PR #<N> (<url>) is green (run <run id>): frontend 356 tests in 55 files, build OK; backend 971 passed, 9 skipped; the Postgres job clean; the Vercel preview built. May I mark it ready for review? Merging stays with you (Task 14).
 
 On the yes:
 
@@ -5782,7 +5789,7 @@ Read the failure (for CI: `gh run view <run-id> -R bbrown62450/church --log-fail
 
 For each fix: change only the owning task's files; rerun Steps 2-8; commit with the subject `Fix: <what> (Task <n>, slice 2c final verification)` and the trailer; have that task re-reviewed; push with `git push origin claude/slice-2-plan-4q33le` (a backup before Step 10; after it, covered by the owner's first yes); after Step 10, repeat Steps 11-12 and send Step 13's message with the new run. An infrastructure failure with no test output gets one `gh run rerun <run-id> -R bbrown62450/church --failed` first.
 
-Expected counts after this task: frontend `347 passed` in 55 files (CI the same); backend `971 passed, 9 skipped` (CI `backend-postgres`: `9 passed, 971 deselected, 1 warning`). No commit unless Step 14 needed a fix.
+Expected counts after this task: frontend `356 passed` in 55 files (CI the same); backend `971 passed, 9 skipped` (CI `backend-postgres`: `9 passed, 971 deselected, 1 warning`). No commit unless Step 14 needed a fix.
 
 ### Task 14: Merge and after (OWNER + agent): the merge, the deploy, a guided check on the phone and a look on a computer, the slice 2c record (S Manual checks, AC18; F §5.5; owner decisions 2, 3; owner answers Q3, Q4)
 
@@ -5809,7 +5816,7 @@ git rev-parse HEAD
 git rev-list --count HEAD..origin/main
 ```
 
-**Expected:** `OPEN draft=false MERGEABLE CLEAN <sha>` with `<sha>` equal to `git rev-parse HEAD`; `0`. If `main` moved (count not `0`, or `BEHIND`): merge it as in T13 Step 1, rerun T13 Steps 2-3 (`347 passed` in 55 files, plus any tests the merge brought; `971 passed, 9 skipped`), push with the owner's yes, wait for green checks, and run this step again. `BLOCKED`: a required check is not green; fix it (T13 Step 14). Never merge with `--admin`.
+**Expected:** `OPEN draft=false MERGEABLE CLEAN <sha>` with `<sha>` equal to `git rev-parse HEAD`; `0`. If `main` moved (count not `0`, or `BEHIND`): merge it as in T13 Step 1, rerun T13 Steps 2-3 (`356 passed` in 55 files, plus any tests the merge brought; `971 passed, 9 skipped`), push with the owner's yes, wait for green checks, and run this step again. `BLOCKED`: a required check is not green; fix it (T13 Step 14). Never merge with `--admin`.
 
 - [ ] **Step 2 (agent → OWNER): Ask to merge, then merge**
 
@@ -5981,7 +5988,7 @@ gh pr checks claude/revert-slice-2c -R bbrown62450/church --watch
 
 **Expected:** Vitest `Test Files  49 passed (49)`, `Tests  299 passed (299)` (if anything else merged after 2c, it differs by exactly those tests); `971 passed, 9 skipped`; every check passes. Merge on the owner's yes, then the owner checks that the site signs in and shows the builder with "Available soon". Record the revert as a row of the slice 2c record (or its own records PR if Step 12 already merged).
 
-Expected counts after this task: frontend `347 passed` in 55 files on `main`; backend `971 passed, 9 skipped` (CI `backend-postgres`: `9 passed, 971 deselected, 1 warning`). The records PR adds no test.
+Expected counts after this task: frontend `356 passed` in 55 files on `main`; backend `971 passed, 9 skipped` (CI `backend-postgres`: `9 passed, 971 deselected, 1 warning`). The records PR adds no test.
 
 ---
 

@@ -1,5 +1,7 @@
 "use client";
 
+import type { AlertDialog as AlertDialogPrimitive } from "@base-ui/react/alert-dialog";
+
 import { PendingButton } from "@/components/app/pending-button";
 import {
   AlertDialog,
@@ -24,6 +26,14 @@ export type ConfirmDialogProps = {
   /** While true the confirm button is a disabled "Saving…"; the caller closes the dialog on success. */
   pending?: boolean;
   destructive?: boolean;
+  /** Called by the cancel button only; Escape and a click outside just close. */
+  onCancel?(): void;
+  /**
+   * Where focus goes when the dialog closes (Base UI `finalFocus`): pass one
+   * when the element that opened it may be gone by then, so focus never
+   * drops to the page.
+   */
+  finalFocus?: AlertDialogPrimitive.Popup.Props["finalFocus"];
 };
 
 /**
@@ -41,16 +51,18 @@ export function ConfirmDialog({
   onConfirm,
   pending = false,
   destructive = false,
+  onCancel,
+  finalFocus,
 }: ConfirmDialogProps) {
   return (
     <AlertDialog open={open} onOpenChange={(next) => onOpenChange(next)}>
-      <AlertDialogContent>
+      <AlertDialogContent {...(finalFocus === undefined ? {} : { finalFocus })}>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           {description ? <AlertDialogDescription>{description}</AlertDialogDescription> : null}
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>{cancelLabel}</AlertDialogCancel>
+          <AlertDialogCancel onClick={onCancel ? () => onCancel() : undefined}>{cancelLabel}</AlertDialogCancel>
           <PendingButton
             pending={pending}
             variant={destructive ? "destructive" : "default"}

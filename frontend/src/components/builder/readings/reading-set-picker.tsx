@@ -34,9 +34,9 @@ export function ReadingSetPicker({
             className="flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border p-3 has-data-checked:border-primary"
           >
             <RadioGroupItem value={String(index)} className="mt-0.5" />
-            <span className="grid min-w-0 gap-0.5">
+            <span className="grid min-w-0 gap-0.5 wrap-anywhere">
               <span className="text-sm font-medium">{set.name}</span>
-              <span className="text-sm break-words text-muted-foreground">{set.scriptures.join(" · ")}</span>
+              <span className="text-sm wrap-anywhere text-muted-foreground">{set.scriptures.join(" · ")}</span>
             </span>
           </label>
         ))}

@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { ConfirmDialog } from "./confirm-dialog";
@@ -78,5 +78,52 @@ describe("ConfirmDialog", () => {
     expect(within(dialog).queryByRole("button", { name: "Cancel" })).toBeNull();
     await user.click(within(dialog).getByRole("button", { name: "Keep mine" }));
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("calls onCancel for the cancel button only, never for Escape, and focuses finalFocus when it closes", async () => {
+    const user = userEvent.setup();
+    const onCancel = vi.fn();
+    function Harness() {
+      const [open, setOpen] = useState(true);
+      const after = useRef<HTMLDivElement>(null);
+      return (
+        <>
+          <button type="button" onClick={() => setOpen(true)}>
+            Ask again
+          </button>
+          <div ref={after} tabIndex={-1} data-testid="after" />
+          <ConfirmDialog
+            open={open}
+            onOpenChange={setOpen}
+            title="Replace your readings?"
+            confirmLabel="Replace readings"
+            cancelLabel="Keep mine"
+            onCancel={onCancel}
+            onConfirm={() => setOpen(false)}
+            finalFocus={after}
+          />
+        </>
+      );
+    }
+    render(<Harness />);
+    await screen.findByRole("alertdialog", { name: "Replace your readings?" });
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(onCancel).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByTestId("after")).toHaveFocus());
+
+    await user.click(screen.getByRole("button", { name: "Ask again" }));
+    let dialog = await screen.findByRole("alertdialog", { name: "Replace your readings?" });
+    await user.click(within(dialog).getByRole("button", { name: "Keep mine" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.getByTestId("after")).toHaveFocus());
+
+    await user.click(screen.getByRole("button", { name: "Ask again" }));
+    dialog = await screen.findByRole("alertdialog", { name: "Replace your readings?" });
+    await user.click(within(dialog).getByRole("button", { name: "Replace readings" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    await waitFor(() => expect(screen.getByTestId("after")).toHaveFocus());
+    expect(onCancel).toHaveBeenCalledTimes(1);
   });
 });

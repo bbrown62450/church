@@ -38,7 +38,7 @@ function TryAgain({
  */
 export function PassageText({ reference, translation }: { reference: string; translation: string }) {
   const query = usePassage(reference, translation, true);
-  const limited = query.error?.code === "rate_limited" ? query.error : null;
+  const limited = query.error?.status === 429 ? query.error : null;
   const waitOver = useWaitOver(limited);
   const retry = () => void query.refetch();
 

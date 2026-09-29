@@ -79,6 +79,10 @@ describe("stepStatus (F §4.7)", () => {
     expect(stepStatus(editScriptureLines(full, lines(21)), "readings", READINGS)).toEqual(twoOf3);
     expect(stepStatus(editScriptureLines(full, lines(20)), "readings", READINGS)).toEqual({ kind: "complete" });
     expect(stepStatus(editScriptureLines(full, `Mark 1:1\n${"y".repeat(201)}`), "readings", READINGS)).toEqual(twoOf3);
+    // The limit counts the trimmed line, as the row and the message do.
+    expect(stepStatus(editScriptureLines(full, `Mark 1:1\n  ${"y".repeat(200)}  `), "readings", READINGS)).toEqual({
+      kind: "complete",
+    });
   });
 
   it("counts filled hymn slots and enabled liturgy cards with text once those steps ship", () => {

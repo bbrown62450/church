@@ -28,7 +28,9 @@ import { setDate } from "@/lib/draft/readings";
  * was typed, even when it stores "" (a fifth year digit), so it never
  * empties under the user's fingers; it shows the draft's date again when the
  * date changes elsewhere ("Use next Sunday", another tab, "New service"). The
- * range message waits until the date has settled (the lookup's 400 ms).
+ * range message waits until the date has settled (the lookup's 400 ms), and
+ * so does the long date for a year outside the range, so a year half typed
+ * never shows "…, 0020".
  */
 export function ServiceDateField({ today }: { today: string }) {
   const { draft, update } = useDraft();
@@ -68,7 +70,7 @@ export function ServiceDateField({ today }: { today: string }) {
         }}
         className="h-11 w-full sm:w-56"
       />
-      {valid ? <p className="font-medium">{formatLongDate(iso)}</p> : null}
+      {inRange || (valid && settled) ? <p className="font-medium">{formatLongDate(iso)}</p> : null}
       {problem ? (
         <p id="service-date-problem" className="text-sm text-destructive">
           {problem}

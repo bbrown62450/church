@@ -1,7 +1,7 @@
 "use client";
 
 import { InfoIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 
 import { ErrorState } from "@/components/app/error-state";
 import { useLectionaryLookup } from "@/components/builder/lectionary-sync";
@@ -13,6 +13,7 @@ import type { Lectionary } from "@/lib/api/types";
 import { useChurch } from "@/lib/church-context";
 import { formatLongDate, formatServiceDate, isValidDateIso } from "@/lib/dates";
 import { useDraft } from "@/lib/draft/context";
+import type { DraftV1 } from "@/lib/draft/schema";
 import {
   applyReadingSet,
   chooseReadingSet,
@@ -70,8 +71,9 @@ function RateLimited({ error, onRetry, retrying }: { error: ApiError; onRetry: (
 /**
  * "These readings are from …" with "Clear readings" (S UX item 2, stale
  * fields). Without a valid date to name, the sentence stops after the set.
+ * Clearing moves focus to Occasion, since the button goes with the note.
  */
-function StaleFields() {
+function StaleFields({ focusOccasion }: { focusOccasion: () => void }) {
   const { draft, update } = useDraft();
   const set = draft.readings.reading_set;
   if (!readingsStale(draft) || !set) return null;
@@ -84,7 +86,15 @@ function StaleFields() {
           ? `These readings are from ${from}, not ${formatServiceDate(dateIso)}.`
           : `These readings are from ${from}.`}
       </p>
-      <Button type="button" variant="outline" size="touch" onClick={() => update(clearReadings)}>
+      <Button
+        type="button"
+        variant="outline"
+        size="touch"
+        onClick={() => {
+          update(clearReadings);
+          focusOccasion();
+        }}
+      >
         Clear readings
       </Button>
     </div>
@@ -105,32 +115,60 @@ function readKeptMine(churchId: string): string[] {
   }
 }
 
+function sameLines(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((line, i) => scriptureKey(line) === scriptureKey(b[i]));
+}
+
+/** Fields a lectionary set may replace without asking. */
+function replaceable(d: DraftV1): boolean {
+  return d.readings.fields_origin === "empty" || d.readings.fields_origin === "lectionary";
+}
+
+type Asking = { index: number; from: "switcher" | "banner" | "link" };
+
 /**
  * This date's sets (S UX items 2 and 3): the switcher when there are several,
- * the partial note, the "Readings … are available" banner and, on a date with
- * one set whose lines differ from the draft's, "Use the lectionary's
- * readings" (owner answer B). A set chosen over empty or lectionary fields
- * applies at once; over typed or archived fields it asks first. The banner's
- * "Keep mine" hides it for that date until the tab closes (sessionStorage, not
- * the draft; owner answer C); "Keep mine" in the switcher's or the one-set
- * link's question only closes it.
+ * the partial note, the "Readings … are available" banner and "Use the
+ * lectionary's readings" when the cleaned lines differ from the date's set
+ * (its only set, or the one chosen; owner answers B and 3). A set chosen
+ * over empty or lectionary fields applies at once; over typed or archived
+ * fields it asks first. The check is made again inside the update, so fields
+ * typed meanwhile (in another tab) are never replaced without asking.
+ *
+ * Only the banner question's "Keep mine" button hides the banner and the link
+ * for that date until the tab closes (sessionStorage, not the draft; owner
+ * answers C, 1 and 2); Escape, a click outside and the other questions' "Keep
+ * mine" only close. The link waits while the fields are empty, since the
+ * automatic fill takes care of them. When a question closes, focus goes back
+ * to what opened it or, when that has gone (the banner, the link), to the
+ * status area (Base UI focuses its first control, such as the checked set,
+ * else the area itself).
  */
-function ReadingSets({ lect }: { lect: Lectionary }) {
+function ReadingSets({ lect, statusRef }: { lect: Lectionary; statusRef: RefObject<HTMLDivElement | null> }) {
   const church = useChurch();
   const { draft, update } = useDraft();
-  const [asking, setAsking] = useState<{ index: number; from: "switcher" | "banner" | "link" } | null>(null);
+  const [asking, setAsking] = useState<Asking | null>(null);
+  const opener = useRef<HTMLElement | null>(null);
   const [keptMine, setKeptMine] = useState<string[]>(() => readKeptMine(church.id));
   const dateIso = draft.readings.date_iso;
+  const kept = keptMine.includes(dateIso);
   const selected = selectedSetIndex(draft, lect);
-  const banner = !keptMine.includes(dateIso) && showAvailableBanner(draft, lect);
+  const banner = !kept && showAvailableBanner(draft, lect);
   const origin = draft.readings.fields_origin;
-  const lines = cleanScriptures(draft);
-  const only = lect.reading_sets.length === 1 ? lect.reading_sets[0] : null;
-  const offerOnly =
-    only !== null &&
+  const target = lect.reading_sets.length === 1 ? 0 : selected;
+  const targetSet = target === null ? undefined : lect.reading_sets[target];
+  const offerSet =
+    target !== null &&
+    targetSet !== undefined &&
+    origin !== "empty" &&
     !banner &&
-    (only.scriptures.length !== lines.length ||
-      only.scriptures.some((line, i) => scriptureKey(line) !== scriptureKey(lines[i])));
+    !kept &&
+    !sameLines(targetSet.scriptures, cleanScriptures(draft));
+
+  function ask(next: Asking) {
+    opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setAsking(next);
+  }
 
   function keepMine() {
     const next = [...readKeptMine(church.id).filter((date) => date !== dateIso), dateIso].slice(-50);
@@ -138,17 +176,19 @@ function ReadingSets({ lect }: { lect: Lectionary }) {
     setKeptMine(next);
   }
 
-  function applyOnly() {
+  function applyTarget() {
+    if (target === null) return;
     if (origin === "empty" || origin === "lectionary") {
-      update((d) => (d.readings.date_iso !== lect.date ? d : applyReadingSet(d, lect, 0)));
-    } else setAsking({ index: 0, from: "link" });
+      update((d) => (d.readings.date_iso !== lect.date || !replaceable(d) ? d : applyReadingSet(d, lect, target)));
+    } else ask({ index: target, from: "link" });
   }
 
   function choose(index: number) {
     if (origin === "empty" || origin === "lectionary") {
-      // Like replace(): a choice that lands after the date moved does nothing.
-      update((d) => (d.readings.date_iso !== lect.date ? d : chooseReadingSet(d, lect, index)));
-    } else setAsking({ index, from: "switcher" });
+      // Like replace(): a choice that lands after the date moved, or after
+      // fields were typed, does nothing.
+      update((d) => (d.readings.date_iso !== lect.date || !replaceable(d) ? d : chooseReadingSet(d, lect, index)));
+    } else ask({ index, from: "switcher" });
   }
 
   function replace() {
@@ -169,9 +209,9 @@ function ReadingSets({ lect }: { lect: Lectionary }) {
           One lectionary source didn&apos;t respond, so other reading options for this date may be missing.
         </p>
       ) : null}
-      {offerOnly ? (
+      {offerSet ? (
         <div>
-          <Button type="button" variant="link" className="h-11 px-0" onClick={applyOnly}>
+          <Button type="button" variant="link" className="h-11 px-0" onClick={applyTarget}>
             Use the lectionary&apos;s readings
           </Button>
         </div>
@@ -186,7 +226,7 @@ function ReadingSets({ lect }: { lect: Lectionary }) {
               variant="outline"
               size="touch"
               className="mt-2"
-              onClick={() => setAsking({ index: selected ?? lect.default_index ?? 0, from: "banner" })}
+              onClick={() => ask({ index: selected ?? lect.default_index ?? 0, from: "banner" })}
             >
               Use them
             </Button>
@@ -196,10 +236,11 @@ function ReadingSets({ lect }: { lect: Lectionary }) {
       <ReplaceReadingsDialog
         setName={asking ? (lect.reading_sets[asking.index]?.name ?? null) : null}
         onConfirm={replace}
-        onKeep={() => {
+        onKeepMine={() => {
           if (asking?.from === "banner") keepMine();
-          setAsking(null);
         }}
+        onClose={() => setAsking(null)}
+        finalFocus={() => (opener.current?.isConnected ? opener.current : (statusRef.current ?? true))}
       />
     </div>
   );
@@ -211,58 +252,101 @@ function ReadingSets({ lect }: { lect: Lectionary }) {
  * directly under the date, plus the partial note and the stale-fields note.
  * For a date the lookup refuses only the stale-fields note can show (the date
  * field explains the date). Focus never moves on its own; "Enter readings"
- * moves it to Occasion.
+ * and "Clear readings" move it to Occasion, and a "Try again" that brings an
+ * answer moves it to this area (`tabIndex={-1}`), since the button is gone.
  */
-export function LectionaryStatus({ onEnterReadings }: { onEnterReadings: () => void }) {
+export function LectionaryStatus({ focusOccasion }: { focusOccasion: () => void }) {
   const { draft } = useDraft();
   const { lookupDate, settled, query } = useLectionaryLookup();
-  if (!canLookUp(draft.readings.date_iso)) return <StaleFields />;
-  const retry = () => void query.refetch();
+  const statusRef = useRef<HTMLDivElement>(null);
+  const focusOnAnswer = useRef(false);
+  const answered = query.isSuccess && !query.isFetching;
+  const failed = query.isError && !query.isFetching;
 
-  if (!settled || query.isPending) return <Loading lookupDate={draft.readings.date_iso} />;
+  useEffect(() => {
+    if (!focusOnAnswer.current || (!answered && !failed)) return;
+    focusOnAnswer.current = false;
+    // Only when focus went down with the button; never away from where the user is.
+    if (answered && (document.activeElement === null || document.activeElement === document.body)) {
+      statusRef.current?.focus();
+    }
+  }, [answered, failed]);
+
+  const retry = () => {
+    focusOnAnswer.current = true;
+    void query.refetch();
+  };
+
+  return (
+    <div ref={statusRef} tabIndex={-1} className="grid gap-3 outline-none empty:hidden">
+      <StatusContent
+        lookupDate={lookupDate}
+        settled={settled}
+        query={query}
+        retry={retry}
+        statusRef={statusRef}
+        focusOccasion={focusOccasion}
+        dateIso={draft.readings.date_iso}
+      />
+    </div>
+  );
+}
+
+function StatusContent({
+  lookupDate,
+  settled,
+  query,
+  retry,
+  statusRef,
+  focusOccasion,
+  dateIso,
+}: ReturnType<typeof useLectionaryLookup> & {
+  retry: () => void;
+  statusRef: RefObject<HTMLDivElement | null>;
+  focusOccasion: () => void;
+  dateIso: string;
+}) {
+  if (!canLookUp(dateIso)) return <StaleFields focusOccasion={focusOccasion} />;
+  if (!settled || query.isPending) return <Loading lookupDate={dateIso} />;
 
   // An answer already on screen wins over a failed background refetch.
   const lect = query.data;
   if (lect === undefined) {
-    if (query.error?.code === "rate_limited") {
-      return (
-        <div className="grid gap-3">
-          <RateLimited error={query.error} onRetry={retry} retrying={query.isFetching} />
-          <StaleFields />
-        </div>
-      );
-    }
     return (
-      <div className="grid gap-3">
-        <ErrorState
-          error={query.error}
-          message={LECTIONARY_UNAVAILABLE}
-          retryLabel="Try again"
-          retrying={query.isFetching}
-          onRetry={retry}
-        />
-        <StaleFields />
-      </div>
+      <>
+        {query.error?.status === 429 ? (
+          <RateLimited error={query.error} onRetry={retry} retrying={query.isFetching} />
+        ) : (
+          <ErrorState
+            error={query.error}
+            message={LECTIONARY_UNAVAILABLE}
+            retryLabel="Try again"
+            retrying={query.isFetching}
+            onRetry={retry}
+          />
+        )}
+        <StaleFields focusOccasion={focusOccasion} />
+      </>
     );
   }
 
   if (lect.status === "no_readings" || lect.reading_sets.length === 0) {
     return (
-      <div className="grid gap-3">
+      <>
         <Alert role="status">
           <InfoIcon aria-hidden="true" />
           <AlertTitle>No lectionary readings for {formatLongDate(lookupDate)}.</AlertTitle>
           <AlertDescription>
             <p>Enter the occasion and readings below.</p>
-            <Button type="button" variant="outline" size="touch" className="mt-2" onClick={onEnterReadings}>
+            <Button type="button" variant="outline" size="touch" className="mt-2" onClick={focusOccasion}>
               Enter readings
             </Button>
           </AlertDescription>
         </Alert>
-        <StaleFields />
-      </div>
+        <StaleFields focusOccasion={focusOccasion} />
+      </>
     );
   }
 
-  return <ReadingSets lect={lect} />;
+  return <ReadingSets lect={lect} statusRef={statusRef} />;
 }

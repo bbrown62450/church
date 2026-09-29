@@ -50,7 +50,7 @@ export function SummaryPanel({ shipped = SHIPPED_STEPS, onNavigate }: { shipped?
     <div className="grid gap-4">
       <Block title="Date" step="readings" onNavigate={onNavigate}>
         <p className="text-foreground">{formatLongDate(draft.readings.date_iso) || "No service date"}</p>
-        {readingsShipped ? <p>{draft.readings.occasion.trim() || "No occasion yet"}</p> : null}
+        {readingsShipped ? <p className="wrap-anywhere">{draft.readings.occasion.trim() || "No occasion yet"}</p> : null}
       </Block>
       <Block title="Readings" step="readings" onNavigate={onNavigate}>
         {!readingsShipped ? (
@@ -60,8 +60,8 @@ export function SummaryPanel({ shipped = SHIPPED_STEPS, onNavigate }: { shipped?
         ) : (
           <ul className="grid gap-1">
             {lines.map((line, i) => (
-              <li key={`${i}:${line}`} className="flex flex-wrap items-center gap-1.5 break-words text-foreground">
-                <span className="min-w-0 break-words">{line}</span>
+              <li key={`${i}:${line}`} className="flex flex-wrap items-center gap-1.5 wrap-anywhere text-foreground">
+                <span className="min-w-0 wrap-anywhere">{line}</span>
                 {holds(line, picks.ot) ? <Badge variant="secondary">{picks.otAuto ? "OT (auto)" : "OT"}</Badge> : null}
                 {holds(line, picks.nt) ? <Badge variant="secondary">{picks.ntAuto ? "NT (auto)" : "NT"}</Badge> : null}
               </li>

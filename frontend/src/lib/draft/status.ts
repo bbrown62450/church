@@ -20,7 +20,10 @@ function counted(done: number, total: number): StepStatus {
   return done === total ? { kind: "complete" } : { kind: "incomplete", done, total };
 }
 
-/** Date & readings' field limits (S UX items 4 and 5); the step shows a message past each. */
+/**
+ * Date & readings' field limits (S UX items 4 and 5); the step shows a message
+ * past each. A scripture line is measured trimmed, as its row sends it.
+ */
 export const OCCASION_MAX = 300;
 export const MAX_READINGS = 20;
 export const MAX_LINE = 200;
@@ -51,7 +54,7 @@ export function stepStatus(
     const scripturesOk =
       cleanLines(r.scriptures).length > 0 &&
       r.scriptures.filter((line) => line.trim() !== "").length <= MAX_READINGS &&
-      r.scriptures.every((line) => line.length <= MAX_LINE);
+      r.scriptures.every((line) => line.trim().length <= MAX_LINE);
     const done = [hasServiceDate(draft), r.occasion.trim() !== "" && r.occasion.length <= OCCASION_MAX, scripturesOk];
     return counted(done.filter(Boolean).length, 3);
   }
