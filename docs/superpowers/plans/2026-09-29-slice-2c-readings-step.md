@@ -20,6 +20,7 @@
   - The build container reaches registry.npmjs.org and raw.githubusercontent.com (checked 2026-09-29) but not ui.shadcn.com (`CONNECT tunnel failed, response 403`), Railway or the reading sites. No test needs the network.
   - Every task's code below was written and run by the plan's writer in a throwaway worktree at `0f6fcbc` (hard-linked `node_modules`, `cp -al`). Then T1-T12 were replayed mechanically from this document onto two further clean worktrees at `0f6fcbc` (every "Create", "Replace" and "Append" block, each import-block replacement and each edit script, in order): after each task the suite gave exactly the count in the table below with typecheck and lint clean, each "see them fail" step printed the output quoted in it (timings shown as `<t>`), and the two replays produced the same tree. On the replayed tree the full suite ran three times at `347 passed` in 55 files, and with the real clock moved 0, 8 and 400 days forward, with no `act` warnings; `next build` compiled and listed the five builder routes; `npm run gen:api` changed nothing; T13's gates and T12's checks gave their stated outputs; the backend suite stayed at `971 passed, 9 skipped`. Not run while planning: a successful `shadcn add` (the registry is blocked; T4 records the failure message), the pushes and CI (T13), and the OWNER steps (T14).
   - After the plan review (2026-09-29, the "Plan: slice 2c review fixes and owner answers" commit), T1-T12 were replayed again the same way onto a clean worktree at `0f6fcbc`: every task gave the count in the table, typecheck and lint stayed clean, and the replayed `frontend/src` was identical to the tree the fixes were written in; the full suite passed at `347 passed` in 55 files three times, including with the real clock moved 8 and 400 days forward, with no `act` warnings, and `next build` compiled and listed the five builder routes. The review's changes are clarifications 7, 8, 10, 13-15 and 21, the accepted translation case in clarification 2, the test rule in "Code rules", and the review questions at the end.
+  - After the owner's review answers A-G (2026-09-29, the "Plan: slice 2c owner answers A-G" commit), T1-T12 were replayed again from this document onto a clean worktree at `0f6fcbc`: every task gave the count in the table (T1 302, T5 320, T8 336, T9 343, T10 346, T11 347), each "see them fail" step printed the output quoted in it, typecheck and lint stayed clean, and T12's checks gave their stated outputs; the full suite passed at `347 passed` in 55 files three times and with the real clock moved 8 and 400 days forward, with no `act` warnings, and `next build` compiled and listed the five builder routes. The answers add one test (T8's "Use the lectionary's readings", answer B, so T8-T12 end one higher than before); the rest are assertions in existing tests (T1's `stepStatus`, roll-forward and "New service" cases, answers A and E; T6's date field, F; T7's and T9's "Try again now.", D; T8's "Keep mine", C).
   - Where S and the code or F disagreed, the code and F won; each case is a numbered clarification below.
 
 ## Global Constraints
@@ -74,8 +75,8 @@
 
 ### Messages (verbatim, from S and F)
 - Service date: label "Service date"; help "Readings and the occasion load automatically for this date."; "Choose a service date."; "Enter a date between 1900 and 2199."; "This date has passed."; "Not a Sunday. We'll look for this day's own readings, such as Ash Wednesday, Christmas Eve or Good Friday."; button "Use next Sunday ({Month D})".
-- Lectionary: "Looking up the lectionary…"; after 8 s "Still working — this can take up to a minute."; legend "This date has more than one set of readings"; "No lectionary readings for {Weekday, Month D, YYYY}." with "Enter the occasion and readings below." and button "Enter readings"; "The lectionary couldn't be reached. Enter readings yourself, or try again in a few minutes." with "Try again"; "Too many requests — try again in N s." with "Try again"; "One lectionary source didn't respond, so other reading options for this date may be missing."; "These readings are from {set name} ({Month D, YYYY}), not {Month D, YYYY}." with "Clear readings".
-- Banner and dialog: "Readings for {Month D, YYYY} are available." with "Use them"; title "Replace your readings?", body "Your occasion and scripture list will be replaced with “{set name}” from the lectionary.", confirm "Replace readings", cancel "Keep mine".
+- Lectionary: "Looking up the lectionary…"; after 8 s "Still working — this can take up to a minute."; legend "This date has more than one set of readings"; "No lectionary readings for {Weekday, Month D, YYYY}." with "Enter the occasion and readings below." and button "Enter readings"; "The lectionary couldn't be reached. Enter readings yourself, or try again in a few minutes." with "Try again"; "Too many requests — try again in N s." with "Try again", then "Try again now." once the wait has passed (owner answer D; also for passage text); "One lectionary source didn't respond, so other reading options for this date may be missing."; "These readings are from {set name} ({Month D, YYYY}), not {Month D, YYYY}." with "Clear readings".
+- Banner and dialog: "Readings for {Month D, YYYY} are available." with "Use them"; title "Replace your readings?", body "Your occasion and scripture list will be replaced with “{set name}” from the lectionary.", confirm "Replace readings", cancel "Keep mine"; on a one-set date whose lines differ from the set, the link "Use the lectionary's readings" (owner answer B).
 - Occasion: label "Occasion"; help "Printed as the bulletin's title. Filled from the lectionary; edit if needed."; placeholder "e.g. Third Sunday of Easter"; "Too long (max 300 characters)."; captions "From the Revised Common Lectionary: {set name}", "Edited from the lectionary ({set name})", "Entered by you", "From the saved service".
 - Scripture readings: label "Scripture readings"; help "One reference per line, for example Matthew 17:1-9. Filled from the lectionary; edit if needed."; placeholder "Matthew 17:1-9"; "Up to 20 readings."; "Line {n} is too long (max 200 characters)."
 - Readings list: heading "Readings"; "Bible translation"; help "For the passage text shown here. The bulletin lists the references, not the verse text."; "Passage text shown in {label}."; "Show all text"; "Show text" / "Hide text"; badges "OT", "Psalm", "NT", "?" ("Book not recognized"); "Loading text…"; "Couldn't load {reference}."; "Part of this passage couldn't be loaded."; "Couldn't find this passage. Check the reference, for example “Matthew 17:1-9”."; "Passage text isn't available right now."; the server's 422 message "Too many passages in one request."; empty "Add a reading above to see its text and choose the bulletin readings."
@@ -92,7 +93,7 @@
 
 ### Owner answers (2026-09-29, binding for the plan)
 - **Q1: no Saturday vigil one-tap.** A Saturday service date falls back to manual entry like any date without readings. S open question 2 is closed as "no" (T12 notes it in S; clarification 3).
-- **Q2: "New service" asks when the member has done any of three things:** picked a date (`date_origin: "user"`), chosen a reading set, or chosen a translation (`readings.translation` not null). The exact rule (clarification 2): `isPristine` also requires `date_origin !== "user"` and `translation === null`, and choosing a set in the switcher (`chooseReadingSet`) makes a `default` date the user's, so a chosen set counts without a new draft field. The mount-time roll-forward still requires a pristine draft whose `date_origin` is `default`, so it now also keeps the date of a draft with a translation override (T1 tests it). T12 notes the rule in S and F as "(2c plan)".
+- **Q2: "New service" asks when the member has done any of three things:** picked a date (`date_origin: "user"`), chosen a reading set, or chosen a translation (`readings.translation` not null). The exact rule (clarification 2): `isPristine` also requires `date_origin !== "user"` and `translation === null`, and choosing a set in the switcher (`chooseReadingSet`) makes a `default` date the user's, so a chosen set counts without a new draft field. The mount-time roll-forward still requires a pristine draft whose `date_origin` is `default`, so it now also keeps the date of a draft with a chosen set; a translation override alone does not hold the date back (review answer A; T1 tests both). T12 notes the rule in S and F as "(2c plan)".
 - **Q3: after the merge, a guided owner check on the phone of about six steps, then a quick look on a computer, given one step at a time:** next Sunday fills; a date with two sets; a weekday with no readings; typing your own reading; opening Bible text; choosing the bulletin readings (with "New service"). S requires the checklist in `docs/manual-verification.md` (its "Manual checks" heading says "append to"), so T12 appends "## Slice 2" and updates `backend/tests/test_slice1_docs.py`, which pins that file's last `##` headings (P2b clarification 29).
 - **Q4: same process as 2a and 2b.** Subagent-driven, one task at a time with review, a backup push after each task, one PR; the owner is asked before the PR is opened, before it is marked ready, and before it is merged. The standing permission (owner decision 1) carries over.
 - **Review answers (2026-09-29, "all recommended"):**
@@ -379,17 +380,19 @@ PYEOF
 **Expected:**
 
 ```
-⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
  FAIL  |unit| src/lib/draft/readings.test.ts > readings transitions (S readings.ts) > chooseReadingSet applies the chosen set and makes a default date the user's (owner answer Q2)
 TypeError: (0 , chooseReadingSet) is not a function
+ FAIL  |unit| src/lib/draft/status.test.ts > stepStatus (F §4.7) > counts the readings: a valid date, an occasion and a scripture ("2 of 3")
+AssertionError: expected { kind: 'complete' } to deeply equal { kind: 'incomplete', done: 2, …(1) }
  FAIL  |unit| src/lib/draft/status.test.ts > isPristine (S status.ts) > is false once anything the user would lose is there
 TypeError: (0 , chooseReadingSet) is not a function
- FAIL  |unit| src/lib/draft/store.test.ts > DraftStore roll-forward and owner answer Q2 > keeps a passed default date when a reading set was chosen or a translation picked
+ FAIL  |unit| src/lib/draft/store.test.ts > DraftStore roll-forward and owner answers Q2 and A > keeps a passed default date when a reading set was chosen, and rolls one with only a translation picked
 TypeError: (0 , chooseReadingSet) is not a function
-      Tests  3 failed | 27 passed (30)
+      Tests  4 failed | 26 passed (30)
 ```
 
-- [ ] **Step 4 (agent): Write `chooseReadingSet` and the new `isPristine` rule**
+- [ ] **Step 4 (agent): Write `chooseReadingSet`, the new `isPristine` and `stepStatus` rules, the roll-forward and "New service"**
 
 Run this edit script from the repo root:
 
@@ -3605,9 +3608,10 @@ describe("reading sets and the available banner (S UX items 2 and 3)", () => {
    × reading sets and the available banner (S UX items 2 and 3) > shows one card per set, keyed by index, and choosing another applies it and makes the date the user's <t>ms
    × reading sets and the available banner (S UX items 2 and 3) > asks before a set replaces typed readings: Keep mine keeps them, Replace readings replaces them <t>ms
    × reading sets and the available banner (S UX items 2 and 3) > after typing, a new date shows the banner instead of replacing; Use them asks, then replaces <t>ms
-   × reading sets and the available banner (S UX items 2 and 3) > deleting the Psalm line of this date's set raises no banner; Keep mine hides it until the date changes <t>ms
+   × reading sets and the available banner (S UX items 2 and 3) > deleting the Psalm line of this date's set raises no banner; Keep mine hides it for that date for the session <t>ms
+   × reading sets and the available banner (S UX items 2 and 3) > on a one-set date, edited readings can go back to the lectionary's, asking first (owner answer B) <t>ms
    × reading sets and the available banner (S UX items 2 and 3) > an archived service keeps its fields on its own date, and is offered the readings after a date change <t>ms
-⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
       Tests  6 failed | 10 passed (16)
 ```
 
@@ -6037,10 +6041,10 @@ S = `docs/superpowers/specs/2026-09-25-slice-2-readings-design.md`; F = foundati
 
 The owner's answers of 2026-09-29 (Q1-Q4, and review answers A-G) are binding and already in the plan. These plan choices are visible to the owner; each had a recommendation, and the owner accepted them as recommended (review answer G for clarifications 3, 9-13 and 18).
 
-1. **What makes "New service" ask (clarification 2).** Picking a date, choosing a reading set in the switcher, or choosing a translation other than the church's. "Use next Sunday" counts as putting the default back, so it does not make it ask. Such a draft also keeps its date after that Sunday passes, showing "This date has passed." instead of moving on. Recommended: as written.
-2. **The rate-limit message shows a fixed number** ("Too many requests — try again in 12 s."), and "Try again" turns on after that many seconds, rather than a live countdown (clarification 9). Recommended: as written.
+1. **What makes "New service" ask (clarification 2).** Picking a date, choosing a reading set in the switcher, or choosing a translation other than the church's. "Use next Sunday" counts as putting the default back, so it does not make it ask. A draft with a picked date or a chosen set also keeps its date after that Sunday passes, showing "This date has passed." instead of moving on; a translation alone does not hold the date back, and "New service" keeps it (review answer A). Recommended: as written.
+2. **The rate-limit message shows a fixed number** ("Too many requests — try again in 12 s."), and "Try again" turns on after that many seconds, rather than a live countdown; once the wait has passed the text reads "Try again now." (clarification 9; review answer D). Recommended: as written.
 3. **Just after a refresh**, before the lectionary answers, an edited occasion's caption reads "Edited from the lectionary" without the set's name for a moment (clarification 10). Recommended: accept.
-4. **The date picker stays within 1900-2199**; a typed year outside still gets its message (clarification 11). Recommended: accept.
+4. **The date picker stays within 1900-2199**; a typed year outside still gets its message once the date has settled, and the field keeps what was typed (clarification 11; review answer F). Recommended: accept.
 5. **Only the first too-long scripture line is named** ("Line 3 is too long (max 200 characters)."), not every one (clarification 12). Recommended: accept.
 6. **On a phone the unknown-book badge shows only "?"**: tooltips do not open on a tap, though screen readers say "Book not recognized" (clarification 13). Recommended: accept; a tap-to-explain could come later.
 7. **Screens 2b built now include Date & readings** (clarification 18): the step bar counts it, Review lists "No occasion — Add one" and similar rows when something is missing, and the summary shows the occasion and the readings with OT and NT marks. Recommended: as written (this is what 2b's owner answer Q1 deferred to 2c).
