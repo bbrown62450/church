@@ -45,8 +45,15 @@ export function migrate(
   while (version < target) {
     const step = table[version];
     if (!step) throw new DraftRestoreError(`No migration from version ${version}.`);
+    let next: unknown;
+    try {
+      next = step(draft);
+    } catch {
+      throw new DraftRestoreError(`Migration from version ${version} failed.`);
+    }
+    if (!isRecord(next)) throw new DraftRestoreError(`Migration from version ${version} returned no object.`);
     version += 1;
-    draft = { ...step(draft), version };
+    draft = { ...next, version };
   }
   return draft;
 }

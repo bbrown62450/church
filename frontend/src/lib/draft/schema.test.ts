@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { nextSunday, todayIn } from "@/lib/dates";
 import { churchProfile, testDraft, USER_ID } from "@/test/fixtures";
 
-import { corruptDraftKey, draftKey, draftV1Schema, DRAFT_VERSION, freshDraft, SECTION_KEYS } from "./schema";
+import { churchZone, corruptDraftKey, draftKey, draftV1Schema, DRAFT_VERSION, freshDraft, SECTION_KEYS } from "./schema";
 
 describe("draft schema and freshDraft (F §4.6)", () => {
   it("a fresh draft is dated next Sunday with every field empty and the F §4.6 defaults", () => {
@@ -58,6 +58,7 @@ describe("draft schema and freshDraft (F §4.6)", () => {
     );
     const invalid = churchProfile({ timezone: "Eastern", timezone_valid: false });
     expect(freshDraft({ church: invalid, user, now }).readings.date_iso).toBe(nextSunday(todayIn(undefined, now)));
+    expect(churchZone(churchProfile({ timezone_valid: false }))).toBeUndefined();
     const later = new Date(Date.UTC(2026, 9, 6, 16, 0)); // Tuesday October 6 → Sunday October 11
     expect(freshDraft({ church: churchProfile(), user, now: later }).liturgy.include_communion).toBe(false);
   });
@@ -74,6 +75,8 @@ describe("draft schema and freshDraft (F §4.6)", () => {
       { ...d, version: 2 },
       { ...d, readings: { ...d.readings, fields_origin: "typed" } },
       { ...d, liturgy: { ...d.liturgy, cards: { ...d.liturgy.cards, benediction: undefined } } },
+      { ...d, updated_at: "not a time" },
+      { ...d, created_at: "" },
     ]) {
       expect(draftV1Schema.safeParse(bad).success).toBe(false);
     }

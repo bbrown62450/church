@@ -52,5 +52,13 @@ describe("draft migrate and parseStoredDraft (F §4.6 Versioning)", () => {
     expect(seen).toEqual([1, 2]);
     expect(migrate({ version: 3 }, table, 3)).toEqual({ version: 3 });
     expect(() => migrate({ version: 1 }, { 2: table[2] }, 3)).toThrow(DraftRestoreError);
+    // A migration that throws, or returns no object, is a restore error too.
+    const broken: Record<number, Migration> = {
+      1: () => {
+        throw new TypeError("boom");
+      },
+    };
+    expect(() => migrate({ version: 1 }, broken, 2)).toThrow(DraftRestoreError);
+    expect(() => migrate({ version: 1 }, { 1: () => null as never }, 2)).toThrow(DraftRestoreError);
   });
 });

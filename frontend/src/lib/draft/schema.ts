@@ -32,6 +32,8 @@ export const SECTION_KEYS = [
 export type SectionKey = (typeof SECTION_KEYS)[number];
 
 const text = z.string().max(20_000);
+// Timestamps must parse, so prune and cross-tab adoption can compare them (owner decision 1).
+const timestamp = z.iso.datetime({ offset: true });
 const dateIso = text.refine(isValidDateIso, "Not a YYYY-MM-DD date.");
 const dateIsoOrEmpty = text.refine((s) => s === "" || isValidDateIso(s), "Not a YYYY-MM-DD date.");
 
@@ -58,8 +60,8 @@ export const draftV1Schema = z.object({
   version: z.literal(DRAFT_VERSION),
   user_id: text,
   church_id: text,
-  created_at: text,
-  updated_at: text,
+  created_at: timestamp,
+  updated_at: timestamp,
   last_step: z.enum(STEP_IDS),
   save_key: text,
   editing: z.object({ service_id: text, saved_at: text }).nullable(),
