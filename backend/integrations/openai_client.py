@@ -21,6 +21,7 @@ No FastAPI, no Streamlit (tests/test_no_streamlit_in_core.py).
 from __future__ import annotations
 
 import logging
+import math
 import os
 import re
 import threading
@@ -49,7 +50,7 @@ CONNECT_TIMEOUT_SECONDS = 5.0
 
 @dataclass(frozen=True)
 class AISettings:
-    api_key: str = ""
+    api_key: str = field(default="", repr=False)   # never in a repr, traceback or diff
     model: str = ""
     timeout_seconds: float = 30.0
     max_retries: int = 1
@@ -77,7 +78,7 @@ def _number(environ: Mapping[str, str], name: str, default, cast, minimum):
         value = cast(raw)
     except ValueError:
         value = None
-    if value is None or value < minimum:
+    if value is None or (isinstance(value, float) and not math.isfinite(value)) or value < minimum:
         logger.warning("AI: %s=%r is not valid; using %s", name, raw, default)
         return default
     return value
@@ -288,6 +289,10 @@ def _mapped(exc: BaseException, model: str) -> Exception:
     return UpstreamError(UPSTREAM_MESSAGE, code="ai_upstream_error")
 
 
+class _NoChoices(Exception):
+    """A reply with no choices: the upstream's fault, mapped to ai_upstream_error."""
+
+
 def _attempt(state: _State, messages, max_completion_tokens: int, json_mode: bool,
              timeout: float) -> str:
     settings = state.settings
@@ -309,7 +314,11 @@ def _attempt(state: _State, messages, max_completion_tokens: int, json_mode: boo
     logger.info("ai_call model=%s duration_ms=%d prompt_tokens=%s completion_tokens=%s outcome=ok",
                 settings.model, round((state.clock() - started) * 1000),
                 getattr(usage, "prompt_tokens", "-"), getattr(usage, "completion_tokens", "-"))
-    return response.choices[0].message.content or ""
+    choices = getattr(response, "choices", None)
+    if not choices:
+        raise _NoChoices()
+    # "" is possible (an empty answer); callers treat it as unusable.
+    return choices[0].message.content or ""
 
 
 def _complete(state: _State, messages, max_completion_tokens: int, json_mode: bool,
@@ -331,9 +340,13 @@ def _complete(state: _State, messages, max_completion_tokens: int, json_mode: bo
             remaining = _remaining(state, deadline)
             timeout = settings.timeout_seconds if remaining is None else min(settings.timeout_seconds, remaining)
             if timeout <= 0:
+                logger.warning("ai_call model=%s outcome=ai_timeout (no time left)", settings.model)
                 raise UpstreamTimeout(TIMEOUT_MESSAGE, code="ai_timeout")
             try:
                 return _attempt(state, messages, max_completion_tokens, json_mode, timeout)
+            except _NoChoices:
+                logger.warning("ai_call model=%s outcome=ai_upstream_error error=no_choices", settings.model)
+                raise UpstreamError(UPSTREAM_MESSAGE, code="ai_upstream_error") from None
             except openai.OpenAIError as exc:
                 mapped_later = retries >= settings.max_retries or not _retryable(exc)
                 backoff = 0.0 if mapped_later else _backoff(exc)

@@ -102,6 +102,11 @@ def test_settings_defaults_overrides_and_bad_values(caplog):
     assert (bad.timeout_seconds, bad.max_retries, bad.max_concurrency, bad.temperature) == (
         30.0, 1, 4, None)
     assert caplog.text.count("is not valid") == 4
+    # Non-finite numbers are not valid either, and the key never shows in the settings' repr.
+    odd = ai.load_settings({"OPENAI_API_KEY": "sk-SECRET", "OPENAI_TIMEOUT_SECONDS": "nan",
+                            "OPENAI_TEMPERATURE": "inf"})
+    assert (odd.timeout_seconds, odd.temperature) == (30.0, None)
+    assert "sk-SECRET" not in repr(odd)
 
 
 def test_reasoning_effort_is_read_only_when_set(caplog):
@@ -272,6 +277,13 @@ def test_every_sdk_error_class_maps_to_its_code():
         assert (caught.value.code, caught.value.message) == (code, message), kind
         assert "upstream said" not in caught.value.message            # never the SDK's text
 
+    # A reply with no choices is the upstream's fault, not a 500.
+    sdk, _ = setup(max_retries=0)
+    sdk.chat.completions.create = lambda **kwargs: SimpleNamespace(choices=[], usage=None)
+    with pytest.raises(UpstreamError) as caught:
+        ai.complete(MESSAGES, max_completion_tokens=10)
+    assert caught.value.code == "ai_upstream_error"
+
 
 def test_api_timeout_error_is_ai_timeout_not_its_base_class():
     # APITimeoutError subclasses APIConnectionError, which maps to ai_upstream_error.
@@ -347,6 +359,15 @@ def test_the_deadline_shrinks_each_attempt_and_skips_a_late_retry():
     with pytest.raises(UpstreamError):
         ai.complete(MESSAGES, max_completion_tokens=10, deadline=clock.now() + 12.0)
     assert sleeps == []                                          # 4 s - 1 s backoff < 5 s: no retry
+
+
+def test_a_deadline_already_passed_times_out_with_one_log_line(caplog):
+    clock = FakeClock()
+    sdk, _ = setup('{"ok": true}', clock=clock.now)
+    with pytest.raises(UpstreamTimeout):
+        ai.complete(MESSAGES, max_completion_tokens=10, deadline=clock.now() - 1.0)
+    assert sdk.calls == []
+    assert "outcome=ai_timeout" in caplog.text
 
 
 def test_the_slot_wait_is_bounded_by_the_deadline():
