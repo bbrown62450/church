@@ -20,6 +20,7 @@
   - The build container reaches registry.npmjs.org, PyPI and raw.githubusercontent.com, but not ui.shadcn.com, Railway, OpenAI, Supabase or the reading sites. No test needs the network.
   - Every task's code below was written and run by the plan's writer in a throwaway worktree at `b47abba` (hard-linked `node_modules`, `cp -al`; `.venv` linked), one commit per task, with every stated count, every "see them fail" output and typecheck and lint observed. Not run while planning: a successful `shadcn add` (the registry is blocked; T7 records the failure), the pushes and CI (T14), and the OWNER steps (T1, T15).
   - Where S and the code or F disagreed, the code and F won unless an owner answer says otherwise; each case is a numbered clarification below.
+  - When the plan was finished (second session, 2026-09-29), T2-T13 were replayed mechanically from this document onto a clean worktree at `b47abba` (every script in order, T13's checklist appended): after each task the tree was identical to the tree the code was written in, the suite gave exactly the count in the table with typecheck and lint clean, and each "see them fail" step printed the output quoted in it (timings as `<t>`, paths as `<repo>`). On that tree the full suite also passed at `421 passed` in 64 files with the real clock moved 8 and 400 days forward, with no `act` warnings; `next build` compiled and listed the five builder routes; the backend stayed at `1110 passed, 11 skipped`.
 
 ## Global Constraints
 
@@ -35,7 +36,7 @@
 - `main` is protected: the `backend`, `backend-postgres` and `frontend` checks must pass and the branch must be up to date. Merge only with `gh pr merge <N> --merge -R bbrown62450/church`, only on the owner's explicit yes.
 - Commits end with a blank line and `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`; when the session's attribution asks for it, a `Claude-Session: <url>` line stands immediately before or after that line (T14's trailer check matches the `Co-Authored-By` line anywhere in the message, and its commit-list check compares subjects only). Subjects read "Area: plain words (S …, owner answer …)". Use TDD: write the failing test first and quote its failure.
 - **Backup push after every task** (standing rule, as in 2a-3a): the controller pushes the working branch after each task's commit and review with `git push origin claude/slice-2-plan-4q33le` (never `--force`; there is no open PR, so the push asks nobody; Vercel may build a preview). A fix asked for by a task's review is a new commit, `Fix: <what> (Task <n> review)`, pushed the same way, never an amend of a pushed commit; T14 lists it. The container can restart and lose uncommitted work, so commit as soon as a task's checks pass. If the push is refused because the remote moved, stop and ask the controller.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and includes the line given in T14 ("Tests: frontend 356 → … ; backend 1106 → … passed, 11 → 11 skipped").
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and includes the line given in T14 ("Tests: frontend 356 → 421 in 55 → 64 files; backend 1106 → 1110 passed, 11 → 11 skipped").
 - New prose for the owner has no em dashes and no flattery, and leads with the point. Copy quoted from S keeps its own punctuation (for example "Too many requests — try again in {n} s.", "After the sermon — responds to the scripture (NT reading)", "Still working — this can take up to a minute.", "No Opening hymn — Choose one", the Hymnary credit).
 - Ask the owner before any push to a PR, PR creation, marking ready, merging, or any production or settings action. The build of T2-T13 does not wait for T1's owner steps.
 
@@ -493,6 +494,7 @@ PYEOF
 **Expected:**
 
 ```
+ImportError while importing test module '<repo>/backend/tests/test_lectionary_domain.py'.
 E   ImportError: cannot import name 'church_season' from 'vanderbilt_lectionary' (<repo>/backend/vanderbilt_lectionary.py)
 1 error in <t>s
 FAILED backend/tests/test_hymn_suggest.py::test_the_prompt_names_the_season_and_asks_to_avoid_other_seasons
@@ -1113,6 +1115,8 @@ Error: Cannot find module './hymnal' imported from '<repo>/frontend/src/lib/hymn
  Test Files  1 failed (1)
       Tests  no tests
 ```
+
+(`<repo>` is the checkout's absolute path; the "Cannot find module" line is followed by a "Caused by:" line the grep also prints.)
 
 - [ ] **Step 4 (agent): Write the types, `picks.ts` and `hymnal.ts`**
 
@@ -2300,6 +2304,7 @@ PYEOF
 ```
  FAIL  |dom| src/lib/queries/hymns.test.tsx [ src/lib/queries/hymns.test.tsx ]
 Error: Failed to resolve import "./hymns" from "src/lib/queries/hymns.test.tsx". Does the file exist?
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
  FAIL  |unit| src/lib/queries/keys.test.ts > keys > starts every church-scoped key with ['church', id]
 TypeError: keys.hymnMatches is not a function
  Test Files  2 failed (2)
