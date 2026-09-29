@@ -39,7 +39,7 @@
   `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
   `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`
 - Commit subjects read "Area: plain words (F §x, S ...)". Use TDD: write the failing test first and quote its failure.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`. It includes the line "Tests: backend 971 → 1101 passed, 9 → 11 skipped; frontend 356 → 356 in 55 files".
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`. It includes the line "Tests: backend 971 → 1103 passed, 9 → 11 skipped; frontend 356 → 356 in 55 files".
 - **The container restarts** (2a, 2b and 2c build notes): uncommitted work can be lost. Commit as soon as a task's checks pass, and after each task's review back the branch up with `git push origin claude/slice-2-plan-4q33le` (owner answer Q5: standing permission for backup pushes, as in slice 2). If `frontend/node_modules` is gone after a restart, `(cd frontend && npm ci)`.
 - **The network is filtered.** OpenAI, hymnary.org, lectio-api.org, Vanderbilt, bible-api.com and Railway are not reachable from the build container; the npm registry and PyPI are. No test may need the network: the AI is `FakeAI` or a fake SDK client, and the NT fetch is patched.
 - **Grep gates exclude tests** and are judged, not obeyed blindly: a hit may be a comment or a test asserting absence. Read the line, and if it is harmless say why in the task's report.
@@ -6375,7 +6375,7 @@ def finalize_slots(resolved: Mapping[str, list], current_picks: Mapping[str, Opt
 git status --short
 ```
 
-**Expected:** `24 passed in <t>s`; `1095 passed, 11 skipped in <t>s`; then ` M backend/hymn_suggest.py` and ` M backend/tests/test_hymn_suggest.py`.
+**Expected:** `24 passed in <t>s`; `1097 passed, 11 skipped in <t>s`; then ` M backend/hymn_suggest.py` and ` M backend/tests/test_hymn_suggest.py`.
 
 - [ ] **Step 6 (agent): Commit**
 
@@ -6399,7 +6399,7 @@ git log --oneline -1
 
 Walk S step 9 items 1-4 against `finalize_slots`, the PREFERENCES line against `worship_service.py:545-551` (still on the branch until Task 14), and clarification 15's mapping against the tests present. Push the backup.
 
-Counts after Task 12: backend **1095 passed, 11 skipped**; frontend **356 in 55 files**.
+Counts after Task 12: backend **1097 passed, 11 skipped**; frontend **356 in 55 files**.
 
 ### Task 13: `POST /hymns/suggestions` (S API row 4, Models, Backend 3.6-3.8, 4, 6; F §1.8; Testing `test_api_hymn_suggestions.py`, "Isolation and roles", "Rate limit", "Rubric"; owner decision 3; owner answer Q1; AC4-AC8, AC11, AC18-AC20; clarifications 7, 10, 19, 21)
 
@@ -6432,7 +6432,7 @@ This task adds the suggestion usecase and route. `suggest_hymns` sets its 75 s d
 .venv/bin/python -c "import sys; sys.path.insert(0, 'backend'); from api import ratelimit as r; print(r.BUCKETS['ai'])"
 ```
 
-**Expected:** `1095 passed, 11 skipped in <t>s`; `(Rule(scope='user', capacity=40, per_seconds=600), Rule(scope='church', capacity=400, per_seconds=86400))`.
+**Expected:** `1097 passed, 11 skipped in <t>s`; `(Rule(scope='user', capacity=40, per_seconds=600), Rule(scope='church', capacity=400, per_seconds=86400))`.
 
 - [ ] **Step 2 (agent): Write the failing tests**
 
@@ -7319,7 +7319,7 @@ git diff --numstat -- frontend/src/lib/api
 git status --short
 ```
 
-**Expected:** `52 passed, 1 skipped in <t>s` (the hung-fetch test takes about 0.05 s; the whole file runs in a few seconds); numstat exactly `441	0	frontend/src/lib/api/openapi.json` and `207	0	frontend/src/lib/api/schema.d.ts`; `tsc` prints nothing; `1113 passed, 11 skipped in <t>s`; then ` M` for `backend/api/routes/hymns.py`, `backend/tests/conftest.py`, `backend/tests/test_api_app.py`, `backend/tests/test_no_streamlit_in_core.py`, `backend/usecases/hymns.py`, the two generated files, and `?? backend/tests/test_api_hymn_suggestions.py`.
+**Expected:** `52 passed, 1 skipped in <t>s` (the hung-fetch test takes about 0.05 s; the whole file runs in a few seconds); numstat exactly `441	0	frontend/src/lib/api/openapi.json` and `207	0	frontend/src/lib/api/schema.d.ts`; `tsc` prints nothing; `1115 passed, 11 skipped in <t>s`; then ` M` for `backend/api/routes/hymns.py`, `backend/tests/conftest.py`, `backend/tests/test_api_app.py`, `backend/tests/test_no_streamlit_in_core.py`, `backend/usecases/hymns.py`, the two generated files, and `?? backend/tests/test_api_hymn_suggestions.py`.
 
 - [ ] **Step 6 (agent): Run the threaded tests three times**
 
@@ -7327,7 +7327,7 @@ git status --short
 for i in 1 2 3; do .venv/bin/python -m pytest -q backend/tests/test_api_hymn_suggestions.py backend/tests/test_openai_client.py 2>&1 | tail -1; done
 ```
 
-**Expected:** `41 passed in <t>s`, three times. A failure even once is a failure (CI runs each test once).
+**Expected:** `42 passed in <t>s`, three times. A failure even once is a failure (CI runs each test once).
 
 - [ ] **Step 7 (agent): Commit**
 
@@ -7354,7 +7354,7 @@ git log --oneline -1
 
 Walk S 3.6 steps 0-10 against `suggest_hymns` (the order of the 422s and the 503, the read session closed before `_nt_context`, the deadline passed to `complete`), the error table in S API against `test_ai_errors_return_their_code_and_exact_message`, and S 3.7's worst case (75 s deadline; the client leaves about 14 s of the 90 s client timeout). Push the backup.
 
-Counts after Task 13: backend **1113 passed, 11 skipped**; frontend **356 in 55 files**.
+Counts after Task 13: backend **1115 passed, 11 skipped**; frontend **356 in 55 files**.
 
 ### Task 14: Delete the Streamlit-era hymn code and `lxml` (S Backend 1 row `worship_service.py`, `requirements.txt`, 5 "Streamlit coupling removed"; F §2.3; AC9, AC19; owner decision 2; clarifications 14, 15)
 
@@ -7377,7 +7377,7 @@ Everything the old hymn code did now lives in `hymn_search`, `hymn_suggest`, `hy
 grep -rnE "hymns_by_scripture|suggest_hymns_for_service|hymn_display_info|resolve_hymnary_audio_url|_hymnary_audio_url" --include=*.py backend streamlit_tests streamlit_views app.py ui_helpers.py | grep -v "^backend/worship_service.py"
 ```
 
-**Expected:** `1113 passed, 11 skipped in <t>s`; then exactly these hits, and nothing else:
+**Expected:** `1115 passed, 11 skipped in <t>s`; then exactly these hits, and nothing else:
 - `app.py:24`, `:25`, `:26` (the three imported names) and `app.py:690`, `:707`, `:769` (their calls): frozen Streamlit's copy on `main`, which no test imports and which stops importing after this task (owner decision 2);
 - `backend/hymn_ranking.py:31` (a docstring naming `hymn_display_info`; this task rewords it);
 - `backend/tests/test_hymn_suggest.py:7` (a docstring);
@@ -7585,7 +7585,7 @@ grep -n "lxml" backend/requirements.txt
 git status --short
 ```
 
-**Expected:** `15 passed in <t>s` (3 in the parity file and `test_generate_liturgy.py`'s 12, unchanged); the three greps print nothing (clarification 14: `NotionHymnsDB` remains only in the migration-only CLIs); `1101 passed, 11 skipped in <t>s` (1113 + 1 − 13); then ` M backend/hymn_ranking.py`, ` M backend/requirements.txt`, ` M backend/tests/test_hymn_match_parity.py`, `D  backend/tests/test_suggest_hymns.py`, ` M backend/worship_service.py`.
+**Expected:** `15 passed in <t>s` (3 in the parity file and `test_generate_liturgy.py`'s 12, unchanged); the three greps print nothing (clarification 14: `NotionHymnsDB` remains only in the migration-only CLIs); `1103 passed, 11 skipped in <t>s` (1115 + 1 − 13); then ` M backend/hymn_ranking.py`, ` M backend/requirements.txt`, ` M backend/tests/test_hymn_match_parity.py`, `D  backend/tests/test_suggest_hymns.py`, ` M backend/worship_service.py`.
 
 - [ ] **Step 6 (agent): Commit**
 
@@ -7609,7 +7609,7 @@ git log --oneline -1
 
 Read `git show --stat HEAD` (5 files, about 830 lines deleted) and check that `generate_liturgy`'s tests still pass and clarification 15's mapping holds. Push the backup.
 
-Counts after Task 14: backend **1101 passed, 11 skipped**; frontend **356 in 55 files**.
+Counts after Task 14: backend **1103 passed, 11 skipped**; frontend **356 in 55 files**.
 
 ### Task 15: Docs: F's decision D16 and amendment rows, S's "(3a plan)" notes and answers, the runbook's OpenAI rows (S open questions 1 and 2; F Decisions, Amendments, §1.3; owner answers Q1-Q3, A, B; clarifications 1-4, 8, 26, 27, 30)
 
@@ -7846,7 +7846,7 @@ git diff --stat
 .venv/bin/python -m pytest -q | tail -1
 ```
 
-**Expected:** `89 passed in <t>s`; `4`; three files, 18 insertions and 9 deletions; `1101 passed, 11 skipped in <t>s`.
+**Expected:** `89 passed in <t>s`; `4`; three files, 18 insertions and 9 deletions; `1103 passed, 11 skipped in <t>s`.
 
 - [ ] **Step 4 (agent): Commit**
 
@@ -7873,7 +7873,7 @@ git log --oneline -1
 
 Read the three diffs: no em dash in new prose outside quoted spec copy, D16's wording matches owner answer Q1, and the follow-up says the first-lines source is unverified. Push the backup.
 
-Counts after Task 15: backend **1101 passed, 11 skipped**; frontend **356 in 55 files**.
+Counts after Task 15: backend **1103 passed, 11 skipped**; frontend **356 in 55 files**.
 
 ### Task 16: Whole-branch verification and the slice 3a pull request (owner's yes before the PR is opened and before it is marked ready) (S Testing, AC1-AC9, AC16, AC18-AC20; F §2.2, §2.5, §5.4; owner decisions 2, 4; owner answers Q3-Q5, D)
 
@@ -7902,7 +7902,7 @@ git log --oneline origin/main..HEAD | tail -1
 for i in 1 2 3; do .venv/bin/python -m pytest -q backend/tests/test_api_hymn_suggestions.py backend/tests/test_openai_client.py backend/tests/test_usecase_passages.py 2>&1 | tail -1; done
 ```
 
-**Expected:** `1101 passed, 11 skipped in <t>s`; `11 skipped, 1101 deselected in <t>s` (no `TEST_DATABASE_URL` here; nine earlier Postgres tests plus Task 7's and Task 9's); `<n> passed in <t>s` three times with no failure. If a local throwaway Postgres is available, `TEST_DATABASE_URL=postgresql://postgres:<password>@localhost:5432/postgres .venv/bin/python -m pytest -q -m postgres` gives `11 passed, 1101 deselected, 1 warning`.
+**Expected:** `1103 passed, 11 skipped in <t>s`; `11 skipped, 1103 deselected in <t>s` (no `TEST_DATABASE_URL` here; nine earlier Postgres tests plus Task 7's and Task 9's); `<n> passed in <t>s` three times with no failure. If a local throwaway Postgres is available, `TEST_DATABASE_URL=postgresql://postgres:<password>@localhost:5432/postgres .venv/bin/python -m pytest -q -m postgres` gives `11 passed, 1103 deselected, 1 warning`.
 
 - [ ] **Step 3 (agent): Frontend tests, types, lint and build**
 
@@ -7960,7 +7960,7 @@ git log --reverse --format=%s origin/main..HEAD
 
 - [ ] **Step 8 (agent): Ask the owner to open the pull request**
 
-Tell the owner, in one message: "Slice 3a (the hymns backend) is ready for a pull request: four new church-scoped routes (hymnals, hymns, scripture matches, AI suggestions), two new fields on the church profile, the OpenAI client, and the old Streamlit-era hymn code removed. Nothing changes on screen, there is no database change, and liturgy-frozen is not affected. Tests: backend 971 → 1101 passed, 9 → 11 skipped; frontend 356 → 356. The scripture sample is <still the made-up (synthetic) one, so before I ask to mark the PR ready I will walk you through exporting your real one / your export of <date>, <rate> parsed>. May I open the pull request as a draft so CI runs?"
+Tell the owner, in one message: "Slice 3a (the hymns backend) is ready for a pull request: four new church-scoped routes (hymnals, hymns, scripture matches, AI suggestions), two new fields on the church profile, the OpenAI client, and the old Streamlit-era hymn code removed. Nothing changes on screen, there is no database change, and liturgy-frozen is not affected. Tests: backend 971 → 1103 passed, 9 → 11 skipped; frontend 356 → 356. The scripture sample is <still the made-up (synthetic) one, so before I ask to mark the PR ready I will walk you through exporting your real one / your export of <date>, <rate> parsed>. May I open the pull request as a draft so CI runs?"
 
 - [ ] **Step 9 (agent, on the owner's yes): Open the draft PR**
 
@@ -7977,7 +7977,7 @@ Write `<scratch>/slice3a-pr-body.md` first. While the sample is synthetic, its f
 > **Scripture sample: SYNTHETIC.** The 98 % parse test (AC3) currently runs on 100 hand-written rows in Hymnary.org's shape, not on production data. This PR stays a draft until the owner's read-only export of `hymn_catalog` replaces `backend/tests/hymn_fixtures/scripture_refs_sample.csv` and passes the 98 % check (owner answer D; plan Task 16 Step 11).
 ```
 
-(When the export has already been swapped in, the first line instead reads `> **Scripture sample: EXPORTED on <date>**, <rows> rows, <rate> of segments parsed.`) Then: a summary (the Goal paragraph in plain words); the four routes and the two `/church` fields; the owner answers Q1-Q4 and A-D and where each landed; the owner-visible clarifications (1, 2, 9, 26) and the model recommendation with its fallbacks (UNVERIFIED, confirmed in Task 17); the scripture sample line (synthetic, or the export's date, row count and parse rate); the owner's `hymn_usage.date_iso` length counts from Task 4 Step 1 (or "not run"); the line `Tests: backend 971 → 1101 passed, 9 → 11 skipped; frontend 356 → 356 in 55 files`; "No migration; production stays at 0004_invites_reusable. After the merge the owner sets OPENAI_API_KEY and OPENAI_MODEL on Railway (Task 17)."; then `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS` on the last lines.
+(When the export has already been swapped in, the first line instead reads `> **Scripture sample: EXPORTED on <date>**, <rows> rows, <rate> of segments parsed.`) Then: a summary (the Goal paragraph in plain words); the four routes and the two `/church` fields; the owner answers Q1-Q4 and A-D and where each landed; the owner-visible clarifications (1, 2, 9, 26) and the model recommendation with its fallbacks (UNVERIFIED, confirmed in Task 17); the scripture sample line (synthetic, or the export's date, row count and parse rate); the owner's `hymn_usage.date_iso` length counts from Task 4 Step 1 (or "not run"); the line `Tests: backend 971 → 1103 passed, 9 → 11 skipped; frontend 356 → 356 in 55 files`; "No migration; production stays at 0004_invites_reusable. After the merge the owner sets OPENAI_API_KEY and OPENAI_MODEL on Railway (Task 17)."; then `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS` on the last lines.
 
 **Expected:** the push prints `Everything up-to-date` or the new commits; `gh` prints the PR URL. Record `<N>`.
 
@@ -7988,7 +7988,7 @@ gh pr checks <N> -R bbrown62450/church --watch
 gh run view $(gh run list --branch claude/slice-2-plan-4q33le --workflow ci --limit 1 -R bbrown62450/church --json databaseId --jq '.[0].databaseId') -R bbrown62450/church --log | grep -E '[0-9]+ passed' | sed -E 's/^.*Z //'
 ```
 
-**Expected:** `backend`, `backend-postgres`, `frontend` and the Vercel preview pass; the log lines include `1101 passed, 11 skipped` (`backend`), `11 passed, 1101 deselected, 1 warning` (`backend-postgres`) and `Tests  356 passed (356)` (`frontend`). A CI-only failure is fixed in the owning task's files, pushed on the standing backup permission, and this step reruns.
+**Expected:** `backend`, `backend-postgres`, `frontend` and the Vercel preview pass; the log lines include `1103 passed, 11 skipped` (`backend`), `11 passed, 1103 deselected, 1 warning` (`backend-postgres`) and `Tests  356 passed (356)` (`frontend`). A CI-only failure is fixed in the owning task's files, pushed on the standing backup permission, and this step reruns.
 
 - [ ] **Step 11 (agent + OWNER): The owner's scripture export gates "ready" (owner answer D)**
 
@@ -8003,7 +8003,7 @@ Then run Task 4 Step 10. If the rate is at least 0.98 and `test_scripture_refs_p
 
 - [ ] **Step 12 (agent): Ask, then mark ready**
 
-Tell the owner: "PR #<N> is green on CI (backend 1101 passed, 11 skipped; Postgres 11 passed; frontend 356), and the scripture test passes on your real export (<rate> of <segments> references read). May I mark it ready for review?" On the yes:
+Tell the owner: "PR #<N> is green on CI (backend 1103 passed, 11 skipped; Postgres 11 passed; frontend 356), and the scripture test passes on your real export (<rate> of <segments> references read). May I mark it ready for review?" On the yes:
 
 ```bash
 gh pr ready <N> -R bbrown62450/church
@@ -8142,7 +8142,7 @@ On a branch `claude/slice-3a-records` from `origin/main`, insert `### Slice 3a r
 
 Use this only if the release cannot serve or breaks the church pages (for example `GET /church` failing) and a fix would take too long. No database step: 3a adds no revision and writes nothing. On the owner's yes for each outward action: `git switch -c claude/revert-slice-3a origin/main`, `git revert -m 1 <merge sha>` (commit with the two trailer lines), run both suites (expected `971 passed, 9 skipped`, and 356 frontend tests), push, open a PR titled "Revert slice 3a", wait for green, merge on the yes. The OpenAI variables can stay on Railway; the reverted code does not read them. Record the revert in the slice 3a record.
 
-Expected counts after this task: backend `1101 passed, 11 skipped` on `main` (CI `backend-postgres`: `11 passed, 1101 deselected, 1 warning`); frontend `356 passed` in 55 files. The records PR adds no test.
+Expected counts after this task: backend `1103 passed, 11 skipped` on `main` (CI `backend-postgres`: `11 passed, 1103 deselected, 1 warning`); frontend `356 passed` in 55 files. The records PR adds no test.
 
 ---
 
@@ -8173,6 +8173,11 @@ Filled in while Tasks 1-15 are built: each change from the plan as written, its 
   - `hymnal_summaries` sorts codes in Python (codepoint order, as Streamlit's `sorted()`), so the effective-hymnal fallback no longer depends on the Postgres collation (an `en` collation put "ab" before "Zz"). SQLite has no "C" collation, so `.collate("C")` was not used. The Postgres test was seen failing on an ICU `en` database before the fix. `GET /hymns`' own `ORDER BY hymnal` still uses the database collation (unchanged).
   - `test_isolation_and_every_role` pins that church A asking for church B's hymnal code gets exactly the response for a code that does not exist.
 - **Not fixed here: NUL characters.** A `\x00` in a query value or body is an app-wide concern (Postgres rejects it in text), left to a separate follow-up across all routes.
+- **Review of T4-T9: left for the owner's export.** Shapes the synthetic sample cannot show and the parser does not read yet: "vv.", "(paraphrase)", "and" or "&" between references, and a book carried across " or ". They are judged against the real export (T4 Step 10, T16 Step 11), whose Task 4 Step 1 also has the second read-only query (the `hymn_usage.date_iso` shapes). A parity test over a real corpus is a minor follow-up for the same point.
+- **Review of T10-T12 (owner decision 1, not owner-visible).** The prompt's NEW TESTAMENT READING line is put on one line and clipped to 200 characters (`_clip`), so `selected_nt_ref` cannot add lines to the prompt; a `|` in a catalogue line's title, themes or scripture field becomes `/` (`_field`), so a hymn field cannot fake the number or facts field; `parse_suggestion_json` also catches `RecursionError`, so a deeply nested answer is 502 `ai_upstream_error`, not a 500. No test count change (assertions added to existing tests).
+- **Review of T10-T12: owner answer of 2026-09-29 (owner-visible in which hymns are offered).** Ranking the whole response list by era and familiarity before the 50-hymn cut could drop every hymn matching the NT reading. The owner chose: in a ranked response list, hymns matching the NT reading come first, ranked among themselves (at most 50), and the rest are ranked and cut with `shortlist` into the remaining places, with a reserve of `min(NEWER_RESERVE, remaining places)`. Opening, closing and a sampled (no-signal) response list are unchanged. Commit `5eb0f43`, with assertions added to an existing `test_hymn_suggest.py` test (no count change). S §3.8 item 1 carries it as a "(3a build)" note.
+- **Counts in the task prose.** The count table was updated with the two review rows; the prose of Tasks 12-17 (the PR body and the owner message included) and the PR-body line in Global Constraints kept the plan's first numbers (1095, 1113, 1101, and 41 for the threaded pair in T13 Step 6). Task 15 corrected them to the table's 1097, 1115, 1103 and 42.
+- **Written to S and F by Task 15.** S carries "(3a build)" notes for answers A and B (§3.4 key; §2 step 5 and "Matching"), the text-fallback fixes and Psalm 151 (§2), the codepoint hymnal order (§3.1), `q`'s ASCII digits and the `offset` cap (API notes), the date clamp (§3.4), the prompt hardening (§3.6 steps 7 and 9), the client hardening (§3.7, with owner answer A's retired-model row as a "(3a plan)" note), the NT-first response candidates (§3.8 item 1), the export gate and the deferred shapes (Risks), and the NUL follow-up (Risks). F's amendments gain a §2.8 row (client hardening) and a §4.4 row (answer A's key). So Task 15's commit is larger than Step 3's "three files, 18 insertions and 9 deletions", which counts the plan's own edits only, and it also changes this plan.
 
 ## Spec coverage
 
