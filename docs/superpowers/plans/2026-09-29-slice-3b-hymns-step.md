@@ -1024,6 +1024,24 @@ describe("applySuggestions (S AI suggestion flow; owner decision 3, F D16)", () 
     expect(next.alternatives?.by_slot.opening).toHaveLength(2);
     expect(next.alternatives?.by_slot.closing).toEqual([HOLY, PRAISE, GRACE].map(pick));
   });
+
+  it("an empty slot takes the first hymn no other slot holds, so a slot emptied during the request repeats none", () => {
+    // Opening was emptied while the request ran, so the server did not keep its list apart;
+    // Response holds Amazing Grace.
+    const hymns = withSlots({ response: pick(GRACE) });
+    const next = applySuggestions(
+      hymns,
+      answer({ opening: [GRACE, HOLY, PRAISE].map((h) => suggested(h)), closing: [HOLY, KING].map((h) => suggested(h)) }),
+      "2026-10-04",
+    );
+    expect(next.slots).toEqual({ opening: pick(HOLY), response: pick(GRACE), closing: pick(KING) });
+    expect(next.alternatives?.by_slot.opening).toEqual([GRACE, PRAISE].map(pick));
+    expect(next.alternatives?.by_slot.closing).toEqual([HOLY].map(pick));
+    // Every hymn returned is held elsewhere: the slot stays empty and they are its ideas.
+    const held = applySuggestions(hymns, answer({ opening: [suggested(GRACE)] }), "2026-10-04");
+    expect(held.slots.opening).toBeNull();
+    expect(held.alternatives?.by_slot.opening).toEqual([pick(GRACE)]);
+  });
 });
 
 describe("swapAlternative (S Other ideas)", () => {
@@ -1223,9 +1241,11 @@ export function reconcilePick(
 
 /**
  * The AI's answer applied to the latest hymns (S "AI suggestion flow" 2; F
- * D16): an empty slot takes the first hymn and its ideas are the next ones (2
- * to 4); a filled slot keeps its pick and its ideas are the answer without it
- * (3 to 4). The ideas are dated, so they hide when the service date changes.
+ * D16): an empty slot takes the first hymn that no other slot holds once the
+ * slots before it are filled (a slot emptied while the request ran could
+ * otherwise repeat another slot's hymn), and its ideas are the rest (2 to 4);
+ * a filled slot keeps its pick and its ideas are the answer without it (3 to
+ * 4). The ideas are dated, so they hide when the service date changes.
  */
 export function applySuggestions(hymns: HymnsBlock, resp: HymnSuggestions, dateIso: string): HymnsBlock {
   const slots = { ...hymns.slots };
@@ -1234,8 +1254,10 @@ export function applySuggestions(hymns: HymnsBlock, resp: HymnSuggestions, dateI
     const list = resp.slots[slot];
     const current = slots[slot];
     if (current === null) {
-      if (list.length > 0) slots[slot] = pickFromHymn(list[0]);
-      bySlot[slot] = list.slice(1, 5).map(pickFromHymn);
+      const held = new Set(SLOTS.map((other) => slots[other]?.hymn_id ?? null));
+      const top = list.find((h) => !held.has(h.id));
+      if (top) slots[slot] = pickFromHymn(top);
+      bySlot[slot] = list.filter((h) => h !== top).slice(0, 4).map(pickFromHymn);
     } else {
       bySlot[slot] = list.filter((h) => h.id !== current.hymn_id).slice(0, 4).map(pickFromHymn);
     }
@@ -1518,7 +1540,7 @@ describe("hymn labels (S Slot cards, Newer-hymn year label)", () => {
 
 Path("frontend/src/lib/hymns/match-request.test.ts").write_text('''import { describe, expect, it } from "vitest";
 
-import { buildMatchRefs, cleanRefs } from "./match-request";
+import { buildMatchRefs, cleanRefs, clipChars } from "./match-request";
 
 describe("cleanRefs and buildMatchRefs (S buildMatchRefs)", () => {
   it("trims, drops blanks, cuts each line to 200 and keeps at most the first max", () => {
@@ -1538,6 +1560,15 @@ describe("cleanRefs and buildMatchRefs (S buildMatchRefs)", () => {
     expect(buildMatchRefs(["Mark 1:9-15", "Psalm 25"], "Psalm 25")).toEqual(["Mark 1:9-15", "Psalm 25"]);
     expect(buildMatchRefs(["Mark 1:9-15"], "   ")).toEqual(["Mark 1:9-15"]);
     expect(buildMatchRefs([], "x".repeat(500))).toEqual(["x".repeat(200)]);
+  });
+
+  it("cuts by characters as the server counts them, never splitting an emoji", () => {
+    const hearts = "💜".repeat(250); // 500 UTF-16 units, 250 characters
+    const [cut] = cleanRefs([hearts], { max: 20, maxLen: 200 });
+    expect(Array.from(cut)).toHaveLength(200);
+    expect(cut).toBe("💜".repeat(200));
+    expect(clipChars("Psalm 23 💜", 10)).toBe("Psalm 23 💜");
+    expect(clipChars("a💜b", 2)).toBe("a💜");
   });
 });
 ''', encoding="utf-8")
@@ -1609,6 +1640,17 @@ describe("buildSuggestionRequest (S buildSuggestionRequest)", () => {
       hymnal: "GG2013",
       exclude_recent: false,
       current_picks: { opening: null, response: king.id, closing: null },
+    });
+  });
+
+  it("cuts the occasion by characters, never splitting an emoji, and sends only UUID-shaped ids as hints", () => {
+    const d = editOccasion(testDraft(), "🎄".repeat(301));
+    expect(buildSuggestionRequest(d, "GG2013", () => undefined, "web").occasion).toBe("🎄".repeat(300));
+    const odd = setSlot(setSlot(testDraft(), "opening", { ...pickFromHymn(hymn()), hymn_id: "not-a-uuid" }), "closing", pickFromHymn(hymn()));
+    expect(buildSuggestionRequest(odd, "GG2013", () => undefined, "web").current_picks).toEqual({
+      opening: null,
+      response: null,
+      closing: hymn().id,
     });
   });
 });
@@ -1823,10 +1865,19 @@ Path("frontend/src/lib/hymns/match-request.ts").write_text('''/**
 export const MAX_REFS = 20;
 export const MAX_REF_LENGTH = 200;
 
-/** Each item trimmed, blanks dropped, each cut to `maxLen`, the first `max` kept. */
+/**
+ * The first `n` characters of `s` as the server counts them (Unicode code
+ * points, Python's `len`), so a cut never splits an emoji's surrogate pair
+ * and never leaves a line the server finds too long.
+ */
+export function clipChars(s: string, n: number): string {
+  return s.length <= n ? s : Array.from(s).slice(0, n).join("");
+}
+
+/** Each item trimmed, blanks dropped, each cut to `maxLen` characters, the first `max` kept. */
 export function cleanRefs(list: readonly string[], { max, maxLen }: { max: number; maxLen: number }): string[] {
   return list
-    .map((line) => line.trim().slice(0, maxLen).trim())
+    .map((line) => clipChars(line.trim(), maxLen).trim())
     .filter((line) => line !== "")
     .slice(0, max);
 }
@@ -1849,16 +1900,27 @@ import type { HymnSuggestionBody, Passage } from "@/lib/api/types";
 import type { DraftV1 } from "@/lib/draft/schema";
 import { passageText } from "@/lib/queries/passages";
 
-import { cleanRefs, MAX_REF_LENGTH, MAX_REFS } from "./match-request";
+import { cleanRefs, clipChars, MAX_REF_LENGTH, MAX_REFS } from "./match-request";
 
 export const MAX_OCCASION = 300;
 export const MAX_NT_TEXT = 20_000;
+
+/** A hymn id as the server's `SlotPicks` accepts it (a UUID). */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** A slot's id as an exclusion hint, or null when there is none or it is not UUID-shaped (a 422 Retry could not clear). */
+function hintId(pick: DraftV1["hymns"]["slots"]["opening"]): string | null {
+  const id = pick?.hymn_id ?? null;
+  return id !== null && UUID.test(id) ? id : null;
+}
 
 /**
  * `nt_text` goes only when all hold: an NT reading was chosen in step 1, the
  * translation shown (`draft.readings.translation ?? churchTranslation`) is
  * not ESV (Crossway's terms), and that reading's text is already cached under
- * `["passage", translation, ref]` with `ref` exactly as stored.
+ * `["passage", translation, ref]` with `ref` exactly as stored. Every cut
+ * counts characters as the server does (`clipChars`); `current_picks` sends
+ * only UUID-shaped ids.
  */
 export function buildSuggestionRequest(
   draft: DraftV1,
@@ -1867,25 +1929,25 @@ export function buildSuggestionRequest(
   churchTranslation: string,
 ): HymnSuggestionBody {
   const r = draft.readings;
-  const ntRef = r.selected_nt_ref.trim().slice(0, MAX_REF_LENGTH);
+  const ntRef = clipChars(r.selected_nt_ref.trim(), MAX_REF_LENGTH);
   const body: HymnSuggestionBody = {
     service_date_iso: r.date_iso,
-    occasion: r.occasion.trim().slice(0, MAX_OCCASION),
+    occasion: clipChars(r.occasion.trim(), MAX_OCCASION),
     scriptures: cleanRefs(r.scriptures, { max: MAX_REFS, maxLen: MAX_REF_LENGTH }),
     selected_nt_ref: ntRef === "" ? null : ntRef,
     hymnal: selectedHymnal,
     exclude_recent: draft.hymns.exclude_recent,
     current_picks: {
-      opening: draft.hymns.slots.opening?.hymn_id ?? null,
-      response: draft.hymns.slots.response?.hymn_id ?? null,
-      closing: draft.hymns.slots.closing?.hymn_id ?? null,
+      opening: hintId(draft.hymns.slots.opening),
+      response: hintId(draft.hymns.slots.response),
+      closing: hintId(draft.hymns.slots.closing),
     },
   };
   const translation = r.translation ?? churchTranslation;
   if (ntRef !== "" && translation !== "esv") {
     const cached = getCachedPassage(translation, r.selected_nt_ref);
     const text = cached ? passageText(cached) : null;
-    if (text) body.nt_text = text.slice(0, MAX_NT_TEXT);
+    if (text) body.nt_text = clipChars(text, MAX_NT_TEXT);
   }
   return body;
 }
@@ -3072,7 +3134,7 @@ describe("HymnLabel", () => {
     expect(screen.queryByRole("link")).toBeNull();
   });
 
-  it("adds Written {year} only for a flagged hymn, and at 375 px the title truncates while the badges stay whole", () => {
+  it("adds Written {year} only for a flagged hymn, and in a chip the title truncates while the badges stay whole", () => {
     const newer = hymn({ title: "Here I Am, Lord", number: 710, text_year: 1981, newer_than_preferred: true });
     const { rerender } = render(<HymnLabel hymn={newer} recentBadge="Used Sep 6" truncate />);
     expect(screen.getByText("#710 Here I Am, Lord")).toHaveClass("truncate", "min-w-0");
@@ -3082,6 +3144,17 @@ describe("HymnLabel", () => {
     expect(screen.queryByText(/^Written/)).toBeNull();
     rerender(<HymnLabel hymn={{ title: "Snapshot", number: 5, hymnal: "GG2013" }} />); // a draft pick has no year
     expect(screen.queryByText(/^Written/)).toBeNull();
+  });
+
+  it("wraps everywhere but a chip, so at 375 px a row with every badge moves them to a second line", () => {
+    const newer = hymn({ title: "Here I Am, Lord", number: 710, text_year: 1981, newer_than_preferred: true });
+    const { rerender } = render(<HymnLabel hymn={newer} showHymnal recentBadge="Used Sep 6" listen />);
+    const title = screen.getByText("#710 Here I Am, Lord");
+    expect(title.parentElement).toHaveClass("flex-wrap", "min-w-0");
+    expect(title).toHaveClass("wrap-anywhere", "min-w-0");
+    expect(title).not.toHaveClass("truncate");
+    rerender(<HymnLabel hymn={newer} showHymnal recentBadge="Used Sep 6" truncate />);
+    expect(screen.getByText("#710 Here I Am, Lord").parentElement).not.toHaveClass("flex-wrap");
   });
 });
 ''', encoding="utf-8")
@@ -3107,6 +3180,7 @@ import { useDraft } from "@/lib/draft/context";
 import { editOccasion } from "@/lib/draft/readings";
 import { draftKey, type DraftV1, type HymnPick } from "@/lib/draft/schema";
 import { pickFromHymn } from "@/lib/hymns/picks";
+import { keys } from "@/lib/queries/keys";
 import { fakeError, installFakeApi, type FakeHandler, type RecordedRequest } from "@/test/fake-api";
 import {
   church,
@@ -3212,10 +3286,12 @@ describe("the Hymns step (S User experience)", () => {
     expect(response).toHaveAttribute("placeholder", "Loading hymnal…");
     expect(within(card("Response")).getByText("After the sermon — responds to the scripture (NT reading)")).toBeInTheDocument();
     expect(within(card("Closing")).getByText("Joyful / sending")).toBeInTheDocument();
+    expect(within(opening).getByRole("button", { name: "Change" })).toBeDisabled(); // no disabled field to focus
     release();
     // The live title shows; the draft keeps its snapshot (a rename never marks it dirty).
     expect(await within(opening).findByText("#403 Come, Thou Almighty King")).toBeInTheDocument();
     await waitFor(() => expect(response).toHaveAttribute("placeholder", "Search by title or number"));
+    expect(within(opening).getByRole("button", { name: "Change" })).toBeEnabled();
     expect(stored().hymns.slots.opening?.title).toBe("Come, Thou Almighty King (old title)");
     expect(within(opening).getByRole("link", { name: "Listen to Come, Thou Almighty King on Hymnary.org" })).toHaveAttribute(
       "href",
@@ -3268,6 +3344,28 @@ describe("the Hymns step (S User experience)", () => {
     expect(await readyPicker("Response")).toBeInTheDocument();
     expect(screen.queryByText("Couldn't load this church's hymnal.")).toBeNull();
   });
+
+  it("keeps the pickers when a background refetch fails after loading", async () => {
+    let fail = false;
+    const listRoute = hymnListRoute(undefined, RECENT);
+    const failing = () => fakeError(500, "internal_error", "Something went wrong.");
+    const { user, queryClient } = renderStep(draftWith(slots(pick(COME))), {
+      "GET /hymnals": () => (fail ? failing() : hymnals()),
+      "GET /hymns": (req: RecordedRequest) => (fail ? failing() : listRoute(req)),
+    });
+    const input = await readyPicker("Response");
+    fail = true;
+    await act(() => queryClient.refetchQueries({ type: "active" }));
+    expect(queryClient.getQueryState(keys.hymnals(church().id))?.status).toBe("error");
+    const listKey = keys.hymns(church().id, { hymnal: "GG2013", limit: 2000, recent_for_date: "2026-10-04" });
+    expect(queryClient.getQueryState(listKey)?.status).toBe("error");
+    // TanStack Query v5 keeps the loaded data with the error: the picker still works afterwards.
+    await user.type(input, "650");
+    await user.click(await screen.findByRole("option", { name: /#650 Amazing Grace/ }));
+    expect(await within(card("Response")).findByText("#650 Amazing Grace")).toBeInTheDocument();
+    expect(screen.queryByText("Couldn't load this church's hymnal.")).toBeNull();
+    expect(within(card("Opening")).getByRole("button", { name: "Change" })).toBeInTheDocument();
+  });
 });
 
 describe("slot cards (S Slot cards, Notices)", () => {
@@ -3312,6 +3410,7 @@ describe("slot cards (S Slot cards, Notices)", () => {
     expect(options.map((o) => o.textContent)).toEqual(["#649 Amazing Grace", "#650 Amazing Grace"]);
     await user.click(options[1]);
     expect(await within(opening).findByText("#650 Amazing Grace")).toBeInTheDocument();
+    await waitFor(() => expect(within(opening).getByRole("button", { name: "Change" })).toHaveFocus());
     await waitFor(() => expect(stored().hymns.slots.opening?.number).toBe(650));
     // #650's link is not https, so it has no Listen link.
     expect(within(opening).queryByRole("link")).toBeNull();
@@ -3321,12 +3420,35 @@ describe("slot cards (S Slot cards, Notices)", () => {
     const { user } = renderStep(draftWith(slots(pick(GRACE))));
     const opening = await screen.findByRole("region", { name: "Opening hymn" });
     await user.click(await within(opening).findByRole("button", { name: "Remove Amazing Grace" }));
-    expect(within(opening).getByRole("combobox", { name: "Opening hymn" })).toBeInTheDocument();
+    await waitFor(() => expect(within(opening).getByRole("combobox", { name: "Opening hymn" })).toHaveFocus());
     await waitFor(() => expect(stored().hymns.slots.opening).toBeNull());
     expect(await screen.findByText("Removed Amazing Grace.")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Undo" }));
     expect(await within(opening).findByText("#649 Amazing Grace")).toBeInTheDocument();
     await waitFor(() => expect(stored().hymns.slots.opening).toEqual(pick(GRACE)));
+  });
+
+  it("Undo does nothing once another hymn fills the slot", async () => {
+    function Typist() {
+      const { update } = useDraft();
+      return (
+        <button type="button" onClick={() => update((d) => editOccasion(d, "Harvest"))}>
+          Type an occasion
+        </button>
+      );
+    }
+    const { user } = renderStep(draftWith(slots(pick(GRACE))), {}, <Typist />);
+    const opening = await screen.findByRole("region", { name: "Opening hymn" });
+    await user.click(await within(opening).findByRole("button", { name: "Remove Amazing Grace" }));
+    await user.type(await readyPicker("Opening"), "403");
+    await user.click(await screen.findByRole("option", { name: /#403 Come, Thou Almighty King/ }));
+    expect(await within(opening).findByText("#403 Come, Thou Almighty King")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Undo" }));
+    // A later write lands after any write the Undo could have caused (the same 400 ms delay).
+    await user.click(screen.getByRole("button", { name: "Type an occasion" }));
+    await waitFor(() => expect(stored().readings.occasion).toBe("Harvest"));
+    expect(stored().hymns.slots.opening).toEqual(pick(COME));
+    expect(within(opening).getByText("#403 Come, Thou Almighty King")).toBeInTheDocument();
   });
 
   it("Undo after a church switch: the toast is dismissed and its handler changes no draft", async () => {
@@ -3437,9 +3559,11 @@ export type LabelHymn = Pick<Hymn, "title" | "number"> & { hymnal: string | null
 /**
  * One hymn as the step shows it everywhere (S "Filled slot", "Newer-hymn year
  * label"): "#n Title", then small badges that never shrink (the hymnal when
- * the church has 2+, the recent use, "Written {year}" for a flagged hymn), so
- * at 375 px the title truncates first. With `listen`, a ▶ link to the hymn's
- * Hymnary.org page when the link is https (`safeHttpsUrl`), else none.
+ * the church has 2+, the recent use, "Written {year}" for a flagged hymn). The
+ * row wraps, so at 375 px a long title breaks and the badges move to a second
+ * line; only a chip (`truncate`) stays on one line, its title truncating first.
+ * With `listen`, a ▶ link to the hymn's Hymnary.org page when the link is
+ * https (`safeHttpsUrl`), else none.
  */
 export function HymnLabel({
   hymn,
@@ -3460,7 +3584,7 @@ export function HymnLabel({
       : null;
   const href = listen ? safeHttpsUrl(hymn.link) : null;
   return (
-    <span className="flex min-w-0 items-center gap-1.5">
+    <span className={cn("flex min-w-0 items-center gap-1.5", !truncate && "flex-wrap")}>
       <span className={cn("min-w-0", truncate ? "truncate" : "wrap-anywhere")}>{hymnText(hymn)}</span>
       {showHymnal && hymn.hymnal ? (
         <Badge variant="outline" className="shrink-0">
@@ -3575,7 +3699,7 @@ Path("frontend/src/components/builder/hymns").mkdir(parents=True, exist_ok=True)
 Path("frontend/src/components/builder/hymns/hymn-slot-card.tsx").write_text('''"use client";
 
 import { InfoIcon, XIcon } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import type { Hymn } from "@/lib/api/types";
@@ -3612,7 +3736,9 @@ export type SlotCardProps = {
  * One slot (S "Slot cards"): its title and caption; a filled slot shows the
  * hymn (live when its list has loaded, the draft's snapshot until then) with
  * its ▶ Listen link, ✕ and Change, which puts the focused picker in the row's
- * place until Escape or focus leaves; an empty slot shows the picker. The
+ * place until Escape or focus leaves (Change waits for the list, so it never
+ * focuses a disabled field); an empty slot shows the picker. After ✕ focus
+ * moves to the new picker, and after a choice from Change back to Change. The
  * notices sit under the pick.
  */
 export function HymnSlotCard({
@@ -3631,7 +3757,23 @@ export function HymnSlotCard({
 }: SlotCardProps) {
   const meta = SLOT_META[slot];
   const [changing, setChanging] = useState(false);
+  // Where focus goes once the row has re-rendered: the picker after ✕, Change after a choice from Change.
+  const focusNext = useRef<"picker" | "change" | null>(null);
+  const sectionRef = useRef<HTMLElement>(null);
+  const changeRef = useRef<HTMLButtonElement>(null);
   const headingId = `slot-${slot}-title`;
+
+  useEffect(() => {
+    if (focusNext.current === null) return;
+    const target =
+      focusNext.current === "change"
+        ? changeRef.current
+        : (sectionRef.current?.querySelector<HTMLInputElement>("input[role=combobox]") ?? null);
+    if (target === null) return;
+    focusNext.current = null;
+    target.focus();
+  });
+
   const live = reconciled?.status === "ok" ? reconciled.live : null;
   const picker = (autoFocus: boolean) => (
     <HymnPicker
@@ -3643,6 +3785,7 @@ export function HymnSlotCard({
       autoFocus={autoFocus}
       onDismiss={autoFocus ? () => setChanging(false) : undefined}
       onChoose={(h) => {
+        if (changing) focusNext.current = "change";
         setChanging(false);
         onChoose(h);
       }}
@@ -3650,7 +3793,7 @@ export function HymnSlotCard({
   );
 
   return (
-    <section aria-labelledby={headingId} className="grid gap-3 rounded-lg border p-4">
+    <section ref={sectionRef} aria-labelledby={headingId} className="grid gap-3 rounded-lg border p-4">
       <div>
         <h3 id={headingId} className="text-base font-medium">
           {meta.title}
@@ -3672,14 +3815,23 @@ export function HymnSlotCard({
               size="icon-lg"
               className="size-11 shrink-0 md:size-8"
               aria-label={`Remove ${(live ?? pick).title}`}
-              onClick={() => onRemove()}
+              onClick={() => {
+                focusNext.current = "picker";
+                onRemove();
+              }}
             >
               <XIcon aria-hidden="true" />
             </Button>
           </div>
           {pickerAvailable ? (
             <div>
-              <Button variant="outline" size="touch" onClick={() => setChanging(true)}>
+              <Button
+                ref={changeRef}
+                variant="outline"
+                size="touch"
+                disabled={list === undefined}
+                onClick={() => setChanging(true)}
+              >
                 Change
               </Button>
             </div>
@@ -3769,7 +3921,10 @@ export function HymnsStep() {
   const showUndo = useUndoToasts();
 
   const selectedList = code === null ? undefined : lists.lists.get(code);
-  const failed = hymnalsQuery.isError || (code !== null && lists.failed.has(code));
+  // A failed background refetch keeps what had loaded (TanStack Query v5 keeps `data` with
+  // `isError`), so only a load that never succeeded replaces the pickers with the error.
+  const failed =
+    (hymnalsQuery.isError && hymnals === undefined) || (code !== null && lists.failed.has(code) && selectedList === undefined);
   const pickers = !failed && !empty;
   const showHymnal = (hymnals?.items.length ?? 0) >= 2;
   const excludeRecent = hymns.exclude_recent && dateValid;
@@ -3794,7 +3949,8 @@ export function HymnsStep() {
     const previous = hymns.slots[slot];
     if (!previous) return;
     update((d) => clearSlot(d, slot));
-    showUndo(`Removed ${title}.`, () => update((d) => setSlot(d, slot, previous)));
+    // Undo only while the slot is still as ✕ left it; a hymn chosen since is never replaced.
+    showUndo(`Removed ${title}.`, () => update((d) => (d.hymns.slots[slot] === null ? setSlot(d, slot, previous) : d)));
   }
 
   return (
@@ -3811,7 +3967,7 @@ export function HymnsStep() {
           message="Couldn't load this church's hymnal."
           retrying={hymnalsQuery.isFetching || lists.fetching}
           onRetry={() => {
-            if (hymnalsQuery.isError) void hymnalsQuery.refetch();
+            if (hymnals === undefined) void hymnalsQuery.refetch();
             else lists.retry();
           }}
         />
@@ -4442,13 +4598,6 @@ import { ChurchProvider } from "@/lib/church-context";
 import type { ChurchProfile, HymnSuggestionBody } from "@/lib/api/types";
 import { ChurchProvider } from "@/lib/church-context";
 '''),
-    ('''import { pickFromHymn } from "@/lib/hymns/picks";
-import { fakeError, installFakeApi, type FakeHandler, type RecordedRequest } from "@/test/fake-api";
-''',
-     '''import { pickFromHymn } from "@/lib/hymns/picks";
-import { keys } from "@/lib/queries/keys";
-import { fakeError, installFakeApi, type FakeHandler, type RecordedRequest } from "@/test/fake-api";
-'''),
     ('''  hymnListRoute,
   lectionaryRoute,
 ''',
@@ -4463,6 +4612,42 @@ const [HOLY, PRAISE, COME, GRACE, , FAITHFUL] = gg2013();
      '''const KEY = draftKey(USER_ID, church().id);
 const [HOLY, PRAISE, COME, GRACE, , FAITHFUL, HERE, , SENT] = gg2013();
 /** Grace's recent use around October 4, 2026: sung September 6, planned October 18. */
+'''),
+    # The T8 refetch test also holds a pending Suggest, so the toolbar must stay mounted (review fix 1).
+    ('''  it("keeps the pickers when a background refetch fails after loading", async () => {
+    let fail = false;
+    const listRoute = hymnListRoute(undefined, RECENT);
+    const failing = () => fakeError(500, "internal_error", "Something went wrong.");
+    const { user, queryClient } = renderStep(draftWith(slots(pick(COME))), {
+      "GET /hymnals": () => (fail ? failing() : hymnals()),
+      "GET /hymns": (req: RecordedRequest) => (fail ? failing() : listRoute(req)),
+    });
+    const input = await readyPicker("Response");
+    fail = true;
+''',
+     '''  it("keeps the pickers, the toolbar and a pending Suggest when a background refetch fails after loading", async () => {
+    let fail = false;
+    const listRoute = hymnListRoute(undefined, RECENT);
+    const failing = () => fakeError(500, "internal_error", "Something went wrong.");
+    const answer = held(THREE_EACH);
+    const { user, queryClient } = renderStep(draftWith(slots(pick(COME))), {
+      "GET /hymnals": () => (fail ? failing() : hymnals()),
+      "GET /hymns": (req: RecordedRequest) => (fail ? failing() : listRoute(req)),
+      "POST /hymns/suggestions": answer.handler,
+    });
+    const input = await readyPicker("Response");
+    await user.click(await suggestButton());
+    await screen.findByRole("button", { name: "Suggesting…" });
+    fail = true;
+'''),
+    ('''    expect(within(card("Opening")).getByRole("button", { name: "Change" })).toBeInTheDocument();
+  });
+''',
+     '''    expect(within(card("Opening")).getByRole("button", { name: "Change" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Suggesting…" })).toBeInTheDocument(); // the toolbar stayed mounted
+    answer.release();
+    expect(await screen.findByText(/^Suggestions ready/)).toBeInTheDocument();
+  });
 '''),
 ])
 with open("frontend/src/components/builder/hymns/hymns-step.test.tsx", "a", encoding="utf-8") as f:
@@ -4626,7 +4811,7 @@ describe("Suggest hymns (S AI suggestion flow)", () => {
     act(() => {
       vi.advanceTimersByTime(8_000);
     });
-    expect(screen.getByText("Still working — this can take up to a minute.")).toBeInTheDocument();
+    expect(screen.getByText("Still working — this can take up to a minute.")).toHaveAttribute("aria-live", "polite");
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     expect(await screen.findByRole("button", { name: "Suggest hymns" })).toBeEnabled();
     expect(api.requests.filter((r) => r.path === "/hymns/suggestions")).toHaveLength(1);
@@ -5102,7 +5287,7 @@ export function SuggestHymnsButton({
       </PendingButton>
       {isPending ? (
         <div className="flex flex-wrap items-center gap-x-3 text-sm text-muted-foreground">
-          {slow ? <p>Still working — this can take up to a minute.</p> : null}
+          <p aria-live="polite">{slow ? "Still working — this can take up to a minute." : null}</p>
           <Button variant="link" className="h-11 px-0" onClick={() => controller.current?.abort()}>
             Cancel
           </Button>
@@ -5240,7 +5425,7 @@ async function openMatches(user: { click: (el: Element) => Promise<void> }) {
 }
 
 describe("Hymns for the readings (S ScriptureMatches)", () => {
-  it("asks for the draft's readings in the selected hymnal; Add → Response hymn sets the slot and Undo restores it", async () => {
+  it("asks for the draft's readings in the selected hymnal; Add → Response hymn sets the slot and Undo restores it until the slot changes again", async () => {
     const { user, api } = renderStep(draftWith(slots(null, pick(GRACE)), { scriptures: LINES }));
     const trigger = await screen.findByRole("button", { name: "Hymns for the readings 4" }); // the count, while closed
     expect(trigger).toHaveAttribute("aria-expanded", "false");
@@ -5262,10 +5447,21 @@ describe("Hymns for the readings (S ScriptureMatches)", () => {
     expect(await screen.findByText("Response hymn changed to Holy, Holy, Holy! Lord God Almighty.")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Undo" }));
     await waitFor(() => expect(stored().hymns.slots.response).toEqual(pick(GRACE)));
+    // Undo does nothing once another hymn fills the slot.
+    act(() => toast.dismiss());
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Undo" })).toBeNull());
+    await user.click(within(section).getByRole("button", { name: "Add Holy, Holy, Holy! Lord God Almighty" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Response hymn" }));
+    await waitFor(() => expect(stored().hymns.slots.response).toEqual(pick(HOLY)));
+    await user.click(within(card("Response")).getByRole("button", { name: "Change" }));
+    await user.type(within(card("Response")).getByRole("combobox", { name: "Response hymn" }), "403");
+    await user.click(await screen.findByRole("option", { name: /#403 Come, Thou Almighty King/ }));
+    await user.click(await screen.findByRole("button", { name: "Undo" }));
     // Into an empty slot: no toast.
     await user.click(within(section).getByRole("button", { name: "Add Here I Am, Lord" }));
     await user.click(await screen.findByRole("menuitem", { name: "Closing hymn" }));
     await waitFor(() => expect(stored().hymns.slots.closing).toEqual(pick(HERE)));
+    expect(stored().hymns.slots.response).toEqual(pick(COME)); // the Undo after Change did nothing
     expect(screen.queryByText(/^Closing hymn changed/)).toBeNull();
   });
 
@@ -5297,7 +5493,9 @@ describe("Hymns for the readings (S ScriptureMatches)", () => {
     const first = renderStep();
     const section = await openMatches(first.user);
     expect(within(section).getByText(/^Add the readings in step 1, or type a scripture reference here\./)).toBeInTheDocument();
-    expect(within(section).getByRole("link", { name: "Go to readings" })).toHaveAttribute("href", "/builder/readings");
+    const readings = within(section).getByRole("link", { name: "Go to readings" });
+    expect(readings).toHaveAttribute("href", "/builder/readings");
+    expect(readings).toHaveClass("min-h-11"); // a 44 px touch target
     first.unmount();
 
     const { user, api } = renderStep(draftWith({ hymnal: "PH1990" }, { scriptures: LINES }), { "GET /hymnals": twoHymnals() });
@@ -5319,7 +5517,7 @@ describe("Hymns for the readings (S ScriptureMatches)", () => {
     expect(await within(section).findByRole("heading", { name: "Matches the readings" })).toBeInTheDocument();
   });
 
-  it("with Exclude on hides recently used matches behind Show them; shown, they carry their badge", async () => {
+  it("with Exclude on hides recently used matches behind Show them; shown, they carry their badge; Hide them hides them again", async () => {
     const [holy, , come] = gg2013();
     const recentMatches = scriptureMatches({
       items: [
@@ -5338,6 +5536,11 @@ describe("Hymns for the readings (S ScriptureMatches)", () => {
     expect(within(section).getByText("Used Sep 6")).toBeInTheDocument();
     expect(within(section).getByText("Planned Oct 18")).toBeInTheDocument();
     expect(within(section).queryByText(/recently used matches are hidden/)).toBeNull();
+    expect(within(section).getByText(/^2 recently used matches are shown\\./)).toBeInTheDocument();
+    await user.click(within(section).getByRole("button", { name: "Hide them" }));
+    expect(within(section).getAllByRole("listitem")).toHaveLength(1);
+    expect(within(section).getByText(/^2 recently used matches are hidden\\./)).toBeInTheDocument();
+    expect(within(section).getByRole("button", { name: "Show them" })).toBeInTheDocument();
   });
 });
 ''')
@@ -5436,7 +5639,9 @@ import { SuggestHymnsButton } from "./suggest-hymns-button";
     const previous = hymns.slots[slot];
     update((d) => setSlot(d, slot, pickFromHymn(match)));
     if (previous && previous.hymn_id !== match.id) {
-      showUndo(`${SLOT_META[slot].title} changed to ${match.title}.`, () => update((d) => setSlot(d, slot, previous)));
+      showUndo(`${SLOT_META[slot].title} changed to ${match.title}.`, () =>
+        update((d) => (d.hymns.slots[slot]?.hymn_id === match.id ? setSlot(d, slot, previous) : d)),
+      );
     }
   }
 '''),
@@ -5489,12 +5694,20 @@ import { HymnLabel } from "./hymn-label";
 
 /** Open from `md` (48rem), closed below it, as the section first renders (S; plan clarification 19). */
 function openAtFirst(): boolean {
-  return typeof window.matchMedia === "function" && window.matchMedia("(min-width: 48rem)").matches;
+  return (
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(min-width: 48rem)").matches
+  );
 }
 
-/** "{k} recently used matches are hidden." (S); "1 recently used match is hidden." for one (plan clarification 13). */
-function hiddenMatchesText(k: number): string {
-  return k === 1 ? "1 recently used match is hidden." : `${k} recently used matches are hidden.`;
+/**
+ * "{k} recently used matches are hidden." (S), or "… are shown." once shown;
+ * "1 recently used match is hidden." for one (plan clarification 13).
+ */
+function recentMatchesText(k: number, shown: boolean): string {
+  const state = shown ? "shown" : "hidden";
+  return k === 1 ? `1 recently used match is ${state}.` : `${k} recently used matches are ${state}.`;
 }
 
 /** One match: its label (with "Used Sep 7" when it is shown although recently used), what it matched, and Add. */
@@ -5541,7 +5754,8 @@ function MatchRow({
  * selected hymnal. The request runs by itself whenever the references, the
  * hymnal or the date change, also while the section is closed, so its count
  * shows. Results come in two groups; each row's Add puts the hymn in a slot.
- * With Exclude on, recently used matches are hidden behind "Show them".
+ * With Exclude on, recently used matches are hidden behind "Show them", a
+ * local toggle ("Hide them" puts them away again).
  */
 export function ScriptureMatches({
   scriptures,
@@ -5572,7 +5786,7 @@ export function ScriptureMatches({
   const hideRecent = excludeRecent && !showRecent;
   const all = data?.items ?? [];
   const items = hideRecent ? all.filter((m) => m.recent_use_on === null) : all;
-  const hidden = all.length - items.length;
+  const recentCount = excludeRecent ? all.filter((m) => m.recent_use_on !== null).length : 0;
   const groups = [
     { title: "Matches the readings", items: items.filter((m) => m.strength === "passage") },
     { title: "Same chapter", items: items.filter((m) => m.strength === "chapter") },
@@ -5594,7 +5808,10 @@ export function ScriptureMatches({
     body = (
       <p className="text-sm text-muted-foreground">
         Add the readings in step 1, or type a scripture reference here.{" "}
-        <Link href="/builder/readings" className="font-medium text-foreground underline underline-offset-4">
+        <Link
+          href="/builder/readings"
+          className="inline-flex min-h-11 items-center font-medium text-foreground underline underline-offset-4"
+        >
           Go to readings
         </Link>
       </p>
@@ -5645,11 +5862,11 @@ export function ScriptureMatches({
             </ul>
           </div>
         ))}
-        {hidden > 0 ? (
+        {recentCount > 0 ? (
           <p className="text-sm text-muted-foreground">
-            {hiddenMatchesText(hidden)}{" "}
-            <Button variant="link" className="h-11 px-0" onClick={() => setShowRecent(true)}>
-              Show them
+            {recentMatchesText(recentCount, showRecent)}{" "}
+            <Button variant="link" className="h-11 px-0" onClick={() => setShowRecent((shown) => !shown)}>
+              {showRecent ? "Hide them" : "Show them"}
             </Button>
           </p>
         ) : null}
