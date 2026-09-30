@@ -346,6 +346,32 @@ were the owner's, from the Railway logs and a signed-in Console snippet.
 | Streamlit smoke | Not run (optional; merges never reach liturgy-frozen) | 2026-09-29 |
 | Follow-ups | 3b: the Hymns step UI, and whether hymnal changes and hymn alternatives count as unsaved work (owner question). The Console check found no recent use within 12 weeks of October 4 (`recent=0`) although 90 uses are logged: check in 3b whether they are older or belong to another church. The suggestion's response slot included two Palm Sunday hymns on the Nineteenth Sunday after Pentecost: if off-season picks recur in 3b, add church-year guidance to the prompt. Research whether Hymnary.org can supply first lines for title matching (owner answer Q2). Known risk: one member's burst of 40 suggestions can briefly hold most worker threads before `ai_busy` | 2026-09-29 |
 
+### Slice 3b record
+
+Slice 3b (the Hymns step: three slots filled by number or title, recent use
+within 12 weeks, hymns for the readings, AI suggestions with other ideas,
+"Written {year}" on newer hymns, and the step in the step bar, Review and
+the summary) merged as PR #28. The API's AI prompt now names the church
+season; no database change, so production stays at `0004_invites_reusable`
+(head). The owner's check was a guided check on a phone and a look on a
+computer (owner answer 5, 2026-09-29), covering the "(owner, after 3b)"
+items of `docs/manual-verification.md` → "Slice 3" in part. No token, email
+address or church id is recorded here.
+
+| Step | Result | Date |
+|---|---|---|
+| Recent use (Task 1) | Outcome B, another church: all 90 `hymn_usage` rows belong to the owner's real church, but the new app had a leftover slice 1 test church selected, whose hymnal copy has no usage (this also explains the 3a record's `recent=0`). With the real church selected, 29 hymns showed as used within 12 weeks of 2026-10-04. No code change; the owner keeps the two test churches for now | 2026-09-30 |
+| Merge and deploy | PR #28 merged 2026-09-30 about 15:03 UTC (11:03 EDT), merge commit `a589be3`. CI on `main` for the merge commit (run 36733854498): success. The checks below ran on production; a live suggestion answered, so the key and model were in place. The Railway Deploy Logs glance was offered and skipped | 2026-09-30 |
+| 1. The step and the readings' hymns (phone) | Three cards; matches grouped; Add → Opening worked. Owner: looks good | 2026-09-30 |
+| 2. Search by number and title | Number first and Enter picked it; title search; Response filled; Listen link. Owner: looks good | 2026-09-30 |
+| 3. Recently used hymns | Switch on; "29 hymns are hidden."; picks stayed when toggled. Owner: looks good | 2026-09-30 |
+| 4. Suggest hymns | Empty slot filled; ideas under each slot; swap and swap back; no out-of-season hymns reported. Owner: looks good | 2026-09-30 |
+| 5. Remove, Undo and the summary | Removed … with Undo and no keyboard; step bar done; summary lists the three hymns. Owner: yes | 2026-09-30 |
+| 6. New service | Asked first; Cancel kept the hymns. Owner: yes | 2026-09-30 |
+| Computer | Summary column with the hymns; step bar; Still needed row after a removal. Owner: looks right | 2026-09-30 |
+| Streamlit smoke on liturgy-frozen | Not run: 3b changes no data, and merges never reach liturgy-frozen | 2026-09-30 |
+| Follow-ups | Slice 4: the Liturgy step. 5a: recording hymn use on every save (the new app does not write `hymn_usage` yet), and leaving the service's own date out of the recent-use lookup so its hymns never read "Planned" for that day. 6a: Settings → Hymns flips `SETTINGS_HYMNS_READY`. Later, the owner's call: removing the two slice 1 test churches (a production change). Still open: first-line matching research on Hymnary.org; the NUL-character 500 (app-wide) | 2026-09-30 |
+
 ## Backups
 
 - **Workflow:** `.github/workflows/backup.yml` (`db-backup`). Daily at 08:37 UTC,
