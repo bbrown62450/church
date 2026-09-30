@@ -17,7 +17,7 @@
 - Facts checked for this plan (tree `9ab3fa6`, slices 3a and 3b merged and live, 2026-09-30):
   - Backend baseline `1110 passed, 11 skipped`; frontend `442 passed` in 64 files; Alembic head `0004_invites_reusable`; 4 runbook owner markers; `openai` 3.20.0; `python-docx` 1.2.0.
   - On `main`: `api/ratelimit.consume(bucket, *, user_id, church_id=None, cost=1)` exists (S's "if slice 2 did not ship one" is moot); `api/schemas.py` has 3a's `SectionKey`, `HymnRef`, `SlotHymns`, `HymnalCode`; `repos.churches.get_church_rubric_overrides(church_id, *, session=None)` exists (3a); `repos.churches.get_church_prompts(church_id)` has no `session` (T6 adds it); there is no by-id hymn lookup (T6 adds `get_hymns_by_ids`); `backend/prayer_library.py` does not exist (T4); `worship_service.generate_liturgy` (with PR #4's `rubric` and `sermon_text`), `_sermon_text_block` and `SERMON_TEXT_LIMIT` exist, and `build_docx` prints every heading as Heading 2 except communion's title (Heading 1) and still says "Old Testament Reading"; `service_rubric` imports `SECTION_ORDER` from `liturgy_prompts`; `integrations/openai_client.complete(messages, *, max_completion_tokens, json_mode=False, deadline=None)` and `FakeAI` exist (3a).
-  - Every task's code in this plan was written and run by the planner in a throwaway worktree of `9ab3fa6`, with each red run and every count in the table observed. The plan text was then replayed onto a clean worktree of `9ab3fa6` (every Create, Append, Replace and Run directive below applied in order by a script, Tasks 1-12), reproducing each count. Not run while planning: the pushes and CI (Task 13), the owner steps (Tasks 13 Step 9 and 14), and any call to OpenAI (the container cannot reach it).
+  - Every task's code in this plan was written and run by the planner in a throwaway worktree of `9ab3fa6`, with each red run and every count in the table observed. The plan text was then replayed onto a clean worktree of `9ab3fa6` (every Create, Append, Replace and Run directive below applied in order by a script, Tasks 1-12), reproducing each count and ending in a tree identical to the planner's. The frontend build (T13 Step 3) ran on this tree's frontend sources, which 4a changes only in generated types and one test fixture. The Postgres-marked tests ran on a local Postgres 16 (`11 passed, 1178 deselected, 1 warning`). Not run while planning: the pushes and CI (Task 13), the owner steps (Tasks 13 Step 9 and 14), and any call to OpenAI (the container cannot reach it).
 
 ## Global Constraints
 
@@ -709,12 +709,12 @@ def resolve_default_benediction(settings: Optional[Mapping[str, Any]]) -> str:
 
 ```bash
 .venv/bin/python -m pytest -q backend/tests/test_liturgy_config.py backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -1
-PYTHONPATH=backend .venv/bin/python backend/tests/test_liturgy_config.py && git status --short backend/tests/fixtures
+before=$(sha256sum backend/tests/fixtures/shared/liturgy_outline.json) && PYTHONPATH=backend .venv/bin/python backend/tests/test_liturgy_config.py && [ "$before" = "$(sha256sum backend/tests/fixtures/shared/liturgy_outline.json)" ] && echo unchanged
 .venv/bin/python -m pytest -q | tail -1
 git status --short
 ```
 
-**Expected:** `11 passed in <t>s` (8 new and the 3 import tests); `wrote <repo>/backend/tests/fixtures/shared/liturgy_outline.json` and nothing else from the first `git status` except the three new fixture files as `??` (regenerating rewrote the outline fixture byte for byte); `1118 passed, 11 skipped in <t>s`; then exactly ` M backend/tests/test_no_streamlit_in_core.py`, `?? backend/liturgy_config.py`, `?? backend/tests/fixtures/shared/first_sunday.json`, `?? backend/tests/fixtures/shared/liturgy_outline.json`, `?? backend/tests/fixtures/shared/liturgy_sections.json`, `?? backend/tests/test_liturgy_config.py` (and `?? .claude/`).
+**Expected:** `11 passed in <t>s` (8 new and the 3 import tests); `wrote <repo>/backend/tests/fixtures/shared/liturgy_outline.json` then `unchanged` (the regeneration command in the test's failure message rewrites the fixture byte for byte); `1118 passed, 11 skipped in <t>s`; then exactly ` M backend/tests/test_no_streamlit_in_core.py`, `?? backend/liturgy_config.py`, `?? backend/tests/fixtures/shared/first_sunday.json`, `?? backend/tests/fixtures/shared/liturgy_outline.json`, `?? backend/tests/fixtures/shared/liturgy_sections.json`, `?? backend/tests/test_liturgy_config.py` (and `?? .claude/`).
 
 - [ ] **Step 6 (agent): Commit**
 
@@ -1835,7 +1835,7 @@ def test_the_budget_drops_the_example_then_the_profile_then_the_sermon():
 .venv/bin/python -m pytest -q backend/tests/test_liturgy_prompts.py 2>&1 | tail -1
 ```
 
-**Expected:** the first is a collection error, `AttributeError: module 'liturgy_prompts' has no attribute 'ResolvedHymn'` (`1 error in <t>s`); the second `9 failed, 14 passed in <t>s`.
+**Expected:** both are collection errors (`1 error in <t>s` each): `AttributeError: module 'liturgy_prompts' has no attribute 'ResolvedHymn'`, raised by the module-level hymn slots in both files.
 
 - [ ] **Step 3 (agent): Add the builder, and break the import cycle**
 
@@ -2057,7 +2057,7 @@ def build_messages(section: str, prompts: Mapping[str, str], ctx: PromptContext,
 git status --short
 ```
 
-**Expected:** `<n> passed in <t>s` with no failure (6 + 23 + 12 + `test_service_rubric.py`'s); `1149 passed, 11 skipped in <t>s`; then exactly ` M backend/liturgy_prompts.py`, ` M backend/service_rubric.py`, ` M backend/tests/test_liturgy_prompts.py`, ` M backend/tests/test_no_streamlit_in_core.py`, `?? backend/tests/test_liturgy_generation.py`.
+**Expected:** `74 passed in <t>s` (6 + 23 + 12 + `test_service_rubric.py`'s 33); `1149 passed, 11 skipped in <t>s`; then exactly ` M backend/liturgy_prompts.py`, ` M backend/service_rubric.py`, ` M backend/tests/test_liturgy_prompts.py`, ` M backend/tests/test_no_streamlit_in_core.py`, `?? backend/tests/test_liturgy_generation.py`.
 
 - [ ] **Step 5 (agent): Commit**
 
@@ -2229,7 +2229,7 @@ def get_hymns_by_ids(church_id, ids, *, session: Optional[Session] = None) -> di
 git status --short
 ```
 
-**Expected:** `<n> passed in <t>s` with no failure (Streamlit's `get_church_prompts(church)` positional call still works); `1151 passed, 11 skipped in <t>s`; then exactly the four modified files.
+**Expected:** `28 passed in <t>s` (Streamlit's `get_church_prompts(church)` positional call still works); `1151 passed, 11 skipped in <t>s`; then exactly the four modified files.
 
 - [ ] **Step 5 (agent): Commit**
 
@@ -3176,7 +3176,7 @@ def test_hymnal_code_pattern_and_models_in_openapi_unchanged():
 .venv/bin/python -m pytest -q backend/tests/test_api_liturgy.py backend/tests/test_route_guards.py backend/tests/test_api_app.py backend/tests/test_schemas.py 2>&1 | tail -3
 ```
 
-**Expected:** a collection error for `test_api_liturgy.py` (`ImportError: cannot import name 'SermonText'` is not reached; the route module is imported by nothing yet, so the file collects) or failures: every `test_api_liturgy.py` test answers 404 for the unknown path, `test_allowlists_name_real_routes` fails on `("GET", "/liturgy/config")`, `test_routes_document_the_error_body` on the missing path and the snapshot test on the absent models. The run ends `14 failed, <n> passed in <t>s`.
+**Expected:** `14 failed, 34 passed, 1 skipped in <t>s`: all ten `test_api_liturgy.py` tests (the paths do not exist yet, so every call answers 404), `test_user_scoped_routes_require_a_user` and `test_allowlists_name_real_routes` (`("GET", "/liturgy/config")` is not served), `test_routes_document_the_error_body` (`KeyError` for the missing path) and the renamed snapshot test (the models are absent).
 
 - [ ] **Step 3 (agent): Add `SermonText`, the routes and the router**
 
@@ -3394,7 +3394,7 @@ from api.routes import (churches, health, hymnals, hymns, invites, lectionary, l
 git status --short
 ```
 
-**Expected:** `Wrote .../frontend/src/lib/api/openapi.json`, `tsc` prints nothing after its header, ` Test Files  64 passed (64)` and `      Tests  442 passed (442)`; `<n> passed in <t>s` with no failure; `1175 passed, 11 skipped in <t>s`; then exactly ` M backend/api/main.py`, ` M backend/api/schemas.py`, ` M backend/tests/test_api_app.py`, ` M backend/tests/test_route_guards.py`, ` M backend/tests/test_schemas.py`, ` M frontend/src/lib/api/openapi.json`, ` M frontend/src/lib/api/schema.d.ts`, `?? backend/api/routes/liturgy.py`, `?? backend/tests/test_api_liturgy.py`.
+**Expected:** `Wrote .../frontend/src/lib/api/openapi.json`, `tsc` prints nothing after its header, ` Test Files  64 passed (64)` and `      Tests  442 passed (442)`; `54 passed, 1 skipped in <t>s`; `1175 passed, 11 skipped in <t>s`; then exactly ` M backend/api/main.py`, ` M backend/api/schemas.py`, ` M backend/tests/test_api_app.py`, ` M backend/tests/test_route_guards.py`, ` M backend/tests/test_schemas.py`, ` M frontend/src/lib/api/openapi.json`, ` M frontend/src/lib/api/schema.d.ts`, `?? backend/api/routes/liturgy.py`, `?? backend/tests/test_api_liturgy.py`.
 
 - [ ] **Step 5 (agent): Commit**
 
@@ -3524,7 +3524,7 @@ def test_default_benediction_is_the_church_s_or_halverson(client, make_user, mak
 .venv/bin/python -m pytest -q backend/tests/test_api_church_profile.py backend/tests/test_api_me.py backend/tests/test_api_invites.py backend/tests/test_api_churches.py 2>&1 | tail -1
 ```
 
-**Expected:** `6 failed, <n> passed in <t>s` (the five exact-body or required-field tests and the new one).
+**Expected:** `6 failed, 62 passed in <t>s` (the five exact-body or required-field tests and the new one).
 
 - [ ] **Step 3 (agent): Add the field, regenerate, and fix the frontend fixture**
 
@@ -3616,7 +3616,7 @@ from liturgy_config import resolve_default_benediction
 .venv/bin/python backend/scripts/export_openapi.py && (cd frontend && npm run gen:api >/dev/null && npm run typecheck 2>&1 | grep -c "default_benediction")
 ```
 
-**Expected:** `Wrote .../openapi.json`, then `1`: `tsc` fails on the one fixture that builds a `ChurchProfile` (clarification 18).
+**Expected:** `Wrote .../openapi.json`, then `2`: `tsc` fails on the one fixture that builds a `ChurchProfile` (clarification 18).
 
 **In `frontend/src/test/fixtures/index.ts`, replace:**
 
@@ -3656,7 +3656,7 @@ from liturgy_config import resolve_default_benediction
 git status --short
 ```
 
-**Expected:** `tsc` and `eslint` print nothing after their headers; ` Test Files  64 passed (64)`, `      Tests  442 passed (442)`; `<n> passed in <t>s` with no failure; `1176 passed, 11 skipped in <t>s`; then exactly the six backend files, `frontend/src/lib/api/openapi.json`, `frontend/src/lib/api/schema.d.ts` and `frontend/src/test/fixtures/index.ts` as ` M`.
+**Expected:** `tsc` and `eslint` print nothing after their headers; ` Test Files  64 passed (64)`, `      Tests  442 passed (442)`; `71 passed in <t>s`; `1176 passed, 11 skipped in <t>s`; then exactly the six backend files, `frontend/src/lib/api/openapi.json`, `frontend/src/lib/api/schema.d.ts` and `frontend/src/test/fixtures/index.ts` as ` M`.
 
 - [ ] **Step 5 (agent): Commit**
 
@@ -3689,7 +3689,9 @@ PR #4's `test_generate_liturgy.py` is rewritten against `build_context`/`build_m
 
 - [ ] **Step 1 (agent): Retarget PR #4's tests (they pass on the new code)**
 
-**Create `backend/tests/test_generate_liturgy.py`:** (this replaces the whole file)
+This replaces the whole file:
+
+**Create `backend/tests/test_generate_liturgy.py`:**
 
 ````python
 """PR #4's liturgy tests (the rubric checklist and the sermon text), retargeted
@@ -3795,7 +3797,9 @@ def test_user_written_sections_are_not_sent_to_the_ai(make_church):
 
 - [ ] **Step 2 (agent): Replace the oracle with the "gone" test, and see it fail**
 
-**Create `backend/tests/test_liturgy_generation.py`:** (this replaces the whole file; the first five tests are unchanged)
+This replaces the whole file; its first five tests are unchanged:
+
+**Create `backend/tests/test_liturgy_generation.py`:**
 
 ````python
 """The liturgy prompts, pinned before worship_service.generate_liturgy goes
@@ -3883,7 +3887,7 @@ def test_the_old_generate_liturgy_is_gone():
 
 ```
 FAILED backend/tests/test_liturgy_generation.py::test_the_old_generate_liturgy_is_gone
-1 failed, <n> passed in <t>s
+1 failed, 8 passed in <t>s
 ```
 
 (`AssertionError: generate_liturgy`.)
@@ -3963,7 +3967,7 @@ grep -rnE "generate_liturgy|_sermon_text_block|SERMON_TEXT_LIMIT|Settings → Se
 git status --short
 ```
 
-**Expected:** `<n> passed in <t>s` with no failure; the grep prints `backend/liturgy_prompts.py` lines for `SERMON_TEXT_LIMIT` (the moved constant and its use) and `backend/usecases/liturgy.py` and `backend/api/routes/liturgy.py` lines for the new `generate_liturgy`, and nothing from `worship_service.py`; `1176 passed, 11 skipped in <t>s`; then exactly ` M backend/tests/test_generate_liturgy.py`, ` M backend/tests/test_hymn_match_parity.py`, ` M backend/tests/test_liturgy_generation.py`, ` M backend/worship_service.py`.
+**Expected:** `33 passed in <t>s`; the grep prints only the new code: `backend/usecases/liturgy.py` (its docstring and `def generate_liturgy`), `backend/api/routes/liturgy.py` (the route and its usecase call), `backend/liturgy_prompts.py` (`SERMON_TEXT_LIMIT` and its use) and `backend/api/schemas.py` (`SermonText`'s docstring), and nothing from `worship_service.py`; `1176 passed, 11 skipped in <t>s`; then exactly ` M backend/tests/test_generate_liturgy.py`, ` M backend/tests/test_hymn_match_parity.py`, ` M backend/tests/test_liturgy_generation.py`, ` M backend/worship_service.py`.
 
 - [ ] **Step 5 (agent): Commit**
 
@@ -4073,7 +4077,7 @@ def test_prayers_of_the_people_gets_one_60_second_attempt(church):
 FAILED backend/tests/test_openai_client.py::test_a_call_can_set_its_own_timeout_and_retries
 FAILED backend/tests/test_usecase_liturgy.py::test_prayers_of_the_people_gets_one_60_second_attempt
 FAILED backend/tests/test_liturgy_config.py::test_rows_budgets_pastor_copy_and_hints
-3 failed, <n> passed in <t>s
+3 failed, 46 passed in <t>s
 ```
 
 - [ ] **Step 3 (agent): Add the keywords and use them**
@@ -4267,7 +4271,7 @@ def _complete(state: _State, messages, max_completion_tokens: int, json_mode: bo
 git status --short
 ```
 
-**Expected:** `<n> passed in <t>s` with no failure (3a's exact `FakeAI` call test and the suggestion tests are unchanged); `1178 passed, 11 skipped in <t>s`; then exactly the six modified files.
+**Expected:** `71 passed in <t>s` (3a's exact `FakeAI` call test and the suggestion tests are unchanged); `1178 passed, 11 skipped in <t>s`; then exactly the six modified files.
 
 - [ ] **Step 5 (agent): Commit**
 
@@ -4437,7 +4441,7 @@ git log --oneline origin/main..HEAD | tail -1
 for i in 1 2 3; do .venv/bin/python -m pytest -q backend/tests/test_usecase_liturgy.py backend/tests/test_api_liturgy.py backend/tests/test_openai_client.py 2>&1 | tail -1; done
 ```
 
-**Expected:** `1178 passed, 11 skipped in <t>s`; `11 skipped, 1178 deselected in <t>s` (no `TEST_DATABASE_URL` here; 4a adds no Postgres test); `49 passed in <t>s` three times with no failure. If a local throwaway Postgres is available, `TEST_DATABASE_URL=postgresql://postgres:<password>@localhost:5432/postgres .venv/bin/python -m pytest -q -m postgres | tail -1` gives `11 passed, 1178 deselected, 1 warning in <t>s`.
+**Expected:** `1178 passed, 11 skipped in <t>s`; `11 skipped, 1178 deselected in <t>s` (no `TEST_DATABASE_URL` here; 4a adds no Postgres test); `50 passed in <t>s` three times with no failure (48 if T11 was skipped). If a local throwaway Postgres is available, `TEST_DATABASE_URL=postgresql://postgres:<password>@localhost:5432/postgres .venv/bin/python -m pytest -q -m postgres | tail -1` gives `11 passed, 1178 deselected, 1 warning in <t>s`.
 
 - [ ] **Step 3 (agent): Frontend tests, types, lint, build; the generated files are current**
 
@@ -4468,7 +4472,7 @@ git diff --name-status origin/main | sort -k2
 git log --reverse --format=%s origin/main..HEAD
 ```
 
-**Expected:** the File Structure's lists and nothing else: `A` for the plan, `backend/liturgy_config.py`, `backend/prayer_library.py`, `backend/usecases/liturgy.py`, `backend/api/routes/liturgy.py`, the three `fixtures/shared/*.json` files and the six new test files (14 `A`); `M` for the 12 backend modules and 14 backend test files, the three frontend files and the three docs (29 `M`... counted: 9 backend modules, 14 backend tests, 3 frontend, 3 docs); no `D`. Then the plan's commits (`WIP plan: slice 4a` ..., `Plan: slice 4a liturgy backend (S slice 4; owner answers 2026-09-30)`), and the twelve subjects of Tasks 1-12 in order (eleven if T11 was skipped), plus any review-fix commits, each named in Step 6's message.
+**Expected:** the File Structure's lists and nothing else: `A` for the plan, `backend/liturgy_config.py`, `backend/prayer_library.py`, `backend/usecases/liturgy.py`, `backend/api/routes/liturgy.py`, the three `fixtures/shared/*.json` files and the six new test files (14 `A`); `M` for the 9 backend modules, the 14 backend test files, the 3 frontend files and the 3 docs in the File Structure (29 `M`; 27 if T11 was skipped, since `openai_client.py` and `test_openai_client.py` are then untouched); no `D`. Then the plan's commits (`WIP plan: slice 4a` ..., `Plan: slice 4a liturgy backend (S slice 4; owner answers 2026-09-30)`), and the twelve subjects of Tasks 1-12 in order (eleven if T11 was skipped), plus any review-fix commits, each named in Step 6's message.
 
 - [ ] **Step 6 (agent): Ask the owner to open the pull request**
 
