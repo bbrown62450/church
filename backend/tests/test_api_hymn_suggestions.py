@@ -232,6 +232,16 @@ def test_the_nt_readings_matches_lead_the_response_candidates(client, church, fe
     assert [lines[t] for t in tokens_for(prompt, "response", n=3)] == ["Gospel 1", "Gospel 2", "Gospel 3"]
 
 
+def test_the_prompt_names_the_services_church_season(client, church, fetched):
+    hymnal(church)
+    fake = install()
+    suggest(client, church, {"scriptures": ["Matthew 21:33-46"]})
+    assert "\nCHURCH SEASON: Season after Pentecost\n" in prompt_of(fake)
+    suggest(client, church, {"service_date_iso": "2027-03-21", "occasion": "Palm Sunday"})
+    assert "\nCHURCH SEASON: Holy Week\n" in prompt_of(fake)
+    assert "Avoid hymns written for another season or feast" in prompt_of(fake)
+
+
 def test_exclude_recent_leaves_recent_hymns_out_of_prompt_and_answer(client, church, fetched):
     hymnal(church, n=20)
     use(church, "hymn 1", "2026-09-27")              # within 12 weeks before

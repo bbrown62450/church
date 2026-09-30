@@ -45,6 +45,7 @@ from scripture_refs import default_nt_ref, parse_refs, split_alternatives
 import scripture_fetcher
 from service_rubric import merge_rubric
 from usecases import passages
+from vanderbilt_lectionary import church_season
 
 logger = logging.getLogger(__name__)
 
@@ -346,7 +347,7 @@ def suggest_hymns(church_id: uuid.UUID, user_id: uuid.UUID, req: SuggestionReque
                                                    current_picks=req.current_picks, rubric=rubric)
         messages, token_map = hymn_suggest.build_prompt(                                  # step 7
             candidates, occasion=req.occasion, scriptures=req.scriptures, nt_ref=nt_ref,
-            nt_text=nt_text, rubric=rubric)
+            nt_text=nt_text, rubric=rubric, season=church_season(req.service_date))
         if logger.isEnabledFor(logging.DEBUG):                    # nt_text is never logged (S §6)
             logger.debug("hymn_suggestions prompt=%r", _without_nt_text(messages))
         try:

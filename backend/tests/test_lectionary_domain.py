@@ -25,6 +25,7 @@ from vanderbilt_lectionary import (
     VRow,
     _ordinary_time_name,
     advent_sunday,
+    church_season,
     clean_cell,
     easter_date,
     fits_draft_limits,
@@ -241,6 +242,54 @@ def test_weekday_feast_name():
         assert weekday_feast_name(d) == expected, d
     for d in (date(2026, 9, 29), date(2026, 11, 26), date(2026, 4, 5), date(2026, 9, 14)):
         assert weekday_feast_name(d) is None, d
+
+
+# --- slice 3b: the church season for the AI hymn prompt (owner answer 3, 2026-09-29) ---
+
+
+def test_church_season_table():
+    seasons = {
+        date(2026, 10, 4): "Season after Pentecost",   # Nineteenth Sunday after Pentecost
+        date(2026, 11, 22): "Season after Pentecost",  # Christ the King
+        date(2026, 11, 28): "Season after Pentecost",  # the Saturday before Advent 1
+        date(2026, 11, 29): "Advent",
+        date(2026, 12, 23): "Advent",
+        date(2026, 12, 24): "Christmas Eve",
+        date(2026, 12, 25): "Christmas",
+        date(2027, 1, 5): "Christmas",
+        date(2027, 1, 6): "Epiphany of the Lord",
+        date(2027, 1, 10): "Season after the Epiphany",  # Baptism of the Lord
+        date(2027, 2, 7): "Season after the Epiphany",   # Transfiguration Sunday
+        date(2027, 2, 10): "Lent",                       # Ash Wednesday
+        date(2027, 3, 20): "Lent",
+        date(2027, 3, 21): "Holy Week",                  # Palm Sunday
+        date(2027, 3, 26): "Holy Week",                  # Good Friday
+        date(2027, 3, 28): "Easter",
+        date(2027, 5, 15): "Easter",
+        date(2027, 5, 16): "Day of Pentecost",
+        date(2027, 5, 23): "Season after Pentecost",     # Trinity Sunday
+    }
+    for d, expected in seasons.items():
+        assert church_season(d) == expected, d
+
+
+def test_church_season_covers_every_day_in_calendar_order():
+    order = ["Season after the Epiphany", "Lent", "Holy Week", "Easter", "Day of Pentecost",
+             "Season after Pentecost", "Advent", "Christmas Eve", "Christmas"]
+    d = date(2025, 1, 7)
+    previous = church_season(d)
+    while d < date(2029, 1, 5):
+        d += timedelta(days=1)
+        season = church_season(d)
+        if season == previous:
+            continue
+        if season == "Epiphany of the Lord":
+            assert (d.month, d.day, previous) == (1, 6, "Christmas"), d
+        elif previous == "Epiphany of the Lord":
+            assert (d.month, d.day, season) == (1, 7, "Season after the Epiphany"), d
+        else:
+            assert order.index(season) == order.index(previous) + 1, (d, previous, season)
+        previous = season
 
 
 def test_lectio_set_name_precedence():
