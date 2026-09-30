@@ -73,7 +73,9 @@ export function stepStatus(
  * and a translation override count as work here (owner answer Q2,
  * 2026-09-29). "New service" and the mount-time roll-forward both keep the
  * translation, so they look past it with `withoutTranslation` (owner answer
- * A, 2026-09-29).
+ * A, 2026-09-29). A hymn in any slot and a chosen hymnal count too; the
+ * Exclude switch and the AI's other ideas never do (owner answer 1,
+ * 2026-09-29, slice 3b; the same fields the fingerprint payload holds).
  */
 export function isPristine(draft: DraftV1): boolean {
   const r = draft.readings;
@@ -85,6 +87,7 @@ export function isPristine(draft: DraftV1): boolean {
     r.selected_ot_ref === "" &&
     r.selected_nt_ref === "" &&
     SLOTS.every((slot) => draft.hymns.slots[slot] === null) &&
+    draft.hymns.hymnal === null &&
     SECTION_KEYS.every((key) => {
       const card = l.cards[key];
       return card.origin === "default" || (card.origin === "empty" && card.text === "");

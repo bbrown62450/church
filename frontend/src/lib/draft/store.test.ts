@@ -172,6 +172,21 @@ describe("DraftStore roll-forward and owner answers Q2 and A", () => {
   });
 });
 
+describe("DraftStore roll-forward and the hymns step (owner answer 1, 2026-09-29)", () => {
+  it("keeps a passed default date when a hymnal was chosen, and rolls one with only the switch or ideas changed", () => {
+    const tenDaysLater = clock(new Date(DRAFT_NOW.getTime() + 10 * 86_400_000)); // Friday, October 9
+    const hymns = (patch: Partial<DraftV1["hymns"]>) => testDraft((d) => ({ ...d, hymns: { ...d.hymns, ...patch } }));
+    const load = (d: DraftV1) =>
+      makeStore(memoryStorage({ [KEY]: JSON.stringify(d) }).storage, tenDaysLater.now).store.getSnapshot().draft;
+    expect(load(hymns({ hymnal: "PH1990" })).readings.date_iso).toBe("2026-10-04");
+    const pick = { hymn_id: "h1", title: "Amazing Grace", number: 649, hymnal: "GG2013" };
+    const ideas = { for_date_iso: "2026-10-04", by_slot: { opening: [pick], response: [], closing: [] } };
+    const rolled = load(hymns({ exclude_recent: false, alternatives: ideas }));
+    expect(rolled.readings.date_iso).toBe("2026-10-11");
+    expect(rolled.hymns).toMatchObject({ exclude_recent: false, alternatives: ideas }); // kept, and hidden by date
+  });
+});
+
 describe("DraftStore changes (S store.ts)", () => {
   it("debounces writes, bumps updated_at, and ignores a recipe that returns the same draft", () => {
     const { storage, data, writes } = memoryStorage({ [KEY]: JSON.stringify(testDraft()) });

@@ -146,6 +146,18 @@ describe("isPristine and the date and translation defaults (owner answer Q2)", (
   });
 });
 
+describe("isPristine and the hymns step (owner answer 1, 2026-09-29)", () => {
+  it("counts a hymn slot and a chosen hymnal, never the Exclude switch or the other ideas", () => {
+    const hymns = (patch: Partial<DraftV1["hymns"]>) => testDraft((d) => ({ ...d, hymns: { ...d.hymns, ...patch } }));
+    expect(isPristine(hymns({ hymnal: "PH1990" }))).toBe(false);
+    expect(isPristine(hymns({ slots: { opening: null, response: HYMN, closing: null } }))).toBe(false);
+    const ideas = { for_date_iso: "2026-10-04", by_slot: { opening: [HYMN], response: [], closing: [HYMN] } };
+    expect(isPristine(hymns({ exclude_recent: false }))).toBe(true);
+    expect(isPristine(hymns({ alternatives: ideas }))).toBe(true);
+    expect(isPristine(hymns({ exclude_recent: false, alternatives: ideas }))).toBe(true);
+  });
+});
+
 describe("stillNeeded (S Review \"Still needed\")", () => {
   it("lists only shipped steps' gaps", () => {
     const fresh = setDate(testDraft(), "");
