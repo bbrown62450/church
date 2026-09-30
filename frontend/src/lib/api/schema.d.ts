@@ -352,6 +352,8 @@ export interface components {
         ChurchProfileOut: {
             /** Bible Translation */
             bible_translation: string | null;
+            /** Default Benediction */
+            default_benediction: string;
             /** Default Hymnal */
             default_hymnal: string | null;
             /** Effective Hymnal */

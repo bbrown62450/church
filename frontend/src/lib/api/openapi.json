@@ -44,6 +44,10 @@
             ],
             "title": "Bible Translation"
           },
+          "default_benediction": {
+            "title": "Default Benediction",
+            "type": "string"
+          },
           "default_hymnal": {
             "anyOf": [
               {
@@ -111,7 +115,8 @@
           "effective_translation",
           "effective_translation_label",
           "default_hymnal",
-          "effective_hymnal"
+          "effective_hymnal",
+          "default_benediction"
         ],
         "title": "ChurchProfileOut",
         "type": "object"
