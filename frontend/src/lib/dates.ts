@@ -93,6 +93,19 @@ export function formatShortDate(iso: string): string {
   return p ? `${MONTHS[p.m - 1]} ${p.d}` : "";
 }
 
+/**
+ * "Sep 7" (slice 3b's recent-use badges); "Dec 28, 2025" when the year differs
+ * from `contextIso`'s (the service date) and `contextIso` is a valid date; ""
+ * for an invalid date.
+ */
+export function formatAbbrevDate(iso: string, contextIso?: string): string {
+  const p = parseIsoDate(iso);
+  if (!p) return "";
+  const text = `${MONTHS[p.m - 1].slice(0, 3)} ${p.d}`;
+  const context = contextIso === undefined ? null : parseIsoDate(contextIso);
+  return context && context.y !== p.y ? `${text}, ${p.y}` : text;
+}
+
 function formatterFor(tz: string | null | undefined): Intl.DateTimeFormat {
   const options: Intl.DateTimeFormatOptions = { year: "numeric", month: "2-digit", day: "2-digit" };
   if (tz) {
