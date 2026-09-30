@@ -1,29 +1,22 @@
 #!/usr/bin/env python3
 """
-Worship service generator: OpenAI liturgy and Word document export (the
-hymn helpers moved to hymn_search, hymn_suggest and usecases.hymns in slice 3).
+Worship service generator: the Word document export. The hymn helpers moved
+to hymn_search, hymn_suggest and usecases.hymns in slice 3; liturgy generation
+moved to liturgy_prompts and usecases.liturgy in slice 4.
 """
 
 from __future__ import annotations
 
 import logging
-import os
 import re
 from typing import Dict, Any, List, Optional
 from io import BytesIO
 
-import liturgy_prompts
-import service_rubric
 from liturgy_config import COMMUNION_BLOCKS
 
 logger = logging.getLogger(__name__)
 
-# Optional imports for docx and openai
-try:
-    from openai import OpenAI
-except ImportError:
-    OpenAI = None
-
+# Optional import for docx
 try:
     from docx import Document
     from docx.shared import Pt
@@ -93,123 +86,6 @@ def _add_assurance_paragraph(doc, leader_text: str) -> None:
     p = doc.add_paragraph()
     r = p.add_run("People: Thanks be to God! Amen.")
     r.bold = True
-
-
-SERMON_TEXT_LIMIT = 2000
-
-
-def _sermon_text_block(sermon_text: Optional[tuple]) -> str:
-    """The sermon-text context appended to each liturgy prompt, or '' when the
-    reference or text is missing, or the passage failed to load."""
-    if not sermon_text:
-        return ""
-    ref, text = sermon_text
-    text = (text or "").strip()
-    if not (ref or "").strip() or not text or "[Could not load text]" in text:
-        return ""
-    return (
-        f"Sermon text ({ref.strip()}), for themes only; do not quote, cite, or name it:\n"
-        f"{text[:SERMON_TEXT_LIMIT]}"
-    )
-
-
-def generate_liturgy(
-    *,
-    occasion: str,
-    scriptures: List[str],
-    hymns: List[Dict[str, str]],
-    sections: List[str],
-    api_key: Optional[str] = None,
-    user_overrides: Optional[Dict[str, str]] = None,
-    prompt_overrides: Optional[Dict[str, str]] = None,
-    rubric: Optional[Dict[str, Any]] = None,
-    sermon_text: Optional[tuple] = None,
-) -> Dict[str, str]:
-    """
-    Use OpenAI to generate liturgy text for the requested sections.
-    If user_overrides[section] is non-empty, that text is used instead of generating.
-    prompt_overrides (per church) replaces the default AI instructions for the
-    "system" voice and/or any section; missing keys fall back to the defaults.
-    Returns dict mapping section key -> plain text.
-    rubric adds each section's quality checklist to its prompt. It is merged over
-    the defaults, so None, a church's sparse overrides or a full rubric all
-    work. sermon_text, as (reference, passage text), is
-    added to every prompt for themes; it is skipped when missing or when the
-    passage failed to load. Both are appended in code, so churches with edited
-    prompts get them too.
-    """
-    overrides = user_overrides or {}
-    prompts = liturgy_prompts.merge_prompts(prompt_overrides)
-    rubric = service_rubric.merge_rubric(rubric)
-    sermon_block = _sermon_text_block(sermon_text)
-    client = None
-    if OpenAI:
-        key = (api_key or os.getenv("OPENAI_API_KEY") or "").strip()
-        if key and not key.isascii():
-            # A pasted key sometimes arrives with Unicode look-alike characters
-            # (e.g. from a rich-text copy path); the HTTP layer then fails with a
-            # cryptic 'ascii codec' error. Say what actually happened instead.
-            return {
-                s: "[Your OPENAI_API_KEY contains invalid (non-ASCII) characters — "
-                   "it was likely mangled when pasted. Re-paste it in Settings → Secrets.]"
-                for s in sections
-            }
-        if key:
-            client = OpenAI(api_key=key)
-
-    if not client:
-        return {
-            s: f"[Configure OPENAI_API_KEY to generate {s.replace('_', ' ')}.]"
-            for s in sections
-        }
-
-    hymn_lines = "\n".join(
-        f"- {h.get('title', '')} (#{h.get('number', '')})" for h in hymns
-    )
-    scripture_lines = "\n".join(f"- {s}" for s in scriptures) if scriptures else "None specified."
-
-    system = prompts["system"]
-    opening_hymn = hymns[0].get("title", "") if hymns else "N/A"
-
-    out = {}
-    for section in sections:
-        if overrides.get(section, "").strip():
-            out[section] = overrides[section].strip()
-            continue
-        template = prompts.get(section)
-        if not template:
-            out[section] = ""
-            continue
-        prompt = liturgy_prompts.render(
-            template,
-            occasion=occasion,
-            scriptures=scripture_lines,
-            opening_hymn=opening_hymn,
-            hymns=hymn_lines,
-        )
-        checklist = rubric["prayers"].get(section)
-        if checklist:
-            label = liturgy_prompts.SECTION_LABELS.get(section, section)
-            prompt += "\n\n" + service_rubric.format_checklist(label, checklist)
-        if sermon_block:
-            prompt += "\n\n" + sermon_block
-
-        model = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
-        try:
-            r = client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": prompt},
-                ],
-                max_tokens=1024,
-            )
-            text = (r.choices[0].message.content or "").strip()
-            out[section] = text
-        except Exception as e:
-            out[section] = f"[Error generating {section}: {e}]"
-
-    return out
 
 
 def _add_custom_elements_after(

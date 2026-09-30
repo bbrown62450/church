@@ -65,4 +65,4 @@ def test_the_old_hymn_code_is_gone():
     assert "load_dotenv" not in source and "NotionHymnsDB" not in source
     requirements = (Path(worship_service.__file__).parent / "requirements.txt").read_text()
     assert "lxml" not in requirements
-    assert callable(worship_service.generate_liturgy) and callable(worship_service.build_docx)
+    assert callable(worship_service.build_docx)       # generate_liturgy went in slice 4a

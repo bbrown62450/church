@@ -3,10 +3,7 @@
 AC3, AC19). The system message is compared with the merged system prompt,
 never quoted (the reviewer add-on changes the default's season sentences;
 S "Tests before and after")."""
-from types import SimpleNamespace
-
 import liturgy_prompts as lp
-from service_rubric import default_rubric
 
 OCCASION = "Third Sunday of Easter"
 SCRIPTURES = ["Acts 9:1-6", "Psalm 30", "Revelation 5:11-14", "John 21:1-19"]
@@ -52,40 +49,15 @@ def test_a_hymn_without_a_number_has_no_hash_none():
     assert "Hymns: - Archived Hymn." in user and "(#None)" not in user
 
 
-# --- the old function as the oracle, until Task 10 deletes it ---
+def test_the_old_generate_liturgy_is_gone():
+    """S Backend 6: deleted after its behavior was pinned above and in
+    test_generate_liturgy.py, with its UI-shaped error strings."""
+    from pathlib import Path
 
-class _RecordingOpenAI:
-    def __init__(self):
-        self.requests = []
-        self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
-
-    def _create(self, **kwargs):
-        self.requests.append(kwargs)
-        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="Draft."))])
-
-
-def test_messages_match_the_old_generate_liturgy(monkeypatch):
     import worship_service
 
-    fake = _RecordingOpenAI()
-    monkeypatch.setattr(worship_service, "OpenAI", lambda api_key: fake)
-    rubric = default_rubric()
-    rubric["prayers"]["benediction"] = ["ends with the Aaronic blessing"]
-    cases = [
-        {},
-        {"prompt_overrides": {"system": "Our voice.", "offertory_prayer": "Thanks for {hymns} on {occasion}."}},
-        {"rubric": rubric, "sermon_text": ("John 21:1-19", "Simon Peter said, I am going fishing.")},
-        {"rubric": {}, "sermon_text": ("John 21:1-19", "[Could not load text]")},
-    ]
-    for case in cases:
-        fake.requests.clear()
-        worship_service.generate_liturgy(
-            occasion=OCCASION, scriptures=SCRIPTURES,
-            hymns=[{"title": h.title, "number": h.number} for h in SLOTS.values()],
-            sections=list(lp.SECTION_ORDER), api_key="test-key", **case)
-        sermon = case.get("sermon_text") or (None, None)
-        ctx = lp.build_context(occasion=OCCASION, scriptures=SCRIPTURES, hymns_by_slot=SLOTS,
-                               rubric=case.get("rubric"), sermon_ref=sermon[0], sermon_text=sermon[1])
-        prompts = lp.merge_prompts(case.get("prompt_overrides"))
-        assert [r["messages"] for r in fake.requests] == [
-            lp.build_messages(section, prompts, ctx) for section in lp.SECTION_ORDER], case
+    for name in ("generate_liturgy", "_sermon_text_block", "SERMON_TEXT_LIMIT", "OpenAI"):
+        assert not hasattr(worship_service, name), name
+    source = Path(worship_service.__file__).read_text(encoding="utf-8")
+    for text in ("Settings → Secrets", "Configure OPENAI_API_KEY", "gpt-3.5-turbo", "[Error generating"):
+        assert text not in source, text
