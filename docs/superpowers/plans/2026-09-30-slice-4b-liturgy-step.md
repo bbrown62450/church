@@ -73,7 +73,7 @@ A directive that does not match exactly once is a stop: the tree is not what the
   | T13, T14 | 0 | 0 | 509 in 75 | 1183 passed, 11 skipped |
 
 - CI `backend-postgres` stays at `11 passed, 1183 deselected` (4b adds no Postgres test).
-- The step tests fake only `Date` and wait on the app's real timers (the draft's 400 ms writes, the fake API's answers), so `liturgy-step.test.tsx` takes about 12 s; one test fakes `setTimeout` as well (the 8-second "Still working" line) and says why, and one waits out a real 1-second `Retry-After`. Four heavier tests carry `{ timeout: 10_000 }` with a comment.
+- The step tests fake only `Date` and wait on the app's real timers (the draft's 400 ms writes, the fake API's answers), so `liturgy-step.test.tsx` takes about 18 s; one test fakes `setTimeout` as well (the 8-second "Still working" line) and says why, and one waits out a real 1-second `Retry-After`. Four heavier tests carry `{ timeout: 10_000 }` with a comment.
 
 ### Code rules (F §4)
 - Every file under `src/app/` that renders is a client component (`"use client"`, F §4.1). Pages and components never call `apiFetch` (F §4.4): the step uses `lib/queries/liturgy.ts`, and the provider calls `generateSection` from there.
@@ -405,6 +405,7 @@ describe("DraftStore changes (S store.ts)", () => {
 ```
  FAIL  |unit| src/lib/liturgy/sections.test.ts [ src/lib/liturgy/sections.test.ts ]
 Error: Cannot find module './sections' imported from '<repo>/frontend/src/lib/liturgy/sections.test.ts'
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
  FAIL  |unit| src/lib/draft/status.test.ts > isPristine and the liturgy step (owner answer 1, 2026-09-30) > counts a switch moved from its default and text that prints, never a card following the church default
 AssertionError: expected true to be false // Object.is equality
  FAIL  |unit| src/lib/draft/store.test.ts > DraftStore roll-forward and the liturgy step (owner answer 1, 2026-09-30) > keeps a passed default date when a card was switched, and rolls one whose Benediction follows the default
@@ -853,8 +854,15 @@ describe("liturgyCounts (S summary.ts)", () => {
 **Expected:**
 
 ```
-(pending replay)
+ FAIL  |unit| src/lib/liturgy/cards.test.ts [ src/lib/liturgy/cards.test.ts ]
+Error: Cannot find module './cards' imported from '<repo>/frontend/src/lib/liturgy/cards.test.ts'
+ FAIL  |unit| src/lib/liturgy/defaults.test.ts [ src/lib/liturgy/defaults.test.ts ]
+Error: Cannot find module './cards' imported from '<repo>/frontend/src/lib/liturgy/defaults.test.ts'
+ FAIL  |unit| src/lib/liturgy/summary.test.ts [ src/lib/liturgy/summary.test.ts ]
+Error: Cannot find module './cards' imported from '<repo>/frontend/src/lib/liturgy/summary.test.ts'
+      Tests  no tests
 ```
+
 - [ ] **Step 4 (agent): Write `cards.ts`, `defaults.ts` and `summary.ts`, and move the communion rule**
 
 **Create `frontend/src/lib/liturgy/cards.ts`:**
@@ -1194,14 +1202,14 @@ Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 
 **Review checkpoint (T1-T2, batch A):** `isPristine` counts exactly owner answer 1's fields and nothing transient; every S origin row has a test; the stale rule's order matches S step 6; the communion rule has one home; counts match.
 
-### Task 3: The request body, the card errors and the queue (S Frontend `request.ts`, `errors.ts`, `queue.ts`, "Sermon text", "Per-card error messages"; BC-24; clarifications 7, 8, 9)
+### Task 3: The request body, the card errors and the queue (S Frontend `request.ts`, `errors.ts`, `queue.ts`, "Sermon text", "Per-card error messages"; BC-24; clarifications 7, 8, 9, 29)
 
-The rest of the pure half. `request.ts` builds one section's `POST /liturgy/generate` body from the draft exactly as S's `request.ts` row says (one section, no `overrides`, the ServiceDraft limits, the three slots as `HymnRef`s) and works out which passage is the sermon text (`sermonSource`: the effective NT reading, the draft's or church's translation, WEB for ESV) and its `{ref, text}` (`sermonText`); the fetch itself is T6's. An id that is not a UUID goes as `null`, because the API validates `hymn_id` as a UUID and would reject the whole request (clarification 7). `errors.ts` turns a section's failure or a failed request into what the card shows, with S's copy; a cancel, a 401 and a lost church show nothing on the card (clarification 8), and the 404's link is labelled "Go to Hymns" (clarification 9). `queue.ts` runs at most 3 tasks, first in first out, and a cancelled task's outcome is never delivered. The generated type names join `lib/api/types.ts`.
+The rest of the pure half. `request.ts` builds one section's `POST /liturgy/generate` body from the draft exactly as S's `request.ts` row says (one section, no `overrides`, the ServiceDraft limits, the three slots as `HymnRef`s) and works out which passage is the sermon text (`sermonSource`: the effective NT reading, the draft's or church's translation, WEB for ESV) and its `{ref, text}` (`sermonText`); the fetch itself is T6's. An id that is not a UUID goes as `null`, because the API validates `hymn_id` as a UUID and would reject the whole request (clarification 7). `errors.ts` turns a section's failure or a failed request into what the card shows, with S's copy; a cancel, a 401 and a lost church show nothing on the card (clarification 8), and the 404's link is labelled "Go to Hymns" (clarification 9). `queue.ts` runs at most 3 tasks, first in first out; a cancelled task's outcome is never delivered, a task cancelled before its `run` was called never runs, and each outcome is delivered before the next task starts, so a 429 can stop the waiting ones (clarification 29). The generated type names join `lib/api/types.ts`.
 
 **Files:**
 - Create: `frontend/src/lib/liturgy/request.ts`, `frontend/src/lib/liturgy/errors.ts`, `frontend/src/lib/liturgy/queue.ts`
 - Modify: `frontend/src/lib/api/types.ts` (the liturgy type names)
-- Test: `frontend/src/lib/liturgy/request.test.ts` (new, 3), `frontend/src/lib/liturgy/errors.test.ts` (new, 2), `frontend/src/lib/liturgy/queue.test.ts` (new, 3)
+- Test: `frontend/src/lib/liturgy/request.test.ts` (new, 3), `frontend/src/lib/liturgy/errors.test.ts` (new, 2), `frontend/src/lib/liturgy/queue.test.ts` (new, 4)
 
 **Interfaces:**
 - Consumes: the generated `LiturgyConfigOut`, `GenerateLiturgyIn`/`Out`, `SectionResult`, `SectionError`, `SermonText`, `HymnRef` (4a's `schema.d.ts`, unchanged); `effectivePicks` (2c); `clipChars`, `cleanRefs`, `MAX_REFS`, `MAX_REF_LENGTH` (3b `lib/hymns/match-request.ts`); `passageText` (2c); `ApiError`, `describeError`, `isNoChurchAccess` (1, 2).
@@ -1209,10 +1217,10 @@ The rest of the pure half. `request.ts` builds one section's `POST /liturgy/gene
   - `lib/api/types.ts`: `LiturgyConfig`, `LiturgySection`, `OutlineItem`, `CommunionBlock`, `GenerateLiturgyBody`, `GenerateLiturgyResult`, `SectionResult`, `SectionError`, `SermonText`, `HymnRef`.
   - `request.ts`: `MAX_OCCASION`, `MAX_HYMN_TITLE`, `MAX_HYMNAL`, `MAX_SERMON_TEXT`, `buildGenerateRequest(draft, section, sermon: SermonText | null)`, `sermonSource(draft, churchTranslation) → {ref, translation} | null`, `sermonText(ref, passage | undefined) → SermonText | null`.
   - `errors.ts`: `type CardError = {code, message, retryable, retryAfterSeconds?, link?}`, `AI_NOT_CONFIGURED_MESSAGE`, `localAiNotConfigured()`, `cardErrorFrom(e) → CardError | null`.
-  - `queue.ts`: `type TaskOutcome<T>`, `type TaskQueue = {push(key, run, done), cancel(key), cancelAll(), runningKeys(), waitingKeys()}`, `createTaskQueue({concurrency})`.
+  - `queue.ts`: `type TaskOutcome<T>`, `type TaskQueue = {push(key, run, done), cancel(key), cancelAll(), runningKeys(), waitingKeys()}`, `createTaskQueue({concurrency})` (the outcome before the next start).
   - Later users: T4 (the fixtures use the type names), T6 (all of it).
 
-Counts after this task: frontend **463 passed in 71 files**.
+Counts after this task: frontend **464 passed in 71 files**.
 
 - [ ] **Step 1 (agent): Check the starting point**
 
@@ -1531,8 +1539,15 @@ describe("createTaskQueue (S queue.ts)", () => {
 **Expected:**
 
 ```
-(pending replay)
+ FAIL  |unit| src/lib/liturgy/errors.test.ts [ src/lib/liturgy/errors.test.ts ]
+Error: Cannot find module './errors' imported from '<repo>/frontend/src/lib/liturgy/errors.test.ts'
+ FAIL  |unit| src/lib/liturgy/queue.test.ts [ src/lib/liturgy/queue.test.ts ]
+Error: Cannot find module './queue' imported from '<repo>/frontend/src/lib/liturgy/queue.test.ts'
+ FAIL  |unit| src/lib/liturgy/request.test.ts [ src/lib/liturgy/request.test.ts ]
+Error: Cannot find module './request' imported from '<repo>/frontend/src/lib/liturgy/request.test.ts'
+      Tests  no tests
 ```
+
 - [ ] **Step 4 (agent): Write the type names, `request.ts`, `errors.ts` and `queue.ts`**
 
 **In `frontend/src/lib/api/types.ts`, replace:**
@@ -1816,7 +1831,7 @@ export function createTaskQueue({ concurrency }: { concurrency: number }): TaskQ
 git status --short
 ```
 
-**Expected:** ` Test Files  7 passed (7)`, `      Tests  18 passed (18)`; the suite ` Test Files  71 passed (71)`, `      Tests  463 passed (463)`; `typecheck 0` and `lint 0`; ` M frontend/src/lib/api/types.ts` and six new files under `frontend/src/lib/liturgy/` as `??`.
+**Expected:** ` Test Files  7 passed (7)`, `      Tests  19 passed (19)`; the suite ` Test Files  71 passed (71)`, `      Tests  464 passed (464)`; `typecheck 0` and `lint 0`; ` M frontend/src/lib/api/types.ts` and six new files under `frontend/src/lib/liturgy/` as `??`.
 
 - [ ] **Step 6 (agent): Commit**
 
@@ -1828,8 +1843,9 @@ as a snapshot). sermonSource picks the effective NT reading in the draft's
 translation, WEB for ESV; sermonText cuts it to 20 000 characters.
 cardErrorFrom words every code as the slice 4 table does and shows nothing
 for a cancel, a 401 or a lost church. createTaskQueue runs at most 3,
-first in first out, and never delivers a cancelled task's outcome.
-Frontend 455 -> 463 tests in 68 -> 71 files." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+first in first out, never delivers a cancelled task's outcome, and hands
+each outcome over before the next task starts.
+Frontend 455 -> 464 tests in 68 -> 71 files." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
@@ -1854,7 +1870,7 @@ The API side of the step. `lib/queries/liturgy.ts` holds `useLiturgyConfig()` (u
   - Fixtures: `liturgyConfig(overrides?)`, `sectionResult(section, text)`, `sectionFailure(section, code, message)`, `generateRoute(answer?)` (a `POST /liturgy/generate` handler; by default each section comes back as "{Label} written by the AI.").
   - Later users: T6 (`generateSection`, `passageQuery`, `reportAuthErrors`), T8-T11 (`useLiturgyConfig`, the fixtures).
 
-Counts after this task: frontend **467 passed in 72 files**.
+Counts after this task: frontend **468 passed in 72 files**.
 
 - [ ] **Step 1 (agent): Check the starting point**
 
@@ -1864,7 +1880,7 @@ grep -c "liturgy" frontend/src/lib/api/timeouts.ts
 (cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
 ```
 
-**Expected:** nothing (or `?? .claude/`); `0` (grep exits 1); ` Test Files  71 passed (71)`, `      Tests  463 passed (463)`.
+**Expected:** nothing (or `?? .claude/`); `0` (grep exits 1); ` Test Files  71 passed (71)`, `      Tests  464 passed (464)`.
 
 - [ ] **Step 2 (agent): Write the fixtures and the failing tests**
 
@@ -2208,8 +2224,14 @@ describe("liturgy queries (S API client usage)", () => {
 **Expected:**
 
 ```
-(pending replay)
+ FAIL  |dom| src/lib/queries/liturgy.test.tsx [ src/lib/queries/liturgy.test.tsx ]
+Error: Failed to resolve import "./liturgy" from "src/lib/queries/liturgy.test.tsx". Does the file exist?
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  |unit| src/lib/queries/client.test.ts > handleAuthErrors (through makeQueryClient's caches) > reportAuthErrors does the same for a call made outside the caches (slice 4b generation)
+TypeError: reportAuthErrors is not a function
+      Tests  1 failed | 16 passed (17)
 ```
+
 - [ ] **Step 4 (agent): Write the queries, the timeout row, `passageQuery` and `reportAuthErrors`**
 
 **In `frontend/src/lib/api/timeouts.ts`, replace:**
@@ -2398,7 +2420,7 @@ export async function generateSection(
 git status --short
 ```
 
-**Expected:** ` Test Files  9 passed (9)`, `      Tests  45 passed (45)`; the suite ` Test Files  72 passed (72)`, `      Tests  467 passed (467)`; `typecheck 0` and `lint 0`; ` M` for the five modified files and `??` for the two new ones.
+**Expected:** ` Test Files  9 passed (9)`, `      Tests  45 passed (45)`; the suite ` Test Files  72 passed (72)`, `      Tests  468 passed (468)`; `typecheck 0` and `lint 0`; ` M` for the five modified files and `??` for the two new ones.
 
 - [ ] **Step 6 (agent): Commit**
 
@@ -2411,7 +2433,7 @@ result, with a 100 s client timeout (owner answer 2: 4a answers within
 and freshness for the sermon text; reportAuthErrors gives a call made
 outside the caches the same 401 and lost-church handling. The fixtures'
 liturgy config is pinned to 4a's shared fixtures.
-Frontend 463 -> 467 tests in 71 -> 72 files." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Frontend 464 -> 468 tests in 71 -> 72 files." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
@@ -2434,7 +2456,7 @@ A fresh draft now prints the church default, so three existing tests change thei
 - Consumes: `applyLiturgyDefaults`, `DEFAULT_BENEDICTION_FALLBACK`, `type LiturgyDefaults` (T2); `ChurchProfile.default_benediction` (4a).
 - Produces: `type DraftChurch = {id; timezone?; timezone_valid?; default_benediction?: string}`; `new DraftStore({..., liturgyDefaults?: LiturgyDefaults})`, `store.setLiturgyDefaults(next)`; `DraftApi.peek: () => DraftV1`. Later users: T6 (`peek`), T8 (the Benediction card follows the default), every "New service" (its fresh draft carries the default).
 
-Counts after this task: frontend **470 passed in 72 files**.
+Counts after this task: frontend **471 passed in 72 files**.
 
 - [ ] **Step 1 (agent): Check the starting point**
 
@@ -2444,7 +2466,7 @@ grep -c "default_benediction" frontend/src/lib/draft/schema.ts frontend/src/lib/
 (cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
 ```
 
-**Expected:** nothing (or `?? .claude/`); `frontend/src/lib/draft/schema.ts:0`, `frontend/src/lib/draft/store.ts:0`, `frontend/src/lib/draft/context.tsx:0`; ` Test Files  72 passed (72)`, `      Tests  467 passed (467)`.
+**Expected:** nothing (or `?? .claude/`); `frontend/src/lib/draft/schema.ts:0`, `frontend/src/lib/draft/store.ts:0`, `frontend/src/lib/draft/context.tsx:0`; ` Test Files  72 passed (72)`, `      Tests  468 passed (468)`.
 
 - [ ] **Step 2 (agent): Write the failing tests and the new expected values**
 
@@ -2669,8 +2691,24 @@ import { CHURCH_IDS, churchProfile, DRAFT_NOW, testDraft, USER_ID } from "@/test
 **Expected:**
 
 ```
-(pending replay)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  |unit| src/lib/draft/mapping.test.ts > draftToServicePayload (provisional; 5a replaces it) > maps a fresh draft to the ServiceDraft shape
+AssertionError: expected { …(11) } to deeply equal { …(11) }
+ FAIL  |unit| src/lib/draft/mapping.test.ts > draftToServicePayload (provisional; 5a replaces it) > trims and drops blank lines, keeps enabled non-empty cards, slot-keyed hymns and elements without ids
+AssertionError: expected { Object (call_to_worship) } to deeply equal { …(2) }
+ FAIL  |unit| src/lib/draft/schema.test.ts > draft schema and freshDraft (F §4.6) > a fresh draft is dated next Sunday with every field empty and the F §4.6 defaults
+AssertionError: benediction: expected { enabled: true, text: '', …(1) } to deeply equal { enabled: true, …(2) }
+ FAIL  |unit| src/lib/draft/status.test.ts > stepStatus (F §4.7) > counts filled hymn slots and enabled liturgy cards with text once those steps ship
+AssertionError: expected { kind: 'incomplete', done: 1, …(1) } to deeply equal { kind: 'incomplete', done: 2, …(1) }
+ FAIL  |unit| src/lib/draft/store.test.ts > DraftStore and the liturgy defaults (slice 4 spec, Draft store integration) > fills a fresh draft's Benediction with the church default and follows a new default until the card is edited
+AssertionError: expected { enabled: true, text: '', …(1) } to deeply equal { enabled: true, …(2) }
+ FAIL  |unit| src/lib/draft/store.test.ts > DraftStore and the liturgy defaults (slice 4 spec, Draft store integration) > loads a stored draft with today's default and the date's communion, stamped just after the stored draft
+AssertionError: expected '' to be 'Halverson' // Object.is equality
+ FAIL  |dom| src/lib/draft/context.test.tsx > DraftProvider and useDraft (F §4.6 Persistence) > fills the Benediction from the church profile, follows a new default, and peek reads the latest draft (slice 4b)
+TestingLibraryElementError: Unable to find an element with the text: Benediction: Go in peace.. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+      Tests  7 failed | 52 passed (59)
 ```
+
 - [ ] **Step 4 (agent): Fill the fresh draft, and run the defaults in the store and the provider**
 
 **In `frontend/src/lib/draft/schema.ts`, replace:**
@@ -2979,7 +3017,7 @@ import type { DraftChurch, DraftV1, StepId } from "./schema";
 git status --short
 ```
 
-**Expected:** ` Test Files  9 passed (9)`, `      Tests  59 passed (59)`; the suite ` Test Files  72 passed (72)`, `      Tests  470 passed (470)` (the builder, Hymns and Date & readings tests pass unchanged: their seeded drafts carry the default already); `typecheck 0` and `lint 0`; ` M` for the eight files named in **Files:**.
+**Expected:** ` Test Files  9 passed (9)`, `      Tests  59 passed (59)`; the suite ` Test Files  72 passed (72)`, `      Tests  471 passed (471)` (the builder, Hymns and Date & readings tests pass unchanged: their seeded drafts carry the default already); `typecheck 0` and `lint 0`; ` M` for the eight files named in **Files:**.
 
 - [ ] **Step 6 (agent): Commit**
 
@@ -2991,7 +3029,7 @@ applyLiturgyDefaults on load, on every change and on replace; a load it
 changes is stamped 1 ms after the stored draft, and a new default from a
 profile refetch is an automatic change, so neither outranks another
 tab's edit. DraftProvider passes the default and useDraft gains peek().
-Frontend 467 -> 470 tests in 72 files." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Frontend 468 -> 471 tests in 72 files." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
@@ -3022,7 +3060,7 @@ The provider's own tests are S's `generation.test.tsx` cases (the sermon text); 
 - Consumes: `useDraft().update`, `peek` (T5); `captureCard`, `staleVerdict`, `applyGenerated`, `restoreCard` (T2); `buildGenerateRequest`, `sermonSource`, `sermonText`, `cardErrorFrom`, `localAiNotConfigured`, `createTaskQueue` (T3); `generateSection`, `passageQuery`, `reportAuthErrors`, `useApi` (T4); `SECTION_LABELS` (T1); sonner's `toast.message`.
 - Produces: `LiturgyGenerationProvider({church: {id, effective_translation}, sermonWaitMs?, children})`, `useLiturgyGeneration(): LiturgyGeneration`, `MAX_IN_FLIGHT = 3`, `SERMON_WAIT_MS = 10_000`, `type CardRun = {phase: "queued" | "writing", since}`, `type UndoEntry = {kind: "replaced" | "cleared", previous}`, `type BulkRun = {total, done}`. Later users: T8-T10 (the step), T11 (`LiturgySummaryBlock` reads `runs`).
 
-Counts after this task: frontend **473 passed in 73 files**.
+Counts after this task: frontend **474 passed in 73 files**.
 
 - [ ] **Step 1 (agent): Check the starting point**
 
@@ -3032,7 +3070,7 @@ grep -c "LiturgyGenerationProvider" frontend/src/components/builder/builder-shel
 (cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
 ```
 
-**Expected:** nothing (or `?? .claude/`); `0` (grep exits 1); ` Test Files  72 passed (72)`, `      Tests  470 passed (470)`.
+**Expected:** nothing (or `?? .claude/`); `0` (grep exits 1); ` Test Files  72 passed (72)`, `      Tests  471 passed (471)`.
 
 - [ ] **Step 2 (agent): Write the failing tests**
 
@@ -3202,8 +3240,11 @@ describe("the sermon text (S Sermon text)", () => {
 **Expected:**
 
 ```
-(pending replay)
+ FAIL  |dom| src/lib/liturgy/generation.test.tsx [ src/lib/liturgy/generation.test.tsx ]
+Error: Failed to resolve import "./generation" from "src/lib/liturgy/generation.test.tsx". Does the file exist?
+      Tests  no tests
 ```
+
 - [ ] **Step 4 (agent): Write the provider and mount it in the shell**
 
 **Create `frontend/src/lib/liturgy/generation.tsx`:**
@@ -3631,7 +3672,7 @@ import { useMeContext } from "@/lib/me-context";
 git status --short
 ```
 
-**Expected:** ` Test Files  7 passed (7)`, `      Tests  95 passed (95)` (the shell, Hymns and Date & readings tests pass with the provider mounted, sending nothing); the suite ` Test Files  73 passed (73)`, `      Tests  473 passed (473)`; `typecheck 0` and `lint 0`; ` M frontend/src/components/builder/builder-shell.tsx` and the two new files as `??`.
+**Expected:** ` Test Files  7 passed (7)`, `      Tests  95 passed (95)` (the shell, Hymns and Date & readings tests pass with the provider mounted, sending nothing); the suite ` Test Files  73 passed (73)`, `      Tests  474 passed (474)`; `typecheck 0` and `lint 0`; ` M frontend/src/components/builder/builder-shell.tsx` and the two new files as `??`.
 
 - [ ] **Step 6 (agent): Commit**
 
@@ -3644,7 +3685,7 @@ reads the sermon text once (WEB for ESV, at most 10 s, left out on
 failure), then sends one section per request, 3 at a time; a result is
 applied or dropped by the stale rule with its toast; a 429 stops the
 queue; a bulk run ends with one toast. Unmounting cancels everything.
-Frontend 470 -> 473 tests in 72 -> 73 files." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Frontend 471 -> 474 tests in 72 -> 73 files." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
@@ -3748,8 +3789,11 @@ describe("useAutosize (S Layout)", () => {
 **Expected:**
 
 ```
-(pending replay)
+ FAIL  |dom| src/lib/use-autosize.test.tsx [ src/lib/use-autosize.test.tsx ]
+Error: Failed to resolve import "./use-autosize" from "src/lib/use-autosize.test.tsx". Does the file exist?
+      Tests  no tests
 ```
+
 - [ ] **Step 4 (agent, clarifications 19 and 20): Write the dialog and `useAutosize`**
 
 **Create `frontend/src/components/ui/dialog.tsx`:**
@@ -4325,8 +4369,11 @@ describe("the card's own draft (S Card origin transitions)", () => {
 **Expected:**
 
 ```
-(pending replay)
+ FAIL  |dom| src/components/builder/liturgy/liturgy-step.test.tsx [ src/components/builder/liturgy/liturgy-step.test.tsx ]
+Error: Failed to resolve import "./liturgy-step" from "src/components/builder/liturgy/liturgy-step.test.tsx". Does the file exist?
+      Tests  no tests
 ```
+
 - [ ] **Step 4 (agent): Write the step, the cards, the landmarks and the sermon title**
 
 **Create `frontend/src/components/builder/liturgy/sermon-title-field.tsx`:**
@@ -5070,6 +5117,7 @@ describe("Generate and Regenerate (S Generate and Regenerate, AI bar)", () => {
     expect(screen.queryByText(/^Wrote/)).toBeNull();
   });
 
+  // Heavy: three runs, one of them a bulk run of six with five answers; near Vitest's 5 s default on a busy machine.
   it("Cancel, switching a running card off, and typing in a queued card all stop it silently", { timeout: 10_000 }, async () => {
     const held = heldGenerate();
     const { user } = renderStep(testDraft(), { "POST /liturgy/generate": held.handler });
@@ -5105,6 +5153,7 @@ describe("Generate and Regenerate (S Generate and Regenerate, AI bar)", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
+  // Heavy: three runs, a New service, a 400 ms draft write and a profile change; near Vitest's 5 s default.
   it("drops a result for a replaced service or an edit from another tab, and applies one to a card following the default", { timeout: 10_000 }, async () => {
     const held = heldGenerate();
     const { user, queryClient } = renderStep(testDraft(), { "POST /liturgy/generate": held.handler });
@@ -5168,6 +5217,7 @@ describe("Generate and Regenerate (S Generate and Regenerate, AI bar)", () => {
     expect(await screen.findByRole("textbox", { name: "Call to Worship" })).toHaveValue("New call_to_worship");
   });
 
+  // Heavy: a bulk run of six and four cards' alerts; near Vitest's 5 s default on a busy machine.
   it("stops the queue on a 429: that card and every waiting one show the wait", { timeout: 10_000 }, async () => {
     const held = heldGenerate();
     const { user } = renderStep(testDraft(), { "POST /liturgy/generate": held.handler });
@@ -5270,8 +5320,11 @@ describe("Generate and Regenerate (S Generate and Regenerate, AI bar)", () => {
 **Expected:**
 
 ```
-(pending replay)
+ FAIL  |dom| src/components/builder/liturgy/liturgy-step.test.tsx [ src/components/builder/liturgy/liturgy-step.test.tsx ]
+Error: Failed to resolve import "./use-still-working" from "src/components/builder/liturgy/liturgy-step.test.tsx". Does the file exist?
+      Tests  no tests
 ```
+
 - [ ] **Step 4 (agent): Write the AI bar and the cards' AI states**
 
 **Create `frontend/src/components/builder/liturgy/use-still-working.ts`:**
@@ -6050,8 +6103,18 @@ describe("custom elements (S Custom elements)", () => {
 **Expected:**
 
 ```
-(pending replay)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  |dom| src/components/builder/liturgy/liturgy-step.test.tsx > the Liturgy step (S User experience) > lays out the order of worship as the Word files print it, with the draft's hymns, readings and title
+ FAIL  |dom| src/components/builder/liturgy/liturgy-step.test.tsx > the communion card (S Communion card) > follows the first-Sunday rule until toggled, says why, restores the default, and shows the fixed text
+ FAIL  |dom| src/components/builder/liturgy/liturgy-step.test.tsx > the communion card (S Communion card) > says when communion came from a saved service
+ FAIL  |dom| src/components/builder/liturgy/liturgy-step.test.tsx > custom elements (S Custom elements) > requires a label, adds after its place with the fields trimmed, scrolls to it, and opens empty next time
+ FAIL  |dom| src/components/builder/liturgy/liturgy-step.test.tsx > custom elements (S Custom elements) > edits the label, text and place inline; a blank label says it won't print, and an unknown place is the end
+ FAIL  |dom| src/components/builder/liturgy/liturgy-step.test.tsx > custom elements (S Custom elements) > Remove offers Undo, which puts the element back at the same index
+ FAIL  |dom| src/components/builder/liturgy/liturgy-step.test.tsx > custom elements (S Custom elements) > stops at 30 elements
+ FAIL  |dom| src/components/builder/liturgy/liturgy-step.test.tsx > custom elements (S Custom elements) > keeps each church's elements in its own draft (streamlit_tests/test_streamlit_tenancy.py)
+      Tests  8 failed | 23 passed (31)
 ```
+
 - [ ] **Step 4 (agent): Write the communion card, the custom elements and the dialog**
 
 **Create `frontend/src/components/builder/liturgy/communion-card.tsx`:**
@@ -7027,8 +7090,16 @@ describe("the shell with Liturgy shipped (slice 4b)", () => {
 **Expected:**
 
 ```
-(pending replay)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  |unit| src/lib/draft/status.test.ts > steps (S steps.ts) > lists the four steps in order, ships Date & readings (2c), Hymns (3b) and Liturgy (4b), and reads a step from its path
+ FAIL  |unit| src/lib/draft/status.test.ts > stepStatus (F §4.7) > shows Soon for unshipped steps and Not in archive for Review
+ FAIL  |unit| src/lib/draft/status.test.ts > stillNeeded (S Review "Still needed") > counts the liturgy's enabled cards with text and lists the empty ones and a missing title (slice 4b)
+ FAIL  |dom| src/components/builder/builder-shell.test.tsx > builder shell (F §4.7) > renders each step route inside the shell: progress, the step or its placeholder card, and the footer links
+ FAIL  |dom| src/components/builder/builder-shell.test.tsx > builder shell (F §4.7) > shows the summary: the date and occasion, the readings, the hymns, the liturgy, and where the draft is kept
+ FAIL  |dom| src/components/builder/builder-shell.test.tsx > the shell with Liturgy shipped (slice 4b) > counts the liturgy, lists it in the summary with the sections being written, and in Still needed
+      Tests  6 failed | 17 passed (23)
 ```
+
 - [ ] **Step 4 (agent): Ship the step**
 
 **In `frontend/src/lib/draft/steps.ts`, replace:**
@@ -8132,7 +8203,11 @@ Expected counts after this task: frontend `509 passed` in 75 files on `main`; ba
 Filled in while Tasks 1-12 are built: each change from the plan as written, its reason, and whether the owner saw it. Task 12 (or a follow-up docs commit before Task 13) writes those that alter S or F as "(4b build)" notes.
 
 **Plan fixes made while writing this plan (2026-09-30, before the build):**
-- @@BUILD_NOTES@@
+The plan was written in one session, building each task's code in a throwaway worktree of `4dfed3b` (hard-linked `node_modules`, one commit per task) and then generating each task's directives from that commit, so the code blocks are the code that ran. While writing it:
+- **T3's queue delivers an outcome before the next task starts** (found by T9's 429 test): with the pump first, one queued section was sent after a 429 before the provider could stop the queue; and a task cancelled right after it got a slot still ran (found by T9's Cancel of a bulk run, which left "Writing…" on three cards). T3's `queue.ts` and its fourth test carry both rules (clarification 29); the counts include them.
+- **T5 fills the fresh draft's Benediction** in `freshDraft`, not only in the store: with the store alone, every seeded pre-4b test draft changed on load (stamped 1 ms later) and three existing shell, Hymns and context tests failed on `updated_at`; a fresh draft born with the default loads unchanged (clarification 13). T2's summary test builds its "no default" draft with `applyLiturgyDefaults(..., "")` for the same reason.
+- **The step tests dismiss toasts before each test** (sonner replays a toast still showing to the next `Toaster`), and the "service changed" case moves the fake clock before New service, since a fresh draft made in the same millisecond has the same `created_at` (clarification 29).
+- **A stored draft written 400 ms after a change** is awaited before a test builds "another tab's" copy from `localStorage` (T9's cross-tab case).
 
 ## Spec coverage
 
