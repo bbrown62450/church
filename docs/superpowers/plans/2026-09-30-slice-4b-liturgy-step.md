@@ -314,11 +314,11 @@ import { cleanLines } from "@/lib/scripture-refs";
 ```bash
 (cd frontend && npx vitest run src/lib/liturgy/sections.test.ts src/lib/draft/status.test.ts src/lib/draft/fingerprint.test.ts src/lib/draft/store.test.ts 2>&1 | grep -E "Test Files|Tests ")
 (cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
-(cd frontend && npm run typecheck 2>&1 | tail -1 && npm run lint 2>&1 | tail -1)
+(cd frontend && npm run typecheck >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")
 git status --short
 ```
 
-**Expected:** ` Test Files  4 passed (4)`, `      Tests  30 passed (30)`; the suite ` Test Files  65 passed (65)`, `      Tests  446 passed (446)`; `> tsc --noEmit` and `> eslint` with nothing after them; ` M` for the five modified files and `??` for `frontend/src/lib/liturgy/`.
+**Expected:** ` Test Files  4 passed (4)`, `      Tests  30 passed (30)`; the suite ` Test Files  65 passed (65)`, `      Tests  446 passed (446)`; `typecheck 0` and `lint 0`; ` M` for the five modified files and `??` for `frontend/src/lib/liturgy/`.
 
 - [ ] **Step 6 (agent): Commit**
 
@@ -606,7 +606,7 @@ import { liturgyCounts } from "./summary";
 
 describe("liturgyCounts (S summary.ts)", () => {
   it("counts enabled cards, those with text, communion and custom elements", () => {
-    const fresh = testDraft();
+    const fresh = applyLiturgyDefaults(testDraft(), { defaultBenediction: "" }); // a church with no default
     expect(liturgyCounts(fresh)).toEqual({ ready: 0, enabled: 7, communion: true, customCount: 0 });
     // The Benediction following a non-blank church default counts as ready.
     const withDefault = applyLiturgyDefaults(fresh, { defaultBenediction: "Halverson" });
@@ -946,11 +946,11 @@ export function onDateChanged(d: DraftV1, prevIso: string): DraftV1 {
 ```bash
 (cd frontend && npx vitest run src/lib/liturgy src/lib/draft 2>&1 | grep -E "Test Files|Tests ")
 (cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
-(cd frontend && npm run typecheck 2>&1 | tail -1 && npm run lint 2>&1 | tail -1)
+(cd frontend && npm run typecheck >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")
 git status --short
 ```
 
-**Expected:** ` Test Files  13 passed (13)`, `      Tests  66 passed (66)`; the suite ` Test Files  68 passed (68)`, `      Tests  455 passed (455)`; `> tsc --noEmit` and `> eslint` with nothing after them; ` M frontend/src/lib/draft/date-effects.ts` and the six new files under `frontend/src/lib/liturgy/` as `??`.
+**Expected:** ` Test Files  13 passed (13)`, `      Tests  66 passed (66)`; the suite ` Test Files  68 passed (68)`, `      Tests  455 passed (455)`; `typecheck 0` and `lint 0`; ` M frontend/src/lib/draft/date-effects.ts` and the six new files under `frontend/src/lib/liturgy/` as `??`.
 
 - [ ] **Step 6 (agent): Commit**
 
@@ -1560,11 +1560,11 @@ export function createTaskQueue({ concurrency }: { concurrency: number }): TaskQ
 ```bash
 (cd frontend && npx vitest run src/lib/liturgy 2>&1 | grep -E "Test Files|Tests ")
 (cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
-(cd frontend && npm run typecheck 2>&1 | tail -1 && npm run lint 2>&1 | tail -1)
+(cd frontend && npm run typecheck >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")
 git status --short
 ```
 
-**Expected:** ` Test Files  7 passed (7)`, `      Tests  18 passed (18)`; the suite ` Test Files  71 passed (71)`, `      Tests  463 passed (463)`; `> tsc --noEmit` and `> eslint` with nothing after them; ` M frontend/src/lib/api/types.ts` and six new files under `frontend/src/lib/liturgy/` as `??`.
+**Expected:** ` Test Files  7 passed (7)`, `      Tests  18 passed (18)`; the suite ` Test Files  71 passed (71)`, `      Tests  463 passed (463)`; `typecheck 0` and `lint 0`; ` M frontend/src/lib/api/types.ts` and six new files under `frontend/src/lib/liturgy/` as `??`.
 
 - [ ] **Step 6 (agent): Commit**
 
@@ -1582,3 +1582,1820 @@ Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
 **Expected:** one commit, 7 files changed.
+
+### Task 4: The liturgy queries, the 100-second timeout, and the test fixtures (S "API client usage", "Sermon text" loading; F §4.4, §1.8; owner answer 2; clarifications 10, 11, 12)
+
+The API side of the step. `lib/queries/liturgy.ts` holds `useLiturgyConfig()` (user-scoped reference data, never stale) and `generateSection()` (one church-scoped `POST /liturgy/generate`, returning that section's result; S passes the draft, this takes the built body, clarification 10). The client timeout for that route is 100 000 ms, owner answer 2: `lib/api/timeouts.ts` keeps per-route timeouts in its `ENDPOINT_TIMEOUTS` table (there is no `TIMEOUTS` object; clarification 11), so the row is `"POST /liturgy/generate": 100_000`. `passages.ts` exports `passageQuery()`, the options `usePassage` already used, so T6 can `fetchQuery` the sermon text through the same key, limiter and freshness. `client.ts` exports `reportAuthErrors(error, churchId)`, the logic `handleAuthErrors` runs for the caches, so a call made outside them (the generation queue) signs out on a 401 and falls back on a lost church the same way (clarification 12). The test fixtures gain `liturgyConfig()` (pinned to 4a's shared fixtures), `sectionResult()`, `sectionFailure()` and `generateRoute()`.
+
+**Files:**
+- Create: `frontend/src/lib/queries/liturgy.ts`
+- Modify: `frontend/src/lib/api/timeouts.ts` (the 100 s row), `frontend/src/lib/queries/client.ts` (`reportAuthErrors`), `frontend/src/lib/queries/passages.ts` (`passageQuery`), `frontend/src/test/fixtures/index.ts` (the liturgy builders)
+- Test: `frontend/src/lib/queries/liturgy.test.tsx` (new, 3), `frontend/src/lib/queries/client.test.ts` (+1). 2c's passage tests keep pinning `usePassage`.
+
+**Interfaces:**
+- Consumes: T3's type names; `keys.liturgyConfig()` (1; already `["ref", "liturgy-config"]`); `useApi`, `ApiCall`, `Api` (1); `passageLimiter`, `passageStaleTime`, `keys.passage` (2c); `authEvents`, `isSigningOut`, `isNoChurchAccess` (1); `SECTION_LABELS` (T1); `PLACEMENT_KEYS` (T2).
+- Produces:
+  - `useLiturgyConfig(): UseQueryResult<LiturgyConfig, ApiError>`; `generateSection(call: ApiCall, section: SectionKey, body: GenerateLiturgyBody, signal?: AbortSignal): Promise<SectionResult>` (an answer without that section is `ApiError(0, "unknown", "Something went wrong.")`).
+  - `timeoutFor("POST", "/liturgy/generate") === 100_000`.
+  - `passageQuery(api, translation, ref) → {queryKey, queryFn, staleTime}`.
+  - `reportAuthErrors(error, churchId: string | null): void`.
+  - Fixtures: `liturgyConfig(overrides?)`, `sectionResult(section, text)`, `sectionFailure(section, code, message)`, `generateRoute(answer?)` (a `POST /liturgy/generate` handler; by default each section comes back as "{Label} written by the AI.").
+  - Later users: T6 (`generateSection`, `passageQuery`, `reportAuthErrors`), T8-T11 (`useLiturgyConfig`, the fixtures).
+
+Counts after this task: frontend **467 passed in 72 files**.
+
+- [ ] **Step 1 (agent): Check the starting point**
+
+```bash
+git status --short
+grep -c "liturgy" frontend/src/lib/api/timeouts.ts
+(cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
+```
+
+**Expected:** nothing (or `?? .claude/`); `0` (grep exits 1); ` Test Files  71 passed (71)`, `      Tests  463 passed (463)`.
+
+- [ ] **Step 2 (agent): Write the fixtures and the failing tests**
+
+**In `frontend/src/test/fixtures/index.ts`, replace:**
+
+```ts
+  ChurchProfile,
+  Hymn,
+```
+
+**with:**
+
+```ts
+  ChurchProfile,
+  GenerateLiturgyBody,
+  Hymn,
+```
+
+**In `frontend/src/test/fixtures/index.ts`, replace:**
+
+```ts
+  ScriptureMatches,
+```
+
+**with:**
+
+```ts
+  LiturgyConfig,
+  LiturgySection,
+  OutlineItem,
+  ScriptureMatches,
+  SectionError,
+  SectionResult,
+```
+
+**In `frontend/src/test/fixtures/index.ts`, replace:**
+
+```ts
+import { freshDraft, type DraftV1 } from "@/lib/draft/schema";
+
+```
+
+**with:**
+
+```ts
+import { freshDraft, type DraftV1 } from "@/lib/draft/schema";
+import { SECTION_LABELS } from "@/lib/liturgy/sections";
+
+```
+
+**In `frontend/src/test/fixtures/index.ts`, replace:**
+
+```ts
+    slots: { opening: out(slots.opening), response: out(slots.response), closing: out(slots.closing) },
+    ...overrides,
+  };
+}
+
+```
+
+**with:**
+
+```ts
+    slots: { opening: out(slots.opening), response: out(slots.response), closing: out(slots.closing) },
+    ...overrides,
+  };
+}
+
+// --- slice 4b: the liturgy config and the generation answers --------------------
+
+/**
+ * `GET /liturgy/config` as 4a serves it (slice 4a record: 8 sections, 17
+ * places, 16 outline items, `ai_available` true), with the communion text
+ * shortened to its first seven blocks. `liturgy.test.tsx` pins the sections,
+ * places and outline to the shared fixtures.
+ */
+export function liturgyConfig(overrides: Partial<LiturgyConfig> = {}): LiturgyConfig {
+  const section = (
+    key: LiturgySection["key"],
+    label: string,
+    hint: string | null = null,
+    extra: Partial<LiturgySection> = {},
+  ): LiturgySection => ({ key, label, default_enabled: true, rows: 4, pastor_copy_only: false, hint, ...extra });
+  const landmark = (
+    key: string,
+    label: string,
+    value_source: OutlineItem["value_source"],
+    anchors: string[] = [key],
+    fixed_text: string | null = null,
+  ): OutlineItem => ({ kind: "landmark", key, label, value_source, fixed_text, anchors_after: anchors });
+  const card = (key: string, label: string, anchors: string[] = [key]): OutlineItem => ({
+    kind: "section",
+    key,
+    label,
+    value_source: "none",
+    fixed_text: null,
+    anchors_after: anchors,
+  });
+  return {
+    sections: [
+      section("call_to_worship", "Call to Worship", "Start lines with “Leader:” or “People:”. People lines print in bold."),
+      section("opening_prayer", "Opening Prayer"),
+      section("prayer_of_confession", "Prayer of Confession", "Printed in bold for everyone to read together."),
+      section("assurance", "Assurance of Pardon", "Added automatically after your text."),
+      section("prayer_for_illumination", "Prayer for Illumination"),
+      section("prayers_of_the_people", "Prayers of the People", null, { default_enabled: false, rows: 8, pastor_copy_only: true }),
+      section("offertory_prayer", "Offertory Prayer"),
+      section("benediction", "Benediction", "Your church's default benediction. Admins can change it in Settings."),
+    ],
+    custom_placements: [
+      ["call_to_worship", "After Call to Worship"],
+      ["opening_prayer", "After Opening Prayer"],
+      ["first_hymn", "After First Hymn"],
+      ["prayer_of_confession", "After Prayer of Confession"],
+      ["assurance", "After Assurance of Pardon"],
+      ["prayer_for_illumination", "After Prayer for Illumination"],
+      ["ot_reading", "After First Reading"],
+      ["nt_reading", "After New Testament Reading"],
+      ["sermon", "After Sermon"],
+      ["affirmation_of_faith", "After Affirmation of Faith"],
+      ["second_hymn", "After Second Hymn"],
+      ["communion", "After Communion"],
+      ["prayers_of_the_people", "After Prayers of the People"],
+      ["offertory_prayer", "After Offertory Prayer"],
+      ["third_hymn", "After Third Hymn"],
+      ["benediction", "Before Benediction"],
+      ["end", "At the end (after Benediction)"],
+    ].map(([key, label]) => ({ key, label })),
+    outline: [
+      card("call_to_worship", "Call to Worship"),
+      card("opening_prayer", "Opening Prayer"),
+      landmark("first_hymn", "First Hymn", "hymn_opening"),
+      card("prayer_of_confession", "Prayer of Confession"),
+      card("assurance", "Assurance of Pardon"),
+      card("prayer_for_illumination", "Prayer for Illumination"),
+      landmark("ot_reading", "First Reading", "reading_ot"),
+      landmark("nt_reading", "New Testament Reading", "reading_nt"),
+      landmark("sermon", "Sermon Title", "sermon_title"),
+      landmark("affirmation_of_faith", "Affirmation of Faith", "fixed", ["affirmation_of_faith"], "Apostles' Creed"),
+      landmark("second_hymn", "Second Hymn", "hymn_response"),
+      {
+        kind: "communion",
+        key: "communion",
+        label: "The Sacrament of the Lord's Supper",
+        value_source: "none",
+        fixed_text: null,
+        anchors_after: ["communion"],
+      },
+      card("prayers_of_the_people", "Prayers of the People"),
+      card("offertory_prayer", "Offertory Prayer"),
+      landmark("third_hymn", "Third Hymn", "hymn_closing", ["third_hymn", "benediction"]),
+      card("benediction", "Benediction", ["end"]),
+    ],
+    assurance_response: "People: Thanks be to God! Amen.",
+    default_benediction_fallback: "Halverson",
+    communion: {
+      title: "The Sacrament of the Lord's Supper",
+      toggle_label: "Include communion liturgy (The Sacrament of the Lord's Supper)",
+      default_rule: "first_sunday_of_month",
+      blocks: [
+        { style: "heading1", text: "The Sacrament of the Lord's Supper" },
+        { style: "blank", text: "" },
+        { style: "heading2", text: "Invitation to the Table" },
+        { style: "text", text: "This is the table of our Lord Jesus Christ." },
+        { style: "heading2", text: "Great Thanksgiving" },
+        { style: "text", text: "The Lord be with you." },
+        { style: "response", text: "And also with you." },
+      ],
+    },
+    limits: {
+      max_section_text: 20_000,
+      max_sermon_title: 300,
+      max_custom_elements: 30,
+      max_custom_label: 200,
+      max_custom_text: 10_000,
+      max_sections_per_request: 4,
+    },
+    ai_available: true,
+    ...overrides,
+  };
+}
+
+/** A section written by the AI (`status: "generated"`). */
+export function sectionResult(section: SectionResult["section"], text: string): SectionResult {
+  return { section, status: "generated", text, error: null };
+}
+
+/** A section's failure inside the 200 (`status: "error"`), with the server's message. */
+export function sectionFailure(section: SectionResult["section"], code: SectionError["code"], message: string): SectionResult {
+  return { section, status: "error", text: null, error: { code, message } };
+}
+
+/**
+ * A fake-API handler for `POST /liturgy/generate`: `answer(section, body)`
+ * gives the section's result (wrapped in `{results: [...]}`) or a whole
+ * response (`fakeError(...)`); by default "{Label} written by the AI.".
+ */
+export function generateRoute(
+  answer: (
+    section: SectionResult["section"],
+    body: GenerateLiturgyBody,
+  ) => SectionResult | { status: number } | Promise<SectionResult | { status: number }> = (section) =>
+    sectionResult(section, `${SECTION_LABELS[section]} written by the AI.`),
+) {
+  return async (req: { body: unknown }) => {
+    const body = req.body as GenerateLiturgyBody;
+    const out = await answer(body.sections[0], body);
+    return "section" in out ? { results: [out] } : out;
+  };
+}
+
+```
+
+**In `frontend/src/lib/queries/client.test.ts`, replace:**
+
+```ts
+import { isRetryable, makeQueryClient } from "./client";
+```
+
+**with:**
+
+```ts
+import { isRetryable, makeQueryClient, reportAuthErrors } from "./client";
+```
+
+**In `frontend/src/lib/queries/client.test.ts`, replace:**
+
+```ts
+
+  it("emits nothing while signing out", async () => {
+```
+
+**with:**
+
+```ts
+
+  it("reportAuthErrors does the same for a call made outside the caches (slice 4b generation)", () => {
+    reportAuthErrors(new ApiError(401, "unauthenticated", "Please sign in."), "c-3");
+    reportAuthErrors(noChurchAccess(), "c-3");
+    reportAuthErrors(new ApiError(403, "forbidden", "Only church admins can do this."), "c-3");
+    reportAuthErrors(new ApiError(429, "rate_limited", "Too many requests."), "c-3");
+    expect(events).toEqual(["signOutRequired", "churchAccessLost:c-3"]);
+  });
+
+  it("emits nothing while signing out", async () => {
+```
+
+**Create `frontend/src/lib/queries/liturgy.test.tsx`:**
+
+```tsx
+/**
+ * The Liturgy step's API calls (slice 4 spec, "API client usage"; F §4.4,
+ * §1.8): the config is user-scoped reference data fetched once; a section is
+ * written by one church-scoped POST that may take up to 100 s (owner answer
+ * 2, 2026-09-30) and can be cancelled. The test fixture's config is pinned to
+ * the shared fixtures 4a's API is pinned to.
+ */
+import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
+import { renderHook, waitFor } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import type { ReactNode } from "react";
+import { describe, expect, it } from "vitest";
+
+import { ApiError } from "@/lib/api/client";
+import { timeoutFor } from "@/lib/api/timeouts";
+import { ChurchProvider } from "@/lib/church-context";
+import { PLACEMENT_KEYS } from "@/lib/liturgy/cards";
+import { installFakeApi } from "@/test/fake-api";
+import { church, CHURCH_IDS, liturgyConfig, sectionResult } from "@/test/fixtures";
+
+import { makeQueryClient, useApi } from "./client";
+import { keys } from "./keys";
+import { generateSection, useLiturgyConfig } from "./liturgy";
+
+/** A shared fixture, read from the repo (the tests run in `frontend/`). */
+function shared<T>(name: string): T {
+  return JSON.parse(readFileSync(`${process.cwd()}/../backend/tests/fixtures/shared/${name}`, "utf-8")) as T;
+}
+
+function render<T>(hook: () => T, queryClient: QueryClient = makeQueryClient({ queries: { retry: false } })) {
+  function Wrapper({ children }: { children: ReactNode }) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <ChurchProvider value={church()}>{children}</ChurchProvider>
+      </QueryClientProvider>
+    );
+  }
+  return { ...renderHook(hook, { wrapper: Wrapper }), queryClient };
+}
+
+describe("liturgy queries (S API client usage)", () => {
+  it("loads the config once as the user, and never counts it stale", async () => {
+    const api = installFakeApi({ "GET /liturgy/config": liturgyConfig() });
+    const { result, queryClient } = render(() => useLiturgyConfig());
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.sections).toHaveLength(8);
+    expect(api.requests.map((r) => [r.method, r.path, r.headers["X-Church-Id"]])).toEqual([
+      ["GET", "/liturgy/config", undefined],
+    ]);
+    const query = queryClient.getQueryCache().find({ queryKey: keys.liturgyConfig() });
+    expect(query?.isStale()).toBe(false);
+    render(() => useLiturgyConfig(), queryClient);
+    expect(api.requests).toHaveLength(1);
+  });
+
+  it("writes one section as the church, waiting up to 100 seconds, and a cancel rejects as aborted", async () => {
+    expect(timeoutFor("POST", "/liturgy/generate")).toBe(100_000);
+    const api = installFakeApi({
+      "POST /liturgy/generate": { results: [sectionResult("call_to_worship", "Leader: Come!")] },
+    });
+    const { result } = render(() => useApi());
+    const body = { occasion: "", scriptures: [], hymns: {}, sections: ["call_to_worship" as const] };
+    await expect(generateSection(result.current.church, "call_to_worship", body)).resolves.toEqual(
+      sectionResult("call_to_worship", "Leader: Come!"),
+    );
+    expect(api.requests[0]).toMatchObject({ method: "POST", path: "/liturgy/generate", body });
+    expect(api.requests[0].headers["X-Church-Id"]).toBe(CHURCH_IDS.grace);
+    const controller = new AbortController();
+    controller.abort();
+    await expect(generateSection(result.current.church, "call_to_worship", body, controller.signal)).rejects.toMatchObject(
+      new ApiError(0, "aborted", "The request was cancelled."),
+    );
+  });
+
+  it("uses a test config equal to the shared fixtures 4a's API is pinned to", () => {
+    const config = liturgyConfig();
+    const sections = shared<{ sections: { key: string; label: string; default_enabled: boolean }[] }>("liturgy_sections.json");
+    expect(config.sections.map(({ key, label, default_enabled }) => ({ key, label, default_enabled }))).toEqual(sections.sections);
+    expect(config.outline).toEqual(shared<{ outline: unknown[] }>("liturgy_outline.json").outline);
+    expect(config.custom_placements.map((p) => p.key)).toEqual([...PLACEMENT_KEYS]);
+  });
+});
+```
+
+- [ ] **Step 3 (agent): Run them and see them fail**
+
+```bash
+(cd frontend && npx vitest run src/lib/queries/liturgy.test.tsx src/lib/queries/client.test.ts 2>&1 | grep -E "^ FAIL|AssertionError|TypeError|Error: Failed|Tests ")
+```
+
+**Expected:**
+
+```
+(pending replay)
+```
+- [ ] **Step 4 (agent): Write the queries, the timeout row, `passageQuery` and `reportAuthErrors`**
+
+**In `frontend/src/lib/api/timeouts.ts`, replace:**
+
+```ts
+  "POST /hymns/suggestions": 90_000,
+};
+```
+
+**with:**
+
+```ts
+  "POST /hymns/suggestions": 90_000,
+  // Slice 4 (F §1.8 amendment, owner answer 2, 2026-09-30): a section answers within
+  // 85 s (4a's 80 s deadline plus a last connect); 100 s also covers a slow sign-in.
+  // The service reviewer's routes (the slice after 4b) reuse this value.
+  "POST /liturgy/generate": 100_000,
+};
+```
+
+**In `frontend/src/lib/queries/client.ts`, replace:**
+
+```ts
+export function handleAuthErrors(error: unknown, source: AnyQuery | AnyMutation): void {
+  if (isSigningOut()) return;
+```
+
+**with:**
+
+```ts
+export function handleAuthErrors(error: unknown, source: AnyQuery | AnyMutation): void {
+  reportAuthErrors(error, churchIdOf(source));
+}
+
+/**
+ * `handleAuthErrors` for a call made outside the caches (slice 4b: the
+ * liturgy generation queue): a 401 asks for sign-out; a `no_church_access`
+ * 403 reports `churchId` lost. Nothing while signing out.
+ */
+export function reportAuthErrors(error: unknown, churchId: string | null): void {
+  if (isSigningOut()) return;
+```
+
+**In `frontend/src/lib/queries/client.ts`, replace:**
+
+```ts
+  if (isNoChurchAccess(error)) {
+    const churchId = churchIdOf(source);
+    if (churchId) authEvents.churchAccessLost(churchId);
+  }
+```
+
+**with:**
+
+```ts
+  if (isNoChurchAccess(error) && churchId) authEvents.churchAccessLost(churchId);
+```
+
+**In `frontend/src/lib/queries/passages.ts`, replace:**
+
+```ts
+import { useApi } from "./client";
+```
+
+**with:**
+
+```ts
+import { useApi, type Api } from "./client";
+```
+
+**In `frontend/src/lib/queries/passages.ts`, replace:**
+
+```ts
+    queryKey: keys.passage(translation, ref),
+    queryFn: ({ signal }) =>
+      passageLimiter(async () => {
+        const body = await api.user<Passages>("/scripture/passages", {
+          method: "POST",
+          json: { refs: [ref], translation },
+          signal,
+        });
+        return body.passages[0];
+      }, signal),
+    enabled,
+    staleTime: (query) => passageStaleTime(query.state.data),
+```
+
+**with:**
+
+```ts
+    ...passageQuery(api, translation, ref),
+    enabled,
+```
+
+**In `frontend/src/lib/queries/passages.ts`, replace:**
+
+```ts
+  });
+}
+
+```
+
+**with:**
+
+```ts
+  });
+}
+
+/**
+ * The key, fetch and freshness `usePassage` uses, for a fetch outside a
+ * component: slice 4b's liturgy provider reads the sermon text with
+ * `queryClient.fetchQuery(passageQuery(...))`, so a passage step 1 already
+ * loaded is reused and concurrent reads share one request.
+ */
+export function passageQuery(api: Api, translation: string, ref: string) {
+  return {
+    queryKey: keys.passage(translation, ref),
+    queryFn: ({ signal }: { signal: AbortSignal }) =>
+      passageLimiter(async () => {
+        const body = await api.user<Passages>("/scripture/passages", {
+          method: "POST",
+          json: { refs: [ref], translation },
+          signal,
+        });
+        return body.passages[0];
+      }, signal),
+    staleTime: (query: { state: { data: Passage | undefined } }) => passageStaleTime(query.state.data),
+  };
+}
+
+```
+
+**Create `frontend/src/lib/queries/liturgy.ts`:**
+
+```ts
+/**
+ * The Liturgy step's API calls (slice 4 spec, "API client usage"; F §4.4).
+ *
+ * - `useLiturgyConfig()`: `GET /liturgy/config`, user-scoped reference data
+ *   under ["ref", "liturgy-config"], never stale. A key added to Railway later
+ *   (`ai_available`) takes effect on the next page load.
+ * - `generateSection(call, section, body, signal)`: one
+ *   `POST /liturgy/generate`, church-scoped, returning that section's result.
+ *   A plain async function, because the provider's per-section queue and
+ *   cancel do not fit `useMutation`; it still lives here, so no page calls
+ *   `apiFetch`. Its client timeout is 100 s (`lib/api/timeouts.ts`, owner
+ *   answer 2, 2026-09-30).
+ */
+import { useQuery, type UseQueryResult } from "@tanstack/react-query";
+
+import { ApiError } from "@/lib/api/client";
+import type { GenerateLiturgyBody, GenerateLiturgyResult, LiturgyConfig, SectionResult } from "@/lib/api/types";
+import type { SectionKey } from "@/lib/draft/schema";
+
+import { useApi, type ApiCall } from "./client";
+import { keys } from "./keys";
+
+export function useLiturgyConfig(): UseQueryResult<LiturgyConfig, ApiError> {
+  const api = useApi();
+  return useQuery<LiturgyConfig, ApiError>({
+    queryKey: keys.liturgyConfig(),
+    queryFn: ({ signal }) => api.user<LiturgyConfig>("/liturgy/config", { signal }),
+    staleTime: Infinity,
+  });
+}
+
+export async function generateSection(
+  call: ApiCall,
+  section: SectionKey,
+  body: GenerateLiturgyBody,
+  signal?: AbortSignal,
+): Promise<SectionResult> {
+  const out = await call<GenerateLiturgyResult>("/liturgy/generate", { method: "POST", json: body, signal });
+  const result = out.results.find((r) => r.section === section);
+  if (!result) throw new ApiError(0, "unknown", "Something went wrong.");
+  return result;
+}
+```
+
+- [ ] **Step 5 (agent): Run the tests, the suite, types and lint**
+
+```bash
+(cd frontend && npx vitest run src/lib/queries 2>&1 | grep -E "Test Files|Tests ")
+(cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
+(cd frontend && npm run typecheck >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")
+git status --short
+```
+
+**Expected:** ` Test Files  9 passed (9)`, `      Tests  45 passed (45)`; the suite ` Test Files  72 passed (72)`, `      Tests  467 passed (467)`; `typecheck 0` and `lint 0`; ` M` for the five modified files and `??` for the two new ones.
+
+- [ ] **Step 6 (agent): Commit**
+
+```bash
+git add frontend/src/lib/queries/liturgy.ts frontend/src/lib/queries/liturgy.test.tsx frontend/src/lib/api/timeouts.ts frontend/src/lib/queries/client.ts frontend/src/lib/queries/client.test.ts frontend/src/lib/queries/passages.ts frontend/src/test/fixtures/index.ts
+git commit -m "Liturgy: the config and generate calls, a 100 s client timeout, and the test fixtures (S API client usage; owner answer 2)" -m "useLiturgyConfig loads GET /liturgy/config once as the user, never
+stale; generateSection posts one section as the church and returns its
+result, with a 100 s client timeout (owner answer 2: 4a answers within
+85 s, plus a slow sign-in). passageQuery shares usePassage's key, limiter
+and freshness for the sermon text; reportAuthErrors gives a call made
+outside the caches the same 401 and lost-church handling. The fixtures'
+liturgy config is pinned to 4a's shared fixtures.
+Frontend 463 -> 467 tests in 71 -> 72 files." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
+```
+
+**Expected:** one commit, 7 files changed.
+
+### Task 5: The draft follows the church's default benediction (S "Benediction and the church default", "Draft store integration"; F §4.6 "Fresh draft", "Defaults"; clarifications 13, 14)
+
+S: a fresh draft's Benediction card is `{enabled: true, text: <church default>, origin: "default"}`, the card follows the default until it is edited, generated or cleared, and `DraftProvider` runs `applyLiturgyDefaults` after every change and whenever the profile's `default_benediction` changes. Checked on `4dfed3b`: `freshDraft` leaves the text `""` and nothing fills it; the profile the builder shell passes to `DraftProvider` already carries `default_benediction` (4a). This task:
+- `freshDraft` fills the card from `church.default_benediction` ("Halverson" when an older API leaves it out), so a fresh draft is born with it; `DraftChurch` gains the optional field.
+- `DraftStore` takes `liturgyDefaults` and runs `applyLiturgyDefaults` on load, on every `update`, `autoUpdate` and `replace`, and on an adopted draft (in memory). A stored draft the defaults change (one saved before 4b with an empty Benediction, or communion out of step with its date) is stamped 1 ms after the stored draft, like 2b's roll-forward; `setLiturgyDefaults` (a new default from a profile refetch) is an automatic change, stamped 1 ms after the current draft, so neither ever outranks another tab's edit (clarification 13).
+- `DraftProvider` passes the profile's default and calls `setLiturgyDefaults` when it changes; `useDraft()` gains `peek()`, the latest draft now, for T6's code outside a render (clarification 14).
+
+A fresh draft now prints the church default, so three existing tests change their expected values (0 new tests there): the provisional payload of a fresh draft holds `benediction: "Halverson"`, the fresh-draft shape test expects the text (and gains the empty-default and missing-field cases), and the liturgy status of a draft with one typed card is "2 of 7".
+
+**Files:**
+- Modify: `frontend/src/lib/draft/schema.ts` (`DraftChurch.default_benediction`, `freshDraft`), `frontend/src/lib/draft/store.ts` (`liturgyDefaults`, `setLiturgyDefaults`), `frontend/src/lib/draft/context.tsx` (the profile's default, `peek`)
+- Test: `frontend/src/lib/draft/store.test.ts` (+2), `frontend/src/lib/draft/context.test.tsx` (+1); `mapping.test.ts`, `schema.test.ts`, `status.test.ts` (one test each edited, 0)
+
+**Interfaces:**
+- Consumes: `applyLiturgyDefaults`, `DEFAULT_BENEDICTION_FALLBACK`, `type LiturgyDefaults` (T2); `ChurchProfile.default_benediction` (4a).
+- Produces: `type DraftChurch = {id; timezone?; timezone_valid?; default_benediction?: string}`; `new DraftStore({..., liturgyDefaults?: LiturgyDefaults})`, `store.setLiturgyDefaults(next)`; `DraftApi.peek: () => DraftV1`. Later users: T6 (`peek`), T8 (the Benediction card follows the default), every "New service" (its fresh draft carries the default).
+
+Counts after this task: frontend **470 passed in 72 files**.
+
+- [ ] **Step 1 (agent): Check the starting point**
+
+```bash
+git status --short
+grep -c "default_benediction" frontend/src/lib/draft/schema.ts frontend/src/lib/draft/store.ts frontend/src/lib/draft/context.tsx
+(cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
+```
+
+**Expected:** nothing (or `?? .claude/`); `frontend/src/lib/draft/schema.ts:0`, `frontend/src/lib/draft/store.ts:0`, `frontend/src/lib/draft/context.tsx:0`; ` Test Files  72 passed (72)`, `      Tests  467 passed (467)`.
+
+- [ ] **Step 2 (agent): Write the failing tests and the new expected values**
+
+**In `frontend/src/lib/draft/store.test.ts`, replace:**
+
+```ts
+import { corruptDraftKey, draftKey, type DraftV1 } from "./schema";
+```
+
+**with:**
+
+```ts
+import { corruptDraftKey, draftKey, freshDraft, type DraftV1 } from "./schema";
+```
+
+**In `frontend/src/lib/draft/store.test.ts`, replace:**
+
+```ts
+
+describe("DraftStore changes (S store.ts)", () => {
+```
+
+**with:**
+
+```ts
+
+describe("DraftStore and the liturgy defaults (slice 4 spec, Draft store integration)", () => {
+  function defaultsStore(storage: DraftStorage, now = clock().now) {
+    return new DraftStore({ userId: USER_ID, church: GRACE, storage, now, liturgyDefaults: { defaultBenediction: "Halverson" } });
+  }
+
+  it("fills a fresh draft's Benediction with the church default and follows a new default until the card is edited", () => {
+    const { storage, data } = memoryStorage();
+    const t = clock();
+    const store = defaultsStore(storage, t.now);
+    store.start();
+    expect(store.getSnapshot().draft.liturgy.cards.benediction).toEqual({ enabled: true, text: "Halverson", origin: "default" });
+    vi.advanceTimersByTime(WRITE_DELAY_MS);
+    expect(stored(data).liturgy.cards.benediction.text).toBe("Halverson");
+
+    // An admin changes the default (6a) and the profile refetches: an automatic change, 1 ms after the draft.
+    const before = store.getSnapshot().draft.updated_at;
+    t.advance(60_000);
+    store.setLiturgyDefaults({ defaultBenediction: "The Lord bless you and keep you." });
+    const followed = store.getSnapshot().draft;
+    expect(followed.liturgy.cards.benediction.text).toBe("The Lord bless you and keep you.");
+    expect(followed.updated_at).toBe(new Date(Date.parse(before) + 1).toISOString());
+    store.setLiturgyDefaults({ defaultBenediction: "The Lord bless you and keep you." });
+    expect(store.getSnapshot().draft).toBe(followed); // the same default: nothing to do
+
+    // Every change keeps the defaults: New service's fresh draft gets the default too.
+    store.update((d) => ({ ...d, liturgy: { ...d.liturgy, cards: { ...d.liturgy.cards, benediction: { enabled: true, text: "Go in peace.", origin: "typed" } } } }));
+    store.setLiturgyDefaults({ defaultBenediction: "Halverson" });
+    expect(store.getSnapshot().draft.liturgy.cards.benediction.text).toBe("Go in peace.");
+    store.replace(freshDraft({ church: GRACE, user: { id: USER_ID }, now: t.now() }));
+    expect(store.getSnapshot().draft.liturgy.cards.benediction).toEqual({ enabled: true, text: "Halverson", origin: "default" });
+  });
+
+  it("loads a stored draft with today's default and the date's communion, stamped just after the stored draft", () => {
+    const old = testDraft((d) => ({
+      ...d,
+      updated_at: "2026-09-29T15:00:00.000Z",
+      liturgy: { ...d.liturgy, include_communion: false }, // stored before 4b: the rule says on for October 4
+    }));
+    const { storage } = memoryStorage({ [KEY]: JSON.stringify(old) });
+    const draft = defaultsStore(storage).getSnapshot().draft;
+    expect(draft.liturgy.cards.benediction.text).toBe("Halverson");
+    expect(draft.liturgy.include_communion).toBe(true);
+    expect(draft.updated_at).toBe("2026-09-29T15:00:00.001Z");
+    // Without defaults (slice 2's tests), the store changes nothing.
+    expect(makeStore(memoryStorage({ [KEY]: JSON.stringify(old) }).storage).store.getSnapshot().draft).toEqual(old);
+  });
+});
+
+describe("DraftStore changes (S store.ts)", () => {
+```
+
+**In `frontend/src/lib/draft/context.test.tsx`, replace:**
+
+```tsx
+        Rename
+      </button>
+```
+
+**with:**
+
+```tsx
+        Rename
+      </button>
+    </div>
+  );
+}
+
+/** The Benediction card and the latest draft `peek` returns, for the liturgy defaults (slice 4b). */
+function BenedictionProbe() {
+  const { draft, peek } = useDraft();
+  return (
+    <div>
+      <p>Benediction: {draft.liturgy.cards.benediction.text || "empty"}</p>
+      <button type="button" onClick={() => window.alert(peek().liturgy.cards.benediction.text)}>
+        Peek
+      </button>
+```
+
+**In `frontend/src/lib/draft/context.test.tsx`, replace:**
+
+```tsx
+    vi.restoreAllMocks();
+  });
+```
+
+**with:**
+
+```tsx
+    vi.restoreAllMocks();
+  });
+
+  it("fills the Benediction from the church profile, follows a new default, and peek reads the latest draft (slice 4b)", () => {
+    window.localStorage.setItem(KEY, JSON.stringify(testDraft()));
+    const alert = vi.spyOn(window, "alert").mockImplementation(() => {});
+    const view = render(
+      <DraftProvider userId={USER_ID} church={churchProfile({ default_benediction: "Go in peace." })}>
+        <BenedictionProbe />
+      </DraftProvider>,
+    );
+    expect(screen.getByText("Benediction: Go in peace.")).toBeInTheDocument();
+    view.rerender(
+      <DraftProvider userId={USER_ID} church={churchProfile({ default_benediction: "" })}>
+        <BenedictionProbe />
+      </DraftProvider>,
+    );
+    expect(screen.getByText("Benediction: empty")).toBeInTheDocument();
+    act(() => screen.getByRole("button", { name: "Peek" }).click());
+    expect(alert).toHaveBeenCalledWith("");
+    // An older API without the field: the fallback.
+    view.rerender(
+      <DraftProvider userId={USER_ID} church={{ id: GRACE.id, timezone: GRACE.timezone }}>
+        <BenedictionProbe />
+      </DraftProvider>,
+    );
+    expect(screen.getByText("Benediction: Halverson")).toBeInTheDocument();
+  });
+```
+
+**In `frontend/src/lib/draft/mapping.test.ts`, replace:**
+
+```ts
+      liturgy: {},
+```
+
+**with:**
+
+```ts
+      liturgy: { benediction: "Halverson" }, // the church default (slice 4b)
+```
+
+**In `frontend/src/lib/draft/mapping.test.ts`, replace:**
+
+```ts
+    expect(payload.liturgy).toEqual({ call_to_worship: "Come, let us worship." });
+```
+
+**with:**
+
+```ts
+    expect(payload.liturgy).toEqual({ call_to_worship: "Come, let us worship.", benediction: "Halverson" });
+```
+
+**In `frontend/src/lib/draft/schema.test.ts`, replace:**
+
+```ts
+import { churchProfile, testDraft, USER_ID } from "@/test/fixtures";
+```
+
+**with:**
+
+```ts
+import { CHURCH_IDS, churchProfile, DRAFT_NOW, testDraft, USER_ID } from "@/test/fixtures";
+```
+
+**In `frontend/src/lib/draft/schema.test.ts`, replace:**
+
+```ts
+        text: "",
+        origin: key === "benediction" ? "default" : "empty",
+      });
+    }
+```
+
+**with:**
+
+```ts
+        text: key === "benediction" ? "Halverson" : "", // the church default (slice 4b)
+        origin: key === "benediction" ? "default" : "empty",
+      });
+    }
+    const user = { id: USER_ID };
+    const none = freshDraft({ church: churchProfile({ default_benediction: "" }), user, now: DRAFT_NOW });
+    expect(none.liturgy.cards.benediction).toEqual({ enabled: true, text: "", origin: "default" });
+    const older = freshDraft({ church: { id: CHURCH_IDS.grace, timezone: "America/New_York" }, user, now: DRAFT_NOW });
+    expect(older.liturgy.cards.benediction.text).toBe("Halverson"); // an API without the field
+```
+
+**In `frontend/src/lib/draft/status.test.ts`, replace:**
+
+```ts
+      done: 1,
+```
+
+**with:**
+
+```ts
+      done: 2, // and the Benediction, following the church default (slice 4b)
+```
+
+- [ ] **Step 3 (agent): Run them and see them fail**
+
+```bash
+(cd frontend && npx vitest run src/lib/draft 2>&1 | grep -E "^ FAIL|AssertionError|TestingLibraryElementError|Tests ")
+```
+
+**Expected:**
+
+```
+(pending replay)
+```
+- [ ] **Step 4 (agent): Fill the fresh draft, and run the defaults in the store and the provider**
+
+**In `frontend/src/lib/draft/schema.ts`, replace:**
+
+```ts
+import { isFirstSundayOfMonth, isValidDateIso, nextSunday, todayIn } from "@/lib/dates";
+import { DEFAULT_ENABLED } from "@/lib/liturgy/sections";
+```
+
+**with:**
+
+```ts
+import { isFirstSundayOfMonth, isValidDateIso, nextSunday, todayIn } from "@/lib/dates";
+import { DEFAULT_BENEDICTION_FALLBACK } from "@/lib/liturgy/defaults";
+import { DEFAULT_ENABLED } from "@/lib/liturgy/sections";
+```
+
+**In `frontend/src/lib/draft/schema.ts`, replace:**
+
+```ts
+/** The profile fields `freshDraft` needs (`GET /church`, slice 2a). */
+export type DraftChurch = { id: string; timezone?: string | null; timezone_valid?: boolean };
+```
+
+**with:**
+
+```ts
+/**
+ * The profile fields the draft needs (`GET /church`): the zone for
+ * `freshDraft` (slice 2a) and the church's default benediction, which an
+ * untouched Benediction card shows (slice 4a; an older API leaves it out).
+ */
+export type DraftChurch = { id: string; timezone?: string | null; timezone_valid?: boolean; default_benediction?: string };
+```
+
+**In `frontend/src/lib/draft/schema.ts`, replace:**
+
+```ts
+ * Prayers of the People, the benediction card `default`-origin (slice 4 fills
+ * its text), communion on for a first Sunday, a new save key, on step 1.
+```
+
+**with:**
+
+```ts
+ * Prayers of the People, the benediction card `default`-origin with the
+ * church's default benediction ("Halverson" when the profile has none; slice
+ * 4b), communion on for a first Sunday, a new save key, on step 1.
+```
+
+**In `frontend/src/lib/draft/schema.ts`, replace:**
+
+```ts
+      { enabled: DEFAULT_ENABLED[key], text: "", origin: key === "benediction" ? "default" : "empty" },
+```
+
+**with:**
+
+```ts
+      key === "benediction"
+        ? { enabled: DEFAULT_ENABLED[key], text: church.default_benediction ?? DEFAULT_BENEDICTION_FALLBACK, origin: "default" }
+        : { enabled: DEFAULT_ENABLED[key], text: "", origin: "empty" },
+```
+
+**In `frontend/src/lib/draft/store.ts`, replace:**
+
+```ts
+ *   never bumps `updated_at`. `replace(next)` stores `normalizePicks(next)`.
+ * - A failed write switches to memory-only with one "memory_only" notice and
+```
+
+**with:**
+
+```ts
+ *   never bumps `updated_at`. `replace(next)` stores `normalizePicks(next)`.
+ * - Liturgy defaults (slice 4b; slice 4 spec "Draft store integration"): with
+ *   `liturgyDefaults`, every load, change and replace also runs
+ *   `applyLiturgyDefaults`, so an untouched Benediction shows the church's
+ *   default and untouched communion follows the date. A load it changes is
+ *   stamped 1 ms after the stored draft, and `setLiturgyDefaults` (the
+ *   profile refetched with a new default) is an automatic change, so neither
+ *   outranks another tab's edit. An adopted draft gets the defaults in memory.
+ * - A failed write switches to memory-only with one "memory_only" notice and
+```
+
+**In `frontend/src/lib/draft/store.ts`, replace:**
+
+```ts
+import { isValidDateIso, nextSunday, todayIn } from "@/lib/dates";
+import { readLocal, removeLocal, tryWriteLocal } from "@/lib/storage";
+```
+
+**with:**
+
+```ts
+import { isValidDateIso, nextSunday, todayIn } from "@/lib/dates";
+import { applyLiturgyDefaults, type LiturgyDefaults } from "@/lib/liturgy/defaults";
+import { readLocal, removeLocal, tryWriteLocal } from "@/lib/storage";
+```
+
+**In `frontend/src/lib/draft/store.ts`, replace:**
+
+```ts
+  notify?: (notice: DraftNotice) => void;
+};
+```
+
+**with:**
+
+```ts
+  notify?: (notice: DraftNotice) => void;
+  /** The church's liturgy defaults; without them (slice 2's tests) the store changes no card. */
+  liturgyDefaults?: LiturgyDefaults;
+};
+```
+
+**In `frontend/src/lib/draft/store.ts`, replace:**
+
+```ts
+
+  constructor({ userId, church, storage = browserDraftStorage, now = () => new Date(), notify = () => {} }: DraftStoreOptions) {
+```
+
+**with:**
+
+```ts
+  private defaults: LiturgyDefaults | null;
+
+  constructor({
+    userId,
+    church,
+    storage = browserDraftStorage,
+    now = () => new Date(),
+    notify = () => {},
+    liturgyDefaults,
+  }: DraftStoreOptions) {
+```
+
+**In `frontend/src/lib/draft/store.ts`, replace:**
+
+```ts
+    this.notify = notify;
+
+```
+
+**with:**
+
+```ts
+    this.notify = notify;
+    this.defaults = liturgyDefaults ?? null;
+
+```
+
+**In `frontend/src/lib/draft/store.ts`, replace:**
+
+```ts
+    const rolled = rollForward(draft, todayIn(churchZone(church), now()));
+```
+
+**with:**
+
+```ts
+    const rolled = this.withDefaults(rollForward(draft, todayIn(churchZone(church), now())));
+```
+
+**In `frontend/src/lib/draft/store.ts`, replace:**
+
+```ts
+    const next = recipe(this.snapshot.draft);
+```
+
+**with:**
+
+```ts
+    const next = this.withDefaults(recipe(this.snapshot.draft));
+```
+
+**In `frontend/src/lib/draft/store.ts`, replace:**
+
+```ts
+    const next = recipe(current);
+```
+
+**with:**
+
+```ts
+    const next = this.withDefaults(recipe(current));
+```
+
+**In `frontend/src/lib/draft/store.ts`, replace:**
+
+```ts
+    this.set(normalizePicks({ ...next, updated_at: this.now().toISOString() }));
+    this.schedule();
+```
+
+**with:**
+
+```ts
+    this.set(this.withDefaults(normalizePicks({ ...next, updated_at: this.now().toISOString() })));
+    this.schedule();
+  };
+
+  /** The church's defaults changed (a profile refetch): an automatic change for a card still following them. */
+  setLiturgyDefaults = (next: LiturgyDefaults): void => {
+    if (this.defaults?.defaultBenediction === next.defaultBenediction) return;
+    this.defaults = next;
+    this.autoUpdate((d) => d);
+```
+
+**In `frontend/src/lib/draft/store.ts`, replace:**
+
+```ts
+    this.set(normalizePicks(stored));
+    this.notify("adopted");
+    return true;
+```
+
+**with:**
+
+```ts
+    this.set(this.withDefaults(normalizePicks(stored)));
+    this.notify("adopted");
+    return true;
+  }
+
+  private withDefaults(d: DraftV1): DraftV1 {
+    return this.defaults === null ? d : applyLiturgyDefaults(d, this.defaults);
+```
+
+**In `frontend/src/lib/draft/context.tsx`, replace:**
+
+```tsx
+
+import type { DraftChurch, DraftV1, StepId } from "./schema";
+```
+
+**with:**
+
+```tsx
+
+import { DEFAULT_BENEDICTION_FALLBACK } from "@/lib/liturgy/defaults";
+
+import type { DraftChurch, DraftV1, StepId } from "./schema";
+```
+
+**In `frontend/src/lib/draft/context.tsx`, replace:**
+
+```tsx
+  setLastStep: (step: StepId) => void;
+  persistence: Persistence;
+```
+
+**with:**
+
+```tsx
+  setLastStep: (step: StepId) => void;
+  /** The latest draft now, for code that runs outside a render (slice 4b's generation provider). */
+  peek: () => DraftV1;
+  persistence: Persistence;
+```
+
+**In `frontend/src/lib/draft/context.tsx`, replace:**
+
+```tsx
+  const [store] = useState(() => new DraftStore({ userId, church, notify }));
+  const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
+```
+
+**with:**
+
+```tsx
+  const defaultBenediction = church.default_benediction ?? DEFAULT_BENEDICTION_FALLBACK;
+  const [store] = useState(
+    () => new DraftStore({ userId, church, notify, liturgyDefaults: { defaultBenediction } }),
+  );
+  const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
+
+  // The profile refetched with another default (6a's Settings): untouched Benediction cards follow it.
+  useEffect(() => {
+    store.setLiturgyDefaults({ defaultBenediction });
+  }, [store, defaultBenediction]);
+```
+
+**In `frontend/src/lib/draft/context.tsx`, replace:**
+
+```tsx
+      setLastStep: store.setLastStep,
+    }),
+```
+
+**with:**
+
+```tsx
+      setLastStep: store.setLastStep,
+      peek: () => store.getSnapshot().draft,
+    }),
+```
+
+- [ ] **Step 5 (agent): Run the tests, the suite, types and lint**
+
+```bash
+(cd frontend && npx vitest run src/lib/draft 2>&1 | grep -E "Test Files|Tests ")
+(cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
+(cd frontend && npm run typecheck >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")
+git status --short
+```
+
+**Expected:** ` Test Files  9 passed (9)`, `      Tests  59 passed (59)`; the suite ` Test Files  72 passed (72)`, `      Tests  470 passed (470)` (the builder, Hymns and Date & readings tests pass unchanged: their seeded drafts carry the default already); `typecheck 0` and `lint 0`; ` M` for the eight files named in **Files:**.
+
+- [ ] **Step 6 (agent): Commit**
+
+```bash
+git add frontend/src/lib/draft/schema.ts frontend/src/lib/draft/store.ts frontend/src/lib/draft/context.tsx frontend/src/lib/draft/store.test.ts frontend/src/lib/draft/context.test.tsx frontend/src/lib/draft/mapping.test.ts frontend/src/lib/draft/schema.test.ts frontend/src/lib/draft/status.test.ts
+git commit -m "Draft: the Benediction follows the church's default until it is changed (S Draft store integration)" -m "freshDraft fills the Benediction from the profile's default_benediction
+(Halverson when the API leaves it out). The draft store runs
+applyLiturgyDefaults on load, on every change and on replace; a load it
+changes is stamped 1 ms after the stored draft, and a new default from a
+profile refetch is an automatic change, so neither outranks another
+tab's edit. DraftProvider passes the default and useDraft gains peek().
+Frontend 467 -> 470 tests in 72 files." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
+```
+
+**Expected:** one commit, 8 files changed.
+
+### Task 6: The generation provider in the builder shell (S Frontend `generation.tsx`, UX "Generate and Regenerate" steps 0-7, "Sermon text", BC-13, BC-21; F §1.8; clarifications 15, 16, 17, 18)
+
+`LiturgyGenerationProvider` holds the Liturgy step's AI runs, card errors and Undo in memory, and the builder shell mounts it inside `DraftProvider`, so a run started on the Liturgy step keeps going on the other steps and its result lands in the draft (BC-21). Leaving `/builder`, switching church (the keyed remount) or signing out unmounts it, which cancels everything. It sends nothing while it is idle, so the shell's other tests need no new route.
+
+What it does, in S's order:
+- **Step 0.** With `aiAvailable: false`, `generate()` sends nothing and marks each targeted switched-on empty card with `localAiNotConfigured()`.
+- **Steps 1-3.** Each key is queued; the batch first reads the sermon text once (`sermonSource`, then `queryClient.fetchQuery(passageQuery(...))`, bounded at 10 s; a failure, a timeout or no text sends the batch without it, with no toast), then each section is one request through the 3-at-a-time queue. A card already running is not queued twice.
+- **Step 4.** `cancel(keys)` and the AI bar's `cancelBulk()` drop the cards' runs (waiting for the sermon text, queued or writing); the cards return to where they were, silently.
+- **Step 6.** When a request starts, the card is captured (`captureCard`); when the answer arrives, `staleVerdict` decides inside the draft update: "apply" writes the text with origin "ai" and keeps the previous `{text, origin}` for Undo when it replaced text; "service_changed" and "edited" drop it with S's toasts ("The service changed, so the AI draft for {Label} was discarded." and "Kept your edits — the new AI draft for {Label} was not used.").
+- **Step 7.** A 429 stops the queue: that card and every card still waiting show "Too many requests — try again in N s.".
+- **Errors.** A section's error or a failed request becomes the card's error (`cardErrorFrom`); a 401 or a lost church goes to `reportAuthErrors` and shows nothing on the card.
+- **Bulk.** A "Generate empty sections" run ends with one toast, "Wrote n sections." ("Wrote 1 section." for one; clarification 16) or "Wrote k of n sections. The rest show what went wrong."; cancelled cards are not counted, and a run cancelled whole shows none (clarification 15).
+- The provider takes `sermonWaitMs` so a test can shorten the 10 s wait (clarification 17), and the Undo lines, errors and runs are exposed for T8-T10 (`runs`, `errors`, `undo`, `bulk`, `generate`, `cancel`, `cancelBulk`, `dismissError`, `setUndo`, `clearUndo`, `applyUndo`; clarification 18).
+
+The provider's own tests are S's `generation.test.tsx` cases (the sermon text); T9's step tests cover Generate, Regenerate, errors, the stale rule, navigation and the 429 through the screen.
+
+**Files:**
+- Create: `frontend/src/lib/liturgy/generation.tsx`
+- Modify: `frontend/src/components/builder/builder-shell.tsx` (mounts the provider)
+- Test: `frontend/src/lib/liturgy/generation.test.tsx` (new, 3)
+
+**Interfaces:**
+- Consumes: `useDraft().update`, `peek` (T5); `captureCard`, `staleVerdict`, `applyGenerated`, `restoreCard` (T2); `buildGenerateRequest`, `sermonSource`, `sermonText`, `cardErrorFrom`, `localAiNotConfigured`, `createTaskQueue` (T3); `generateSection`, `passageQuery`, `reportAuthErrors`, `useApi` (T4); `SECTION_LABELS` (T1); sonner's `toast.message`.
+- Produces: `LiturgyGenerationProvider({church: {id, effective_translation}, sermonWaitMs?, children})`, `useLiturgyGeneration(): LiturgyGeneration`, `MAX_IN_FLIGHT = 3`, `SERMON_WAIT_MS = 10_000`, `type CardRun = {phase: "queued" | "writing", since}`, `type UndoEntry = {kind: "replaced" | "cleared", previous}`, `type BulkRun = {total, done}`. Later users: T8-T10 (the step), T11 (`LiturgySummaryBlock` reads `runs`).
+
+Counts after this task: frontend **473 passed in 73 files**.
+
+- [ ] **Step 1 (agent): Check the starting point**
+
+```bash
+git status --short
+grep -c "LiturgyGenerationProvider" frontend/src/components/builder/builder-shell.tsx
+(cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
+```
+
+**Expected:** nothing (or `?? .claude/`); `0` (grep exits 1); ` Test Files  72 passed (72)`, `      Tests  470 passed (470)`.
+
+- [ ] **Step 2 (agent): Write the failing tests**
+
+**Create `frontend/src/lib/liturgy/generation.test.tsx`:**
+
+```tsx
+/**
+ * The generation provider's sermon text (slice 4 spec, "Sermon text";
+ * Testing `generation.test.tsx`, amendment 2026-09-26): a batch reads the
+ * passage once and every request carries it; a fetch that fails or takes too
+ * long still sends the batch, without it and with no toast; Cancel during the
+ * wait sends nothing. The step's own tests (T9) cover the rest of the flow.
+ */
+import { act, screen } from "@testing-library/react";
+import { useEffect } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { Toaster } from "@/components/ui/sonner";
+import type { GenerateLiturgyBody } from "@/lib/api/types";
+import { DraftProvider, useDraft } from "@/lib/draft/context";
+import { editScriptureLines } from "@/lib/draft/readings";
+import { draftKey, type SectionKey } from "@/lib/draft/schema";
+import { fakeError, installFakeApi, type FakeHandler, type RecordedRequest } from "@/test/fake-api";
+import { church, churchProfile, DRAFT_NOW, generateRoute, me, testDraft, USER_ID } from "@/test/fixtures";
+import { renderWithProviders } from "@/test/render";
+
+import { LiturgyGenerationProvider, MAX_IN_FLIGHT, SERMON_WAIT_MS, useLiturgyGeneration, type LiturgyGeneration } from "./generation";
+
+const KEY = draftKey(USER_ID, church().id);
+const FOUR: SectionKey[] = ["call_to_worship", "opening_prayer", "prayer_of_confession", "assurance"];
+const PHILIPPIANS = {
+  reference: "Philippians 3:4b-14",
+  status: "ok",
+  sections: [{ reference: "Philippians 3:4b-14", status: "ok", text: "I press on toward the goal." }],
+};
+
+/** The provider's latest value, for the test to call (set after each render). */
+const handle: { current: LiturgyGeneration | null } = { current: null };
+const generation = {
+  generate: (...args: Parameters<LiturgyGeneration["generate"]>) => handle.current?.generate(...args),
+  cancel: (...args: Parameters<LiturgyGeneration["cancel"]>) => handle.current?.cancel(...args),
+};
+
+function Probe() {
+  const g = useLiturgyGeneration();
+  useEffect(() => {
+    handle.current = g;
+  });
+  const { draft } = useDraft();
+  return (
+    <ul>
+      {FOUR.map((key) => (
+        <li key={key}>
+          {key}: {draft.liturgy.cards[key].text || "empty"} / {g.runs[key]?.phase ?? "idle"}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Pat's draft with October 4's readings (the NT reading is Philippians), in the providers the shell mounts. */
+function renderProvider(routes: Record<string, FakeHandler>, sermonWaitMs?: number) {
+  window.localStorage.setItem(
+    KEY,
+    JSON.stringify(editScriptureLines(testDraft(), "Isaiah 5:1-7\nPsalm 80:7-15\nPhilippians 3:4b-14\nMatthew 21:33-46")),
+  );
+  const api = installFakeApi(routes);
+  const profile = churchProfile();
+  renderWithProviders(
+    <>
+      <DraftProvider userId={USER_ID} church={profile}>
+        <LiturgyGenerationProvider church={profile} sermonWaitMs={sermonWaitMs}>
+          <Probe />
+        </LiturgyGenerationProvider>
+      </DraftProvider>
+      <Toaster />
+    </>,
+    { me: me(), church: church() },
+  );
+  return api;
+}
+
+const generateCalls = (requests: RecordedRequest[]) => requests.filter((r) => r.path === "/liturgy/generate");
+
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(DRAFT_NOW);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
+
+describe("the sermon text (S Sermon text)", () => {
+  it("reads the passage once for a batch of 4, then sends 4 requests with the same sermon_text, 3 at a time", async () => {
+    let open = 0;
+    let most = 0;
+    const api = renderProvider({
+      "POST /scripture/passages": { passages: [PHILIPPIANS] },
+      "POST /liturgy/generate": generateRoute(async (section) => {
+        open += 1;
+        most = Math.max(most, open);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        open -= 1;
+        return { section, status: "generated", text: `${section} text`, error: null };
+      }),
+    });
+    act(() => generation.generate(FOUR, { aiAvailable: true, bulk: true }));
+    for (const key of FOUR) expect(await screen.findByText(`${key}: ${key} text / idle`)).toBeInTheDocument();
+    expect(api.requests.filter((r) => r.path === "/scripture/passages")).toHaveLength(1);
+    expect(api.requests.find((r) => r.path === "/scripture/passages")?.body).toEqual({ refs: ["Philippians 3:4b-14"], translation: "web" });
+    const calls = generateCalls(api.requests);
+    expect(calls.map((r) => (r.body as GenerateLiturgyBody).sections)).toEqual(FOUR.map((key) => [key]));
+    for (const call of calls) {
+      expect((call.body as GenerateLiturgyBody).sermon_text).toEqual({ ref: "Philippians 3:4b-14", text: "I press on toward the goal." });
+    }
+    expect(most).toBeLessThanOrEqual(MAX_IN_FLIGHT);
+    expect(await screen.findByText("Wrote 4 sections.")).toBeInTheDocument();
+  });
+
+  it("sends the batch without sermon_text, and no toast about it, when the passage fails or takes too long", async () => {
+    expect(SERMON_WAIT_MS).toBe(10_000);
+    const failing = renderProvider({
+      "POST /scripture/passages": fakeError(500, "internal_error", "Something went wrong."),
+      "POST /liturgy/generate": generateRoute(),
+    });
+    act(() => generation.generate(["call_to_worship"], { aiAvailable: true }));
+    expect(await screen.findByText("call_to_worship: Call to Worship written by the AI. / idle")).toBeInTheDocument();
+    expect(generateCalls(failing.requests)[0].body).not.toHaveProperty("sermon_text");
+    expect(screen.queryByText(/Something went wrong/)).toBeNull();
+  });
+
+  it("goes without the sermon text once the wait passes (shortened here), and Cancel during the wait sends nothing", async () => {
+    const never = new Promise<never>(() => {});
+    const api = renderProvider(
+      { "POST /scripture/passages": () => never, "POST /liturgy/generate": generateRoute() },
+      50,
+    );
+    act(() => generation.generate(["opening_prayer"], { aiAvailable: true }));
+    expect(screen.getByText("opening_prayer: empty / queued")).toBeInTheDocument();
+    expect(await screen.findByText("opening_prayer: Opening Prayer written by the AI. / idle")).toBeInTheDocument();
+    expect(generateCalls(api.requests)[0].body).not.toHaveProperty("sermon_text");
+
+    act(() => generation.generate(["assurance"], { aiAvailable: true }));
+    expect(screen.getByText("assurance: empty / queued")).toBeInTheDocument();
+    act(() => generation.cancel(["assurance"]));
+    expect(screen.getByText("assurance: empty / idle")).toBeInTheDocument();
+    // A later batch waits as long, so once its answer is in, the cancelled one would have been sent.
+    act(() => generation.generate(["prayer_of_confession"], { aiAvailable: true }));
+    expect(await screen.findByText("prayer_of_confession: Prayer of Confession written by the AI. / idle")).toBeInTheDocument();
+    expect(generateCalls(api.requests).map((r) => (r.body as GenerateLiturgyBody).sections)).toEqual([
+      ["opening_prayer"],
+      ["prayer_of_confession"],
+    ]);
+    expect(screen.getByText("assurance: empty / idle")).toBeInTheDocument();
+  });
+});
+```
+
+- [ ] **Step 3 (agent): Run them and see them fail**
+
+```bash
+(cd frontend && npx vitest run src/lib/liturgy/generation.test.tsx 2>&1 | grep -E "^ FAIL|Error: Failed|Tests ")
+```
+
+**Expected:**
+
+```
+(pending replay)
+```
+- [ ] **Step 4 (agent): Write the provider and mount it in the shell**
+
+**Create `frontend/src/lib/liturgy/generation.tsx`:**
+
+```tsx
+"use client";
+
+/**
+ * `LiturgyGenerationProvider` and `useLiturgyGeneration()` (slice 4 spec,
+ * Frontend `generation.tsx`; UX "Generate and Regenerate"). Mounted in the
+ * builder shell inside the draft provider, so a run keeps going while the
+ * member moves between steps and its result lands in the draft; leaving
+ * `/builder`, switching church (the keyed remount) or signing out unmounts it
+ * and cancels everything.
+ *
+ * - Runs, card errors and Undo live here, in memory, never in the draft
+ *   (owner answer 1, 2026-09-30: none of them is unsaved work).
+ * - `generate(keys, {aiAvailable, bulk})`: with AI off it sends nothing and
+ *   marks each switched-on empty card "AI not configured" (S step 0).
+ *   Otherwise every key is queued; the batch first reads the sermon text once
+ *   (the effective NT reading, WEB for ESV, `queryClient.fetchQuery` through
+ *   `passageQuery`, at most 10 s; a failure or a timeout just leaves it out),
+ *   then each section is one request, at most 3 in flight.
+ * - When a request starts the card is captured (`captureCard`); when its
+ *   answer arrives `staleVerdict` decides, inside the draft update, whether it
+ *   applies ("apply": the text, origin "ai", Undo when it replaced text) or
+ *   is dropped with S's toast.
+ * - A 429 stops the queue: that card and every queued one show the retry
+ *   message. A 401 or a lost church goes to the app's handling
+ *   (`reportAuthErrors`) and shows nothing on the card.
+ * - A bulk run ends with one toast: "Wrote n sections." or "Wrote k of n
+ *   sections. The rest show what went wrong." (cancelled cards not counted).
+ */
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { toast } from "sonner";
+
+import { ApiError } from "@/lib/api/client";
+import { isNoChurchAccess } from "@/lib/api/errors";
+import type { ChurchProfile, SectionResult, SermonText } from "@/lib/api/types";
+import { useDraft } from "@/lib/draft/context";
+import type { SectionKey } from "@/lib/draft/schema";
+import { reportAuthErrors, useApi } from "@/lib/queries/client";
+import { generateSection } from "@/lib/queries/liturgy";
+import { passageQuery } from "@/lib/queries/passages";
+
+import {
+  applyGenerated,
+  captureCard,
+  restoreCard,
+  staleVerdict,
+  type CapturedCard,
+  type CardSnapshot,
+  type StaleVerdict,
+} from "./cards";
+import { cardErrorFrom, localAiNotConfigured, type CardError } from "./errors";
+import { createTaskQueue, type TaskOutcome } from "./queue";
+import { buildGenerateRequest, sermonSource, sermonText } from "./request";
+import { SECTION_LABELS } from "./sections";
+
+/** At most 3 requests in flight, leaving one of the server's 4 AI slots free (S step 3). */
+export const MAX_IN_FLIGHT = 3;
+/** How long a batch waits for the sermon text before going without it (S "Sermon text"). */
+export const SERMON_WAIT_MS = 10_000;
+
+export type CardRun = { phase: "queued" | "writing"; since: number };
+export type UndoEntry = { kind: "replaced" | "cleared"; previous: CardSnapshot };
+export type BulkRun = { total: number; done: number };
+
+export type LiturgyGeneration = {
+  runs: Partial<Record<SectionKey, CardRun>>;
+  errors: Partial<Record<SectionKey, CardError>>;
+  undo: Partial<Record<SectionKey, UndoEntry>>;
+  /** "Generate empty sections" while it runs. */
+  bulk: BulkRun | null;
+  generate: (keys: SectionKey[], opts: { aiAvailable: boolean; bulk?: boolean }) => void;
+  /** Cancels these cards' runs (every run when omitted); the cards return to where they were. */
+  cancel: (keys?: SectionKey[]) => void;
+  /** The AI bar's Cancel: the whole bulk run. */
+  cancelBulk: () => void;
+  dismissError: (key: SectionKey) => void;
+  setUndo: (key: SectionKey, entry: UndoEntry | null) => void;
+  clearUndo: () => void;
+  applyUndo: (key: SectionKey) => void;
+};
+
+const GenerationContext = createContext<LiturgyGeneration | null>(null);
+
+type Bulk = { keys: Set<SectionKey>; total: number; done: number; written: number };
+
+function without<T>(record: Partial<Record<SectionKey, T>>, keys: readonly SectionKey[]): Partial<Record<SectionKey, T>> {
+  if (!keys.some((key) => key in record)) return record;
+  const next = { ...record };
+  for (const key of keys) delete next[key];
+  return next;
+}
+
+function bulkToast(written: number, done: number): void {
+  if (done === 0) return;
+  if (written === done) toast.message(done === 1 ? "Wrote 1 section." : `Wrote ${done} sections.`);
+  else toast.message(`Wrote ${written} of ${done} sections. The rest show what went wrong.`);
+}
+
+export function LiturgyGenerationProvider({
+  church,
+  sermonWaitMs = SERMON_WAIT_MS,
+  children,
+}: {
+  church: Pick<ChurchProfile, "id" | "effective_translation">;
+  /** Tests shorten the sermon-text wait. */
+  sermonWaitMs?: number;
+  children: ReactNode;
+}) {
+  const { update, peek } = useDraft();
+  const api = useApi();
+  const queryClient = useQueryClient();
+  const [queue] = useState(() => createTaskQueue({ concurrency: MAX_IN_FLIGHT }));
+  const [runs, setRuns] = useState<Partial<Record<SectionKey, CardRun>>>({});
+  const [errors, setErrors] = useState<Partial<Record<SectionKey, CardError>>>({});
+  const [undo, setUndoState] = useState<Partial<Record<SectionKey, UndoEntry>>>({});
+  const [bulk, setBulk] = useState<BulkRun | null>(null);
+  const mounted = useRef(true);
+  /** Cards waiting for their batch's sermon text: key → batch id. */
+  const pending = useRef(new Map<SectionKey, number>());
+  /** Each batch's sermon-text wait, aborted when all of its cards are cancelled. */
+  const batches = useRef(new Map<number, AbortController>());
+  const captured = useRef(new Map<SectionKey, CapturedCard>());
+  const bulkRef = useRef<Bulk | null>(null);
+  const batchSeq = useRef(0);
+
+  useEffect(() => {
+    mounted.current = true;
+    const waits = batches.current;
+    return () => {
+      mounted.current = false;
+      queue.cancelAll();
+      for (const controller of waits.values()) controller.abort();
+    };
+  }, [queue]);
+
+  const setError = useCallback((key: SectionKey, error: CardError | null) => {
+    setErrors((current) => (error === null ? without(current, [key]) : { ...current, [key]: error }));
+  }, []);
+
+  const setUndo = useCallback((key: SectionKey, entry: UndoEntry | null) => {
+    setUndoState((current) => (entry === null ? without(current, [key]) : { ...current, [key]: entry }));
+  }, []);
+
+  /** A card left the bulk run: settled (counted, `wrote` when applied) or cancelled (not counted). */
+  const leaveBulk = useCallback((key: SectionKey, how: "wrote" | "failed" | "cancelled") => {
+    const b = bulkRef.current;
+    if (b === null || !b.keys.has(key)) return;
+    b.keys.delete(key);
+    if (how === "cancelled") b.total -= 1;
+    else b.done += 1;
+    if (how === "wrote") b.written += 1;
+    if (b.keys.size === 0) {
+      bulkRef.current = null;
+      setBulk(null);
+      bulkToast(b.written, b.done);
+    } else {
+      setBulk({ total: b.total, done: b.done });
+    }
+  }, []);
+
+  /** Drops a card's run: waiting for the sermon text, queued or writing. */
+  const dropRun = useCallback(
+    (key: SectionKey) => {
+      const batch = pending.current.get(key);
+      pending.current.delete(key);
+      if (batch !== undefined && ![...pending.current.values()].includes(batch)) {
+        batches.current.get(batch)?.abort();
+        batches.current.delete(batch);
+      }
+      queue.cancel(key);
+      captured.current.delete(key);
+    },
+    [queue],
+  );
+
+  const applyResult = useCallback(
+    (key: SectionKey, text: string): boolean => {
+      const cap = captured.current.get(key);
+      captured.current.delete(key);
+      if (!cap) return false;
+      const out: { verdict: StaleVerdict; previous: CardSnapshot | null } = { verdict: "apply", previous: null };
+      update((d) => {
+        out.verdict = staleVerdict(d, key, cap);
+        if (out.verdict !== "apply") return d;
+        const card = d.liturgy.cards[key];
+        out.previous = { text: card.text, origin: card.origin };
+        return applyGenerated(d, key, text);
+      });
+      const label = SECTION_LABELS[key];
+      if (out.verdict === "service_changed") {
+        toast.message(`The service changed, so the AI draft for ${label} was discarded.`);
+      } else if (out.verdict === "edited") {
+        toast.message(`Kept your edits — the new AI draft for ${label} was not used.`);
+      } else if (out.previous !== null && out.previous.text.trim() !== "") {
+        setUndo(key, { kind: "replaced", previous: out.previous });
+      }
+      return out.verdict === "apply";
+    },
+    [update, setUndo],
+  );
+
+  const settle = useCallback(
+    (key: SectionKey, outcome: TaskOutcome<SectionResult>) => {
+      if (!mounted.current) return;
+      setRuns((current) => without(current, [key]));
+      if (outcome.ok) {
+        const result = outcome.value;
+        if (result.status !== "error" && result.text !== null) {
+          leaveBulk(key, applyResult(key, result.text) ? "wrote" : "failed");
+          return;
+        }
+        captured.current.delete(key);
+        setError(key, result.error ? cardErrorFrom(result.error) : cardErrorFrom(new Error("no text")));
+        leaveBulk(key, "failed");
+        return;
+      }
+      captured.current.delete(key);
+      const e = outcome.error;
+      if (e instanceof ApiError && (e.status === 401 || isNoChurchAccess(e))) reportAuthErrors(e, church.id);
+      const error = cardErrorFrom(e);
+      setError(key, error);
+      leaveBulk(key, error === null ? "cancelled" : "failed");
+      if (e instanceof ApiError && e.code === "rate_limited") {
+        // S step 7: the whole queue stops, and every card still waiting shows the same message.
+        const waiting = [...queue.waitingKeys(), ...pending.current.keys()] as SectionKey[];
+        for (const other of waiting) {
+          dropRun(other);
+          setError(other, error);
+          leaveBulk(other, "failed");
+        }
+        setRuns((current) => without(current, waiting));
+      }
+    },
+    [applyResult, church.id, dropRun, leaveBulk, queue, setError],
+  );
+
+  const loadSermon = useCallback(
+    (signal: AbortSignal): Promise<SermonText | null> => {
+      const source = sermonSource(peek(), church.effective_translation);
+      if (source === null) return Promise.resolve(null);
+      return new Promise((resolve) => {
+        const done = (value: SermonText | null) => {
+          clearTimeout(timer);
+          signal.removeEventListener("abort", onAbort);
+          resolve(value);
+        };
+        const onAbort = () => done(null);
+        const timer = setTimeout(() => done(null), sermonWaitMs);
+        signal.addEventListener("abort", onAbort, { once: true });
+        queryClient.fetchQuery(passageQuery(api, source.translation, source.ref)).then(
+          (passage) => done(sermonText(source.ref, passage)),
+          () => done(null),
+        );
+      });
+    },
+    [api, church.effective_translation, peek, queryClient, sermonWaitMs],
+  );
+
+  const send = useCallback(
+    (key: SectionKey, sermon: SermonText | null) => {
+      queue.push(
+        key,
+        (signal) => {
+          const draft = peek();
+          captured.current.set(key, captureCard(draft, key));
+          setRuns((current) => ({ ...current, [key]: { phase: "writing", since: Date.now() } }));
+          return generateSection(api.church, key, buildGenerateRequest(draft, key, sermon), signal);
+        },
+        (outcome) => settle(key, outcome),
+      );
+    },
+    [api, peek, queue, settle],
+  );
+
+  const generate = useCallback(
+    (keys: SectionKey[], { aiAvailable, bulk: isBulk = false }: { aiAvailable: boolean; bulk?: boolean }) => {
+      const draft = peek();
+      if (!aiAvailable) {
+        // S step 0: nothing is sent; each targeted switched-on empty card says so.
+        const empty = keys.filter((key) => {
+          const card = draft.liturgy.cards[key];
+          return card.enabled && card.text.trim() === "";
+        });
+        setErrors((current) => ({ ...current, ...Object.fromEntries(empty.map((key) => [key, localAiNotConfigured()])) }));
+        return;
+      }
+      const busy = new Set<SectionKey>([...pending.current.keys(), ...(queue.runningKeys() as SectionKey[]), ...(queue.waitingKeys() as SectionKey[])]);
+      const fresh = keys.filter((key) => !busy.has(key));
+      if (fresh.length === 0) return;
+      const since = Date.now();
+      setErrors((current) => without(current, fresh));
+      setRuns((current) => ({ ...current, ...Object.fromEntries(fresh.map((key) => [key, { phase: "queued", since }])) }));
+      if (isBulk) {
+        bulkRef.current = { keys: new Set(fresh), total: fresh.length, done: 0, written: 0 };
+        setBulk({ total: fresh.length, done: 0 });
+      }
+      const batch = ++batchSeq.current;
+      const controller = new AbortController();
+      batches.current.set(batch, controller);
+      for (const key of fresh) pending.current.set(key, batch);
+      void loadSermon(controller.signal).then((sermon) => {
+        batches.current.delete(batch);
+        if (!mounted.current) return;
+        for (const key of fresh) {
+          if (pending.current.get(key) !== batch) continue; // cancelled while waiting
+          pending.current.delete(key);
+          send(key, sermon);
+        }
+      });
+    },
+    [loadSermon, peek, queue, send],
+  );
+
+  const cancel = useCallback(
+    (keys?: SectionKey[]) => {
+      const targets =
+        keys ?? ([...pending.current.keys(), ...queue.runningKeys(), ...queue.waitingKeys()] as SectionKey[]);
+      for (const key of targets) {
+        dropRun(key);
+        leaveBulk(key, "cancelled");
+      }
+      setRuns((current) => without(current, targets));
+    },
+    [dropRun, leaveBulk, queue],
+  );
+
+  const cancelBulk = useCallback(() => {
+    const b = bulkRef.current;
+    if (b) cancel([...b.keys]);
+  }, [cancel]);
+
+  const dismissError = useCallback((key: SectionKey) => setError(key, null), [setError]);
+  const clearUndo = useCallback(() => setUndoState({}), []);
+  const applyUndo = useCallback(
+    (key: SectionKey) => {
+      const entry = undo[key];
+      if (!entry) return;
+      update((d) => restoreCard(d, key, entry.previous));
+      setUndo(key, null);
+    },
+    [undo, update, setUndo],
+  );
+
+  const value = useMemo<LiturgyGeneration>(
+    () => ({ runs, errors, undo, bulk, generate, cancel, cancelBulk, dismissError, setUndo, clearUndo, applyUndo }),
+    [runs, errors, undo, bulk, generate, cancel, cancelBulk, dismissError, setUndo, clearUndo, applyUndo],
+  );
+  return <GenerationContext value={value}>{children}</GenerationContext>;
+}
+
+/** The generation state and actions. Throws outside `LiturgyGenerationProvider` (the builder shell mounts it). */
+export function useLiturgyGeneration(): LiturgyGeneration {
+  const value = useContext(GenerationContext);
+  if (!value) throw new Error("useLiturgyGeneration() must be used inside <LiturgyGenerationProvider>.");
+  return value;
+}
+```
+
+**In `frontend/src/components/builder/builder-shell.tsx`, replace:**
+
+```tsx
+ * every step (slice 2c).
+```
+
+**with:**
+
+```tsx
+ * every step (slice 2c). `<LiturgyGenerationProvider>` holds the Liturgy
+ * step's AI runs, so they keep going on the other steps (slice 4b).
+```
+
+**In `frontend/src/components/builder/builder-shell.tsx`, replace:**
+
+```tsx
+import { stepFromPath } from "@/lib/draft/steps";
+import { useMeContext } from "@/lib/me-context";
+```
+
+**with:**
+
+```tsx
+import { stepFromPath } from "@/lib/draft/steps";
+import { LiturgyGenerationProvider } from "@/lib/liturgy/generation";
+import { useMeContext } from "@/lib/me-context";
+```
+
+**In `frontend/src/components/builder/builder-shell.tsx`, replace:**
+
+```tsx
+      <LectionarySync>
+        <BuilderFrame church={profile.data}>{children}</BuilderFrame>
+      </LectionarySync>
+```
+
+**with:**
+
+```tsx
+      <LiturgyGenerationProvider church={profile.data}>
+        <LectionarySync>
+          <BuilderFrame church={profile.data}>{children}</BuilderFrame>
+        </LectionarySync>
+      </LiturgyGenerationProvider>
+```
+
+- [ ] **Step 5 (agent): Run the tests, the suite, types and lint**
+
+```bash
+(cd frontend && npx vitest run src/lib/liturgy/generation.test.tsx src/components/builder 2>&1 | grep -E "Test Files|Tests ")
+(cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
+(cd frontend && npm run typecheck >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")
+git status --short
+```
+
+**Expected:** ` Test Files  7 passed (7)`, `      Tests  95 passed (95)` (the shell, Hymns and Date & readings tests pass with the provider mounted, sending nothing); the suite ` Test Files  73 passed (73)`, `      Tests  473 passed (473)`; `typecheck 0` and `lint 0`; ` M frontend/src/components/builder/builder-shell.tsx` and the two new files as `??`.
+
+- [ ] **Step 6 (agent): Commit**
+
+```bash
+git add frontend/src/lib/liturgy/generation.tsx frontend/src/lib/liturgy/generation.test.tsx frontend/src/components/builder/builder-shell.tsx
+git commit -m "Liturgy: the generation provider, mounted in the builder shell (S generation.tsx; BC-13, BC-21)" -m "Runs, card errors and Undo live in memory in LiturgyGenerationProvider,
+inside the builder shell, so a run keeps going on other steps and lands in
+the draft. Without AI it sends nothing and marks empty cards. A batch
+reads the sermon text once (WEB for ESV, at most 10 s, left out on
+failure), then sends one section per request, 3 at a time; a result is
+applied or dropped by the stale rule with its toast; a 429 stops the
+queue; a bulk run ends with one toast. Unmounting cancels everything.
+Frontend 470 -> 473 tests in 72 -> 73 files." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
+```
+
+**Expected:** one commit, 3 files changed.
+
+**Review checkpoint (T3-T6, batch B):** the request never sends `overrides` or ESV text; the timeout row is 100 000; the fixtures match 4a's shared files; the store's defaults never outrank another tab's edit; the provider sends nothing while idle, never delivers a cancelled result, and applies S step 6 inside the update; counts match.
