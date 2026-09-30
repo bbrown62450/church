@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-(WIP: this plan is being written; sections below are filled in as the planner goes.)
+(WIP: this plan is being written; sections below are filled in as the planner goes. Planner's working code: branch `dev-4a` in this repository (a scratch worktree), tasks T1-T6 built so far: config, communion/outline, validator, prayer library, prompt builder, repos.)
 
 ## Owner answers (2026-09-30, "all recommended", binding)
 
