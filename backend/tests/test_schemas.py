@@ -60,12 +60,16 @@ def test_section_key_rejects_an_unknown_section():
         Section(key="offering")
 
 
-def test_hymnal_code_pattern_and_models_absent_from_openapi():
+def test_hymnal_code_pattern_and_models_in_openapi_unchanged():
     code = TypeAdapter(HymnalCode)
     assert code.validate_python("GG2013") == "GG2013"
     for bad in ("PH 1990", "X", "G" * 21):
         with pytest.raises(ValidationError):
             code.validate_python(bad)
-    # No slice-3 route uses them, so the committed snapshot does not change for them.
+    # Slice 4's POST /liturgy/generate is the first route that accepts them; they
+    # enter the snapshot with the frozen shape (F §1.3): no pattern on hymnal.
     schemas = create_app().openapi()["components"]["schemas"]
-    assert not {"HymnRef", "SlotHymns"} & set(schemas)
+    assert {"HymnRef", "SlotHymns"} <= set(schemas)
+    hymnal = schemas["HymnRef"]["properties"]["hymnal"]
+    assert "pattern" not in str(hymnal) and "maxLength" in str(hymnal)
+    assert schemas["HymnRef"]["additionalProperties"] is False

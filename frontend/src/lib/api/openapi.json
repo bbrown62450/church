@@ -116,6 +116,63 @@
         "title": "ChurchProfileOut",
         "type": "object"
       },
+      "CommunionBlockOut": {
+        "properties": {
+          "style": {
+            "enum": [
+              "heading1",
+              "heading2",
+              "text",
+              "response",
+              "blank"
+            ],
+            "title": "Style",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "style",
+          "text"
+        ],
+        "title": "CommunionBlockOut",
+        "type": "object"
+      },
+      "CommunionOut": {
+        "properties": {
+          "blocks": {
+            "items": {
+              "$ref": "#/components/schemas/CommunionBlockOut"
+            },
+            "title": "Blocks",
+            "type": "array"
+          },
+          "default_rule": {
+            "const": "first_sunday_of_month",
+            "title": "Default Rule",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "toggle_label": {
+            "title": "Toggle Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "toggle_label",
+          "default_rule",
+          "blocks"
+        ],
+        "title": "CommunionOut",
+        "type": "object"
+      },
       "CreateChurchIn": {
         "additionalProperties": false,
         "description": "The body of POST /churches. A blank name, or a blank or unknown time\nzone, passes this model and gets a 422 that names the field.",
@@ -196,6 +253,99 @@
           "request_id"
         ],
         "title": "ErrorDetail",
+        "type": "object"
+      },
+      "GenerateLiturgyIn": {
+        "additionalProperties": false,
+        "properties": {
+          "hymns": {
+            "$ref": "#/components/schemas/SlotHymns"
+          },
+          "occasion": {
+            "default": "",
+            "maxLength": 300,
+            "title": "Occasion",
+            "type": "string"
+          },
+          "overrides": {
+            "additionalProperties": {
+              "maxLength": 20000,
+              "type": "string"
+            },
+            "propertyNames": {
+              "enum": [
+                "call_to_worship",
+                "opening_prayer",
+                "prayer_of_confession",
+                "assurance",
+                "prayer_for_illumination",
+                "prayers_of_the_people",
+                "offertory_prayer",
+                "benediction"
+              ]
+            },
+            "title": "Overrides",
+            "type": "object"
+          },
+          "scriptures": {
+            "items": {
+              "maxLength": 200,
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Scriptures",
+            "type": "array"
+          },
+          "sections": {
+            "items": {
+              "enum": [
+                "call_to_worship",
+                "opening_prayer",
+                "prayer_of_confession",
+                "assurance",
+                "prayer_for_illumination",
+                "prayers_of_the_people",
+                "offertory_prayer",
+                "benediction"
+              ],
+              "type": "string"
+            },
+            "maxItems": 4,
+            "minItems": 1,
+            "title": "Sections",
+            "type": "array"
+          },
+          "sermon_text": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SermonText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "sections"
+        ],
+        "title": "GenerateLiturgyIn",
+        "type": "object"
+      },
+      "GenerateLiturgyOut": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/SectionResult"
+            },
+            "title": "Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "results"
+        ],
+        "title": "GenerateLiturgyOut",
         "type": "object"
       },
       "HymnMatchOut": {
@@ -433,6 +583,57 @@
           "newer_than_preferred"
         ],
         "title": "HymnOut",
+        "type": "object"
+      },
+      "HymnRef": {
+        "additionalProperties": false,
+        "description": "One slot's hymn (F \u00a71.3). hymn_id null = an archived snapshot, used as\nsent; for a non-null id the server reads title, number and hymnal from\nthe database and ignores the client's copy.",
+        "properties": {
+          "hymn_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hymn Id"
+          },
+          "hymnal": {
+            "anyOf": [
+              {
+                "maxLength": 20,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hymnal"
+          },
+          "number": {
+            "anyOf": [
+              {
+                "maximum": 100000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Number"
+          },
+          "title": {
+            "default": "",
+            "maxLength": 300,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "title": "HymnRef",
         "type": "object"
       },
       "HymnSuggestionIn": {
@@ -735,6 +936,99 @@
         "title": "LectionaryOut",
         "type": "object"
       },
+      "LiturgyConfigOut": {
+        "properties": {
+          "ai_available": {
+            "title": "Ai Available",
+            "type": "boolean"
+          },
+          "assurance_response": {
+            "title": "Assurance Response",
+            "type": "string"
+          },
+          "communion": {
+            "$ref": "#/components/schemas/CommunionOut"
+          },
+          "custom_placements": {
+            "items": {
+              "$ref": "#/components/schemas/PlacementOut"
+            },
+            "title": "Custom Placements",
+            "type": "array"
+          },
+          "default_benediction_fallback": {
+            "title": "Default Benediction Fallback",
+            "type": "string"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/LiturgyLimitsOut"
+          },
+          "outline": {
+            "items": {
+              "$ref": "#/components/schemas/OutlineItemOut"
+            },
+            "title": "Outline",
+            "type": "array"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/SectionSpecOut"
+            },
+            "title": "Sections",
+            "type": "array"
+          }
+        },
+        "required": [
+          "sections",
+          "custom_placements",
+          "outline",
+          "assurance_response",
+          "default_benediction_fallback",
+          "communion",
+          "limits",
+          "ai_available"
+        ],
+        "title": "LiturgyConfigOut",
+        "type": "object"
+      },
+      "LiturgyLimitsOut": {
+        "properties": {
+          "max_custom_elements": {
+            "title": "Max Custom Elements",
+            "type": "integer"
+          },
+          "max_custom_label": {
+            "title": "Max Custom Label",
+            "type": "integer"
+          },
+          "max_custom_text": {
+            "title": "Max Custom Text",
+            "type": "integer"
+          },
+          "max_section_text": {
+            "title": "Max Section Text",
+            "type": "integer"
+          },
+          "max_sections_per_request": {
+            "title": "Max Sections Per Request",
+            "type": "integer"
+          },
+          "max_sermon_title": {
+            "title": "Max Sermon Title",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "max_section_text",
+          "max_sermon_title",
+          "max_custom_elements",
+          "max_custom_label",
+          "max_custom_text",
+          "max_sections_per_request"
+        ],
+        "title": "LiturgyLimitsOut",
+        "type": "object"
+      },
       "MeOut": {
         "properties": {
           "churches": {
@@ -753,6 +1047,69 @@
           "churches"
         ],
         "title": "MeOut",
+        "type": "object"
+      },
+      "OutlineItemOut": {
+        "properties": {
+          "anchors_after": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Anchors After",
+            "type": "array"
+          },
+          "fixed_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fixed Text"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "section",
+              "landmark",
+              "communion"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "value_source": {
+            "enum": [
+              "none",
+              "hymn_opening",
+              "hymn_response",
+              "hymn_closing",
+              "reading_ot",
+              "reading_nt",
+              "sermon_title",
+              "fixed"
+            ],
+            "title": "Value Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "key",
+          "label",
+          "value_source",
+          "fixed_text",
+          "anchors_after"
+        ],
+        "title": "OutlineItemOut",
         "type": "object"
       },
       "Page_HymnOut_": {
@@ -904,6 +1261,24 @@
           "passages"
         ],
         "title": "PassagesOut",
+        "type": "object"
+      },
+      "PlacementOut": {
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label"
+        ],
+        "title": "PlacementOut",
         "type": "object"
       },
       "ReadingSetOut": {
@@ -1119,6 +1494,202 @@
           "items"
         ],
         "title": "ScriptureMatchesOut",
+        "type": "object"
+      },
+      "SectionError": {
+        "properties": {
+          "code": {
+            "enum": [
+              "ai_not_configured",
+              "ai_busy",
+              "ai_timeout",
+              "ai_upstream_error",
+              "prompt_invalid"
+            ],
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "SectionError",
+        "type": "object"
+      },
+      "SectionResult": {
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SectionError"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "section": {
+            "enum": [
+              "call_to_worship",
+              "opening_prayer",
+              "prayer_of_confession",
+              "assurance",
+              "prayer_for_illumination",
+              "prayers_of_the_people",
+              "offertory_prayer",
+              "benediction"
+            ],
+            "title": "Section",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "override",
+              "generated",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          }
+        },
+        "required": [
+          "section",
+          "status",
+          "text",
+          "error"
+        ],
+        "title": "SectionResult",
+        "type": "object"
+      },
+      "SectionSpecOut": {
+        "properties": {
+          "default_enabled": {
+            "title": "Default Enabled",
+            "type": "boolean"
+          },
+          "hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hint"
+          },
+          "key": {
+            "enum": [
+              "call_to_worship",
+              "opening_prayer",
+              "prayer_of_confession",
+              "assurance",
+              "prayer_for_illumination",
+              "prayers_of_the_people",
+              "offertory_prayer",
+              "benediction"
+            ],
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "pastor_copy_only": {
+            "title": "Pastor Copy Only",
+            "type": "boolean"
+          },
+          "rows": {
+            "title": "Rows",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "default_enabled",
+          "rows",
+          "pastor_copy_only",
+          "hint"
+        ],
+        "title": "SectionSpecOut",
+        "type": "object"
+      },
+      "SermonText": {
+        "additionalProperties": false,
+        "description": "The effective NT reading and its passage text (never ESV); the server keeps\nthe first 2 000 characters (liturgy_prompts.SERMON_TEXT_LIMIT).",
+        "properties": {
+          "ref": {
+            "maxLength": 200,
+            "title": "Ref",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 20000,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "text"
+        ],
+        "title": "SermonText",
+        "type": "object"
+      },
+      "SlotHymns": {
+        "additionalProperties": false,
+        "description": "The three hymn slots (F \u00a71.3): slice 4's GenerateLiturgyIn.hymns, 5a's ServiceDraft.hymns.",
+        "properties": {
+          "closing": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HymnRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "opening": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HymnRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "response": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HymnRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "SlotHymns",
         "type": "object"
       },
       "SlotPicks": {
@@ -2417,6 +2988,195 @@
           }
         },
         "summary": "Lectionary Readings"
+      }
+    },
+    "/liturgy/config": {
+      "get": {
+        "operationId": "get_liturgy_config_liturgy_config_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiturgyConfigOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Get Liturgy Config"
+      }
+    },
+    "/liturgy/generate": {
+      "post": {
+        "description": "Typed text comes back as sent; the rest is written by the AI, at most 4\nsections at a time. Charged to the `ai` bucket per section that reaches the\nAI (40 per 10 min per user, 400 per day per church; F \u00a71.8).",
+        "operationId": "generate_liturgy_liturgy_generate_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-church-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Church-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateLiturgyIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerateLiturgyOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Generate Liturgy"
       }
     },
     "/me": {

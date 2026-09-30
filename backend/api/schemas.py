@@ -238,3 +238,16 @@ class SlotHymns(BaseModel):
 # Only for parameters that name a NEW or admin-managed hymnal code (6a). Never
 # on HymnRef and never on slice 3's read filters, which accept any stored code.
 HymnalCode = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_-]{2,20}$")]
+
+
+# --- slice 4a: the sermon text sent with liturgy requests (F §1.3 amendment
+# 2026-09-26; shared with the reviewer add-on's /liturgy/review and /liturgy/revise) ---
+
+class SermonText(BaseModel):
+    """The effective NT reading and its passage text (never ESV); the server keeps
+    the first 2 000 characters (liturgy_prompts.SERMON_TEXT_LIMIT)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ref: str = Field(max_length=200)
+    text: str = Field(max_length=20_000)
