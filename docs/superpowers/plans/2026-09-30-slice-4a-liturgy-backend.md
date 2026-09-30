@@ -4755,7 +4755,7 @@ The agent checks: `generate 200`; `call_to_worship generated`, `opening_prayer g
 
 Then the timed Prayers of the People, on its own:
 
-"Now paste this and press Return. It asks for one Prayers of the People and times it. It can take up to a minute; wait for the line that starts `prayers`."
+"Now paste this and press Return. It asks for one Prayers of the People and times it. It can take up to a minute and a half; wait for the line that starts `prayers`."
 
 ```js
 (async () => {
@@ -4787,7 +4787,7 @@ Record the time, the status, the length and the `ai_call` line's `completion_tok
 | What the check shows | Meaning | Action |
 |---|---|---|
 | `generated`, under 45 s, `completion_tokens` under 3 600, the text ends with a finished sentence (usually "Amen.") | the 60 s attempt and the 4 000-token budget hold | Record it. No follow-up. |
-| `generated` in 45-60 s | it fits, with little room | Record it, and add a follow-up for 4b: tell the owner the Prayers of the People can take most of a minute, and watch it in 4b's manual check. |
+| `generated` in 45 s or more (over 60 s means a quick failure was retried) | it fits, with little room | Record it, and add a follow-up for 4b: tell the owner the Prayers of the People can take most of a minute, and watch it in 4b's manual check. |
 | `completion_tokens` of 3 900 or more, or the text stops mid-sentence, or `error ai_upstream_error` (an empty answer) | the answer ran out of its token budget (S Risks 2) | Follow-up PR (on the owner's yes): raise Prayers of the People's `max_completion_tokens` in `liturgy_config.SECTIONS` (a code constant, no API change), then repeat this step. |
 | `error ai_timeout` (after about 60-85 s; with T11) | a 60 s attempt was not enough (a retry, if the deadline allowed one, was shorter still) | Follow-up (owner's decision): shorten the default Prayers of the People prompt's length ("at least 10-15 paragraphs"), or accept typing it; the 90 s page timeout leaves no room for a longer attempt. |
 | `error ai_timeout` after about 30 s or 60 s (T11 skipped: 30 s and one retry) | the 30 s attempt was too short | Follow-up PR (on the owner's yes): Task 11 of this plan as written (60 s attempts), then repeat this step. |
@@ -4823,7 +4823,15 @@ Expected counts after this task: backend `1178 passed, 11 skipped` on `main` (CI
 
 Filled in while Tasks 1-12 are built: each change from the plan as written, its reason, and whether the owner saw it. Task 12 (or a follow-up docs commit before Task 13) writes those that alter S or F as "(4a build)" notes.
 
-- (none yet; the planner's replay of 2026-09-30 matched every count in the table, Tasks 1-12)
+- (no build changes yet; the planner's replay of 2026-09-30 matched every count in the table, Tasks 1-12)
+- **Plan review fixes (2026-09-30, before the build).** Each fix was built and run in a scratch worktree of `9ab3fa6`, carried into the task code above, and the whole plan (Tasks 1-12) replayed again onto a clean worktree, reproducing every count in the table and every red run.
+  - **M1+M2, timing (owner-visible: the controller tells the owner).** The old arithmetic left out the client's 5 s connect timeout per attempt: an ordinary section could take 15 + (5 + 30) + 2 + (5 + 30) = 87 s against the page's 90 s. T7 now passes `deadline=` (start + `GENERATE_BUDGET_S` = 80 s, on an injectable `clock`) to every `complete()` call, so every section answers within 85 s. T11 keeps Prayers of the People's 60 s attempts but no longer forces `max_retries=0`; with the deadline, `max_retries` was unnecessary and is dropped from `complete()`, `FakeAI` and `SectionSpec` (T11's tests rewritten: the client test shows a quick failure retried, a 60 s timeout after a 15 s slot wait not retried, and one at once followed by a retry capped at the 20 s left). The owner approved "a single 60 s try, no retry"; the behavior is now "a 60 s try, with one retry only if time is left under the 80 s deadline". It is better in the common cases (a quick failure gets a second try; no section can run past 85 s), with one exception the controller should mention: a 60 s timeout with no slot wait gets a short retry (at most about 14 s plus its connect) that rarely succeeds, may cost a second cut-off call, and reports `ai_timeout` at about 85 s instead of 65 s. Global Constraints, clarification 16, the Questions, T11, T12's F row and S bullet, and T14 Steps 6-7 carry the corrected timings.
+  - **M3.** T7's `test_one_session_reads_everything_and_none_is_open_during_an_ai_call` counts `session_scope` in `usecases.liturgy`, `repos.churches` and `repos.hymns` (a repo opening its own session would show as a second one) and, inside each AI call, asserts the engine pool has no checked-out connection.
+  - **M4.** T13 Step 10 reports a stored overall voice (system) prompt over 8 000 characters only as a note (generation accepts it, clarification 21), and runs `build_prompt` for each changed section (every section when the system prompt changed) over the largest context S allows with the default rubric, reporting a 24 000-character failure.
+  - **M5.** Owner question 2 says the Word file prints "Old Testament Reading" until 5a (the owner has been told).
+  - **M6.** T1's app.py test skips, with its reason, when `app.py` is absent (slice 7 deletes it).
+  - **Nits.** `liturgy_config`'s docstring notes that S's "worship_service.py:78-145" is an older numbering of `_add_communion_liturgy` (68-135 at `9ab3fa6`); T5's intro says the BC-8 tests fail at collection; the INFO line's `voice=...example` counts only examples chosen for sections that reach the AI (T7 code, and an assertion in `test_a_malformed_template_fails_only_its_own_section`).
+  - **Owner answers of 2026-09-30** (questions 1 and 2, both "yes") are marked answered in both question lists.
 
 ## Spec coverage
 
