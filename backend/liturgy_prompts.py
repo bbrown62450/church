@@ -13,9 +13,12 @@ empty, so an edited prompt never crashes):
   {hymns}         all selected hymns as a bulleted list
 """
 import string
-from collections.abc import Mapping
-from dataclasses import dataclass
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
+
+import prayer_library
+import service_rubric
 
 # The one home of the section order and labels is liturgy_config (slice 4); the
 # names stay here for frozen Streamlit's Settings page and the tests.
@@ -247,3 +250,163 @@ def clean_prompt_overrides(prompts: Mapping[str, Any],
         if text and text != _normalized(defaults.get(key)):
             cleaned[key] = text
     return cleaned
+
+
+# --- slice 4a: building a section's messages (slice 4 spec, Backend 2, with the
+# 2026-09-26 amendments: PR #4's rubric checklist and sermon text, PR #7's voice) ---
+
+SERMON_TEXT_LIMIT = 2000                      # moved from worship_service (PR #4)
+SERMON_TEXT_FAILED = "[Could not load text]"  # Streamlit's sentinel for a passage that failed
+TOO_LONG_WITH_ADDITIONS = "It is too long once the readings, hymns and rubric checklist are added."
+HYMN_SLOTS = ("opening", "response", "closing")
+VOICE_PROFILE_INTRO = "Write in the voice of this church's pastor, described here:\n"
+VOICE_EXAMPLE_INTRO = "For voice only, here is a {label} this pastor wrote. Do not reuse its lines or phrases:\n"
+
+
+def _one_line(text: Optional[str], limit: int) -> str:
+    """Client text for the prompt: whitespace (newlines included) collapsed to one
+    space, stripped and cut, so a field cannot add lines of its own (as
+    hymn_suggest._clip does)."""
+    return " ".join((text or "").split())[:limit]
+
+
+def sermon_text_block(ref: Optional[str], text: Optional[str]) -> str:
+    """The sermon-text context for a prompt (PR #4, moved from worship_service),
+    or "" when the reference or text is blank or the passage failed to load."""
+    text = (text or "").strip()
+    ref = _one_line(ref, 200)
+    if not ref or not text or SERMON_TEXT_FAILED in text:
+        return ""
+    return (f"Sermon text ({ref}), for themes only; do not quote, cite, or name it:\n"
+            f"{text[:SERMON_TEXT_LIMIT]}")
+
+
+@dataclass(frozen=True)
+class ResolvedHymn:
+    """A slot's hymn as the prompt shows it: the database's title and number
+    for a hymn_id, or an archived snapshot's own."""
+    title: str
+    number: Optional[int]
+
+
+@dataclass(frozen=True)
+class PromptContext:
+    occasion: str
+    scriptures: str
+    opening_hymn: str
+    hymns: str
+    checklists: Mapping[str, tuple[str, ...]] = field(default_factory=dict)   # the merged rubric's "prayers"
+    sermon: str = ""                                                          # sermon_text_block(...) or ""
+
+
+def build_context(*, occasion: str, scriptures: Sequence[str],
+                  hymns_by_slot: Mapping[str, Optional[ResolvedHymn]],
+                  rubric: Optional[Mapping[str, Any]] = None,
+                  sermon_ref: Optional[str] = None, sermon_text: Optional[str] = None) -> PromptContext:
+    """The placeholders' values and the blocks appended after render().
+
+    - scriptures: "- {ref}" lines (blank ones dropped), or "None specified.".
+    - hymns: the filled slots in slot order, "- {title} (#{number})", or
+      "- {title}" without a number; "None chosen." when none is filled. A slot
+      with a blank title counts as empty.
+    - opening_hymn: the opening slot's title, else "N/A" (never another slot's).
+    - checklists: service_rubric.merge_rubric(rubric)["prayers"], so None, a
+      church's sparse overrides or a full rubric all work (PR #4).
+    """
+    lines = [line for line in (_one_line(s, 200) for s in scriptures) if line]
+    filled = [(slot, hymn, _one_line(hymn.title, 300)) for slot in HYMN_SLOTS
+              if (hymn := hymns_by_slot.get(slot)) is not None and _one_line(hymn.title, 300)]
+    hymn_lines = [f"- {title} (#{hymn.number})" if hymn.number is not None else f"- {title}"
+                  for _slot, hymn, title in filled]
+    opening = next((title for slot, _hymn, title in filled if slot == "opening"), "N/A")
+    prayers = service_rubric.merge_rubric(dict(rubric) if rubric is not None else None)["prayers"]
+    return PromptContext(
+        occasion=_one_line(occasion, 300),
+        scriptures="\n".join(f"- {line}" for line in lines) or "None specified.",
+        opening_hymn=opening,
+        hymns="\n".join(hymn_lines) or "None chosen.",
+        checklists={key: tuple(points) for key, points in prayers.items()},
+        sermon=sermon_text_block(sermon_ref, sermon_text),
+    )
+
+
+@dataclass(frozen=True)
+class VoiceContext:
+    """The prayer library's voice for one section (PR #7): the church's voice
+    profile and one same-type example, or None."""
+    profile: str
+    example: Optional[str]
+
+
+class PromptInvalid(Exception):
+    """The church's own prompt text cannot be used for this section."""
+
+    def __init__(self, section: str, reason: str):
+        super().__init__(reason)
+        self.section = section
+        self.reason = reason
+
+
+@dataclass(frozen=True)
+class BuiltPrompt:
+    messages: list[dict[str, str]]
+    dropped: tuple[str, ...]          # "example", "profile", "sermon": what the budget left out
+
+
+def build_prompt(section: str, prompts: Mapping[str, str], ctx: PromptContext, *,
+                 voice: Optional[VoiceContext] = None) -> BuiltPrompt:
+    """The section's [system, user] messages and what the budget dropped.
+
+    1. The section's template must pass check_template, else PromptInvalid.
+    2. system = prompts["system"]; user = render(template, ctx).
+    3. The section's non-empty checklist is appended to user.
+    4. Over MAX_PROMPT_CHARS now: PromptInvalid (the church's own text).
+    5. After render(), so braces in them are never placeholders: the sermon
+       block (user), the voice profile, stripped and cut to 2 000 (system),
+       and the example, cut to 3 000 (user). While over MAX_PROMPT_CHARS, the
+       example is dropped first, then the profile, then the sermon block;
+       they never raise.
+    With voice None, or an empty profile and no example, the result is the
+    same as without the voice blocks, byte for byte.
+    """
+    template = prompts[section]
+    check = check_template(section, template)
+    if not check.ok:
+        raise PromptInvalid(section, check.message or CANT_FILL)
+    system = prompts["system"]
+    user = render(template, occasion=ctx.occasion, scriptures=ctx.scriptures,
+                  opening_hymn=ctx.opening_hymn, hymns=ctx.hymns)
+    checklist = ctx.checklists.get(section)
+    if checklist:
+        user += "\n\n" + service_rubric.format_checklist(SECTION_LABELS[section], list(checklist))
+    if len(system) + len(user) > MAX_PROMPT_CHARS:
+        raise PromptInvalid(section, TOO_LONG_WITH_ADDITIONS)
+    blocks = {
+        "sermon": ctx.sermon,
+        "profile": (voice.profile if voice else "").strip()[:prayer_library.MAX_PROFILE_CHARS],
+        "example": ((voice.example or "") if voice else "")[:prayer_library.MAX_EXAMPLE_CHARS],
+    }
+    blocks = {name: text for name, text in blocks.items() if text.strip()}
+    dropped: list[str] = []
+    while True:
+        full_system = system + ("\n\n" + VOICE_PROFILE_INTRO + blocks["profile"] if "profile" in blocks else "")
+        full_user = user
+        if "sermon" in blocks:
+            full_user += "\n\n" + blocks["sermon"]
+        if "example" in blocks:
+            full_user += ("\n\n" + VOICE_EXAMPLE_INTRO.format(label=SECTION_LABELS[section])
+                          + blocks["example"])
+        if len(full_system) + len(full_user) <= MAX_PROMPT_CHARS:
+            break
+        name = next(n for n in ("example", "profile", "sermon") if n in blocks)
+        del blocks[name]
+        dropped.append(name)
+    return BuiltPrompt(messages=[{"role": "system", "content": full_system},
+                                 {"role": "user", "content": full_user}],
+                       dropped=tuple(dropped))
+
+
+def build_messages(section: str, prompts: Mapping[str, str], ctx: PromptContext, *,
+                   voice: Optional[VoiceContext] = None) -> list[dict[str, str]]:
+    """build_prompt's messages (the interface the spec names; 6a and the reviewer use it)."""
+    return build_prompt(section, prompts, ctx, voice=voice).messages
