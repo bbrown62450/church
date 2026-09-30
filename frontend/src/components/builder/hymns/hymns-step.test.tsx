@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import BuilderLayout from "@/app/(signed-in)/(church)/builder/layout";
 import { Toaster } from "@/components/ui/sonner";
-import type { ChurchProfile } from "@/lib/api/types";
+import type { ChurchProfile, HymnSuggestionBody } from "@/lib/api/types";
 import { ChurchProvider } from "@/lib/church-context";
 import { useDraft } from "@/lib/draft/context";
 import { editOccasion, setDate } from "@/lib/draft/readings";
@@ -28,6 +28,7 @@ import {
   gg2013,
   hymnals,
   hymnListRoute,
+  hymnSuggestions,
   lectionaryRoute,
   me,
   testDraft,
@@ -39,7 +40,7 @@ import { renderWithProviders } from "@/test/render";
 import { HymnsStep } from "./hymns-step";
 
 const KEY = draftKey(USER_ID, church().id);
-const [HOLY, PRAISE, COME, GRACE, , FAITHFUL] = gg2013();
+const [HOLY, PRAISE, COME, GRACE, , FAITHFUL, HERE, , SENT] = gg2013();
 /** Grace's recent use around October 4, 2026: sung September 6, planned October 18. */
 const RECENT = { "Great Is Thy Faithfulness": "2026-09-06", "Praise, My Soul, the King of Heaven": "2026-10-18" };
 
@@ -184,15 +185,19 @@ describe("the Hymns step (S User experience)", () => {
     expect(screen.queryByText("Couldn't load this church's hymnal.")).toBeNull();
   });
 
-  it("keeps the pickers when a background refetch fails after loading", async () => {
+  it("keeps the pickers, the toolbar and a pending Suggest when a background refetch fails after loading", async () => {
     let fail = false;
     const listRoute = hymnListRoute(undefined, RECENT);
     const failing = () => fakeError(500, "internal_error", "Something went wrong.");
+    const answer = held(THREE_EACH);
     const { user, queryClient } = renderStep(draftWith(slots(pick(COME))), {
       "GET /hymnals": () => (fail ? failing() : hymnals()),
       "GET /hymns": (req: RecordedRequest) => (fail ? failing() : listRoute(req)),
+      "POST /hymns/suggestions": answer.handler,
     });
     const input = await readyPicker("Response");
+    await user.click(await suggestButton());
+    await screen.findByRole("button", { name: "Suggesting…" });
     fail = true;
     await act(() => queryClient.refetchQueries({ type: "active" }));
     expect(queryClient.getQueryState(keys.hymnals(church().id))?.status).toBe("error");
@@ -204,6 +209,9 @@ describe("the Hymns step (S User experience)", () => {
     expect(await within(card("Response")).findByText("#650 Amazing Grace")).toBeInTheDocument();
     expect(screen.queryByText("Couldn't load this church's hymnal.")).toBeNull();
     expect(within(card("Opening")).getByRole("button", { name: "Change" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Suggesting…" })).toBeInTheDocument(); // the toolbar stayed mounted
+    answer.release();
+    expect(await screen.findByText(/^Suggestions ready/)).toBeInTheDocument();
   });
 });
 
@@ -435,5 +443,241 @@ describe("the toolbar (S Toolbar)", () => {
     expect(stored().hymns.slots).toEqual(slots(pick(FAITHFUL)).slots); // AC12: toggling never touched a slot
     expect(within(opening).getByText("#700 Great Is Thy Faithfulness")).toBeInTheDocument();
     expect(within(opening).getByText("Used on September 6, 2026 — within 12 weeks of this service.")).toBeInTheDocument();
+  });
+});
+
+// --- AI suggestions (S "AI suggestion flow"; owner decision 4, F D16) -----------------------
+
+/** A button that moves the draft's date, as step 1 would. */
+function DateProbe() {
+  const { update } = useDraft();
+  return (
+    <button type="button" onClick={() => update((d) => setDate(d, "2026-10-11"))}>
+      Move to October 11
+    </button>
+  );
+}
+
+/** A route that answers only when `release` is called. */
+function held(answer: () => unknown) {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  return {
+    handler: async () => {
+      await gate;
+      return answer();
+    },
+    release: () => release(),
+  };
+}
+
+/** Three hymns for each slot, 4 recently used ones left out. */
+const THREE_EACH = () =>
+  hymnSuggestions(
+    { opening: [HOLY, COME, HERE], response: [FAITHFUL, COME, HOLY], closing: [PRAISE, HERE, SENT] },
+    { excluded_recent_count: 4 },
+  );
+
+function ideaNames(slot: "Opening" | "Response" | "Closing"): string[] {
+  const group = within(card(slot)).queryByRole("group", { name: `Other ideas for the ${slot.toLowerCase()} hymn` });
+  return group ? within(group).getAllByRole("button").map((b) => b.getAttribute("aria-label") ?? "") : [];
+}
+
+async function suggestButton() {
+  const button = await screen.findByRole("button", { name: "Suggest hymns" });
+  await waitFor(() => expect(button).toBeEnabled());
+  return button;
+}
+
+describe("Suggest hymns (S AI suggestion flow)", () => {
+  it("fills only the empty slots, keeps the member's pick, and shows at least 2 ideas under every slot", async () => {
+    const readings = {
+      scriptures: ["Isaiah 5:1-7", "Philippians 3:4b-14"],
+      occasion: "Nineteenth Sunday after Pentecost",
+      selected_nt_ref: "Philippians 3:4b-14",
+    };
+    const { user, api, queryClient } = renderStep(draftWith(slots(null, pick(GRACE)), readings), {
+      "POST /hymns/suggestions": THREE_EACH(),
+    });
+    queryClient.setQueryData(keys.passage("web", "Philippians 3:4b-14"), {
+      reference: "Philippians 3:4b-14",
+      status: "ok",
+      sections: [{ reference: "Philippians 3:4b-14", status: "ok", text: "I press on toward the goal." }],
+    });
+    expect(await screen.findByText("Fills empty slots and shows other ideas under each hymn.")).toBeInTheDocument();
+    expect(screen.queryByText(/^Tip:/)).toBeNull();
+    await user.click(await suggestButton());
+    expect(
+      await screen.findByText("Suggestions ready. Tap an idea under a hymn to swap it in. 4 recently used hymns were left out."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Suggestions favor older and familiar hymns. Newer hymns show the year their words were written."),
+    ).toBeInTheDocument();
+    const body = api.requests.find((r) => r.path === "/hymns/suggestions")?.body as HymnSuggestionBody;
+    expect(body).toEqual({
+      service_date_iso: "2026-10-04",
+      occasion: "Nineteenth Sunday after Pentecost",
+      scriptures: ["Isaiah 5:1-7", "Philippians 3:4b-14"],
+      selected_nt_ref: "Philippians 3:4b-14",
+      hymnal: "GG2013",
+      exclude_recent: true,
+      current_picks: { opening: null, response: GRACE.id, closing: null },
+      nt_text: "I press on toward the goal.",
+    });
+    await waitFor(() => expect(stored().hymns.slots).toEqual(slots(pick(HOLY), pick(GRACE), pick(PRAISE)).slots));
+    expect(stored().hymns.alternatives?.for_date_iso).toBe("2026-10-04");
+    expect(ideaNames("Opening")).toEqual([
+      "Use Come, Thou Almighty King as the opening hymn",
+      "Use Here I Am, Lord, written 1981, as the opening hymn",
+    ]);
+    expect(ideaNames("Response")).toHaveLength(3); // a filled slot: 3 ideas, its own pick left out
+    expect(ideaNames("Closing")).toEqual([
+      "Use Here I Am, Lord, written 1981, as the closing hymn",
+      "Use Sent Forth by God's Blessing as the closing hymn",
+    ]);
+    expect(within(card("Response")).getByText("#649 Amazing Grace")).toBeInTheDocument();
+    expect(within(card("Response")).getByText("Used Sep 6")).toBeInTheDocument(); // a recently used idea
+    expect(within(card("Opening")).getAllByText("Written 1981")).toHaveLength(1);
+  });
+
+  it("a tap swaps an idea with the pick and a second tap swaps back; the ideas hide when the date changes", async () => {
+    const { user } = renderStep(testDraft(), { "POST /hymns/suggestions": THREE_EACH() }, <DateProbe />);
+    await user.click(await suggestButton());
+    await screen.findByText(/^Suggestions ready/);
+    const opening = card("Opening");
+    await user.click(within(opening).getByRole("button", { name: "Use Come, Thou Almighty King as the opening hymn" }));
+    expect(await within(opening).findByText("#403 Come, Thou Almighty King")).toBeInTheDocument();
+    expect(ideaNames("Opening")).toEqual([
+      "Use Holy, Holy, Holy! Lord God Almighty as the opening hymn",
+      "Use Here I Am, Lord, written 1981, as the opening hymn",
+    ]);
+    await user.click(
+      within(opening).getByRole("button", { name: "Use Holy, Holy, Holy! Lord God Almighty as the opening hymn" }),
+    );
+    expect(await within(opening).findByText("#1 Holy, Holy, Holy! Lord God Almighty")).toBeInTheDocument();
+    expect(ideaNames("Opening")).toEqual([
+      "Use Come, Thou Almighty King as the opening hymn",
+      "Use Here I Am, Lord, written 1981, as the opening hymn",
+    ]);
+    await user.click(screen.getByRole("button", { name: "Move to October 11" }));
+    await waitFor(() => expect(ideaNames("Opening")).toEqual([]));
+    expect(within(opening).getByText("#1 Holy, Holy, Holy! Lord God Almighty")).toBeInTheDocument(); // the pick stays
+  });
+
+  it("a pick made while the request runs is kept and gets ideas", async () => {
+    const answer = held(THREE_EACH);
+    const { user } = renderStep(testDraft(), { "POST /hymns/suggestions": answer.handler });
+    await user.click(await suggestButton());
+    expect(await screen.findByRole("button", { name: "Suggesting…" })).toBeDisabled();
+    const input = await readyPicker("Response");
+    await user.type(input, "650");
+    await user.click(await screen.findByRole("option", { name: /#650 Amazing Grace/ }));
+    await waitFor(() => expect(stored().hymns.slots.response?.number).toBe(650));
+    answer.release();
+    await screen.findByText(/^Suggestions ready/);
+    await waitFor(() => expect(stored().hymns.slots.opening?.title).toBe("Holy, Holy, Holy! Lord God Almighty"));
+    expect(stored().hymns.slots.response?.number).toBe(650);
+    expect(ideaNames("Response")).toHaveLength(3);
+  });
+
+  it("drops the answer when the date changed during the wait", async () => {
+    const answer = held(THREE_EACH);
+    const { user } = renderStep(testDraft(), { "POST /hymns/suggestions": answer.handler }, <DateProbe />);
+    await user.click(await suggestButton());
+    await screen.findByRole("button", { name: "Suggesting…" });
+    await user.click(screen.getByRole("button", { name: "Move to October 11" }));
+    await waitFor(() => expect(stored().readings.date_iso).toBe("2026-10-11"));
+    answer.release();
+    expect(await screen.findByText("The date changed while suggestions were loading. Try again.")).toBeInTheDocument();
+    expect(stored().hymns.slots).toEqual(testDraft().hymns.slots);
+    expect(stored().hymns.alternatives).toBeNull();
+  });
+
+  it("Cancel stops waiting and returns to idle; after 8 s it says it is still working", async () => {
+    vi.useRealTimers(); // a second useFakeTimers call would keep beforeEach's Date-only fake
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"], shouldAdvanceTime: true });
+    vi.setSystemTime(DRAFT_NOW);
+    const answer = held(THREE_EACH);
+    const { user, api } = renderStep(testDraft(), { "POST /hymns/suggestions": answer.handler });
+    await user.click(await suggestButton());
+    await screen.findByRole("button", { name: "Suggesting…" });
+    expect(screen.queryByText("Still working — this can take up to a minute.")).toBeNull();
+    act(() => {
+      vi.advanceTimersByTime(8_000);
+    });
+    expect(screen.getByText("Still working — this can take up to a minute.")).toHaveAttribute("aria-live", "polite");
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(await screen.findByRole("button", { name: "Suggest hymns" })).toBeEnabled();
+    expect(api.requests.filter((r) => r.path === "/hymns/suggestions")).toHaveLength(1);
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByText(/^Suggestions ready/)).toBeNull();
+    answer.release();
+  });
+
+  it("shows each failure's own copy under the button, and a server error as a toast", async () => {
+    const cases: [ReturnType<typeof fakeError>, string][] = [
+      [
+        fakeError(503, "ai_not_configured", "AI suggestions aren't set up on this app yet."),
+        "AI suggestions aren't set up on this app yet. You can still choose hymns yourself.",
+      ],
+      [fakeError(503, "ai_busy", "The AI service is busy. Try again in a minute."), "The AI service is busy. Try again in a minute."],
+      [fakeError(504, "ai_timeout", "The AI took too long to answer. Try again."), "The AI took too long to answer. Try again."],
+      [
+        fakeError(502, "ai_upstream_error", "The AI service had a problem. Try again."),
+        "The AI service had a problem. Try again in a moment.",
+      ],
+      [
+        fakeError(422, "invalid_request", "This hymnal has no hymns to suggest from."),
+        "This hymnal has no hymns to suggest from.",
+      ],
+    ];
+    for (const [response, copy] of cases) {
+      const { user, unmount } = renderStep(testDraft(), { "POST /hymns/suggestions": response });
+      await user.click(await suggestButton());
+      expect(await screen.findByRole("alert")).toHaveTextContent(copy);
+      expect(stored().hymns.slots).toEqual(testDraft().hymns.slots); // nothing stored
+      unmount();
+    }
+    const limited = renderStep(testDraft(), {
+      "POST /hymns/suggestions": {
+        ...fakeError(429, "rate_limited", "Too many requests.", { details: { retry_after_seconds: 1 } }),
+        headers: { "Retry-After": "1" },
+      },
+    });
+    await limited.user.click(await suggestButton());
+    expect(await screen.findByRole("alert")).toHaveTextContent("Too many requests — try again in 1 s.");
+    expect(await screen.findByText("Try again now.", {}, { timeout: 3_000 })).toBeInTheDocument();
+    limited.unmount();
+
+    const { user } = renderStep(testDraft(), {
+      "POST /hymns/suggestions": fakeError(500, "internal_error", "Something went wrong."),
+    });
+    await user.click(await suggestButton());
+    expect(await screen.findByText("Something went wrong. (Ref: 4f9a2c1e)")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("says when a slot or every slot got nothing, and waits for a valid date; the tip asks for readings first", async () => {
+    const partly = hymnSuggestions({ opening: [HOLY, COME, GRACE], response: [], closing: [PRAISE, GRACE, SENT] });
+    const one = renderStep(testDraft(), { "POST /hymns/suggestions": partly });
+    expect(await screen.findByText("Tip: add the readings in step 1 first — suggestions use them.")).toBeInTheDocument();
+    await one.user.click(await suggestButton());
+    expect(await within(card("Response")).findByText("No suggestion for this slot.")).toBeInTheDocument();
+    expect(within(card("Opening")).queryByText("No suggestion for this slot.")).toBeNull();
+    expect(screen.queryByText(/Suggestions favor older/)).toBeNull(); // no flagged hymn returned
+    one.unmount();
+
+    const none = renderStep(testDraft(), {
+      "POST /hymns/suggestions": hymnSuggestions({ opening: [], response: [], closing: [] }),
+    });
+    await none.user.click(await suggestButton());
+    expect(
+      await screen.findByText("The AI didn't pick any hymns from this hymnal. Try again, or choose hymns yourself."),
+    ).toBeInTheDocument();
+    none.unmount();
+
+    renderStep(setDate(testDraft(), ""));
+    await screen.findByRole("switch", { name: "Exclude hymns used within 12 weeks" });
+    expect(screen.getByRole("button", { name: "Suggest hymns" })).toBeDisabled();
   });
 });

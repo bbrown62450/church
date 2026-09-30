@@ -1,9 +1,12 @@
 "use client";
 
+import { useState } from "react";
+
 import { EmptyState } from "@/components/app/empty-state";
 import { ErrorState } from "@/components/app/error-state";
 import { buttonVariants } from "@/components/ui/button";
 import type { Hymn } from "@/lib/api/types";
+import { useChurch } from "@/lib/church-context";
 import { isValidDateIso } from "@/lib/dates";
 import { useDraft } from "@/lib/draft/context";
 import { SLOTS, type Slot } from "@/lib/draft/schema";
@@ -18,12 +21,16 @@ import {
   setExcludeRecent,
   setHymnal,
   setSlot,
+  swapAlternative,
   type Reconciled,
 } from "@/lib/hymns/picks";
+import { useChurchProfile } from "@/lib/queries/church";
 import { useHymnals, useHymnLists } from "@/lib/queries/hymns";
 
+import { AlternativeChips } from "./alternative-chips";
 import { HymnSlotCard } from "./hymn-slot-card";
 import { ExcludeSwitch, HymnalPicker, HymnsToolbar, ToolbarSkeleton } from "./hymns-toolbar";
+import { SuggestHymnsButton } from "./suggest-hymns-button";
 import { useUndoToasts } from "./use-undo-toasts";
 
 /** The empty-hymnal state (S "Whole-step states"); the link waits for Settings → Hymns (6a). */
@@ -56,9 +63,13 @@ const MISSING: Reconciled = { status: "missing" };
  * spinner. The selected hymnal is resolved only from a loaded `GET /hymnals`
  * and never written back (S Toolbar); the toolbar's Select and Exclude switch
  * are the only writers of the hymnal and the switch. Removing a hymn offers
- * Undo in a toast that never outlives the step.
+ * Undo in a toast that never outlives the step. Suggest fills the empty slots
+ * and puts other ideas under each hymn; the ideas show only for the date they
+ * were suggested for.
  */
 export function HymnsStep() {
+  const church = useChurch();
+  const profile = useChurchProfile(church.id).data;
   const { draft, update } = useDraft();
   const hymnalsQuery = useHymnals();
   const hymns = draft.hymns;
@@ -73,6 +84,9 @@ export function HymnsStep() {
   const listed = selected === null ? [] : [code, ...SLOTS.map((slot) => hymns.slots[slot]?.hymnal ?? null)];
   const lists = useHymnLists(listed, recentForDate);
   const showUndo = useUndoToasts();
+  // "No suggestion for this slot." after the last answer, for its date only (component state).
+  const [unsuggested, setUnsuggested] = useState<{ dateIso: string; slots: Slot[] }>({ dateIso: "", slots: [] });
+  if (!profile) return null;
 
   const selectedList = code === null ? undefined : lists.lists.get(code);
   // A failed background refetch keeps what had loaded (TanStack Query v5 keeps `data` with
@@ -84,6 +98,8 @@ export function HymnsStep() {
   const excludeRecent = hymns.exclude_recent && dateValid;
   const duplicates = duplicateSlots(hymns.slots);
   const hiddenRecent = (selectedList ?? []).filter((h) => h.title.trim() !== "" && h.recent_use_on !== null).length;
+  const ideas = hymns.alternatives?.for_date_iso === dateIso ? hymns.alternatives.by_slot : null;
+  const selectedCount = hymnals?.items.find((h) => h.code === code)?.hymn_count ?? 0;
 
   function notices(slot: Slot, reconciled: Reconciled | null): string[] {
     const out: string[] = [];
@@ -145,6 +161,12 @@ export function HymnsStep() {
             dateValid={dateValid}
             onChange={(on) => update((d) => setExcludeRecent(d, on))}
           />
+          <SuggestHymnsButton
+            selectedHymnal={code}
+            hymnalEmpty={selectedCount === 0}
+            churchTranslation={profile.effective_translation}
+            onNoSuggestion={(noneFor, forDate) => setUnsuggested({ dateIso: forDate, slots: noneFor })}
+          />
         </HymnsToolbar>
       )}
       {SLOTS.map((slot) => {
@@ -165,7 +187,22 @@ export function HymnsStep() {
             showHymnal={showHymnal}
             onChoose={(h) => choose(slot, h)}
             onRemove={() => remove(slot, title)}
-          />
+          >
+            {unsuggested.dateIso === dateIso && unsuggested.slots.includes(slot) ? (
+              <p className="text-sm text-muted-foreground">No suggestion for this slot.</p>
+            ) : null}
+            {ideas ? (
+              <AlternativeChips
+                slot={slot}
+                ideas={ideas[slot]}
+                lists={lists.lists}
+                fallbackHymnal={code}
+                serviceDateIso={dateIso}
+                showHymnal={showHymnal}
+                onSwap={(hymnId) => update((d) => ({ ...d, hymns: swapAlternative(d.hymns, slot, hymnId) }))}
+              />
+            ) : null}
+          </HymnSlotCard>
         );
       })}
       <p className="text-xs text-muted-foreground">
