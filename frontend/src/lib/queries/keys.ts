@@ -16,6 +16,8 @@ export const keys = {
   church: (id: string) => ["church", id] as const,
   churchProfile: (id: string) => ["church", id, "profile"] as const,
   hymns: (id: string, params: object) => ["church", id, "hymns", params] as const,
+  /** Under the hymns prefix, so a hymn change (6a) refreshes the matches too (slice 3 S Queries). */
+  hymnMatches: (id: string, params: object) => ["church", id, "hymns", "matches", params] as const,
   hymnals: (id: string) => ["church", id, "hymnals"] as const,
   hymnalSources: (id: string) => ["church", id, "hymnal-sources"] as const,
   services: (id: string, params: object) => ["church", id, "services", params] as const,

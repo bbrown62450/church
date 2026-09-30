@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   addDays,
+  formatAbbrevDate,
   formatLongDate,
   formatServiceDate,
   formatShortDate,
@@ -51,6 +52,15 @@ describe("lib/dates", () => {
       expect(formatLongDate(bad)).toBe("");
       expect(formatShortDate(bad)).toBe("");
     }
+  });
+
+  it("formatAbbrevDate gives the short month and day, with the year only when it differs (slice 3b)", () => {
+    expect(formatAbbrevDate("2026-09-07", "2026-10-04")).toBe("Sep 7");
+    expect(formatAbbrevDate("2026-10-18")).toBe("Oct 18");
+    expect(formatAbbrevDate("2025-12-28", "2026-01-04")).toBe("Dec 28, 2025");
+    expect(formatAbbrevDate("2027-01-03", "2026-12-27")).toBe("Jan 3, 2027");
+    expect(formatAbbrevDate("2026-05-31", "not a date")).toBe("May 31");
+    expect(formatAbbrevDate("2026-9-7", "2026-10-04")).toBe("");
   });
 
   it("isFirstSundayOfMonth is true only for a Sunday on days 1-7", () => {

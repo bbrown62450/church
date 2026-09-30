@@ -43,4 +43,16 @@ describe("fingerprint and isDirty (F §4.6 Unsaved changes)", () => {
     expect(isDirty(saved)).toBe(false);
     expect(isDirty(editOccasion(saved, "Harvest Home"))).toBe(true);
   });
+
+  it("after a save, a slot or hymnal change is unsaved; the Exclude switch and other ideas are not (owner answer 1)", () => {
+    const pick = { hymn_id: "h1", title: "Amazing Grace", number: 649, hymnal: "GG2013" };
+    const base = testDraft();
+    const saved: DraftV1 = { ...base, saved_fingerprint: fingerprint(draftToServicePayload(base)) };
+    const hymns = (patch: Partial<DraftV1["hymns"]>): DraftV1 => ({ ...saved, hymns: { ...saved.hymns, ...patch } });
+    expect(isDirty(hymns({ slots: { ...saved.hymns.slots, closing: pick } }))).toBe(true);
+    expect(isDirty(hymns({ hymnal: "PH1990" }))).toBe(true);
+    expect(isDirty(hymns({ exclude_recent: false }))).toBe(false);
+    const ideas = { for_date_iso: "2026-10-04", by_slot: { opening: [pick], response: [], closing: [] } };
+    expect(isDirty(hymns({ alternatives: ideas }))).toBe(false);
+  });
 });

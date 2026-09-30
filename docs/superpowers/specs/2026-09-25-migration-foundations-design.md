@@ -96,6 +96,7 @@ The slice specs refined several foundation rules. This pass folds every one of t
 | §4.4 | *(2026-09-29, owner answer Q2, slice 3a plan)* Recent use is matched on the normalized hymn title alone (`hymn_search.usage_key`), across numbers and hymnals. 5a keeps writing `hymn_usage` rows with number and title; the reader ignores the number. | 3a |
 | §2.8 | *(2026-09-29, slice 3a build)* The OpenAI key is left out of the client settings' repr; a `nan` or `inf` numeric `OPENAI_*` setting falls back to its default; a reply with no choices maps to `ai_upstream_error`; a deadline already passed before an attempt still logs its `ai_call` line. A suggestion answer nested too deeply to parse (`RecursionError`) is `ai_upstream_error`, not a 500. | 3a |
 | §4.4 | *(2026-09-29, owner answer A, slice 3a build)* The recent-use key also ignores punctuation: curly and straight apostrophes are the same, hyphens and dashes read as spaces, other punctuation is dropped, and a leading "Oh" reads as "O" (so "Amazing Grace!" and "Amazing Grace" are one hymn). Leading articles stay. `normalize_title`, which resolves an AI answer's exact title, is unchanged. | 3a |
+| §4.6, §4.7, §4.9 | *(2026-09-29, slice 3b plan)* `isPristine` also counts a chosen hymnal (owner answer 1), so "New service" asks after a hymn or a hymnal is chosen and the roll-forward keeps that draft's date; choosing the church's effective hymnal stores `null`. The Exclude switch and the AI's other ideas never count. Hymns ships (`SHIPPED_STEPS` holds "readings" and "hymns"): the step bar counts it, Review lists each empty slot, and the summary lists the three hymns. The generic long-list picker is `components/app/search-combobox.tsx` (slice 1's time-zone picker uses the Combobox directly), and the kit gains `switch`. | 3b |
 
 ---
 
@@ -990,7 +991,7 @@ The draft is **not** cleared by save, download, email, church switch, logout or 
   - `StepFooter` holds Back and Next links. On mobile it is sticky at the bottom with `pb-[env(safe-area-inset-bottom)]`.
   - Review has no Next. It lists what is missing, each linking to its step ("No Response hymn — Choose one").
   - Only Save, Download and Email are disabled, and only when the date is invalid.
-- **Slice 2 ships all four routes.** Steps 2-4 render an "Available soon — keep using the current app for this part" card inside the working shell until their slice fills them. *(2026-09-28, slice 2b plan: step 1 too, until slice 2c.)* *(2026-09-29, slice 2c plan: step 1 ships in 2c.)*
+- **Slice 2 ships all four routes.** Steps 2-4 render an "Available soon — keep using the current app for this part" card inside the working shell until their slice fills them. *(2026-09-28, slice 2b plan: step 1 too, until slice 2c.)* *(2026-09-29, slice 2c plan: step 1 ships in 2c.)* *(2026-09-29, slice 3b plan: step 2 ships in 3b.)*
 - **`SummaryPanel`** shows:
   - date and occasion;
   - readings, with the OT and NT choices marked;

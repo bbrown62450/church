@@ -12,7 +12,7 @@
 - The shared `HymnRef`, `SlotHymns` and `SectionKey` shapes are **frozen in F §1.3**. This slice lands first and creates them with exactly that shape (§API Models).
 - Owner decisions 3 and 9.
 - **Amendment 2026-09-26: the service rubric (PR #4).** `docs/superpowers/specs/2026-09-25-service-rubric-design.md`, merged to `main` on 2026-09-26, changed `worship_service.suggest_hymns_for_service`, which this slice replaces. Its behavior is now current behavior (inv §1 D10, D8 amendment) and is **carried over, not dropped**: rubric-aware ranking, the rubric's slot checklists and the year/familiarity facts in the prompt, and year and familiarity on every hymn DTO. PR #4 left one screen change to this slice: the "newer hymn" year label. The additions are marked "Amendment 2026-09-26" below; the main ones are §Backend 3.8, §User experience "Newer-hymn year label", the `HymnOut` fields in §API Models, and the Testing and Acceptance additions.
-- **Notes from planning 3a** (`docs/superpowers/plans/2026-09-29-slice-3a-hymns-backend.md`, 2026-09-29) are marked "(3a plan)" where they are made. The owner answered open questions 1 and 2 on 2026-09-29 (answers Q1 and Q2 below). Changes made while building 3a (the plan's "Build notes (3a build)") are marked "(3a build)".
+- **Notes from planning 3a** (`docs/superpowers/plans/2026-09-29-slice-3a-hymns-backend.md`, 2026-09-29) are marked "(3a plan)" where they are made. The owner answered open questions 1 and 2 on 2026-09-29 (answers Q1 and Q2 below). Changes made while building 3a (the plan's "Build notes (3a build)") are marked "(3a build)". Notes from planning 3b (`docs/superpowers/plans/2026-09-29-slice-3b-hymns-step.md`, 2026-09-29) are marked "(3b plan)"; the owner's answers of that day are its owner answers 1-5. Changes made while building 3b (the plan's "Build notes (3b build)") are marked "(3b build)".
 
 ---
 
@@ -143,7 +143,7 @@ carry their own copyright — see each hymn's page.
   **Change** replaces the row with the focused picker. Escape or blur restores the row.
 - **Empty slot.** The card shows the picker.
 - **Live data.** When the pick's id is found in its hymnal's loaded list, the card shows the live title, number and link. The draft snapshot is **not** rewritten, so renaming a hymn in Settings does not mark the draft dirty. Until the list loads, the card shows the snapshot.
-- **Remove.** ✕ sets the slot to `null` and shows the toast "Removed {title}." with an **Undo** action (sonner). The previous pick is held in component state for Undo.
+- **Remove.** ✕ sets the slot to `null` and shows the toast "Removed {title}." with an **Undo** action (sonner). The previous pick is held in component state for Undo. (3b build, owner answer of 2026-09-30: after ✕ focus goes to the card's heading, not the new picker, so it stays on the card and a phone's keyboard does not open.)
 - **Undo toasts never outlive the step.** Sonner toasts stay mounted outside the `(church)` layout, so a closure over `update` could write church A's pick into church B's draft after a switch. Two guards:
   - the step keeps the ids of the Undo toasts it shows (✕ here, "Add" in the matches) and calls `toast.dismiss(id)` for each in an effect cleanup on unmount;
   - each Undo handler captures the church id when the toast is shown and does nothing if the current church id differs.
@@ -174,14 +174,14 @@ carry their own copyright — see each hymn's page.
   - no matches: "No hymns match “{q}”.";
   - when exclusion hides matches: "{k} more used within 12 weeks are hidden."
 - Rows show "#{n} {title}" plus a "Used Sep 7" / "Planned Oct 18" badge when the hymn is recently used and exclusion is off.
-- Selecting sets the slot to `{hymn_id, title, number, hymnal}` from the row.
+- Selecting sets the slot to `{hymn_id, title, number, hymnal}` from the row. (3b build, owner answer of 2026-09-30: Enter picks the top match, so typing "403" then Enter chooses #403.)
 - While the list loads, the input is disabled with placeholder "Loading hymnal…".
 
 ### Toolbar
 
 - **Hymnal** (Base UI `Select` with an `items` map, F §4.9.3). Shown only when `GET /hymnals` returns 2+ items.
   - Item label: "{code} · {hymn_count} hymns". Helper text: "Which hymnal to choose hymns from for this service."
-  - The **selected hymnal** is `selectHymnal(draft.hymns.hymnal, hymnals)` (pure, `src/lib/hymns/hymnal.ts`). It is resolved only after `GET /hymnals` has succeeded; while it loads the toolbar shows skeletons, and on error the `ErrorState` below applies, so nothing is resolved from missing data.
+  - The **selected hymnal** is `selectHymnal(draft.hymns.hymnal, hymnals)` (pure, `src/lib/hymns/hymnal.ts`). It is resolved only after `GET /hymnals` has succeeded; while it loads the toolbar shows skeletons, and on error the `ErrorState` below applies, so nothing is resolved from missing data. (3b plan: the skeletons show until `GET /hymnals` answers; the hymn lists are asked for only after it, and not at all for a church with no hymnals, whose picks show "Not in your hymnal" at once. A date change refetches the list without hiding the toolbar, so a pending suggestion is not lost.)
     - Stored code present in the list → that code.
     - Stored code `null` → `effective_hymnal`.
     - Stored code absent from a successfully loaded list → `effective_hymnal`, with `stale: true`. The note "{code} is no longer in your church's hymnals. Showing {effective} instead." appears in the toolbar, even when the Select itself is hidden (one hymnal).
@@ -189,7 +189,7 @@ carry their own copyright — see each hymn's page.
   - Changing the Select writes `draft.hymns.hymnal = code`. Picks are not touched. **The step never writes the hymnal on its own**, so a vanished code never marks a loaded service dirty or changes its archived hymnal without a user action.
   - When the selected hymnal has `scripture_ref_count == 0`, a note appears under the select: "{code} has no scripture references, so scripture matches and AI response picks will be weaker."
 - **Exclude switch** (`Switch`). Label: "Exclude hymns used within 12 weeks". Helper: "Hides hymns sung in the 12 weeks before this service or planned in the 12 weeks after it."
-  - When on and `n > 0` hidden hymns in the selected hymnal: "{n} hymns are hidden."
+  - When on and `n > 0` hidden hymns in the selected hymnal: "{n} hymns are hidden." (3b plan: "1 hymn is hidden." for one; likewise "1 more used within 12 weeks is hidden.", "1 recently used match is hidden." and " 1 recently used hymn was left out.")
   - Writes `draft.hymns.exclude_recent`. It never changes slots or chips.
   - When the draft date is invalid, the switch is disabled with the helper "Pick a valid date in step 1 to check recent use."
 - **Suggest hymns** (full-width touch button with a Sparkles icon).
@@ -234,8 +234,8 @@ carry their own copyright — see each hymn's page.
 - **Results** come in two groups, "Matches the readings" (`strength = passage`) and "Same chapter" (`strength = chapter`). Each row shows:
   - `HymnLabel`;
   - the matched reference(s) as small text, "Matches Mark 1:9-15";
-  - an **Add** button that opens a `DropdownMenu` with "Opening hymn / Response hymn / Closing hymn". Choosing one sets that slot. If the slot was filled, the toast "{Slot} hymn changed to {title}." offers **Undo**.
-- With exclusion on, recently used matches are hidden and the footer reads "{k} recently used matches are hidden. [Show them]", a local toggle. With exclusion off, they show a badge.
+  - an **Add** button that opens a `DropdownMenu` with "Opening hymn / Response hymn / Closing hymn". Choosing one sets that slot. If the slot was filled, the toast "{Slot} hymn changed to {title}." offers **Undo**. (3b plan: the button is named "Add {title}" for screen readers, and the toast shows only when the slot held another hymn.)
+- With exclusion on, recently used matches are hidden and the footer reads "{k} recently used matches are hidden. [Show them]", a local toggle. With exclusion off, they show a badge. (3b plan: matches shown with **Show them** carry the badge too, and **Hide them** hides them again.)
 - Unreadable references: "Couldn't read “{text}” as a scripture reference."
 - **No references:** "Add the readings in step 1, or type a scripture reference here." with a link "Go to readings" → `/builder/readings`.
 - **No matches:** "No hymns in {hymnal} match these readings. Try a shorter reference, such as “Matthew 17”."
@@ -564,7 +564,7 @@ One session: `query_hymns`. If `recent_for_date` is given, also `usage_near(chur
 7. **Prompt** (`build_prompt`), deterministic and at most 24 000 characters (F §2.8):
    - a system message: "You help a church choose hymns for a worship service. Reply with JSON only.";
    - a user message containing:
-     - `OCCASION`, `SCRIPTURE READINGS`, `NEW TESTAMENT READING` and `NT PASSAGE TEXT (excerpt)` (parity fields); (3a build: the NT reading is put on one line and clipped to 200 characters, so a reference cannot add lines to the prompt);
+     - `OCCASION`, `SCRIPTURE READINGS`, `NEW TESTAMENT READING` and `NT PASSAGE TEXT (excerpt)` (parity fields); (3a build: the NT reading is put on one line and clipped to 200 characters, so a reference cannot add lines to the prompt); (3b plan, owner answer 3: `CHURCH SEASON: {season}` follows `OCCASION`, computed on the server from the service date by `vanderbilt_lectionary.church_season`, and a `SEASON:` line after PREFERENCES asks the model to avoid Advent, Christmas, Palm Sunday and Holy Week or Easter hymns outside their season unless the readings or occasion call for them; the 24 000-character budget is unchanged);
      - the ROLE REQUIREMENTS text for the three slots (parity, worship_service.py:508-511); *amendment 2026-09-26:* since PR #4 the parity text **is** the church's three rubric slot checklists plus the PREFERENCES line (§3.8);
      - one `HYMNS` catalogue listing every distinct candidate once: `H{k} | {title ≤80} | #{number or –} | themes: {≤60} | scripture: {≤60}`, with tokens `H1…Hn` in first-seen order; *amendment 2026-09-26:* `| {facts}` follows the number when either fact is known (§3.8); (3a build: a `|` in the title, themes or scripture field becomes `/`, so a catalogue field cannot fake another field);
      - `OPENING CANDIDATES: H…, …`, and the same for RESPONSE and CLOSING;
@@ -714,10 +714,14 @@ Read `frontend/node_modules/next/dist/docs/` and the installed `@base-ui/react` 
 src/app/(signed-in)/(church)/builder/hymns/page.tsx   replaces slice 2's <StepPlaceholder step="hymns"/>; renders <HymnsStep/>
                                                       (StepPlaceholder stays for liturgy and review; 5a deletes it)
 src/components/ui/{combobox,switch,badge,alert}.tsx   generated: npx shadcn@latest add combobox switch badge alert
+                                                      (3b plan: combobox, badge and alert exist already; switch
+                                                      is rebuilt from the upstream source, the registry being
+                                                      blocked, as in 2b and 2c)
 src/components/app/search-combobox.tsx                generic long-list wrapper over Base UI Combobox (F §4.9.5) for the hymn
                                                       picker; reused as is if slice 1 already built it under TimezoneCombobox.
                                                       The timezone picker is slice 1's TimezoneCombobox (6a reuses that), not
-                                                      this component
+                                                      this component (3b plan: slice 1 used the Combobox directly,
+                                                      so 3b creates it; the caller ranks the rows)
 src/lib/draft/steps.ts                                SHIPPED_STEPS gains "hymns" (slice 2's file)
 src/lib/draft/status.ts                               stillNeeded: the three "No {Slot} hymn — Choose one" rows (if slice 2 did
                                                       not already implement them behind the SHIPPED_STEPS filter)
@@ -746,6 +750,8 @@ src/lib/queries/hymns.ts    useHymnals, useHymnList, useHymnLists, useScriptureM
 src/lib/queries/keys.ts     + hymnList, hymnMatches
 src/lib/api/timeouts.ts     hymnSuggestions: 90_000 (if not already present)
 src/lib/dates.ts            + formatShortDate(iso) -> "Sep 7" (adds the year when it differs from the service year)
+                            (3b plan: named formatAbbrevDate(iso, contextIso); 2b's formatShortDate already
+                            returns "October 4")
 src/lib/features.ts         SETTINGS_HYMNS_READY = false (6a flips it)
 ```
 
@@ -775,12 +781,12 @@ src/lib/features.ts         SETTINGS_HYMNS_READY = false (6a flips it)
 
 - Every write goes through `update(recipe)` as a functional update of the latest draft.
 - `exclude_recent` and `alternatives` are not part of `ServiceDraft`, so changing them never marks the draft dirty.
-- Changing `slots` or `hymnal` does mark it dirty, which is correct because both are archived in 5a. Only user actions change them.
+- Changing `slots` or `hymnal` does mark it dirty, which is correct because both are archived in 5a. Only user actions change them. (3b plan, owner answer 1: `isPristine` now counts `hymnal` as it counted the slots, so "New service" asks first and the roll-forward keeps the date; `setHymnal` stores `null` when the member chooses the church's effective hymnal, so switching away and back is not unsaved work. `exclude_recent` and `alternatives` count nowhere.)
 
 ### Pure-function contracts (`src/lib/hymns/picks.ts`)
 
 - `pickFromHymn(h: HymnOut): HymnPick` → `{hymn_id: h.id, title: h.title, number: h.number, hymnal: h.hymnal}`.
-- `reconcilePick(pick, lists: Map<hymnal, HymnOut[] | undefined>)` returns one of:
+- `reconcilePick(pick, lists: Map<hymnal, HymnOut[] | undefined>)` returns one of (3b plan: a third argument, the selected hymnal, is used for a pick with no hymnal; the draft recipes `setSlot`, `clearSlot`, `setHymnal` and `setExcludeRecent` take the whole draft):
   - `{status: "ok", live: HymnOut}`;
   - `{status: "loading"}` when that hymnal's list is not loaded yet;
   - `{status: "missing"}` when `hymn_id` is null or not found.
@@ -802,6 +808,8 @@ src/lib/features.ts         SETTINGS_HYMNS_READY = false (6a flips it)
 
 ### `buildSuggestionRequest(draft, selectedHymnal, getCachedPassage)`
 
+(3b plan: a fourth argument, the church's `effective_translation`, since the function is pure.)
+
 - `scriptures`: `cleanRefs(draft.readings.scriptures, {max: 20, maxLen: 200})`.
 - `occasion`: trimmed and cut to 300 characters.
 - `selected_nt_ref`: `draft.readings.selected_nt_ref`, trimmed and cut to 200 characters; empty is sent as `null`. Without it the server would always use the classifier fallback and ignore the user's step-1 choice.
@@ -822,6 +830,7 @@ src/lib/features.ts         SETTINGS_HYMNS_READY = false (6a flips it)
 - `onSuccess` applies the result only if the component is still mounted for the same church (the keyed remount unmounts it) and `draft.readings.date_iso` still equals the request date. Otherwise it shows the "date changed" message and does not touch the draft.
 - Undo toasts are dismissed on unmount and check the captured church id (§User experience "Slot cards").
 - The client uses `createLatestTracker` (`src/lib/latest.ts`), so an older response never overwrites a newer one.
+- (3b plan: the tracker, the church check and the mount check live in `useSuggestHymns`, whose `suggest()` resolves `ok`, `error` or `superseded`; the button checks the date and applies.)
 
 ### Builder shell
 
@@ -954,7 +963,7 @@ The `streamlit_tests/` assertions on `hymn_display_from_flat`, `build_title_to_i
 | unit `lib/hymns/labels.test.ts`, `lib/dates.test.ts` | "Used on…" versus "Also planned for…"; `formatShortDate` year handling; no `new Date("YYYY-MM-DD")` (the F §4.10 guard test still passes). |
 | unit `lib/draft/status.test.ts` (slice 2's file, extended) | `SHIPPED_STEPS` contains `"hymns"`; hymns `stepStatus` is `incomplete` "0 of 3" for a fresh draft, "2 of 3" with two slots filled, and `complete` with all three (a `hymn_id: null` pick counts as filled); `stillNeeded` lists "No Opening hymn — Choose one" (and Response, Closing) for empty slots, linking to `/builder/hymns`, and none when all three are filled; still no liturgy rows (liturgy not shipped). |
 | dom `components/app/search-combobox.test.tsx` | Opens on click; renders at most 50 with the hints; shows the empty and hidden footers; keyboard selection. |
-| dom `components/builder/summary-panel.test.tsx` (slice 2's file, extended) | **Hymns step shows its status and the summary no longer says "Available soon" for hymns:** with a draft holding an Opening and a Closing pick, `StepProgress` shows "2 of 3" on the Hymns item (not "Soon"), and after filling Response it shows ✓; the `SummaryPanel` Hymns block shows "#403 Come, Thou Almighty King" for Opening and "No Response hymn" for the empty slot, and its text does not contain "Available soon"; the Liturgy block still reads "Available soon" (until slice 4). Rendered at 375 px (bottom sheet) and at `lg` (column). |
+| dom `components/builder/summary-panel.test.tsx` (slice 2's file, extended) (3b plan: slice 2 tests the summary in `builder-shell.test.tsx`, which 3b extends) | **Hymns step shows its status and the summary no longer says "Available soon" for hymns:** with a draft holding an Opening and a Closing pick, `StepProgress` shows "2 of 3" on the Hymns item (not "Soon"), and after filling Response it shows ✓; the `SummaryPanel` Hymns block shows "#403 Come, Thou Almighty King" for Opening and "No Response hymn" for the empty slot, and its text does not contain "Available soon"; the Liturgy block still reads "Available soon" (until slice 4). Rendered at 375 px (bottom sheet) and at `lg` (column). |
 | dom `components/builder/hymns/hymns-step.test.tsx` | See the list after this table. |
 | unit `lib/hymns/labels.test.ts` + dom `hymn-label.test.tsx` (amendment 2026-09-26) | `newerYearLabel` returns "Written 1985" only when `newer_than_preferred` is true, and null for an older, unknown-year or unflagged hymn. `HymnLabel` renders the badge in a picker row, a filled slot card (after the list loads) and a chip; a chip's aria-label reads "Use {title}, written 1985, as the {slot} hymn"; at 375 px the title truncates while the badge stays whole. After Suggest, the "Suggestions favor older and familiar hymns…" helper appears only when a returned hymn is flagged. |
 
@@ -979,6 +988,8 @@ The `streamlit_tests/` assertions on `hymn_display_from_flat`, `build_title_to_i
 - every request carries `X-Church-Id`.
 
 ### Manual checks (appended to `docs/manual-verification.md`, F §5.5)
+
+(3b plan: appended as "## Slice 3" with check 11 for the church season (owner answer 3) and check 12 for "New service" (owner answer 1); `test_slice1_docs.py` pins the last four `##` headings. The owner's guided check after the merge runs the items marked "(owner, after 3b)".)
 
 Run on the production Vercel URL, at 375 px (iPhone SE in device mode) and on desktop:
 1. Open Hymns with readings for a real Sunday. Matches appear, grouped. "Add → Opening hymn" works.

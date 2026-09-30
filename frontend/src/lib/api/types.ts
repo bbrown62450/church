@@ -30,3 +30,19 @@ export type Translations = components["schemas"]["TranslationsOut"];
 export type Passages = components["schemas"]["PassagesOut"];
 export type Passage = components["schemas"]["PassageOut"];
 export type PassageSection = components["schemas"]["PassageSectionOut"];
+
+/** `GET /hymnals` (slice 3a): the church's hymnals with counts, the stored default and the effective one. */
+export type Hymnals = components["schemas"]["HymnalListOut"];
+export type HymnalSummary = components["schemas"]["HymnalOut"];
+/** One hymn as every hymn route returns it (`HymnOut`, slice 3a). */
+export type Hymn = components["schemas"]["HymnOut"];
+/** `GET /hymns` (slice 3a): one page of hymns. */
+export type HymnPage = components["schemas"]["Page_HymnOut_"];
+/** `POST /hymns/scripture-matches` (slice 3a): the request body and the answer. */
+export type ScriptureMatchBody = components["schemas"]["ScriptureMatchIn"];
+export type ScriptureMatches = components["schemas"]["ScriptureMatchesOut"];
+export type HymnMatch = components["schemas"]["HymnMatchOut"];
+/** `POST /hymns/suggestions` (slice 3a): the request body and the answer. */
+export type HymnSuggestionBody = components["schemas"]["HymnSuggestionIn"];
+export type HymnSuggestions = components["schemas"]["HymnSuggestionsOut"];
+export type SuggestedHymn = components["schemas"]["SuggestedHymnOut"];

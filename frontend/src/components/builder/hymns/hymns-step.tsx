@@ -1,0 +1,260 @@
+"use client";
+
+import { useState } from "react";
+
+import { EmptyState } from "@/components/app/empty-state";
+import { ErrorState } from "@/components/app/error-state";
+import { buttonVariants } from "@/components/ui/button";
+import type { Hymn, HymnMatch } from "@/lib/api/types";
+import { useChurch } from "@/lib/church-context";
+import { isValidDateIso } from "@/lib/dates";
+import { useDraft } from "@/lib/draft/context";
+import { SLOTS, type Slot } from "@/lib/draft/schema";
+import { SETTINGS_HYMNS_READY } from "@/lib/features";
+import { selectHymnal } from "@/lib/hymns/hymnal";
+import { duplicateNotice, MISSING_NOTICE, recentUseNotice, SLOT_META } from "@/lib/hymns/labels";
+import {
+  clearSlot,
+  duplicateSlots,
+  pickFromHymn,
+  reconcilePick,
+  setExcludeRecent,
+  setHymnal,
+  setSlot,
+  swapAlternative,
+  type Reconciled,
+} from "@/lib/hymns/picks";
+import { useChurchProfile } from "@/lib/queries/church";
+import { useHymnals, useHymnLists } from "@/lib/queries/hymns";
+
+import { AlternativeChips } from "./alternative-chips";
+import { HymnSlotCard } from "./hymn-slot-card";
+import { ExcludeSwitch, HymnalPicker, HymnsToolbar, ToolbarSkeleton } from "./hymns-toolbar";
+import { ScriptureMatches } from "./scripture-matches";
+import { SuggestHymnsButton } from "./suggest-hymns-button";
+import { useUndoToasts } from "./use-undo-toasts";
+
+/** The empty-hymnal state (S "Whole-step states"); the link waits for Settings → Hymns (6a). */
+function EmptyHymnal() {
+  return (
+    <EmptyState
+      title="This church's hymnal is empty"
+      description={
+        SETTINGS_HYMNS_READY
+          ? "Add hymns on the Settings → Hymns page to choose hymns here."
+          : "Add hymns in the current app under Settings → Hymns."
+      }
+      action={
+        SETTINGS_HYMNS_READY ? (
+          <a href="/settings/hymns" className={buttonVariants({ size: "touch" })}>
+            Open Settings → Hymns
+          </a>
+        ) : undefined
+      }
+    />
+  );
+}
+
+const MISSING: Reconciled = { status: "missing" };
+
+/**
+ * Step 2, Hymns (S "User experience"). It reads and writes only the draft
+ * (F §4.6). The slot cards show the draft's picks at once; the pickers wait
+ * for `GET /hymnals` and the selected hymnal's list, with no full-page
+ * spinner; a pick's own hymnal whose list failed says so on its card, with
+ * Retry. The selected hymnal is resolved only from a loaded `GET /hymnals`
+ * and never written back (S Toolbar); the toolbar's Select and Exclude switch
+ * are the only writers of the hymnal and the switch. Removing a hymn offers
+ * Undo in a toast that never outlives the step. Suggest fills the empty slots
+ * and puts other ideas under each hymn; the ideas show only for the date they
+ * were suggested for. "Hymns for the readings" matches the draft's scriptures
+ * in the selected hymnal; adding one over another hymn offers Undo too.
+ */
+export function HymnsStep() {
+  const church = useChurch();
+  const profile = useChurchProfile(church.id).data;
+  const { draft, update } = useDraft();
+  const hymnalsQuery = useHymnals();
+  const hymns = draft.hymns;
+  const dateIso = draft.readings.date_iso;
+  const dateValid = isValidDateIso(dateIso);
+  const recentForDate = dateValid ? dateIso : null;
+  const hymnals = hymnalsQuery.data;
+  const empty = hymnals !== undefined && hymnals.items.length === 0;
+  const selected = hymnals && !empty ? selectHymnal(hymns.hymnal, hymnals) : null;
+  const code = selected?.code ?? null;
+  // The ideas for the draft's date only (they were suggested for it).
+  const ideas = hymns.alternatives?.for_date_iso === dateIso ? hymns.alternatives.by_slot : null;
+  // The picks' hymnals too (a pick keeps its own), then the ideas' (from an earlier hymnal, so a chip
+  // never waits on a list nobody loads), once GET /hymnals has answered with some; at most MAX_LISTS.
+  const listed =
+    selected === null
+      ? []
+      : [
+          code,
+          ...SLOTS.map((slot) => hymns.slots[slot]?.hymnal ?? null),
+          ...SLOTS.flatMap((slot) => (ideas?.[slot] ?? []).map((idea) => idea.hymnal)),
+        ];
+  const lists = useHymnLists(listed, recentForDate);
+  const showUndo = useUndoToasts();
+  // "No suggestion for this slot." after the last answer, for its date only (component state).
+  const [unsuggested, setUnsuggested] = useState<{ dateIso: string; slots: Slot[] }>({ dateIso: "", slots: [] });
+  if (!profile) return null;
+
+  const selectedList = code === null ? undefined : lists.lists.get(code);
+  // A failed background refetch keeps what had loaded (TanStack Query v5 keeps `data` with
+  // `isError`), so only a load that never succeeded replaces the pickers with the error.
+  const failed =
+    (hymnalsQuery.isError && hymnals === undefined) || (code !== null && lists.failed.has(code) && selectedList === undefined);
+  const pickers = !failed && !empty;
+  const showHymnal = (hymnals?.items.length ?? 0) >= 2;
+  const excludeRecent = hymns.exclude_recent && dateValid;
+  const duplicates = duplicateSlots(hymns.slots);
+  const hiddenRecent = (selectedList ?? []).filter((h) => h.title.trim() !== "" && h.recent_use_on !== null).length;
+  const selectedInfo = hymnals?.items.find((h) => h.code === code);
+  const selectedCount = selectedInfo?.hymn_count ?? 0;
+
+  function notices(slot: Slot, reconciled: Reconciled | null): string[] {
+    const out: string[] = [];
+    if (reconciled?.status === "ok" && dateValid && reconciled.live.recent_use_on) {
+      out.push(recentUseNotice(reconciled.live.recent_use_on, dateIso));
+    }
+    if (reconciled?.status === "missing") out.push(MISSING_NOTICE);
+    const duplicate = duplicateNotice(duplicates[slot]);
+    if (duplicate) out.push(duplicate);
+    return out;
+  }
+
+  function choose(slot: Slot, h: Hymn) {
+    update((d) => setSlot(d, slot, pickFromHymn(h)));
+  }
+
+  function remove(slot: Slot, title: string) {
+    const previous = hymns.slots[slot];
+    if (!previous) return;
+    update((d) => clearSlot(d, slot));
+    // Undo only while the slot is still as ✕ left it; a hymn chosen since is never replaced.
+    showUndo(`Removed ${title}.`, () => update((d) => (d.hymns.slots[slot] === null ? setSlot(d, slot, previous) : d)));
+  }
+
+  function addMatch(slot: Slot, match: HymnMatch) {
+    const previous = hymns.slots[slot];
+    update((d) => setSlot(d, slot, pickFromHymn(match)));
+    if (previous && previous.hymn_id !== match.id) {
+      showUndo(`${SLOT_META[slot].title} changed to ${match.title}.`, () =>
+        update((d) => (d.hymns.slots[slot]?.hymn_id === match.id ? setSlot(d, slot, previous) : d)),
+      );
+    }
+  }
+
+  return (
+    <section aria-labelledby="hymns-step-title" className="grid gap-6">
+      <div>
+        <h2 id="hymns-step-title" className="text-lg font-semibold">
+          Hymns
+        </h2>
+        <p className="text-sm text-muted-foreground">Choose an opening, response and closing hymn.</p>
+      </div>
+      {failed ? (
+        <ErrorState
+          error={hymnalsQuery.error}
+          message="Couldn't load this church's hymnal."
+          retrying={hymnalsQuery.isFetching || lists.fetching}
+          onRetry={() => {
+            if (hymnals === undefined) void hymnalsQuery.refetch();
+            else lists.retry();
+          }}
+        />
+      ) : empty ? (
+        <EmptyHymnal />
+      ) : hymnals === undefined || code === null || selected === null ? (
+        <ToolbarSkeleton />
+      ) : (
+        <HymnsToolbar>
+          <HymnalPicker
+            hymnals={hymnals}
+            selected={code}
+            stale={selected.stale}
+            storedCode={hymns.hymnal}
+            onChange={(next) => update((d) => setHymnal(d, next, hymnals.effective_hymnal))}
+          />
+          <ExcludeSwitch
+            on={hymns.exclude_recent}
+            hidden={hiddenRecent}
+            dateValid={dateValid}
+            onChange={(on) => update((d) => setExcludeRecent(d, on))}
+          />
+          <SuggestHymnsButton
+            selectedHymnal={code}
+            hymnalEmpty={selectedCount === 0}
+            churchTranslation={profile.effective_translation}
+            onNoSuggestion={(noneFor, forDate) => setUnsuggested({ dateIso: forDate, slots: noneFor })}
+          />
+        </HymnsToolbar>
+      )}
+      {SLOTS.map((slot) => {
+        const pick = hymns.slots[slot];
+        const reconciled = pick === null ? null : empty ? MISSING : reconcilePick(pick, lists.lists, code);
+        const title = reconciled?.status === "ok" ? reconciled.live.title : (pick?.title ?? "");
+        // A pick's own hymnal whose list failed (the selected one's failure replaces the pickers).
+        const own = pick?.hymnal ?? null;
+        const ownFailed =
+          reconciled?.status === "loading" && own !== null && own !== code && lists.failed.has(own)
+            ? { code: own, retrying: lists.fetchingCodes.has(own), retry: () => lists.retry(own) }
+            : null;
+        return (
+          <HymnSlotCard
+            key={slot}
+            slot={slot}
+            pick={pick}
+            reconciled={reconciled}
+            notices={notices(slot, reconciled)}
+            listFailed={ownFailed}
+            list={selectedList}
+            pickerAvailable={pickers}
+            excludeRecent={excludeRecent}
+            serviceDateIso={dateIso}
+            showHymnal={showHymnal}
+            onChoose={(h) => choose(slot, h)}
+            onRemove={() => remove(slot, title)}
+          >
+            {unsuggested.dateIso === dateIso && unsuggested.slots.includes(slot) ? (
+              <p className="text-sm text-muted-foreground">No suggestion for this slot.</p>
+            ) : null}
+            {ideas ? (
+              <AlternativeChips
+                slot={slot}
+                ideas={ideas[slot]}
+                lists={lists.lists}
+                fallbackHymnal={code}
+                serviceDateIso={dateIso}
+                showHymnal={showHymnal}
+                onSwap={(hymnId) =>
+                  update((d) => {
+                    const hymns = swapAlternative(d.hymns, slot, hymnId);
+                    return hymns === d.hymns ? d : { ...d, hymns };
+                  })
+                }
+              />
+            ) : null}
+          </HymnSlotCard>
+        );
+      })}
+      {pickers && selectedInfo ? (
+        <ScriptureMatches
+          scriptures={draft.readings.scriptures}
+          hymnal={selectedInfo}
+          recentForDate={recentForDate}
+          serviceDateIso={dateIso}
+          excludeRecent={excludeRecent}
+          showHymnal={showHymnal}
+          onAdd={addMatch}
+        />
+      ) : null}
+      <p className="text-xs text-muted-foreground">
+        Hymn information and links courtesy of Hymnary.org. Individual hymns may carry their own copyright — see each
+        hymn&apos;s page.
+      </p>
+    </section>
+  );
+}

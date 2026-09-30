@@ -164,8 +164,9 @@ def test_ops_runbook_health_check_lines_name_health_ready():
 
 def test_manual_verification_has_the_slice_1_section():
     text = _read(MANUAL_VERIFICATION)
-    # Slice 2c appends "## Slice 2" after this section (slice 2 spec, Manual checks).
-    assert re.findall(r"^## .+$", text, re.MULTILINE)[-3:] == ["## Ops slice", "## Slice 1", "## Slice 2"]
+    # Slices 2c and 3b append "## Slice 2" and "## Slice 3" after this section (their specs, Manual checks).
+    headings = re.findall(r"^## .+$", text, re.MULTILINE)[-4:]
+    assert headings == ["## Ops slice", "## Slice 1", "## Slice 2", "## Slice 3"]
     section = _flat(_section(text, "## Slice 1"))
     for needle in (
         "https://worship-service-builder.vercel.app",

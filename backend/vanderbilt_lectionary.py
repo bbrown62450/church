@@ -188,6 +188,42 @@ def weekday_feast_name(d: date) -> str | None:
     return _EASTER_FEASTS.get((d - easter_date(d.year)).days)
 
 
+def church_season(d: date) -> str:
+    """The church season of `d`, for the AI hymn prompt (slice 3b plan, owner answer 3).
+
+    Date arithmetic only, from the same calendar as the occasion names: "Advent" from
+    Advent 1 to December 23 (and December 24 when it is a Sunday, the Fourth
+    Sunday of Advent); "Christmas Eve"; "Christmas" from December 25 to January 5;
+    "Epiphany of the Lord" (January 6); "Season after the Epiphany" to the day before
+    Ash Wednesday (Transfiguration Sunday included); "Lent" to the Saturday before Palm
+    Sunday; "Holy Week" from Palm Sunday to Holy Saturday; "Easter" from Easter Day to
+    the day before Pentecost; "Day of Pentecost"; then "Season after Pentecost" to the
+    day before Advent 1 (Christ the King included). Every date has exactly one.
+    """
+    if (d.month == 12 and d.day >= 25) or (d.month == 1 and d.day <= 5):
+        return "Christmas"
+    if d.month == 12 and d.day == 24 and d.weekday() != _SUNDAY:
+        return "Christmas Eve"
+    advent1 = advent_sunday(d.year)
+    if d >= advent1:
+        return "Advent"
+    if d.month == 1 and d.day == 6:
+        return "Epiphany of the Lord"
+    easter = easter_date(d.year)
+    pentecost = easter + timedelta(days=49)
+    if d < easter - timedelta(days=46):
+        return "Season after the Epiphany"
+    if d < easter - timedelta(days=7):
+        return "Lent"
+    if d < easter:
+        return "Holy Week"
+    if d < pentecost:
+        return "Easter"
+    if d == pentecost:
+        return "Day of Pentecost"
+    return "Season after Pentecost"
+
+
 @dataclass(frozen=True)
 class LectioGroup:
     """One Lectio reading group; `scriptures` is the four lines minus blanks (Task 6b parses)."""

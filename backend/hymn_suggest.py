@@ -49,6 +49,11 @@ _CLOSING_THEMES = {"joy", "rejoice", "sending", "benediction", "mission", "dismi
 _THEMES = {"opening": _OPENING_THEMES, "closing": _CLOSING_THEMES}
 
 SYSTEM_MESSAGE = "You help a church choose hymns for a worship service. Reply with JSON only."
+# Owner answer 3 (2026-09-29, slice 3b plan): a hymn for another season or feast (for
+# example Palm Sunday hymns in the Season after Pentecost) only when the readings call for it.
+SEASON_GUIDANCE = ("Choose hymns that suit this church season and occasion. Avoid hymns written for "
+                   "another season or feast (Advent, Christmas, Palm Sunday and Holy Week, or Easter "
+                   "hymns outside their season) unless the readings or the occasion clearly call for them.")
 INSTRUCTION = ('Return {"opening": [ids], "response": [ids], "closing": [ids]}, with exactly 5 ids '
                "per slot (all of that slot's ids if it lists fewer than 5), best first, using only "
                "ids listed for that slot, and never the same hymn in two slots.")
@@ -179,7 +184,7 @@ def _preferences(rubric: Mapping[str, Any]) -> str:
 
 def _render(lists: Mapping[str, list], *, occasion: str, scriptures: Sequence[str],
             nt_ref: Optional[str], nt_text: Optional[str],
-            rubric: Mapping[str, Any]) -> tuple[list[dict], dict[str, Any]]:
+            rubric: Mapping[str, Any], season: str = "") -> tuple[list[dict], dict[str, Any]]:
     tokens: dict[uuid.UUID, str] = {}
     token_map: dict[str, Any] = {}
     catalogue: list[str] = []
@@ -198,11 +203,13 @@ def _render(lists: Mapping[str, list], *, occasion: str, scriptures: Sequence[st
     slot_lines = "\n".join(f"{slot.upper()} CANDIDATES: " + ", ".join(tokens[r.id] for r in lists[slot])
                            for slot in SLOTS)
     user = (f"OCCASION: {_clip(occasion, 300) or 'Not specified'}\n"
+            f"CHURCH SEASON: {_clip(season, 60) or 'Not specified'}\n"
             f"SCRIPTURE READINGS:\n{readings}\n"
             f"NEW TESTAMENT READING (for the response hymn): {_clip(nt_ref or '', 200) or 'Not specified'}\n"
             f"NT PASSAGE TEXT (excerpt): {excerpt}\n\n"
             f"ROLE REQUIREMENTS (what makes a good hymn for each slot):\n\n{checklists}\n\n"
             f"PREFERENCES: {_preferences(rubric)}\n\n"
+            f"SEASON: {SEASON_GUIDANCE}\n\n"
             "HYMNS:\n" + "\n".join(catalogue) + "\n\n"
             f"{slot_lines}\n\n{INSTRUCTION}")
     messages = [{"role": "system", "content": SYSTEM_MESSAGE}, {"role": "user", "content": user}]
@@ -215,15 +222,17 @@ def prompt_size(messages: Sequence[Mapping[str, str]]) -> int:
 
 def build_prompt(candidates: Candidates, *, occasion: str, scriptures: Sequence[str],
                  nt_ref: Optional[str], nt_text: Optional[str],
-                 rubric: Mapping[str, Any]) -> tuple[list[dict], dict[str, Any]]:
-    """(messages, {"H1": record, ...}), at most MAX_PROMPT_CHARS in all. While
+                 rubric: Mapping[str, Any], season: str = "") -> tuple[list[dict], dict[str, Any]]:
+    """(messages, {"H1": record, ...}), at most MAX_PROMPT_CHARS in all. `season` is
+    the server's `church_season` label (one clipped line; "Not specified" when empty),
+    followed in the prompt by SEASON_GUIDANCE (owner answer 3, slice 3b plan). While
     it is longer, the last candidate of the longest slot list (the first such
     slot on a tie) is dropped, with its catalogue line when no other list uses
     it. Checklist points are never dropped. Deterministic."""
     lists = {slot: list(candidates.by_slot[slot]) for slot in SLOTS}
     while True:
         messages, token_map = _render(lists, occasion=occasion, scriptures=scriptures,
-                                      nt_ref=nt_ref, nt_text=nt_text, rubric=rubric)
+                                      nt_ref=nt_ref, nt_text=nt_text, rubric=rubric, season=season)
         if prompt_size(messages) <= MAX_PROMPT_CHARS:
             return messages, token_map
         longest = max(SLOTS, key=lambda slot: len(lists[slot]))

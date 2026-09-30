@@ -152,3 +152,32 @@ address or a church id.
 - [ ] (owner, after 2c) **12.** At 375 px: no sideways scroll, even with a long reference typed without spaces; the footer stays at the bottom above the home indicator; inputs do not zoom on iOS. On desktop: the summary sits in the right column with the readings and their OT and NT marks.
 - [ ] **13.** Regression: sign in, switch church, open the Builder nav item; the Streamlit smoke check on https://liturgy-frozen.streamlit.app (F §6.3).
 - [ ] (owner, after 2c) **14.** After picking a date or choosing a reading set, **New service** asks "Start a new service?". On an untouched draft it starts over at once, and so it does when only the Bible translation was changed, keeping that translation (2c build).
+
+## Slice 3
+
+Run on the production URLs: https://worship-service-builder.vercel.app (at
+375 px in Chrome device mode, iPhone SE, and on desktop) and
+https://liturgy-frozen.streamlit.app, the production Streamlit app. These are
+the slice 3 spec's manual checks 1-10 (slice 3 spec → Manual checks), with
+check 11 for the church season in the AI prompt (owner answer 3, 2026-09-29)
+and check 12 for "New service" (owner answer 1). After the 3b merge the
+owner's guided check (owner answer 5: about six steps on the phone, given one
+at a time, then a quick look on a computer) covers the items marked "(owner,
+after 3b)", some of them in part; its result goes into `docs/ops-runbook.md` →
+"Slice 3b record", which says what ran. The rest can be run at any time and
+recorded the same way. Hymn titles, numbers and suggestions come from the
+church's own hymnal and the live AI, so record what the page shows, never an
+email address or a church id.
+
+- [ ] (owner, after 3b) **1.** Open Hymns with readings for a real Sunday. "Hymns for the readings" shows matches in "Matches the readings" and "Same chapter". **Add** → **Opening hymn** fills the Opening card.
+- [ ] (owner, after 3b) **2.** Search a picker by number and by part of a title. Two hymns with the same title are both listed, with different numbers, and either can be chosen. Typing a number then Enter chooses the top match (owner answer, 2026-09-30).
+- [ ] (owner, after 3b) **3.** Turn **Exclude hymns used within 12 weeks** off and on. A recently used pick stays, with its "Used on …" notice. The "… hymns are hidden." count changes with the switch. Run this in the church whose services the old app holds: recent use is kept per church. On 2026-09-30 (slice 3b Task 1) no recent use showed because a test church with no services was selected; with the real church selected, 29 hymns showed as used within 12 weeks of 2026-10-04.
+- [ ] (owner, after 3b) **4.** **Suggest hymns**: empty slots fill and every slot shows at least 2 ideas. Tap an idea, then tap the hymn it replaced: they swap back. Choose a slot yourself, suggest again: your pick stays.
+- [ ] **5.** Tap **Cancel** during a suggestion: the button is back to "Suggest hymns". Suggest 41 times quickly (or lower the limit in a local run): "Too many requests — try again in … s.", then "Try again now." once the wait has passed.
+- [ ] **6.** In a church with two hymnals: switch hymnals with **Hymnal**; the picks keep their hymnal badges. With PH1990 the "no scripture references" notes show.
+- [ ] (owner, after 3b) **7.** Refresh the page mid-step: picks, ideas and the switch survive. Switch church and back: each church keeps its own draft. The step bar shows "n of 3", then "Complete", for Hymns, and the summary (bottom sheet at 375 px, right column on desktop) lists the three hymns or "No {Slot} hymn", with no "Available soon" in its Hymns block. Review lists each empty slot under "Still needed".
+- [ ] (owner, after 3b) **8.** At 375 px: no sideways scroll, the ideas wrap, a picker's list is usable with the keyboard open, and the sticky footer does not cover the last card. A row with every badge (a long title with its hymnal, "Used …" and "Written …", in a picker list, on a card and in Hymns for the readings) moves its badges to a second line instead of widening the page; an idea stays one line, its title shortened. Tap a hymn's ✕: focus stays on the card (its heading) and the keyboard does not open (owner answer, 2026-09-30).
+- [ ] **9.** Regression: sign in, switch church, open every shipped nav item; the Streamlit smoke check on https://liturgy-frozen.streamlit.app: load the church, load an archived service, open Settings (F §6.3).
+- [ ] (owner, after 3b) **10.** In GG2013, **Suggest hymns** for a real Sunday: the ideas lean older and familiar, and any hymn written in 1970 or later shows "Written {year}". A picker search for a known modern hymn shows the badge; a nineteenth-century hymn does not.
+- [ ] (owner, after 3b) **11.** On a Sunday in the Season after Pentecost (for example 2026-10-04), **Suggest hymns** offers no Palm Sunday, Holy Week, Easter, Advent or Christmas hymns unless the readings call for one.
+- [ ] (owner, after 3b) **12.** After choosing a hymn or a hymnal, **New service** asks "Start a new service?". Turning Exclude on or off does not make it ask; Suggest fills empty slots, which does.
