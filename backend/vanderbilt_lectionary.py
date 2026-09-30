@@ -192,7 +192,8 @@ def church_season(d: date) -> str:
     """The church season of `d`, for the AI hymn prompt (slice 3b plan, owner answer 3).
 
     Date arithmetic only, from the same calendar as the occasion names: "Advent" from
-    Advent 1 to December 23; "Christmas Eve"; "Christmas" from December 25 to January 5;
+    Advent 1 to December 23 (and December 24 when it is a Sunday, the Fourth
+    Sunday of Advent); "Christmas Eve"; "Christmas" from December 25 to January 5;
     "Epiphany of the Lord" (January 6); "Season after the Epiphany" to the day before
     Ash Wednesday (Transfiguration Sunday included); "Lent" to the Saturday before Palm
     Sunday; "Holy Week" from Palm Sunday to Holy Saturday; "Easter" from Easter Day to
@@ -201,7 +202,7 @@ def church_season(d: date) -> str:
     """
     if (d.month == 12 and d.day >= 25) or (d.month == 1 and d.day <= 5):
         return "Christmas"
-    if d.month == 12 and d.day == 24:
+    if d.month == 12 and d.day == 24 and d.weekday() != _SUNDAY:
         return "Christmas Eve"
     advent1 = advent_sunday(d.year)
     if d >= advent1:

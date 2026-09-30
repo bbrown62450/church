@@ -17,6 +17,7 @@ describe("filterHymns (S Picker ranking)", () => {
       hymn({ number: 4030, title: "Another" }),
     ];
     expect(numbers(filterHymns(items, "403", { excludeRecent: false }))).toEqual([403, 4030]);
+    expect(numbers(filterHymns(items, "#403", { excludeRecent: false }))).toEqual([403, 4030]);
     expect(numbers(filterHymns(items, " 40 ", { excludeRecent: false }))).toEqual([40, 403, 4030, 12]);
   });
 

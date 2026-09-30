@@ -108,7 +108,7 @@ export function swapAlternative(hymns: HymnsBlock, slot: Slot, hymnId: string): 
   const at = ideas.findIndex((idea) => idea.hymn_id === hymnId);
   if (hymns.alternatives === null || at < 0) return hymns;
   const previous = hymns.slots[slot];
-  const keepPrevious = previous !== null && !ideas.some((idea) => idea.hymn_id === previous.hymn_id);
+  const keepPrevious = previous !== null && previous.hymn_id !== null && !ideas.some((idea) => idea.hymn_id === previous.hymn_id);
   const next = keepPrevious ? ideas.map((idea, i) => (i === at ? previous : idea)) : ideas.filter((_, i) => i !== at);
   return {
     ...hymns,

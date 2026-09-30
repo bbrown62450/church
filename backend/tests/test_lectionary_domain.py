@@ -255,6 +255,7 @@ def test_church_season_table():
         date(2026, 11, 29): "Advent",
         date(2026, 12, 23): "Advent",
         date(2026, 12, 24): "Christmas Eve",
+        date(2028, 12, 24): "Advent",                    # a Sunday: Advent 4, not Christmas Eve
         date(2026, 12, 25): "Christmas",
         date(2027, 1, 5): "Christmas",
         date(2027, 1, 6): "Epiphany of the Lord",
@@ -287,6 +288,8 @@ def test_church_season_covers_every_day_in_calendar_order():
             assert (d.month, d.day, previous) == (1, 6, "Christmas"), d
         elif previous == "Epiphany of the Lord":
             assert (d.month, d.day, season) == (1, 7, "Season after the Epiphany"), d
+        elif (d.month, d.day) == (12, 25) and previous == "Advent":
+            assert (d - timedelta(days=1)).weekday() == 6, d   # Dec 24 was a Sunday
         else:
             assert order.index(season) == order.index(previous) + 1, (d, previous, season)
         previous = season

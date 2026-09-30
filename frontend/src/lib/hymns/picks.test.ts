@@ -129,6 +129,11 @@ describe("swapAlternative (S Other ideas)", () => {
     expect(swapAlternative(base, "opening", "nope")).toBe(base);
     const none = withSlots({});
     expect(swapAlternative(none, "opening", HOLY.id)).toBe(none);
+    // An archived pick with no id never becomes an idea (it could not be tapped back).
+    const archived = { ...base, slots: { ...base.slots, opening: { ...pick(KING), hymn_id: null } } };
+    const fromArchived = swapAlternative(archived, "opening", HOLY.id);
+    expect(fromArchived.slots.opening).toEqual(pick(HOLY));
+    expect(fromArchived.alternatives?.by_slot.opening).toEqual([PRAISE, GRACE].map(pick));
   });
 });
 

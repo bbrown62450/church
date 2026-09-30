@@ -48,7 +48,7 @@ function rank(h: Hymn, q: string, digits: boolean): number {
 }
 
 export function filterHymns(items: readonly Hymn[], query: string, { excludeRecent }: { excludeRecent: boolean }): FilterResult {
-  const trimmed = query.trim();
+  const trimmed = query.trim().replace(/^#\s*(?=[0-9]+$)/, "");
   const digits = /^[0-9]+$/.test(trimmed);
   const q = digits ? trimmed : foldText(trimmed);
   const groups: Hymn[][] = [[], [], []];
