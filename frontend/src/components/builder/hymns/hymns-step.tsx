@@ -61,7 +61,8 @@ const MISSING: Reconciled = { status: "missing" };
  * Step 2, Hymns (S "User experience"). It reads and writes only the draft
  * (F §4.6). The slot cards show the draft's picks at once; the pickers wait
  * for `GET /hymnals` and the selected hymnal's list, with no full-page
- * spinner. The selected hymnal is resolved only from a loaded `GET /hymnals`
+ * spinner; a pick's own hymnal whose list failed says so on its card, with
+ * Retry. The selected hymnal is resolved only from a loaded `GET /hymnals`
  * and never written back (S Toolbar); the toolbar's Select and Exclude switch
  * are the only writers of the hymnal and the switch. Removing a hymn offers
  * Undo in a toast that never outlives the step. Suggest fills the empty slots
@@ -186,6 +187,12 @@ export function HymnsStep() {
         const pick = hymns.slots[slot];
         const reconciled = pick === null ? null : empty ? MISSING : reconcilePick(pick, lists.lists, code);
         const title = reconciled?.status === "ok" ? reconciled.live.title : (pick?.title ?? "");
+        // A pick's own hymnal whose list failed (the selected one's failure replaces the pickers).
+        const own = pick?.hymnal ?? null;
+        const ownFailed =
+          reconciled?.status === "loading" && own !== null && own !== code && lists.failed.has(own)
+            ? { code: own, retrying: lists.fetchingCodes.has(own), retry: () => lists.retry(own) }
+            : null;
         return (
           <HymnSlotCard
             key={slot}
@@ -193,6 +200,7 @@ export function HymnsStep() {
             pick={pick}
             reconciled={reconciled}
             notices={notices(slot, reconciled)}
+            listFailed={ownFailed}
             list={selectedList}
             pickerAvailable={pickers}
             excludeRecent={excludeRecent}

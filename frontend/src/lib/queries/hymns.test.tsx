@@ -165,4 +165,31 @@ describe("hymn queries (S Queries)", () => {
     late.release();
     expect(await orphan).toEqual({ status: "superseded" });
   });
+
+  it("drops an answer when the church changes while the step stays mounted", async () => {
+    const late = held(hymnSuggestions({ opening: gg2013().slice(0, 1), response: [], closing: [] }));
+    const api = installFakeApi({ "POST /hymns/suggestions": late.handler });
+    let active = church();
+    const queryClient = makeQueryClient({ queries: { retry: false } });
+    function Wrapper({ children }: { children: ReactNode }) {
+      return (
+        <QueryClientProvider client={queryClient}>
+          <ChurchProvider value={active}>{children}</ChurchProvider>
+        </QueryClientProvider>
+      );
+    }
+    const { result, rerender } = renderHook(() => useSuggestHymns(), { wrapper: Wrapper });
+    let pending!: Promise<unknown>;
+    act(() => {
+      pending = result.current.suggest(BODY);
+    });
+    await waitFor(() => expect(api.requests).toHaveLength(1));
+    expect(api.requests[0].headers["X-Church-Id"]).toBe(GRACE);
+    active = church({ id: CHURCH_IDS.hope, name: "Hope" });
+    rerender();
+    late.release();
+    await act(async () => {
+      expect(await pending).toEqual({ status: "superseded" });
+    });
+  });
 });

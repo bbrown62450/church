@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, type ReactNode } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
 
 import {
   Combobox,
@@ -36,7 +36,11 @@ export type SearchComboboxProps<T> = {
   placeholder?: string;
   disabled?: boolean;
   autoFocus?: boolean;
-  /** Escape, or focus leaving the field and its list ("Change" puts the row back). */
+  /**
+   * Escape, or focus leaving the combobox ("Change" puts the row back). Focus
+   * moving between the field, its own ▾ button and its list stays inside, so
+   * Tab from the field lands on ▾ with the combobox still there.
+   */
   onDismiss?: () => void;
   id?: string;
 };
@@ -45,7 +49,8 @@ export type SearchComboboxProps<T> = {
  * A searchable long list (F §4.9 item 5; slice 3's hymn picker). The caller
  * filters and ranks (`search`), so the list shows exactly its order; Base UI
  * only renders the items it is given (`filteredItems`) and handles focus,
- * highlight and keyboard selection. The footer holds the caller's hints.
+ * highlight and keyboard selection; the first row is highlighted as the user
+ * types, so Enter picks the top match. The footer holds the caller's hints.
  */
 export function SearchCombobox<T>({
   label,
@@ -68,9 +73,26 @@ export function SearchCombobox<T>({
   // What the user has typed since the list opened ("" = nothing yet).
   const [query, setQuery] = useState("");
   const result = search(query);
+  const wrapperRef = useRef<HTMLDivElement>(null);
 
   return (
-    <div className="grid gap-1.5">
+    // The wrapper sees the blur and Escape of the field and of ▾; the list's are
+    // seen too (React events bubble through its portal). Escape is caught on the
+    // way down: Base UI stops it once it has closed an open list.
+    <div
+      ref={wrapperRef}
+      className="grid gap-1.5"
+      onKeyDownCapture={(event) => {
+        if (event.key === "Escape") onDismiss?.();
+      }}
+      onBlur={(event) => {
+        const next = event.relatedTarget;
+        const inside =
+          next instanceof Element &&
+          ((wrapperRef.current?.contains(next) ?? false) || next.closest("[data-slot=combobox-content]") !== null);
+        if (!inside) onDismiss?.();
+      }}
+    >
       <Label htmlFor={inputId} className={cn(labelHidden && "sr-only")}>
         {label}
       </Label>
@@ -79,6 +101,8 @@ export function SearchCombobox<T>({
         filteredItems={result.shown}
         itemToStringLabel={itemText}
         isItemEqualToValue={(a: T, b: T) => itemKey(a) === itemKey(b)}
+        // The top match is highlighted as the user types, so Enter picks it ("403", Enter; owner answer 2026-09-30).
+        autoHighlight
         value={value}
         onValueChange={(next) => {
           if (next !== null) onValueChange(next as T);
@@ -95,14 +119,6 @@ export function SearchCombobox<T>({
           disabled={disabled}
           autoFocus={autoFocus}
           className="h-11 w-full *:data-[slot=input-group-control]:h-full"
-          onKeyDown={(event) => {
-            if (event.key === "Escape") onDismiss?.();
-          }}
-          onBlur={(event) => {
-            const next = event.relatedTarget;
-            const inList = next instanceof Element && next.closest("[data-slot=combobox-content]") !== null;
-            if (!inList) onDismiss?.();
-          }}
         />
         <ComboboxContent>
           <ComboboxList>

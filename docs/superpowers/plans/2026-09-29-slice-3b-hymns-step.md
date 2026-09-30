@@ -37,7 +37,7 @@
 - `main` is protected: the `backend`, `backend-postgres` and `frontend` checks must pass and the branch must be up to date. Merge only with `gh pr merge <N> --merge -R bbrown62450/church`, only on the owner's explicit yes.
 - Commits end with a blank line and `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`; when the session's attribution asks for it, a `Claude-Session: <url>` line stands immediately before or after that line (T14's trailer check matches the `Co-Authored-By` line anywhere in the message, and its commit-list check compares subjects only). Subjects read "Area: plain words (S …, owner answer …)". Use TDD: write the failing test first and quote its failure.
 - **Backup push after every task** (standing rule, as in 2a-3a): the controller pushes the working branch after each task's commit and review with `git push origin claude/slice-2-plan-4q33le` (never `--force`; there is no open PR, so the push asks nobody; Vercel may build a preview). A fix asked for by a task's review is a new commit, `Fix: <what> (Task <n> review)`, pushed the same way, never an amend of a pushed commit; T14 lists it. The container can restart and lose uncommitted work, so commit as soon as a task's checks pass. If the push is refused because the remote moved, stop and ask the controller.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and includes the line given in T14 ("Tests: frontend 356 → 427 in 55 → 64 files; backend 1106 → 1110 passed, 11 → 11 skipped").
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and includes the line given in T14 ("Tests: frontend 356 → 435 in 55 → 64 files; backend 1106 → 1110 passed, 11 → 11 skipped").
 - New prose for the owner has no em dashes and no flattery, and leads with the point. Copy quoted from S keeps its own punctuation (for example "Too many requests — try again in {n} s.", "After the sermon — responds to the scripture (NT reading)", "Still working — this can take up to a minute.", "No Opening hymn — Choose one", the Hymnary credit).
 - Ask the owner before any push to a PR, PR creation, marking ready, merging, or any production or settings action. The build of T2-T13 does not wait for T1's owner steps.
 
@@ -58,9 +58,10 @@
   | T9 | +4 (`hymns-step.test.tsx`) | 0 | 413 in 64 | unchanged |
   | T10 | +7 (`hymns-step.test.tsx`; T8's refetch test extended, 0) | 0 | 420 in 64 | unchanged |
   | T11 | +5 (`hymns-step.test.tsx`; the Add test extended, 0) | 0 | 425 in 64 | unchanged |
-  | T12 | +2 (`draft/status.test.ts` +1, `builder-shell.test.tsx` +1; two status tests and three shell tests edited, 0) | 0 | 427 in 64 | unchanged |
-  | T13 | 0 | 0 | 427 in 64 | 1110 passed, 11 skipped (one assertion in `test_slice1_docs.py` edited) |
-  | T14, T15 | 0 | 0 | 427 in 64 | 1110 passed, 11 skipped |
+  | T6-T8 review fixes (and owner answers of 2026-09-30) | +8 (`search-combobox.test.tsx` +2, `hymns-step.test.tsx` +5, `queries/hymns.test.tsx` +1; three step tests edited, 0) | 0 | 433 in 64 | unchanged |
+  | T12 | +2 (`draft/status.test.ts` +1, `builder-shell.test.tsx` +1; two status tests and three shell tests edited, 0) | 0 | 435 in 64 | unchanged |
+  | T13 | 0 | 0 | 435 in 64 | 1110 passed, 11 skipped (one assertion in `test_slice1_docs.py` edited) |
+  | T14, T15 | 0 | 0 | 435 in 64 | 1110 passed, 11 skipped |
 
 - CI `backend-postgres` shows `11 passed, 1110 deselected` after T2 (the Postgres tests are unchanged).
 - The step tests fake only `Date` and wait on the app's real timers (the draft's 400 ms writes, the list and match requests), so `hymns-step.test.tsx` takes about 17 s; one test fakes `setTimeout` as well (the 8-second "Still working" line) and says why, and one waits out a real 1-second `Retry-After`.
@@ -5986,7 +5987,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Consumes: `HymnsStep` (T8-T11), `SLOT_META`, `hymnText` (T5), `stepStatus`, `StepProgress`, `StillNeeded`, `SummaryPanel` (2b, 2c).
 - Produces: `SHIPPED_STEPS = new Set(["readings", "hymns"])`; `stillNeeded` hymn rows `{step: "hymns", message: "No {Opening|Response|Closing} hymn", action: "Choose one"}`; `SummaryHymns()`. Later users: slice 4 (adds `"liturgy"`), 5a (`"review"`).
 
-Counts after this task: frontend **427 passed in 64 files**.
+Counts after this task: frontend **435 passed in 64 files** (427 as first planned; the T6-T8 review fixes added 8).
 
 - [ ] **Step 1 (agent): Check the starting point**
 
@@ -5996,7 +5997,7 @@ grep -n "export const SHIPPED_STEPS" frontend/src/lib/draft/steps.ts
 (cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
 ```
 
-**Expected:** nothing (or `?? .claude/`); `34:export const SHIPPED_STEPS: ReadonlySet<StepId> = new Set<StepId>(["readings"]);`; ` Test Files  64 passed (64)`, `      Tests  425 passed (425)`.
+**Expected:** nothing (or `?? .claude/`); `34:export const SHIPPED_STEPS: ReadonlySet<StepId> = new Set<StepId>(["readings"]);`; ` Test Files  64 passed (64)`, `      Tests  433 passed (433)` (425 after T11, plus the T6-T8 review fixes' 8).
 
 - [ ] **Step 2 (agent): Write the failing tests**
 
@@ -6452,7 +6453,7 @@ PYEOF
 git status --short
 ```
 
-**Expected:** ` Test Files  7 passed (7)`, `      Tests  90 passed (90)`; ` Test Files  64 passed (64)`, `      Tests  427 passed (427)`; `0`; `> tsc --noEmit` and `> eslint` with nothing after them; seven ` M` files and `?? frontend/src/components/builder/summary-hymns.tsx`.
+**Expected:** ` Test Files  7 passed (7)`, `      Tests  95 passed (95)`; ` Test Files  64 passed (64)`, `      Tests  435 passed (435)`; `0`; `> tsc --noEmit` and `> eslint` with nothing after them; seven ` M` files and `?? frontend/src/components/builder/summary-hymns.tsx`.
 
 - [ ] **Step 6 (agent): Commit**
 
@@ -6463,7 +6464,7 @@ git commit -m "Builder: Hymns ships; the step bar, Still needed and the summary 
 each empty slot, and the summary lists Opening, Response and Closing
 from the draft's snapshot (No ... hymn when empty). /builder/hymns
 renders the Hymns step; Liturgy and Review keep Available soon.
-Frontend 425 -> 427 tests in 64 files.
+Frontend 433 -> 435 tests in 64 files.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -6484,7 +6485,7 @@ S and F are what slices 4, 5a and 6a will read, so they must say what 3b built. 
 - Consumes: the clarifications above and the code of T2-T12.
 - Produces: S and F as later slices read them; the checklist T15 runs from.
 
-Counts after this task: frontend **427 passed in 64 files**; backend **1110 passed, 11 skipped**.
+Counts after this task: frontend **435 passed in 64 files**; backend **1110 passed, 11 skipped**.
 
 - [ ] **Step 1 (agent): Check the starting point**
 
@@ -6699,7 +6700,7 @@ Below, `<scratch>` is the absolute path of the session's scratchpad directory, a
 
 **Interfaces:**
 - Consumes: everything from T2-T13, in particular each task's commit subject (Step 8 reads them from this plan between `### Task 1:` and `### Task 14:`), the cumulative counts (Baselines and counts), `SHIPPED_STEPS` (T12), and CI (`.github/workflows/ci.yml`, unchanged: `backend`, `backend-postgres`, `frontend` with lint, typecheck, `API types match the OpenAPI snapshot (F §5.4)`, test and build).
-- Produces: PR `<N>` (`claude/slice-2-plan-4q33le` → `main`), titled `Slice 3b: the Hymns step`, not a draft after Step 13, CI green on the branch head, its body holding the line `Tests: frontend 356 → 427 in 55 → 64 files; backend 1106 → 1110 passed, 11 → 11 skipped` and ending with `🤖 Generated with [Claude Code](https://claude.com/claude-code)`. Later user: T15.
+- Produces: PR `<N>` (`claude/slice-2-plan-4q33le` → `main`), titled `Slice 3b: the Hymns step`, not a draft after Step 13, CI green on the branch head, its body holding the line `Tests: frontend 356 → 435 in 55 → 64 files; backend 1106 → 1110 passed, 11 → 11 skipped` and ending with `🤖 Generated with [Claude Code](https://claude.com/claude-code)`. Later user: T15.
 
 - [ ] **Step 1 (agent): Bring the branch up to date with `origin/main`**
 
@@ -6739,7 +6740,7 @@ for d in 8 400; do echo "clock +$d days"; (cd frontend && WSB_CLOCK_SHIFT_DAYS=$
 (cd frontend && npm run typecheck 2>&1 | tail -1 && npm run lint 2>&1 | tail -1)
 ```
 
-**Expected:** three times ` Test Files  64 passed (64)` and `      Tests  427 passed (427)` (baseline 356 in 55; after T3-T12: 359, 367, 385, 391, 395, 409, 413, 420, 425, 427) and no `FAIL`; then `clock +8 days` and `clock +400 days`, each followed by the same two lines and no `FAIL`; `0`; `> tsc --noEmit` and `> eslint` with nothing after. Any other number: find the task whose count drifted. A run that fails even once is a failure (Step 14): make the test deterministic (fake only `Date`, set to `DRAFT_NOW`; await the UI with `findBy`/`waitFor`) rather than retrying it.
+**Expected:** three times ` Test Files  64 passed (64)` and `      Tests  435 passed (435)` (baseline 356 in 55; after T3-T12: 359, 367, 385, 391, 395, 409, 413, 420, 425, then 433 after the T6-T8 review fixes, 435) and no `FAIL`; then `clock +8 days` and `clock +400 days`, each followed by the same two lines and no `FAIL`; `0`; `> tsc --noEmit` and `> eslint` with nothing after. Any other number: find the task whose count drifted. A run that fails even once is a failure (Step 14): make the test deterministic (fake only `Date`, set to `DRAFT_NOW`; await the UI with `findBy`/`waitFor`) rather than retrying it.
 
 - [ ] **Step 3 (agent): Run the backend suite and the Postgres marker count**
 
@@ -6904,7 +6905,7 @@ git rev-list --count origin/main..HEAD
 
 Send the owner exactly this, with `<count>` filled in, and wait for a clear yes:
 
-> Slice 3b is verified locally: frontend 427 tests in 64 files, passing three runs in a row and with the clock moved 8 and 400 days ahead (356 in 55 before); typecheck, lint and the production build are clean; the backend has 1110 passed, 11 skipped (1106 before: the church season in the AI prompt added four tests); the API types did not change; the checks are clean (every page is a client component, no link to the old app, the screens use the query hooks, no new browser storage, Date & readings and Hymns are the steps switched on); changed files (56) and commits (<count>) are as planned, and every commit is already backed up on the branch. May I open the pull request as a **draft** titled "Slice 3b: the Hymns step", so the checks run? I will come back with the results and ask again before marking it ready. Merging stays with you (Task 15).
+> Slice 3b is verified locally: frontend 435 tests in 64 files, passing three runs in a row and with the clock moved 8 and 400 days ahead (356 in 55 before); typecheck, lint and the production build are clean; the backend has 1110 passed, 11 skipped (1106 before: the church season in the AI prompt added four tests); the API types did not change; the checks are clean (every page is a client component, no link to the old app, the screens use the query hooks, no new browser storage, Date & readings and Hymns are the steps switched on); changed files (56) and commits (<count>) are as planned, and every commit is already backed up on the branch. May I open the pull request as a **draft** titled "Slice 3b: the Hymns step", so the checks run? I will come back with the results and ask again before marking it ready. Merging stays with you (Task 15).
 
 Add one line per note from Steps 1-8 (a merge from `main`, a skipped font download, a `Fix:` commit, Task 1b, how the switch was made). A no leaves the branch as it is.
 
@@ -6925,7 +6926,7 @@ Backend: the AI prompt now names the church season (from the service date) and a
 
 Owner answers (2026-09-29): choosing a hymn or a hymnal is unsaved work, the Exclude switch and the ideas are not (1); the recent-use finding is in the plan's Task 1 (2); the church season in the prompt (3); "Written {year}" as designed (4); a guided phone check after the merge (5). @@SWITCH_LINE@@
 
-Tests: frontend 356 → 427 in 55 → 64 files; backend 1106 → 1110 passed, 11 → 11 skipped
+Tests: frontend 356 → 435 in 55 → 64 files; backend 1106 → 1110 passed, 11 → 11 skipped
 
 After merge (Task 15): a guided check on the owner's phone (about six steps) and a quick look on a computer, then a short "Slice 3b record" in docs/ops-runbook.md.
 
@@ -6937,7 +6938,7 @@ Replace `@@SWITCH_LINE@@` with `The switch is generated from the base-nova regis
 
 ```bash
 grep -c '@@' "<scratch>/slice3b-pr-body.md"
-grep -cx 'Tests: frontend 356 → 427 in 55 → 64 files; backend 1106 → 1110 passed, 11 → 11 skipped' "<scratch>/slice3b-pr-body.md"
+grep -cx 'Tests: frontend 356 → 435 in 55 → 64 files; backend 1106 → 1110 passed, 11 → 11 skipped' "<scratch>/slice3b-pr-body.md"
 git fetch origin && test "$(git rev-list --count HEAD..origin/main)" = 0 && test "$(git rev-list --count origin/claude/slice-2-plan-4q33le..HEAD)" = 0 && echo "branch is current and backed up"
 gh pr create -R bbrown62450/church --draft --base main --head claude/slice-2-plan-4q33le \
   --title "Slice 3b: the Hymns step" \
@@ -6968,13 +6969,13 @@ RUN=$(gh run list -R bbrown62450/church --workflow ci.yml --branch claude/slice-
 RUN=$(gh run list -R bbrown62450/church --workflow ci.yml --branch claude/slice-2-plan-4q33le --commit "$(git rev-parse HEAD)" --limit 1 --json databaseId --jq '.[0].databaseId'); JOB=$(gh run view "$RUN" -R bbrown62450/church --json jobs --jq '.jobs[] | select(.name == "backend-postgres") | .databaseId'); gh run view -R bbrown62450/church --job "$JOB" --log | grep -E "pg_smoke: OK|[0-9]+ (passed|failed)"
 ```
 
-**Expected:** `run <id>`; `backend: success`, `backend-postgres: success`, `frontend: success`; frontend `Test Files  64 passed (64)`, `Tests  427 passed (427)`, `✓ Compiled successfully` and the five `/builder` route lines; backend `1110 passed, 11 skipped in …s`; backend-postgres `pg_smoke: OK` and `11 passed, 1110 deselected` (with any warning count the 3a runs showed). If a required job failed on or after 2026-10-19, first check the runner image (`Image: ubuntu-24.04` expected; GitHub moves `ubuntu-latest` then) and report a setup failure on a new image to the owner before changing any 3b file.
+**Expected:** `run <id>`; `backend: success`, `backend-postgres: success`, `frontend: success`; frontend `Test Files  64 passed (64)`, `Tests  435 passed (435)`, `✓ Compiled successfully` and the five `/builder` route lines; backend `1110 passed, 11 skipped in …s`; backend-postgres `pg_smoke: OK` and `11 passed, 1110 deselected` (with any warning count the 3a runs showed). If a required job failed on or after 2026-10-19, first check the runner image (`Image: ubuntu-24.04` expected; GitHub moves `ubuntu-latest` then) and report a setup failure on a new image to the owner before changing any 3b file.
 
 - [ ] **Step 13 (agent → OWNER): Report CI and ask to mark the PR ready**
 
 Send exactly this, with the values filled in, and wait for a clear yes:
 
-> PR #<N> (<url>) is green (run <run id>): frontend 427 tests in 64 files, build OK; backend 1110 passed, 11 skipped; the Postgres job clean; the Vercel preview built. May I mark it ready for review? Merging stays with you (Task 15).
+> PR #<N> (<url>) is green (run <run id>): frontend 435 tests in 64 files, build OK; backend 1110 passed, 11 skipped; the Postgres job clean; the Vercel preview built. May I mark it ready for review? Merging stays with you (Task 15).
 
 On the yes:
 
@@ -7008,7 +7009,7 @@ Read the failure (for CI: `gh run view <run-id> -R bbrown62450/church --log-fail
 
 For each fix: change only the owning task's files; rerun Steps 2-8; commit with the subject `Fix: <what> (Task <n>, slice 3b final verification)` and the trailer; have that task re-reviewed; push with `git push origin claude/slice-2-plan-4q33le` (a backup before Step 10; after it, covered by the owner's first yes); after Step 10, repeat Steps 11-12 and send Step 13's message with the new run. An infrastructure failure with no test output gets one `gh run rerun <run-id> -R bbrown62450/church --failed` first.
 
-Expected counts after this task: frontend `427 passed` in 64 files (CI the same); backend `1110 passed, 11 skipped` (CI `backend-postgres`: `11 passed, 1110 deselected`). No commit unless Step 14 needed a fix.
+Expected counts after this task: frontend `435 passed` in 64 files (CI the same); backend `1110 passed, 11 skipped` (CI `backend-postgres`: `11 passed, 1110 deselected`). No commit unless Step 14 needed a fix.
 
 ### Task 15: Merge and after (OWNER + agent): the merge, the deploy, a guided check on the phone and a look on a computer, the slice 3b record (S Manual checks, AC10, AC11, AC17, AC20; F §5.5; owner decisions 2, 3, 5; owner answers 2, 5)
 
@@ -7035,7 +7036,7 @@ git rev-parse HEAD
 git rev-list --count HEAD..origin/main
 ```
 
-**Expected:** `OPEN draft=false MERGEABLE CLEAN <sha>` with `<sha>` equal to `git rev-parse HEAD`; `0`. If `main` moved (count not `0`, or `BEHIND`): merge it as in T14 Step 1, rerun T14 Steps 2-3 (`427 passed` in 64 files, plus any tests the merge brought; `1110 passed, 11 skipped`), push with the owner's yes, wait for green checks, and run this step again. `BLOCKED`: a required check is not green; fix it (T14 Step 14). Never merge with `--admin`.
+**Expected:** `OPEN draft=false MERGEABLE CLEAN <sha>` with `<sha>` equal to `git rev-parse HEAD`; `0`. If `main` moved (count not `0`, or `BEHIND`): merge it as in T14 Step 1, rerun T14 Steps 2-3 (`435 passed` in 64 files, plus any tests the merge brought; `1110 passed, 11 skipped`), push with the owner's yes, wait for green checks, and run this step again. `BLOCKED`: a required check is not green; fix it (T14 Step 14). Never merge with `--admin`.
 
 - [ ] **Step 2 (agent → OWNER): Ask to merge, then merge**
 
@@ -7210,7 +7211,7 @@ gh pr checks claude/revert-slice-3b -R bbrown62450/church --watch
 
 **Expected:** Vitest `Test Files  55 passed (55)`, `Tests  356 passed (356)` (if anything else merged after 3b, it differs by exactly those tests); `1106 passed, 11 skipped`; every check passes. Merge on the owner's yes, then the owner checks that the site signs in and shows the builder with Hymns "Available soon". Record the revert as a row of the slice 3b record (or its own records PR if Step 12 already merged).
 
-Expected counts after this task: frontend `427 passed` in 64 files on `main`; backend `1110 passed, 11 skipped` (CI `backend-postgres`: `11 passed, 1110 deselected`). The records PR adds no test.
+Expected counts after this task: frontend `435 passed` in 64 files on `main`; backend `1110 passed, 11 skipped` (CI `backend-postgres`: `11 passed, 1110 deselected`). The records PR adds no test.
 
 ---
 
@@ -7242,7 +7243,7 @@ Filled in while Tasks 1-13 are built: each change from the plan as written, its 
 - (M3) **[owner-visible]** T13 check 12 and T15 Step 9 now say "Turning Exclude on or off does not make it ask; Suggest fills empty slots, which does."
 - (M4) T11 `openAtFirst` checks `typeof window !== "undefined"` first.
 - (M5) T5 `clipChars` cuts by code points (as the server's `len` counts), used by `cleanRefs` and every cut in `buildSuggestionRequest` (occasion, NT reading, NT text); `current_picks` sends only UUID-shaped ids, others as null. New `match-request.test.ts` and `suggest-request.test.ts` tests (+2).
-- (M6) Accessibility: after ✕ focus moves to the new picker, and after a choice from **Change** back to **Change** (T8); **Change** is disabled until the selected list has loaded, so it never mounts a disabled, auto-focused field (T8); "Still working — this can take up to a minute." sits in an `aria-live="polite"` line (T10); "Go to readings" is at least 44 px tall (`min-h-11`, T11). Existing tests extended (0).
+- (M6) Accessibility: after ✕ focus moves to the new picker (since the owner answer of 2026-09-30, the card's heading; see "Owner answers during the build"), and after a choice from **Change** back to **Change** (T8); **Change** is disabled until the selected list has loaded, so it never mounts a disabled, auto-focused field (T8); "Still working — this can take up to a minute." sits in an `aria-live="polite"` line (T10); "Go to readings" is at least 44 px tall (`min-h-11`, T11). Existing tests extended (0).
 - (M7) Global Constraints and T7: a toggle meets 44 px through its clickable `min-h-11` label row, not the switch itself.
 - (M8) **[owner-visible]** Clarification 12 (the search ignores punctuation) is marked owner-visible, and new clarifications 23 (the plural "Also chosen as the Opening and Closing hymns.") and 24 (**Show them** is a toggle: "{k} recently used matches are shown." with **Hide them**, T11, test extended) join "Questions for the owner" item 8 with 25 and 26.
 - (M9) T2's prose and commit body say ten season labels, as listed.
@@ -7252,10 +7253,10 @@ Filled in while Tasks 1-13 are built: each change from the plan as written, its 
 **T1's finding (owner answer 2):** <outcome A, B, C or D, in one sentence, without ids; the owner's choice; Task 1b's commit if any.>
 
 **Review fixes under owner decision 1 (no owner-visible change unless marked):**
-- <none yet>
+- **T6-T8 review fixes (2026-09-30).** (I1) Keyboard focus stays on the card when leaving **Change**'s picker: `SearchCombobox` handles blur and Escape on its wrapper, so focus moving between the field, its own ▾ button and its list is inside (Tab from the field lands on ▾ with the picker still open; the next Tab moves on and closes it, and focus stays where Tab put it); Escape is caught in the capture phase (Base UI stops it once it has closed an open list) and gives focus back to **Change**. (M1) After ✕, focus goes to the target in `FOCUS_AFTER_REMOVE` (`hymn-slot-card.tsx`), falling back to the card's heading (`tabIndex=-1`) whenever there is no enabled picker (the list still loading, the empty hymnal, the error state), so focus never lands on the page and a pending focus never steals it later; focus that Tab or a click moved elsewhere is never taken back. (M3) **[owner-visible]** A pick whose own hymnal (not the selected one) failed to load says "Couldn't load {code}." on its card with a 44 px **Retry** (accessible name "Retry loading {code}") that refetches only that list (`useHymnLists().retry(code)`, `fetchingCodes`), instead of waiting forever. (M4) A pick cleared elsewhere while **Change** is open ends Change, so a hymn put back shows its row. (M5) Tests: the Undo toast's church-id guard as a `useUndoToasts` hook test (the builder shell keys the draft provider by church, so a church change always remounts the step and cannot reach the guard through the component); `useSuggestHymns` drops an answer when the church changes under a mounted hook; a picker row shows "Written 1981" for #710 and none for #403. (M6) Undo toasts last `UNDO_TOAST_MS` (8 s, twice sonner's default; asserted in the ✕ test), so the Undo tests on real timers never race the toast. Counts: +8 with the owner answers below (`search-combobox.test.tsx` +2, `hymns-step.test.tsx` +5, `queries/hymns.test.tsx` +1; three step tests edited, 0): frontend 425 → 433 in 64 files, so T12 now ends at 435 (its builder run at 95), and T13-T15 and the PR body's test line say 435.
 
 **Owner answers during the build:**
-- <none yet>
+- **2026-09-30 ("all recommended"), both [owner-visible]:** (1) Enter in the hymn search picks the top match: `SearchCombobox` sets Base UI's `autoHighlight`, so typing "403" then Enter chooses #403 (new `search-combobox.test.tsx` test; the step's "writes the chosen hymn" test now picks with Enter). (2) After ✕ focus goes to the card's heading, not the picker, so a phone's keyboard does not pop up (`FOCUS_AFTER_REMOVE = "heading"`; the ✕ test now expects the heading). T8's scripts above show the code as T8 first built it.
 
 **Carried to later slices:**
 - (4) The Liturgy step adds `"liturgy"` to `SHIPPED_STEPS` and replaces the summary's Liturgy block; `SummaryHymns` is its model.

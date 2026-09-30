@@ -3,6 +3,7 @@
 import { InfoIcon, XIcon } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
+import { PendingButton } from "@/components/app/pending-button";
 import { Button } from "@/components/ui/button";
 import type { Hymn } from "@/lib/api/types";
 import type { HymnPick, Slot } from "@/lib/draft/schema";
@@ -11,6 +12,14 @@ import type { Reconciled } from "@/lib/hymns/picks";
 
 import { HymnLabel } from "./hymn-label";
 import { HymnPicker } from "./hymn-picker";
+
+/**
+ * Where focus goes after ✕: the card's heading, so a phone's keyboard does not
+ * pop up (owner answer 2026-09-30); "picker" would focus the slot's new picker,
+ * with the heading as the fallback while it is not there or still loading.
+ * Either way focus never falls to the page.
+ */
+export const FOCUS_AFTER_REMOVE: "picker" | "heading" = "heading";
 
 export type SlotCardProps = {
   slot: Slot;
@@ -30,6 +39,11 @@ export type SlotCardProps = {
   onRemove: () => void;
   /** Under the pick, in muted text; none changes the pick (S "Notices"). */
   notices: readonly string[];
+  /**
+   * The pick's own hymnal (not the selected one) whose list failed: "Couldn't
+   * load {code}." with Retry, instead of waiting for it forever.
+   */
+  listFailed?: { code: string; retrying: boolean; retry: () => void } | null;
   /** Under the notices: "No suggestion for this slot." and the other ideas (slice 3b T10). */
   children?: ReactNode;
 };
@@ -38,10 +52,13 @@ export type SlotCardProps = {
  * One slot (S "Slot cards"): its title and caption; a filled slot shows the
  * hymn (live when its list has loaded, the draft's snapshot until then) with
  * its ▶ Listen link, ✕ and Change, which puts the focused picker in the row's
- * place until Escape or focus leaves (Change waits for the list, so it never
- * focuses a disabled field); an empty slot shows the picker. After ✕ focus
- * moves to the new picker, and after a choice from Change back to Change. The
- * notices sit under the pick.
+ * place until Escape or focus leaves the picker (Change waits for the list, so
+ * it never focuses a disabled field); an empty slot shows the picker. After ✕
+ * focus moves to the card's heading (`FOCUS_AFTER_REMOVE`); after a choice
+ * from Change, or Escape, back to Change. Tab from Change's picker moves to
+ * its ▾ button and then on, closing it; focus is never taken back from where
+ * Tab put it. The notices sit under the pick; a pick whose own hymnal failed
+ * to load says so, with Retry.
  */
 export function HymnSlotCard({
   slot,
@@ -55,25 +72,34 @@ export function HymnSlotCard({
   onChoose,
   onRemove,
   notices,
+  listFailed = null,
   children,
 }: SlotCardProps) {
   const meta = SLOT_META[slot];
   const [changing, setChanging] = useState(false);
-  // Where focus goes once the row has re-rendered: the picker after ✕, Change after a choice from Change.
-  const focusNext = useRef<"picker" | "change" | null>(null);
+  // A pick cleared elsewhere (another tab, Undo) ends Change, so a later pick shows its row.
+  if (changing && pick === null) setChanging(false);
+  // Where focus goes once the row has re-rendered: the picker (or heading) after ✕, Change after Change's picker.
+  const focusNext = useRef<"picker" | "heading" | "change" | null>(null);
   const sectionRef = useRef<HTMLElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
   const changeRef = useRef<HTMLButtonElement>(null);
   const headingId = `slot-${slot}-title`;
 
   useEffect(() => {
-    if (focusNext.current === null) return;
-    const target =
-      focusNext.current === "change"
-        ? changeRef.current
-        : (sectionRef.current?.querySelector<HTMLInputElement>("input[role=combobox]") ?? null);
-    if (target === null) return;
+    const want = focusNext.current;
+    if (want === null) return;
+    // Wait for the render that shows the change: the empty slot after ✕, the row after Change.
+    if (want === "change" ? changing : pick !== null) return;
     focusNext.current = null;
-    target.focus();
+    const section = sectionRef.current;
+    const active = document.activeElement;
+    // Focus that Tab (or a click) moved elsewhere stays there.
+    if (active !== null && active !== document.body && !(section?.contains(active) ?? false)) return;
+    const input = section?.querySelector<HTMLInputElement>("input[role=combobox]") ?? null;
+    const target =
+      want === "change" ? changeRef.current : want === "picker" && input !== null && !input.disabled ? input : null;
+    (target ?? headingRef.current)?.focus();
   });
 
   const live = reconciled?.status === "ok" ? reconciled.live : null;
@@ -85,7 +111,14 @@ export function HymnSlotCard({
       serviceDateIso={serviceDateIso}
       showHymnal={showHymnal}
       autoFocus={autoFocus}
-      onDismiss={autoFocus ? () => setChanging(false) : undefined}
+      onDismiss={
+        autoFocus
+          ? () => {
+              focusNext.current = "change";
+              setChanging(false);
+            }
+          : undefined
+      }
       onChoose={(h) => {
         if (changing) focusNext.current = "change";
         setChanging(false);
@@ -97,7 +130,7 @@ export function HymnSlotCard({
   return (
     <section ref={sectionRef} aria-labelledby={headingId} className="grid gap-3 rounded-lg border p-4">
       <div>
-        <h3 id={headingId} className="text-base font-medium">
+        <h3 id={headingId} ref={headingRef} tabIndex={-1} className="text-base font-medium">
           {meta.title}
         </h3>
         <p className="text-sm text-muted-foreground">{meta.caption}</p>
@@ -118,13 +151,28 @@ export function HymnSlotCard({
               className="size-11 shrink-0 md:size-8"
               aria-label={`Remove ${(live ?? pick).title}`}
               onClick={() => {
-                focusNext.current = "picker";
+                focusNext.current = FOCUS_AFTER_REMOVE;
                 onRemove();
               }}
             >
               <XIcon aria-hidden="true" />
             </Button>
           </div>
+          {listFailed ? (
+            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+              <span>Couldn&apos;t load {listFailed.code}.</span>
+              <PendingButton
+                variant="outline"
+                size="touch"
+                pending={listFailed.retrying}
+                pendingLabel="Retry"
+                aria-label={`Retry loading ${listFailed.code}`}
+                onClick={() => listFailed.retry()}
+              >
+                Retry
+              </PendingButton>
+            </div>
+          ) : null}
           {pickerAvailable ? (
             <div>
               <Button

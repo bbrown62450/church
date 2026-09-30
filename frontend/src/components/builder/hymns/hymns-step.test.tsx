@@ -5,7 +5,7 @@
  * draft is dated Sunday, October 4, 2026, and the lectionary answers "no
  * readings", so the readings stay as each test seeds them.
  */
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, renderHook, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -17,7 +17,7 @@ import { ChurchProvider } from "@/lib/church-context";
 import { useDraft } from "@/lib/draft/context";
 import { editOccasion, setDate } from "@/lib/draft/readings";
 import { draftKey, type DraftV1, type HymnPick } from "@/lib/draft/schema";
-import { pickFromHymn } from "@/lib/hymns/picks";
+import { clearSlot, pickFromHymn, setSlot } from "@/lib/hymns/picks";
 import { keys } from "@/lib/queries/keys";
 import { fakeError, installFakeApi, type FakeHandler, type RecordedRequest } from "@/test/fake-api";
 import {
@@ -32,6 +32,7 @@ import {
   hymnSuggestions,
   lectionaryRoute,
   me,
+  ph1990,
   scriptureMatches,
   testDraft,
   twoHymnals,
@@ -40,6 +41,7 @@ import {
 import { renderWithProviders } from "@/test/render";
 
 import { HymnsStep } from "./hymns-step";
+import { UNDO_TOAST_MS, useUndoToasts } from "./use-undo-toasts";
 
 const KEY = draftKey(USER_ID, church().id);
 const [HOLY, PRAISE, COME, GRACE, , FAITHFUL, HERE, , SENT] = gg2013();
@@ -150,8 +152,14 @@ describe("the Hymns step (S User experience)", () => {
   it("writes the chosen hymn to the draft, and every request names the church", async () => {
     const { user, api } = renderStep();
     const input = await readyPicker("Opening");
+    await user.type(input, "710");
+    // A newer hymn's row shows the year its words were written.
+    expect(within(await screen.findByRole("option", { name: /#710 Here I Am, Lord/ })).getByText("Written 1981")).toBeInTheDocument();
+    await user.clear(input);
     await user.type(input, "403");
-    await user.click(await screen.findByRole("option", { name: /#403 Come, Thou Almighty King/ }));
+    const come = await screen.findByRole("option", { name: /#403 Come, Thou Almighty King/ });
+    expect(within(come).queryByText(/^Written/)).toBeNull();
+    await user.keyboard("{Enter}"); // the top match is highlighted, so Enter picks it (owner answer 2026-09-30)
     expect(await within(card("Opening")).findByText("#403 Come, Thou Almighty King")).toBeInTheDocument();
     await waitFor(() => expect(stored().hymns.slots.opening).toEqual(pick(COME)));
     const churchCalls = api.requests.filter((r) => !r.path.startsWith("/lectionary"));
@@ -266,13 +274,19 @@ describe("slot cards (S Slot cards, Notices)", () => {
     expect(within(opening).queryByRole("link")).toBeNull();
   });
 
-  it("✕ removes the hymn with a Removed toast whose Undo puts it back", async () => {
+  it("✕ removes the hymn with a Removed toast whose Undo puts it back; focus goes to the card's heading", async () => {
+    const shown = vi.spyOn(toast, "message");
     const { user } = renderStep(draftWith(slots(pick(GRACE))));
     const opening = await screen.findByRole("region", { name: "Opening hymn" });
     await user.click(await within(opening).findByRole("button", { name: "Remove Amazing Grace" }));
-    await waitFor(() => expect(within(opening).getByRole("combobox", { name: "Opening hymn" })).toHaveFocus());
+    // The heading, not the new picker, so a phone's keyboard does not pop up (owner answer 2026-09-30).
+    await waitFor(() => expect(within(opening).getByRole("heading", { name: "Opening hymn" })).toHaveFocus());
+    expect(await readyPicker("Opening")).not.toHaveFocus();
     await waitFor(() => expect(stored().hymns.slots.opening).toBeNull());
     expect(await screen.findByText("Removed Amazing Grace.")).toBeInTheDocument();
+    // Undo stays 8 s, not sonner's 4 s, so it is there to reach (and the Undo tests never race it).
+    expect(shown).toHaveBeenCalledWith("Removed Amazing Grace.", expect.objectContaining({ duration: UNDO_TOAST_MS }));
+    expect(UNDO_TOAST_MS).toBe(8000);
     await user.click(screen.getByRole("button", { name: "Undo" }));
     expect(await within(opening).findByText("#649 Amazing Grace")).toBeInTheDocument();
     await waitFor(() => expect(stored().hymns.slots.opening).toEqual(pick(GRACE)));
@@ -346,6 +360,132 @@ describe("slot cards (S Slot cards, Notices)", () => {
     await waitFor(() => expect(stored(hopeKey)?.readings.occasion).toBe("Harvest at Hope"));
     expect(stored(hopeKey).hymns.slots.opening).toBeNull();
     expect(stored().hymns.slots.opening).toBeNull(); // Grace's draft is not written either
+  });
+
+  it("Escape from Change's picker gives focus back to Change; Tab moves to its ▾ button, then on, closing it without taking focus back", async () => {
+    const { user } = renderStep(draftWith(slots(pick(COME))));
+    const opening = await screen.findByRole("region", { name: "Opening hymn" });
+    await readyPicker("Response");
+    await user.click(within(opening).getByRole("button", { name: "Change" }));
+    await waitFor(() => expect(within(opening).getByRole("combobox", { name: "Opening hymn" })).toHaveFocus());
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(within(opening).getByRole("button", { name: "Change" })).toHaveFocus());
+
+    await user.keyboard("{Enter}"); // Change, from the keyboard
+    await waitFor(() => expect(within(opening).getByRole("combobox", { name: "Opening hymn" })).toHaveFocus());
+    await user.tab();
+    // The field's own ▾ button: still the picker, so focus is not lost with it.
+    expect(document.activeElement).toHaveAttribute("aria-haspopup", "listbox");
+    expect(opening).toContainElement(document.activeElement as HTMLElement);
+    expect(within(opening).getByRole("combobox", { name: "Opening hymn" })).toBeInTheDocument();
+    await user.tab();
+    // On to the next card's picker; the Opening row is back and focus stays where Tab put it.
+    expect(await within(opening).findByRole("button", { name: "Change" })).toBeInTheDocument();
+    await waitFor(() => expect(within(card("Response")).getByRole("combobox", { name: "Response hymn" })).toHaveFocus());
+    expect(document.activeElement).not.toBe(document.body);
+  });
+
+  it("✕ focuses the card's heading also while the list loads, and in the empty hymnal, never leaving focus on the page", async () => {
+    let release!: () => void;
+    const loaded = new Promise<void>((resolve) => (release = resolve));
+    const listRoute = hymnListRoute(undefined, RECENT);
+    const loading = renderStep(draftWith(slots(pick(COME))), {
+      "GET /hymns": async (req: RecordedRequest) => {
+        await loaded;
+        return listRoute(req);
+      },
+    });
+    const opening = await screen.findByRole("region", { name: "Opening hymn" });
+    await loading.user.click(within(opening).getByRole("button", { name: "Remove Come, Thou Almighty King" }));
+    const heading = within(opening).getByRole("heading", { name: "Opening hymn" });
+    await waitFor(() => expect(heading).toHaveFocus());
+    expect(heading).toHaveAttribute("tabindex", "-1");
+    release();
+    await readyPicker("Opening");
+    expect(heading).toHaveFocus(); // the loaded picker does not take focus later
+    loading.unmount();
+
+    const { user } = renderStep(draftWith(slots(pick(COME))), { "GET /hymnals": hymnals({ items: [], effective_hymnal: null }) });
+    await screen.findByRole("heading", { name: "This church's hymnal is empty" });
+    await user.click(within(card("Opening")).getByRole("button", { name: "Remove Come, Thou Almighty King" }));
+    await waitFor(() => expect(within(card("Opening")).getByRole("heading", { name: "Opening hymn" })).toHaveFocus());
+  });
+
+  it("a pick cleared while Change is open ends Change, so a hymn put back shows its row", async () => {
+    function Elsewhere() {
+      const { update } = useDraft();
+      return (
+        <>
+          <button type="button" onClick={() => update((d) => clearSlot(d, "opening"))}>
+            Clear the opening hymn
+          </button>
+          <button type="button" onClick={() => update((d) => setSlot(d, "opening", pick(GRACE)))}>
+            Choose Amazing Grace
+          </button>
+        </>
+      );
+    }
+    const { user } = renderStep(draftWith(slots(pick(COME))), {}, <Elsewhere />);
+    const opening = await screen.findByRole("region", { name: "Opening hymn" });
+    await readyPicker("Response");
+    await user.click(within(opening).getByRole("button", { name: "Change" }));
+    await waitFor(() => expect(within(opening).getByRole("combobox", { name: "Opening hymn" })).toHaveFocus());
+    // As another tab or an Undo would: fireEvent leaves focus in the picker, so Change stays open.
+    fireEvent.click(screen.getByText("Clear the opening hymn"));
+    expect(within(opening).getByRole("combobox", { name: "Opening hymn" })).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Choose Amazing Grace"));
+    expect(await within(opening).findByText("#649 Amazing Grace")).toBeInTheDocument();
+    expect(within(opening).getByRole("button", { name: "Change" })).toBeInTheDocument();
+    expect(within(opening).queryByRole("combobox")).toBeNull();
+  });
+
+  it("a pick's own hymnal that fails to load says so on its card, with a Retry for that list", async () => {
+    let fail = true;
+    const listRoute = hymnListRoute(undefined, RECENT);
+    const [longExpected] = ph1990();
+    const { user, api } = renderStep(draftWith(slots(pick(longExpected))), {
+      "GET /hymnals": twoHymnals(),
+      "GET /hymns": (req: RecordedRequest) =>
+        fail && req.path.includes("hymnal=PH1990") ? fakeError(500, "internal_error", "Something went wrong.") : listRoute(req),
+    });
+    const opening = await screen.findByRole("region", { name: "Opening hymn" });
+    expect(await within(opening).findByText("Couldn't load PH1990.")).toBeInTheDocument();
+    expect(within(opening).getByText("#1 Come, Thou Long-Expected Jesus")).toBeInTheDocument(); // the snapshot stays
+    expect(screen.queryByText("Couldn't load this church's hymnal.")).toBeNull(); // the selected hymnal's pickers work
+    expect(await readyPicker("Response")).toBeInTheDocument();
+    const retry = within(opening).getByRole("button", { name: "Retry loading PH1990" });
+    expect(retry).toHaveClass("h-11"); // a 44 px touch target
+    const before = api.requests.filter((r) => r.path.includes("hymnal=PH1990")).length;
+    fail = false;
+    await user.click(retry);
+    await waitFor(() => expect(within(opening).queryByText("Couldn't load PH1990.")).toBeNull());
+    expect(api.requests.filter((r) => r.path.includes("hymnal=PH1990")).length).toBe(before + 1);
+    expect(api.requests.filter((r) => r.path.includes("hymnal=GG2013"))).toHaveLength(1); // only that list
+    expect(within(opening).queryByText("Not in your hymnal. Choose a replacement.")).toBeNull();
+  });
+});
+
+describe("useUndoToasts (S Undo toasts never outlive the step)", () => {
+  it("an Undo shown for one church does nothing once the church changes without a remount (the church-id guard)", () => {
+    // The builder shell remounts the step on a church switch (its draft is keyed by church), so
+    // the unmount guard is what acts there; this pins the second guard on its own.
+    const shown = vi.spyOn(toast, "message");
+    let active: ChurchProfile = churchProfile();
+    function Wrapper({ children }: { children: ReactNode }) {
+      return <ChurchProvider value={active}>{children}</ChurchProvider>;
+    }
+    const { result, rerender } = renderHook(() => useUndoToasts(), { wrapper: Wrapper });
+    const undo = vi.fn();
+    const onClick = (i: number) => (shown.mock.calls[i][1]?.action as unknown as { onClick: () => void }).onClick;
+    act(() => result.current("Removed Amazing Grace.", undo));
+    act(() => onClick(0)());
+    expect(undo).toHaveBeenCalledTimes(1); // same church: Undo works
+    act(() => result.current("Removed Amazing Grace.", undo));
+    active = churchProfile({ id: CHURCH_IDS.hope, name: "Hope" });
+    rerender();
+    act(() => onClick(1)());
+    expect(undo).toHaveBeenCalledTimes(1); // shown for Grace, clicked under Hope: nothing
+    act(() => toast.dismiss());
   });
 });
 

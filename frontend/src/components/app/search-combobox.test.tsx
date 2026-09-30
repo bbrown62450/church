@@ -90,6 +90,20 @@ describe("SearchCombobox", () => {
     expect(input).toHaveValue("Item 42");
   });
 
+  it("highlights the top match as the user types, so Enter picks it", async () => {
+    const onChange = vi.fn();
+    const user = userEvent.setup();
+    render(<Host onChange={onChange} />);
+    const input = screen.getByRole("combobox", { name: "Opening hymn" });
+    await user.type(input, "item 2");
+    const options = await screen.findAllByRole("option");
+    expect(options.map((o) => o.textContent)).toEqual(ITEMS.slice(20, 30).map((i) => i.name));
+    expect(options[0]).toHaveAttribute("data-highlighted");
+    await user.keyboard("{Enter}");
+    expect(onChange).toHaveBeenCalledWith({ id: "i20", name: "Item 20" });
+    expect(input).toHaveValue("Item 20");
+  });
+
   it("calls onDismiss on Escape and when focus leaves, but not when an option is clicked", async () => {
     const onDismiss = vi.fn();
     const onChange = vi.fn();
@@ -107,5 +121,23 @@ describe("SearchCombobox", () => {
     // While the list is open the rest of the page is hidden from the accessibility tree, so find it by text.
     await user.click(screen.getByText("Elsewhere"));
     expect(onDismiss).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps Tab from the field to its own ▾ button inside, and dismisses when Tab leaves the combobox", async () => {
+    const onDismiss = vi.fn();
+    const user = userEvent.setup();
+    render(<Host onDismiss={onDismiss} />);
+    const input = screen.getByRole("combobox", { name: "Opening hymn" });
+    await user.click(input);
+    await user.keyboard("{Escape}"); // close the list, so Tab walks the page
+    onDismiss.mockClear();
+    await user.tab();
+    const trigger = document.activeElement;
+    expect(trigger?.tagName).toBe("BUTTON"); // the field's own ▾ button
+    expect(trigger).toHaveAttribute("aria-haspopup", "listbox");
+    expect(onDismiss).not.toHaveBeenCalled();
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Elsewhere" })).toHaveFocus();
+    expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 });

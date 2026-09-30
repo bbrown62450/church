@@ -5,6 +5,9 @@ import { toast } from "sonner";
 
 import { useChurch } from "@/lib/church-context";
 
+/** How long an Undo toast stays: twice sonner's 4 s default, time enough to reach Undo. */
+export const UNDO_TOAST_MS = 8000;
+
 /**
  * Toasts with Undo that never outlive the step (S "Undo toasts never outlive
  * the step"). Sonner's toasts live outside the `(church)` layout, so a closure
@@ -36,6 +39,7 @@ export function useUndoToasts(): (message: string, undo: () => void) => void {
     (message: string, undo: () => void) => {
       const captured = church.id;
       const id = toast.message(message, {
+        duration: UNDO_TOAST_MS,
         action: {
           label: "Undo",
           onClick: () => {

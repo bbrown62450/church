@@ -69,8 +69,10 @@ export type HymnLists = {
   failed: ReadonlySet<string>;
   /** True while any of them is being fetched (a Retry's spinner). */
   fetching: boolean;
-  /** Asks again for every list that failed. */
-  retry: () => void;
+  /** The hymnals being fetched (a pick's own Retry). */
+  fetchingCodes: ReadonlySet<string>;
+  /** Asks again for every list that failed, or only `code`'s. */
+  retry: (code?: string) => void;
 };
 
 /**
@@ -88,8 +90,11 @@ export function useHymnLists(hymnals: readonly (string | null)[], recentForDate:
     lists: new Map(codes.map((code, i) => [code, results[i].data] as const)),
     failed: new Set(codes.filter((_, i) => results[i].isError)),
     fetching: results.some((r) => r.isFetching),
-    retry: () => {
-      for (const r of results) if (r.isError) void r.refetch();
+    fetchingCodes: new Set(codes.filter((_, i) => results[i].isFetching)),
+    retry: (only?: string) => {
+      results.forEach((r, i) => {
+        if (r.isError && (only === undefined || codes[i] === only)) void r.refetch();
+      });
     },
   };
 }
