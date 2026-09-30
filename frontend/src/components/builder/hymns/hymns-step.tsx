@@ -229,7 +229,12 @@ export function HymnsStep() {
                 fallbackHymnal={code}
                 serviceDateIso={dateIso}
                 showHymnal={showHymnal}
-                onSwap={(hymnId) => update((d) => ({ ...d, hymns: swapAlternative(d.hymns, slot, hymnId) }))}
+                onSwap={(hymnId) =>
+                  update((d) => {
+                    const hymns = swapAlternative(d.hymns, slot, hymnId);
+                    return hymns === d.hymns ? d : { ...d, hymns };
+                  })
+                }
               />
             ) : null}
           </HymnSlotCard>
