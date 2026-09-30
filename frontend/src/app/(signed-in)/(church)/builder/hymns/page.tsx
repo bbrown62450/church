@@ -1,8 +1,8 @@
 "use client";
 
-import { StepPlaceholder } from "@/components/builder/step-placeholder";
+import { HymnsStep } from "@/components/builder/hymns/hymns-step";
 
-/** Step: Hymns. Slice 3 replaces the placeholder. */
+/** Step: Hymns (slice 3b). */
 export default function HymnsStepPage() {
-  return <StepPlaceholder step="hymns" />;
+  return <HymnsStep />;
 }

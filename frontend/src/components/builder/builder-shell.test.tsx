@@ -19,11 +19,15 @@ import ReviewStepPage from "@/app/(signed-in)/(church)/builder/review/page";
 import { useDraft } from "@/lib/draft/context";
 import { applyReadingSet, editOccasion, setPick, setTranslation } from "@/lib/draft/readings";
 import { draftKey, type DraftV1 } from "@/lib/draft/schema";
+import { pickFromHymn, setSlot } from "@/lib/hymns/picks";
 import { installFakeApi } from "@/test/fake-api";
 import {
   church,
   churchProfile,
   DRAFT_NOW,
+  gg2013,
+  hymnals,
+  hymnListRoute,
   lectionary,
   lectionaryRoute,
   me,
@@ -61,7 +65,13 @@ function DraftProbe() {
 }
 
 function renderBuilder(page: ReactElement, path: string, lookup = lectionaryRoute()) {
-  installFakeApi({ "GET /church": churchProfile(), "GET /lectionary/readings": lookup, "GET /translations": translations() });
+  installFakeApi({
+    "GET /church": churchProfile(),
+    "GET /lectionary/readings": lookup,
+    "GET /translations": translations(),
+    "GET /hymnals": hymnals(),
+    "GET /hymns": hymnListRoute(),
+  });
   return renderWithProviders(<BuilderLayout>{page}</BuilderLayout>, { me: me(), church: church(), path });
 }
 
@@ -91,7 +101,7 @@ describe("builder shell (F §4.7)", () => {
       const steps = within(screen.getByRole("navigation", { name: "Steps" })).getAllByRole("link");
       expect(steps.map((link) => link.textContent)).toEqual([
         "1 Date & readings 1 of 3", // shipped in 2c: a date, no occasion, no readings
-        "2 Hymns Soon",
+        "2 Hymns 0 of 3", // shipped in 3b: no hymn chosen
         "3 Liturgy Soon",
         "4 Review & send Not in archive",
       ]);
@@ -108,6 +118,10 @@ describe("builder shell (F §4.7)", () => {
         // Date & readings is the real step from slice 2c.
         expect(within(card).getByLabelText("Service date")).toHaveValue("2026-10-04");
         expect(within(card).queryByRole("heading", { name: "Available soon" })).toBeNull();
+      } else if (number === 2) {
+        // Hymns is the real step from slice 3b.
+        expect(within(card).getByText("Choose an opening, response and closing hymn.")).toBeInTheDocument();
+        expect(within(card).queryByRole("heading", { name: "Available soon" })).toBeNull();
       } else {
         expect(within(card).getByRole("heading", { name: "Available soon" })).toBeInTheDocument();
         expect(within(card).getByText("Keep using the current app for this part.")).toBeInTheDocument();
@@ -116,13 +130,18 @@ describe("builder shell (F §4.7)", () => {
 
       const links = within(screen.getByRole("navigation", { name: "Step navigation" })).getAllByRole("link");
       expect(links.map((link) => link.textContent)).toEqual(footer);
-      // Review lists what the shipped step still needs; the other steps do not.
+      // Review lists what the shipped steps still need; the other steps do not.
       if (number === 4) {
         const needed = screen.getByRole("region", { name: "Still needed" });
         expect(within(needed).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
           "No occasion — Add one",
           "No scripture readings — Add one",
+          "No Opening hymn — Choose one",
+          "No Response hymn — Choose one",
+          "No Closing hymn — Choose one",
         ]);
+        const links = within(needed).getAllByRole("link").map((link) => link.getAttribute("href"));
+        expect(links).toEqual(["/builder/readings", "/builder/readings", "/builder/hymns", "/builder/hymns", "/builder/hymns"]);
       } else {
         expect(screen.queryByRole("heading", { name: "Still needed" })).toBeNull();
       }
@@ -151,7 +170,7 @@ describe("builder shell (F §4.7)", () => {
     }
   });
 
-  it("shows the summary: the date and occasion, the readings, Available soon for the rest, and where the draft is kept", async () => {
+  it("shows the summary: the date and occasion, the readings, the hymns, Available soon for liturgy, and where the draft is kept", async () => {
     // A controllable (min-width: 64rem) query, so the test can widen the window past lg.
     const wide = { matches: false, listeners: new Set<() => void>() };
     vi.spyOn(window, "matchMedia").mockImplementation(
@@ -185,10 +204,10 @@ describe("builder shell (F §4.7)", () => {
     expect(within(aside).getByText("No occasion yet")).toBeInTheDocument();
     const readings = within(aside).getByRole("link", { name: "Readings" }).closest("h3");
     expect(readings?.nextElementSibling).toHaveTextContent(/^No readings yet$/);
-    for (const block of ["Hymns", "Liturgy"]) {
-      const heading = within(aside).getByRole("link", { name: block }).closest("h3");
-      expect(heading?.nextElementSibling).toHaveTextContent(/^Available soon$/);
-    }
+    const hymnsBlock = within(aside).getByRole("link", { name: "Hymns" }).closest("h3");
+    expect(hymnsBlock?.nextElementSibling).toHaveTextContent(/^No Opening hymnNo Response hymnNo Closing hymn$/);
+    const liturgy = within(aside).getByRole("link", { name: "Liturgy" }).closest("h3");
+    expect(liturgy?.nextElementSibling).toHaveTextContent(/^Available soon$/);
     expect(within(aside).getByRole("link", { name: "Date" })).toHaveAttribute("href", "/builder/readings");
     expect(within(aside).getByText("Draft saved on this device · Not in archive")).toBeInTheDocument();
 
@@ -300,7 +319,8 @@ describe("the shell with Date & readings shipped (slice 2c)", () => {
     );
     const aside = screen.getByRole("complementary", { name: "Summary" });
     expect(within(aside).getByText("Nineteenth Sunday after Pentecost")).toBeInTheDocument();
-    expect(within(aside).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+    const readingsBlock = within(aside).getByRole("link", { name: "Readings" }).closest("h3")?.nextElementSibling as HTMLElement;
+    expect(within(readingsBlock).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
       "Isaiah 5:1-7OT (auto)",
       "Psalm 80:7-15",
       "Philippians 3:4b-14NT (auto)",
@@ -356,5 +376,49 @@ describe("the shell with Date & readings shipped (slice 2c)", () => {
       "No scripture readings — Add one",
     ]);
     for (const link of within(section).getAllByRole("link")) expect(link).toHaveAttribute("href", "/builder/readings");
+  });
+});
+
+describe("the shell with Hymns shipped (slice 3b)", () => {
+  it("counts Hymns n of 3, then Complete, and the summary lists the three slots in the column and the sheet", async () => {
+    const [, praise, come, grace] = gg2013();
+    seed(setSlot(setSlot(testDraft(), "opening", pickFromHymn(come)), "closing", pickFromHymn(praise)));
+    function FillResponse() {
+      const { update } = useDraft();
+      return (
+        <button type="button" onClick={() => update((d) => setSlot(d, "response", pickFromHymn(grace)))}>
+          Fill Response
+        </button>
+      );
+    }
+    const { user } = renderBuilder(
+      <>
+        <ReviewStepPage />
+        <FillResponse />
+      </>,
+      "/builder/review",
+    );
+    const progress = await screen.findByRole("navigation", { name: "Steps" });
+    expect(within(progress).getAllByRole("link")[1]).toHaveTextContent("2 Hymns 2 of 3");
+    const aside = screen.getByRole("complementary", { name: "Summary" });
+    const hymnsBlock = within(aside).getByRole("link", { name: "Hymns" }).closest("h3")?.nextElementSibling as HTMLElement;
+    expect(within(hymnsBlock).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+      "Opening · #403 Come, Thou Almighty King",
+      "No Response hymn",
+      "Closing · #35 Praise, My Soul, the King of Heaven",
+    ]);
+    expect(within(aside).getByRole("link", { name: "Hymns" })).toHaveAttribute("href", "/builder/hymns");
+    expect(hymnsBlock).not.toHaveTextContent("Available soon");
+    const needed = screen.getByRole("region", { name: "Still needed" });
+    expect(within(needed).getAllByRole("listitem").map((li) => li.textContent)).toContain("No Response hymn — Choose one");
+
+    await user.click(screen.getByRole("button", { name: "Fill Response" }));
+    await waitFor(() => expect(within(progress).getAllByRole("link")[1]).toHaveTextContent("2 Hymns Complete"));
+    expect(within(needed).queryByText(/hymn — Choose one/)).toBeNull();
+    // Below lg the same rows show in the bottom sheet.
+    await user.click(screen.getByRole("button", { name: "Summary" }));
+    const sheet = await screen.findByRole("dialog", { name: "Summary" });
+    expect(within(sheet).getByText("Response · #649 Amazing Grace")).toBeInTheDocument();
+    expect(within(sheet).getByText("Opening · #403 Come, Thou Almighty King")).toBeInTheDocument();
   });
 });

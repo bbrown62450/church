@@ -10,6 +10,8 @@ import { cleanScriptures, effectivePicks } from "@/lib/draft/readings";
 import { SHIPPED_STEPS, stepById, type StepId } from "@/lib/draft/steps";
 import { splitAlternatives } from "@/lib/scripture-refs";
 
+import { SummaryHymns } from "./summary-hymns";
+
 /** A pick matches a line when it is the line or one of its " or " alternatives. */
 function holds(line: string, pick: string | null): boolean {
   return pick !== null && (line === pick || splitAlternatives(line).includes(pick));
@@ -35,13 +37,14 @@ function Soon() {
 /**
  * The draft at a glance (S "SummaryPanel"; F §4.7): a sticky column from
  * `lg`, the bottom sheet below it. Each block links to its step. The Readings
- * block and the occasion line show once "readings" ships (slice 2c); slices 3
- * and 4 replace the Hymns and Liturgy blocks, and 5a wires the archive half
- * of the status line.
+ * block and the occasion line show once "readings" ships (slice 2c), the three
+ * hymns once "hymns" ships (slice 3b); slice 4 replaces the Liturgy block, and
+ * 5a wires the archive half of the status line.
  */
 export function SummaryPanel({ shipped = SHIPPED_STEPS, onNavigate }: { shipped?: ReadonlySet<StepId>; onNavigate?: () => void }) {
   const { draft, persistence } = useDraft();
   const readingsShipped = shipped.has("readings");
+  const hymnsShipped = shipped.has("hymns");
   const lines = cleanScriptures(draft);
   const picks = effectivePicks(draft);
   const saved = persistence === "ok" ? "Draft saved on this device" : "Draft not saved on this device";
@@ -70,7 +73,7 @@ export function SummaryPanel({ shipped = SHIPPED_STEPS, onNavigate }: { shipped?
         )}
       </Block>
       <Block title="Hymns" step="hymns" onNavigate={onNavigate}>
-        <Soon />
+        {hymnsShipped ? <SummaryHymns /> : <Soon />}
       </Block>
       <Block title="Liturgy" step="liturgy" onNavigate={onNavigate}>
         <Soon />

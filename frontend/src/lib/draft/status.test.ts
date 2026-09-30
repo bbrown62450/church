@@ -31,14 +31,14 @@ function withCard(key: keyof DraftV1["liturgy"]["cards"], card: Partial<DraftV1[
 }
 
 describe("steps (S steps.ts)", () => {
-  it("lists the four steps in order, ships Date & readings (2c), and reads a step from its path", () => {
+  it("lists the four steps in order, ships Date & readings (2c) and Hymns (3b), and reads a step from its path", () => {
     expect(STEPS.map((s) => [s.number, s.label, s.href, s.previous, s.next])).toEqual([
       [1, "Date & readings", "/builder/readings", null, "hymns"],
       [2, "Hymns", "/builder/hymns", "readings", "liturgy"],
       [3, "Liturgy", "/builder/liturgy", "hymns", "review"],
       [4, "Review & send", "/builder/review", "liturgy", null],
     ]);
-    expect([...SHIPPED_STEPS]).toEqual(["readings"]);
+    expect([...SHIPPED_STEPS]).toEqual(["readings", "hymns"]);
     expect(stepById("liturgy").label).toBe("Liturgy");
     expect(stepFromPath("/builder/hymns")).toBe("hymns");
     expect(stepFromPath("/builder/review/")).toBe("review");
@@ -51,7 +51,7 @@ describe("steps (S steps.ts)", () => {
 describe("stepStatus (F §4.7)", () => {
   it("shows Soon for unshipped steps and Not in archive for Review", () => {
     const d = testDraft();
-    expect(STEPS.map((s) => stepStatus(d, s.id).kind)).toEqual(["incomplete", "soon", "soon", "not_in_archive"]);
+    expect(STEPS.map((s) => stepStatus(d, s.id).kind)).toEqual(["incomplete", "incomplete", "soon", "not_in_archive"]);
     expect(stepStatus(d, "readings", new Set())).toEqual({ kind: "soon" });
     expect(stepStatus(d, "review", ALL)).toEqual({ kind: "not_in_archive" });
   });
@@ -168,5 +168,30 @@ describe("stillNeeded (S Review \"Still needed\")", () => {
       { step: "readings", message: "No scripture readings", action: "Add one" },
     ]);
     expect(stillNeeded(applyReadingSet(testDraft(), lectionary("2026-10-04"), 0), READINGS)).toEqual([]);
+  });
+
+  it("counts the hymns step n of 3 and lists each empty slot once it ships (slice 3b)", () => {
+    const filled = applyReadingSet(testDraft(), lectionary("2026-10-04"), 0);
+    const withSlots = (slots: Partial<DraftV1["hymns"]["slots"]>) => ({
+      ...filled,
+      hymns: { ...filled.hymns, slots: { ...filled.hymns.slots, ...slots } },
+    });
+    expect(stepStatus(filled, "hymns")).toEqual({ kind: "incomplete", done: 0, total: 3 });
+    expect(stepStatus(withSlots({ opening: HYMN, closing: HYMN }), "hymns")).toEqual({ kind: "incomplete", done: 2, total: 3 });
+    const archived = { ...HYMN, hymn_id: null }; // shown as "Not in your hymnal", still a pick
+    const all = withSlots({ opening: HYMN, response: archived, closing: HYMN });
+    expect(stepStatus(all, "hymns")).toEqual({ kind: "complete" });
+    expect(stillNeeded(filled)).toEqual([
+      { step: "hymns", message: "No Opening hymn", action: "Choose one" },
+      { step: "hymns", message: "No Response hymn", action: "Choose one" },
+      { step: "hymns", message: "No Closing hymn", action: "Choose one" },
+    ]);
+    expect(stillNeeded(withSlots({ response: HYMN }))).toEqual([
+      { step: "hymns", message: "No Opening hymn", action: "Choose one" },
+      { step: "hymns", message: "No Closing hymn", action: "Choose one" },
+    ]);
+    expect(stillNeeded(all)).toEqual([]);
+    expect(stillNeeded(filled, READINGS)).toEqual([]); // before 3b: no hymn rows
+    expect(stillNeeded(filled).some((item) => item.step === "liturgy")).toBe(false); // liturgy not shipped
   });
 });

@@ -5,7 +5,7 @@
 import { inSupportedRange, isValidDateIso } from "@/lib/dates";
 import { cleanLines } from "@/lib/scripture-refs";
 
-import { SECTION_KEYS, SLOTS, type DraftV1, type StepId } from "./schema";
+import { SECTION_KEYS, SLOTS, type DraftV1, type Slot, type StepId } from "./schema";
 import { SHIPPED_STEPS } from "./steps";
 
 export type StepStatus =
@@ -108,6 +108,9 @@ export function withoutTranslation(draft: DraftV1): DraftV1 {
   return { ...draft, readings: { ...draft.readings, translation: null } };
 }
 
+/** The slot names in "No Opening hymn" (the same words as `lib/hymns/labels.ts` `SLOT_META`). */
+const SLOT_NAMES: Record<Slot, string> = { opening: "Opening", response: "Response", closing: "Closing" };
+
 export type NeededItem = {
   step: StepId;
   /** "No service date" */
@@ -116,7 +119,11 @@ export type NeededItem = {
   action: string;
 };
 
-/** What Review lists under "Still needed", from shipped steps only; slices 3 and 4 add their rows. */
+/**
+ * What Review lists under "Still needed", from shipped steps only: the
+ * readings' gaps (2c), then one row per empty hymn slot in slot order (3b,
+ * F §4.7's wording). Slice 4 adds the liturgy's rows.
+ */
 export function stillNeeded(draft: DraftV1, shipped: ReadonlySet<StepId> = SHIPPED_STEPS): NeededItem[] {
   const items: NeededItem[] = [];
   if (shipped.has("readings")) {
@@ -126,6 +133,12 @@ export function stillNeeded(draft: DraftV1, shipped: ReadonlySet<StepId> = SHIPP
     }
     if (cleanLines(draft.readings.scriptures).length === 0) {
       items.push({ step: "readings", message: "No scripture readings", action: "Add one" });
+    }
+  }
+  if (shipped.has("hymns")) {
+    for (const slot of SLOTS) {
+      if (draft.hymns.slots[slot] !== null) continue;
+      items.push({ step: "hymns", message: `No ${SLOT_NAMES[slot]} hymn`, action: "Choose one" });
     }
   }
   return items;
