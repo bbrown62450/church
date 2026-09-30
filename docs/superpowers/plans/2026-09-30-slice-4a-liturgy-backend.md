@@ -4,7 +4,7 @@
 
 **Goal:** Ship PR 4a of slice 4, the liturgy backend, with no screen change. The new app gains `GET /liturgy/config` (user-scoped: the 8 sections with their switch defaults, rows, hints and budgets, the 17 custom-element placements, the order of worship as `OUTLINE`, the communion text, the limits and whether AI is set up) and `POST /liturgy/generate` (church-scoped: one result per requested section, typed text returned exactly as sent, the rest written by the AI at most 4 at a time, AI and prompt failures returned per section inside a 200, charged to the `ai` bucket only for sections that reach the AI). `GET /church` gains `default_benediction`. `liturgy_config.py` becomes the one home of the liturgy constants; `liturgy_prompts` gains the template validator 6a reuses (`check_template`, `template_error`, `validate_prompts`, `clean_prompt_overrides`) and the prompt builder (`build_context`, `build_prompt`/`build_messages` with PR #4's rubric checklist and sermon text and PR #7's voice hook); `prayer_library.py` is the library's one reader. `worship_service` prints communion from `COMMUNION_BLOCKS` (the Word file is unchanged) and loses `generate_liturgy`. There is no migration (head stays `0004_invites_reusable`), the frontend changes only through the regenerated `openapi.json` and `schema.d.ts` plus one test fixture, and production Streamlit (https://liturgy-frozen.streamlit.app/, branch `streamlit-frozen`) is untouched.
 
-**Architecture:** Below the API, importing no FastAPI, Starlette or Streamlit: `liturgy_config.py` (pure data and two rules), `prayer_library.py` (pure reader and chooser), `liturgy_prompts.py` (pure validator and builder), `repos/churches.py` and `repos/hymns.py` (reads in the caller's session), `usecases/liturgy.py` (one session for every read, closed before any AI call; `charge(n)` once; a per-request pool of at most 4). `api/routes/liturgy.py` holds two thin plain-`def` routes and the route models; `SermonText` joins `api/schemas.py`. The OpenAI client (slice 3a) gains optional per-call `timeout_seconds` and `max_retries`, used for Prayers of the People (owner question 1). Tests use `FakeAI`, the SQLite fixtures and slice 2's limiter clock; the no-network guard stays on.
+**Architecture:** Below the API, importing no FastAPI, Starlette or Streamlit: `liturgy_config.py` (pure data and two rules), `prayer_library.py` (pure reader and chooser), `liturgy_prompts.py` (pure validator and builder), `repos/churches.py` and `repos/hymns.py` (reads in the caller's session), `usecases/liturgy.py` (one session for every read, closed before any AI call; `charge(n)` once; a per-request pool of at most 4). `api/routes/liturgy.py` holds two thin plain-`def` routes and the route models; `SermonText` joins `api/schemas.py`. Every AI call carries an 80 s server deadline (F §1.8). The OpenAI client (slice 3a) gains an optional per-call `timeout_seconds`, used for Prayers of the People's 60 s attempts (owner question 1). Tests use `FakeAI`, the SQLite fixtures and slice 2's limiter clock; the no-network guard stays on.
 
 **Tech Stack:** Python 3.11 (`.venv`), FastAPI 0.141.1, Pydantic 2.13.5, SQLAlchemy 2.1.1, python-docx 1.2.0 (installed; `python-docx>=1.0.0`), openai 3.20.0 (installed; `openai>=1.58.0,<4`), Alembic (no new revision), pytest; Next 16 / openapi-typescript 7 for the regenerated types only; GitHub Actions (`backend`, `backend-postgres`, `frontend`, all required on `main`), Railway, Vercel, Supabase Postgres, OpenAI (`gpt-4.1-mini` on Railway).
 
@@ -91,7 +91,7 @@ A directive that does not match exactly once is a stop: the tree is not what the
 ### Buckets, budgets and limits
 - `ai` (slice 2): 40 per 600 s per user and 400 per 86 400 s per church. `/liturgy/generate` has no rate-limit dependency: the usecase calls the route's `charge(n)` once, after hymn resolution and after every section's messages are built, with `n` = the sections about to call the AI, and never with 0 (S semantics 8). So a 401, 403, 404, 422, an override-only request, AI not configured and an all-`prompt_invalid` request cost nothing (unlike `/hymns/suggestions`, where the dependency charges first).
 - Token budgets (`SectionSpec.max_completion_tokens`): 1 500, or 4 000 for Prayers of the People (S Backend 1).
-- OpenAI per attempt: `OPENAI_TIMEOUT_SECONDS` 30 and `OPENAI_MAX_RETRIES` 1, except Prayers of the People: one 60 s attempt, no retry (T11, owner question 1). No deadline is passed (F §1.8 row `/liturgy/generate`: the 15 s slot wait plus the attempts; worst case 15 + 30 + 2 + 30 = 77 s, or 15 + 60 = 75 s for Prayers of the People, inside the client's 90 s).
+- OpenAI per attempt: `OPENAI_TIMEOUT_SECONDS` 30 (read) plus the client's 5 s connect timeout, and `OPENAI_MAX_RETRIES` 1 with a backoff of at most 2 s; Prayers of the People's attempts get 60 s (T11, owner question 1) and keep the retry setting. Every `complete()` call on `/liturgy/generate` gets `deadline=` the start of the request + 80 s (`usecases.liturgy.GENERATE_BUDGET_S`, T7; F §1.8 row `/liturgy/generate`, "~80 s"). With a deadline the client waits at most min(15 s, remaining − 5 s) for a slot, caps each attempt's read timeout at the time remaining, and starts a retry only when at least 5 s remain after the backoff; only the connect (at most 5 s) of the last attempt can run past the deadline. Worst cases: without the deadline an ordinary section could take 15 + (5 + 30) + 2 + (5 + 30) = 87 s, too close to the client's 90 s; with it, 15 + (5 + 30) + 2 + (5 + 28) = 85 s. Prayers of the People: after a 15 s slot wait, 15 + (5 + 60) = 80 s and no retry (0 s left); with no wait, (5 + 60) + 1 + (5 + 14) = 85 s (a short retry, since 15 s were left); a quick failure is retried with the rest of the 80 s. Every section answers within 85 s, inside the client's 90 s.
 - Prompt: `MAX_TEMPLATE_CHARS` 8 000 per template; `MAX_PROMPT_CHARS` 24 000 for system + user; sermon text cut to 2 000; voice profile stripped and cut to 2 000; example cut to 3 000; an answer over 20 000 characters is `ai_upstream_error`.
 - Request limits (S Schemas): `occasion` ≤ 300; `scriptures` ≤ 20 of ≤ 200; `sections` 1-4 `SectionKey`s; `overrides` `SectionKey` → ≤ 20 000; `hymns` is 3a's `SlotHymns` of `HymnRef` (title ≤ 300, number 0-100 000, hymnal ≤ 20, no pattern); `sermon_text` optional `{ref ≤ 200, text ≤ 20 000}`; `extra="forbid"` everywhere.
 
@@ -100,7 +100,7 @@ A directive that does not match exactly once is a stop: the tree is not what the
 1. **Standing permission** for safety and reliability fixes with no owner-visible change (carried from slices 2 and 3). Each is recorded as a numbered clarification: "(owner decision 1; ...)".
 2. **Production Streamlit** is https://liturgy-frozen.streamlit.app/ (branch `streamlit-frozen`), frozen; merges never reach it.
    - The F §6.1 item 6 contingency is off (F §6.1 amendment of 2026-09-28; 3a owner decision 2): no `generate_liturgy` wrapper, no `AppTest` smoke (clarification 2).
-   - `app.py`, `ui_helpers.py`, `streamlit_tenancy.py` and `streamlit_views/*` are untouched. `app.py` on `main` stops importing once T10 deletes `generate_liturgy`, which it imports; that is accepted, as in 2a and 3a (no test imports `app.py`; T1's test only parses its text).
+   - `app.py`, `ui_helpers.py`, `streamlit_tenancy.py` and `streamlit_views/*` are untouched. `app.py` on `main` stops importing once T10 deletes `generate_liturgy`, which it imports; that is accepted, as in 2a and 3a (no test imports `app.py`; T1's test only parses its text, and skips itself once slice 7 deletes `app.py`).
 3. **Railway** keeps its Pre-deploy Command (`alembic upgrade head`) and Healthcheck Path (`/health/ready`); 4a changes neither, and the pre-deploy is a no-op at head `0004`.
 4. **`main` is branch-protected** (`backend`, `backend-postgres`, `frontend`; up to date).
 5. **Owner decisions 2 and 9** (S): typed text is used verbatim and never changed by the AI; generating without a key is allowed (typed sections come back, the rest say "AI not configured"). **Owner decision B**: the first reading's heading is "First Reading" wherever the app shows it (clarifications 3, 4).
@@ -115,9 +115,9 @@ A directive that does not match exactly once is a stop: the tree is not what the
 5. **Testing:** automated tests; the owner's live checks are signed-in Console calls like 3a Task 17 (`GET /liturgy/config`, `POST /liturgy/generate` for a couple of sections including Prayers of the People, `GET /church`'s `default_benediction`), one step at a time.
 
 ### Questions for the owner before the build
-Both are asked in one message before T1 starts; the plan is written for the recommended answers.
-1. **Prayers of the People: one 60 s attempt from the start? (Recommended: yes.)** S Risks 1 plans to add an optional `timeout_seconds` to the OpenAI client only if a live Prayers of the People times out at 30 s. A 10-15 paragraph prayer (about 1 000-1 400 words) can take 20-40 s on `gpt-4.1-mini`, and at 30 s a slow answer would fail, retry and likely fail again after about a minute, costing twice. T11 adds the keyword now (small, additive, tested) and gives only Prayers of the People one 60 s attempt with no retry, so its worst case is 15 s (a slot) + 60 s = 75 s, inside the page's 90 s. The live check (T14) still times a real one. If the owner says no, skip T11 (the counts from T11 on stay 1176), drop T12's F row and S bullet on the timeout, and use T14 Step 7's decision rule as S wrote it.
-2. **"After First Reading" in the custom-element place list? (Recommended: yes.)** Owner decision B renamed the first reading's heading to "First Reading" wherever the app shows it; app.py's place list still says "After Old Testament Reading". T1 serves "After First Reading" (the key `ot_reading` is unchanged, so saved elements keep their place). If the owner prefers the old words, T1's label and its test change back to app.py's exact text.
+Both were asked in one message before T1; the owner answered "yes" to both on 2026-09-30, and the plan is written for those answers.
+1. **Prayers of the People: one 60 s attempt from the start? (Recommended: yes.) Answered 2026-09-30: yes.** *(Plan review, 2026-09-30, owner-visible: the approved "a single 60 s try, no retry" became "60 s tries inside the route's 80 s deadline, with one retry only if time is left" (clarification 16); the controller tells the owner.)* S Risks 1 plans to add an optional `timeout_seconds` to the OpenAI client only if a live Prayers of the People times out at 30 s. A 10-15 paragraph prayer (about 1 000-1 400 words) can take 20-40 s on `gpt-4.1-mini`, and at 30 s a slow answer would fail, retry and likely fail again after about a minute, costing twice. T11 adds the keyword now (small, additive, tested) and gives only Prayers of the People one 60 s attempt with no retry, so its worst case is 15 s (a slot) + 60 s = 75 s, inside the page's 90 s. The live check (T14) still times a real one. If the owner says no, skip T11 (the counts from T11 on stay 1176), drop T12's F row and S bullet on the timeout, and use T14 Step 7's decision rule as S wrote it.
+2. **"After First Reading" in the custom-element place list? (Recommended: yes.) Answered 2026-09-30: yes.** The Word file still prints "Old Testament Reading" until 5a renames that heading (clarification 4); the owner has been told. Owner decision B renamed the first reading's heading to "First Reading" wherever the app shows it; app.py's place list still says "After Old Testament Reading". T1 serves "After First Reading" (the key `ot_reading` is unchanged, so saved elements keep their place). If the owner prefers the old words, T1's label and its test change back to app.py's exact text.
 
 ## Spec clarifications
 
@@ -125,7 +125,7 @@ Code and F win over S; each is owner decision 1 unless marked **owner-visible**.
 
 1. **(Owner answer 1; owner-visible, answered.)** Custom elements have no Generate. T12 adds F D17 and marks S Risks item 7 and S's header line answered. 4a has no `custom` request kind.
 2. **No freeze-contingency code.** F §6.1 item 6 is not in effect, so S Backend 6's "keep `generate_liturgy` instead, as a wrapper", the usecase's `use_library` parameter (used only by that wrapper) and the reviewer amendment's `LEGACY_SYSTEM_PROMPT` / `legacy_default_prompts()` are not built. T10 deletes `generate_liturgy`; `app.py` on `main` then no longer imports (owner decision 2).
-3. **(Owner-visible in 4b; owner question 2.) The first reading's place reads "After First Reading".** S says the 17 placements are app.py:148-166 "verbatim", but owner decision B says "First Reading" wherever the app shows that heading. `CUSTOM_PLACEMENTS` keeps app.py's keys, order and 16 labels and changes that one label; T1's test reads app.py's list from its source (never importing it) and pins the one difference.
+3. **(Owner-visible in 4b; owner question 2.) The first reading's place reads "After First Reading".** S says the 17 placements are app.py:148-166 "verbatim", but owner decision B says "First Reading" wherever the app shows that heading. `CUSTOM_PLACEMENTS` keeps app.py's keys, order and 16 labels and changes that one label; T1's test reads app.py's list from its source (never importing it) and pins the one difference. The test skips, with that reason, when `app.py` is absent (slice 7 deletes it), so it cannot break the suite then.
 4. **The outline/docx test maps one heading until 5a.** `OUTLINE`'s row 7 says "First Reading" (S), but `build_docx` still prints "Old Testament Reading" and the Word files belong to 5a (S "Out of scope"). T2's test reads the docx through `DOCX_HEADINGS_UNTIL_5A = {"ot_reading": "Old Testament Reading"}`; 5a changes `build_docx` and deletes the map in the same PR.
 5. **Section hints live in `SectionSpec.hint`.** S's hint table: Call to Worship and Prayer of Confession as written; Assurance "Added automatically after your text." (4b shows it under the fixed `assurance_response` line); Benediction "Your church's default benediction. Admins can change it in Settings." (4b shows it only while the card's origin is `default`); Prayers of the People none (its chip comes from `pastor_copy_only`).
 6. **`service_rubric` imports `SECTION_ORDER` from `liturgy_config`.** `liturgy_prompts` now imports `service_rubric` (for `format_checklist`), which imported `SECTION_ORDER` from `liturgy_prompts`: an import cycle. The list is the same object (`liturgy_prompts.SECTION_ORDER is liturgy_config.SECTION_ORDER`, pinned in T3).
@@ -138,7 +138,7 @@ Code and F win over S; each is owner decision 1 unless marked **owner-visible**.
 13. **The prayer library reader** (`prayer_library.read_library`): a stored value that is not an object, or whose `prayers` is not a list, reads as the empty library; a single prayer entry of the wrong shape (not an object, a type outside `PRAYER_TYPES`, text not a string) is skipped and the rest kept; a `voice_profile` that is not a string reads as "". The reader enforces none of 6a's write limits. `choose_example` never picks a prayer whose text is blank.
 14. **The rate-limit tests read the bucket by behavior.** With the user's 40 tokens spent on the limiter's `FakeClock` (`limiter_clock`), a request that charges 0 still answers 200 and one that charges 1 gets 429; the 41st-section test spends 36, sends 4 sections, then gets 429 with `Retry-After: 15`.
 15. **The communion characterization compares with a verbatim legacy copy**, in the same run: `test_communion_docx.py` keeps the old `_add_communion_liturgy` as `_legacy_communion` and compares the documents' body XML (with communion, and the helper alone), so the python-docx version (CI installs the newest `>=1.0.0`) cannot matter. A stored hash would.
-16. **(Owner question 1; owner-visible only as "fewer timeouts".)** `complete()` gains optional `timeout_seconds` and `max_retries`; `SectionSpec` gains `timeout_seconds` and `max_retries` (None = the settings); Prayers of the People has 60.0 and 0 (T11). `FakeAI` records the two only when a caller sets them, so 3a's exact-call test is unchanged.
+16. **(Owner question 1, answered yes; owner-visible: the controller tells the owner.)** Every `complete()` call on `/liturgy/generate` carries an 80 s server deadline from the start of the request (T7; the arithmetic is under Global Constraints "Buckets, budgets and limits"): every section answers within 85 s, inside the page's 90 s. `complete()` gains an optional `timeout_seconds`; `SectionSpec` gains `timeout_seconds` (None = the setting); Prayers of the People has 60.0 and keeps `OPENAI_MAX_RETRIES` (T11). `FakeAI` records the keyword only when a caller sets it, so 3a's exact-call test is unchanged. The owner approved "a single 60 s try, no retry"; after the plan review the behavior is "a 60 s try, with one retry only if time is left under the 80 s deadline": a quick failure (an upstream error or a dropped connection in the first seconds) now gets a second try instead of an error, and a 60 s timeout after a slot wait ends the section at 80 s with no retry, as before. One case differs from the approved wording: a 60 s timeout with no slot wait leaves about 15 s, so one short retry (at most about 14 s plus its connect) is tried before the section reports `ai_timeout` at about 85 s instead of 65 s; it rarely succeeds and may cost a second, cut-off call.
 17. **`HymnRef` and `SlotHymns` enter the OpenAPI snapshot** with `/liturgy/generate`, the first route that accepts them. 3a's `test_hymnal_code_pattern_and_models_absent_from_openapi` becomes `test_hymnal_code_pattern_and_models_in_openapi_unchanged`, asserting they are present with no pattern on `hymnal` (T8).
 18. **One frontend test fixture changes** (as 3a clarification 13): `frontend/src/test/fixtures/index.ts`'s `churchProfile()` gains `default_benediction: "Halverson"`; the regenerated `ChurchProfileOut` makes it required and `tsc` fails without it (T9). No frontend test or count changes. 4b treats the field as optional (S).
 19. **`liturgy.generate` also logs a failed call** (`outcome=not_found`, `rate_limited` or `internal_error`), as 3a's suggestion line does; S names only the success line.
@@ -149,7 +149,7 @@ Code and F win over S; each is owner decision 1 unless marked **owner-visible**.
 
 ### Risks carried into the plan
 - **Stored prompts that fail the new checks.** Streamlit never validated them; such a section answers `prompt_invalid` in the new app. The pre-ready check (T13 Steps 9-10) finds them; the owner fixes them in Streamlit before the switch.
-- **Prayers of the People's time and budget (S Risks 1-2).** Unmeasured until the owner's live check (T14 Step 6). With T11, a 60 s single attempt; without it, 30 s plus one retry. An empty or cut-off answer is `ai_upstream_error`, never stored. The decision rule is T14 Step 7.
+- **Prayers of the People's time and budget (S Risks 1-2).** Unmeasured until the owner's live check (T14 Step 6). With T11, 60 s attempts inside the 80 s deadline (a retry only when time is left); without it, 30 s attempts inside the same deadline. An empty or cut-off answer is `ai_upstream_error`, never stored. The decision rule is T14 Step 7.
 - **Frozen `app.py` on `main`** no longer imports after T10 (accepted, owner decision 2).
 - **Cost exposure** is bounded by the `ai` bucket (40 sections per 10 minutes per user, 400 per day per church) and the owner's $15 monthly cap; a full liturgy is about 6 calls (S Risks 5).
 - **Legacy liturgy keys** (S Risks 6) are 5a's.
@@ -161,9 +161,9 @@ Code and F win over S; each is owner decision 1 unless marked **owner-visible**.
 | Path | Responsibility |
 |---|---|
 | `docs/superpowers/plans/2026-09-30-slice-4a-liturgy-backend.md` | this plan |
-| `backend/liturgy_config.py` | `SectionSpec`, `SECTIONS`, `SECTION_ORDER`, `SECTION_LABELS`, `SECTIONS_BY_KEY`, `CUSTOM_PLACEMENTS`, `PLACEMENT_KEYS`, `normalize_placement`, `OutlineItem`, `OUTLINE`, `outline_as_json`, `ASSURANCE_RESPONSE`, `COMMUNION_TITLE`, `COMMUNION_TOGGLE_LABEL`, `CommunionBlock`, `COMMUNION_BLOCKS`, `DEFAULT_BENEDICTION_FALLBACK`, `Limits`, `LIMITS`, `is_first_sunday_of_month`, `resolve_default_benediction` (T1; T11 adds two `SectionSpec` fields) |
+| `backend/liturgy_config.py` | `SectionSpec`, `SECTIONS`, `SECTION_ORDER`, `SECTION_LABELS`, `SECTIONS_BY_KEY`, `CUSTOM_PLACEMENTS`, `PLACEMENT_KEYS`, `normalize_placement`, `OutlineItem`, `OUTLINE`, `outline_as_json`, `ASSURANCE_RESPONSE`, `COMMUNION_TITLE`, `COMMUNION_TOGGLE_LABEL`, `CommunionBlock`, `COMMUNION_BLOCKS`, `DEFAULT_BENEDICTION_FALLBACK`, `Limits`, `LIMITS`, `is_first_sunday_of_month`, `resolve_default_benediction` (T1; T11 adds `SectionSpec.timeout_seconds`) |
 | `backend/prayer_library.py` | `PRAYER_TYPES`, the limits, `Prayer`, `PrayerLibrary`, `EMPTY_LIBRARY`, `read_library`, `choose_example` (T4) |
-| `backend/usecases/liturgy.py` | `HymnRefData`, `SectionOutcome`, `dedupe`, `sections_needing_ai`, `generate_liturgy` (T7; T11 passes the per-call limits) |
+| `backend/usecases/liturgy.py` | `HymnRefData`, `SectionOutcome`, `dedupe`, `sections_needing_ai`, `generate_liturgy`, `GENERATE_BUDGET_S` (T7; T11 passes the per-call timeout) |
 | `backend/api/routes/liturgy.py` | the route models; `GET /liturgy/config`, `POST /liturgy/generate` (T8) |
 | `backend/tests/fixtures/shared/liturgy_sections.json`, `first_sunday.json`, `liturgy_outline.json` | the shared cases 4b's TypeScript reads too (T1) |
 | New test files | `test_liturgy_config` (T1, T2, T11), `test_communion_docx` (T2), `test_prayer_library` (T4), `test_liturgy_generation` (T5, T10), `test_usecase_liturgy` (T7, T11), `test_api_liturgy` (T8) |
@@ -180,7 +180,7 @@ Code and F win over S; each is owner decision 1 unless marked **owner-visible**.
 | `backend/api/schemas.py` | `SermonText` (T8); `ChurchProfileOut.default_benediction` (T9) |
 | `backend/api/main.py` | mount `liturgy` (T8) |
 | `backend/usecases/church_profile.py` | `default_benediction` (T9) |
-| `backend/integrations/openai_client.py` | `complete(..., timeout_seconds=None, max_retries=None)`; `FakeAI` records them (T11) |
+| `backend/integrations/openai_client.py` | `complete(..., timeout_seconds=None)`; `FakeAI` records it (T11) |
 | `backend/tests/test_no_streamlit_in_core.py` | import list (T1, T4, T5, T7) |
 | `backend/tests/test_liturgy_prompts.py` | T3's and T5's tests |
 | `backend/tests/test_churches_repo.py`, `test_hymns_repo.py` | T6's tests |
@@ -313,6 +313,8 @@ import json
 from datetime import date
 from pathlib import Path
 
+import pytest
+
 import liturgy_config as lc
 
 SHARED = Path(__file__).resolve().parent / "fixtures" / "shared"
@@ -366,6 +368,8 @@ def _app_py_placements() -> list[tuple[str, str]]:
     raise AssertionError("CUSTOM_PLACEMENTS not found in app.py")
 
 
+@pytest.mark.skipif(not APP_PY.exists(), reason="app.py is gone (slice 7 deletes the Streamlit app): "
+                    "liturgy_config.CUSTOM_PLACEMENTS is then the only copy of the 17 placements")
 def test_custom_placements_are_app_py_s_17_with_the_first_reading_label():
     frozen = _app_py_placements()
     assert len(frozen) == len(lc.CUSTOM_PLACEMENTS) == 17
@@ -455,7 +459,9 @@ The collection error is `ModuleNotFoundError: No module named 'liturgy_config'`.
 
 The one home of the constants the Streamlit app held (app.py:67, 148-166, the
 four section-list copies and 969-971) and of the communion text that
-worship_service's docx helper held (worship_service.py:68-135):
+worship_service's docx helper held (_add_communion_liturgy,
+worship_service.py:68-135 at 9ab3fa6; the spec's "78-145" is an older
+numbering of the same function):
 
 - SECTIONS (and SECTION_ORDER, SECTION_LABELS): the 8 liturgy sections, their
   default switch states, textarea rows, hints and AI token budgets.
@@ -1547,7 +1553,7 @@ Counts after Task 4: backend **1134 passed, 11 skipped**; frontend **442 in 64**
 
 ### Task 5: The prompt builder, pinned against `generate_liturgy` (S Backend 2 "Prompt building" and its 2026-09-26 amendment; Testing "Characterization first", `test_liturgy_generation.py`, `test_liturgy_prompts.py` additions; AC3, AC19, AC21; BC-8; clarifications 6, 8, 9, 21)
 
-`liturgy_prompts` gains the builder: `sermon_text_block` (moved from `worship_service`, same wording), `ResolvedHymn`, `PromptContext`, `build_context` (the scripture and hymn lines, the opening slot's title, the merged rubric's checklists, the sermon block), `VoiceContext`, `PromptInvalid`, `BuiltPrompt`, `build_prompt` and `build_messages`. `test_liturgy_generation.py` pins the old behavior, including an oracle test that compares every section's messages with what `worship_service.generate_liturgy` sends for the same one-line inputs (T10 removes it with the function), plus the two intentional changes (BC-8), which fail on the old function's behavior. `service_rubric` stops importing from `liturgy_prompts` (clarification 6).
+`liturgy_prompts` gains the builder: `sermon_text_block` (moved from `worship_service`, same wording), `ResolvedHymn`, `PromptContext`, `build_context` (the scripture and hymn lines, the opening slot's title, the merged rubric's checklists, the sermon block), `VoiceContext`, `PromptInvalid`, `BuiltPrompt`, `build_prompt` and `build_messages`. `test_liturgy_generation.py` pins the old behavior, including an oracle test that compares every section's messages with what `worship_service.generate_liturgy` sends for the same one-line inputs (T10 removes it with the function), plus the two intentional changes (BC-8), which, like every test in the new file, fail at collection until the builder exists (Step 2). `service_rubric` stops importing from `liturgy_prompts` (clarification 6).
 
 **Files:**
 - Create: `backend/tests/test_liturgy_generation.py`
@@ -2252,7 +2258,7 @@ Counts after Task 6: backend **1151 passed, 11 skipped**; frontend **442 in 64**
 
 ### Task 7: `usecases/liturgy.generate_liturgy` (S Backend 3 and its amendment; API semantics 1-10; Testing `test_usecase_liturgy.py`; AC3-AC6, AC8 usecase half, AC10, AC19, AC21; F §1.8; clarifications 7, 12, 19, 20)
 
-One call per request: dedupe, split typed and AI sections, read the hymns (404 for any id not in the church) and, only when a section needs the AI, the church's prompts, rubric and prayer library, all in one session closed before any AI call; typed sections come back exactly as sent; no AI configured gives `ai_not_configured` per AI section; otherwise each section's messages are built (`PromptInvalid` is that section's `prompt_invalid`), `charge(n)` runs once, and the sections run at most 4 at a time with typed errors per section.
+One call per request: dedupe, split typed and AI sections, read the hymns (404 for any id not in the church) and, only when a section needs the AI, the church's prompts, rubric and prayer library, all in one session closed before any AI call; typed sections come back exactly as sent; no AI configured gives `ai_not_configured` per AI section; otherwise each section's messages are built (`PromptInvalid` is that section's `prompt_invalid`), `charge(n)` runs once, and the sections run at most 4 at a time, each `complete()` call inside an 80 s server deadline (F §1.8), with typed errors per section.
 
 **Files:**
 - Create: `backend/usecases/liturgy.py`, `backend/tests/test_usecase_liturgy.py`
@@ -2264,8 +2270,8 @@ One call per request: dedupe, split typed and AI sections, read the hymns (404 f
   - `HymnRefData(hymn_id: UUID | None, title: str, number: int | None, hymnal: str | None = None)`
   - `SectionOutcome(section, status: "override" | "generated" | "error", text, error_code, error_message)`
   - `dedupe(sections) -> list[str]`, `sections_needing_ai(sections, overrides) -> list[str]`
-  - `generate_liturgy(*, church_id, user_id, occasion, scriptures, hymns: Mapping[str, HymnRefData | None], sections, overrides, sermon: tuple[str, str] | None = None, charge=lambda n: None, ai=openai_client, choose=random.choice) -> list[SectionOutcome]`; raises `NotFound` (hymn) and whatever `charge` raises (`RateLimited`)
-  - `HYMN_GONE_MESSAGE`, `SECTION_MESSAGES`, `PROMPT_INVALID_MESSAGE`, `MAX_PARALLEL = 4`, `MAX_ANSWER_CHARS = 20_000`
+  - `generate_liturgy(*, church_id, user_id, occasion, scriptures, hymns: Mapping[str, HymnRefData | None], sections, overrides, sermon: tuple[str, str] | None = None, charge=lambda n: None, ai=openai_client, choose=random.choice, clock=time.monotonic) -> list[SectionOutcome]`; raises `NotFound` (hymn) and whatever `charge` raises (`RateLimited`); every `complete()` call gets `deadline=clock() at the start + GENERATE_BUDGET_S`
+  - `HYMN_GONE_MESSAGE`, `SECTION_MESSAGES`, `PROMPT_INVALID_MESSAGE`, `MAX_PARALLEL = 4`, `MAX_ANSWER_CHARS = 20_000`, `GENERATE_BUDGET_S = 80.0`
 
 - [ ] **Step 1 (agent): Write the failing tests**
 
@@ -2275,17 +2281,19 @@ One call per request: dedupe, split typed and AI sections, read the hymns (404 f
 """usecases.liturgy.generate_liturgy (slice 4 spec, Backend 3 and its 2026-09-26
 amendment; Testing `test_usecase_liturgy.py`; API semantics 1-10; AC3-AC6,
 AC8, AC10, AC19, AC21). SQLite `tmp_db`, and a FakeAI passed as `ai=`."""
+import logging
 import threading
 import uuid
 
 import pytest
 
 import liturgy_prompts as lp
-from db import session_scope
+from db import get_engine, session_scope
 from db.models import Hymn
 from domain_errors import Busy, NotConfigured, NotFound, RateLimited, UpstreamError, UpstreamTimeout
 from integrations.openai_client import FakeAI
 from repos import churches
+from repos import hymns as hymn_repo
 from usecases import liturgy
 from usecases.liturgy import HymnRefData
 
@@ -2343,11 +2351,12 @@ def test_without_ai_an_override_is_verbatim_and_the_rest_not_configured(church):
 def test_answers_are_stripped_and_the_church_s_prompts_are_read_fresh(church):
     churches.set_church_prompts(church, {"system": "First voice.", "benediction": "Bless {occasion}."})
     ai = FakeAI(reply="  Go now in peace.\n")
-    (outcome,) = run(church, ["benediction"], ai=ai)
+    (outcome,) = run(church, ["benediction"], ai=ai, clock=lambda: 1000.0)
     assert (outcome.status, outcome.text) == ("generated", "Go now in peace.")
     assert ai.calls[0]["messages"][0]["content"] == "First voice."
     assert user_message(ai.calls[0]).startswith("Bless Third Sunday of Easter.")
     assert ai.calls[0]["max_completion_tokens"] == 1500
+    assert ai.calls[0]["deadline"] == 1080.0            # F §1.8: 80 s from the start of the request
     churches.set_church_prompts(church, {"system": "Second voice."})
     run(church, ["benediction"], ai=ai)
     assert ai.calls[1]["messages"][0]["content"] == "Second voice."
@@ -2379,16 +2388,20 @@ def test_ai_failures_map_to_their_codes_and_never_leak(church, caplog):
     assert ok.status == "generated"
 
 
-def test_a_malformed_template_fails_only_its_own_section(church):
+def test_a_malformed_template_fails_only_its_own_section(church, caplog):
     churches.set_church_prompts(church, {"call_to_worship": '{"a": 1}'})
+    set_settings(church, prayer_library={"prayers": [{"type": "call_to_worship", "text": "Come, all."}]})
     ai = FakeAI(reply="Draft.")
-    outcomes = by_section(run(church, ["call_to_worship", "opening_prayer"], ai=ai))
+    with caplog.at_level(logging.INFO, logger="usecases.liturgy"):
+        outcomes = by_section(run(church, ["call_to_worship", "opening_prayer"], ai=ai))
     assert outcomes["call_to_worship"].error_message == (
         "The Call to Worship prompt in Settings has a problem: Placeholders must be a single word such as "
         "{occasion}. To print a { or } as text, write {{ or }}. An admin can fix it under Settings → "
         "Liturgy prompts.")
     assert outcomes["call_to_worship"].error_code == "prompt_invalid"
     assert outcomes["opening_prayer"].status == "generated" and len(ai.calls) == 1
+    # The Call to Worship example never reached the AI, so the log names none.
+    assert " ai=1 " in caplog.text and " voice=none " in caplog.text
 
 
 def test_the_length_cap_is_the_same_prompt_invalid_message(church):
@@ -2481,7 +2494,7 @@ def test_request_order_after_dedupe_with_four_sections_at_a_time(church):
 
 def test_one_session_reads_everything_and_none_is_open_during_an_ai_call(church, monkeypatch):
     real = liturgy.session_scope
-    state = {"opened": 0, "open": 0, "open_during_ai": []}
+    state = {"opened": 0, "open": 0, "during_ai": []}
 
     class Counting:
         def __enter__(self):
@@ -2494,15 +2507,26 @@ def test_one_session_reads_everything_and_none_is_open_during_an_ai_call(church,
             state["open"] -= 1
             return self.inner.__exit__(*exc)
 
-    monkeypatch.setattr(liturgy, "session_scope", Counting)
     set_settings(church, rubric={"prayers": {"benediction": ["is short"]}},
                  prayer_library={"prayers": [{"type": "benediction", "text": "Go gently."}]})
     churches.set_church_prompts(church, {"system": "Our voice."})
     hymn = add_hymn(church, "Holy, Holy, Holy", 138)
-    ai = FakeAI(reply=lambda messages: state["open_during_ai"].append(state["open"]) or "Draft.")
+    # Counted in the usecase and in both repos it reads through, so a repo that
+    # opened a session of its own would show as a second one.
+    for module in (liturgy, churches, hymn_repo):
+        monkeypatch.setattr(module, "session_scope", Counting)
+    pool = get_engine().pool
+
+    def reply(messages):
+        state["during_ai"].append((state["open"], pool.checkedout()))
+        return "Draft."
+
+    ai = FakeAI(reply=reply)
     run(church, ["benediction", "assurance"], ai=ai,
         hymns={"opening": HymnRefData(hymn_id=hymn, title="x", number=1)})
-    assert state["opened"] == 1 and state["open_during_ai"] == [0, 0]
+    # One session in all; during each AI call no session is open and no
+    # connection is checked out of the pool, whoever opened it.
+    assert state["opened"] == 1 and state["during_ai"] == [(0, 0), (0, 0)]
     benediction = next(c for c in ai.calls if "Benediction" in user_message(c))
     assert benediction["messages"][0]["content"] == "Our voice."
     assert "A good Benediction:\n- is short" in user_message(benediction)
@@ -2600,9 +2624,11 @@ generate_liturgy:
 5. Otherwise builds each section's messages (a PromptInvalid is that section's
    prompt_invalid), charges the `ai` bucket once for the sections left
    (charge(n), never with 0; a 429 it raises stops every AI call), and runs
-   them at most 4 at a time. AI failures, an empty answer and an answer over
-   20 000 characters are per-section errors with this module's messages;
-   upstream text is never returned.
+   them at most 4 at a time, each inside an 80 s deadline from the start of
+   the call (F §1.8: with the last attempt's 5 s connect, at most 85 s, inside
+   the page's 90 s). AI failures, an empty answer and an answer over 20 000
+   characters are per-section errors with this module's messages; upstream
+   text is never returned.
 6. Returns the outcomes in request order.
 
 Logs one `liturgy.generate` INFO line per call (counts, codes, which optional
@@ -2644,6 +2670,10 @@ PROMPT_INVALID_MESSAGE = ("The {label} prompt in Settings has a problem: {reason
                           "An admin can fix it under Settings → Liturgy prompts.")
 MAX_PARALLEL = 4                               # sections of one request at a time
 MAX_ANSWER_CHARS = LIMITS.max_section_text     # a longer answer could not be saved (5a)
+# The server deadline passed to complete() (F §1.8): every slot wait, attempt and
+# retry ends by it; only the last attempt's connect (5 s) can run past, so a call
+# answers within 85 s, inside the client's 90 s.
+GENERATE_BUDGET_S = 80.0
 
 Status = Literal["override", "generated", "error"]
 
@@ -2697,12 +2727,14 @@ def _resolved(ref: Optional[HymnRefData], found: Mapping[uuid.UUID, Any]) -> Opt
     return liturgy_prompts.ResolvedHymn(record.title or "", record.number)
 
 
-def _generate_one(ai: Any, section: str, prompt: liturgy_prompts.BuiltPrompt) -> SectionOutcome:
+def _generate_one(ai: Any, section: str, prompt: liturgy_prompts.BuiltPrompt,
+                  deadline: float) -> SectionOutcome:
     if logger.isEnabledFor(logging.DEBUG):                 # prompts at DEBUG only (F §2.5)
         logger.debug("liturgy.generate section=%s messages=%r", section, prompt.messages)
     try:
         text = ai.complete(prompt.messages,
-                           max_completion_tokens=SECTIONS_BY_KEY[section].max_completion_tokens)
+                           max_completion_tokens=SECTIONS_BY_KEY[section].max_completion_tokens,
+                           deadline=deadline)
     except NotConfigured:
         return _error(section, "ai_not_configured")
     except Busy:
@@ -2730,32 +2762,35 @@ def generate_liturgy(*, church_id: uuid.UUID, user_id: uuid.UUID,
                      sermon: Optional[tuple[str, str]] = None,
                      charge: Callable[[int], None] = lambda n: None,
                      ai: Any = openai_client,
-                     choose: Callable[[Sequence[str]], str] = random.choice) -> list[SectionOutcome]:
+                     choose: Callable[[Sequence[str]], str] = random.choice,
+                     clock: Callable[[], float] = time.monotonic) -> list[SectionOutcome]:
     """One outcome per requested section, in request order (see the module
-    docstring). user_id is for the rate limit only (the route's charge)."""
-    started = time.monotonic()
+    docstring). user_id is for the rate limit only (the route's charge).
+    clock is time.monotonic, the clock complete() reads its deadline on."""
+    started = clock()
+    deadline = started + GENERATE_BUDGET_S
     wanted = dedupe(sections)
     need_ai = sections_needing_ai(wanted, overrides)
     facts: dict[str, Any] = {"church": church_id, "sections": len(wanted), "ai": 0}
     try:
         outcomes = _generate(church_id, occasion, scriptures, hymns, wanted, need_ai, overrides,
-                             sermon, charge, ai, choose, facts)
+                             sermon, charge, ai, choose, deadline, facts)
     except DomainError as exc:
-        _log(facts, started, outcome=exc.code)
+        _log(facts, started, clock, outcome=exc.code)
         raise
     except Exception:
-        _log(facts, started, outcome="internal_error")
+        _log(facts, started, clock, outcome="internal_error")
         raise
     counts = Counter(o.status for o in outcomes)
     codes = Counter(o.error_code for o in outcomes if o.error_code)
     facts["outcomes"] = ",".join(f"{k}:{counts[k]}" for k in ("generated", "override", "error"))
     facts["codes"] = ",".join(f"{code}:{n}" for code, n in sorted(codes.items())) or "-"
-    _log(facts, started, outcome="ok")
+    _log(facts, started, clock, outcome="ok")
     return outcomes
 
 
 def _generate(church_id, occasion, scriptures, hymns, wanted, need_ai, overrides, sermon,
-              charge, ai, choose, facts) -> list[SectionOutcome]:
+              charge, ai, choose, deadline, facts) -> list[SectionOutcome]:
     ids = [ref.hymn_id for ref in hymns.values() if ref is not None and ref.hymn_id is not None]
     stored_prompts: Mapping[str, Any] = {}
     rubric_overrides: Mapping[str, Any] = {}
@@ -2781,15 +2816,16 @@ def _generate(church_id, occasion, scriptures, hymns, wanted, need_ai, overrides
             rubric=rubric_overrides, sermon_ref=sermon_ref, sermon_text=sermon_text)
         prompts = liturgy_prompts.merge_prompts(stored_prompts)
         built: dict[str, liturgy_prompts.BuiltPrompt] = {}
-        examples = 0
+        examples = 0                            # chosen for sections that reach the AI
         for section in need_ai:
             example = prayer_library.choose_example(library, section, choose=choose)
-            examples += example is not None
             voice = liturgy_prompts.VoiceContext(profile=library.voice_profile, example=example)
             try:
                 built[section] = liturgy_prompts.build_prompt(section, prompts, ctx, voice=voice)
             except liturgy_prompts.PromptInvalid as exc:
                 outcomes[section] = _prompt_invalid(section, exc.reason)
+            else:
+                examples += example is not None
         facts.update(
             rubric="custom" if rubric_overrides else "default",
             sermon="yes" if ctx.sermon else "no",
@@ -2802,18 +2838,18 @@ def _generate(church_id, occasion, scriptures, hymns, wanted, need_ai, overrides
             with ThreadPoolExecutor(max_workers=min(MAX_PARALLEL, len(built)),
                                     thread_name_prefix="liturgy") as pool:
                 futures = {section: pool.submit(contextvars.copy_context().run, _generate_one,
-                                                ai, section, prompt)
+                                                ai, section, prompt, deadline)
                            for section, prompt in built.items()}
                 outcomes.update({section: future.result() for section, future in futures.items()})
     return [outcomes[section] for section in wanted]
 
 
-def _log(facts: Mapping[str, Any], started: float, *, outcome: str) -> None:
+def _log(facts: Mapping[str, Any], started: float, clock: Callable[[], float], *, outcome: str) -> None:
     """One line per call (S Backend 3 "Logging"): never a prompt, an answer or
     any client text."""
     details = " ".join(f"{key}={value}" for key, value in facts.items())
     logger.info("liturgy.generate %s duration_ms=%d outcome=%s", details,
-                round((time.monotonic() - started) * 1000), outcome)
+                round((clock() - started) * 1000), outcome)
 ````
 
 **In `backend/tests/test_no_streamlit_in_core.py`, replace:**
@@ -2847,16 +2883,16 @@ configured. Hymns resolve within the church (any other id is the 404); the
 prompts, rubric and prayer library are read fresh in the same session,
 closed before any AI call. A bad template fails only its own section. The
 ai bucket is charged once, only for sections that reach the AI, and at most
-4 run at a time. AI failures are per-section errors with S's messages; no
-upstream text is returned. One liturgy.generate line per call, no prompt
-text at INFO." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+4 run at a time, inside an 80 s server deadline. AI failures are per-section
+errors with S's messages; no upstream text is returned. One liturgy.generate
+line per call, no prompt text at INFO." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 git log --oneline -1
 ```
 
 - [ ] **Step 6 (controller): Review checkpoint and backup push**
 
-Check against S API semantics 1-10: `charge` is called after hymn resolution and after every `build_prompt`, once, never with 0; the session closes before the pool starts; the messages equal S's table. `grep -n "logger\." backend/usecases/liturgy.py`: the DEBUG prompt and answer lines, the `logger.exception` for an unexpected error (no message text), the unusable-answer WARNING (length only) and the one INFO line (counts and ids only). Push the backup.
+Check against S API semantics 1-10: `charge` is called after hymn resolution and after every `build_prompt`, once, never with 0; the session closes before the pool starts; every `complete()` call carries `deadline=` (`GENERATE_BUDGET_S` from the start); the messages equal S's table. `grep -n "logger\." backend/usecases/liturgy.py`: the DEBUG prompt and answer lines, the `logger.exception` for an unexpected error (no message text), the unusable-answer WARNING (length only) and the one INFO line (counts and ids only). Push the backup.
 
 Counts after Task 7: backend **1165 passed, 11 skipped**; frontend **442 in 64**.
 
@@ -3989,18 +4025,18 @@ Compare the old and new `test_generate_liturgy.py` case by case (each assertion 
 
 Counts after Task 10: backend **1176 passed, 11 skipped**; frontend **442 in 64**.
 
-### Task 11: Prayers of the People gets one 60 s attempt (S Risks 1; F §1.8, §2.8; owner question 1; clarification 16)
+### Task 11: Prayers of the People gets a 60 s attempt (S Risks 1; F §1.8, §2.8; owner question 1, answered yes; clarification 16)
 
-**Only if the owner answered "yes" to question 1.** Otherwise skip this task; the counts stay at 1176 and T12 leaves out the F row and the S bullet about the timeout (T12 Step 1 says how).
+The owner answered "yes" to question 1 on 2026-09-30, so this task runs. (Had the answer been "no", it would be skipped, the counts would stay at 1176 and T12 would leave out the F row and the S bullet about the timeout; T12 Step 1 says how.)
 
-`complete()` gains optional per-call `timeout_seconds` (> 0) and `max_retries` (>= 0) that replace the settings for that call; a deadline still caps the attempt. `FakeAI` records them only when set. `SectionSpec` gains the two fields (None = the settings), and Prayers of the People has 60.0 and 0.
+`complete()` gains an optional per-call `timeout_seconds` (> 0) that replaces `OPENAI_TIMEOUT_SECONDS` for that call; the deadline still caps each attempt and still decides whether a retry fits (`OPENAI_MAX_RETRIES`, 1, is unchanged). `FakeAI` records it only when set. `SectionSpec` gains `timeout_seconds` (None = the setting), and Prayers of the People has 60.0. With T7's 80 s deadline, a quick failure is retried, while a 60 s attempt that times out after a slot wait is not (plan review fix M1+M2; see clarification 16 for the timings).
 
 **Files:**
 - Modify: `backend/integrations/openai_client.py`, `backend/liturgy_config.py`, `backend/usecases/liturgy.py`, `backend/tests/test_openai_client.py`, `backend/tests/test_usecase_liturgy.py`, `backend/tests/test_liturgy_config.py`
 
 **Interfaces:**
-- Consumes: `openai_client._complete`'s loop (3a); `liturgy_config.SECTIONS_BY_KEY` (T1).
-- Produces: `openai_client.complete(messages, *, max_completion_tokens, json_mode=False, deadline=None, timeout_seconds=None, max_retries=None)`; `FakeAI.complete` with the same keywords; `SectionSpec.timeout_seconds: float | None = None`, `SectionSpec.max_retries: int | None = None`.
+- Consumes: `openai_client._complete`'s loop (3a); `liturgy_config.SECTIONS_BY_KEY` (T1); `usecases.liturgy._generate_one`'s `deadline` (T7).
+- Produces: `openai_client.complete(messages, *, max_completion_tokens, json_mode=False, deadline=None, timeout_seconds=None)`; `FakeAI.complete` with the same keywords; `SectionSpec.timeout_seconds: float | None = None`.
 
 - [ ] **Step 1 (agent): Write the failing tests**
 
@@ -4009,31 +4045,46 @@ Counts after Task 10: backend **1176 passed, 11 skipped**; frontend **442 in 64*
 ````python
 
 
-# --- slice 4a: per-call timeout and retries (slice 4 spec, Risks 1) ---------------------
+# --- slice 4a: a per-call attempt timeout (slice 4 spec, Risks 1) ------------------------
 
 
-def test_a_call_can_set_its_own_timeout_and_retries():
-    sdk, sleeps = setup(sdk_error("server"), '{"ok": true}')
-    with pytest.raises(UpstreamError):
-        ai.complete(MESSAGES, max_completion_tokens=10, timeout_seconds=60.0, max_retries=0)
-    assert len(sdk.calls) == 1 and sleeps == []                  # no retry
-    assert (sdk.calls[0]["timeout"].read, sdk.calls[0]["timeout"].connect) == (60.0, 5.0)
+def test_a_call_can_set_its_own_attempt_timeout_inside_the_deadline():
+    """Prayers of the People: 60 s attempts inside /liturgy/generate's 80 s deadline."""
     clock = FakeClock()
-    sdk, _ = setup('{"ok": true}', clock=clock.now)
-    ai.complete(MESSAGES, max_completion_tokens=10, timeout_seconds=60.0, deadline=clock.now() + 20.0)
-    assert sdk.calls[0]["timeout"].read == 20.0                  # a deadline still wins
-    sdk, _ = setup(sdk_error("server"), '{"ok": true}')
-    assert ai.complete(MESSAGES, max_completion_tokens=10) == '{"ok": true}'   # the settings: one retry
-    assert sdk.calls[1]["timeout"].read == 30.0
-    for bad in ({"timeout_seconds": 0}, {"timeout_seconds": -1.0}, {"max_retries": -1}):
+    sdk, sleeps = setup(sdk_error("server"), '{"ok": true}', clock=clock.now)
+    assert ai.complete(MESSAGES, max_completion_tokens=10, timeout_seconds=60.0,
+                       deadline=clock.now() + 80.0) == '{"ok": true}'
+    assert [(c["timeout"].read, c["timeout"].connect) for c in sdk.calls] == [(60.0, 5.0), (60.0, 5.0)]
+    assert sleeps == [1.0]                                       # a quick failure is retried
+    reads = []
+
+    def time_out(**kwargs):                                     # each attempt runs to its timeout
+        reads.append(kwargs["timeout"].read)
+        clock.advance(kwargs["timeout"].read)
+        raise sdk_error("timeout")
+
+    # After a 15 s slot wait, a 60 s timeout leaves 5 s: no retry. Straight
+    # away, it leaves 20 s: one retry, capped by the deadline.
+    for waited, expected in ((15.0, [60.0]), (0.0, [60.0, 20.0])):
+        sdk, _ = setup(clock=clock.now)
+        sdk.chat.completions.create = time_out
+        reads.clear()
+        deadline = clock.now() + 80.0
+        clock.advance(waited)
+        with pytest.raises(UpstreamTimeout):
+            ai.complete(MESSAGES, max_completion_tokens=10, timeout_seconds=60.0, deadline=deadline)
+        assert reads == expected, waited
+    sdk, _ = setup('{"ok": true}')
+    ai.complete(MESSAGES, max_completion_tokens=10)
+    assert sdk.calls[0]["timeout"].read == 30.0                  # without it: the setting
+    for bad in (0, -1.0):
         with pytest.raises(ValueError):
-            ai.complete(MESSAGES, max_completion_tokens=10, **bad)
+            ai.complete(MESSAGES, max_completion_tokens=10, timeout_seconds=bad)
     fake = ai.FakeAI(reply="ok")
     ai.set_ai_for_tests(fake)
-    ai.complete(MESSAGES, max_completion_tokens=10, timeout_seconds=60.0, max_retries=0)
+    ai.complete(MESSAGES, max_completion_tokens=10, timeout_seconds=60.0)
     ai.complete(MESSAGES, max_completion_tokens=10)
-    assert (fake.calls[0]["timeout_seconds"], fake.calls[0]["max_retries"]) == (60.0, 0)
-    assert "timeout_seconds" not in fake.calls[1] and "max_retries" not in fake.calls[1]
+    assert fake.calls[0]["timeout_seconds"] == 60.0 and "timeout_seconds" not in fake.calls[1]
 ````
 
 **Append to `backend/tests/test_usecase_liturgy.py`:**
@@ -4041,13 +4092,13 @@ def test_a_call_can_set_its_own_timeout_and_retries():
 ````python
 
 
-def test_prayers_of_the_people_gets_one_60_second_attempt(church):
-    """S Risks 1: 15 s for a slot plus one 60 s attempt fits the client's 90 s."""
+def test_prayers_of_the_people_gets_60_second_attempts_inside_the_deadline(church):
+    """S Risks 1: 60 s per attempt; the 80 s deadline decides whether a retry fits."""
     ai = FakeAI(reply="Draft.")
-    run(church, ["prayers_of_the_people", "benediction"], ai=ai)
+    run(church, ["prayers_of_the_people", "benediction"], ai=ai, clock=lambda: 1000.0)
     calls = {("Prayers of the People" in user_message(c)): c for c in ai.calls}
-    assert (calls[True]["timeout_seconds"], calls[True]["max_retries"]) == (60.0, 0)
-    assert "timeout_seconds" not in calls[False] and "max_retries" not in calls[False]
+    assert (calls[True]["timeout_seconds"], calls[True]["deadline"]) == (60.0, 1080.0)
+    assert "timeout_seconds" not in calls[False] and calls[False]["deadline"] == 1080.0
 ````
 
 **In `backend/tests/test_liturgy_config.py`, replace:**
@@ -4062,7 +4113,7 @@ def test_prayers_of_the_people_gets_one_60_second_attempt(church):
 ````python
         assert (spec.rows, spec.max_completion_tokens, spec.pastor_copy_only) == (
             (8, 4000, True) if pastor else (4, 1500, False)), spec.key
-        assert (spec.timeout_seconds, spec.max_retries) == ((60.0, 0) if pastor else (None, None)), spec.key
+        assert spec.timeout_seconds == (60.0 if pastor else None), spec.key
 ````
 
 - [ ] **Step 2 (agent): Run them to see them fail**
@@ -4074,13 +4125,10 @@ def test_prayers_of_the_people_gets_one_60_second_attempt(church):
 **Expected:**
 
 ```
-FAILED backend/tests/test_openai_client.py::test_a_call_can_set_its_own_timeout_and_retries
-FAILED backend/tests/test_usecase_liturgy.py::test_prayers_of_the_people_gets_one_60_second_attempt
-FAILED backend/tests/test_liturgy_config.py::test_rows_budgets_pastor_copy_and_hints
-3 failed, 46 passed in <t>s
+@@RED11@@
 ```
 
-- [ ] **Step 3 (agent): Add the keywords and use them**
+- [ ] **Step 3 (agent): Add the keyword and use it**
 
 **In `backend/integrations/openai_client.py`, replace:**
 
@@ -4096,14 +4144,13 @@ FAILED backend/tests/test_liturgy_config.py::test_rows_budgets_pastor_copy_and_h
 
 ````python
 - ai_available() and complete(messages, *, max_completion_tokens,
-  json_mode=False, deadline=None, timeout_seconds=None, max_retries=None)
-  -> str. complete() always sends max_completion_tokens, sends
-  response_format json_object in json_mode, and temperature and
-  reasoning_effort only when they are set. It holds one of
-  OPENAI_MAX_CONCURRENCY slots per call and retries itself (the SDK client
-  has max_retries=0). timeout_seconds and max_retries replace
-  OPENAI_TIMEOUT_SECONDS and OPENAI_MAX_RETRIES for one call (slice 4:
-  Prayers of the People gets 60 s and no retry).
+  json_mode=False, deadline=None, timeout_seconds=None) -> str. complete()
+  always sends max_completion_tokens, sends response_format json_object in
+  json_mode, and temperature and reasoning_effort only when they are set. It
+  holds one of OPENAI_MAX_CONCURRENCY slots per call and retries itself (the
+  SDK client has max_retries=0). timeout_seconds replaces
+  OPENAI_TIMEOUT_SECONDS for one call; a deadline still caps each attempt
+  (slice 4: Prayers of the People gets 60 s attempts).
 ````
 
 **In `backend/integrations/openai_client.py`, replace:**
@@ -4120,14 +4167,11 @@ FAILED backend/tests/test_liturgy_config.py::test_rows_budgets_pastor_copy_and_h
 
 ````python
     def complete(self, messages, *, max_completion_tokens: int, json_mode: bool = False,
-                 deadline: Optional[float] = None, timeout_seconds: Optional[float] = None,
-                 max_retries: Optional[int] = None) -> str:
+                 deadline: Optional[float] = None, timeout_seconds: Optional[float] = None) -> str:
         call = {"messages": [dict(m) for m in messages], "max_completion_tokens": max_completion_tokens,
                 "json_mode": json_mode, "deadline": deadline}
-        if timeout_seconds is not None:                 # recorded only when a caller sets them
+        if timeout_seconds is not None:                 # recorded only when a caller sets it
             call["timeout_seconds"] = timeout_seconds
-        if max_retries is not None:
-            call["max_retries"] = max_retries
         self.calls.append(call)
 ````
 
@@ -4149,25 +4193,19 @@ def complete(messages: Sequence[Mapping[str, str]], *, max_completion_tokens: in
 ````python
 def complete(messages: Sequence[Mapping[str, str]], *, max_completion_tokens: int,
              json_mode: bool = False, deadline: Optional[float] = None,
-             timeout_seconds: Optional[float] = None, max_retries: Optional[int] = None) -> str:
+             timeout_seconds: Optional[float] = None) -> str:
     """The reply's text. Raises NotConfigured, Busy, UpstreamTimeout or
     UpstreamError (F §2.8's codes, this module's messages); never an SDK error.
-    timeout_seconds (> 0) and max_retries (>= 0), when given, replace the
-    settings' per-attempt timeout and retry count for this call."""
+    timeout_seconds (> 0), when given, replaces the settings' per-attempt
+    timeout for this call; the deadline still caps each attempt."""
     if timeout_seconds is not None and not timeout_seconds > 0:
         raise ValueError("timeout_seconds must be positive")
-    if max_retries is not None and max_retries < 0:
-        raise ValueError("max_retries must not be negative")
     if _override is not None:
-        extra: dict[str, Any] = {}
-        if timeout_seconds is not None:
-            extra["timeout_seconds"] = timeout_seconds
-        if max_retries is not None:
-            extra["max_retries"] = max_retries
+        extra = {} if timeout_seconds is None else {"timeout_seconds": timeout_seconds}
         return _override.complete(messages, max_completion_tokens=max_completion_tokens,
                                   json_mode=json_mode, deadline=deadline, **extra)
     return _complete(_current(), messages, max_completion_tokens, json_mode, deadline,
-                     timeout_seconds=timeout_seconds, max_retries=max_retries)
+                     timeout_seconds=timeout_seconds)
 ````
 
 **In `backend/integrations/openai_client.py`, replace:**
@@ -4182,11 +4220,9 @@ def _complete(state: _State, messages, max_completion_tokens: int, json_mode: bo
 
 ````python
 def _complete(state: _State, messages, max_completion_tokens: int, json_mode: bool,
-              deadline: Optional[float], *, timeout_seconds: Optional[float] = None,
-              max_retries: Optional[int] = None) -> str:
+              deadline: Optional[float], *, timeout_seconds: Optional[float] = None) -> str:
     settings = state.settings
     per_attempt = settings.timeout_seconds if timeout_seconds is None else timeout_seconds
-    retry_limit = settings.max_retries if max_retries is None else max_retries
 ````
 
 **In `backend/integrations/openai_client.py`, replace:**
@@ -4201,18 +4237,6 @@ def _complete(state: _State, messages, max_completion_tokens: int, json_mode: bo
             timeout = per_attempt if remaining is None else min(per_attempt, remaining)
 ````
 
-**In `backend/integrations/openai_client.py`, replace:**
-
-````python
-                mapped_later = retries >= settings.max_retries or not _retryable(exc)
-````
-
-**with:**
-
-````python
-                mapped_later = retries >= retry_limit or not _retryable(exc)
-````
-
 **In `backend/liturgy_config.py`, replace:**
 
 ````python
@@ -4225,11 +4249,10 @@ def _complete(state: _State, messages, max_completion_tokens: int, json_mode: bo
 ````python
     hint: Optional[str]
     max_completion_tokens: int
-    # Per-call overrides of OPENAI_TIMEOUT_SECONDS and OPENAI_MAX_RETRIES (S Risks 1):
-    # a long prayer gets one 60 s attempt; 15 s for a slot + 60 s stays inside
-    # the client's 90 s (F §1.8). None: the settings apply.
+    # A per-call override of OPENAI_TIMEOUT_SECONDS (S Risks 1): a long prayer
+    # gets 60 s attempts. The usecase's 80 s deadline still caps each attempt
+    # and allows a retry only when time is left (F §1.8). None: the setting.
     timeout_seconds: Optional[float] = None
-    max_retries: Optional[int] = None
 ````
 
 **In `backend/liturgy_config.py`, replace:**
@@ -4242,7 +4265,7 @@ def _complete(state: _State, messages, max_completion_tokens: int, json_mode: bo
 
 ````python
     SectionSpec("prayers_of_the_people", "Prayers of the People", False, 8, True, None, 4000,
-                timeout_seconds=60.0, max_retries=0),
+                timeout_seconds=60.0),
 ````
 
 **In `backend/usecases/liturgy.py`, replace:**
@@ -4250,17 +4273,18 @@ def _complete(state: _State, messages, max_completion_tokens: int, json_mode: bo
 ````python
     try:
         text = ai.complete(prompt.messages,
-                           max_completion_tokens=SECTIONS_BY_KEY[section].max_completion_tokens)
+                           max_completion_tokens=SECTIONS_BY_KEY[section].max_completion_tokens,
+                           deadline=deadline)
 ````
 
 **with:**
 
 ````python
     spec = SECTIONS_BY_KEY[section]
-    limits = {name: value for name, value in (("timeout_seconds", spec.timeout_seconds),
-                                              ("max_retries", spec.max_retries)) if value is not None}
+    extra = {} if spec.timeout_seconds is None else {"timeout_seconds": spec.timeout_seconds}
     try:
-        text = ai.complete(prompt.messages, max_completion_tokens=spec.max_completion_tokens, **limits)
+        text = ai.complete(prompt.messages, max_completion_tokens=spec.max_completion_tokens,
+                           deadline=deadline, **extra)
 ````
 
 - [ ] **Step 4 (agent): Run the tests and the suite**
@@ -4277,17 +4301,18 @@ git status --short
 
 ```bash
 git add backend/integrations/openai_client.py backend/liturgy_config.py backend/usecases/liturgy.py backend/tests/test_openai_client.py backend/tests/test_usecase_liturgy.py backend/tests/test_liturgy_config.py
-git commit -q -m "AI: one 60 s attempt for Prayers of the People (S Risks 1; owner answer to plan question 1)" -m "complete() takes optional timeout_seconds and max_retries for one call,
-still capped by a deadline. Prayers of the People, 10-15 paragraphs, gets
-one 60 s attempt with no retry: 15 s for a slot plus 60 s stays inside the
-page's 90 s. Every other section keeps 30 s and one retry." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+git commit -q -m "AI: 60 s attempts for Prayers of the People (S Risks 1; owner answer to plan question 1)" -m "complete() takes an optional timeout_seconds for one call, still capped
+by the deadline. Prayers of the People, 10-15 paragraphs, gets 60 s
+attempts inside the route's 80 s deadline: a quick failure is retried, and a
+slow attempt ends the call in time for the page's 90 s. Every other section
+keeps 30 s and one retry." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 git log --oneline -1
 ```
 
 - [ ] **Step 6 (controller): Review checkpoint and backup push**
 
-`git show HEAD -- backend/integrations/openai_client.py`: with neither keyword the call is exactly as before (3a's tests unchanged). Push the backup.
+`git show HEAD -- backend/integrations/openai_client.py`: without the keyword the call is exactly as before (3a's tests unchanged); the retry rule is untouched. Push the backup.
 
 Counts after Task 11: backend **1178 passed, 11 skipped**; frontend **442 in 64**.
 
@@ -4298,7 +4323,7 @@ Counts after Task 11: backend **1178 passed, 11 skipped**; frontend **442 in 64*
 
 - [ ] **Step 1 (agent): Write the docs**
 
-If T11 was skipped (owner question 1 answered "no"), leave out the F row that starts `| §1.8, §2.8 | *(2026-09-30, slice 4a plan)*` and replace S's bullet that starts `- **Prayers of the People timeout**` with: `- **Prayers of the People timeout** (Risks 1): unchanged in 4a (30 s and one retry); the owner's live check after the merge measures a real one, and the follow-up in Risks 1 applies if it times out.`
+The owner answered "yes" to question 1, so T11 ran and the docs below are written as they stand. (Had T11 been skipped, the F row would keep only its first sentence, about the 80 s deadline, and S's bullet that starts `- **Prayers of the People timeout**` would read: `- **Prayers of the People timeout** (Risks 1): 30 s attempts inside the route's 80 s deadline in 4a; the owner's live check after the merge measures a real one, and the follow-up in Risks 1 applies if it times out.`)
 
 **In `docs/superpowers/specs/2026-09-25-migration-foundations-design.md`, replace:**
 
@@ -4322,7 +4347,7 @@ The member's own choice always wins, and the AI's top pick stays one tap away as
 **with:**
 
 ````markdown
-| §1.8, §2.8 | *(2026-09-30, slice 4a plan)* `complete()` also takes optional `timeout_seconds` and `max_retries`, which replace `OPENAI_TIMEOUT_SECONDS` and `OPENAI_MAX_RETRIES` for one call. `POST /liturgy/generate` gives Prayers of the People one 60 s attempt with no retry (slice 4 Risks 1), so its worst case is 15 s for a slot plus 60 s, inside the 90 s client timeout; the other sections keep 30 s and one retry. | 4a |
+| §1.8, §2.8 | *(2026-09-30, slice 4a plan)* `POST /liturgy/generate` passes an 80 s server deadline (from the start of the request) to every `complete(deadline=…)` call: the slot wait, each attempt and any retry end by it, and only the last attempt's 5 s connect can run past, so a section answers within 85 s, inside the 90 s client timeout (without a deadline, 15 + (5 + 30) + 2 + (5 + 30) = 87 s was possible). `complete()` also takes an optional `timeout_seconds`, which replaces `OPENAI_TIMEOUT_SECONDS` for one call: Prayers of the People gets 60 s attempts (slice 4 Risks 1) and keeps `OPENAI_MAX_RETRIES`, so a quick failure is retried while a 60 s timeout after a slot wait leaves no time for one; the other sections keep 30 s. | 4a |
 | §4.6, §4.7, §4.9 | *(2026-09-29, slice 3b plan)*
 ````
 
@@ -4369,7 +4394,7 @@ The member's own choice always wins, and the AI's top pick stays one tap away as
 - **Stored JSON** (Data): a non-object `liturgy_prompts` value reads as no overrides, `merge_prompts` ignores values that are not strings, and `validate_prompts` checks only the overrides `merge_prompts` would use.
 - **Hymns** (Backend 6): `repos.hymns.get_hymns_by_ids` returns 3a's `HymnRecord`s; the usecase answers any id it does not find (another church's, a deleted hymn, a malformed id) with the 404 message.
 - **Prayer library** (Interfaces 6a): `read_library` reads a stored value of the wrong shape as empty and skips a single prayer of the wrong shape; `choose_example` never picks a blank prayer.
-- **Prayers of the People timeout** (Risks 1): one 60 s attempt with no retry from 4a on (owner answer to the 4a plan's question 1; F §2.8 amendment). The owner's live check after the merge measures a real one.
+- **Prayers of the People timeout** (Risks 1): 60 s attempts from 4a on (owner answer to the 4a plan's question 1; F §1.8/§2.8 amendment), inside the route's 80 s server deadline, which every section gets: a retry happens only when the deadline leaves time for it (after a quick failure, not after a 60 s timeout that followed a slot wait). The owner's live check after the merge measures a real one.
 - **Risk 3's query** lists only an 8-character prefix of each church id: `select left(id::text, 8) as church, settings->'liturgy_prompts' as prompts from churches where settings->'liturgy_prompts' is not null and deleted_at is null`.
 ````
 
@@ -4536,6 +4561,12 @@ import csv, json, sys
 sys.path[:0] = ["backend"]
 import liturgy_prompts as lp
 
+# The largest context a request can carry (S Schemas: occasion 300, 20 readings
+# of 200, three 300-character hymn titles), with the default rubric: the
+# 24 000-character cap is checked against it for each section a church changed.
+BIGGEST = lp.build_context(occasion="o" * 300, scriptures=["r" * 200] * 20,
+                           hymns_by_slot={slot: lp.ResolvedHymn("h" * 300, 100_000) for slot in lp.HYMN_SLOTS})
+
 rows = list(csv.DictReader(open("<scratch>/prompt_overrides.csv", encoding="utf-8")))
 for row in rows:
     prompts = json.loads(row["prompts"] or "null")
@@ -4544,24 +4575,37 @@ for row in rows:
         continue
     used = [k for k in lp.PROMPT_KEYS if isinstance(prompts.get(k), str) and prompts[k].strip()]
     failures = lp.validate_prompts(prompts)
+    notes = []
+    if failures.pop("system", None):          # only its length is checked; generation accepts it (clarification 21)
+        notes.append(f"the overall voice (system) prompt has {len(prompts['system'])} characters, over 8 000: "
+                     "generation still uses it, but the new Settings screen (6a) will not save it that long")
+    merged = lp.merge_prompts(prompts)
+    for key in (lp.SECTION_ORDER if "system" in used else [k for k in used if k != "system"]):
+        if key not in failures:
+            try:
+                lp.build_prompt(key, merged, BIGGEST)
+            except lp.PromptInvalid as exc:
+                failures[key] = exc.reason + " (with the longest readings and hymn titles a request allows)"
     print(row["church"], "overrides:", ",".join(used) or "none", "->", "all pass" if not failures else "")
     for key, reason in failures.items():
-        print("   FAILS", lp.SECTION_LABELS.get(key, "Overall voice (system)"), "-", reason)
+        print("   FAILS", lp.SECTION_LABELS[key], "-", reason)
     for key in used:
         unknown = lp.check_template(key, prompts[key]).unknown_placeholders
         if unknown:
-            print("   note:", lp.SECTION_LABELS.get(key, key), "has placeholders that print as blank:", unknown)
+            notes.append(f"{lp.SECTION_LABELS.get(key, key)} has placeholders that print as blank: {unknown}")
     ignored = sorted(set(prompts) - set(lp.PROMPT_KEYS))
     if ignored:
-        print("   note: keys the app ignores:", ignored)
+        notes.append(f"keys the app ignores: {ignored}")
+    for note in notes:
+        print("   note:", note)
 print(len(rows), "rows")
 EOF
 ```
 
-**Expected:** one line per church. Report to the owner in plain words:
+**Expected:** one line per church, then its failures and notes. Each section a church changed is checked twice: its template (`validate_prompts`), and the 24 000-character cap with the largest request S allows (`build_prompt` over `BIGGEST` and the default rubric; every section when the church changed the overall voice). Report to the owner in plain words:
 - **All pass:** "I checked the saved prompts for <n> church(es): all of them work with the new app. May I mark the pull request ready?" (Step 11.)
-- **A failure:** name the church prefix, the section's label and the reason, and say what to change, for example: "Your church's Prayer of Confession prompt has a { without a partner. In the old app, open Settings → Liturgy prompts, find 'Prayer of Confession', and either remove the { or write {{ to print a brace. Tell me when you have saved it, and I will check again." Then repeat Steps 9-10 (the query only) until every row passes. The owner fixes prompts in Streamlit; the agent changes nothing in the database.
-- **Notes** (placeholders that print as blank, ignored keys) are not failures; mention them in one line so the owner can fix a typo such as `{ocassion}` if they want.
+- **A failure:** name the church prefix, the section's label and the reason, and say what to change, for example: "Your church's Prayer of Confession prompt has a { without a partner. In the old app, open Settings → Liturgy prompts, find 'Prayer of Confession', and either remove the { or write {{ to print a brace. Tell me when you have saved it, and I will check again." A length failure: "Your church's <label> prompt, with the overall voice, gets too long for the AI when a service has many long readings and hymn titles. In the old app, shorten it or the overall voice under Settings → Liturgy prompts, and tell me when you have saved it." Then repeat Steps 9-10 (the query only) until every row passes. The owner fixes prompts in Streamlit; the agent changes nothing in the database.
+- **Notes** (an overall voice over 8 000 characters, which generation still accepts (clarification 21); placeholders that print as blank; ignored keys) are not failures; mention them in one line so the owner can shorten the voice or fix a typo such as `{ocassion}` if they want.
 
 Edit the PR body's first line to `> **Stored prompts: CHECKED on <date>**, <n> churches, all pass.` (`gh pr edit <N> -R bbrown62450/church --body-file <scratch>/slice4a-pr-body.md`).
 
@@ -4745,8 +4789,8 @@ Record the time, the status, the length and the `ai_call` line's `completion_tok
 | `generated`, under 45 s, `completion_tokens` under 3 600, the text ends with a finished sentence (usually "Amen.") | the 60 s attempt and the 4 000-token budget hold | Record it. No follow-up. |
 | `generated` in 45-60 s | it fits, with little room | Record it, and add a follow-up for 4b: tell the owner the Prayers of the People can take most of a minute, and watch it in 4b's manual check. |
 | `completion_tokens` of 3 900 or more, or the text stops mid-sentence, or `error ai_upstream_error` (an empty answer) | the answer ran out of its token budget (S Risks 2) | Follow-up PR (on the owner's yes): raise Prayers of the People's `max_completion_tokens` in `liturgy_config.SECTIONS` (a code constant, no API change), then repeat this step. |
-| `error ai_timeout` (after about 60 s; with T11) | one 60 s attempt was not enough | Follow-up (owner's decision): shorten the default Prayers of the People prompt's length ("at least 10-15 paragraphs"), or accept typing it; the 90 s page timeout leaves no room for a longer attempt. |
-| `error ai_timeout` after about 30 s or 60 s (T11 skipped: 30 s and one retry) | the 30 s attempt was too short | Follow-up PR (on the owner's yes): Task 11 of this plan as written (60 s, no retry), then repeat this step. |
+| `error ai_timeout` (after about 60-85 s; with T11) | a 60 s attempt was not enough (a retry, if the deadline allowed one, was shorter still) | Follow-up (owner's decision): shorten the default Prayers of the People prompt's length ("at least 10-15 paragraphs"), or accept typing it; the 90 s page timeout leaves no room for a longer attempt. |
+| `error ai_timeout` after about 30 s or 60 s (T11 skipped: 30 s and one retry) | the 30 s attempt was too short | Follow-up PR (on the owner's yes): Task 11 of this plan as written (60 s attempts), then repeat this step. |
 | `error ai_busy` | a slot or OpenAI's rate limit | Run it once more a minute later; record both. |
 
 - [ ] **Step 8 (OWNER, optional): Streamlit smoke on liturgy-frozen**
@@ -4830,8 +4874,8 @@ S = `docs/superpowers/specs/2026-09-25-slice-4-liturgy-design.md`; F = foundatio
 
 ## Questions for the owner
 
-Before the build (both in one message; the plan is written for "yes"):
-1. **Prayers of the People: one 60 s attempt, no retry, from the start?** Recommended: yes (T11; clarification 16). "No" skips T11 and keeps S Risks 1's measure-then-fix path (T14 Step 7's last timeout row).
-2. **"After First Reading" in the custom-element place list?** Recommended: yes (clarification 3). "No" keeps app.py's "After Old Testament Reading" (T1's label and test change back).
+Before the build (both in one message; both answered "yes" on 2026-09-30):
+1. **Prayers of the People: one 60 s attempt, no retry, from the start?** Recommended: yes (T11; clarification 16). **Answered 2026-09-30: yes.** Owner-visible change from the plan review: 60 s attempts inside the 80 s deadline, with one retry only if time is left (clarification 16); the controller tells the owner.
+2. **"After First Reading" in the custom-element place list?** Recommended: yes (clarification 3). **Answered 2026-09-30: yes.** The Word file prints "Old Testament Reading" until 5a (clarification 4); the owner has been told.
 
 Owner steps still to come: the read-only list of stored prompts before ready (T13 Steps 9-10), and the live checks with a real Prayers of the People after the merge (T14 Steps 3, 5-6).
