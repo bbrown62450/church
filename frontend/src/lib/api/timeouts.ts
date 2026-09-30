@@ -9,6 +9,8 @@ const ENDPOINT_TIMEOUTS: Record<string, number> = {
   // passages have a 20 s server deadline per request, and the clock starts when the limiter sends it.
   "GET /lectionary/readings": 25_000,
   "POST /scripture/passages": 30_000,
+  // Slice 3 (S API; F §1.8): the server answers within its 75 s deadline.
+  "POST /hymns/suggestions": 90_000,
 };
 
 export function timeoutFor(method: string, path: string): number {

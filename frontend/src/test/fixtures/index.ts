@@ -5,10 +5,14 @@
 import type {
   ChurchProfile,
   Hymn,
+  HymnMatch,
   Hymnals,
+  HymnPage,
+  HymnSuggestions,
   InviteAccepted,
   InvitePreview,
   Lectionary,
+  ScriptureMatches,
   SuggestedHymn,
   Translations,
 } from "@/lib/api/types";
@@ -175,6 +179,103 @@ export function hymnals(overrides: Partial<Hymnals> = {}): Hymnals {
     items: [{ code: "GG2013", hymn_count: 853, scripture_ref_count: 795 }],
     default_hymnal: null,
     effective_hymnal: "GG2013",
+    ...overrides,
+  };
+}
+
+/**
+ * Grace's GG2013 list as `GET /hymns?hymnal=GG2013&limit=2000` returns it, in
+ * hymnal order: #403 (`hymn()`), two hymns with the same title, one newer than
+ * the church prefers (#710, written 1981), one with no number (last), one
+ * with a link that is not https (#650), and one with a blank title (never listed).
+ */
+export function gg2013(): Hymn[] {
+  return [
+    hymn({ number: 1, title: "Holy, Holy, Holy! Lord God Almighty", scripture_refs: "Revelation 4:8-11", text_year: 1826 }),
+    hymn({ number: 35, title: "Praise, My Soul, the King of Heaven", link: null, scripture_refs: "Psalm 103", text_year: 1834 }),
+    hymn(),
+    hymn({ number: 649, title: "Amazing Grace", scripture_refs: "Ephesians 2:8", text_year: 1779 }),
+    hymn({ number: 650, title: "Amazing Grace", link: "http://hymnary.org/text/amazing_grace", text_year: 1779 }),
+    hymn({ number: 700, title: "Great Is Thy Faithfulness", scripture_refs: "Lamentations 3:22-23", text_year: 1923 }),
+    hymn({ number: 710, title: "Here I Am, Lord", scripture_refs: "Isaiah 6:8", text_year: 1981, newer_than_preferred: true }),
+    hymn({ number: 800, title: " " }),
+    hymn({ id: hymnId(9999), number: null, title: "Sent Forth by God's Blessing", link: null, text_year: 1964 }),
+  ];
+}
+
+/** Grace's PH1990 list: no scripture references, as in production's PH1990. */
+export function ph1990(): Hymn[] {
+  return [
+    hymn({ id: hymnId(10_001), hymnal: "PH1990", number: 1, title: "Come, Thou Long-Expected Jesus", link: null }),
+    hymn({ id: hymnId(10_276), hymnal: "PH1990", number: 276, title: "Great Is Thy Faithfulness", link: null }),
+  ];
+}
+
+/** `GET /hymnals` with GG2013 and PH1990 (605 hymns, none with scripture references). */
+export function twoHymnals(): Hymnals {
+  return hymnals({
+    items: [
+      { code: "GG2013", hymn_count: 853, scripture_ref_count: 795 },
+      { code: "PH1990", hymn_count: 605, scripture_ref_count: 0 },
+    ],
+  });
+}
+
+/**
+ * A fake-API handler for `GET /hymns`: each hymnal's list from `lists`, and,
+ * when `recent_for_date` is sent, `recent_use_on` from `recent` (title → date).
+ */
+export function hymnListRoute(
+  lists: Record<string, Hymn[]> = { GG2013: gg2013(), PH1990: ph1990() },
+  recent: Record<string, string> = {},
+) {
+  return (req: { path: string }): HymnPage => {
+    const query = new URL(req.path, "http://localhost").searchParams;
+    const dated = query.get("recent_for_date") !== null;
+    const items = (lists[query.get("hymnal") ?? ""] ?? []).map((h) => ({
+      ...h,
+      recent_use_on: dated ? (recent[h.title] ?? null) : null,
+    }));
+    return { items, total: items.length, limit: Number(query.get("limit") ?? 50), offset: 0 };
+  };
+}
+
+/** A `HymnMatchOut`: a hymn with its strength and the query references it matched. */
+export function hymnMatch(h: Hymn, strength: HymnMatch["strength"], matched: string[]): HymnMatch {
+  return { ...h, strength, matched_refs: matched };
+}
+
+/** `POST /hymns/scripture-matches` for the readings of October 4, 2026, unless overridden. */
+export function scriptureMatches(overrides: Partial<ScriptureMatches> = {}): ScriptureMatches {
+  const [holy, , come, grace, , , here] = gg2013();
+  const items = [
+    hymnMatch(here, "passage", ["Isaiah 5:1-7"]),
+    hymnMatch(come, "chapter", ["Isaiah 5:1-7"]),
+    hymnMatch(holy, "chapter", ["Matthew 21:33-46"]),
+    hymnMatch(grace, "chapter", ["Philippians 3:4b-14"]),
+  ];
+  return {
+    hymnal: "GG2013",
+    refs_used: ["Isaiah 5:1-7", "Psalm 80:7-15", "Philippians 3:4b-14", "Matthew 21:33-46"],
+    unparsed_refs: [],
+    total_matched: items.length,
+    items,
+    ...overrides,
+  };
+}
+
+/** `POST /hymns/suggestions`: each slot's hymns in order, all `source: "ai"`, unless overridden. */
+export function hymnSuggestions(
+  slots: Record<"opening" | "response" | "closing", Hymn[]>,
+  overrides: Partial<HymnSuggestions> = {},
+): HymnSuggestions {
+  const out = (list: Hymn[]): SuggestedHymn[] => list.map((h) => suggested(h));
+  return {
+    hymnal: "GG2013",
+    nt_ref: "Philippians 3:4b-14",
+    nt_text_used: false,
+    excluded_recent_count: 0,
+    slots: { opening: out(slots.opening), response: out(slots.response), closing: out(slots.closing) },
     ...overrides,
   };
 }
