@@ -14,6 +14,7 @@ from io import BytesIO
 
 import liturgy_prompts
 import service_rubric
+from liturgy_config import COMMUNION_BLOCKS
 
 logger = logging.getLogger(__name__)
 
@@ -66,73 +67,19 @@ def _add_leader_people_paragraph(doc, text: str) -> None:
 
 
 def _add_communion_liturgy(doc) -> None:
-    """Add The Sacrament of the Lord's Supper liturgy (invitation, great thanksgiving, etc.)."""
-    doc.add_paragraph("The Sacrament of the Lord's Supper", style="Heading 1")
-    doc.add_paragraph()
-
-    doc.add_paragraph("Invitation to the Table", style="Heading 2")
-    doc.add_paragraph(
-        "This is the table of our Lord Jesus Christ. It is not a reward for the righteous, "
-        "but nourishment for those who hunger; not a prize for the strong, but grace for those who are weary. "
-        "Here, blessing is not earned but received. All who seek to walk humbly with God, and who trust in God's mercy, "
-        "are welcome at this table."
-    )
-    doc.add_paragraph()
-
-    doc.add_paragraph("Great Thanksgiving", style="Heading 2")
-    doc.add_paragraph("The Lord be with you.")
-    p = doc.add_paragraph()
-    p.add_run("And also with you.").bold = True
-    doc.add_paragraph("Lift up your hearts.")
-    p = doc.add_paragraph()
-    p.add_run("We lift them up to the Lord.").bold = True
-    doc.add_paragraph("Let us give thanks to the Lord our God.")
-    p = doc.add_paragraph()
-    p.add_run("It is right to give our thanks and praise.").bold = True
-    doc.add_paragraph(
-        "It is truly right and our greatest joy to give you thanks and praise, O God, "
-        "creator of heaven and earth, for you have made us and all things, and in your love you hold us in life. "
-        "And so we join the everlasting song:"
-    )
-    p = doc.add_paragraph()
-    p.add_run(
-        "Holy, holy, holy Lord, God of power and might, heaven and earth are full of your glory. "
-        "Hosanna in the highest. Blessed is the one who comes in the name of the Lord. Hosanna in the highest."
-    ).bold = True
-    doc.add_paragraph(
-        "You are holy, O God of majesty, and blessed is Jesus Christ, your Son, our Lord, "
-        "who by his life, death, and resurrection has reconciled the world to you. On the night in which he gave himself up "
-        "he took bread, gave thanks, broke it, and gave it to his disciples. And likewise the cup after supper. "
-        "Remembering his death and resurrection, we offer ourselves in praise and thanksgiving. Therefore we proclaim the mystery of faith:"
-    )
-    doc.add_paragraph("Christ has died.")
-    doc.add_paragraph("Christ is risen.")
-    doc.add_paragraph("Christ will come again.")
-    doc.add_paragraph()
-
-    doc.add_paragraph("Words of Institution", style="Heading 2")
-    doc.add_paragraph("[Words of institution as printed or as used.]")
-    doc.add_paragraph()
-
-    doc.add_paragraph("The Lord's Prayer", style="Heading 2")
-    doc.add_paragraph("[The Lord's Prayer as printed.]")
-    doc.add_paragraph()
-
-    doc.add_paragraph("Breaking of the Bread and Communion", style="Heading 2")
-    doc.add_paragraph(
-        "The bread that we break is a sharing in the body of Christ. "
-        "The cup that we bless is a sharing in the blood of Christ. Come, for all is ready."
-    )
-    doc.add_paragraph()
-
-    doc.add_paragraph("Prayer After Communion", style="Heading 2")
-    doc.add_paragraph(
-        "Gracious God, we give you thanks that you have fed us at this table of grace, "
-        "strengthening us not to win our lives, but to live them faithfully. Send us out to do justice, "
-        "to love kindness, and to walk humbly with you, bearing your blessing into a world still hungry for hope, "
-        "through Jesus Christ our Lord. Amen."
-    )
-    doc.add_paragraph()
+    """Add The Sacrament of the Lord's Supper liturgy: liturgy_config.COMMUNION_BLOCKS
+    (the one copy of the text, which GET /liturgy/config also serves), one paragraph each."""
+    for block in COMMUNION_BLOCKS:
+        if block.style == "heading1":
+            doc.add_paragraph(block.text, style="Heading 1")
+        elif block.style == "heading2":
+            doc.add_paragraph(block.text, style="Heading 2")
+        elif block.style == "response":
+            doc.add_paragraph().add_run(block.text).bold = True
+        elif block.style == "text":
+            doc.add_paragraph(block.text)
+        else:                               # blank
+            doc.add_paragraph()
 
 
 def _add_assurance_paragraph(doc, leader_text: str) -> None:

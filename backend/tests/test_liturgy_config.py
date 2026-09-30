@@ -122,6 +122,38 @@ def test_normalize_placement_limits_and_fixed_text():
         "Breaking of the Bread and Communion", "Prayer After Communion"]
 
 
+# The docx still prints "Old Testament Reading" until 5a renames it to OUTLINE's
+# "First Reading" (owner decision B; slice 4a plan, clarification 4). 5a deletes
+# this map when it changes build_docx.
+DOCX_HEADINGS_UNTIL_5A = {"ot_reading": "Old Testament Reading"}
+
+
+def test_the_outline_is_build_docx_s_heading_order():
+    from docx import Document
+
+    import worship_service
+
+    buf = worship_service.build_docx(
+        occasion="World Communion Sunday", date="October 4, 2026",
+        scriptures=["Isaiah 5:1-7", "Matthew 21:33-46"],
+        hymns=[{"title": f"Hymn {n}", "number": n} for n in (1, 2, 3)],
+        liturgy={key: f"Text of {key}." for key in lc.SECTION_ORDER},
+        sermon_title="Living Water", selected_ot_ref="Isaiah 5:1-7", selected_nt_ref="Matthew 21:33-46",
+        include_sermon=True, include_prayers_of_the_people=True, include_communion=True,
+        custom_elements=[{"label": f"CE:{key}", "text": "", "insert_after": key}
+                         for key, _label in lc.CUSTOM_PLACEMENTS])
+    communion_inside = {b.text for b in lc.COMMUNION_BLOCKS if b.style == "heading2"}
+    printed = [p.text for p in Document(buf).paragraphs
+               if p.style.name in ("Heading 1", "Heading 2") and p.text not in communion_inside]
+    expected = []
+    for item in lc.OUTLINE:
+        expected.append(DOCX_HEADINGS_UNTIL_5A.get(item.key, item.label))
+        expected.extend(f"CE:{anchor}" for anchor in item.anchors_after)
+    assert printed == expected, (
+        "OUTLINE and build_docx disagree: change both in one PR and regenerate "
+        f"shared/liturgy_outline.json ({REGENERATE})")
+
+
 if __name__ == "__main__":
     write_outline_fixture()
     print(f"wrote {OUTLINE_FIXTURE}")
