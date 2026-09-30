@@ -6,7 +6,7 @@
  * readings", so the readings stay as each test seeds them.
  */
 import { act, fireEvent, renderHook, screen, waitFor, within } from "@testing-library/react";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -543,7 +543,7 @@ describe("the toolbar (S Toolbar)", () => {
     expect(stored().updated_at).toBe(saved.updated_at); // no write, so not dirty
   });
 
-  it("the Exclude switch counts the hidden hymns, and is off without a valid date", async () => {
+  it("the Exclude switch counts the hidden hymns; without a valid date it is disabled and shows off, keeping the stored value", async () => {
     const { user, unmount } = renderStep();
     const exclude = await screen.findByRole("switch", { name: "Exclude hymns used within 12 weeks" });
     expect(exclude).toBeChecked();
@@ -556,10 +556,13 @@ describe("the toolbar (S Toolbar)", () => {
     unmount();
 
     const { api } = renderStep(setDate(testDraft(), ""));
+    expect(stored().hymns.exclude_recent).toBe(true); // stored on
     const off = await screen.findByRole("switch", { name: "Exclude hymns used within 12 weeks" });
     expect(off).toHaveAttribute("aria-disabled", "true");
+    expect(off).not.toBeChecked(); // nothing is hidden without a date, so it does not show on
     expect(screen.getByText("Pick a valid date in step 1 to check recent use.")).toBeInTheDocument();
     expect(api.requests.map((r) => r.path)).toContain("/hymns?hymnal=GG2013&limit=2000"); // no recent_for_date
+    expect(stored().hymns.exclude_recent).toBe(true); // the stored value is unchanged
   });
 
   it("exclusion never clears a pick: the switch hides recent hymns from the picker and keeps a recent pick with its notice", async () => {
@@ -599,6 +602,20 @@ function DateProbe() {
       Move to October 11
     </button>
   );
+}
+
+/** The draft's `update`, for a route that changes the draft as its answer arrives. */
+let draftUpdate: ((recipe: (d: DraftV1) => DraftV1) => void) | null = null;
+
+function UpdateProbe() {
+  const { update } = useDraft();
+  useEffect(() => {
+    draftUpdate = update;
+    return () => {
+      draftUpdate = null;
+    };
+  }, [update]);
+  return null;
 }
 
 /** A route that answers only when `release` is called. */
@@ -736,6 +753,60 @@ describe("Suggest hymns (S AI suggestion flow)", () => {
     expect(stored().hymns.alternatives).toBeNull();
   });
 
+  it("a date change as the answer arrives: the draft's own check drops the answer and says so, never Suggestions ready", async () => {
+    const answer = held(THREE_EACH);
+    const { user } = renderStep(
+      testDraft(),
+      {
+        "POST /hymns/suggestions": async () => {
+          const body = await answer.handler();
+          draftUpdate?.((d) => setDate(d, "2026-10-11")); // the same tick: the step has not rendered the new date yet
+          return body;
+        },
+      },
+      <UpdateProbe />,
+    );
+    await user.click(await suggestButton());
+    await screen.findByRole("button", { name: "Suggesting…" });
+    answer.release();
+    expect(await screen.findByText("The date changed while suggestions were loading. Try again.")).toBeInTheDocument();
+    expect(screen.queryByText(/^Suggestions ready/)).toBeNull();
+    await waitFor(() => expect(stored().readings.date_iso).toBe("2026-10-11"));
+    expect(stored().hymns.slots).toEqual(testDraft().hymns.slots);
+    expect(stored().hymns.alternatives).toBeNull();
+  });
+
+  it("Suggestions ready and an error show only while the draft keeps the date they were for", async () => {
+    const ready = renderStep(testDraft(), { "POST /hymns/suggestions": THREE_EACH() }, <DateProbe />);
+    await ready.user.click(await suggestButton());
+    expect(await screen.findByText(/^Suggestions ready/)).toBeInTheDocument();
+    expect(screen.getByText(/^Suggestions favor older/)).toBeInTheDocument();
+    await ready.user.click(screen.getByRole("button", { name: "Move to October 11" }));
+    await waitFor(() => expect(screen.queryByText(/^Suggestions ready/)).toBeNull());
+    expect(screen.queryByText(/^Suggestions favor older/)).toBeNull();
+    ready.unmount();
+
+    const failed = renderStep(
+      testDraft(),
+      { "POST /hymns/suggestions": fakeError(503, "ai_busy", "The AI service is busy. Try again in a minute.") },
+      <DateProbe />,
+    );
+    await failed.user.click(await suggestButton());
+    expect(await screen.findByRole("alert")).toHaveTextContent("The AI service is busy. Try again in a minute.");
+    await failed.user.click(screen.getByRole("button", { name: "Move to October 11" }));
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+  });
+
+  it("ideas from an earlier hymnal load that hymnal's list, so they show its live hymn", async () => {
+    const earlier = { for_date_iso: "2026-10-04", by_slot: { opening: [pick(FAITHFUL)], response: [], closing: [] } };
+    const { api } = renderStep(draftWith({ hymnal: "PH1990", alternatives: earlier }), { "GET /hymnals": twoHymnals() });
+    const group = await within(await screen.findByRole("region", { name: "Opening hymn" })).findByRole("group", {
+      name: "Other ideas for the opening hymn",
+    });
+    expect(await within(group).findByText("Used Sep 6")).toBeInTheDocument(); // the live GG2013 hymn, not a stored title
+    expect(api.requests.map((r) => r.path)).toContain("/hymns?hymnal=GG2013&limit=2000&recent_for_date=2026-10-04");
+  });
+
   it("Cancel stops waiting and returns to idle; after 8 s it says it is still working", async () => {
     vi.useRealTimers(); // a second useFakeTimers call would keep beforeEach's Date-only fake
     vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"], shouldAdvanceTime: true });
@@ -757,7 +828,8 @@ describe("Suggest hymns (S AI suggestion flow)", () => {
     answer.release();
   });
 
-  it("shows each failure's own copy under the button, and a server error as a toast", async () => {
+  // Heavy: seven renders and a real 1-second Retry-After, near Vitest's 5 s default on a busy machine.
+  it("shows each failure's own copy under the button, and a server error as a toast", { timeout: 10_000 }, async () => {
     const cases: [ReturnType<typeof fakeError>, string][] = [
       [
         fakeError(503, "ai_not_configured", "AI suggestions aren't set up on this app yet."),
@@ -800,6 +872,50 @@ describe("Suggest hymns (S AI suggestion flow)", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
+  it("a client timeout after 90 s shows its own copy under the button", async () => {
+    vi.useRealTimers(); // a second useFakeTimers call would keep beforeEach's Date-only fake
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"], shouldAdvanceTime: true });
+    vi.setSystemTime(DRAFT_NOW);
+    const answer = held(THREE_EACH);
+    const { user } = renderStep(testDraft(), { "POST /hymns/suggestions": answer.handler });
+    await user.click(await suggestButton());
+    await screen.findByRole("button", { name: "Suggesting…" });
+    act(() => {
+      vi.advanceTimersByTime(90_000);
+    });
+    expect(await screen.findByRole("alert")).toHaveTextContent("This is taking too long. Try again.");
+    expect(stored().hymns.slots).toEqual(testDraft().hymns.slots);
+    answer.release();
+  });
+
+  it("a network error shows as a toast, not under the button", async () => {
+    const { user } = renderStep(testDraft(), {
+      "POST /hymns/suggestions": () => {
+        throw new TypeError("Failed to fetch");
+      },
+    });
+    await user.click(await suggestButton());
+    expect(await screen.findByText("Can't reach the server. Check your connection and try again.")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("adds no message of its own after a 401 or a lost church (the app's own handling shows those)", async () => {
+    const errorToast = vi.spyOn(toast, "error");
+    const responses = [
+      fakeError(401, "unauthorized", "Sign in again."),
+      fakeError(403, "forbidden", "You no longer have access to this church.", { details: { reason: "no_church_access" } }),
+    ];
+    for (const response of responses) {
+      const { user, api, unmount } = renderStep(testDraft(), { "POST /hymns/suggestions": response });
+      await user.click(await suggestButton());
+      await waitFor(() => expect(api.requests.some((r) => r.path === "/hymns/suggestions")).toBe(true));
+      expect(await screen.findByRole("button", { name: "Suggest hymns" })).toBeEnabled();
+      expect(screen.queryByRole("alert")).toBeNull();
+      unmount();
+    }
+    expect(errorToast).not.toHaveBeenCalled();
+  });
+
   it("says when a slot or every slot got nothing, and waits for a valid date; the tip asks for readings first", async () => {
     const partly = hymnSuggestions({ opening: [HOLY, COME, GRACE], response: [], closing: [PRAISE, GRACE, SENT] });
     const one = renderStep(testDraft(), { "POST /hymns/suggestions": partly });
@@ -837,20 +953,21 @@ async function openMatches(user: { click: (el: Element) => Promise<void> }) {
 }
 
 describe("Hymns for the readings (S ScriptureMatches)", () => {
-  it("asks for the draft's readings in the selected hymnal; Add → Response hymn sets the slot and Undo restores it until the slot changes again", async () => {
+  // Heavy: the section, two menus and an Undo on real timers.
+  it("asks for the draft's readings in the selected hymnal; Add → Response hymn sets the slot and Undo restores it", { timeout: 10_000 }, async () => {
     const { user, api } = renderStep(draftWith(slots(null, pick(GRACE)), { scriptures: LINES }));
-    const trigger = await screen.findByRole("button", { name: "Hymns for the readings 4" }); // the count, while closed
+    const trigger = await screen.findByRole("button", { name: "Hymns for the readings 4 matches" }); // the count, while closed
     expect(trigger).toHaveAttribute("aria-expanded", "false");
     const matchCalls = api.requests.filter((r) => r.path === "/hymns/scripture-matches");
     expect(matchCalls.map((r) => r.body)).toEqual([
       { refs: LINES, hymnal: "GG2013", recent_for_date: "2026-10-04", max_results: 30 },
     ]);
     const section = await openMatches(user);
-    const passage = within(section).getByRole("heading", { name: "Matches the readings" }).nextElementSibling as HTMLElement;
+    const passage = within(section).getByRole("heading", { level: 3, name: "Matches the readings" }).nextElementSibling as HTMLElement;
     expect(within(passage).getByText("#710 Here I Am, Lord")).toBeInTheDocument();
     expect(within(passage).getByText("Written 1981")).toBeInTheDocument();
     expect(within(passage).getByText("Matches Isaiah 5:1-7")).toBeInTheDocument();
-    const chapter = within(section).getByRole("heading", { name: "Same chapter" }).nextElementSibling as HTMLElement;
+    const chapter = within(section).getByRole("heading", { level: 3, name: "Same chapter" }).nextElementSibling as HTMLElement;
     expect(within(chapter).getAllByRole("listitem")).toHaveLength(3);
     await user.click(within(section).getByRole("button", { name: "Add Holy, Holy, Holy! Lord God Almighty" }));
     await user.click(await screen.findByRole("menuitem", { name: "Response hymn" }));
@@ -859,22 +976,32 @@ describe("Hymns for the readings (S ScriptureMatches)", () => {
     expect(await screen.findByText("Response hymn changed to Holy, Holy, Holy! Lord God Almighty.")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Undo" }));
     await waitFor(() => expect(stored().hymns.slots.response).toEqual(pick(GRACE)));
-    // Undo does nothing once another hymn fills the slot.
+    // Into an empty slot: no toast.
     act(() => toast.dismiss());
     await waitFor(() => expect(screen.queryByRole("button", { name: "Undo" })).toBeNull());
-    await user.click(within(section).getByRole("button", { name: "Add Holy, Holy, Holy! Lord God Almighty" }));
-    await user.click(await screen.findByRole("menuitem", { name: "Response hymn" }));
-    await waitFor(() => expect(stored().hymns.slots.response).toEqual(pick(HOLY)));
-    await user.click(within(card("Response")).getByRole("button", { name: "Change" }));
-    await user.type(within(card("Response")).getByRole("combobox", { name: "Response hymn" }), "403");
-    await user.click(await screen.findByRole("option", { name: /#403 Come, Thou Almighty King/ }));
-    await user.click(await screen.findByRole("button", { name: "Undo" }));
-    // Into an empty slot: no toast.
     await user.click(within(section).getByRole("button", { name: "Add Here I Am, Lord" }));
     await user.click(await screen.findByRole("menuitem", { name: "Closing hymn" }));
     await waitFor(() => expect(stored().hymns.slots.closing).toEqual(pick(HERE)));
-    expect(stored().hymns.slots.response).toEqual(pick(COME)); // the Undo after Change did nothing
     expect(screen.queryByText(/^Closing hymn changed/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+  });
+
+  // Heavy: a menu, Change's picker and an Undo on real timers.
+  it("an Add's Undo does nothing once the slot changes again", { timeout: 10_000 }, async () => {
+    const { user } = renderStep(draftWith(slots(null, pick(GRACE)), { scriptures: LINES }));
+    const section = await openMatches(user);
+    await user.click(await within(section).findByRole("button", { name: "Add Holy, Holy, Holy! Lord God Almighty" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Response hymn" }));
+    await waitFor(() => expect(stored().hymns.slots.response).toEqual(pick(HOLY)));
+    expect(await screen.findByText("Response hymn changed to Holy, Holy, Holy! Lord God Almighty.")).toBeInTheDocument();
+    await user.click(within(card("Response")).getByRole("button", { name: "Change" }));
+    await user.type(within(card("Response")).getByRole("combobox", { name: "Response hymn" }), "403");
+    await user.click(await screen.findByRole("option", { name: /#403 Come, Thou Almighty King/ }));
+    await waitFor(() => expect(stored().hymns.slots.response).toEqual(pick(COME)));
+    await user.click(screen.getByRole("button", { name: "Undo" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Undo" })).toBeNull());
+    expect(stored().hymns.slots.response).toEqual(pick(COME)); // the Undo after Change did nothing
+    expect(within(card("Response")).getByText("#403 Come, Thou Almighty King")).toBeInTheDocument();
   });
 
   it("searches an extra reference with the readings, and says when one can't be read or nothing matches", async () => {
@@ -926,7 +1053,7 @@ describe("Hymns for the readings (S ScriptureMatches)", () => {
     expect(await within(section).findByText("Couldn't search the hymnal.")).toBeInTheDocument();
     fail = false;
     await user.click(within(section).getByRole("button", { name: "Retry" }));
-    expect(await within(section).findByRole("heading", { name: "Matches the readings" })).toBeInTheDocument();
+    expect(await within(section).findByRole("heading", { level: 3, name: "Matches the readings" })).toBeInTheDocument();
   });
 
   it("with Exclude on hides recently used matches behind Show them; shown, they carry their badge; Hide them hides them again", async () => {
@@ -942,7 +1069,7 @@ describe("Hymns for the readings (S ScriptureMatches)", () => {
     const section = await openMatches(user);
     expect(await within(section).findByText("2 recently used matches are hidden.")).toBeInTheDocument();
     expect(within(section).getAllByRole("listitem")).toHaveLength(1);
-    expect(screen.getByRole("button", { name: "Hymns for the readings 1" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hymns for the readings 1 match" })).toBeInTheDocument();
     await user.click(within(section).getByRole("button", { name: "Show them" }));
     expect(within(section).getAllByRole("listitem")).toHaveLength(3);
     expect(within(section).getByText("Used Sep 6")).toBeInTheDocument();

@@ -83,8 +83,18 @@ export function HymnsStep() {
   const empty = hymnals !== undefined && hymnals.items.length === 0;
   const selected = hymnals && !empty ? selectHymnal(hymns.hymnal, hymnals) : null;
   const code = selected?.code ?? null;
-  // The picks' hymnals too (a pick keeps its own), once GET /hymnals has answered with some.
-  const listed = selected === null ? [] : [code, ...SLOTS.map((slot) => hymns.slots[slot]?.hymnal ?? null)];
+  // The ideas for the draft's date only (they were suggested for it).
+  const ideas = hymns.alternatives?.for_date_iso === dateIso ? hymns.alternatives.by_slot : null;
+  // The picks' hymnals too (a pick keeps its own), then the ideas' (from an earlier hymnal, so a chip
+  // never waits on a list nobody loads), once GET /hymnals has answered with some; at most MAX_LISTS.
+  const listed =
+    selected === null
+      ? []
+      : [
+          code,
+          ...SLOTS.map((slot) => hymns.slots[slot]?.hymnal ?? null),
+          ...SLOTS.flatMap((slot) => (ideas?.[slot] ?? []).map((idea) => idea.hymnal)),
+        ];
   const lists = useHymnLists(listed, recentForDate);
   const showUndo = useUndoToasts();
   // "No suggestion for this slot." after the last answer, for its date only (component state).
@@ -101,7 +111,6 @@ export function HymnsStep() {
   const excludeRecent = hymns.exclude_recent && dateValid;
   const duplicates = duplicateSlots(hymns.slots);
   const hiddenRecent = (selectedList ?? []).filter((h) => h.title.trim() !== "" && h.recent_use_on !== null).length;
-  const ideas = hymns.alternatives?.for_date_iso === dateIso ? hymns.alternatives.by_slot : null;
   const selectedInfo = hymnals?.items.find((h) => h.code === code);
   const selectedCount = selectedInfo?.hymn_count ?? 0;
 

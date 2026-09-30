@@ -10,7 +10,7 @@ import { rateLimitMessage, useWaitOver } from "@/components/builder/readings/use
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import type { ApiError } from "@/lib/api/client";
-import { errorToastMessage } from "@/lib/api/errors";
+import { errorToastMessage, isNoChurchAccess } from "@/lib/api/errors";
 import type { HymnSuggestions, Passage } from "@/lib/api/types";
 import { isValidDateIso } from "@/lib/dates";
 import { useDraft } from "@/lib/draft/context";
@@ -55,11 +55,13 @@ export function suggestErrorMessage(e: ApiError, waitOver = false): string | nul
   }
 }
 
-type Outcome =
+/** What the last request ended with, for `dateIso` only: a date change hides it (the draft's date is the key). */
+type Outcome = { dateIso: string } & (
   | { kind: "ready"; text: string; newer: boolean }
   | { kind: "none" }
   | { kind: "date_changed" }
-  | { kind: "error"; error: ApiError };
+  | { kind: "error"; error: ApiError }
+);
 
 /** "Suggestions ready…", with " {n} recently used hymns were left out." (plan clarification 13 for one). */
 function readyText(resp: HymnSuggestions): string {
@@ -82,9 +84,10 @@ function SuggestError({ error }: { error: ApiError }) {
  * functional update of the latest draft (`applySuggestions`: only empty slots
  * are filled, F D16), so a pick made during the wait counts. It is dropped when
  * `useSuggestHymns` reports it superseded (a newer request, the step
- * unmounted, another church) or the draft's date changed meanwhile. Cancel
- * aborts the wait; the server finishes and discards it (F §1.8). Messages and
- * errors live in component state, never in the draft.
+ * unmounted, another church) or the draft's date changed meanwhile, which the
+ * recipe itself checks. Cancel aborts the wait; the server finishes and
+ * discards it (F §1.8). Messages and errors live in component state, never in
+ * the draft, and show only while the draft keeps the date they were for.
  */
 export function SuggestHymnsButton({
   selectedHymnal,
@@ -123,6 +126,8 @@ export function SuggestHymnsButton({
   }, [isPending]);
 
   const dateValid = isValidDateIso(draft.readings.date_iso);
+  // Only what the last request said about the draft's current date.
+  const shown = outcome?.dateIso === draft.readings.date_iso ? outcome : null;
   const noReadings = cleanLines(draft.readings.scriptures).length === 0 && draft.readings.occasion.trim() === "";
 
   async function run() {
@@ -141,25 +146,36 @@ export function SuggestHymnsButton({
     if (controller.current === own) controller.current = null;
     if (result.status === "superseded") return;
     if (result.status === "error") {
-      if (result.error.code === "aborted") return;
-      if (suggestErrorMessage(result.error) === null) toast.error(errorToastMessage(result.error));
-      else setOutcome({ kind: "error", error: result.error });
+      const error = result.error;
+      if (error.code === "aborted") return;
+      // A 401 or a lost church is handled globally (sign-out, the church's own message): no second message.
+      if (error.status === 401 || isNoChurchAccess(error)) return;
+      if (suggestErrorMessage(error) === null) toast.error(errorToastMessage(error));
+      else setOutcome({ dateIso: date, kind: "error", error });
       return;
     }
     const resp = result.data;
-    if (latest.current.readings.date_iso !== date) {
-      setOutcome({ kind: "date_changed" });
+    // The recipe runs on the latest draft and records whether it applied, and the date it saw.
+    let applied = false as boolean;
+    let seen = date;
+    update((d) => {
+      seen = d.readings.date_iso;
+      if (seen !== date) return d;
+      applied = true;
+      return { ...d, hymns: applySuggestions(d.hymns, resp, date) };
+    });
+    if (!applied) {
+      setOutcome({ dateIso: seen, kind: "date_changed" });
       return;
     }
-    update((d) => (d.readings.date_iso === date ? { ...d, hymns: applySuggestions(d.hymns, resp, date) } : d));
     const empty = SLOTS.filter((slot) => resp.slots[slot].length === 0);
     if (empty.length === SLOTS.length) {
-      setOutcome({ kind: "none" });
+      setOutcome({ dateIso: date, kind: "none" });
       return;
     }
     onNoSuggestion(empty, date);
     const newer = SLOTS.some((slot) => resp.slots[slot].some((h) => h.newer_than_preferred));
-    setOutcome({ kind: "ready", text: readyText(resp), newer });
+    setOutcome({ dateIso: date, kind: "ready", text: readyText(resp), newer });
   }
 
   return (
@@ -188,12 +204,12 @@ export function SuggestHymnsButton({
         <p className="text-sm text-muted-foreground">Tip: add the readings in step 1 first — suggestions use them.</p>
       ) : null}
       <div role="status" className="grid gap-1 text-sm">
-        {outcome?.kind === "ready" ? <p>{outcome.text}</p> : null}
-        {outcome?.kind === "ready" && outcome.newer ? <p className="text-muted-foreground">{NEWER_NOTE}</p> : null}
-        {outcome?.kind === "none" ? <p>{NOTHING_PICKED}</p> : null}
-        {outcome?.kind === "date_changed" ? <p>{DATE_CHANGED}</p> : null}
+        {shown?.kind === "ready" ? <p>{shown.text}</p> : null}
+        {shown?.kind === "ready" && shown.newer ? <p className="text-muted-foreground">{NEWER_NOTE}</p> : null}
+        {shown?.kind === "none" ? <p>{NOTHING_PICKED}</p> : null}
+        {shown?.kind === "date_changed" ? <p>{DATE_CHANGED}</p> : null}
       </div>
-      {outcome?.kind === "error" ? <SuggestError error={outcome.error} /> : null}
+      {shown?.kind === "error" ? <SuggestError error={shown.error} /> : null}
     </div>
   );
 }

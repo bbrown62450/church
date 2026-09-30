@@ -182,7 +182,7 @@ export function ScriptureMatches({
         ) : null}
         {groups.map((group) => (
           <div key={group.title} className="grid gap-1">
-            <h4 className="text-sm font-medium">{group.title}</h4>
+            <h3 className="text-sm font-medium">{group.title}</h3>
             <ul className="divide-y">
               {group.items.map((match) => (
                 <MatchRow
@@ -213,7 +213,12 @@ export function ScriptureMatches({
       <CollapsibleTrigger className="flex min-h-11 items-center gap-2 text-left text-base font-medium">
         <ChevronDownIcon aria-hidden="true" className={cn("size-4 transition-transform", !open && "-rotate-90")} />
         <span>Hymns for the readings</span>
-        {data ? <Badge variant="secondary">{items.length}</Badge> : null}
+        {data ? (
+          <>
+            <Badge variant="secondary">{items.length}</Badge>
+            <span className="sr-only">{items.length === 1 ? " match" : " matches"}</span>
+          </>
+        ) : null}
       </CollapsibleTrigger>
       <CollapsibleContent className="grid gap-3">
         <form onSubmit={submit} className="grid gap-1.5">

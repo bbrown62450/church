@@ -94,8 +94,9 @@ export function HymnalPicker({
 
 /**
  * "Exclude hymns used within 12 weeks" (S Toolbar). It writes only
- * `exclude_recent`; it never changes a slot or an idea (AC12). Disabled when
- * the draft's date is not valid.
+ * `exclude_recent`; it never changes a slot or an idea (AC12). Disabled, and
+ * shown off, when the draft's date is not valid: nothing is hidden then, though
+ * the stored value is kept for when the date is fixed.
  */
 export function ExcludeSwitch({
   on,
@@ -114,7 +115,7 @@ export function ExcludeSwitch({
       <div className="flex min-h-11 items-center gap-3">
         <Switch
           id="exclude-recent"
-          checked={on}
+          checked={on && dateValid}
           disabled={!dateValid}
           onCheckedChange={(checked) => onChange(checked)}
           aria-describedby="exclude-recent-help"
