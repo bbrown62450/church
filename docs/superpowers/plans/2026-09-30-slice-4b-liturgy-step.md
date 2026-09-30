@@ -971,7 +971,7 @@ Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 
 **Review checkpoint (T1-T2, batch A):** `isPristine` counts exactly owner answer 1's fields and nothing transient; every S origin row has a test; the stale rule's order matches S step 6; the communion rule has one home; counts match.
 
-### Task 3: The request body, the card errors and the queue (S Frontend `request.ts`, `errors.ts`, `queue.ts`, "Sermon text", "Per-card error messages"; BC-24; clarifications 7, 8, 9, 10)
+### Task 3: The request body, the card errors and the queue (S Frontend `request.ts`, `errors.ts`, `queue.ts`, "Sermon text", "Per-card error messages"; BC-24; clarifications 7, 8, 9)
 
 The rest of the pure half. `request.ts` builds one section's `POST /liturgy/generate` body from the draft exactly as S's `request.ts` row says (one section, no `overrides`, the ServiceDraft limits, the three slots as `HymnRef`s) and works out which passage is the sermon text (`sermonSource`: the effective NT reading, the draft's or church's translation, WEB for ESV) and its `{ref, text}` (`sermonText`); the fetch itself is T6's. An id that is not a UUID goes as `null`, because the API validates `hymn_id` as a UUID and would reject the whole request (clarification 7). `errors.ts` turns a section's failure or a failed request into what the card shows, with S's copy; a cancel, a 401 and a lost church show nothing on the card (clarification 8), and the 404's link is labelled "Go to Hymns" (clarification 9). `queue.ts` runs at most 3 tasks, first in first out, and a cancelled task's outcome is never delivered. The generated type names join `lib/api/types.ts`.
 
@@ -1259,6 +1259,29 @@ describe("createTaskQueue (S queue.ts)", () => {
     h.push("e");
     await tick();
     expect(h.started).toEqual(["a", "b", "c", "e"]); // b's slot freed at once
+    // A task cancelled as soon as it got a slot, before its run was called, never runs.
+    h.queue.cancel("c");
+    h.push("f");
+    h.queue.cancel("f");
+    await tick();
+    expect(h.started).toEqual(["a", "b", "c", "e"]);
+  });
+
+  it("delivers an outcome before the next task starts, so it can stop the waiting ones", async () => {
+    const queue = createTaskQueue({ concurrency: 1 });
+    const started: string[] = [];
+    const run = (key: string) => () => {
+      started.push(key);
+      return key === "x" ? Promise.reject(new Error("429")) : new Promise<string>(() => {});
+    };
+    // As the provider does on a 429: the failed task's outcome cancels every waiting one.
+    queue.push("x", run("x"), () => {
+      for (const key of queue.waitingKeys()) queue.cancel(key);
+    });
+    queue.push("y", run("y"), () => {});
+    await tick();
+    expect(started).toEqual(["x"]);
+    expect(queue.waitingKeys()).toEqual([]);
   });
 
   it("cancelAll aborts every running task and drops every waiting one", async () => {
@@ -1477,7 +1500,10 @@ export function cardErrorFrom(e: unknown): CardError | null {
  * sections": at most 3 in flight, which leaves one of the server's 4 AI slots
  * free). First in, first out; each task gets its own `AbortController`.
  * `cancel(key)` aborts a running task or drops a waiting one, frees its slot
- * at once, and its outcome is never delivered.
+ * at once, and its outcome is never delivered; a task cancelled before its
+ * `run` was called never runs. A task's outcome is delivered before the next
+ * task starts, so `done` can still cancel the waiting ones (S step 7: a 429
+ * stops the queue).
  */
 export type TaskOutcome<T> = { ok: true; value: T } | { ok: false; error: unknown };
 
@@ -1529,11 +1555,14 @@ export function createTaskQueue({ concurrency }: { concurrency: number }): TaskQ
           const settle = (outcome: TaskOutcome<T>) => {
             if (controller.signal.aborted || running.get(key) !== task) return;
             running.delete(key);
-            pump();
-            done(outcome);
+            try {
+              done(outcome);
+            } finally {
+              pump();
+            }
           };
           Promise.resolve()
-            .then(() => run(controller.signal))
+            .then(() => (controller.signal.aborted ? Promise.reject(controller.signal.reason) : run(controller.signal)))
             .then(
               (value: T) => settle({ ok: true, value }),
               (error: unknown) => settle({ ok: false, error }),
@@ -3399,3 +3428,3930 @@ Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 **Expected:** one commit, 3 files changed.
 
 **Review checkpoint (T3-T6, batch B):** the request never sends `overrides` or ESV text; the timeout row is 100 000; the fixtures match 4a's shared files; the store's defaults never outrank another tab's edit; the provider sends nothing while idle, never delivers a cancelled result, and applies S step 6 inside the update; counts match.
+
+### Task 7: The kit's dialog and the growing textarea (S "Frontend changes" shadcn list, UX "Layout"; F §4.9 items 1 and 6; clarifications 19, 20)
+
+Two small pieces the step needs. `components/ui/dialog.tsx` is the base-nova `Dialog` ("Add custom element", T10); the registry (ui.shadcn.com) is blocked from the container, so it is rebuilt from the upstream source exactly as 2b, 2c and 3b rebuilt theirs (clarification 19). S's other kit components exist already: `switch` (3b), `textarea`, `badge`, `alert`, `collapsible`, `select`, `dropdown-menu` (1-2c). `lib/use-autosize.ts` is S's `useAutosize`: the kit's `Textarea` already sizes itself to its content with `field-sizing: content` where the browser supports it, so the hook sets the height from the content only where it does not (older iOS Safari), capped at 60% of the window; the cards cap the field with `max-h-[60vh]` so it scrolls past that (clarification 20).
+
+Provenance of `dialog.tsx`: at shadcn-ui/ui commit `db2db460a26fa84fb65c8d903b213925fbdee9ed` (the commit 2b, 2c and 3b pinned), the plan's writer fetched `apps/v4/registry/bases/base/ui/dialog.tsx` (sha256 `aba6df6cbf51a1edcc22e415a3a46a666fc8cb66729e47b3ed2ecd97f166adff`) and `apps/v4/registry/styles/style-nova.css` (sha256 `5d5751579c015b61e77cf0822862a43ac79f3e6fed236a17624be8e6d1ebea1d`) from raw.githubusercontent.com, ran the file through the installed shadcn 4.21.0 CLI's `createStyleMap`, `transformStyle`, `transformIcons`, `transformFont` and `transformMenu`, mapped `@/registry/bases/base/ui/button` to `@/components/ui/button`, and formatted it with Prettier 3.9.9 and `prettier-plugin-tailwindcss` 0.8.1 (`semi: false`, `trailingComma: "es5"`, `tailwindFunctions: ["cn", "cva"]`, `tailwindStylesheet: src/app/globals.css`). The same pipeline reproduces the repo's `sheet.tsx` byte for byte after its header comment (checked while planning). The only change from that output is the header comment. Optional check that the upstream file is unchanged (skip it if the host is unreachable; the code below is the record):
+
+```bash
+curl -fsS "https://raw.githubusercontent.com/shadcn-ui/ui/db2db460a26fa84fb65c8d903b213925fbdee9ed/apps/v4/registry/bases/base/ui/dialog.tsx" | sha256sum | cut -c1-64
+```
+
+**Expected:** `aba6df6cbf51a1edcc22e415a3a46a666fc8cb66729e47b3ed2ecd97f166adff`.
+
+**Files:**
+- Create: `frontend/src/components/ui/dialog.tsx` (clarification 19's file, or the generated one), `frontend/src/lib/use-autosize.ts`
+- Test: `frontend/src/lib/use-autosize.test.tsx` (new, 2). The dialog is exercised by T10.
+
+**Interfaces:**
+- Consumes: `@base-ui/react/dialog` (installed), `Button` (1), `XIcon` (lucide).
+- Produces: `components/ui/dialog.tsx`: `Dialog`, `DialogClose`, `DialogContent` (`showCloseButton?`), `DialogDescription`, `DialogFooter`, `DialogHeader`, `DialogOverlay`, `DialogPortal`, `DialogTitle`, `DialogTrigger`. `lib/use-autosize.ts`: `useAutosize(ref: RefObject<HTMLTextAreaElement | null>, value: string): void`, `AUTOSIZE_MAX_SHARE = 0.6`. Later users: T8 and T10 (the cards' textareas), T10 (the dialog).
+
+Counts after this task: frontend **476 passed in 74 files**.
+
+- [ ] **Step 1 (agent): Check the starting point, and try the registry**
+
+```bash
+git status --short
+ls frontend/src/components/ui/ | tr '\n' ' '; echo
+(cd frontend && timeout 120 npx shadcn@latest add dialog --yes 2>&1 | grep -m1 -o "Request to .* failed")
+git status --short
+(cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
+```
+
+**Expected:** nothing (or `?? .claude/`); `alert-dialog.tsx alert.tsx avatar.tsx badge.tsx button.test.tsx button.tsx card.tsx collapsible.tsx combobox.tsx dropdown-menu.tsx input-group.tsx input.tsx label.tsx radio-group.tsx select.tsx sheet.tsx skeleton.tsx sonner.tsx switch.tsx tabs.tsx textarea.tsx tooltip.tsx` (no `dialog.tsx`); `Request to https://ui.shadcn.com/r/styles/base-nova/dialog.json failed` (the registry is blocked; shadcn 4.21 adds "Request was cancelled.") and `git status --short` still shows nothing new; ` Test Files  73 passed (73)`, `      Tests  474 passed (474)`. If the registry answers and writes `frontend/src/components/ui/dialog.tsx`, keep the generated file, skip its **Create** below, and say so in the commit body.
+
+- [ ] **Step 2 (agent): Write the failing test**
+
+**Create `frontend/src/lib/use-autosize.test.tsx`:**
+
+```tsx
+/**
+ * `useAutosize` (slice 4 spec, UX "Layout": textareas grow with their content
+ * up to 60 vh, then scroll): where the browser sizes a field to its content
+ * itself (`field-sizing: content`) the hook does nothing; elsewhere it sets
+ * the height from the content, capped at 60% of the window.
+ */
+import { render, screen } from "@testing-library/react";
+import { useRef } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { useAutosize } from "./use-autosize";
+
+function Field({ value }: { value: string }) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useAutosize(ref, value);
+  return <textarea ref={ref} aria-label="Text" value={value} readOnly />;
+}
+
+function withScrollHeight(px: number) {
+  vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(px);
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+
+describe("useAutosize (S Layout)", () => {
+  it("grows the field to its content and stops at 60% of the window, where the browser cannot", () => {
+    vi.stubGlobal("CSS", { supports: () => false });
+    vi.spyOn(window, "innerHeight", "get").mockReturnValue(1000);
+    withScrollHeight(240);
+    const view = render(<Field value="Leader: Come!" />);
+    expect(screen.getByRole("textbox", { name: "Text" }).style.height).toBe("242px");
+    withScrollHeight(900);
+    view.rerender(<Field value={"Leader: Come!\n".repeat(40)} />);
+    expect(screen.getByRole("textbox", { name: "Text" }).style.height).toBe("600px");
+  });
+
+  it("leaves the height to the browser when it sizes fields to their content", () => {
+    vi.stubGlobal("CSS", { supports: (property: string, value: string) => property === "field-sizing" && value === "content" });
+    withScrollHeight(240);
+    render(<Field value="Leader: Come!" />);
+    expect(screen.getByRole("textbox", { name: "Text" }).style.height).toBe("");
+  });
+});
+```
+
+- [ ] **Step 3 (agent): Run it and see it fail**
+
+```bash
+(cd frontend && npx vitest run src/lib/use-autosize.test.tsx 2>&1 | grep -E "^ FAIL|Error: Failed|Tests ")
+```
+
+**Expected:**
+
+```
+(pending replay)
+```
+- [ ] **Step 4 (agent, clarifications 19 and 20): Write the dialog and `useAutosize`**
+
+**Create `frontend/src/components/ui/dialog.tsx`:**
+
+```tsx
+"use client"
+
+// Rebuilt from the upstream shadcn source (slice 4b plan clarification 19, as
+// slices 2b, 2c and 3b did): shadcn-ui/ui@db2db460
+// apps/v4/registry/bases/base/ui/dialog.tsx with
+// apps/v4/registry/styles/style-nova.css, through the shadcn 4.21.0 CLI's own
+// style, icon and font transforms and Prettier's Tailwind class order. The
+// only change from that output is this comment. Replace it with the file
+// `npx shadcn@latest add dialog` generates when the registry is reachable.
+
+import * as React from "react"
+import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
+import { cn } from "cn"
+
+import { Button } from "@/components/ui/button"
+import { XIcon } from "lucide-react"
+
+function Dialog({ ...props }: DialogPrimitive.Root.Props) {
+  return <DialogPrimitive.Root data-slot="dialog" {...props} />
+}
+
+function DialogTrigger({ ...props }: DialogPrimitive.Trigger.Props) {
+  return <DialogPrimitive.Trigger data-slot="dialog-trigger" {...props} />
+}
+
+function DialogPortal({ ...props }: DialogPrimitive.Portal.Props) {
+  return <DialogPrimitive.Portal data-slot="dialog-portal" {...props} />
+}
+
+function DialogClose({ ...props }: DialogPrimitive.Close.Props) {
+  return <DialogPrimitive.Close data-slot="dialog-close" {...props} />
+}
+
+function DialogOverlay({
+  className,
+  ...props
+}: DialogPrimitive.Backdrop.Props) {
+  return (
+    <DialogPrimitive.Backdrop
+      data-slot="dialog-overlay"
+      className={cn(
+        "fixed inset-0 isolate z-50 bg-black/10 duration-100 supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+function DialogContent({
+  className,
+  children,
+  showCloseButton = true,
+  ...props
+}: DialogPrimitive.Popup.Props & {
+  showCloseButton?: boolean
+}) {
+  return (
+    <DialogPortal>
+      <DialogOverlay />
+      <DialogPrimitive.Popup
+        data-slot="dialog-content"
+        className={cn(
+          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          className
+        )}
+        {...props}
+      >
+        {children}
+        {showCloseButton && (
+          <DialogPrimitive.Close
+            data-slot="dialog-close"
+            render={
+              <Button
+                variant="ghost"
+                className="absolute top-2 right-2"
+                size="icon-sm"
+              />
+            }
+          >
+            <XIcon />
+            <span className="sr-only">Close</span>
+          </DialogPrimitive.Close>
+        )}
+      </DialogPrimitive.Popup>
+    </DialogPortal>
+  )
+}
+
+function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="dialog-header"
+      className={cn("flex flex-col gap-2", className)}
+      {...props}
+    />
+  )
+}
+
+function DialogFooter({
+  className,
+  showCloseButton = false,
+  children,
+  ...props
+}: React.ComponentProps<"div"> & {
+  showCloseButton?: boolean
+}) {
+  return (
+    <div
+      data-slot="dialog-footer"
+      className={cn(
+        "-mx-4 -mb-4 flex flex-col-reverse gap-2 rounded-b-xl border-t bg-muted/50 p-4 sm:flex-row sm:justify-end",
+        className
+      )}
+      {...props}
+    >
+      {children}
+      {showCloseButton && (
+        <DialogPrimitive.Close render={<Button variant="outline" />}>
+          Close
+        </DialogPrimitive.Close>
+      )}
+    </div>
+  )
+}
+
+function DialogTitle({ className, ...props }: DialogPrimitive.Title.Props) {
+  return (
+    <DialogPrimitive.Title
+      data-slot="dialog-title"
+      className={cn(
+        "font-heading text-base leading-none font-medium",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+function DialogDescription({
+  className,
+  ...props
+}: DialogPrimitive.Description.Props) {
+  return (
+    <DialogPrimitive.Description
+      data-slot="dialog-description"
+      className={cn(
+        "text-sm text-muted-foreground *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-foreground",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+export {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogOverlay,
+  DialogPortal,
+  DialogTitle,
+  DialogTrigger,
+}
+```
+
+**Create `frontend/src/lib/use-autosize.ts`:**
+
+```ts
+"use client";
+
+/**
+ * Textareas grow with their content up to 60 vh, then scroll (slice 4 spec,
+ * UX "Layout"). The kit's `Textarea` already sizes itself to its content with
+ * `field-sizing: content` where the browser supports it; this hook does the
+ * same for a browser that does not (older iOS Safari), by setting the height
+ * from `scrollHeight` whenever the value changes. The caller caps the field
+ * with `max-h-[60vh]` so it scrolls past that.
+ */
+import { useLayoutEffect, type RefObject } from "react";
+
+/** The share of the window a field may grow to. */
+export const AUTOSIZE_MAX_SHARE = 0.6;
+
+function sizesItself(): boolean {
+  return typeof CSS !== "undefined" && typeof CSS.supports === "function" && CSS.supports("field-sizing", "content");
+}
+
+export function useAutosize(ref: RefObject<HTMLTextAreaElement | null>, value: string): void {
+  useLayoutEffect(() => {
+    const field = ref.current;
+    if (field === null || sizesItself()) return;
+    field.style.height = "auto";
+    // scrollHeight leaves out the 1 px borders.
+    const height = Math.min(field.scrollHeight + 2, Math.round(window.innerHeight * AUTOSIZE_MAX_SHARE));
+    field.style.height = `${height}px`;
+  }, [ref, value]);
+}
+```
+
+- [ ] **Step 5 (agent): Run the test, the suite, types and lint**
+
+```bash
+(cd frontend && npx vitest run src/lib/use-autosize.test.tsx 2>&1 | grep -E "Test Files|Tests ")
+(cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
+(cd frontend && npm run typecheck >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")
+git status --short
+```
+
+**Expected:** ` Test Files  1 passed (1)`, `      Tests  2 passed (2)`; the suite ` Test Files  74 passed (74)`, `      Tests  476 passed (476)`; `typecheck 0` and `lint 0`; the three new files as `??`.
+
+- [ ] **Step 6 (agent): Commit**
+
+```bash
+git add frontend/src/components/ui/dialog.tsx frontend/src/lib/use-autosize.ts frontend/src/lib/use-autosize.test.tsx
+git commit -m "Kit: the base-nova dialog and a textarea that grows to 60 vh (S Frontend changes; F §4.9)" -m "dialog.tsx is rebuilt from the upstream shadcn source (shadcn-ui/ui@db2db460,
+base-nova, through the installed CLI's transforms and Prettier), because
+the build container cannot reach the registry; only its header comment is
+added. useAutosize sizes a textarea to its content where the browser
+cannot (field-sizing: content), capped at 60% of the window.
+Frontend 474 -> 476 tests in 73 -> 74 files." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
+```
+
+**Expected:** one commit, 3 files changed.
+
+### Task 8: The step: the order of worship, the section cards, the sermon title and the landmarks (S UX "Layout", "Sermon title", "Section card", "Benediction and the church default", "Loading, error and empty states"; BC-1, BC-3, BC-9, BC-15, BC-17, BC-18; owner answer 3; clarifications 1, 21, 24, 28, 31)
+
+The screen, without the AI yet (T9) and without communion and custom elements (T10). `LiturgyStep` loads `GET /liturgy/config` (a skeleton while it loads; "Couldn't load the liturgy sections." with the server's message and Retry when a first load fails, never when a background refetch fails), then lays out the heading "Liturgy" (clarification 21), the sermon title and the order of worship from the config's outline, in the Word files' order: a `SectionCard` for each section, an `OutlineLandmark` row for the hymns, the readings, the sermon title and the creed (clarification 24). The cards follow S's "Section card": the switch "Include {Label}" (its touch area grown to 46 px on the use, not in the generated file; clarification 31), the label, the status chip by origin, the "Pastor's copy only" chip, and a ⋯ menu with **Clear text** (with an Undo line) and, on the Benediction when it no longer follows the church default, **Use church default**; when on, a textarea growing to 60 vh with its placeholder, the 20 000-character limit and a counter past 18 000, and the section's hint (the Assurance's fixed "People: Thanks be to God! Amen." line and its hint; the Benediction's hint only while it follows the default); when off, only "Off — not in the service. Any text is kept." Typing makes the text the user's; the Benediction follows the church default until edited (T5 keeps it there). On mount the step scrolls to the card the address names (`#card-…`), for Review's links. The step's Undo lines go when it unmounts. Owner answer 3 needs no new code: 2b's `StepFooter` already hides below `md` while a text field has focus (`useKeyboardOpen`, focus-based rather than `visualViewport`; clarification 28), so this task adds its test on this step. The page still renders the placeholder until T11 turns the step on; these tests render `LiturgyStep` inside the real builder layout.
+
+**Files:**
+- Create: `frontend/src/components/builder/liturgy/liturgy-step.tsx`, `section-card.tsx`, `outline-landmark.tsx`, `sermon-title-field.tsx` (all in `frontend/src/components/builder/liturgy/`)
+- Test: `frontend/src/components/builder/liturgy/liturgy-step.test.tsx` (new, 11)
+
+**Interfaces:**
+- Consumes: `useLiturgyConfig` and the fixtures (T4); `useLiturgyGeneration().undo`, `setUndo`, `clearUndo`, `applyUndo`, `dismissError` (T6); `editCardText`, `setCardEnabled`, `clearCard`, `restoreChurchDefault`, `setSermonTitle` (T2); `useAutosize` (T7); `effectivePicks` (2c); `useChurchProfile` (2a); the kit (`Switch`, `Textarea`, `Badge`, `DropdownMenu`, `Input`, `Label`, `Skeleton`, `ErrorState`).
+- Produces: `LiturgyStep()`; `SectionCard({spec, assuranceResponse, defaultBenediction, maxLength})` with `ORIGIN_CHIPS` and `COUNTER_FROM = 18_000`; `OutlineLandmark({item, draft})`; `SermonTitleField({maxLength})` and `SERMON_TITLE_ID = "sermon-title"`. DOM ids `card-{key}` (5a's Review links). Later users: T9 (the AI on the cards, the AI bar), T10 (communion, custom elements), T11 (the page).
+
+Counts after this task: frontend **487 passed in 75 files**.
+
+- [ ] **Step 1 (agent): Check the starting point**
+
+```bash
+git status --short
+ls frontend/src/components/builder/liturgy 2>&1 | tail -1
+(cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
+```
+
+**Expected:** nothing (or `?? .claude/`); `ls: cannot access 'frontend/src/components/builder/liturgy': No such file or directory`; ` Test Files  74 passed (74)`, `      Tests  476 passed (476)`.
+
+- [ ] **Step 2 (agent): Write the failing tests**
+
+**Create `frontend/src/components/builder/liturgy/liturgy-step.test.tsx`:**
+
+```tsx
+/**
+ * The Liturgy step (slice 4 spec, "User experience", Testing "dom"; F §4.6,
+ * §4.8). The step runs inside the real builder layout against the fake API.
+ * The clock is Tuesday, September 29, 2026 (only `Date` is faked), so a fresh
+ * draft is dated Sunday, October 4, 2026 (a first Sunday), and the lectionary
+ * answers "no readings", so the readings stay as each test seeds them.
+ */
+import { act, screen, waitFor, within } from "@testing-library/react";
+import type { ReactNode } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import BuilderLayout from "@/app/(signed-in)/(church)/builder/layout";
+import { Toaster } from "@/components/ui/sonner";
+import { editScriptureLines, setPick } from "@/lib/draft/readings";
+import { draftKey, type DraftV1, type SectionKey } from "@/lib/draft/schema";
+import { editCardText } from "@/lib/liturgy/cards";
+import { keys } from "@/lib/queries/keys";
+import { fakeError, installFakeApi, type FakeHandler } from "@/test/fake-api";
+import {
+  church,
+  churchProfile,
+  DRAFT_NOW,
+  gg2013,
+  lectionaryRoute,
+  liturgyConfig,
+  me,
+  testDraft,
+  USER_ID,
+} from "@/test/fixtures";
+import { renderWithProviders } from "@/test/render";
+
+import { LiturgyStep } from "./liturgy-step";
+
+const KEY = draftKey(USER_ID, church().id);
+const [, , COME, , , , , , SENT] = gg2013();
+const OCT_4 = "Isaiah 5:1-7\nPsalm 80:7-15\nPhilippians 3:4b-14\nMatthew 21:33-46";
+
+function stored(): DraftV1 {
+  return JSON.parse(window.localStorage.getItem(KEY) ?? "null") as DraftV1;
+}
+
+function withCard(key: SectionKey, patch: Partial<DraftV1["liturgy"]["cards"]["benediction"]>, d: DraftV1 = testDraft()): DraftV1 {
+  return { ...d, liturgy: { ...d.liturgy, cards: { ...d.liturgy.cards, [key]: { ...d.liturgy.cards[key], ...patch } } } };
+}
+
+/** The step in the builder layout, with a Toaster for toast text; `routes` replace the defaults. */
+function renderStep(draft: DraftV1 = testDraft(), routes: Record<string, FakeHandler> = {}, extra: ReactNode = null) {
+  window.localStorage.setItem(KEY, JSON.stringify(draft));
+  const api = installFakeApi({
+    "GET /church": churchProfile(),
+    "GET /lectionary/readings": lectionaryRoute(),
+    "GET /liturgy/config": liturgyConfig(),
+    ...routes,
+  });
+  const view = renderWithProviders(
+    <>
+      <BuilderLayout>
+        <LiturgyStep />
+        {extra}
+      </BuilderLayout>
+      <Toaster />
+    </>,
+    { me: me(), church: church(), path: "/builder/liturgy" },
+  );
+  return { ...view, api };
+}
+
+function card(label: string) {
+  return screen.getByRole("region", { name: label });
+}
+
+/** Each outline row: a card's title, or a landmark row's text. */
+function outline(): string[] {
+  const list = screen.getByRole("list", { name: "Order of worship" });
+  return within(list)
+    .getAllByRole("listitem")
+    .map((li) => li.querySelector("h3")?.textContent ?? li.textContent ?? "");
+}
+
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(DRAFT_NOW);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+  window.location.hash = "";
+});
+
+describe("the Liturgy step (S User experience)", () => {
+  it("shows the step's shape while the sections load, and Couldn't load the liturgy sections. with Retry when they fail", async () => {
+    let fail = true;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const { user } = renderStep(testDraft(), {
+      "GET /liturgy/config": async () => {
+        await gate;
+        return fail ? fakeError(500, "internal_error", "Something went wrong.") : liturgyConfig();
+      },
+    });
+    expect(await screen.findByRole("status", { name: "Loading the liturgy" })).toBeInTheDocument();
+    release();
+    expect(await screen.findByText("Couldn't load the liturgy sections.")).toBeInTheDocument();
+    expect(screen.getByText("Something went wrong. (Ref: 4f9a2c1e)")).toBeInTheDocument();
+    fail = false;
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByRole("region", { name: "Call to Worship" })).toBeInTheDocument();
+    expect(screen.queryByText("Couldn't load the liturgy sections.")).toBeNull();
+  });
+
+  it("lays out the order of worship as the Word files print it, with the draft's hymns, readings and title", async () => {
+    const hymns = (d: DraftV1): DraftV1 => ({
+      ...d,
+      hymns: {
+        ...d.hymns,
+        slots: {
+          opening: { hymn_id: COME.id, title: COME.title, number: COME.number, hymnal: "GG2013" },
+          response: null,
+          closing: { hymn_id: SENT.id, title: SENT.title, number: null, hymnal: "GG2013" },
+        },
+      },
+    });
+    const view = renderStep(hymns(editScriptureLines(testDraft(), OCT_4)));
+    expect(await screen.findByRole("heading", { level: 2, name: "Liturgy" })).toBeInTheDocument();
+    // No picks: the automatic readings, marked auto; the NT reading is never the Psalm.
+    expect(outline()).toEqual([
+      "Call to Worship",
+      "Opening Prayer",
+      "First Hymn · Come, Thou Almighty King",
+      "Prayer of Confession",
+      "Assurance of Pardon",
+      "Prayer for Illumination",
+      "First Reading · Isaiah 5:1-7 auto",
+      "New Testament Reading · Philippians 3:4b-14 auto",
+      "Sermon Title · [Sermon title]",
+      "Affirmation of Faith · Apostles' Creed",
+      "Second Hymn",
+      "Prayers of the People",
+      "Offertory Prayer",
+      "Third Hymn · Sent Forth by God's Blessing",
+      "Benediction",
+    ]);
+    expect(screen.getByRole("link", { name: "First Hymn · Come, Thou Almighty King" })).toHaveAttribute("href", "/builder/hymns");
+    expect(screen.getByRole("link", { name: "First Reading · Isaiah 5:1-7 auto" })).toHaveAttribute("href", "/builder/readings");
+    view.unmount();
+
+    // Explicit picks show without "auto"; a title shows as typed.
+    const picked = setPick(setPick(editScriptureLines(testDraft(), OCT_4), "ot", "Isaiah 5:1-7"), "nt", "Matthew 21:33-46");
+    renderStep({ ...picked, liturgy: { ...picked.liturgy, sermon_title: "Living Water" } });
+    expect(await screen.findByRole("link", { name: "First Reading · Isaiah 5:1-7" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "New Testament Reading · Matthew 21:33-46" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sermon Title · Living Water" })).toBeInTheDocument();
+  });
+
+  it("writes what is typed to the draft as the user's text, and keeps it across a reload", async () => {
+    const { user, unmount } = renderStep();
+    const text = await screen.findByRole("textbox", { name: "Call to Worship" });
+    expect(text).toHaveAttribute("placeholder", "Type your own text, or tap Generate.");
+    expect(within(card("Call to Worship")).getByText("Empty")).toBeInTheDocument();
+    await user.type(text, "Come, let us worship.");
+    expect(within(card("Call to Worship")).getByText("Your text")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(stored().liturgy.cards.call_to_worship).toEqual({ enabled: true, text: "Come, let us worship.", origin: "typed" }),
+    );
+    unmount();
+    renderStep(stored());
+    expect(await screen.findByRole("textbox", { name: "Call to Worship" })).toHaveValue("Come, let us worship.");
+  });
+
+  it("shows each section's hints and switches; a card switched off keeps its text and says so", async () => {
+    const { user } = renderStep(withCard("opening_prayer", { text: "Gracious God", origin: "typed" }));
+    await screen.findByRole("region", { name: "Call to Worship" });
+    expect(within(card("Call to Worship")).getByText("Start lines with “Leader:” or “People:”. People lines print in bold.")).toBeInTheDocument();
+    expect(within(card("Prayer of Confession")).getByText("Printed in bold for everyone to read together.")).toBeInTheDocument();
+    expect(within(card("Assurance of Pardon")).getByText("People: Thanks be to God! Amen.")).toBeInTheDocument();
+    expect(within(card("Assurance of Pardon")).getByText("Added automatically after your text.")).toBeInTheDocument();
+    const prayers = card("Prayers of the People");
+    expect(within(prayers).getByText("Pastor's copy only")).toBeInTheDocument();
+    expect(within(prayers).getByRole("switch", { name: "Include Prayers of the People" })).not.toBeChecked();
+    expect(within(prayers).getByText("Off — not in the service. Any text is kept.")).toBeInTheDocument();
+    expect(within(prayers).queryByRole("textbox")).toBeNull();
+
+    const opening = card("Opening Prayer");
+    await user.click(within(opening).getByRole("switch", { name: "Include Opening Prayer" }));
+    expect(within(opening).queryByRole("textbox")).toBeNull();
+    expect(within(opening).getByText("Off — not in the service. Any text is kept.")).toBeInTheDocument();
+    await waitFor(() => expect(stored().liturgy.cards.opening_prayer).toEqual({ enabled: false, text: "Gracious God", origin: "typed" }));
+    await user.click(within(opening).getByRole("switch", { name: "Include Opening Prayer" }));
+    expect(within(opening).getByRole("textbox", { name: "Opening Prayer" })).toHaveValue("Gracious God");
+  });
+
+  it("shows the church's default benediction and follows it until edited; Use church default follows it again", async () => {
+    const { user, queryClient } = renderStep();
+    const benediction = await screen.findByRole("region", { name: "Benediction" });
+    const text = within(benediction).getByRole("textbox", { name: "Benediction" });
+    expect(text).toHaveValue("Halverson");
+    expect(within(benediction).getByText("Church default")).toBeInTheDocument();
+    expect(within(benediction).getByText("Your church's default benediction. Admins can change it in Settings.")).toBeInTheDocument();
+    // An admin changes the default (6a) and the profile refetches.
+    act(() => queryClient.setQueryData(keys.churchProfile(church().id), churchProfile({ default_benediction: "The Lord bless you." })));
+    await waitFor(() => expect(text).toHaveValue("The Lord bless you."));
+    await user.clear(text);
+    await user.type(text, "Go in peace.");
+    expect(within(benediction).getByText("Your text")).toBeInTheDocument();
+    expect(within(benediction).queryByText(/Your church's default benediction/)).toBeNull();
+    act(() => queryClient.setQueryData(keys.churchProfile(church().id), churchProfile({ default_benediction: "Halverson" })));
+    await user.click(within(benediction).getByRole("button", { name: "More actions for Benediction" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Use church default" }));
+    expect(text).toHaveValue("Halverson");
+    expect(within(benediction).getByText("Church default")).toBeInTheDocument();
+    await waitFor(() => expect(stored().liturgy.cards.benediction).toEqual({ enabled: true, text: "Halverson", origin: "default" }));
+  });
+
+  it("Clear text empties a card with an Undo line; Undo brings the text back, and the line goes on the next edit", async () => {
+    const { user } = renderStep(withCard("call_to_worship", { text: "Come.", origin: "typed" }));
+    const cw = await screen.findByRole("region", { name: "Call to Worship" });
+    expect(within(card("Opening Prayer")).getByRole("button", { name: "More actions for Opening Prayer" })).toBeDisabled();
+    await user.click(within(cw).getByRole("button", { name: "More actions for Call to Worship" }));
+    expect(screen.queryByRole("menuitem", { name: "Use church default" })).toBeNull();
+    await user.click(await screen.findByRole("menuitem", { name: "Clear text" }));
+    const text = within(cw).getByRole("textbox", { name: "Call to Worship" });
+    expect(text).toHaveValue("");
+    expect(within(cw).getByText("Empty")).toBeInTheDocument();
+    expect(within(cw).getByText("Cleared.")).toBeInTheDocument();
+    await user.click(within(cw).getByRole("button", { name: "Undo" }));
+    expect(text).toHaveValue("Come.");
+    expect(within(cw).getByText("Your text")).toBeInTheDocument();
+    expect(within(cw).queryByText("Cleared.")).toBeNull();
+    await user.click(within(cw).getByRole("button", { name: "More actions for Call to Worship" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Clear text" }));
+    await user.type(text, "Welcome");
+    expect(within(cw).queryByText("Cleared.")).toBeNull();
+    expect(within(cw).queryByRole("button", { name: "Undo" })).toBeNull();
+  });
+
+  it("writes the sermon title, shows it in the Sermon row, and the row focuses the field", async () => {
+    const { user } = renderStep();
+    const title = await screen.findByRole("textbox", { name: "Sermon title" });
+    expect(title).toHaveAttribute("placeholder", "e.g. Living Water");
+    expect(title).toHaveAttribute("maxLength", "300");
+    expect(screen.getByText("Printed in the bulletin and the pastor's copy. If blank, both show “[Sermon title]”.")).toBeInTheDocument();
+    await user.type(title, "Living Water");
+    const row = screen.getByRole("button", { name: "Sermon Title · Living Water" });
+    await waitFor(() => expect(stored().liturgy.sermon_title).toBe("Living Water"));
+    await user.click(screen.getByRole("textbox", { name: "Call to Worship" }));
+    await user.click(row);
+    expect(title).toHaveFocus();
+  });
+
+  it("shows typed and AI text as text, never as markup, and counts characters past 18,000", async () => {
+    let d = withCard("call_to_worship", { text: "<b>x</b>", origin: "typed" });
+    d = withCard("opening_prayer", { text: "<i>AI</i> & more", origin: "ai" }, d);
+    d = withCard("offertory_prayer", { text: "y".repeat(18_001), origin: "typed" }, d);
+    d = withCard("prayer_of_confession", { text: "z".repeat(18_000), origin: "typed" }, d);
+    renderStep({ ...d, liturgy: { ...d.liturgy, sermon_title: "<script>t</script>" } });
+    expect(await screen.findByRole("textbox", { name: "Call to Worship" })).toHaveValue("<b>x</b>");
+    expect(within(card("Opening Prayer")).getByRole("textbox")).toHaveValue("<i>AI</i> & more");
+    expect(within(card("Opening Prayer")).getByText("AI draft")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sermon Title · <script>t</script>" })).toBeInTheDocument();
+    expect(document.querySelector("b, i, script")).toBeNull();
+    expect(within(card("Offertory Prayer")).getByText("18,001 / 20,000")).toBeInTheDocument();
+    expect(within(card("Offertory Prayer")).getByRole("textbox")).toHaveAttribute("maxLength", "20000");
+    expect(within(card("Prayer of Confession")).queryByText(/\/ 20,000/)).toBeNull();
+  });
+
+  it("hides the step footer below md while a text field has focus, and shows it again on blur (owner answer 3)", async () => {
+    renderStep();
+    const text = await screen.findByRole("textbox", { name: "Call to Worship" });
+    const footer = screen.getByRole("navigation", { name: "Step navigation" });
+    expect(footer).not.toHaveAttribute("data-keyboard-open");
+    act(() => text.focus());
+    expect(footer).toHaveAttribute("data-keyboard-open");
+    expect(footer.className).toContain("max-md:hidden");
+    act(() => text.blur());
+    expect(footer).not.toHaveAttribute("data-keyboard-open");
+    act(() => screen.getByRole("textbox", { name: "Sermon title" }).focus());
+    expect(footer).toHaveAttribute("data-keyboard-open");
+  });
+
+  it("scrolls to the card the address names, as Review's links do", async () => {
+    window.location.hash = "#card-assurance";
+    const scroll = vi.spyOn(Element.prototype, "scrollIntoView");
+    renderStep();
+    await screen.findByRole("region", { name: "Assurance of Pardon" });
+    await waitFor(() => expect(scroll).toHaveBeenCalled());
+    expect(scroll.mock.contexts[0]).toBe(document.getElementById("card-assurance"));
+  });
+});
+
+describe("the card's own draft (S Card origin transitions)", () => {
+  it("never shows another card's edit, and a typed card keeps its origin when switched", async () => {
+    const d = editCardText(testDraft(), "assurance", "You are forgiven.");
+    const { user } = renderStep(d);
+    const assurance = await screen.findByRole("region", { name: "Assurance of Pardon" });
+    await user.click(within(assurance).getByRole("switch", { name: "Include Assurance of Pardon" }));
+    await user.click(within(assurance).getByRole("switch", { name: "Include Assurance of Pardon" }));
+    expect(within(assurance).getByText("Your text")).toBeInTheDocument();
+    expect(within(card("Call to Worship")).getByText("Empty")).toBeInTheDocument();
+  });
+});
+```
+
+- [ ] **Step 3 (agent): Run them and see them fail**
+
+```bash
+(cd frontend && npx vitest run src/components/builder/liturgy 2>&1 | grep -E "^ FAIL|Error: Failed|Tests ")
+```
+
+**Expected:**
+
+```
+(pending replay)
+```
+- [ ] **Step 4 (agent): Write the step, the cards, the landmarks and the sermon title**
+
+**Create `frontend/src/components/builder/liturgy/sermon-title-field.tsx`:**
+
+```tsx
+"use client";
+
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useDraft } from "@/lib/draft/context";
+import { setSermonTitle } from "@/lib/liturgy/cards";
+
+/** The field's id: the Sermon row in the order of worship focuses it. */
+export const SERMON_TITLE_ID = "sermon-title";
+
+/**
+ * The sermon title (S UX "Sermon title"; BC-15): printed in the bulletin and
+ * the pastor's copy, never sent to the AI; 300 characters at most.
+ */
+export function SermonTitleField({ maxLength }: { maxLength: number }) {
+  const { draft, update } = useDraft();
+  return (
+    <div className="grid gap-2">
+      <Label htmlFor={SERMON_TITLE_ID}>Sermon title</Label>
+      <Input
+        id={SERMON_TITLE_ID}
+        value={draft.liturgy.sermon_title}
+        placeholder="e.g. Living Water"
+        maxLength={maxLength}
+        aria-describedby="sermon-title-help"
+        onChange={(event) => {
+          const next = event.target.value;
+          update((d) => setSermonTitle(d, next));
+        }}
+        className="h-11"
+      />
+      <p id="sermon-title-help" className="text-sm text-muted-foreground">
+        Printed in the bulletin and the pastor&apos;s copy. If blank, both show “[Sermon title]”.
+      </p>
+    </div>
+  );
+}
+```
+
+**Create `frontend/src/components/builder/liturgy/outline-landmark.tsx`:**
+
+```tsx
+"use client";
+
+import Link from "next/link";
+import type { ReactNode } from "react";
+
+import type { OutlineItem } from "@/lib/api/types";
+import { effectivePicks } from "@/lib/draft/readings";
+import type { DraftV1, Slot } from "@/lib/draft/schema";
+import { cn } from "@/lib/utils";
+
+import { SERMON_TITLE_ID } from "./sermon-title-field";
+
+const HYMN_SLOTS: Partial<Record<OutlineItem["value_source"], Slot>> = {
+  hymn_opening: "opening",
+  hymn_response: "response",
+  hymn_closing: "closing",
+};
+
+const ROW = "flex min-h-11 w-full min-w-0 flex-wrap items-center gap-x-1 border-l-2 pl-3 text-left text-sm text-muted-foreground";
+
+/**
+ * One landmark of the order of worship (S UX "Landmark rows"): a single muted
+ * line, not a card, with the value the Word files will print. Hymns show the
+ * slot's title and open Hymns; the readings show `effectivePicks` (an
+ * automatic one marked "auto") and open Date & readings; the Sermon row shows
+ * the title, or "[Sermon title]" when blank, and focuses the sermon field;
+ * the Affirmation row shows its fixed text.
+ */
+export function OutlineLandmark({ item, draft }: { item: OutlineItem; draft: DraftV1 }) {
+  const label = <span className="font-medium text-foreground">{item.label}</span>;
+  const value = (text: ReactNode) => <span className="min-w-0 wrap-anywhere"> · {text}</span>;
+  const slot = HYMN_SLOTS[item.value_source];
+  if (slot) {
+    const pick = draft.hymns.slots[slot];
+    return (
+      <Link href="/builder/hymns" className={cn(ROW, "hover:text-foreground")}>
+        {label}
+        {pick ? value(pick.title) : null}
+      </Link>
+    );
+  }
+  if (item.value_source === "reading_ot" || item.value_source === "reading_nt") {
+    const picks = effectivePicks(draft);
+    const ref = item.value_source === "reading_ot" ? picks.ot : picks.nt;
+    const auto = item.value_source === "reading_ot" ? picks.otAuto : picks.ntAuto;
+    return (
+      <Link href="/builder/readings" className={cn(ROW, "hover:text-foreground")}>
+        {label}
+        {ref
+          ? value(
+              <>
+                {ref}
+                {auto ? <span className="text-xs"> auto</span> : null}
+              </>,
+            )
+          : null}
+      </Link>
+    );
+  }
+  if (item.value_source === "sermon_title") {
+    const title = draft.liturgy.sermon_title.trim();
+    return (
+      <button
+        type="button"
+        className={cn(ROW, "hover:text-foreground")}
+        onClick={() => document.getElementById(SERMON_TITLE_ID)?.focus()}
+      >
+        {label}
+        {value(title === "" ? <span className="italic">[Sermon title]</span> : title)}
+      </button>
+    );
+  }
+  return (
+    <div className={ROW}>
+      {label}
+      {item.fixed_text ? value(item.fixed_text) : null}
+    </div>
+  );
+}
+```
+
+**Create `frontend/src/components/builder/liturgy/section-card.tsx`:**
+
+```tsx
+"use client";
+
+import { EllipsisIcon } from "lucide-react";
+import { useRef } from "react";
+
+import { Badge } from "@/components/ui/badge";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import type { LiturgySection } from "@/lib/api/types";
+import { useDraft } from "@/lib/draft/context";
+import { clearCard, editCardText, restoreChurchDefault, setCardEnabled, type CardOrigin } from "@/lib/liturgy/cards";
+import { useLiturgyGeneration } from "@/lib/liturgy/generation";
+import { useAutosize } from "@/lib/use-autosize";
+import { cn } from "@/lib/utils";
+
+/** The status chip for each origin (S "Section card"). */
+export const ORIGIN_CHIPS: Record<CardOrigin, string> = {
+  empty: "Empty",
+  typed: "Your text",
+  ai: "AI draft",
+  default: "Church default",
+  archive: "From saved service",
+};
+
+/** The counter shows past this many characters (S "Other card rules"). */
+export const COUNTER_FROM = 18_000;
+
+const UNDO_LINES = { replaced: "Replaced with a new AI draft.", cleared: "Cleared." } as const;
+
+export type SectionCardProps = {
+  spec: LiturgySection;
+  /** "People: Thanks be to God! Amen." under the Assurance card. */
+  assuranceResponse: string;
+  /** The church's default benediction, for "Use church default". */
+  defaultBenediction: string;
+  maxLength: number;
+};
+
+/**
+ * One liturgy section (S "Section card"): a switch named "Include {Label}",
+ * the label, a status chip and a ⋯ menu; when on, the textarea (growing up to
+ * 60 vh), the section's hint and the Undo line; when off, only "Off — not in
+ * the service. Any text is kept." Typing makes the text the user's; Clear
+ * text offers Undo; "Use church default" (Benediction) follows the default
+ * again. The card's id is `card-{key}`, so Review can link to it.
+ */
+export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLength }: SectionCardProps) {
+  const { draft, update } = useDraft();
+  const generation = useLiturgyGeneration();
+  const key = spec.key;
+  const card = draft.liturgy.cards[key];
+  const undo = generation.undo[key];
+  const textRef = useRef<HTMLTextAreaElement>(null);
+  useAutosize(textRef, card.text);
+  const headingId = `card-${key}-title`;
+  const hasText = card.text.trim() !== "";
+  const followsDefault = key === "benediction" && card.origin === "default";
+  const hint = key === "benediction" ? (followsDefault ? spec.hint : null) : key === "assurance" ? null : spec.hint;
+
+  function edit(text: string) {
+    update((d) => editCardText(d, key, text));
+    generation.dismissError(key);
+    generation.setUndo(key, null);
+  }
+
+  function toggle(enabled: boolean) {
+    update((d) => setCardEnabled(d, key, enabled));
+    generation.dismissError(key);
+  }
+
+  function clear() {
+    const previous = { text: card.text, origin: card.origin };
+    update((d) => clearCard(d, key));
+    generation.dismissError(key);
+    generation.setUndo(key, { kind: "cleared", previous });
+  }
+
+  function followDefault() {
+    update((d) => restoreChurchDefault(d, defaultBenediction));
+    generation.dismissError(key);
+    generation.setUndo(key, null);
+  }
+
+  const menuItems = [
+    hasText ? (
+      <DropdownMenuItem key="clear" onClick={clear} className="min-h-11 md:min-h-8">
+        Clear text
+      </DropdownMenuItem>
+    ) : null,
+    key === "benediction" && card.origin !== "default" ? (
+      <DropdownMenuItem key="default" onClick={followDefault} className="min-h-11 md:min-h-8">
+        Use church default
+      </DropdownMenuItem>
+    ) : null,
+  ].filter(Boolean);
+
+  return (
+    <section
+      id={`card-${key}`}
+      aria-labelledby={headingId}
+      className={cn("grid scroll-mt-24 gap-3 rounded-lg border p-4", !card.enabled && "bg-muted/40")}
+    >
+      <div className="flex min-w-0 items-center gap-3">
+        <Switch
+          checked={card.enabled}
+          onCheckedChange={(checked) => toggle(checked)}
+          aria-label={`Include ${spec.label}`}
+          className="after:-inset-y-3.5"
+        />
+        <h3 id={headingId} className="min-w-0 flex-1 text-base font-medium">
+          {spec.label}
+        </h3>
+        <div className="flex shrink-0 flex-wrap justify-end gap-1">
+          {spec.pastor_copy_only ? <Badge variant="outline">Pastor&apos;s copy only</Badge> : null}
+          <Badge variant="secondary">{ORIGIN_CHIPS[card.origin]}</Badge>
+        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            aria-label={`More actions for ${spec.label}`}
+            disabled={menuItems.length === 0}
+            className={cn(buttonVariants({ variant: "ghost", size: "icon-lg" }), "size-11 shrink-0 md:size-8")}
+          >
+            <EllipsisIcon aria-hidden="true" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-auto min-w-44">
+            {menuItems}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+      {card.enabled ? (
+        <>
+          <Textarea
+            ref={textRef}
+            aria-labelledby={headingId}
+            value={card.text}
+            placeholder="Type your own text, or tap Generate."
+            maxLength={maxLength}
+            rows={spec.rows}
+            style={{ minHeight: `calc(${spec.rows}lh + 1rem + 2px)` }}
+            className="max-h-[60vh] overflow-y-auto"
+            onChange={(event) => edit(event.target.value)}
+          />
+          {card.text.length > COUNTER_FROM ? (
+            <p className="text-right text-xs text-muted-foreground">
+              {card.text.length.toLocaleString("en-US")} / {maxLength.toLocaleString("en-US")}
+            </p>
+          ) : null}
+          {key === "assurance" ? (
+            <div className="grid gap-0.5 text-sm">
+              <p className="font-medium">{assuranceResponse}</p>
+              {spec.hint ? <p className="text-muted-foreground">{spec.hint}</p> : null}
+            </div>
+          ) : null}
+          {hint ? <p className="text-sm text-muted-foreground">{hint}</p> : null}
+          {undo ? (
+            <p className="flex flex-wrap items-center gap-x-1 text-sm" aria-live="polite">
+              {UNDO_LINES[undo.kind]}
+              <Button variant="link" className="h-11 px-1 md:h-auto" onClick={() => generation.applyUndo(key)}>
+                Undo
+              </Button>
+            </p>
+          ) : null}
+        </>
+      ) : (
+        <p className="text-sm text-muted-foreground">Off — not in the service. Any text is kept.</p>
+      )}
+    </section>
+  );
+}
+```
+
+**Create `frontend/src/components/builder/liturgy/liturgy-step.tsx`:**
+
+```tsx
+"use client";
+
+import { Fragment, useEffect } from "react";
+
+import { ErrorState } from "@/components/app/error-state";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useChurch } from "@/lib/church-context";
+import { useDraft } from "@/lib/draft/context";
+import { useLiturgyGeneration } from "@/lib/liturgy/generation";
+import { useChurchProfile } from "@/lib/queries/church";
+import { useLiturgyConfig } from "@/lib/queries/liturgy";
+
+import { OutlineLandmark } from "./outline-landmark";
+import { SectionCard } from "./section-card";
+import { SermonTitleField } from "./sermon-title-field";
+
+/** The step's shape while `GET /liturgy/config` loads (S "Loading, error and empty states"). */
+function LiturgySkeleton() {
+  return (
+    <div role="status" aria-label="Loading the liturgy" className="grid gap-4">
+      <Skeleton className="h-16 w-full" />
+      <Skeleton className="h-40 w-full" />
+      <Skeleton className="h-40 w-full" />
+      <Skeleton className="h-40 w-full" />
+    </div>
+  );
+}
+
+/**
+ * Step 3, Liturgy (slice 4 spec, "User experience"): the sermon title, then
+ * the order of worship from `GET /liturgy/config`'s outline, in the order the
+ * Word files print it: a card for each section, muted landmark rows for the
+ * hymns, readings, sermon and creed. It reads and writes only the draft (F
+ * §4.6); the AI runs live in the builder shell's generation provider, and the
+ * step's Undo lines go when it unmounts. On mount it scrolls to the card the
+ * address names (`#card-…`, `#custom-…`).
+ */
+export function LiturgyStep() {
+  const configQuery = useLiturgyConfig();
+  const config = configQuery.data;
+  const church = useChurch();
+  const profile = useChurchProfile(church.id).data;
+  const { draft } = useDraft();
+  const { clearUndo } = useLiturgyGeneration();
+  const loaded = config !== undefined;
+
+  // "Just replaced" and "Cleared" lines disappear when the step unmounts (S "Section card").
+  useEffect(() => () => clearUndo(), [clearUndo]);
+
+  useEffect(() => {
+    if (!loaded) return;
+    const id = decodeURIComponent(window.location.hash.slice(1));
+    if (id !== "") document.getElementById(id)?.scrollIntoView({ block: "start" });
+  }, [loaded]);
+
+  if (config === undefined) {
+    // A failed background refetch keeps the config (TanStack Query v5), so only a first load that failed shows this.
+    return configQuery.isError ? (
+      <ErrorState
+        title="Couldn't load the liturgy sections."
+        error={configQuery.error}
+        onRetry={() => void configQuery.refetch()}
+        retrying={configQuery.isFetching}
+      />
+    ) : (
+      <LiturgySkeleton />
+    );
+  }
+
+  const sections = new Map(config.sections.map((spec) => [spec.key as string, spec]));
+  const defaultBenediction = profile?.default_benediction ?? config.default_benediction_fallback;
+
+  return (
+    <div className="grid gap-6">
+      <h2 className="text-lg font-semibold">Liturgy</h2>
+      <SermonTitleField maxLength={config.limits.max_sermon_title} />
+      <section aria-labelledby="order-of-worship" className="grid gap-3">
+        <h3 id="order-of-worship" className="text-base font-medium">
+          Order of worship
+        </h3>
+        <ol aria-labelledby="order-of-worship" className="grid gap-3">
+          {config.outline.map((item) => {
+            const spec = sections.get(item.key);
+            return (
+              <Fragment key={item.key}>
+                {item.kind === "section" && spec ? (
+                  <li>
+                    <SectionCard
+                      spec={spec}
+                      assuranceResponse={config.assurance_response}
+                      defaultBenediction={defaultBenediction}
+                      maxLength={config.limits.max_section_text}
+                    />
+                  </li>
+                ) : item.kind === "landmark" ? (
+                  <li>
+                    <OutlineLandmark item={item} draft={draft} />
+                  </li>
+                ) : null}
+              </Fragment>
+            );
+          })}
+        </ol>
+      </section>
+    </div>
+  );
+}
+```
+
+- [ ] **Step 5 (agent): Run the tests, the suite, types and lint**
+
+```bash
+(cd frontend && npx vitest run src/components/builder/liturgy 2>&1 | grep -E "Test Files|Tests ")
+(cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
+(cd frontend && npm run typecheck >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")
+git status --short
+```
+
+**Expected:** ` Test Files  1 passed (1)`, `      Tests  11 passed (11)`; the suite ` Test Files  75 passed (75)`, `      Tests  487 passed (487)`; `typecheck 0` and `lint 0`; `?? frontend/src/components/builder/liturgy/`.
+
+- [ ] **Step 6 (agent): Commit**
+
+```bash
+git add frontend/src/components/builder/liturgy/liturgy-step.tsx frontend/src/components/builder/liturgy/section-card.tsx frontend/src/components/builder/liturgy/outline-landmark.tsx frontend/src/components/builder/liturgy/sermon-title-field.tsx frontend/src/components/builder/liturgy/liturgy-step.test.tsx
+git commit -m "Liturgy: the order of worship with editable section cards, the sermon title and the landmarks (S Section card, Layout; BC-1, BC-3, BC-9)" -m "LiturgyStep lays out GET /liturgy/config's outline in the Word files'
+order: a card per section (switch, chip, menu with Clear text and Use
+church default, a textarea growing to 60 vh with the hints and a counter
+past 18,000, Off when switched off with the text kept) and muted rows for
+the hymns, readings, sermon title and creed. Skeleton while loading;
+Couldn't load the liturgy sections. with Retry. The footer already hides
+while typing (owner answer 3); a test pins it here.
+Frontend 476 -> 487 tests in 74 -> 75 files." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
+```
+
+**Expected:** one commit, 5 files changed.
+
+### Task 9: Generate, Regenerate and the AI bar (S UX "AI bar", "Generate and Regenerate", "Per-card error messages", Testing dom 4-12; BC-2, BC-5, BC-6, BC-13, BC-20, BC-21; clarifications 8, 9, 15, 22, 23, 29)
+
+The cards get their AI (S "Section card" states) and the step its AI bar. An empty card has **Generate**; a card with text has **Regenerate**, which asks "Replace your text?" ("Keep my text" / "Replace text") when the text is the user's or a saved service's and runs at once for an AI draft or a Benediction following the default, and is disabled with "AI isn't set up" when the config says AI is off. While queued the card shows a disabled "Waiting…" and while writing "Writing…" (then "Still working — this can take up to a minute." after 8 s), each with a Cancel button named "Cancel {Label}"; the ⋯ menu is disabled, and the text is read-only while writing. Typing in a queued card, or switching a running card off, cancels its run. An error shows in an alert under the text; a retryable one carries **Try again** (disabled until a 429's wait has passed), which stands in for the card's button (clarification 22), and the 404 carries "Go to Hymns" (clarification 9). The AI bar has **Generate empty sections (n)** (disabled at 0, with S's other caption), **Cancel** and "Writing k of n…" during a bulk run (clarification 23), the no-AI banner, the "general text" notice with its "Date & readings" link, and the all-off notice. The AI itself is T6's provider; this task wires the screen to it and tests S's dom cases 4-12 through it, including the stale rule (clarification 29), navigation to another step, the 429 and a 401 or a lost church.
+
+**Files:**
+- Create: `frontend/src/components/builder/liturgy/ai-bar.tsx`, `frontend/src/components/builder/liturgy/use-still-working.ts`
+- Modify: `frontend/src/components/builder/liturgy/section-card.tsx` (the AI states, the confirm dialog, the error alert), `frontend/src/components/builder/liturgy/liturgy-step.tsx` (the AI bar, `aiAvailable`)
+- Test: `frontend/src/components/builder/liturgy/liturgy-step.test.tsx` (+13)
+
+**Interfaces:**
+- Consumes: `useLiturgyGeneration()` (T6); `sectionsNeedingAi`, `needsRegenerateConfirm` (T2); `type CardError` (T3); `liturgyCounts` (T2); `ConfirmDialog` (`cancelLabel`, 2c), `PendingButton`, `Alert`; `authEvents` (1, in the tests).
+- Produces: `AiBar({aiAvailable})` (a region named "Write with AI"); `SectionCard` gains `aiAvailable`; `STILL_WORKING_MS = 8_000`, `STILL_WORKING`, `useStillWorking(active)`. Later users: T10, T11.
+
+Counts after this task: frontend **500 passed in 75 files**.
+
+- [ ] **Step 1 (agent): Check the starting point**
+
+```bash
+git status --short
+grep -c "aiAvailable" frontend/src/components/builder/liturgy/section-card.tsx
+(cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
+```
+
+**Expected:** nothing (or `?? .claude/`); `0` (grep exits 1); ` Test Files  75 passed (75)`, `      Tests  487 passed (487)`.
+
+- [ ] **Step 2 (agent): Write the failing tests**
+
+**In `frontend/src/components/builder/liturgy/liturgy-step.test.tsx`, replace:**
+
+```tsx
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import BuilderLayout from "@/app/(signed-in)/(church)/builder/layout";
+import { Toaster } from "@/components/ui/sonner";
+import { editScriptureLines, setPick } from "@/lib/draft/readings";
+import { draftKey, type DraftV1, type SectionKey } from "@/lib/draft/schema";
+import { editCardText } from "@/lib/liturgy/cards";
+import { keys } from "@/lib/queries/keys";
+import { fakeError, installFakeApi, type FakeHandler } from "@/test/fake-api";
+```
+
+**with:**
+
+```tsx
+import { toast } from "sonner";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import BuilderLayout from "@/app/(signed-in)/(church)/builder/layout";
+import ReviewStepPage from "@/app/(signed-in)/(church)/builder/review/page";
+import { Toaster } from "@/components/ui/sonner";
+import type { GenerateLiturgyBody } from "@/lib/api/types";
+import { editOccasion, editScriptureLines, setPick } from "@/lib/draft/readings";
+import { draftKey, type DraftV1, type SectionKey } from "@/lib/draft/schema";
+import { editCardText } from "@/lib/liturgy/cards";
+import { authEvents } from "@/lib/queries/auth-events";
+import { keys } from "@/lib/queries/keys";
+import { fakeError, installFakeApi, type FakeHandler, type FakeResponse, type RecordedRequest } from "@/test/fake-api";
+```
+
+**In `frontend/src/components/builder/liturgy/liturgy-step.test.tsx`, replace:**
+
+```tsx
+  DRAFT_NOW,
+  gg2013,
+```
+
+**with:**
+
+```tsx
+  DRAFT_NOW,
+  generateRoute,
+  gg2013,
+```
+
+**In `frontend/src/components/builder/liturgy/liturgy-step.test.tsx`, replace:**
+
+```tsx
+  me,
+  testDraft,
+```
+
+**with:**
+
+```tsx
+  me,
+  sectionFailure,
+  sectionResult,
+  testDraft,
+```
+
+**In `frontend/src/components/builder/liturgy/liturgy-step.test.tsx`, replace:**
+
+```tsx
+import { LiturgyStep } from "./liturgy-step";
+
+```
+
+**with:**
+
+```tsx
+import { LiturgyStep } from "./liturgy-step";
+import { STILL_WORKING } from "./use-still-working";
+
+```
+
+**In `frontend/src/components/builder/liturgy/liturgy-step.test.tsx`, replace:**
+
+```tsx
+  vi.setSystemTime(DRAFT_NOW);
+});
+```
+
+**with:**
+
+```tsx
+  vi.setSystemTime(DRAFT_NOW);
+  toast.dismiss(); // sonner replays a toast still showing to the next Toaster
+});
+```
+
+**In `frontend/src/components/builder/liturgy/liturgy-step.test.tsx`, replace:**
+
+```tsx
+    expect(within(card("Call to Worship")).getByText("Empty")).toBeInTheDocument();
+  });
+});
+
+```
+
+**with:**
+
+```tsx
+    expect(within(card("Call to Worship")).getByText("Empty")).toBeInTheDocument();
+  });
+});
+
+// --- slice 4b T9: Generate, Regenerate and the AI bar ---------------------------------
+
+/** A `POST /liturgy/generate` handler that answers each section only when the test releases it. */
+function heldGenerate() {
+  const waiting = new Map<string, (answer: FakeResponse | undefined) => void>();
+  const sent: string[] = [];
+  let open = 0;
+  let most = 0;
+  const handler = async (req: RecordedRequest) => {
+    const section = (req.body as GenerateLiturgyBody).sections[0];
+    sent.push(section);
+    open += 1;
+    most = Math.max(most, open);
+    const answer = await new Promise<FakeResponse | undefined>((resolve) => waiting.set(section, resolve));
+    open -= 1;
+    return answer ?? { results: [sectionResult(section, `New ${section}`)] };
+  };
+  return {
+    handler,
+    sent,
+    most: () => most,
+    /** Answers `section` (by default "New {section}"), once its request has arrived. */
+    release: async (section: SectionKey, answer?: FakeResponse) => {
+      await waitFor(() => expect(waiting.has(section)).toBe(true));
+      waiting.get(section)?.(answer);
+      waiting.delete(section);
+    },
+  };
+}
+
+const generateCalls = (requests: RecordedRequest[]) => requests.filter((r) => r.path === "/liturgy/generate");
+
+describe("Generate and Regenerate (S Generate and Regenerate, AI bar)", () => {
+  it("Generate sends one section as the church, no overrides, and writes an AI draft with no toast", async () => {
+    const { user, api } = renderStep();
+    const cw = await screen.findByRole("region", { name: "Call to Worship" });
+    api.set("POST /liturgy/generate", generateRoute());
+    await user.click(within(cw).getByRole("button", { name: "Generate" }));
+    expect(await within(cw).findByText("AI draft")).toBeInTheDocument();
+    expect(within(cw).getByRole("textbox", { name: "Call to Worship" })).toHaveValue("Call to Worship written by the AI.");
+    const [call] = generateCalls(api.requests);
+    expect(call.headers["X-Church-Id"]).toBe(church().id);
+    expect(call.body).toEqual({ occasion: "", scriptures: [], hymns: { opening: null, response: null, closing: null }, sections: ["call_to_worship"] });
+    expect(generateCalls(api.requests)).toHaveLength(1);
+    expect(within(cw).queryByText(/Replaced/)).toBeNull(); // nothing was replaced
+    expect(screen.queryByText(/^Wrote/)).toBeNull();
+    await waitFor(() => expect(stored().liturgy.cards.call_to_worship.origin).toBe("ai"));
+  });
+
+  it("Generate empty sections writes only switched-on empty cards, 3 at a time, and ends with one toast", async () => {
+    const held = heldGenerate();
+    const d = withCard("call_to_worship", { text: "Come, let us worship.", origin: "typed" }, withCard("assurance", { enabled: false }));
+    const { user } = renderStep(d, { "POST /liturgy/generate": held.handler });
+    const bar = await screen.findByRole("region", { name: "Write with AI" });
+    expect(within(bar).getByText("Only switched-on sections with no text are written. Text you typed is never changed.")).toBeInTheDocument();
+    await user.click(within(bar).getByRole("button", { name: "Generate empty sections (4)" }));
+    expect(await within(bar).findByText("Writing 1 of 4…")).toBeInTheDocument();
+    expect(within(bar).getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+    await waitFor(() => expect(held.sent).toHaveLength(3));
+    expect(within(card("Offertory Prayer")).getByRole("button", { name: "Waiting…" })).toBeDisabled();
+    await held.release("opening_prayer");
+    expect(await within(bar).findByText("Writing 2 of 4…")).toBeInTheDocument();
+    for (const key of ["prayer_of_confession", "prayer_for_illumination", "offertory_prayer"] as const) await held.release(key);
+    expect(await screen.findByText("Wrote 4 sections.")).toBeInTheDocument();
+    expect(held.sent).toEqual(["opening_prayer", "prayer_of_confession", "prayer_for_illumination", "offertory_prayer"]);
+    expect(held.most()).toBe(3);
+    // Typed text, a card that is off and the Benediction's default are never sent or changed.
+    expect(screen.getByRole("textbox", { name: "Call to Worship" })).toHaveValue("Come, let us worship.");
+    expect(screen.getByRole("textbox", { name: "Benediction" })).toHaveValue("Halverson");
+    expect(within(bar).getByRole("button", { name: "Generate empty sections (0)" })).toBeDisabled();
+    expect(within(bar).getByText("Every switched-on section has text. Use Regenerate on a card for a new AI draft.")).toBeInTheDocument();
+  });
+
+  it("Regenerate on the user's text asks first; Keep my text sends nothing, Replace text replaces it with Undo", async () => {
+    const { user, api } = renderStep(withCard("opening_prayer", { text: "Gracious God", origin: "typed" }), {
+      "POST /liturgy/generate": generateRoute(),
+    });
+    const op = await screen.findByRole("region", { name: "Opening Prayer" });
+    await user.click(within(op).getByRole("button", { name: "Regenerate" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "Replace your text?" });
+    expect(within(dialog).getByText("Regenerate replaces the text in Opening Prayer with a new AI draft. You can undo right after.")).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Keep my text" }));
+    expect(generateCalls(api.requests)).toHaveLength(0);
+    await user.click(within(op).getByRole("button", { name: "Regenerate" }));
+    await user.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Replace text" }));
+    const text = within(op).getByRole("textbox", { name: "Opening Prayer" });
+    await waitFor(() => expect(text).toHaveValue("Opening Prayer written by the AI."));
+    expect(within(op).getByText("Replaced with a new AI draft.")).toBeInTheDocument();
+    await user.click(within(op).getByRole("button", { name: "Undo" }));
+    expect(text).toHaveValue("Gracious God");
+    expect(within(op).getByText("Your text")).toBeInTheDocument();
+    // An AI draft is regenerated without asking.
+    await user.click(within(op).getByRole("button", { name: "Regenerate" }));
+    await user.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Replace text" }));
+    await waitFor(() => expect(text).toHaveValue("Opening Prayer written by the AI."));
+    await user.click(within(op).getByRole("button", { name: "Regenerate" }));
+    await waitFor(() => expect(generateCalls(api.requests)).toHaveLength(3));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
+  // Heavy: six cards answer in one run, then a retry; near Vitest's 5 s default on a busy machine.
+  it("shows each error on its card only, never in the draft, with Try again where it can help", { timeout: 10_000 }, async () => {
+    let timeoutOnce = true;
+    const answers: Partial<Record<SectionKey, () => FakeResponse | ReturnType<typeof sectionResult>>> = {
+      call_to_worship: () =>
+        timeoutOnce
+          ? ((timeoutOnce = false), sectionFailure("call_to_worship", "ai_timeout", "The AI took too long to answer. Try again."))
+          : sectionResult("call_to_worship", "Leader: Come!"),
+      opening_prayer: () =>
+        sectionFailure(
+          "opening_prayer",
+          "prompt_invalid",
+          "The Opening Prayer prompt in Settings has a problem: Placeholders need a name, such as {occasion}. An admin can fix it under Settings → Liturgy prompts.",
+        ),
+      prayer_of_confession: () =>
+        fakeError(404, "not_found", "A chosen hymn is no longer in your hymnal. Choose it again on the Hymns step."),
+      assurance: () => fakeError(500, "internal_error", "Something went wrong."),
+      prayer_for_illumination: () => sectionFailure("prayer_for_illumination", "ai_not_configured", "AI not configured. Type this section yourself."),
+    };
+    const { user } = renderStep(testDraft(), {
+      "POST /liturgy/generate": generateRoute((section) => answers[section]?.() ?? sectionResult(section, `New ${section}`)),
+    });
+    const bar = await screen.findByRole("region", { name: "Write with AI" });
+    await user.click(within(bar).getByRole("button", { name: "Generate empty sections (6)" }));
+    expect(await screen.findByText("Wrote 1 of 6 sections. The rest show what went wrong.")).toBeInTheDocument();
+    const alertIn = (label: string) => within(card(label)).getByRole("alert");
+    expect(alertIn("Call to Worship")).toHaveTextContent("The AI took too long to answer. Try again.");
+    expect(within(alertIn("Opening Prayer")).queryByRole("button", { name: "Try again" })).toBeNull();
+    expect(within(alertIn("Prayer of Confession")).getByRole("link", { name: "Go to Hymns" })).toHaveAttribute("href", "/builder/hymns");
+    expect(within(alertIn("Prayer of Confession")).queryByRole("button", { name: "Try again" })).toBeNull();
+    expect(alertIn("Assurance of Pardon")).toHaveTextContent("Something went wrong. (Ref: 4f9a2c1e)");
+    expect(alertIn("Prayer for Illumination")).toHaveTextContent("AI not configured. Type this section yourself.");
+    expect(screen.getByRole("textbox", { name: "Call to Worship" })).toHaveValue(""); // the text is unchanged
+    await waitFor(() => expect(stored().liturgy.cards.offertory_prayer.text).toBe("New offertory_prayer"));
+    expect(window.localStorage.getItem(KEY)).not.toMatch(/took too long|has a problem|no longer in your hymnal|went wrong|not configured/);
+    await user.click(within(alertIn("Call to Worship")).getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Call to Worship" })).toHaveValue("Leader: Come!"));
+    expect(within(card("Call to Worship")).queryByRole("alert")).toBeNull();
+  });
+
+  it("without AI sends nothing: empty cards say so, Regenerate is off, and the banner explains", async () => {
+    const d = withCard("opening_prayer", { text: "Gracious God", origin: "typed" }, withCard("assurance", { enabled: false }));
+    const { user, api } = renderStep(d, { "GET /liturgy/config": liturgyConfig({ ai_available: false }) });
+    const bar = await screen.findByRole("region", { name: "Write with AI" });
+    expect(within(bar).getByText("AI writing isn't set up for this app. Type each section yourself — everything else works as usual.")).toBeInTheDocument();
+    await user.click(within(card("Call to Worship")).getByRole("button", { name: "Generate" }));
+    expect(within(card("Call to Worship")).getByRole("alert")).toHaveTextContent("AI not configured. Type this section yourself.");
+    await user.click(within(bar).getByRole("button", { name: "Generate empty sections (4)" }));
+    const marked = ["Call to Worship", "Prayer of Confession", "Prayer for Illumination", "Offertory Prayer"];
+    for (const label of marked) expect(within(card(label)).getByRole("alert")).toHaveTextContent("AI not configured. Type this section yourself.");
+    for (const label of ["Opening Prayer", "Assurance of Pardon", "Prayers of the People", "Benediction"]) {
+      expect(within(card(label)).queryByRole("alert")).toBeNull();
+    }
+    const op = card("Opening Prayer");
+    expect(within(op).getByRole("button", { name: "Regenerate" })).toBeDisabled();
+    expect(within(op).getByText("AI isn't set up")).toBeInTheDocument();
+    expect(within(op).getByRole("textbox", { name: "Opening Prayer" })).toHaveValue("Gracious God");
+    expect(within(op).getByText("Your text")).toBeInTheDocument();
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(generateCalls(api.requests)).toHaveLength(0);
+    expect(screen.queryByText(/^Wrote/)).toBeNull();
+  });
+
+  it("Cancel, switching a running card off, and typing in a queued card all stop it silently", { timeout: 10_000 }, async () => {
+    const held = heldGenerate();
+    const { user } = renderStep(testDraft(), { "POST /liturgy/generate": held.handler });
+    const cw = await screen.findByRole("region", { name: "Call to Worship" });
+    await user.click(within(cw).getByRole("button", { name: "Generate" }));
+    expect(await within(cw).findByRole("button", { name: "Writing…" })).toBeDisabled();
+    expect(within(cw).getByRole("textbox", { name: "Call to Worship" })).toHaveAttribute("readonly");
+    expect(within(cw).getByRole("button", { name: "More actions for Call to Worship" })).toBeDisabled();
+    await user.click(within(cw).getByRole("button", { name: "Cancel Call to Worship" }));
+    expect(within(cw).getByRole("button", { name: "Generate" })).toBeEnabled();
+    await held.release("call_to_worship");
+
+    const op = card("Opening Prayer");
+    await user.click(within(op).getByRole("button", { name: "Generate" }));
+    await within(op).findByRole("button", { name: "Writing…" });
+    await user.click(within(op).getByRole("switch", { name: "Include Opening Prayer" }));
+    await user.click(within(op).getByRole("switch", { name: "Include Opening Prayer" }));
+    expect(within(op).getByRole("button", { name: "Generate" })).toBeEnabled(); // not restarted
+    await held.release("opening_prayer");
+
+    await user.click(screen.getByRole("button", { name: "Generate empty sections (6)" }));
+    const assurance = card("Assurance of Pardon");
+    expect(await within(assurance).findByRole("button", { name: "Waiting…" })).toBeDisabled();
+    await user.type(within(assurance).getByRole("textbox", { name: "Assurance of Pardon" }), "You are forgiven.");
+    for (const key of ["call_to_worship", "opening_prayer", "prayer_of_confession", "prayer_for_illumination", "offertory_prayer"] as const) {
+      await held.release(key);
+    }
+    expect(await screen.findByText("Wrote 5 sections.")).toBeInTheDocument();
+    expect(held.sent).not.toContain("assurance");
+    expect(within(assurance).getByRole("textbox", { name: "Assurance of Pardon" })).toHaveValue("You are forgiven.");
+    // The cancelled runs' answers were never applied, and no card shows an error.
+    expect(screen.getByRole("textbox", { name: "Call to Worship" })).toHaveValue("New call_to_worship");
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("drops a result for a replaced service or an edit from another tab, and applies one to a card following the default", { timeout: 10_000 }, async () => {
+    const held = heldGenerate();
+    const { user, queryClient } = renderStep(testDraft(), { "POST /liturgy/generate": held.handler });
+    const cw = await screen.findByRole("region", { name: "Call to Worship" });
+    // New service while a run goes: the draft is replaced (a new created_at).
+    await user.click(within(cw).getByRole("button", { name: "Generate" }));
+    await within(cw).findByRole("button", { name: "Writing…" });
+    vi.setSystemTime(new Date(DRAFT_NOW.getTime() + 60_000)); // the new draft's created_at differs
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    await user.click(await screen.findByRole("menuitem", { name: "New service" }));
+    await held.release("call_to_worship");
+    expect(await screen.findByText("The service changed, so the AI draft for Call to Worship was discarded.")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Call to Worship" })).toHaveValue("");
+
+    // An edit from another tab while it writes.
+    await user.click(within(card("Opening Prayer")).getByRole("button", { name: "Generate" }));
+    await within(card("Opening Prayer")).findByRole("button", { name: "Writing…" });
+    // The other tab edits the new service (written 400 ms after New service).
+    await waitFor(() => expect(stored().created_at).toBe(new Date(DRAFT_NOW.getTime() + 60_000).toISOString()));
+    const theirs = withCard("opening_prayer", { text: "From the other tab", origin: "typed" }, stored());
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent("storage", { key: KEY, newValue: JSON.stringify({ ...theirs, updated_at: "2026-09-29T17:00:00.000Z" }) }),
+      );
+    });
+    await held.release("opening_prayer");
+    expect(await screen.findByText("Kept your edits — the new AI draft for Opening Prayer was not used.")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Opening Prayer" })).toHaveValue("From the other tab");
+
+    // Regenerate a Benediction following the default; the default changes mid-run.
+    const bn = card("Benediction");
+    await user.click(within(bn).getByRole("button", { name: "Regenerate" }));
+    await within(bn).findByRole("button", { name: "Writing…" });
+    act(() => queryClient.setQueryData(keys.churchProfile(church().id), churchProfile({ default_benediction: "Go in peace." })));
+    await waitFor(() => expect(within(bn).getByRole("textbox", { name: "Benediction" })).toHaveValue("Go in peace."));
+    await held.release("benediction");
+    await waitFor(() => expect(within(bn).getByRole("textbox", { name: "Benediction" })).toHaveValue("New benediction"));
+    expect(within(bn).getByText("AI draft")).toBeInTheDocument();
+    await user.click(within(bn).getByRole("button", { name: "Undo" }));
+    expect(within(bn).getByRole("textbox", { name: "Benediction" })).toHaveValue("Go in peace.");
+    expect(within(bn).getByText("Church default")).toBeInTheDocument();
+  });
+
+  it("keeps writing while the member is on another step, and the result is there on return", async () => {
+    const held = heldGenerate();
+    const view = renderStep(testDraft(), { "POST /liturgy/generate": held.handler });
+    const cw = await screen.findByRole("region", { name: "Call to Worship" });
+    await view.user.click(within(cw).getByRole("button", { name: "Generate" }));
+    await within(cw).findByRole("button", { name: "Writing…" });
+    const page = (step: ReactNode) => (
+      <>
+        <BuilderLayout>{step}</BuilderLayout>
+        <Toaster />
+      </>
+    );
+    view.rerender(page(<ReviewStepPage />));
+    expect(screen.queryByRole("region", { name: "Call to Worship" })).toBeNull();
+    await held.release("call_to_worship");
+    await waitFor(() => expect(stored().liturgy.cards.call_to_worship.text).toBe("New call_to_worship"));
+    view.rerender(page(<LiturgyStep />));
+    expect(await screen.findByRole("textbox", { name: "Call to Worship" })).toHaveValue("New call_to_worship");
+  });
+
+  it("stops the queue on a 429: that card and every waiting one show the wait", { timeout: 10_000 }, async () => {
+    const held = heldGenerate();
+    const { user } = renderStep(testDraft(), { "POST /liturgy/generate": held.handler });
+    await user.click(await screen.findByRole("button", { name: "Generate empty sections (6)" }));
+    await waitFor(() => expect(held.sent).toHaveLength(3));
+    await held.release(
+      "call_to_worship",
+      fakeError(429, "rate_limited", "Too many requests. Try again in 30 seconds.", { details: { retry_after_seconds: 30 } }),
+    );
+    for (const label of ["Call to Worship", "Assurance of Pardon", "Prayer for Illumination", "Offertory Prayer"]) {
+      const alert = await within(card(label)).findByRole("alert");
+      expect(alert).toHaveTextContent("Too many requests — try again in 30 s.");
+      expect(within(alert).getByRole("button", { name: "Try again" })).toBeDisabled();
+    }
+    await held.release("opening_prayer");
+    await held.release("prayer_of_confession");
+    expect(await screen.findByText("Wrote 2 of 6 sections. The rest show what went wrong.")).toBeInTheDocument();
+    expect(held.sent).toEqual(["call_to_worship", "opening_prayer", "prayer_of_confession"]);
+  });
+
+  it("enables Try again once a 429's wait has passed", async () => {
+    const { user } = renderStep(testDraft(), {
+      "POST /liturgy/generate": fakeError(429, "rate_limited", "Too many requests. Try again in 1 seconds.", {
+        details: { retry_after_seconds: 1 },
+      }),
+    });
+    await user.click(within(await screen.findByRole("region", { name: "Offertory Prayer" })).getByRole("button", { name: "Generate" }));
+    const retry = within(await within(card("Offertory Prayer")).findByRole("alert")).getByRole("button", { name: "Try again" });
+    expect(retry).toBeDisabled();
+    await waitFor(() => expect(retry).toBeEnabled(), { timeout: 2_000 });
+  });
+
+  it("a 401 or a lost church goes to the app's handling and shows nothing on the card", async () => {
+    const events: string[] = [];
+    const off = [
+      authEvents.onSignOutRequired(() => events.push("signOutRequired")),
+      authEvents.onChurchAccessLost((id) => events.push(`lost:${id}`)),
+    ];
+    const { user, api } = renderStep();
+    const cw = await screen.findByRole("region", { name: "Call to Worship" });
+    api.set("POST /liturgy/generate", fakeError(401, "unauthenticated", "Please sign in."));
+    await user.click(within(cw).getByRole("button", { name: "Generate" }));
+    await waitFor(() => expect(events).toEqual(["signOutRequired"]));
+    api.set("POST /liturgy/generate", fakeError(403, "forbidden", "No access.", { details: { reason: "no_church_access" } }));
+    await user.click(within(cw).getByRole("button", { name: "Generate" }));
+    await waitFor(() => expect(events).toEqual(["signOutRequired", `lost:${church().id}`]));
+    expect(within(cw).queryByRole("alert")).toBeNull();
+    for (const stop of off) stop();
+  });
+
+  it("says Still working after 8 s on the card and in the bar", async () => {
+    vi.useRealTimers(); // a second useFakeTimers call would keep beforeEach's Date-only fake
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"], shouldAdvanceTime: true });
+    vi.setSystemTime(DRAFT_NOW);
+    const held = heldGenerate();
+    const { user } = renderStep(testDraft(), { "POST /liturgy/generate": held.handler });
+    await user.click(await screen.findByRole("button", { name: "Generate empty sections (6)" }));
+    await within(card("Call to Worship")).findByRole("button", { name: "Writing…" });
+    expect(screen.queryByText(STILL_WORKING)).toBeNull();
+    act(() => {
+      vi.advanceTimersByTime(8_000);
+    });
+    expect(within(card("Call to Worship")).getByText(STILL_WORKING)).toHaveAttribute("aria-live", "polite");
+    expect(screen.getByText(`Writing 1 of 6… ${STILL_WORKING}`)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByRole("button", { name: "Generate empty sections (6)" })).toBeEnabled();
+    expect(screen.queryByText(STILL_WORKING)).toBeNull();
+  });
+
+  it("notes when AI text will be general, and when every section is off", async () => {
+    const view = renderStep();
+    const { user } = view;
+    const bar = await screen.findByRole("region", { name: "Write with AI" });
+    expect(within(bar).getByText(/No occasion or readings yet, so AI text will be general\./)).toBeInTheDocument();
+    expect(within(bar).getByRole("link", { name: "Date & readings" })).toHaveAttribute("href", "/builder/readings");
+    expect(within(bar).queryByText(/All liturgy sections are switched off/)).toBeNull();
+    for (const label of ["Call to Worship", "Opening Prayer", "Prayer of Confession", "Assurance of Pardon", "Prayer for Illumination", "Offertory Prayer", "Benediction"]) {
+      await user.click(within(card(label)).getByRole("switch", { name: `Include ${label}` }));
+    }
+    expect(
+      within(bar).getByText(
+        "All liturgy sections are switched off. The Word files will list only hymns, readings, the sermon title and any custom elements.",
+      ),
+    ).toBeInTheDocument();
+    view.unmount();
+    renderStep(editOccasion(testDraft(), "Harvest Home"));
+    expect(await screen.findByRole("button", { name: "Generate empty sections (6)" })).toBeInTheDocument();
+    expect(screen.queryByText(/No occasion or readings yet/)).toBeNull();
+  });
+});
+
+```
+
+- [ ] **Step 3 (agent): Run them and see them fail**
+
+```bash
+(cd frontend && npx vitest run src/components/builder/liturgy 2>&1 | grep -E "^ FAIL|Error: Failed|Tests ")
+```
+
+**Expected:**
+
+```
+(pending replay)
+```
+- [ ] **Step 4 (agent): Write the AI bar and the cards' AI states**
+
+**Create `frontend/src/components/builder/liturgy/use-still-working.ts`:**
+
+```ts
+"use client";
+
+import { useEffect, useState } from "react";
+
+/** After this long a running AI request adds "Still working — this can take up to a minute." (F §1.8, §4.8). */
+export const STILL_WORKING_MS = 8_000;
+
+export const STILL_WORKING = "Still working — this can take up to a minute.";
+
+/** True once `active` has been true for `STILL_WORKING_MS`; false again as soon as it is not. */
+export function useStillWorking(active: boolean): boolean {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    if (!active) return;
+    const timer = setTimeout(() => setSlow(true), STILL_WORKING_MS);
+    return () => {
+      clearTimeout(timer);
+      setSlow(false);
+    };
+  }, [active]);
+  return active && slow;
+}
+```
+
+**Create `frontend/src/components/builder/liturgy/ai-bar.tsx`:**
+
+```tsx
+"use client";
+
+import { InfoIcon } from "lucide-react";
+import Link from "next/link";
+
+import { Alert, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { useDraft } from "@/lib/draft/context";
+import { sectionsNeedingAi } from "@/lib/liturgy/cards";
+import { useLiturgyGeneration } from "@/lib/liturgy/generation";
+import { liturgyCounts } from "@/lib/liturgy/summary";
+import { cleanLines } from "@/lib/scripture-refs";
+
+import { STILL_WORKING, useStillWorking } from "./use-still-working";
+
+/**
+ * The AI bar (S UX "AI bar"): "Generate empty sections (n)" for the
+ * switched-on cards with no text that are not already running, Cancel and
+ * "Writing k of n…" while a bulk run goes, the no-AI banner, and the two
+ * notices (no context; every section off). With AI off the button still
+ * marks the empty cards, and sends nothing (S step 0).
+ */
+export function AiBar({ aiAvailable }: { aiAvailable: boolean }) {
+  const { draft } = useDraft();
+  const generation = useLiturgyGeneration();
+  const targets = sectionsNeedingAi(draft).filter((key) => generation.runs[key] === undefined);
+  const bulk = generation.bulk;
+  const still = useStillWorking(bulk !== null);
+  const r = draft.readings;
+  const noContext = r.occasion.trim() === "" && cleanLines(r.scriptures).length === 0;
+  const allOff = liturgyCounts(draft).enabled === 0;
+
+  return (
+    <section aria-label="Write with AI" className="grid gap-3 rounded-lg border bg-muted/30 p-4">
+      {aiAvailable ? null : (
+        <Alert role="status">
+          <InfoIcon aria-hidden="true" />
+          <AlertTitle>AI writing isn&apos;t set up for this app. Type each section yourself — everything else works as usual.</AlertTitle>
+        </Alert>
+      )}
+      <div>
+        {bulk ? (
+          <Button variant="outline" size="touch" onClick={() => generation.cancelBulk()}>
+            Cancel
+          </Button>
+        ) : (
+          <Button
+            size="touch"
+            disabled={targets.length === 0}
+            onClick={() => generation.generate(targets, { aiAvailable, bulk: true })}
+          >
+            Generate empty sections ({targets.length})
+          </Button>
+        )}
+      </div>
+      {bulk ? (
+        <p className="text-sm" aria-live="polite">
+          Writing {Math.min(bulk.done + 1, bulk.total)} of {bulk.total}…{still ? ` ${STILL_WORKING}` : null}
+        </p>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          {targets.length === 0
+            ? "Every switched-on section has text. Use Regenerate on a card for a new AI draft."
+            : "Only switched-on sections with no text are written. Text you typed is never changed."}
+        </p>
+      )}
+      {noContext ? (
+        <p className="text-sm text-muted-foreground">
+          No occasion or readings yet, so AI text will be general. Add them in{" "}
+          <Link href="/builder/readings" className="font-medium underline underline-offset-4">
+            Date &amp; readings
+          </Link>
+          .
+        </p>
+      ) : null}
+      {allOff ? (
+        <p className="text-sm text-muted-foreground">
+          All liturgy sections are switched off. The Word files will list only hymns, readings, the sermon title and any
+          custom elements.
+        </p>
+      ) : null}
+    </section>
+  );
+}
+```
+
+**In `frontend/src/components/builder/liturgy/section-card.tsx`, replace:**
+
+```tsx
+import { EllipsisIcon } from "lucide-react";
+import { useRef } from "react";
+
+```
+
+**with:**
+
+```tsx
+import { CircleAlertIcon, EllipsisIcon, XIcon } from "lucide-react";
+import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
+
+import { ConfirmDialog } from "@/components/app/confirm-dialog";
+import { PendingButton } from "@/components/app/pending-button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+```
+
+**In `frontend/src/components/builder/liturgy/section-card.tsx`, replace:**
+
+```tsx
+import { clearCard, editCardText, restoreChurchDefault, setCardEnabled, type CardOrigin } from "@/lib/liturgy/cards";
+import { useLiturgyGeneration } from "@/lib/liturgy/generation";
+import { useAutosize } from "@/lib/use-autosize";
+import { cn } from "@/lib/utils";
+```
+
+**with:**
+
+```tsx
+import {
+  clearCard,
+  editCardText,
+  needsRegenerateConfirm,
+  restoreChurchDefault,
+  setCardEnabled,
+  type CardOrigin,
+} from "@/lib/liturgy/cards";
+import type { CardError } from "@/lib/liturgy/errors";
+import { useLiturgyGeneration } from "@/lib/liturgy/generation";
+import { useAutosize } from "@/lib/use-autosize";
+import { cn } from "@/lib/utils";
+
+import { STILL_WORKING, useStillWorking } from "./use-still-working";
+```
+
+**In `frontend/src/components/builder/liturgy/section-card.tsx`, replace:**
+
+```tsx
+  maxLength: number;
+};
+
+```
+
+**with:**
+
+```tsx
+  maxLength: number;
+  /** `GET /liturgy/config`'s `ai_available`: when false nothing is sent, and Regenerate is disabled. */
+  aiAvailable: boolean;
+};
+
+/** A 429's Try again waits out Retry-After (S "Per-card error messages"). */
+function useRetryWait(error: CardError | undefined): boolean {
+  const [over, setOver] = useState<CardError | null>(null);
+  useEffect(() => {
+    if (error?.retryAfterSeconds === undefined) return;
+    const timer = setTimeout(() => setOver(error), error.retryAfterSeconds * 1000);
+    return () => clearTimeout(timer);
+  }, [error]);
+  return error?.retryAfterSeconds !== undefined && over !== error;
+}
+
+```
+
+**In `frontend/src/components/builder/liturgy/section-card.tsx`, replace:**
+
+```tsx
+ */
+export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLength }: SectionCardProps) {
+```
+
+**with:**
+
+```tsx
+ *
+ * The AI (S "Generate and Regenerate"): an empty card has Generate; a card
+ * with text has Regenerate, which asks "Replace your text?" first when the
+ * text is the user's or a saved service's, and is disabled when AI is not set
+ * up. While queued ("Waiting…") or writing ("Writing…", then "Still
+ * working…" after 8 s) the card has a Cancel button and its ⋯ menu is off;
+ * while writing the text is read-only. Typing in a queued card, or switching
+ * a running card off, cancels its run. An error shows in an alert under the
+ * text with Try again when trying again can help; the text never changes.
+ */
+export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLength, aiAvailable }: SectionCardProps) {
+```
+
+**In `frontend/src/components/builder/liturgy/section-card.tsx`, replace:**
+
+```tsx
+  const undo = generation.undo[key];
+  const textRef = useRef<HTMLTextAreaElement>(null);
+```
+
+**with:**
+
+```tsx
+  const undo = generation.undo[key];
+  const run = generation.runs[key];
+  const error = generation.errors[key];
+  const still = useStillWorking(run?.phase === "writing");
+  const retryWaiting = useRetryWait(error);
+  const [confirming, setConfirming] = useState(false);
+  const textRef = useRef<HTMLTextAreaElement>(null);
+```
+
+**In `frontend/src/components/builder/liturgy/section-card.tsx`, replace:**
+
+```tsx
+  function edit(text: string) {
+    update((d) => editCardText(d, key, text));
+```
+
+**with:**
+
+```tsx
+  function edit(text: string) {
+    // Typing in a queued card cancels its request, which was never sent; the typed text stays.
+    if (run?.phase === "queued") generation.cancel([key]);
+    update((d) => editCardText(d, key, text));
+```
+
+**In `frontend/src/components/builder/liturgy/section-card.tsx`, replace:**
+
+```tsx
+  function toggle(enabled: boolean) {
+    update((d) => setCardEnabled(d, key, enabled));
+```
+
+**with:**
+
+```tsx
+  function toggle(enabled: boolean) {
+    // Switching a running card off cancels it silently; switching it back on does not restart it.
+    if (run !== undefined) generation.cancel([key]);
+    update((d) => setCardEnabled(d, key, enabled));
+```
+
+**In `frontend/src/components/builder/liturgy/section-card.tsx`, replace:**
+
+```tsx
+    update((d) => restoreChurchDefault(d, defaultBenediction));
+    generation.dismissError(key);
+    generation.setUndo(key, null);
+  }
+
+  const menuItems = [
+```
+
+**with:**
+
+```tsx
+    update((d) => restoreChurchDefault(d, defaultBenediction));
+    generation.dismissError(key);
+    generation.setUndo(key, null);
+  }
+
+  function start() {
+    generation.generate([key], { aiAvailable });
+  }
+
+  /** Generate, Regenerate and Try again: replacing the user's own or saved text asks first. */
+  function write() {
+    if (needsRegenerateConfirm(card)) setConfirming(true);
+    else start();
+  }
+
+  const menuItems = [
+```
+
+**In `frontend/src/components/builder/liturgy/section-card.tsx`, replace:**
+
+```tsx
+            disabled={menuItems.length === 0}
+```
+
+**with:**
+
+```tsx
+            disabled={menuItems.length === 0 || run !== undefined}
+```
+
+**In `frontend/src/components/builder/liturgy/section-card.tsx`, replace:**
+
+```tsx
+            maxLength={maxLength}
+            rows={spec.rows}
+```
+
+**with:**
+
+```tsx
+            maxLength={maxLength}
+            readOnly={run?.phase === "writing"}
+            rows={spec.rows}
+```
+
+**In `frontend/src/components/builder/liturgy/section-card.tsx`, replace:**
+
+```tsx
+          ) : null}
+        </>
+```
+
+**with:**
+
+```tsx
+          ) : null}
+          {error ? (
+            <Alert variant="destructive">
+              <CircleAlertIcon aria-hidden="true" />
+              <AlertTitle className="whitespace-normal">{error.message}</AlertTitle>
+              {error.retryable || error.link ? (
+                <AlertDescription className="flex flex-wrap gap-2 pt-2">
+                  {error.retryable ? (
+                    <Button variant="outline" size="touch" disabled={retryWaiting} onClick={write}>
+                      Try again
+                    </Button>
+                  ) : null}
+                  {error.link ? (
+                    <Link href={error.link.href} className={buttonVariants({ variant: "outline", size: "touch" })}>
+                      {error.link.label}
+                    </Link>
+                  ) : null}
+                </AlertDescription>
+              ) : null}
+            </Alert>
+          ) : null}
+          {error?.retryable ? null : (
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {run ? (
+                <>
+                  {run.phase === "queued" ? (
+                    <Button variant="outline" size="touch" disabled>
+                      Waiting…
+                    </Button>
+                  ) : (
+                    <PendingButton pending pendingLabel="Writing…" size="touch">
+                      Writing…
+                    </PendingButton>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon-lg"
+                    className="size-11 md:size-8"
+                    aria-label={`Cancel ${spec.label}`}
+                    onClick={() => generation.cancel([key])}
+                  >
+                    <XIcon aria-hidden="true" />
+                  </Button>
+                </>
+              ) : hasText ? (
+                <>
+                  {aiAvailable ? null : <span className="text-sm text-muted-foreground">AI isn&apos;t set up</span>}
+                  <Button variant="outline" size="touch" disabled={!aiAvailable} onClick={write}>
+                    Regenerate
+                  </Button>
+                </>
+              ) : (
+                <Button size="touch" onClick={write}>
+                  Generate
+                </Button>
+              )}
+              <p className="w-full text-right text-sm text-muted-foreground" aria-live="polite">
+                {still ? STILL_WORKING : null}
+              </p>
+            </div>
+          )}
+        </>
+```
+
+**In `frontend/src/components/builder/liturgy/section-card.tsx`, replace:**
+
+```tsx
+      )}
+    </section>
+```
+
+**with:**
+
+```tsx
+      )}
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title="Replace your text?"
+        description={`Regenerate replaces the text in ${spec.label} with a new AI draft. You can undo right after.`}
+        confirmLabel="Replace text"
+        cancelLabel="Keep my text"
+        onConfirm={() => {
+          setConfirming(false);
+          start();
+        }}
+      />
+    </section>
+```
+
+**In `frontend/src/components/builder/liturgy/liturgy-step.tsx`, replace:**
+
+```tsx
+
+import { OutlineLandmark } from "./outline-landmark";
+```
+
+**with:**
+
+```tsx
+
+import { AiBar } from "./ai-bar";
+import { OutlineLandmark } from "./outline-landmark";
+```
+
+**In `frontend/src/components/builder/liturgy/liturgy-step.tsx`, replace:**
+
+```tsx
+      <SermonTitleField maxLength={config.limits.max_sermon_title} />
+      <section aria-labelledby="order-of-worship" className="grid gap-3">
+```
+
+**with:**
+
+```tsx
+      <SermonTitleField maxLength={config.limits.max_sermon_title} />
+      <AiBar aiAvailable={config.ai_available} />
+      <section aria-labelledby="order-of-worship" className="grid gap-3">
+```
+
+**In `frontend/src/components/builder/liturgy/liturgy-step.tsx`, replace:**
+
+```tsx
+                      maxLength={config.limits.max_section_text}
+                    />
+```
+
+**with:**
+
+```tsx
+                      maxLength={config.limits.max_section_text}
+                      aiAvailable={config.ai_available}
+                    />
+```
+
+- [ ] **Step 5 (agent): Run the tests three times, the suite, types and lint**
+
+```bash
+for i in 1 2 3; do (cd frontend && npx vitest run src/components/builder/liturgy 2>&1 | grep -E "Test Files|Tests |FAIL"); done
+(cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
+(cd frontend && npm run typecheck >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")
+git status --short
+```
+
+**Expected:** three times ` Test Files  1 passed (1)`, `      Tests  24 passed (24)` and no `FAIL`; the suite ` Test Files  75 passed (75)`, `      Tests  500 passed (500)`; `typecheck 0` and `lint 0`; ` M` for the three modified files and `??` for the two new ones. A run that fails even once is a failure: make the test wait for a condition (`findBy`, `waitFor`), never retry it.
+
+- [ ] **Step 6 (agent): Commit**
+
+```bash
+git add frontend/src/components/builder/liturgy/ai-bar.tsx frontend/src/components/builder/liturgy/use-still-working.ts frontend/src/components/builder/liturgy/section-card.tsx frontend/src/components/builder/liturgy/liturgy-step.tsx frontend/src/components/builder/liturgy/liturgy-step.test.tsx
+git commit -m "Liturgy: Generate, Regenerate with confirm and Undo, the card errors and the AI bar (S Generate and Regenerate; BC-2, BC-5, BC-6, BC-13)" -m "Each card has Generate or Regenerate (asking first before replacing the
+user's or a saved service's text; off without AI), Waiting and Writing
+with Cancel and Still working after 8 s, and its error with Try again.
+The AI bar writes every switched-on empty card, 3 at a time, with Cancel
+and Writing k of n, and shows the no-AI banner and the two notices. Tests
+cover S's dom cases 4-12: the stale rule, navigation, the 429 and a 401.
+Frontend 487 -> 500 tests in 75 files." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
+```
+
+**Expected:** one commit, 5 files changed.
+
+### Task 10: The communion card and custom elements (S UX "Communion card", "Custom elements", Testing dom 14-15; BC-10, BC-11, BC-12; F D17; clarifications 6, 25, 26)
+
+The rest of the outline. `CommunionCard` sits after the Second Hymn: its header is the switch with S's toggle label; the helper says why it is on or off ("On by default — {October 4, 2026} is the first Sunday of the month.", "Off by default — it's on by default only on the first Sunday of the month.", "You changed this." or "Set from the saved service.", the last two with **Use default**); **Show communion text** reveals the config's blocks read-only (headings, paragraphs, bold responses) and the caption (clarification 26). Custom elements render right after the outline item whose `anchors_after` holds their place (an unknown place reads as the end; clarification 6) as dashed cards with the "Custom" chip, inline Label, Text and Place, the "won't be printed" message for a blank label (the card is then titled "Custom element"; clarification 25), and ⋯ → **Remove**, which offers Undo in a toast ("Removed “{label}”.") through 3b's `useUndoToasts`, so it never outlives the step and is checked against the church. **Add custom element** opens the dialog (a bottom sheet below `md`): Label (required: "Label is required." and focus), Text (optional) and Place (first place by default); Add appends the element trimmed with a new id, closes, and scrolls to it; the fields are empty the next time. At 30 elements Add is disabled with "You can add up to 30 custom elements." No custom element has Generate (owner answer of 2026-09-30, F D17). T8's outline test gains the communion row (edited, 0).
+
+**Files:**
+- Create: `frontend/src/components/builder/liturgy/communion-card.tsx`, `custom-element-card.tsx`, `add-custom-element-dialog.tsx` (in `frontend/src/components/builder/liturgy/`)
+- Modify: `frontend/src/components/builder/liturgy/liturgy-step.tsx` (the communion row, the custom elements, Add, Remove with Undo)
+- Test: `frontend/src/components/builder/liturgy/liturgy-step.test.tsx` (+7; T8's outline test edited, 0)
+
+**Interfaces:**
+- Consumes: `setCommunion`, `restoreCommunionDefault`, `addCustomElement`, `updateCustomElement`, `removeCustomElement`, `restoreCustomElement`, `normalizePlacement` (T2); `isFirstSundayOfMonth`, `formatServiceDate` (2b); `Dialog` (T7); `Select` with `items` (F §4.9 item 3), `Collapsible`, `useUndoToasts` and `UNDO_TOAST_MS` (3b `components/builder/hymns/use-undo-toasts.ts`).
+- Produces: `CommunionCard({communion})` (region named by the toggle label, id `communion`); `CustomElementCard({element, placements, limits, onRemove})` (id `custom-{id}`); `AddCustomElementDialog({open, onOpenChange, placements, limits, onAdd})`. Later users: T11 (the page), 5a (the Review links).
+
+Counts after this task: frontend **507 passed in 75 files**.
+
+- [ ] **Step 1 (agent): Check the starting point**
+
+```bash
+git status --short
+ls frontend/src/components/builder/liturgy | tr '\n' ' '; echo
+(cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
+```
+
+**Expected:** nothing (or `?? .claude/`); `ai-bar.tsx liturgy-step.test.tsx liturgy-step.tsx outline-landmark.tsx section-card.tsx sermon-title-field.tsx use-still-working.ts`; ` Test Files  75 passed (75)`, `      Tests  500 passed (500)`.
+
+- [ ] **Step 2 (agent): Write the failing tests**
+
+**In `frontend/src/components/builder/liturgy/liturgy-step.test.tsx`, replace:**
+
+```tsx
+import { editOccasion, editScriptureLines, setPick } from "@/lib/draft/readings";
+```
+
+**with:**
+
+```tsx
+import { useDraft } from "@/lib/draft/context";
+import { editOccasion, editScriptureLines, setDate, setPick } from "@/lib/draft/readings";
+```
+
+**In `frontend/src/components/builder/liturgy/liturgy-step.test.tsx`, replace:**
+
+```tsx
+  church,
+  churchProfile,
+```
+
+**with:**
+
+```tsx
+  church,
+  CHURCH_IDS,
+  churchProfile,
+```
+
+**In `frontend/src/components/builder/liturgy/liturgy-step.test.tsx`, replace:**
+
+```tsx
+import { LiturgyStep } from "./liturgy-step";
+import { STILL_WORKING } from "./use-still-working";
+```
+
+**with:**
+
+```tsx
+import { LiturgyStep } from "./liturgy-step";
+import { UNDO_TOAST_MS } from "../hymns/use-undo-toasts";
+
+import { STILL_WORKING } from "./use-still-working";
+```
+
+**In `frontend/src/components/builder/liturgy/liturgy-step.test.tsx`, replace:**
+
+```tsx
+      "Second Hymn",
+      "Prayers of the People",
+```
+
+**with:**
+
+```tsx
+      "Second Hymn",
+      "Include communion liturgy (The Sacrament of the Lord's Supper)",
+      "Prayers of the People",
+```
+
+**In `frontend/src/components/builder/liturgy/liturgy-step.test.tsx`, replace:**
+
+```tsx
+    expect(screen.queryByText(/No occasion or readings yet/)).toBeNull();
+  });
+});
+
+```
+
+**with:**
+
+```tsx
+    expect(screen.queryByText(/No occasion or readings yet/)).toBeNull();
+  });
+});
+
+// --- slice 4b T10: communion and custom elements ------------------------------------------
+
+/** Moves the draft's date, as Date & readings would (the communion default follows it). */
+function MoveDate() {
+  const { update } = useDraft();
+  return (
+    <button type="button" onClick={() => update((d) => setDate(d, "2026-10-11"))}>
+      Move to October 11
+    </button>
+  );
+}
+
+function withElements(elements: DraftV1["liturgy"]["custom_elements"], d: DraftV1 = testDraft()): DraftV1 {
+  return { ...d, liturgy: { ...d.liturgy, custom_elements: elements } };
+}
+
+const COMMUNION = "Include communion liturgy (The Sacrament of the Lord's Supper)";
+
+describe("the communion card (S Communion card)", () => {
+  it("follows the first-Sunday rule until toggled, says why, restores the default, and shows the fixed text", async () => {
+    const { user } = renderStep(testDraft(), {}, <MoveDate />);
+    const communion = await screen.findByRole("region", { name: COMMUNION });
+    const toggle = within(communion).getByRole("switch", { name: COMMUNION });
+    expect(toggle).toBeChecked();
+    expect(within(communion).getByText("On by default — October 4, 2026 is the first Sunday of the month.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Move to October 11" }));
+    expect(toggle).not.toBeChecked();
+    expect(within(communion).getByText("Off by default — it's on by default only on the first Sunday of the month.")).toBeInTheDocument();
+    await user.click(toggle);
+    expect(toggle).toBeChecked();
+    expect(within(communion).getByText("You changed this.")).toBeInTheDocument();
+    await waitFor(() => expect(stored().liturgy).toMatchObject({ include_communion: true, communion_origin: "user" }));
+    await user.click(within(communion).getByRole("button", { name: "Use default" }));
+    expect(toggle).not.toBeChecked();
+    expect(within(communion).queryByRole("button", { name: "Use default" })).toBeNull();
+    // The fixed text, read-only, from the config.
+    expect(within(communion).queryByText("And also with you.")).toBeNull();
+    await user.click(within(communion).getByRole("button", { name: "Show communion text" }));
+    expect(within(communion).getByRole("heading", { level: 4, name: "The Sacrament of the Lord's Supper" })).toBeInTheDocument();
+    expect(within(communion).getByRole("heading", { level: 5, name: "Invitation to the Table" })).toBeInTheDocument();
+    expect(within(communion).getByText("And also with you.")).toHaveClass("font-semibold");
+    expect(within(communion).getByText("Printed after the Second Hymn. The same text is used for every service.")).toBeInTheDocument();
+  });
+
+  it("says when communion came from a saved service", async () => {
+    const d = testDraft();
+    renderStep({ ...d, liturgy: { ...d.liturgy, include_communion: false, communion_origin: "archive" } });
+    const communion = await screen.findByRole("region", { name: COMMUNION });
+    expect(within(communion).getByText("Set from the saved service.")).toBeInTheDocument();
+    expect(within(communion).getByRole("button", { name: "Use default" })).toBeInTheDocument();
+  });
+});
+
+describe("custom elements (S Custom elements)", () => {
+  it("requires a label, adds after its place with the fields trimmed, scrolls to it, and opens empty next time", async () => {
+    const scroll = vi.spyOn(Element.prototype, "scrollIntoView");
+    const { user } = renderStep();
+    await user.click(await screen.findByRole("button", { name: "Add custom element" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add custom element" });
+    expect(within(dialog).getByText("A heading and text printed in the Word files at the place you choose.")).toBeInTheDocument();
+    expect(within(dialog).getByRole("combobox", { name: "Place" })).toHaveTextContent("After Call to Worship");
+    await user.click(within(dialog).getByRole("button", { name: "Add" }));
+    expect(within(dialog).getByText("Label is required.")).toBeInTheDocument();
+    expect(within(dialog).getByRole("textbox", { name: "Label" })).toHaveFocus();
+    await user.type(within(dialog).getByRole("textbox", { name: "Label" }), "  Children's Moment ");
+    expect(within(dialog).queryByText("Label is required.")).toBeNull();
+    await user.type(within(dialog).getByRole("textbox", { name: "Text (optional)" }), "Come forward. ");
+    await user.click(within(dialog).getByRole("combobox", { name: "Place" }));
+    await user.click(await screen.findByRole("option", { name: "After Opening Prayer" }));
+    await user.click(within(dialog).getByRole("button", { name: "Add" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    const added = await screen.findByRole("region", { name: "Children's Moment" });
+    expect(outline().slice(0, 4)).toEqual(["Call to Worship", "Opening Prayer", "Children's Moment", "First Hymn"]);
+    expect(within(added).getByText("Custom")).toBeInTheDocument();
+    expect(within(added).getByRole("textbox", { name: "Text" })).toHaveValue("Come forward.");
+    await waitFor(() =>
+      expect(stored().liturgy.custom_elements).toEqual([
+        { id: expect.any(String), label: "Children's Moment", text: "Come forward.", insert_after: "opening_prayer" },
+      ]),
+    );
+    await waitFor(() => expect(scroll.mock.contexts).toContain(added));
+    await user.click(screen.getByRole("button", { name: "Add custom element" }));
+    const again = await screen.findByRole("dialog", { name: "Add custom element" });
+    expect(within(again).getByRole("textbox", { name: "Label" })).toHaveValue("");
+    expect(within(again).getByRole("combobox", { name: "Place" })).toHaveTextContent("After Call to Worship");
+  });
+
+  it("edits the label, text and place inline; a blank label says it won't print, and an unknown place is the end", async () => {
+    const { user } = renderStep(
+      withElements([
+        { id: "a", label: "Anthem", text: "<b>Choir</b>", insert_after: "sermon" },
+        { id: "b", label: "Minute for Mission", text: "", insert_after: "bogus" },
+      ]),
+    );
+    const anthem = await screen.findByRole("region", { name: "Anthem" });
+    expect(within(anthem).getByRole("textbox", { name: "Text" })).toHaveValue("<b>Choir</b>");
+    const rows = outline();
+    expect(rows.indexOf("Anthem")).toBe(rows.indexOf("Sermon Title · [Sermon title]") + 1);
+    expect(rows.at(-1)).toBe("Minute for Mission"); // an unknown place prints at the end
+    expect(within(card("Minute for Mission")).getByRole("combobox", { name: "Place" })).toHaveTextContent("At the end (after Benediction)");
+    await user.click(within(anthem).getByRole("combobox", { name: "Place" }));
+    await user.click(await screen.findByRole("option", { name: "After Second Hymn" }));
+    await waitFor(() => expect(outline().indexOf("Anthem")).toBe(outline().indexOf("Second Hymn") + 1));
+    const label = within(card("Anthem")).getByRole("textbox", { name: "Label" });
+    await user.clear(label);
+    const blank = screen.getByRole("region", { name: "Custom element" });
+    expect(within(blank).getByText("Add a label, or remove this element — it won't be printed without one.")).toBeInTheDocument();
+    await user.type(label, "Choir Anthem");
+    await waitFor(() =>
+      expect(stored().liturgy.custom_elements[0]).toEqual({ id: "a", label: "Choir Anthem", text: "<b>Choir</b>", insert_after: "second_hymn" }),
+    );
+  });
+
+  it("Remove offers Undo, which puts the element back at the same index", async () => {
+    const { user } = renderStep(
+      withElements([
+        { id: "a", label: "Anthem", text: "", insert_after: "sermon" },
+        { id: "b", label: "Children's Moment", text: "", insert_after: "sermon" },
+      ]),
+    );
+    const anthem = await screen.findByRole("region", { name: "Anthem" });
+    await user.click(within(anthem).getByRole("button", { name: "More actions for Anthem" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Remove" }));
+    expect(screen.queryByRole("region", { name: "Anthem" })).toBeNull();
+    const toastText = await screen.findByText("Removed “Anthem”.");
+    await waitFor(() => expect(stored().liturgy.custom_elements.map((e) => e.id)).toEqual(["b"]));
+    expect(UNDO_TOAST_MS).toBe(8000);
+    await user.click(within(toastText.closest("li") as HTMLElement).getByRole("button", { name: "Undo" }));
+    expect(await screen.findByRole("region", { name: "Anthem" })).toBeInTheDocument();
+    await waitFor(() => expect(stored().liturgy.custom_elements.map((e) => e.id)).toEqual(["a", "b"]));
+  });
+
+  it("stops at 30 elements", async () => {
+    const thirty = Array.from({ length: 30 }, (_, i) => ({ id: `e${i}`, label: `Element ${i}`, text: "", insert_after: "end" }));
+    renderStep(withElements(thirty));
+    expect(await screen.findByRole("button", { name: "Add custom element" })).toBeDisabled();
+    expect(screen.getByText("You can add up to 30 custom elements.")).toBeInTheDocument();
+  });
+
+  it("keeps each church's elements in its own draft (streamlit_tests/test_streamlit_tenancy.py)", async () => {
+    const hope = church({ id: CHURCH_IDS.hope, name: "Hope" });
+    window.localStorage.setItem(
+      draftKey(USER_ID, hope.id),
+      JSON.stringify({ ...withElements([{ id: "h", label: "Hope's Anthem", text: "", insert_after: "end" }]), church_id: hope.id }),
+    );
+    const grace = renderStep(withElements([{ id: "g", label: "Grace's Anthem", text: "", insert_after: "end" }]));
+    expect(await screen.findByRole("region", { name: "Grace's Anthem" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Hope's Anthem" })).toBeNull();
+    grace.unmount();
+    installFakeApi({
+      "GET /church": churchProfile({ ...hope }),
+      "GET /lectionary/readings": lectionaryRoute(),
+      "GET /liturgy/config": liturgyConfig(),
+    });
+    renderWithProviders(
+      <BuilderLayout>
+        <LiturgyStep />
+      </BuilderLayout>,
+      { me: me({ churches: [church(), hope] }), church: hope, path: "/builder/liturgy" },
+    );
+    expect(await screen.findByRole("region", { name: "Hope's Anthem" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Grace's Anthem" })).toBeNull();
+  });
+});
+
+```
+
+- [ ] **Step 3 (agent): Run them and see them fail**
+
+```bash
+(cd frontend && npx vitest run src/components/builder/liturgy 2>&1 | grep -E "^ FAIL|Tests ")
+```
+
+**Expected:**
+
+```
+(pending replay)
+```
+- [ ] **Step 4 (agent): Write the communion card, the custom elements and the dialog**
+
+**Create `frontend/src/components/builder/liturgy/communion-card.tsx`:**
+
+```tsx
+"use client";
+
+import { ChevronDownIcon } from "lucide-react";
+import { useState } from "react";
+
+import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Switch } from "@/components/ui/switch";
+import type { CommunionBlock, LiturgyConfig } from "@/lib/api/types";
+import { formatServiceDate, isFirstSundayOfMonth } from "@/lib/dates";
+import { useDraft } from "@/lib/draft/context";
+import { restoreCommunionDefault, setCommunion } from "@/lib/liturgy/cards";
+import { cn } from "@/lib/utils";
+
+function Block({ block }: { block: CommunionBlock }) {
+  switch (block.style) {
+    case "heading1":
+      return <h4 className="font-semibold">{block.text}</h4>;
+    case "heading2":
+      return <h5 className="pt-2 font-medium">{block.text}</h5>;
+    case "response":
+      return <p className="font-semibold">{block.text}</p>;
+    case "text":
+      return <p>{block.text}</p>;
+    default:
+      return null;
+  }
+}
+
+/**
+ * The communion card (S UX "Communion card"; BC-10, BC-11): the switch, a
+ * helper that says why it is on or off (the first-Sunday rule while it is the
+ * default, "You changed this." or "Set from the saved service." with "Use
+ * default"), and the fixed communion text, read-only, behind "Show communion
+ * text". It sits in the outline after the Second Hymn.
+ */
+export function CommunionCard({ communion }: { communion: LiturgyConfig["communion"] }) {
+  const { draft, update } = useDraft();
+  const [open, setOpen] = useState(false);
+  const l = draft.liturgy;
+  const date = draft.readings.date_iso;
+  const helper =
+    l.communion_origin === "default"
+      ? isFirstSundayOfMonth(date)
+        ? `On by default — ${formatServiceDate(date)} is the first Sunday of the month.`
+        : "Off by default — it's on by default only on the first Sunday of the month."
+      : l.communion_origin === "user"
+        ? "You changed this."
+        : "Set from the saved service.";
+
+  return (
+    <section id="communion" aria-labelledby="communion-title" className="grid scroll-mt-24 gap-3 rounded-lg border p-4">
+      <div className="flex min-w-0 items-center gap-3">
+        <Switch
+          checked={l.include_communion}
+          onCheckedChange={(checked) => update((d) => setCommunion(d, checked))}
+          aria-labelledby="communion-title"
+          className="after:-inset-y-3.5"
+        />
+        <h3 id="communion-title" className="min-w-0 flex-1 text-base font-medium">
+          {communion.toggle_label}
+        </h3>
+      </div>
+      <p className="flex flex-wrap items-center gap-x-1 text-sm text-muted-foreground">
+        {helper}
+        {l.communion_origin === "default" ? null : (
+          <Button variant="link" className="h-11 px-1 md:h-auto" onClick={() => update(restoreCommunionDefault)}>
+            Use default
+          </Button>
+        )}
+      </p>
+      <Collapsible open={open} onOpenChange={setOpen} className="grid gap-2">
+        <CollapsibleTrigger className="flex min-h-11 items-center gap-2 text-left text-sm font-medium">
+          <ChevronDownIcon aria-hidden="true" className={cn("size-4 transition-transform", !open && "-rotate-90")} />
+          Show communion text
+        </CollapsibleTrigger>
+        <CollapsibleContent className="grid gap-2">
+          <div className="grid gap-2 rounded-md bg-muted/40 p-3 text-sm">
+            {communion.blocks.map((block, i) => (
+              <Block key={i} block={block} />
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground">Printed after the Second Hymn. The same text is used for every service.</p>
+        </CollapsibleContent>
+      </Collapsible>
+    </section>
+  );
+}
+```
+
+**Create `frontend/src/components/builder/liturgy/custom-element-card.tsx`:**
+
+```tsx
+"use client";
+
+import { EllipsisIcon } from "lucide-react";
+import { useRef } from "react";
+
+import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import type { LiturgyConfig } from "@/lib/api/types";
+import { useDraft } from "@/lib/draft/context";
+import { normalizePlacement, updateCustomElement, type CustomElement } from "@/lib/liturgy/cards";
+import { useAutosize } from "@/lib/use-autosize";
+
+export type Placements = LiturgyConfig["custom_placements"];
+
+/**
+ * A custom element in its printed position (S UX "Custom elements"; BC-12):
+ * a dashed card with the "Custom" chip and inline Label, Text and Place. A
+ * blank label says the element will not be printed without one; ⋯ → Remove
+ * takes it out (the step offers Undo). No AI Generate (F D17). The card's id
+ * is `custom-{id}`.
+ */
+export function CustomElementCard({
+  element,
+  placements,
+  limits,
+  onRemove,
+}: {
+  element: CustomElement;
+  placements: Placements;
+  limits: LiturgyConfig["limits"];
+  onRemove: () => void;
+}) {
+  const { update } = useDraft();
+  const textRef = useRef<HTMLTextAreaElement>(null);
+  useAutosize(textRef, element.text);
+  const id = element.id;
+  const name = element.label.trim() === "" ? "Custom element" : element.label.trim();
+  const blank = element.label.trim() === "";
+  const items = Object.fromEntries(placements.map((p) => [p.key, p.label]));
+  const edit = (patch: Partial<Omit<CustomElement, "id">>) => update((d) => updateCustomElement(d, id, patch));
+
+  return (
+    <section
+      id={`custom-${id}`}
+      aria-labelledby={`custom-${id}-title`}
+      className="grid scroll-mt-24 gap-3 rounded-lg border border-dashed p-4"
+    >
+      <div className="flex min-w-0 items-center gap-2">
+        <h3 id={`custom-${id}-title`} className="min-w-0 flex-1 text-base font-medium wrap-anywhere">
+          {name}
+        </h3>
+        <Badge variant="outline">Custom</Badge>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            aria-label={`More actions for ${name}`}
+            className={`${buttonVariants({ variant: "ghost", size: "icon-lg" })} size-11 shrink-0 md:size-8`}
+          >
+            <EllipsisIcon aria-hidden="true" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-auto min-w-44">
+            <DropdownMenuItem onClick={onRemove} className="min-h-11 md:min-h-8">
+              Remove
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+      <div className="grid gap-1.5">
+        <Label htmlFor={`custom-${id}-label`}>Label</Label>
+        <Input
+          id={`custom-${id}-label`}
+          value={element.label}
+          maxLength={limits.max_custom_label}
+          aria-invalid={blank ? true : undefined}
+          aria-describedby={blank ? `custom-${id}-blank` : undefined}
+          onChange={(event) => edit({ label: event.target.value })}
+          className="h-11"
+        />
+        {blank ? (
+          <p id={`custom-${id}-blank`} className="text-sm text-destructive">
+            Add a label, or remove this element — it won&apos;t be printed without one.
+          </p>
+        ) : null}
+      </div>
+      <div className="grid gap-1.5">
+        <Label htmlFor={`custom-${id}-text`}>Text</Label>
+        <Textarea
+          id={`custom-${id}-text`}
+          ref={textRef}
+          value={element.text}
+          maxLength={limits.max_custom_text}
+          className="max-h-[60vh] overflow-y-auto"
+          onChange={(event) => edit({ text: event.target.value })}
+        />
+      </div>
+      <div className="grid gap-1.5">
+        <Label id={`custom-${id}-place`}>Place</Label>
+        <Select
+          value={normalizePlacement(element.insert_after)}
+          items={items}
+          onValueChange={(value) => {
+            if (typeof value === "string") edit({ insert_after: value });
+          }}
+        >
+          <SelectTrigger aria-labelledby={`custom-${id}-place`} className="h-11 w-full sm:w-80 data-[size=default]:h-11">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {placements.map((p) => (
+              <SelectItem key={p.key} value={p.key}>
+                {p.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </section>
+  );
+}
+```
+
+**Create `frontend/src/components/builder/liturgy/add-custom-element-dialog.tsx`:**
+
+```tsx
+"use client";
+
+import { useRef, useState, type FormEvent } from "react";
+
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import type { LiturgyConfig } from "@/lib/api/types";
+import type { CustomElement } from "@/lib/liturgy/cards";
+
+/**
+ * "Add custom element" (S UX "Custom elements"; BC-12): a dialog, a bottom
+ * sheet below `md`, with a native form (F §4.8): Label (required), Text
+ * (optional) and Place (defaulting to the first place, "After Call to
+ * Worship", as app.py did). A blank label says "Label is required." and
+ * focuses the field. After Add the fields are empty the next time it opens.
+ */
+export function AddCustomElementDialog({
+  open,
+  onOpenChange,
+  placements,
+  limits,
+  onAdd,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  placements: LiturgyConfig["custom_placements"];
+  limits: LiturgyConfig["limits"];
+  onAdd: (element: Omit<CustomElement, "id">) => void;
+}) {
+  const first = placements[0]?.key ?? "end";
+  const [label, setLabel] = useState("");
+  const [text, setText] = useState("");
+  const [place, setPlace] = useState(first);
+  const [missing, setMissing] = useState(false);
+  const labelRef = useRef<HTMLInputElement>(null);
+  const items = Object.fromEntries(placements.map((p) => [p.key, p.label]));
+
+  function reset() {
+    setLabel("");
+    setText("");
+    setPlace(first);
+    setMissing(false);
+  }
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    if (label.trim() === "") {
+      setMissing(true);
+      labelRef.current?.focus();
+      return;
+    }
+    onAdd({ label, text, insert_after: place });
+    reset();
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) reset();
+        onOpenChange(next);
+      }}
+    >
+      <DialogContent
+        showCloseButton={false}
+        className="max-md:top-auto max-md:bottom-0 max-md:left-0 max-md:max-w-none! max-md:translate-x-0 max-md:translate-y-0 max-md:rounded-b-none max-md:pb-[calc(1rem+env(safe-area-inset-bottom))] md:max-w-lg"
+      >
+        <DialogHeader>
+          <DialogTitle>Add custom element</DialogTitle>
+          <DialogDescription>A heading and text printed in the Word files at the place you choose.</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={submit} noValidate className="grid gap-4">
+          <div className="grid gap-1.5">
+            <Label htmlFor="new-custom-label">Label</Label>
+            <Input
+              id="new-custom-label"
+              ref={labelRef}
+              value={label}
+              maxLength={limits.max_custom_label}
+              placeholder="e.g. Children's Moment"
+              aria-invalid={missing ? true : undefined}
+              aria-describedby={missing ? "new-custom-label-error" : undefined}
+              onChange={(event) => {
+                setLabel(event.target.value);
+                setMissing(false);
+              }}
+              className="h-11"
+            />
+            {missing ? (
+              <p id="new-custom-label-error" className="text-sm text-destructive">
+                Label is required.
+              </p>
+            ) : null}
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="new-custom-text">Text (optional)</Label>
+            <Textarea
+              id="new-custom-text"
+              value={text}
+              maxLength={limits.max_custom_text}
+              placeholder="Words for the bulletin or order of service"
+              className="max-h-[40vh] overflow-y-auto"
+              onChange={(event) => setText(event.target.value)}
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label id="new-custom-place">Place</Label>
+            <Select
+              value={place}
+              items={items}
+              onValueChange={(value) => {
+                if (typeof value === "string") setPlace(value);
+              }}
+            >
+              <SelectTrigger aria-labelledby="new-custom-place" className="h-11 w-full data-[size=default]:h-11">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {placements.map((p) => (
+                  <SelectItem key={p.key} value={p.key}>
+                    {p.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <DialogClose render={<Button type="button" variant="outline" size="touch" className="md:h-8" />}>Cancel</DialogClose>
+            <Button type="submit" size="touch" className="md:h-8">
+              Add
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+```
+
+**In `frontend/src/components/builder/liturgy/liturgy-step.tsx`, replace:**
+
+```tsx
+import { Fragment, useEffect } from "react";
+
+import { ErrorState } from "@/components/app/error-state";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useChurch } from "@/lib/church-context";
+import { useDraft } from "@/lib/draft/context";
+```
+
+**with:**
+
+```tsx
+import { PlusIcon } from "lucide-react";
+import { Fragment, useEffect, useRef, useState } from "react";
+
+import { ErrorState } from "@/components/app/error-state";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useChurch } from "@/lib/church-context";
+import { useDraft } from "@/lib/draft/context";
+import {
+  addCustomElement,
+  normalizePlacement,
+  removeCustomElement,
+  restoreCustomElement,
+  type CustomElement,
+} from "@/lib/liturgy/cards";
+```
+
+**In `frontend/src/components/builder/liturgy/liturgy-step.tsx`, replace:**
+
+```tsx
+import { AiBar } from "./ai-bar";
+```
+
+**with:**
+
+```tsx
+import { useUndoToasts } from "../hymns/use-undo-toasts";
+
+import { AddCustomElementDialog } from "./add-custom-element-dialog";
+import { AiBar } from "./ai-bar";
+import { CommunionCard } from "./communion-card";
+import { CustomElementCard } from "./custom-element-card";
+```
+
+**In `frontend/src/components/builder/liturgy/liturgy-step.tsx`, replace:**
+
+```tsx
+ * hymns, readings, sermon and creed. It reads and writes only the draft (F
+```
+
+**with:**
+
+```tsx
+ * hymns, readings, sermon and creed, the communion card after the Second
+ * Hymn, and each custom element right after the item that owns its place (an
+ * unknown place reads as the end), then "Add custom element" (at most 30;
+ * Remove offers Undo in a toast that never outlives the step). It reads and
+ * writes only the draft (F
+```
+
+**In `frontend/src/components/builder/liturgy/liturgy-step.tsx`, replace:**
+
+```tsx
+  const { draft } = useDraft();
+  const { clearUndo } = useLiturgyGeneration();
+```
+
+**with:**
+
+```tsx
+  const { draft, update } = useDraft();
+  const { clearUndo } = useLiturgyGeneration();
+  const showUndo = useUndoToasts();
+  const [adding, setAdding] = useState(false);
+  const scrollTo = useRef<string | null>(null);
+```
+
+**In `frontend/src/components/builder/liturgy/liturgy-step.tsx`, replace:**
+
+```tsx
+  }, [loaded]);
+
+```
+
+**with:**
+
+```tsx
+  }, [loaded]);
+
+  // After Add, the page scrolls to the new card once it has rendered.
+  useEffect(() => {
+    if (scrollTo.current === null) return;
+    const element = document.getElementById(`custom-${scrollTo.current}`);
+    if (element === null) return;
+    scrollTo.current = null;
+    element.scrollIntoView({ block: "center" });
+  });
+
+```
+
+**In `frontend/src/components/builder/liturgy/liturgy-step.tsx`, replace:**
+
+```tsx
+  const defaultBenediction = profile?.default_benediction ?? config.default_benediction_fallback;
+
+```
+
+**with:**
+
+```tsx
+  const defaultBenediction = profile?.default_benediction ?? config.default_benediction_fallback;
+  const customs = draft.liturgy.custom_elements;
+  const full = customs.length >= config.limits.max_custom_elements;
+
+  function after(anchors: readonly string[]): CustomElement[] {
+    return anchors.flatMap((anchor) => customs.filter((e) => normalizePlacement(e.insert_after) === anchor));
+  }
+
+  function add(element: Omit<CustomElement, "id">) {
+    const id = crypto.randomUUID();
+    update((d) => addCustomElement(d, element, id));
+    scrollTo.current = id;
+    setAdding(false);
+  }
+
+  function remove(element: CustomElement) {
+    const found = removeCustomElement(draft, element.id);
+    if (found === null) return;
+    update((d) => removeCustomElement(d, element.id)?.draft ?? d);
+    const label = element.label.trim() === "" ? "Custom element" : element.label.trim();
+    showUndo(`Removed “${label}”.`, () => update((d) => restoreCustomElement(d, found.element, found.index)));
+  }
+
+```
+
+**In `frontend/src/components/builder/liturgy/liturgy-step.tsx`, replace:**
+
+```tsx
+                ) : null}
+```
+
+**with:**
+
+```tsx
+                ) : item.kind === "communion" ? (
+                  <li>
+                    <CommunionCard communion={config.communion} />
+                  </li>
+                ) : null}
+                {after(item.anchors_after).map((element) => (
+                  <li key={element.id}>
+                    <CustomElementCard
+                      element={element}
+                      placements={config.custom_placements}
+                      limits={config.limits}
+                      onRemove={() => remove(element)}
+                    />
+                  </li>
+                ))}
+```
+
+**In `frontend/src/components/builder/liturgy/liturgy-step.tsx`, replace:**
+
+```tsx
+      </section>
+```
+
+**with:**
+
+```tsx
+        <div className="grid gap-1.5">
+          <div>
+            <Button variant="outline" size="touch" disabled={full} onClick={() => setAdding(true)}>
+              <PlusIcon aria-hidden="true" data-icon="inline-start" />
+              Add custom element
+            </Button>
+          </div>
+          {full ? (
+            <p className="text-sm text-muted-foreground">
+              You can add up to {config.limits.max_custom_elements} custom elements.
+            </p>
+          ) : null}
+        </div>
+      </section>
+      <AddCustomElementDialog
+        open={adding}
+        onOpenChange={setAdding}
+        placements={config.custom_placements}
+        limits={config.limits}
+        onAdd={add}
+      />
+```
+
+- [ ] **Step 5 (agent): Run the tests three times, the suite, types and lint**
+
+```bash
+for i in 1 2 3; do (cd frontend && npx vitest run src/components/builder/liturgy 2>&1 | grep -E "Test Files|Tests |FAIL"); done
+(cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
+(cd frontend && npm run typecheck >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")
+git status --short
+```
+
+**Expected:** three times ` Test Files  1 passed (1)`, `      Tests  31 passed (31)` and no `FAIL`; the suite ` Test Files  75 passed (75)`, `      Tests  507 passed (507)`; `typecheck 0` and `lint 0`; ` M` for `liturgy-step.tsx` and `liturgy-step.test.tsx`, `??` for the three new files.
+
+- [ ] **Step 6 (agent): Commit**
+
+```bash
+git add frontend/src/components/builder/liturgy/communion-card.tsx frontend/src/components/builder/liturgy/custom-element-card.tsx frontend/src/components/builder/liturgy/add-custom-element-dialog.tsx frontend/src/components/builder/liturgy/liturgy-step.tsx frontend/src/components/builder/liturgy/liturgy-step.test.tsx
+git commit -m "Liturgy: the communion card and custom elements in their printed places (S Communion card, Custom elements; BC-10, BC-11, BC-12)" -m "Communion follows the first-Sunday rule until toggled, says why, offers
+Use default, and shows the fixed text read-only. Custom elements show
+right after their place with inline label, text and place, a message for
+a blank label, and Remove with Undo; Add custom element opens a dialog
+(a bottom sheet on phones) that requires a label, trims, scrolls to the
+new card and opens empty next time; at most 30. No AI for them (F D17).
+Frontend 500 -> 507 tests in 75 files." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
+```
+
+**Expected:** one commit, 5 files changed.
+
+**Review checkpoint (T7-T10, batch C):** the dialog is the pinned upstream file plus a comment; every S card state, message and chip matches S's copy (or a numbered clarification); typed text is never replaced without the dialog; nothing is sent without AI; the stale, cancel and 429 rules are tested through the screen; the tests pass three runs in a row; counts match.
+
+### Task 11: Turn the step on: `"liturgy"` ships, its route renders the step, the step bar, Still needed and the summary count it (S Frontend "Builder shell", Testing dom 17; F §4.7; AC16; clarifications 16, 27)
+
+Slice 2's hand-off, as 3b did for Hymns: `SHIPPED_STEPS` gains `"liturgy"`, so the step bar shows "{ready} of {enabled}" (or "Complete") instead of "Soon", from `liturgyCounts` (T2), the one count the summary shares; `/builder/liturgy` renders `LiturgyStep` instead of the "Available soon" card; `stillNeeded` gains "{Card label} is empty — Write or generate it" for each switched-on card with no text, linking to `/builder/liturgy#card-{key}` (`NeededItem.href`), and "No sermon title — Add one", linking to `/builder/liturgy` (clarification 27); the summary's Liturgy block becomes `LiturgySummaryBlock`: "{ready} of {enabled} liturgy sections ready" (or "All liturgy sections switched off"), " · Writing n sections…" while the provider has runs ("Writing 1 section…" for one; clarification 16), "Communion: Yes/No" and the custom-element count. The step's root becomes a region named "Liturgy", as the shell test expects of every step. Existing tests change where the shell now shows the liturgy (edited, 0): the shipped-steps list, the unshipped-step statuses, 3b's hymn Still-needed rows (now with a hymns-only shipped set), and the shell tests' Liturgy status, step card, Still-needed rows and summary block.
+
+**Files:**
+- Create: `frontend/src/components/builder/liturgy/liturgy-summary-block.tsx`
+- Modify: `frontend/src/lib/draft/steps.ts`, `frontend/src/lib/draft/status.ts` (`stepStatus`, `NeededItem.href`, `stillNeeded`), `frontend/src/components/builder/still-needed.tsx`, `frontend/src/components/builder/summary-panel.tsx`, `frontend/src/components/builder/step-placeholder.tsx` (comment), `frontend/src/app/(signed-in)/(church)/builder/liturgy/page.tsx`, `frontend/src/components/builder/liturgy/liturgy-step.tsx` (a region)
+- Test: `frontend/src/lib/draft/status.test.ts` (+1; three tests edited, 0), `frontend/src/components/builder/builder-shell.test.tsx` (+1; two tests and the helper edited, 0)
+
+**Interfaces:**
+- Consumes: `liturgyCounts` (T2), `SECTION_LABELS` (T1), `useLiturgyGeneration().runs` (T6), `LiturgyStep` (T8-T10), 2b's shell.
+- Produces: `SHIPPED_STEPS = {"readings", "hymns", "liturgy"}`; `NeededItem.href?: string`; `LiturgySummaryBlock()`. Later users: 5a (Review reuses the rows and turns "review" on; its `missingItems` reuses the wording).
+
+Counts after this task: frontend **509 passed in 75 files**.
+
+- [ ] **Step 1 (agent): Check the starting point**
+
+```bash
+git status --short
+grep -n "export const SHIPPED_STEPS" frontend/src/lib/draft/steps.ts
+(cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
+```
+
+**Expected:** nothing (or `?? .claude/`); `34:export const SHIPPED_STEPS: ReadonlySet<StepId> = new Set<StepId>(["readings", "hymns"]);`; ` Test Files  75 passed (75)`, `      Tests  507 passed (507)`.
+
+- [ ] **Step 2 (agent): Write the failing tests**
+
+**In `frontend/src/lib/draft/status.test.ts`, replace:**
+
+```ts
+  it("lists the four steps in order, ships Date & readings (2c) and Hymns (3b), and reads a step from its path", () => {
+```
+
+**with:**
+
+```ts
+  it("lists the four steps in order, ships Date & readings (2c), Hymns (3b) and Liturgy (4b), and reads a step from its path", () => {
+```
+
+**In `frontend/src/lib/draft/status.test.ts`, replace:**
+
+```ts
+    expect([...SHIPPED_STEPS]).toEqual(["readings", "hymns"]);
+```
+
+**with:**
+
+```ts
+    expect([...SHIPPED_STEPS]).toEqual(["readings", "hymns", "liturgy"]);
+```
+
+**In `frontend/src/lib/draft/status.test.ts`, replace:**
+
+```ts
+    expect(STEPS.map((s) => stepStatus(d, s.id).kind)).toEqual(["incomplete", "incomplete", "soon", "not_in_archive"]);
+```
+
+**with:**
+
+```ts
+    expect(STEPS.map((s) => stepStatus(d, s.id).kind)).toEqual(["incomplete", "incomplete", "incomplete", "not_in_archive"]);
+    expect(stepStatus(d, "liturgy", READINGS)).toEqual({ kind: "soon" });
+```
+
+**In `frontend/src/lib/draft/status.test.ts`, replace:**
+
+```ts
+    expect(stillNeeded(filled)).toEqual([
+```
+
+**with:**
+
+```ts
+    const hymnsShipped = new Set<StepId>(["readings", "hymns"]); // the liturgy's rows are 4b's test below
+    expect(stillNeeded(filled, hymnsShipped)).toEqual([
+```
+
+**In `frontend/src/lib/draft/status.test.ts`, replace:**
+
+```ts
+    expect(stillNeeded(withSlots({ response: HYMN }))).toEqual([
+      { step: "hymns", message: "No Opening hymn", action: "Choose one" },
+      { step: "hymns", message: "No Closing hymn", action: "Choose one" },
+    ]);
+    expect(stillNeeded(all)).toEqual([]);
+    expect(stillNeeded(filled, READINGS)).toEqual([]); // before 3b: no hymn rows
+    expect(stillNeeded(filled).some((item) => item.step === "liturgy")).toBe(false); // liturgy not shipped
+```
+
+**with:**
+
+```ts
+    expect(stillNeeded(withSlots({ response: HYMN }), hymnsShipped)).toEqual([
+      { step: "hymns", message: "No Opening hymn", action: "Choose one" },
+      { step: "hymns", message: "No Closing hymn", action: "Choose one" },
+    ]);
+    expect(stillNeeded(all, hymnsShipped)).toEqual([]);
+    expect(stillNeeded(filled, READINGS)).toEqual([]); // before 3b: no hymn rows
+    expect(stillNeeded(filled, hymnsShipped).some((item) => item.step === "liturgy")).toBe(false);
+  });
+
+  it("counts the liturgy's enabled cards with text and lists the empty ones and a missing title (slice 4b)", () => {
+    const d = testDraft(); // the Benediction follows the church default: 1 of 7
+    expect(stepStatus(d, "liturgy")).toEqual({ kind: "incomplete", done: 1, total: 7 });
+    const allOff = withLiturgy({
+      cards: Object.fromEntries(
+        Object.entries(d.liturgy.cards).map(([key, card]) => [key, { ...card, enabled: false }]),
+      ) as DraftV1["liturgy"]["cards"],
+    });
+    expect(stepStatus(allOff, "liturgy")).toEqual({ kind: "complete" }); // every card off
+    const rows = stillNeeded(withCard("assurance", { enabled: false })).filter((item) => item.step === "liturgy");
+    expect(rows).toEqual([
+      { step: "liturgy", message: "Call to Worship is empty", action: "Write or generate it", href: "/builder/liturgy#card-call_to_worship" },
+      { step: "liturgy", message: "Opening Prayer is empty", action: "Write or generate it", href: "/builder/liturgy#card-opening_prayer" },
+      {
+        step: "liturgy",
+        message: "Prayer of Confession is empty",
+        action: "Write or generate it",
+        href: "/builder/liturgy#card-prayer_of_confession",
+      },
+      {
+        step: "liturgy",
+        message: "Prayer for Illumination is empty",
+        action: "Write or generate it",
+        href: "/builder/liturgy#card-prayer_for_illumination",
+      },
+      { step: "liturgy", message: "Offertory Prayer is empty", action: "Write or generate it", href: "/builder/liturgy#card-offertory_prayer" },
+      { step: "liturgy", message: "No sermon title", action: "Add one" },
+    ]);
+    const titled = withLiturgy({ sermon_title: "Living Water" });
+    expect(stillNeeded(titled).some((item) => item.message === "No sermon title")).toBe(false);
+```
+
+**In `frontend/src/components/builder/builder-shell.test.tsx`, replace:**
+
+```tsx
+import { installFakeApi } from "@/test/fake-api";
+```
+
+**with:**
+
+```tsx
+import { addCustomElement, editCardText } from "@/lib/liturgy/cards";
+import { installFakeApi, type FakeHandler, type RecordedRequest } from "@/test/fake-api";
+```
+
+**In `frontend/src/components/builder/builder-shell.test.tsx`, replace:**
+
+```tsx
+  me,
+```
+
+**with:**
+
+```tsx
+  liturgyConfig,
+  me,
+  sectionResult,
+```
+
+**In `frontend/src/components/builder/builder-shell.test.tsx`, replace:**
+
+```tsx
+function renderBuilder(page: ReactElement, path: string, lookup = lectionaryRoute()) {
+```
+
+**with:**
+
+```tsx
+function renderBuilder(page: ReactElement, path: string, lookup = lectionaryRoute(), routes: Record<string, FakeHandler> = {}) {
+```
+
+**In `frontend/src/components/builder/builder-shell.test.tsx`, replace:**
+
+```tsx
+    "GET /hymns": hymnListRoute(),
+  });
+```
+
+**with:**
+
+```tsx
+    "GET /hymns": hymnListRoute(),
+    "GET /liturgy/config": liturgyConfig(),
+    ...routes,
+  });
+```
+
+**In `frontend/src/components/builder/builder-shell.test.tsx`, replace:**
+
+```tsx
+        "3 Liturgy Soon",
+```
+
+**with:**
+
+```tsx
+        "3 Liturgy 1 of 7", // shipped in 4b: the Benediction follows the church default
+```
+
+**In `frontend/src/components/builder/builder-shell.test.tsx`, replace:**
+
+```tsx
+      const card = screen.getByRole("region", { name: label });
+```
+
+**with:**
+
+```tsx
+      const card = await screen.findByRole("region", { name: label }); // Liturgy's shows once its config loads
+```
+
+**In `frontend/src/components/builder/builder-shell.test.tsx`, replace:**
+
+```tsx
+        expect(within(card).getByText("Choose an opening, response and closing hymn.")).toBeInTheDocument();
+        expect(within(card).queryByRole("heading", { name: "Available soon" })).toBeNull();
+```
+
+**with:**
+
+```tsx
+        expect(within(card).getByText("Choose an opening, response and closing hymn.")).toBeInTheDocument();
+        expect(within(card).queryByRole("heading", { name: "Available soon" })).toBeNull();
+      } else if (number === 3) {
+        // Liturgy is the real step from slice 4b.
+        expect(await within(card).findByRole("textbox", { name: "Sermon title" })).toBeInTheDocument();
+        expect(within(card).queryByRole("heading", { name: "Available soon" })).toBeNull();
+```
+
+**In `frontend/src/components/builder/builder-shell.test.tsx`, replace:**
+
+```tsx
+        ]);
+        const links = within(needed).getAllByRole("link").map((link) => link.getAttribute("href"));
+        expect(links).toEqual(["/builder/readings", "/builder/readings", "/builder/hymns", "/builder/hymns", "/builder/hymns"]);
+```
+
+**with:**
+
+```tsx
+          "Call to Worship is empty — Write or generate it",
+          "Opening Prayer is empty — Write or generate it",
+          "Prayer of Confession is empty — Write or generate it",
+          "Assurance of Pardon is empty — Write or generate it",
+          "Prayer for Illumination is empty — Write or generate it",
+          "Offertory Prayer is empty — Write or generate it",
+          "No sermon title — Add one",
+        ]);
+        const links = within(needed).getAllByRole("link").map((link) => link.getAttribute("href"));
+        expect(links).toEqual([
+          "/builder/readings",
+          "/builder/readings",
+          "/builder/hymns",
+          "/builder/hymns",
+          "/builder/hymns",
+          "/builder/liturgy#card-call_to_worship",
+          "/builder/liturgy#card-opening_prayer",
+          "/builder/liturgy#card-prayer_of_confession",
+          "/builder/liturgy#card-assurance",
+          "/builder/liturgy#card-prayer_for_illumination",
+          "/builder/liturgy#card-offertory_prayer",
+          "/builder/liturgy",
+        ]);
+```
+
+**In `frontend/src/components/builder/builder-shell.test.tsx`, replace:**
+
+```tsx
+  it("shows the summary: the date and occasion, the readings, the hymns, Available soon for liturgy, and where the draft is kept", async () => {
+```
+
+**with:**
+
+```tsx
+  it("shows the summary: the date and occasion, the readings, the hymns, the liturgy, and where the draft is kept", async () => {
+```
+
+**In `frontend/src/components/builder/builder-shell.test.tsx`, replace:**
+
+```tsx
+    expect(liturgy?.nextElementSibling).toHaveTextContent(/^Available soon$/);
+```
+
+**with:**
+
+```tsx
+    expect(liturgy?.nextElementSibling).toHaveTextContent(/^1 of 7 liturgy sections readyCommunion: YesNo custom elements$/);
+```
+
+**In `frontend/src/components/builder/builder-shell.test.tsx`, replace:**
+
+```tsx
+    expect(within(sheet).getByText("Opening · #403 Come, Thou Almighty King")).toBeInTheDocument();
+  });
+});
+
+```
+
+**with:**
+
+```tsx
+    expect(within(sheet).getByText("Opening · #403 Come, Thou Almighty King")).toBeInTheDocument();
+  });
+});
+
+describe("the shell with Liturgy shipped (slice 4b)", () => {
+  it("counts the liturgy, lists it in the summary with the sections being written, and in Still needed", async () => {
+    let d = editCardText(testDraft(), "call_to_worship", "Come, let us worship.");
+    d = addCustomElement(d, { label: "Anthem", text: "", insert_after: "sermon" }, "a");
+    seed({ ...d, liturgy: { ...d.liturgy, include_communion: false, communion_origin: "user" } });
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const view = renderBuilder(<LiturgyStepPage />, "/builder/liturgy", lectionaryRoute(), {
+      "POST /liturgy/generate": async (req: RecordedRequest) => {
+        await held;
+        return { results: [sectionResult((req.body as { sections: ["opening_prayer"] }).sections[0], "Gracious God")] };
+      },
+    });
+    const progress = await screen.findByRole("navigation", { name: "Steps" });
+    expect(within(progress).getAllByRole("link")[2]).toHaveTextContent("3 Liturgy 2 of 7");
+    const aside = screen.getByRole("complementary", { name: "Summary" });
+    const block = within(aside).getByRole("link", { name: "Liturgy" }).closest("h3")?.nextElementSibling as HTMLElement;
+    expect(within(block).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+      "2 of 7 liturgy sections ready",
+      "Communion: No",
+      "1 custom element",
+    ]);
+    expect(within(aside).getByRole("link", { name: "Liturgy" })).toHaveAttribute("href", "/builder/liturgy");
+    expect(block).not.toHaveTextContent("Available soon");
+
+    // While a section is written the first line says so, and the line goes when it is done.
+    const opening = await screen.findByRole("region", { name: "Opening Prayer" });
+    await view.user.click(within(opening).getByRole("button", { name: "Generate" }));
+    await waitFor(() => expect(block).toHaveTextContent("2 of 7 liturgy sections ready · Writing 1 section…"));
+    release();
+    await waitFor(() => expect(within(block).getAllByRole("listitem")[0]).toHaveTextContent(/^3 of 7 liturgy sections ready$/));
+    expect(within(progress).getAllByRole("link")[2]).toHaveTextContent("3 Liturgy 3 of 7");
+    view.unmount();
+
+    renderBuilder(<ReviewStepPage />, "/builder/review");
+    const needed = await screen.findByRole("region", { name: "Still needed" });
+    const liturgyRows = within(needed)
+      .getAllByRole("listitem")
+      .map((li) => li.textContent)
+      .filter((text) => /empty|sermon/.test(text ?? ""));
+    expect(liturgyRows).toEqual([
+      "Prayer of Confession is empty — Write or generate it",
+      "Assurance of Pardon is empty — Write or generate it",
+      "Prayer for Illumination is empty — Write or generate it",
+      "Offertory Prayer is empty — Write or generate it",
+      "No sermon title — Add one",
+    ]);
+    const hrefs = within(needed)
+      .getAllByRole("link", { name: "Write or generate it" })
+      .map((link) => link.getAttribute("href"));
+    expect(hrefs[0]).toBe("/builder/liturgy#card-prayer_of_confession");
+    expect(within(needed).getAllByRole("link", { name: "Add one" }).at(-1)).toHaveAttribute("href", "/builder/liturgy");
+  });
+});
+
+```
+
+- [ ] **Step 3 (agent): Run them and see them fail**
+
+```bash
+(cd frontend && npx vitest run src/lib/draft/status.test.ts src/components/builder/builder-shell.test.tsx 2>&1 | grep -E "^ FAIL|Tests ")
+```
+
+**Expected:**
+
+```
+(pending replay)
+```
+- [ ] **Step 4 (agent): Ship the step**
+
+**In `frontend/src/lib/draft/steps.ts`, replace:**
+
+```ts
+ * answer Q1, 2026-09-28); slice 2c ships "readings" and slice 3b "hymns".
+ * Slice 4 adds "liturgy", 5a "review".
+```
+
+**with:**
+
+```ts
+ * answer Q1, 2026-09-28); slice 2c ships "readings", slice 3b "hymns" and
+ * slice 4b "liturgy". 5a adds "review".
+```
+
+**In `frontend/src/lib/draft/steps.ts`, replace:**
+
+```ts
+export const SHIPPED_STEPS: ReadonlySet<StepId> = new Set<StepId>(["readings", "hymns"]);
+```
+
+**with:**
+
+```ts
+export const SHIPPED_STEPS: ReadonlySet<StepId> = new Set<StepId>(["readings", "hymns", "liturgy"]);
+```
+
+**In `frontend/src/lib/draft/status.ts`, replace:**
+
+```ts
+import { DEFAULT_ENABLED } from "@/lib/liturgy/sections";
+```
+
+**with:**
+
+```ts
+import { DEFAULT_ENABLED, SECTION_LABELS } from "@/lib/liturgy/sections";
+import { liturgyCounts } from "@/lib/liturgy/summary";
+```
+
+**In `frontend/src/lib/draft/status.ts`, replace:**
+
+```ts
+  const enabled = SECTION_KEYS.map((key) => draft.liturgy.cards[key]).filter((card) => card.enabled);
+  return counted(enabled.filter((card) => card.text.trim() !== "").length, enabled.length);
+```
+
+**with:**
+
+```ts
+  // Liturgy: the enabled cards with text, from the count the summary shows too (slice 4b); all off is complete.
+  const { ready, enabled } = liturgyCounts(draft);
+  return counted(ready, enabled);
+```
+
+**In `frontend/src/lib/draft/status.ts`, replace:**
+
+```ts
+  action: string;
+};
+```
+
+**with:**
+
+```ts
+  action: string;
+  /** Where the link goes when not the step's own page: "/builder/liturgy#card-call_to_worship" (slice 4b). */
+  href?: string;
+};
+```
+
+**In `frontend/src/lib/draft/status.ts`, replace:**
+
+```ts
+ * F §4.7's wording). Slice 4 adds the liturgy's rows.
+```
+
+**with:**
+
+```ts
+ * F §4.7's wording), then one row per switched-on liturgy card with no text,
+ * linking to that card, and "No sermon title" (4b, the wording 5a's Review
+ * checklist reuses).
+```
+
+**In `frontend/src/lib/draft/status.ts`, replace:**
+
+```ts
+  }
+  return items;
+```
+
+**with:**
+
+```ts
+  }
+  if (shipped.has("liturgy")) {
+    for (const key of SECTION_KEYS) {
+      const card = draft.liturgy.cards[key];
+      if (!card.enabled || card.text.trim() !== "") continue;
+      items.push({
+        step: "liturgy",
+        message: `${SECTION_LABELS[key]} is empty`,
+        action: "Write or generate it",
+        href: `/builder/liturgy#card-${key}`,
+      });
+    }
+    if (draft.liturgy.sermon_title.trim() === "") {
+      items.push({ step: "liturgy", message: "No sermon title", action: "Add one" });
+    }
+  }
+  return items;
+```
+
+**In `frontend/src/components/builder/still-needed.tsx`, replace:**
+
+```tsx
+            <Link href={stepById(item.step).href} className="font-medium underline underline-offset-4">
+```
+
+**with:**
+
+```tsx
+            <Link href={item.href ?? stepById(item.step).href} className="font-medium underline underline-offset-4">
+```
+
+**Create `frontend/src/components/builder/liturgy/liturgy-summary-block.tsx`:**
+
+```tsx
+"use client";
+
+import { useDraft } from "@/lib/draft/context";
+import { useLiturgyGeneration } from "@/lib/liturgy/generation";
+import { liturgyCounts } from "@/lib/liturgy/summary";
+
+/**
+ * The summary's Liturgy block (slice 4 spec, "Builder shell"; F §4.7): "{ready}
+ * of {enabled} liturgy sections ready" (or "All liturgy sections switched
+ * off"), with " · Writing n sections…" while the generation provider has runs;
+ * "Communion: Yes/No"; and the custom-element count. It reads the draft and
+ * the runs only, so the shell never fetches anything for it.
+ */
+export function LiturgySummaryBlock() {
+  const { draft } = useDraft();
+  const { runs } = useLiturgyGeneration();
+  const counts = liturgyCounts(draft);
+  const writing = Object.keys(runs).length;
+  const ready =
+    counts.enabled === 0 ? "All liturgy sections switched off" : `${counts.ready} of ${counts.enabled} liturgy sections ready`;
+  const custom =
+    counts.customCount === 0
+      ? "No custom elements"
+      : counts.customCount === 1
+        ? "1 custom element"
+        : `${counts.customCount} custom elements`;
+  return (
+    <ul className="grid gap-1">
+      <li className="text-foreground">
+        {ready}
+        {writing > 0 ? ` · Writing ${writing} ${writing === 1 ? "section" : "sections"}…` : null}
+      </li>
+      <li>Communion: {counts.communion ? "Yes" : "No"}</li>
+      <li>{custom}</li>
+    </ul>
+  );
+}
+```
+
+**In `frontend/src/components/builder/summary-panel.tsx`, replace:**
+
+```tsx
+
+import { SummaryHymns } from "./summary-hymns";
+```
+
+**with:**
+
+```tsx
+
+import { LiturgySummaryBlock } from "./liturgy/liturgy-summary-block";
+import { SummaryHymns } from "./summary-hymns";
+```
+
+**In `frontend/src/components/builder/summary-panel.tsx`, replace:**
+
+```tsx
+ * hymns once "hymns" ships (slice 3b); slice 4 replaces the Liturgy block, and
+ * 5a wires the archive half of the status line.
+```
+
+**with:**
+
+```tsx
+ * hymns once "hymns" ships (slice 3b), the liturgy counts once "liturgy" ships
+ * (slice 4b); 5a wires the archive half of the status line.
+```
+
+**In `frontend/src/components/builder/summary-panel.tsx`, replace:**
+
+```tsx
+  const hymnsShipped = shipped.has("hymns");
+  const lines = cleanScriptures(draft);
+```
+
+**with:**
+
+```tsx
+  const hymnsShipped = shipped.has("hymns");
+  const liturgyShipped = shipped.has("liturgy");
+  const lines = cleanScriptures(draft);
+```
+
+**In `frontend/src/components/builder/summary-panel.tsx`, replace:**
+
+```tsx
+      <Block title="Liturgy" step="liturgy" onNavigate={onNavigate}>
+        <Soon />
+      </Block>
+```
+
+**with:**
+
+```tsx
+      <Block title="Liturgy" step="liturgy" onNavigate={onNavigate}>
+        {liturgyShipped ? <LiturgySummaryBlock /> : <Soon />}
+      </Block>
+```
+
+**In `frontend/src/components/builder/step-placeholder.tsx`, replace:**
+
+```tsx
+ * answer Q1, 2026-09-28), and Hymns used it until slice 3b. Slices 4 and 5a
+ * replace their steps' use, and 5a deletes this component. No link to the old
+ * app (owner answer Q2).
+```
+
+**with:**
+
+```tsx
+ * answer Q1, 2026-09-28), Hymns until slice 3b and Liturgy until slice 4b.
+ * Only Review uses it now; 5a replaces that use and deletes this component.
+ * No link to the old app (owner answer Q2).
+```
+
+**In `frontend/src/app/(signed-in)/(church)/builder/liturgy/page.tsx`, replace:**
+
+```tsx
+import { StepPlaceholder } from "@/components/builder/step-placeholder";
+
+/** Step: Liturgy. Slice 4 replaces the placeholder. */
+export default function LiturgyStepPage() {
+  return <StepPlaceholder step="liturgy" />;
+```
+
+**with:**
+
+```tsx
+import { LiturgyStep } from "@/components/builder/liturgy/liturgy-step";
+
+/** Step: Liturgy (slice 4b). */
+export default function LiturgyStepPage() {
+  return <LiturgyStep />;
+```
+
+**In `frontend/src/components/builder/liturgy/liturgy-step.tsx`, replace:**
+
+```tsx
+    <div className="grid gap-6">
+      <h2 className="text-lg font-semibold">Liturgy</h2>
+```
+
+**with:**
+
+```tsx
+    <section aria-labelledby="liturgy-step-title" className="grid gap-6">
+      <h2 id="liturgy-step-title" className="text-lg font-semibold">
+        Liturgy
+      </h2>
+```
+
+**In `frontend/src/components/builder/liturgy/liturgy-step.tsx`, replace:**
+
+```tsx
+      />
+    </div>
+  );
+```
+
+**with:**
+
+```tsx
+      />
+    </section>
+  );
+```
+
+- [ ] **Step 5 (agent): Run the tests, the suite, types and lint**
+
+```bash
+(cd frontend && npx vitest run src/lib/draft src/components/builder 2>&1 | grep -E "Test Files|Tests ")
+(cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
+(cd frontend && npm run typecheck >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")
+git status --short
+```
+
+**Expected:** ` Test Files  16 passed (16)`, `      Tests  184 passed (184)`; the suite ` Test Files  75 passed (75)`, `      Tests  509 passed (509)`; `typecheck 0` and `lint 0`; ` M` for the nine modified files and `??` for `liturgy-summary-block.tsx`.
+
+- [ ] **Step 6 (agent): Commit**
+
+```bash
+git add frontend/src/components/builder/liturgy/liturgy-summary-block.tsx frontend/src/lib/draft/steps.ts frontend/src/lib/draft/status.ts frontend/src/lib/draft/status.test.ts frontend/src/components/builder/still-needed.tsx frontend/src/components/builder/summary-panel.tsx frontend/src/components/builder/step-placeholder.tsx 'frontend/src/app/(signed-in)/(church)/builder/liturgy/page.tsx' frontend/src/components/builder/liturgy/liturgy-step.tsx frontend/src/components/builder/builder-shell.test.tsx
+git commit -m "Builder: the Liturgy step ships in the step bar, Still needed and the summary (S Builder shell; F §4.7; AC16)" -m "SHIPPED_STEPS gains liturgy: the step bar shows ready of enabled sections
+(from liturgyCounts), /builder/liturgy renders the step, Review lists each
+empty switched-on card (linking to its card) and a missing sermon title,
+and the summary's Liturgy block shows the sections ready, Writing n
+sections while the AI runs, communion and the custom elements. Only
+Review keeps Available soon.
+Frontend 507 -> 509 tests in 75 files." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
+```
+
+**Expected:** one commit, 10 files changed.
+
+### Task 12: Docs: the "(4b plan)" notes in S, two F amendment rows and the §1.8 timeouts, the slice 4 checklist and its heading pin (owner answers 1, 2, 4; S Manual checklist; F Amendments, §1.8, §4.7; clarifications 1-31)
+
+S and F are what 5a, 6a and the reviewer slice will read, so they say what 4b built. S gains three inline notes (the keyboard, owner answer 3; the 100-second timeout, owner answer 2, in two places) and a closing section "Notes from the slice 4b plan (2026-09-30)", as 4a added its own. F gains two amendment rows (§1.8: the 100 000 ms client timeout, which the reviewer's routes reuse; §4.6/§4.7: what counts as unsaved work, the default benediction, and Liturgy shipping), the timeouts in §1.8's table, and a §4.7 note. `docs/manual-verification.md` gains "## Slice 4" (S's checks, check 10 for "New service" and check 11 for a long section, and "(owner, after 4b)" on the items the guided check covers; S's check 2 says 6 sections, which with a typed Call to Worship and the Benediction's default is 5), and `backend/tests/test_slice1_docs.py`, which pins the file's last four `##` headings, pins the last five. No code changes.
+
+**Files:**
+- Modify: `docs/superpowers/specs/2026-09-25-slice-4-liturgy-design.md`, `docs/superpowers/specs/2026-09-25-migration-foundations-design.md`, `docs/manual-verification.md`, `backend/tests/test_slice1_docs.py`
+- Test: none new; `backend/tests/test_ops_workflows.py`, `test_slice1_docs.py` and `test_docs.py` must still pass (89).
+
+**Interfaces:**
+- Consumes: the clarifications above and the code of T1-T11.
+- Produces: S and F as later slices read them; the checklist T14 runs from.
+
+Counts after this task: frontend **509 passed in 75 files**; backend **1183 passed, 11 skipped**.
+
+- [ ] **Step 1 (agent): Check the starting point**
+
+```bash
+git status --short
+grep -c "4b plan" docs/superpowers/specs/2026-09-25-slice-4-liturgy-design.md
+grep -c "^## Slice 4$" docs/manual-verification.md
+.venv/bin/python -m pytest -q backend/tests/test_ops_workflows.py backend/tests/test_slice1_docs.py backend/tests/test_docs.py 2>&1 | tail -1
+```
+
+**Expected:** nothing (or `?? .claude/`); `0` (grep exits 1); `0` (grep exits 1); `89 passed in <t>s`.
+
+- [ ] **Step 2 (agent): Apply the S, F, checklist and docs-test edits**
+
+**In `docs/superpowers/specs/2026-09-25-slice-4-liturgy-design.md`, replace:**
+
+```markdown
+- Below `md`, while a textarea has focus, the sticky `StepFooter` hides, so the iOS keyboard does not stack on it. If slice 2's footer doesn't already do this, this slice adds it through a `useKeyboardOpen()` hook based on `visualViewport`.
+```
+
+**with:**
+
+```markdown
+- Below `md`, while a textarea has focus, the sticky `StepFooter` hides, so the iOS keyboard does not stack on it. If slice 2's footer doesn't already do this, this slice adds it through a `useKeyboardOpen()` hook based on `visualViewport`. (4b plan, owner answer 3: slice 2b's `StepFooter` already does this with `useKeyboardOpen()`, which watches focus rather than `visualViewport`; 4b adds only a test on this step.)
+```
+
+**In `docs/superpowers/specs/2026-09-25-slice-4-liturgy-design.md`, replace:**
+
+```markdown
+| `timeout` (client, 90 s) | "This is taking too long. Try again." | Try again |
+```
+
+**with:**
+
+```markdown
+| `timeout` (client, 90 s; 4b plan: 100 s, owner answer 2) | "This is taking too long. Try again." | Try again |
+```
+
+**In `docs/superpowers/specs/2026-09-25-slice-4-liturgy-design.md`, replace:**
+
+```markdown
+- Client timeouts: `/liturgy/config` uses the default 20 s. `/liturgy/generate` uses 90 s (F §1.8), so `TIMEOUTS.liturgyGenerate = 90_000`.
+```
+
+**with:**
+
+```markdown
+- Client timeouts: `/liturgy/config` uses the default 20 s. `/liturgy/generate` uses 90 s (F §1.8), so `TIMEOUTS.liturgyGenerate = 90_000`. (4b plan, owner answer 2 of 2026-09-30: 100 s, which covers a slow sign-in on top of 4a's 85 s worst case; the client keeps per-route timeouts in `lib/api/timeouts.ts`'s `ENDPOINT_TIMEOUTS`, so the row is `"POST /liturgy/generate": 100_000`; F §1.8 is amended, and the reviewer's routes reuse the value.)
+```
+
+**In `docs/superpowers/specs/2026-09-25-slice-4-liturgy-design.md`, replace:**
+
+```markdown
+- **Risk 3's query** lists only an 8-character prefix of each church id: `select left(id::text, 8) as church, settings->'liturgy_prompts' as prompts from churches where settings->'liturgy_prompts' is not null and deleted_at is null`.
+
+```
+
+**with:**
+
+```markdown
+- **Risk 3's query** lists only an 8-character prefix of each church id: `select left(id::text, 8) as church, settings->'liturgy_prompts' as prompts from churches where settings->'liturgy_prompts' is not null and deleted_at is null`.
+
+## Notes from the slice 4b plan (2026-09-30)
+
+`docs/superpowers/plans/2026-09-30-slice-4b-liturgy-step.md` builds the frontend half. Where it reads this spec more precisely, or the code and F win, it says so here (its clarifications give the reasons); the owner's answers of 2026-09-30 are its owner answers 1-4.
+
+- **Unsaved work** (owner answer 1; Draft store integration, Risks 4): everything that ends up in the service counts, so "New service" asks and the mount-time roll-forward keeps the date after a card's text, a section switched away from its default, communion set by the user, a sermon title or a custom element; transient state (runs, errors, Undo lines) is never in the draft, and a Benediction still following the church default does not count. Text or a title that is blank after trimming counts as nothing. After a save (5a) the fingerprint decides: a switch on an empty card changes nothing that is saved, and Risks item 4 stands.
+- **The default benediction** (Benediction and the church default): `freshDraft` fills the card from the profile's `default_benediction` ("Halverson" when missing); the draft store runs `applyLiturgyDefaults` on load, on every change and on replace, and on a profile refetch as an automatic change (stamped just after the current draft, like 2c's lectionary fill), so it never outranks another tab's edit. The communion rule moved into `lib/liturgy/defaults.ts`; `date-effects.ts` calls it.
+- **Names and files** (Frontend changes): components are kebab-case files under `src/components/builder/liturgy/` (`liturgy-step.tsx`, `section-card.tsx`, `ai-bar.tsx`, `outline-landmark.tsx`, `sermon-title-field.tsx`, `communion-card.tsx`, `custom-element-card.tsx`, `add-custom-element-dialog.tsx`, `liturgy-summary-block.tsx`), as 3b's are; `useChurchDefault` is `restoreChurchDefault` (React's lint reads a `use…` name as a hook); the labels and default switches live in `lib/liturgy/sections.ts`, pinned to `shared/liturgy_sections.json`; `generateSection` takes the built body; the provider exposes `runs`, `errors`, `undo`, `bulk`, `generate(keys, {aiAvailable, bulk})`, `cancel`, `cancelBulk`, `dismissError`, `setUndo`, `clearUndo`, `applyUndo`, and fetches nothing until asked. `components/ui/dialog.tsx` is rebuilt from the upstream shadcn source (the registry is blocked), as 2b, 2c and 3b did.
+- **Requests** (`request.ts`): a hymn id that is not a UUID goes as `null` (the API validates it as a UUID and would reject the whole request).
+- **Errors** (Per-card error messages): a cancel, a 401 and a lost church show nothing on the card (the app's handling acts); the 404's link reads "Go to Hymns"; while a retryable error shows, its "Try again" stands in for the card's button. A 429 stops the queue at once: the answer is handled before the next queued section starts.
+- **Wording**: "Writing k of n…" counts the sections finished plus one; "Wrote 1 section." and the summary's "Writing 1 section…" are singular for one; a bulk run cancelled whole ends with no toast, and cancelled cards are not counted in "Wrote k of n sections."; the "Replaced with a new AI draft." line shows only when text was replaced. The step opens with the heading "Liturgy"; landmark rows read "First Hymn · {title}" (no number) and "First Reading · {reference} auto"; a custom element with a blank label is titled "Custom element".
+- **Still needed** (Builder shell): each empty switched-on card links to `/builder/liturgy#card-{key}`, the sermon row to `/builder/liturgy`; the card rows come first.
+- **Tests** (Testing → Frontend): the dom cases are in `components/builder/liturgy/liturgy-step.test.tsx` and `builder-shell.test.tsx`; `generation.test.tsx` holds the sermon-text cases; `sections.test.ts` pins the fresh-draft switches (S put that in `defaults.test.ts`).
+- **Manual checklist**: appended as "## Slice 4"; the owner's guided phone check after the merge runs the items marked "(owner, after 4b)". Check 2's count is 5 (the Benediction has the default and the Call to Worship is typed), not 6.
+
+```
+
+**In `docs/superpowers/specs/2026-09-25-migration-foundations-design.md`, replace:**
+
+```markdown
+| §4.6, §4.7, §4.9 | *(2026-09-29, slice 3b plan)* `isPristine` also counts a chosen hymnal (owner answer 1), so "New service" asks after a hymn or a hymnal is chosen and the roll-forward keeps that draft's date; choosing the church's effective hymnal stores `null`. The Exclude switch and the AI's other ideas never count. Hymns ships (`SHIPPED_STEPS` holds "readings" and "hymns"): the step bar counts it, Review lists each empty slot, and the summary lists the three hymns. The generic long-list picker is `components/app/search-combobox.tsx` (slice 1's time-zone picker uses the Combobox directly), and the kit gains `switch`. | 3b |
+
+```
+
+**with:**
+
+```markdown
+| §4.6, §4.7, §4.9 | *(2026-09-29, slice 3b plan)* `isPristine` also counts a chosen hymnal (owner answer 1), so "New service" asks after a hymn or a hymnal is chosen and the roll-forward keeps that draft's date; choosing the church's effective hymnal stores `null`. The Exclude switch and the AI's other ideas never count. Hymns ships (`SHIPPED_STEPS` holds "readings" and "hymns"): the step bar counts it, Review lists each empty slot, and the summary lists the three hymns. The generic long-list picker is `components/app/search-combobox.tsx` (slice 1's time-zone picker uses the Combobox directly), and the kit gains `switch`. | 3b |
+| §1.8 | *(2026-09-30, slice 4b plan, owner answer 2)* The client timeout for `POST /liturgy/generate` is 100 000 ms, not 90 000: a section answers within 85 s (4a's 80 s deadline plus a last connect), and 100 s also covers a slow sign-in before the request is sent. The client keeps it in `lib/api/timeouts.ts`'s `ENDPOINT_TIMEOUTS`. The service reviewer's `POST /liturgy/review` and `/liturgy/revise` (the slice after 4b) reuse 100 000. | 4b |
+| §4.6, §4.7 | *(2026-09-30, slice 4b plan, owner answer 1)* On the Liturgy step `isPristine` counts everything that ends up in the service: card text, a card switched away from its default, communion set by the user, the sermon title and custom elements; text or a title blank after trimming counts as nothing, and a Benediction following the church default never counts. A fresh draft's Benediction holds the church's `default_benediction`, and the draft store keeps untouched cards on the defaults (automatic changes, never outranking another tab's edit). Liturgy ships (`SHIPPED_STEPS` holds "readings", "hymns" and "liturgy"): the step bar counts it, Review lists each empty switched-on card and a missing sermon title, and the summary shows the liturgy counts. The kit gains `dialog`. | 4b |
+
+```
+
+**In `docs/superpowers/specs/2026-09-25-migration-foundations-design.md`, replace:**
+
+```markdown
+| `POST /liturgy/generate` (UI sends one section) | OpenAI (§2.8) + ≤ 15 s waiting for a concurrency slot | ~80 s | 90 000 |
+| `POST /church/prayer-library/voice-profile-draft` (6a, PR #7; *amendment 2026-09-26*) | OpenAI inside a 75 s deadline passed to `complete(deadline=…)` | ~75 s | 90 000 |
+| `POST /liturgy/review` (PR #8; *amendment 2026-09-26*) | code checks + OpenAI inside a 75 s deadline | ~75 s | 90 000 |
+| `POST /liturgy/revise` (PR #8; *amendment 2026-09-26*) | OpenAI (§2.8), as `/liturgy/generate` for one section | ~80 s | 90 000 |
+```
+
+**with:**
+
+```markdown
+| `POST /liturgy/generate` (UI sends one section) | OpenAI (§2.8) + ≤ 15 s waiting for a concurrency slot | ~80 s | 90 000; *100 000 (2026-09-30, slice 4b plan, owner answer 2)* |
+| `POST /church/prayer-library/voice-profile-draft` (6a, PR #7; *amendment 2026-09-26*) | OpenAI inside a 75 s deadline passed to `complete(deadline=…)` | ~75 s | 90 000 |
+| `POST /liturgy/review` (PR #8; *amendment 2026-09-26*) | code checks + OpenAI inside a 75 s deadline | ~75 s | 90 000; *100 000, as `/liturgy/generate` (slice 4b plan)* |
+| `POST /liturgy/revise` (PR #8; *amendment 2026-09-26*) | OpenAI (§2.8), as `/liturgy/generate` for one section | ~80 s | 90 000; *100 000, as `/liturgy/generate` (slice 4b plan)* |
+```
+
+**In `docs/superpowers/specs/2026-09-25-migration-foundations-design.md`, replace:**
+
+```markdown
+- **Slice 2 ships all four routes.** Steps 2-4 render an "Available soon — keep using the current app for this part" card inside the working shell until their slice fills them. *(2026-09-28, slice 2b plan: step 1 too, until slice 2c.)* *(2026-09-29, slice 2c plan: step 1 ships in 2c.)* *(2026-09-29, slice 3b plan: step 2 ships in 3b.)*
+```
+
+**with:**
+
+```markdown
+- **Slice 2 ships all four routes.** Steps 2-4 render an "Available soon — keep using the current app for this part" card inside the working shell until their slice fills them. *(2026-09-28, slice 2b plan: step 1 too, until slice 2c.)* *(2026-09-29, slice 2c plan: step 1 ships in 2c.)* *(2026-09-29, slice 3b plan: step 2 ships in 3b.)* *(2026-09-30, slice 4b plan: step 3 ships in 4b.)*
+```
+
+**In `docs/manual-verification.md`, replace:**
+
+```markdown
+- [ ] (owner, after 3b) **12.** After choosing a hymn or a hymnal, **New service** asks "Start a new service?". Turning Exclude on or off does not make it ask; Suggest fills empty slots, which does.
+
+```
+
+**with:**
+
+```markdown
+- [ ] (owner, after 3b) **12.** After choosing a hymn or a hymnal, **New service** asks "Start a new service?". Turning Exclude on or off does not make it ask; Suggest fills empty slots, which does.
+
+## Slice 4
+
+Run on the production URL https://worship-service-builder.vercel.app, at 375 px
+(Chrome device mode, iPhone SE) and on desktop, and the Streamlit smoke on
+https://liturgy-frozen.streamlit.app. These are the slice 4 spec's manual
+checks (slice 4 spec → Manual checklist), with check 10 for "New service"
+(owner answer 1, 2026-09-30) and check 11 for a long section (owner answer 2).
+After the 4b merge the owner's guided check (owner answer 4: six short steps
+on the phone, given one at a time, then a quick look on a computer) covers the
+items marked "(owner, after 4b)", some of them in part; its result goes into
+`docs/ops-runbook.md` → "Slice 4b record", which says what ran. The rest can
+be run at any time and recorded the same way. The AI's words differ every
+time, so record what the page shows, never an email address or a church id.
+
+- [ ] (owner, after 4b) **1.** Open Liturgy on a fresh draft: the 8 cards in the order of worship, Prayers of the People off; Benediction "Halverson" with "Church default"; the landmark rows show the chosen hymns and readings.
+- [ ] (owner, after 4b) **2.** Type a Call to Worship. Tap **Generate empty sections (5)**: the 5 empty switched-on sections fill within about a minute and one message says "Wrote 5 sections."; the Call to Worship is unchanged, character for character; the Benediction is untouched.
+- [ ] (owner, after 4b) **3.** Regenerate the typed card: "Replace your text?" appears; **Replace text**, then **Undo** brings the typed text back.
+- [ ] **4.** Start a bulk run, go to Hymns and back: the results are there. Cancel a run: the card is unchanged.
+- [ ] **5.** Refresh mid-edit: the text is kept. Switch church and back: each church keeps its own liturgy.
+- [ ] **6.** Communion is on for a first-Sunday date, off after changing the date, and stays as set after a toggle; **Use default** follows the date again. Its text shows under **Show communion text**.
+- [ ] (owner, after 4b) **7.** Add, edit, move and remove (then **Undo**) a custom element. It shows right after its place.
+- [ ] (owner, after 4b) **8.** At 375 px: no sideways scroll; the keyboard does not cover the focused text; the footer (Back, Next) hides while typing and comes back after; touch targets are at least 44 px. Switching a section off shows "Off — not in the service. Any text is kept." and switching it on shows the text again.
+- [ ] **9.** Regression: sign in, switch church, open every shipped nav item; the Streamlit smoke check on https://liturgy-frozen.streamlit.app: load the church, load an archived service, open Settings (F §6.3).
+- [ ] (owner, after 4b) **10.** **New service** asks "Start a new service?" after a card's text, a section switched on or off, a sermon title, a communion toggle or a custom element; on a fresh draft whose Benediction still shows the church default it does not ask.
+- [ ] **11.** Switch on Prayers of the People and tap **Generate**: it fills (about 5 s in the 4a check; the page waits up to 100 s).
+
+```
+
+**In `backend/tests/test_slice1_docs.py`, replace:**
+
+```python
+    # Slices 2c and 3b append "## Slice 2" and "## Slice 3" after this section (their specs, Manual checks).
+    headings = re.findall(r"^## .+$", text, re.MULTILINE)[-4:]
+    assert headings == ["## Ops slice", "## Slice 1", "## Slice 2", "## Slice 3"]
+```
+
+**with:**
+
+```python
+    # Slices 2c, 3b and 4b append "## Slice 2", "## Slice 3" and "## Slice 4" after this section (their specs, Manual checks).
+    headings = re.findall(r"^## .+$", text, re.MULTILINE)[-5:]
+    assert headings == ["## Ops slice", "## Slice 1", "## Slice 2", "## Slice 3", "## Slice 4"]
+```
+
+- [ ] **Step 3 (agent): Check the result**
+
+```bash
+grep -c "4b plan" docs/superpowers/specs/2026-09-25-slice-4-liturgy-design.md
+grep -c "slice 4b plan" docs/superpowers/specs/2026-09-25-migration-foundations-design.md
+sed -n '/^## Slice 4$/,$p' docs/manual-verification.md | grep -cE "^- \[ \] "
+grep -c "^- \[ \] (owner, after 4b) " docs/manual-verification.md
+.venv/bin/python -m pytest -q backend/tests/test_ops_workflows.py backend/tests/test_slice1_docs.py backend/tests/test_docs.py 2>&1 | tail -1
+.venv/bin/python -m pytest -q | tail -1
+git diff -U0 docs backend | grep '^+' | grep -v '^+++' | grep -c '—'
+git diff --stat
+```
+
+**Expected:** `4`; `6`; `11`; `6`; `89 passed in <t>s`; `1183 passed, 11 skipped in <t>s`; `2` (the only em dashes on added lines are S's own copy "Off — not in the service. Any text is kept." in check 8 and F §4.7's existing "Available soon — keep using the current app for this part" on the line that gains a note; the new prose has none); ` 4 files changed, 52 insertions(+), 10 deletions(-)`.
+
+- [ ] **Step 4 (agent): Commit**
+
+```bash
+git add docs/superpowers/specs/2026-09-25-slice-4-liturgy-design.md docs/superpowers/specs/2026-09-25-migration-foundations-design.md docs/manual-verification.md backend/tests/test_slice1_docs.py
+git commit -m "Docs: slice 4b notes in S and F, the 100 s timeout, and the slice 4 manual checklist (owner answers 1, 2, 4; F §1.8, §4.6, §4.7)" -m "The slice 4 spec gains its 4b notes (the keyboard footer already built,
+the 100 s client timeout, and a closing section on what 4b built more
+precisely: unsaved work, the default benediction, names and files,
+requests, errors, wording, Still needed, tests and the checklist). F gains
+two amendment rows and the timeouts in §1.8 (the reviewer's routes reuse
+100 000 ms). docs/manual-verification.md gains \"## Slice 4\", and
+test_slice1_docs.py pins its last five headings." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
+```
+
+**Expected:** one commit, 4 files changed.
+
+**Review checkpoint (T11-T12, batch D):** the shell shows Liturgy's status, rows and summary, and only Review keeps "Available soon"; every S note says "(4b plan)" or sits in the closing section and matches the code; F's rows match owner answers 1 and 2; the checklist reads as the owner will run it; `git show --stat HEAD` lists the four files only.
