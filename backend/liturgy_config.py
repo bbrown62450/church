@@ -37,6 +37,10 @@ class SectionSpec:
     pastor_copy_only: bool
     hint: Optional[str]
     max_completion_tokens: int
+    # A per-call override of OPENAI_TIMEOUT_SECONDS (S Risks 1): a long prayer
+    # gets 60 s attempts. The usecase's 80 s deadline still caps each attempt
+    # and allows a retry only when time is left (F §1.8). None: the setting.
+    timeout_seconds: Optional[float] = None
 
 
 # SECTION_ORDER order; labels as liturgy_prompts.py:29-38 had them. Hints mirror
@@ -53,7 +57,8 @@ SECTIONS: tuple[SectionSpec, ...] = (
     SectionSpec("assurance", "Assurance of Pardon", True, 4, False,
                 "Added automatically after your text.", 1500),
     SectionSpec("prayer_for_illumination", "Prayer for Illumination", True, 4, False, None, 1500),
-    SectionSpec("prayers_of_the_people", "Prayers of the People", False, 8, True, None, 4000),
+    SectionSpec("prayers_of_the_people", "Prayers of the People", False, 8, True, None, 4000,
+                timeout_seconds=60.0),
     SectionSpec("offertory_prayer", "Offertory Prayer", True, 4, False, None, 1500),
     SectionSpec("benediction", "Benediction", True, 4, False,
                 "Your church's default benediction. Admins can change it in Settings.", 1500),

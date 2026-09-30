@@ -314,3 +314,12 @@ def test_the_worst_case_prayers_of_the_people_fits_and_gets_4000_tokens(church):
     assert sum(len(m["content"]) for m in call["messages"]) <= lp.MAX_PROMPT_CHARS
     assert "e" * 3000 in user_message(call) and "e" * 3001 not in user_message(call)
     assert call["messages"][0]["content"].endswith("v" * 2000)
+
+
+def test_prayers_of_the_people_gets_60_second_attempts_inside_the_deadline(church):
+    """S Risks 1: 60 s per attempt; the 80 s deadline decides whether a retry fits."""
+    ai = FakeAI(reply="Draft.")
+    run(church, ["prayers_of_the_people", "benediction"], ai=ai, clock=lambda: 1000.0)
+    calls = {("Prayers of the People" in user_message(c)): c for c in ai.calls}
+    assert (calls[True]["timeout_seconds"], calls[True]["deadline"]) == (60.0, 1080.0)
+    assert "timeout_seconds" not in calls[False] and calls[False]["deadline"] == 1080.0

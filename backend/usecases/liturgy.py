@@ -120,10 +120,11 @@ def _generate_one(ai: Any, section: str, prompt: liturgy_prompts.BuiltPrompt,
                   deadline: float) -> SectionOutcome:
     if logger.isEnabledFor(logging.DEBUG):                 # prompts at DEBUG only (F §2.5)
         logger.debug("liturgy.generate section=%s messages=%r", section, prompt.messages)
+    spec = SECTIONS_BY_KEY[section]
+    extra = {} if spec.timeout_seconds is None else {"timeout_seconds": spec.timeout_seconds}
     try:
-        text = ai.complete(prompt.messages,
-                           max_completion_tokens=SECTIONS_BY_KEY[section].max_completion_tokens,
-                           deadline=deadline)
+        text = ai.complete(prompt.messages, max_completion_tokens=spec.max_completion_tokens,
+                           deadline=deadline, **extra)
     except NotConfigured:
         return _error(section, "ai_not_configured")
     except Busy:

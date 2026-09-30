@@ -42,6 +42,7 @@ def test_rows_budgets_pastor_copy_and_hints():
         pastor = spec.key == "prayers_of_the_people"
         assert (spec.rows, spec.max_completion_tokens, spec.pastor_copy_only) == (
             (8, 4000, True) if pastor else (4, 1500, False)), spec.key
+        assert spec.timeout_seconds == (60.0 if pastor else None), spec.key
     hints = {s.key: s.hint for s in lc.SECTIONS if s.hint is not None}
     assert hints == {
         "call_to_worship": "Start lines with “Leader:” or “People:”. People lines print in bold.",

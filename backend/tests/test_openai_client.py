@@ -397,3 +397,45 @@ def test_a_real_semaphore_times_out_as_ai_busy():
     with pytest.raises(Busy):
         ai.complete(MESSAGES, max_completion_tokens=10, deadline=clock.now() + 5.05)
     slots.release()
+
+
+# --- slice 4a: a per-call attempt timeout (slice 4 spec, Risks 1) ------------------------
+
+
+def test_a_call_can_set_its_own_attempt_timeout_inside_the_deadline():
+    """Prayers of the People: 60 s attempts inside /liturgy/generate's 80 s deadline."""
+    clock = FakeClock()
+    sdk, sleeps = setup(sdk_error("server"), '{"ok": true}', clock=clock.now)
+    assert ai.complete(MESSAGES, max_completion_tokens=10, timeout_seconds=60.0,
+                       deadline=clock.now() + 80.0) == '{"ok": true}'
+    assert [(c["timeout"].read, c["timeout"].connect) for c in sdk.calls] == [(60.0, 5.0), (60.0, 5.0)]
+    assert sleeps == [1.0]                                       # a quick failure is retried
+    reads = []
+
+    def time_out(**kwargs):                                     # each attempt runs to its timeout
+        reads.append(kwargs["timeout"].read)
+        clock.advance(kwargs["timeout"].read)
+        raise sdk_error("timeout")
+
+    # After a 15 s slot wait, a 60 s timeout leaves 5 s: no retry. Straight
+    # away, it leaves 20 s: one retry, capped by the deadline.
+    for waited, expected in ((15.0, [60.0]), (0.0, [60.0, 20.0])):
+        sdk, _ = setup(clock=clock.now)
+        sdk.chat.completions.create = time_out
+        reads.clear()
+        deadline = clock.now() + 80.0
+        clock.advance(waited)
+        with pytest.raises(UpstreamTimeout):
+            ai.complete(MESSAGES, max_completion_tokens=10, timeout_seconds=60.0, deadline=deadline)
+        assert reads == expected, waited
+    sdk, _ = setup('{"ok": true}')
+    ai.complete(MESSAGES, max_completion_tokens=10)
+    assert sdk.calls[0]["timeout"].read == 30.0                  # without it: the setting
+    for bad in (0, -1.0):
+        with pytest.raises(ValueError):
+            ai.complete(MESSAGES, max_completion_tokens=10, timeout_seconds=bad)
+    fake = ai.FakeAI(reply="ok")
+    ai.set_ai_for_tests(fake)
+    ai.complete(MESSAGES, max_completion_tokens=10, timeout_seconds=60.0)
+    ai.complete(MESSAGES, max_completion_tokens=10)
+    assert fake.calls[0]["timeout_seconds"] == 60.0 and "timeout_seconds" not in fake.calls[1]

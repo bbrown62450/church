@@ -6,10 +6,13 @@
   OPENAI_REASONING_EFFORT (unset). A missing key or model, or a key that is
   not ASCII, means "not configured".
 - ai_available() and complete(messages, *, max_completion_tokens,
-  json_mode=False, deadline=None) -> str. complete() always sends
-  max_completion_tokens, sends response_format json_object in json_mode, and
-  temperature and reasoning_effort only when they are set. It holds one of OPENAI_MAX_CONCURRENCY
-  slots per call and retries itself (the SDK client has max_retries=0).
+  json_mode=False, deadline=None, timeout_seconds=None) -> str. complete()
+  always sends max_completion_tokens, sends response_format json_object in
+  json_mode, and temperature and reasoning_effort only when they are set. It
+  holds one of OPENAI_MAX_CONCURRENCY slots per call and retries itself (the
+  SDK client has max_retries=0). timeout_seconds replaces
+  OPENAI_TIMEOUT_SECONDS for one call; a deadline still caps each attempt
+  (slice 4: Prayers of the People gets 60 s attempts).
 - log_startup_state(): the lifespan's one "AI: ..." line. The key is never
   logged, and no member ever sees configuration detail.
 - FakeAI and set_ai_for_tests(): no test reaches OpenAI (F §5.3).
@@ -142,10 +145,12 @@ class FakeAI:
         return self.available
 
     def complete(self, messages, *, max_completion_tokens: int, json_mode: bool = False,
-                 deadline: Optional[float] = None) -> str:
-        self.calls.append({"messages": [dict(m) for m in messages],
-                           "max_completion_tokens": max_completion_tokens,
-                           "json_mode": json_mode, "deadline": deadline})
+                 deadline: Optional[float] = None, timeout_seconds: Optional[float] = None) -> str:
+        call = {"messages": [dict(m) for m in messages], "max_completion_tokens": max_completion_tokens,
+                "json_mode": json_mode, "deadline": deadline}
+        if timeout_seconds is not None:                 # recorded only when a caller sets it
+            call["timeout_seconds"] = timeout_seconds
+        self.calls.append(call)
         if self.error is not None:
             raise self.error
         return self.reply(messages) if callable(self.reply) else self.reply
@@ -225,13 +230,20 @@ def ai_available() -> bool:
 
 
 def complete(messages: Sequence[Mapping[str, str]], *, max_completion_tokens: int,
-             json_mode: bool = False, deadline: Optional[float] = None) -> str:
+             json_mode: bool = False, deadline: Optional[float] = None,
+             timeout_seconds: Optional[float] = None) -> str:
     """The reply's text. Raises NotConfigured, Busy, UpstreamTimeout or
-    UpstreamError (F §2.8's codes, this module's messages); never an SDK error."""
+    UpstreamError (F §2.8's codes, this module's messages); never an SDK error.
+    timeout_seconds (> 0), when given, replaces the settings' per-attempt
+    timeout for this call; the deadline still caps each attempt."""
+    if timeout_seconds is not None and not timeout_seconds > 0:
+        raise ValueError("timeout_seconds must be positive")
     if _override is not None:
+        extra = {} if timeout_seconds is None else {"timeout_seconds": timeout_seconds}
         return _override.complete(messages, max_completion_tokens=max_completion_tokens,
-                                  json_mode=json_mode, deadline=deadline)
-    return _complete(_current(), messages, max_completion_tokens, json_mode, deadline)
+                                  json_mode=json_mode, deadline=deadline, **extra)
+    return _complete(_current(), messages, max_completion_tokens, json_mode, deadline,
+                     timeout_seconds=timeout_seconds)
 
 
 def _remaining(state: _State, deadline: Optional[float]) -> Optional[float]:
@@ -322,8 +334,9 @@ def _attempt(state: _State, messages, max_completion_tokens: int, json_mode: boo
 
 
 def _complete(state: _State, messages, max_completion_tokens: int, json_mode: bool,
-              deadline: Optional[float]) -> str:
+              deadline: Optional[float], *, timeout_seconds: Optional[float] = None) -> str:
     settings = state.settings
+    per_attempt = settings.timeout_seconds if timeout_seconds is None else timeout_seconds
     if settings.problem is not None:
         raise NotConfigured(NOT_CONFIGURED_MESSAGE, code="ai_not_configured")
     remaining = _remaining(state, deadline)
@@ -338,7 +351,7 @@ def _complete(state: _State, messages, max_completion_tokens: int, json_mode: bo
         retries = 0
         while True:
             remaining = _remaining(state, deadline)
-            timeout = settings.timeout_seconds if remaining is None else min(settings.timeout_seconds, remaining)
+            timeout = per_attempt if remaining is None else min(per_attempt, remaining)
             if timeout <= 0:
                 logger.warning("ai_call model=%s outcome=ai_timeout (no time left)", settings.model)
                 raise UpstreamTimeout(TIMEOUT_MESSAGE, code="ai_timeout")
