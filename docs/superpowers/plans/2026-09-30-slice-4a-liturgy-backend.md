@@ -4779,7 +4779,7 @@ Expected counts after this task: backend `1178 passed, 11 skipped` on `main` (CI
 
 Filled in while Tasks 1-12 are built: each change from the plan as written, its reason, and whether the owner saw it. Task 12 (or a follow-up docs commit before Task 13) writes those that alter S or F as "(4a build)" notes.
 
-- (none yet)
+- (none yet; the planner's replay of 2026-09-30 matched every count in the table, Tasks 1-12)
 
 ## Spec coverage
 
