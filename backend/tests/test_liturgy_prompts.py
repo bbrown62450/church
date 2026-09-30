@@ -91,6 +91,22 @@ def test_defaults_literal_braces_unknown_placeholders_and_the_system_prompt_pass
     assert "No more than three sentences" in lp.DEFAULT_SECTION_PROMPTS["offertory_prayer"]
 
 
+CANT_FILL = "It can't be filled in. Check the { } placeholders."
+
+
+def test_a_value_that_is_not_text_can_t_be_filled_in_and_the_checker_never_raises():
+    assert lp.CANT_FILL == CANT_FILL
+    assert lp.check_template("call_to_worship", 5) == lp.TemplateCheck(False, CANT_FILL, ())
+    assert lp.check_template("system", None) == lp.TemplateCheck(False, CANT_FILL, ())
+    assert lp.template_error(None) == CANT_FILL
+    odd = [5, None, b"{occasion}", ["x"], {"a": 1}, 1.5, "{", "{a!}", "{0[}", "{:{}}", "{a:{b}}",
+           "}{", "{{}", "{\x00}", "{\u00e9}", "{é}", "\r\n" * 4001]
+    for key in ["system", "call_to_worship", "bogus", None, 5]:
+        for template in odd:
+            check = lp.check_template(key, template)          # no exception, whatever it is given
+            assert isinstance(check, lp.TemplateCheck) and (check.ok or check.message), (key, template)
+
+
 def test_validate_prompts_reports_only_what_merge_prompts_would_use():
     assert lp.validate_prompts({"bogus": "x", "benediction": "{", "system": "{"}) == {"benediction": BRACE}
     assert lp.validate_prompts({"benediction": "   ", "opening_prayer": 5, "assurance": None}) == {}
@@ -113,6 +129,8 @@ def test_clean_prompt_overrides_drops_defaults_blanks_and_unknown_keys():
     defaults = {"benediction": "Go in peace, friends."}
     assert lp.clean_prompt_overrides(submitted, defaults) == {"system": lp.DEFAULT_SYSTEM_PROMPT}
     assert lp.clean_prompt_overrides({}) == {}
+    for not_a_mapping in (["benediction", "x"], "benediction", None, 5, [("benediction", "Go.")]):
+        assert lp.clean_prompt_overrides(not_a_mapping) == {}, not_a_mapping
 
 
 def test_clean_prompt_overrides_reads_crlf_as_lf():

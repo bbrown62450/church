@@ -106,6 +106,21 @@ def test_jwks_resolver_finds_key_by_kid(monkeypatch):
     assert claims["email"] == "pastor@example.com"
 
 
+def test_jwks_resolver_fetches_keys_with_a_short_timeout(monkeypatch):
+    import api.security as security
+
+    made = {}
+
+    class Recording(PyJWKClient):
+        def __init__(self, uri, **kwargs):
+            made.update(kwargs)
+            super().__init__(uri, **kwargs)
+
+    monkeypatch.setattr(security, "PyJWKClient", Recording)
+    jwks_key_resolver("https://test-project.supabase.co/auth/v1/.well-known/jwks.json")
+    assert made["timeout"] == security.JWKS_FETCH_TIMEOUT_S == 5
+
+
 def test_claims_to_profile_maps_google_identity():
     token = make_token(email="p@x.com", google_sub="g-123", name="Pat", picture="https://x/p.png")
     claims = jwt.decode(token, options={"verify_signature": False})

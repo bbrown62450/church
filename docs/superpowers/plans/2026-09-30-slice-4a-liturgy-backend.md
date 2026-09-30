@@ -34,7 +34,7 @@
   `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`
   `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
 - Commit subjects read "Area: plain words (S ..., F §x)". Use TDD: write the failing test first and quote its failure.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`. It includes the line "Tests: backend 1110 → 1178 passed, 11 → 11 skipped; frontend 442 → 442 in 64 files".
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`. It includes the line "Tests: backend 1110 → 1183 passed, 11 → 11 skipped; frontend 442 → 442 in 64 files".
 - **The container restarts** (2a-3b build notes): uncommitted work can be lost. Commit as soon as a task's checks pass. The controller, not the task agent, backs the branch up after each task's review with `git push origin claude/slice-2-plan-4q33le` (standing permission for backup pushes). If `frontend/node_modules` is gone after a restart, `(cd frontend && npm ci)`.
 - **The network is filtered.** OpenAI, hymnary.org, the lectionary sites, bible-api.com and Railway are unreachable from the build container; PyPI and the npm registry are reachable. No test may need the network: the AI is `FakeAI`.
 - **Grep gates exclude tests** and are judged, not obeyed blindly: read each hit, and if it is harmless say why in the task's report.
@@ -67,10 +67,11 @@ A directive that does not match exactly once is a stop: the tree is not what the
   | T10 | +1 − 1 (the old-function oracle leaves) | 1176 passed, 11 skipped | 442 in 64 |
   | T11 | +2 | 1178 passed, 11 skipped | 442 in 64 |
   | T12 | 0 | 1178 passed, 11 skipped | 442 in 64 |
+  | T1-T9 review fixes | +5 (Build notes) | 1183 passed, 11 skipped | 442 in 64 (a shared fixture case; the frontend does not read it) |
 
   If the owner answers "no" to question 1 (T11 is skipped), every count from T11 on is 1176, and the PR body's line says 1176.
 - The frontend stays at 442 in 64 files throughout: T8 and T9 regenerate `openapi.json` and `schema.d.ts`, and T9 edits one fixture (clarification 18).
-- At the end, CI `backend-postgres` shows `11 passed, 1178 deselected, 1 warning` (4a adds no Postgres test).
+- At the end, CI `backend-postgres` shows `11 passed, 1183 deselected, 1 warning` (4a adds no Postgres test).
 - Table-driven tests loop over their cases inside one test function (no new parametrize), so counts stay stable when cases are added. T10 keeps PR #4's two parametrized tests as they are.
 
 ### Layering and logging
@@ -91,7 +92,7 @@ A directive that does not match exactly once is a stop: the tree is not what the
 ### Buckets, budgets and limits
 - `ai` (slice 2): 40 per 600 s per user and 400 per 86 400 s per church. `/liturgy/generate` has no rate-limit dependency: the usecase calls the route's `charge(n)` once, after hymn resolution and after every section's messages are built, with `n` = the sections about to call the AI, and never with 0 (S semantics 8). So a 401, 403, 404, 422, an override-only request, AI not configured and an all-`prompt_invalid` request cost nothing (unlike `/hymns/suggestions`, where the dependency charges first).
 - Token budgets (`SectionSpec.max_completion_tokens`): 1 500, or 4 000 for Prayers of the People (S Backend 1).
-- OpenAI per attempt: `OPENAI_TIMEOUT_SECONDS` 30 (read) plus the client's 5 s connect timeout, and `OPENAI_MAX_RETRIES` 1 with a backoff of at most 2 s; Prayers of the People's attempts get 60 s (T11, owner question 1) and keep the retry setting. Every `complete()` call on `/liturgy/generate` gets `deadline=` the start of the request + 80 s (`usecases.liturgy.GENERATE_BUDGET_S`, T7; F §1.8 row `/liturgy/generate`, "~80 s"). With a deadline the client waits at most min(15 s, remaining − 5 s) for a slot, caps each attempt's read timeout at the time remaining, and starts a retry only when at least 5 s remain after the backoff; only the connect (at most 5 s) of the last attempt can run past the deadline. Worst cases: without the deadline an ordinary section could take 15 + (5 + 30) + 2 + (5 + 30) = 87 s, too close to the client's 90 s; with it, 15 + (5 + 30) + 2 + (5 + 28) = 85 s. Prayers of the People: after a 15 s slot wait, 15 + (5 + 60) = 80 s and no retry (0 s left); with no wait, (5 + 60) + 1 + (5 + 14) = 85 s (a short retry, since 15 s were left); a quick failure is retried with the rest of the 80 s. Every section answers within 85 s, inside the client's 90 s.
+- OpenAI per attempt: `OPENAI_TIMEOUT_SECONDS` 30 (read) plus the client's 5 s connect timeout, and `OPENAI_MAX_RETRIES` 1 with a backoff of at most 2 s; Prayers of the People's attempts get 60 s (T11, owner question 1) and keep the retry setting. Every `complete()` call on `/liturgy/generate` gets `deadline=` the start of the usecase + 80 s (`usecases.liturgy.GENERATE_BUDGET_S`, T7; F §1.8 row `/liturgy/generate`, "~80 s"). With a deadline the client waits at most min(15 s, remaining − 5 s) for a slot, caps each attempt's read timeout at the time remaining, and starts a retry only when at least 5 s remain after the backoff; only the connect (at most 5 s) of the last attempt can run past the deadline. Worst cases: without the deadline an ordinary section could take 15 + (5 + 30) + 2 + (5 + 30) = 87 s, too close to the client's 90 s; with it, 15 + (5 + 30) + 2 + (5 + 28) = 85 s. Prayers of the People: after a 15 s slot wait, 15 + (5 + 60) = 80 s and no retry (0 s left); with no wait, (5 + 60) + 1 + (5 + 14) = 85 s (a short retry, since 15 s were left); a quick failure is retried with the rest of the 80 s. Every section answers within 85 s, inside the client's 90 s.
 - Prompt: `MAX_TEMPLATE_CHARS` 8 000 per template; `MAX_PROMPT_CHARS` 24 000 for system + user; sermon text cut to 2 000; voice profile stripped and cut to 2 000; example cut to 3 000; an answer over 20 000 characters is `ai_upstream_error`.
 - Request limits (S Schemas): `occasion` ≤ 300; `scriptures` ≤ 20 of ≤ 200; `sections` 1-4 `SectionKey`s; `overrides` `SectionKey` → ≤ 20 000; `hymns` is 3a's `SlotHymns` of `HymnRef` (title ≤ 300, number 0-100 000, hymnal ≤ 20, no pattern); `sermon_text` optional `{ref ≤ 200, text ≤ 20 000}`; `extra="forbid"` everywhere.
 
@@ -138,7 +139,7 @@ Code and F win over S; each is owner decision 1 unless marked **owner-visible**.
 13. **The prayer library reader** (`prayer_library.read_library`): a stored value that is not an object, or whose `prayers` is not a list, reads as the empty library; a single prayer entry of the wrong shape (not an object, a type outside `PRAYER_TYPES`, text not a string) is skipped and the rest kept; a `voice_profile` that is not a string reads as "". The reader enforces none of 6a's write limits. `choose_example` never picks a prayer whose text is blank.
 14. **The rate-limit tests read the bucket by behavior.** With the user's 40 tokens spent on the limiter's `FakeClock` (`limiter_clock`), a request that charges 0 still answers 200 and one that charges 1 gets 429; the 41st-section test spends 36, sends 4 sections, then gets 429 with `Retry-After: 15`.
 15. **The communion characterization compares with a verbatim legacy copy**, in the same run: `test_communion_docx.py` keeps the old `_add_communion_liturgy` as `_legacy_communion` and compares the documents' body XML (with communion, and the helper alone), so the python-docx version (CI installs the newest `>=1.0.0`) cannot matter. A stored hash would.
-16. **(Owner question 1, answered yes; owner-visible: the controller tells the owner.)** Every `complete()` call on `/liturgy/generate` carries an 80 s server deadline from the start of the request (T7; the arithmetic is under Global Constraints "Buckets, budgets and limits"): every section answers within 85 s, inside the page's 90 s. `complete()` gains an optional `timeout_seconds`; `SectionSpec` gains `timeout_seconds` (None = the setting); Prayers of the People has 60.0 and keeps `OPENAI_MAX_RETRIES` (T11). `FakeAI` records the keyword only when a caller sets it, so 3a's exact-call test is unchanged. The owner approved "a single 60 s try, no retry"; after the plan review the behavior is "a 60 s try, with one retry only if time is left under the 80 s deadline": a quick failure (an upstream error or a dropped connection in the first seconds) now gets a second try instead of an error, and a 60 s timeout after a slot wait ends the section at 80 s with no retry, as before. One case differs from the approved wording: a 60 s timeout with no slot wait leaves about 15 s, so one short retry (at most about 14 s plus its connect) is tried before the section reports `ai_timeout` at about 85 s instead of 65 s; it rarely succeeds and may cost a second, cut-off call.
+16. **(Owner question 1, answered yes; owner-visible: the controller tells the owner.)** Every `complete()` call on `/liturgy/generate` carries an 80 s server deadline from the start of the usecase (T7; the arithmetic is under Global Constraints "Buckets, budgets and limits"): every section answers within 85 s, inside the page's 90 s. `complete()` gains an optional `timeout_seconds`; `SectionSpec` gains `timeout_seconds` (None = the setting); Prayers of the People has 60.0 and keeps `OPENAI_MAX_RETRIES` (T11). `FakeAI` records the keyword only when a caller sets it, so 3a's exact-call test is unchanged. The owner approved "a single 60 s try, no retry"; after the plan review the behavior is "a 60 s try, with one retry only if time is left under the 80 s deadline": a quick failure (an upstream error or a dropped connection in the first seconds) now gets a second try instead of an error, and a 60 s timeout after a slot wait ends the section at 80 s with no retry, as before. One case differs from the approved wording: a 60 s timeout with no slot wait leaves about 15 s, so one short retry (at most about 14 s plus its connect) is tried before the section reports `ai_timeout` at about 85 s instead of 65 s; it rarely succeeds and may cost a second, cut-off call.
 17. **`HymnRef` and `SlotHymns` enter the OpenAPI snapshot** with `/liturgy/generate`, the first route that accepts them. 3a's `test_hymnal_code_pattern_and_models_absent_from_openapi` becomes `test_hymnal_code_pattern_and_models_in_openapi_unchanged`, asserting they are present with no pattern on `hymnal` (T8).
 18. **One frontend test fixture changes** (as 3a clarification 13): `frontend/src/test/fixtures/index.ts`'s `churchProfile()` gains `default_benediction: "Halverson"`; the regenerated `ChurchProfileOut` makes it required and `tsc` fails without it (T9). No frontend test or count changes. 4b treats the field as optional (S).
 19. **`liturgy.generate` also logs a failed call** (`outcome=not_found`, `rate_limited` or `internal_error`), as 3a's suggestion line does; S names only the success line.
@@ -2356,7 +2357,7 @@ def test_answers_are_stripped_and_the_church_s_prompts_are_read_fresh(church):
     assert ai.calls[0]["messages"][0]["content"] == "First voice."
     assert user_message(ai.calls[0]).startswith("Bless Third Sunday of Easter.")
     assert ai.calls[0]["max_completion_tokens"] == 1500
-    assert ai.calls[0]["deadline"] == 1080.0            # F §1.8: 80 s from the start of the request
+    assert ai.calls[0]["deadline"] == 1080.0            # F §1.8: 80 s from the start of the usecase
     churches.set_church_prompts(church, {"system": "Second voice."})
     run(church, ["benediction"], ai=ai)
     assert ai.calls[1]["messages"][0]["content"] == "Second voice."
@@ -2625,7 +2626,7 @@ generate_liturgy:
    prompt_invalid), charges the `ai` bucket once for the sections left
    (charge(n), never with 0; a 429 it raises stops every AI call), and runs
    them at most 4 at a time, each inside an 80 s deadline from the start of
-   the call (F §1.8: with the last attempt's 5 s connect, at most 85 s, inside
+   the usecase (F §1.8: with the last attempt's 5 s connect, at most 85 s, inside
    the page's 90 s). AI failures, an empty answer and an answer over 20 000
    characters are per-section errors with this module's messages; upstream
    text is never returned.
@@ -2670,7 +2671,8 @@ PROMPT_INVALID_MESSAGE = ("The {label} prompt in Settings has a problem: {reason
                           "An admin can fix it under Settings → Liturgy prompts.")
 MAX_PARALLEL = 4                               # sections of one request at a time
 MAX_ANSWER_CHARS = LIMITS.max_section_text     # a longer answer could not be saved (5a)
-# The server deadline passed to complete() (F §1.8): every slot wait, attempt and
+# The server deadline passed to complete() (F §1.8), counted from the start of the
+# usecase (not the request's arrival): every slot wait, attempt and
 # retry ends by it; only the last attempt's connect (5 s) can run past, so a call
 # answers within 85 s, inside the client's 90 s.
 GENERATE_BUDGET_S = 80.0
@@ -4350,7 +4352,7 @@ The member's own choice always wins, and the AI's top pick stays one tap away as
 **with:**
 
 ````markdown
-| §1.8, §2.8 | *(2026-09-30, slice 4a plan)* `POST /liturgy/generate` passes an 80 s server deadline (from the start of the request) to every `complete(deadline=…)` call: the slot wait, each attempt and any retry end by it, and only the last attempt's 5 s connect can run past, so a section answers within 85 s, inside the 90 s client timeout (without a deadline, 15 + (5 + 30) + 2 + (5 + 30) = 87 s was possible). `complete()` also takes an optional `timeout_seconds`, which replaces `OPENAI_TIMEOUT_SECONDS` for one call: Prayers of the People gets 60 s attempts (slice 4 Risks 1) and keeps `OPENAI_MAX_RETRIES`, so a quick failure is retried while a 60 s timeout after a slot wait leaves no time for one; the other sections keep 30 s. | 4a |
+| §1.8, §2.8 | *(2026-09-30, slice 4a plan)* `POST /liturgy/generate` passes an 80 s server deadline (from the start of the usecase) to every `complete(deadline=…)` call: the slot wait, each attempt and any retry end by it, and only the last attempt's 5 s connect can run past, so a section answers within 85 s, inside the 90 s client timeout (without a deadline, 15 + (5 + 30) + 2 + (5 + 30) = 87 s was possible). `complete()` also takes an optional `timeout_seconds`, which replaces `OPENAI_TIMEOUT_SECONDS` for one call: Prayers of the People gets 60 s attempts (slice 4 Risks 1) and keeps `OPENAI_MAX_RETRIES`, so a quick failure is retried while a 60 s timeout after a slot wait leaves no time for one; the other sections keep 30 s. | 4a |
 | §4.6, §4.7, §4.9 | *(2026-09-29, slice 3b plan)*
 ````
 
@@ -4469,7 +4471,7 @@ git log --oneline origin/main..HEAD | tail -1
 for i in 1 2 3; do .venv/bin/python -m pytest -q backend/tests/test_usecase_liturgy.py backend/tests/test_api_liturgy.py backend/tests/test_openai_client.py 2>&1 | tail -1; done
 ```
 
-**Expected:** `1178 passed, 11 skipped in <t>s`; `11 skipped, 1178 deselected in <t>s` (no `TEST_DATABASE_URL` here; 4a adds no Postgres test); `50 passed in <t>s` three times with no failure (48 if T11 was skipped). If a local throwaway Postgres is available, `TEST_DATABASE_URL=postgresql://postgres:<password>@localhost:5432/postgres .venv/bin/python -m pytest -q -m postgres | tail -1` gives `11 passed, 1178 deselected, 1 warning in <t>s`.
+**Expected:** `1183 passed, 11 skipped in <t>s` (T12's 1178 plus the review fixes' 5); `11 skipped, 1183 deselected in <t>s` (no `TEST_DATABASE_URL` here; 4a adds no Postgres test); `50 passed in <t>s` three times with no failure (48 if T11 was skipped). If a local throwaway Postgres is available, `TEST_DATABASE_URL=postgresql://postgres:<password>@localhost:5432/postgres .venv/bin/python -m pytest -q -m postgres | tail -1` gives `11 passed, 1183 deselected, 1 warning in <t>s`.
 
 - [ ] **Step 3 (agent): Frontend tests, types, lint, build; the generated files are current**
 
@@ -4500,11 +4502,11 @@ git diff --name-status origin/main | sort -k2
 git log --reverse --format=%s origin/main..HEAD
 ```
 
-**Expected:** the File Structure's lists and nothing else: `A` for the plan, `backend/liturgy_config.py`, `backend/prayer_library.py`, `backend/usecases/liturgy.py`, `backend/api/routes/liturgy.py`, the three `fixtures/shared/*.json` files and the six new test files (14 `A`); `M` for the 9 backend modules, the 14 backend test files, the 3 frontend files and the 3 docs in the File Structure (29 `M`; 27 if T11 was skipped, since `openai_client.py` and `test_openai_client.py` are then untouched); no `D`. Then the plan's commits (`WIP plan: slice 4a` ..., `Plan: slice 4a liturgy backend (S slice 4; owner answers 2026-09-30)`), and the twelve subjects of Tasks 1-12 in order (eleven if T11 was skipped), plus any review-fix commits, each named in Step 6's message.
+**Expected:** the File Structure's lists and nothing else: `A` for the plan, `backend/liturgy_config.py`, `backend/prayer_library.py`, `backend/usecases/liturgy.py`, `backend/api/routes/liturgy.py`, the three `fixtures/shared/*.json` files and the six new test files (14 `A`); `M` for the 9 backend modules, the 14 backend test files, the 3 frontend files and the 3 docs in the File Structure, plus `backend/api/security.py` and `backend/tests/test_api_security.py` from the review fixes (31 `M`; 29 if T11 was skipped, since `openai_client.py` and `test_openai_client.py` are then untouched); no `D`. Then the plan's commits (`WIP plan: slice 4a` ..., `Plan: slice 4a liturgy backend (S slice 4; owner answers 2026-09-30)`), and the twelve subjects of Tasks 1-12 in order (eleven if T11 was skipped), plus any review-fix commits, each named in Step 6's message.
 
 - [ ] **Step 6 (agent): Ask the owner to open the pull request**
 
-Tell the owner, in one message: "Slice 4a (the liturgy backend) is ready for a pull request. It adds two routes the Liturgy step will use (the step's settings, and writing sections with AI one at a time, where anything typed comes back unchanged) and the church's default benediction on the church profile. Nothing changes on screen, there is no database change, and liturgy-frozen is not affected. Tests: backend 1110 → 1178 passed, 11 → 11 skipped; frontend 442 → 442. Before I ask to mark it ready, I will walk you through one read-only query that lists your church's saved liturgy prompts, so I can check them against the new rules. May I open the pull request as a draft so CI runs?"
+Tell the owner, in one message: "Slice 4a (the liturgy backend) is ready for a pull request. It adds two routes the Liturgy step will use (the step's settings, and writing sections with AI one at a time, where anything typed comes back unchanged) and the church's default benediction on the church profile. Nothing changes on screen, there is no database change, and liturgy-frozen is not affected. Tests: backend 1110 → 1183 passed, 11 → 11 skipped; frontend 442 → 442. Before I ask to mark it ready, I will walk you through one read-only query that lists your church's saved liturgy prompts, so I can check them against the new rules. May I open the pull request as a draft so CI runs?"
 
 - [ ] **Step 7 (agent, on the owner's yes): Open the draft PR**
 
@@ -4522,7 +4524,7 @@ Write `<scratch>/slice4a-pr-body.md` first. Its first line, above the summary, i
 > **Stored prompts: NOT YET CHECKED.** This PR stays a draft until the owner's read-only list of saved liturgy prompts has been checked with `validate_prompts` (owner answer 4a; plan Task 13 Steps 9-10).
 ```
 
-Then: a summary (the Goal paragraph in plain words); the two routes and the `/church` field; the owner answers 1-5 of 2026-09-30 and the two plan questions with the owner's answers, and where each landed; the owner-visible clarifications (1, 3, 16); the line `Tests: backend 1110 → 1178 passed, 11 → 11 skipped; frontend 442 → 442 in 64 files`; "No migration; production stays at 0004_invites_reusable. No new variables: the OpenAI key and model from slice 3a are used."; then `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS` on the last lines.
+Then: a summary (the Goal paragraph in plain words); the two routes and the `/church` field; the owner answers 1-5 of 2026-09-30 and the two plan questions with the owner's answers, and where each landed; the owner-visible clarifications (1, 3, 16); the line `Tests: backend 1110 → 1183 passed, 11 → 11 skipped; frontend 442 → 442 in 64 files`; "No migration; production stays at 0004_invites_reusable. No new variables: the OpenAI key and model from slice 3a are used."; then `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS` on the last lines.
 
 **Expected:** the push prints `Everything up-to-date` or the new commits; `gh` prints the PR URL. Record `<N>`.
 
@@ -4534,7 +4536,7 @@ gh pr checks <N> -R bbrown62450/church --watch
 gh run view $(gh run list --branch claude/slice-2-plan-4q33le --workflow ci --limit 1 -R bbrown62450/church --json databaseId --jq '.[0].databaseId') -R bbrown62450/church --log | grep -E '[0-9]+ passed' | sed -E 's/^.*Z //'
 ```
 
-**Expected:** `backend`, `backend-postgres`, `frontend` and the Vercel preview pass; the log lines include `1178 passed, 11 skipped` (`backend`), `11 passed, 1178 deselected, 1 warning` (`backend-postgres`) and `Tests  442 passed (442)` (`frontend`). A CI-only failure is fixed in the owning task's files, pushed on the standing backup permission, and this step reruns.
+**Expected:** `backend`, `backend-postgres`, `frontend` and the Vercel preview pass; the log lines include `1183 passed, 11 skipped` (`backend`), `11 passed, 1183 deselected, 1 warning` (`backend-postgres`) and `Tests  442 passed (442)` (`frontend`). A CI-only failure is fixed in the owning task's files, pushed on the standing backup permission, and this step reruns.
 
 - [ ] **Step 9 (agent + OWNER): The stored prompts, listed read-only (owner answer 4a; S Risks 3)**
 
@@ -4614,7 +4616,7 @@ Edit the PR body's first line to `> **Stored prompts: CHECKED on <date>**, <n> c
 
 - [ ] **Step 11 (agent): Ask, then mark ready**
 
-Tell the owner: "PR #<N> is green on CI (backend 1178 passed, 11 skipped; Postgres 11 passed; frontend 442), and your saved prompts all work with the new rules. May I mark it ready for review?" On the yes:
+Tell the owner: "PR #<N> is green on CI (backend 1183 passed, 11 skipped; Postgres 11 passed; frontend 442), and your saved prompts all work with the new rules. May I mark it ready for review?" On the yes:
 
 (not replayed)
 ```bash
@@ -4808,7 +4810,7 @@ On a branch `claude/slice-4a-records` from `origin/main`, insert `### Slice 4a r
 
 Use this only if the release cannot serve or breaks the church pages (for example `GET /church` failing) and a fix would take too long. No database step: 4a adds no revision and writes nothing. On the owner's yes for each outward action: `git switch -c claude/revert-slice-4a origin/main`, `git revert -m 1 <merge sha>` (commit with the two trailer lines), run both suites (expected `1110 passed, 11 skipped`, and 442 frontend tests), push, open a PR titled "Revert slice 4a", wait for green, merge on the yes. Record the revert in the slice 4a record.
 
-Expected counts after this task: backend `1178 passed, 11 skipped` on `main` (CI `backend-postgres`: `11 passed, 1178 deselected, 1 warning`); frontend `442 passed` in 64 files. The records PR adds no test.
+Expected counts after this task: backend `1183 passed, 11 skipped` on `main` (CI `backend-postgres`: `11 passed, 1183 deselected, 1 warning`); frontend `442 passed` in 64 files. The records PR adds no test.
 
 ---
 
@@ -4835,6 +4837,16 @@ Filled in while Tasks 1-12 are built: each change from the plan as written, its 
   - **M6.** T1's app.py test skips, with its reason, when `app.py` is absent (slice 7 deletes it).
   - **Nits.** `liturgy_config`'s docstring notes that S's "worship_service.py:78-145" is an older numbering of `_add_communion_liturgy` (68-135 at `9ab3fa6`); T5's intro says the BC-8 tests fail at collection; the INFO line's `voice=...example` counts only examples chosen for sections that reach the AI (T7 code, and an assertion in `test_a_malformed_template_fails_only_its_own_section`).
   - **Owner answers of 2026-09-30** (questions 1 and 2, both "yes") are marked answered in both question lists.
+- **T1-T9 review fixes (after Tasks 1-12 were built; none owner-visible, standing permission).** One commit, +5 tests (1178 → 1183 passed, 11 skipped; frontend 442 in 64, `tsc` clean):
+  - `worship_service._add_assurance_paragraph` prints `liturgy_config.ASSURANCE_RESPONSE` (the one copy 4b's card shows), the same string, so the Word file is byte-identical; `test_the_word_file_s_assurance_line_is_liturgy_config_s` (+1). `test_the_word_file_with_communion_is_unchanged` takes its paragraphs from the new build before the legacy helper is swapped in.
+  - `liturgy_prompts`: `clean_prompt_overrides` returns `{}` for any non-mapping (as `validate_prompts`); a comment and `check_template`'s docstring say the 8 000-character check counts CRLF as two, so callers (6a) run `clean_prompt_overrides` first. `test_a_value_that_is_not_text_can_t_be_filled_in_and_the_checker_never_raises` (+1: `check_template("call_to_worship", 5)` and `("system", None)` give S's "It can't be filled in." reason; odd keys and values never raise).
+  - `test_communion_toggle_label_is_app_py_s` (+1) pins `COMMUNION_TOGGLE_LABEL` to app.py's `include_communion` checkbox (skips when app.py is gone). `first_sunday.json` gains 2026-11-02 (a Monday on the 2nd) → false.
+  - `repos/churches.get_church` coerces its id with `as_uuid` (a malformed id is `NotFound`, F §2.2 item 5); `test_get_church_with_a_malformed_id_is_not_found` (+1). The caller's-session tests in `test_churches_repo.py` and `test_hymns_repo.py` now write without committing in `s`, patch the repo's `session_scope` to raise, and read the uncommitted value (checked: both fail when the function ignores `session=`).
+  - `prayer_library.choose_example` strips the text before the 3 000-character cut (assertions added to the existing cut test).
+  - `usecases.liturgy`: the 80 s deadline counts "from the start of the usecase" (docstring, the `GENERATE_BUDGET_S` comment, this plan and F §1.8's row); `facts["ai"]` is set after `charge()` returns, so a 429 logs `ai=0` (asserted in `test_a_charge_that_raises_stops_every_ai_call`).
+  - `api/security.py`: `PyJWKClient(..., timeout=JWKS_FETCH_TIMEOUT_S)` (5 s; PyJWT 2.15.1's default is 30 s), so a cold sign-in-key fetch cannot eat most of the page's 90 s; `test_jwks_resolver_fetches_keys_with_a_short_timeout` (+1). T13 Step 5's `M` count grows by these two files.
+  - `test_invalid_bodies_are_422_with_fields` adds `hymns.opening.hymn_id: "nope"` and asserts no 422 calls the AI or costs an `ai` token.
+  - Left as accepted by S: the sermon-text heading note (T4-6 M2).
 
 ## Spec coverage
 

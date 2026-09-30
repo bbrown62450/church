@@ -14,7 +14,7 @@ generate_liturgy:
    prompt_invalid), charges the `ai` bucket once for the sections left
    (charge(n), never with 0; a 429 it raises stops every AI call), and runs
    them at most 4 at a time, each inside an 80 s deadline from the start of
-   the call (F §1.8: with the last attempt's 5 s connect, at most 85 s, inside
+   the usecase (F §1.8: with the last attempt's 5 s connect, at most 85 s, inside
    the page's 90 s). AI failures, an empty answer and an answer over 20 000
    characters are per-section errors with this module's messages; upstream
    text is never returned.
@@ -59,7 +59,8 @@ PROMPT_INVALID_MESSAGE = ("The {label} prompt in Settings has a problem: {reason
                           "An admin can fix it under Settings → Liturgy prompts.")
 MAX_PARALLEL = 4                               # sections of one request at a time
 MAX_ANSWER_CHARS = LIMITS.max_section_text     # a longer answer could not be saved (5a)
-# The server deadline passed to complete() (F §1.8): every slot wait, attempt and
+# The server deadline passed to complete() (F §1.8), counted from the start of the
+# usecase (not the request's arrival): every slot wait, attempt and
 # retry ends by it; only the last attempt's connect (5 s) can run past, so a call
 # answers within 85 s, inside the client's 90 s.
 GENERATE_BUDGET_S = 80.0
@@ -223,8 +224,8 @@ def _generate(church_id, occasion, scriptures, hymns, wanted, need_ai, overrides
                                                       ("example", examples)) if present) or "none",
             dropped=",".join(dict.fromkeys(n for p in built.values() for n in p.dropped)) or "-")
         if built:
-            facts["ai"] = len(built)
             charge(len(built))                  # once; a RateLimited here stops every AI call
+            facts["ai"] = len(built)            # after the charge: a 429 logs ai=0
             with ThreadPoolExecutor(max_workers=min(MAX_PARALLEL, len(built)),
                                     thread_name_prefix="liturgy") as pool:
                 futures = {section: pool.submit(contextvars.copy_context().run, _generate_one,

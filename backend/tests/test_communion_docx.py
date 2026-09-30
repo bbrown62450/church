@@ -4,6 +4,7 @@ Testing "Characterization first"; AC2). _legacy_communion is a verbatim copy
 of worship_service._add_communion_liturgy as it was before slice 4a: the
 characterization the refactor must keep, compared as XML in the same run, so
 the python-docx version cannot matter."""
+from io import BytesIO
 from pathlib import Path
 
 from docx import Document
@@ -83,12 +84,13 @@ def _legacy_communion(doc) -> None:
 
 
 def _service(**overrides):
-    return worship_service.build_docx(
+    kwargs = dict(
         occasion="World Communion Sunday", date="October 4, 2026",
         scriptures=["Isaiah 5:1-7", "Matthew 21:33-46"],
         hymns=[{"title": "Be Thou My Vision", "number": 450}, {"title": "Come, Thou Fount", "number": 475}],
         liturgy={"prayers_of_the_people": "We pray.", "benediction": "Go in peace."},
-        include_communion=True, **overrides)
+        include_communion=True)
+    return worship_service.build_docx(**{**kwargs, **overrides})
 
 
 def _paragraphs(buf) -> list[tuple[str, str, list[tuple[str, bool]]]]:
@@ -97,11 +99,12 @@ def _paragraphs(buf) -> list[tuple[str, str, list[tuple[str, bool]]]]:
 
 
 def test_the_word_file_with_communion_is_unchanged(monkeypatch):
-    current = Document(_service()).element.body.xml
+    built = _service().getvalue()
+    current = Document(BytesIO(built)).element.body.xml
+    paragraphs = _paragraphs(BytesIO(built))          # the new build's, taken before the swap
     monkeypatch.setattr(worship_service, "_add_communion_liturgy", _legacy_communion)
     legacy = Document(_service()).element.body.xml
     assert current == legacy
-    paragraphs = _paragraphs(_service())
     assert ("Heading 1", "The Sacrament of the Lord's Supper",
             [("The Sacrament of the Lord's Supper", False)]) in paragraphs
     assert ("Normal", "And also with you.", [("And also with you.", True)]) in paragraphs
@@ -122,3 +125,12 @@ def test_the_communion_text_lives_in_liturgy_config():
     source = Path(worship_service.__file__).read_text(encoding="utf-8")
     assert "Invitation to the Table" not in source and "Christ will come again." not in source
     assert "COMMUNION_BLOCKS" in source
+
+
+def test_the_word_file_s_assurance_line_is_liturgy_config_s():
+    paragraphs = _paragraphs(_service(liturgy={"assurance": "Leader: In Christ we are forgiven."}))
+    at = next(i for i, (_style, text, _runs) in enumerate(paragraphs) if text == "Leader: In Christ we are forgiven.")
+    assert paragraphs[at + 1] == ("Normal", liturgy_config.ASSURANCE_RESPONSE,
+                                  [(liturgy_config.ASSURANCE_RESPONSE, True)])
+    source = Path(worship_service.__file__).read_text(encoding="utf-8")
+    assert "Thanks be to God" not in source

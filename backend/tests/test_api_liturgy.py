@@ -131,7 +131,10 @@ def test_generate_needs_a_token_and_a_membership(client, church, isolation_world
     assert generate(client, church, {"sections": ["benediction"]})["results"][0]["status"] == "generated"
 
 
-def test_invalid_bodies_are_422_with_fields(client, church):
+def test_invalid_bodies_are_422_with_fields(client, church, owner, limiter_clock):
+    ai = install()
+    for _ in range(39):                                        # one ai token left
+        ratelimit.consume("ai", user_id=owner, church_id=church)
     cases = [
         ({"sections": ["offering"]}, "sections.0"),
         ({"sections": ["benediction"] * 5}, "sections"),
@@ -149,6 +152,8 @@ def test_invalid_bodies_are_422_with_fields(client, church):
         ({"sections": ["benediction"], "hymns": {"opening": {"title": "x", "slot": "opening"}}},
          "hymns.opening.slot"),
         ({"sections": ["benediction"], "hymns": {"opening": {"hymnal": "H" * 21}}}, "hymns.opening.hymnal"),
+        ({"sections": ["benediction"], "hymns": {"opening": {"hymn_id": "nope", "title": "x"}}},
+         "hymns.opening.hymn_id"),
         ({"sections": ["benediction"], "hymns": {"offertory": None}}, "hymns.offertory"),
         ({"sections": ["benediction"], "sermon_text": {"ref": "r" * 201, "text": "x"}}, "sermon_text.ref"),
         ({"sections": ["benediction"], "sermon_text": {"ref": "Mark 4", "text": "x" * 20_001}}, "sermon_text.text"),
@@ -160,6 +165,10 @@ def test_invalid_bodies_are_422_with_fields(client, church):
         assert r.status_code == 422, (body, r.text)
         error = r.json()["error"]
         assert error["code"] == "invalid_request" and field in error["fields"], (field, error)
+    assert ai.calls == []                                       # no 422 reaches the AI
+    generate(client, church, {"sections": ["benediction"]})     # or costs the last ai token
+    r = client.post("/liturgy/generate", json={"sections": ["benediction"]}, headers=church_headers(EMAIL, church))
+    assert r.status_code == 429
 
 
 def test_hymn_ref_and_sermon_text_accept_what_f_1_3_allows(client, church):

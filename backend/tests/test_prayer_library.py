@@ -62,3 +62,7 @@ def test_limits_types_and_the_example_cut():
         30, 6_000, 2_000, 3_000)
     library = pl.read_library(_settings({"prayers": [{"type": "benediction", "text": "x" * 4000}]}))
     assert pl.choose_example(library, "benediction") == "x" * 3000
+    padded = pl.read_library(_settings({"prayers": [{"type": "benediction", "text": "\n" * 500 + "y" * 3000 + "  \n"}]}))
+    assert pl.choose_example(padded, "benediction") == "y" * 3000         # stripped before the cut
+    assert pl.choose_example(pl.read_library(_settings({"prayers": [{"type": "benediction", "text": "  Go.\n"}]})),
+                             "benediction") == "Go."

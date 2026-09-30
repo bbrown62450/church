@@ -151,6 +151,9 @@ def render(template: str, *, occasion: str = "", scriptures: str = "",
 # --- slice 4a: the template validator (slice 4 spec, Backend 2; reused by 6a) ---
 
 KNOWN_PLACEHOLDERS = ("occasion", "scriptures", "opening_hymn", "hymns")
+# Counted on the text as given, so a CRLF line ending counts as two characters:
+# callers (6a's PUT) run clean_prompt_overrides first, then check_template on
+# what it keeps, so a browser's CRLF textarea is measured as it will be stored.
 MAX_TEMPLATE_CHARS = 8000
 MAX_PROMPT_CHARS = 24_000         # system + user, the cost guard (F §2.8)
 
@@ -178,7 +181,8 @@ def _failed(message: str) -> TemplateCheck:
 def check_template(key: str, template: str) -> TemplateCheck:
     """The first failing check, in the spec's order, or ok with the unknown
     placeholders. The system prompt is sent as written, never formatted, so
-    only its length is checked. Never raises."""
+    only its length is checked. Never raises. The length is of the text as
+    given (CRLF counts two): run clean_prompt_overrides first."""
     if not isinstance(template, str):
         return _failed(CANT_FILL)
     if len(template) > MAX_TEMPLATE_CHARS:
@@ -241,9 +245,11 @@ def clean_prompt_overrides(prompts: Mapping[str, Any],
     then non-blank and differs from its default is kept, stored normalized.
     defaults=None means default_prompts(). The one rule for "equal to the
     default": 6a's PUT imports it and has no second copy."""
+    if not isinstance(prompts, Mapping):
+        return {}                         # a list, string or None stores nothing (as validate_prompts)
     defaults = default_prompts() if defaults is None else defaults
     cleaned = {}
-    for key, value in (prompts or {}).items():
+    for key, value in prompts.items():
         if key not in PROMPT_KEYS:
             continue
         text = _normalized(value)

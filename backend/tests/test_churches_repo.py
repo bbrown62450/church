@@ -170,16 +170,38 @@ def test_rubric_overrides_read_in_the_callers_session(tmp_db, make_user):
     assert get_church_rubric_overrides(uuid.uuid4()) == {}
 
 
-def test_prompts_read_in_the_callers_session_and_junk_reads_as_none(tmp_db, make_user):
+def _no_own_scope():
+    raise AssertionError("opened its own session_scope instead of using session=")
+
+
+def test_prompts_read_in_the_callers_session_and_junk_reads_as_none(tmp_db, make_user, monkeypatch):
     """Slice 4 reads the prompts in the same session as the hymns and rubric (F §2.2 rule 3)."""
+    import repos.churches
     from repos.churches import get_church_prompts, set_church_prompts
 
     cid = create_church(name="Grace", timezone="America/New_York", owner_user_id=make_user())
     set_church_prompts(cid, {"benediction": "Go in peace."})
     with session_scope() as s:
-        assert get_church_prompts(cid, session=s) == {"benediction": "Go in peace."}
+        s.get(Church, cid).settings = {"liturgy_prompts": {"benediction": "Uncommitted."}}
+        s.flush()                                       # seen only through s
+        with monkeypatch.context() as m:
+            m.setattr(repos.churches, "session_scope", _no_own_scope)
+            assert get_church_prompts(cid, session=s) == {"benediction": "Uncommitted."}
+        s.rollback()
     assert get_church_prompts(cid) == {"benediction": "Go in peace."}
     assert get_church_prompts(uuid.uuid4()) == {}
     for junk in ("text", ["a"], 5, None):
         update_church(cid, settings={"liturgy_prompts": junk})
         assert get_church_prompts(cid) == {}, junk
+
+
+def test_get_church_with_a_malformed_id_is_not_found(tmp_db):
+    """F §2.2 item 5: as_uuid, so a bad id is a 404, never a 500."""
+    from repos.churches import get_church_prompts
+
+    for bad in ("not-a-uuid", 5, None, ""):
+        with pytest.raises(NotFound):
+            get_church(bad)
+        with pytest.raises(NotFound):
+            get_church_prompts(bad)
+    assert get_church(str(uuid.uuid4())) is None

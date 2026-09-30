@@ -12,7 +12,7 @@ import re
 from typing import Dict, Any, List, Optional
 from io import BytesIO
 
-from liturgy_config import COMMUNION_BLOCKS
+from liturgy_config import ASSURANCE_RESPONSE, COMMUNION_BLOCKS
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +76,8 @@ def _add_communion_liturgy(doc) -> None:
 
 
 def _add_assurance_paragraph(doc, leader_text: str) -> None:
-    """Add Assurance: Leader line then 'People: Thanks be to God! Amen.' in bold."""
+    """Add Assurance: Leader line then liturgy_config.ASSURANCE_RESPONSE in bold
+    (the one copy the 4b card shows too)."""
     leader_clean = (leader_text or "").strip()
     if leader_clean.startswith("Leader:"):
         leader_clean = leader_clean[7:].strip()
@@ -84,7 +85,7 @@ def _add_assurance_paragraph(doc, leader_text: str) -> None:
         doc.add_paragraph("Leader: " + leader_clean)
     # Always add the congregational response
     p = doc.add_paragraph()
-    r = p.add_run("People: Thanks be to God! Amen.")
+    r = p.add_run(ASSURANCE_RESPONSE)
     r.bold = True
 
 
@@ -178,7 +179,7 @@ def build_docx(
         doc.add_paragraph()
     _add_custom_elements_after(doc, "prayer_of_confession", custom)
 
-    # 5. Assurance of Pardon (Leader: ... / People: Thanks be to God! Amen. in bold)
+    # 5. Assurance of Pardon (Leader: ... / ASSURANCE_RESPONSE in bold)
     if liturgy.get("assurance"):
         doc.add_paragraph("Assurance of Pardon", style="Heading 2")
         _add_assurance_paragraph(doc, liturgy["assurance"])

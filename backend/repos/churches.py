@@ -57,7 +57,9 @@ def _create_church(session, name, timezone, owner_id) -> tuple[uuid.UUID, int]:
 
 def get_church(church_id, *, session: Optional[Session] = None) -> Optional[dict]:
     """{"id", "name", "timezone", "settings"}, or None when the church is missing
-    or soft-deleted. Reads in the caller's `session` or in its own scope."""
+    or soft-deleted. Reads in the caller's `session` or in its own scope.
+    `church_id` goes through as_uuid (a malformed id is NotFound, F §2.2 item 5)."""
+    church_id = as_uuid(church_id)
     if session is not None:
         return _get_church(session, church_id)
     with session_scope() as own:

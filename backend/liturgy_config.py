@@ -151,7 +151,7 @@ def outline_as_json() -> list[dict[str, Any]]:
              "anchors_after": list(item.anchors_after)} for item in OUTLINE]
 
 
-ASSURANCE_RESPONSE = "People: Thanks be to God! Amen."      # worship_service._add_assurance_paragraph
+ASSURANCE_RESPONSE = "People: Thanks be to God! Amen."      # worship_service._add_assurance_paragraph prints it
 
 
 CommunionStyle = Literal["heading1", "heading2", "text", "response", "blank"]

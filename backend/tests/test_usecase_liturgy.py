@@ -76,7 +76,7 @@ def test_answers_are_stripped_and_the_church_s_prompts_are_read_fresh(church):
     assert ai.calls[0]["messages"][0]["content"] == "First voice."
     assert user_message(ai.calls[0]).startswith("Bless Third Sunday of Easter.")
     assert ai.calls[0]["max_completion_tokens"] == 1500
-    assert ai.calls[0]["deadline"] == 1080.0            # F §1.8: 80 s from the start of the request
+    assert ai.calls[0]["deadline"] == 1080.0            # F §1.8: 80 s from the start of the usecase
     churches.set_church_prompts(church, {"system": "Second voice."})
     run(church, ["benediction"], ai=ai)
     assert ai.calls[1]["messages"][0]["content"] == "Second voice."
@@ -182,15 +182,16 @@ def test_the_ai_bucket_is_charged_once_for_the_sections_that_reach_the_ai(church
     assert charged == []
 
 
-def test_a_charge_that_raises_stops_every_ai_call(church):
+def test_a_charge_that_raises_stops_every_ai_call(church, caplog):
     ai = FakeAI(reply="Draft.")
 
     def charge(n):
         raise RateLimited("Too many requests. Try again in 15 seconds.", retry_after_seconds=15)
 
-    with pytest.raises(RateLimited):
+    with caplog.at_level(logging.INFO, logger="usecases.liturgy"), pytest.raises(RateLimited):
         run(church, ["call_to_worship", "benediction"], ai=ai, charge=charge)
     assert ai.calls == []
+    assert " ai=0 " in caplog.text and "outcome=rate_limited" in caplog.text     # no AI call was made
 
 
 def test_request_order_after_dedupe_with_four_sections_at_a_time(church):

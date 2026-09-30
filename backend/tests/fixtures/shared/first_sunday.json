@@ -4,6 +4,7 @@
     {"date": "2026-10-04", "expected": true, "why": "the first Sunday of October"},
     {"date": "2026-10-11", "expected": false, "why": "the second Sunday"},
     {"date": "2026-11-01", "expected": true, "why": "a Sunday on the 1st"},
+    {"date": "2026-11-02", "expected": false, "why": "a Monday on the 2nd, the day after a first Sunday"},
     {"date": "2026-11-07", "expected": false, "why": "a Saturday in the first week"},
     {"date": "2026-12-06", "expected": true, "why": "a Sunday on the 6th"},
     {"date": "2026-12-24", "expected": false, "why": "Christmas Eve, a Thursday"},

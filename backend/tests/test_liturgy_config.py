@@ -74,6 +74,23 @@ def test_custom_placements_are_app_py_s_17_with_the_first_reading_label():
     assert lc.PLACEMENT_KEYS == {key for key, _ in frozen}
 
 
+def _app_py_communion_checkbox_label() -> str:
+    """The first argument of the st.checkbox keyed "include_communion" in app.py."""
+    tree = ast.parse(APP_PY.read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.Call) and getattr(node.func, "attr", None) == "checkbox"
+                and any(k.arg == "key" and isinstance(k.value, ast.Constant) and k.value.value == "include_communion"
+                        for k in node.keywords)):
+            return ast.literal_eval(node.args[0])
+    raise AssertionError('st.checkbox(..., key="include_communion") not found in app.py')
+
+
+@pytest.mark.skipif(not APP_PY.exists(), reason="app.py is gone (slice 7 deletes the Streamlit app): "
+                    "liturgy_config.COMMUNION_TOGGLE_LABEL is then the only copy")
+def test_communion_toggle_label_is_app_py_s():
+    assert lc.COMMUNION_TOGGLE_LABEL == _app_py_communion_checkbox_label()
+
+
 def test_every_placement_is_anchored_exactly_once():
     anchors = [anchor for item in lc.OUTLINE for anchor in item.anchors_after]
     assert sorted(anchors) == sorted(lc.PLACEMENT_KEYS)

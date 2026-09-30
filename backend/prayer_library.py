@@ -75,11 +75,12 @@ def read_library(settings: Any) -> PrayerLibrary:
 
 def choose_example(library: PrayerLibrary, section: str, *,
                    choose: Callable[[Sequence[str]], str] = random.choice) -> Optional[str]:
-    """A random prayer whose type is `section` (never "other"), cut to
-    MAX_EXAMPLE_CHARS; None when the library has none of that type."""
+    """A random prayer whose type is `section` (never "other"), stripped and
+    then cut to MAX_EXAMPLE_CHARS (so leading blank lines never use up the
+    budget); None when the library has none of that type."""
     if section == "other":
         return None
     texts = [p.text for p in library.prayers if p.type == section and p.text.strip()]
     if not texts:
         return None
-    return choose(texts)[:MAX_EXAMPLE_CHARS]
+    return choose(texts).strip()[:MAX_EXAMPLE_CHARS]
