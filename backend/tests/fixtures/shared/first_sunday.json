@@ -1,0 +1,15 @@
+{
+  "_about": "The communion default: a Sunday in the first 7 days of its month (app.py:969-971). backend/liturgy_config.is_first_sunday_of_month runs every case (test_liturgy_config.py); 4b's firstSundayOfMonth does too (defaults.test.ts).",
+  "cases": [
+    {"date": "2026-10-04", "expected": true, "why": "the first Sunday of October"},
+    {"date": "2026-10-11", "expected": false, "why": "the second Sunday"},
+    {"date": "2026-11-01", "expected": true, "why": "a Sunday on the 1st"},
+    {"date": "2026-11-07", "expected": false, "why": "a Saturday in the first week"},
+    {"date": "2026-12-06", "expected": true, "why": "a Sunday on the 6th"},
+    {"date": "2026-12-24", "expected": false, "why": "Christmas Eve, a Thursday"},
+    {"date": "2026-02-01", "expected": true, "why": "a Sunday on the 1st"},
+    {"date": "2026-03-08", "expected": false, "why": "a Sunday on day 8"},
+    {"date": "2026-03-07", "expected": false, "why": "day 7, a Saturday"},
+    {"date": "2026-06-07", "expected": true, "why": "a Sunday on day 7"}
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "_about": "The 8 liturgy sections in order, with their labels and default switch states (slice 4 spec, Testing). backend/liturgy_config.SECTIONS must equal it (test_liturgy_config.py); 4b's fresh-draft card switches read it too (defaults.test.ts).",
+  "sections": [
+    {"key": "call_to_worship", "label": "Call to Worship", "default_enabled": true},
+    {"key": "opening_prayer", "label": "Opening Prayer", "default_enabled": true},
+    {"key": "prayer_of_confession", "label": "Prayer of Confession", "default_enabled": true},
+    {"key": "assurance", "label": "Assurance of Pardon", "default_enabled": true},
+    {"key": "prayer_for_illumination", "label": "Prayer for Illumination", "default_enabled": true},
+    {"key": "prayers_of_the_people", "label": "Prayers of the People", "default_enabled": false},
+    {"key": "offertory_prayer", "label": "Offertory Prayer", "default_enabled": true},
+    {"key": "benediction", "label": "Benediction", "default_enabled": true}
+  ]
+}
