@@ -15,7 +15,7 @@ import datetime as _dt
 import unicodedata
 from typing import Any, Callable, Dict, List
 
-from liturgy_prompts import SECTION_ORDER
+from liturgy_config import SECTION_ORDER
 
 HYMN_SLOTS: List[str] = ["opening", "response", "closing"]
 

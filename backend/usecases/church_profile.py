@@ -3,8 +3,8 @@
 get_church_profile reads the church row once and derives the fields the
 builder needs: the stored time zone and whether it is a real IANA name, and
 the stored default translation and the one passage text actually uses.
-Slice 3 added default_hymnal and effective_hymnal; slice 4 adds its fields
-to ChurchProfile (and ChurchProfileOut) additively.
+Slice 3 added default_hymnal and effective_hymnal; slice 4 added
+default_benediction (to ChurchProfile and ChurchProfileOut, additively).
 
 The route passes only ActiveChurch.id (F §1.2 rule 1) and supplies the id,
 name and role itself. The layer rules are in usecases/__init__.py: no FastAPI,
@@ -17,6 +17,7 @@ from dataclasses import dataclass
 
 import scripture_fetcher
 from db import session_scope
+from liturgy_config import resolve_default_benediction
 from domain_errors import Forbidden
 from repos import churches
 from timezones import is_valid_timezone
@@ -37,6 +38,7 @@ class ChurchProfile:
     effective_translation_label: str
     default_hymnal: str | None           # slice 3: settings["default_hymnal"], when a non-blank string
     effective_hymnal: str | None         # slice 3: the hymnal the builder opens (GET /hymnals agrees)
+    default_benediction: str             # slice 4: settings["default_benediction"] when a string, else "Halverson"
 
 
 def get_church_profile(church_id: uuid.UUID) -> ChurchProfile:
@@ -51,6 +53,8 @@ def get_church_profile(church_id: uuid.UUID) -> ChurchProfile:
       "web"; effective_translation_label is its human label.
     - default_hymnal, effective_hymnal: usecases.hymns.resolve_default_hymnal,
       read in the same session (slice 3).
+    - default_benediction: liturgy_config.resolve_default_benediction(settings)
+      ("" is kept: a church with no default; slice 4).
 
     Raises Forbidden (403 forbidden, details.reason no_church_access) when the
     church is missing or soft-deleted.
@@ -74,4 +78,5 @@ def get_church_profile(church_id: uuid.UUID) -> ChurchProfile:
         effective_translation_label=scripture_fetcher.translation_label(effective),
         default_hymnal=hymnals.default_hymnal,
         effective_hymnal=hymnals.effective_hymnal,
+        default_benediction=resolve_default_benediction(church["settings"]),
     )

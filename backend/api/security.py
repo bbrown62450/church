@@ -17,6 +17,11 @@ ALGORITHMS = ["RS256", "ES256"]
 # `iat` is a second or two ahead of our clock isn't rejected as "not yet valid".
 LEEWAY_SECONDS = 30
 
+# A cold fetch of Supabase's signing keys gives up after this long (PyJWKClient's
+# default is 30 s), so it cannot eat most of a slow page's client timeout, such
+# as /liturgy/generate's 90 s. A timeout is a PyJWKClientConnectionError: 503.
+JWKS_FETCH_TIMEOUT_S = 5
+
 KeyResolver = Callable[[str], Any]
 
 
@@ -43,7 +48,7 @@ def jwks_key_resolver(jwks_url: str) -> KeyResolver:
     token's `kid`, so an unknown `kid` or malformed token still surfaces as
     a per-token failure to `verify`, not an outage.
     """
-    client = PyJWKClient(jwks_url, cache_keys=True)
+    client = PyJWKClient(jwks_url, cache_keys=True, timeout=JWKS_FETCH_TIMEOUT_S)
 
     def resolve(token: str):
         try:

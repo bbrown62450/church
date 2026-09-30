@@ -298,3 +298,35 @@ def test_list_hymnal_records_in_hymnal_order_in_the_callers_session(tmp_db, make
         records = list_hymnal_records(cid, "GG2013", session=s)
         assert [r.title for r in records] == ["C", "B", "A"]
         assert hymnal_summaries(cid, session=s)[0].code == "GG2013"
+
+
+# --- slice 4a: the liturgy request's picks (S Backend 6 "repos/hymns.py") ---
+
+def _no_own_scope():
+    raise AssertionError("opened its own session_scope instead of using session=")
+
+
+def test_get_hymns_by_ids_is_church_scoped_and_skips_what_it_cannot_find(tmp_db, make_church, monkeypatch):
+    import repos.hymns
+    from repos.hymns import get_hymns_by_ids
+
+    mine, other = make_church(), make_church(name="Other")
+    a = _hymn(mine, "GG2013", "Holy, Holy, Holy", 1, text_year=1826)
+    b = _hymn(mine, "PH1990", "Be Thou My Vision", None)
+    theirs = _hymn(other, "GG2013", "Not Mine", 2)
+    found = get_hymns_by_ids(mine, [a, str(b), theirs, uuid.uuid4(), "not-a-uuid", None])
+    assert set(found) == {a, b}
+    assert (found[a].title, found[a].number, found[a].hymnal, found[a].text_year) == (
+        "Holy, Holy, Holy", 1, "GG2013", 1826)
+    assert found[b].number is None
+    assert get_hymns_by_ids(mine, []) == {}
+    with session_scope() as s:
+        s.get(Hymn, a).title = "Uncommitted"
+        s.flush()                                       # seen only through s
+        with monkeypatch.context() as m:
+            m.setattr(repos.hymns, "session_scope", _no_own_scope)
+            found_in_s = get_hymns_by_ids(mine, [a], session=s)
+        assert set(found_in_s) == {a} and found_in_s[a].title == "Uncommitted"
+        s.rollback()
+    with pytest.raises(NotFound):
+        get_hymns_by_ids("not-a-church", [a])

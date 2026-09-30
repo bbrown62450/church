@@ -1,0 +1,21 @@
+{
+  "_about": "The order of worship: backend/liturgy_config.OUTLINE serialized as GET /liturgy/config's outline (OutlineItemOut). Generated, never hand-edited: test_liturgy_config.py keeps it equal to OUTLINE and prints the command that rewrites it. 5a builds its order fixtures and tests from this file.",
+  "outline": [
+    {"kind": "section", "key": "call_to_worship", "label": "Call to Worship", "value_source": "none", "fixed_text": null, "anchors_after": ["call_to_worship"]},
+    {"kind": "section", "key": "opening_prayer", "label": "Opening Prayer", "value_source": "none", "fixed_text": null, "anchors_after": ["opening_prayer"]},
+    {"kind": "landmark", "key": "first_hymn", "label": "First Hymn", "value_source": "hymn_opening", "fixed_text": null, "anchors_after": ["first_hymn"]},
+    {"kind": "section", "key": "prayer_of_confession", "label": "Prayer of Confession", "value_source": "none", "fixed_text": null, "anchors_after": ["prayer_of_confession"]},
+    {"kind": "section", "key": "assurance", "label": "Assurance of Pardon", "value_source": "none", "fixed_text": null, "anchors_after": ["assurance"]},
+    {"kind": "section", "key": "prayer_for_illumination", "label": "Prayer for Illumination", "value_source": "none", "fixed_text": null, "anchors_after": ["prayer_for_illumination"]},
+    {"kind": "landmark", "key": "ot_reading", "label": "First Reading", "value_source": "reading_ot", "fixed_text": null, "anchors_after": ["ot_reading"]},
+    {"kind": "landmark", "key": "nt_reading", "label": "New Testament Reading", "value_source": "reading_nt", "fixed_text": null, "anchors_after": ["nt_reading"]},
+    {"kind": "landmark", "key": "sermon", "label": "Sermon Title", "value_source": "sermon_title", "fixed_text": null, "anchors_after": ["sermon"]},
+    {"kind": "landmark", "key": "affirmation_of_faith", "label": "Affirmation of Faith", "value_source": "fixed", "fixed_text": "Apostles' Creed", "anchors_after": ["affirmation_of_faith"]},
+    {"kind": "landmark", "key": "second_hymn", "label": "Second Hymn", "value_source": "hymn_response", "fixed_text": null, "anchors_after": ["second_hymn"]},
+    {"kind": "communion", "key": "communion", "label": "The Sacrament of the Lord's Supper", "value_source": "none", "fixed_text": null, "anchors_after": ["communion"]},
+    {"kind": "section", "key": "prayers_of_the_people", "label": "Prayers of the People", "value_source": "none", "fixed_text": null, "anchors_after": ["prayers_of_the_people"]},
+    {"kind": "section", "key": "offertory_prayer", "label": "Offertory Prayer", "value_source": "none", "fixed_text": null, "anchors_after": ["offertory_prayer"]},
+    {"kind": "landmark", "key": "third_hymn", "label": "Third Hymn", "value_source": "hymn_closing", "fixed_text": null, "anchors_after": ["third_hymn", "benediction"]},
+    {"kind": "section", "key": "benediction", "label": "Benediction", "value_source": "none", "fixed_text": null, "anchors_after": ["end"]}
+  ]
+}

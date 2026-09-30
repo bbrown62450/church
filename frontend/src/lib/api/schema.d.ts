@@ -214,6 +214,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/liturgy/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Liturgy Config */
+        get: operations["get_liturgy_config_liturgy_config_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/liturgy/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generate Liturgy
+         * @description Typed text comes back as sent; the rest is written by the AI, at most 4
+         *     sections at a time. Charged to the `ai` bucket per section that reaches the
+         *     AI (40 per 10 min per user, 400 per day per church; F §1.8).
+         */
+        post: operations["generate_liturgy_liturgy_generate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me": {
         parameters: {
             query?: never;
@@ -313,6 +352,8 @@ export interface components {
         ChurchProfileOut: {
             /** Bible Translation */
             bible_translation: string | null;
+            /** Default Benediction */
+            default_benediction: string;
             /** Default Hymnal */
             default_hymnal: string | null;
             /** Effective Hymnal */
@@ -337,6 +378,30 @@ export interface components {
             timezone: string;
             /** Timezone Valid */
             timezone_valid: boolean;
+        };
+        /** CommunionBlockOut */
+        CommunionBlockOut: {
+            /**
+             * Style
+             * @enum {string}
+             */
+            style: "heading1" | "heading2" | "text" | "response" | "blank";
+            /** Text */
+            text: string;
+        };
+        /** CommunionOut */
+        CommunionOut: {
+            /** Blocks */
+            blocks: components["schemas"]["CommunionBlockOut"][];
+            /**
+             * Default Rule
+             * @constant
+             */
+            default_rule: "first_sunday_of_month";
+            /** Title */
+            title: string;
+            /** Toggle Label */
+            toggle_label: string;
         };
         /**
          * CreateChurchIn
@@ -378,6 +443,29 @@ export interface components {
             message: string;
             /** Request Id */
             request_id: string;
+        };
+        /** GenerateLiturgyIn */
+        GenerateLiturgyIn: {
+            hymns?: components["schemas"]["SlotHymns"];
+            /**
+             * Occasion
+             * @default
+             */
+            occasion: string;
+            /** Overrides */
+            overrides?: {
+                [key: string]: string;
+            };
+            /** Scriptures */
+            scriptures?: string[];
+            /** Sections */
+            sections: ("call_to_worship" | "opening_prayer" | "prayer_of_confession" | "assurance" | "prayer_for_illumination" | "prayers_of_the_people" | "offertory_prayer" | "benediction")[];
+            sermon_text?: components["schemas"]["SermonText"] | null;
+        };
+        /** GenerateLiturgyOut */
+        GenerateLiturgyOut: {
+            /** Results */
+            results: components["schemas"]["SectionResult"][];
         };
         /** HymnMatchOut */
         HymnMatchOut: {
@@ -440,6 +528,25 @@ export interface components {
             /** Themes */
             themes: string[];
             /** Title */
+            title: string;
+        };
+        /**
+         * HymnRef
+         * @description One slot's hymn (F §1.3). hymn_id null = an archived snapshot, used as
+         *     sent; for a non-null id the server reads title, number and hymnal from
+         *     the database and ignores the client's copy.
+         */
+        HymnRef: {
+            /** Hymn Id */
+            hymn_id?: string | null;
+            /** Hymnal */
+            hymnal?: string | null;
+            /** Number */
+            number?: number | null;
+            /**
+             * Title
+             * @default
+             */
             title: string;
         };
         /** HymnSuggestionIn */
@@ -564,11 +671,64 @@ export interface components {
              */
             status: "ok" | "no_readings";
         };
+        /** LiturgyConfigOut */
+        LiturgyConfigOut: {
+            /** Ai Available */
+            ai_available: boolean;
+            /** Assurance Response */
+            assurance_response: string;
+            communion: components["schemas"]["CommunionOut"];
+            /** Custom Placements */
+            custom_placements: components["schemas"]["PlacementOut"][];
+            /** Default Benediction Fallback */
+            default_benediction_fallback: string;
+            limits: components["schemas"]["LiturgyLimitsOut"];
+            /** Outline */
+            outline: components["schemas"]["OutlineItemOut"][];
+            /** Sections */
+            sections: components["schemas"]["SectionSpecOut"][];
+        };
+        /** LiturgyLimitsOut */
+        LiturgyLimitsOut: {
+            /** Max Custom Elements */
+            max_custom_elements: number;
+            /** Max Custom Label */
+            max_custom_label: number;
+            /** Max Custom Text */
+            max_custom_text: number;
+            /** Max Section Text */
+            max_section_text: number;
+            /** Max Sections Per Request */
+            max_sections_per_request: number;
+            /** Max Sermon Title */
+            max_sermon_title: number;
+        };
         /** MeOut */
         MeOut: {
             /** Churches */
             churches: components["schemas"]["ChurchOut"][];
             user: components["schemas"]["UserOut"];
+        };
+        /** OutlineItemOut */
+        OutlineItemOut: {
+            /** Anchors After */
+            anchors_after: string[];
+            /** Fixed Text */
+            fixed_text: string | null;
+            /** Key */
+            key: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "section" | "landmark" | "communion";
+            /** Label */
+            label: string;
+            /**
+             * Value Source
+             * @enum {string}
+             */
+            value_source: "none" | "hymn_opening" | "hymn_response" | "hymn_closing" | "reading_ot" | "reading_nt" | "sermon_title" | "fixed";
         };
         /** Page[HymnOut] */
         Page_HymnOut_: {
@@ -631,6 +791,13 @@ export interface components {
             translation: string;
             /** Translation Label */
             translation_label: string;
+        };
+        /** PlacementOut */
+        PlacementOut: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
         };
         /**
          * ReadingSetOut
@@ -715,6 +882,70 @@ export interface components {
             total_matched: number;
             /** Unparsed Refs */
             unparsed_refs: string[];
+        };
+        /** SectionError */
+        SectionError: {
+            /**
+             * Code
+             * @enum {string}
+             */
+            code: "ai_not_configured" | "ai_busy" | "ai_timeout" | "ai_upstream_error" | "prompt_invalid";
+            /** Message */
+            message: string;
+        };
+        /** SectionResult */
+        SectionResult: {
+            error: components["schemas"]["SectionError"] | null;
+            /**
+             * Section
+             * @enum {string}
+             */
+            section: "call_to_worship" | "opening_prayer" | "prayer_of_confession" | "assurance" | "prayer_for_illumination" | "prayers_of_the_people" | "offertory_prayer" | "benediction";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "override" | "generated" | "error";
+            /** Text */
+            text: string | null;
+        };
+        /** SectionSpecOut */
+        SectionSpecOut: {
+            /** Default Enabled */
+            default_enabled: boolean;
+            /** Hint */
+            hint: string | null;
+            /**
+             * Key
+             * @enum {string}
+             */
+            key: "call_to_worship" | "opening_prayer" | "prayer_of_confession" | "assurance" | "prayer_for_illumination" | "prayers_of_the_people" | "offertory_prayer" | "benediction";
+            /** Label */
+            label: string;
+            /** Pastor Copy Only */
+            pastor_copy_only: boolean;
+            /** Rows */
+            rows: number;
+        };
+        /**
+         * SermonText
+         * @description The effective NT reading and its passage text (never ESV); the server keeps
+         *     the first 2 000 characters (liturgy_prompts.SERMON_TEXT_LIMIT).
+         */
+        SermonText: {
+            /** Ref */
+            ref: string;
+            /** Text */
+            text: string;
+        };
+        /**
+         * SlotHymns
+         * @description The three hymn slots (F §1.3): slice 4's GenerateLiturgyIn.hymns, 5a's ServiceDraft.hymns.
+         */
+        SlotHymns: {
+            closing?: components["schemas"]["HymnRef"] | null;
+            opening?: components["schemas"]["HymnRef"] | null;
+            response?: components["schemas"]["HymnRef"] | null;
         };
         /**
          * SlotPicks
@@ -1449,6 +1680,136 @@ export interface operations {
             };
             /** @description Gateway Timeout */
             504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_liturgy_config_liturgy_config_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiturgyConfigOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    generate_liturgy_liturgy_generate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-church-id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GenerateLiturgyIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenerateLiturgyOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -59,6 +59,7 @@ def test_new_fields_including_label(client, make_user, make_church, no_esv_key):
         "effective_translation_label": "King James Version (KJV)",
         "default_hymnal": None,
         "effective_hymnal": None,
+        "default_benediction": "Halverson",
     }
 
 
@@ -133,7 +134,8 @@ def test_me_church_items_unchanged(client, make_user, make_church):
     assert ok["schema"] == {"$ref": "#/components/schemas/ChurchProfileOut"}
     assert set(components["ChurchProfileOut"]["required"]) == {
         "id", "name", "role", "timezone", "timezone_valid", "bible_translation",
-        "effective_translation", "effective_translation_label", "default_hymnal", "effective_hymnal"}
+        "effective_translation", "effective_translation_label", "default_hymnal", "effective_hymnal",
+        "default_benediction"}
 
 
 def test_church_deleted_after_guard_is_403(client, make_user, make_church, monkeypatch):
@@ -150,3 +152,13 @@ def test_church_deleted_after_guard_is_403(client, make_user, make_church, monke
     error = dict(r.json()["error"])
     error.pop("request_id")
     assert error == NO_CHURCH_ACCESS
+
+
+def test_default_benediction_is_the_church_s_or_halverson(client, make_user, make_church):
+    """Slice 4 (S API; Backend 5; AC9): "" is a stored value meaning no default."""
+    cid = make_church(name="Grace", owner_user_id=make_user(email=EMAIL))
+    assert _profile(client, cid)["default_benediction"] == "Halverson"
+    for stored, expected in (("May the Lord bless you and keep you.", "May the Lord bless you and keep you."),
+                             ("", ""), (5, "Halverson")):
+        churches.update_church(cid, settings={"default_benediction": stored})
+        assert _profile(client, cid)["default_benediction"] == expected, stored
