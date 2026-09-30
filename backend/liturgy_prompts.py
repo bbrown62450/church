@@ -12,30 +12,14 @@ empty, so an edited prompt never crashes):
   {opening_hymn}  the selected opening hymn title (or "N/A")
   {hymns}         all selected hymns as a bulleted list
 """
-from typing import Dict, List
+import string
+from collections.abc import Mapping
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
 
-# Ordered so the UI shows sections in worship order.
-SECTION_ORDER: List[str] = [
-    "call_to_worship",
-    "opening_prayer",
-    "prayer_of_confession",
-    "assurance",
-    "prayer_for_illumination",
-    "prayers_of_the_people",
-    "offertory_prayer",
-    "benediction",
-]
-
-SECTION_LABELS: Dict[str, str] = {
-    "call_to_worship": "Call to Worship",
-    "opening_prayer": "Opening Prayer",
-    "prayer_of_confession": "Prayer of Confession",
-    "assurance": "Assurance of Pardon",
-    "prayer_for_illumination": "Prayer for Illumination",
-    "prayers_of_the_people": "Prayers of the People",
-    "offertory_prayer": "Offertory Prayer",
-    "benediction": "Benediction",
-}
+# The one home of the section order and labels is liturgy_config (slice 4); the
+# names stay here for frozen Streamlit's Settings page and the tests.
+from liturgy_config import SECTION_LABELS, SECTION_ORDER  # noqa: F401 (re-exported)
 
 PLACEHOLDER_HELP = (
     "Placeholders you can use: {occasion}, {scriptures}, {opening_hymn}, {hymns}. "
@@ -139,11 +123,12 @@ def default_prompts() -> Dict[str, str]:
 
 
 def merge_prompts(overrides: Dict[str, str] | None) -> Dict[str, str]:
-    """Defaults with any non-blank per-key overrides applied. Ignores unknown keys."""
+    """Defaults with any non-blank per-key overrides applied. Ignores unknown keys,
+    and values that are not strings (settings is JSON anyone could have written)."""
     prompts = default_prompts()
     for key in PROMPT_KEYS:
         value = (overrides or {}).get(key)
-        if value and value.strip():
+        if isinstance(value, str) and value.strip():
             prompts[key] = value
     return prompts
 
@@ -158,3 +143,107 @@ def render(template: str, *, occasion: str = "", scriptures: str = "",
         hymns=hymns,
     )
     return template.format_map(ctx)
+
+
+# --- slice 4a: the template validator (slice 4 spec, Backend 2; reused by 6a) ---
+
+KNOWN_PLACEHOLDERS = ("occasion", "scriptures", "opening_hymn", "hymns")
+MAX_TEMPLATE_CHARS = 8000
+MAX_PROMPT_CHARS = 24_000         # system + user, the cost guard (F §2.8)
+
+TOO_LONG_TEMPLATE = "This prompt is too long (max 8,000 characters)."
+UNPAIRED_BRACE = "It has a { or } without a partner. Use {{ or }} to print a brace."
+NO_NAME = "Placeholders need a name, such as {occasion}."
+NOT_PLAIN_NAME = "Placeholders must be a plain name such as {occasion}, with no dots or brackets."
+NOT_ONE_WORD = ("Placeholders must be a single word such as {occasion}. "
+                "To print a { or } as text, write {{ or }}.")
+HAS_SPEC = "Placeholders can't include ! or :. Write just {occasion}."
+CANT_FILL = "It can't be filled in. Check the { } placeholders."
+
+
+@dataclass(frozen=True)
+class TemplateCheck:
+    ok: bool
+    message: Optional[str]                      # user-facing reason when not ok
+    unknown_placeholders: tuple[str, ...]       # render as blank; 6a may show them as warnings
+
+
+def _failed(message: str) -> TemplateCheck:
+    return TemplateCheck(False, message, ())
+
+
+def check_template(key: str, template: str) -> TemplateCheck:
+    """The first failing check, in the spec's order, or ok with the unknown
+    placeholders. The system prompt is sent as written, never formatted, so
+    only its length is checked. Never raises."""
+    if not isinstance(template, str):
+        return _failed(CANT_FILL)
+    if len(template) > MAX_TEMPLATE_CHARS:
+        return _failed(TOO_LONG_TEMPLATE)
+    if key == "system":
+        return TemplateCheck(True, None, ())
+    try:
+        parsed = list(string.Formatter().parse(template))
+    except ValueError:
+        return _failed(UNPAIRED_BRACE)
+    fields = [(name, spec, conversion) for _text, name, spec, conversion in parsed if name is not None]
+    checks = (
+        (lambda name, spec, conv: name == "" or name.isdigit(), NO_NAME),
+        (lambda name, spec, conv: "." in name or "[" in name, NOT_PLAIN_NAME),
+        (lambda name, spec, conv: not name.isidentifier(), NOT_ONE_WORD),
+        (lambda name, spec, conv: conv is not None or bool(spec), HAS_SPEC),
+    )
+    for fails, message in checks:
+        if any(fails(*field) for field in fields):
+            return _failed(message)
+    try:
+        template.format_map(_SafeDict({name: "sample" for name in KNOWN_PLACEHOLDERS}))
+    except Exception:                                    # inv §0 item 4: never crash here
+        return _failed(CANT_FILL)
+    unknown = tuple(dict.fromkeys(name for name, _spec, _conv in fields if name not in KNOWN_PLACEHOLDERS))
+    return TemplateCheck(True, None, unknown)
+
+
+def template_error(template: str) -> Optional[str]:
+    """The section-template check 6a calls: the reason, or None. Any section key
+    gives the same result; only "system" is special. Never raises."""
+    return check_template("call_to_worship", template).message
+
+
+def validate_prompts(prompts: Mapping[str, Any]) -> dict[str, str]:
+    """key -> reason for each stored override merge_prompts would use (a
+    non-blank string under a PROMPT_KEYS key) that fails check_template.
+    Other keys and values are skipped: merge_prompts ignores them."""
+    if not isinstance(prompts, Mapping):
+        return {}
+    failures = {}
+    for key in PROMPT_KEYS:
+        value = prompts.get(key)
+        if isinstance(value, str) and value.strip():
+            message = check_template(key, value).message
+            if message is not None:
+                failures[key] = message
+    return failures
+
+
+def _normalized(value: Any) -> str:
+    return value.replace("\r\n", "\n").strip() if isinstance(value, str) else ""
+
+
+def clean_prompt_overrides(prompts: Mapping[str, Any],
+                           defaults: Optional[Mapping[str, Any]] = None) -> dict[str, str]:
+    """The overrides worth storing (streamlit_views/settings.py submit_prompts,
+    plus one rule): each value and default has its CRLF line endings read as LF
+    (browser textareas submit CRLF) and is stripped; a PROMPT_KEYS value that is
+    then non-blank and differs from its default is kept, stored normalized.
+    defaults=None means default_prompts(). The one rule for "equal to the
+    default": 6a's PUT imports it and has no second copy."""
+    defaults = default_prompts() if defaults is None else defaults
+    cleaned = {}
+    for key, value in (prompts or {}).items():
+        if key not in PROMPT_KEYS:
+            continue
+        text = _normalized(value)
+        if text and text != _normalized(defaults.get(key)):
+            cleaned[key] = text
+    return cleaned
