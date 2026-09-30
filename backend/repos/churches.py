@@ -168,12 +168,15 @@ def _merge_settings(church_id, patch: dict) -> None:
         church.settings = {**(church.settings or {}), **patch}
 
 
-def get_church_prompts(church_id) -> dict:
-    """Per-church liturgy prompt overrides ({} when the church uses all defaults)."""
-    church = get_church(church_id)
+def get_church_prompts(church_id, *, session: Optional[Session] = None) -> dict:
+    """Per-church liturgy prompt overrides ({} when the church uses all defaults,
+    or when the stored value is not an object). Reads in the caller's `session`
+    or in its own scope (slice 4, F §2.2 rule 3)."""
+    church = get_church(church_id, session=session)
     if not church:
         return {}
-    return dict((church.get("settings") or {}).get("liturgy_prompts") or {})
+    stored = (church.get("settings") or {}).get("liturgy_prompts")
+    return dict(stored) if isinstance(stored, dict) else {}
 
 
 def set_church_prompts(church_id, prompts: dict) -> None:

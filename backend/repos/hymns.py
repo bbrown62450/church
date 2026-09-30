@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from db import session_scope
 from db.ids import as_uuid
 from db.models import Hymn, HymnCatalog
+from domain_errors import NotFound
 
 
 def _as_uuid(value: Any) -> uuid.UUID:
@@ -326,5 +327,27 @@ def list_hymnal_records(church_id, hymnal: str, *,
                          .where(Hymn.church_id == cid, Hymn.hymnal == hymnal)
                          .order_by(*_ORDER)).all()
         return [_record(r) for r in rows]
+
+    return _in(session, work)
+
+
+def get_hymns_by_ids(church_id, ids, *, session: Optional[Session] = None) -> dict[uuid.UUID, HymnRecord]:
+    """The church's hymns among `ids`, keyed by id, in one SELECT (slice 4:
+    a liturgy request's slot picks). An id of another church, a deleted hymn or
+    a malformed id is simply absent; the caller decides what that means."""
+    cid = as_uuid(church_id)
+    wanted = set()
+    for value in ids:
+        try:
+            wanted.add(as_uuid(value))
+        except NotFound:
+            continue
+    if not wanted:
+        return {}
+
+    def work(s: Session) -> dict[uuid.UUID, HymnRecord]:
+        rows = s.execute(select(*_RECORD_COLUMNS)
+                         .where(Hymn.church_id == cid, Hymn.id.in_(sorted(wanted)))).all()
+        return {row.id: _record(row) for row in rows}
 
     return _in(session, work)

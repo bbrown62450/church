@@ -168,3 +168,18 @@ def test_rubric_overrides_read_in_the_callers_session(tmp_db, make_user):
         assert get_church_rubric_overrides(cid, session=s) == {"prefer_before_year": 1900}
     assert get_church_rubric_overrides(cid) == {"prefer_before_year": 1900}
     assert get_church_rubric_overrides(uuid.uuid4()) == {}
+
+
+def test_prompts_read_in_the_callers_session_and_junk_reads_as_none(tmp_db, make_user):
+    """Slice 4 reads the prompts in the same session as the hymns and rubric (F §2.2 rule 3)."""
+    from repos.churches import get_church_prompts, set_church_prompts
+
+    cid = create_church(name="Grace", timezone="America/New_York", owner_user_id=make_user())
+    set_church_prompts(cid, {"benediction": "Go in peace."})
+    with session_scope() as s:
+        assert get_church_prompts(cid, session=s) == {"benediction": "Go in peace."}
+    assert get_church_prompts(cid) == {"benediction": "Go in peace."}
+    assert get_church_prompts(uuid.uuid4()) == {}
+    for junk in ("text", ["a"], 5, None):
+        update_church(cid, settings={"liturgy_prompts": junk})
+        assert get_church_prompts(cid) == {}, junk
