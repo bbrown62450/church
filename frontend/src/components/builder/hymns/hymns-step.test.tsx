@@ -28,9 +28,11 @@ import {
   gg2013,
   hymnals,
   hymnListRoute,
+  hymnMatch,
   hymnSuggestions,
   lectionaryRoute,
   me,
+  scriptureMatches,
   testDraft,
   twoHymnals,
   USER_ID,
@@ -66,6 +68,7 @@ function renderStep(draft: DraftV1 = testDraft(), routes: Record<string, FakeHan
     "GET /lectionary/readings": lectionaryRoute(),
     "GET /hymnals": hymnals(),
     "GET /hymns": hymnListRoute(undefined, RECENT),
+    "POST /hymns/scripture-matches": scriptureMatches(),
     ...routes,
   });
   const view = renderWithProviders(
@@ -679,5 +682,136 @@ describe("Suggest hymns (S AI suggestion flow)", () => {
     renderStep(setDate(testDraft(), ""));
     await screen.findByRole("switch", { name: "Exclude hymns used within 12 weeks" });
     expect(screen.getByRole("button", { name: "Suggest hymns" })).toBeDisabled();
+  });
+});
+
+// --- Hymns for the readings (S "Hymns for the readings") ------------------------------------
+
+const LINES = ["Isaiah 5:1-7", "Psalm 80:7-15", "Philippians 3:4b-14", "Matthew 21:33-46"];
+
+/** The section, opened (it starts closed below md, and jsdom's window is narrow). */
+async function openMatches(user: { click: (el: Element) => Promise<void> }) {
+  const trigger = await screen.findByRole("button", { name: /^Hymns for the readings/ });
+  await user.click(trigger);
+  return trigger.closest("[data-slot=collapsible]") as HTMLElement;
+}
+
+describe("Hymns for the readings (S ScriptureMatches)", () => {
+  it("asks for the draft's readings in the selected hymnal; Add → Response hymn sets the slot and Undo restores it until the slot changes again", async () => {
+    const { user, api } = renderStep(draftWith(slots(null, pick(GRACE)), { scriptures: LINES }));
+    const trigger = await screen.findByRole("button", { name: "Hymns for the readings 4" }); // the count, while closed
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    const matchCalls = api.requests.filter((r) => r.path === "/hymns/scripture-matches");
+    expect(matchCalls.map((r) => r.body)).toEqual([
+      { refs: LINES, hymnal: "GG2013", recent_for_date: "2026-10-04", max_results: 30 },
+    ]);
+    const section = await openMatches(user);
+    const passage = within(section).getByRole("heading", { name: "Matches the readings" }).nextElementSibling as HTMLElement;
+    expect(within(passage).getByText("#710 Here I Am, Lord")).toBeInTheDocument();
+    expect(within(passage).getByText("Written 1981")).toBeInTheDocument();
+    expect(within(passage).getByText("Matches Isaiah 5:1-7")).toBeInTheDocument();
+    const chapter = within(section).getByRole("heading", { name: "Same chapter" }).nextElementSibling as HTMLElement;
+    expect(within(chapter).getAllByRole("listitem")).toHaveLength(3);
+    await user.click(within(section).getByRole("button", { name: "Add Holy, Holy, Holy! Lord God Almighty" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Response hymn" }));
+    expect(await within(card("Response")).findByText("#1 Holy, Holy, Holy! Lord God Almighty")).toBeInTheDocument();
+    await waitFor(() => expect(stored().hymns.slots.response).toEqual(pick(HOLY)));
+    expect(await screen.findByText("Response hymn changed to Holy, Holy, Holy! Lord God Almighty.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Undo" }));
+    await waitFor(() => expect(stored().hymns.slots.response).toEqual(pick(GRACE)));
+    // Undo does nothing once another hymn fills the slot.
+    act(() => toast.dismiss());
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Undo" })).toBeNull());
+    await user.click(within(section).getByRole("button", { name: "Add Holy, Holy, Holy! Lord God Almighty" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Response hymn" }));
+    await waitFor(() => expect(stored().hymns.slots.response).toEqual(pick(HOLY)));
+    await user.click(within(card("Response")).getByRole("button", { name: "Change" }));
+    await user.type(within(card("Response")).getByRole("combobox", { name: "Response hymn" }), "403");
+    await user.click(await screen.findByRole("option", { name: /#403 Come, Thou Almighty King/ }));
+    await user.click(await screen.findByRole("button", { name: "Undo" }));
+    // Into an empty slot: no toast.
+    await user.click(within(section).getByRole("button", { name: "Add Here I Am, Lord" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Closing hymn" }));
+    await waitFor(() => expect(stored().hymns.slots.closing).toEqual(pick(HERE)));
+    expect(stored().hymns.slots.response).toEqual(pick(COME)); // the Undo after Change did nothing
+    expect(screen.queryByText(/^Closing hymn changed/)).toBeNull();
+  });
+
+  it("searches an extra reference with the readings, and says when one can't be read or nothing matches", async () => {
+    const { user, api } = renderStep(draftWith({}, { scriptures: LINES }), {
+      "POST /hymns/scripture-matches": (req: RecordedRequest) => {
+        const refs = (req.body as { refs: string[] }).refs;
+        return refs.includes("Transfiguration")
+          ? scriptureMatches({ refs_used: refs, unparsed_refs: ["Transfiguration"], total_matched: 0, items: [] })
+          : scriptureMatches();
+      },
+    });
+    const section = await openMatches(user);
+    const extra = within(section).getByLabelText("Additional scripture");
+    expect(extra).toHaveAttribute("placeholder", "e.g. Matthew 17");
+    expect(extra).toHaveAttribute("maxLength", "200");
+    await user.type(extra, "Transfiguration{Enter}");
+    expect(
+      await within(section).findByText("Couldn't read “Transfiguration” as a scripture reference."),
+    ).toBeInTheDocument();
+    expect(
+      within(section).getByText("No hymns in GG2013 match these readings. Try a shorter reference, such as “Matthew 17”."),
+    ).toBeInTheDocument();
+    const last = api.requests.filter((r) => r.path === "/hymns/scripture-matches").at(-1);
+    expect((last?.body as { refs: string[] }).refs).toEqual([...LINES, "Transfiguration"]);
+  });
+
+  it("links to step 1 without references, and never searches a hymnal with no scripture references", async () => {
+    const first = renderStep();
+    const section = await openMatches(first.user);
+    expect(within(section).getByText(/^Add the readings in step 1, or type a scripture reference here\./)).toBeInTheDocument();
+    const readings = within(section).getByRole("link", { name: "Go to readings" });
+    expect(readings).toHaveAttribute("href", "/builder/readings");
+    expect(readings).toHaveClass("min-h-11"); // a 44 px touch target
+    first.unmount();
+
+    const { user, api } = renderStep(draftWith({ hymnal: "PH1990" }, { scriptures: LINES }), { "GET /hymnals": twoHymnals() });
+    const ph = await openMatches(user);
+    expect(within(ph).getByText("PH1990 has no scripture references, so it can't be searched by scripture.")).toBeInTheDocument();
+    expect(api.requests.some((r) => r.path === "/hymns/scripture-matches")).toBe(false);
+    expect(first.api.requests.some((r) => r.path === "/hymns/scripture-matches")).toBe(false);
+  });
+
+  it("shows Couldn't search the hymnal with Retry when the search fails", async () => {
+    let fail = true;
+    const { user } = renderStep(draftWith({}, { scriptures: LINES }), {
+      "POST /hymns/scripture-matches": () => (fail ? fakeError(500, "internal_error", "Something went wrong.") : scriptureMatches()),
+    });
+    const section = await openMatches(user);
+    expect(await within(section).findByText("Couldn't search the hymnal.")).toBeInTheDocument();
+    fail = false;
+    await user.click(within(section).getByRole("button", { name: "Retry" }));
+    expect(await within(section).findByRole("heading", { name: "Matches the readings" })).toBeInTheDocument();
+  });
+
+  it("with Exclude on hides recently used matches behind Show them; shown, they carry their badge; Hide them hides them again", async () => {
+    const [holy, , come] = gg2013();
+    const recentMatches = scriptureMatches({
+      items: [
+        hymnMatch({ ...holy, recent_use_on: "2026-09-06" }, "passage", ["Isaiah 5:1-7"]),
+        hymnMatch(come, "chapter", ["Isaiah 5:1-7"]),
+        hymnMatch({ ...FAITHFUL, recent_use_on: "2026-10-18" }, "chapter", ["Matthew 21:33-46"]),
+      ],
+    });
+    const { user } = renderStep(draftWith({}, { scriptures: LINES }), { "POST /hymns/scripture-matches": recentMatches });
+    const section = await openMatches(user);
+    expect(await within(section).findByText("2 recently used matches are hidden.")).toBeInTheDocument();
+    expect(within(section).getAllByRole("listitem")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Hymns for the readings 1" })).toBeInTheDocument();
+    await user.click(within(section).getByRole("button", { name: "Show them" }));
+    expect(within(section).getAllByRole("listitem")).toHaveLength(3);
+    expect(within(section).getByText("Used Sep 6")).toBeInTheDocument();
+    expect(within(section).getByText("Planned Oct 18")).toBeInTheDocument();
+    expect(within(section).queryByText(/recently used matches are hidden/)).toBeNull();
+    expect(within(section).getByText(/^2 recently used matches are shown\./)).toBeInTheDocument();
+    await user.click(within(section).getByRole("button", { name: "Hide them" }));
+    expect(within(section).getAllByRole("listitem")).toHaveLength(1);
+    expect(within(section).getByText(/^2 recently used matches are hidden\./)).toBeInTheDocument();
+    expect(within(section).getByRole("button", { name: "Show them" })).toBeInTheDocument();
   });
 });

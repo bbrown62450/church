@@ -5,14 +5,14 @@ import { useState } from "react";
 import { EmptyState } from "@/components/app/empty-state";
 import { ErrorState } from "@/components/app/error-state";
 import { buttonVariants } from "@/components/ui/button";
-import type { Hymn } from "@/lib/api/types";
+import type { Hymn, HymnMatch } from "@/lib/api/types";
 import { useChurch } from "@/lib/church-context";
 import { isValidDateIso } from "@/lib/dates";
 import { useDraft } from "@/lib/draft/context";
 import { SLOTS, type Slot } from "@/lib/draft/schema";
 import { SETTINGS_HYMNS_READY } from "@/lib/features";
 import { selectHymnal } from "@/lib/hymns/hymnal";
-import { duplicateNotice, MISSING_NOTICE, recentUseNotice } from "@/lib/hymns/labels";
+import { duplicateNotice, MISSING_NOTICE, recentUseNotice, SLOT_META } from "@/lib/hymns/labels";
 import {
   clearSlot,
   duplicateSlots,
@@ -30,6 +30,7 @@ import { useHymnals, useHymnLists } from "@/lib/queries/hymns";
 import { AlternativeChips } from "./alternative-chips";
 import { HymnSlotCard } from "./hymn-slot-card";
 import { ExcludeSwitch, HymnalPicker, HymnsToolbar, ToolbarSkeleton } from "./hymns-toolbar";
+import { ScriptureMatches } from "./scripture-matches";
 import { SuggestHymnsButton } from "./suggest-hymns-button";
 import { useUndoToasts } from "./use-undo-toasts";
 
@@ -65,7 +66,8 @@ const MISSING: Reconciled = { status: "missing" };
  * are the only writers of the hymnal and the switch. Removing a hymn offers
  * Undo in a toast that never outlives the step. Suggest fills the empty slots
  * and puts other ideas under each hymn; the ideas show only for the date they
- * were suggested for.
+ * were suggested for. "Hymns for the readings" matches the draft's scriptures
+ * in the selected hymnal; adding one over another hymn offers Undo too.
  */
 export function HymnsStep() {
   const church = useChurch();
@@ -99,7 +101,8 @@ export function HymnsStep() {
   const duplicates = duplicateSlots(hymns.slots);
   const hiddenRecent = (selectedList ?? []).filter((h) => h.title.trim() !== "" && h.recent_use_on !== null).length;
   const ideas = hymns.alternatives?.for_date_iso === dateIso ? hymns.alternatives.by_slot : null;
-  const selectedCount = hymnals?.items.find((h) => h.code === code)?.hymn_count ?? 0;
+  const selectedInfo = hymnals?.items.find((h) => h.code === code);
+  const selectedCount = selectedInfo?.hymn_count ?? 0;
 
   function notices(slot: Slot, reconciled: Reconciled | null): string[] {
     const out: string[] = [];
@@ -122,6 +125,16 @@ export function HymnsStep() {
     update((d) => clearSlot(d, slot));
     // Undo only while the slot is still as ✕ left it; a hymn chosen since is never replaced.
     showUndo(`Removed ${title}.`, () => update((d) => (d.hymns.slots[slot] === null ? setSlot(d, slot, previous) : d)));
+  }
+
+  function addMatch(slot: Slot, match: HymnMatch) {
+    const previous = hymns.slots[slot];
+    update((d) => setSlot(d, slot, pickFromHymn(match)));
+    if (previous && previous.hymn_id !== match.id) {
+      showUndo(`${SLOT_META[slot].title} changed to ${match.title}.`, () =>
+        update((d) => (d.hymns.slots[slot]?.hymn_id === match.id ? setSlot(d, slot, previous) : d)),
+      );
+    }
   }
 
   return (
@@ -205,6 +218,17 @@ export function HymnsStep() {
           </HymnSlotCard>
         );
       })}
+      {pickers && selectedInfo ? (
+        <ScriptureMatches
+          scriptures={draft.readings.scriptures}
+          hymnal={selectedInfo}
+          recentForDate={recentForDate}
+          serviceDateIso={dateIso}
+          excludeRecent={excludeRecent}
+          showHymnal={showHymnal}
+          onAdd={addMatch}
+        />
+      ) : null}
       <p className="text-xs text-muted-foreground">
         Hymn information and links courtesy of Hymnary.org. Individual hymns may carry their own copyright — see each
         hymn&apos;s page.
