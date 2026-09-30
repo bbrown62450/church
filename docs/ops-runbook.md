@@ -372,6 +372,28 @@ address or church id is recorded here.
 | Streamlit smoke on liturgy-frozen | Not run: 3b changes no data, and merges never reach liturgy-frozen | 2026-09-30 |
 | Follow-ups | Slice 4: the Liturgy step. 5a: recording hymn use on every save (the new app does not write `hymn_usage` yet), and leaving the service's own date out of the recent-use lookup so its hymns never read "Planned" for that day. 6a: Settings → Hymns flips `SETTINGS_HYMNS_READY`. Later, the owner's call: removing the two slice 1 test churches (a production change). Still open: first-line matching research on Hymnary.org; the NUL-character 500 (app-wide) | 2026-09-30 |
 
+### Slice 4a record
+
+Slice 4a (the Liturgy step's backend: `liturgy_config.py`, the prompt
+checker, per-section generation, `GET /liturgy/config`,
+`POST /liturgy/generate` and `default_benediction` on `GET /church`) merged
+as PR #30 with no database change and no new variable, so production stays
+at `0004_invites_reusable` (head) and the OpenAI key and model from slice 3a
+are used. No page calls the new routes until 4b. The checks were the
+owner's: a read-only list of saved prompts before the PR was marked ready,
+then the Railway deploy log and two signed-in Console snippets. No token,
+email address or church id is recorded here.
+
+| Step | Result | Date |
+|---|---|---|
+| Stored prompts | One church has a saved override (Benediction); it passes the new checker and the 24 000-character check with the largest request allowed. Nothing to fix | 2026-09-30 |
+| Merge and deploy | PR #30 merged 2026-09-30 about 18:53 UTC (14:53 EDT), merge commit `f1b15f5`. CI on `main` for the merge commit (run 36761817431): success. Deploy Logs: no `Running upgrade`; `AI: configured (model=gpt-4.1-mini)`; health check 200; no Traceback or ERROR | 2026-09-30 |
+| Config and church | `GET /liturgy/config` 200 in 182 ms: 8 sections, 17 places, 16 outline items, 31 communion blocks, `ai_available=true`; only Prayers of the People is off by default; the reading heading is "First Reading" and the place "After First Reading" (owner). `GET /church` 200: `default_benediction="Halverson"` | 2026-09-30 |
+| Generation | `POST /liturgy/generate` 200 in 3.1 s for October 4: Call to Worship generated (338 characters, Leader/People lines, drawing on the vineyard reading without naming a book or verse), Opening Prayer generated (532), the typed Benediction returned unchanged (39) | 2026-09-30 |
+| Prayers of the People | 200 in 5.2 s: generated, 2 820 characters, 464 words, 9 paragraphs, ending by leading into the Lord's Prayer. Far inside the 60 s attempt and the 4 000-token budget (the `ai_call` line was not collected; about 600 tokens estimated). Plan Task 14 Step 7, first row: no follow-up | 2026-09-30 |
+| Streamlit smoke on liturgy-frozen | Not run: 4a changes no data, and merges never reach liturgy-frozen | 2026-09-30 |
+| Follow-ups | 4b: the Liturgy step, and a client timeout a few seconds above 90 s so a slow sign-in cannot push a worst-case section past it. After 4b: the service reviewer as its own slice (owner). 5a: the Word files' "First Reading" heading, deleting `DOCX_HEADINGS_UNTIL_5A`. 6a: Settings for the default benediction, the liturgy prompts and the prayer library (the default Prayers of the People prompt asks for 10-15 paragraphs; the live draft had 9, tunable there) | 2026-09-30 |
+
 ## Backups
 
 - **Workflow:** `.github/workflows/backup.yml` (`db-backup`). Daily at 08:37 UTC,
