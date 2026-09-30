@@ -15,7 +15,7 @@ import { Toaster } from "@/components/ui/sonner";
 import type { ChurchProfile } from "@/lib/api/types";
 import { ChurchProvider } from "@/lib/church-context";
 import { useDraft } from "@/lib/draft/context";
-import { editOccasion } from "@/lib/draft/readings";
+import { editOccasion, setDate } from "@/lib/draft/readings";
 import { draftKey, type DraftV1, type HymnPick } from "@/lib/draft/schema";
 import { pickFromHymn } from "@/lib/hymns/picks";
 import { keys } from "@/lib/queries/keys";
@@ -31,6 +31,7 @@ import {
   lectionaryRoute,
   me,
   testDraft,
+  twoHymnals,
   USER_ID,
 } from "@/test/fixtures";
 import { renderWithProviders } from "@/test/render";
@@ -334,5 +335,105 @@ describe("slot cards (S Slot cards, Notices)", () => {
     await waitFor(() => expect(stored(hopeKey)?.readings.occasion).toBe("Harvest at Hope"));
     expect(stored(hopeKey).hymns.slots.opening).toBeNull();
     expect(stored().hymns.slots.opening).toBeNull(); // Grace's draft is not written either
+  });
+});
+
+describe("the toolbar (S Toolbar)", () => {
+  it("switches hymnals from the select, keeping the picks, and notes a hymnal with no scripture references", async () => {
+    // One hymnal (production today): no select.
+    const one = renderStep(draftWith(slots(pick(COME))));
+    await screen.findByRole("switch", { name: "Exclude hymns used within 12 weeks" });
+    expect(screen.queryByRole("combobox", { name: "Hymnal" })).toBeNull();
+    expect(within(card("Opening")).queryByText("GG2013")).toBeNull();
+    one.unmount();
+
+    const { user, api } = renderStep(draftWith(slots(pick(COME))), { "GET /hymnals": twoHymnals() });
+    const select = await screen.findByRole("combobox", { name: "Hymnal" });
+    expect(select).toHaveTextContent("GG2013 · 853 hymns");
+    expect(screen.getByText("Which hymnal to choose hymns from for this service.")).toBeInTheDocument();
+    expect(within(card("Opening")).getByText("GG2013")).toBeInTheDocument(); // 2+ hymnals: each pick shows its hymnal
+    await user.click(select);
+    await user.click(await screen.findByRole("option", { name: "PH1990 · 605 hymns" }));
+    await waitFor(() => expect(stored().hymns.hymnal).toBe("PH1990"));
+    expect(stored().hymns.slots.opening).toEqual(pick(COME)); // picks keep their own hymnal
+    await waitFor(() =>
+      expect(api.requests.map((r) => r.path)).toContain("/hymns?hymnal=PH1990&limit=2000&recent_for_date=2026-10-04"),
+    );
+    expect(
+      await screen.findByText("PH1990 has no scripture references, so scripture matches and AI response picks will be weaker."),
+    ).toBeInTheDocument();
+    const input = await readyPicker("Response");
+    await user.type(input, "long");
+    expect(await screen.findByRole("option", { name: /#1 Come, Thou Long-Expected Jesus/ })).toBeInTheDocument();
+    // Choosing the effective hymnal again stores null, so it is not unsaved work (owner answer 1).
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("combobox", { name: "Hymnal" }));
+    await user.click(await screen.findByRole("option", { name: "GG2013 · 853 hymns" }));
+    await waitFor(() => expect(stored().hymns.hymnal).toBeNull());
+  });
+
+  it("keeps a vanished stored hymnal in the draft and shows the effective one, writing nothing, also while GET /hymnals fails", async () => {
+    const saved = draftWith({ hymnal: "HYMNAL1982" });
+    const first = renderStep(saved, { "GET /hymnals": fakeError(500, "internal_error", "Something went wrong.") });
+    expect(await screen.findByText("Couldn't load this church's hymnal.")).toBeInTheDocument();
+    expect(first.api.requests.some((r) => r.path.startsWith("/hymns"))).toBe(false);
+    first.unmount();
+    expect(stored().hymns).toEqual(saved.hymns);
+    expect(stored().updated_at).toBe(saved.updated_at);
+
+    const { api } = renderStep(saved);
+    expect(
+      await screen.findByText("HYMNAL1982 is no longer in your church's hymnals. Showing GG2013 instead."),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(api.requests.map((r) => r.path)).toContain("/hymns?hymnal=GG2013&limit=2000&recent_for_date=2026-10-04"),
+    );
+    expect(stored().hymns.hymnal).toBe("HYMNAL1982");
+    expect(stored().updated_at).toBe(saved.updated_at); // no write, so not dirty
+  });
+
+  it("the Exclude switch counts the hidden hymns, and is off without a valid date", async () => {
+    const { user, unmount } = renderStep();
+    const exclude = await screen.findByRole("switch", { name: "Exclude hymns used within 12 weeks" });
+    expect(exclude).toBeChecked();
+    expect(
+      screen.getByText("Hides hymns sung in the 12 weeks before this service or planned in the 12 weeks after it. 2 hymns are hidden."),
+    ).toBeInTheDocument();
+    await user.click(exclude);
+    await waitFor(() => expect(stored().hymns.exclude_recent).toBe(false));
+    expect(screen.queryByText(/hymns are hidden/)).toBeNull();
+    unmount();
+
+    const { api } = renderStep(setDate(testDraft(), ""));
+    const off = await screen.findByRole("switch", { name: "Exclude hymns used within 12 weeks" });
+    expect(off).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByText("Pick a valid date in step 1 to check recent use.")).toBeInTheDocument();
+    expect(api.requests.map((r) => r.path)).toContain("/hymns?hymnal=GG2013&limit=2000"); // no recent_for_date
+  });
+
+  it("exclusion never clears a pick: the switch hides recent hymns from the picker and keeps a recent pick with its notice", async () => {
+    const { user } = renderStep(draftWith(slots(pick(FAITHFUL))));
+    const opening = await screen.findByRole("region", { name: "Opening hymn" });
+    expect(
+      await within(opening).findByText("Used on September 6, 2026 — within 12 weeks of this service."),
+    ).toBeInTheDocument();
+    const input = await readyPicker("Response");
+    await user.type(input, "great");
+    expect(await screen.findByText("No hymns match “great”.")).toBeInTheDocument();
+    expect(screen.getByText("1 more used within 12 weeks is hidden.")).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    const exclude = screen.getByRole("switch", { name: "Exclude hymns used within 12 weeks" });
+    await user.click(exclude);
+    await waitFor(() => expect(stored().hymns.exclude_recent).toBe(false));
+    await user.clear(input);
+    await user.type(input, "great");
+    const option = await screen.findByRole("option", { name: /#700 Great Is Thy Faithfulness/ });
+    expect(within(option).getByText("Used Sep 6")).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    await user.click(exclude);
+    await waitFor(() => expect(stored().hymns.exclude_recent).toBe(true));
+    expect(stored().hymns.slots).toEqual(slots(pick(FAITHFUL)).slots); // AC12: toggling never touched a slot
+    expect(within(opening).getByText("#700 Great Is Thy Faithfulness")).toBeInTheDocument();
+    expect(within(opening).getByText("Used on September 6, 2026 — within 12 weeks of this service.")).toBeInTheDocument();
   });
 });

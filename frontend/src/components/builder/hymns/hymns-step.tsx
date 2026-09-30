@@ -10,10 +10,20 @@ import { SLOTS, type Slot } from "@/lib/draft/schema";
 import { SETTINGS_HYMNS_READY } from "@/lib/features";
 import { selectHymnal } from "@/lib/hymns/hymnal";
 import { duplicateNotice, MISSING_NOTICE, recentUseNotice } from "@/lib/hymns/labels";
-import { clearSlot, duplicateSlots, pickFromHymn, reconcilePick, setSlot, type Reconciled } from "@/lib/hymns/picks";
+import {
+  clearSlot,
+  duplicateSlots,
+  pickFromHymn,
+  reconcilePick,
+  setExcludeRecent,
+  setHymnal,
+  setSlot,
+  type Reconciled,
+} from "@/lib/hymns/picks";
 import { useHymnals, useHymnLists } from "@/lib/queries/hymns";
 
 import { HymnSlotCard } from "./hymn-slot-card";
+import { ExcludeSwitch, HymnalPicker, HymnsToolbar, ToolbarSkeleton } from "./hymns-toolbar";
 import { useUndoToasts } from "./use-undo-toasts";
 
 /** The empty-hymnal state (S "Whole-step states"); the link waits for Settings → Hymns (6a). */
@@ -44,8 +54,9 @@ const MISSING: Reconciled = { status: "missing" };
  * (F §4.6). The slot cards show the draft's picks at once; the pickers wait
  * for `GET /hymnals` and the selected hymnal's list, with no full-page
  * spinner. The selected hymnal is resolved only from a loaded `GET /hymnals`
- * and never written back (S Toolbar). Removing a hymn offers Undo in a toast
- * that never outlives the step.
+ * and never written back (S Toolbar); the toolbar's Select and Exclude switch
+ * are the only writers of the hymnal and the switch. Removing a hymn offers
+ * Undo in a toast that never outlives the step.
  */
 export function HymnsStep() {
   const { draft, update } = useDraft();
@@ -72,6 +83,7 @@ export function HymnsStep() {
   const showHymnal = (hymnals?.items.length ?? 0) >= 2;
   const excludeRecent = hymns.exclude_recent && dateValid;
   const duplicates = duplicateSlots(hymns.slots);
+  const hiddenRecent = (selectedList ?? []).filter((h) => h.title.trim() !== "" && h.recent_use_on !== null).length;
 
   function notices(slot: Slot, reconciled: Reconciled | null): string[] {
     const out: string[] = [];
@@ -116,7 +128,25 @@ export function HymnsStep() {
         />
       ) : empty ? (
         <EmptyHymnal />
-      ) : null}
+      ) : hymnals === undefined || code === null || selected === null ? (
+        <ToolbarSkeleton />
+      ) : (
+        <HymnsToolbar>
+          <HymnalPicker
+            hymnals={hymnals}
+            selected={code}
+            stale={selected.stale}
+            storedCode={hymns.hymnal}
+            onChange={(next) => update((d) => setHymnal(d, next, hymnals.effective_hymnal))}
+          />
+          <ExcludeSwitch
+            on={hymns.exclude_recent}
+            hidden={hiddenRecent}
+            dateValid={dateValid}
+            onChange={(on) => update((d) => setExcludeRecent(d, on))}
+          />
+        </HymnsToolbar>
+      )}
       {SLOTS.map((slot) => {
         const pick = hymns.slots[slot];
         const reconciled = pick === null ? null : empty ? MISSING : reconcilePick(pick, lists.lists, code);
