@@ -2,7 +2,16 @@
  * Builders for API payloads in tests. Each call returns a fresh object;
  * `overrides` replace top-level fields (pass a whole `user` to change it).
  */
-import type { ChurchProfile, InviteAccepted, InvitePreview, Lectionary, Translations } from "@/lib/api/types";
+import type {
+  ChurchProfile,
+  Hymn,
+  Hymnals,
+  InviteAccepted,
+  InvitePreview,
+  Lectionary,
+  SuggestedHymn,
+  Translations,
+} from "@/lib/api/types";
 import type { Church, Me } from "@/lib/church";
 import { freshDraft, type DraftV1 } from "@/lib/draft/schema";
 
@@ -127,4 +136,45 @@ export function noReadings(date: string): Lectionary {
 /** A fake-API handler for `GET /lectionary/readings` that answers each date with `answer(date)`. */
 export function lectionaryRoute(answer: (date: string) => Lectionary = noReadings) {
   return (req: { path: string }) => answer(new URL(req.path, "http://localhost").searchParams.get("date") ?? "");
+}
+
+// --- slice 3b: hymns and hymnals ------------------------------------------------
+
+/** A readable, valid hymn id: `hymnId(403)` is "00000000-0000-4000-8000-000000000403". */
+export function hymnId(n: number): string {
+  return `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+}
+
+/** One `HymnOut` (slice 3a): #403 "Come, Thou Almighty King" in GG2013 unless overridden; the id follows the number. */
+export function hymn(overrides: Partial<Hymn> = {}): Hymn {
+  const number = overrides.number === undefined ? 403 : overrides.number;
+  return {
+    id: hymnId(number ?? 0),
+    hymnal: "GG2013",
+    title: "Come, Thou Almighty King",
+    number,
+    link: `https://hymnary.org/hymn/GG2013/${number ?? ""}`,
+    scripture_refs: null,
+    themes: [],
+    recent_use_on: null,
+    text_year: null,
+    hymnal_count: null,
+    newer_than_preferred: false,
+    ...overrides,
+  };
+}
+
+/** One `SuggestedHymnOut`: `hymn(overrides)` with `source` "ai" unless overridden. */
+export function suggested(overrides: Partial<SuggestedHymn> = {}): SuggestedHymn {
+  return { source: "ai", ...hymn(overrides), ...overrides };
+}
+
+/** `GET /hymnals` for Grace: GG2013 only (production, slice 3a record), no stored default. */
+export function hymnals(overrides: Partial<Hymnals> = {}): Hymnals {
+  return {
+    items: [{ code: "GG2013", hymn_count: 853, scripture_ref_count: 795 }],
+    default_hymnal: null,
+    effective_hymnal: "GG2013",
+    ...overrides,
+  };
 }
