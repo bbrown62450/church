@@ -2,16 +2,195 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-(Work in progress: this plan is being written. Sections below are filled in task by task.)
+**Goal:** Ship the service reviewer add-on as one PR (backend and frontend; owner answer 1). After it merges, a member on the Liturgy step taps **Review service** in the step's header: every switched-on card with text is read by the code checks and, when the AI is available, by an AI acting as a tough, fair liturgical editor. Short notes appear under each card (a tag chip, one sentence, a dismiss ×; at most 3, or "Looks good."), notes about several prayers appear in an **Across the service** box at the top, and when the AI part is missing the code notes still show with "Only quick checks ran. The full review isn't available right now.". An AI-written card with notes left offers **Revise with these notes**, which edits the draft to address them and keeps an Undo. Notes live in memory only and go when a card's text changes. The writer's default system prompt gets the reviewer spec's new season guidance (owner answer 2). Two new church-scoped routes (`POST /liturgy/review`, `POST /liturgy/revise`), no migration, no new variable, no change to the draft's shape; production Streamlit (https://liturgy-frozen.streamlit.app/, branch `streamlit-frozen`) is untouched.
 
-**Goal:** Ship the service reviewer add-on as one PR (backend and frontend): a "Review service" button on the Liturgy step that leaves short notes under each prayer and in an "Across the service" box, "Revise with these notes" on AI-written cards, the code checks, the AI review, and the writer's new season guidance.
+**Architecture:** Backend first (T1-T5), so the PR could still be split after T5. `liturgy_prompts.SEASON_GUIDANCE` replaces the old season sentences in `DEFAULT_SYSTEM_PROMPT` (T1). `review_checks.py` (pure) runs R's four code checks, reading book names only from `scripture_refs.BOOKS` and confirming each reference with `scripture_refs.parse_refs` (T2). `usecases/liturgy_review.py` holds `review_service` (code notes always; the church's merged system prompt, rubric and voice profile read in one session closed before the AI call; one `complete()` call in JSON mode inside a 75 s deadline; the `ai` bucket charged 1 through a `charge` callback only when the AI is called; tolerant parsing; code notes first) (T3) and `revise_section` (the writer's system prompt and voice, the section's checklist, the context, the draft and its notes; the section's slice 4 token budget and attempt timeout inside generation's 80 s deadline; the budget drops profile, sermon text, checklist, then answers 422) (T4). `api/routes/liturgy_review.py` holds the two thin routes; OpenAPI and the frontend types are regenerated (T5). On the client: the two calls with 100 s timeouts and the request bodies (T6); the notes' pure rules in `lib/liturgy/notes.ts` (T7); `LiturgyReviewProvider` beside 4b's generation provider in the builder shell, with the sermon loader moved to `lib/liturgy/sermon.ts` so all three requests share it (T8); the header button, status lines, notes and "Across the service" box (T9); Revise with Undo on the card (T10). Docs last (T11).
+
+**Tech Stack:** Python 3.11 (`.venv`), FastAPI 0.141.1, Pydantic 2.13.5, SQLAlchemy 2.1.1, openai 3.20.0 (`gpt-4.1-mini` on Railway), pytest; Next 16.3.6, React 19.2.8, TypeScript 5, Tailwind 4, Base UI (shadcn "base-nova"), TanStack Query 5, sonner, Vitest 3.2.7 with Testing Library; GitHub Actions (`backend`, `backend-postgres`, `frontend`, all required on `main`), Railway (API), Vercel (frontend), Supabase Postgres.
 
 **Source documents:**
-- Reviewer spec ("R"): `docs/superpowers/specs/2026-09-26-service-reviewer-design.md`.
-- Slice 4 spec ("S4"): `docs/superpowers/specs/2026-09-25-slice-4-liturgy-design.md`, "Amendment 2026-09-26: service reviewer", and its 4a and 4b notes.
-- Foundations ("F"): `docs/superpowers/specs/2026-09-25-migration-foundations-design.md`.
+- Reviewer spec ("R"): `docs/superpowers/specs/2026-09-26-service-reviewer-design.md` (decisions 1-7, User experience, the checks, Revise and its Budget, API, Writer: new season guidance, Testing, Dependencies).
+- Slice 4 spec ("S4"): `docs/superpowers/specs/2026-09-25-slice-4-liturgy-design.md`, "Amendment 2026-09-26: service reviewer" (UI hooks, Routes, Consistency with F, Revise input budget, Sermon text, Timeouts, Tenancy, New modules, Baseline change, Freeze contingency, Tests before and after, Testing and acceptance), and its notes from the 4a and 4b plans.
+- Foundations ("F §n"): `docs/superpowers/specs/2026-09-25-migration-foundations-design.md` (§1.1-§1.5, §1.8 with its 100 000 ms rows, §1.11, §2.2, §2.5, §2.8, §4.4, §4.5, §4.8, §4.9, §5.2, §5.5, §6.1 and its amendment of 2026-09-28, decisions D16 and D17, the Amendments table).
+- Related: `2026-09-25-service-rubric-design.md` (the checklists, `merge_rubric`, `format_checklist`), `2026-09-26-prayer-library-design.md` (the voice profile is optional; 6a builds the library, so until then every church has none and the Voice check is skipped).
+- Format models: `docs/superpowers/plans/2026-09-30-slice-4a-liturgy-backend.md` and `docs/superpowers/plans/2026-09-30-slice-4b-liturgy-step.md` (structure, directives, Build notes and review-fix lessons).
+- Production facts: `docs/ops-runbook.md` "Slice 4a record" and "Slice 4b record": `OPENAI_MODEL=gpt-4.1-mini`; a Prayers of the People in about 5 s and 5 sections in about 15 s; the owner's church (First Presbyterian Church) has a saved Benediction prompt only, so it uses the default system prompt, and T1 changes its future drafts.
+- Facts checked for this plan (tree `3957d45` = `origin/main`, slices 2a-4b merged and live, 2026-10-01):
+  - Backend `1183 passed, 11 skipped`; frontend `539 passed` in 75 files; typecheck and lint clean; Alembic head `0004_invites_reusable`; 4 runbook owner markers.
+  - `liturgy_prompts.DEFAULT_SYSTEM_PROMPT` holds the three old season sentences exactly as R quotes them ("..." in code, "…" in R's new sentence); no test quotes them (`grep` finds them only in `liturgy_prompts.py`); `streamlit_tests/test_settings_prompts_translation.py` compares with the constant.
+  - F §6.1 item 6 is not in effect (F §6.1 amendment of 2026-09-28; 4a clarification 2): there is no `generate_liturgy` wrapper and no `LEGACY_SYSTEM_PROMPT`, and this plan adds none (owner answer 2).
+  - `usecases/liturgy.py`: `GENERATE_BUDGET_S = 80.0` from the start of the usecase, `SectionSpec.timeout_seconds` (60 s for Prayers of the People), `charge(n)` called once before any AI call, `PROMPT_INVALID_MESSAGE`; `liturgy_prompts.build_prompt`/`build_messages`, `sermon_text_block`, `VOICE_PROFILE_INTRO`, `MAX_PROMPT_CHARS = 24_000`; `liturgy_config.SECTIONS_BY_KEY`, `max_completion_tokens` 1 500 or 4 000; `api/schemas.SermonText`; `api/ratelimit.consume(cost=)` and `rate_limit("ai")` (charged before body validation, as `/hymns/suggestions` shows); `integrations/openai_client.complete(messages, *, max_completion_tokens, json_mode=False, deadline=None, timeout_seconds=None)`, `FakeAI`, and the client's sentences `NOT_CONFIGURED_MESSAGE` ("AI isn't set up on this app yet."), `BUSY_MESSAGE`, `TIMEOUT_MESSAGE`, `UPSTREAM_MESSAGE`; `scripture_refs.BOOKS` (normalized names and aliases, no periods), `normalize_book_text`, `parse_refs` (with `PARSE_ALIASES`, which R does not use); `service_rubric.merge_rubric`, `format_checklist`; `prayer_library.read_library`, `MAX_PROFILE_CHARS`; `repos.churches.get_church_prompts`, `get_church_rubric_overrides`, `get_church` with `session=`.
+  - Frontend: `lib/liturgy/{cards,request,errors,generation,sections}.ts(x)`, `lib/queries/liturgy.ts` (`generateSection`), `lib/api/timeouts.ts` `ENDPOINT_TIMEOUTS` (the generate row's comment says the reviewer reuses 100 000), `components/builder/liturgy/{liturgy-step,section-card,ai-bar,use-still-working}.tsx`, `builder-shell.tsx` mounting `LiturgyGenerationProvider`; 4b's `UndoEntry`, `captureCard`/`staleVerdict` (text only, with the default rule), `useDraft().peek`, `reportAuthErrors`, `useStillWorking`, `PendingButton`; no `dialog` is needed.
+  - The build container reaches PyPI and the npm registry, not OpenAI, Railway or Supabase; no test needs the network.
+  - Every task's code in this plan was written and run by the planner in a throwaway worktree of `3957d45`, one commit per task, and each task's directives were generated from that commit, so the blocks are the code that ran. The plan was then replayed onto a fresh worktree of `3957d45` (see "Build notes", "Replay").
 
-Baselines checked on `3957d45` (2026-10-01): backend `1183 passed, 11 skipped`; frontend `539 passed` in 75 files.
+## Global Constraints
+
+"T<n>" means Task n of this plan.
+
+### Commands and process
+- Run commands from the repo root; the working directory resets between commands. Run the frontend as `(cd frontend && …)`. No foreground `sleep`, and never prove that something is absent by sleeping.
+- Backend: one file `.venv/bin/python -m pytest -q <file> 2>&1 | tail -2`; the suite `.venv/bin/python -m pytest -q | tail -1`. Frontend: one file `(cd frontend && npx vitest run <path> 2>&1 | grep -E "Tests ")`; the suite `(cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")`; then `(cd frontend && npm run typecheck >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`.
+- After a route or schema change, regenerate and commit both files with the route: `.venv/bin/python backend/scripts/export_openapi.py && (cd frontend && npm run gen:api)`. Never hand-edit either.
+- `node_modules` exists; after a container restart run `(cd frontend && npm ci)`. Turbopack refuses a symlinked `node_modules`, so `npm run build` runs in the real checkout (T12).
+- Branch: `claude/slice-2-plan-4q33le`, at `origin/main` `3957d45` plus this plan's commits (`WIP plan: service reviewer` commits, then `Plan: service reviewer (reviewer spec; owner answers 2026-10-01)`). Stage files by name; `.claude/` stays untracked.
+- `main` is protected (`backend`, `backend-postgres`, `frontend`, up to date). Merge only with `gh pr merge <N> --merge -R bbrown62450/church`, only on the owner's explicit yes.
+- Every commit message has a subject, a body, and, as its last paragraph (a separate `-m`), these two lines:
+  `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`
+  `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
+- TDD: write the failing test first and see it fail as quoted.
+- **Backup push after every task** (standing rule): the controller, not the task agent, runs `git push origin claude/slice-2-plan-4q33le` after each task's commit and review (never `--force`). A fix asked for by a review is a new commit, `Fix: <what> (Task <n> review)`. The container can restart and lose uncommitted work: commit as soon as a task's checks pass.
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1183 → 1213 passed, 11 → 11 skipped; frontend 539 → 562 in 75 → 78 files`.
+- New prose for the owner has no em dashes and no flattery, and leads with the point. Strings quoted from R or already approved keep their own punctuation ("Still working — this can take up to a minute.").
+- Ask the owner before any push to a PR, PR creation, marking ready, merging, or any production or settings action. Owner steps go one at a time, in plain words.
+
+### How the file directives below read
+Each file change is a bold directive followed by a fenced block (four backticks), applied in the order written:
+- **Create `path`:** the block is the whole file.
+- **Append to `path`:** the block is added at the end of the file.
+- **In `path`, replace:** the first block occurs exactly once in the file and is replaced by the block after **with:**.
+
+A directive that does not match exactly once is a stop: the tree is not what the plan expects. Find why before changing anything.
+
+### Baselines and counts
+- Starting baselines: backend **1183 passed, 11 skipped**; frontend **539 passed in 75 files**, typecheck and lint clean; Alembic head **`0004_invites_reusable`** (no new revision); runbook owner markers `grep -n '\[owner' docs/ops-runbook.md | grep -v 'An entry marked' | wc -l` = **4**. If any baseline differs, stop and ask.
+- Planned cumulative counts (each observed while planning and again in the replay). A backend delta is the number of new `def test_` functions; a frontend delta the number of new `it(` blocks. If a count drifts, stop and find why.
+
+  | After | Backend (delta) | Backend | Frontend (delta, files) | Frontend |
+  |---|---|---|---|---|
+  | T1 | +1 (`test_liturgy_prompts.py`) | 1184 passed, 11 skipped | 0 | 539 in 75 |
+  | T2 | +6 (`test_review_checks.py`, new) | 1190 passed, 11 skipped | 0 | 539 in 75 |
+  | T3 | +10 (`test_usecase_liturgy_review.py`, new) | 1200 passed, 11 skipped | 0 | 539 in 75 |
+  | T4 | +5 (`test_usecase_liturgy_revise.py`, new) | 1205 passed, 11 skipped | 0 | 539 in 75 |
+  | T5 | +8 (`test_api_liturgy_review.py`, new; one map in `test_api_app.py` edited) | 1213 passed, 11 skipped | 0 (generated types only) | 539 in 75 |
+  | T6 | 0 | 1213 passed, 11 skipped | +3 (`request.test.ts` +2, `queries/liturgy.test.tsx` +1) | 542 in 75 |
+  | T7 | 0 | 1213 passed, 11 skipped | +4 (`lib/liturgy/notes.test.ts`, new; +1 file) | 546 in 76 |
+  | T8 | 0 | 1213 passed, 11 skipped | +5 (`lib/liturgy/review.test.tsx`, new; +1 file) | 551 in 77 |
+  | T9 | 0 | 1213 passed, 11 skipped | +6 (`components/builder/liturgy/review-step.test.tsx`, new; +1 file) | 557 in 78 |
+  | T10 | 0 | 1213 passed, 11 skipped | +5 (`review-step.test.tsx` +4, `lib/liturgy/errors.test.ts` +1) | 562 in 78 |
+  | T11 | 0 (one assertion in `test_slice1_docs.py` edited) | 1213 passed, 11 skipped | 0 | 562 in 78 |
+  | T12, T13 | 0 | 1213 passed, 11 skipped | 0 | 562 in 78 |
+
+- CI `backend-postgres` stays at `11 passed, 1213 deselected` (no Postgres test is added).
+- Backend table-driven tests loop over their cases inside one function, so counts stay stable when cases are added.
+- The DOM tests fake only `Date` (`DRAFT_NOW`) and wait on the app's real timers; one test fakes `setTimeout` too (the 8 s "Still working" line) and says why. `review-step.test.tsx` takes about 6 s.
+
+### Layering, logging and code rules
+- `review_checks.py` and `usecases/liturgy_review.py` import no FastAPI, Starlette or Streamlit (`test_no_streamlit_in_core.py` grows in T2 and T3). Routes are plain `def`, call one usecase with `church.id`, and contain no SQL and no `try`.
+- `usecases.liturgy_review` logs one INFO line per call: `liturgy.review church=<id> cards=<n> code_notes=<k> ai=<0|1> [rubric=default|custom sermon=yes|no voice=profile|none dropped=profile,sermon,cards|too_long|-] notes=<n> ai_status=<status> duration_ms=<ms> outcome=<ok|code>` and `liturgy.revise church=<id> section=<key> notes=<n> [rubric=… sermon=… voice=… dropped=…] duration_ms=<ms> outcome=<ok|code>`. Prompts, cards, notes and answers are logged at DEBUG only; an unexpected AI exception with its stack; an unusable answer with its length. Never prayer text, a note, the occasion or the sermon text at INFO (F §2.5).
+- Frontend (F §4): pages and components never call `apiFetch` (the calls live in `lib/queries/liturgy.ts`); notes never reach the draft or `lib/storage.ts`; card text, notes and server messages render as React text only; primary buttons `size="touch"` (44 px), icon buttons `size-11` below `md`; rows `flex-wrap`, `min-w-0`, `wrap-anywhere` so nothing widens the page at 375 px; Base UI's `focusableWhenDisabled` for a button that must keep focus.
+
+### Messages (verbatim)
+- From R: "Review service"; "Cancel"; "Still working" is the app's approved "Still working — this can take up to a minute."; the tags "Checklist", "Rules", "Voice", "Read aloud", "Theology", "Repetition"; "Looks good."; "Across the service"; "Revise with these notes"; "Only quick checks ran. The full review isn't available right now."; the code notes `Stock phrase "{match}". Say it more naturally.`, `Names Ordinary Time. Leave the season unnamed.`, `Cites {match}. Draw on the reading's themes without naming it.`, `Several prayers open with "{words}".`; revise's 422 "This prayer is too long to revise."; the revise instruction "Revise this draft to address these notes only. Keep everything that works. Keep the same form (Leader/People lines where present) and about the same length. Output only the revised text."; the role "a tough, fair liturgical editor for a moderate Reformed (PC(USA)) congregation"; the new season sentence (T1).
+- New in this plan (owner-visible, clarification 22): "Reviewing…"; "Revising…"; "Revised with these notes." with "Undo"; toasts "The service changed, so the revised draft for {Label} was discarded." and "Kept your edits, so the revised draft for {Label} was not used."; read out only: "Review finished. No notes.", "Review finished. 1 note.", "Review finished. {n} notes."; names for assistive technology: "Cancel review", "Dismiss note: {note}", "Cancel revising {Label}", "Notes on {Label}", "Notes across the service".
+- Reused: revise's AI errors are the OpenAI client's sentences ("AI isn't set up on this app yet.", "The AI service is busy. Try again in a minute.", "The AI took too long to answer. Try again.", "The AI service had a problem. Try again."); a failed review shows the app's usual sentence ("Something went wrong. (Ref: …)", "This is taking too long. Try again.", "Can't reach the server. Check your connection and try again."); a 429 on revise "Too many requests — try again in N s.".
+
+### Codes, statuses, buckets and timeouts
+- No new error code. `ai_status` is a response field (`ok`, `not_configured`, `busy`, `timeout`, `rate_limited`, `error`), never in `ERROR_CODES` (S4; F §1.5).
+- `error_responses`: review 401, 403, 422, 503; revise 401, 403, 422, 429, 502, 503, 504 (`test_api_app.py`).
+- `ai` bucket (40 per 10 min per user, 400 per day per church): review charges 1 through `charge` just before its AI call and never otherwise (AI off, a prompt it cannot fit, a 422); an empty bucket gives `ai_status: "rate_limited"` with the code notes, never a 429. Revise has the `rate_limit("ai")` dependency, cost 1, charged before body validation (a 422 costs a token, as on `/hymns/suggestions`).
+- Timeouts (owner answer 3; F §1.8): the client waits 100 000 ms for each (`ENDPOINT_TIMEOUTS`); the timer starts after `getAccessToken()`, so the margin covers the server's sign-in key fetch (at most 5 s), latency and the proxy. Review: one `complete()` call with `deadline = start + 75 s` (`REVIEW_BUDGET_S`); with a deadline the client waits at most min(15 s, remaining − 5 s) for a slot and caps each attempt at the time left, so only the last connect (5 s) runs past: at most about 80 s. Revise: `deadline = start + 80 s` (`GENERATE_BUDGET_S`, reused) and the section's attempt timeout (30 s, or 60 s for Prayers of the People): at most 85 s, the 4a arithmetic. Both stay inside 100 s.
+- Budgets: the prompt within `MAX_PROMPT_CHARS` (24 000); each card cut to 4 000 for review (never below 200 when the budget cuts further); a note cut to 240; at most 3 notes per card and 3 across the service; the sermon text cut to 2 000 (`sermon_text_block`); the voice profile stripped and cut to 2 000; review `max_completion_tokens` 2 000 in JSON mode; revise the section's 1 500 or 4 000; an answer over 20 000 characters is `ai_upstream_error`.
+- Request limits (R API): review `occasion` ≤ 300, `scriptures` ≤ 20 × ≤ 200, `sermon_text` `{ref ≤ 200, text ≤ 20 000}`, `cards` 1-8 with one per section, `origin` `ai` | `typed` | `archive` | `default`, `text` ≤ 20 000; revise `section`, `text` ≤ 20 000, `notes` 1-3 × ≤ 240, the same context; `extra="forbid"` everywhere.
+
+## Owner decisions
+
+1. **Standing permission** for safety and reliability fixes with no owner-visible change (carried from slices 2-4). Each use is a numbered clarification.
+2. **Production Streamlit** is https://liturgy-frozen.streamlit.app/ (branch `streamlit-frozen`), frozen; merges never reach it. F §6.1 item 6's contingency is off (F §6.1 amendment of 2026-09-28), so nothing here keeps Streamlit working from `main`.
+3. **`main` is branch-protected** (`backend`, `backend-postgres`, `frontend`; up to date). Railway keeps its Pre-deploy Command and Healthcheck Path; the pre-deploy is a no-op at head `0004`.
+4. **Reviewer decisions 1-7** (Beau, 2026-09-26, R): notes for you, never automatic rewrites; one "Review service" button for every card; review everything, typed text included; Revise only on AI cards, editing the draft, never typed text; the six checks; season language judged by feel; new app only. **D16, D17** (F): custom elements get no AI Generate; R also leaves custom elements, hymns and readings out of the review.
+5. **Production:** frontend https://worship-service-builder.vercel.app (Vercel), API https://church-production-74ca.up.railway.app (Railway), Supabase project `worship-staging`.
+
+### Owner answers (2026-10-01, "all recommended", binding)
+1. **One PR** for the whole add-on, backend and frontend. Tasks run backend first (T1-T5), then frontend (T6-T10), so it could still be split after T5 if needed.
+2. **The writer's new season guidance ships with the reviewer.** T1 replaces the old sentences in `liturgy_prompts.DEFAULT_SYSTEM_PROMPT` with R's new ones exactly; the tests compare with `DEFAULT_SYSTEM_PROMPT`/`default_prompts()` and T1 adds the test that the constant has the new sentence and none of the old (S4 "Tests before and after"). The freeze contingency is off: no `LEGACY_SYSTEM_PROMPT`, no wrapper; `streamlit-frozen` keeps the old wording. Owner-visible: new AI drafts will sound slightly different; churches with a saved system prompt keep theirs.
+3. **Client timeouts** for `POST /liturgy/review` and `POST /liturgy/revise` are 100 000 ms (`ENDPOINT_TIMEOUTS`), matching 4b's Generate, with an F §1.8 amendment row (T11). The server deadline stays 75 s for review (R); revise uses the section's slice 4 budgets and reuses 4a's 80 s deadline from the start of the usecase, which keeps its worst case at 85 s (Global Constraints, "Codes, statuses, buckets and timeouts").
+4. **Testing:** automated tests, then a guided owner phone check one step at a time after the merge (Review service, a note on a prayer, dismissing a note, Revise with Undo on an AI card, no Revise on a typed card, notes clearing when typing, the "Across the service" box, the quick-checks-only line if it can be shown) and a quick desktop look (T13); then a records PR. Also an owner Console check of `POST /liturgy/review`, to time it (T13).
+- **Standing rules:** backup pushes to the working branch are the controller's; every other outward action asks first; production Streamlit untouched.
+
+## Spec clarifications
+
+The code and F win over R and S4, and the owner's answers over all three. **[owner-visible]** items are put to the owner in "Questions for the owner" at the end (each is written as recommended; none blocks the build); the rest are owner decision 1 or plain readings.
+
+1. **One PR, backend first (owner answer 1).** T1-T5 are the backend and leave the frontend at 539 tests (only the generated types change); T6-T10 the screen; T11 the docs. Split after T5 if the owner asks: the backend alone is safe to ship (no page calls the routes), but T1's new season wording would then reach every new AI draft before the reviewer does.
+2. **[owner-visible] The writer's new season guidance (owner answer 2).** T1 puts R's sentence into `DEFAULT_SYSTEM_PROMPT` exactly as R gives it, with R's "…" (the old sentences in code use "..."), as one constant, `SEASON_GUIDANCE`, which T3's review prompt quotes so the writer and the reviewer follow one rule. The freeze contingency is confirmed off (F §6.1 amendment of 2026-09-28; 4a clarification 2), so `LEGACY_SYSTEM_PROMPT`, `legacy_default_prompts()` and the wrapper smoke test of S4's contingency paragraph are not built; `streamlit-frozen` keeps the old wording. Owner-visible: every new AI draft for a church without a saved system prompt may now name the season or festival, and may say "Easter" or "Christmas" more than once; canned phrases and naming Ordinary Time stay ruled out. The owner's church has a saved Benediction prompt only (runbook, slice 4a record), so its drafts change too. A church whose admin saved its own system prompt keeps it (overrides are stored whole).
+3. **[owner-visible] "On this … Sunday"** reads as "on this", one to four words, then "Sunday" ("On this Third Sunday", "on this twenty-first Sunday"); a plain "on this Sunday" is not a stock phrase. Each stock phrase is quoted as written and listed in the order it appears.
+4. **[owner-visible] Ordinary Time is one point.** "in this ordinary time" gives the stock-phrase note only; "Names Ordinary Time. Leave the season unnamed." appears once per card when Ordinary Time is named anywhere else.
+5. **[owner-visible] Scripture references.** The pattern is built from `scripture_refs.BOOKS` only (every normalized name and alias, longest first, whole words), as R says ("no second list"), so slice 3's `PARSE_ALIASES` are not used and "there is 1 God" is never Isaiah. An abbreviation may end with a period ("1 Sam. 3:10"; `BOOKS` stores aliases without periods), and a number may touch its book ("1Sam 3"). The book word must start with a capital letter, so "we mark 3 years" is no reference (R: "no false hit on 'Mark' as a verb"). `parse_refs` must read the book and chapter as a passage, so "Psalm 200" is none and "Psalm 1" never reads as "Psalm 119". The note quotes the reference as written ("Cites 1 Sam 3:10. …").
+6. **The review prompt's wording.** R lists its parts but not its words; T3 writes them (`ROLE`, `RULES_INTRO`, `SEASON_INTRO`, `CHECKS`, `CHECKLISTS_INTRO`, `VOICE_INTRO`, `NO_VOICE`, `CONTRACT`, `ORIGIN_LABELS`, `CODE_NOTES_INTRO`). The system message has the role, the church's merged system prompt, the season rule, the six checks, the present sections' checklists and the voice profile (or "skip the Voice check"), and R's output contract; the user message has the occasion, the readings, the sermon block (`sermon_text_block`, the writer's, cut to 2 000), the cards in section order labelled `[key] Label (origin in words)`, and the code notes not to repeat. Owner decision 1: the members see only the notes.
+7. **The review reads the church's settings only when the AI is configured.** With the AI off nothing is read and the code notes come back with `not_configured`; whenever it reads, it reads the prompts, rubric and library in one session closed before the AI call (R, S4 "Tenancy").
+8. **When the church's own text is too long to review.** After R's order (the voice profile, the sermon text, then the longest card, cut further), a card is never cut below 200 characters. If the prompt is still over 24 000 characters (only possible with a system prompt over 8 000 saved in Streamlit, or a rubric near its maximum on every section), the AI is skipped, nothing is charged, and the answer is the code notes with `ai_status: "error"` (logged `dropped=too_long`). R says the review never answers `prompt_invalid`; it does not say what to do then. Owner decision 1.
+9. **Voice notes need a profile.** With no voice profile (every church until 6a), or one the budget dropped, the prompt says to skip the Voice check and any `voice` note the AI sends anyway is dropped.
+10. **Tolerant parsing, read precisely.** A tag is read loosely ("Read aloud", "read-aloud" are `read_aloud`); a note's whitespace collapses to single spaces; a blank note, a note that is not text and an unknown tag or section are dropped; an answer that is not a JSON object (including invalid JSON, a list, or JSON nested too deeply to parse) is `error`; an object without `cards` or `service_notes` lists is `ok` with no AI notes.
+11. **The merge, read precisely.** Each code note keeps the text it quotes (`Note.match`: the stock phrase, "Ordinary Time", the reference or the opening words); an AI note containing it, in any case, is a repeat and is dropped. "Across the service" works the same way against the code's repetition notes. Code notes come first, so when a card has more than 3 code notes the first 3 in R's table order are kept.
+12. **Server deadlines (owner answer 3).** Review: one call inside 75 s from the start of the usecase (`REVIEW_BUDGET_S`), at most about 80 s with the last connect. Revise reuses `usecases.liturgy.GENERATE_BUDGET_S` (80 s from the start of the usecase) and the section's attempt timeout (60 s for Prayers of the People), so the 4a arithmetic holds: at most 85 s. Both fit the 100 s client timeout. T11 adds the F §1.8 row (F already lists 100 000 for both routes since the 4b plan).
+13. **[owner-visible] Revise's error sentences.** Revise raises the AI errors with the OpenAI client's own sentences, which the card shows: 503 `ai_not_configured` "AI isn't set up on this app yet." (generation's per-section text, "AI not configured. Type this section yourself.", does not fit a revision), 503 `ai_busy`, 504 `ai_timeout`, 502 `ai_upstream_error` (also for an empty answer, one over 20 000 characters or an unexpected error). Its 422 `prompt_invalid` "This prayer is too long to revise." has no `fields` (it is not a field's fault).
+14. **The routes, read precisely.** Request models sit at the top of `api/routes/liturgy_review.py` (R); `cards` must name each section once (one 422 on `cards`); a blank card text is accepted (the screen never sends one); the origin `empty` is not accepted (a card with text is never "empty"; the client sends "typed" if one ever were). OpenAPI names: `ReviewIn`, `ReviewCardIn`, `ReviewOut`, `CardNotesOut`, `NoteOut`, `ReviseIn`, `ReviseOut`. Neither route is user-scoped, so `test_route_guards.py` is unchanged.
+15. **Charging.** Review has no rate-limit dependency: the usecase calls the route's `charge(1)` just before the AI call, and an empty bucket is `ai_status: "rate_limited"` in a 200. Revise has `rate_limit("ai")` (cost 1), which FastAPI runs before validating the body, so a 422 costs a token, as on `/hymns/suggestions` (S4: "The `rate_limit("ai")` dependency has already charged the token").
+16. **Tenancy tests.** Both routes get `assert_church_isolated`, and a test puts another church's system prompt, rubric point and voice profile in its settings and checks that none of them reaches the AI for either route.
+17. **Where the screen's state lives.** The notes, the running review and the revisions are in a sibling provider, `LiturgyReviewProvider` (`lib/liturgy/review.tsx`), mounted inside 4b's `LiturgyGenerationProvider` (S4: "or a sibling provider"). The sermon loader moves unchanged from `generation.tsx` to `lib/liturgy/sermon.ts` (`useSermonLoader`) so review and revise send generation's resolved sermon text (S4 "Sermon text": WEB for ESV, one bounded fetch through the passage cache); 4b's generation tests pass unchanged. The two calls are plain async functions beside `generateSection`, and the bodies reuse generation's occasion and readings (`readingsContext`).
+18. **[owner-visible] When notes go.** A card's notes go as soon as its text or origin changes, whatever changed it: typing, a Regenerate or Revise result, Clear text, "Use church default" (even with the same words, since the origin changes), Undo, or another tab. A Regenerate or Revise that fails or is cancelled leaves the text, so the notes stay (R lists Regenerate among what clears notes; here they go when its new draft lands). Undo of a Revise does not bring the notes back. A card switched off hides its notes; switched on again with the same text, they show again. The check runs on every draft change, during render, so stale notes never flash.
+19. **[owner-visible] "Looks good."** shows only for a card that was reviewed and came back with no notes; a card whose notes were all dismissed shows nothing; a card not reviewed (empty, off, or changed since) shows nothing.
+20. **[owner-visible] A review's life.** The answer replaces every note from the last review (a card changed while it ran gets none, by S4's stale rule on text and origin). Cancel stops the wait and keeps the notes already shown, as does a review that fails, which shows its message under the header (the app's usual sentences); a 401 or a lost church shows nothing (the app signs out or falls back). "New service" cancels a running review and every revision silently and clears every note.
+21. **[owner-visible] "Across the service" stays** until the next review, its own dismiss or New service; editing one card does not clear it, since its notes are about several prayers.
+22. **[owner-visible] New copy not in R.** Visible: "Reviewing…" (beside the spinner); "Revising…" (on the busy Revise button); "Revised with these notes." with **Undo** (the Undo line after a Revise); the toasts "The service changed, so the revised draft for {Label} was discarded." and "Kept your edits, so the revised draft for {Label} was not used." (a revision whose card changed meanwhile; no em dash, unlike 4b's approved generation toasts); a check mark before "Looks good.". Read out only: "Review finished. No notes.", "Review finished. 1 note.", "Review finished. {n} notes.". Names for assistive technology: "Cancel review" (the button shows "Cancel"), "Dismiss note: {the note}", "Cancel revising {Label}", "Notes on {Label}", "Notes across the service". Reused, already approved: "Still working — this can take up to a minute.".
+23. **[owner-visible] Revise's rules.** The button shows on an AI card with a note left, and not while the AI is writing that card. While it runs the card is read-only and its Regenerate and ⋯ menu are off; the notes stay until the revised text lands. A failure shows under the notes and Revise stays, to try again. Revise is offered even when the review's AI part was missing (quick checks only); with the AI off it answers "AI isn't set up on this app yet.". A revision's result replaces the card only while it still holds what was sent and the service is the same; otherwise nothing changes and a toast says why.
+24. **[owner-visible] Where things sit.** "Review service" is at the right of the "Liturgy" heading (under it on a narrow phone); the spinner line, a failed review's message and the quick-checks line come under the header; the "Across the service" box comes next, above the sermon title; a card's notes come under its text and hint, before its Undo line and any AI error.
+25. **Focus and screen readers (F §4.9; owner decision 1).** The Review button is one button (Base UI `focusableWhenDisabled`), so focus stays on it as it turns into Cancel and back. Dismissing a note moves focus to the next note's ×, else the previous one's, else the card's heading (the Review button when the "Across the service" box goes). Revise moves focus to its Cancel; when the revision ends focus goes to the Undo line's button (revised), the Revise button (failed or cancelled) or the heading. A card's notes describe its textarea (`aria-describedby`); the end of a review is announced politely; touch targets are 44 px below `md`; chips and sentences wrap at 375 px.
+26. **[owner-visible] 100 s on the client (owner answer 3).** `ENDPOINT_TIMEOUTS` gains `"POST /liturgy/review": 100_000` and `"POST /liturgy/revise": 100_000` (R and S4 said 90 000; F's 4b row already said 100 000). A review or revision that takes longer shows "This is taking too long. Try again.".
+27. **Revise's HTTP errors on the card.** `cardErrorFrom` (4b) showed "Something went wrong. (Ref: …)" for any 5xx it did not know; `ai_busy`, `ai_timeout` and `ai_upstream_error` now show the server's sentence, as `ai_not_configured` and `prompt_invalid` already did. Generation is unaffected (it gets those codes inside a 200). Owner decision 1.
+28. **Never reviewed:** custom elements, hymns and readings (R "Out of scope"; F D17), and the sermon title.
+29. **Where the tests live.** S4 says the add-on's cases join slice 4's test files (`generation`/card tests, `cards.test.ts`). The rules live in new modules, so their tests do too: `lib/liturgy/notes.test.ts` (stale rule, clearing, dismiss, "Looks good.", Revise eligibility), `lib/liturgy/review.test.tsx` (the provider and the sermon text), `components/builder/liturgy/review-step.test.tsx` (R's DOM list); `cards.ts` is unchanged. "Spec coverage" maps each R and S4 case to its test.
+30. **The manual check** is appended as "## Service reviewer" to `docs/manual-verification.md` (R Testing), with the owner's guided steps marked "(owner, after the reviewer)"; `test_slice1_docs.py`'s heading pin grows by that heading (one assertion edited, no new test).
+31. **The owner's checks after the merge (owner answer 4).** A guided phone check of seven short steps, one at a time, a quick look on a computer, and an optional Console call of `POST /liturgy/review` that times a real review (T13); then a records PR with a "Service reviewer record".
+
+### Risks carried into the plan
+- **The AI review's quality and timing are unmeasured.** The container cannot reach OpenAI; the tests use `FakeAI`. A full service is a prompt of up to 24 000 characters and an answer of up to 2 000 tokens in JSON mode; `gpt-4.1-mini` wrote a 2 820-character Prayers of the People in about 5 s, so a review is expected in 10-30 s, inside the 75 s deadline. T13 Step 6 times a real one. Invalid JSON or a slow answer still leaves the code notes.
+- **The new season wording changes every new AI draft** for churches without a saved system prompt, the owner's included (clarification 2). T13's phone check generates one section to see it.
+- **Code-check false hits.** A capitalized book name followed by a number in prose ("Song 2", "Job 3") reads as a reference; the member dismisses it. The capital-letter rule removes the common lower-case cases (clarification 5).
+- **Cost.** One `ai` token per review that reaches the AI and one per revision, inside the existing 40 per 10 minutes per user and 400 per day per church, and the owner's $15 monthly OpenAI cap.
+
+## File Structure
+
+**Created**
+
+| Path | Responsibility | Task |
+|---|---|---|
+| `docs/superpowers/plans/2026-10-01-service-reviewer.md` | this plan | 0 |
+| `backend/review_checks.py` (+ `tests/test_review_checks.py`) | `Note`, `TAGS`, `check_card`, `check_openings`, `opening_words`, `scripture_book_keys` | T2 |
+| `backend/usecases/liturgy_review.py` (+ `tests/test_usecase_liturgy_review.py`, `tests/test_usecase_liturgy_revise.py`) | `review_service` and its prompt, parsing and merge (T3); `revise_section` and its prompt (T4) | T3, T4 |
+| `backend/api/routes/liturgy_review.py` (+ `tests/test_api_liturgy_review.py`) | the request and response models; `POST /liturgy/review`, `POST /liturgy/revise` | T5 |
+| `frontend/src/lib/liturgy/notes.ts` (+ `.test.ts`) | the notes' rules | T7 |
+| `frontend/src/lib/liturgy/sermon.ts` | `useSermonLoader`, `SERMON_WAIT_MS` (moved from `generation.tsx`) | T8 |
+| `frontend/src/lib/liturgy/review.tsx` (+ `.test.tsx`) | `LiturgyReviewProvider`, `useLiturgyReview`, `reviewDoneMessage` | T8 |
+| `frontend/src/components/builder/liturgy/review-bar.tsx` | `ReviewButton`, `ReviewStatus`, `REVIEW_BUTTON_ID` | T9 |
+| `frontend/src/components/builder/liturgy/card-notes.tsx` | `CardNotes` (T10 adds Revise), `ServiceNotes`, `NoteList`, `notesId`, `reviseId` | T9, T10 |
+| `frontend/src/components/builder/liturgy/review-step.test.tsx` | R's DOM cases | T9, T10 |
+
+**Modified**
+
+| Path | Change | Task |
+|---|---|---|
+| `backend/liturgy_prompts.py` (+ `tests/test_liturgy_prompts.py`) | `SEASON_GUIDANCE` in `DEFAULT_SYSTEM_PROMPT` | T1 |
+| `backend/tests/test_no_streamlit_in_core.py` | `review_checks`, `usecases.liturgy_review` | T2, T3 |
+| `backend/api/main.py`, `backend/tests/test_api_app.py` | mount the router; its error documentation | T5 |
+| `frontend/src/lib/api/openapi.json`, `frontend/src/lib/api/schema.d.ts` | regenerated | T5 |
+| `frontend/src/lib/api/types.ts`, `lib/api/timeouts.ts`, `lib/queries/liturgy.ts` (+ test), `lib/liturgy/request.ts` (+ test), `src/test/fixtures/index.ts` | the names, the 100 s rows, the calls, the bodies, the fixtures | T6 |
+| `frontend/src/lib/liturgy/generation.tsx`, `components/builder/builder-shell.tsx` | the shared sermon loader, the "revised" Undo; the provider mounted | T8 |
+| `frontend/src/components/builder/liturgy/section-card.tsx` | the "revised" Undo line (T8); the notes (T9); Revise's read-only state and focus (T10) | T8, T9, T10 |
+| `frontend/src/components/builder/liturgy/liturgy-step.tsx` | the header's button, the status lines, the "Across the service" box | T9 |
+| `frontend/src/lib/liturgy/errors.ts` (+ test) | revise's HTTP AI codes show the server's sentence | T10 |
+| `docs/superpowers/specs/2026-09-25-migration-foundations-design.md`, `…/2026-09-25-slice-4-liturgy-design.md`, `…/2026-09-26-service-reviewer-design.md`, `docs/manual-verification.md`, `backend/tests/test_slice1_docs.py` | the F §1.8 row, the plan notes, "## Service reviewer", its heading pin | T11 |
+| `docs/ops-runbook.md` | "Service reviewer record" (the records PR after the merge) | T13 |
+
+**Counts:** 16 created (this plan, 7 backend files and 8 frontend files) and 25 modified (6 backend files, 15 frontend files and 4 docs) in the PR, 41 paths in all; T12 Step 7 checks the exact list. The runbook's record is its own records PR (T13).
+
+**Untouched:** migrations, `db/models.py`, `worship_service.py`, `app.py`, `streamlit_views/*`, `streamlit_tests/*`, `requirements*.txt`, `frontend/package*.json`, CI workflows, `lib/draft/*` (no `DraftV1` change), `components/ui/*`, the AI bar and 4b's other liturgy components.
+
+**Task order and review batches:** T1 → T11 each end in one commit, a review and a backup push; T12 verifies the branch, opens the draft PR (owner's yes) and marks it ready (owner's yes); T13 merges (owner's yes), runs the owner's checks and writes the record. The controller reviews in three batches:
+- **Batch A (T1-T5):** the backend (season guidance, code checks, the AI review, Revise, the routes).
+- **Batch B (T6-T8):** the client's calls and bodies, the notes' rules, the provider.
+- **Batch C (T9-T11):** the screen and the docs.
 
 ---
 
@@ -69,7 +248,7 @@ def test_the_default_system_prompt_has_the_new_season_guidance_and_none_of_the_o
 .venv/bin/python -m pytest -q backend/tests/test_liturgy_prompts.py 2>&1 | tail -2
 ```
 
-**Expected:** `FAILED backend/tests/test_liturgy_prompts.py::test_the_default_system_prompt_has_the_new_season_guidance_and_none_of_the_old - assert "Let the season's themes ...` (the new sentence is not in the prompt yet), then `1 failed, 24 passed in <t>s`.
+**Expected:** `FAILED backend/tests/test_liturgy_prompts.py::test_the_default_system_prompt_has_the_new_season_guidance_and_none_of_the_old` (the new sentence is not in the prompt yet), then `1 failed, 24 passed in <t>s`.
 
 - [ ] **Step 3 (agent): Replace the sentences**
 
@@ -119,7 +298,7 @@ grep -c "do not name or refer to the liturgical season" backend/liturgy_prompts.
 .venv/bin/python -m pytest -q | tail -1
 ```
 
-**Expected:** `<n> passed in <t>s` with no failure (the Streamlit test compares with the constant, so it follows the new text); `0`; `1184 passed, 11 skipped in <t>s`.
+**Expected:** `28 passed in <t>s` (the Streamlit test compares with the constant, so it follows the new text); `0`; `1184 passed, 11 skipped in <t>s`.
 
 - [ ] **Step 5 (agent): Commit**
 
@@ -297,7 +476,7 @@ def test_repeated_openings_across_cards_go_to_the_service_box():
 .venv/bin/python -m pytest -q backend/tests/test_review_checks.py 2>&1 | tail -2
 ```
 
-**Expected:** `ERROR backend/tests/test_review_checks.py`, then `1 error in <t>s` (collection stops at `ModuleNotFoundError: No module named 'review_checks'`).
+**Expected:** `!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!`, then `1 error in <t>s` (collection stops at `ModuleNotFoundError: No module named 'review_checks'`).
 
 - [ ] **Step 3 (agent): Write the module**
 
@@ -797,7 +976,7 @@ def test_the_info_line_carries_no_prayer_text_or_notes(church, caplog):
 .venv/bin/python -m pytest -q backend/tests/test_usecase_liturgy_review.py 2>&1 | tail -2
 ```
 
-**Expected:** `ERROR backend/tests/test_usecase_liturgy_review.py`, then `1 error in <t>s` (`ImportError: cannot import name 'liturgy_review' from 'usecases'`).
+**Expected:** `!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!`, then `1 error in <t>s` (collection stops at `ImportError: cannot import name 'liturgy_review' from 'usecases'`).
 
 - [ ] **Step 3 (agent): Write the usecase**
 
@@ -1332,7 +1511,7 @@ def test_the_info_line_carries_no_prayer_text_or_notes(church, caplog):
 .venv/bin/python -m pytest -q backend/tests/test_usecase_liturgy_revise.py 2>&1 | tail -2
 ```
 
-**Expected:** `FAILED backend/tests/test_usecase_liturgy_revise.py::test_the_info_line_carries_no_prayer_text_or_notes - AttributeError: module 'usecases.liturgy_review' has no attribute 'revise_section'`, then `5 failed in <t>s`.
+**Expected:** `FAILED backend/tests/test_usecase_liturgy_revise.py::test_the_info_line_carries_no_prayer_text_or_notes`, then `5 failed in <t>s` (each test stops at `AttributeError: module 'usecases.liturgy_review' has no attribute 'revise_section'`).
 
 - [ ] **Step 3 (agent): Add Revise to the module**
 
@@ -1781,7 +1960,7 @@ def test_info_logs_carry_no_prayer_text_or_notes(client, church, caplog):
 .venv/bin/python -m pytest -q backend/tests/test_api_liturgy_review.py backend/tests/test_api_app.py 2>&1 | tail -2
 ```
 
-**Expected:** `FAILED backend/tests/test_api_liturgy_review.py::test_info_logs_carry_no_prayer_text_or_notes - AssertionError: assert 404 == 200`, then `9 failed, <n> passed in <t>s` (the eight route tests get 404 or 405, and the error-documentation test finds no `/liturgy/review` path).
+**Expected:** `FAILED backend/tests/test_api_app.py::test_routes_document_the_error_body - K...`, then `9 failed, 25 passed, 1 skipped in <t>s` (the eight route tests get 404, and the error-documentation test finds no `/liturgy/review` path: a `KeyError`).
 
 - [ ] **Step 3 (agent): Write the routes and mount them**
 
@@ -1953,7 +2132,7 @@ git status --short -- frontend backend
 (cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
 ```
 
-**Expected:** `Wrote <repo>/frontend/src/lib/api/openapi.json` and `typecheck 0`; ` M backend/api/main.py`, ` M backend/tests/test_api_app.py`, ` M frontend/src/lib/api/openapi.json`, ` M frontend/src/lib/api/schema.d.ts`, `?? backend/api/routes/liturgy_review.py`, `?? backend/tests/test_api_liturgy_review.py`; `<n> passed in <t>s` with no failure; `1213 passed, 11 skipped in <t>s`; ` Test Files  75 passed (75)` and `      Tests  539 passed (539)` (generated types only).
+**Expected:** `Wrote <repo>/frontend/src/lib/api/openapi.json` and `typecheck 0`; ` M backend/api/main.py`, ` M backend/tests/test_api_app.py`, ` M frontend/src/lib/api/openapi.json`, ` M frontend/src/lib/api/schema.d.ts`, `?? backend/api/routes/liturgy_review.py`, `?? backend/tests/test_api_liturgy_review.py`; `45 passed, 1 skipped in <t>s`; `1213 passed, 11 skipped in <t>s`; ` Test Files  75 passed (75)` and `      Tests  539 passed (539)` (generated types only).
 
 - [ ] **Step 5 (agent): Commit**
 
@@ -2205,7 +2384,7 @@ import { generateSection, reviewService, reviseSection, useLiturgyConfig } from 
 (cd frontend && npx vitest run src/lib/liturgy/request.test.ts src/lib/queries/liturgy.test.tsx 2>&1 | grep -E "^ +(✓|×)|Tests ")
 ```
 
-**Expected:** @@RED6@@
+**Expected:** 8 lines starting `✓` (4b's tests) and three starting `×`: `buildReviewRequest and buildReviseRequest (the service reviewer, R API) > sends every switched-on card with text, in section order, with its origin, and generation's context`, `… > sends one card's text and its remaining notes to revise, with the same context` (`reviewTargets` and the builders do not exist yet) and `liturgy queries (S API client usage) > reviews the service and revises a card as the church, each waiting up to 100 seconds (owner answer 3)` (the timeout is still 20 000); then `      Tests  3 failed | 8 passed (11)`.
 
 - [ ] **Step 3 (agent): The types, timeouts, calls and builders**
 
@@ -2589,7 +2768,7 @@ describe("the reviewer's notes (R Notes)", () => {
 (cd frontend && npx vitest run src/lib/liturgy/notes.test.ts 2>&1 | grep -E "Failed to (load|resolve)|Test Files|Tests ")
 ```
 
-**Expected:** @@RED7@@
+**Expected:** `Caused by: Error: Failed to load url ./notes (resolved id: ./notes) in <repo>/frontend/src/lib/liturgy/notes.test.ts. Does the file exist?`, ` Test Files  1 failed (1)`, `      Tests  no tests`.
 
 - [ ] **Step 3 (agent): Write the module**
 
@@ -3034,7 +3213,7 @@ describe("Revise with these notes (R Revise)", () => {
 (cd frontend && npx vitest run src/lib/liturgy/review.test.tsx 2>&1 | grep -E "Failed to (load|resolve)|Test Files|Tests ")
 ```
 
-**Expected:** @@RED8@@
+**Expected:** `Error: Failed to resolve import "./review" from "src/lib/liturgy/review.test.tsx". Does the file exist?`, ` Test Files  1 failed (1)`, `      Tests  no tests`.
 
 - [ ] **Step 3 (agent): Move the sermon loader, write the provider, mount it**
 
@@ -3954,7 +4133,7 @@ describe("Review service (R User experience)", () => {
 (cd frontend && npx vitest run src/components/builder/liturgy/review-step.test.tsx 2>&1 | grep -E "^ +(✓|×)|Tests ")
 ```
 
-**Expected:** @@RED9@@
+**Expected:** six lines starting `×`, one per test (there is no "Review service" button yet), then `      Tests  6 failed (6)`.
 
 - [ ] **Step 3 (agent): The button, the status, the notes**
 
@@ -4524,7 +4703,7 @@ describe("Revise with these notes (R Revise)", () => {
 (cd frontend && npx vitest run src/components/builder/liturgy/review-step.test.tsx src/lib/liturgy/errors.test.ts 2>&1 | grep -E "^ +(✓|×)|Tests ")
 ```
 
-**Expected:** @@RED10@@
+**Expected:** nine lines starting `✓` (4b's three error tests and T9's six) and five starting `×`: `cardErrorFrom (S errors.ts) > shows the server's sentence for the AI codes Revise gets as HTTP statuses (the service reviewer)` (a 503 `ai_busy` still reads "Something went wrong. (Ref: …)") and the four `Revise with these notes (R Revise) > …` tests (there is no Revise button yet); then `      Tests  5 failed | 9 passed (14)`.
 
 - [ ] **Step 3 (agent): Revise on the card**
 
@@ -4895,7 +5074,7 @@ Counts after Task 10: backend **1213 passed, 11 skipped**; frontend **562 in 78*
 .venv/bin/python -m pytest -q backend/tests/test_slice1_docs.py 2>&1 | tail -2
 ```
 
-**Expected:** `FAILED backend/tests/test_slice1_docs.py::test_manual_verification_has_the_slice_1_section - AssertionError: assert ['## Slice 0 ...`, then `1 failed, <n> passed in <t>s`.
+**Expected:** `FAILED backend/tests/test_slice1_docs.py::test_manual_verification_has_the_slice_1_section` (the checklist has no "## Service reviewer" yet), then `1 failed, 5 passed in <t>s`.
 
 - [ ] **Step 2 (agent): Write the docs**
 
@@ -4992,3 +5171,629 @@ Review T9-T11 together: R's strings verbatim ("Looks good.", "Only quick checks 
 
 Counts after Task 11: backend **1213 passed, 11 skipped**; frontend **562 in 78**.
 
+### Task 12: Whole-branch verification and the pull request (owner's yes before the PR is opened and before it is marked ready) (R Testing; S4 reviewer amendment Testing and acceptance; F §1.11, §2.2, §2.5, §4.1, §4.4, §5.2, §5.4; owner answers 1, 4; standing rules)
+
+The whole branch is checked in one place: both suites (the new DOM tests three times and with the clock moved forward), types, lint, the production build, the generated API files, the gates, the exact changed paths and the exact commits against this plan. The branch is already on GitHub from the backup pushes; on the owner's first yes the agent opens the PR as a **draft** so CI runs; when CI is green, on the second yes, it marks it ready. Merging is T13, with its own yes.
+
+Below, `<scratch>` is the absolute path of the session's scratchpad directory and `<N>` the PR number Step 10 prints; write both out literally. Every `gh` command uses `-R bbrown62450/church`. Never run a bare `git push` or `--force`.
+
+**Files:** none changed. A local or CI failure is fixed in its owning task's files (Step 14).
+
+- [ ] **Step 1 (agent): Bring the branch up to date with `origin/main`**
+
+```bash
+git status --short
+git fetch origin
+git rev-list --count HEAD..origin/main
+git log --oneline -1 origin/main
+git log --oneline --grep '^Plan: service reviewer' -1
+git rev-list --count origin/claude/slice-2-plan-4q33le..HEAD
+```
+
+**Expected,** in order: nothing (or `?? .claude/`); nothing or updated refs; `0`; `3957d45 Merge pull request #33 from bbrown62450/claude/slice-2-plan-4q33le` (or a later merge the owner made); `<sha> Plan: service reviewer (reviewer spec; owner answers 2026-10-01)`; `0` (every commit backed up). If the first count is not `0`: `git merge origin/main -m "Merge origin/main into claude/slice-2-plan-4q33le (Task 12)"` with the two trailer lines as a second `-m`; on a conflict `git merge --abort`, stop and tell the owner which files conflict. New tests from `main` change Steps 2-3's totals by exactly their number; name them in Step 9's message.
+
+- [ ] **Step 2 (agent): Frontend suite three times and with the clock moved forward, then types and lint**
+
+```bash
+for i in 1 2 3; do (cd frontend && npm test 2>&1 | grep -E "Test Files|Tests |FAIL"); done
+cat > "<scratch>/shift-clock.mjs" <<'JSEOF'
+// Moves the real clock forward by WSB_CLOCK_SHIFT_DAYS days (loaded with NODE_OPTIONS=--import).
+const offset = Number(process.env.WSB_CLOCK_SHIFT_DAYS ?? "0") * 24 * 60 * 60 * 1000;
+const RealDate = Date;
+function ShiftedDate(...args) {
+  if (!new.target) return new RealDate(RealDate.now() + offset).toString();
+  return args.length === 0 ? new RealDate(RealDate.now() + offset) : new RealDate(...args);
+}
+Object.setPrototypeOf(ShiftedDate, RealDate);
+ShiftedDate.prototype = RealDate.prototype;
+ShiftedDate.now = () => RealDate.now() + offset;
+globalThis.Date = ShiftedDate;
+JSEOF
+for d in 8 400; do echo "clock +$d days"; (cd frontend && WSB_CLOCK_SHIFT_DAYS=$d NODE_OPTIONS="--import <scratch>/shift-clock.mjs" npm test 2>&1 | grep -E "Test Files|Tests |FAIL"); done
+(cd frontend && npm test 2>&1 | grep -cE "Warning:|not wrapped in act")
+(cd frontend && npm run typecheck >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")
+```
+
+**Expected:** three times ` Test Files  78 passed (78)` and `      Tests  562 passed (562)` with no `FAIL`; then `clock +8 days` and `clock +400 days`, each followed by the same two lines; `0`; `typecheck 0` and `lint 0`. A run that fails even once is a failure (Step 14): make the test deterministic, never retry it.
+
+- [ ] **Step 3 (agent): Backend suite, the Postgres marker count, the reviewer's files three times**
+
+```bash
+.venv/bin/python -m pytest -q | tail -1
+.venv/bin/python -m pytest -q -m postgres | tail -1
+for i in 1 2 3; do .venv/bin/python -m pytest -q backend/tests/test_review_checks.py backend/tests/test_usecase_liturgy_review.py backend/tests/test_usecase_liturgy_revise.py backend/tests/test_api_liturgy_review.py 2>&1 | tail -1; done
+```
+
+**Expected:** `1213 passed, 11 skipped in <t>s`; `11 skipped, 1213 deselected in <t>s`; `29 passed in <t>s` three times.
+
+- [ ] **Step 4 (agent): The production build**
+
+```bash
+(cd frontend && NEXT_PUBLIC_SUPABASE_URL=https://ci-placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-placeholder NEXT_PUBLIC_API_URL=http://localhost:8000 npm run build 2>&1 | grep -E "Compiled successfully|Error|/builder")
+(cd frontend && node -e 'const m = require("./.next/app-path-routes-manifest.json"); console.log(Object.values(m).sort().join(" "))')
+```
+
+**Expected:** `✓ Compiled successfully in <t>s`, the five builder routes (`├ ○ /builder`, `├ ○ /builder/hymns`, `├ ○ /builder/liturgy`, `├ ○ /builder/readings`, `├ ○ /builder/review`) and no `Error` line; then exactly `/ /_global-error /_not-found /auth/callback /builder /builder/hymns /builder/liturgy /builder/readings /builder/review /favicon.ico /join /login /welcome` (no new page). It runs in the real checkout (Turbopack refuses a symlinked `node_modules`); a `Failed to fetch` for a font only: say so in Step 9 and rely on CI.
+
+- [ ] **Step 5 (agent): The generated API files are current and name the new routes**
+
+```bash
+.venv/bin/python backend/scripts/export_openapi.py >/dev/null && (cd frontend && npm run gen:api >/dev/null) && git status --short -- frontend backend
+.venv/bin/python -c "import json; p = json.load(open('frontend/src/lib/api/openapi.json')); print(sorted(k for k in p['paths'] if 'liturgy' in k)); print(sorted(k for k in p['components']['schemas'] if k in ('ReviewIn', 'ReviewCardIn', 'ReviewOut', 'CardNotesOut', 'NoteOut', 'ReviseIn', 'ReviseOut')))"
+```
+
+**Expected:** nothing from `git status`; `['/liturgy/config', '/liturgy/generate', '/liturgy/review', '/liturgy/revise']`; `['CardNotesOut', 'NoteOut', 'ReviewCardIn', 'ReviewIn', 'ReviewOut', 'ReviseIn', 'ReviseOut']`.
+
+- [ ] **Step 6 (agent): The gates (judged, not obeyed blindly; tests excluded)**
+
+```bash
+grep -nE "^(import|from) (fastapi|starlette|streamlit)" backend/review_checks.py backend/usecases/liturgy_review.py
+grep -nE "logger\.(info|warning|error|debug|exception)" backend/usecases/liturgy_review.py
+grep -nE "try:|select\(|session_scope" backend/api/routes/liturgy_review.py
+grep -rn "LEGACY_SYSTEM_PROMPT\|legacy_default_prompts" backend --include=*.py; echo "legacy grep exit $?"
+grep -c "do not name or refer to the liturgical season" backend/liturgy_prompts.py
+grep -rn "apiFetch" frontend/src/components frontend/src/app --include=*.ts --include=*.tsx | grep -vE "\.test\.tsx?:"; echo "apiFetch in UI grep exit $?"
+grep -rnE "window\.(local|session)Storage|(local|session)Storage\.(getItem|setItem|removeItem|key|clear)" frontend/src --include=*.ts --include=*.tsx | grep -vE "^frontend/src/lib/storage\.ts:|\.test\.tsx?:|^frontend/src/test/"; echo "storage grep exit $?"
+grep -rn "dangerouslySetInnerHTML" frontend/src --include=*.tsx; echo "raw html grep exit $?"
+grep -n '"POST /liturgy/review"\|"POST /liturgy/revise"' frontend/src/lib/api/timeouts.ts
+git diff --name-only origin/main...HEAD -- backend/migrations backend/db requirements-dev.txt backend/requirements.txt .github frontend/package.json frontend/package-lock.json docs/ops-runbook.md app.py streamlit_views streamlit_tests | wc -l
+for c in $(git rev-list origin/main..HEAD); do git show -s --format=%B "$c" | grep -q '^Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>$' || echo "no trailer: $(git show -s --format='%h %s' "$c")"; done; echo "trailer check done"
+```
+
+**Expected:** the first grep prints nothing; the second lists the review's two DEBUG lines (messages, answer), its WARNING (an unusable answer's length), its `logger.exception` (no text) and its `_log` INFO line, and the same five for revise (with the section key): read each, none formats a prompt, a card, a note or an answer at INFO; the third prints nothing; `legacy grep exit 1`; `0`; `apiFetch in UI grep exit 1`; `storage grep exit 1`; `raw html grep exit 1`; two lines ending `100_000,`; `0`; only `trailer check done`.
+
+- [ ] **Step 7 (agent): The exact list of changed paths**
+
+```bash
+LC_ALL=C sort > "<scratch>/reviewer-expected-paths.txt" <<'EOF'
+backend/api/main.py
+backend/api/routes/liturgy_review.py
+backend/liturgy_prompts.py
+backend/review_checks.py
+backend/tests/test_api_app.py
+backend/tests/test_api_liturgy_review.py
+backend/tests/test_liturgy_prompts.py
+backend/tests/test_no_streamlit_in_core.py
+backend/tests/test_review_checks.py
+backend/tests/test_slice1_docs.py
+backend/tests/test_usecase_liturgy_review.py
+backend/tests/test_usecase_liturgy_revise.py
+backend/usecases/liturgy_review.py
+docs/manual-verification.md
+docs/superpowers/plans/2026-10-01-service-reviewer.md
+docs/superpowers/specs/2026-09-25-migration-foundations-design.md
+docs/superpowers/specs/2026-09-25-slice-4-liturgy-design.md
+docs/superpowers/specs/2026-09-26-service-reviewer-design.md
+frontend/src/components/builder/builder-shell.tsx
+frontend/src/components/builder/liturgy/card-notes.tsx
+frontend/src/components/builder/liturgy/liturgy-step.tsx
+frontend/src/components/builder/liturgy/review-bar.tsx
+frontend/src/components/builder/liturgy/review-step.test.tsx
+frontend/src/components/builder/liturgy/section-card.tsx
+frontend/src/lib/api/openapi.json
+frontend/src/lib/api/schema.d.ts
+frontend/src/lib/api/timeouts.ts
+frontend/src/lib/api/types.ts
+frontend/src/lib/liturgy/errors.test.ts
+frontend/src/lib/liturgy/errors.ts
+frontend/src/lib/liturgy/generation.tsx
+frontend/src/lib/liturgy/notes.test.ts
+frontend/src/lib/liturgy/notes.ts
+frontend/src/lib/liturgy/request.test.ts
+frontend/src/lib/liturgy/request.ts
+frontend/src/lib/liturgy/review.test.tsx
+frontend/src/lib/liturgy/review.tsx
+frontend/src/lib/liturgy/sermon.ts
+frontend/src/lib/queries/liturgy.test.tsx
+frontend/src/lib/queries/liturgy.ts
+frontend/src/test/fixtures/index.ts
+EOF
+git diff --name-only --no-renames origin/main...HEAD | LC_ALL=C sort > "<scratch>/reviewer-actual-paths.txt"
+wc -l < "<scratch>/reviewer-expected-paths.txt"
+wc -l < "<scratch>/reviewer-actual-paths.txt"
+LC_ALL=C comm -3 "<scratch>/reviewer-expected-paths.txt" "<scratch>/reviewer-actual-paths.txt"
+git diff --name-status --no-renames origin/main...HEAD | cut -c1 | sort | uniq -c
+```
+
+**Expected:** `41`; `41`; `comm` prints nothing; `     16 A` and `     25 M`. An indented `comm` line (changed, not listed) means a task touched a file its **Files:** does not name: find it with `git log --format='%h %s' origin/main..HEAD -- '<path>'`; anything under `backend/migrations`, `backend/db`, `.github`, `frontend/package*.json` or the Streamlit files is a stop.
+
+- [ ] **Step 8 (agent): The exact list of commits against this plan**
+
+```bash
+.venv/bin/python - docs/superpowers/plans/2026-10-01-service-reviewer.md > "<scratch>/reviewer-plan-subjects.txt" <<'EOF'
+import pathlib, re, sys
+text = "\n" + pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+lines = text.split("\n### Task 1:", 1)[1].split("\n### Task 12:", 1)[0].splitlines()
+for line in lines:
+    m = re.match(r'\s*git commit -q -m "((?:[^"\\]|\\.)*)"', line)
+    if m:
+        print(re.sub(r"\\(.)", r"\1", m.group(1)))
+EOF
+PLAN=$(git log --format=%H --grep '^Plan: service reviewer' -1)
+git log --reverse --no-merges --format=%s "$PLAN"..HEAD > "<scratch>/reviewer-branch-subjects.txt"
+wc -l < "<scratch>/reviewer-plan-subjects.txt"
+diff "<scratch>/reviewer-plan-subjects.txt" "<scratch>/reviewer-branch-subjects.txt"; echo "commit list diff exit $?"
+git log --reverse --format='%h %s' origin/main..HEAD
+```
+
+**Expected:** `11` (one commit for each of T1-T11); `commit list diff exit 0`; the branch's commits oldest first: the plan's own (`WIP plan: service reviewer` several times, then `Plan: service reviewer (reviewer spec; owner answers 2026-10-01)`), then the eleven task commits from `Liturgy prompts: the writer's new season guidance (R Writer; S4 reviewer amendment; owner answer 2)` to `Docs: the reviewer's F row, plan notes in S4 and R, the manual check (owner answers 2026-10-01)`. A `diff` line is a failure unless it is a `>` line `Fix: … (Task <n> review)`, `Fix: … (Task <n>, reviewer final verification)` (Step 14), `WIP plan: …` or `Plan: …`, each named in Step 9's message.
+
+- [ ] **Step 9 (agent → OWNER): Ask for the go-ahead to open the draft PR**
+
+```bash
+gh auth status 2>&1 | grep -E "Logged in to github.com"
+gh pr list -R bbrown62450/church --head claude/slice-2-plan-4q33le --state open --json number,url
+git rev-list --count origin/main..HEAD
+```
+
+**Expected:** one `✓ Logged in to github.com account <login> (keyring)` line; `[]`; the branch's commit count. If `gh` is not logged in, ask the owner to run `gh auth login`; if an open PR exists, stop and ask.
+
+Send the owner exactly this, with `<count>` filled in, and wait for a clear yes:
+
+> The service reviewer is verified on this machine: backend 1213 passed, 11 skipped (1183 before); frontend 562 tests in 78 files (539 in 75 before), three runs in a row and with the clock moved 8 and 400 days ahead; typecheck, lint and the production build are clean; the API files are current with the two new routes; the checks are clean (no prayer text in the logs, no AI text saved, the screens use the query functions, both new calls wait up to 100 seconds); the 41 changed files and <count> commits are as planned and backed up. It also changes the writer's default wording on the season, as you approved. May I open the pull request as a **draft** titled "Service reviewer: Review service, notes and Revise", so the checks run? I will come back with the results and ask again before marking it ready. Merging stays with you.
+
+Add one line per note from Steps 1-8 (a merge from `main`, a skipped font download, a `Fix:` commit).
+
+- [ ] **Step 10 (agent, on the owner's yes): Write the PR body and open the draft PR**
+
+(not replayed)
+```bash
+cat > "<scratch>/reviewer-pr-body.md" <<'EOF'
+The service reviewer add-on (one PR, backend and frontend; owner answer 1 of 2026-10-01). Spec: docs/superpowers/specs/2026-09-26-service-reviewer-design.md, with the slice 4 spec's reviewer amendment. Plan: docs/superpowers/plans/2026-10-01-service-reviewer.md. No migration and no new variable; the OpenAI key and model from slice 3a are used.
+
+What members see
+- Review service, in the Liturgy step's header: notes under each switched-on card with text (a tag, one sentence, a dismiss button; at most 3, or "Looks good."), and an "Across the service" box for notes about several prayers. With the AI unavailable, the quick checks still show, with "Only quick checks ran. The full review isn't available right now."
+- Revise with these notes, on AI-written cards with notes left: the draft is edited to address them, with Undo. Typed, saved and default text is never changed.
+- Notes are kept in memory only and go when a card's text changes.
+- The writer's default system prompt has the new season guidance (owner answer 2): seasonal themes and naming the season are fine; canned seasonal phrases and naming Ordinary Time are not. Churches with a saved system prompt keep theirs; liturgy-frozen keeps the old wording.
+
+Backend: review_checks.py (stock seasonal phrases, Ordinary Time, scripture references from scripture_refs.BOOKS, repeated openings), usecases/liturgy_review.py (the AI review in JSON mode inside a 75 s deadline, charged one ai token only when the AI runs; Revise inside generation's 80 s deadline with the section's token budget), POST /liturgy/review (always 200 with ai_status) and POST /liturgy/revise (AI failures as HTTP statuses). Client timeouts 100 s for both (owner answer 3; F §1.8).
+
+Tests: backend 1183 → 1213 passed, 11 → 11 skipped; frontend 539 → 562 in 75 → 78 files
+
+After merge (Task 13): a guided check on the owner's phone (seven steps), a quick look on a computer and an optional Console timing of a real review, then a short "Service reviewer record" in docs/ops-runbook.md.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS
+EOF
+grep -cx 'Tests: backend 1183 → 1213 passed, 11 → 11 skipped; frontend 539 → 562 in 75 → 78 files' "<scratch>/reviewer-pr-body.md"
+git fetch origin && test "$(git rev-list --count HEAD..origin/main)" = 0 && test "$(git rev-list --count origin/claude/slice-2-plan-4q33le..HEAD)" = 0 && echo "branch is current and backed up"
+gh pr create -R bbrown62450/church --draft --base main --head claude/slice-2-plan-4q33le \
+  --title "Service reviewer: Review service, notes and Revise" \
+  --body-file "<scratch>/reviewer-pr-body.md"
+gh pr view claude/slice-2-plan-4q33le -R bbrown62450/church --json number,isDraft,headRefOid,url --jq '"#\(.number) draft=\(.isDraft) \(.headRefOid) \(.url)"'
+git rev-parse HEAD
+```
+
+**Expected:** `1`; `branch is current and backed up`; the PR URL; `#<N> draft=true <sha> https://github.com/bbrown62450/church/pull/<N>` with the same `<sha>` as `git rev-parse HEAD`.
+
+- [ ] **Step 11 (agent): Watch the checks**
+
+(not replayed)
+```bash
+gh pr checks <N> -R bbrown62450/church --watch --interval 30
+```
+
+Run it with `run_in_background: true`. **Expected** when it exits: every check `pass`: `backend`, `backend-postgres`, `frontend`, and the Vercel preview. Any `fail`: Step 14.
+
+- [ ] **Step 12 (agent): Read the CI logs and compare**
+
+(not replayed)
+```bash
+RUN=$(gh run list -R bbrown62450/church --workflow ci.yml --branch claude/slice-2-plan-4q33le --commit "$(git rev-parse HEAD)" --limit 1 --json databaseId --jq '.[0].databaseId'); echo "run $RUN"; gh run view "$RUN" -R bbrown62450/church --json jobs --jq '.jobs[] | "\(.name): \(.conclusion)"'
+RUN=$(gh run list -R bbrown62450/church --workflow ci.yml --branch claude/slice-2-plan-4q33le --commit "$(git rev-parse HEAD)" --limit 1 --json databaseId --jq '.[0].databaseId'); for job in frontend backend backend-postgres; do JOB=$(gh run view "$RUN" -R bbrown62450/church --json jobs --jq ".jobs[] | select(.name == \"$job\") | .databaseId"); echo "$job:"; gh run view -R bbrown62450/church --job "$JOB" --log | grep -E "Test Files +[0-9]+ passed|Tests +[0-9]+ passed|Compiled successfully|[0-9]+ passed|pg_smoke: OK" | sed -E 's/^.*Z //'; done
+```
+
+**Expected:** `backend: success`, `backend-postgres: success`, `frontend: success`; frontend `Test Files  78 passed (78)`, `Tests  562 passed (562)`, `✓ Compiled successfully`; backend `1213 passed, 11 skipped`; backend-postgres `pg_smoke: OK` and `11 passed, 1213 deselected`. If a required job fails on a new runner image (`ubuntu-latest` moves on 2026-10-19), report a setup failure to the owner before changing any file.
+
+- [ ] **Step 13 (agent → OWNER): Report CI and ask to mark the PR ready**
+
+Send exactly this, filled in, and wait for a clear yes:
+
+> PR #<N> (<url>) is green (run <run id>): backend 1213 passed, 11 skipped; the Postgres job is clean; 562 frontend tests in 78 files and the build are fine; the Vercel preview built. May I mark it ready for review? Merging stays with you.
+
+On the yes:
+
+(not replayed)
+```bash
+gh pr ready <N> -R bbrown62450/church
+gh pr view <N> -R bbrown62450/church --json isDraft,state --jq '"draft=\(.isDraft) \(.state)"'
+```
+
+**Expected:** `✓ Pull request bbrown62450/church#<N> is marked as "ready for review"`, then `draft=false OPEN`.
+
+- [ ] **Step 14 (agent): Fix any failure in its owning task**
+
+| Failing check or test | Owning task |
+|---|---|
+| `test_liturgy_prompts.py`, the Streamlit prompt test | T1 |
+| `test_review_checks.py`, `test_no_streamlit_in_core.py` (`review_checks`) | T2 |
+| `test_usecase_liturgy_review.py`, `test_no_streamlit_in_core.py` (`usecases.liturgy_review`) | T3 |
+| `test_usecase_liturgy_revise.py` | T4 |
+| `test_api_liturgy_review.py`, `test_api_app.py`, `test_openapi_contract.py`, the generated files | T5 |
+| `request.test.ts`, `queries/liturgy.test.tsx`, `timeouts.ts`, the fixtures | T6 |
+| `notes.test.ts` | T7 |
+| `review.test.tsx`, `generation.test.tsx`, the shell's provider | T8 |
+| `review-step.test.tsx` "Review service" block, `liturgy-step.test.tsx` | T9 |
+| its "Revise with these notes" block, `errors.test.ts` | T10 |
+| `test_slice1_docs.py`, `test_docs.py`, the spec or F text | T11 |
+| a flaky run, or one only with the clock moved | the owning task: fake only `Date`, await the UI with `findBy`/`waitFor`, never sleep |
+| any other existing test, the Vercel preview only | report to the owner before changing anything |
+
+For each fix: change only the owning task's files; rerun Steps 2-8; commit `Fix: <what> (Task <n>, reviewer final verification)` with both trailer lines; have it reviewed; before Step 10 ask the controller for the backup push; after it, ask the owner ("May I push the fix for <what> to PR #<N>?") and on the yes push, then repeat Steps 11-13.
+
+Expected counts after this task: backend `1213 passed, 11 skipped` (CI `backend-postgres`: `11 passed, 1213 deselected`); frontend `562 passed` in 78 files. No commit unless Step 14 needed one.
+
+### Task 13: Merge and after (OWNER + agent): the merge, the deploy, a guided check on the phone, a look on a computer, a timed review, the record (R Testing; owner answer 4; F §5.5)
+
+No schema change, so the merge's Railway deploy runs `alembic upgrade head` with nothing to do (head `0004_invites_reusable`) and adds no variable. The Vercel deploy is the one members see: the Liturgy step gains Review service, the notes and Revise; the AI drafts written after the deploy follow the new season guidance. Merges never reach https://liturgy-frozen.streamlit.app/. Owner answer 4: a guided check on the phone, **one step at a time** (send one OWNER step, wait for the report or "next", then send the next), a quick look on a computer, and a Console call that times a real review. The agent writes each result, with its date, into `<scratch>/reviewer-t13-results.md` (not committed); Step 12 fills the record from it. The AI's words differ every time: the owner reports what the page shows. No token, email address or church id is recorded anywhere.
+
+Below, `<N>` is the PR number (T12), `<merge sha>` the merge commit Step 2 prints, `<scratch>` the scratchpad path; write them out literally. Pushing, merging and any settings change each need the owner's explicit yes, asked separately.
+
+**Files:**
+- Merge (Steps 1-2): none.
+- Create (not committed): `<scratch>/reviewer-t13-results.md`.
+- Modify (the records PR, Step 12): `docs/ops-runbook.md`: insert `### Service reviewer record` right after `### Slice 4b record`'s table (its last row starts `| Follow-ups | Next: the service reviewer`) and before `## Backups`. A `###` heading, because `test_ops_workflows.py::test_runbook_has_the_seven_sections_in_order` pins the `##` list.
+
+- [ ] **Step 1 (agent): Check the PR can merge**
+
+(not replayed)
+```bash
+git fetch origin
+gh pr view <N> -R bbrown62450/church --json state,isDraft,mergeable,mergeStateStatus,headRefOid --jq '"\(.state) draft=\(.isDraft) \(.mergeable) \(.mergeStateStatus) \(.headRefOid)"'
+git rev-parse HEAD
+git rev-list --count HEAD..origin/main
+git diff --quiet origin/main HEAD -- backend/migrations backend/db/models.py backend/Procfile backend/railway.toml; echo "exit $?"
+```
+
+**Expected:** `OPEN draft=false MERGEABLE CLEAN <sha>` with `<sha>` equal to `git rev-parse HEAD`; `0`; `exit 0`. If `main` moved: merge it as in T12 Step 1, rerun T12 Steps 2-3, push on the owner's yes, wait for green, and run this step again. Never merge with `--admin`.
+
+- [ ] **Step 2 (agent → OWNER): Ask to merge, then merge**
+
+Send: "PR #<N> (the service reviewer) is ready, green and up to date with main. After the merge, members get Review service, the notes and Revise on the Liturgy step, and new AI drafts follow the new season wording. There is no database change, and liturgy-frozen is not affected. Then I will ask you for a short check on your phone, one step at a time. May I merge it with a merge commit?" On a clear yes:
+
+(not replayed)
+```bash
+gh pr merge <N> --merge -R bbrown62450/church
+gh pr view <N> -R bbrown62450/church --json state,mergeCommit,mergedAt --jq '"\(.state) \(.mergeCommit.oid) \(.mergedAt)"'
+```
+
+**Expected:** `MERGED <merge sha> <UTC time>`. Write the sha and time (UTC and Eastern) into the results file.
+
+- [ ] **Step 3 (agent, then OWNER): CI on `main`, the deployments, the deploy log**
+
+(not replayed)
+```bash
+RUN=$(gh run list -R bbrown62450/church --workflow ci.yml --branch main --commit <merge sha> --limit 1 --json databaseId --jq '.[0].databaseId'); echo "run $RUN"; gh run watch "$RUN" -R bbrown62450/church --exit-status --interval 30 >/dev/null; echo "ci exit $?"
+for id in $(gh api "repos/bbrown62450/church/deployments?sha=<merge sha>" --jq '.[].id'); do gh api "repos/bbrown62450/church/deployments/$id/statuses" --jq '"'"$id"' \(.[0].state)"'; done
+```
+
+Run the first line with `run_in_background: true`. **Expected:** `run <id>`, `ci exit 0`; each deployment `success` (run the loop again a minute later for `pending`). Then ask the owner, once: "Please open Railway → the API service → Deployments → the one whose message starts `Merge pull request #<N>` → Deploy Logs, and tell me: is there a line with `Running upgrade` (there should not be), does the line starting `AI:` say `AI: configured (model=gpt-4.1-mini)`, and is there any `Traceback` or `ERROR`?" Record the answer. A failure, or no `AI: configured`: stop and tell the owner (Step R if the site cannot serve).
+
+- [ ] **Step 4 (OWNER, then agent): Phone, step 1 of 7: Review service**
+
+> On your phone, open https://worship-service-builder.vercel.app (signed in, in First Presbyterian Church). Tap **⋮** next to Summary, choose **New service** (tap **Start new service** if it asks), then tap **3 Liturgy**. In **Call to Worship** type: `Leader: As we journey, come and worship. People: We come.` Then tap **Generate empty sections (5)** and wait for "Wrote 5 sections.". Now tap **Review service** at the top, next to "Liturgy". It should show a spinner and "Reviewing…", then notes under the cards: each note has a small tag (such as "Rules" or "Read aloud"), one sentence and an **×**; a card with nothing to say shows "Looks good.". Your Call to Worship should have the note `Stock phrase "As we journey". Say it more naturally.` How long did it take, and what do you see?
+
+Record the time and what the owner saw (how many cards had notes, which tags, whether an "Across the service" box showed).
+
+- [ ] **Step 5 (OWNER, then agent): Phone, step 2 of 7: a note, then dismissing it**
+
+> Pick a card with two or more notes and read them: do they make sense for that prayer? Tap the **×** on one note: only that note should go, and the others stay. Did it?
+
+- [ ] **Step 6 (OWNER, then agent): Phone, step 3 of 7: no Revise on your own text**
+
+> Look at your **Call to Worship**: it has a note but no **Revise with these notes** button, because you typed it. Cards the AI wrote that still have a note show **Revise with these notes** under their notes. Is that what you see?
+
+- [ ] **Step 7 (OWNER, then agent): Phone, step 4 of 7: Revise with Undo**
+
+> On a card the AI wrote that has a note (for example Opening Prayer), tap **Revise with these notes**. It shows "Revising…"; then the prayer changes, its notes go, and "Revised with these notes. Undo" appears. Read the new version: did it fix what the note said and keep the rest? Then tap **Undo**: the earlier version comes back. Did it?
+
+Record whether the revision addressed the note and kept the form, and the time it took.
+
+- [ ] **Step 8 (OWNER, then agent): Phone, step 5 of 7: typing clears a card's notes**
+
+> In a card that still has notes, type one letter at the end. Its notes should disappear at once; the other cards keep theirs. Did they?
+
+- [ ] **Step 9 (OWNER, then agent): Phone, step 6 of 7: the Across the service box**
+
+> If an "Across the service" box showed at the top after the review, tell me what it said. If not, let's make one: in **Opening Prayer** and **Offertory Prayer**, put `Gracious God,` at the very start of the text (type over the first words if needed), then tap **Review service** again. At the top, under the button, an **Across the service** box should say `Several prayers open with "Gracious God".` Does it?
+
+- [ ] **Step 10 (OWNER, then agent): Phone, step 7 of 7: the quick-checks line, and the phone layout**
+
+> The line "Only quick checks ran. The full review isn't available right now." appears only when the AI cannot answer, so you will probably not see it; that is fine (it is covered by the automated tests). While you are on the phone: does anything run off the right edge of the screen, and are the note **×** buttons easy to tap?
+
+Record "quick-checks line: not shown (the AI answered)" unless the owner saw it.
+
+- [ ] **Step 11 (OWNER, then agent): A quick look on a computer, and a timed review in the Console**
+
+> On a computer, open the same service in a wide window and go to Liturgy. **Review service** should sit at the right of "Liturgy", with any "Across the service" box below it and the notes under each card's text. Does it look right?
+>
+> Then, if you have a minute: open DevTools (⌥⌘I) → Console, paste this and press Return (type `allow pasting` first if Chrome asks). It reads your sign-in from this site, calls only the app's API, prints no token, changes nothing, and asks the AI for one review of three short sample prayers (one `ai` token). Copy the lines it prints to me.
+
+```js
+(async () => {
+  const API = "https://church-production-74ca.up.railway.app";
+  const jar = {};
+  for (const pair of document.cookie.split("; ")) {
+    const i = pair.indexOf("=");
+    if (i > 0) jar[pair.slice(0, i)] = decodeURIComponent(pair.slice(i + 1));
+  }
+  const names = Object.keys(jar).filter((k) => /^sb-.+-auth-token(\.\d+)?$/.test(k));
+  const whole = names.find((k) => !/\.\d+$/.test(k));
+  let raw = whole ? jar[whole]
+    : names.sort((a, b) => Number(a.split(".").pop()) - Number(b.split(".").pop())).map((k) => jar[k]).join("");
+  if (!raw) { console.log("No sign-in found. Sign in, reload, then run this again."); return; }
+  if (raw.startsWith("base64-")) {
+    const bytes = Uint8Array.from(atob(raw.slice(7).replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
+    raw = new TextDecoder().decode(bytes);
+  }
+  const token = JSON.parse(raw).access_token;
+  const me = await (await fetch(API + "/me", { headers: { Authorization: "Bearer " + token } })).json();
+  const churchId = localStorage.getItem("activeChurchId") || (me.churches[0] || {}).id;
+  const body = {
+    occasion: "Nineteenth Sunday after Pentecost",
+    scriptures: ["Isaiah 5:1-7", "Philippians 3:4b-14", "Matthew 21:33-46"],
+    cards: [
+      { section: "call_to_worship", origin: "typed", text: "Leader: As we journey, in this season of growth, come.\nPeople: We come to worship." },
+      { section: "opening_prayer", origin: "ai", text: "Gracious God, as in Matthew 21:33-46, you planted a vineyard and tended it. Make us fruitful. Amen." },
+      { section: "offertory_prayer", origin: "ai", text: "Gracious God, receive these gifts and our lives. Amen." },
+    ],
+  };
+  const started = performance.now();
+  const r = await fetch(API + "/liturgy/review", { method: "POST", body: JSON.stringify(body),
+    headers: { Authorization: "Bearer " + token, "X-Church-Id": churchId, "Content-Type": "application/json" } });
+  const ms = Math.round(performance.now() - started);
+  const b = await r.json();
+  console.log(`review ${r.status} ${ms}ms ai_status=${b.ai_status}`);
+  for (const c of b.cards || []) console.log(`${c.section}: ${c.notes.map((n) => `[${n.tag}/${n.source}] ${n.text}`).join(" | ") || "Looks good."}`);
+  console.log(`across: ${(b.service_notes || []).map((n) => `[${n.tag}/${n.source}] ${n.text}`).join(" | ") || "none"}`);
+})();
+```
+
+The agent checks: `review 200` with `ai_status=ok` (a `busy` or `timeout`: run it once more a minute later; `not_configured`: the `AI:` line of Step 3; `error`: ask the controller); the Call to Worship has the code notes for "As we journey" and "this season of" (`[rules/code]`); the Opening Prayer has `Cites Matthew 21:33-46.` (`[rules/code]`); "across" has `Several prayers open with "Gracious God".` (`[repetition/code]`); any AI notes (`/ai`) are one sentence each and name a phrase. Record the time: under 30 s as expected; 30-75 s fits, with little room (a follow-up to watch it); `timeout` twice means the 75 s deadline is too short for this model and prompt (a follow-up for the owner: a shorter `REVIEW_MAX_COMPLETION_TOKENS` or a faster model).
+
+- [ ] **Step 12 (agent): Write the record**
+
+(not replayed)
+```bash
+git fetch origin
+git switch claude/slice-2-plan-4q33le
+git merge --ff-only origin/main
+git log --oneline -1
+grep -n '^### Slice 4b record$\|^| Follow-ups | Next: the service reviewer\|^## Backups$' docs/ops-runbook.md
+```
+
+**Expected:** `Fast-forward` (or `Already up to date.`); `<merge sha> Merge pull request #<N> from bbrown62450/claude/slice-2-plan-4q33le`; three lines in that order. Insert, between that last row and `## Backups` (one blank line on each side):
+
+```markdown
+### Service reviewer record
+
+The service reviewer (Review service on the Liturgy step: code checks and an
+AI review leaving notes under each card and in an "Across the service" box,
+Revise with these notes on AI cards with Undo, and the writer's new season
+guidance) merged as PR #<N>. No database change and no new variable, so
+production stays at `0004_invites_reusable` (head); both new calls wait up to
+100 s (owner answer 3, 2026-10-01). The owner's check was a guided check on a
+phone, a look on a computer and a timed review in the Console (owner answer
+4), covering the "(owner, after the reviewer)" items of
+`docs/manual-verification.md` → "Service reviewer". No token, email address
+or church id is recorded here.
+
+| Step | Result | Date |
+|---|---|---|
+| Merge and deploy | PR #<N> merged <UTC time> (<Eastern time>), merge commit `<short sha>`. CI on `main` (run <run id>): success. Deploy Logs: <no Running upgrade; AI configured (model=gpt-4.1-mini); no Traceback / what the owner saw> | <date> |
+| 1. Review service (phone: <phone and browser>) | <n cards with notes, tags seen, Looks good on n cards; the typed card's stock-phrase note; took <n> s. / …> | <date> |
+| 2. A note, dismissed | <The notes made sense / what the owner said; × removed only that note. / …> | <date> |
+| 3. No Revise on typed text | <The typed card had notes and no Revise; AI cards with notes had it. / …> | <date> |
+| 4. Revise with Undo | <Revised in <n> s, addressed the note and kept the form; Undo brought the draft back. / …> | <date> |
+| 5. Typing clears notes | <The card's notes went at once; the others stayed. / …> | <date> |
+| 6. Across the service | <The box said …. / …> | <date> |
+| 7. Quick checks only; the phone layout | <Not shown (the AI answered), covered by the tests; nothing ran off the screen; the × buttons were easy to tap. / …> | <date> |
+| Computer and timed review | <The layout looked right. Console: review 200 in <n> ms, ai_status=ok; the code notes as expected; <n> AI notes. / Not run.> | <date> |
+| Streamlit smoke on liturgy-frozen | <Not run: the reviewer changes no data, and merges never reach liturgy-frozen. / OK.> | <date> |
+| Follow-ups | <None. / One line per follow-up.> Next: 5a (saving and archiving services and the Word files). 6a: Settings for the default benediction, the liturgy prompts and the prayer library (the voice profile turns on the Voice check). | <date> |
+```
+
+Replace every `<…>` from the results file, keeping one alternative where a cell offers two (separated by ` / `). Then:
+
+(not replayed)
+```bash
+sed -n '/^### Service reviewer record$/,/^## Backups$/p' docs/ops-runbook.md | grep -c '<'
+sed -n '/^### Service reviewer record$/,/^## Backups$/p' docs/ops-runbook.md | grep -Eic '@|bearer|eyJ|postgres(ql)?://|[0-9a-f]{8}-[0-9a-f]{4}-'
+.venv/bin/python -m pytest -q backend/tests/test_ops_workflows.py backend/tests/test_slice1_docs.py backend/tests/test_docs.py 2>&1 | tail -1
+git add docs/ops-runbook.md
+git commit -q -m "Runbook: service reviewer record (merged; Review service and Revise are live; owner's guided phone check)" -m "Records the service reviewer merge (PR #<N>): no database change; CI on
+main and the deploy; the owner's guided check on a phone (Review service,
+a note dismissed, no Revise on typed text, Revise with Undo, typing clears
+notes, the Across the service box, the phone layout), a look on a
+computer and a timed review. No token, email or church id is recorded." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
+```
+
+**Expected:** `0`; `0`; `89 passed in <t>s`; one commit.
+
+- [ ] **Step 13 (agent, on the owner's yes): Push, open and merge the records PR**
+
+Ask: "The service reviewer record is written (docs/ops-runbook.md only). May I push it and open its PR?" On the yes:
+
+(not replayed)
+```bash
+git push origin claude/slice-2-plan-4q33le
+gh pr create -R bbrown62450/church --base main --head claude/slice-2-plan-4q33le \
+  --title "Runbook: service reviewer record" \
+  --body "Records the service reviewer (PR #<N>) in docs/ops-runbook.md → Service reviewer record: the merge and deploy, the owner's guided check on a phone, a look on a computer and a timed review. No token, email or church id is recorded. Docs only.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
+gh pr checks claude/slice-2-plan-4q33le -R bbrown62450/church --watch
+```
+
+**Expected:** the push; the PR URL; every check passes. Then ask: "The records PR is green. May I merge it with a merge commit?" On the yes: `gh pr merge claude/slice-2-plan-4q33le --merge -R bbrown62450/church`, then `gh pr view claude/slice-2-plan-4q33le -R bbrown62450/church --json state --jq .state` → `MERGED`. Report: "The service reviewer is live and recorded; <n> follow-ups."
+
+- [ ] **Step R (only if the release must come out): Revert**
+
+Use this only when the site cannot serve, or the Liturgy step breaks, after the merge, and a fix would take too long. The reviewer writes nothing to the database and changes no draft shape (notes were never saved), so a revert is code only; reverting also restores the old season sentences. On the owner's yes for each command that leaves this machine:
+
+(not replayed)
+```bash
+git fetch origin
+git switch -c claude/revert-service-reviewer origin/main
+git revert -m 1 --no-commit <merge sha>
+git commit -m "Revert the service reviewer (PR #<N>)" -m "The reviewer merge <what failed>. It changed no database or draft shape, so
+nothing else needs undoing; the writer's season sentences return to the old
+wording." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
+(cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
+.venv/bin/python -m pytest -q | tail -1
+git push -u origin claude/revert-service-reviewer
+gh pr create -R bbrown62450/church --base main --head claude/revert-service-reviewer --title "Revert the service reviewer" \
+  --body "Reverts the service reviewer merge (PR #<N>) because <what failed>. No database change to undo.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
+gh pr checks claude/revert-service-reviewer -R bbrown62450/church --watch
+```
+
+**Expected:** `Test Files  75 passed (75)`, `Tests  539 passed (539)`; `1183 passed, 11 skipped` (if anything else merged after, it differs by exactly those tests); every check passes. Merge on the owner's yes; record the revert in the service reviewer record.
+
+Expected counts after this task: backend `1213 passed, 11 skipped` on `main` (CI `backend-postgres`: `11 passed, 1213 deselected`); frontend `562 passed` in 78 files. The records PR adds no test.
+
+---
+
+## Lessons carried from the slice 2, 3 and 4 builds (P2a-P4b "Build notes")
+
+- **The container restarts.** Commit as soon as a task's checks pass; the controller backs the branch up after every task's review. If `node_modules` is gone, `(cd frontend && npm ci)`.
+- **The network is filtered.** PyPI and the npm registry are reachable; OpenAI, Railway, Supabase and ui.shadcn.com are not. No test needs the network: the backend uses `FakeAI`; the fake API fails a test on any unhandled request. No new shadcn component is needed (the reviewer uses `badge`, `button`, `alert` and 4b's `PendingButton`).
+- **Exact anchors.** Every Replace directive names text that occurs once; if one does not match, the tree differs from the plan: stop and find why.
+- **Capture what the member saw when they asked** (4b C1): the review captures each card's text and origin at the click, and Revise captures the card when Revise is pressed; the result is checked against them before it is applied, and a revision is applied inside the draft update.
+- **A stale verdict before applying, and on the result** (4b clarification 33): a review result is dropped per card when the text or origin changed; a revision is dropped when the card changed or the service changed, with a toast saying which.
+- **A new `created_at` cancels** (4b I1): New service cancels the running review and revisions silently and clears every note.
+- **Undo only while the card still holds what the action left** (4b `UndoEntry.after`): Revise reuses the generation provider's Undo with a "revised" kind, so the same rule holds.
+- **Focus never drops to the page** (4b I3, final review): one Review button that changes its label keeps focus; a dismiss moves focus to a surviving control or the heading; Revise's Cancel takes focus, and the end of a revision moves it to Undo, Revise or the heading.
+- **44 px, and wrapping at 375 px** (4b I2): icon buttons `size-11` below `md`; chips, sentences and the header row wrap (`flex-wrap`, `min-w-0`, `wrap-anywhere`).
+- **`aria-describedby` and polite live regions** (4b M9): a card's notes describe its textarea; the end of a review is announced politely, never as an alert; a failed review or revision is an alert.
+- **Explicit test timeouts and no sleeping** (4b): waits are positive conditions (`findBy`, `waitFor`); the one test that fakes `setTimeout` says why; the reviewer's DOM tests run well under 5 s each, so none needs `{ timeout: 10_000 }`.
+- **TanStack Query v5 keeps `data` with `isError`** after a failed background refetch: the reviewer adds no query (its calls are plain functions), so nothing here depends on it.
+- **Toasts outlive a test** (sonner): the reviewer's DOM tests call `toast.dismiss()` before each test.
+- **Grep gates exclude tests** and are judged, not obeyed blindly. **Counts are exact.** **Owner steps one at a time, in plain words**, and every outward action on its own yes; then a records PR.
+
+## Build notes (reviewer build)
+
+Filled in while Tasks 1-11 are built: each change from the plan as written, its reason, and whether the owner saw it. Task 11 (or a follow-up docs commit before Task 12) writes those that alter R, S4 or F as "(reviewer build)" notes.
+
+**How this plan was written (2026-10-01).** Each task's code was built and run in a throwaway worktree of `3957d45` (one commit per task, `npm ci` in its `frontend`, the repo's `.venv`), and each task's directives were generated from that commit: a new file as a Create block, a changed one as Replace blocks whose anchors occur exactly once (or an Append when the task only added at the end), checked by applying them in order and comparing with the commit. While writing it:
+- **T3's budget test** first assumed three 4 000-character cards dropped only the profile; measured, three dropped the sermon text too, so the cases use two cards and a 2 000-character one (profile only) and three cards (profile and sermon). The card-cut case asserts the longest-first cut exactly: six cards at 200 characters, the seventh cut part way, the eighth whole.
+- **T8's pruning runs during render**, not in an effect: React's lint (`react-hooks/set-state-in-effect`) refuses a `setState` called straight from an effect, and pruning during render also means stale notes never show for a frame.
+- **T10's error mapping** came from its own test: a 503 `ai_busy` from Revise read "Something went wrong. (Ref: …)" through 4b's `cardErrorFrom`; the three AI codes now show the server's sentence (clarification 27).
+- **T9's quick-checks test** waits for each review's own announcement before checking the line, so a line left from the previous review cannot pass it.
+
+**Replay of the finished plan (2026-10-01).** The plan text was replayed onto a fresh detached worktree of `3957d45` (`npm ci` in its `frontend`; a symlink to the repo's `.venv`) by a script that applies every Create, Append and Replace directive of Tasks 1-11 in order and runs every bash block not marked "(not replayed)". Results:
+- All 90 directives applied; every Replace anchor occurred exactly once; after each task's commit the tree was identical to the build commit of that task.
+- Every "see it fail" output matched as quoted above (T1-T11), and every count matched the table: backend 1184, 1190, 1200, 1205, 1213 (11 skipped throughout); frontend 539/75 through T5, then 542/75, 546/76, 551/77, 557/78, 562/78. T3's usecase file passed three runs, T8's provider file, T9's step file and T10's two files three runs each; typecheck and lint were 0 after every frontend task; T11's docs tests printed `89 passed`, the owner-marker count `4` and the diff stat `5 files changed, 41 insertions(+), 3 deletions(-)`.
+- T12 Steps 2-7 on the replayed tree: @@T12REPLAY@@
+- Not run while planning: the pushes, the PR and CI (T12 Steps 9-13), the merge and the owner's checks (T13), and any call to OpenAI (the container cannot reach it).
+
+## Spec coverage
+
+R = the reviewer spec; S4 = the slice 4 spec's reviewer amendment; F = foundations.
+
+### R decisions and scope
+
+| Item | Task(s) |
+|---|---|
+| Decision 1 (notes, never automatic rewrites) | T3, T9 (notes only); T10 (Revise only on request) |
+| Decision 2 (one button reviews every card) | T6 (`reviewTargets`), T8, T9 |
+| Decision 3 (typed text reviewed too) | T6, T9 (`typed`, `archive`, `default` cards are sent and get notes) |
+| Decision 4 (Revise only on AI cards; typed text never changed) | T7 (`canRevise`), T10 |
+| Decision 5 (the six checks) | T2 (code), T3 (the AI's checks, tags) |
+| Decision 6 (season language by feel) | T1 (writer), T2 (stock phrases, Ordinary Time), T3 (the review prompt quotes the rule) |
+| Decision 7 (new app only) | T1 (no legacy copy; `streamlit-frozen` untouched), every task |
+| Out of scope: saving notes; custom elements, hymns, readings; automatic revision; Streamlit | T7, T8 (memory only), T6 (bodies), T9 (`JSON.stringify(sent)` has no custom element) |
+
+### R sections
+
+| R section | Task(s) and tests |
+|---|---|
+| UX "Review service" (enabled, spinner, Still working, Cancel; 75 s / 100 s) | T9 `is off until…`, `says Still working after 8 s…`; T3 deadline; T6 timeouts (clarification 26) |
+| UX "Notes" (chip, sentence, ×; at most 3; Looks good; Across the service, at most 3) | T3 (caps), T7, T9 `is off until…`, `dismisses one note at a time…` |
+| UX "Revise with these notes" (AI only, notes left, text and remaining notes, origin stays ai, Undo; none on typed, archive, default) | T4, T6, T7, T8 `sends the card's text…`, T10 (all four tests) |
+| UX "Notes go away when the text changes" (typing, Regenerate, Revise, Clear text, Use church default; stale results) | T7 `clears a card's notes…`, `keeps the notes…`; T9 `clears a card's notes when it is typed in, regenerated, cleared or set to the church default`, `drops the notes of a card edited while the review ran…`; T10 (Revise) |
+| UX "Other rules" (memory only; quick-checks line) | T8 (localStorage holds no note), T9 `shows the quick checks…` |
+| Layer 1 code checks (the table; BOOKS + parse_refs; no false hits; repeated openings) | T2 (six tests) |
+| Layer 2 AI review (one call, json_mode, 2 000, 75 s; the messages; the contract; tolerant parsing; merge; budget) | T3 (ten tests) |
+| Revise (messages, budgets, the instruction, the Budget and its 422) | T4 (five tests) |
+| API (routes, guards, bodies, `Note`, server-side settings in one session, 200 with `ai_status`, charging, HTTP errors for revise, sermon text, DEBUG-only text) | T3, T4, T5 (eight tests), T6, T8 |
+| Writer: new season guidance | T1 |
+| Testing → backend `review_checks` | T2 |
+| Testing → backend review usecase (prompt contents, parsing, merge, budget, statuses, charging) | T3 |
+| Testing → backend revise (messages, token budgets, error statuses, budget and 422 with no AI call) | T4, T5 |
+| Testing → routes (guards, `assert_church_isolated`, another church's rubric and profile, validation) | T5 |
+| Testing → `DEFAULT_SYSTEM_PROMPT` new sentence and none of the old | T1 |
+| Testing → frontend DOM: happy path; Looks good; Across the service; dismiss; Revise with Undo; Revise hidden on typed, archive, default; cleared on typing; stale dropped; quick-checks-only; cancel | T9 (happy path, Looks good, the box, dismiss, typing, stale, quick checks, cancel), T10 (Revise with Undo, hidden on the other origins) |
+| Testing → manual check at 375 px | T11 (`docs/manual-verification.md` "## Service reviewer"), T13 (owner) |
+| Dependencies (slice 4 cards and stale rule, `usecases/liturgy.py`, `liturgy_prompts`, the OpenAI client; the `ai` bucket; the rubric; the prayer library optional) | T3, T4 (reuse), T8 (`applyGenerated`, the Undo), T3 `test_without_a_voice_profile…` |
+
+### S4 reviewer amendment
+
+| S4 item | Task(s) |
+|---|---|
+| UI hooks (header button, notes, what clears them, Revise and Undo, memory only, quick-checks line) | T7-T10 (clarifications 18-25) |
+| Routes table, Consistency with F (`ai_status` not an error code; declared deviations) | T3, T5 (clarifications 14, 15) |
+| Revise input budget | T4 `test_the_budget_drops_the_profile_then_the_sermon_then_the_checklist_then_refuses` |
+| Sermon text (same resolved text; WEB for ESV; one bounded fetch; omitted on failure) | T8 (`useSermonLoader`; `reviews every switched-on card…` checks WEB for an ESV church) |
+| Timeouts | T3, T4, T6 (owner answer 3; clarifications 12, 26) |
+| Tenancy | T3 `test_one_session…`, T5 `test_another_church_s_prompt…`, `assert_church_isolated` |
+| Route guards unchanged; OpenAPI regenerated | T5 |
+| New modules (`review_checks.py`, `usecases/liturgy_review.py`; one book table) | T2, T3, T4 |
+| Baseline change: the season guidance; Freeze contingency (off); Tests before and after | T1 (clarification 2) |
+| Testing and acceptance: generation/card tests (clearing, stale), `cards.test.ts` (Revise only for ai; Undo), request builders (sermon text), Revise budget with `FakeAI.calls == 0` | T7, T9 (clearing, stale), T7/T10 (Revise eligibility, Undo; clarification 29), T6 and T8 (bodies and sermon text), T4 (budget) |
+
+### F
+
+| F item | Task(s) |
+|---|---|
+| §1.5 (no new code; `ai_status` a field) | T5 |
+| §1.8 (100 000 rows; the review's deadline; buckets) | T3, T4, T6, T11 (the 2026-10-01 row) |
+| §2.5 (no prayer text at INFO) | T3, T4, T5 (the INFO tests), T12 Step 6 |
+| §2.8 (one OpenAI client; FakeAI; the prompt cap) | T3, T4 |
+| §4.4, §4.5, §4.8, §4.9 (no `apiFetch` in components; timeouts; Still working; Base UI) | T6, T9, T10, T12 Step 6 |
+| §5.5 (manual verification) | T11, T13 |
+| D16, D17 (custom elements get no AI) | T6, T9 |
+
+## Questions for the owner
+
+The owner's answers of 2026-10-01 (1-4, "all recommended") are binding and already in the plan, so nothing blocks the build. These plan choices are visible to the owner; each has a recommendation, and the plan is written as recommended. A different answer changes the named task before or during its build.
+
+1. **The new season wording reaches your church's drafts too** (clarification 2). Your church saved only a Benediction prompt, so after the merge every new AI draft follows the new rule: it may name the season or a festival and repeat "Easter" or "Christmas", and still avoids canned phrases and never names Ordinary Time. Recommended: as approved (owner answer 2).
+2. **What the code checks flag** (clarifications 3, 4, 5): "on this … Sunday" needs at least one word between ("On this Third Sunday"), so a plain "on this Sunday" is fine; "in this ordinary time" gets one note, not two; a scripture reference counts only when the book is capitalized ("Mark 4", not "we mark 4 years") and is a real chapter. Recommended: accept.
+3. **Revise's error sentences** (clarification 13): when the AI cannot revise, the card shows "AI isn't set up on this app yet.", "The AI service is busy. Try again in a minute.", "The AI took too long to answer. Try again." or "The AI service had a problem. Try again."; a very long prayer shows "This prayer is too long to revise.". Recommended: accept.
+4. **When notes go** (clarifications 18, 19, 21): a card's notes go the moment its text changes in any way, including Undo and another tab, and do not come back on Undo; a Regenerate or Revise that fails keeps them; "Looks good." only for a card that came back with no notes, not one whose notes you dismissed; the "Across the service" notes stay until the next review, a dismiss or New service. Recommended: accept.
+5. **A review's life** (clarification 20): a new review replaces the old notes; Cancel, or a review that fails, keeps the notes you have; New service clears them. Recommended: accept.
+6. **New wording not in the spec** (clarification 22): "Reviewing…" by the spinner; "Revising…" on the busy button; "Revised with these notes." with Undo; the messages "The service changed, so the revised draft for {Label} was discarded." and "Kept your edits, so the revised draft for {Label} was not used."; for screen readers, "Review finished. 2 notes." (or "1 note.", "No notes."). Recommended: accept, or give other words.
+7. **Revise's rules and where things sit** (clarifications 23, 24): Revise shows on AI cards with notes left, not while the AI is writing that card; while it runs the card is locked; it is offered even when only the quick checks ran. "Review service" sits at the right of the "Liturgy" heading; the "Across the service" box sits under it, above the sermon title; a card's notes sit under its text. Recommended: accept.
+8. **100 seconds** (clarification 26): both new calls wait up to 100 s, as Generate does. Recommended: as approved (owner answer 3).
+
+Owner steps still to come: the PR on your yes and ready on your yes (T12), the merge on your yes, then the guided phone check, the look on a computer and the timed review, one step at a time (T13), and the records PR.
