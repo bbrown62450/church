@@ -7,29 +7,37 @@
  */
 import { act, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
+import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import BuilderLayout from "@/app/(signed-in)/(church)/builder/layout";
+import ReviewStepPage from "@/app/(signed-in)/(church)/builder/review/page";
 import { Toaster } from "@/components/ui/sonner";
-import { editScriptureLines, setPick } from "@/lib/draft/readings";
+import type { GenerateLiturgyBody } from "@/lib/api/types";
+import { editOccasion, editScriptureLines, setPick } from "@/lib/draft/readings";
 import { draftKey, type DraftV1, type SectionKey } from "@/lib/draft/schema";
 import { editCardText } from "@/lib/liturgy/cards";
+import { authEvents } from "@/lib/queries/auth-events";
 import { keys } from "@/lib/queries/keys";
-import { fakeError, installFakeApi, type FakeHandler } from "@/test/fake-api";
+import { fakeError, installFakeApi, type FakeHandler, type FakeResponse, type RecordedRequest } from "@/test/fake-api";
 import {
   church,
   churchProfile,
   DRAFT_NOW,
+  generateRoute,
   gg2013,
   lectionaryRoute,
   liturgyConfig,
   me,
+  sectionFailure,
+  sectionResult,
   testDraft,
   USER_ID,
 } from "@/test/fixtures";
 import { renderWithProviders } from "@/test/render";
 
 import { LiturgyStep } from "./liturgy-step";
+import { STILL_WORKING } from "./use-still-working";
 
 const KEY = draftKey(USER_ID, church().id);
 const [, , COME, , , , , , SENT] = gg2013();
@@ -80,6 +88,7 @@ function outline(): string[] {
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(DRAFT_NOW);
+  toast.dismiss(); // sonner replays a toast still showing to the next Toaster
 });
 
 afterEach(() => {
@@ -304,5 +313,469 @@ describe("the card's own draft (S Card origin transitions)", () => {
     await user.click(within(assurance).getByRole("switch", { name: "Include Assurance of Pardon" }));
     expect(within(assurance).getByText("Your text")).toBeInTheDocument();
     expect(within(card("Call to Worship")).getByText("Empty")).toBeInTheDocument();
+  });
+});
+
+// --- slice 4b T9: Generate, Regenerate and the AI bar ---------------------------------
+
+/** A `POST /liturgy/generate` handler that answers each section only when the test releases it. */
+function heldGenerate() {
+  const waiting = new Map<string, (answer: FakeResponse | undefined) => void>();
+  const sent: string[] = [];
+  let open = 0;
+  let most = 0;
+  const handler = async (req: RecordedRequest) => {
+    const section = (req.body as GenerateLiturgyBody).sections[0];
+    sent.push(section);
+    open += 1;
+    most = Math.max(most, open);
+    const answer = await new Promise<FakeResponse | undefined>((resolve) => waiting.set(section, resolve));
+    open -= 1;
+    return answer ?? { results: [sectionResult(section, `New ${section}`)] };
+  };
+  return {
+    handler,
+    sent,
+    most: () => most,
+    /** Answers `section` (by default "New {section}"), once its request has arrived. */
+    release: async (section: SectionKey, answer?: FakeResponse) => {
+      await waitFor(() => expect(waiting.has(section)).toBe(true));
+      waiting.get(section)?.(answer);
+      waiting.delete(section);
+    },
+  };
+}
+
+const generateCalls = (requests: RecordedRequest[]) => requests.filter((r) => r.path === "/liturgy/generate");
+
+/**
+ * A card's error, whether it came as an alert (the card's own run) or
+ * quietly (a bulk run announces its errors politely, not as one alert each).
+ */
+function errorIn(label: string): HTMLElement | null {
+  return card(label).querySelector<HTMLElement>('[data-slot="alert"]');
+}
+
+describe("Generate and Regenerate (S Generate and Regenerate, AI bar)", () => {
+  it("Generate sends one section as the church, no overrides, and writes an AI draft with no toast", async () => {
+    const { user, api } = renderStep();
+    const cw = await screen.findByRole("region", { name: "Call to Worship" });
+    api.set("POST /liturgy/generate", generateRoute());
+    await user.click(within(cw).getByRole("button", { name: "Generate" }));
+    expect(await within(cw).findByText("AI draft")).toBeInTheDocument();
+    expect(within(cw).getByRole("textbox", { name: "Call to Worship" })).toHaveValue("Call to Worship written by the AI.");
+    const [call] = generateCalls(api.requests);
+    expect(call.headers["X-Church-Id"]).toBe(church().id);
+    expect(call.body).toEqual({ occasion: "", scriptures: [], hymns: { opening: null, response: null, closing: null }, sections: ["call_to_worship"] });
+    expect(generateCalls(api.requests)).toHaveLength(1);
+    expect(within(cw).queryByText(/Replaced/)).toBeNull(); // nothing was replaced
+    expect(screen.queryByText(/^Wrote/)).toBeNull();
+    await waitFor(() => expect(stored().liturgy.cards.call_to_worship.origin).toBe("ai"));
+  });
+
+  it("Generate empty sections writes only switched-on empty cards, 3 at a time, and ends with one toast", async () => {
+    const held = heldGenerate();
+    const d = withCard("call_to_worship", { text: "Come, let us worship.", origin: "typed" }, withCard("assurance", { enabled: false }));
+    const { user } = renderStep(d, { "POST /liturgy/generate": held.handler });
+    const bar = await screen.findByRole("region", { name: "Write with AI" });
+    expect(within(bar).getByText("Only switched-on sections with no text are written. Text you typed is never changed.")).toBeInTheDocument();
+    await user.click(within(bar).getByRole("button", { name: "Generate empty sections (4)" }));
+    expect(await within(bar).findByText("Writing 1 of 4…")).toBeInTheDocument();
+    expect(within(bar).getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+    await waitFor(() => expect(held.sent).toHaveLength(3));
+    expect(within(card("Offertory Prayer")).getByRole("button", { name: "Waiting…" })).toBeDisabled();
+    await held.release("opening_prayer");
+    expect(await within(bar).findByText("Writing 2 of 4…")).toBeInTheDocument();
+    for (const key of ["prayer_of_confession", "prayer_for_illumination", "offertory_prayer"] as const) await held.release(key);
+    expect(await screen.findByText("Wrote 4 sections.")).toBeInTheDocument();
+    expect(held.sent).toEqual(["opening_prayer", "prayer_of_confession", "prayer_for_illumination", "offertory_prayer"]);
+    expect(held.most()).toBe(3);
+    // Typed text, a card that is off and the Benediction's default are never sent or changed.
+    expect(screen.getByRole("textbox", { name: "Call to Worship" })).toHaveValue("Come, let us worship.");
+    expect(screen.getByRole("textbox", { name: "Benediction" })).toHaveValue("Halverson");
+    expect(within(bar).getByRole("button", { name: "Generate empty sections (0)" })).toBeDisabled();
+    expect(within(bar).getByText("Every switched-on section has text. Use Regenerate on a card for a new AI draft.")).toBeInTheDocument();
+  });
+
+  it("Regenerate on the user's text asks first; Keep my text sends nothing, Replace text replaces it with Undo", async () => {
+    const { user, api } = renderStep(withCard("opening_prayer", { text: "Gracious God", origin: "typed" }), {
+      "POST /liturgy/generate": generateRoute(),
+    });
+    const op = await screen.findByRole("region", { name: "Opening Prayer" });
+    await user.click(within(op).getByRole("button", { name: "Regenerate" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "Replace your text?" });
+    expect(within(dialog).getByText("Regenerate replaces the text in Opening Prayer with a new AI draft. You can undo right after.")).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Keep my text" }));
+    expect(generateCalls(api.requests)).toHaveLength(0);
+    await user.click(within(op).getByRole("button", { name: "Regenerate" }));
+    await user.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Replace text" }));
+    const text = within(op).getByRole("textbox", { name: "Opening Prayer" });
+    await waitFor(() => expect(text).toHaveValue("Opening Prayer written by the AI."));
+    expect(within(op).getByText("Replaced with a new AI draft.")).toBeInTheDocument();
+    await user.click(within(op).getByRole("button", { name: "Undo" }));
+    expect(text).toHaveValue("Gracious God");
+    expect(within(op).getByText("Your text")).toBeInTheDocument();
+    // An AI draft is regenerated without asking.
+    await user.click(within(op).getByRole("button", { name: "Regenerate" }));
+    await user.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Replace text" }));
+    await waitFor(() => expect(text).toHaveValue("Opening Prayer written by the AI."));
+    await user.click(within(op).getByRole("button", { name: "Regenerate" }));
+    await waitFor(() => expect(generateCalls(api.requests)).toHaveLength(3));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
+  // Heavy: six cards answer in one run, then a retry; near Vitest's 5 s default on a busy machine.
+  it("shows each error on its card only, never in the draft, with Try again where it can help", { timeout: 10_000 }, async () => {
+    let timeoutOnce = true;
+    const answers: Partial<Record<SectionKey, () => FakeResponse | ReturnType<typeof sectionResult>>> = {
+      call_to_worship: () =>
+        timeoutOnce
+          ? ((timeoutOnce = false), sectionFailure("call_to_worship", "ai_timeout", "The AI took too long to answer. Try again."))
+          : sectionResult("call_to_worship", "Leader: Come!"),
+      opening_prayer: () =>
+        sectionFailure(
+          "opening_prayer",
+          "prompt_invalid",
+          "The Opening Prayer prompt in Settings has a problem: Placeholders need a name, such as {occasion}. An admin can fix it under Settings → Liturgy prompts.",
+        ),
+      prayer_of_confession: () =>
+        fakeError(404, "not_found", "A chosen hymn is no longer in your hymnal. Choose it again on the Hymns step."),
+      assurance: () => fakeError(500, "internal_error", "Something went wrong."),
+      prayer_for_illumination: () => sectionFailure("prayer_for_illumination", "ai_not_configured", "AI not configured. Type this section yourself."),
+    };
+    const { user } = renderStep(testDraft(), {
+      "POST /liturgy/generate": generateRoute((section) => answers[section]?.() ?? sectionResult(section, `New ${section}`)),
+    });
+    const bar = await screen.findByRole("region", { name: "Write with AI" });
+    await user.click(within(bar).getByRole("button", { name: "Generate empty sections (6)" }));
+    expect(await screen.findByText("Wrote 1 of 6 sections. The rest show what went wrong.")).toBeInTheDocument();
+    const alertIn = (label: string) => errorIn(label) as HTMLElement;
+    expect(alertIn("Call to Worship")).toHaveTextContent("The AI took too long to answer. Try again.");
+    // A bulk run's errors are announced politely, not as six alerts; each is linked to its card's text.
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(within(card("Call to Worship")).getByText("The AI took too long to answer. Try again.", { selector: "[aria-live=polite]" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Call to Worship" })).toHaveAccessibleDescription(/The AI took too long to answer\. Try again\./);
+    expect(within(alertIn("Opening Prayer")).queryByRole("button", { name: "Try again" })).toBeNull();
+    expect(within(alertIn("Prayer of Confession")).getByRole("link", { name: "Go to Hymns" })).toHaveAttribute("href", "/builder/hymns");
+    expect(within(alertIn("Prayer of Confession")).queryByRole("button", { name: "Try again" })).toBeNull();
+    expect(alertIn("Assurance of Pardon")).toHaveTextContent("Something went wrong. (Ref: 4f9a2c1e)");
+    expect(alertIn("Prayer for Illumination")).toHaveTextContent("AI not configured. Type this section yourself.");
+    expect(screen.getByRole("textbox", { name: "Call to Worship" })).toHaveValue(""); // the text is unchanged
+    await waitFor(() => expect(stored().liturgy.cards.offertory_prayer.text).toBe("New offertory_prayer"));
+    expect(window.localStorage.getItem(KEY)).not.toMatch(/took too long|has a problem|no longer in your hymnal|went wrong|not configured/);
+    await user.click(within(alertIn("Call to Worship")).getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Call to Worship" })).toHaveValue("Leader: Come!"));
+    expect(errorIn("Call to Worship")).toBeNull();
+  });
+
+  it("without AI sends nothing: empty cards say so, Regenerate is off, and the banner explains", async () => {
+    const d = withCard("opening_prayer", { text: "Gracious God", origin: "typed" }, withCard("assurance", { enabled: false }));
+    const { user, api } = renderStep(d, { "GET /liturgy/config": liturgyConfig({ ai_available: false }) });
+    const bar = await screen.findByRole("region", { name: "Write with AI" });
+    expect(within(bar).getByText("AI writing isn't set up for this app. Type each section yourself — everything else works as usual.")).toBeInTheDocument();
+    await user.click(within(card("Call to Worship")).getByRole("button", { name: "Generate" }));
+    expect(within(card("Call to Worship")).getByRole("alert")).toHaveTextContent("AI not configured. Type this section yourself.");
+    await user.click(within(bar).getByRole("button", { name: "Generate empty sections (4)" }));
+    const marked = ["Call to Worship", "Prayer of Confession", "Prayer for Illumination", "Offertory Prayer"];
+    for (const label of marked) expect(errorIn(label)).toHaveTextContent("AI not configured. Type this section yourself.");
+    for (const label of ["Opening Prayer", "Assurance of Pardon", "Prayers of the People", "Benediction"]) {
+      expect(errorIn(label)).toBeNull();
+    }
+    const op = card("Opening Prayer");
+    expect(within(op).getByRole("button", { name: "Regenerate" })).toBeDisabled();
+    expect(within(op).getByText("AI isn't set up")).toBeInTheDocument();
+    expect(within(op).getByRole("textbox", { name: "Opening Prayer" })).toHaveValue("Gracious God");
+    expect(within(op).getByText("Your text")).toBeInTheDocument();
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(generateCalls(api.requests)).toHaveLength(0);
+    expect(screen.queryByText(/^Wrote/)).toBeNull();
+  });
+
+  // Heavy: three runs, one of them a bulk run of six with five answers; near Vitest's 5 s default on a busy machine.
+  it("Cancel, switching a running card off, and typing in a queued card all stop it silently", { timeout: 10_000 }, async () => {
+    const held = heldGenerate();
+    const { user } = renderStep(testDraft(), { "POST /liturgy/generate": held.handler });
+    const cw = await screen.findByRole("region", { name: "Call to Worship" });
+    await user.click(within(cw).getByRole("button", { name: "Generate" }));
+    expect(await within(cw).findByRole("button", { name: "Writing…" })).toBeDisabled();
+    expect(within(cw).getByRole("textbox", { name: "Call to Worship" })).toHaveAttribute("readonly");
+    expect(within(cw).getByRole("button", { name: "More actions for Call to Worship" })).toBeDisabled();
+    await user.click(within(cw).getByRole("button", { name: "Cancel Call to Worship" }));
+    expect(within(cw).getByRole("button", { name: "Generate" })).toBeEnabled();
+    await held.release("call_to_worship");
+
+    const op = card("Opening Prayer");
+    await user.click(within(op).getByRole("button", { name: "Generate" }));
+    await within(op).findByRole("button", { name: "Writing…" });
+    await user.click(within(op).getByRole("switch", { name: "Include Opening Prayer" }));
+    await user.click(within(op).getByRole("switch", { name: "Include Opening Prayer" }));
+    expect(within(op).getByRole("button", { name: "Generate" })).toBeEnabled(); // not restarted
+    await held.release("opening_prayer");
+
+    await user.click(screen.getByRole("button", { name: "Generate empty sections (6)" }));
+    const assurance = card("Assurance of Pardon");
+    expect(await within(assurance).findByRole("button", { name: "Waiting…" })).toBeDisabled();
+    await user.type(within(assurance).getByRole("textbox", { name: "Assurance of Pardon" }), "You are forgiven.");
+    for (const key of ["call_to_worship", "opening_prayer", "prayer_of_confession", "prayer_for_illumination", "offertory_prayer"] as const) {
+      await held.release(key);
+    }
+    expect(await screen.findByText("Wrote 5 sections.")).toBeInTheDocument();
+    expect(held.sent).not.toContain("assurance");
+    expect(within(assurance).getByRole("textbox", { name: "Assurance of Pardon" })).toHaveValue("You are forgiven.");
+    // The cancelled runs' answers were never applied, and no card shows an error.
+    expect(screen.getByRole("textbox", { name: "Call to Worship" })).toHaveValue("New call_to_worship");
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  // Heavy: three runs, a New service, a 400 ms draft write and a profile change; near Vitest's 5 s default.
+  it("drops a run for a replaced service or a result for an edit from another tab, and applies one to a card following the default", { timeout: 10_000 }, async () => {
+    const held = heldGenerate();
+    const { user, queryClient } = renderStep(testDraft(), { "POST /liturgy/generate": held.handler });
+    const cw = await screen.findByRole("region", { name: "Call to Worship" });
+    // New service while a run goes: the draft is replaced (a new created_at), and the run stops silently.
+    await user.click(within(cw).getByRole("button", { name: "Generate" }));
+    await within(cw).findByRole("button", { name: "Writing…" });
+    vi.setSystemTime(new Date(DRAFT_NOW.getTime() + 60_000)); // the new draft's created_at differs
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    await user.click(await screen.findByRole("menuitem", { name: "New service" }));
+    expect(await within(card("Call to Worship")).findByRole("button", { name: "Generate" })).toBeEnabled();
+    await held.release("call_to_worship");
+    expect(screen.getByRole("textbox", { name: "Call to Worship" })).toHaveValue("");
+
+    // An edit from another tab while it writes.
+    await user.click(within(card("Opening Prayer")).getByRole("button", { name: "Generate" }));
+    await within(card("Opening Prayer")).findByRole("button", { name: "Writing…" });
+    // The other tab edits the new service (written 400 ms after New service).
+    await waitFor(() => expect(stored().created_at).toBe(new Date(DRAFT_NOW.getTime() + 60_000).toISOString()));
+    const theirs = withCard("opening_prayer", { text: "From the other tab", origin: "typed" }, stored());
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent("storage", { key: KEY, newValue: JSON.stringify({ ...theirs, updated_at: "2026-09-29T17:00:00.000Z" }) }),
+      );
+    });
+    await held.release("opening_prayer");
+    expect(await screen.findByText("Kept your edits — the new AI draft for Opening Prayer was not used.")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Opening Prayer" })).toHaveValue("From the other tab");
+    // The New service run was dropped without a toast, and its answer never landed.
+    expect(screen.queryByText(/The service changed/)).toBeNull();
+    expect(screen.getByRole("textbox", { name: "Call to Worship" })).toHaveValue("");
+
+    // Regenerate a Benediction following the default; the default changes mid-run.
+    const bn = card("Benediction");
+    await user.click(within(bn).getByRole("button", { name: "Regenerate" }));
+    await within(bn).findByRole("button", { name: "Writing…" });
+    act(() => queryClient.setQueryData(keys.churchProfile(church().id), churchProfile({ default_benediction: "Go in peace." })));
+    await waitFor(() => expect(within(bn).getByRole("textbox", { name: "Benediction" })).toHaveValue("Go in peace."));
+    await held.release("benediction");
+    await waitFor(() => expect(within(bn).getByRole("textbox", { name: "Benediction" })).toHaveValue("New benediction"));
+    expect(within(bn).getByText("AI draft")).toBeInTheDocument();
+    await user.click(within(bn).getByRole("button", { name: "Undo" }));
+    expect(within(bn).getByRole("textbox", { name: "Benediction" })).toHaveValue("Go in peace.");
+    expect(within(bn).getByText("Church default")).toBeInTheDocument();
+  });
+
+  // Heavy: a bulk run of six, an error, New service and one more run; near Vitest's 5 s default on a busy machine.
+  it("New service during a bulk run drops every run with one toast and clears the cards' errors and Undo", { timeout: 10_000 }, async () => {
+    const held = heldGenerate();
+    const { user } = renderStep(withCard("call_to_worship", { text: "Come.", origin: "typed" }), { "POST /liturgy/generate": held.handler });
+    const cw = await screen.findByRole("region", { name: "Call to Worship" });
+    await user.click(within(cw).getByRole("button", { name: "More actions for Call to Worship" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Clear text" }));
+    expect(within(cw).getByText("Cleared.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Generate empty sections (6)" }));
+    await waitFor(() => expect(held.sent).toHaveLength(3));
+    // While the card runs its Undo is hidden, so Undo cannot change the text the run will replace.
+    expect(within(cw).queryByText("Cleared.")).toBeNull();
+    await held.release("call_to_worship", fakeError(500, "internal_error", "Something went wrong."));
+    await waitFor(() => expect(errorIn("Call to Worship")).toHaveTextContent("Something went wrong. (Ref: 4f9a2c1e)"));
+    expect(within(cw).getByText("Cleared.")).toBeInTheDocument(); // back once the run has ended
+    await waitFor(() => expect(held.sent).toHaveLength(4));
+    vi.setSystemTime(new Date(DRAFT_NOW.getTime() + 60_000)); // the new draft's created_at differs
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    await user.click(await screen.findByRole("menuitem", { name: "New service" }));
+    expect(await screen.findByText("The service changed, so the AI drafts were discarded.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Generate empty sections (6)" })).toBeEnabled();
+    expect(errorIn("Call to Worship")).toBeNull();
+    expect(within(card("Call to Worship")).queryByText("Cleared.")).toBeNull();
+    // The answers still on their way land nowhere; a new run works as usual.
+    await held.release("opening_prayer");
+    await held.release("prayer_of_confession");
+    await user.click(within(card("Offertory Prayer")).getByRole("button", { name: "Generate" }));
+    await held.release("offertory_prayer");
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Offertory Prayer" })).toHaveValue("New offertory_prayer"));
+    expect(screen.getByRole("textbox", { name: "Opening Prayer" })).toHaveValue("");
+    expect(screen.queryByText(/^Wrote/)).toBeNull();
+    expect(screen.queryByText(/The service changed, so the AI draft for/)).toBeNull();
+    expect(held.sent).toEqual(["call_to_worship", "opening_prayer", "prayer_of_confession", "assurance", "offertory_prayer"]);
+  });
+
+  it("keeps focus on the card when its control goes: Replace text, Cancel, Keep my text, Try again, Clear and Undo", async () => {
+    const held = heldGenerate();
+    const { user } = renderStep(withCard("opening_prayer", { text: "Gracious God", origin: "typed" }), { "POST /liturgy/generate": held.handler });
+    const op = await screen.findByRole("region", { name: "Opening Prayer" });
+    // Replace text: Regenerate is gone while the card runs, so the card's Cancel takes focus.
+    await user.click(within(op).getByRole("button", { name: "Regenerate" }));
+    await user.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Replace text" }));
+    await waitFor(() => expect(within(op).getByRole("button", { name: "Cancel Opening Prayer" })).toHaveFocus());
+    await user.click(within(op).getByRole("button", { name: "Cancel Opening Prayer" }));
+    expect(within(op).getByRole("button", { name: "Regenerate" })).toHaveFocus();
+    await user.click(within(op).getByRole("button", { name: "Regenerate" }));
+    await user.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Keep my text" }));
+    await waitFor(() => expect(within(op).getByRole("button", { name: "Regenerate" })).toHaveFocus());
+    // Try again: its alert goes, so the card's Cancel.
+    const cw = card("Call to Worship");
+    await user.click(within(cw).getByRole("button", { name: "Generate" }));
+    await held.release("call_to_worship", {
+      status: 200,
+      body: { results: [sectionFailure("call_to_worship", "ai_timeout", "The AI took too long to answer. Try again.")] },
+    });
+    await user.click(within(await within(cw).findByRole("alert")).getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(within(cw).getByRole("button", { name: "Cancel Call to Worship" })).toHaveFocus());
+    // Clear: the ⋯ menu is off on an empty card, so "Cleared. Undo"; Undo: the card's heading.
+    await user.click(within(op).getByRole("button", { name: "More actions for Opening Prayer" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Clear text" }));
+    await waitFor(() => expect(within(op).getByRole("button", { name: "Undo" })).toHaveFocus());
+    await user.click(within(op).getByRole("button", { name: "Undo" }));
+    expect(within(op).getByRole("heading", { name: "Opening Prayer" })).toHaveFocus();
+  });
+
+  it("keeps a 429's wait when the member leaves the step and comes back, and the AI bar waits too", async () => {
+    const view = renderStep(testDraft(), {
+      "POST /liturgy/generate": fakeError(429, "rate_limited", "Too many requests. Try again in 30 seconds.", {
+        details: { retry_after_seconds: 30 },
+      }),
+    });
+    await view.user.click(within(await screen.findByRole("region", { name: "Offertory Prayer" })).getByRole("button", { name: "Generate" }));
+    expect(within(await within(card("Offertory Prayer")).findByRole("alert")).getByRole("button", { name: "Try again" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Generate empty sections (6)" })).toBeDisabled();
+    const page = (step: ReactNode) => (
+      <>
+        <BuilderLayout>{step}</BuilderLayout>
+        <Toaster />
+      </>
+    );
+    view.rerender(page(<ReviewStepPage />));
+    expect(screen.queryByRole("region", { name: "Offertory Prayer" })).toBeNull();
+    view.rerender(page(<LiturgyStep />));
+    // Back at once: the wait goes on (it is not restarted, nor over).
+    expect(within(await within(await screen.findByRole("region", { name: "Offertory Prayer" })).findByRole("alert")).getByRole("button", { name: "Try again" })).toBeDisabled();
+    view.rerender(page(<ReviewStepPage />));
+    vi.setSystemTime(new Date(DRAFT_NOW.getTime() + 30_000)); // the 30 s pass while the member is away
+    view.rerender(page(<LiturgyStep />));
+    const offertory = await screen.findByRole("region", { name: "Offertory Prayer" });
+    expect(within(within(offertory).getByRole("alert")).getByRole("button", { name: "Try again" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Generate empty sections (6)" })).toBeEnabled();
+  });
+
+  it("keeps writing while the member is on another step, and the result is there on return", async () => {
+    const held = heldGenerate();
+    const view = renderStep(testDraft(), { "POST /liturgy/generate": held.handler });
+    const cw = await screen.findByRole("region", { name: "Call to Worship" });
+    await view.user.click(within(cw).getByRole("button", { name: "Generate" }));
+    await within(cw).findByRole("button", { name: "Writing…" });
+    const page = (step: ReactNode) => (
+      <>
+        <BuilderLayout>{step}</BuilderLayout>
+        <Toaster />
+      </>
+    );
+    view.rerender(page(<ReviewStepPage />));
+    expect(screen.queryByRole("region", { name: "Call to Worship" })).toBeNull();
+    await held.release("call_to_worship");
+    await waitFor(() => expect(stored().liturgy.cards.call_to_worship.text).toBe("New call_to_worship"));
+    view.rerender(page(<LiturgyStep />));
+    expect(await screen.findByRole("textbox", { name: "Call to Worship" })).toHaveValue("New call_to_worship");
+  });
+
+  // Heavy: a bulk run of six and four cards' alerts; near Vitest's 5 s default on a busy machine.
+  it("stops the queue on a 429: that card and every waiting one show the wait", { timeout: 10_000 }, async () => {
+    const held = heldGenerate();
+    const { user } = renderStep(testDraft(), { "POST /liturgy/generate": held.handler });
+    await user.click(await screen.findByRole("button", { name: "Generate empty sections (6)" }));
+    await waitFor(() => expect(held.sent).toHaveLength(3));
+    await held.release(
+      "call_to_worship",
+      fakeError(429, "rate_limited", "Too many requests. Try again in 30 seconds.", { details: { retry_after_seconds: 30 } }),
+    );
+    for (const label of ["Call to Worship", "Assurance of Pardon", "Prayer for Illumination", "Offertory Prayer"]) {
+      await waitFor(() => expect(errorIn(label)).toHaveTextContent("Too many requests — try again in 30 s."));
+      expect(within(errorIn(label) as HTMLElement).getByRole("button", { name: "Try again" })).toBeDisabled();
+    }
+    await held.release("opening_prayer");
+    await held.release("prayer_of_confession");
+    expect(await screen.findByText("Wrote 2 of 6 sections. The rest show what went wrong.")).toBeInTheDocument();
+    expect(held.sent).toEqual(["call_to_worship", "opening_prayer", "prayer_of_confession"]);
+    // The AI bar waits as well.
+    expect(screen.getByRole("button", { name: "Generate empty sections (4)" })).toBeDisabled();
+  });
+
+  it("enables Try again once a 429's wait has passed", async () => {
+    const { user } = renderStep(testDraft(), {
+      "POST /liturgy/generate": fakeError(429, "rate_limited", "Too many requests. Try again in 1 seconds.", {
+        details: { retry_after_seconds: 1 },
+      }),
+    });
+    await user.click(within(await screen.findByRole("region", { name: "Offertory Prayer" })).getByRole("button", { name: "Generate" }));
+    const retry = within(await within(card("Offertory Prayer")).findByRole("alert")).getByRole("button", { name: "Try again" });
+    expect(retry).toBeDisabled();
+    await waitFor(() => expect(retry).toBeEnabled(), { timeout: 2_000 });
+  });
+
+  it("a 401 or a lost church goes to the app's handling and shows nothing on the card", async () => {
+    const events: string[] = [];
+    const off = [
+      authEvents.onSignOutRequired(() => events.push("signOutRequired")),
+      authEvents.onChurchAccessLost((id) => events.push(`lost:${id}`)),
+    ];
+    const { user, api } = renderStep();
+    const cw = await screen.findByRole("region", { name: "Call to Worship" });
+    api.set("POST /liturgy/generate", fakeError(401, "unauthenticated", "Please sign in."));
+    await user.click(within(cw).getByRole("button", { name: "Generate" }));
+    await waitFor(() => expect(events).toEqual(["signOutRequired"]));
+    api.set("POST /liturgy/generate", fakeError(403, "forbidden", "No access.", { details: { reason: "no_church_access" } }));
+    await user.click(within(cw).getByRole("button", { name: "Generate" }));
+    await waitFor(() => expect(events).toEqual(["signOutRequired", `lost:${church().id}`]));
+    expect(within(cw).queryByRole("alert")).toBeNull();
+    for (const stop of off) stop();
+  });
+
+  it("says Still working after 8 s on the card and in the bar", async () => {
+    vi.useRealTimers(); // a second useFakeTimers call would keep beforeEach's Date-only fake
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"], shouldAdvanceTime: true });
+    vi.setSystemTime(DRAFT_NOW);
+    const held = heldGenerate();
+    const { user } = renderStep(testDraft(), { "POST /liturgy/generate": held.handler });
+    await user.click(await screen.findByRole("button", { name: "Generate empty sections (6)" }));
+    await within(card("Call to Worship")).findByRole("button", { name: "Writing…" });
+    expect(screen.queryByText(STILL_WORKING)).toBeNull();
+    act(() => {
+      vi.advanceTimersByTime(8_000);
+    });
+    expect(within(card("Call to Worship")).getByText(STILL_WORKING)).toHaveAttribute("aria-live", "polite");
+    expect(screen.getByText(`Writing 1 of 6… ${STILL_WORKING}`)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByRole("button", { name: "Generate empty sections (6)" })).toBeEnabled();
+    expect(screen.queryByText(STILL_WORKING)).toBeNull();
+  });
+
+  it("notes when AI text will be general, and when every section is off", async () => {
+    const view = renderStep();
+    const { user } = view;
+    const bar = await screen.findByRole("region", { name: "Write with AI" });
+    expect(within(bar).getByText(/No occasion or readings yet, so AI text will be general\./)).toBeInTheDocument();
+    expect(within(bar).getByRole("link", { name: "Date & readings" })).toHaveAttribute("href", "/builder/readings");
+    expect(within(bar).queryByText(/All liturgy sections are switched off/)).toBeNull();
+    for (const label of ["Call to Worship", "Opening Prayer", "Prayer of Confession", "Assurance of Pardon", "Prayer for Illumination", "Offertory Prayer", "Benediction"]) {
+      await user.click(within(card(label)).getByRole("switch", { name: `Include ${label}` }));
+    }
+    expect(
+      within(bar).getByText(
+        "All liturgy sections are switched off. The Word files will list only hymns, readings, the sermon title and any custom elements.",
+      ),
+    ).toBeInTheDocument();
+    view.unmount();
+    renderStep(editOccasion(testDraft(), "Harvest Home"));
+    expect(await screen.findByRole("button", { name: "Generate empty sections (6)" })).toBeInTheDocument();
+    expect(screen.queryByText(/No occasion or readings yet/)).toBeNull();
   });
 });

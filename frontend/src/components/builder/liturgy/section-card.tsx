@@ -1,8 +1,12 @@
 "use client";
 
-import { EllipsisIcon } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { CircleAlertIcon, EllipsisIcon, XIcon } from "lucide-react";
+import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
 
+import { ConfirmDialog } from "@/components/app/confirm-dialog";
+import { PendingButton } from "@/components/app/pending-button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -10,10 +14,19 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import type { LiturgySection } from "@/lib/api/types";
 import { useDraft } from "@/lib/draft/context";
-import { clearCard, editCardText, restoreChurchDefault, setCardEnabled, type CardOrigin } from "@/lib/liturgy/cards";
+import {
+  clearCard,
+  editCardText,
+  needsRegenerateConfirm,
+  restoreChurchDefault,
+  setCardEnabled,
+  type CardOrigin,
+} from "@/lib/liturgy/cards";
 import { useLiturgyGeneration } from "@/lib/liturgy/generation";
 import { useAutosize } from "@/lib/use-autosize";
 import { cn } from "@/lib/utils";
+
+import { STILL_WORKING, useStillWorking } from "./use-still-working";
 
 /** The status chip for each origin (S "Section card"). */
 export const ORIGIN_CHIPS: Record<CardOrigin, string> = {
@@ -36,7 +49,24 @@ export type SectionCardProps = {
   /** The church's default benediction, for "Use church default". */
   defaultBenediction: string;
   maxLength: number;
+  /** `GET /liturgy/config`'s `ai_available`: when false nothing is sent, and Regenerate is disabled. */
+  aiAvailable: boolean;
 };
+
+/**
+ * A 429's wait (S "Per-card error messages"): true until `retryAt` (ms since
+ * the epoch) passes. It counts from that moment, not from when the card
+ * mounted, so leaving the step and coming back does not restart it.
+ */
+export function useRetryWait(retryAt: number | undefined): boolean {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (retryAt === undefined) return;
+    const timer = setTimeout(() => setNow(Math.max(Date.now(), retryAt)), Math.max(retryAt - Date.now(), 0));
+    return () => clearTimeout(timer);
+  }, [retryAt]);
+  return retryAt !== undefined && now < retryAt;
+}
 
 /**
  * One liturgy section (S "Section card"): a switch named "Include {Label}",
@@ -46,16 +76,36 @@ export type SectionCardProps = {
  * text offers Undo; "Use church default" (Benediction) follows the default
  * again. The card's id is `card-{key}`, so Review can link to it.
  *
- * Focus never drops to the page: when the control that had it goes, focus
- * moves to a control that survives or to the card's heading (`tabIndex={-1}`).
+ * The AI (S "Generate and Regenerate"): an empty card has Generate; a card
+ * with text has Regenerate, which asks "Replace your text?" first when the
+ * text is the user's or a saved service's, and is disabled when AI is not set
+ * up. While queued ("Waiting…") or writing ("Writing…", then "Still
+ * working…" after 8 s) the card has a Cancel button and its ⋯ menu is off;
+ * while writing the text is read-only. Typing in a queued card, or switching
+ * a running card off, cancels its run. An error shows in an alert under the
+ * text with Try again when trying again can help; the text never changes.
+ * While the card runs its Undo line is hidden, so Undo cannot change the text
+ * a queued run is about to replace.
+ *
+ * Focus never drops to the page: when the control that had it goes (Cancel,
+ * Try again, Undo, Clear, the confirm dialog's Replace text), focus moves to
+ * a control that survives or to the card's heading (`tabIndex={-1}`).
  */
-export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLength }: SectionCardProps) {
+export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLength, aiAvailable }: SectionCardProps) {
   const { draft, update } = useDraft();
   const generation = useLiturgyGeneration();
   const key = spec.key;
   const card = draft.liturgy.cards[key];
   const undo = generation.undo[key];
+  const run = generation.runs[key];
+  const error = generation.errors[key];
+  const still = useStillWorking(run?.phase === "writing");
+  const retryWaiting = useRetryWait(error?.retryAt);
+  const [confirming, setConfirming] = useState(false);
   const textRef = useRef<HTMLTextAreaElement>(null);
+  const actionRef = useRef<HTMLButtonElement>(null);
+  /** "Replace text" was chosen, so the closing dialog sends focus to the running card. */
+  const confirmed = useRef(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const undoRef = useRef<HTMLButtonElement>(null);
   /** Set by a handler whose control is about to go: where focus moves after the next render. */
@@ -73,6 +123,7 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
       hint ? `card-${key}-hint` : null,
       key === "assurance" ? `card-${key}-response` : null,
       showCounter ? `card-${key}-count` : null,
+      error ? `card-${key}-error` : null,
     ]
       .filter(Boolean)
       .join(" ") || undefined;
@@ -88,12 +139,16 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
   });
 
   function edit(text: string) {
+    // Typing in a queued card cancels its request, which was never sent; the typed text stays.
+    if (run?.phase === "queued") generation.cancel([key]);
     update((d) => editCardText(d, key, text));
     generation.dismissError(key);
     generation.setUndo(key, null);
   }
 
   function toggle(enabled: boolean) {
+    // Switching a running card off cancels it silently; switching it back on does not restart it.
+    if (run !== undefined) generation.cancel([key]);
     update((d) => setCardEnabled(d, key, enabled));
     generation.dismissError(key);
   }
@@ -117,6 +172,27 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
     update((d) => restoreChurchDefault(d, defaultBenediction));
     generation.dismissError(key);
     generation.setUndo(key, null);
+  }
+
+  function start() {
+    generation.generate([key], { aiAvailable });
+  }
+
+  /** Generate, Regenerate and Try again: replacing the user's own or saved text asks first. */
+  function write() {
+    if (needsRegenerateConfirm(card)) {
+      confirmed.current = false;
+      setConfirming(true);
+    } else {
+      start();
+      // Try again's alert goes; Generate becomes Waiting… (disabled): the card's Cancel takes focus.
+      focusNext.current = () => actionRef.current;
+    }
+  }
+
+  function cancelRun() {
+    generation.cancel([key]);
+    focusNext.current = () => actionRef.current;
   }
 
   const menuItems = [
@@ -162,7 +238,7 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
         <DropdownMenu>
           <DropdownMenuTrigger
             aria-label={`More actions for ${spec.label}`}
-            disabled={menuItems.length === 0}
+            disabled={menuItems.length === 0 || run !== undefined}
             className={cn(buttonVariants({ variant: "ghost", size: "icon-lg" }), "size-11 shrink-0 md:size-8")}
           >
             <EllipsisIcon aria-hidden="true" />
@@ -189,6 +265,7 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
             value={card.text}
             placeholder="Type your own text, or tap Generate."
             maxLength={maxLength}
+            readOnly={run?.phase === "writing"}
             rows={spec.rows}
             style={{ minHeight: `calc(${spec.rows}lh + 1rem + 2px)` }}
             className="max-h-[60vh] overflow-y-auto"
@@ -210,7 +287,7 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
               {hint}
             </p>
           ) : null}
-          {undo ? (
+          {undo && run === undefined ? (
             <p className="flex flex-wrap items-center gap-x-1 text-sm" aria-live="polite">
               {UNDO_LINES[undo.kind]}
               <Button ref={undoRef} variant="link" className="h-11 px-1 md:h-auto" onClick={undoLast}>
@@ -218,10 +295,94 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
               </Button>
             </p>
           ) : null}
+          {/* A bulk run's errors are announced politely here, not as one alert per card. */}
+          <p className="sr-only" aria-live="polite">
+            {error?.bulk ? error.message : null}
+          </p>
+          {error ? (
+            <Alert id={`card-${key}-error`} variant="destructive" role={error.bulk ? undefined : "alert"}>
+              <CircleAlertIcon aria-hidden="true" />
+              <AlertTitle className="whitespace-normal">{error.message}</AlertTitle>
+              {error.retryable || error.link ? (
+                <AlertDescription className="flex flex-wrap gap-2 pt-2">
+                  {error.retryable ? (
+                    <Button variant="outline" size="touch" disabled={retryWaiting} onClick={write}>
+                      Try again
+                    </Button>
+                  ) : null}
+                  {error.link ? (
+                    <Link href={error.link.href} className={buttonVariants({ variant: "outline", size: "touch" })}>
+                      {error.link.label}
+                    </Link>
+                  ) : null}
+                </AlertDescription>
+              ) : null}
+            </Alert>
+          ) : null}
+          {error?.retryable ? null : (
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {run ? (
+                <>
+                  {run.phase === "queued" ? (
+                    <Button variant="outline" size="touch" disabled>
+                      Waiting…
+                    </Button>
+                  ) : (
+                    <PendingButton pending pendingLabel="Writing…" size="touch">
+                      Writing…
+                    </PendingButton>
+                  )}
+                  <Button
+                    ref={actionRef}
+                    variant="ghost"
+                    size="icon-lg"
+                    className="size-11 md:size-8"
+                    aria-label={`Cancel ${spec.label}`}
+                    onClick={cancelRun}
+                  >
+                    <XIcon aria-hidden="true" />
+                  </Button>
+                </>
+              ) : hasText ? (
+                <>
+                  {aiAvailable ? null : <span className="text-sm text-muted-foreground">AI isn&apos;t set up</span>}
+                  <Button ref={actionRef} variant="outline" size="touch" disabled={!aiAvailable} onClick={write}>
+                    Regenerate
+                  </Button>
+                </>
+              ) : (
+                <Button ref={actionRef} size="touch" onClick={write}>
+                  Generate
+                </Button>
+              )}
+              <p className="w-full text-right text-sm text-muted-foreground" aria-live="polite">
+                {still ? STILL_WORKING : null}
+              </p>
+            </div>
+          )}
         </>
       ) : (
         <p className="text-sm text-muted-foreground">Off — not in the service. Any text is kept.</p>
       )}
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title="Replace your text?"
+        description={`Regenerate replaces the text in ${spec.label} with a new AI draft. You can undo right after.`}
+        confirmLabel="Replace text"
+        cancelLabel="Keep my text"
+        onConfirm={() => {
+          confirmed.current = true;
+          setConfirming(false);
+          start();
+        }}
+        // Keep my text: back to the button that opened it. Replace text: that button is gone, so the card's Cancel.
+        finalFocus={() => {
+          if (!confirmed.current) return true;
+          const cancel = actionRef.current;
+          return cancel !== null && cancel.isConnected ? cancel : headingRef.current;
+        }}
+      />
     </section>
   );
 }

@@ -10,6 +10,7 @@ import { useLiturgyGeneration } from "@/lib/liturgy/generation";
 import { useChurchProfile } from "@/lib/queries/church";
 import { useLiturgyConfig } from "@/lib/queries/liturgy";
 
+import { AiBar } from "./ai-bar";
 import { OutlineLandmark } from "./outline-landmark";
 import { SectionCard } from "./section-card";
 import { SermonTitleField } from "./sermon-title-field";
@@ -79,6 +80,7 @@ export function LiturgyStep() {
     <div className="grid gap-6">
       <h2 className="text-lg font-semibold">Liturgy</h2>
       <SermonTitleField maxLength={config.limits.max_sermon_title} />
+      <AiBar aiAvailable={config.ai_available} />
       <section aria-labelledby="order-of-worship" className="grid gap-3">
         <h3 id="order-of-worship" className="text-base font-medium">
           Order of worship
@@ -95,6 +97,7 @@ export function LiturgyStep() {
                       assuranceResponse={config.assurance_response}
                       defaultBenediction={defaultBenediction}
                       maxLength={config.limits.max_section_text}
+                      aiAvailable={config.ai_available}
                     />
                   </li>
                 ) : item.kind === "landmark" ? (
