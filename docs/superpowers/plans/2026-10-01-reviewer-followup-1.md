@@ -11,6 +11,7 @@
 **Source documents:**
 - Reviewer spec ("R"): `docs/superpowers/specs/2026-09-26-service-reviewer-design.md` (decision 4, "Notes", "Notes go away when the text changes", "Revise with these notes", "Layer 2: AI review").
 - The reviewer plan ("RP"): `docs/superpowers/plans/2026-10-01-service-reviewer.md` (its clarifications 18-25 are what this plan changes), and its runbook record, `docs/ops-runbook.md` → "Service reviewer record" (follow-ups 1-4 there are this plan; 5 is out of scope).
+- The branch also carries one docs-only commit made before this plan, `2607566 Docs: Voices of the Church owner decisions (pre-spec, 2026-10-01)` (one new file under `docs/superpowers/specs/`); it touches nothing this plan changes.
 - Facts checked for this plan (tree `faa0ecb` = `origin/main`, the reviewer merged and live, 2026-10-01): backend `1217 passed, 11 skipped`; frontend `570 passed` in 78 files; typecheck and lint clean; Alembic head `0004_invites_reusable`; 4 runbook owner markers. `revise_section` and `ReviseIn` take no origin, so the backend never restricted Revise to AI text; only `canRevise` in `notes.ts` did. `needsRegenerateConfirm` (`cards.ts`) is true for "typed" and "archive" cards with text. `check_openings` builds its key from `opening_words` (the first two words, lowered and joined by a space) and puts the first card's words in `Note.match`.
 - Every task's code was written and run by the planner in a throwaway worktree of `faa0ecb`, and the plan's directives were then replayed onto a fresh worktree of `faa0ecb` (see "Build notes").
 
@@ -1700,7 +1701,7 @@ git log --reverse --no-merges --format=%s origin/main..HEAD
 for c in $(git rev-list origin/main..HEAD); do git show -s --format=%B "$c" | grep -q '^Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>$' || echo "no trailer: $(git show -s --format='%h %s' "$c")"; done; echo "trailer check done"
 ```
 
-**Expected:** nothing from `git status`; `imports grep exit 1`; `raw html grep exit 1`; exactly these 12 paths (this plan and the 11 files the tasks change):
+**Expected:** nothing from `git status`; `imports grep exit 1`; `raw html grep exit 1`; exactly these 12 paths (this plan and the 11 files the tasks change), plus `docs/superpowers/specs/2026-10-01-voices-of-the-church-decisions.md` from the docs-only commit `2607566 Docs: Voices of the Church owner decisions (pre-spec, 2026-10-01)`, which landed on the branch before this plan (name it in Step 4's message; it changes no code):
 ```
 backend/tests/test_usecase_liturgy_review.py
 backend/usecases/liturgy_review.py
@@ -1715,7 +1716,7 @@ frontend/src/lib/liturgy/notes.ts
 frontend/src/lib/liturgy/review.test.tsx
 frontend/src/lib/liturgy/review.tsx
 ```
-`0`; the subjects oldest first: the plan's (`WIP plan: reviewer follow-up 1` …, `Plan: reviewer follow-up 1 (owner answers 2026-10-01)`), then T1-T5's five subjects as written above, then any `Fix: …` lines; only `trailer check done`.
+`0`; the subjects oldest first: `Docs: Voices of the Church owner decisions (pre-spec, 2026-10-01)`, the plan's (`WIP plan: reviewer follow-up 1` …, `Plan: reviewer follow-up 1 (owner answers 2026-10-01)`), then T1-T5's five subjects as written above, then any `Fix: …` lines; only `trailer check done`.
 
 - [ ] **Step 4 (agent → OWNER): Ask to open the draft PR**
 
