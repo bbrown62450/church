@@ -164,7 +164,7 @@ def test_the_prompt_asks_for_no_praise_and_no_restated_code_notes(church):
 .venv/bin/python -m pytest -q backend/tests/test_usecase_liturgy_review.py 2>&1 | tail -2
 ```
 
-**Expected:** `FAILED backend/tests/test_usecase_liturgy_review.py::test_the_prompt_asks_for_no_praise_and_no_restated_code_notes - assert ('A note is only for something to change. …`, then `1 failed, 13 passed in <t>s`.
+**Expected:** `FAILED backend/tests/test_usecase_liturgy_review.py::test_the_prompt_asks_for_no_praise_and_no_restated_code_notes` (the contract has no such rule yet), then `1 failed, 13 passed in <t>s`.
 
 - [ ] **Step 3 (agent): The two strings**
 
@@ -291,7 +291,7 @@ def test_the_review_drops_restated_citation_and_opening_notes(church):
 .venv/bin/python -m pytest -q backend/tests/test_usecase_liturgy_review.py 2>&1 | tail -3
 ```
 
-**Expected:** `FAILED …::test_ai_notes_that_restate_a_code_note_in_other_words_are_dropped - AttributeError: module 'usecases.liturgy_review' has no attribute 'drop_restated'`, `FAILED …::test_the_review_drops_restated_citation_and_opening_notes - AssertionError: …`, then `2 failed, 14 passed in <t>s`.
+**Expected:** `FAILED backend/tests/test_usecase_liturgy_review.py::test_ai_notes_that_restate_a_code_note_in_other_words_are_dropped` (no `drop_restated` yet), `FAILED backend/tests/test_usecase_liturgy_review.py::test_the_review_drops_restated_citation_and_opening_notes` (the restated notes are kept), then `2 failed, 14 passed in <t>s`.
 
 - [ ] **Step 3 (agent): `drop_restated`, and run it before the merge**
 
@@ -718,9 +718,16 @@ const STALE = "From before your last edit.";
 (cd frontend && npx vitest run src/lib/liturgy/notes.test.ts src/lib/liturgy/review.test.tsx src/components/builder/liturgy/review-step.test.tsx 2>&1 | grep -E "^ +× |Tests ")
 ```
 
-**Expected:** these lines (order may vary), then `Tests  8 failed | 34 passed (42)`:
+**Expected:** these eight lines (order may vary; the `stale` field, `forgetCard` and the line do not exist yet), then `⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯` and `      Tests  8 failed | 21 passed (29)`:
 ```
-FILL-T3-FAIL
+   × the reviewer's notes (R Notes) > keeps the notes of each card that still holds what was reviewed, and drops the rest or the whole review
+   × the reviewer's notes (R Notes) > fades a card's notes when its text or origin changes, drops a blank or noteless card's, and every note when the service changes
+   × the reviewer's notes (R Notes) > forgets a card's notes after a new AI draft or a revision lands; a faded AI card can still be revised
+   × Revise with these notes (R Revise) > keeps a card edited meanwhile, and shows why a revision failed
+   × Revise with these notes (R Revise) > checks again once the sermon text has loaded: a card changed meanwhile is left out of the review, and its revision sends nothing
+   × Review service (R User experience) > fades a card's notes when it is typed in or set to the church default, and drops them when it is regenerated or cleared
+   × Review service (R User experience) > keeps faded notes readable and dismissable, drops Looks good. after an edit, and a new review replaces them
+   × Revise with these notes (R Revise) > keeps Cancel while a one-note card revises, with its × off, even when another tab's edit fades the notes
 ```
 
 - [ ] **Step 3 (agent): The notes' rules**
@@ -1144,7 +1151,7 @@ for i in 1 2 3; do (cd frontend && npx vitest run src/lib/liturgy/notes.test.ts 
 (cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")
 ```
 
-**Expected:** `Tests  42 passed (42)` three times; ` Test Files  78 passed (78)` and `      Tests  572 passed (572)`; `typecheck 0`, `lint 0`.
+**Expected:** `      Tests  29 passed (29)` three times; ` Test Files  78 passed (78)` and `      Tests  572 passed (572)`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 8 (agent): Commit**
 
@@ -1327,9 +1334,12 @@ Counts after Task 3: backend **1220 passed, 11 skipped**; frontend **572 in 78**
 (cd frontend && npx vitest run src/lib/liturgy/notes.test.ts src/lib/liturgy/review.test.tsx src/components/builder/liturgy/review-step.test.tsx 2>&1 | grep -E "^ +× |Tests ")
 ```
 
-**Expected:** these lines (order may vary), then `Tests  4 failed | 39 passed (43)`:
+**Expected:** these four lines (order may vary; typed and saved text has no Revise yet), then `⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯` and `      Tests  4 failed | 26 passed (30)`:
 ```
-FILL-T4-FAIL
+   × the reviewer's notes (R Notes) > offers Revise on AI, typed and saved text with a note left, never on the church default or a blank card
+   × Revise with these notes (R Revise) > is offered on AI, typed and archived cards with a note left; the Benediction only once it no longer follows the default
+   × Revise with these notes (R Revise) > asks before revising typed or saved text: Keep my text sends nothing; Revise text revises the current text, with Undo
+   × Revise with these notes (R Revise) > keeps Cancel while a one-note card revises, with its × off, even when another tab's edit fades the notes
 ```
 
 - [ ] **Step 3 (agent): Who gets Revise**
@@ -1534,7 +1544,7 @@ for i in 1 2 3; do (cd frontend && npx vitest run src/lib/liturgy/notes.test.ts 
 (cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")
 ```
 
-**Expected:** `Tests  43 passed (43)` three times; ` Test Files  78 passed (78)` and `      Tests  573 passed (573)`; `typecheck 0`, `lint 0`.
+**Expected:** `      Tests  30 passed (30)` three times; ` Test Files  78 passed (78)` and `      Tests  573 passed (573)`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 6 (agent): Commit**
 
@@ -1628,7 +1638,7 @@ grep -c "—" <(git diff -U0 -- docs | grep '^+' | grep -v '^+++')
 git diff --stat
 ```
 
-**Expected:** `89 passed in <t>s`; `4`; `0` (no em dash added); `1220 passed, 11 skipped in <t>s`; `2 files changed, FILL-T5-STAT`.
+**Expected:** `89 passed in <t>s`; `4`; `0` (no em dash added); `1220 passed, 11 skipped in <t>s`; `2 files changed, 18 insertions(+), 3 deletions(-)`.
 
 - [ ] **Step 3 (agent): Commit**
 
@@ -1893,7 +1903,11 @@ Expected counts after this task: backend `1220 passed, 11 skipped` on `main`; fr
 - **T3's dismissed-card case** first used the Opening Prayer, which has one note in `notes.test.ts`'s answer, so dismissing it left none; it uses the Call to Worship (two notes).
 - **T3 keeps `canRevise` as it is,** so its DOM tests stay on AI cards; T4 widens it and updates the two cases that depended on typed cards having no Revise (the "offered on" test and the other-tab Cancel test, whose focus now goes to Revise on the now-typed card).
 
-FILL-REPLAY
+**Replay of the finished plan (2026-10-01).** The directives of T1-T5 were applied in order onto a fresh detached worktree of `faa0ecb` (a symlink to the repo's `.venv` and to `frontend/node_modules`), running each task's test commands:
+- All 61 directives applied (T1 4, T2 4, T3 34, T4 15, T5 4); every Replace anchor occurred exactly once; after T2, T3, T4 and T5 the tree was identical to the build worktree's.
+- Every "see it fail" output matched as quoted (T1 `1 failed, 13 passed`; T2 `2 failed, 14 passed`; T3 eight failures, `8 failed | 21 passed (29)`; T4 four failures, `4 failed | 26 passed (30)`), and every count matched the table: backend 1218, then 1220 (11 skipped); frontend 572, then 573 in 78 files; typecheck 0 and lint 0; the docs tests `89 passed`, owner markers `4`, no em dash added; the OpenAPI export and `gen:api` left the API files unchanged.
+- **One flaky run:** during T3's checks the three frontend files once reported `1 failed | 28 passed (29)`; the failing test's name was not captured, and 45 further runs of the same files (T3 and T4 trees) all passed. T6 Step 2 runs the suite three times; a failure there is Step 6's (make the test deterministic, never retry), and the build's review should look at the new DOM tests' waits first.
+- Not run while planning: the production build (Turbopack refuses the replay's symlinked `node_modules`; T6 runs it in the real checkout), the pushes, the PR and CI, the merge and the owner's checks, and any call to OpenAI.
 
 ## Spec coverage
 
