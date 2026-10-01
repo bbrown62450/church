@@ -29,7 +29,7 @@
   `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
 - TDD: write the failing test first and see it fail as quoted. T1's backend test pins behavior that already exists, so it passes at once (said where it runs).
 - **Backup push after every task** (standing rule): the controller runs `git push origin claude/slice-2-plan-4q33le` after each task's commit (never `--force`). A fix asked for by the review is a new commit, `Fix: <what> (Task <n> review)`.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1222 → 1223 passed, 11 → 11 skipped; frontend 581 → 588 in 78 → 78 files`.
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1222 → 1223 passed, 11 → 11 skipped; frontend 581 → 596 in 78 → 78 files`.
 - New prose for the owner has no em dashes and no flattery. The owner's copy is exact: "Revise the other prayers", "Replace your text?", "Revise replaces the text in {A} and {B}. You can undo each right after." (with "{A}", "{A} and {B}", "{A}, {B} and {C}"), "Revise text", "Keep my text", "Revising…", "Revised with these notes. Undo".
 - Ask the owner before any push to a PR, PR creation, marking ready, merging, or any production or settings action. Owner steps go one at a time, in plain words.
 
@@ -1796,7 +1796,7 @@ for i in 1 2 3; do (cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Te
 (cd frontend && NEXT_PUBLIC_SUPABASE_URL=https://ci-placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-placeholder NEXT_PUBLIC_API_URL=http://localhost:8000 npm run build 2>&1 | grep -E "Compiled successfully|Error")
 ```
 
-**Expected:** `1223 passed, 11 skipped in <t>s`; three times ` Test Files  78 passed (78)` and `      Tests  588 passed (588)` with no `×` or `FAIL` line (one names the failing test: Step 6); `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s` and no `Error` (the build runs in the real checkout; a font `Failed to fetch` only: say so and rely on CI).
+**Expected:** `1223 passed, 11 skipped in <t>s`; three times ` Test Files  78 passed (78)` and `      Tests  596 passed (596)` with no `×` or `FAIL` line (one names the failing test: Step 6); `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s` and no `Error` (the build runs in the real checkout; a font `Failed to fetch` only: say so and rely on CI).
 
 - [ ] **Step 3 (agent): The API files are unchanged, the gates, the paths, the commits**
 
@@ -1834,7 +1834,7 @@ gh pr list -R bbrown62450/church --head claude/slice-2-plan-4q33le --state open 
 
 **Expected:** one `✓ Logged in` line; `[]`. Send the owner exactly this, and wait for a clear yes:
 
-> Reviewer follow-up 2 is verified on this machine: backend 1223 passed, 11 skipped (1222 before); frontend 588 tests in 78 files (581 before), three runs in a row; typecheck, lint and the production build are clean; the API is unchanged. It adds **Revise the other prayers** under "Several prayers open with …": the first prayer keeps its text, the others are revised one at a time to open differently, each with its own Undo, and "Replace your text?" asks first when your own text is involved. May I open the pull request as a **draft** titled "Reviewer follow-up 2: Revise the other prayers", so the checks run? Merging stays with you.
+> Reviewer follow-up 2 is verified on this machine: backend 1223 passed, 11 skipped (1222 before); frontend 596 tests in 78 files (581 before), three runs in a row; typecheck, lint and the production build are clean; the API is unchanged. It adds **Revise the other prayers** under "Several prayers open with …": the first prayer keeps its text, the others are revised one at a time to open differently, each with its own Undo, and "Replace your text?" asks first when your own text is involved. May I open the pull request as a **draft** titled "Reviewer follow-up 2: Revise the other prayers", so the checks run? Merging stays with you.
 
 - [ ] **Step 5 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
 
@@ -1849,7 +1849,7 @@ Reviewer follow-up 2 (owner answers of 2026-10-01): Revise from "Across the serv
 - The note goes once every one was revised (never a newer review's); a failure, Cancel or edit keeps it, and a 429 stops the rest.
 - The frontend finds the prayers with the backend's opening rule; a shared fixture (backend/tests/fixtures/shared/opening_words.json) pins both.
 
-Tests: backend 1222 → 1223 passed, 11 → 11 skipped; frontend 581 → 588 in 78 → 78 files
+Tests: backend 1222 → 1223 passed, 11 → 11 skipped; frontend 581 → 596 in 78 → 78 files
 
 After merge (Task 6): a three-step check on the owner's phone, then a short "Reviewer follow-up 2 record" in docs/ops-runbook.md.
 
@@ -1863,7 +1863,7 @@ gh pr create -R bbrown62450/church --draft --base main --head claude/slice-2-pla
 gh pr checks <N> -R bbrown62450/church --watch --interval 30
 ```
 
-Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1223 passed, 11 skipped`, backend-postgres `11 passed, 1223 deselected`, frontend `588 passed` in 78 files. Then send: "PR #<N> is green: backend 1223 passed, 11 skipped; 588 frontend tests in 78 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R bbrown62450/church`.
+Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1223 passed, 11 skipped`, backend-postgres `11 passed, 1223 deselected`, frontend `596 passed` in 78 files. Then send: "PR #<N> is green: backend 1223 passed, 11 skipped; 596 frontend tests in 78 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R bbrown62450/church`.
 
 - [ ] **Step 6: Fix any failure in its owning task**
 
@@ -1878,7 +1878,7 @@ Run the last line with `run_in_background: true`. **Expected:** the PR URL; ever
 
 For each fix: change only the owning task's files; rerun Steps 2-3; commit `Fix: <what> (Task <n>, follow-up 2 final verification)` with the trailer; after the PR exists, ask the owner before pushing it.
 
-Expected counts after this task: backend `1223 passed, 11 skipped`; frontend `588 passed` in 78 files.
+Expected counts after this task: backend `1223 passed, 11 skipped`; frontend `596 passed` in 78 files.
 
 ### Task 6: Merge, the owner's phone check (three steps), the record (OWNER + agent)
 
@@ -1996,7 +1996,7 @@ gh pr checks claude/slice-2-plan-4q33le -R bbrown62450/church --watch
 
 Code only (notes were never saved; no draft shape changed). On the owner's yes for each outward command: a branch `claude/revert-reviewer-followup-2` from `origin/main`, `git revert -m 1 --no-commit <merge sha>`, a commit "Revert reviewer follow-up 2 (PR #<N>)" with the trailer, both suites (`1222 passed, 11 skipped`; `581 passed` in 78), a PR, CI, and the merge on the owner's yes; record it in the follow-up record.
 
-Expected counts after this task: backend `1223 passed, 11 skipped` on `main`; frontend `588 passed` in 78 files. The records PR adds no test.
+Expected counts after this task: backend `1223 passed, 11 skipped` on `main`; frontend `596 passed` in 78 files. The records PR adds no test.
 
 ---
 
