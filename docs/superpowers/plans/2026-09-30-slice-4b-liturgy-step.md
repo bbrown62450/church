@@ -744,9 +744,10 @@ describe("communion, the sermon title and custom elements (S Communion card, Cus
     expect(removed?.element.label).toBe("Choir Anthem");
     expect(removed?.draft.liturgy.custom_elements.map((e) => e.id)).toEqual(["a", "c"]);
     expect(removeCustomElement(moved, "zzz")).toBeNull();
-    const restored = restoreCustomElement(removed!.draft, removed!.element, removed!.index);
+    const restored = restoreCustomElement(removed!.draft, removed!.element, removed!.index, 30);
     expect(restored.liturgy.custom_elements.map((e) => e.id)).toEqual(["a", "b", "c"]);
-    expect(restoreCustomElement(restored, removed!.element, 1)).toBe(restored); // already back
+    expect(restoreCustomElement(restored, removed!.element, 1, 30)).toBe(restored); // already back
+    expect(restoreCustomElement(removed!.draft, removed!.element, removed!.index, 2)).toBe(removed!.draft); // the list is full
   });
 });
 ```
@@ -1011,10 +1012,10 @@ export function removeCustomElement(
   return { draft: withLiturgy(d, { custom_elements: list.filter((e) => e.id !== id) }), element: list[index], index };
 }
 
-/** Undo of Remove: back at its index (or the end), unless it is already there. */
-export function restoreCustomElement(d: DraftV1, element: CustomElement, index: number): DraftV1 {
+/** Undo of Remove: back at its index (or the end), unless it is already there or the list is full (`max`). */
+export function restoreCustomElement(d: DraftV1, element: CustomElement, index: number, max: number): DraftV1 {
   const list = d.liturgy.custom_elements;
-  if (list.some((e) => e.id === element.id)) return d;
+  if (list.some((e) => e.id === element.id) || list.length >= max) return d;
   const at = Math.min(Math.max(index, 0), list.length);
   return withLiturgy(d, { custom_elements: [...list.slice(0, at), element, ...list.slice(at)] });
 }
@@ -3082,9 +3083,11 @@ grep -c "LiturgyGenerationProvider" frontend/src/components/builder/builder-shel
  * Testing `generation.test.tsx`, amendment 2026-09-26): a batch reads the
  * passage once and every request carries it; a fetch that fails or takes too
  * long still sends the batch, without it and with no toast; Cancel during the
- * wait sends nothing. The step's own tests (T9) cover the rest of the flow.
+ * wait sends nothing. And S step 6 before sending: a card whose text became
+ * the member's while it waited in the queue (Undo, another tab) is not sent.
+ * The step's own tests (T9) cover the rest of the flow.
  */
-import { act, screen } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import { useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -3092,9 +3095,9 @@ import { Toaster } from "@/components/ui/sonner";
 import type { GenerateLiturgyBody } from "@/lib/api/types";
 import { DraftProvider, useDraft } from "@/lib/draft/context";
 import { editScriptureLines } from "@/lib/draft/readings";
-import { draftKey, type SectionKey } from "@/lib/draft/schema";
+import { draftKey, type DraftV1, type SectionKey } from "@/lib/draft/schema";
 import { fakeError, installFakeApi, type FakeHandler, type RecordedRequest } from "@/test/fake-api";
-import { church, churchProfile, DRAFT_NOW, generateRoute, me, testDraft, USER_ID } from "@/test/fixtures";
+import { church, churchProfile, DRAFT_NOW, generateRoute, me, sectionResult, testDraft, USER_ID } from "@/test/fixtures";
 import { renderWithProviders } from "@/test/render";
 
 import { LiturgyGenerationProvider, MAX_IN_FLIGHT, SERMON_WAIT_MS, useLiturgyGeneration, type LiturgyGeneration } from "./generation";
@@ -3112,6 +3115,8 @@ const handle: { current: LiturgyGeneration | null } = { current: null };
 const generation = {
   generate: (...args: Parameters<LiturgyGeneration["generate"]>) => handle.current?.generate(...args),
   cancel: (...args: Parameters<LiturgyGeneration["cancel"]>) => handle.current?.cancel(...args),
+  setUndo: (...args: Parameters<LiturgyGeneration["setUndo"]>) => handle.current?.setUndo(...args),
+  applyUndo: (...args: Parameters<LiturgyGeneration["applyUndo"]>) => handle.current?.applyUndo(...args),
 };
 
 function Probe() {
@@ -3132,10 +3137,10 @@ function Probe() {
 }
 
 /** Pat's draft with October 4's readings (the NT reading is Philippians), in the providers the shell mounts. */
-function renderProvider(routes: Record<string, FakeHandler>, sermonWaitMs?: number) {
+function renderProvider(routes: Record<string, FakeHandler>, sermonWaitMs?: number, recipe: (d: DraftV1) => DraftV1 = (d) => d) {
   window.localStorage.setItem(
     KEY,
-    JSON.stringify(editScriptureLines(testDraft(), "Isaiah 5:1-7\nPsalm 80:7-15\nPhilippians 3:4b-14\nMatthew 21:33-46")),
+    JSON.stringify(recipe(editScriptureLines(testDraft(), "Isaiah 5:1-7\nPsalm 80:7-15\nPhilippians 3:4b-14\nMatthew 21:33-46"))),
   );
   const api = installFakeApi(routes);
   const profile = churchProfile();
@@ -3229,6 +3234,55 @@ describe("the sermon text (S Sermon text)", () => {
     expect(screen.getByText("assurance: empty / idle")).toBeInTheDocument();
   });
 });
+
+/** A generate route that holds every section until the test releases it, so the 4th card waits in the queue. */
+function heldRoute() {
+  const waiting = new Map<string, () => void>();
+  const route = generateRoute(async (section) => {
+    await new Promise<void>((resolve) => waiting.set(section, resolve));
+    return sectionResult(section, `New ${section}`);
+  });
+  return { route, release: (key: SectionKey) => waiting.get(key)?.() };
+}
+
+const withAssurance = (text: string, origin: "ai" | "typed") => (d: DraftV1): DraftV1 => ({
+  ...d,
+  liturgy: { ...d.liturgy, cards: { ...d.liturgy.cards, assurance: { enabled: true, text, origin } } },
+});
+
+describe("a card that changed while it waited (S step 6, before sending)", () => {
+  it("Undo while Waiting… sends nothing: the card keeps the text Undo brought back", async () => {
+    const held = heldRoute();
+    const api = renderProvider({ "POST /scripture/passages": { passages: [PHILIPPIANS] }, "POST /liturgy/generate": held.route }, undefined, withAssurance("You are forgiven (AI).", "ai"));
+    act(() => generation.setUndo("assurance", { kind: "replaced", previous: { text: "You are forgiven.", origin: "typed" } }));
+    act(() => generation.generate(FOUR, { aiAvailable: true }));
+    await waitFor(() => expect(generateCalls(api.requests)).toHaveLength(MAX_IN_FLIGHT));
+    expect(screen.getByText("assurance: You are forgiven (AI). / queued")).toBeInTheDocument();
+    act(() => generation.applyUndo("assurance"));
+    for (const key of FOUR.slice(0, 3)) held.release(key);
+    expect(await screen.findByText("Kept your edits — the new AI draft for Assurance of Pardon was not used.")).toBeInTheDocument();
+    expect(screen.getByText("assurance: You are forgiven. / idle")).toBeInTheDocument();
+    expect(generateCalls(api.requests).map((r) => (r.body as GenerateLiturgyBody).sections[0])).toEqual(FOUR.slice(0, 3));
+  });
+
+  it("an edit from another tab while the card waits sends nothing", async () => {
+    const held = heldRoute();
+    const api = renderProvider({ "POST /scripture/passages": { passages: [PHILIPPIANS] }, "POST /liturgy/generate": held.route });
+    act(() => generation.generate(FOUR, { aiAvailable: true }));
+    await waitFor(() => expect(generateCalls(api.requests)).toHaveLength(MAX_IN_FLIGHT));
+    const theirs = withAssurance("From the other tab", "typed")(JSON.parse(window.localStorage.getItem(KEY) ?? "null") as DraftV1);
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent("storage", { key: KEY, newValue: JSON.stringify({ ...theirs, updated_at: "2026-09-29T17:00:00.000Z" }) }),
+      );
+    });
+    expect(await screen.findByText("assurance: From the other tab / queued")).toBeInTheDocument();
+    for (const key of FOUR.slice(0, 3)) held.release(key);
+    expect(await screen.findByText("Kept your edits — the new AI draft for Assurance of Pardon was not used.")).toBeInTheDocument();
+    expect(screen.getByText("assurance: From the other tab / idle")).toBeInTheDocument();
+    expect(generateCalls(api.requests)).toHaveLength(3);
+  });
+});
 ```
 
 - [ ] **Step 3 (agent): Run them and see them fail**
@@ -3268,12 +3322,21 @@ Error: Failed to resolve import "./generation" from "src/lib/liturgy/generation.
  *   (the effective NT reading, WEB for ESV, `queryClient.fetchQuery` through
  *   `passageQuery`, at most 10 s; a failure or a timeout just leaves it out),
  *   then each section is one request, at most 3 in flight.
- * - When a request starts the card is captured (`captureCard`); when its
- *   answer arrives `staleVerdict` decides, inside the draft update, whether it
- *   applies ("apply": the text, origin "ai", Undo when it replaced text) or
- *   is dropped with S's toast.
+ * - The card is captured (`captureCard`) when the member asks (the click, or
+ *   "Replace text"), not when the request starts. Before a queued request is
+ *   sent, and again when its answer arrives, `staleVerdict` decides against
+ *   the current draft: "apply" sends it, then writes the text (origin "ai",
+ *   Undo when it replaced text, inside the draft update); otherwise nothing
+ *   is sent or written and S's toast says why. So text that became the
+ *   member's while the card waited (Undo, another tab) is never replaced
+ *   without the confirm dialog.
+ * - "New service" (a new `created_at`) cancels every run silently and clears
+ *   the errors and Undo; a bulk run ends with one toast, "The service
+ *   changed, so the AI drafts were discarded.". A result racing that change
+ *   (another tab) still meets the stale rule.
  * - A 429 stops the queue: that card and every queued one show the retry
- *   message. A 401 or a lost church goes to the app's handling
+ *   message, with the moment the wait ends (`retryAt`), so leaving the step
+ *   and coming back does not restart it. A 401 or a lost church goes to the app's handling
  *   (`reportAuthErrors`) and shows nothing on the card.
  * - A bulk run ends with one toast: "Wrote n sections." or "Wrote k of n
  *   sections. The rest show what went wrong." (cancelled cards not counted).
@@ -3322,10 +3385,16 @@ export const SERMON_WAIT_MS = 10_000;
 export type CardRun = { phase: "queued" | "writing"; since: number };
 export type UndoEntry = { kind: "replaced" | "cleared"; previous: CardSnapshot };
 export type BulkRun = { total: number; done: number };
+/**
+ * A card's error as the step shows it: `retryAt` (ms since the epoch) is when
+ * a 429's wait ends; `bulk` marks an error from "Generate empty sections",
+ * announced politely rather than as one alert per card.
+ */
+export type CardErrorState = CardError & { retryAt?: number; bulk?: boolean };
 
 export type LiturgyGeneration = {
   runs: Partial<Record<SectionKey, CardRun>>;
-  errors: Partial<Record<SectionKey, CardError>>;
+  errors: Partial<Record<SectionKey, CardErrorState>>;
   undo: Partial<Record<SectionKey, UndoEntry>>;
   /** "Generate empty sections" while it runs. */
   bulk: BulkRun | null;
@@ -3343,6 +3412,30 @@ export type LiturgyGeneration = {
 const GenerationContext = createContext<LiturgyGeneration | null>(null);
 
 type Bulk = { keys: Set<SectionKey>; total: number; done: number; written: number };
+
+/** A queued run that found its card changed before it was sent: nothing is sent. */
+class StaleRun extends Error {
+  constructor(readonly verdict: Exclude<StaleVerdict, "apply">) {
+    super(verdict);
+  }
+}
+
+export const SERVICE_CHANGED_BULK = "The service changed, so the AI drafts were discarded.";
+
+function staleToast(key: SectionKey, verdict: Exclude<StaleVerdict, "apply">): void {
+  const label = SECTION_LABELS[key];
+  toast.message(
+    verdict === "service_changed"
+      ? `The service changed, so the AI draft for ${label} was discarded.`
+      : `Kept your edits — the new AI draft for ${label} was not used.`,
+  );
+}
+
+function errorState(error: CardError, bulk: boolean): CardErrorState {
+  return error.retryAfterSeconds === undefined
+    ? { ...error, bulk }
+    : { ...error, bulk, retryAt: Date.now() + error.retryAfterSeconds * 1000 };
+}
 
 function without<T>(record: Partial<Record<SectionKey, T>>, keys: readonly SectionKey[]): Partial<Record<SectionKey, T>> {
   if (!keys.some((key) => key in record)) return record;
@@ -3367,12 +3460,12 @@ export function LiturgyGenerationProvider({
   sermonWaitMs?: number;
   children: ReactNode;
 }) {
-  const { update, peek } = useDraft();
+  const { draft, update, peek } = useDraft();
   const api = useApi();
   const queryClient = useQueryClient();
   const [queue] = useState(() => createTaskQueue({ concurrency: MAX_IN_FLIGHT }));
   const [runs, setRuns] = useState<Partial<Record<SectionKey, CardRun>>>({});
-  const [errors, setErrors] = useState<Partial<Record<SectionKey, CardError>>>({});
+  const [errors, setErrors] = useState<Partial<Record<SectionKey, CardErrorState>>>({});
   const [undo, setUndoState] = useState<Partial<Record<SectionKey, UndoEntry>>>({});
   const [bulk, setBulk] = useState<BulkRun | null>(null);
   const mounted = useRef(true);
@@ -3383,6 +3476,7 @@ export function LiturgyGenerationProvider({
   const captured = useRef(new Map<SectionKey, CapturedCard>());
   const bulkRef = useRef<Bulk | null>(null);
   const batchSeq = useRef(0);
+  const service = useRef(draft.created_at);
 
   useEffect(() => {
     mounted.current = true;
@@ -3394,7 +3488,26 @@ export function LiturgyGenerationProvider({
     };
   }, [queue]);
 
-  const setError = useCallback((key: SectionKey, error: CardError | null) => {
+  // "New service" (or a saved service loaded): the runs, errors and Undo belonged to the old draft.
+  const createdAt = draft.created_at;
+  useEffect(() => {
+    if (service.current === createdAt) return;
+    service.current = createdAt;
+    queue.cancelAll();
+    for (const controller of batches.current.values()) controller.abort();
+    batches.current.clear();
+    pending.current.clear();
+    captured.current.clear();
+    const hadBulk = bulkRef.current !== null;
+    bulkRef.current = null;
+    setRuns({});
+    setErrors({});
+    setUndoState({});
+    setBulk(null);
+    if (hadBulk) toast.message(SERVICE_CHANGED_BULK);
+  }, [createdAt, queue]);
+
+  const setError = useCallback((key: SectionKey, error: CardErrorState | null) => {
     setErrors((current) => (error === null ? without(current, [key]) : { ...current, [key]: error }));
   }, []);
 
@@ -3447,15 +3560,14 @@ export function LiturgyGenerationProvider({
         out.previous = { text: card.text, origin: card.origin };
         return applyGenerated(d, key, text);
       });
-      const label = SECTION_LABELS[key];
-      if (out.verdict === "service_changed") {
-        toast.message(`The service changed, so the AI draft for ${label} was discarded.`);
-      } else if (out.verdict === "edited") {
-        toast.message(`Kept your edits — the new AI draft for ${label} was not used.`);
-      } else if (out.previous !== null && out.previous.text.trim() !== "") {
-        setUndo(key, { kind: "replaced", previous: out.previous });
+      if (out.verdict !== "apply") {
+        staleToast(key, out.verdict);
+        return false;
       }
-      return out.verdict === "apply";
+      // Over text: Undo brings it back. Over a blank card: any "Cleared." line is stale now.
+      const replaced = out.previous !== null && out.previous.text.trim() !== "";
+      setUndo(key, replaced && out.previous !== null ? { kind: "replaced", previous: out.previous } : null);
+      return true;
     },
     [update, setUndo],
   );
@@ -3464,6 +3576,13 @@ export function LiturgyGenerationProvider({
     (key: SectionKey, outcome: TaskOutcome<SectionResult>) => {
       if (!mounted.current) return;
       setRuns((current) => without(current, [key]));
+      const inBulk = bulkRef.current?.keys.has(key) ?? false;
+      if (!outcome.ok && outcome.error instanceof StaleRun) {
+        captured.current.delete(key);
+        staleToast(key, outcome.error.verdict);
+        leaveBulk(key, "failed");
+        return;
+      }
       if (outcome.ok) {
         const result = outcome.value;
         if (result.status !== "error" && result.text !== null) {
@@ -3471,7 +3590,8 @@ export function LiturgyGenerationProvider({
           return;
         }
         captured.current.delete(key);
-        setError(key, result.error ? cardErrorFrom(result.error) : cardErrorFrom(new Error("no text")));
+        const failure = cardErrorFrom(result.error ?? new Error("no text"));
+        setError(key, failure === null ? null : errorState(failure, inBulk));
         leaveBulk(key, "failed");
         return;
       }
@@ -3479,14 +3599,16 @@ export function LiturgyGenerationProvider({
       const e = outcome.error;
       if (e instanceof ApiError && (e.status === 401 || isNoChurchAccess(e))) reportAuthErrors(e, church.id);
       const error = cardErrorFrom(e);
-      setError(key, error);
+      setError(key, error === null ? null : errorState(error, inBulk));
       leaveBulk(key, error === null ? "cancelled" : "failed");
-      if (e instanceof ApiError && e.code === "rate_limited") {
+      if (error !== null && e instanceof ApiError && e.code === "rate_limited") {
         // S step 7: the whole queue stops, and every card still waiting shows the same message.
         const waiting = [...queue.waitingKeys(), ...pending.current.keys()] as SectionKey[];
+        const stamped = errorState(error, inBulk);
         for (const other of waiting) {
+          const otherInBulk = bulkRef.current?.keys.has(other) ?? false;
           dropRun(other);
-          setError(other, error);
+          setError(other, { ...stamped, bulk: otherInBulk });
           leaveBulk(other, "failed");
         }
         setRuns((current) => without(current, waiting));
@@ -3522,8 +3644,11 @@ export function LiturgyGenerationProvider({
       queue.push(
         key,
         (signal) => {
+          // S step 6 before sending: text that became the member's while the card waited is never replaced.
           const draft = peek();
-          captured.current.set(key, captureCard(draft, key));
+          const cap = captured.current.get(key);
+          const verdict = cap === undefined ? "service_changed" : staleVerdict(draft, key, cap);
+          if (verdict !== "apply") return Promise.reject(new StaleRun(verdict));
           setRuns((current) => ({ ...current, [key]: { phase: "writing", since: Date.now() } }));
           return generateSection(api.church, key, buildGenerateRequest(draft, key, sermon), signal);
         },
@@ -3542,13 +3667,16 @@ export function LiturgyGenerationProvider({
           const card = draft.liturgy.cards[key];
           return card.enabled && card.text.trim() === "";
         });
-        setErrors((current) => ({ ...current, ...Object.fromEntries(empty.map((key) => [key, localAiNotConfigured()])) }));
+        const marked = errorState(localAiNotConfigured(), isBulk);
+        setErrors((current) => ({ ...current, ...Object.fromEntries(empty.map((key) => [key, marked])) }));
         return;
       }
       const busy = new Set<SectionKey>([...pending.current.keys(), ...(queue.runningKeys() as SectionKey[]), ...(queue.waitingKeys() as SectionKey[])]);
       const fresh = keys.filter((key) => !busy.has(key));
       if (fresh.length === 0) return;
       const since = Date.now();
+      // The card as the member saw it when they asked (the click, or "Replace text").
+      for (const key of fresh) captured.current.set(key, captureCard(draft, key));
       setErrors((current) => without(current, fresh));
       setRuns((current) => ({ ...current, ...Object.fromEntries(fresh.map((key) => [key, { phase: "queued", since }])) }));
       if (isBulk) {
@@ -3736,7 +3864,8 @@ git status --short
  * `useAutosize` (slice 4 spec, UX "Layout": textareas grow with their content
  * up to 60 vh, then scroll): where the browser sizes a field to its content
  * itself (`field-sizing: content`) the hook does nothing; elsewhere it sets
- * the height from the content, capped at 60% of the window.
+ * the height from the content, capped at 60% of the window, and again when
+ * the field comes back (a card switched on).
  */
 import { render, screen } from "@testing-library/react";
 import { useRef } from "react";
@@ -3748,6 +3877,13 @@ function Field({ value }: { value: string }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   useAutosize(ref, value);
   return <textarea ref={ref} aria-label="Text" value={value} readOnly />;
+}
+
+/** A card's field, rendered only while the card is on. */
+function Toggled({ on, value }: { on: boolean; value: string }) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useAutosize(ref, value, on);
+  return on ? <textarea ref={ref} aria-label="Text" value={value} readOnly /> : null;
 }
 
 function withScrollHeight(px: number) {
@@ -3769,6 +3905,17 @@ describe("useAutosize (S Layout)", () => {
     withScrollHeight(900);
     view.rerender(<Field value={"Leader: Come!\n".repeat(40)} />);
     expect(screen.getByRole("textbox", { name: "Text" }).style.height).toBe("600px");
+  });
+
+  it("sizes the field again when it comes back with the same text", () => {
+    vi.stubGlobal("CSS", { supports: () => false });
+    vi.spyOn(window, "innerHeight", "get").mockReturnValue(1000);
+    withScrollHeight(240);
+    const view = render(<Toggled on value="Leader: Come!" />);
+    view.rerender(<Toggled on={false} value="Leader: Come!" />);
+    expect(screen.queryByRole("textbox")).toBeNull();
+    view.rerender(<Toggled on value="Leader: Come!" />);
+    expect(screen.getByRole("textbox", { name: "Text" }).style.height).toBe("242px");
   });
 
   it("leaves the height to the browser when it sizes fields to their content", () => {
@@ -3990,7 +4137,8 @@ function sizesItself(): boolean {
   return typeof CSS !== "undefined" && typeof CSS.supports === "function" && CSS.supports("field-sizing", "content");
 }
 
-export function useAutosize(ref: RefObject<HTMLTextAreaElement | null>, value: string): void {
+/** `shown`: false while the field is not rendered (a card switched off), so it is sized again when it comes back. */
+export function useAutosize(ref: RefObject<HTMLTextAreaElement | null>, value: string, shown = true): void {
   useLayoutEffect(() => {
     const field = ref.current;
     if (field === null || sizesItself()) return;
@@ -3998,7 +4146,7 @@ export function useAutosize(ref: RefObject<HTMLTextAreaElement | null>, value: s
     // scrollHeight leaves out the 1 px borders.
     const height = Math.min(field.scrollHeight + 2, Math.round(window.innerHeight * AUTOSIZE_MAX_SHARE));
     field.style.height = `${height}px`;
-  }, [ref, value]);
+  }, [ref, value, shown]);
 }
 ```
 
@@ -4234,6 +4382,13 @@ describe("the Liturgy step (S User experience)", () => {
     expect(within(card("Prayer of Confession")).getByText("Printed in bold for everyone to read together.")).toBeInTheDocument();
     expect(within(card("Assurance of Pardon")).getByText("People: Thanks be to God! Amen.")).toBeInTheDocument();
     expect(within(card("Assurance of Pardon")).getByText("Added automatically after your text.")).toBeInTheDocument();
+    // The hints are the fields' descriptions.
+    expect(screen.getByRole("textbox", { name: "Call to Worship" })).toHaveAccessibleDescription(
+      "Start lines with “Leader:” or “People:”. People lines print in bold.",
+    );
+    expect(screen.getByRole("textbox", { name: "Assurance of Pardon" })).toHaveAccessibleDescription(
+      "People: Thanks be to God! Amen. Added automatically after your text.",
+    );
     const prayers = card("Prayers of the People");
     expect(within(prayers).getByText("Pastor's copy only")).toBeInTheDocument();
     expect(within(prayers).getByRole("switch", { name: "Include Prayers of the People" })).not.toBeChecked();
@@ -4508,7 +4663,7 @@ export function OutlineLandmark({ item, draft }: { item: OutlineItem; draft: Dra
 "use client";
 
 import { EllipsisIcon } from "lucide-react";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -4552,6 +4707,9 @@ export type SectionCardProps = {
  * the service. Any text is kept." Typing makes the text the user's; Clear
  * text offers Undo; "Use church default" (Benediction) follows the default
  * again. The card's id is `card-{key}`, so Review can link to it.
+ *
+ * Focus never drops to the page: when the control that had it goes, focus
+ * moves to a control that survives or to the card's heading (`tabIndex={-1}`).
  */
 export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLength }: SectionCardProps) {
   const { draft, update } = useDraft();
@@ -4560,11 +4718,36 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
   const card = draft.liturgy.cards[key];
   const undo = generation.undo[key];
   const textRef = useRef<HTMLTextAreaElement>(null);
-  useAutosize(textRef, card.text);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const undoRef = useRef<HTMLButtonElement>(null);
+  /** Set by a handler whose control is about to go: where focus moves after the next render. */
+  const focusNext = useRef<(() => HTMLElement | null) | null>(null);
+  /** The ⋯ menu's item moved focus itself, so the closing menu leaves it there. */
+  const menuMovedFocus = useRef(false);
+  useAutosize(textRef, card.text, card.enabled);
   const headingId = `card-${key}-title`;
   const hasText = card.text.trim() !== "";
   const followsDefault = key === "benediction" && card.origin === "default";
   const hint = key === "benediction" ? (followsDefault ? spec.hint : null) : key === "assurance" ? null : spec.hint;
+  const showCounter = card.text.length > COUNTER_FROM;
+  const describedBy =
+    [
+      hint ? `card-${key}-hint` : null,
+      key === "assurance" ? `card-${key}-response` : null,
+      showCounter ? `card-${key}-count` : null,
+    ]
+      .filter(Boolean)
+      .join(" ") || undefined;
+
+  // A control that can take focus, or the card's heading.
+  useEffect(() => {
+    const target = focusNext.current;
+    if (target === null) return;
+    focusNext.current = null;
+    const element = target();
+    const usable = element !== null && element.isConnected && !(element as HTMLButtonElement).disabled;
+    (usable ? element : headingRef.current)?.focus();
+  });
 
   function edit(text: string) {
     update((d) => editCardText(d, key, text));
@@ -4582,6 +4765,14 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
     update((d) => clearCard(d, key));
     generation.dismissError(key);
     generation.setUndo(key, { kind: "cleared", previous });
+    // The ⋯ menu may be disabled now (an empty card); focus goes to "Cleared. Undo".
+    menuMovedFocus.current = true;
+    focusNext.current = () => undoRef.current;
+  }
+
+  function undoLast() {
+    generation.applyUndo(key);
+    focusNext.current = () => null;
   }
 
   function followDefault() {
@@ -4609,17 +4800,24 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
       aria-labelledby={headingId}
       className={cn("grid scroll-mt-24 gap-3 rounded-lg border p-4", !card.enabled && "bg-muted/40")}
     >
-      <div className="flex min-w-0 items-center gap-3">
+      {/* Below sm the chips take their own line under the title, so a long label never pushes the menu out. */}
+      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
         <Switch
           checked={card.enabled}
           onCheckedChange={(checked) => toggle(checked)}
           aria-label={`Include ${spec.label}`}
           className="after:-inset-y-3.5"
         />
-        <h3 id={headingId} className="min-w-0 flex-1 text-base font-medium">
+        <h3
+          ref={headingRef}
+          id={headingId}
+          tabIndex={-1}
+          data-card-heading=""
+          className="min-w-0 flex-1 text-base font-medium outline-none"
+        >
           {spec.label}
         </h3>
-        <div className="flex shrink-0 flex-wrap justify-end gap-1">
+        <div className="flex flex-wrap gap-1 max-sm:order-last max-sm:basis-full max-sm:pl-11 sm:justify-end">
           {spec.pastor_copy_only ? <Badge variant="outline">Pastor&apos;s copy only</Badge> : null}
           <Badge variant="secondary">{ORIGIN_CHIPS[card.origin]}</Badge>
         </div>
@@ -4631,7 +4829,15 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
           >
             <EllipsisIcon aria-hidden="true" />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-auto min-w-44">
+          <DropdownMenuContent
+            align="end"
+            className="w-auto min-w-44"
+            finalFocus={() => {
+              const moved = menuMovedFocus.current;
+              menuMovedFocus.current = false;
+              return !moved;
+            }}
+          >
             {menuItems}
           </DropdownMenuContent>
         </DropdownMenu>
@@ -4641,6 +4847,7 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
           <Textarea
             ref={textRef}
             aria-labelledby={headingId}
+            aria-describedby={describedBy}
             value={card.text}
             placeholder="Type your own text, or tap Generate."
             maxLength={maxLength}
@@ -4649,22 +4856,26 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
             className="max-h-[60vh] overflow-y-auto"
             onChange={(event) => edit(event.target.value)}
           />
-          {card.text.length > COUNTER_FROM ? (
-            <p className="text-right text-xs text-muted-foreground">
+          {showCounter ? (
+            <p id={`card-${key}-count`} className="text-right text-xs text-muted-foreground">
               {card.text.length.toLocaleString("en-US")} / {maxLength.toLocaleString("en-US")}
             </p>
           ) : null}
           {key === "assurance" ? (
-            <div className="grid gap-0.5 text-sm">
+            <div id={`card-${key}-response`} className="grid gap-0.5 text-sm">
               <p className="font-medium">{assuranceResponse}</p>
               {spec.hint ? <p className="text-muted-foreground">{spec.hint}</p> : null}
             </div>
           ) : null}
-          {hint ? <p className="text-sm text-muted-foreground">{hint}</p> : null}
+          {hint ? (
+            <p id={`card-${key}-hint`} className="text-sm text-muted-foreground">
+              {hint}
+            </p>
+          ) : null}
           {undo ? (
             <p className="flex flex-wrap items-center gap-x-1 text-sm" aria-live="polite">
               {UNDO_LINES[undo.kind]}
-              <Button variant="link" className="h-11 px-1 md:h-auto" onClick={() => generation.applyUndo(key)}>
+              <Button ref={undoRef} variant="link" className="h-11 px-1 md:h-auto" onClick={undoLast}>
                 Undo
               </Button>
             </p>
@@ -4732,7 +4943,12 @@ export function LiturgyStep() {
 
   useEffect(() => {
     if (!loaded) return;
-    const id = decodeURIComponent(window.location.hash.slice(1));
+    let id = "";
+    try {
+      id = decodeURIComponent(window.location.hash.slice(1));
+    } catch {
+      return; // a malformed address ("#card-%E0") scrolls nowhere
+    }
     if (id !== "") document.getElementById(id)?.scrollIntoView({ block: "start" });
   }, [loaded]);
 
@@ -4986,6 +5202,14 @@ function heldGenerate() {
 
 const generateCalls = (requests: RecordedRequest[]) => requests.filter((r) => r.path === "/liturgy/generate");
 
+/**
+ * A card's error, whether it came as an alert (the card's own run) or
+ * quietly (a bulk run announces its errors politely, not as one alert each).
+ */
+function errorIn(label: string): HTMLElement | null {
+  return card(label).querySelector<HTMLElement>('[data-slot="alert"]');
+}
+
 describe("Generate and Regenerate (S Generate and Regenerate, AI bar)", () => {
   it("Generate sends one section as the church, no overrides, and writes an AI draft with no toast", async () => {
     const { user, api } = renderStep();
@@ -5079,8 +5303,12 @@ describe("Generate and Regenerate (S Generate and Regenerate, AI bar)", () => {
     const bar = await screen.findByRole("region", { name: "Write with AI" });
     await user.click(within(bar).getByRole("button", { name: "Generate empty sections (6)" }));
     expect(await screen.findByText("Wrote 1 of 6 sections. The rest show what went wrong.")).toBeInTheDocument();
-    const alertIn = (label: string) => within(card(label)).getByRole("alert");
+    const alertIn = (label: string) => errorIn(label) as HTMLElement;
     expect(alertIn("Call to Worship")).toHaveTextContent("The AI took too long to answer. Try again.");
+    // A bulk run's errors are announced politely, not as six alerts; each is linked to its card's text.
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(within(card("Call to Worship")).getByText("The AI took too long to answer. Try again.", { selector: "[aria-live=polite]" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Call to Worship" })).toHaveAccessibleDescription(/The AI took too long to answer\. Try again\./);
     expect(within(alertIn("Opening Prayer")).queryByRole("button", { name: "Try again" })).toBeNull();
     expect(within(alertIn("Prayer of Confession")).getByRole("link", { name: "Go to Hymns" })).toHaveAttribute("href", "/builder/hymns");
     expect(within(alertIn("Prayer of Confession")).queryByRole("button", { name: "Try again" })).toBeNull();
@@ -5091,7 +5319,7 @@ describe("Generate and Regenerate (S Generate and Regenerate, AI bar)", () => {
     expect(window.localStorage.getItem(KEY)).not.toMatch(/took too long|has a problem|no longer in your hymnal|went wrong|not configured/);
     await user.click(within(alertIn("Call to Worship")).getByRole("button", { name: "Try again" }));
     await waitFor(() => expect(screen.getByRole("textbox", { name: "Call to Worship" })).toHaveValue("Leader: Come!"));
-    expect(within(card("Call to Worship")).queryByRole("alert")).toBeNull();
+    expect(errorIn("Call to Worship")).toBeNull();
   });
 
   it("without AI sends nothing: empty cards say so, Regenerate is off, and the banner explains", async () => {
@@ -5103,9 +5331,9 @@ describe("Generate and Regenerate (S Generate and Regenerate, AI bar)", () => {
     expect(within(card("Call to Worship")).getByRole("alert")).toHaveTextContent("AI not configured. Type this section yourself.");
     await user.click(within(bar).getByRole("button", { name: "Generate empty sections (4)" }));
     const marked = ["Call to Worship", "Prayer of Confession", "Prayer for Illumination", "Offertory Prayer"];
-    for (const label of marked) expect(within(card(label)).getByRole("alert")).toHaveTextContent("AI not configured. Type this section yourself.");
+    for (const label of marked) expect(errorIn(label)).toHaveTextContent("AI not configured. Type this section yourself.");
     for (const label of ["Opening Prayer", "Assurance of Pardon", "Prayers of the People", "Benediction"]) {
-      expect(within(card(label)).queryByRole("alert")).toBeNull();
+      expect(errorIn(label)).toBeNull();
     }
     const op = card("Opening Prayer");
     expect(within(op).getByRole("button", { name: "Regenerate" })).toBeDisabled();
@@ -5154,18 +5382,18 @@ describe("Generate and Regenerate (S Generate and Regenerate, AI bar)", () => {
   });
 
   // Heavy: three runs, a New service, a 400 ms draft write and a profile change; near Vitest's 5 s default.
-  it("drops a result for a replaced service or an edit from another tab, and applies one to a card following the default", { timeout: 10_000 }, async () => {
+  it("drops a run for a replaced service or a result for an edit from another tab, and applies one to a card following the default", { timeout: 10_000 }, async () => {
     const held = heldGenerate();
     const { user, queryClient } = renderStep(testDraft(), { "POST /liturgy/generate": held.handler });
     const cw = await screen.findByRole("region", { name: "Call to Worship" });
-    // New service while a run goes: the draft is replaced (a new created_at).
+    // New service while a run goes: the draft is replaced (a new created_at), and the run stops silently.
     await user.click(within(cw).getByRole("button", { name: "Generate" }));
     await within(cw).findByRole("button", { name: "Writing…" });
     vi.setSystemTime(new Date(DRAFT_NOW.getTime() + 60_000)); // the new draft's created_at differs
     await user.click(screen.getByRole("button", { name: "More actions" }));
     await user.click(await screen.findByRole("menuitem", { name: "New service" }));
+    expect(await within(card("Call to Worship")).findByRole("button", { name: "Generate" })).toBeEnabled();
     await held.release("call_to_worship");
-    expect(await screen.findByText("The service changed, so the AI draft for Call to Worship was discarded.")).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Call to Worship" })).toHaveValue("");
 
     // An edit from another tab while it writes.
@@ -5182,6 +5410,9 @@ describe("Generate and Regenerate (S Generate and Regenerate, AI bar)", () => {
     await held.release("opening_prayer");
     expect(await screen.findByText("Kept your edits — the new AI draft for Opening Prayer was not used.")).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Opening Prayer" })).toHaveValue("From the other tab");
+    // The New service run was dropped without a toast, and its answer never landed.
+    expect(screen.queryByText(/The service changed/)).toBeNull();
+    expect(screen.getByRole("textbox", { name: "Call to Worship" })).toHaveValue("");
 
     // Regenerate a Benediction following the default; the default changes mid-run.
     const bn = card("Benediction");
@@ -5195,6 +5426,99 @@ describe("Generate and Regenerate (S Generate and Regenerate, AI bar)", () => {
     await user.click(within(bn).getByRole("button", { name: "Undo" }));
     expect(within(bn).getByRole("textbox", { name: "Benediction" })).toHaveValue("Go in peace.");
     expect(within(bn).getByText("Church default")).toBeInTheDocument();
+  });
+
+  // Heavy: a bulk run of six, an error, New service and one more run; near Vitest's 5 s default on a busy machine.
+  it("New service during a bulk run drops every run with one toast and clears the cards' errors and Undo", { timeout: 10_000 }, async () => {
+    const held = heldGenerate();
+    const { user } = renderStep(withCard("call_to_worship", { text: "Come.", origin: "typed" }), { "POST /liturgy/generate": held.handler });
+    const cw = await screen.findByRole("region", { name: "Call to Worship" });
+    await user.click(within(cw).getByRole("button", { name: "More actions for Call to Worship" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Clear text" }));
+    expect(within(cw).getByText("Cleared.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Generate empty sections (6)" }));
+    await waitFor(() => expect(held.sent).toHaveLength(3));
+    // While the card runs its Undo is hidden, so Undo cannot change the text the run will replace.
+    expect(within(cw).queryByText("Cleared.")).toBeNull();
+    await held.release("call_to_worship", fakeError(500, "internal_error", "Something went wrong."));
+    await waitFor(() => expect(errorIn("Call to Worship")).toHaveTextContent("Something went wrong. (Ref: 4f9a2c1e)"));
+    expect(within(cw).getByText("Cleared.")).toBeInTheDocument(); // back once the run has ended
+    await waitFor(() => expect(held.sent).toHaveLength(4));
+    vi.setSystemTime(new Date(DRAFT_NOW.getTime() + 60_000)); // the new draft's created_at differs
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    await user.click(await screen.findByRole("menuitem", { name: "New service" }));
+    expect(await screen.findByText("The service changed, so the AI drafts were discarded.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Generate empty sections (6)" })).toBeEnabled();
+    expect(errorIn("Call to Worship")).toBeNull();
+    expect(within(card("Call to Worship")).queryByText("Cleared.")).toBeNull();
+    // The answers still on their way land nowhere; a new run works as usual.
+    await held.release("opening_prayer");
+    await held.release("prayer_of_confession");
+    await user.click(within(card("Offertory Prayer")).getByRole("button", { name: "Generate" }));
+    await held.release("offertory_prayer");
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Offertory Prayer" })).toHaveValue("New offertory_prayer"));
+    expect(screen.getByRole("textbox", { name: "Opening Prayer" })).toHaveValue("");
+    expect(screen.queryByText(/^Wrote/)).toBeNull();
+    expect(screen.queryByText(/The service changed, so the AI draft for/)).toBeNull();
+    expect(held.sent).toEqual(["call_to_worship", "opening_prayer", "prayer_of_confession", "assurance", "offertory_prayer"]);
+  });
+
+  it("keeps focus on the card when its control goes: Replace text, Cancel, Keep my text, Try again, Clear and Undo", async () => {
+    const held = heldGenerate();
+    const { user } = renderStep(withCard("opening_prayer", { text: "Gracious God", origin: "typed" }), { "POST /liturgy/generate": held.handler });
+    const op = await screen.findByRole("region", { name: "Opening Prayer" });
+    // Replace text: Regenerate is gone while the card runs, so the card's Cancel takes focus.
+    await user.click(within(op).getByRole("button", { name: "Regenerate" }));
+    await user.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Replace text" }));
+    await waitFor(() => expect(within(op).getByRole("button", { name: "Cancel Opening Prayer" })).toHaveFocus());
+    await user.click(within(op).getByRole("button", { name: "Cancel Opening Prayer" }));
+    expect(within(op).getByRole("button", { name: "Regenerate" })).toHaveFocus();
+    await user.click(within(op).getByRole("button", { name: "Regenerate" }));
+    await user.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Keep my text" }));
+    await waitFor(() => expect(within(op).getByRole("button", { name: "Regenerate" })).toHaveFocus());
+    // Try again: its alert goes, so the card's Cancel.
+    const cw = card("Call to Worship");
+    await user.click(within(cw).getByRole("button", { name: "Generate" }));
+    await held.release("call_to_worship", {
+      status: 200,
+      body: { results: [sectionFailure("call_to_worship", "ai_timeout", "The AI took too long to answer. Try again.")] },
+    });
+    await user.click(within(await within(cw).findByRole("alert")).getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(within(cw).getByRole("button", { name: "Cancel Call to Worship" })).toHaveFocus());
+    // Clear: the ⋯ menu is off on an empty card, so "Cleared. Undo"; Undo: the card's heading.
+    await user.click(within(op).getByRole("button", { name: "More actions for Opening Prayer" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Clear text" }));
+    await waitFor(() => expect(within(op).getByRole("button", { name: "Undo" })).toHaveFocus());
+    await user.click(within(op).getByRole("button", { name: "Undo" }));
+    expect(within(op).getByRole("heading", { name: "Opening Prayer" })).toHaveFocus();
+  });
+
+  it("keeps a 429's wait when the member leaves the step and comes back, and the AI bar waits too", async () => {
+    const view = renderStep(testDraft(), {
+      "POST /liturgy/generate": fakeError(429, "rate_limited", "Too many requests. Try again in 30 seconds.", {
+        details: { retry_after_seconds: 30 },
+      }),
+    });
+    await view.user.click(within(await screen.findByRole("region", { name: "Offertory Prayer" })).getByRole("button", { name: "Generate" }));
+    expect(within(await within(card("Offertory Prayer")).findByRole("alert")).getByRole("button", { name: "Try again" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Generate empty sections (6)" })).toBeDisabled();
+    const page = (step: ReactNode) => (
+      <>
+        <BuilderLayout>{step}</BuilderLayout>
+        <Toaster />
+      </>
+    );
+    view.rerender(page(<ReviewStepPage />));
+    expect(screen.queryByRole("region", { name: "Offertory Prayer" })).toBeNull();
+    view.rerender(page(<LiturgyStep />));
+    // Back at once: the wait goes on (it is not restarted, nor over).
+    expect(within(await within(await screen.findByRole("region", { name: "Offertory Prayer" })).findByRole("alert")).getByRole("button", { name: "Try again" })).toBeDisabled();
+    view.rerender(page(<ReviewStepPage />));
+    vi.setSystemTime(new Date(DRAFT_NOW.getTime() + 30_000)); // the 30 s pass while the member is away
+    view.rerender(page(<LiturgyStep />));
+    const offertory = await screen.findByRole("region", { name: "Offertory Prayer" });
+    expect(within(within(offertory).getByRole("alert")).getByRole("button", { name: "Try again" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Generate empty sections (6)" })).toBeEnabled();
   });
 
   it("keeps writing while the member is on another step, and the result is there on return", async () => {
@@ -5228,14 +5552,15 @@ describe("Generate and Regenerate (S Generate and Regenerate, AI bar)", () => {
       fakeError(429, "rate_limited", "Too many requests. Try again in 30 seconds.", { details: { retry_after_seconds: 30 } }),
     );
     for (const label of ["Call to Worship", "Assurance of Pardon", "Prayer for Illumination", "Offertory Prayer"]) {
-      const alert = await within(card(label)).findByRole("alert");
-      expect(alert).toHaveTextContent("Too many requests — try again in 30 s.");
-      expect(within(alert).getByRole("button", { name: "Try again" })).toBeDisabled();
+      await waitFor(() => expect(errorIn(label)).toHaveTextContent("Too many requests — try again in 30 s."));
+      expect(within(errorIn(label) as HTMLElement).getByRole("button", { name: "Try again" })).toBeDisabled();
     }
     await held.release("opening_prayer");
     await held.release("prayer_of_confession");
     expect(await screen.findByText("Wrote 2 of 6 sections. The rest show what went wrong.")).toBeInTheDocument();
     expect(held.sent).toEqual(["call_to_worship", "opening_prayer", "prayer_of_confession"]);
+    // The AI bar waits as well.
+    expect(screen.getByRole("button", { name: "Generate empty sections (4)" })).toBeDisabled();
   });
 
   it("enables Try again once a 429's wait has passed", async () => {
@@ -5370,6 +5695,7 @@ import { useLiturgyGeneration } from "@/lib/liturgy/generation";
 import { liturgyCounts } from "@/lib/liturgy/summary";
 import { cleanLines } from "@/lib/scripture-refs";
 
+import { useRetryWait } from "./section-card";
 import { STILL_WORKING, useStillWorking } from "./use-still-working";
 
 /**
@@ -5377,7 +5703,8 @@ import { STILL_WORKING, useStillWorking } from "./use-still-working";
  * switched-on cards with no text that are not already running, Cancel and
  * "Writing k of n…" while a bulk run goes, the no-AI banner, and the two
  * notices (no context; every section off). With AI off the button still
- * marks the empty cards, and sends nothing (S step 0).
+ * marks the empty cards, and sends nothing (S step 0). After a 429 the
+ * button waits as the cards' Try again does.
  */
 export function AiBar({ aiAvailable }: { aiAvailable: boolean }) {
   const { draft } = useDraft();
@@ -5385,6 +5712,8 @@ export function AiBar({ aiAvailable }: { aiAvailable: boolean }) {
   const targets = sectionsNeedingAi(draft).filter((key) => generation.runs[key] === undefined);
   const bulk = generation.bulk;
   const still = useStillWorking(bulk !== null);
+  const retryAt = Math.max(0, ...Object.values(generation.errors).map((e) => e?.retryAt ?? 0));
+  const retryWaiting = useRetryWait(retryAt === 0 ? undefined : retryAt);
   const r = draft.readings;
   const noContext = r.occasion.trim() === "" && cleanLines(r.scriptures).length === 0;
   const allOff = liturgyCounts(draft).enabled === 0;
@@ -5405,7 +5734,7 @@ export function AiBar({ aiAvailable }: { aiAvailable: boolean }) {
         ) : (
           <Button
             size="touch"
-            disabled={targets.length === 0}
+            disabled={targets.length === 0 || retryWaiting}
             onClick={() => generation.generate(targets, { aiAvailable, bulk: true })}
           >
             Generate empty sections ({targets.length})
@@ -5447,7 +5776,7 @@ export function AiBar({ aiAvailable }: { aiAvailable: boolean }) {
 
 ```tsx
 import { EllipsisIcon } from "lucide-react";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 
 ```
 
@@ -5483,7 +5812,6 @@ import {
   setCardEnabled,
   type CardOrigin,
 } from "@/lib/liturgy/cards";
-import type { CardError } from "@/lib/liturgy/errors";
 import { useLiturgyGeneration } from "@/lib/liturgy/generation";
 import { useAutosize } from "@/lib/use-autosize";
 import { cn } from "@/lib/utils";
@@ -5507,15 +5835,19 @@ import { STILL_WORKING, useStillWorking } from "./use-still-working";
   aiAvailable: boolean;
 };
 
-/** A 429's Try again waits out Retry-After (S "Per-card error messages"). */
-function useRetryWait(error: CardError | undefined): boolean {
-  const [over, setOver] = useState<CardError | null>(null);
+/**
+ * A 429's wait (S "Per-card error messages"): true until `retryAt` (ms since
+ * the epoch) passes. It counts from that moment, not from when the card
+ * mounted, so leaving the step and coming back does not restart it.
+ */
+export function useRetryWait(retryAt: number | undefined): boolean {
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    if (error?.retryAfterSeconds === undefined) return;
-    const timer = setTimeout(() => setOver(error), error.retryAfterSeconds * 1000);
+    if (retryAt === undefined) return;
+    const timer = setTimeout(() => setNow(Math.max(Date.now(), retryAt)), Math.max(retryAt - Date.now(), 0));
     return () => clearTimeout(timer);
-  }, [error]);
-  return error?.retryAfterSeconds !== undefined && over !== error;
+  }, [retryAt]);
+  return retryAt !== undefined && now < retryAt;
 }
 
 ```
@@ -5523,6 +5855,10 @@ function useRetryWait(error: CardError | undefined): boolean {
 **In `frontend/src/components/builder/liturgy/section-card.tsx`, replace:**
 
 ```tsx
+ * again. The card's id is `card-{key}`, so Review can link to it.
+ *
+ * Focus never drops to the page: when the control that had it goes, focus
+ * moves to a control that survives or to the card's heading (`tabIndex={-1}`).
  */
 export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLength }: SectionCardProps) {
 ```
@@ -5530,6 +5866,7 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
 **with:**
 
 ```tsx
+ * again. The card's id is `card-{key}`, so Review can link to it.
  *
  * The AI (S "Generate and Regenerate"): an empty card has Generate; a card
  * with text has Regenerate, which asks "Replace your text?" first when the
@@ -5539,6 +5876,12 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
  * while writing the text is read-only. Typing in a queued card, or switching
  * a running card off, cancels its run. An error shows in an alert under the
  * text with Try again when trying again can help; the text never changes.
+ * While the card runs its Undo line is hidden, so Undo cannot change the text
+ * a queued run is about to replace.
+ *
+ * Focus never drops to the page: when the control that had it goes (Cancel,
+ * Try again, Undo, Clear, the confirm dialog's Replace text), focus moves to
+ * a control that survives or to the card's heading (`tabIndex={-1}`).
  */
 export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLength, aiAvailable }: SectionCardProps) {
 ```
@@ -5557,9 +5900,12 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
   const run = generation.runs[key];
   const error = generation.errors[key];
   const still = useStillWorking(run?.phase === "writing");
-  const retryWaiting = useRetryWait(error);
+  const retryWaiting = useRetryWait(error?.retryAt);
   const [confirming, setConfirming] = useState(false);
   const textRef = useRef<HTMLTextAreaElement>(null);
+  const actionRef = useRef<HTMLButtonElement>(null);
+  /** "Replace text" was chosen, so the closing dialog sends focus to the running card. */
+  const confirmed = useRef(false);
 ```
 
 **In `frontend/src/components/builder/liturgy/section-card.tsx`, replace:**
@@ -5619,8 +5965,19 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
 
   /** Generate, Regenerate and Try again: replacing the user's own or saved text asks first. */
   function write() {
-    if (needsRegenerateConfirm(card)) setConfirming(true);
-    else start();
+    if (needsRegenerateConfirm(card)) {
+      confirmed.current = false;
+      setConfirming(true);
+    } else {
+      start();
+      // Try again's alert goes; Generate becomes Waiting… (disabled): the card's Cancel takes focus.
+      focusNext.current = () => actionRef.current;
+    }
+  }
+
+  function cancelRun() {
+    generation.cancel([key]);
+    focusNext.current = () => actionRef.current;
   }
 
   const menuItems = [
@@ -5656,6 +6013,28 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
 **In `frontend/src/components/builder/liturgy/section-card.tsx`, replace:**
 
 ```tsx
+      showCounter ? `card-${key}-count` : null,
+    ]
+```
+
+**with:**
+
+```tsx
+      showCounter ? `card-${key}-count` : null,
+      error ? `card-${key}-error` : null,
+    ]
+```
+
+**In `frontend/src/components/builder/liturgy/section-card.tsx`, replace:**
+
+```tsx
+          {undo ? (
+            <p className="flex flex-wrap items-center gap-x-1 text-sm" aria-live="polite">
+              {UNDO_LINES[undo.kind]}
+              <Button ref={undoRef} variant="link" className="h-11 px-1 md:h-auto" onClick={undoLast}>
+                Undo
+              </Button>
+            </p>
           ) : null}
         </>
 ```
@@ -5663,9 +6042,20 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
 **with:**
 
 ```tsx
+          {undo && run === undefined ? (
+            <p className="flex flex-wrap items-center gap-x-1 text-sm" aria-live="polite">
+              {UNDO_LINES[undo.kind]}
+              <Button ref={undoRef} variant="link" className="h-11 px-1 md:h-auto" onClick={undoLast}>
+                Undo
+              </Button>
+            </p>
           ) : null}
+          {/* A bulk run's errors are announced politely here, not as one alert per card. */}
+          <p className="sr-only" aria-live="polite">
+            {error?.bulk ? error.message : null}
+          </p>
           {error ? (
-            <Alert variant="destructive">
+            <Alert id={`card-${key}-error`} variant="destructive" role={error.bulk ? undefined : "alert"}>
               <CircleAlertIcon aria-hidden="true" />
               <AlertTitle className="whitespace-normal">{error.message}</AlertTitle>
               {error.retryable || error.link ? (
@@ -5698,11 +6088,12 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
                     </PendingButton>
                   )}
                   <Button
+                    ref={actionRef}
                     variant="ghost"
                     size="icon-lg"
                     className="size-11 md:size-8"
                     aria-label={`Cancel ${spec.label}`}
-                    onClick={() => generation.cancel([key])}
+                    onClick={cancelRun}
                   >
                     <XIcon aria-hidden="true" />
                   </Button>
@@ -5710,12 +6101,12 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
               ) : hasText ? (
                 <>
                   {aiAvailable ? null : <span className="text-sm text-muted-foreground">AI isn&apos;t set up</span>}
-                  <Button variant="outline" size="touch" disabled={!aiAvailable} onClick={write}>
+                  <Button ref={actionRef} variant="outline" size="touch" disabled={!aiAvailable} onClick={write}>
                     Regenerate
                   </Button>
                 </>
               ) : (
-                <Button size="touch" onClick={write}>
+                <Button ref={actionRef} size="touch" onClick={write}>
                   Generate
                 </Button>
               )}
@@ -5746,8 +6137,15 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
         confirmLabel="Replace text"
         cancelLabel="Keep my text"
         onConfirm={() => {
+          confirmed.current = true;
           setConfirming(false);
           start();
+        }}
+        // Keep my text: back to the button that opened it. Replace text: that button is gone, so the card's Cancel.
+        finalFocus={() => {
+          if (!confirmed.current) return true;
+          const cancel = actionRef.current;
+          return cancel !== null && cancel.isConnected ? cancel : headingRef.current;
         }}
       />
     </section>
@@ -6066,6 +6464,43 @@ describe("custom elements (S Custom elements)", () => {
     expect(screen.getByText("You can add up to 30 custom elements.")).toBeInTheDocument();
   });
 
+  it("after Remove, focus goes to the next card's heading, or to Add custom element when none follows", async () => {
+    const { user } = renderStep(
+      withElements([
+        { id: "a", label: "Anthem", text: "", insert_after: "sermon" },
+        { id: "b", label: "Minute for Mission", text: "", insert_after: "end" },
+      ]),
+    );
+    const anthem = await screen.findByRole("region", { name: "Anthem" });
+    await user.click(within(anthem).getByRole("button", { name: "More actions for Anthem" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Remove" }));
+    // After the Sermon row come two landmark rows and the communion card, then Prayers of the People.
+    await waitFor(() => expect(within(card("Prayers of the People")).getByRole("heading", { name: "Prayers of the People" })).toHaveFocus());
+    await user.click(within(card("Minute for Mission")).getByRole("button", { name: "More actions for Minute for Mission" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Remove" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Add custom element" })).toHaveFocus());
+  });
+
+  // Heavy: 30 cards, a Remove and an Add through the dialog; near Vitest's 5 s default on a busy machine.
+  it("Undo of Remove never goes past 30 elements", { timeout: 10_000 }, async () => {
+    const thirty = Array.from({ length: 30 }, (_, i) => ({ id: `e${i}`, label: `Element ${i}`, text: "", insert_after: "end" }));
+    const { user } = renderStep(withElements(thirty));
+    const first = await screen.findByRole("region", { name: "Element 0" });
+    await user.click(within(first).getByRole("button", { name: "More actions for Element 0" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Remove" }));
+    const toastText = await screen.findByText("Removed “Element 0”.");
+    await user.click(screen.getByRole("button", { name: "Add custom element" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add custom element" });
+    await user.type(within(dialog).getByRole("textbox", { name: "Label" }), "Anthem");
+    await user.click(within(dialog).getByRole("button", { name: "Add" }));
+    expect(await screen.findByRole("region", { name: "Anthem" })).toBeInTheDocument();
+    await user.click(within(toastText.closest("li") as HTMLElement).getByRole("button", { name: "Undo" }));
+    // The toast and the step's own line.
+    await waitFor(() => expect(screen.getAllByText("You can add up to 30 custom elements.")).toHaveLength(2));
+    expect(screen.queryByRole("region", { name: "Element 0" })).toBeNull();
+    await waitFor(() => expect(stored().liturgy.custom_elements).toHaveLength(30));
+  });
+
   it("keeps each church's elements in its own draft (streamlit_tests/test_streamlit_tenancy.py)", async () => {
     const hope = church({ id: CHURCH_IDS.hope, name: "Hope" });
     window.localStorage.setItem(
@@ -6266,7 +6701,12 @@ export function CustomElementCard({
       className="grid scroll-mt-24 gap-3 rounded-lg border border-dashed p-4"
     >
       <div className="flex min-w-0 items-center gap-2">
-        <h3 id={`custom-${id}-title`} className="min-w-0 flex-1 text-base font-medium wrap-anywhere">
+        <h3
+          id={`custom-${id}-title`}
+          tabIndex={-1}
+          data-card-heading=""
+          className="min-w-0 flex-1 text-base font-medium wrap-anywhere outline-none"
+        >
           {name}
         </h3>
         <Badge variant="outline">Custom</Badge>
@@ -6418,7 +6858,7 @@ export function AddCustomElementDialog({
     >
       <DialogContent
         showCloseButton={false}
-        className="max-md:top-auto max-md:bottom-0 max-md:left-0 max-md:max-w-none! max-md:translate-x-0 max-md:translate-y-0 max-md:rounded-b-none max-md:pb-[calc(1rem+env(safe-area-inset-bottom))] md:max-w-lg"
+        className="max-md:top-auto max-md:bottom-0 max-md:left-0 max-md:max-w-none! max-md:translate-x-0 max-md:translate-y-0 max-md:rounded-b-none max-md:max-h-[85dvh] max-md:overflow-y-auto max-md:pb-[calc(1rem+env(safe-area-inset-bottom))] md:max-w-lg"
       >
         <DialogHeader>
           <DialogTitle>Add custom element</DialogTitle>
@@ -6508,6 +6948,7 @@ import { useDraft } from "@/lib/draft/context";
 ```tsx
 import { PlusIcon } from "lucide-react";
 import { Fragment, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 
 import { ErrorState } from "@/components/app/error-state";
 import { Button } from "@/components/ui/button";
@@ -6566,11 +7007,14 @@ import { CustomElementCard } from "./custom-element-card";
 **with:**
 
 ```tsx
-  const { draft, update } = useDraft();
+  const { draft, update, peek } = useDraft();
   const { clearUndo } = useLiturgyGeneration();
   const showUndo = useUndoToasts();
   const [adding, setAdding] = useState(false);
   const scrollTo = useRef<string | null>(null);
+  /** After Remove: the id of the heading that takes focus (the next card's), or null for the Add button. */
+  const focusAfterRemove = useRef<string | null | undefined>(undefined);
+  const addRef = useRef<HTMLButtonElement>(null);
 ```
 
 **In `frontend/src/components/builder/liturgy/liturgy-step.tsx`, replace:**
@@ -6594,6 +7038,14 @@ import { CustomElementCard } from "./custom-element-card";
     element.scrollIntoView({ block: "center" });
   });
 
+  // After Remove the element's card is gone: focus goes to the next card's heading, or the Add button.
+  useEffect(() => {
+    const target = focusAfterRemove.current;
+    if (target === undefined) return;
+    focusAfterRemove.current = undefined;
+    (target === null ? addRef.current : document.getElementById(target))?.focus();
+  });
+
 ```
 
 **In `frontend/src/components/builder/liturgy/liturgy-step.tsx`, replace:**
@@ -6608,7 +7060,8 @@ import { CustomElementCard } from "./custom-element-card";
 ```tsx
   const defaultBenediction = profile?.default_benediction ?? config.default_benediction_fallback;
   const customs = draft.liturgy.custom_elements;
-  const full = customs.length >= config.limits.max_custom_elements;
+  const maxCustom = config.limits.max_custom_elements;
+  const full = customs.length >= maxCustom;
 
   function after(anchors: readonly string[]): CustomElement[] {
     return anchors.flatMap((anchor) => customs.filter((e) => normalizePlacement(e.insert_after) === anchor));
@@ -6624,9 +7077,19 @@ import { CustomElementCard } from "./custom-element-card";
   function remove(element: CustomElement) {
     const found = removeCustomElement(draft, element.id);
     if (found === null) return;
+    const headings = [...document.querySelectorAll<HTMLElement>("[data-card-heading]")];
+    const at = headings.findIndex((h) => h.id === `custom-${element.id}-title`);
+    focusAfterRemove.current = at >= 0 && at + 1 < headings.length ? headings[at + 1].id : null;
     update((d) => removeCustomElement(d, element.id)?.draft ?? d);
     const label = element.label.trim() === "" ? "Custom element" : element.label.trim();
-    showUndo(`Removed “${label}”.`, () => update((d) => restoreCustomElement(d, found.element, found.index)));
+    showUndo(`Removed “${label}”.`, () => {
+      // Another element may have been added meanwhile: never past the limit.
+      if (peek().liturgy.custom_elements.length >= maxCustom) {
+        toast.message(`You can add up to ${maxCustom} custom elements.`);
+        return;
+      }
+      update((d) => restoreCustomElement(d, found.element, found.index, maxCustom));
+    });
   }
 
 ```
@@ -6668,14 +7131,14 @@ import { CustomElementCard } from "./custom-element-card";
 ```tsx
         <div className="grid gap-1.5">
           <div>
-            <Button variant="outline" size="touch" disabled={full} onClick={() => setAdding(true)}>
+            <Button ref={addRef} variant="outline" size="touch" disabled={full} onClick={() => setAdding(true)}>
               <PlusIcon aria-hidden="true" data-icon="inline-start" />
               Add custom element
             </Button>
           </div>
           {full ? (
             <p className="text-sm text-muted-foreground">
-              You can add up to {config.limits.max_custom_elements} custom elements.
+              You can add up to {maxCustom} custom elements.
             </p>
           ) : null}
         </div>
