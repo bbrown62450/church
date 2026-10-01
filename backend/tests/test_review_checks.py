@@ -161,3 +161,17 @@ def test_a_giant_word_never_makes_a_note_over_the_cap():
         assert check_openings([f"{long_word} Gracious God, hear.", f"{long_word} gracious god! come."]) == [
             Note("repetition", 'Several prayers open with "Gracious God".')], long_word[:40]
 
+
+def test_opening_words_and_the_opening_note_match_the_shared_fixture():
+    """The frontend finds the prayers a "Several prayers open with" note is about by the same rule, and reads the
+    note's words back from its text (reviewer follow-up 2); both suites read this fixture."""
+    import json
+    from pathlib import Path
+
+    import review_checks
+
+    fixture = json.loads((Path(__file__).resolve().parent / "fixtures" / "shared" / "opening_words.json")
+                         .read_text(encoding="utf-8"))
+    assert review_checks.OPENING_NOTE == fixture["opening_note"]
+    for case in fixture["cases"]:
+        assert review_checks.opening_words(case["text"]) == case["words"], case["text"]

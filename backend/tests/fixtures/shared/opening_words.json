@@ -1,0 +1,22 @@
+{
+  "_about": "The rule backend review_checks.opening_words and check_openings use, and frontend lib/liturgy/notes.ts (openingWords, sharedOpening) mirrors for Revise the other prayers (reviewer follow-up 2). Both test suites read this file.",
+  "opening_note": "Several prayers open with \"{words}\".",
+  "cases": [
+    {"text": "Gracious God, we gather.", "words": ["Gracious", "God"]},
+    {"text": "Leader: gracious god! Hear us.", "words": ["gracious", "god"]},
+    {"text": "  PEOPLE :  Holy One, come.", "words": ["Holy", "One"]},
+    {"text": "Leader: People: Come now.", "words": ["People", "Come"]},
+    {"text": "Leader:Gracious God", "words": ["Gracious", "God"]},
+    {"text": " Leader:\u0085Gracious God", "words": ["Gracious", "God"]},
+    {"text": "﻿Leader: Holy One", "words": ["Leader", "Holy"]},
+    {"text": "We\u2019re here, O God.", "words": ["We\u2019re", "here"]},
+    {"text": "O'er all the earth", "words": ["O'er", "all"]},
+    {"text": "snake_case words", "words": ["snake", "case"]},
+    {"text": "Se\u00f1or Dios, \u00f3yenos.", "words": ["Se\u00f1or", "Dios"]},
+    {"text": "Cafe\u0301 God", "words": ["Cafe", "God"]},
+    {"text": "1 Lord, 2 God", "words": ["1", "Lord"]},
+    {"text": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Gracious God, hear.", "words": ["Gracious", "God"]},
+    {"text": "God", "words": ["God"]},
+    {"text": "  ", "words": []}
+  ]
+}
