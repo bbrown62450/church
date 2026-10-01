@@ -320,6 +320,30 @@ describe("the provider after the T1-T10 review", () => {
     expect(screen.getByText("call_to_worship error: none / until none; undo: none")).toBeInTheDocument();
   });
 
+  it("an onWritten listener that throws is logged; the draft is still written and the other listeners still run", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    renderProvider(
+      { "POST /scripture/passages": { passages: [PHILIPPIANS] }, "POST /liturgy/generate": generateRoute() },
+      undefined,
+      withAssurance("You are forgiven.", "typed"),
+    );
+    const boom = new Error("listener failed");
+    const heard: SectionKey[] = [];
+    const offs = [
+      handle.current!.onWritten(() => {
+        throw boom;
+      }),
+      handle.current!.onWritten((key) => heard.push(key)),
+    ];
+    act(() => generation.generate(["assurance"], { aiAvailable: true }));
+    expect(await screen.findByText("assurance: Assurance of Pardon written by the AI. / idle")).toBeInTheDocument();
+    expect(screen.getByText("assurance error: none / until none; undo: replaced")).toBeInTheDocument();
+    expect(heard).toEqual(["assurance"]);
+    expect(logged).toHaveBeenCalledWith("A liturgy onWritten listener threw:", boom);
+    await waitFor(() => expect(storedDraft().liturgy.cards.assurance.origin).toBe("ai"));
+    for (const off of offs) off();
+  });
+
   it("Undo restores only over the AI text it wrote: an edit from another tab since then stays", async () => {
     renderProvider(
       { "POST /scripture/passages": { passages: [PHILIPPIANS] }, "POST /liturgy/generate": generateRoute() },

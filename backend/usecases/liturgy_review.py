@@ -30,9 +30,10 @@ review_service:
    3 across the service. Before it, `drop_restated` drops an AI note that
    makes a code note's point in other words (owner answer 5 of 2026-10-01):
    a rules note on citing or naming scripture on a card with a "Cites" note,
-   and a repetition note on how the prayer opens on a card whose opening a
-   code note across the service names (or, across the service, on prayers
-   that open alike when that code note is there).
+   and a repetition note that this prayer opens like others on a card whose
+   opening a code note across the service names (or, across the service, on
+   prayers that open alike when that code note is there, unless it quotes
+   only other openings).
 
 The cards and the standing rules are fenced (<<<CARD key>>> or <<<RULES>>>,
 then <<<END>>>), with any run of three or more < or > taken out of the
@@ -190,7 +191,7 @@ def code_notes_intro(code_notes: Mapping[str, Sequence[Note]], service_notes: Se
     cites = any(n.text.startswith(CITES_PREFIX) for notes in code_notes.values() for n in notes)
     points = [point for point, present in ((RESTATED_CITING, cites), (RESTATED_OPENING, bool(service_notes)))
               if present]
-    return CODE_NOTES_INTRO + (f" (another note {', or '.join(points)})" if points else "") + ":\n"
+    return CODE_NOTES_INTRO + (f" (for example, a note {', or '.join(points)})" if points else "") + ":\n"
 
 
 def _readings(scriptures: Sequence[str]) -> str:
@@ -315,14 +316,23 @@ def merge_notes(code: Sequence[Note], ai: Sequence[Note], limit: int) -> tuple[N
     return tuple([*code, *kept][:limit])
 
 
-# An AI note that makes a code note's point in other words (owner answer 5 of 2026-10-01). Conservative: only a
-# rules note that speaks of citing or naming scripture, on a card with a code "Cites ..." note, and only a
-# repetition note that speaks of how the prayer opens ("opens with", "begins like", "starts the same" ...; the
-# section names are taken out first, so "the Opening Prayer" is not about opening) or quotes its opening, on a
-# card whose opening is in a code "Several prayers open with ..." note; across the service, a repetition note
-# about prayers that open alike when that code note is there.
+# An AI note that makes a code note's point in other words (owner answer 5 of 2026-10-01). Conservative:
+# - a rules note that speaks of citing, referencing or naming scripture ("cites", "references", "by name", "names
+#   the Gospel reading", "refers to the Gospel", "scripture reference"), on a card with a code "Cites ..." note. A
+#   possessive after the scripture word ("the reading's central image", "the passages' setting") is not about naming
+#   the reading, so "Name the reading's central image instead of summarizing." stays;
+# - a repetition note on a card whose opening is in a code "Several prayers open with ..." note, when it speaks of
+#   how the prayer opens ("opens with", "begins like", "starts the same" ...; the section names taken out first, so
+#   "the Opening Prayer" is not about opening) or quotes its opening, and says the opening is shared with other
+#   prayers (a cross-prayer word: both, also, other, another, several, "same as", "like the", "as in" ...; or a
+#   section's name). So 'Uses "Gracious God" three times.' or "Begins with 'we' three lines in a row." stays;
+# - across the service, a repetition note about prayers that open alike when that code note is there, unless it
+#   quotes only openings the code note does not name ('both open with "We confess"' stays).
+_SCRIPTURE_WORD = r"(?:reading|passage|scripture|text|gospel|psalm|lesson|epistle)s?(?!['\u2019])"
 RESTATES_CITING = re.compile(
-    r"\b(?:cit(?:e|es|ed|ing|ation)s?|nam(?:e|es|ed|ing)\s+(?:the\s+)?(?:reading|passage|scripture|text)s?"
+    r"\b(?:cit(?:e|es|ed|ing|ation)s?|referenc(?:e|es|ed|ing)|by\s+name"
+    r"|nam(?:e|es|ed|ing)\s+(?:\S+\s+){0,3}?" + _SCRIPTURE_WORD
+    + r"|refer(?:s|red|ring)?\s+to\s+(?:\S+\s+){0,2}?(?:reading|passage|scripture|gospel|psalm|lesson|epistle)s?(?!['\u2019])"
     r"|scripture\s+references?)\b",
     re.IGNORECASE,
 )
@@ -335,6 +345,17 @@ SECTION_NAMES = re.compile(
     r"\b(?:" + "|".join(re.escape(label) for label in sorted(SECTION_LABELS.values(), key=len, reverse=True)) + r")\b",
     re.IGNORECASE,
 )
+# A word that puts this prayer beside others. Not "same" alone ("starts with the same petition it ends with"), nor
+# "each" or "all" alone ("begins each line with"), nor "again" or "too".
+CROSS_PRAYER = re.compile(
+    r"\b(?:both|also|other|others|another|several|alike|elsewhere|prayers"
+    r"|same\s+(?:as|way)|like\s+(?:the|another|every|each|its)|as\s+(?:in|the|another|does|do|did)"
+    r"|each\s+(?:of|other)|every\s+(?:other|prayer)|all\s+(?:the\s+)?(?:other|prayers))\b"
+    r"|\b(?:call\s+to\s+worship|opening\s+prayer|confession|assurance|illumination|offertory|benediction)\b",
+    re.IGNORECASE,
+)
+# A quoted phrase: in double or curly quotes, or in single quotes that are not an apostrophe.
+_QUOTED = re.compile(r'"([^"]+)"|\u201c([^\u201d]+)\u201d|\u2018([^\u2019]+)\u2019|(?<!\w)\'([^\']+)\'(?!\w)')
 
 
 def speaks_of_opening(text: str) -> bool:
@@ -342,19 +363,44 @@ def speaks_of_opening(text: str) -> bool:
     return RESTATES_OPENING.search(SECTION_NAMES.sub(" ", text)) is not None
 
 
+def _words_pattern(words: str) -> Optional[re.Pattern[str]]:
+    """The words as whole words, any case, any whitespace between them; None for no words."""
+    split = words.split()
+    return (re.compile(r"(?<!\w)" + r"\s+".join(map(re.escape, split)) + r"(?!\w)", re.IGNORECASE)
+            if split else None)
+
+
+def quotes(text: str) -> list[str]:
+    """The phrases a note quotes."""
+    return [next(g for g in m.groups() if g is not None) for m in _QUOTED.finditer(text)]
+
+
 def drop_restated(code: Sequence[Note], ai: Sequence[Note], *, opening: str = "") -> list[Note]:
     """The card's AI notes without those that restate its code notes in other words. `opening` is the
     card's opening words when a code note across the service already names them, else ""."""
     cites = any(n.text.startswith(CITES_PREFIX) for n in code)
-    words = opening.split()
-    quoted = (re.compile(r"(?<!\w)" + r"\s+".join(map(re.escape, words)) + r"(?!\w)", re.IGNORECASE)
-              if words else None)
+    quoted = _words_pattern(opening)
 
     def restated(note: Note) -> bool:
         if cites and note.tag == "rules" and RESTATES_CITING.search(note.text):
             return True
         return (quoted is not None and note.tag == "repetition"
-                and (speaks_of_opening(note.text) or quoted.search(note.text) is not None))
+                and (speaks_of_opening(note.text) or quoted.search(note.text) is not None)
+                and CROSS_PRAYER.search(note.text) is not None)
+
+    return [n for n in ai if not restated(n)]
+
+
+def drop_restated_across(code_service: Sequence[Note], ai: Sequence[Note]) -> list[Note]:
+    """The AI's notes across the service without one on prayers that open alike when a code note names the
+    shared opening, unless the note quotes something and none of it is an opening the code notes name."""
+    shared = [p for p in (_words_pattern(n.match) for n in code_service) if p is not None]
+
+    def restated(note: Note) -> bool:
+        if not (shared and note.tag == "repetition" and speaks_of_opening(note.text)):
+            return False
+        said = quotes(note.text)
+        return not said or any(p.search(q) for q in said for p in shared)
 
     return [n for n in ai if not restated(n)]
 
@@ -388,7 +434,7 @@ def review_service(*, church_id: uuid.UUID, user_id: uuid.UUID, occasion: str, s
     kept = {key: drop_restated(code[key], ai_notes[key],
                                opening=openings[key] if openings[key].lower() in shared else "") for key in sections}
     # Across the service, a note on prayers that open alike restates the code note that names the opening.
-    across = [n for n in ai_service if not (code_service and n.tag == "repetition" and speaks_of_opening(n.text))]
+    across = drop_restated_across(code_service, ai_service)
     outcome = ReviewOutcome(
         cards=tuple(CardNotes(key, merge_notes(code[key], kept[key], MAX_NOTES_PER_CARD)) for key in sections),
         service_notes=merge_notes(code_service, across, MAX_SERVICE_NOTES),

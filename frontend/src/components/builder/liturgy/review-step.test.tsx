@@ -405,7 +405,16 @@ describe("Revise with these notes (R Revise)", () => {
     const call = card("Call to Worship");
     await user.click(within(call).getByRole("button", { name: "Revise with these notes" }));
     expect(await screen.findByRole("alertdialog", { name: "Replace your text?" })).toBeInTheDocument();
-    // Another tab clears the card: no notes are left to revise with.
+    // Another tab edits another card: its notes fade, this card's do not, so the confirm stays open.
+    act(() => {
+      const theirs = withCard(stored(), "opening_prayer", "Holy One, hear us.", "typed");
+      window.dispatchEvent(
+        new StorageEvent("storage", { key: KEY, newValue: JSON.stringify({ ...theirs, updated_at: "2026-09-29T16:59:00.000Z" }) }),
+      );
+    });
+    await waitFor(() => expect(within(card("Opening Prayer")).getByText(STALE)).toBeInTheDocument());
+    expect(screen.getByRole("alertdialog", { name: "Replace your text?" })).toBeInTheDocument();
+    // Another tab clears this card: no notes are left to revise with.
     act(() => {
       const theirs = withCard(stored(), "call_to_worship", "", "empty");
       window.dispatchEvent(
@@ -415,19 +424,121 @@ describe("Revise with these notes (R Revise)", () => {
     await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
     expect(within(call).queryByRole("list", { name: "Notes on Call to Worship" })).toBeNull();
     await waitFor(() => expect(screen.getByRole("heading", { name: "Call to Worship" })).toHaveFocus());
-    // Another tab edits another card: the review changed, so the confirm closes; Revise is still there and takes focus.
+    expect(api.requests.some((r) => r.path === "/liturgy/revise")).toBe(false);
+  });
+
+  it("closes Replace your text? when this card goes stale, sending nothing; Revise is still offered and takes focus", async () => {
+    const { user, api } = renderStep();
+    await review(user);
     const confession = card("Prayer of Confession");
     await user.click(within(confession).getByRole("button", { name: "Revise with these notes" }));
     expect(await screen.findByRole("alertdialog", { name: "Replace your text?" })).toBeInTheDocument();
     act(() => {
-      const theirs = withCard(stored(), "opening_prayer", "Holy One, hear us.", "typed");
+      const theirs = withCard(stored(), "prayer_of_confession", "Merciful God, we confess our sin.", "archive");
       window.dispatchEvent(
         new StorageEvent("storage", { key: KEY, newValue: JSON.stringify({ ...theirs, updated_at: "2026-09-29T17:01:00.000Z" }) }),
       );
     });
     await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(within(confession).getByText(STALE)).toBeInTheDocument();
     await waitFor(() => expect(within(confession).getByRole("button", { name: "Revise with these notes" })).toHaveFocus());
     expect(api.requests.some((r) => r.path === "/liturgy/revise")).toBe(false);
+  });
+
+  it("closes Replace your text? when another tab edits a card whose notes had already faded", async () => {
+    const { user, api } = renderStep();
+    await review(user);
+    const call = card("Call to Worship");
+    await user.type(screen.getByRole("textbox", { name: "Call to Worship" }), " Now.");
+    expect(within(call).getByText(STALE)).toBeInTheDocument();
+    await user.click(within(call).getByRole("button", { name: "Revise with these notes" }));
+    expect(await screen.findByRole("alertdialog", { name: "Replace your text?" })).toBeInTheDocument();
+    // The notes are already faded, so they do not change; the text does.
+    act(() => {
+      const theirs = withCard(stored(), "call_to_worship", "Leader: Come, all who are weary.", "typed");
+      window.dispatchEvent(
+        new StorageEvent("storage", { key: KEY, newValue: JSON.stringify({ ...theirs, updated_at: "2026-09-29T17:02:00.000Z" }) }),
+      );
+    });
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(screen.getByRole("textbox", { name: "Call to Worship" })).toHaveValue("Leader: Come, all who are weary.");
+    await waitFor(() => expect(within(call).getByRole("button", { name: "Revise with these notes" })).toHaveFocus());
+    expect(api.requests.some((r) => r.path === "/liturgy/revise")).toBe(false);
+  });
+
+  it("closes Replace your text? when a new review arrives, sending nothing", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const { user, api } = renderStep();
+    await review(user);
+    api.set(
+      "POST /liturgy/review",
+      reviewRoute(async () => {
+        await gate;
+        return ANSWER;
+      }),
+    );
+    await user.click(reviewButton()); // the second review waits on the gate
+    const call = card("Call to Worship");
+    await user.click(within(call).getByRole("button", { name: "Revise with these notes" }));
+    expect(await screen.findByRole("alertdialog", { name: "Replace your text?" })).toBeInTheDocument();
+    await act(async () => {
+      release();
+      await gate;
+    });
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    await waitFor(() => expect(within(call).getByRole("button", { name: "Revise with these notes" })).toHaveFocus());
+    expect(api.requests.some((r) => r.path === "/liturgy/revise")).toBe(false);
+  });
+
+  it("Undo after revising a saved service's text brings back its text and its From saved service chip", async () => {
+    const { user } = renderStep(seeded(), {
+      "POST /liturgy/revise": reviseRoute(() => ({ text: "Merciful God, we confess our sin." })),
+    });
+    await review(user);
+    const confession = card("Prayer of Confession");
+    expect(within(confession).getByText("From saved service")).toBeInTheDocument();
+    await user.click(within(confession).getByRole("button", { name: "Revise with these notes" }));
+    await user.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Revise text" }));
+    expect(await within(confession).findByText("Revised with these notes.")).toBeInTheDocument();
+    expect(within(confession).getByText("AI draft")).toBeInTheDocument();
+    await user.click(within(confession).getByRole("button", { name: "Undo" }));
+    expect(screen.getByRole("textbox", { name: "Prayer of Confession" })).toHaveValue("Merciful God, we confess.");
+    expect(within(confession).getByText("From saved service")).toBeInTheDocument();
+    expect(within(confession).queryByText("AI draft")).toBeNull();
+    await waitFor(() =>
+      expect(stored().liturgy.cards.prayer_of_confession).toEqual({ enabled: true, text: "Merciful God, we confess.", origin: "archive" }),
+    );
+  });
+
+  it("a failed or cancelled Regenerate leaves the card's faded notes in place", async () => {
+    const { user, api } = renderStep(seeded(), {
+      "POST /liturgy/generate": fakeError(503, "ai_busy", "The AI service is busy. Try again in a minute."),
+    });
+    await review(user);
+    const assurance = card("Assurance of Pardon");
+    // Another tab edits the AI draft (still an AI draft, so Regenerate does not ask): its notes fade.
+    act(() => {
+      const theirs = withCard(stored(), "assurance", "Leader: In Christ we are pardoned.", "ai");
+      window.dispatchEvent(
+        new StorageEvent("storage", { key: KEY, newValue: JSON.stringify({ ...theirs, updated_at: "2026-09-29T17:00:00.000Z" }) }),
+      );
+    });
+    await waitFor(() => expect(within(assurance).getByText(STALE)).toBeInTheDocument());
+    // Failed.
+    await user.click(within(assurance).getByRole("button", { name: "Regenerate" }));
+    await waitFor(() => expect(api.requests.filter((r) => r.path === "/liturgy/generate")).toHaveLength(1));
+    expect(await within(assurance).findByText("The AI service is busy. Try again in a minute.")).toBeInTheDocument();
+    expect(within(assurance).getByText(STALE)).toBeInTheDocument();
+    expect(within(assurance).getByText("Name Christ as the source of pardon.")).toHaveClass("text-muted-foreground");
+    // Cancelled: Try again (a Regenerate), then Cancel.
+    api.set("POST /liturgy/generate", () => new Promise<never>(() => {}));
+    await user.click(within(assurance).getByRole("button", { name: "Try again" }));
+    await user.click(await within(assurance).findByRole("button", { name: "Cancel Assurance of Pardon" }));
+    expect(await within(assurance).findByRole("button", { name: "Regenerate" })).toBeInTheDocument();
+    expect(within(assurance).getByText(STALE)).toBeInTheDocument();
+    expect(within(assurance).getByText("Name Christ as the source of pardon.")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Assurance of Pardon" })).toHaveValue("Leader: In Christ we are pardoned.");
   });
 
   it("keeps the card read-only while it revises; Cancel keeps the text and notes and returns focus to Revise", async () => {
@@ -620,5 +731,36 @@ describe("Revise with these notes (R Revise)", () => {
     expect(within(opening).queryByText(/Too many requests/)).toBeNull();
     await user.click(revise);
     expect(await within(opening).findByText("Revised with these notes.")).toBeInTheDocument();
+  });
+
+  it("closes Replace your text? when a 429's wait begins while it asks, sending nothing; the wait shows beside Revise", async () => {
+    vi.useRealTimers(); // a second useFakeTimers call would keep beforeEach's Date-only fake
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"], shouldAdvanceTime: true });
+    vi.setSystemTime(DRAFT_NOW);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const { user, api } = renderStep(seeded(), {
+      "POST /liturgy/generate": async () => {
+        await gate;
+        return fakeError(429, "rate_limited", "Too many requests. Try again in 30 seconds.", { details: { retry_after_seconds: 30 } });
+      },
+      "POST /liturgy/revise": reviseRoute(),
+    });
+    await review(user);
+    await user.click(within(card("Prayer for Illumination")).getByRole("button", { name: "Generate" }));
+    await waitFor(() => expect(api.requests.filter((r) => r.path === "/liturgy/generate")).toHaveLength(1));
+    const call = card("Call to Worship");
+    await user.click(within(call).getByRole("button", { name: "Revise with these notes" }));
+    expect(await screen.findByRole("alertdialog", { name: "Replace your text?" })).toBeInTheDocument();
+    await act(async () => {
+      release();
+      await gate;
+    });
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    const revise = within(call).getByRole("button", { name: "Revise with these notes" });
+    expect(revise).toHaveAttribute("aria-disabled", "true");
+    expect(within(call).getByText(/^Too many requests — try again in \d+ s\.$/)).toBeInTheDocument();
+    await waitFor(() => expect(revise).toHaveFocus());
+    expect(api.requests.some((r) => r.path === "/liturgy/revise")).toBe(false);
   });
 });

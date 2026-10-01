@@ -46,7 +46,8 @@
  *   The service reviewer's Revise sets the same kind of Undo ("revised").
  * - `onWritten(listener)`: told the card's key each time an AI draft is
  *   written into it (the service reviewer drops that card's notes; reviewer
- *   follow-up 1). Returns the unsubscribe.
+ *   follow-up 1). Returns the unsubscribe. A listener that throws is logged
+ *   (console.error) and the others still run.
  */
 import {
   createContext,
@@ -308,7 +309,14 @@ export function LiturgyGenerationProvider({
       // Over text: Undo brings it back. Over a blank card: any "Cleared." line is stale now.
       const replaced = out.previous !== null && out.previous.text.trim() !== "";
       setUndo(key, replaced && out.previous !== null ? { kind: "replaced", previous: out.previous, after: text } : null);
-      for (const listener of writtenListeners.current) listener(key);
+      // Each listener on its own: one that throws is logged and never stops the others or this write.
+      for (const listener of writtenListeners.current) {
+        try {
+          listener(key);
+        } catch (error) {
+          console.error("A liturgy onWritten listener threw:", error);
+        }
+      }
       return true;
     },
     [update, setUndo],

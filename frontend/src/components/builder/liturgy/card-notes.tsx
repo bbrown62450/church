@@ -13,7 +13,7 @@ import type { SectionKey } from "@/lib/draft/schema";
 import { needsRegenerateConfirm } from "@/lib/liturgy/cards";
 import { rateLimitMessage } from "@/lib/liturgy/errors";
 import { useLiturgyGeneration } from "@/lib/liturgy/generation";
-import { canRevise, LOOKS_GOOD, STALE_LINE, TAG_LABELS, type Note, type ServiceReview } from "@/lib/liturgy/notes";
+import { canRevise, LOOKS_GOOD, STALE_LINE, TAG_LABELS, type CardReview, type Note } from "@/lib/liturgy/notes";
 import { useLiturgyReview } from "@/lib/liturgy/review";
 import { cn } from "@/lib/utils";
 
@@ -123,9 +123,10 @@ export function reviseId(key: SectionKey): string {
  * card's heading describes it. On typed or saved text it asks first ("Replace
  * your text?", the same rule as Regenerate's): "Keep my text" returns focus to
  * the button, "Revise text" starts it and the closing dialog sends focus to its
- * Cancel. The dialog closes, sending nothing, when the notes change while it
- * asks (Revise no longer offered, or a new review or another tab's edit), and
- * focus goes to Revise, else the heading. While it runs the button
+ * Cancel. The dialog closes, sending nothing, when this card's notes or text
+ * change while it asks (Revise no longer offered, a new review, another tab's
+ * edit) or a 429's wait begins (the wait shows beside Revise), and focus goes
+ * to Revise, else the heading; other cards' changes leave it open. While it runs the button
  * reads "Revising…" beside a Cancel ×, which takes focus, and the notes' ×
  * are off; the row stays while it runs even if the notes go (another tab
  * edited the card), so Cancel stays reachable. A failure shows its message
@@ -153,8 +154,8 @@ export function CardNotes({
   const cancelRef = useRef<HTMLButtonElement>(null);
   const focusCancel = useRef(false);
   const [confirming, setConfirming] = useState(false);
-  /** The review the confirm was opened on. */
-  const [askedOn, setAskedOn] = useState<ServiceReview | null>(null);
+  /** This card's own review entry, and its text, when the confirm was opened. */
+  const [askedOn, setAskedOn] = useState<{ notes: CardReview | undefined; text: string } | null>(null);
   /** "Revise text" was chosen, so the closing dialog sends focus to the revision's Cancel. */
   const confirmed = useRef(false);
   const revising = review.revising[sectionKey] === true;
@@ -186,9 +187,12 @@ export function CardNotes({
   ) : null;
   const card = draft.liturgy.cards[sectionKey];
   const offered = canRevise(card, notes) && !busy;
-  // The confirm closes once Revise is no longer offered or the notes it asked about changed (another tab's edit,
-  // a new review), so it never revises with notes the member is not looking at.
-  if (confirming && (!offered || review.review !== askedOn)) setConfirming(false);
+  // The confirm closes once Revise is no longer offered, this card's notes changed (a new review, the card went
+  // stale or lost its notes), its text changed (another tab's edit, even to a card already faded) or a 429's wait
+  // began, so it never revises with notes or text the member is not looking at. Other cards' changes leave it open.
+  if (confirming && (!offered || waiting || notes !== askedOn?.notes || card.text !== askedOn?.text)) {
+    setConfirming(false);
+  }
   // Rendered after the notes in every branch below, so it stays mounted (and sends focus back) as the notes go.
   const dialog = (
     <ConfirmDialog
@@ -268,7 +272,7 @@ export function CardNotes({
               onClick={() => {
                 if (needsRegenerateConfirm(card)) {
                   confirmed.current = false;
-                  setAskedOn(review.review);
+                  setAskedOn({ notes, text: card.text });
                   setConfirming(true);
                   return;
                 }
