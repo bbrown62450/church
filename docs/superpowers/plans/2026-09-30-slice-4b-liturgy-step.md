@@ -6547,7 +6547,7 @@ describe("custom elements (S Custom elements)", () => {
 **Expected:**
 
 ```
-⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+⎯⎯⎯⎯⎯⎯ Failed Tests 10 ⎯⎯⎯⎯⎯⎯⎯
  FAIL  |dom| src/components/builder/liturgy/liturgy-step.test.tsx > the Liturgy step (S User experience) > lays out the order of worship as the Word files print it, with the draft's hymns, readings and title
  FAIL  |dom| src/components/builder/liturgy/liturgy-step.test.tsx > the communion card (S Communion card) > follows the first-Sunday rule until toggled, says why, restores the default, and shows the fixed text
  FAIL  |dom| src/components/builder/liturgy/liturgy-step.test.tsx > the communion card (S Communion card) > says when communion came from a saved service
@@ -6555,8 +6555,10 @@ describe("custom elements (S Custom elements)", () => {
  FAIL  |dom| src/components/builder/liturgy/liturgy-step.test.tsx > custom elements (S Custom elements) > edits the label, text and place inline; a blank label says it won't print, and an unknown place is the end
  FAIL  |dom| src/components/builder/liturgy/liturgy-step.test.tsx > custom elements (S Custom elements) > Remove offers Undo, which puts the element back at the same index
  FAIL  |dom| src/components/builder/liturgy/liturgy-step.test.tsx > custom elements (S Custom elements) > stops at 30 elements
+ FAIL  |dom| src/components/builder/liturgy/liturgy-step.test.tsx > custom elements (S Custom elements) > after Remove, focus goes to the next card's heading, or to Add custom element when none follows
+ FAIL  |dom| src/components/builder/liturgy/liturgy-step.test.tsx > custom elements (S Custom elements) > Undo of Remove never goes past 30 elements
  FAIL  |dom| src/components/builder/liturgy/liturgy-step.test.tsx > custom elements (S Custom elements) > keeps each church's elements in its own draft (streamlit_tests/test_streamlit_tenancy.py)
-      Tests  8 failed | 23 passed (31)
+      Tests  10 failed | 26 passed (36)
 ```
 
 - [ ] **Step 4 (agent): Write the communion card, the custom elements and the dialog**
@@ -8103,7 +8105,7 @@ git diff -U0 docs backend | grep '^+' | grep -v '^+++' | grep -c '—'
 git diff --stat
 ```
 
-**Expected:** `4`; `6`; `11`; `6`; `89 passed in <t>s`; `1183 passed, 11 skipped in <t>s`; `2` (the only em dashes on added lines are S's own copy "Off — not in the service. Any text is kept." in check 8 and F §4.7's existing "Available soon — keep using the current app for this part" on the line that gains a note; the new prose has none); ` 4 files changed, 52 insertions(+), 10 deletions(-)`.
+**Expected:** `4`; `6`; `11`; `6`; `89 passed in <t>s`; `1183 passed, 11 skipped in <t>s`; `2` (the only em dashes on added lines are S's own copy "Off — not in the service. Any text is kept." in check 8 and F §4.7's existing "Available soon — keep using the current app for this part" on the line that gains a note; the new prose has none); ` 4 files changed, 53 insertions(+), 10 deletions(-)`.
 
 - [ ] **Step 4 (agent): Commit**
 
@@ -8682,13 +8684,30 @@ The plan was written in one session, building each task's code in a throwaway wo
 - **The step tests dismiss toasts before each test** (sonner replays a toast still showing to the next `Toaster`), and the "service changed" case moves the fake clock before New service, since a fresh draft made in the same millisecond has the same `created_at` (clarification 29).
 - **A stored draft written 400 ms after a change** is awaited before a test builds "another tab's" copy from `localStorage` (T9's cross-tab case).
 
+**Plan review fixes (2026-10-01, before the build):**
+A review of the finished plan found the issues below. Each fix was built and tested in a scratch worktree of `4dfed3b` with the plan's tasks applied, carried into the owning task's code blocks, and the plan replayed again (next paragraph). **[owner-visible]** marks the ones the owner will see; they are also "Questions for the owner" 7-9. The rest are owner decision 1.
+- **C1, the card is captured at the click** (T6 `generation.tsx` `generate`/`send`/`settle`; T9 `section-card.tsx` Undo line; clarification 33). The card was captured when its request started, so text that became the member's while the card waited ("Undo" clicked during "Waiting…", or another tab's edit while queued) was replaced without the confirm dialog. Now `generate()` captures at the click or "Replace text"; the queue's run checks `staleVerdict` first and, when the card was edited or the service changed, sends nothing, shows S's toast and counts as not written; the Undo line is hidden while the card runs. Tests: T6 "Undo while Waiting… sends nothing" and "an edit from another tab while the card waits sends nothing" (+2); T9's New service test checks the hidden Undo line.
+- **I1, "New service" during a run** **[owner-visible]** (T6 provider; T9 tests; clarification 32). Old errors, Undo lines and runs keyed by section stayed on the new draft. The provider now watches `draft.created_at`: a change cancels every run silently, clears errors and Undo, and ends a bulk run with one toast, "The service changed, so the AI drafts were discarded." (no "Wrote…" toast, no per-card toasts); a result racing the change keeps the per-result rule. T9's service-changed test now expects a silent stop for a single run; a new T9 test covers a bulk run (+1).
+- **I2, the card header at 375 px** **[owner-visible]** (T8 `section-card.tsx`; clarification 35). The chips overflowed beside a long title. The header wraps, the chips take their own line below `sm` (`max-sm:basis-full`, `max-sm:order-last`) and lost `shrink-0`; T12's manual check 8 adds the 375 px look at Prayers of the People with "Pastor's copy only" and a status chip.
+- **I3, focus never drops to the page** (T8, T9 `section-card.tsx`; T10 `liturgy-step.tsx`, `custom-element-card.tsx`; clarification 34). Card headings have `tabIndex={-1}`; the Regenerate `ConfirmDialog` gets `finalFocus`; after Cancel, Try again, Undo, Clear and Remove focus moves to a surviving control or a heading (Remove: the next card's heading, or "Add custom element"). Tests: T9 (Replace text, Cancel, Keep my text, Try again, Clear, Undo) and T10 (Remove), +1 each.
+- **M1** (T6): a result applied over a blank card clears that card's "Cleared. Undo" entry.
+- **M2** (T4 comment and commit body, T12's S note and F §1.8 row, owner answer 2's summary, clarification 11): the 100 s reasoning now says the client's timer starts after `getAccessToken()`, so the margin above 85 s covers the server's sign-in key fetch (at most 5 s), latency and the proxy, not the client's own sign-in.
+- **M3** (T2 `restoreCustomElement(d, element, index, max)`, T10 `liturgy-step.tsx`): Undo of a Remove refuses past 30 elements with the toast "You can add up to 30 custom elements."; T2's custom-element test gains the full-list assertion (edited, 0) and T10 adds a test (+1).
+- **M4** (T8): `decodeURIComponent(location.hash)` is wrapped in `try`/`catch`.
+- **M5** (T7 `useAutosize(ref, value, shown)`; T8 passes `card.enabled`): a card switched back on is sized again; T7 adds a test (+1).
+- **M6** (T10): the "Add custom element" bottom sheet is `max-md:max-h-[85dvh] max-md:overflow-y-auto`.
+- **M7** (T6 `retryAt`; T9 `useRetryWait(retryAt)` exported from `section-card.tsx`, `AiBar`): a 429 stores the absolute moment its wait ends; "Generate empty sections" is disabled until then, and leaving and returning does not restart the wait. T9's 429 test checks the bar; a new T9 test moves the clock while the member is on Review (+1).
+- **M8** **[owner-visible]**: left as is (clearing the default Benediction is not unsaved work; a fresh draft restores it); clarification 37.
+- **M9** (T8, T9 `section-card.tsx`): the hint, the Assurance line, the counter and the error alert describe the textarea (`aria-describedby`); a bulk run's errors are announced by a polite `aria-live` line instead of one `role="alert"` each, and a card's own run keeps `role="alert"`. T8's hints test and T9's error, no-AI and 429 tests check this (edited, 0).
+- Counts: +8 tests (T6 +2, T7 +1, T9 +3, T10 +2): frontend 442 → 517 in 64 → 75 files; the table, every task's expected output, the T10 red run, T11's focused run, T12's diff stat, T13's gates and PR-body line and T14 follow. T9 gained one directive (the error in the textarea's description): 160 in all.
+
 **Replay of the finished plan (2026-10-01, before the build):**
 A container restart interrupted the first replay, so the plan was replayed again from scratch on a fresh detached worktree of `4dfed3b` (`npm ci` in its `frontend`; the repo's `.venv` for Python), applying each task's directives and running each task's commands exactly as written, blocks copied by line number without their fence lines. Results:
 - Baselines: frontend `442 passed` in 64 files, typecheck 0, lint 0; backend `1183 passed, 11 skipped`.
 - All 160 file directives (`Create` and `In …, replace`) applied; every replace anchor occurred exactly once.
 - Every "see it fail" output matched as quoted (T1-T11; the absolute path in place of `<repo>`), and every cumulative count matched the table: 446/65, 455/68, 464/71, 468/72, 471/72, 474/73, 476/74, 487/75, 500/75, 507/75, 509/75. Each task's focused run matched its stated file and test totals, and typecheck and lint were 0 after every task. T9 and T10 passed three runs in a row (24 and 31 tests; the step's file takes about 17 s). Each commit's file count matched.
 - T7: the registry still answers `Request to https://ui.shadcn.com/r/styles/base-nova/dialog.json failed`; the pinned upstream `dialog.tsx` still hashes to `aba6df6c…66adff`.
-- T12: the checks printed `4`, `6`, `11`, `6`, `89 passed`, `1183 passed, 11 skipped`, `2` and ` 4 files changed, 52 insertions(+), 10 deletions(-)`.
+- T12: the checks printed `4`, `6`, `11`, `6`, `89 passed`, `1183 passed, 11 skipped`, `2` and ` 4 files changed, 53 insertions(+), 10 deletions(-)`.
 - T13 Steps 2-8: 509 in 75 three times and with the clock moved 8 and 400 days, 0 act warnings, typecheck and lint 0; `11 skipped, 1183 deselected`; `✓ Compiled successfully` with the five `/builder` routes and the exact route list; `gen:api` changed nothing; every gate as expected (10 client components, the greps exit 1, `SHIPPED_STEPS` with "liturgy", the two "Available soon" files, the 100 000 row, only `test_slice1_docs.py` among the guarded paths, every trailer present); 60 changed paths (`32 A`, `28 M`; the plan file is the 61st and 33rd `A` on the real branch); the 12 commit subjects equal the plan's (the plan's commit stood in by `4dfed3b`).
 - No plan text needed a fix. T14's anchors were checked against the tree: the runbook's "Slice 4a record" heading, its `| Follow-ups | 4b: the Liturgy step,` row and `## Backups` exist in that order, and the outline's place label "After Opening Prayer" (T14 Step 8) is the config's.
 
