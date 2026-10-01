@@ -151,8 +151,10 @@ export function LiturgyStep() {
   }
 
   return (
-    <div className="grid gap-6">
-      <h2 className="text-lg font-semibold">Liturgy</h2>
+    <section aria-labelledby="liturgy-step-title" className="grid gap-6">
+      <h2 id="liturgy-step-title" className="text-lg font-semibold">
+        Liturgy
+      </h2>
       <SermonTitleField maxLength={config.limits.max_sermon_title} />
       <AiBar aiAvailable={config.ai_available} />
       <section aria-labelledby="order-of-worship" className="grid gap-3">
@@ -218,6 +220,6 @@ export function LiturgyStep() {
         limits={config.limits}
         onAdd={add}
       />
-    </div>
+    </section>
   );
 }
