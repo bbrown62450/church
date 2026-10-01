@@ -23,7 +23,7 @@
   - `keys.liturgyConfig()` exists (`["ref", "liturgy-config"]`); `usePassage`'s options are not exported; `handleAuthErrors` runs only from the query and mutation caches; `useUndoToasts` exists (3b); `SHIPPED_STEPS` holds "readings" and "hymns"; `schema.d.ts` already has every 4a type, so `npm run gen:api` changes nothing.
   - The build container reaches the npm registry, PyPI and raw.githubusercontent.com, but not ui.shadcn.com, Railway, OpenAI or Supabase. No test needs the network.
   - Where S and the code or F disagreed, the code and F won unless an owner answer says otherwise; each case is a numbered clarification below.
-  - @@REPLAY_FACT@@
+  - The whole plan was replayed on a fresh worktree of `4dfed3b` (2026-10-01; `npm ci`, no symlinked `node_modules`), copying every block by line number: all 159 directives matched exactly once, every "see it fail" output and every count matched, each task's typecheck and lint were clean, the production build passed, and T13 Steps 2-8 matched (see "Build notes").
 
 ## Global Constraints
 
@@ -8208,6 +8208,16 @@ The plan was written in one session, building each task's code in a throwaway wo
 - **T5 fills the fresh draft's Benediction** in `freshDraft`, not only in the store: with the store alone, every seeded pre-4b test draft changed on load (stamped 1 ms later) and three existing shell, Hymns and context tests failed on `updated_at`; a fresh draft born with the default loads unchanged (clarification 13). T2's summary test builds its "no default" draft with `applyLiturgyDefaults(..., "")` for the same reason.
 - **The step tests dismiss toasts before each test** (sonner replays a toast still showing to the next `Toaster`), and the "service changed" case moves the fake clock before New service, since a fresh draft made in the same millisecond has the same `created_at` (clarification 29).
 - **A stored draft written 400 ms after a change** is awaited before a test builds "another tab's" copy from `localStorage` (T9's cross-tab case).
+
+**Replay of the finished plan (2026-10-01, before the build):**
+A container restart interrupted the first replay, so the plan was replayed again from scratch on a fresh detached worktree of `4dfed3b` (`npm ci` in its `frontend`; the repo's `.venv` for Python), applying each task's directives and running each task's commands exactly as written, blocks copied by line number without their fence lines. Results:
+- Baselines: frontend `442 passed` in 64 files, typecheck 0, lint 0; backend `1183 passed, 11 skipped`.
+- All 159 file directives (`Create` and `In …, replace`) applied; every replace anchor occurred exactly once.
+- Every "see it fail" output matched as quoted (T1-T11; the absolute path in place of `<repo>`), and every cumulative count matched the table: 446/65, 455/68, 464/71, 468/72, 471/72, 474/73, 476/74, 487/75, 500/75, 507/75, 509/75. Each task's focused run matched its stated file and test totals, and typecheck and lint were 0 after every task. T9 and T10 passed three runs in a row (24 and 31 tests; the step's file takes about 17 s). Each commit's file count matched.
+- T7: the registry still answers `Request to https://ui.shadcn.com/r/styles/base-nova/dialog.json failed`; the pinned upstream `dialog.tsx` still hashes to `aba6df6c…66adff`.
+- T12: the checks printed `4`, `6`, `11`, `6`, `89 passed`, `1183 passed, 11 skipped`, `2` and ` 4 files changed, 52 insertions(+), 10 deletions(-)`.
+- T13 Steps 2-8: 509 in 75 three times and with the clock moved 8 and 400 days, 0 act warnings, typecheck and lint 0; `11 skipped, 1183 deselected`; `✓ Compiled successfully` with the five `/builder` routes and the exact route list; `gen:api` changed nothing; every gate as expected (10 client components, the greps exit 1, `SHIPPED_STEPS` with "liturgy", the two "Available soon" files, the 100 000 row, only `test_slice1_docs.py` among the guarded paths, every trailer present); 60 changed paths (`32 A`, `28 M`; the plan file is the 61st and 33rd `A` on the real branch); the 12 commit subjects equal the plan's (the plan's commit stood in by `4dfed3b`).
+- No plan text needed a fix. T14's anchors were checked against the tree: the runbook's "Slice 4a record" heading, its `| Follow-ups | 4b: the Liturgy step,` row and `## Backups` exist in that order, and the outline's place label "After Opening Prayer" (T14 Step 8) is the config's.
 
 ## Spec coverage
 
