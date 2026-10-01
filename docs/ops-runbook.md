@@ -394,6 +394,31 @@ email address or church id is recorded here.
 | Streamlit smoke on liturgy-frozen | Not run: 4a changes no data, and merges never reach liturgy-frozen | 2026-09-30 |
 | Follow-ups | 4b: the Liturgy step, and a client timeout a few seconds above 90 s so a slow sign-in cannot push a worst-case section past it. After 4b: the service reviewer as its own slice (owner). 5a: the Word files' "First Reading" heading, deleting `DOCX_HEADINGS_UNTIL_5A`. 6a: Settings for the default benediction, the liturgy prompts and the prayer library (the default Prayers of the People prompt asks for 10-15 paragraphs; the live draft had 9, tunable there) | 2026-09-30 |
 
+### Slice 4b record
+
+Slice 4b (the Liturgy step: sermon title, a card for each section with
+Generate and Regenerate, "Generate empty sections", the communion card,
+custom elements, and the step in the step bar, Review and the summary)
+merged as PR #32. It changes the frontend only, with no database change, so
+production stays at `0004_invites_reusable` (head). The owner's check was a
+guided check on a phone and a look on a computer (owner answer 4,
+2026-09-30), covering the "(owner, after 4b)" items of
+`docs/manual-verification.md` → "Slice 4" in part. No token, email address
+or church id is recorded here.
+
+| Step | Result | Date |
+|---|---|---|
+| Merge and deploy | PR #32 merged 2026-10-01 about 12:53 UTC (08:53 EDT), merge commit `5447891`. CI on `main` for the merge commit (run 36864812322): success. The checks below ran on production | 2026-10-01 |
+| 1. The order of worship (phone) | After New service, "Liturgy" with the sermon title, "Generate empty sections (6)", the cards in printed order; Prayers of the People off with "Off — not in the service. Any text is kept."; Benediction "Halverson" marked "Church default". Owner: looks great | 2026-10-01 |
+| 2. Writing the empty sections | A typed Call to Worship line; the footer hid while typing; "Generate empty sections (5)" wrote 5 sections in about 15 s; the typed line and the Benediction were unchanged. Owner: yes | 2026-10-01 |
+| 3. Regenerate and Undo | Regenerate on the typed card asked "Replace your text?"; Replace text, then Undo brought the typed line back. Owner: yes | 2026-10-01 |
+| 4. Switching a section off and on | Opening Prayer off and on again kept its text. Owner: yes | 2026-10-01 |
+| 5. A custom element | "Children's Moment" added after Opening Prayer; Remove, then Undo restored it in place. Owner: yes | 2026-10-01 |
+| 6. New service | Asked "Start a new service?" first; Cancel kept everything. Owner: yes | 2026-10-01 |
+| Computer | The summary's liturgy block, the step bar, and Review's Still needed rows opening their cards. Owner: looks right | 2026-10-01 |
+| Streamlit smoke on liturgy-frozen | Not run: 4b changes no data, and merges never reach liturgy-frozen | 2026-10-01 |
+| Follow-ups | Next: the service reviewer as its own slice (owner answer 3, 2026-09-30). 5a: saving and archiving services and the Word files, including the "First Reading" heading and recording hymn use on every save (leaving a service's own date out of the recent-use lookup). 6a: Settings for the default benediction, the liturgy prompts and the prayer library. Still open from earlier slices: first-line matching research (Hymnary.org), the NUL-character 500 (app-wide), and the two slice 1 test churches (kept for now, owner) | 2026-10-01 |
+
 ## Backups
 
 - **Workflow:** `.github/workflows/backup.yml` (`db-backup`). Daily at 08:37 UTC,
