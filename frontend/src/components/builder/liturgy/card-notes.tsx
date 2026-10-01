@@ -3,15 +3,17 @@
 import { CheckIcon, CircleAlertIcon, XIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { PendingButton } from "@/components/app/pending-button";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useDraft } from "@/lib/draft/context";
 import type { SectionKey } from "@/lib/draft/schema";
+import { needsRegenerateConfirm } from "@/lib/liturgy/cards";
 import { rateLimitMessage } from "@/lib/liturgy/errors";
 import { useLiturgyGeneration } from "@/lib/liturgy/generation";
-import { canRevise, LOOKS_GOOD, STALE_LINE, TAG_LABELS, type Note } from "@/lib/liturgy/notes";
+import { canRevise, LOOKS_GOOD, STALE_LINE, TAG_LABELS, type Note, type ServiceReview } from "@/lib/liturgy/notes";
 import { useLiturgyReview } from "@/lib/liturgy/review";
 import { cn } from "@/lib/utils";
 
@@ -115,9 +117,15 @@ export function reviseId(key: SectionKey): string {
  * part of the textarea's description and describes the list; it is not
  * announced as it appears (it appears as the member types).
  *
- * "Revise with these notes" (R "Revise") shows only on an AI card with a note
- * left, and not while the card is being written; the card's heading
- * describes it. While it runs the button
+ * "Revise with these notes" (R "Revise") shows on a card with text and a note
+ * left, written by the AI, typed or from a saved service (reviewer follow-up
+ * 1; never the church default), and not while the card is being written; the
+ * card's heading describes it. On typed or saved text it asks first ("Replace
+ * your text?", the same rule as Regenerate's): "Keep my text" returns focus to
+ * the button, "Revise text" starts it and the closing dialog sends focus to its
+ * Cancel. The dialog closes, sending nothing, when the notes change while it
+ * asks (Revise no longer offered, or a new review or another tab's edit), and
+ * focus goes to Revise, else the heading. While it runs the button
  * reads "Revising…" beside a Cancel ×, which takes focus, and the notes' ×
  * are off; the row stays while it runs even if the notes go (another tab
  * edited the card), so Cancel stays reachable. A failure shows its message
@@ -144,6 +152,11 @@ export function CardNotes({
   const remember = useDismissFocus(() => document.getElementById(headingId));
   const cancelRef = useRef<HTMLButtonElement>(null);
   const focusCancel = useRef(false);
+  const [confirming, setConfirming] = useState(false);
+  /** The review the confirm was opened on. */
+  const [askedOn, setAskedOn] = useState<ServiceReview | null>(null);
+  /** "Revise text" was chosen, so the closing dialog sends focus to the revision's Cancel. */
+  const confirmed = useRef(false);
   const revising = review.revising[sectionKey] === true;
   const failure = review.reviseErrors[sectionKey];
   const limitedUntil = useLiturgyGeneration().rateLimitedUntil ?? undefined;
@@ -171,22 +184,56 @@ export function CardNotes({
       </Button>
     </div>
   ) : null;
+  const card = draft.liturgy.cards[sectionKey];
+  const offered = canRevise(card, notes) && !busy;
+  // The confirm closes once Revise is no longer offered or the notes it asked about changed (another tab's edit,
+  // a new review), so it never revises with notes the member is not looking at.
+  if (confirming && (!offered || review.review !== askedOn)) setConfirming(false);
+  // Rendered after the notes in every branch below, so it stays mounted (and sends focus back) as the notes go.
+  const dialog = (
+    <ConfirmDialog
+      open={confirming}
+      onOpenChange={setConfirming}
+      title="Replace your text?"
+      description={`Revise replaces the text in ${label} with a version that addresses these notes. You can undo right after.`}
+      confirmLabel="Revise text"
+      cancelLabel="Keep my text"
+      onConfirm={() => {
+        confirmed.current = true;
+        setConfirming(false);
+        review.revise(sectionKey);
+      }}
+      // Keep my text: back to Revise. Revise text: Revise is gone, so the revision's Cancel (Revise if it did not
+      // start). The heading when neither is there (the notes went while it asked).
+      finalFocus={() => {
+        const cancel = confirmed.current ? cancelRef.current : null;
+        if (cancel !== null && cancel.isConnected) return cancel;
+        return document.getElementById(reviseId(sectionKey)) ?? document.getElementById(headingId);
+      }}
+    />
+  );
   if (notes === undefined || notes.notes.length === 0) {
     // The notes went while the card revises (another tab edited it): Cancel stays.
-    if (revisingRow !== null) return revisingRow;
-    return notes?.found === 0 ? (
-      <p id={notesId(sectionKey)} className="flex items-center gap-1.5 text-sm text-muted-foreground">
-        <CheckIcon className="size-4" aria-hidden="true" />
-        {LOOKS_GOOD}
-      </p>
-    ) : null;
+    const rest =
+      revisingRow ??
+      (notes?.found === 0 ? (
+        <p id={notesId(sectionKey)} className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          <CheckIcon className="size-4" aria-hidden="true" />
+          {LOOKS_GOOD}
+        </p>
+      ) : null);
+    return (
+      <>
+        {rest}
+        {dialog}
+      </>
+    );
   }
-  const offered = canRevise(draft.liturgy.cards[sectionKey], notes) && !busy;
   // A 429's alert shows until its wait ends.
   const failureShown = failure !== undefined && !revising && (failure.retryAt === undefined || failureWaiting);
   // The wait, beside the disabled Revise, unless its own alert already says it.
   const waitShown = offered && !revising && waiting && limitedUntil !== undefined && !(failureShown && failure.code === "rate_limited");
-  return (
+  const shown = (
     <div id={notesId(sectionKey)} className="grid gap-2 rounded-md bg-muted/40 p-3">
       {notes.stale ? (
         <p id={staleId(sectionKey)} className="text-sm font-medium text-muted-foreground">
@@ -219,6 +266,12 @@ export function CardNotes({
               disabled={waiting}
               className="data-disabled:pointer-events-none data-disabled:opacity-50"
               onClick={() => {
+                if (needsRegenerateConfirm(card)) {
+                  confirmed.current = false;
+                  setAskedOn(review.review);
+                  setConfirming(true);
+                  return;
+                }
                 // Focus moves to Cancel only when the revision started.
                 if (review.revise(sectionKey)) focusCancel.current = true;
               }}
@@ -234,6 +287,12 @@ export function CardNotes({
         </Alert>
       ) : null}
     </div>
+  );
+  return (
+    <>
+      {shown}
+      {dialog}
+    </>
   );
 }
 

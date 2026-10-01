@@ -218,7 +218,7 @@ describe("Revise with these notes (R Revise)", () => {
     act(() => handle.current?.dismiss("opening_prayer", "opening_prayer-1"));
     const started: (boolean | undefined)[] = [];
     act(() => {
-      started.push(handle.current?.revise("call_to_worship")); // typed: never revised
+      started.push(handle.current?.revise("benediction")); // no notes: nothing to revise with
       started.push(handle.current?.revise("opening_prayer"));
       started.push(handle.current?.revise("opening_prayer")); // already running
     });

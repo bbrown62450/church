@@ -311,18 +311,30 @@ describe("Review service (R User experience)", () => {
 });
 
 describe("Revise with these notes (R Revise)", () => {
-  it("is offered only on AI cards with a note left; typed, archived and default cards get notes but no Revise", async () => {
-    const { user } = renderStep();
-    await review(user);
-    expect(within(card("Opening Prayer")).getByRole("button", { name: "Revise with these notes" })).toBeInTheDocument();
+  it("is offered on AI, typed and archived cards with a note left; the Benediction only once it no longer follows the default", async () => {
+    const answer = reviewResult({
+      cards: [
+        ...ANSWER.cards.filter((c) => c.section !== "benediction"),
+        { section: "benediction", notes: [reviewNote("read_aloud", "The last line is long.")] },
+      ],
+      service_notes: ANSWER.service_notes,
+    });
+    const { user } = renderStep(seeded(), { "POST /liturgy/review": reviewRoute(() => answer) });
+    await user.click(await screen.findByRole("button", { name: "Review service" }));
+    await screen.findByText("Review finished. 7 notes.");
+    for (const label of ["Opening Prayer", "Call to Worship", "Prayer of Confession"]) {
+      expect(within(card(label)).getByRole("button", { name: "Revise with these notes" }), label).toBeInTheDocument();
+    }
     expect(within(card("Assurance of Pardon")).getByRole("button", { name: "Revise with these notes" })).toHaveAccessibleDescription(
       "Assurance of Pardon",
     );
-    expect(within(card("Call to Worship")).getByText(STOCK)).toBeInTheDocument();
-    expect(within(card("Call to Worship")).queryByRole("button", { name: "Revise with these notes" })).toBeNull();
-    expect(within(card("Prayer of Confession")).queryByRole("button", { name: "Revise with these notes" })).toBeNull();
-    expect(within(card("Benediction")).queryByRole("button", { name: "Revise with these notes" })).toBeNull();
-    // Its last note dismissed, an AI card has nothing to revise with.
+    const benediction = card("Benediction");
+    expect(within(benediction).getByText("The last line is long.")).toBeInTheDocument();
+    expect(within(benediction).queryByRole("button", { name: "Revise with these notes" })).toBeNull(); // follows the church default
+    await user.type(screen.getByRole("textbox", { name: "Benediction" }), " Amen.");
+    expect(within(benediction).getByText(STALE)).toBeInTheDocument();
+    expect(within(benediction).getByRole("button", { name: "Revise with these notes" })).toBeInTheDocument(); // now your text
+    // Its last note dismissed, a card has nothing to revise with.
     await user.click(within(card("Assurance of Pardon")).getByRole("button", { name: /^Dismiss note:/ }));
     expect(within(card("Assurance of Pardon")).queryByRole("button", { name: "Revise with these notes" })).toBeNull();
   });
@@ -347,6 +359,75 @@ describe("Revise with these notes (R Revise)", () => {
     expect(screen.getByRole("textbox", { name: "Opening Prayer" })).toHaveValue("Gracious God, as we journey, hear us.");
     expect(within(opening).queryByText("Revised with these notes.")).toBeNull();
     expect(within(card("Call to Worship")).getByText(STOCK)).toBeInTheDocument(); // other cards keep theirs
+  });
+
+  it("asks before revising typed or saved text: Keep my text sends nothing; Revise text revises the current text, with Undo", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const { user, api } = renderStep(seeded(), {
+      "POST /liturgy/revise": reviseRoute(async () => {
+        await gate;
+        return { text: "Leader: Come, all.\nPeople: We come." };
+      }),
+    });
+    await review(user);
+    const call = card("Call to Worship");
+    const box = screen.getByRole("textbox", { name: "Call to Worship" });
+    await user.type(box, " Now.");
+    const revise = within(call).getByRole("button", { name: "Revise with these notes" }); // faded notes: still offered
+    await user.click(revise);
+    const dialog = await screen.findByRole("alertdialog", { name: "Replace your text?" });
+    expect(dialog).toHaveTextContent(
+      "Revise replaces the text in Call to Worship with a version that addresses these notes. You can undo right after.",
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Keep my text" }));
+    await waitFor(() => expect(revise).toHaveFocus());
+    expect(api.requests.some((r) => r.path === "/liturgy/revise")).toBe(false);
+    await user.click(revise);
+    await user.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Revise text" }));
+    await waitFor(() => expect(within(call).getByRole("button", { name: "Cancel revising Call to Worship" })).toHaveFocus());
+    const sent = api.requests.find((r) => r.path === "/liturgy/revise")?.body as ReviseBody;
+    expect(sent).toMatchObject({ section: "call_to_worship", text: "Leader: As we journey, come. Now.", notes: [STOCK] });
+    release();
+    expect(await within(call).findByText("Revised with these notes.")).toBeInTheDocument();
+    expect(box).toHaveValue("Leader: Come, all.\nPeople: We come.");
+    expect(within(call).getByText("AI draft")).toBeInTheDocument();
+    expect(within(call).queryByRole("list", { name: "Notes on Call to Worship" })).toBeNull(); // addressed: they go
+    expect(within(call).getByRole("button", { name: "Undo" })).toHaveFocus();
+    await user.click(within(call).getByRole("button", { name: "Undo" }));
+    expect(box).toHaveValue("Leader: As we journey, come. Now.");
+    expect(within(call).getByText("Your text")).toBeInTheDocument();
+  });
+
+  it("closes Replace your text? when the notes change meanwhile, sending nothing; focus goes to the heading once Revise is gone", async () => {
+    const { user, api } = renderStep();
+    await review(user);
+    const call = card("Call to Worship");
+    await user.click(within(call).getByRole("button", { name: "Revise with these notes" }));
+    expect(await screen.findByRole("alertdialog", { name: "Replace your text?" })).toBeInTheDocument();
+    // Another tab clears the card: no notes are left to revise with.
+    act(() => {
+      const theirs = withCard(stored(), "call_to_worship", "", "empty");
+      window.dispatchEvent(
+        new StorageEvent("storage", { key: KEY, newValue: JSON.stringify({ ...theirs, updated_at: "2026-09-29T17:00:00.000Z" }) }),
+      );
+    });
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(within(call).queryByRole("list", { name: "Notes on Call to Worship" })).toBeNull();
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Call to Worship" })).toHaveFocus());
+    // Another tab edits another card: the review changed, so the confirm closes; Revise is still there and takes focus.
+    const confession = card("Prayer of Confession");
+    await user.click(within(confession).getByRole("button", { name: "Revise with these notes" }));
+    expect(await screen.findByRole("alertdialog", { name: "Replace your text?" })).toBeInTheDocument();
+    act(() => {
+      const theirs = withCard(stored(), "opening_prayer", "Holy One, hear us.", "typed");
+      window.dispatchEvent(
+        new StorageEvent("storage", { key: KEY, newValue: JSON.stringify({ ...theirs, updated_at: "2026-09-29T17:01:00.000Z" }) }),
+      );
+    });
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    await waitFor(() => expect(within(confession).getByRole("button", { name: "Revise with these notes" })).toHaveFocus());
+    expect(api.requests.some((r) => r.path === "/liturgy/revise")).toBe(false);
   });
 
   it("keeps the card read-only while it revises; Cancel keeps the text and notes and returns focus to Revise", async () => {
@@ -454,7 +535,7 @@ describe("Revise with these notes (R Revise)", () => {
     await user.click(cancel);
     expect(within(assurance).queryByRole("button", { name: "Revising…" })).toBeNull();
     expect(screen.getByRole("textbox", { name: "Assurance of Pardon" })).toHaveValue("From the other tab");
-    expect(screen.getByRole("heading", { name: "Assurance of Pardon" })).toHaveFocus();
+    expect(within(assurance).getByRole("button", { name: "Revise with these notes" })).toHaveFocus(); // now typed text
   });
 
   it("turns Try again off while the card revises", async () => {

@@ -41,8 +41,10 @@ text too), so a card cannot close its fence or
 open another; the prompt says they are material to review, not
 instructions, and that the JSON contract sets the answer's format.
 
-revise_section: one complete() call that edits an AI draft to address the
-notes left on it and keeps the rest. The system message is the church's
+revise_section: one complete() call that edits a card's text to address the
+notes left on it and keeps the rest: an AI draft, typed text or a saved
+service's (reviewer follow-up 1; the origin is not sent, and the client asks
+before replacing the member's own text). The system message is the church's
 merged system prompt with the voice profile appended (as the writer gets
 it); the user message is the section, its checklist, the occasion and
 readings, the sermon text, the draft, the notes and the instruction. The

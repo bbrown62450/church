@@ -24,7 +24,8 @@
  *   follow-up 1); a successful Regenerate (`onWritten`) or Revise drops the
  *   card's notes (`forgetCard`); a new service (a new `created_at`) cancels
  *   the review and every revision silently and drops all notes.
- * - `revise(key)`: an AI card with notes left; its text and remaining notes,
+ * - `revise(key)`: a card with notes left (`canRevise`: AI, typed or saved
+ *   text; the card asks first for the last two); its text and remaining notes,
  *   with the sermon text, in one `POST /liturgy/revise` (100 s); it returns
  *   whether it started. Nothing is sent while the AI writes the card, nor while a 429's wait is not over
  *   (`rateLimitedUntil`, Generate's or Revise's: the card shows the wait), nor
@@ -87,7 +88,7 @@ export type LiturgyReview = {
   revising: Partial<Record<SectionKey, true>>;
   /** A revision's failure; a 429's carries `retryAt` (ms since the epoch), when its wait ends. */
   reviseErrors: Partial<Record<SectionKey, ReviseError>>;
-  /** True when the revision started (an AI card with notes left, not already revising, not being written, no 429 wait). */
+  /** True when the revision started (`canRevise`, not already revising, not being written, no 429 wait). */
   revise: (key: SectionKey) => boolean;
   cancelRevise: (key: SectionKey) => void;
 };

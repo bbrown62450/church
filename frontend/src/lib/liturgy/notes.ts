@@ -21,7 +21,10 @@
  * - "Looks good." shows for a card that was reviewed, came back with no
  *   notes and is unchanged since; a card whose notes were all dismissed
  *   shows nothing.
- * - Revise is offered only on a card whose origin is "ai" with a note left.
+ * - Revise is offered on a card with text and a note left whose origin is
+ *   "ai", "typed" or "archive" (owner answer 2 of 2026-10-01); never on the
+ *   church default (owner answer 3). Typed and saved text asks first
+ *   (`CardNotes`).
  */
 import type { AiStatus, ReviewNote, ReviewResult } from "@/lib/api/types";
 import type { DraftV1, LiturgyCard, SectionKey } from "@/lib/draft/schema";
@@ -147,9 +150,10 @@ export function dismissNote(review: ServiceReview, where: SectionKey | "service"
   return { ...review, cards: { ...review.cards, [where]: { ...card, notes: card.notes.filter((n) => n.id !== id) } } };
 }
 
-/** "Revise with these notes": only an AI card with at least one note left. */
+/** "Revise with these notes": a card with text and a note left, written by the AI, typed or from a saved service. */
 export function canRevise(card: LiturgyCard, review: CardReview | undefined): boolean {
-  return card.origin === "ai" && review !== undefined && review.notes.length > 0;
+  const origin = card.origin === "ai" || card.origin === "typed" || card.origin === "archive";
+  return origin && card.text.trim() !== "" && review !== undefined && review.notes.length > 0;
 }
 
 /** How many notes the review shows in all (for the announcement when it ends). */

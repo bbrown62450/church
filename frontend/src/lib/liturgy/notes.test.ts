@@ -127,14 +127,18 @@ describe("the reviewer's notes (R Notes)", () => {
     expect(canRevise(elsewhere.liturgy.cards.opening_prayer, faded.cards.opening_prayer)).toBe(true);
   });
 
-  it("offers Revise only on an AI card with a note left", () => {
+  it("offers Revise on AI, typed and saved text with a note left, never on the church default or a blank card", () => {
     const d = reviewed();
     const review = applyReview(d, captureReview(d, ["call_to_worship", "opening_prayer", "benediction"]), ANSWER).review!;
     expect(canRevise(d.liturgy.cards.opening_prayer, review.cards.opening_prayer)).toBe(true);
-    expect(canRevise(d.liturgy.cards.call_to_worship, review.cards.call_to_worship)).toBe(false);     // typed
-    expect(canRevise(d.liturgy.cards.benediction, review.cards.benediction)).toBe(false);             // default
+    expect(canRevise(d.liturgy.cards.call_to_worship, review.cards.call_to_worship)).toBe(true);      // typed
+    expect(canRevise(d.liturgy.cards.benediction, review.cards.benediction)).toBe(false);             // default, no notes
     const archive = { ...d.liturgy.cards.opening_prayer, origin: "archive" as const };
-    expect(canRevise(archive, review.cards.opening_prayer)).toBe(false);
+    expect(canRevise(archive, review.cards.opening_prayer)).toBe(true);
+    const followsDefault = { ...d.liturgy.cards.opening_prayer, origin: "default" as const };
+    expect(canRevise(followsDefault, review.cards.opening_prayer)).toBe(false);                       // even with notes
+    const blank = { ...d.liturgy.cards.opening_prayer, text: "  ", origin: "typed" as const };
+    expect(canRevise(blank, review.cards.opening_prayer)).toBe(false);
     const dismissed = dismissNote(review, "opening_prayer", "opening_prayer-0");
     expect(canRevise(d.liturgy.cards.opening_prayer, dismissed.cards.opening_prayer)).toBe(false);    // none left
     expect(canRevise(d.liturgy.cards.opening_prayer, undefined)).toBe(false);                          // not reviewed
