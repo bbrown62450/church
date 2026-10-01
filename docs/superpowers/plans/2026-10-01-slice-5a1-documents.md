@@ -252,7 +252,7 @@ def test_legacy_error_placeholders():
 .venv/bin/python -m pytest -q backend/tests/test_service_output.py 2>&1 | tail -3
 ```
 
-**Expected:** <<F1>>
+**Expected:** `ERROR backend/tests/test_service_output.py` (`ModuleNotFoundError: No module named 'service_output'`), `!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!`, `1 error in <t>s`.
 
 - [ ] **Step 3 (agent): The module**
 
@@ -374,7 +374,7 @@ Counts after Task 1: backend **1229 passed, 11 skipped**; frontend **597 in 78**
 
 - [ ] **Step 1 (agent): Write the failing tests: the old function, copied verbatim, and the parity and change tests**
 
-`legacy_build_docx` is `build_docx` exactly as it is at `934ffb9` (docstring and numbered comments trimmed); the helpers it calls are imported from `worship_service`, where they do not change.
+`legacy_build_docx` is `build_docx` exactly as it is at `934ffb9`, statement for statement (its docstring, its python-docx check and its numbered comments left out); the helpers it calls are imported from `worship_service`, where they do not change.
 
 **Create `backend/tests/test_build_docx_characterization.py`:**
 
@@ -695,7 +695,17 @@ def test_without_python_docx_it_raises(monkeypatch):
 .venv/bin/python -m pytest -q backend/tests/test_build_docx_characterization.py 2>&1 | tail -10
 ```
 
-**Expected:** <<F2>>
+**Expected:** eight `FAILED` lines (the `build_docx` tests with `TypeError: build_docx() got an unexpected keyword argument 'date_display'`, the `render_docx` ones with `AttributeError: module 'service_output' has no attribute 'ResolvedHymn'`), then `8 failed in <t>s`:
+```
+FAILED backend/tests/test_build_docx_characterization.py::test_a_full_service_prints_exactly_as_streamlit_did_but_for_the_first_reading_heading[bulletin]
+FAILED backend/tests/test_build_docx_characterization.py::test_a_full_service_prints_exactly_as_streamlit_did_but_for_the_first_reading_heading[pastor]
+FAILED backend/tests/test_build_docx_characterization.py::test_a_sparse_service_prints_as_before_with_every_anchor
+FAILED backend/tests/test_build_docx_characterization.py::test_the_title_date_fonts_and_bold_text_are_unchanged
+FAILED backend/tests/test_build_docx_characterization.py::test_hymn_headings_follow_slots_and_never_print_none
+FAILED backend/tests/test_build_docx_characterization.py::test_render_docx_prints_the_readings_the_screen_shows
+FAILED backend/tests/test_build_docx_characterization.py::test_render_docx_variants
+FAILED backend/tests/test_build_docx_characterization.py::test_without_python_docx_it_raises
+```
 
 - [ ] **Step 3 (agent): The two older tests that call `build_docx` move to the new signature; `DOCX_HEADINGS_UNTIL_5A` goes**
 
@@ -789,7 +799,13 @@ def _service(**overrides):
 .venv/bin/python -m pytest -q backend/tests/test_liturgy_config.py backend/tests/test_communion_docx.py 2>&1 | tail -4
 ```
 
-**Expected:** <<F2b>>
+**Expected:** (the old `build_docx` refuses `date_display`)
+```
+FAILED backend/tests/test_liturgy_config.py::test_the_outline_is_build_docx_s_heading_order
+FAILED backend/tests/test_communion_docx.py::test_the_word_file_with_communion_is_unchanged
+FAILED backend/tests/test_communion_docx.py::test_the_word_file_s_assurance_line_is_liturgy_config_s
+3 failed, 11 passed in <t>s
+```
 
 - [ ] **Step 4 (agent): The new signature, `_add_hymn`, "First Reading", bytes; `render_docx`**
 
@@ -1163,7 +1179,7 @@ def render_docx(resolved: ResolvedService, variant: Variant) -> bytes:
 
 ```bash
 .venv/bin/python -m pytest -q backend/tests/test_build_docx_characterization.py backend/tests/test_service_output.py backend/tests/test_liturgy_config.py backend/tests/test_communion_docx.py 2>&1 | tail -1
-grep -n "DOCX_HEADINGS_UNTIL_5A\|Old Testament Reading" backend/worship_service.py backend/tests/test_liturgy_config.py; echo "old heading grep exit $?"
+grep -n 'DOCX_HEADINGS_UNTIL_5A\|paragraph("Old Testament Reading"' backend/worship_service.py backend/tests/test_liturgy_config.py; echo "old heading grep exit $?"
 .venv/bin/python -m pytest -q | tail -1
 ```
 
@@ -1487,7 +1503,7 @@ def test_without_python_docx_it_is_a_logged_500(tmp_db, church, monkeypatch):
 .venv/bin/python -m pytest -q backend/tests/test_usecase_documents.py backend/tests/test_api_documents.py backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -4
 ```
 
-**Expected:** <<F3>>
+**Expected:** `ERROR backend/tests/test_usecase_documents.py` (`ImportError: cannot import name 'archive' from 'usecases'`), `!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!`, `1 error in <t>s`.
 
 - [ ] **Step 3 (agent): The usecases, the schema, the route**
 
@@ -1806,7 +1822,7 @@ git diff --stat -- frontend/src/lib/api | tail -1
 grep -c '"/documents"\|"DocumentIn"\|"ServiceDraft"\|"CustomElementIn"' frontend/src/lib/api/openapi.json
 ```
 
-**Expected:** `Wrote …/frontend/src/lib/api/openapi.json`; a `🚀 src/lib/api/openapi.json → src/lib/api/schema.d.ts` line; `2 files changed, 448 insertions(+)`; `4`.
+**Expected:** `Wrote …/frontend/src/lib/api/openapi.json`; a `🚀 src/lib/api/openapi.json → src/lib/api/schema.d.ts` line; `2 files changed, 448 insertions(+)`; `7` (the path, the three schemas and their `$ref`s).
 
 - [ ] **Step 5 (agent): Run the files, the suite, the types**
 
@@ -1817,7 +1833,7 @@ grep -nE "^(import|from) (fastapi|starlette|streamlit)" backend/service_output.p
 (cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")
 ```
 
-**Expected:** <<F3b>>; `imports grep exit 1`; `1254 passed, 11 skipped in <t>s`; `typecheck 0`, `lint 0`.
+**Expected:** `28 passed in <t>s`; `imports grep exit 1`; `1254 passed, 11 skipped in <t>s`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 6 (agent): Commit**
 
@@ -1958,7 +1974,14 @@ describe("apiFetchBlob (slice 5a; F §1.9, §4.5)", () => {
 (cd frontend && npx vitest run src/lib/api/client.test.ts 2>&1 | grep -E "^ +× |Tests ")
 ```
 
-**Expected:** <<F4>>
+**Expected:** four failures (`apiFetchBlob` and `parseContentDispositionFilename` are not exported yet):
+```
+   × apiFetchBlob (slice 5a; F §1.9, §4.5) > returns the bytes and the server's filename, sending the token, church and JSON body <t>ms
+   × apiFetchBlob (slice 5a; F §1.9, §4.5) > turns a JSON error body into an ApiError, and keeps the client codes <t>ms
+   × apiFetchBlob (slice 5a; F §1.9, §4.5) > times out after 30 s on POST /documents <t>ms
+   × apiFetchBlob (slice 5a; F §1.9, §4.5) > reads filename* first, then a quoted or plain filename <t>ms
+      Tests  4 failed | 18 passed (22)
+```
 
 - [ ] **Step 3 (agent): One `send()` for both calls, the blob call, the filename, 30 s**
 
@@ -2253,7 +2276,17 @@ describe("documentRequest (slice 5a)", () => {
 (cd frontend && npx vitest run src/lib/download.test.ts src/lib/documents.test.ts 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests |Error:")
 ```
 
-**Expected:** <<F5>>
+**Expected:** both files fail to load:
+```
+ FAIL  |unit| src/lib/documents.test.ts [ src/lib/documents.test.ts ]
+Error: Cannot find module './documents' imported from '…/frontend/src/lib/documents.test.ts'
+Caused by: Error: Failed to load url ./documents (resolved id: ./documents) in …/frontend/src/lib/documents.test.ts. Does the file exist?
+ FAIL  |unit| src/lib/download.test.ts [ src/lib/download.test.ts ]
+Error: Cannot find module './download' imported from '…/frontend/src/lib/download.test.ts'
+Caused by: Error: Failed to load url ./download (resolved id: ./download) in …/frontend/src/lib/download.test.ts. Does the file exist?
+ Test Files  2 failed (2)
+      Tests  no tests
+```
 
 - [ ] **Step 3 (agent): `docxFilename`, `downloadBlob`, `documentRequest`, `useApi().churchBlob`, `useDownloadDocument`**
 
@@ -2855,7 +2888,16 @@ function toResponse(result: unknown): Response {
 (cd frontend && npx vitest run src/components/builder/review src/components/builder/builder-shell.test.tsx 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests |Error:")
 ```
 
-**Expected:** <<F6>>
+**Expected:** 
+```
+   × builder shell (F §4.7) > renders each step route inside the shell: progress, the step, and the footer links <t>ms
+ FAIL  |dom| src/components/builder/review/review-send-step.test.tsx [ src/components/builder/review/review-send-step.test.tsx ]
+Error: Failed to resolve import "./documents-card" from "src/components/builder/review/review-send-step.test.tsx". Does the file exist?
+ FAIL  |dom| src/components/builder/builder-shell.test.tsx > builder shell (F §4.7) > renders each step route inside the shell: progress, the step, and the footer links
+TestingLibraryElementError: Unable to find an accessible element with the role "heading" and name "Word documents"
+ Test Files  2 failed (2)
+      Tests  1 failed | 10 passed (11)
+```
 
 - [ ] **Step 3 (agent): The card, the step, the route; the placeholder goes**
 
@@ -3474,7 +3516,11 @@ Expected counts after this task: backend `1254 passed, 11 skipped` on `main`; fr
 - **Two status lines** (one per copy) made `getByRole("status")` ambiguous; the test reads both.
 - **The fake API's change** (a real `Response` passes through) is needed only by T6's DOM tests, so it moved from the build's T4 to T6.
 
-<<REPLAY>>
+**Replay of the finished plan (2026-10-01).** The directives of T1-T7 were applied in order onto a fresh detached worktree of `934ffb9` (symlinks to the repo's `.venv` and `frontend/node_modules`), with T6's `git rm`, running each task's commands:
+- All directives applied (T1 3, T2 17, T3 10, T4 5, T5 13, T6 9, T7 3); every Replace anchor occurred exactly once, and every Append landed on the file as the task before left it. After T7 the tree was identical to the build worktree's (`git diff` between the two: empty).
+- Every "see it fail" output matched as quoted (T1 one collection error; T2 `8 failed`, then `3 failed, 11 passed`; T3 one collection error; T4 `4 failed | 18 passed (22)`; T5 two files that cannot load; T6 one file that cannot load and `1 failed | 10 passed (11)`), and every count matched the table: backend 1229, 1237, 1254 (11 skipped); frontend 601 in 78, 604 in 80, 609 in 81; the T6 files three times and the whole suite three times at the end, with no `×` or `FAIL` line; typecheck 0 and lint 0 after T3-T6; the OpenAPI export and `gen:api` gave `2 files changed, 448 insertions(+)` and, run again at the end, no change; the docs tests `89 passed`, owner markers `4`, no em dash added, `3 files changed, 41 insertions(+), 3 deletions(-)`; four revisions; no raw HTML; the 38 code paths of T8 Step 3 exactly. No flaky run.
+- One check was corrected by the replay: T2 Step 5's grep first matched "Old Testament Reading" in the new comment that records the rename; it now looks for the old `add_paragraph("Old Testament Reading"` call only. T3 Step 4's count is `7`, not 4 (each schema also appears in a `$ref`).
+- Not run while planning: the production build (Turbopack refuses the replay's symlinked `node_modules`; T8 runs it in the real checkout), the pushes, the PR and CI, the merge and the owner's checks, and a download on a real phone.
 
 ## Spec coverage
 
