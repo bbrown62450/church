@@ -175,3 +175,6 @@ def test_opening_words_and_the_opening_note_match_the_shared_fixture():
     assert review_checks.OPENING_NOTE == fixture["opening_note"]
     for case in fixture["cases"]:
         assert review_checks.opening_words(case["text"]) == case["words"], case["text"]
+    for group in fixture["groups"]:
+        expected = [] if group["words"] is None else [review_checks.OPENING_NOTE.format(words=group["words"])]
+        assert [n.text for n in review_checks.check_openings(group["texts"])] == expected, group["texts"]

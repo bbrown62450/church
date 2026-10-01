@@ -406,4 +406,121 @@ describe("Revise the other prayers (reviewer follow-up 2)", () => {
     expect(screen.queryByText(/revised draft for Prayer of Confession/)).toBeNull(); // skipped silently, as a switch-off in this tab
     expect(screen.getByText(`status: ok; service: ${OPENING} | Two prayers say journey.`)).toBeInTheDocument();
   });
+
+  const KEPT = `status: ok; service: ${OPENING} | Two prayers say journey.`;
+
+  /** Three prayers share the opening; the batch has started and sent the Opening Prayer, which waits. */
+  async function begun(route: FakeHandler) {
+    const api = renderProvider({ "POST /liturgy/review": reviewRoute(() => ANSWER_ACROSS), "POST /liturgy/revise": route }, churchProfile(), threeShare());
+    act(() => handle.current?.start());
+    expect(await screen.findByText("said: Review finished. 3 notes.")).toBeInTheDocument();
+    act(() => void handle.current?.reviseAcross("service-0"));
+    await waitFor(() => expect(sentNotes(api)).toHaveLength(1));
+    return api;
+  }
+
+  /** Lets any revision still in flight settle (the fake API answers on the next tasks). */
+  async function settle() {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+  }
+
+  it("keeps the note when an Undo mid-batch brought the shared opening back, even though every one was revised", async () => {
+    const { route, release } = gated({ opening_prayer: "Holy One, hear us.", prayer_of_confession: "Merciful God, we confess.", assurance: "Loving God, you forgive." });
+    const api = await begun(route);
+    act(() => release("opening_prayer"));
+    expect(await screen.findByText(/^opening_prayer: Holy One, hear us\. \[ai\] .*undo revised$/)).toBeInTheDocument();
+    act(() => generationHandle.current?.applyUndo("opening_prayer"));
+    expect(await screen.findByText(/^opening_prayer: Gracious God, as we journey, hear us\. \[ai\]/)).toBeInTheDocument();
+    await waitFor(() => expect(sentNotes(api)).toHaveLength(2));
+    act(() => release("prayer_of_confession"));
+    await waitFor(() => expect(sentNotes(api)).toHaveLength(3));
+    act(() => release("assurance"));
+    await waitFor(() => expect(handle.current?.revising).toEqual({}));
+    expect(draftHandle.current?.peek().liturgy.cards.assurance.text).toBe("Loving God, you forgive.");
+    expect(screen.getByText(KEPT)).toBeInTheDocument();
+  });
+
+  it("stops when a 429's wait began before the next prayer's turn: nothing more is sent, the wait shows on it, the note stays", async () => {
+    const { route, release } = gated({ opening_prayer: "Holy One, hear us." });
+    const api = await begun(route);
+    act(() => generationHandle.current?.noteRateLimit(Date.now() + 30_000)); // Generate's 429 on another card
+    act(() => release("opening_prayer"));
+    expect(await screen.findByText(/^opening_prayer: Holy One, hear us\. \[ai\]/)).toBeInTheDocument();
+    await waitFor(() => expect(handle.current?.revising).toEqual({}));
+    await settle();
+    expect(sentNotes(api)).toHaveLength(1);
+    expect(handle.current?.reviseErrors.prayer_of_confession?.message).toBe("Too many requests — try again in 30 s.");
+    expect(handle.current?.reviseErrors.assurance).toBeUndefined();
+    expect(screen.getByText(KEPT)).toBeInTheDocument();
+  });
+
+  it("stops when the kept first prayer no longer opens with the words", async () => {
+    const { route, release } = gated({ opening_prayer: "Holy One, hear us." });
+    const api = await begun(route);
+    act(() => draftHandle.current?.update((d) => editCardText(d, "call_to_worship", "Leader: Come, all.")));
+    act(() => release("opening_prayer"));
+    await waitFor(() => expect(handle.current?.revising).toEqual({}));
+    await settle();
+    expect(sentNotes(api)).toHaveLength(1);
+    expect(draftHandle.current?.peek().liturgy.cards.prayer_of_confession.text).toBe("Gracious God, we confess.");
+    expect(screen.getByText(KEPT)).toBeInTheDocument();
+  });
+
+  it("New service mid-batch: nothing shows as revising and nothing more is sent", async () => {
+    const { route, release } = gated({ opening_prayer: "Holy One, hear us." });
+    const api = await begun(route);
+    const current = draftHandle.current!.peek();
+    act(() => draftHandle.current?.replace({ ...current, created_at: "2026-09-29T16:30:00.000Z" }));
+    expect(handle.current?.revising).toEqual({});
+    act(() => release("opening_prayer"));
+    await settle();
+    expect(sentNotes(api)).toHaveLength(1);
+    expect(handle.current?.revising).toEqual({});
+  });
+
+  it("unmounting mid-batch sends nothing more and logs no error", async () => {
+    const errors = vi.spyOn(console, "error");
+    const { route, release } = gated({ opening_prayer: "Holy One, hear us." });
+    const api = await begun(route);
+    api.view.unmount();
+    release("opening_prayer");
+    await settle();
+    expect(sentNotes(api)).toHaveLength(1);
+    expect(errors).not.toHaveBeenCalled();
+  });
+
+  it("goes on after a prayer's revision failed (not a 429), showing the failure on it and keeping the note", async () => {
+    const gates = new Map<string, () => void>();
+    const api = await begun(
+      reviseRoute(async (body) => {
+        await new Promise<void>((resolve) => gates.set(body.section, resolve));
+        return body.section === "opening_prayer" ? fakeError(500, "internal_error", "Something went wrong.") : { text: `Holy ${body.section}.` };
+      }),
+    );
+    act(() => gates.get("opening_prayer")?.());
+    expect(await screen.findByText(/^opening_prayer: Gracious God, as we journey, hear us\. \[ai\] .*error Something went wrong\./)).toBeInTheDocument();
+    await waitFor(() => expect(sentNotes(api)).toHaveLength(2));
+    act(() => gates.get("prayer_of_confession")?.());
+    await waitFor(() => expect(sentNotes(api)).toHaveLength(3));
+    act(() => gates.get("assurance")?.());
+    await waitFor(() => expect(handle.current?.revising).toEqual({}));
+    expect(draftHandle.current?.peek().liturgy.cards.assurance.text).toBe("Holy assurance.");
+    expect(screen.getByText(KEPT)).toBeInTheDocument();
+  });
+
+  it("skips a prayer edited in another tab before its turn, saying it kept the edits, and keeps the note", async () => {
+    const { route, release } = gated({ opening_prayer: "Holy One, hear us.", assurance: "Loving God, you forgive." });
+    const api = await begun(route);
+    act(() => draftHandle.current?.update((d) => card(d, "prayer_of_confession", "Gracious God, my own words.", "typed")));
+    act(() => release("opening_prayer"));
+    expect(await screen.findByText("Kept your edits, so the revised draft for Prayer of Confession was not used.")).toBeInTheDocument();
+    await waitFor(() => expect(sentNotes(api)).toHaveLength(2));
+    expect(sentNotes(api).map(([section]) => section)).toEqual(["opening_prayer", "assurance"]);
+    act(() => release("assurance"));
+    await waitFor(() => expect(handle.current?.revising).toEqual({}));
+    expect(draftHandle.current?.peek().liturgy.cards.prayer_of_confession.text).toBe("Gracious God, my own words.");
+    expect(screen.getByText(KEPT)).toBeInTheDocument();
+  });
 });

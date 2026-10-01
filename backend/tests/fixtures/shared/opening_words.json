@@ -18,5 +18,12 @@
     {"text": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Gracious God, hear.", "words": ["Gracious", "God"]},
     {"text": "God", "words": ["God"]},
     {"text": "  ", "words": []}
+  ],
+  "_groups": "Which openings count as the same, any case (Python str.lower, JavaScript toLowerCase; both apply Greek final sigma): check_openings' note words, or null for no note; acrossTargets finds every one of them from those words.",
+  "groups": [
+    {"texts": ["Gracious God, we gather.", "Leader: GRACIOUS god! Hear us."], "words": "Gracious God"},
+    {"texts": ["\u0398\u0395\u039f\u03a3 \u0391\u0393\u0399\u039f\u03a3, come.", "\u03b8\u03b5\u03bf\u03c2 \u03b1\u03b3\u03b9\u03bf\u03c2, hear."], "words": "\u0398\u0395\u039f\u03a3 \u0391\u0393\u0399\u039f\u03a3"},
+    {"texts": ["\u03a3 Lord, come.", "\u03c3 lord, hear."], "words": "\u03a3 Lord"},
+    {"texts": ["Holy One, come.", "Holy Ones, hear."], "words": null}
   ]
 }

@@ -376,15 +376,26 @@ export function ServiceNotes() {
   const remember = useDismissFocus(() => document.getElementById(REVIEW_BUTTON_ID));
   /** The note whose confirm is open, and the prayers it names (`snapshot`). */
   const [asking, setAsking] = useState<{ id: string; others: string } | null>(null);
-  /** The last button pressed and the prayers its confirm lists (kept while the dialog closes). */
-  const [pressed, setPressed] = useState<{ id: string; labels: string } | null>(null);
+  /** The prayers the last confirm lists (kept while the dialog closes). */
+  const [labels, setLabels] = useState("");
+  /** The last button pressed, for the dialog's closing focus. */
+  const lastPressed = useRef<string | null>(null);
+  /** The button pressed whose note is followed: the prayers it revises, and whether their batch started. */
+  const followed = useRef<{ id: string; keys: SectionKey[]; started: boolean } | null>(null);
   // The pressed button's note went (every prayer was revised) and focus fell to the page: the next note's ×, else
   // the Review button, as a dismiss. Before the cards' own effects, which would send it to the last card's Undo.
+  // Followed only until its batch ends with the note kept, or the note goes.
   const shownBefore = useRef<Note[]>(notes);
   useLayoutEffect(() => {
     const before = shownBefore.current;
     shownBefore.current = notes;
-    if (pressed === null || notes.some((n) => n.id === pressed.id)) return;
+    const pressed = followed.current;
+    if (pressed === null) return;
+    if (notes.some((n) => n.id === pressed.id)) {
+      if (pressed.started && !pressed.keys.some((key) => review.revising[key] === true)) followed.current = null;
+      return;
+    }
+    followed.current = null;
     const at = before.findIndex((n) => n.id === pressed.id);
     if (at < 0) return;
     const active = document.activeElement;
@@ -414,18 +425,21 @@ export function ServiceNotes() {
         if (!open) setAsking(null);
       }}
       title="Replace your text?"
-      description={`Revise replaces the text in ${pressed?.labels ?? ""}. You can undo each right after.`}
+      description={`Revise replaces the text in ${labels}. You can undo each right after.`}
       confirmLabel="Revise text"
       cancelLabel="Keep my text"
       onConfirm={() => {
         const id = asking?.id;
         setAsking(null);
-        if (id !== undefined) review.reviseAcross(id);
+        const started = id !== undefined && review.reviseAcross(id);
+        // Followed while its batch runs; nothing to follow when it did not start.
+        followed.current = started && followed.current?.id === id ? { ...followed.current, started } : null;
       }}
       // Keep my text, Revise text, or the confirm closing on its own: the button (off while the prayers revise), else
       // the Review button when the note went.
       finalFocus={() =>
-        (pressed === null ? null : document.getElementById(acrossId(pressed.id))) ?? document.getElementById(REVIEW_BUTTON_ID)
+        (lastPressed.current === null ? null : document.getElementById(acrossId(lastPressed.current))) ??
+        document.getElementById(REVIEW_BUTTON_ID)
       }
     />
   );
@@ -458,12 +472,14 @@ export function ServiceNotes() {
                 disabled={off}
                 className="data-disabled:pointer-events-none data-disabled:opacity-50"
                 onClick={() => {
-                  setPressed({ id: note.id, labels: listLabels(targets.others.map((key) => SECTION_LABELS[key])) });
+                  lastPressed.current = note.id;
+                  setLabels(listLabels(targets.others.map((key) => SECTION_LABELS[key])));
                   if (targets.others.some((key) => needsRegenerateConfirm(draft.liturgy.cards[key]))) {
+                    followed.current = { id: note.id, keys: targets.others, started: false };
                     setAsking({ id: note.id, others: snapshot(draft, targets.others) });
                     return;
                   }
-                  review.reviseAcross(note.id);
+                  followed.current = review.reviseAcross(note.id) ? { id: note.id, keys: targets.others, started: true } : null;
                 }}
               >
                 Revise the other prayers

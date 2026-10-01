@@ -161,13 +161,24 @@ describe("the reviewer's notes (R Notes)", () => {
 });
 
 describe("Revise the other prayers (reviewer follow-up 2)", () => {
-  type Fixture = { opening_note: string; cases: { text: string; words: string[] }[] };
+  type Fixture = {
+    opening_note: string;
+    cases: { text: string; words: string[] }[];
+    groups: { texts: string[]; words: string | null }[];
+  };
   const fixture = JSON.parse(
     readFileSync(new URL("../../../../backend/tests/fixtures/shared/opening_words.json", import.meta.url), "utf-8"),
   ) as Fixture;
 
   it("reads openings and the shared-opening note as the backend does (the shared fixture)", () => {
     for (const { text, words } of fixture.cases) expect(openingWords(text), text).toEqual(words);
+    // The same openings, any case, as the backend groups them: every one is found from the note's words.
+    const keys: SectionKey[] = ["call_to_worship", "opening_prayer", "prayer_of_confession"];
+    for (const { texts, words } of fixture.groups) {
+      const d = texts.reduce((acc, t, i) => withText(acc, keys[i], t, "typed"), testDraft());
+      const found = acrossTargets(d, words ?? openingWords(texts[0]).join(" "));
+      expect(found === null ? null : [found.first, ...found.others], texts.join(" / ")).toEqual(words === null ? null : keys.slice(0, texts.length));
+    }
     const text = fixture.opening_note.replace("{words}", "Gracious God");
     expect(sharedOpening(reviewNote("repetition", text, "code"))).toBe("Gracious God");
     expect(sharedOpening(reviewNote("repetition", text))).toBeNull(); // an AI note: no button
