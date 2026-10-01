@@ -3,6 +3,7 @@
  * Pure functions of the draft; the shell decides what an unshipped step shows.
  */
 import { inSupportedRange, isValidDateIso } from "@/lib/dates";
+import { DEFAULT_ENABLED } from "@/lib/liturgy/sections";
 import { cleanLines } from "@/lib/scripture-refs";
 
 import { SECTION_KEYS, SLOTS, type DraftV1, type Slot, type StepId } from "./schema";
@@ -75,7 +76,12 @@ export function stepStatus(
  * translation, so they look past it with `withoutTranslation` (owner answer
  * A, 2026-09-29). A hymn in any slot and a chosen hymnal count too; the
  * Exclude switch and the AI's other ideas never do (owner answer 1,
- * 2026-09-29, slice 3b; the same fields the fingerprint payload holds).
+ * 2026-09-29, slice 3b; the same fields the fingerprint payload holds). On
+ * the Liturgy step everything that ends up in the service counts: card text,
+ * a card switched away from its default, communion the user set, the sermon
+ * title and custom elements; a Benediction still following the church
+ * default (origin "default") and text that prints nothing (blank after
+ * trimming) do not (owner answer 1, 2026-09-30, slice 4b).
  */
 export function isPristine(draft: DraftV1): boolean {
   const r = draft.readings;
@@ -90,10 +96,11 @@ export function isPristine(draft: DraftV1): boolean {
     draft.hymns.hymnal === null &&
     SECTION_KEYS.every((key) => {
       const card = l.cards[key];
-      return card.origin === "default" || (card.origin === "empty" && card.text === "");
+      const text = card.origin === "default" || (card.origin === "empty" && card.text.trim() === "");
+      return card.enabled === DEFAULT_ENABLED[key] && text;
     }) &&
     l.communion_origin === "default" &&
-    l.sermon_title === "" &&
+    l.sermon_title.trim() === "" &&
     l.custom_elements.length === 0 &&
     draft.editing === null
   );

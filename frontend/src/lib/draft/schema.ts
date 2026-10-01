@@ -10,6 +10,7 @@
 import { z } from "zod";
 
 import { isFirstSundayOfMonth, isValidDateIso, nextSunday, todayIn } from "@/lib/dates";
+import { DEFAULT_ENABLED } from "@/lib/liturgy/sections";
 
 export const DRAFT_VERSION = 1;
 
@@ -125,7 +126,7 @@ export function freshDraft({
   const cards = Object.fromEntries(
     SECTION_KEYS.map((key) => [
       key,
-      { enabled: key !== "prayers_of_the_people", text: "", origin: key === "benediction" ? "default" : "empty" },
+      { enabled: DEFAULT_ENABLED[key], text: "", origin: key === "benediction" ? "default" : "empty" },
     ]),
   ) as Record<SectionKey, LiturgyCard>;
   return {

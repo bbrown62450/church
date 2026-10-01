@@ -158,6 +158,24 @@ describe("isPristine and the hymns step (owner answer 1, 2026-09-29)", () => {
   });
 });
 
+describe("isPristine and the liturgy step (owner answer 1, 2026-09-30)", () => {
+  it("counts a switch moved from its default and text that prints, never a card following the church default", () => {
+    // Everything that ends up in the service counts: text, the switches, communion, the title, custom elements.
+    expect(isPristine(withCard("call_to_worship", { enabled: false }))).toBe(false);
+    expect(isPristine(withCard("prayers_of_the_people", { enabled: true }))).toBe(false);
+    expect(isPristine(withCard("benediction", { enabled: false }))).toBe(false);
+    expect(isPristine(withCard("opening_prayer", { text: "Gracious God", origin: "typed" }))).toBe(false);
+    // A Benediction still following the church default is not the user's work, whatever the default says.
+    expect(isPristine(withCard("benediction", { text: "Go in peace.", origin: "default" }))).toBe(true);
+    expect(isPristine(withCard("benediction", { text: "", origin: "default" }))).toBe(true);
+    // Text that prints nothing is not work: blank typing, a blank title.
+    expect(isPristine(withCard("assurance", { text: "  \n ", origin: "empty" }))).toBe(true);
+    expect(isPristine(withLiturgy({ sermon_title: "   " }))).toBe(true);
+    // A card switched off and back on again is as it was.
+    expect(isPristine(withCard("call_to_worship", { enabled: true }))).toBe(true);
+  });
+});
+
 describe("stillNeeded (S Review \"Still needed\")", () => {
   it("lists only shipped steps' gaps", () => {
     const fresh = setDate(testDraft(), "");

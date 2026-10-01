@@ -187,6 +187,21 @@ describe("DraftStore roll-forward and the hymns step (owner answer 1, 2026-09-29
   });
 });
 
+describe("DraftStore roll-forward and the liturgy step (owner answer 1, 2026-09-30)", () => {
+  it("keeps a passed default date when a card was switched, and rolls one whose Benediction follows the default", () => {
+    const tenDaysLater = clock(new Date(DRAFT_NOW.getTime() + 10 * 86_400_000)); // Friday, October 9
+    const card = (key: "prayers_of_the_people" | "benediction", patch: object) =>
+      testDraft((d) => ({
+        ...d,
+        liturgy: { ...d.liturgy, cards: { ...d.liturgy.cards, [key]: { ...d.liturgy.cards[key], ...patch } } },
+      }));
+    const load = (d: DraftV1) =>
+      makeStore(memoryStorage({ [KEY]: JSON.stringify(d) }).storage, tenDaysLater.now).store.getSnapshot().draft;
+    expect(load(card("prayers_of_the_people", { enabled: true })).readings.date_iso).toBe("2026-10-04");
+    expect(load(card("benediction", { text: "Go in peace.", origin: "default" })).readings.date_iso).toBe("2026-10-11");
+  });
+});
+
 describe("DraftStore changes (S store.ts)", () => {
   it("debounces writes, bumps updated_at, and ignores a recipe that returns the same draft", () => {
     const { storage, data, writes } = memoryStorage({ [KEY]: JSON.stringify(testDraft()) });

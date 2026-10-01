@@ -55,4 +55,32 @@ describe("fingerprint and isDirty (F §4.6 Unsaved changes)", () => {
     const ideas = { for_date_iso: "2026-10-04", by_slot: { opening: [pick], response: [], closing: [] } };
     expect(isDirty(hymns({ alternatives: ideas }))).toBe(false);
   });
+
+  it("after a save, liturgy that prints is unsaved; a switch on an empty card is not (owner answer 1, 2026-09-30)", () => {
+    const base = testDraft((d) => ({
+      ...d,
+      liturgy: {
+        ...d.liturgy,
+        cards: {
+          ...d.liturgy.cards,
+          call_to_worship: { enabled: true, text: "Come, let us worship.", origin: "typed" },
+          benediction: { enabled: true, text: "Halverson", origin: "default" },
+        },
+      },
+    }));
+    const saved: DraftV1 = { ...base, saved_fingerprint: fingerprint(draftToServicePayload(base)) };
+    const liturgy = (patch: Partial<DraftV1["liturgy"]>): DraftV1 => ({ ...saved, liturgy: { ...saved.liturgy, ...patch } });
+    const card = (key: "call_to_worship" | "opening_prayer" | "benediction", patch: object): DraftV1 =>
+      liturgy({ cards: { ...saved.liturgy.cards, [key]: { ...saved.liturgy.cards[key], ...patch } } });
+    expect(isDirty(saved)).toBe(false);
+    expect(isDirty(card("call_to_worship", { text: "Come, let us worship God.", origin: "typed" }))).toBe(true);
+    expect(isDirty(card("call_to_worship", { enabled: false }))).toBe(true); // its text leaves the service
+    expect(isDirty(liturgy({ include_communion: !saved.liturgy.include_communion, communion_origin: "user" }))).toBe(true);
+    expect(isDirty(liturgy({ sermon_title: "Living Water" }))).toBe(true);
+    expect(isDirty(liturgy({ custom_elements: [{ id: "c1", label: "Anthem", text: "", insert_after: "sermon" }] }))).toBe(true);
+    // Slice 4 Risks item 4: a Benediction following the church default shows the new default as unsaved.
+    expect(isDirty(card("benediction", { text: "Go in peace." }))).toBe(true);
+    // Switches are not saved (slice 4 BC-17), so switching an empty card prints nothing new.
+    expect(isDirty(card("opening_prayer", { enabled: false }))).toBe(false);
+  });
 });
