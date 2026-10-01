@@ -102,7 +102,7 @@ def test_the_prompt_carries_the_church_s_rules_present_checklists_profile_and_co
     assert "<<<CARD opening_prayer>>> Opening Prayer (an AI draft):\nGracious God" in user
     assert "<<<CARD benediction>>> Benediction (the church's default):\nGo in peace.\n<<<END>>>" in user
     assert "(an AI draft):\n" + "P" * 4000 + "\n<<<END>>>" in user and "P" * 4001 not in user   # cut for review only
-    assert user.endswith("Notes already found by code. Do not repeat them:\n"
+    assert user.endswith(liturgy_review.CODE_NOTES_INTRO + " (for example, a note on prayers that open alike):\n" +
                          f"- call_to_worship: {STOCK}\n"
                          '- across the service: Several prayers open with "Gracious God".')
     assert (user.index("<<<CARD call_to_worship>>>") < user.index("<<<CARD opening_prayer>>>")
@@ -354,3 +354,121 @@ def test_the_info_line_carries_no_prayer_text_or_notes(church, caplog):
     assert "liturgy.review" in info and " cards=1 code_notes=1 ai=1 " in info
     assert "ai_status=ok" in info and "notes=2" in info and "outcome=ok" in info
     assert "SECRET" not in info and "journey" not in info
+
+
+# --- reviewer follow-up 1 (owner answers 2026-10-01): no praise notes, no restated code notes ---
+
+NO_PRAISE = ("A note is only for something to change. Never praise or describe what already works. "
+             "If a prayer is fine, give it no notes")
+
+
+def test_the_prompt_asks_for_no_praise_and_no_restated_code_notes(church):
+    intro = ("Notes already found by code. The pastor sees them already, so do not repeat them or make the same "
+             "point in other words")
+    ai = FakeAI(reply=answer())
+    run(church, cards=CARDS[:1], ai=ai)                 # only a stock-phrase note: nothing in brackets
+    system, user = (m["content"] for m in ai.calls[0]["messages"])
+    assert NO_PRAISE in system and "Give a card an empty notes list when it is fine." not in system
+    assert user.endswith(f"{intro}:\n- call_to_worship: {STOCK}")
+    # A Cites note and a shared opening: the brackets name both.
+    ai = FakeAI(reply=answer())
+    run(church, cards=[*CARDS, ReviewCard("assurance", "ai", "As John 21:1-19 tells, you are forgiven.")], ai=ai)
+    user = ai.calls[0]["messages"][1]["content"]
+    assert (f"{intro} (for example, a note on citing or naming scripture on a card that already has a Cites "
+            f"note, or on prayers that open alike):\n- call_to_worship: {STOCK}\n- assurance: Cites John 21:1-19.") in user
+
+
+def test_ai_notes_that_restate_a_code_note_in_other_words_are_dropped():
+    cites = [Note("rules", "Cites John 21:1-19. Draw on the reading's themes without naming it.", match="John 21:1-19")]
+    stock = [Note("rules", STOCK, match="as we journey")]
+    cases = [
+        # (code notes, the card's shared opening, the AI note, kept?)
+        (cites, "", ("rules", "Cites the Gospel directly; draw on its themes."), False),
+        (cites, "", ("rules", "Names the reading outright."), False),
+        (cites, "", ("rules", "Naming the passages breaks the church's rule."), False),
+        (cites, "", ("rules", "Drop the scripture reference in the second line."), False),
+        (cites, "", ("rules", "The citation of John should go."), False),
+        (cites, "", ("rules", "Names the Gospel reading outright."), False),
+        (cites, "", ("rules", "Mentions John 3 by name; the church asks that readings not be named."), False),
+        (cites, "", ("rules", "Refers to the Gospel of John explicitly; allude instead."), False),
+        (cites, "", ("rules", "Explicitly references John 21"), False),
+        # Precision over recall: a possessive after the scripture word is about the reading's content, not naming
+        # it, so this real criticism stays (a note like "Names the reading's source" would stay too).
+        (cites, "", ("rules", "Name the reading's central image instead of summarizing."), True),
+        (cites, "", ("rules", "Names the passages' setting in Galilee."), True),
+        (cites, "", ("theology", "Cites the Gospel to prove a point."), True),       # another tag: kept
+        (cites, "", ("rules", "Recites a long list of attributes."), True),         # not "cite"
+        (cites, "", ("rules", "Names God only as Father."), True),
+        (stock, "", ("rules", "Names the reading outright."), True),                # no Cites note on this card
+        ([], "Gracious God", ("repetition", "Opens like the Opening Prayer."), False),
+        ([], "Gracious God", ("repetition", "Begins the same way as the Confession."), False),
+        ([], "Gracious God", ("repetition", '"gracious god" again, as in the Confession.'), False),
+        ([], "Gracious God", ("repetition", 'Repeats "mercy" four times.'), True),   # not about the opening
+        ([], "Gracious God", ("repetition", 'Repeats "mercy" from the Opening Prayer.'), True),   # a section's name
+        ([], "Gracious God", ("repetition", '"Open our hearts" also appears in the Confession.'), True),
+        ([], "Gracious God", ("repetition", "Echoes the Opening Prayer word for word in its last line."), True),
+        ([], "Gracious God", ("repetition", "Starts and ends with the same petition."), True),
+        ([], "Gracious God", ("theology", "Opens with a request before any praise."), True),
+        ([], "", ("repetition", "Opens like the Opening Prayer."), True),          # its opening is not shared
+        # About this prayer alone, with no word putting it beside another prayer: kept, even when the opening is shared.
+        ([], "Gracious God", ("repetition", "Begins with 'we' three lines in a row."), True),
+        ([], "Gracious God", ("repetition", "Starts with the same petition it ends with."), True),
+        ([], "Gracious God", ("repetition", "'Lord, have mercy' begins as a refrain and repeats five times."), True),
+        ([], "Gracious God", ("repetition", 'Uses "Gracious God" three times.'), True),
+        ([], "Gracious God", ("repetition", "Opens with the same words as the other prayers."), False),
+        ([], "Gracious God", ("repetition", 'Also opens with "Gracious God", like the Prayer of Confession.'), False),
+    ]
+    for code, opening, (tag, text), kept in cases:
+        note = Note(tag, text, "ai")
+        assert (liturgy_review.drop_restated(code, [note], opening=opening) == [note]) is kept, text
+
+
+ALIKE = ("repetition", "The Call to Worship and Opening Prayer both begin alike.")
+
+
+def test_the_review_drops_restated_citation_and_opening_notes(church):
+    cards = [ReviewCard("call_to_worship", "ai", "Gracious God, we gather."),
+             ReviewCard("opening_prayer", "ai", "Gracious God, as John 21:1-19 tells, you call us. Amen."),
+             ReviewCard("offertory_prayer", "ai", "Holy One, receive these gifts.")]
+    reply = answer([
+        ("call_to_worship", [("repetition", "Opens the same way as the Opening Prayer.")]),
+        ("opening_prayer", [("rules", "Names the reading; let its themes speak instead."),
+                            # "again" alone does not put the prayer beside another (owner decision 1, M2).
+                            ("repetition", '"Gracious God" again, as in the Call to Worship.'),
+                            ("read_aloud", "The second clause is long.")]),
+        ("offertory_prayer", [("repetition", "Starts like no other prayer, which is fine but abrupt."),
+                              ("rules", "Names the reading outright.")]),
+    ], service=[ALIKE])
+    outcome = run(church, cards=cards, ai=FakeAI(reply=reply))
+    assert notes_of(outcome) == {
+        "call_to_worship": [],
+        "opening_prayer": [("rules", "Cites John 21:1-19. Draw on the reading's themes without naming it.", "code"),
+                           ("read_aloud", "The second clause is long.", "ai")],
+        "offertory_prayer": [("repetition", "Starts like no other prayer, which is fine but abrupt.", "ai"),
+                             ("rules", "Names the reading outright.", "ai")],     # no code note here: kept
+    }
+    assert [n.text for n in outcome.service_notes] == ['Several prayers open with "Gracious God".']
+    # With no shared opening found by code, the AI's note across the service on prayers that open alike stays.
+    apart = [ReviewCard("call_to_worship", "ai", "Come, let us worship."), *cards[1:]]
+    outcome = run(church, cards=apart, ai=FakeAI(reply=answer(service=[ALIKE])))
+    assert [(n.text, n.source) for n in outcome.service_notes] == [(ALIKE[1], "ai")]
+
+
+def test_a_note_across_the_service_on_another_shared_opening_is_kept():
+    code = [Note("repetition", 'Several prayers open with "Gracious God".', match="Gracious God")]
+    other = Note("repetition", 'The Prayer of Confession and the Assurance both open with "We confess".', "ai")
+    same = Note("repetition", 'Three prayers open with "gracious  God".', "ai")
+    plain = Note("repetition", "The Call to Worship and Opening Prayer both begin alike.", "ai")
+    mixed = Note("repetition", 'Two open with "We confess" and three with "Gracious God".', "ai")
+    assert liturgy_review.drop_restated_across(code, [other, same, plain, mixed]) == [other]
+    assert liturgy_review.drop_restated_across([], [other, same, plain]) == [other, same, plain]
+
+
+def test_the_citing_pattern_runs_in_linear_time_on_100_kb():
+    import time
+    for text in ("name " * 20_000, "refers to " * 10_000, "a " * 50_000 + "names", "names the " * 10_000 + "x"):
+        started = time.perf_counter()
+        liturgy_review.RESTATES_CITING.search(text)
+        liturgy_review.CROSS_PRAYER.search(text)
+        liturgy_review.quotes(text + '"' * 3)
+        assert time.perf_counter() - started < 0.5, text[:20]

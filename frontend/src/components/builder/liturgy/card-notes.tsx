@@ -3,16 +3,19 @@
 import { CheckIcon, CircleAlertIcon, XIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { PendingButton } from "@/components/app/pending-button";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useDraft } from "@/lib/draft/context";
 import type { SectionKey } from "@/lib/draft/schema";
+import { needsRegenerateConfirm } from "@/lib/liturgy/cards";
 import { rateLimitMessage } from "@/lib/liturgy/errors";
 import { useLiturgyGeneration } from "@/lib/liturgy/generation";
-import { canRevise, LOOKS_GOOD, TAG_LABELS, type Note } from "@/lib/liturgy/notes";
+import { canRevise, LOOKS_GOOD, STALE_LINE, TAG_LABELS, type CardReview, type Note } from "@/lib/liturgy/notes";
 import { useLiturgyReview } from "@/lib/liturgy/review";
+import { cn } from "@/lib/utils";
 
 import { REVIEW_BUTTON_ID } from "./review-bar";
 import { useRetryWait } from "./section-card";
@@ -50,21 +53,27 @@ export function NoteList({
   label,
   onDismiss,
   disabled = false,
+  faded = false,
+  describedBy,
 }: {
   notes: Note[];
   label: string;
   onDismiss: (id: string) => void;
   /** The card is being revised with these notes: none can go meanwhile. */
   disabled?: boolean;
+  /** The card changed since its review: the chips and sentences are dimmed, still readable. */
+  faded?: boolean;
+  /** The id of the line that says why they are dimmed. */
+  describedBy?: string;
 }) {
   return (
-    <ul aria-label={label} className="grid gap-2">
+    <ul aria-label={label} aria-describedby={describedBy} className="grid gap-2">
       {notes.map((note) => (
         <li key={note.id} className="flex min-w-0 items-start gap-2">
-          <Badge variant="outline" className="mt-0.5 shrink-0">
+          <Badge variant="outline" className={cn("mt-0.5 shrink-0", faded && "text-muted-foreground")}>
             {TAG_LABELS[note.tag]}
           </Badge>
-          <p className="min-w-0 flex-1 text-sm wrap-anywhere">{note.text}</p>
+          <p className={cn("min-w-0 flex-1 text-sm wrap-anywhere", faded && "text-muted-foreground")}>{note.text}</p>
           <Button
             id={`note-${note.id}-dismiss`}
             variant="ghost"
@@ -88,6 +97,11 @@ function WaitLine({ until }: { until: number }) {
   return <span className="text-sm text-muted-foreground">{rateLimitMessage(seconds)}</span>;
 }
 
+/** The id of a card's "From before your last edit." line, which describes its faded notes. */
+function staleId(key: SectionKey): string {
+  return `card-${key}-stale`;
+}
+
 /** The id of a card's "Revise with these notes" button. */
 export function reviseId(key: SectionKey): string {
   return `card-${key}-revise`;
@@ -96,12 +110,23 @@ export function reviseId(key: SectionKey): string {
 /**
  * A card's notes under its text (R "Notes"): at most 3, most important
  * first; "Looks good." when the card was reviewed and came back with none;
- * nothing when it was not reviewed, its notes were all dismissed, or its text
- * changed since.
+ * nothing when it was not reviewed, its notes were all dismissed, or it was
+ * "Looks good." and has changed since. When the card changed after its review
+ * (reviewer follow-up 1) the notes stay, dimmed, under "From before your last
+ * edit.", which is plain text inside the notes, so it is read with them, is
+ * part of the textarea's description and describes the list; it is not
+ * announced as it appears (it appears as the member types).
  *
- * "Revise with these notes" (R "Revise") shows only on an AI card with a note
- * left, and not while the card is being written; the card's heading
- * describes it. While it runs the button
+ * "Revise with these notes" (R "Revise") shows on a card with text and a note
+ * left, written by the AI, typed or from a saved service (reviewer follow-up
+ * 1; never the church default), and not while the card is being written; the
+ * card's heading describes it. On typed or saved text it asks first ("Replace
+ * your text?", the same rule as Regenerate's): "Keep my text" returns focus to
+ * the button, "Revise text" starts it and the closing dialog sends focus to its
+ * Cancel. The dialog closes, sending nothing, when this card's notes or text
+ * change while it asks (Revise no longer offered, a new review, another tab's
+ * edit) or a 429's wait begins (the wait shows beside Revise), and focus goes
+ * to Revise, else the heading; other cards' changes leave it open. While it runs the button
  * reads "Revising…" beside a Cancel ×, which takes focus, and the notes' ×
  * are off; the row stays while it runs even if the notes go (another tab
  * edited the card), so Cancel stays reachable. A failure shows its message
@@ -128,6 +153,11 @@ export function CardNotes({
   const remember = useDismissFocus(() => document.getElementById(headingId));
   const cancelRef = useRef<HTMLButtonElement>(null);
   const focusCancel = useRef(false);
+  const [confirming, setConfirming] = useState(false);
+  /** This card's own review entry, and its text, when the confirm was opened. */
+  const [askedOn, setAskedOn] = useState<{ notes: CardReview | undefined; text: string } | null>(null);
+  /** "Revise text" was chosen, so the closing dialog sends focus to the revision's Cancel. */
+  const confirmed = useRef(false);
   const revising = review.revising[sectionKey] === true;
   const failure = review.reviseErrors[sectionKey];
   const limitedUntil = useLiturgyGeneration().rateLimitedUntil ?? undefined;
@@ -155,27 +185,71 @@ export function CardNotes({
       </Button>
     </div>
   ) : null;
+  const card = draft.liturgy.cards[sectionKey];
+  const offered = canRevise(card, notes) && !busy;
+  // The confirm closes once Revise is no longer offered, this card's notes changed (a new review, the card went
+  // stale or lost its notes), its text changed (another tab's edit, even to a card already faded) or a 429's wait
+  // began, so it never revises with notes or text the member is not looking at. Other cards' changes leave it open.
+  if (confirming && (!offered || waiting || notes !== askedOn?.notes || card.text !== askedOn?.text)) {
+    setConfirming(false);
+  }
+  // Rendered after the notes in every branch below, so it stays mounted (and sends focus back) as the notes go.
+  const dialog = (
+    <ConfirmDialog
+      open={confirming}
+      onOpenChange={setConfirming}
+      title="Replace your text?"
+      description={`Revise replaces the text in ${label} with a version that addresses these notes. You can undo right after.`}
+      confirmLabel="Revise text"
+      cancelLabel="Keep my text"
+      onConfirm={() => {
+        confirmed.current = true;
+        setConfirming(false);
+        review.revise(sectionKey);
+      }}
+      // Keep my text: back to Revise. Revise text: Revise is gone, so the revision's Cancel (Revise if it did not
+      // start). The heading when neither is there (the notes went while it asked).
+      finalFocus={() => {
+        const cancel = confirmed.current ? cancelRef.current : null;
+        if (cancel !== null && cancel.isConnected) return cancel;
+        return document.getElementById(reviseId(sectionKey)) ?? document.getElementById(headingId);
+      }}
+    />
+  );
   if (notes === undefined || notes.notes.length === 0) {
     // The notes went while the card revises (another tab edited it): Cancel stays.
-    if (revisingRow !== null) return revisingRow;
-    return notes?.found === 0 ? (
-      <p id={notesId(sectionKey)} className="flex items-center gap-1.5 text-sm text-muted-foreground">
-        <CheckIcon className="size-4" aria-hidden="true" />
-        {LOOKS_GOOD}
-      </p>
-    ) : null;
+    const rest =
+      revisingRow ??
+      (notes?.found === 0 ? (
+        <p id={notesId(sectionKey)} className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          <CheckIcon className="size-4" aria-hidden="true" />
+          {LOOKS_GOOD}
+        </p>
+      ) : null);
+    return (
+      <>
+        {rest}
+        {dialog}
+      </>
+    );
   }
-  const offered = canRevise(draft.liturgy.cards[sectionKey], notes) && !busy;
   // A 429's alert shows until its wait ends.
   const failureShown = failure !== undefined && !revising && (failure.retryAt === undefined || failureWaiting);
   // The wait, beside the disabled Revise, unless its own alert already says it.
   const waitShown = offered && !revising && waiting && limitedUntil !== undefined && !(failureShown && failure.code === "rate_limited");
-  return (
+  const shown = (
     <div id={notesId(sectionKey)} className="grid gap-2 rounded-md bg-muted/40 p-3">
+      {notes.stale ? (
+        <p id={staleId(sectionKey)} className="text-sm font-medium text-muted-foreground">
+          {STALE_LINE}
+        </p>
+      ) : null}
       <NoteList
         notes={notes.notes}
         label={`Notes on ${label}`}
         disabled={revising}
+        faded={notes.stale}
+        describedBy={notes.stale ? staleId(sectionKey) : undefined}
         onDismiss={(id) => {
           remember(notes.notes, id);
           review.dismiss(sectionKey, id);
@@ -196,6 +270,12 @@ export function CardNotes({
               disabled={waiting}
               className="data-disabled:pointer-events-none data-disabled:opacity-50"
               onClick={() => {
+                if (needsRegenerateConfirm(card)) {
+                  confirmed.current = false;
+                  setAskedOn({ notes, text: card.text });
+                  setConfirming(true);
+                  return;
+                }
                 // Focus moves to Cancel only when the revision started.
                 if (review.revise(sectionKey)) focusCancel.current = true;
               }}
@@ -211,6 +291,12 @@ export function CardNotes({
         </Alert>
       ) : null}
     </div>
+  );
+  return (
+    <>
+      {shown}
+      {dialog}
+    </>
   );
 }
 

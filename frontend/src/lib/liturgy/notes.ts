@@ -9,13 +9,22 @@
  *   card still holds exactly that (slice 4's stale-results rule, comparing
  *   text and origin), and drops the whole review when the service changed
  *   (a new `created_at`).
- * - `pruneReview` runs on every draft change: a card whose text or origin no
- *   longer matches what was reviewed loses its notes (typing, Regenerate,
- *   Revise, Clear text, "Use church default", Undo, another tab's edit), and
- *   a new service loses the whole review.
- * - "Looks good." shows for a card that was reviewed and came back with no
- *   notes; a card whose notes were all dismissed shows nothing.
- * - Revise is offered only on a card whose origin is "ai" with a note left.
+ * - `pruneReview` runs on every draft change (reviewer follow-up 1, owner
+ *   answer 4 of 2026-10-01): a card whose text or origin no longer matches
+ *   what was reviewed keeps its notes, marked `stale` ("From before your last
+ *   edit.") until the next review (typing, Undo, "Use church default",
+ *   another tab's edit; an Undo back to the reviewed words keeps them
+ *   stale); a card left blank, or one with no notes left ("Looks good." or
+ *   all dismissed), loses them; a new service loses the whole review. A
+ *   successful Regenerate or Revise drops the card's notes (`forgetCard`,
+ *   called by the providers), since the new text replaced or addressed them.
+ * - "Looks good." shows for a card that was reviewed, came back with no
+ *   notes and is unchanged since; a card whose notes were all dismissed
+ *   shows nothing.
+ * - Revise is offered on a card with text and a note left whose origin is
+ *   "ai", "typed" or "archive" (owner answer 2 of 2026-10-01); never on the
+ *   church default (owner answer 3). Typed and saved text asks first
+ *   (`CardNotes`).
  */
 import type { AiStatus, ReviewNote, ReviewResult } from "@/lib/api/types";
 import type { DraftV1, LiturgyCard, SectionKey } from "@/lib/draft/schema";
@@ -35,8 +44,13 @@ export const QUICK_CHECKS_ONLY = "Only quick checks ran. The full review isn't a
 
 export type Note = ReviewNote & { id: string };
 export type ReviewedCard = { text: string; origin: LiturgyCard["origin"] };
-/** `found`: how many notes the card came back with ("Looks good." only when 0). */
-export type CardReview = { reviewed: ReviewedCard; notes: Note[]; found: number };
+export const STALE_LINE = "From before your last edit.";
+
+/**
+ * `found`: how many notes the card came back with ("Looks good." only when 0).
+ * `stale`: the card changed since it was reviewed; its notes show faded.
+ */
+export type CardReview = { reviewed: ReviewedCard; notes: Note[]; found: number; stale: boolean };
 export type ServiceReview = {
   createdAt: string;
   cards: Partial<Record<SectionKey, CardReview>>;
@@ -78,7 +92,12 @@ export function applyReview(
       dropped.push(section);
       continue;
     }
-    cards[section] = { reviewed, notes: notes.map((n, i) => ({ ...n, id: `${section}-${i}` })), found: notes.length };
+    cards[section] = {
+      reviewed,
+      notes: notes.map((n, i) => ({ ...n, id: `${section}-${i}` })),
+      found: notes.length,
+      stale: false,
+    };
   }
   return {
     review: {
@@ -91,17 +110,32 @@ export function applyReview(
   };
 }
 
-/** The review after a draft change: the same object when nothing changed. */
+/**
+ * The review after a draft change: a changed card's notes fade (`stale`),
+ * a blank card's or a noteless card's go; the same object when nothing changed.
+ */
 export function pruneReview(review: ServiceReview | null, d: DraftV1): ServiceReview | null {
   if (review === null) return null;
   if (d.created_at !== review.createdAt) return null;
-  const gone = (Object.keys(review.cards) as SectionKey[]).filter((key) => {
+  let cards: Partial<Record<SectionKey, CardReview>> | null = null;
+  for (const key of Object.keys(review.cards) as SectionKey[]) {
     const card = review.cards[key];
-    return card !== undefined && !holds(d.liturgy.cards[key], card.reviewed);
-  });
-  if (gone.length === 0) return review;
+    const now = d.liturgy.cards[key];
+    if (card === undefined) continue;
+    const blank = now.text.trim() === "";
+    if (!blank && (card.stale || holds(now, card.reviewed))) continue;
+    cards ??= { ...review.cards };
+    if (blank || card.notes.length === 0) delete cards[key];
+    else cards[key] = { ...card, stale: true };
+  }
+  return cards === null ? review : { ...review, cards };
+}
+
+/** A successful Regenerate or Revise: the card's notes go (the new text replaced or addressed them). */
+export function forgetCard(review: ServiceReview | null, key: SectionKey): ServiceReview | null {
+  if (review === null || review.cards[key] === undefined) return review;
   const cards = { ...review.cards };
-  for (const key of gone) delete cards[key];
+  delete cards[key];
   return { ...review, cards };
 }
 
@@ -116,9 +150,10 @@ export function dismissNote(review: ServiceReview, where: SectionKey | "service"
   return { ...review, cards: { ...review.cards, [where]: { ...card, notes: card.notes.filter((n) => n.id !== id) } } };
 }
 
-/** "Revise with these notes": only an AI card with at least one note left. */
+/** "Revise with these notes": a card with text and a note left, written by the AI, typed or from a saved service. */
 export function canRevise(card: LiturgyCard, review: CardReview | undefined): boolean {
-  return card.origin === "ai" && review !== undefined && review.notes.length > 0;
+  const origin = card.origin === "ai" || card.origin === "typed" || card.origin === "archive";
+  return origin && card.text.trim() !== "" && review !== undefined && review.notes.length > 0;
 }
 
 /** How many notes the review shows in all (for the announcement when it ends). */

@@ -217,13 +217,17 @@ manual check (Testing) and the owner's guided check (owner answer 4,
 the reviewer)" on a phone, one step at a time, and takes a quick look on a
 computer; the result goes into `docs/ops-runbook.md` → "Service reviewer
 record". The AI's words differ every time, so record what the page shows,
-never an email address or a church id.
+never an email address or a church id. Items marked "(owner, after
+follow-up 1)" are the owner's phone check after reviewer follow-up 1
+(`docs/superpowers/plans/2026-10-01-reviewer-followup-1.md`); that result
+goes into "Reviewer follow-up 1 record".
 
 - [ ] (owner, after the reviewer) **1.** On a liturgy with a typed Call to Worship and a few AI sections, tap **Review service**: a spinner and "Reviewing…", then notes under the cards (a tag such as "Rules" or "Read aloud", one sentence, an ×), "Looks good." on a card with none, and, when prayers repeat each other, an "Across the service" box at the top.
 - [ ] (owner, after the reviewer) **2.** Dismiss one note with its ×: only that note goes.
 - [ ] (owner, after the reviewer) **3.** On an AI card with a note, tap **Revise with these notes**: the text is replaced, "Revised with these notes. Undo" shows, and **Undo** brings the draft back.
-- [ ] (owner, after the reviewer) **4.** The typed card has notes but no **Revise with these notes** button.
-- [ ] (owner, after the reviewer) **5.** Type in a card that has notes: its notes go at once; the other cards keep theirs.
+- [ ] (owner, after follow-up 1) **4.** On the typed card with a note, tap **Revise with these notes**: "Replace your text?" asks first; **Keep my text** changes nothing; **Revise text** revises it, shows "Revised with these notes. Undo", and **Undo** brings your text back. A Benediction that follows the church default has no Revise. (Before reviewer follow-up 1: typed cards had no Revise.)
+- [ ] (owner, after follow-up 1) **5.** Type in a card that has notes: its notes stay, dimmed, under "From before your last edit.", and the other cards keep theirs; a card that said "Looks good." shows nothing after an edit; a new **Review service** replaces the dimmed notes. (Before reviewer follow-up 1: the notes went at once.)
 - [ ] **6.** With the AI unavailable (or after a review that says so), the quick checks still show with "Only quick checks ran. The full review isn't available right now."
 - [ ] (owner, after the reviewer) **7.** At 375 px: no sideways scroll; the Review service button sits beside or under "Liturgy"; note chips and sentences wrap; every × and button is at least 44 px.
 - [ ] **8.** Start a review and tap **Cancel**: the spinner goes and nothing changes. Start one and choose **New service**: no notes remain.
+- [ ] (owner, after follow-up 1) **9.** On a real review: no note only praises a prayer ("… fits well", "good focus on …"); a card with a "Cites …" note has no second note about naming the reading; a prayer named in "Several prayers open with …" has no note of its own about its opening, and "Across the service" has no second, AI-worded version of that note.

@@ -1,8 +1,9 @@
 /**
  * The service reviewer's notes (reviewer spec, "Notes", "Notes go away when
- * the text changes"; slice 4 spec, reviewer amendment Testing): stale results
- * dropped by text and origin, notes cleared by any change, dismiss, "Looks
- * good." and when Revise is offered.
+ * the text changes"; slice 4 spec, reviewer amendment Testing; reviewer
+ * follow-up 1): stale results dropped by text and origin, notes faded by any
+ * later change and dropped by a new draft, dismiss, "Looks good." and when
+ * Revise is offered.
  */
 import { describe, expect, it } from "vitest";
 
@@ -10,7 +11,7 @@ import type { DraftV1, SectionKey } from "@/lib/draft/schema";
 import { reviewNote, reviewResult, testDraft } from "@/test/fixtures";
 
 import { applyGenerated, clearCard, editCardText, restoreChurchDefault } from "./cards";
-import { applyReview, canRevise, captureReview, dismissNote, noteCount, pruneReview } from "./notes";
+import { applyReview, canRevise, captureReview, dismissNote, forgetCard, noteCount, pruneReview } from "./notes";
 
 const STOCK = 'Stock phrase "as we journey". Say it more naturally.';
 
@@ -43,7 +44,7 @@ describe("the reviewer's notes (R Notes)", () => {
       ["call_to_worship-0", "rules", STOCK],
       ["call_to_worship-1", "read_aloud", "Long line."],
     ]);
-    expect(review?.cards.benediction).toEqual({ reviewed: { text: "Go in peace.", origin: "default" }, notes: [], found: 0 });
+    expect(review?.cards.benediction).toEqual({ reviewed: { text: "Go in peace.", origin: "default" }, notes: [], found: 0, stale: false });
     expect(review?.service.map((n) => n.id)).toEqual(["service-0"]);
     expect(review?.aiStatus).toBe("ok");
     expect(review && noteCount(review)).toBe(4);
@@ -62,20 +63,35 @@ describe("the reviewer's notes (R Notes)", () => {
     });
   });
 
-  it("clears a card's notes when its text or origin changes, and every note when the service changes", () => {
+  it("fades a card's notes when its text or origin changes, drops a blank or noteless card's, and every note when the service changes", () => {
     const d = reviewed();
     const { review } = applyReview(d, captureReview(d, ["call_to_worship", "opening_prayer", "benediction"]), ANSWER);
     expect(pruneReview(review, d)).toBe(review);                                    // nothing changed: the same object
     const changes: [string, DraftV1][] = [
       ["typing", editCardText(d, "opening_prayer", "Gracious God, hear us!")],
-      ["Regenerate or Revise", applyGenerated(d, "opening_prayer", "A new draft.")],
-      ["Clear text", clearCard(d, "opening_prayer")],
+      ["another tab, or an Undo", withText(d, "opening_prayer", "Gracious God, hear us all.", "ai")],
+      ["only the origin", withText(d, "opening_prayer", "Gracious God, hear us.", "typed")],
     ];
     for (const [what, next] of changes) {
       const pruned = pruneReview(review, next);
-      expect(Object.keys(pruned?.cards ?? {}), what).toEqual(["call_to_worship", "benediction"]);
+      expect(pruned?.cards.opening_prayer, what).toEqual({ ...review?.cards.opening_prayer, stale: true });
+      expect(pruned?.cards.call_to_worship?.stale, what).toBe(false);
       expect(pruned?.service, what).toHaveLength(1);
+      // Faded until the next review, even back at the reviewed words.
+      const back = pruneReview(pruned, d);
+      expect(back?.cards.opening_prayer?.stale, what).toBe(true);
+      expect(pruneReview(back, d), what).toBe(back);
     }
+    // Clear text: a blank card shows no notes; "Looks good." and a card with every note dismissed go after any edit.
+    expect(Object.keys(pruneReview(review, clearCard(d, "opening_prayer"))?.cards ?? {})).toEqual(["call_to_worship", "benediction"]);
+    expect(pruneReview(review, editCardText(d, "benediction", "Go in peace!"))?.cards.benediction).toBeUndefined();
+    const dismissed = dismissNote(review!, "call_to_worship", "call_to_worship-0");
+    expect(pruneReview(dismissed, editCardText(d, "call_to_worship", "Come."))?.cards.call_to_worship).toEqual({
+      ...dismissed.cards.call_to_worship,
+      stale: true,
+    });
+    const none = dismissNote(dismissed, "call_to_worship", "call_to_worship-1");
+    expect(pruneReview(none, editCardText(d, "call_to_worship", "Come."))?.cards.call_to_worship).toBeUndefined();
     // "Use church default" with the same words still changes the origin.
     const typed = withText(d, "benediction", "Go in peace.", "typed");
     const asked = applyReview(typed, captureReview(typed, ["benediction"]), ANSWER).review;
@@ -97,14 +113,32 @@ describe("the reviewer's notes (R Notes)", () => {
     expect(dismissNote(review, "assurance", "assurance-0")).toBe(review);
   });
 
-  it("offers Revise only on an AI card with a note left", () => {
+  it("forgets a card's notes after a new AI draft or a revision lands; a faded AI card can still be revised", () => {
+    const d = reviewed();
+    const review = applyReview(d, captureReview(d, ["call_to_worship", "opening_prayer", "benediction"]), ANSWER).review!;
+    const written = applyGenerated(d, "opening_prayer", "A new draft.");
+    const forgotten = forgetCard(pruneReview(review, written), "opening_prayer");
+    expect(Object.keys(forgotten?.cards ?? {})).toEqual(["call_to_worship", "benediction"]);
+    expect(forgotten?.service).toHaveLength(1);
+    expect(forgetCard(review, "assurance")).toBe(review);
+    expect(forgetCard(null, "opening_prayer")).toBeNull();
+    const elsewhere = withText(d, "opening_prayer", "Gracious God, hear us all.", "ai");
+    const faded = pruneReview(review, elsewhere)!;
+    expect(canRevise(elsewhere.liturgy.cards.opening_prayer, faded.cards.opening_prayer)).toBe(true);
+  });
+
+  it("offers Revise on AI, typed and saved text with a note left, never on the church default or a blank card", () => {
     const d = reviewed();
     const review = applyReview(d, captureReview(d, ["call_to_worship", "opening_prayer", "benediction"]), ANSWER).review!;
     expect(canRevise(d.liturgy.cards.opening_prayer, review.cards.opening_prayer)).toBe(true);
-    expect(canRevise(d.liturgy.cards.call_to_worship, review.cards.call_to_worship)).toBe(false);     // typed
-    expect(canRevise(d.liturgy.cards.benediction, review.cards.benediction)).toBe(false);             // default
+    expect(canRevise(d.liturgy.cards.call_to_worship, review.cards.call_to_worship)).toBe(true);      // typed
+    expect(canRevise(d.liturgy.cards.benediction, review.cards.benediction)).toBe(false);             // default, no notes
     const archive = { ...d.liturgy.cards.opening_prayer, origin: "archive" as const };
-    expect(canRevise(archive, review.cards.opening_prayer)).toBe(false);
+    expect(canRevise(archive, review.cards.opening_prayer)).toBe(true);
+    const followsDefault = { ...d.liturgy.cards.opening_prayer, origin: "default" as const };
+    expect(canRevise(followsDefault, review.cards.opening_prayer)).toBe(false);                       // even with notes
+    const blank = { ...d.liturgy.cards.opening_prayer, text: "  ", origin: "typed" as const };
+    expect(canRevise(blank, review.cards.opening_prayer)).toBe(false);
     const dismissed = dismissNote(review, "opening_prayer", "opening_prayer-0");
     expect(canRevise(d.liturgy.cards.opening_prayer, dismissed.cards.opening_prayer)).toBe(false);    // none left
     expect(canRevise(d.liturgy.cards.opening_prayer, undefined)).toBe(false);                          // not reviewed
