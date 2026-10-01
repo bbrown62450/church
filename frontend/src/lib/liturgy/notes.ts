@@ -25,9 +25,19 @@
  *   "ai", "typed" or "archive" (owner answer 2 of 2026-10-01); never on the
  *   church default (owner answer 3). Typed and saved text asks first
  *   (`CardNotes`).
+ * - "Revise the other prayers" (reviewer follow-up 2, owner answers of
+ *   2026-10-01) shows only on the code note "Several prayers open with
+ *   "…"." (`sharedOpening`). The prayers it is about are found again from the
+ *   draft by the backend's rule (`openingWords`, the shared fixture
+ *   `opening_words.json`): every switched-on card with text that opens with
+ *   those words, any case. The first in service order is kept, and so is a
+ *   Benediction following the church default; the others are revised
+ *   (`acrossTargets`), each with one note (`acrossNote`).
  */
 import type { AiStatus, ReviewNote, ReviewResult } from "@/lib/api/types";
 import type { DraftV1, LiturgyCard, SectionKey } from "@/lib/draft/schema";
+
+import { reviewTargets } from "./request";
 
 /** The tag chips (R "Notes"). */
 export const TAG_LABELS: Record<ReviewNote["tag"], string> = {
@@ -56,6 +66,8 @@ export type ServiceReview = {
   cards: Partial<Record<SectionKey, CardReview>>;
   service: Note[];
   aiStatus: AiStatus;
+  /** Which review this is: the provider numbers each one it shows, so a late revision never touches a newer one's notes. */
+  generation?: number;
 };
 export type ReviewAsk = { createdAt: string; cards: Partial<Record<SectionKey, ReviewedCard>> };
 
@@ -150,10 +162,88 @@ export function dismissNote(review: ServiceReview, where: SectionKey | "service"
   return { ...review, cards: { ...review.cards, [where]: { ...card, notes: card.notes.filter((n) => n.id !== id) } } };
 }
 
+/** A card Revise may rewrite: text written by the AI, typed or from a saved service; never the church default. */
+export function revisable(card: LiturgyCard): boolean {
+  const origin = card.origin === "ai" || card.origin === "typed" || card.origin === "archive";
+  return origin && card.text.trim() !== "";
+}
+
 /** "Revise with these notes": a card with text and a note left, written by the AI, typed or from a saved service. */
 export function canRevise(card: LiturgyCard, review: CardReview | undefined): boolean {
-  const origin = card.origin === "ai" || card.origin === "typed" || card.origin === "archive";
-  return origin && card.text.trim() !== "" && review !== undefined && review.notes.length > 0;
+  return revisable(card) && review !== undefined && review.notes.length > 0;
+}
+
+/** The code note across the service that names a shared opening (backend `review_checks.OPENING_NOTE`). */
+const OPENING_NOTE = /^Several prayers open with "(.+)"\.$/;
+
+/** The words a "Several prayers open with "…"." code note names; null for any other note (an AI note included). */
+export function sharedOpening(note: ReviewNote): string | null {
+  if (note.source !== "code" || note.tag !== "repetition") return null;
+  return OPENING_NOTE.exec(note.text)?.[1] ?? null;
+}
+
+// Python's `\s` (str patterns): JavaScript's `\s` adds U+FEFF and lacks U+001C-U+001F and U+0085, so it is spelled out.
+const PY_SPACE = "[\\t\\n\\v\\f\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]";
+const LABEL = new RegExp(`^${PY_SPACE}*(?:leader|people)${PY_SPACE}*:${PY_SPACE}*`, "i");
+// Backend `review_checks._WORD`: a run of letters and digits, apostrophe-joined parts included.
+const WORD = /(?<![\p{L}\p{N}])[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*(?![\p{L}\p{N}])/gu;
+const MAX_WORD_CHARS = 30;
+
+/** Backend `review_checks.opening_words`: the first two words after any leading "Leader:" or "People:" label. */
+export function openingWords(text: string): string[] {
+  const words = text.replace(LABEL, "").match(WORD) ?? [];
+  return words.filter((w) => [...w].length <= MAX_WORD_CHARS).slice(0, 2);
+}
+
+export type AcrossTargets = { words: string; first: SectionKey; others: SectionKey[] };
+
+/**
+ * The prayers a shared-opening note is about, as the draft is now: the
+ * switched-on cards with text (the review's own rule) whose first two words
+ * are `words`, any case, in service order. `first` is kept; `others` are the
+ * rest Revise may rewrite (a Benediction following the church default is
+ * kept too). Null when fewer than two still share the opening or none can be
+ * revised.
+ */
+export function acrossTargets(d: DraftV1, words: string): AcrossTargets | null {
+  const key = words.toLowerCase();
+  const sharing = reviewTargets(d).filter((k) => {
+    const opening = openingWords(d.liturgy.cards[k].text);
+    return opening.length === 2 && opening.join(" ").toLowerCase() === key;
+  });
+  if (sharing.length < 2) return null;
+  const [first, ...rest] = sharing;
+  const others = rest.filter((k) => revisable(d.liturgy.cards[k]));
+  return others.length === 0 ? null : { words, first, others };
+}
+
+/** `ReviseIn`'s limit on one note, in characters. */
+const MAX_NOTE_CHARS = 240;
+
+/**
+ * The one note each other prayer is revised with (owner answer 2 of
+ * 2026-10-01). The prayers go one at a time (owner decision A), so each
+ * later note also names `avoid`, the new openings the batch has produced so
+ * far, oldest first: `…; open differently, not with "X" or "Y".` The oldest go
+ * first when the note would pass 240 characters.
+ */
+export function acrossNote(words: string, firstLabel: string, avoid: readonly string[] = []): string {
+  const base = `Opens with "${words}" like the ${firstLabel}; open differently`;
+  for (let drop = 0; drop < avoid.length; drop += 1) {
+    const note = `${base}, not with ${joined(avoid.slice(drop).map((w) => `"${w}"`), "or")}.`;
+    if ([...note].length <= MAX_NOTE_CHARS) return note;
+  }
+  return `${base}.`;
+}
+
+function joined(items: readonly string[], last: "and" | "or"): string {
+  if (items.length <= 1) return items.join("");
+  return `${items.slice(0, -1).join(", ")} ${last} ${items[items.length - 1]}`;
+}
+
+/** "A", "A and B", "A, B and C". */
+export function listLabels(labels: string[]): string {
+  return joined(labels, "and");
 }
 
 /** How many notes the review shows in all (for the announcement when it ends). */

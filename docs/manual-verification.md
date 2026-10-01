@@ -220,7 +220,10 @@ record". The AI's words differ every time, so record what the page shows,
 never an email address or a church id. Items marked "(owner, after
 follow-up 1)" are the owner's phone check after reviewer follow-up 1
 (`docs/superpowers/plans/2026-10-01-reviewer-followup-1.md`); that result
-goes into "Reviewer follow-up 1 record".
+goes into "Reviewer follow-up 1 record". Items marked "(owner, after
+follow-up 2)" are the owner's phone check after reviewer follow-up 2
+(`docs/superpowers/plans/2026-10-01-reviewer-followup-2.md`); that result
+goes into "Reviewer follow-up 2 record".
 
 - [ ] (owner, after the reviewer) **1.** On a liturgy with a typed Call to Worship and a few AI sections, tap **Review service**: a spinner and "Reviewing…", then notes under the cards (a tag such as "Rules" or "Read aloud", one sentence, an ×), "Looks good." on a card with none, and, when prayers repeat each other, an "Across the service" box at the top.
 - [ ] (owner, after the reviewer) **2.** Dismiss one note with its ×: only that note goes.
@@ -231,3 +234,4 @@ goes into "Reviewer follow-up 1 record".
 - [ ] (owner, after the reviewer) **7.** At 375 px: no sideways scroll; the Review service button sits beside or under "Liturgy"; note chips and sentences wrap; every × and button is at least 44 px.
 - [ ] **8.** Start a review and tap **Cancel**: the spinner goes and nothing changes. Start one and choose **New service**: no notes remain.
 - [ ] (owner, after follow-up 1) **9.** On a real review: no note only praises a prayer ("… fits well", "good focus on …"); a card with a "Cites …" note has no second note about naming the reading; a prayer named in "Several prayers open with …" has no note of its own about its opening, and "Across the service" has no second, AI-worded version of that note.
+- [ ] (owner, after follow-up 2) **10.** With two or three prayers opening with the same words, **Review service**: under "Several prayers open with "…"." in "Across the service" there is **Revise the other prayers** (an AI note there has none). Tap it: the first of those prayers keeps its text; each of the others shows "Revising…" with its own Cancel from the start, and they are revised one at a time (about 10 s each), each with a new opening, different from the first and from each other, and "Revised with these notes. Undo"; the note goes once all were revised with new openings (if the AI kept the opening, the note and its button stay). When one of them is your own or saved text, "Replace your text?" asks first, once, naming them; **Keep my text** changes nothing. **Undo** on one card brings back only that card's text.

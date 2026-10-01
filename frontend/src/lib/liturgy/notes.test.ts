@@ -5,13 +5,28 @@
  * later change and dropped by a new draft, dismiss, "Looks good." and when
  * Revise is offered.
  */
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
 import type { DraftV1, SectionKey } from "@/lib/draft/schema";
 import { reviewNote, reviewResult, testDraft } from "@/test/fixtures";
 
 import { applyGenerated, clearCard, editCardText, restoreChurchDefault } from "./cards";
-import { applyReview, canRevise, captureReview, dismissNote, forgetCard, noteCount, pruneReview } from "./notes";
+import {
+  acrossNote,
+  acrossTargets,
+  applyReview,
+  canRevise,
+  captureReview,
+  dismissNote,
+  forgetCard,
+  listLabels,
+  noteCount,
+  openingWords,
+  pruneReview,
+  sharedOpening,
+} from "./notes";
 
 const STOCK = 'Stock phrase "as we journey". Say it more naturally.';
 
@@ -142,5 +157,68 @@ describe("the reviewer's notes (R Notes)", () => {
     const dismissed = dismissNote(review, "opening_prayer", "opening_prayer-0");
     expect(canRevise(d.liturgy.cards.opening_prayer, dismissed.cards.opening_prayer)).toBe(false);    // none left
     expect(canRevise(d.liturgy.cards.opening_prayer, undefined)).toBe(false);                          // not reviewed
+  });
+});
+
+describe("Revise the other prayers (reviewer follow-up 2)", () => {
+  type Fixture = {
+    opening_note: string;
+    cases: { text: string; words: string[] }[];
+    groups: { texts: string[]; words: string | null }[];
+  };
+  const fixture = JSON.parse(
+    readFileSync(new URL("../../../../backend/tests/fixtures/shared/opening_words.json", import.meta.url), "utf-8"),
+  ) as Fixture;
+
+  it("reads openings and the shared-opening note as the backend does (the shared fixture)", () => {
+    for (const { text, words } of fixture.cases) expect(openingWords(text), text).toEqual(words);
+    // The same openings, any case, as the backend groups them: every one is found from the note's words.
+    const keys: SectionKey[] = ["call_to_worship", "opening_prayer", "prayer_of_confession"];
+    for (const { texts, words } of fixture.groups) {
+      const d = texts.reduce((acc, t, i) => withText(acc, keys[i], t, "typed"), testDraft());
+      const found = acrossTargets(d, words ?? openingWords(texts[0]).join(" "));
+      expect(found === null ? null : [found.first, ...found.others], texts.join(" / ")).toEqual(words === null ? null : keys.slice(0, texts.length));
+    }
+    const text = fixture.opening_note.replace("{words}", "Gracious God");
+    expect(sharedOpening(reviewNote("repetition", text, "code"))).toBe("Gracious God");
+    expect(sharedOpening(reviewNote("repetition", text))).toBeNull(); // an AI note: no button
+    expect(sharedOpening(reviewNote("rules", text, "code"))).toBeNull();
+    expect(sharedOpening(reviewNote("repetition", "Two prayers say journey.", "code"))).toBeNull();
+    expect(acrossNote("Gracious God", "Call to Worship")).toBe('Opens with "Gracious God" like the Call to Worship; open differently.');
+    // One at a time (owner decision A): each later note also names the openings the batch has produced so far.
+    expect(acrossNote("Gracious God", "Call to Worship", ["Holy One"])).toBe(
+      'Opens with "Gracious God" like the Call to Worship; open differently, not with "Holy One".',
+    );
+    expect(acrossNote("Gracious God", "Call to Worship", ["Holy One", "Loving God"])).toBe(
+      'Opens with "Gracious God" like the Call to Worship; open differently, not with "Holy One" or "Loving God".',
+    );
+    expect(acrossNote("Gracious God", "Call to Worship", ["Holy One", "Loving God", "Merciful God"])).toBe(
+      'Opens with "Gracious God" like the Call to Worship; open differently, not with "Holy One", "Loving God" or "Merciful God".',
+    );
+    // At most 240 characters (ReviseIn): the oldest extra openings go first.
+    const long = ["a", "b", "c", "d", "e", "f"].map((c) => `${c.repeat(30)} ${c.repeat(30)}`);
+    const capped = acrossNote("Gracious God", "Call to Worship", long);
+    expect([...capped].length).toBeLessThanOrEqual(240);
+    expect(capped).toBe(
+      `Opens with "Gracious God" like the Call to Worship; open differently, not with "${long[4]}" or "${long[5]}".`,
+    );
+    expect([[], ["A"], ["A", "B"], ["A", "B", "C"]].map(listLabels)).toEqual(["", "A", "A and B", "A, B and C"]);
+  });
+
+  it("finds the prayers as the draft is now: the first kept, a default Benediction kept, switched-off cards left out", () => {
+    let d = withText(testDraft(), "call_to_worship", "Leader: Gracious God, we gather.", "typed");
+    d = withText(d, "opening_prayer", "gracious god! Hear us.", "ai");
+    d = withText(d, "prayer_of_confession", "Gracious God, we confess.", "archive");
+    d = { ...d, liturgy: { ...d.liturgy, cards: { ...d.liturgy.cards, prayer_of_confession: { ...d.liturgy.cards.prayer_of_confession, enabled: false } } } };
+    d = withText(d, "assurance", "People: Gracious   God, you forgive.", "archive");
+    d = withText(d, "benediction", "Gracious God, go with us.", "default");
+    expect(acrossTargets(d, "Gracious God")).toEqual({ words: "Gracious God", first: "call_to_worship", others: ["opening_prayer", "assurance"] });
+    expect(acrossTargets(d, "Holy One")).toBeNull();
+    // Only the first and a Benediction following the default still share it: nothing to revise.
+    const left = withText(withText(d, "opening_prayer", "Holy One, hear us.", "ai"), "assurance", "", "empty");
+    expect(acrossTargets(left, "Gracious God")).toBeNull();
+    // Once edited, the Benediction is typed text and is revised; a lone opening is no shared one.
+    expect(acrossTargets(withText(left, "benediction", "Gracious God, go with us. Amen.", "typed"), "gracious god")?.others).toEqual(["benediction"]);
+    expect(acrossTargets(withText(left, "benediction", "Go in peace.", "typed"), "Gracious God")).toBeNull();
   });
 });

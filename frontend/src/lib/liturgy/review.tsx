@@ -35,6 +35,27 @@
  *   sent and the service is the same; then the generation provider's Undo
  *   line ("revised") keeps the previous text and origin. Otherwise nothing
  *   changes and a toast says why. A failure shows on the card's notes.
+ * - `reviseAcross(noteId)` (reviewer follow-up 2): "Revise the other
+ *   prayers" on a "Several prayers open with "…"." note. The prayers are
+ *   found again from the draft (`acrossTargets`); nothing is sent while any
+ *   of them is being written, revised or waiting in a batch, or while a
+ *   429's wait is not over. The others are revised one at a time, in service
+ *   order (owner decision A), each through the same path as `revise` (its
+ *   own stale rule, failure and Undo), with the one note `acrossNote`
+ *   instead of its own notes; each later note also names the new openings
+ *   the batch has produced so far. Every one of them shows as revising from
+ *   the start, with its own Cancel: a Cancel on one not sent yet skips it,
+ *   on the running one moves to the next. One edited meanwhile (its text or
+ *   origin no longer what it was when the button was pressed), switched
+ *   off (silently), or whose revision failed, is skipped and the batch goes
+ *   on; a 429 stops it (the
+ *   rest are not sent), as does one that cannot be sent at its turn (a 429's
+ *   wait began meanwhile, shown on that card, or the AI is writing it) or the
+ *   kept first prayer no longer opening with the words. Each success drops
+ *   that card's own notes, as any revision does. The note goes once every one
+ *   of them was revised, fewer than two prayers still share the opening (an
+ *   Undo may have brought it back, or the AI kept it), and only while the review it came from is
+ *   still the one shown (`generation`); otherwise it stays.
  * - `announcement`: the polite line read out when a review ends.
  */
 import {
@@ -42,6 +63,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -58,16 +80,21 @@ import { reportAuthErrors, useApi } from "@/lib/queries/client";
 import { reviewService, reviseSection } from "@/lib/queries/liturgy";
 
 import { applyGenerated, type CardSnapshot } from "./cards";
-import { cardErrorFrom, type CardError } from "./errors";
+import { cardErrorFrom, rateLimitMessage, type CardError } from "./errors";
 import { useLiturgyGeneration } from "./generation";
 import {
+  acrossNote,
+  acrossTargets,
   applyReview,
   canRevise,
   captureReview,
   dismissNote,
   forgetCard,
   noteCount,
+  openingWords,
   pruneReview,
+  revisable,
+  sharedOpening,
   type ServiceReview,
 } from "./notes";
 import { buildReviewRequest, buildReviseRequest, reviewTargets } from "./request";
@@ -90,6 +117,9 @@ export type LiturgyReview = {
   reviseErrors: Partial<Record<SectionKey, ReviseError>>;
   /** True when the revision started (`canRevise`, not already revising, not being written, no 429 wait). */
   revise: (key: SectionKey) => boolean;
+  /** "Revise the other prayers" on a shared-opening note, one at a time; true when the first revision started. */
+  reviseAcross: (noteId: string) => boolean;
+  /** Stops a card's revision, or takes it out of a "Revise the other prayers" batch before it is sent. */
   cancelRevise: (key: SectionKey) => void;
 };
 
@@ -105,6 +135,43 @@ export function reviewDoneMessage(notes: number, quickOnly = false): string {
 
 type Sent = { createdAt: string; text: string; origin: LiturgyCard["origin"] };
 type ReviseVerdict = "apply" | "service_changed" | "edited";
+/** How one revision ended: the text put in the card (null when none was), and whether it was a 429. */
+type ReviseEnd = { text: string | null; limited: boolean };
+/** True when it started; "limited" when a 429's wait is not over; false for any other refusal. */
+type StartRevise = (key: SectionKey, instead?: string[], onDone?: (end: ReviseEnd) => void) => boolean | "limited";
+
+/** "Revise the other prayers" while it runs (owner decision A): one prayer at a time, in service order. */
+type AcrossBatch = {
+  noteId: string;
+  /** The review the note came from (`ServiceReview.generation`). */
+  generation: number | undefined;
+  words: string;
+  /** The kept prayer the note names ("like the …"). */
+  first: SectionKey;
+  firstLabel: string;
+  /** The prayers not sent yet, each as it was when the button was pressed. */
+  queue: { key: SectionKey; sent: Sent }[];
+  /** The new openings so far, oldest first. */
+  openings: string[];
+  started: number;
+  /** Every one so far was revised. */
+  all: boolean;
+};
+
+function inBatch(batches: Set<AcrossBatch>, key: SectionKey): boolean {
+  for (const batch of batches) if (batch.queue.some((q) => q.key === key)) return true;
+  return false;
+}
+
+/** A Cancel on a prayer not sent yet: it leaves its batch, which then keeps the note. */
+function leaveBatch(batches: Set<AcrossBatch>, key: SectionKey): void {
+  for (const batch of batches) {
+    const at = batch.queue.findIndex((q) => q.key === key);
+    if (at < 0) continue;
+    batch.queue.splice(at, 1);
+    batch.all = false;
+  }
+}
 
 /** Slice 4's stale rule for a revision: the card must still hold what was sent, in the same service. */
 function reviseVerdict(d: DraftV1, key: SectionKey, sent: Sent): ReviseVerdict {
@@ -154,15 +221,24 @@ export function LiturgyReviewProvider({
   const revisions = useRef(new Map<SectionKey, AbortController>());
   const mounted = useRef(true);
   const service = useRef(draft.created_at);
+  const batches = useRef(new Set<AcrossBatch>());
+  const startReviseRef = useRef<StartRevise | null>(null);
+  /** `rateLimitedUntil` at commit, for a batch's refusal message. */
+  const rateLimitedRef = useRef(rateLimitedUntil);
+  /** Numbers each review shown (`ServiceReview.generation`). */
+  const generation = useRef(0);
 
-  useEffect(() => {
+  // At commit, not after paint: a Revise pressed as soon as the notes show must see them (a passive effect could lag).
+  useLayoutEffect(() => {
     reviewRef.current = review;
   }, [review]);
 
   useEffect(() => {
     mounted.current = true;
     const waits = revisions.current;
+    const queued = batches.current;
     return () => {
+      queued.clear();
       mounted.current = false;
       active.current?.abort();
       for (const controller of waits.values()) controller.abort();
@@ -187,6 +263,7 @@ export function LiturgyReviewProvider({
     service.current = createdAt;
     active.current?.abort();
     active.current = null;
+    batches.current.clear();
     for (const controller of revisions.current.values()) controller.abort();
     revisions.current.clear();
     setRunning(false);
@@ -231,7 +308,8 @@ export function LiturgyReviewProvider({
         const result = await reviewService(api.church, buildReviewRequest(asked, fresh, sermon), controller.signal);
         if (!mounted.current || active.current !== controller) return;
         const { review: next } = applyReview(peek(), ask, result);
-        setReview(next);
+        generation.current += 1;
+        setReview(next === null ? null : { ...next, generation: generation.current });
         if (next !== null) setAnnouncement(reviewDoneMessage(noteCount(next), next.aiStatus !== "ok"));
       } catch (e) {
         if (!mounted.current || active.current !== controller) return;
@@ -255,22 +333,26 @@ export function LiturgyReviewProvider({
     setReview((current) => (current === null ? null : dismissNote(current, where, id)));
   }, []);
 
-  const revise = useCallback(
-    (key: SectionKey) => {
-      if (revisions.current.has(key)) return false;
+  // One card's revision: with its remaining notes (`revise`), or with `instead` (`reviseAcross`). `onDone` hears
+  // how it ended. A card waiting in a "Revise the other prayers" batch is left to the batch.
+  const startRevise = useCallback<StartRevise>(
+    (key, instead, onDone) => {
+      if (revisions.current.has(key) || inBatch(batches.current, key)) return false;
       const asked = peek();
       const card = asked.liturgy.cards[key];
-      const notes = reviewRef.current?.cards[key];
-      if (!canRevise(card, notes) || notes === undefined) return false;
+      const own = reviewRef.current?.cards[key];
+      const notes = instead ?? (canRevise(card, own) && own !== undefined ? own.notes.map((n) => n.text) : []);
+      if (!revisable(card) || notes.length === 0) return false;
       // The AI is writing this card (Generate, Regenerate, Try again): one request at a time per card.
       if (runs[key] !== undefined) return false;
       // A 429's wait (Generate's or Revise's) is not over: nothing is sent (the card shows the wait, its Revise off).
-      if (rateLimitedUntil !== null && Date.now() < rateLimitedUntil) return false;
+      if (rateLimitedUntil !== null && Date.now() < rateLimitedUntil) return "limited";
       const sent: Sent = { createdAt: asked.created_at, text: card.text, origin: card.origin };
       const controller = new AbortController();
       revisions.current.set(key, controller);
       setRevising((current) => ({ ...current, [key]: true }));
       setReviseErrors((current) => without(current, key));
+      const end: ReviseEnd = { text: null, limited: false };
       void (async () => {
         try {
           const sermon = await loadSermon(controller.signal);
@@ -281,7 +363,7 @@ export function LiturgyReviewProvider({
             reviseToast(key, before);
             return;
           }
-          const body = buildReviseRequest(asked, key, notes.notes.map((n) => n.text), sermon);
+          const body = buildReviseRequest(asked, key, notes, sermon);
           const text = await reviseSection(api.church, body, controller.signal);
           if (!mounted.current || revisions.current.get(key) !== controller) return;
           const out: { verdict: ReviseVerdict; previous: CardSnapshot | null } = { verdict: "apply", previous: null };
@@ -296,6 +378,7 @@ export function LiturgyReviewProvider({
           else if (out.previous !== null) {
             setUndo(key, { kind: "revised", previous: out.previous, after: text });
             setReview((current) => forgetCard(current, key)); // the notes were addressed
+            end.text = text;
           }
         } catch (e) {
           if (!mounted.current || revisions.current.get(key) !== controller) return;
@@ -303,13 +386,17 @@ export function LiturgyReviewProvider({
           if (failure === null) return;
           // A 429's alert goes when its wait ends (`CardNotes`); Generate waits as long.
           const retryAt = failure.retryAfterSeconds === undefined ? undefined : Date.now() + failure.retryAfterSeconds * 1000;
-          if (retryAt !== undefined) noteRateLimit(retryAt);
+          if (retryAt !== undefined) {
+            noteRateLimit(retryAt);
+            end.limited = true;
+          }
           setReviseErrors((current) => ({ ...current, [key]: retryAt === undefined ? failure : { ...failure, retryAt } }));
         } finally {
           if (revisions.current.get(key) === controller) {
             revisions.current.delete(key);
             if (mounted.current) setRevising((current) => without(current, key));
           }
+          if (mounted.current) onDone?.(end);
         }
       })();
       return true;
@@ -317,15 +404,136 @@ export function LiturgyReviewProvider({
     [api, handleFailure, loadSermon, noteRateLimit, peek, rateLimitedUntil, runs, setUndo, update],
   );
 
+  // A batch moves on from a revision's end (its `finally`), which can come before any passive effect of the latest
+  // render: kept at commit, so the next one is started with the latest committed guards (runs, the 429's wait).
+  useLayoutEffect(() => {
+    startReviseRef.current = startRevise;
+    rateLimitedRef.current = rateLimitedUntil;
+  }, [startRevise, rateLimitedUntil]);
+
+  const revise = useCallback((key: SectionKey) => startRevise(key) === true, [startRevise]);
+
+  // Sends a batch's next prayer, skipping one edited meanwhile; when none is left, the note goes if every one was
+  // revised, fewer than two prayers still share the opening (an Undo may have brought one back) and its review is
+  // still the one shown.
+  const runAcross = useCallback(
+    (batch: AcrossBatch) => {
+      // Stops the batch: the rest (and `also`, the one at hand) are not sent and stop showing as revising; the note stays.
+      const stop = (also: SectionKey[] = []): void => {
+        const left = [...also, ...batch.queue.map((q) => q.key)];
+        batch.queue = [];
+        batch.all = false;
+        setRevising((current) => left.reduce((acc, k) => without(acc, k), current));
+      };
+      const step = (): void => {
+        if (!batches.current.has(batch)) return; // a new service, or the provider went
+        for (let next = batch.queue.shift(); next !== undefined; next = batch.queue.shift()) {
+          const { key, sent } = next;
+          const now = peek();
+          // The kept prayer no longer opens with the words (edited, revised, an Undo): the note's ask no longer holds.
+          if (openingWords(now.liturgy.cards[batch.first].text).join(" ").toLowerCase() !== batch.words.toLowerCase()) {
+            stop([key]);
+            break;
+          }
+          const verdict = reviseVerdict(now, key, sent);
+          // Switched off before its turn (in another tab; here its switch cancels it): skipped silently, never sent.
+          const off = !now.liturgy.cards[key].enabled;
+          if (!off && verdict === "apply") {
+            const ask = acrossNote(batch.words, batch.firstLabel, batch.openings);
+            const started = startReviseRef.current?.(key, [ask], (end) => {
+              if (!batches.current.has(batch)) return;
+              if (end.text === null) batch.all = false;
+              else {
+                const opening = openingWords(end.text).join(" ");
+                const seen = [batch.words, ...batch.openings].some((w) => w.toLowerCase() === opening.toLowerCase());
+                if (opening !== "" && !seen) batch.openings.push(opening);
+              }
+              // A 429: the rest are not sent (the wait shows on that card and beside the button).
+              if (end.limited) stop();
+              step();
+            });
+            if (started === true) {
+              batch.started += 1;
+              return;
+            }
+            // Refused (a 429's wait began meanwhile, or the AI is writing it): the rest are not sent, as after a 429.
+            if (started === "limited") {
+              const until = rateLimitedRef.current ?? Date.now();
+              const seconds = Math.max(1, Math.ceil((until - Date.now()) / 1000));
+              const failure: ReviseError = { code: "rate_limited", message: rateLimitMessage(seconds), retryable: true, retryAfterSeconds: seconds, retryAt: until };
+              setReviseErrors((current) => ({ ...current, [key]: failure }));
+            }
+            stop([key]);
+            break;
+          } else if (!off && verdict !== "apply") reviseToast(key, verdict);
+          batch.all = false;
+          setRevising((current) => without(current, key));
+        }
+        batches.current.delete(batch);
+        if (!batch.all || acrossTargets(peek(), batch.words) !== null) return;
+        // Every one was revised: the note goes, unless a newer review has replaced it meanwhile.
+        setReview((current) =>
+          current !== null && current.generation === batch.generation && current.service.some((n) => n.id === batch.noteId)
+            ? dismissNote(current, "service", batch.noteId)
+            : current,
+        );
+      };
+      step();
+    },
+    [peek],
+  );
+
+  const reviseAcross = useCallback(
+    (noteId: string) => {
+      const current = reviewRef.current;
+      const note = current?.service.find((n) => n.id === noteId);
+      const words = note === undefined ? null : sharedOpening(note);
+      if (current === null || note === undefined || words === null) return false;
+      const asked = peek();
+      const targets = acrossTargets(asked, words);
+      if (targets === null) return false;
+      // Any of these prayers being written, revised or waiting in a batch: nothing is sent (the button is off).
+      const busy = (key: SectionKey) => runs[key] !== undefined || revisions.current.has(key) || inBatch(batches.current, key);
+      if ([targets.first, ...targets.others].some(busy)) return false;
+      if (rateLimitedUntil !== null && Date.now() < rateLimitedUntil) return false;
+      const batch: AcrossBatch = {
+        noteId: note.id,
+        generation: current.generation,
+        words,
+        first: targets.first,
+        firstLabel: SECTION_LABELS[targets.first],
+        queue: targets.others.map((key) => {
+          const card = asked.liturgy.cards[key];
+          return { key, sent: { createdAt: asked.created_at, text: card.text, origin: card.origin } };
+        }),
+        openings: [],
+        started: 0,
+        all: true,
+      };
+      batches.current.add(batch);
+      // Every one shows as revising, with its own Cancel, from the start.
+      setRevising((now) => {
+        const next = { ...now };
+        for (const key of targets.others) next[key] = true;
+        return next;
+      });
+      runAcross(batch);
+      return batch.started > 0;
+    },
+    [peek, rateLimitedUntil, runAcross, runs],
+  );
+
   const cancelRevise = useCallback((key: SectionKey) => {
+    // Not sent yet: it leaves its batch. Running: its batch moves on to the next.
+    leaveBatch(batches.current, key);
     revisions.current.get(key)?.abort();
     revisions.current.delete(key);
     setRevising((current) => without(current, key));
   }, []);
 
   const value = useMemo<LiturgyReview>(
-    () => ({ review, running, error, announcement, start, cancel, dismiss, revising, reviseErrors, revise, cancelRevise }),
-    [review, running, error, announcement, start, cancel, dismiss, revising, reviseErrors, revise, cancelRevise],
+    () => ({ review, running, error, announcement, start, cancel, dismiss, revising, reviseErrors, revise, reviseAcross, cancelRevise }),
+    [review, running, error, announcement, start, cancel, dismiss, revising, reviseErrors, revise, reviseAcross, cancelRevise],
   );
   return <ReviewContext value={value}>{children}</ReviewContext>;
 }

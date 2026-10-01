@@ -1,7 +1,7 @@
 "use client";
 
 import { CheckIcon, CircleAlertIcon, XIcon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { PendingButton } from "@/components/app/pending-button";
@@ -9,12 +9,23 @@ import { Alert, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useDraft } from "@/lib/draft/context";
-import type { SectionKey } from "@/lib/draft/schema";
+import type { DraftV1, SectionKey } from "@/lib/draft/schema";
 import { needsRegenerateConfirm } from "@/lib/liturgy/cards";
 import { rateLimitMessage } from "@/lib/liturgy/errors";
 import { useLiturgyGeneration } from "@/lib/liturgy/generation";
-import { canRevise, LOOKS_GOOD, STALE_LINE, TAG_LABELS, type CardReview, type Note } from "@/lib/liturgy/notes";
+import {
+  acrossTargets,
+  canRevise,
+  listLabels,
+  LOOKS_GOOD,
+  sharedOpening,
+  STALE_LINE,
+  TAG_LABELS,
+  type CardReview,
+  type Note,
+} from "@/lib/liturgy/notes";
 import { useLiturgyReview } from "@/lib/liturgy/review";
+import { SECTION_LABELS } from "@/lib/liturgy/sections";
 import { cn } from "@/lib/utils";
 
 import { REVIEW_BUTTON_ID } from "./review-bar";
@@ -47,7 +58,12 @@ function useDismissFocus(fallback: () => HTMLElement | null) {
   };
 }
 
-/** One list of notes: a tag chip, the sentence and a dismiss ×, wrapping at 375 px. */
+/** The id of a note's sentence (it describes the note's own button, when it has one). */
+function noteTextId(id: string): string {
+  return `note-${id}-text`;
+}
+
+/** One list of notes: a tag chip, the sentence and a dismiss ×, wrapping at 375 px; `action` may add a row under one. */
 export function NoteList({
   notes,
   label,
@@ -55,6 +71,7 @@ export function NoteList({
   disabled = false,
   faded = false,
   describedBy,
+  action,
 }: {
   notes: Note[];
   label: string;
@@ -65,28 +82,45 @@ export function NoteList({
   faded?: boolean;
   /** The id of the line that says why they are dimmed. */
   describedBy?: string;
+  /** A row under a note (its own button), or null. */
+  action?: (note: Note) => ReactNode;
 }) {
   return (
     <ul aria-label={label} aria-describedby={describedBy} className="grid gap-2">
-      {notes.map((note) => (
-        <li key={note.id} className="flex min-w-0 items-start gap-2">
-          <Badge variant="outline" className={cn("mt-0.5 shrink-0", faded && "text-muted-foreground")}>
-            {TAG_LABELS[note.tag]}
-          </Badge>
-          <p className={cn("min-w-0 flex-1 text-sm wrap-anywhere", faded && "text-muted-foreground")}>{note.text}</p>
-          <Button
-            id={`note-${note.id}-dismiss`}
-            variant="ghost"
-            size="icon-lg"
-            className="-my-2 size-11 shrink-0 md:my-0 md:size-8"
-            aria-label={`Dismiss note: ${note.text}`}
-            disabled={disabled}
-            onClick={() => onDismiss(note.id)}
-          >
-            <XIcon aria-hidden="true" />
-          </Button>
-        </li>
-      ))}
+      {notes.map((note) => {
+        const row = (
+          <>
+            <Badge variant="outline" className={cn("mt-0.5 shrink-0", faded && "text-muted-foreground")}>
+              {TAG_LABELS[note.tag]}
+            </Badge>
+            <p id={noteTextId(note.id)} className={cn("min-w-0 flex-1 text-sm wrap-anywhere", faded && "text-muted-foreground")}>
+              {note.text}
+            </p>
+            <Button
+              id={`note-${note.id}-dismiss`}
+              variant="ghost"
+              size="icon-lg"
+              className="-my-2 size-11 shrink-0 md:my-0 md:size-8"
+              aria-label={`Dismiss note: ${note.text}`}
+              disabled={disabled}
+              onClick={() => onDismiss(note.id)}
+            >
+              <XIcon aria-hidden="true" />
+            </Button>
+          </>
+        );
+        const extra = action?.(note) ?? null;
+        return extra === null ? (
+          <li key={note.id} className="flex min-w-0 items-start gap-2">
+            {row}
+          </li>
+        ) : (
+          <li key={note.id} className="grid gap-2">
+            <div className="flex min-w-0 items-start gap-2">{row}</div>
+            {extra}
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -216,8 +250,17 @@ export function CardNotes({
       }}
     />
   );
+  // A 429's alert shows until its wait ends.
+  const failureShown = failure !== undefined && !revising && (failure.retryAt === undefined || failureWaiting);
+  const failureAlert = failureShown ? (
+    <Alert variant="destructive" role="alert">
+      <CircleAlertIcon aria-hidden="true" />
+      <AlertTitle className="whitespace-normal">{failure.message}</AlertTitle>
+    </Alert>
+  ) : null;
   if (notes === undefined || notes.notes.length === 0) {
-    // The notes went while the card revises (another tab edited it): Cancel stays.
+    // The notes went while the card revises (another tab edited it): Cancel stays. A card revised from "Across the
+    // service" may have no notes of its own: its failure shows here.
     const rest =
       revisingRow ??
       (notes?.found === 0 ? (
@@ -229,12 +272,11 @@ export function CardNotes({
     return (
       <>
         {rest}
+        {failureAlert}
         {dialog}
       </>
     );
   }
-  // A 429's alert shows until its wait ends.
-  const failureShown = failure !== undefined && !revising && (failure.retryAt === undefined || failureWaiting);
   // The wait, beside the disabled Revise, unless its own alert already says it.
   const waitShown = offered && !revising && waiting && limitedUntil !== undefined && !(failureShown && failure.code === "rate_limited");
   const shown = (
@@ -284,12 +326,7 @@ export function CardNotes({
             </Button>
           </div>
         ) : null)}
-      {failureShown ? (
-        <Alert variant="destructive" role="alert">
-          <CircleAlertIcon aria-hidden="true" />
-          <AlertTitle className="whitespace-normal">{failure.message}</AlertTitle>
-        </Alert>
-      ) : null}
+      {failureAlert}
     </div>
   );
   return (
@@ -300,12 +337,113 @@ export function CardNotes({
   );
 }
 
-/** The "Across the service" box at the top of the step (R "Notes"): notes about more than one prayer, at most 3. */
+/** The id of a shared-opening note's "Revise the other prayers" button. */
+function acrossId(noteId: string): string {
+  return `${noteId}-revise-others`;
+}
+
+/** The prayers a confirm names, each with its origin and text, so any change to one of them closes it. */
+function snapshot(d: DraftV1, keys: readonly SectionKey[]): string {
+  return keys.map((k) => `${k}\u0000${d.liturgy.cards[k].origin}\u0000${d.liturgy.cards[k].text}`).join("\u0001");
+}
+
+/**
+ * The "Across the service" box at the top of the step (R "Notes"): notes
+ * about more than one prayer, at most 3.
+ *
+ * "Revise the other prayers" (reviewer follow-up 2) shows under a code note
+ * "Several prayers open with "…"." while at least two switched-on prayers
+ * still open with those words and one of the others can be revised
+ * (`acrossTargets`); the note's sentence describes it. It is off (still
+ * focusable) while any of those prayers is being written or revised, and
+ * during a 429's wait, which shows beside it. When any prayer it would
+ * revise is typed or saved text it asks first, once for all of them ("Replace
+ * your text?"); the dialog closes, sending nothing, when the prayers it names
+ * change (which ones, or any one's text or origin) or the button goes off.
+ * Focus stays on the button (or, when it has gone, the Review button); the
+ * prayers are revised one at a time, and each shows its own Revising… and
+ * Cancel from the start. When the note goes with its button (every one was
+ * revised), focus moves as a dismiss would: the next note's ×, else the
+ * Review button.
+ */
 export function ServiceNotes() {
   const review = useLiturgyReview();
+  const { draft } = useDraft();
+  const { runs, rateLimitedUntil } = useLiturgyGeneration();
+  const limitedUntil = rateLimitedUntil ?? undefined;
+  const waiting = useRetryWait(limitedUntil);
   const notes = review.review?.service ?? [];
   const remember = useDismissFocus(() => document.getElementById(REVIEW_BUTTON_ID));
-  if (notes.length === 0) return null;
+  /** The note whose confirm is open, and the prayers it names (`snapshot`). */
+  const [asking, setAsking] = useState<{ id: string; others: string } | null>(null);
+  /** The prayers the last confirm lists (kept while the dialog closes). */
+  const [labels, setLabels] = useState("");
+  /** The last button pressed, for the dialog's closing focus. */
+  const lastPressed = useRef<string | null>(null);
+  /** The button pressed whose note is followed: the prayers it revises, and whether their batch started. */
+  const followed = useRef<{ id: string; keys: SectionKey[]; started: boolean } | null>(null);
+  // The pressed button's note went (every prayer was revised) and focus fell to the page: the next note's ×, else
+  // the Review button, as a dismiss. Before the cards' own effects, which would send it to the last card's Undo.
+  // Followed only until its batch ends with the note kept, or the note goes.
+  const shownBefore = useRef<Note[]>(notes);
+  useLayoutEffect(() => {
+    const before = shownBefore.current;
+    shownBefore.current = notes;
+    const pressed = followed.current;
+    if (pressed === null) return;
+    if (notes.some((n) => n.id === pressed.id)) {
+      if (pressed.started && !pressed.keys.some((key) => review.revising[key] === true)) followed.current = null;
+      return;
+    }
+    followed.current = null;
+    const at = before.findIndex((n) => n.id === pressed.id);
+    if (at < 0) return;
+    const active = document.activeElement;
+    if (active !== null && active !== document.body) return; // focus already went somewhere on purpose
+    const left = (n: Note) => notes.some((m) => m.id === n.id);
+    const next = before.slice(at + 1).find(left) ?? before.slice(0, at).reverse().find(left);
+    const element = next === undefined ? null : document.getElementById(`note-${next.id}-dismiss`);
+    (element ?? document.getElementById(REVIEW_BUTTON_ID))?.focus();
+  });
+  const offer = (note: Note) => {
+    const words = sharedOpening(note);
+    const targets = words === null ? null : acrossTargets(draft, words);
+    if (targets === null) return null;
+    const busy = [targets.first, ...targets.others].some((key) => runs[key] !== undefined || review.revising[key] === true);
+    return { targets, off: busy || waiting };
+  };
+  const asked = asking === null ? undefined : notes.find((n) => n.id === asking.id);
+  const askedOffer = asked === undefined ? null : offer(asked);
+  // The confirm closes when the prayers it names change, or the button goes off or away.
+  if (asking !== null && (askedOffer === null || askedOffer.off || snapshot(draft, askedOffer.targets.others) !== asking.others)) {
+    setAsking(null);
+  }
+  const dialog = (
+    <ConfirmDialog
+      open={asking !== null}
+      onOpenChange={(open) => {
+        if (!open) setAsking(null);
+      }}
+      title="Replace your text?"
+      description={`Revise replaces the text in ${labels}. You can undo each right after.`}
+      confirmLabel="Revise text"
+      cancelLabel="Keep my text"
+      onConfirm={() => {
+        const id = asking?.id;
+        setAsking(null);
+        const started = id !== undefined && review.reviseAcross(id);
+        // Followed while its batch runs; nothing to follow when it did not start.
+        followed.current = started && followed.current?.id === id ? { ...followed.current, started } : null;
+      }}
+      // Keep my text, Revise text, or the confirm closing on its own: the button (off while the prayers revise), else
+      // the Review button when the note went.
+      finalFocus={() =>
+        (lastPressed.current === null ? null : document.getElementById(acrossId(lastPressed.current))) ??
+        document.getElementById(REVIEW_BUTTON_ID)
+      }
+    />
+  );
+  if (notes.length === 0) return dialog;
   return (
     <section aria-labelledby="across-the-service" className="grid gap-2 rounded-lg border p-4">
       <h3 id="across-the-service" className="text-base font-medium">
@@ -318,7 +456,39 @@ export function ServiceNotes() {
           remember(notes, id);
           review.dismiss("service", id);
         }}
+        action={(note) => {
+          const offered = offer(note);
+          if (offered === null) return null;
+          const { targets, off } = offered;
+          return (
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {waiting && limitedUntil !== undefined ? <WaitLine key={limitedUntil} until={limitedUntil} /> : null}
+              <Button
+                id={acrossId(note.id)}
+                variant="outline"
+                size="touch"
+                aria-describedby={noteTextId(note.id)}
+                focusableWhenDisabled
+                disabled={off}
+                className="data-disabled:pointer-events-none data-disabled:opacity-50"
+                onClick={() => {
+                  lastPressed.current = note.id;
+                  setLabels(listLabels(targets.others.map((key) => SECTION_LABELS[key])));
+                  if (targets.others.some((key) => needsRegenerateConfirm(draft.liturgy.cards[key]))) {
+                    followed.current = { id: note.id, keys: targets.others, started: false };
+                    setAsking({ id: note.id, others: snapshot(draft, targets.others) });
+                    return;
+                  }
+                  followed.current = review.reviseAcross(note.id) ? { id: note.id, keys: targets.others, started: true } : null;
+                }}
+              >
+                Revise the other prayers
+              </Button>
+            </div>
+          );
+        }}
       />
+      {dialog}
     </section>
   );
 }
