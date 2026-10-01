@@ -23,7 +23,7 @@
   - `keys.liturgyConfig()` exists (`["ref", "liturgy-config"]`); `usePassage`'s options are not exported; `handleAuthErrors` runs only from the query and mutation caches; `useUndoToasts` exists (3b); `SHIPPED_STEPS` holds "readings" and "hymns"; `schema.d.ts` already has every 4a type, so `npm run gen:api` changes nothing.
   - The build container reaches the npm registry, PyPI and raw.githubusercontent.com, but not ui.shadcn.com, Railway, OpenAI or Supabase. No test needs the network.
   - Where S and the code or F disagreed, the code and F won unless an owner answer says otherwise; each case is a numbered clarification below.
-  - The whole plan was replayed on a fresh worktree of `4dfed3b` (2026-10-01; `npm ci`, no symlinked `node_modules`), copying every block by line number: all 159 directives matched exactly once, every "see it fail" output and every count matched, each task's typecheck and lint were clean, the production build passed, and T13 Steps 2-8 matched (see "Build notes").
+  - The whole plan was replayed on a fresh worktree of `4dfed3b` (2026-10-01; `npm ci`, no symlinked `node_modules`), copying every block by line number: all 160 directives matched exactly once, every "see it fail" output and every count matched, each task's typecheck and lint were clean, the production build passed, and T13 Steps 2-8 matched (see "Build notes").
 
 ## Global Constraints
 
@@ -42,7 +42,7 @@
   `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
 - Commit subjects read "Area: plain words (S …, owner answer …)". Use TDD: write the failing test first and see it fail as quoted.
 - **Backup push after every task** (standing rule): the controller, not the task agent, backs the branch up after each task's commit and review with `git push origin claude/slice-2-plan-4q33le` (never `--force`; while no PR is open it asks nobody; Vercel may build a preview). A fix asked for by a task's review is a new commit, `Fix: <what> (Task <n> review)`, never an amend of a pushed commit; T13 lists it. The container can restart and lose uncommitted work, so commit as soon as a task's checks pass. If the push is refused because the remote moved, stop and ask the controller.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then the session link, and includes the line "Tests: frontend 442 → 509 in 64 → 75 files; backend 1183 → 1183 passed, 11 → 11 skipped".
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then the session link, and includes the line "Tests: frontend 442 → 517 in 64 → 75 files; backend 1183 → 1183 passed, 11 → 11 skipped".
 - New prose for the owner has no em dashes and no flattery, and leads with the point. Copy quoted from S keeps its own punctuation (for example "Off — not in the service. Any text is kept.", "Still working — this can take up to a minute.", "Too many requests — try again in N s.", "Kept your edits — the new AI draft for {Label} was not used.", "{Card label} is empty — Write or generate it").
 - Ask the owner before any push to a PR, PR creation, marking ready, merging, or any production or settings action.
 
@@ -63,17 +63,17 @@ A directive that does not match exactly once is a stop: the tree is not what the
   | T3 | +9 (`request.test.ts` 3, `errors.test.ts` 2, `queue.test.ts` 4, all new in `lib/liturgy/`) | +3 | 464 in 71 | unchanged |
   | T4 | +4 (`lib/queries/liturgy.test.tsx` 3, new; `queries/client.test.ts` +1) | +1 | 468 in 72 | unchanged |
   | T5 | +3 (`draft/store.test.ts` +2, `draft/context.test.tsx` +1; `mapping.test.ts`, `schema.test.ts`, `status.test.ts` one test each edited, 0) | 0 | 471 in 72 | unchanged |
-  | T6 | +3 (`lib/liturgy/generation.test.tsx`, new) | +1 | 474 in 73 | unchanged |
-  | T7 | +2 (`lib/use-autosize.test.tsx`, new) | +1 | 476 in 74 | unchanged |
-  | T8 | +11 (`components/builder/liturgy/liturgy-step.test.tsx`, new) | +1 | 487 in 75 | unchanged |
-  | T9 | +13 (`liturgy-step.test.tsx`) | 0 | 500 in 75 | unchanged |
-  | T10 | +7 (`liturgy-step.test.tsx`; T8's outline test edited, 0) | 0 | 507 in 75 | unchanged |
-  | T11 | +2 (`draft/status.test.ts` +1, `builder-shell.test.tsx` +1; three status tests, two shell tests and the shell helper edited, 0) | 0 | 509 in 75 | unchanged |
-  | T12 | 0 | 0 | 509 in 75 | 1183 passed, 11 skipped (one assertion in `test_slice1_docs.py` edited) |
-  | T13, T14 | 0 | 0 | 509 in 75 | 1183 passed, 11 skipped |
+  | T6 | +5 (`lib/liturgy/generation.test.tsx`, new) | +1 | 476 in 73 | unchanged |
+  | T7 | +3 (`lib/use-autosize.test.tsx`, new) | +1 | 479 in 74 | unchanged |
+  | T8 | +11 (`components/builder/liturgy/liturgy-step.test.tsx`, new) | +1 | 490 in 75 | unchanged |
+  | T9 | +16 (`liturgy-step.test.tsx`) | 0 | 506 in 75 | unchanged |
+  | T10 | +9 (`liturgy-step.test.tsx`; T8's outline test edited, 0) | 0 | 515 in 75 | unchanged |
+  | T11 | +2 (`draft/status.test.ts` +1, `builder-shell.test.tsx` +1; three status tests, two shell tests and the shell helper edited, 0) | 0 | 517 in 75 | unchanged |
+  | T12 | 0 | 0 | 517 in 75 | 1183 passed, 11 skipped (one assertion in `test_slice1_docs.py` edited) |
+  | T13, T14 | 0 | 0 | 517 in 75 | 1183 passed, 11 skipped |
 
 - CI `backend-postgres` stays at `11 passed, 1183 deselected` (4b adds no Postgres test).
-- The step tests fake only `Date` and wait on the app's real timers (the draft's 400 ms writes, the fake API's answers), so `liturgy-step.test.tsx` takes about 18 s; one test fakes `setTimeout` as well (the 8-second "Still working" line) and says why, and one waits out a real 1-second `Retry-After`. Four heavier tests carry `{ timeout: 10_000 }` with a comment.
+- The step tests fake only `Date` and wait on the app's real timers (the draft's 400 ms writes, the fake API's answers), so `liturgy-step.test.tsx` takes about 18 s; one test fakes `setTimeout` as well (the 8-second "Still working" line) and says why, and one waits out a real 1-second `Retry-After`. Six heavier tests carry `{ timeout: 10_000 }` with a comment.
 
 ### Code rules (F §4)
 - Every file under `src/app/` that renders is a client component (`"use client"`, F §4.1). Pages and components never call `apiFetch` (F §4.4): the step uses `lib/queries/liturgy.ts`, and the provider calls `generateSection` from there.
@@ -91,7 +91,7 @@ A directive that does not match exactly once is a stop: the tree is not what the
 - Sermon title: "Sermon title"; placeholder "e.g. Living Water"; "Printed in the bulletin and the pastor's copy. If blank, both show “[Sermon title]”."
 - AI bar: "Generate empty sections (n)"; "Only switched-on sections with no text are written. Text you typed is never changed."; "Every switched-on section has text. Use Regenerate on a card for a new AI draft."; "Cancel"; "Writing k of n…"; "Still working — this can take up to a minute."; toasts "Wrote n sections." and "Wrote k of n sections. The rest show what went wrong."; banner "AI writing isn't set up for this app. Type each section yourself — everything else works as usual."; "No occasion or readings yet, so AI text will be general. Add them in Date & readings."; "All liturgy sections are switched off. The Word files will list only hymns, readings, the sermon title and any custom elements."
 - Section card: switch "Include {Label}"; chips "Empty", "Your text", "AI draft", "Church default", "From saved service", "Pastor's copy only"; placeholder "Type your own text, or tap Generate."; "Off — not in the service. Any text is kept."; "Waiting…", "Writing…", "Generate", "Regenerate", "AI isn't set up", "Try again"; "Replaced with a new AI draft. Undo", "Cleared. Undo"; counter "n / 20,000"; menu "Clear text", "Use church default"; dialog "Replace your text?", "Regenerate replaces the text in {Label} with a new AI draft. You can undo right after.", "Replace text", "Keep my text"; hints "Start lines with “Leader:” or “People:”. People lines print in bold.", "Printed in bold for everyone to read together.", "People: Thanks be to God! Amen." with "Added automatically after your text.", "Your church's default benediction. Admins can change it in Settings."
-- Errors: "AI not configured. Type this section yourself."; "The AI service is busy. Try again in a minute."; "The AI took too long to answer. Try again."; "The AI service had a problem. Try again."; "The {Label} prompt in Settings has a problem: {reason} An admin can fix it under Settings → Liturgy prompts."; "A chosen hymn is no longer in your hymnal. Choose it again on the Hymns step."; "Too many requests — try again in N s."; "This is taking too long. Try again."; "Can't reach the server. Check your connection and try again."; "Something went wrong. (Ref: {8 chars})"; stale toasts "The service changed, so the AI draft for {Label} was discarded." and "Kept your edits — the new AI draft for {Label} was not used."
+- Errors: "AI not configured. Type this section yourself."; "The AI service is busy. Try again in a minute."; "The AI took too long to answer. Try again."; "The AI service had a problem. Try again."; "The {Label} prompt in Settings has a problem: {reason} An admin can fix it under Settings → Liturgy prompts."; "A chosen hymn is no longer in your hymnal. Choose it again on the Hymns step."; "Too many requests — try again in N s."; "This is taking too long. Try again."; "Can't reach the server. Check your connection and try again."; "Something went wrong. (Ref: {8 chars})"; stale toasts "The service changed, so the AI draft for {Label} was discarded." and "Kept your edits — the new AI draft for {Label} was not used."; and, not in S, a bulk run ended by a new service: "The service changed, so the AI drafts were discarded." (clarification 32)
 - Communion: "Include communion liturgy (The Sacrament of the Lord's Supper)"; "On by default — {October 4, 2026} is the first Sunday of the month."; "Off by default — it's on by default only on the first Sunday of the month."; "You changed this."; "Set from the saved service."; "Use default"; "Show communion text"; "Printed after the Second Hymn. The same text is used for every service."
 - Custom elements: "+ Add custom element" (the button reads "Add custom element" after a plus icon); dialog "Add custom element", "A heading and text printed in the Word files at the place you choose.", "Label" (placeholder "e.g. Children's Moment"), "Text (optional)" (placeholder "Words for the bulletin or order of service"), "Place", "Cancel", "Add"; "Label is required."; chip "Custom"; "Add a label, or remove this element — it won't be printed without one."; "Remove"; toast "Removed “{label}”." with "Undo"; "You can add up to 30 custom elements."
 - Loading and errors: "Couldn't load the liturgy sections." with the server's message and "Retry".
@@ -107,7 +107,7 @@ A directive that does not match exactly once is a stop: the tree is not what the
 
 ### Owner answers (2026-09-30, binding for the plan; "all recommended")
 - **1. Unsaved work.** Everything that ends up in the service counts: section text, the section switches, the communion switch and its origin, custom elements and the sermon title. Transient UI state does not (AI errors, queued and writing states, Undo lines, "just replaced" notices). A Benediction card still following the church default (origin "default") does not count until changed (S Risks item 4). Checked on `4dfed3b`: `isPristine` missed the switches and counted blank text and a blank title; the transient state was never in the draft. T1 makes `isPristine` exact and pins every field (clarifications 2, 3). This also answers "whether card toggles count as unsaved work": they do, before the first save.
-- **2. Timing.** The client timeout for `POST /liturgy/generate` is 100 000 ms (a slow sign-in plus the server's 85 s worst case), recorded as an F §1.8 amendment (T12); the reviewer slice reuses it. T4 adds the row to `ENDPOINT_TIMEOUTS` (clarification 11).
+- **2. Timing.** The client timeout for `POST /liturgy/generate` is 100 000 ms (the server's 85 s worst case, plus margin for the server's own sign-in check, the network and the proxy; the client's timer starts only after it has the sign-in token, so the client's own sign-in is not in it), recorded as an F §1.8 amendment (T12); the reviewer slice reuses it. T4 adds the row to `ENDPOINT_TIMEOUTS` (clarification 11).
 - **3. Phone keyboard.** Below `md` the sticky footer hides while a textarea or text input on this step has focus, and shows again on blur. 2b's footer already does this for every step (clarification 28); T8 pins it on this step.
 - **4. Testing.** Automated tests, then a guided owner check on the phone one step at a time after the merge (generating a few sections, Regenerate with Undo, switching a section off and on, adding a custom element, "New service" asking first) and a quick desktop look (T14); then a records PR.
 - **Standing rules:** one PR for 4b; backup pushes to the working branch after each task are done by the controller; every other outward action asks first; production Streamlit untouched.
@@ -143,7 +143,7 @@ The code and F win over S's outline, and the owner's answers over both. **[owner
 8. **What `cardErrorFrom` shows nothing for.** A cancel (the card returns to where it was), a 401 and a lost church (the app's handling signs out or falls back, F §4.4) show nothing on the card. A 429 without a wait uses the server's message. Everything else follows S's table.
 9. **[owner-visible] The 404's link reads "Go to Hymns"** (S: "A link to /builder/hymns").
 10. **`generateSection(call, section, body, signal)` takes the built body** (S passes the draft); `buildGenerateRequest` builds it, so the pure part is tested alone.
-11. **[owner-visible] The 100 s timeout (owner answer 2).** `lib/api/timeouts.ts` has no `TIMEOUTS` object; its per-route table `ENDPOINT_TIMEOUTS` gains `"POST /liturgy/generate": 100_000`. S's "timeout (client, 90 s)" row reads 100 s; F §1.8 is amended (T12), with the reviewer's `/liturgy/review` and `/liturgy/revise` noted to reuse it.
+11. **[owner-visible] The 100 s timeout (owner answer 2).** `lib/api/timeouts.ts` has no `TIMEOUTS` object; its per-route table `ENDPOINT_TIMEOUTS` gains `"POST /liturgy/generate": 100_000`. S's "timeout (client, 90 s)" row reads 100 s; F §1.8 is amended (T12), with the reviewer's `/liturgy/review` and `/liturgy/revise` noted to reuse it. `apiFetch` starts the timer after `getAccessToken()`, so the 15 s above the server's 85 s cover the server's sign-in key fetch (at most 5 s), latency and the proxy, not the client's own sign-in (plan review fix M2).
 12. **`reportAuthErrors(error, churchId)`.** The generation queue calls the API outside the query and mutation caches, so `lib/queries/client.ts` exports the logic `handleAuthErrors` already ran; the caches call it too.
 13. **The default benediction in the draft.** `freshDraft` fills the Benediction from the profile's `default_benediction` ("Halverson" when an older API leaves it out), so a fresh draft is born with it and "New service" gets it. The draft store runs `applyLiturgyDefaults` on load, on every change and on replace (and in memory on an adopted draft). A load it changes is stamped 1 ms after the stored draft; a new default from a profile refetch is an automatic change, stamped 1 ms after the current draft (2c's `autoUpdate`), so neither ever outranks another tab's edit. Three existing tests change their expected values (a fresh draft now prints "Halverson").
 14. **`useDraft().peek()`** returns the latest draft now, for the provider's code that runs outside a render (a request's start and its answer).
@@ -164,6 +164,12 @@ The code and F win over S's outline, and the owner's answers over both. **[owner
 29. **The stale rule and the queue.** A draft's identity is its `created_at` (stable across 5a's saves; `save_key` rotates on save), so the "service changed" test moves the clock before "New service". The queue hands a task's outcome to the provider before the next queued task starts, and a task cancelled before its `run` was called never runs, so a 429 stops the waiting cards at once.
 30. **[owner-visible] Small card rules.** The "Replaced with a new AI draft." line shows only when the AI replaced text (Generate on an empty card shows none); the ⋯ menu is disabled when it has nothing to offer (an empty card other than the Benediction) as well as while the card runs.
 31. **The switch's touch area.** The generated switch is 18 px tall with a larger invisible hit area; the cards pass `after:-inset-y-3.5`, which makes it 46 px, instead of editing `switch.tsx`.
+32. **[owner-visible] "New service" during a run** (plan review fix I1; S step 6). The provider watches the draft's `created_at`. When it changes ("New service", or another tab's new service adopted here) every run is cancelled silently, the cards' errors and Undo lines are cleared, and a bulk run ends with one toast, "The service changed, so the AI drafts were discarded." (no "Wrote…" toast, no per-card toasts). A single card's run ends with no toast. A result that arrives in the moment before the provider sees the change still meets S's per-result rule and its toast.
+33. **The card is captured when the member asks** (plan review fix C1; S step 6). `generate()` captures each card at the click (or at "Replace text"), not when its request starts. A queued run checks `staleVerdict` against the current draft before it sends; if the card's text changed (Undo, another tab) or the service changed, it sends nothing, shows S's toast and counts as not written. While a card runs its Undo line is hidden. Owner decision 1.
+34. **Focus stays on the card** (plan review fix I3; F §4.9). Section and custom-element headings take focus (`tabIndex={-1}`). After Cancel and Try again focus goes to the card's next control (Generate or the run's Cancel); after Replace text to the run's Cancel (the confirm dialog's `finalFocus`), after Keep my text back to the button that opened it; after Clear to "Undo"; after Undo to the heading; after a custom element's Remove to the next card's heading, or "Add custom element" when none follows. Owner decision 1.
+35. **[owner-visible] The card header on a phone** (plan review fix I2). Below `sm` the chips ("Pastor's copy only", the status) sit on their own line under the title, so the switch, title and ⋯ menu always fit at 375 px; from `sm` they sit beside the title.
+36. **Small reliability fixes** (plan review fixes M1, M3-M7, M9; owner decision 1). A result written over a blank card clears its "Cleared. Undo" line. Undo of a custom element's Remove refuses past 30 elements with the toast "You can add up to 30 custom elements." (`restoreCustomElement` takes the limit). A malformed `#…` address scrolls nowhere instead of throwing. `useAutosize` sizes a field again when its card is switched back on. The "Add custom element" sheet scrolls within 85 dvh on a phone. A 429 stores the moment its wait ends (`retryAt`): Try again and "Generate empty sections" wait until then, and leaving the step does not restart it. Each card's hint, Assurance line, counter and error are the textarea's description (`aria-describedby`); a bulk run's errors are announced politely, while a card's own run keeps `role="alert"`.
+37. **[owner-visible] Clearing the church-default Benediction is not unsaved work** (plan review M8, left as is). Clear text on a Benediction that follows the default leaves it empty, which counts as nothing (clarification 2), so "New service" does not ask; a fresh draft brings the default back anyway.
 
 ### Risks carried into the plan
 - **Live AI.** The drafts come from `gpt-4.1-mini` through Railway; the tests use fakes. The owner's check (T14 Steps 5-6) times a real run of 5 sections.
@@ -572,7 +578,7 @@ The pure half of the step. `cards.ts` holds every transition of S's origin table
 **Interfaces:**
 - Consumes: `DraftV1`, `LiturgyCard`, `SECTION_KEYS` (2b), `isFirstSundayOfMonth` (2b `lib/dates.ts`), `setDate` (2c), `shared/first_sunday.json` and `shared/liturgy_outline.json` (4a).
 - Produces:
-  - `cards.ts`: `type CardOrigin`, `type CardSnapshot = {text, origin}`, `type CustomElement`, `PLACEMENT_KEYS` (the 17), `normalizePlacement(key)`, `editCardText(d, key, text)`, `setCardEnabled(d, key, enabled)`, `applyGenerated(d, key, text)`, `clearCard(d, key)`, `restoreChurchDefault(d, defaultText)` (S's `useChurchDefault`; clarification 5), `restoreCard(d, key, previous)`, `setSermonTitle(d, title)`, `setCommunion(d, include)`, `restoreCommunionDefault(d)`, `addCustomElement(d, {label, text, insert_after}, id)`, `updateCustomElement(d, id, patch)`, `removeCustomElement(d, id) → {draft, element, index} | null`, `restoreCustomElement(d, element, index)`, `sectionsNeedingAi(d)`, `needsRegenerateConfirm(card)`, `type CapturedCard = {createdAt, text, origin}`, `captureCard(d, key)`, `staleVerdict(d, key, captured) → "apply" | "service_changed" | "edited"`.
+  - `cards.ts`: `type CardOrigin`, `type CardSnapshot = {text, origin}`, `type CustomElement`, `PLACEMENT_KEYS` (the 17), `normalizePlacement(key)`, `editCardText(d, key, text)`, `setCardEnabled(d, key, enabled)`, `applyGenerated(d, key, text)`, `clearCard(d, key)`, `restoreChurchDefault(d, defaultText)` (S's `useChurchDefault`; clarification 5), `restoreCard(d, key, previous)`, `setSermonTitle(d, title)`, `setCommunion(d, include)`, `restoreCommunionDefault(d)`, `addCustomElement(d, {label, text, insert_after}, id)`, `updateCustomElement(d, id, patch)`, `removeCustomElement(d, id) → {draft, element, index} | null`, `restoreCustomElement(d, element, index, max)` (unchanged when the list already holds `max`; clarification 36), `sectionsNeedingAi(d)`, `needsRegenerateConfirm(card)`, `type CapturedCard = {createdAt, text, origin}`, `captureCard(d, key)`, `staleVerdict(d, key, captured) → "apply" | "service_changed" | "edited"`.
   - `defaults.ts`: `DEFAULT_BENEDICTION_FALLBACK = "Halverson"`, `type LiturgyDefaults = {defaultBenediction}`, `applyCommunionDefault(d)`, `applyLiturgyDefaults(d, defaults)`.
   - `summary.ts`: `type LiturgyCounts = {ready, enabled, communion, customCount}`, `liturgyCounts(d)`.
   - Later users: T5 (the store runs `applyLiturgyDefaults`), T6 (`captureCard`, `staleVerdict`, `applyGenerated`, `restoreCard`), T8-T10 (the step), T11 (`liturgyCounts`).
@@ -2247,7 +2253,8 @@ TypeError: reportAuthErrors is not a function
 ```ts
   "POST /hymns/suggestions": 90_000,
   // Slice 4 (F §1.8 amendment, owner answer 2, 2026-09-30): a section answers within
-  // 85 s (4a's 80 s deadline plus a last connect); 100 s also covers a slow sign-in.
+  // 85 s (4a's 80 s deadline plus a last connect). The timer starts after getAccessToken(),
+  // so the other 15 s cover the server's sign-in key fetch (at most 5 s), latency and the proxy.
   // The service reviewer's routes (the slice after 4b) reuse this value.
   "POST /liturgy/generate": 100_000,
 };
@@ -2430,7 +2437,8 @@ git add frontend/src/lib/queries/liturgy.ts frontend/src/lib/queries/liturgy.tes
 git commit -m "Liturgy: the config and generate calls, a 100 s client timeout, and the test fixtures (S API client usage; owner answer 2)" -m "useLiturgyConfig loads GET /liturgy/config once as the user, never
 stale; generateSection posts one section as the church and returns its
 result, with a 100 s client timeout (owner answer 2: 4a answers within
-85 s, plus a slow sign-in). passageQuery shares usePassage's key, limiter
+85 s; the rest covers the server's sign-in key fetch, latency and the
+proxy, since the timer starts after the token). passageQuery shares usePassage's key, limiter
 and freshness for the sermon text; reportAuthErrors gives a call made
 outside the caches the same 401 and lost-church handling. The fixtures'
 liturgy config is pinned to 4a's shared fixtures.
@@ -3036,7 +3044,7 @@ Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 
 **Expected:** one commit, 8 files changed.
 
-### Task 6: The generation provider in the builder shell (S Frontend `generation.tsx`, UX "Generate and Regenerate" steps 0-7, "Sermon text", BC-13, BC-21; F §1.8; clarifications 15, 16, 17, 18)
+### Task 6: The generation provider in the builder shell (S Frontend `generation.tsx`, UX "Generate and Regenerate" steps 0-7, "Sermon text", BC-13, BC-21; F §1.8; clarifications 15, 16, 17, 18, 32, 33, 36)
 
 `LiturgyGenerationProvider` holds the Liturgy step's AI runs, card errors and Undo in memory, and the builder shell mounts it inside `DraftProvider`, so a run started on the Liturgy step keeps going on the other steps and its result lands in the draft (BC-21). Leaving `/builder`, switching church (the keyed remount) or signing out unmounts it, which cancels everything. It sends nothing while it is idle, so the shell's other tests need no new route.
 
@@ -3044,24 +3052,25 @@ What it does, in S's order:
 - **Step 0.** With `aiAvailable: false`, `generate()` sends nothing and marks each targeted switched-on empty card with `localAiNotConfigured()`.
 - **Steps 1-3.** Each key is queued; the batch first reads the sermon text once (`sermonSource`, then `queryClient.fetchQuery(passageQuery(...))`, bounded at 10 s; a failure, a timeout or no text sends the batch without it, with no toast), then each section is one request through the 3-at-a-time queue. A card already running is not queued twice.
 - **Step 4.** `cancel(keys)` and the AI bar's `cancelBulk()` drop the cards' runs (waiting for the sermon text, queued or writing); the cards return to where they were, silently.
-- **Step 6.** When a request starts, the card is captured (`captureCard`); when the answer arrives, `staleVerdict` decides inside the draft update: "apply" writes the text with origin "ai" and keeps the previous `{text, origin}` for Undo when it replaced text; "service_changed" and "edited" drop it with S's toasts ("The service changed, so the AI draft for {Label} was discarded." and "Kept your edits — the new AI draft for {Label} was not used.").
-- **Step 7.** A 429 stops the queue: that card and every card still waiting show "Too many requests — try again in N s.".
-- **Errors.** A section's error or a failed request becomes the card's error (`cardErrorFrom`); a 401 or a lost church goes to `reportAuthErrors` and shows nothing on the card.
+- **Step 6.** The card is captured (`captureCard`) when the member asks: in `generate()`, at the click or at "Replace text" (clarification 33). Just before a queued request is sent, `staleVerdict` checks the current draft: anything but "apply" sends nothing, shows S's toast and counts as not written. When the answer arrives, `staleVerdict` decides again inside the draft update: "apply" writes the text with origin "ai" and keeps the previous `{text, origin}` for Undo when it replaced text (over a blank card it clears any "Cleared." Undo; clarification 36); "service_changed" and "edited" drop it with S's toasts ("The service changed, so the AI draft for {Label} was discarded." and "Kept your edits — the new AI draft for {Label} was not used.").
+- **A new service** (clarification 32). The provider watches `draft.created_at`; when it changes, every run is cancelled silently, the errors and Undo entries are cleared, and a bulk run ends with one toast, "The service changed, so the AI drafts were discarded.", with no "Wrote…" toast.
+- **Step 7.** A 429 stops the queue: that card and every card still waiting show "Too many requests — try again in N s.", with `retryAt`, the moment the wait ends, so the screen's wait survives leaving the step (clarification 36).
+- **Errors.** A section's error or a failed request becomes the card's error (`cardErrorFrom`, kept as a `CardErrorState` with `retryAt` and `bulk`, true when it came from "Generate empty sections", so the card announces it politely); a 401 or a lost church goes to `reportAuthErrors` and shows nothing on the card.
 - **Bulk.** A "Generate empty sections" run ends with one toast, "Wrote n sections." ("Wrote 1 section." for one; clarification 16) or "Wrote k of n sections. The rest show what went wrong."; cancelled cards are not counted, and a run cancelled whole shows none (clarification 15).
 - The provider takes `sermonWaitMs` so a test can shorten the 10 s wait (clarification 17), and the Undo lines, errors and runs are exposed for T8-T10 (`runs`, `errors`, `undo`, `bulk`, `generate`, `cancel`, `cancelBulk`, `dismissError`, `setUndo`, `clearUndo`, `applyUndo`; clarification 18).
 
-The provider's own tests are S's `generation.test.tsx` cases (the sermon text); T9's step tests cover Generate, Regenerate, errors, the stale rule, navigation and the 429 through the screen.
+The provider's own tests are S's `generation.test.tsx` cases (the sermon text) and the two before-sending cases (Undo while "Waiting…", and another tab's edit while queued, each sends nothing); T9's step tests cover Generate, Regenerate, errors, the stale rule, navigation and the 429 through the screen.
 
 **Files:**
 - Create: `frontend/src/lib/liturgy/generation.tsx`
 - Modify: `frontend/src/components/builder/builder-shell.tsx` (mounts the provider)
-- Test: `frontend/src/lib/liturgy/generation.test.tsx` (new, 3)
+- Test: `frontend/src/lib/liturgy/generation.test.tsx` (new, 5)
 
 **Interfaces:**
 - Consumes: `useDraft().update`, `peek` (T5); `captureCard`, `staleVerdict`, `applyGenerated`, `restoreCard` (T2); `buildGenerateRequest`, `sermonSource`, `sermonText`, `cardErrorFrom`, `localAiNotConfigured`, `createTaskQueue` (T3); `generateSection`, `passageQuery`, `reportAuthErrors`, `useApi` (T4); `SECTION_LABELS` (T1); sonner's `toast.message`.
-- Produces: `LiturgyGenerationProvider({church: {id, effective_translation}, sermonWaitMs?, children})`, `useLiturgyGeneration(): LiturgyGeneration`, `MAX_IN_FLIGHT = 3`, `SERMON_WAIT_MS = 10_000`, `type CardRun = {phase: "queued" | "writing", since}`, `type UndoEntry = {kind: "replaced" | "cleared", previous}`, `type BulkRun = {total, done}`. Later users: T8-T10 (the step), T11 (`LiturgySummaryBlock` reads `runs`).
+- Produces: `LiturgyGenerationProvider({church: {id, effective_translation}, sermonWaitMs?, children})`, `useLiturgyGeneration(): LiturgyGeneration`, `MAX_IN_FLIGHT = 3`, `SERMON_WAIT_MS = 10_000`, `type CardRun = {phase: "queued" | "writing", since}`, `type UndoEntry = {kind: "replaced" | "cleared", previous}`, `type BulkRun = {total, done}`, `type CardErrorState = CardError & {retryAt?, bulk?}`, `SERVICE_CHANGED_BULK`. Later users: T8-T10 (the step), T11 (`LiturgySummaryBlock` reads `runs`).
 
-Counts after this task: frontend **474 passed in 73 files**.
+Counts after this task: frontend **476 passed in 73 files**.
 
 - [ ] **Step 1 (agent): Check the starting point**
 
@@ -3800,7 +3809,7 @@ import { useMeContext } from "@/lib/me-context";
 git status --short
 ```
 
-**Expected:** ` Test Files  7 passed (7)`, `      Tests  95 passed (95)` (the shell, Hymns and Date & readings tests pass with the provider mounted, sending nothing); the suite ` Test Files  73 passed (73)`, `      Tests  474 passed (474)`; `typecheck 0` and `lint 0`; ` M frontend/src/components/builder/builder-shell.tsx` and the two new files as `??`.
+**Expected:** ` Test Files  7 passed (7)`, `      Tests  97 passed (97)` (the shell, Hymns and Date & readings tests pass with the provider mounted, sending nothing); the suite ` Test Files  73 passed (73)`, `      Tests  476 passed (476)`; `typecheck 0` and `lint 0`; ` M frontend/src/components/builder/builder-shell.tsx` and the two new files as `??`.
 
 - [ ] **Step 6 (agent): Commit**
 
@@ -3813,7 +3822,7 @@ reads the sermon text once (WEB for ESV, at most 10 s, left out on
 failure), then sends one section per request, 3 at a time; a result is
 applied or dropped by the stale rule with its toast; a 429 stops the
 queue; a bulk run ends with one toast. Unmounting cancels everything.
-Frontend 471 -> 474 tests in 72 -> 73 files." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Frontend 471 -> 476 tests in 72 -> 73 files." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
@@ -3821,9 +3830,9 @@ Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 
 **Review checkpoint (T3-T6, batch B):** the request never sends `overrides` or ESV text; the timeout row is 100 000; the fixtures match 4a's shared files; the store's defaults never outrank another tab's edit; the provider sends nothing while idle, never delivers a cancelled result, and applies S step 6 inside the update; counts match.
 
-### Task 7: The kit's dialog and the growing textarea (S "Frontend changes" shadcn list, UX "Layout"; F §4.9 items 1 and 6; clarifications 19, 20)
+### Task 7: The kit's dialog and the growing textarea (S "Frontend changes" shadcn list, UX "Layout"; F §4.9 items 1 and 6; clarifications 19, 20, 36)
 
-Two small pieces the step needs. `components/ui/dialog.tsx` is the base-nova `Dialog` ("Add custom element", T10); the registry (ui.shadcn.com) is blocked from the container, so it is rebuilt from the upstream source exactly as 2b, 2c and 3b rebuilt theirs (clarification 19). S's other kit components exist already: `switch` (3b), `textarea`, `badge`, `alert`, `collapsible`, `select`, `dropdown-menu` (1-2c). `lib/use-autosize.ts` is S's `useAutosize`: the kit's `Textarea` already sizes itself to its content with `field-sizing: content` where the browser supports it, so the hook sets the height from the content only where it does not (older iOS Safari), capped at 60% of the window; the cards cap the field with `max-h-[60vh]` so it scrolls past that (clarification 20).
+Two small pieces the step needs. `components/ui/dialog.tsx` is the base-nova `Dialog` ("Add custom element", T10); the registry (ui.shadcn.com) is blocked from the container, so it is rebuilt from the upstream source exactly as 2b, 2c and 3b rebuilt theirs (clarification 19). S's other kit components exist already: `switch` (3b), `textarea`, `badge`, `alert`, `collapsible`, `select`, `dropdown-menu` (1-2c). `lib/use-autosize.ts` is S's `useAutosize`: the kit's `Textarea` already sizes itself to its content with `field-sizing: content` where the browser supports it, so the hook sets the height from the content only where it does not (older iOS Safari), capped at 60% of the window, and again when the field comes back with the same text (its third argument, `shown`: a card switched on; clarification 36); the cards cap the field with `max-h-[60vh]` so it scrolls past that (clarification 20).
 
 Provenance of `dialog.tsx`: at shadcn-ui/ui commit `db2db460a26fa84fb65c8d903b213925fbdee9ed` (the commit 2b, 2c and 3b pinned), the plan's writer fetched `apps/v4/registry/bases/base/ui/dialog.tsx` (sha256 `aba6df6cbf51a1edcc22e415a3a46a666fc8cb66729e47b3ed2ecd97f166adff`) and `apps/v4/registry/styles/style-nova.css` (sha256 `5d5751579c015b61e77cf0822862a43ac79f3e6fed236a17624be8e6d1ebea1d`) from raw.githubusercontent.com, ran the file through the installed shadcn 4.21.0 CLI's `createStyleMap`, `transformStyle`, `transformIcons`, `transformFont` and `transformMenu`, mapped `@/registry/bases/base/ui/button` to `@/components/ui/button`, and formatted it with Prettier 3.9.9 and `prettier-plugin-tailwindcss` 0.8.1 (`semi: false`, `trailingComma: "es5"`, `tailwindFunctions: ["cn", "cva"]`, `tailwindStylesheet: src/app/globals.css`). The same pipeline reproduces the repo's `sheet.tsx` byte for byte after its header comment (checked while planning). The only change from that output is the header comment. Optional check that the upstream file is unchanged (skip it if the host is unreachable; the code below is the record):
 
@@ -3835,13 +3844,13 @@ curl -fsS "https://raw.githubusercontent.com/shadcn-ui/ui/db2db460a26fa84fb65c8d
 
 **Files:**
 - Create: `frontend/src/components/ui/dialog.tsx` (clarification 19's file, or the generated one), `frontend/src/lib/use-autosize.ts`
-- Test: `frontend/src/lib/use-autosize.test.tsx` (new, 2). The dialog is exercised by T10.
+- Test: `frontend/src/lib/use-autosize.test.tsx` (new, 3). The dialog is exercised by T10.
 
 **Interfaces:**
 - Consumes: `@base-ui/react/dialog` (installed), `Button` (1), `XIcon` (lucide).
-- Produces: `components/ui/dialog.tsx`: `Dialog`, `DialogClose`, `DialogContent` (`showCloseButton?`), `DialogDescription`, `DialogFooter`, `DialogHeader`, `DialogOverlay`, `DialogPortal`, `DialogTitle`, `DialogTrigger`. `lib/use-autosize.ts`: `useAutosize(ref: RefObject<HTMLTextAreaElement | null>, value: string): void`, `AUTOSIZE_MAX_SHARE = 0.6`. Later users: T8 and T10 (the cards' textareas), T10 (the dialog).
+- Produces: `components/ui/dialog.tsx`: `Dialog`, `DialogClose`, `DialogContent` (`showCloseButton?`), `DialogDescription`, `DialogFooter`, `DialogHeader`, `DialogOverlay`, `DialogPortal`, `DialogTitle`, `DialogTrigger`. `lib/use-autosize.ts`: `useAutosize(ref: RefObject<HTMLTextAreaElement | null>, value: string, shown = true): void`, `AUTOSIZE_MAX_SHARE = 0.6`. Later users: T8 and T10 (the cards' textareas), T10 (the dialog).
 
-Counts after this task: frontend **476 passed in 74 files**.
+Counts after this task: frontend **479 passed in 74 files**.
 
 - [ ] **Step 1 (agent): Check the starting point, and try the registry**
 
@@ -3853,7 +3862,7 @@ git status --short
 (cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
 ```
 
-**Expected:** nothing (or `?? .claude/`); `alert-dialog.tsx alert.tsx avatar.tsx badge.tsx button.test.tsx button.tsx card.tsx collapsible.tsx combobox.tsx dropdown-menu.tsx input-group.tsx input.tsx label.tsx radio-group.tsx select.tsx sheet.tsx skeleton.tsx sonner.tsx switch.tsx tabs.tsx textarea.tsx tooltip.tsx` (no `dialog.tsx`); `Request to https://ui.shadcn.com/r/styles/base-nova/dialog.json failed` (the registry is blocked; shadcn 4.21 adds "Request was cancelled.") and `git status --short` still shows nothing new; ` Test Files  73 passed (73)`, `      Tests  474 passed (474)`. If the registry answers and writes `frontend/src/components/ui/dialog.tsx`, keep the generated file, skip its **Create** below, and say so in the commit body.
+**Expected:** nothing (or `?? .claude/`); `alert-dialog.tsx alert.tsx avatar.tsx badge.tsx button.test.tsx button.tsx card.tsx collapsible.tsx combobox.tsx dropdown-menu.tsx input-group.tsx input.tsx label.tsx radio-group.tsx select.tsx sheet.tsx skeleton.tsx sonner.tsx switch.tsx tabs.tsx textarea.tsx tooltip.tsx` (no `dialog.tsx`); `Request to https://ui.shadcn.com/r/styles/base-nova/dialog.json failed` (the registry is blocked; shadcn 4.21 adds "Request was cancelled.") and `git status --short` still shows nothing new; ` Test Files  73 passed (73)`, `      Tests  476 passed (476)`. If the registry answers and writes `frontend/src/components/ui/dialog.tsx`, keep the generated file, skip its **Create** below, and say so in the commit body.
 
 - [ ] **Step 2 (agent): Write the failing test**
 
@@ -4159,7 +4168,7 @@ export function useAutosize(ref: RefObject<HTMLTextAreaElement | null>, value: s
 git status --short
 ```
 
-**Expected:** ` Test Files  1 passed (1)`, `      Tests  2 passed (2)`; the suite ` Test Files  74 passed (74)`, `      Tests  476 passed (476)`; `typecheck 0` and `lint 0`; the three new files as `??`.
+**Expected:** ` Test Files  1 passed (1)`, `      Tests  3 passed (3)`; the suite ` Test Files  74 passed (74)`, `      Tests  479 passed (479)`; `typecheck 0` and `lint 0`; the three new files as `??`.
 
 - [ ] **Step 6 (agent): Commit**
 
@@ -4170,15 +4179,15 @@ base-nova, through the installed CLI's transforms and Prettier), because
 the build container cannot reach the registry; only its header comment is
 added. useAutosize sizes a textarea to its content where the browser
 cannot (field-sizing: content), capped at 60% of the window.
-Frontend 474 -> 476 tests in 73 -> 74 files." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Frontend 476 -> 479 tests in 73 -> 74 files." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
 **Expected:** one commit, 3 files changed.
 
-### Task 8: The step: the order of worship, the section cards, the sermon title and the landmarks (S UX "Layout", "Sermon title", "Section card", "Benediction and the church default", "Loading, error and empty states"; BC-1, BC-3, BC-9, BC-15, BC-17, BC-18; owner answer 3; clarifications 1, 21, 24, 28, 31)
+### Task 8: The step: the order of worship, the section cards, the sermon title and the landmarks (S UX "Layout", "Sermon title", "Section card", "Benediction and the church default", "Loading, error and empty states"; BC-1, BC-3, BC-9, BC-15, BC-17, BC-18; owner answer 3; clarifications 1, 21, 24, 28, 31, 34, 35, 36)
 
-The screen, without the AI yet (T9) and without communion and custom elements (T10). `LiturgyStep` loads `GET /liturgy/config` (a skeleton while it loads; "Couldn't load the liturgy sections." with the server's message and Retry when a first load fails, never when a background refetch fails), then lays out the heading "Liturgy" (clarification 21), the sermon title and the order of worship from the config's outline, in the Word files' order: a `SectionCard` for each section, an `OutlineLandmark` row for the hymns, the readings, the sermon title and the creed (clarification 24). The cards follow S's "Section card": the switch "Include {Label}" (its touch area grown to 46 px on the use, not in the generated file; clarification 31), the label, the status chip by origin, the "Pastor's copy only" chip, and a ⋯ menu with **Clear text** (with an Undo line) and, on the Benediction when it no longer follows the church default, **Use church default**; when on, a textarea growing to 60 vh with its placeholder, the 20 000-character limit and a counter past 18 000, and the section's hint (the Assurance's fixed "People: Thanks be to God! Amen." line and its hint; the Benediction's hint only while it follows the default); when off, only "Off — not in the service. Any text is kept." Typing makes the text the user's; the Benediction follows the church default until edited (T5 keeps it there). On mount the step scrolls to the card the address names (`#card-…`), for Review's links. The step's Undo lines go when it unmounts. Owner answer 3 needs no new code: 2b's `StepFooter` already hides below `md` while a text field has focus (`useKeyboardOpen`, focus-based rather than `visualViewport`; clarification 28), so this task adds its test on this step. The page still renders the placeholder until T11 turns the step on; these tests render `LiturgyStep` inside the real builder layout.
+The screen, without the AI yet (T9) and without communion and custom elements (T10). `LiturgyStep` loads `GET /liturgy/config` (a skeleton while it loads; "Couldn't load the liturgy sections." with the server's message and Retry when a first load fails, never when a background refetch fails), then lays out the heading "Liturgy" (clarification 21), the sermon title and the order of worship from the config's outline, in the Word files' order: a `SectionCard` for each section, an `OutlineLandmark` row for the hymns, the readings, the sermon title and the creed (clarification 24). The cards follow S's "Section card": the switch "Include {Label}" (its touch area grown to 46 px on the use, not in the generated file; clarification 31), the label, the status chip by origin, the "Pastor's copy only" chip (below `sm` the chips take their own line under the title; clarification 35), and a ⋯ menu with **Clear text** (with an Undo line) and, on the Benediction when it no longer follows the church default, **Use church default**; when on, a textarea growing to 60 vh with its placeholder, the 20 000-character limit and a counter past 18 000, and the section's hint (the Assurance's fixed "People: Thanks be to God! Amen." line and its hint; the Benediction's hint only while it follows the default); when off, only "Off — not in the service. Any text is kept." Typing makes the text the user's; the Benediction follows the church default until edited (T5 keeps it there). The hint, the Assurance's line and the counter are the textarea's description (`aria-describedby`). The card's heading can take focus (`tabIndex={-1}`): after Clear text focus goes to "Undo", after Undo to the heading (clarification 34). On mount the step scrolls to the card the address names (`#card-…`), for Review's links; a malformed address scrolls nowhere (clarification 36). The step's Undo lines go when it unmounts. Owner answer 3 needs no new code: 2b's `StepFooter` already hides below `md` while a text field has focus (`useKeyboardOpen`, focus-based rather than `visualViewport`; clarification 28), so this task adds its test on this step. The page still renders the placeholder until T11 turns the step on; these tests render `LiturgyStep` inside the real builder layout.
 
 **Files:**
 - Create: `frontend/src/components/builder/liturgy/liturgy-step.tsx`, `section-card.tsx`, `outline-landmark.tsx`, `sermon-title-field.tsx` (all in `frontend/src/components/builder/liturgy/`)
@@ -4188,7 +4197,7 @@ The screen, without the AI yet (T9) and without communion and custom elements (T
 - Consumes: `useLiturgyConfig` and the fixtures (T4); `useLiturgyGeneration().undo`, `setUndo`, `clearUndo`, `applyUndo`, `dismissError` (T6); `editCardText`, `setCardEnabled`, `clearCard`, `restoreChurchDefault`, `setSermonTitle` (T2); `useAutosize` (T7); `effectivePicks` (2c); `useChurchProfile` (2a); the kit (`Switch`, `Textarea`, `Badge`, `DropdownMenu`, `Input`, `Label`, `Skeleton`, `ErrorState`).
 - Produces: `LiturgyStep()`; `SectionCard({spec, assuranceResponse, defaultBenediction, maxLength})` with `ORIGIN_CHIPS` and `COUNTER_FROM = 18_000`; `OutlineLandmark({item, draft})`; `SermonTitleField({maxLength})` and `SERMON_TITLE_ID = "sermon-title"`. DOM ids `card-{key}` (5a's Review links). Later users: T9 (the AI on the cards, the AI bar), T10 (communion, custom elements), T11 (the page).
 
-Counts after this task: frontend **487 passed in 75 files**.
+Counts after this task: frontend **490 passed in 75 files**.
 
 - [ ] **Step 1 (agent): Check the starting point**
 
@@ -4198,7 +4207,7 @@ ls frontend/src/components/builder/liturgy 2>&1 | tail -1
 (cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
 ```
 
-**Expected:** nothing (or `?? .claude/`); `ls: cannot access 'frontend/src/components/builder/liturgy': No such file or directory`; ` Test Files  74 passed (74)`, `      Tests  476 passed (476)`.
+**Expected:** nothing (or `?? .claude/`); `ls: cannot access 'frontend/src/components/builder/liturgy': No such file or directory`; ` Test Files  74 passed (74)`, `      Tests  479 passed (479)`.
 
 - [ ] **Step 2 (agent): Write the failing tests**
 
@@ -5015,7 +5024,7 @@ export function LiturgyStep() {
 git status --short
 ```
 
-**Expected:** ` Test Files  1 passed (1)`, `      Tests  11 passed (11)`; the suite ` Test Files  75 passed (75)`, `      Tests  487 passed (487)`; `typecheck 0` and `lint 0`; `?? frontend/src/components/builder/liturgy/`.
+**Expected:** ` Test Files  1 passed (1)`, `      Tests  11 passed (11)`; the suite ` Test Files  75 passed (75)`, `      Tests  490 passed (490)`; `typecheck 0` and `lint 0`; `?? frontend/src/components/builder/liturgy/`.
 
 - [ ] **Step 6 (agent): Commit**
 
@@ -5028,26 +5037,26 @@ past 18,000, Off when switched off with the text kept) and muted rows for
 the hymns, readings, sermon title and creed. Skeleton while loading;
 Couldn't load the liturgy sections. with Retry. The footer already hides
 while typing (owner answer 3); a test pins it here.
-Frontend 476 -> 487 tests in 74 -> 75 files." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Frontend 479 -> 490 tests in 74 -> 75 files." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
 **Expected:** one commit, 5 files changed.
 
-### Task 9: Generate, Regenerate and the AI bar (S UX "AI bar", "Generate and Regenerate", "Per-card error messages", Testing dom 4-12; BC-2, BC-5, BC-6, BC-13, BC-20, BC-21; clarifications 8, 9, 15, 22, 23, 29, 30)
+### Task 9: Generate, Regenerate and the AI bar (S UX "AI bar", "Generate and Regenerate", "Per-card error messages", Testing dom 4-12; BC-2, BC-5, BC-6, BC-13, BC-20, BC-21; clarifications 8, 9, 15, 22, 23, 29, 30, 32, 33, 34, 36)
 
-The cards get their AI (S "Section card" states) and the step its AI bar. An empty card has **Generate**; a card with text has **Regenerate**, which asks "Replace your text?" ("Keep my text" / "Replace text") when the text is the user's or a saved service's and runs at once for an AI draft or a Benediction following the default, and is disabled with "AI isn't set up" when the config says AI is off. While queued the card shows a disabled "Waiting…" and while writing "Writing…" (then "Still working — this can take up to a minute." after 8 s), each with a Cancel button named "Cancel {Label}"; the ⋯ menu is disabled, and the text is read-only while writing. Typing in a queued card, or switching a running card off, cancels its run. An error shows in an alert under the text; a retryable one carries **Try again** (disabled until a 429's wait has passed), which stands in for the card's button (clarification 22), and the 404 carries "Go to Hymns" (clarification 9). The AI bar has **Generate empty sections (n)** (disabled at 0, with S's other caption), **Cancel** and "Writing k of n…" during a bulk run (clarification 23), the no-AI banner, the "general text" notice with its "Date & readings" link, and the all-off notice. The AI itself is T6's provider; this task wires the screen to it and tests S's dom cases 4-12 through it, including the stale rule (clarification 29), navigation to another step, the 429 and a 401 or a lost church.
+The cards get their AI (S "Section card" states) and the step its AI bar. An empty card has **Generate**; a card with text has **Regenerate**, which asks "Replace your text?" ("Keep my text" / "Replace text") when the text is the user's or a saved service's and runs at once for an AI draft or a Benediction following the default, and is disabled with "AI isn't set up" when the config says AI is off. While queued the card shows a disabled "Waiting…" and while writing "Writing…" (then "Still working — this can take up to a minute." after 8 s), each with a Cancel button named "Cancel {Label}"; the ⋯ menu is disabled, and the text is read-only while writing. Typing in a queued card, or switching a running card off, cancels its run. An error shows in an alert under the text; a retryable one carries **Try again** (disabled until a 429's wait has passed), which stands in for the card's button (clarification 22), and the 404 carries "Go to Hymns" (clarification 9). The AI bar has **Generate empty sections (n)** (disabled at 0, with S's other caption), **Cancel** and "Writing k of n…" during a bulk run (clarification 23), the no-AI banner, the "general text" notice with its "Date & readings" link, and the all-off notice. The AI itself is T6's provider; this task wires the screen to it and tests S's dom cases 4-12 through it, including the stale rule (clarification 29), navigation to another step, the 429 and a 401 or a lost church. From the plan review: the Undo line is hidden while the card runs (clarification 33); "New service" during a bulk run ends it with one toast and clears the errors and Undo lines (clarification 32); focus moves to the run's Cancel after Replace text and Try again, back to Regenerate after Cancel and Keep my text (clarification 34); the 429's wait counts from `retryAt`, survives leaving the step, and holds "Generate empty sections" too; a bulk run's errors are announced politely (an `aria-live` line) rather than as alerts, and the error is part of the textarea's description (clarification 36).
 
 **Files:**
 - Create: `frontend/src/components/builder/liturgy/ai-bar.tsx`, `frontend/src/components/builder/liturgy/use-still-working.ts`
 - Modify: `frontend/src/components/builder/liturgy/section-card.tsx` (the AI states, the confirm dialog, the error alert), `frontend/src/components/builder/liturgy/liturgy-step.tsx` (the AI bar, `aiAvailable`)
-- Test: `frontend/src/components/builder/liturgy/liturgy-step.test.tsx` (+13)
+- Test: `frontend/src/components/builder/liturgy/liturgy-step.test.tsx` (+16)
 
 **Interfaces:**
-- Consumes: `useLiturgyGeneration()` (T6); `sectionsNeedingAi`, `needsRegenerateConfirm` (T2); `type CardError` (T3); `liturgyCounts` (T2); `ConfirmDialog` (`cancelLabel`, 2c), `PendingButton`, `Alert`; `authEvents` (1, in the tests).
-- Produces: `AiBar({aiAvailable})` (a region named "Write with AI"); `SectionCard` gains `aiAvailable`; `STILL_WORKING_MS = 8_000`, `STILL_WORKING`, `useStillWorking(active)`. Later users: T10, T11.
+- Consumes: `useLiturgyGeneration()` (T6); `sectionsNeedingAi`, `needsRegenerateConfirm` (T2); `type CardErrorState` (T6); `liturgyCounts` (T2); `ConfirmDialog` (`cancelLabel`, `finalFocus`, 2c), `PendingButton`, `Alert`; `authEvents` (1, in the tests).
+- Produces: `AiBar({aiAvailable})` (a region named "Write with AI"); `SectionCard` gains `aiAvailable`; `useRetryWait(retryAt)` (exported from `section-card.tsx`, used by `AiBar`); `STILL_WORKING_MS = 8_000`, `STILL_WORKING`, `useStillWorking(active)`. Later users: T10, T11.
 
-Counts after this task: frontend **500 passed in 75 files**.
+Counts after this task: frontend **506 passed in 75 files**.
 
 - [ ] **Step 1 (agent): Check the starting point**
 
@@ -5057,7 +5066,7 @@ grep -c "aiAvailable" frontend/src/components/builder/liturgy/section-card.tsx
 (cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
 ```
 
-**Expected:** nothing (or `?? .claude/`); `0` (grep exits 1); ` Test Files  75 passed (75)`, `      Tests  487 passed (487)`.
+**Expected:** nothing (or `?? .claude/`); `0` (grep exits 1); ` Test Files  75 passed (75)`, `      Tests  490 passed (490)`.
 
 - [ ] **Step 2 (agent): Write the failing tests**
 
@@ -6205,7 +6214,7 @@ for i in 1 2 3; do (cd frontend && npx vitest run src/components/builder/liturgy
 git status --short
 ```
 
-**Expected:** three times ` Test Files  1 passed (1)`, `      Tests  24 passed (24)` and no `FAIL`; the suite ` Test Files  75 passed (75)`, `      Tests  500 passed (500)`; `typecheck 0` and `lint 0`; ` M` for the three modified files and `??` for the two new ones. A run that fails even once is a failure: make the test wait for a condition (`findBy`, `waitFor`), never retry it.
+**Expected:** three times ` Test Files  1 passed (1)`, `      Tests  27 passed (27)` and no `FAIL`; the suite ` Test Files  75 passed (75)`, `      Tests  506 passed (506)`; `typecheck 0` and `lint 0`; ` M` for the three modified files and `??` for the two new ones. A run that fails even once is a failure: make the test wait for a condition (`findBy`, `waitFor`), never retry it.
 
 - [ ] **Step 6 (agent): Commit**
 
@@ -6217,26 +6226,26 @@ with Cancel and Still working after 8 s, and its error with Try again.
 The AI bar writes every switched-on empty card, 3 at a time, with Cancel
 and Writing k of n, and shows the no-AI banner and the two notices. Tests
 cover S's dom cases 4-12: the stale rule, navigation, the 429 and a 401.
-Frontend 487 -> 500 tests in 75 files." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Frontend 490 -> 506 tests in 75 files." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
 **Expected:** one commit, 5 files changed.
 
-### Task 10: The communion card and custom elements (S UX "Communion card", "Custom elements", Testing dom 14-15; BC-10, BC-11, BC-12; F D17; clarifications 6, 25, 26)
+### Task 10: The communion card and custom elements (S UX "Communion card", "Custom elements", Testing dom 14-15; BC-10, BC-11, BC-12; F D17; clarifications 6, 25, 26, 34, 36)
 
-The rest of the outline. `CommunionCard` sits after the Second Hymn: its header is the switch with S's toggle label; the helper says why it is on or off ("On by default — {October 4, 2026} is the first Sunday of the month.", "Off by default — it's on by default only on the first Sunday of the month.", "You changed this." or "Set from the saved service.", the last two with **Use default**); **Show communion text** reveals the config's blocks read-only (headings, paragraphs, bold responses) and the caption (clarification 26). Custom elements render right after the outline item whose `anchors_after` holds their place (an unknown place reads as the end; clarification 6) as dashed cards with the "Custom" chip, inline Label, Text and Place, the "won't be printed" message for a blank label (the card is then titled "Custom element"; clarification 25), and ⋯ → **Remove**, which offers Undo in a toast ("Removed “{label}”.") through 3b's `useUndoToasts`, so it never outlives the step and is checked against the church. **Add custom element** opens the dialog (a bottom sheet below `md`): Label (required: "Label is required." and focus), Text (optional) and Place (first place by default); Add appends the element trimmed with a new id, closes, and scrolls to it; the fields are empty the next time. At 30 elements Add is disabled with "You can add up to 30 custom elements." No custom element has Generate (owner answer of 2026-09-30, F D17). T8's outline test gains the communion row (edited, 0).
+The rest of the outline. `CommunionCard` sits after the Second Hymn: its header is the switch with S's toggle label; the helper says why it is on or off ("On by default — {October 4, 2026} is the first Sunday of the month.", "Off by default — it's on by default only on the first Sunday of the month.", "You changed this." or "Set from the saved service.", the last two with **Use default**); **Show communion text** reveals the config's blocks read-only (headings, paragraphs, bold responses) and the caption (clarification 26). Custom elements render right after the outline item whose `anchors_after` holds their place (an unknown place reads as the end; clarification 6) as dashed cards with the "Custom" chip, inline Label, Text and Place, the "won't be printed" message for a blank label (the card is then titled "Custom element"; clarification 25), and ⋯ → **Remove**, which offers Undo in a toast ("Removed “{label}”.") through 3b's `useUndoToasts`, so it never outlives the step and is checked against the church. **Add custom element** opens the dialog (a bottom sheet below `md`): Label (required: "Label is required." and focus), Text (optional) and Place (first place by default); Add appends the element trimmed with a new id, closes, and scrolls to it; the fields are empty the next time; the sheet scrolls within 85 dvh on a phone. At 30 elements Add is disabled with "You can add up to 30 custom elements.", and Undo of a Remove refuses with that toast when another element has filled the place (clarification 36). After Remove, focus goes to the next card's heading, or to "Add custom element" when none follows (clarification 34). No custom element has Generate (owner answer of 2026-09-30, F D17). T8's outline test gains the communion row (edited, 0).
 
 **Files:**
 - Create: `frontend/src/components/builder/liturgy/communion-card.tsx`, `custom-element-card.tsx`, `add-custom-element-dialog.tsx` (in `frontend/src/components/builder/liturgy/`)
 - Modify: `frontend/src/components/builder/liturgy/liturgy-step.tsx` (the communion row, the custom elements, Add, Remove with Undo)
-- Test: `frontend/src/components/builder/liturgy/liturgy-step.test.tsx` (+7; T8's outline test edited, 0)
+- Test: `frontend/src/components/builder/liturgy/liturgy-step.test.tsx` (+9; T8's outline test edited, 0)
 
 **Interfaces:**
 - Consumes: `setCommunion`, `restoreCommunionDefault`, `addCustomElement`, `updateCustomElement`, `removeCustomElement`, `restoreCustomElement`, `normalizePlacement` (T2); `isFirstSundayOfMonth`, `formatServiceDate` (2b); `Dialog` (T7); `Select` with `items` (F §4.9 item 3), `Collapsible`, `useUndoToasts` and `UNDO_TOAST_MS` (3b `components/builder/hymns/use-undo-toasts.ts`).
 - Produces: `CommunionCard({communion})` (region named by the toggle label, id `communion`); `CustomElementCard({element, placements, limits, onRemove})` (id `custom-{id}`); `AddCustomElementDialog({open, onOpenChange, placements, limits, onAdd})`. Later users: T11 (the page), 5a (the Review links).
 
-Counts after this task: frontend **507 passed in 75 files**.
+Counts after this task: frontend **515 passed in 75 files**.
 
 - [ ] **Step 1 (agent): Check the starting point**
 
@@ -6246,7 +6255,7 @@ ls frontend/src/components/builder/liturgy | tr '\n' ' '; echo
 (cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
 ```
 
-**Expected:** nothing (or `?? .claude/`); `ai-bar.tsx liturgy-step.test.tsx liturgy-step.tsx outline-landmark.tsx section-card.tsx sermon-title-field.tsx use-still-working.ts`; ` Test Files  75 passed (75)`, `      Tests  500 passed (500)`.
+**Expected:** nothing (or `?? .claude/`); `ai-bar.tsx liturgy-step.test.tsx liturgy-step.tsx outline-landmark.tsx section-card.tsx sermon-title-field.tsx use-still-working.ts`; ` Test Files  75 passed (75)`, `      Tests  506 passed (506)`.
 
 - [ ] **Step 2 (agent): Write the failing tests**
 
@@ -7161,7 +7170,7 @@ for i in 1 2 3; do (cd frontend && npx vitest run src/components/builder/liturgy
 git status --short
 ```
 
-**Expected:** three times ` Test Files  1 passed (1)`, `      Tests  31 passed (31)` and no `FAIL`; the suite ` Test Files  75 passed (75)`, `      Tests  507 passed (507)`; `typecheck 0` and `lint 0`; ` M` for `liturgy-step.tsx` and `liturgy-step.test.tsx`, `??` for the three new files.
+**Expected:** three times ` Test Files  1 passed (1)`, `      Tests  36 passed (36)` and no `FAIL`; the suite ` Test Files  75 passed (75)`, `      Tests  515 passed (515)`; `typecheck 0` and `lint 0`; ` M` for `liturgy-step.tsx` and `liturgy-step.test.tsx`, `??` for the three new files.
 
 - [ ] **Step 6 (agent): Commit**
 
@@ -7173,7 +7182,7 @@ right after their place with inline label, text and place, a message for
 a blank label, and Remove with Undo; Add custom element opens a dialog
 (a bottom sheet on phones) that requires a label, trims, scrolls to the
 new card and opens empty next time; at most 30. No AI for them (F D17).
-Frontend 500 -> 507 tests in 75 files." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Frontend 506 -> 515 tests in 75 files." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
@@ -7194,7 +7203,7 @@ Slice 2's hand-off, as 3b did for Hymns: `SHIPPED_STEPS` gains `"liturgy"`, so t
 - Consumes: `liturgyCounts` (T2), `SECTION_LABELS` (T1), `useLiturgyGeneration().runs` (T6), `LiturgyStep` (T8-T10), 2b's shell.
 - Produces: `SHIPPED_STEPS = {"readings", "hymns", "liturgy"}`; `NeededItem.href?: string`; `LiturgySummaryBlock()`. Later users: 5a (Review reuses the rows and turns "review" on; its `missingItems` reuses the wording).
 
-Counts after this task: frontend **509 passed in 75 files**.
+Counts after this task: frontend **517 passed in 75 files**.
 
 - [ ] **Step 1 (agent): Check the starting point**
 
@@ -7204,7 +7213,7 @@ grep -n "export const SHIPPED_STEPS" frontend/src/lib/draft/steps.ts
 (cd frontend && npm test 2>&1 | grep -E "Test Files|Tests ")
 ```
 
-**Expected:** nothing (or `?? .claude/`); `34:export const SHIPPED_STEPS: ReadonlySet<StepId> = new Set<StepId>(["readings", "hymns"]);`; ` Test Files  75 passed (75)`, `      Tests  507 passed (507)`.
+**Expected:** nothing (or `?? .claude/`); `34:export const SHIPPED_STEPS: ReadonlySet<StepId> = new Set<StepId>(["readings", "hymns"]);`; ` Test Files  75 passed (75)`, `      Tests  515 passed (515)`.
 
 - [ ] **Step 2 (agent): Write the failing tests**
 
@@ -7869,7 +7878,7 @@ export default function LiturgyStepPage() {
 git status --short
 ```
 
-**Expected:** ` Test Files  16 passed (16)`, `      Tests  184 passed (184)`; the suite ` Test Files  75 passed (75)`, `      Tests  509 passed (509)`; `typecheck 0` and `lint 0`; ` M` for the nine modified files and `??` for `liturgy-summary-block.tsx`.
+**Expected:** ` Test Files  16 passed (16)`, `      Tests  189 passed (189)`; the suite ` Test Files  75 passed (75)`, `      Tests  517 passed (517)`; `typecheck 0` and `lint 0`; ` M` for the nine modified files and `??` for `liturgy-summary-block.tsx`.
 
 - [ ] **Step 6 (agent): Commit**
 
@@ -7881,7 +7890,7 @@ empty switched-on card (linking to its card) and a missing sermon title,
 and the summary's Liturgy block shows the sections ready, Writing n
 sections while the AI runs, communion and the custom elements. Only
 Review keeps Available soon.
-Frontend 507 -> 509 tests in 75 files." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Frontend 515 -> 517 tests in 75 files." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
@@ -7899,7 +7908,7 @@ S and F are what 5a, 6a and the reviewer slice will read, so they say what 4b bu
 - Consumes: the clarifications above and the code of T1-T11.
 - Produces: S and F as later slices read them; the checklist T14 runs from.
 
-Counts after this task: frontend **509 passed in 75 files**; backend **1183 passed, 11 skipped**.
+Counts after this task: frontend **517 passed in 75 files**; backend **1183 passed, 11 skipped**.
 
 - [ ] **Step 1 (agent): Check the starting point**
 
@@ -7947,7 +7956,7 @@ grep -c "^## Slice 4$" docs/manual-verification.md
 **with:**
 
 ```markdown
-- Client timeouts: `/liturgy/config` uses the default 20 s. `/liturgy/generate` uses 90 s (F §1.8), so `TIMEOUTS.liturgyGenerate = 90_000`. (4b plan, owner answer 2 of 2026-09-30: 100 s, which covers a slow sign-in on top of 4a's 85 s worst case; the client keeps per-route timeouts in `lib/api/timeouts.ts`'s `ENDPOINT_TIMEOUTS`, so the row is `"POST /liturgy/generate": 100_000`; F §1.8 is amended, and the reviewer's routes reuse the value.)
+- Client timeouts: `/liturgy/config` uses the default 20 s. `/liturgy/generate` uses 90 s (F §1.8), so `TIMEOUTS.liturgyGenerate = 90_000`. (4b plan, owner answer 2 of 2026-09-30: 100 s. The client's timer starts after it has the sign-in token, so the 15 s above 4a's 85 s worst case cover the server's sign-in key fetch (at most 5 s), network latency and the proxy; the client keeps per-route timeouts in `lib/api/timeouts.ts`'s `ENDPOINT_TIMEOUTS`, so the row is `"POST /liturgy/generate": 100_000`; F §1.8 is amended, and the reviewer's routes reuse the value.)
 ```
 
 **In `docs/superpowers/specs/2026-09-25-slice-4-liturgy-design.md`, replace:**
@@ -7970,7 +7979,8 @@ grep -c "^## Slice 4$" docs/manual-verification.md
 - **The default benediction** (Benediction and the church default): `freshDraft` fills the card from the profile's `default_benediction` ("Halverson" when missing); the draft store runs `applyLiturgyDefaults` on load, on every change and on replace, and on a profile refetch as an automatic change (stamped just after the current draft, like 2c's lectionary fill), so it never outranks another tab's edit. The communion rule moved into `lib/liturgy/defaults.ts`; `date-effects.ts` calls it.
 - **Names and files** (Frontend changes): components are kebab-case files under `src/components/builder/liturgy/` (`liturgy-step.tsx`, `section-card.tsx`, `ai-bar.tsx`, `outline-landmark.tsx`, `sermon-title-field.tsx`, `communion-card.tsx`, `custom-element-card.tsx`, `add-custom-element-dialog.tsx`, `liturgy-summary-block.tsx`), as 3b's are; `useChurchDefault` is `restoreChurchDefault` (React's lint reads a `use…` name as a hook); the labels and default switches live in `lib/liturgy/sections.ts`, pinned to `shared/liturgy_sections.json`; `generateSection` takes the built body; the provider exposes `runs`, `errors`, `undo`, `bulk`, `generate(keys, {aiAvailable, bulk})`, `cancel`, `cancelBulk`, `dismissError`, `setUndo`, `clearUndo`, `applyUndo`, and fetches nothing until asked. `components/ui/dialog.tsx` is rebuilt from the upstream shadcn source (the registry is blocked), as 2b, 2c and 3b did.
 - **Requests** (`request.ts`): a hymn id that is not a UUID goes as `null` (the API validates it as a UUID and would reject the whole request).
-- **Errors** (Per-card error messages): a cancel, a 401 and a lost church show nothing on the card (the app's handling acts); the 404's link reads "Go to Hymns"; while a retryable error shows, its "Try again" stands in for the card's button. A 429 stops the queue at once: the answer is handled before the next queued section starts.
+- **Errors** (Per-card error messages): a cancel, a 401 and a lost church show nothing on the card (the app's handling acts); the 404's link reads "Go to Hymns"; while a retryable error shows, its "Try again" stands in for the card's button. A 429 stops the queue at once: the answer is handled before the next queued section starts. The wait counts from the moment the 429 came, so leaving the step does not restart it, and "Generate empty sections" waits too. A bulk run's errors are announced politely, not as one alert per card.
+- **Runs and the service** (Generate and Regenerate step 6): the card is captured when the member asks (the click, or "Replace text"), and the stale rule also runs just before a queued section is sent, so text that became the member's while it waited (Undo, another tab) is never sent or replaced; a card's Undo line is hidden while it runs. "New service" (a new `created_at`) cancels every run silently and clears the cards' errors and Undo lines; a bulk run then ends with one toast, "The service changed, so the AI drafts were discarded.", and no "Wrote…" toast. A result racing that change still meets the per-result rule.
 - **Wording**: "Writing k of n…" counts the sections finished plus one; "Wrote 1 section." and the summary's "Writing 1 section…" are singular for one; a bulk run cancelled whole ends with no toast, and cancelled cards are not counted in "Wrote k of n sections."; the "Replaced with a new AI draft." line shows only when text was replaced. The step opens with the heading "Liturgy"; landmark rows read "First Hymn · {title}" (no number) and "First Reading · {reference} auto"; a custom element with a blank label is titled "Custom element".
 - **Still needed** (Builder shell): each empty switched-on card links to `/builder/liturgy#card-{key}`, the sermon row to `/builder/liturgy`; the card rows come first.
 - **Tests** (Testing → Frontend): the dom cases are in `components/builder/liturgy/liturgy-step.test.tsx` and `builder-shell.test.tsx`; `generation.test.tsx` holds the sermon-text cases; `sections.test.ts` pins the fresh-draft switches (S put that in `defaults.test.ts`).
@@ -7989,7 +7999,7 @@ grep -c "^## Slice 4$" docs/manual-verification.md
 
 ```markdown
 | §4.6, §4.7, §4.9 | *(2026-09-29, slice 3b plan)* `isPristine` also counts a chosen hymnal (owner answer 1), so "New service" asks after a hymn or a hymnal is chosen and the roll-forward keeps that draft's date; choosing the church's effective hymnal stores `null`. The Exclude switch and the AI's other ideas never count. Hymns ships (`SHIPPED_STEPS` holds "readings" and "hymns"): the step bar counts it, Review lists each empty slot, and the summary lists the three hymns. The generic long-list picker is `components/app/search-combobox.tsx` (slice 1's time-zone picker uses the Combobox directly), and the kit gains `switch`. | 3b |
-| §1.8 | *(2026-09-30, slice 4b plan, owner answer 2)* The client timeout for `POST /liturgy/generate` is 100 000 ms, not 90 000: a section answers within 85 s (4a's 80 s deadline plus a last connect), and 100 s also covers a slow sign-in before the request is sent. The client keeps it in `lib/api/timeouts.ts`'s `ENDPOINT_TIMEOUTS`. The service reviewer's `POST /liturgy/review` and `/liturgy/revise` (the slice after 4b) reuse 100 000. | 4b |
+| §1.8 | *(2026-09-30, slice 4b plan, owner answer 2)* The client timeout for `POST /liturgy/generate` is 100 000 ms, not 90 000: a section answers within 85 s (4a's 80 s deadline plus a last connect), and the client's timer starts only after `getAccessToken()`, so the other 15 s cover the server's sign-in key fetch (at most 5 s, `JWKS_FETCH_TIMEOUT_S`), network latency and the proxy, not the client's own sign-in. The client keeps it in `lib/api/timeouts.ts`'s `ENDPOINT_TIMEOUTS`. The service reviewer's `POST /liturgy/review` and `/liturgy/revise` (the slice after 4b) reuse 100 000. | 4b |
 | §4.6, §4.7 | *(2026-09-30, slice 4b plan, owner answer 1)* On the Liturgy step `isPristine` counts everything that ends up in the service: card text, a card switched away from its default, communion set by the user, the sermon title and custom elements; text or a title blank after trimming counts as nothing, and a Benediction following the church default never counts. A fresh draft's Benediction holds the church's `default_benediction`, and the draft store keeps untouched cards on the defaults (automatic changes, never outranking another tab's edit). Liturgy ships (`SHIPPED_STEPS` holds "readings", "hymns" and "liturgy"): the step bar counts it, Review lists each empty switched-on card and a missing sermon title, and the summary shows the liturgy counts. The kit gains `dialog`. | 4b |
 
 ```
@@ -8057,7 +8067,7 @@ time, so record what the page shows, never an email address or a church id.
 - [ ] **5.** Refresh mid-edit: the text is kept. Switch church and back: each church keeps its own liturgy.
 - [ ] **6.** Communion is on for a first-Sunday date, off after changing the date, and stays as set after a toggle; **Use default** follows the date again. Its text shows under **Show communion text**.
 - [ ] (owner, after 4b) **7.** Add, edit, move and remove (then **Undo**) a custom element. It shows right after its place.
-- [ ] (owner, after 4b) **8.** At 375 px: no sideways scroll; the keyboard does not cover the focused text; the footer (Back, Next) hides while typing and comes back after; touch targets are at least 44 px. Switching a section off shows "Off — not in the service. Any text is kept." and switching it on shows the text again.
+- [ ] (owner, after 4b) **8.** At 375 px: no sideways scroll; the keyboard does not cover the focused text; the footer (Back, Next) hides while typing and comes back after; touch targets are at least 44 px. The Prayers of the People card's header fits: its switch, title and ⋯ on one line, and "Pastor's copy only" with the status chip (for example "Empty") on the line below. Switching a section off shows "Off — not in the service. Any text is kept." and switching it on shows the text again.
 - [ ] **9.** Regression: sign in, switch church, open every shipped nav item; the Streamlit smoke check on https://liturgy-frozen.streamlit.app: load the church, load an archived service, open Settings (F §6.3).
 - [ ] (owner, after 4b) **10.** **New service** asks "Start a new service?" after a card's text, a section switched on or off, a sermon title, a communion toggle or a custom element; on a fresh draft whose Benediction still shows the church default it does not ask.
 - [ ] **11.** Switch on Prayers of the People and tap **Generate**: it fills (about 5 s in the 4a check; the page waits up to 100 s).
@@ -8123,7 +8133,7 @@ Below, `<scratch>` is the absolute path of the session's scratchpad directory, a
 
 **Interfaces:**
 - Consumes: everything from T1-T12, in particular each task's commit subject (Step 8 reads them from this plan between `### Task 1:` and `### Task 13:`), the cumulative counts (Baselines and counts), `SHIPPED_STEPS` (T11), and CI (`.github/workflows/ci.yml`, unchanged: `backend`, `backend-postgres`, `frontend` with lint, typecheck, `API types match the OpenAPI snapshot (F §5.4)`, test and build).
-- Produces: PR `<N>` (`claude/slice-2-plan-4q33le` → `main`), titled `Slice 4b: the Liturgy step`, not a draft after Step 13, CI green on the branch head, its body holding the line `Tests: frontend 442 → 509 in 64 → 75 files; backend 1183 → 1183 passed, 11 → 11 skipped` and ending with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and the session link. Later user: T14.
+- Produces: PR `<N>` (`claude/slice-2-plan-4q33le` → `main`), titled `Slice 4b: the Liturgy step`, not a draft after Step 13, CI green on the branch head, its body holding the line `Tests: frontend 442 → 517 in 64 → 75 files; backend 1183 → 1183 passed, 11 → 11 skipped` and ending with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and the session link. Later user: T14.
 
 - [ ] **Step 1 (agent): Bring the branch up to date with `origin/main`**
 
@@ -8164,7 +8174,7 @@ for d in 8 400; do echo "clock +$d days"; (cd frontend && WSB_CLOCK_SHIFT_DAYS=$
 (cd frontend && npm run typecheck >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")
 ```
 
-**Expected:** three times ` Test Files  75 passed (75)` and `      Tests  509 passed (509)` (baseline 442 in 64; after T1-T11: 446, 455, 464, 468, 471, 474, 476, 487, 500, 507, 509) and no `FAIL`; then `clock +8 days` and `clock +400 days`, each followed by the same two lines and no `FAIL`; `0`; `typecheck 0` and `lint 0`. Any other number: find the task whose count drifted. A run that fails even once is a failure (Step 14): make the test deterministic (fake only `Date`, set to `DRAFT_NOW`; await the UI with `findBy`/`waitFor`) rather than retrying it.
+**Expected:** three times ` Test Files  75 passed (75)` and `      Tests  517 passed (517)` (baseline 442 in 64; after T1-T11: 446, 455, 464, 468, 471, 476, 479, 490, 506, 515, 517) and no `FAIL`; then `clock +8 days` and `clock +400 days`, each followed by the same two lines and no `FAIL`; `0`; `typecheck 0` and `lint 0`. Any other number: find the task whose count drifted. A run that fails even once is a failure (Step 14): make the test deterministic (fake only `Date`, set to `DRAFT_NOW`; await the UI with `findBy`/`waitFor`) rather than retrying it.
 
 - [ ] **Step 3 (agent): Run the backend suite and the Postgres marker count**
 
@@ -8336,7 +8346,7 @@ git rev-list --count origin/main..HEAD
 
 Send the owner exactly this, with `<count>` filled in, and wait for a clear yes:
 
-> Slice 4b is verified on this machine: 509 frontend tests in 75 files pass three runs in a row and with the clock moved 8 and 400 days ahead (442 in 64 before); typecheck, lint and the production build are clean; the backend is unchanged at 1183 passed, 11 skipped; the API types did not change; the checks are clean (every page is a client component, no link to the old app, the screens use the query hooks, no new browser storage, Date & readings, Hymns and Liturgy are the steps switched on, the AI waits up to 100 seconds); the changed files (61) and commits (<count>) are as planned, and every commit is already backed up on the branch. May I open the pull request as a **draft** titled "Slice 4b: the Liturgy step", so the checks run? I will come back with the results and ask again before marking it ready. Merging stays with you (Task 14).
+> Slice 4b is verified on this machine: 517 frontend tests in 75 files pass three runs in a row and with the clock moved 8 and 400 days ahead (442 in 64 before); typecheck, lint and the production build are clean; the backend is unchanged at 1183 passed, 11 skipped; the API types did not change; the checks are clean (every page is a client component, no link to the old app, the screens use the query hooks, no new browser storage, Date & readings, Hymns and Liturgy are the steps switched on, the AI waits up to 100 seconds); the changed files (61) and commits (<count>) are as planned, and every commit is already backed up on the branch. May I open the pull request as a **draft** titled "Slice 4b: the Liturgy step", so the checks run? I will come back with the results and ask again before marking it ready. Merging stays with you (Task 14).
 
 Add one line per note from Steps 1-8 (a merge from `main`, a skipped font download, a `Fix:` commit, how the dialog was made). A no leaves the branch as it is.
 
@@ -8354,7 +8364,7 @@ The step
 
 Owner answers (2026-09-30): what counts as unsaved work (1); the AI waits up to 100 seconds, recorded in F §1.8 (2); the footer hides while typing on a phone (3; already built in 2b, now tested here); a guided phone check after the merge (4). @@DIALOG_LINE@@
 
-Tests: frontend 442 → 509 in 64 → 75 files; backend 1183 → 1183 passed, 11 → 11 skipped
+Tests: frontend 442 → 517 in 64 → 75 files; backend 1183 → 1183 passed, 11 → 11 skipped
 
 After merge (Task 14): a guided check on the owner's phone (six steps) and a quick look on a computer, then a short "Slice 4b record" in docs/ops-runbook.md.
 
@@ -8368,7 +8378,7 @@ Replace `@@DIALOG_LINE@@` with `The dialog is generated from the base-nova regis
 
 ```bash
 grep -c '@@' "<scratch>/slice4b-pr-body.md"
-grep -cx 'Tests: frontend 442 → 509 in 64 → 75 files; backend 1183 → 1183 passed, 11 → 11 skipped' "<scratch>/slice4b-pr-body.md"
+grep -cx 'Tests: frontend 442 → 517 in 64 → 75 files; backend 1183 → 1183 passed, 11 → 11 skipped' "<scratch>/slice4b-pr-body.md"
 git fetch origin && test "$(git rev-list --count HEAD..origin/main)" = 0 && test "$(git rev-list --count origin/claude/slice-2-plan-4q33le..HEAD)" = 0 && echo "branch is current and backed up"
 gh pr create -R bbrown62450/church --draft --base main --head claude/slice-2-plan-4q33le \
   --title "Slice 4b: the Liturgy step" \
@@ -8399,13 +8409,13 @@ RUN=$(gh run list -R bbrown62450/church --workflow ci.yml --branch claude/slice-
 RUN=$(gh run list -R bbrown62450/church --workflow ci.yml --branch claude/slice-2-plan-4q33le --commit "$(git rev-parse HEAD)" --limit 1 --json databaseId --jq '.[0].databaseId'); JOB=$(gh run view "$RUN" -R bbrown62450/church --json jobs --jq '.jobs[] | select(.name == "backend-postgres") | .databaseId'); gh run view -R bbrown62450/church --job "$JOB" --log | grep -E "pg_smoke: OK|[0-9]+ (passed|failed)"
 ```
 
-**Expected:** `run <id>`; `backend: success`, `backend-postgres: success`, `frontend: success`; frontend `Test Files  75 passed (75)`, `Tests  509 passed (509)`, `✓ Compiled successfully` and the five `/builder` route lines; backend `1183 passed, 11 skipped in …s`; backend-postgres `pg_smoke: OK` and `11 passed, 1183 deselected` (with the one warning the 4a run showed). If a required job failed on or after 2026-10-19, first check the runner image (`Image: ubuntu-24.04` expected; GitHub moves `ubuntu-latest` then) and report a setup failure on a new image to the owner before changing any 4b file.
+**Expected:** `run <id>`; `backend: success`, `backend-postgres: success`, `frontend: success`; frontend `Test Files  75 passed (75)`, `Tests  517 passed (517)`, `✓ Compiled successfully` and the five `/builder` route lines; backend `1183 passed, 11 skipped in …s`; backend-postgres `pg_smoke: OK` and `11 passed, 1183 deselected` (with the one warning the 4a run showed). If a required job failed on or after 2026-10-19, first check the runner image (`Image: ubuntu-24.04` expected; GitHub moves `ubuntu-latest` then) and report a setup failure on a new image to the owner before changing any 4b file.
 
 - [ ] **Step 13 (agent → OWNER): Report CI and ask to mark the PR ready**
 
 Send exactly this, with the values filled in, and wait for a clear yes:
 
-> PR #<N> (<url>) is green (run <run id>): 509 frontend tests in 75 files, the build is fine; the backend is at 1183 passed, 11 skipped; the Postgres job is clean; the Vercel preview built. May I mark it ready for review? Merging stays with you (Task 14).
+> PR #<N> (<url>) is green (run <run id>): 517 frontend tests in 75 files, the build is fine; the backend is at 1183 passed, 11 skipped; the Postgres job is clean; the Vercel preview built. May I mark it ready for review? Merging stays with you (Task 14).
 
 On the yes:
 
@@ -8439,7 +8449,7 @@ Read the failure (for CI: `gh run view <run-id> -R bbrown62450/church --log-fail
 
 For each fix: change only the owning task's files; rerun Steps 2-8; commit with the subject `Fix: <what> (Task <n>, slice 4b final verification)` and both trailer lines; have that task re-reviewed; before Step 10, ask the controller for the backup push; after it, the branch is the PR's, so ask the owner first ("May I push the fix for <what> to PR #<N>?") and on the yes run `git push origin claude/slice-2-plan-4q33le`, then repeat Steps 11-12 and send Step 13's message with the new run. An infrastructure failure with no test output gets one `gh run rerun <run-id> -R bbrown62450/church --failed` first.
 
-Expected counts after this task: frontend `509 passed` in 75 files (CI the same); backend `1183 passed, 11 skipped` (CI `backend-postgres`: `11 passed, 1183 deselected`). No commit unless Step 14 needed a fix.
+Expected counts after this task: frontend `517 passed` in 75 files (CI the same); backend `1183 passed, 11 skipped` (CI `backend-postgres`: `11 passed, 1183 deselected`). No commit unless Step 14 needed a fix.
 
 ### Task 14: Merge and after (OWNER + agent): the merge, the deploy, a guided check on the phone and a look on a computer, the slice 4b record (S Manual checklist, AC11-AC18; F §5.5; owner answers 1, 2, 4)
 
@@ -8466,7 +8476,7 @@ git rev-parse HEAD
 git rev-list --count HEAD..origin/main
 ```
 
-**Expected:** `OPEN draft=false MERGEABLE CLEAN <sha>` with `<sha>` equal to `git rev-parse HEAD`; `0`. If `main` moved (count not `0`, or `BEHIND`): merge it as in T13 Step 1, rerun T13 Steps 2-3 (`509 passed` in 75 files, plus any tests the merge brought; `1183 passed, 11 skipped`), push with the owner's yes, wait for green checks, and run this step again. `BLOCKED`: a required check is not green; fix it (T13 Step 14). Never merge with `--admin`.
+**Expected:** `OPEN draft=false MERGEABLE CLEAN <sha>` with `<sha>` equal to `git rev-parse HEAD`; `0`. If `main` moved (count not `0`, or `BEHIND`): merge it as in T13 Step 1, rerun T13 Steps 2-3 (`517 passed` in 75 files, plus any tests the merge brought; `1183 passed, 11 skipped`), push with the owner's yes, wait for green checks, and run this step again. `BLOCKED`: a required check is not green; fix it (T13 Step 14). Never merge with `--admin`.
 
 - [ ] **Step 2 (agent → OWNER): Ask to merge, then merge**
 
@@ -8642,7 +8652,7 @@ gh pr checks claude/revert-slice-4b -R bbrown62450/church --watch
 
 **Expected:** Vitest `Test Files  64 passed (64)`, `Tests  442 passed (442)` (if anything else merged after 4b, it differs by exactly those tests); `1183 passed, 11 skipped`; every check passes. Merge on the owner's yes, then the owner checks that the site signs in and shows the builder with Liturgy "Available soon". Record the revert as a row of the slice 4b record (or its own records PR if Step 12 already merged).
 
-Expected counts after this task: frontend `509 passed` in 75 files on `main`; backend `1183 passed, 11 skipped` (CI `backend-postgres`: `11 passed, 1183 deselected`). The records PR adds no test.
+Expected counts after this task: frontend `517 passed` in 75 files on `main`; backend `1183 passed, 11 skipped` (CI `backend-postgres`: `11 passed, 1183 deselected`). The records PR adds no test.
 
 ---
 
@@ -8675,7 +8685,7 @@ The plan was written in one session, building each task's code in a throwaway wo
 **Replay of the finished plan (2026-10-01, before the build):**
 A container restart interrupted the first replay, so the plan was replayed again from scratch on a fresh detached worktree of `4dfed3b` (`npm ci` in its `frontend`; the repo's `.venv` for Python), applying each task's directives and running each task's commands exactly as written, blocks copied by line number without their fence lines. Results:
 - Baselines: frontend `442 passed` in 64 files, typecheck 0, lint 0; backend `1183 passed, 11 skipped`.
-- All 159 file directives (`Create` and `In …, replace`) applied; every replace anchor occurred exactly once.
+- All 160 file directives (`Create` and `In …, replace`) applied; every replace anchor occurred exactly once.
 - Every "see it fail" output matched as quoted (T1-T11; the absolute path in place of `<repo>`), and every cumulative count matched the table: 446/65, 455/68, 464/71, 468/72, 471/72, 474/73, 476/74, 487/75, 500/75, 507/75, 509/75. Each task's focused run matched its stated file and test totals, and typecheck and lint were 0 after every task. T9 and T10 passed three runs in a row (24 and 31 tests; the step's file takes about 17 s). Each commit's file count matched.
 - T7: the registry still answers `Request to https://ui.shadcn.com/r/styles/base-nova/dialog.json failed`; the pinned upstream `dialog.tsx` still hashes to `aba6df6c…66adff`.
 - T12: the checks printed `4`, `6`, `11`, `6`, `89 passed`, `1183 passed, 11 skipped`, `2` and ` 4 files changed, 52 insertions(+), 10 deletions(-)`.
@@ -8697,7 +8707,7 @@ S = `docs/superpowers/specs/2026-09-25-slice-4-liturgy-design.md`; F = foundatio
 | 14 | The Benediction and communion follow their defaults while untouched, stop once changed, and can be restored | T2 (`applyLiturgyDefaults`), T5 (the store and provider), T8 (the Benediction), T10 (communion) |
 | 15 | Custom elements: a label required, after their anchor, edited, moved and removed with Undo, at most 30, separate per church | T2, T10 |
 | 16 | The step is on in the shell: `SHIPPED_STEPS`, the step bar, the summary block, Still needed | T11 |
-| 17 | A run finishes on another step; a replaced draft or another tab's edit drops the result with its toast; a Benediction following the default takes it | T2 (`staleVerdict`), T6, T9 (the stale and navigation tests) |
+| 17 | A run finishes on another step; a replaced draft or another tab's edit drops the result with its toast; a Benediction following the default takes it | T2 (`staleVerdict`), T6 (the card captured at the click and checked before sending; a new service cancels the runs, clarifications 32, 33), T9 (the stale, New service and navigation tests) |
 | 18 | Production at 375 px, the keyboard, 6 sections in about a minute | T8 (the footer test), T12 (checklist 8), T14 Steps 4-9 (deployed) |
 | 20 | The client sends the effective NT reading's passage, never ESV, one fetch per batch, never blocking | T3 (`sermonSource`, `sermonText`), T4 (`passageQuery`), T6 (`generation.test.tsx`) |
 
@@ -8740,3 +8750,6 @@ The owner's answers of 2026-09-30 (1-4, "all recommended") are binding and alrea
 4. **Errors on a card** (clarifications 8, 22): a problem that trying again can fix shows **Try again** in place of the card's button; one it cannot fix (AI not set up, a prompt problem, a missing hymn) keeps Generate or Regenerate under the message; being signed out or losing access to the church shows nothing on the card, because the app already handles it. Recommended: accept.
 5. **Review's "Still needed"** (clarification 27): each empty section's line opens its card; "No sermon title — Add one" opens the Liturgy step; the section lines come first. Recommended: as written.
 6. **The manual checklist's count** (T12): with a typed Call to Worship and the church's default Benediction, "Generate empty sections" writes 5 sections, not the 6 the spec's check says. Recommended: accept (the spec's number assumed the Benediction was empty).
+7. **"New service" while the AI is writing** (clarification 32, from the plan review): every section still being written is dropped quietly, error messages and Undo lines go, and a "Generate empty sections" run ends with one message, "The service changed, so the AI drafts were discarded." Recommended: accept.
+8. **The card header on a phone** (clarification 35, from the plan review): below about 640 px the chips ("Pastor's copy only", "Empty") move to their own line under the section's name, so nothing is squeezed at 375 px. Recommended: accept.
+9. **Clearing the church's default Benediction** (clarification 37, from the plan review): clearing it does not make "New service" ask, since a new service brings the default back. Recommended: leave as is.
