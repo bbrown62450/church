@@ -90,7 +90,7 @@ describe("stepStatus (F §4.7)", () => {
     expect(stepStatus(oneHymn, "hymns", ALL)).toEqual({ kind: "incomplete", done: 1, total: 3 });
     expect(stepStatus(withCard("call_to_worship", { text: "Come" }), "liturgy", ALL)).toEqual({
       kind: "incomplete",
-      done: 1,
+      done: 2, // and the Benediction, following the church default (slice 4b)
       total: 7,
     });
   });

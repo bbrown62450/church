@@ -27,6 +27,19 @@ function Probe() {
   );
 }
 
+/** The Benediction card and the latest draft `peek` returns, for the liturgy defaults (slice 4b). */
+function BenedictionProbe() {
+  const { draft, peek } = useDraft();
+  return (
+    <div>
+      <p>Benediction: {draft.liturgy.cards.benediction.text || "empty"}</p>
+      <button type="button" onClick={() => window.alert(peek().liturgy.cards.benediction.text)}>
+        Peek
+      </button>
+    </div>
+  );
+}
+
 function renderProbe() {
   return render(
     <DraftProvider userId={USER_ID} church={GRACE}>
@@ -59,6 +72,32 @@ describe("DraftProvider and useDraft (F §4.6 Persistence)", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
+  });
+
+  it("fills the Benediction from the church profile, follows a new default, and peek reads the latest draft (slice 4b)", () => {
+    window.localStorage.setItem(KEY, JSON.stringify(testDraft()));
+    const alert = vi.spyOn(window, "alert").mockImplementation(() => {});
+    const view = render(
+      <DraftProvider userId={USER_ID} church={churchProfile({ default_benediction: "Go in peace." })}>
+        <BenedictionProbe />
+      </DraftProvider>,
+    );
+    expect(screen.getByText("Benediction: Go in peace.")).toBeInTheDocument();
+    view.rerender(
+      <DraftProvider userId={USER_ID} church={churchProfile({ default_benediction: "" })}>
+        <BenedictionProbe />
+      </DraftProvider>,
+    );
+    expect(screen.getByText("Benediction: empty")).toBeInTheDocument();
+    act(() => screen.getByRole("button", { name: "Peek" }).click());
+    expect(alert).toHaveBeenCalledWith("");
+    // An older API without the field: the fallback.
+    view.rerender(
+      <DraftProvider userId={USER_ID} church={{ id: GRACE.id, timezone: GRACE.timezone }}>
+        <BenedictionProbe />
+      </DraftProvider>,
+    );
+    expect(screen.getByText("Benediction: Halverson")).toBeInTheDocument();
   });
 
   it("useDraft throws outside the provider", () => {

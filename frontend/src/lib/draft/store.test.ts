@@ -12,7 +12,7 @@ import {
   setTranslation,
   shouldAutoApply,
 } from "./readings";
-import { corruptDraftKey, draftKey, type DraftV1 } from "./schema";
+import { corruptDraftKey, draftKey, freshDraft, type DraftV1 } from "./schema";
 import { DraftStore, WRITE_DELAY_MS, type DraftNotice, type DraftStorage } from "./store";
 
 const GRACE = churchProfile();
@@ -199,6 +199,54 @@ describe("DraftStore roll-forward and the liturgy step (owner answer 1, 2026-09-
       makeStore(memoryStorage({ [KEY]: JSON.stringify(d) }).storage, tenDaysLater.now).store.getSnapshot().draft;
     expect(load(card("prayers_of_the_people", { enabled: true })).readings.date_iso).toBe("2026-10-04");
     expect(load(card("benediction", { text: "Go in peace.", origin: "default" })).readings.date_iso).toBe("2026-10-11");
+  });
+});
+
+describe("DraftStore and the liturgy defaults (slice 4 spec, Draft store integration)", () => {
+  function defaultsStore(storage: DraftStorage, now = clock().now) {
+    return new DraftStore({ userId: USER_ID, church: GRACE, storage, now, liturgyDefaults: { defaultBenediction: "Halverson" } });
+  }
+
+  it("fills a fresh draft's Benediction with the church default and follows a new default until the card is edited", () => {
+    const { storage, data } = memoryStorage();
+    const t = clock();
+    const store = defaultsStore(storage, t.now);
+    store.start();
+    expect(store.getSnapshot().draft.liturgy.cards.benediction).toEqual({ enabled: true, text: "Halverson", origin: "default" });
+    vi.advanceTimersByTime(WRITE_DELAY_MS);
+    expect(stored(data).liturgy.cards.benediction.text).toBe("Halverson");
+
+    // An admin changes the default (6a) and the profile refetches: an automatic change, 1 ms after the draft.
+    const before = store.getSnapshot().draft.updated_at;
+    t.advance(60_000);
+    store.setLiturgyDefaults({ defaultBenediction: "The Lord bless you and keep you." });
+    const followed = store.getSnapshot().draft;
+    expect(followed.liturgy.cards.benediction.text).toBe("The Lord bless you and keep you.");
+    expect(followed.updated_at).toBe(new Date(Date.parse(before) + 1).toISOString());
+    store.setLiturgyDefaults({ defaultBenediction: "The Lord bless you and keep you." });
+    expect(store.getSnapshot().draft).toBe(followed); // the same default: nothing to do
+
+    // Every change keeps the defaults: New service's fresh draft gets the default too.
+    store.update((d) => ({ ...d, liturgy: { ...d.liturgy, cards: { ...d.liturgy.cards, benediction: { enabled: true, text: "Go in peace.", origin: "typed" } } } }));
+    store.setLiturgyDefaults({ defaultBenediction: "Halverson" });
+    expect(store.getSnapshot().draft.liturgy.cards.benediction.text).toBe("Go in peace.");
+    store.replace(freshDraft({ church: GRACE, user: { id: USER_ID }, now: t.now() }));
+    expect(store.getSnapshot().draft.liturgy.cards.benediction).toEqual({ enabled: true, text: "Halverson", origin: "default" });
+  });
+
+  it("loads a stored draft with today's default and the date's communion, stamped just after the stored draft", () => {
+    const old = testDraft((d) => ({
+      ...d,
+      updated_at: "2026-09-29T15:00:00.000Z",
+      liturgy: { ...d.liturgy, include_communion: false }, // stored before 4b: the rule says on for October 4
+    }));
+    const { storage } = memoryStorage({ [KEY]: JSON.stringify(old) });
+    const draft = defaultsStore(storage).getSnapshot().draft;
+    expect(draft.liturgy.cards.benediction.text).toBe("Halverson");
+    expect(draft.liturgy.include_communion).toBe(true);
+    expect(draft.updated_at).toBe("2026-09-29T15:00:00.001Z");
+    // Without defaults (slice 2's tests), the store changes nothing.
+    expect(makeStore(memoryStorage({ [KEY]: JSON.stringify(old) }).storage).store.getSnapshot().draft).toEqual(old);
   });
 });
 
