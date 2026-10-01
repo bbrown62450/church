@@ -14,7 +14,8 @@
  * The church profile is already loaded by the `(church)` layout; until the
  * query has data (tests, a cold cache) a step-shaped skeleton shows.
  * `<LectionarySync>` looks up the draft's date and fills the readings on
- * every step (slice 2c).
+ * every step (slice 2c). `<LiturgyGenerationProvider>` holds the Liturgy
+ * step's AI runs, so they keep going on the other steps (slice 4b).
  */
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
@@ -24,6 +25,7 @@ import { useChurch } from "@/lib/church-context";
 import { DraftProvider, useDraft } from "@/lib/draft/context";
 import type { DraftChurch } from "@/lib/draft/schema";
 import { stepFromPath } from "@/lib/draft/steps";
+import { LiturgyGenerationProvider } from "@/lib/liturgy/generation";
 import { useMeContext } from "@/lib/me-context";
 import { useChurchProfile } from "@/lib/queries/church";
 
@@ -42,9 +44,11 @@ export function BuilderShell({ children }: { children: ReactNode }) {
   if (!profile.data) return <BuilderSkeleton />;
   return (
     <DraftProvider key={`${me.user.id}:${church.id}`} userId={me.user.id} church={profile.data}>
-      <LectionarySync>
-        <BuilderFrame church={profile.data}>{children}</BuilderFrame>
-      </LectionarySync>
+      <LiturgyGenerationProvider church={profile.data}>
+        <LectionarySync>
+          <BuilderFrame church={profile.data}>{children}</BuilderFrame>
+        </LectionarySync>
+      </LiturgyGenerationProvider>
     </DraftProvider>
   );
 }
