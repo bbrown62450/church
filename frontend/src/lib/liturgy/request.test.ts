@@ -12,7 +12,16 @@ import { editScriptureLines, setPick, setTranslation } from "@/lib/draft/reading
 import type { DraftV1, HymnPick } from "@/lib/draft/schema";
 import { hymnId, testDraft, translations } from "@/test/fixtures";
 
-import { buildGenerateRequest, MAX_SERMON_TEXT, sermonSource, sermonText } from "./request";
+import { editCardText } from "./cards";
+import {
+  buildGenerateRequest,
+  buildReviewRequest,
+  buildReviseRequest,
+  MAX_SERMON_TEXT,
+  reviewTargets,
+  sermonSource,
+  sermonText,
+} from "./request";
 
 const OCT_4 = ["Isaiah 5:1-7", "Psalm 80:7-15", "Philippians 3:4b-14", "Matthew 21:33-46"];
 
@@ -109,5 +118,53 @@ describe("sermonSource (S Sermon text)", () => {
     // ESV dropped from the server (no key): the church's own translation, and never ESV text.
     const esv = setTranslation(withReadings(OCT_4), "esv", "kjv");
     expect(sermonSource(esv, church("kjv"), translations({ esv_available: false, items: offered.items.slice(0, 2) }))?.translation).toBe("kjv");
+  });
+});
+
+describe("buildReviewRequest and buildReviseRequest (the service reviewer, R API)", () => {
+  function withCard(d: DraftV1, key: keyof DraftV1["liturgy"]["cards"], patch: Partial<DraftV1["liturgy"]["cards"]["benediction"]>): DraftV1 {
+    return { ...d, liturgy: { ...d.liturgy, cards: { ...d.liturgy.cards, [key]: { ...d.liturgy.cards[key], ...patch } } } };
+  }
+
+  it("sends every switched-on card with text, in section order, with its origin, and generation's context", () => {
+    let d = withReadings([" Isaiah 5:1-7 ", "", "Matthew 21:33-46"], ` ${"o".repeat(305)} `);
+    d = withCard(d, "benediction", { text: "Go in peace.", origin: "default" });
+    d = editCardText(d, "call_to_worship", "Leader: Come!");
+    d = withCard(d, "opening_prayer", { text: "   ", origin: "empty" });                       // blank: not sent
+    d = withCard(d, "prayer_of_confession", { text: "Merciful God", origin: "archive", enabled: false }); // off: not sent
+    d = withCard(d, "prayers_of_the_people", { text: "x".repeat(20_005), origin: "ai", enabled: true });
+    d = withCard(d, "assurance", { text: "Leader: Friends,", origin: "empty" });             // defensive: never "empty"
+    const keys = reviewTargets(d);
+    expect(keys).toEqual(["call_to_worship", "assurance", "prayers_of_the_people", "benediction"]);
+    const sermon = { ref: "Matthew 21:33-46", text: "Listen to another parable." };
+    const body = buildReviewRequest(d, keys, sermon);
+    expect(body).toEqual({
+      occasion: "o".repeat(300),
+      scriptures: ["Isaiah 5:1-7", "Matthew 21:33-46"],
+      cards: [
+        { section: "call_to_worship", origin: "typed", text: "Leader: Come!" },
+        { section: "assurance", origin: "typed", text: "Leader: Friends," },
+        { section: "prayers_of_the_people", origin: "ai", text: "x".repeat(20_000) },
+        { section: "benediction", origin: "default", text: "Go in peace." },
+      ],
+      sermon_text: sermon,
+    });
+    const generate = buildGenerateRequest(d, "opening_prayer", sermon);
+    expect([body.occasion, body.scriptures, body.sermon_text]).toEqual([generate.occasion, generate.scriptures, generate.sermon_text]);
+    expect(buildReviewRequest(d, keys, null)).not.toHaveProperty("sermon_text");
+  });
+
+  it("sends one card's text and its remaining notes to revise, with the same context", () => {
+    const d = withCard(withReadings(OCT_4), "opening_prayer", { text: "Gracious God, as we journey, hear us.", origin: "ai" });
+    const notes = ['Stock phrase "as we journey". Say it more naturally.', "Long.", "Third.", "Fourth."];
+    expect(buildReviseRequest(d, "opening_prayer", notes, null)).toEqual({
+      section: "opening_prayer",
+      text: "Gracious God, as we journey, hear us.",
+      notes: notes.slice(0, 3),
+      occasion: "Nineteenth Sunday after Pentecost",
+      scriptures: OCT_4,
+    });
+    const sermon = { ref: "Philippians 3:4b-14", text: "Yet whatever gains I had…" };
+    expect(buildReviseRequest(d, "opening_prayer", notes, sermon).sermon_text).toEqual(sermon);
   });
 });

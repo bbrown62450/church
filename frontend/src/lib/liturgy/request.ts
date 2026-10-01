@@ -12,10 +12,23 @@
  *   whole request) goes as `null`, so the pick's own title is used.
  * - `sermon_text`: the effective NT reading's passage, from `sermonSource`
  *   and the batch's one passage fetch (T6); left out when there is none.
+ *
+ * The service reviewer's bodies (`buildReviewRequest`, `buildReviseRequest`)
+ * carry the same occasion, readings and resolved sermon text.
  */
-import type { ChurchProfile, GenerateLiturgyBody, HymnRef, Passage, SermonText, Translations } from "@/lib/api/types";
+import type {
+  ChurchProfile,
+  GenerateLiturgyBody,
+  HymnRef,
+  Passage,
+  ReviewBody,
+  ReviewCardBody,
+  ReviseBody,
+  SermonText,
+  Translations,
+} from "@/lib/api/types";
 import { effectivePicks, effectiveTranslation } from "@/lib/draft/readings";
-import type { DraftV1, HymnPick, SectionKey } from "@/lib/draft/schema";
+import { SECTION_KEYS, type DraftV1, type HymnPick, type SectionKey } from "@/lib/draft/schema";
 import { cleanRefs, clipChars, MAX_REF_LENGTH, MAX_REFS } from "@/lib/hymns/match-request";
 import { passageText } from "@/lib/queries/passages";
 
@@ -23,6 +36,7 @@ export const MAX_OCCASION = 300;
 export const MAX_HYMN_TITLE = 300;
 export const MAX_HYMNAL = 20;
 export const MAX_SERMON_TEXT = 20_000;
+export const MAX_CARD_TEXT = 20_000;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -37,12 +51,19 @@ function hymnRef(pick: HymnPick | null): HymnRef | null {
   };
 }
 
-export function buildGenerateRequest(draft: DraftV1, section: SectionKey, sermon: SermonText | null): GenerateLiturgyBody {
+/** The occasion and readings every liturgy request carries, within the ServiceDraft limits. */
+function readingsContext(draft: DraftV1): { occasion: string; scriptures: string[] } {
   const r = draft.readings;
-  const slots = draft.hymns.slots;
-  const body: GenerateLiturgyBody = {
+  return {
     occasion: clipChars(r.occasion.trim(), MAX_OCCASION),
     scriptures: cleanRefs(r.scriptures, { max: MAX_REFS, maxLen: MAX_REF_LENGTH }),
+  };
+}
+
+export function buildGenerateRequest(draft: DraftV1, section: SectionKey, sermon: SermonText | null): GenerateLiturgyBody {
+  const slots = draft.hymns.slots;
+  const body: GenerateLiturgyBody = {
+    ...readingsContext(draft),
     hymns: { opening: hymnRef(slots.opening), response: hymnRef(slots.response), closing: hymnRef(slots.closing) },
     sections: [section],
   };
@@ -73,4 +94,39 @@ export function sermonText(ref: string, passage: Passage | undefined): SermonTex
   const text = passage ? passageText(passage) : null;
   if (text === null) return null;
   return { ref: clipChars(ref.trim(), MAX_REF_LENGTH), text: clipChars(text, MAX_SERMON_TEXT) };
+}
+
+/** What "Review service" sends: every switched-on card with text after trimming, in section order. */
+export function reviewTargets(draft: DraftV1): SectionKey[] {
+  return SECTION_KEYS.filter((key) => {
+    const card = draft.liturgy.cards[key];
+    return card.enabled && card.text.trim() !== "";
+  });
+}
+
+/**
+ * The `POST /liturgy/review` body (R API): `keys`' cards with their origins
+ * and their text as the cards hold it (cut to 20 000; a card with text never
+ * says "empty", and one that did would go as "typed"), plus the context.
+ */
+export function buildReviewRequest(draft: DraftV1, keys: SectionKey[], sermon: SermonText | null): ReviewBody {
+  const cards: ReviewCardBody[] = keys.map((key) => {
+    const card = draft.liturgy.cards[key];
+    return { section: key, origin: card.origin === "empty" ? "typed" : card.origin, text: clipChars(card.text, MAX_CARD_TEXT) };
+  });
+  const body: ReviewBody = { ...readingsContext(draft), cards };
+  if (sermon !== null) body.sermon_text = sermon;
+  return body;
+}
+
+/** The `POST /liturgy/revise` body (R API): one card's text and its remaining notes (at most 3), plus the context. */
+export function buildReviseRequest(draft: DraftV1, key: SectionKey, notes: string[], sermon: SermonText | null): ReviseBody {
+  const body: ReviseBody = {
+    section: key,
+    text: clipChars(draft.liturgy.cards[key].text, MAX_CARD_TEXT),
+    notes: notes.slice(0, 3),
+    ...readingsContext(draft),
+  };
+  if (sermon !== null) body.sermon_text = sermon;
+  return body;
 }
