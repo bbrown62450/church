@@ -4,7 +4,7 @@
 
 **Goal:** Four small changes to the service reviewer, from the owner's phone check after it merged (owner answers 1-6 of 2026-10-01, "all recommended"), in one PR built in one batch (about a day). After it merges: the AI review leaves notes only for something to change, never praise; **Revise with these notes** is offered on typed and saved text too, after "Replace your text?", with Undo; after an edit a card's notes stay, dimmed, under "From before your last edit." until the next review; and an AI note that only restates a code note (a citation, a repeated opening) is dropped. No route, schema, migration or variable changes; production Streamlit (https://liturgy-frozen.streamlit.app/, branch `streamlit-frozen`) is untouched.
 
-**Architecture:** Backend first. T1 firms up two strings in `usecases/liturgy_review.py` (`CONTRACT`, `CODE_NOTES_INTRO`). T2 adds `drop_restated` there and runs it on each card's AI notes before `merge_notes`. Frontend: T3 makes `pruneReview` (`lib/liturgy/notes.ts`) mark a changed card's notes `stale` instead of dropping them, adds `forgetCard` for a successful Regenerate (through a new `onWritten` listener on the generation provider) or Revise, and shows the faded notes and the line in `CardNotes`. T4 widens `canRevise` to typed and saved text and puts the existing `ConfirmDialog` in front of Revise on those cards. T5 is the docs. T6 verifies and opens the draft PR; T7 is the merge, the owner's four-step phone check and the record.
+**Architecture:** Backend first. T1 firms up two strings in `usecases/liturgy_review.py` (`CONTRACT`, and `CODE_NOTES_INTRO`, now finished by `code_notes_intro` from the code notes present). T2 adds `drop_restated` there and runs it on each card's AI notes before `merge_notes`, and drops an AI note across the service on prayers that open alike when the code note names the opening. Frontend: T3 makes `pruneReview` (`lib/liturgy/notes.ts`) mark a changed card's notes `stale` instead of dropping them, adds `forgetCard` for a successful Regenerate (through a new `onWritten` listener on the generation provider) or Revise, and shows the faded notes and the line in `CardNotes`. T4 widens `canRevise` to typed and saved text and puts the existing `ConfirmDialog` in front of Revise on those cards. T5 is the docs. T6 verifies and opens the draft PR; T7 is the merge, the owner's four-step phone check and the record.
 
 **Tech Stack:** as the service reviewer plan: Python 3.11 (`.venv`), FastAPI, pytest with `FakeAI`; Next 16, React 19, TypeScript 5, Base UI, Vitest 3 with Testing Library.
 
@@ -21,16 +21,16 @@
 
 ### Commands and process
 - Run commands from the repo root; the working directory resets between commands. Frontend as `(cd frontend && …)`. No foreground `sleep`.
-- Backend: one file `.venv/bin/python -m pytest -q <file> 2>&1 | tail -2`; the suite `.venv/bin/python -m pytest -q | tail -1`. Frontend: one file `(cd frontend && npx vitest run <path> 2>&1 | grep -E "Tests ")`; the suite `(cd frontend && npx vitest run 2>&1 | grep -E "Test Files|Tests ")`; then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`.
+- Backend: one file `.venv/bin/python -m pytest -q <file> 2>&1 | tail -2`; the suite `.venv/bin/python -m pytest -q | tail -1`. Frontend: one file `(cd frontend && npx vitest run <path> 2>&1 | grep -E "Tests ")`; the suite `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")` (a failure is named); then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`.
 - No route or schema changes, so the OpenAPI snapshot and `schema.d.ts` are not regenerated (T6 checks they are unchanged).
-- Branch `claude/slice-2-plan-4q33le`, at `origin/main` `faa0ecb` plus this plan's commits (`WIP plan: reviewer follow-up 1`, then `Plan: reviewer follow-up 1 (owner answers 2026-10-01)`). Stage files by name; `.claude/` stays untracked.
+- Branch `claude/slice-2-plan-4q33le`, at `origin/main` `faa0ecb` plus this plan's commits (`WIP plan: reviewer follow-up 1`, then `Plan: reviewer follow-up 1 (owner answers 2026-10-01)` (twice), then `Plan: reviewer follow-up 1 review fixes (owner answers 2026-10-01)`). Stage files by name; `.claude/` stays untracked.
 - `main` is protected (`backend`, `backend-postgres`, `frontend`, up to date). Merge only with `gh pr merge <N> --merge -R bbrown62450/church`, only on the owner's explicit yes.
 - Every commit message has a subject, a body and, as its last paragraph (a separate `-m`), these two lines:
   `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`
   `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
 - TDD: write the failing test first and see it fail as quoted.
 - **Backup push after every task** (standing rule): the controller runs `git push origin claude/slice-2-plan-4q33le` after each task's commit (never `--force`). A fix asked for by the review is a new commit, `Fix: <what> (Task <n> review)`.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1217 → 1220 passed, 11 → 11 skipped; frontend 570 → 573 in 78 → 78 files`.
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1217 → 1220 passed, 11 → 11 skipped; frontend 570 → 574 in 78 → 78 files`.
 - New prose for the owner has no em dashes and no flattery. The owner's copy is exact: "Replace your text?", "Revise replaces the text in {Label} with a version that addresses these notes. You can undo right after.", "Revise text", "From before your last edit.".
 - Ask the owner before any push to a PR, PR creation, marking ready, merging, or any production or settings action. Owner steps go one at a time, in plain words.
 
@@ -46,8 +46,8 @@ As in RP: **Create `path`:** the block is the whole file; **Append to `path`:** 
   | T1 | +1 (`test_usecase_liturgy_review.py`; one assertion edited) | 1218 passed, 11 skipped | 0 | 570 in 78 |
   | T2 | +2 (`test_usecase_liturgy_review.py`) | 1220 passed, 11 skipped | 0 | 570 in 78 |
   | T3 | 0 | 1220 passed, 11 skipped | +2 (`notes.test.ts` +1, `review-step.test.tsx` +1; others edited) | 572 in 78 |
-  | T4 | 0 | 1220 passed, 11 skipped | +1 (`review-step.test.tsx`; others edited) | 573 in 78 |
-  | T5-T7 | 0 | 1220 passed, 11 skipped | 0 | 573 in 78 |
+  | T4 | 0 | 1220 passed, 11 skipped | +2 (`review-step.test.tsx`; others edited) | 574 in 78 |
+  | T5-T7 | 0 | 1220 passed, 11 skipped | 0 | 574 in 78 |
 
 - CI `backend-postgres` stays at `11 passed, 1220 deselected`.
 
@@ -72,24 +72,27 @@ As in RP: **Create `path`:** the block is the whole file; **Append to `path`:** 
 5. **No restated code notes.** On a card with a code "Cites …" note, AI rules notes about citing or naming scripture are dropped; AI repetition notes on a card whose opening is already in a code "Several prayers open with …" note are dropped; the prompt's "Do not repeat them" is firmer. Table tests (T1, T2).
 6. **Process:** this short plan, reviewed, the owner's approval, one build batch with review and fixes, a draft PR, a phone check of about four steps after the merge (praise gone on a real review, Revise on typed text with the confirm and Undo, faded notes after typing, no restated citation or repetition notes), then a records step: "### Reviewer follow-up 1 record" in `docs/ops-runbook.md` after the Service reviewer record, before "## Backups", and the `docs/manual-verification.md` "Service reviewer" items that change (T5, T7).
 
+### Owner answers to this plan's questions (Beau, 2026-10-01; "all recommended", binding)
+The owner answered "all recommended" to "Questions for the owner" (1-8) on 2026-10-01: every choice stands as written there and in the clarifications it names. The plan's review of the same day changed no answer. It added two owner-visible notes to clarification 5, which question 4 now states (Undo after a successful Revise or Regenerate brings the text back without the notes; another tab's Regenerate or Revise fades this tab's notes under the same line), and narrowed which opening notes are dropped (clarification 4, question 2), so fewer real points are lost.
+
 **Later, out of scope:** Revise from "Across the service" (runbook follow-up 5), planned separately.
 
 ## Spec clarifications
 
-The owner's answers win over R and RP; the code wins over both where they disagree. **[owner-visible]** items are put to the owner in "Questions for the owner" (each written as recommended; none blocks the build).
+The owner's answers win over R and RP; the code wins over both where they disagree. **[owner-visible]** items are put to the owner in "Questions for the owner" (each written as recommended; the owner answered "all recommended" on 2026-10-01).
 
 1. **[owner-visible] The no-praise rule, worded** (owner answer 1). The contract's last sentence "Give a card an empty notes list when it is fine." becomes "A note is only for something to change. Never praise or describe what already works. If a prayer is fine, give it no notes: its notes list is empty." The role already says the editor points out problems. Nothing in code inspects a note for praise.
-2. **[owner-visible] The firmer "do not repeat" line** (owner answer 5). `CODE_NOTES_INTRO` becomes "Notes already found by code. The pastor sees them already, so do not repeat them or make the same point in other words (another note on citing or naming scripture, or on prayers that open alike):". It still comes only when there are code notes.
+2. **[owner-visible] The firmer "do not repeat" line** (owner answer 5). `CODE_NOTES_INTRO` becomes "Notes already found by code. The pastor sees them already, so do not repeat them or make the same point in other words", then, in brackets, only the points these code notes invite, joined by ", or ": "another note on citing or naming scripture on a card that already has a Cites note" when a card has a code "Cites …" note (`CITES_PREFIX`), and "on prayers that open alike" when a code note across the service names an opening; with neither (say, only a stock-phrase note) there are no brackets; then ":" (`code_notes_intro`). So the AI is never told about a citation or an opening the service does not have. It still comes only when there are code notes.
 3. **[owner-visible] Which restated citation notes go** (owner answer 5). Only on a card that has a code "Cites …" note, and only AI notes tagged `rules`, matching (any case) `\b(?:cit(?:e|es|ed|ing|ation)s?|nam(?:e|es|ed|ing)\s+(?:the\s+)?(?:reading|passage|scripture|text)s?|scripture\s+references?)\b`: "cite(s/d)", "citing", "citation(s)", "name(s/d)/naming (the) reading/passage/scripture/text(s)", "scripture reference(s)". "Recites", "excited" and "Names God only as Father" do not match; a `theology` note that mentions citing is kept. The whole-word repeat rule of RP clarification 11 still runs after it.
-4. **[owner-visible] Which restated opening notes go** (owner answer 5). Only on a card whose opening words are the words of a code "Several prayers open with …" note (the same key as `check_openings`: the first two words after any "Leader:"/"People:" label, any case), and only AI notes tagged `repetition` that either speak of the opening (`open`, `opens`, `opened`, `opening(s)`, `begin(s)`, `beginning`, `began`, `start(s/ed/ing)`) or quote the opening words. A repetition note about something else on that card ("Repeats "mercy" four times.") is kept: narrower than "drop AI repetition notes on that card", so a real repetition point inside one prayer is not lost. AI notes across the service already drop a note quoting the opening (RP clarification 11).
-5. **[owner-visible] What fades and what goes** (owner answer 4). Faded, under "From before your last edit.": typing, Undo, "Use church default", another tab's edit (any change to the text or the origin, as before). Gone: a successful Regenerate or Generate (its new draft replaced the text the notes were about), a successful Revise (it addressed them), Clear text (a blank card shows no notes; Undo of Clear does not bring them back), New service. A card that showed "Looks good.", or whose notes were all dismissed, shows nothing after an edit. Once faded, a card stays faded until the next Review, even when Undo puts back the exact words that were reviewed. A failed or cancelled Regenerate or Revise leaves the text, so the notes stay as they were.
+4. **[owner-visible] Which restated opening notes go** (owner answer 5). Only on a card whose opening words are the words of a code "Several prayers open with …" note (the same key as `check_openings`: the first two words after any "Leader:"/"People:" label, any case), and only AI notes tagged `repetition` that either speak of how the prayer opens or quote the opening words. "Speak of how it opens" (`speaks_of_opening`): once the section names (`SECTION_LABELS`, any case, so "the Opening Prayer") are taken out of the note, it matches (any case) `\b(?:opens?|opened|opening|begins?|beginning|began|starts?|started|starting)\s+(?:with|like|alike|the\s+same|as)\b`: "Opens like …", "Begins the same way as …", "both begin alike". A repetition note about something else on that card is kept ("Repeats "mercy" four times.", "Repeats "mercy" from the Opening Prayer.", ""Open our hearts" also appears in the Confession.", "Echoes the Opening Prayer word for word in its last line.", "Starts and ends with the same petition."): narrower than "drop AI repetition notes on that card", so a real repetition point inside one prayer is not lost. Across the service, when a code note names a shared opening, an AI `repetition` note there that speaks of prayers opening alike ("The Call to Worship and Opening Prayer both begin alike.") is dropped the same way, before `merge_notes`; one quoting the opening was already dropped (RP clarification 11).
+5. **[owner-visible] What fades and what goes** (owner answer 4). Faded, under "From before your last edit.": typing, Undo, "Use church default", another tab's edit (any change to the text or the origin, as before). Gone: a successful Regenerate or Generate (its new draft replaced the text the notes were about), a successful Revise (it addressed them), Clear text (a blank card shows no notes; Undo of Clear does not bring them back), New service. A card that showed "Looks good.", or whose notes were all dismissed, shows nothing after an edit. Once faded, a card stays faded until the next Review, even when Undo puts back the exact words that were reviewed. A failed or cancelled Regenerate or Revise leaves the text, so the notes stay as they were. Undo after a successful Revise or Regenerate brings the text back without the notes (they went with the revision or the new draft; the next Review brings fresh ones). Another tab's Regenerate or Revise reaches this tab as an edit, so here the card's notes fade under the same line instead of going: accepted (this tab cannot tell another tab's AI draft from its typing); a possible later follow-up.
 6. **[owner-visible] "Across the service" is unchanged:** it stays, at full strength, until the next Review, its own dismiss or New service, since its notes are about several prayers.
 7. **The in-flight rule stays** (RP clarification 20): a card changed while a review was running gets no notes from that review. The member edited it before seeing any notes, so nothing would fade, and "From before your last edit." would be wrong for notes they never saw; the next Review is one tap.
 8. **[owner-visible] Revise on a faded card** sends the card's current text and the notes left (as before: the notes the member has not dismissed). It is offered whenever `canRevise` holds, faded or not.
-9. **Screen readers** (F §4.9). "From before your last edit." is plain text inside the card's notes block, before the list, so it is read with the notes and is part of the textarea's description (`aria-describedby`, as the notes already are). It is not a live region: it appears as the member types, and announcing it then would interrupt every edit. The list keeps its name "Notes on {Label}".
+9. **Screen readers** (F §4.9). "From before your last edit." is plain text inside the card's notes block, before the list, so it is read with the notes and is part of the textarea's description (`aria-describedby`, as the notes already are). It is not a live region: it appears as the member types, and announcing it then would interrupt every edit. The list keeps its name "Notes on {Label}" and, while faded, is described by the line (`aria-describedby` on the list, pointing at the line's id), so a screen reader that moves to the list hears why the notes are dimmed.
 10. **How the screen knows a draft was written.** The review provider is inside the generation provider, so the generation provider gains `onWritten(listener)`, called with the card's key whenever an AI draft is applied (Generate, Regenerate, Try again); the review provider subscribes and calls `forgetCard`. Revise calls `forgetCard` itself after its draft lands. Pruning still runs during render, so faded notes never show a frame unfaded; `forgetCard` then removes them in the same update. Owner decision 1.
 11. **[owner-visible] Revise's eligibility** (owner answers 2, 3). `canRevise`: the card has text after trimming, at least one note left, and its origin is "ai", "typed" or "archive"; never "default" (a Benediction following the church default) or "empty". The confirm shows exactly when `needsRegenerateConfirm(card)` is true (typed or archive text), so AI text revises at once as before.
-12. **[owner-visible] The dialog's other button** is "Keep my text", Regenerate's approved label (the owner gave the title, the description and the confirm). Focus mirrors Regenerate: "Keep my text" (or Escape) returns to **Revise with these notes**; "Revise text" starts the revision and the closing dialog sends focus to its Cancel (the Revise button, or the card's heading, if it did not start).
+12. **[owner-visible] The dialog's other button** is "Keep my text", Regenerate's approved label (the owner gave the title, the description and the confirm). Focus mirrors Regenerate: "Keep my text" (or Escape) returns to **Revise with these notes**; "Revise text" starts the revision and the closing dialog sends focus to its Cancel (the Revise button, or the card's heading, if it did not start). If the notes change while it asks (another tab edits or clears the card, a new review), the dialog closes without revising: it closes whenever Revise is no longer offered or the review it was opened on is replaced, and focus goes to Revise if it is still there, else the card's heading. The dialog is rendered in every branch of `CardNotes`, after the notes, so it stays mounted as the notes go.
 13. **[owner-visible] After Revise on your text** the card's chip reads "AI draft" (the text is now the AI's, as after Regenerate) and the line "Revised with these notes. Undo" shows; Undo brings your text back with its "Your text" chip.
 14. **The backend needed no change for Revise on typed text:** `ReviseIn` and `revise_section` take the section, text and notes only, with no origin. The `ai` bucket and the 100 s client timeouts are unchanged.
 15. **Docs** (owner answer 6). T5 rewrites `docs/manual-verification.md` "Service reviewer" items 4 and 5 and adds item 9, marked "(owner, after follow-up 1)"; no `##` heading changes, so `test_slice1_docs.py`'s pin is unchanged. R gains a short amendment. The runbook record is T7's records step.
@@ -104,11 +107,11 @@ The owner's answers win over R and RP; the code wins over both where they disagr
 
 | Path | Change | Task |
 |---|---|---|
-| `backend/usecases/liturgy_review.py` (+ `backend/tests/test_usecase_liturgy_review.py`) | `CONTRACT`, `CODE_NOTES_INTRO` (T1); `drop_restated`, its patterns, and its use in `review_service` (T2) | T1, T2 |
+| `backend/usecases/liturgy_review.py` (+ `backend/tests/test_usecase_liturgy_review.py`) | `CONTRACT`, `CODE_NOTES_INTRO`, `code_notes_intro` (T1); `drop_restated`, `speaks_of_opening`, their patterns, and their use in `review_service` (T2); the module docstring on `revise_section` (T4) | T1, T2, T4 |
 | `frontend/src/lib/liturgy/notes.ts` (+ `.test.ts`) | `STALE_LINE`, `CardReview.stale`, `pruneReview` fades, `forgetCard` (T3); `canRevise` (T4) | T3, T4 |
 | `frontend/src/lib/liturgy/generation.tsx` | `onWritten` | T3 |
 | `frontend/src/lib/liturgy/review.tsx` (+ `review.test.tsx`) | forget on Regenerate and Revise (T3); docs of `revise` (T4) | T3, T4 |
-| `frontend/src/components/builder/liturgy/card-notes.tsx` | the faded notes and the line (T3); the confirm (T4) | T3, T4 |
+| `frontend/src/components/builder/liturgy/card-notes.tsx` | the faded notes, the line and the list's description (T3); the confirm (T4) | T3, T4 |
 | `frontend/src/components/builder/liturgy/review-step.test.tsx` | DOM cases | T3, T4 |
 | `docs/manual-verification.md`, `docs/superpowers/specs/2026-09-26-service-reviewer-design.md` | items 4, 5, 9; R's amendment | T5 |
 | `docs/ops-runbook.md` | "Reviewer follow-up 1 record" (the records PR, after the merge) | T7 |
@@ -135,7 +138,7 @@ The owner's answers win over R and RP; the code wins over both where they disagr
 **with:**
 
 ````python
-    assert user.endswith(liturgy_review.CODE_NOTES_INTRO +
+    assert user.endswith(liturgy_review.CODE_NOTES_INTRO + " (another note on prayers that open alike):\n" +
 ````
 
 **Append to `backend/tests/test_usecase_liturgy_review.py`:**
@@ -150,24 +153,30 @@ NO_PRAISE = ("A note is only for something to change. Never praise or describe w
 
 
 def test_the_prompt_asks_for_no_praise_and_no_restated_code_notes(church):
+    intro = ("Notes already found by code. The pastor sees them already, so do not repeat them or make the same "
+             "point in other words")
     ai = FakeAI(reply=answer())
-    run(church, ai=ai)
+    run(church, cards=CARDS[:1], ai=ai)                 # only a stock-phrase note: nothing in brackets
     system, user = (m["content"] for m in ai.calls[0]["messages"])
     assert NO_PRAISE in system and "Give a card an empty notes list when it is fine." not in system
-    assert ("Notes already found by code. The pastor sees them already, so do not repeat them or make the same "
-            "point in other words (another note on citing or naming scripture, or on prayers that open alike):\n"
-            f"- call_to_worship: {STOCK}\n") in user
+    assert user.endswith(f"{intro}:\n- call_to_worship: {STOCK}")
+    # A Cites note and a shared opening: the brackets name both.
+    ai = FakeAI(reply=answer())
+    run(church, cards=[*CARDS, ReviewCard("assurance", "ai", "As John 21:1-19 tells, you are forgiven.")], ai=ai)
+    user = ai.calls[0]["messages"][1]["content"]
+    assert (f"{intro} (another note on citing or naming scripture on a card that already has a Cites note, "
+            f"or on prayers that open alike):\n- call_to_worship: {STOCK}\n- assurance: Cites John 21:1-19.") in user
 ````
 
 - [ ] **Step 2 (agent): Run it and see it fail**
 
 ```bash
-.venv/bin/python -m pytest -q backend/tests/test_usecase_liturgy_review.py 2>&1 | tail -2
+.venv/bin/python -m pytest -q backend/tests/test_usecase_liturgy_review.py 2>&1 | tail -3
 ```
 
-**Expected:** `FAILED backend/tests/test_usecase_liturgy_review.py::test_the_prompt_asks_for_no_praise_and_no_restated_code_notes` (the contract has no such rule yet), then `1 failed, 13 passed in <t>s`.
+**Expected:** `FAILED backend/tests/test_usecase_liturgy_review.py::test_the_prompt_carries_the_church_s_rules_present_checklists_profile_and_code_notes` (the code-notes line has no brackets yet), `FAILED backend/tests/test_usecase_liturgy_review.py::test_the_prompt_asks_for_no_praise_and_no_restated_code_notes` (the contract has no such rule yet), then `2 failed, 12 passed in <t>s`.
 
-- [ ] **Step 3 (agent): The two strings**
+- [ ] **Step 3 (agent): The contract, and the code-notes line built from the code notes present**
 
 **In `backend/usecases/liturgy_review.py`, replace:**
 
@@ -196,8 +205,43 @@ CODE_NOTES_INTRO = "Notes already found by code. Do not repeat them:\n"
 
 ````python
 CODE_NOTES_INTRO = ("Notes already found by code. The pastor sees them already, so do not repeat them or make "
-                    "the same point in other words (another note on citing or naming scripture, or on prayers "
-                    "that open alike):\n")
+                    "the same point in other words")
+CITES_PREFIX = review_checks.CITES_NOTE.split("{match}", 1)[0]          # "Cites "
+RESTATED_CITING = "on citing or naming scripture on a card that already has a Cites note"
+RESTATED_OPENING = "on prayers that open alike"
+````
+
+**In `backend/usecases/liturgy_review.py`, replace:**
+
+````python
+def _readings(scriptures: Sequence[str]) -> str:
+````
+
+**with:**
+
+````python
+def code_notes_intro(code_notes: Mapping[str, Sequence[Note]], service_notes: Sequence[Note]) -> str:
+    """CODE_NOTES_INTRO, naming in brackets only the restatements these code notes invite: citing, when a card
+    has a "Cites ..." note; openings, when a note across the service names one (reviewer follow-up 1)."""
+    cites = any(n.text.startswith(CITES_PREFIX) for notes in code_notes.values() for n in notes)
+    points = [point for point, present in ((RESTATED_CITING, cites), (RESTATED_OPENING, bool(service_notes)))
+              if present]
+    return CODE_NOTES_INTRO + (f" (another note {', or '.join(points)})" if points else "") + ":\n"
+
+
+def _readings(scriptures: Sequence[str]) -> str:
+````
+
+**In `backend/usecases/liturgy_review.py`, replace:**
+
+````python
+            CODE_NOTES_INTRO + "\n".join(noted) if noted else "",
+````
+
+**with:**
+
+````python
+            code_notes_intro(code_notes, service_notes) + "\n".join(noted) if noted else "",
 ````
 
 - [ ] **Step 4 (agent): Run the file and the suite**
@@ -207,7 +251,7 @@ CODE_NOTES_INTRO = ("Notes already found by code. The pastor sees them already, 
 .venv/bin/python -m pytest -q | tail -1
 ```
 
-**Expected:** `14 passed in <t>s` (the budget test still drops what it did: the prompt grew by about 200 characters); `1218 passed, 11 skipped in <t>s`.
+**Expected:** `14 passed in <t>s` (the budget test still drops what it did: the prompt grew by less than 250 characters); `1218 passed, 11 skipped in <t>s`.
 
 - [ ] **Step 5 (agent): Commit**
 
@@ -216,7 +260,9 @@ git add backend/usecases/liturgy_review.py backend/tests/test_usecase_liturgy_re
 git commit -q -m "Reviewer: notes only for something to change, and code notes not restated (follow-up 1; owner answers 1, 5)" -m "The review's output contract now says a note is only for something to
 change, never praise or a description of what works, and a fine prayer
 gets no notes. The code-notes line asks the AI not to make the same point
-in other words (citing scripture, prayers that open alike)." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+in other words, naming in brackets only what these code notes invite
+(citing scripture when a card has a Cites note, prayers that open alike
+when a note across the service names an opening)." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 git log --oneline -1
 ```
@@ -229,7 +275,8 @@ Counts after Task 1: backend **1218 passed, 11 skipped**; frontend **570 in 78**
 - Modify: `backend/usecases/liturgy_review.py`, `backend/tests/test_usecase_liturgy_review.py`
 
 **Interfaces:**
-- Produces: `liturgy_review.drop_restated(code, ai, *, opening="") -> list[Note]`, `RESTATES_CITING`, `RESTATES_OPENING`, `CITES_PREFIX`.
+- Consumes: `CITES_PREFIX` (T1).
+- Produces: `liturgy_review.drop_restated(code, ai, *, opening="") -> list[Note]`, `speaks_of_opening(text) -> bool`, `RESTATES_CITING`, `RESTATES_OPENING`, `SECTION_NAMES`.
 
 - [ ] **Step 1 (agent): Write the failing tests**
 
@@ -256,12 +303,19 @@ def test_ai_notes_that_restate_a_code_note_in_other_words_are_dropped():
         ([], "Gracious God", ("repetition", "Begins the same way as the Confession."), False),
         ([], "Gracious God", ("repetition", '"gracious god" again, as in the Confession.'), False),
         ([], "Gracious God", ("repetition", 'Repeats "mercy" four times.'), True),   # not about the opening
+        ([], "Gracious God", ("repetition", 'Repeats "mercy" from the Opening Prayer.'), True),   # a section's name
+        ([], "Gracious God", ("repetition", '"Open our hearts" also appears in the Confession.'), True),
+        ([], "Gracious God", ("repetition", "Echoes the Opening Prayer word for word in its last line."), True),
+        ([], "Gracious God", ("repetition", "Starts and ends with the same petition."), True),
         ([], "Gracious God", ("theology", "Opens with a request before any praise."), True),
         ([], "", ("repetition", "Opens like the Opening Prayer."), True),          # its opening is not shared
     ]
     for code, opening, (tag, text), kept in cases:
         note = Note(tag, text, "ai")
         assert (liturgy_review.drop_restated(code, [note], opening=opening) == [note]) is kept, text
+
+
+ALIKE = ("repetition", "The Call to Worship and Opening Prayer both begin alike.")
 
 
 def test_the_review_drops_restated_citation_and_opening_notes(church):
@@ -274,7 +328,7 @@ def test_the_review_drops_restated_citation_and_opening_notes(church):
                             ("repetition", '"Gracious God" again.'), ("read_aloud", "The second clause is long.")]),
         ("offertory_prayer", [("repetition", "Starts like no other prayer, which is fine but abrupt."),
                               ("rules", "Names the reading outright.")]),
-    ])
+    ], service=[ALIKE])
     outcome = run(church, cards=cards, ai=FakeAI(reply=reply))
     assert notes_of(outcome) == {
         "call_to_worship": [],
@@ -284,6 +338,10 @@ def test_the_review_drops_restated_citation_and_opening_notes(church):
                              ("rules", "Names the reading outright.", "ai")],     # no code note here: kept
     }
     assert [n.text for n in outcome.service_notes] == ['Several prayers open with "Gracious God".']
+    # With no shared opening found by code, the AI's note across the service on prayers that open alike stays.
+    apart = [ReviewCard("call_to_worship", "ai", "Come, let us worship."), *cards[1:]]
+    outcome = run(church, cards=apart, ai=FakeAI(reply=answer(service=[ALIKE])))
+    assert [(n.text, n.source) for n in outcome.service_notes] == [(ALIKE[1], "ai")]
 ````
 
 - [ ] **Step 2 (agent): Run them and see them fail**
@@ -311,7 +369,8 @@ def test_the_review_drops_restated_citation_and_opening_notes(church):
    makes a code note's point in other words (owner answer 5 of 2026-10-01):
    a rules note on citing or naming scripture on a card with a "Cites" note,
    and a repetition note on how the prayer opens on a card whose opening a
-   code note across the service names.
+   code note across the service names (or, across the service, on prayers
+   that open alike when that code note is there).
 ````
 
 **In `backend/usecases/liturgy_review.py`, replace:**
@@ -325,16 +384,29 @@ def review_service(*, church_id: uuid.UUID, user_id: uuid.UUID, occasion: str, s
 ````python
 # An AI note that makes a code note's point in other words (owner answer 5 of 2026-10-01). Conservative: only a
 # rules note that speaks of citing or naming scripture, on a card with a code "Cites ..." note, and only a
-# repetition note that speaks of how the prayer opens (or quotes its opening), on a card whose opening is in a
-# code "Several prayers open with ..." note.
-CITES_PREFIX = review_checks.CITES_NOTE.split("{match}", 1)[0]          # "Cites "
+# repetition note that speaks of how the prayer opens ("opens with", "begins like", "starts the same" ...; the
+# section names are taken out first, so "the Opening Prayer" is not about opening) or quotes its opening, on a
+# card whose opening is in a code "Several prayers open with ..." note; across the service, a repetition note
+# about prayers that open alike when that code note is there.
 RESTATES_CITING = re.compile(
     r"\b(?:cit(?:e|es|ed|ing|ation)s?|nam(?:e|es|ed|ing)\s+(?:the\s+)?(?:reading|passage|scripture|text)s?"
     r"|scripture\s+references?)\b",
     re.IGNORECASE,
 )
-RESTATES_OPENING = re.compile(r"\b(?:open(?:s|ed|ing|ings)?|begin(?:s|ning)?|began|start(?:s|ed|ing)?)\b",
-                              re.IGNORECASE)
+RESTATES_OPENING = re.compile(
+    r"\b(?:opens?|opened|opening|begins?|beginning|began|starts?|started|starting)"
+    r"\s+(?:with|like|alike|the\s+same|as)\b",
+    re.IGNORECASE,
+)
+SECTION_NAMES = re.compile(
+    r"\b(?:" + "|".join(re.escape(label) for label in sorted(SECTION_LABELS.values(), key=len, reverse=True)) + r")\b",
+    re.IGNORECASE,
+)
+
+
+def speaks_of_opening(text: str) -> bool:
+    """True when a note speaks of how a prayer opens, once the section names are taken out of it."""
+    return RESTATES_OPENING.search(SECTION_NAMES.sub(" ", text)) is not None
 
 
 def drop_restated(code: Sequence[Note], ai: Sequence[Note], *, opening: str = "") -> list[Note]:
@@ -349,7 +421,7 @@ def drop_restated(code: Sequence[Note], ai: Sequence[Note], *, opening: str = ""
         if cites and note.tag == "rules" and RESTATES_CITING.search(note.text):
             return True
         return (quoted is not None and note.tag == "repetition"
-                and (RESTATES_OPENING.search(note.text) is not None or quoted.search(note.text) is not None))
+                and (speaks_of_opening(note.text) or quoted.search(note.text) is not None))
 
     return [n for n in ai if not restated(n)]
 
@@ -362,6 +434,7 @@ def review_service(*, church_id: uuid.UUID, user_id: uuid.UUID, occasion: str, s
 ````python
     outcome = ReviewOutcome(
         cards=tuple(CardNotes(key, merge_notes(code[key], ai_notes[key], MAX_NOTES_PER_CARD)) for key in sections),
+        service_notes=merge_notes(code_service, ai_service, MAX_SERVICE_NOTES),
 ````
 
 **with:**
@@ -371,8 +444,11 @@ def review_service(*, church_id: uuid.UUID, user_id: uuid.UUID, occasion: str, s
     openings = {c.section: " ".join(review_checks.opening_words(c.text)) for c in cards}
     kept = {key: drop_restated(code[key], ai_notes[key],
                                opening=openings[key] if openings[key].lower() in shared else "") for key in sections}
+    # Across the service, a note on prayers that open alike restates the code note that names the opening.
+    across = [n for n in ai_service if not (code_service and n.tag == "repetition" and speaks_of_opening(n.text))]
     outcome = ReviewOutcome(
         cards=tuple(CardNotes(key, merge_notes(code[key], kept[key], MAX_NOTES_PER_CARD)) for key in sections),
+        service_notes=merge_notes(code_service, across, MAX_SERVICE_NOTES),
 ````
 
 - [ ] **Step 4 (agent): Run the file three times, the import gate and the suite**
@@ -392,8 +468,10 @@ git add backend/usecases/liturgy_review.py backend/tests/test_usecase_liturgy_re
 git commit -q -m "Reviewer: drop AI notes that restate a code note (follow-up 1; owner answer 5)" -m "On a card with a code Cites note, an AI rules note about citing or naming
 scripture is dropped; on a card whose opening a code note across the
 service names, an AI repetition note about how it opens, or quoting the
-opening, is dropped. Conservative patterns, table-tested; code notes are
-never dropped." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+opening, is dropped, and so is an AI note across the service on prayers
+that open alike. Section names are taken out before matching, so a note
+naming the Opening Prayer is kept. Conservative patterns, table-tested;
+code notes are never dropped." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 git log --oneline -1
 ```
@@ -406,7 +484,7 @@ Counts after Task 2: backend **1220 passed, 11 skipped**; frontend **570 in 78**
 - Modify: `frontend/src/lib/liturgy/notes.ts`, `frontend/src/lib/liturgy/notes.test.ts`, `frontend/src/lib/liturgy/generation.tsx`, `frontend/src/lib/liturgy/review.tsx`, `frontend/src/lib/liturgy/review.test.tsx`, `frontend/src/components/builder/liturgy/card-notes.tsx`, `frontend/src/components/builder/liturgy/review-step.test.tsx`
 
 **Interfaces:**
-- Produces: `notes.STALE_LINE`, `CardReview.stale: boolean`, `pruneReview` (fades), `forgetCard(review, key)`; `LiturgyGeneration.onWritten(listener) => unsubscribe`; `NoteList`'s `faded` prop.
+- Produces: `notes.STALE_LINE`, `CardReview.stale: boolean`, `pruneReview` (fades), `forgetCard(review, key)`; `LiturgyGeneration.onWritten(listener) => unsubscribe`; `NoteList`'s `faded` and `describedBy` props.
 
 - [ ] **Step 1 (agent): Write the failing tests**
 
@@ -660,6 +738,7 @@ const STALE = "From before your last edit.";
     await user.type(screen.getByRole("textbox", { name: "Opening Prayer" }), " Amen.");
     expect(within(opening).getByText(STALE)).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Opening Prayer" })).toHaveAccessibleDescription(expect.stringContaining(STALE));
+    expect(within(opening).getByRole("list", { name: "Notes on Opening Prayer" })).toHaveAccessibleDescription(STALE);
     expect(within(opening).getByText(STOCK)).toHaveClass("text-muted-foreground");
     await user.click(within(opening).getByRole("button", { name: `Dismiss note: ${STOCK}` }));
     expect(within(opening).getByRole("button", { name: "Dismiss note: The second clause is hard to say aloud." })).toHaveFocus();
@@ -670,8 +749,9 @@ const STALE = "From before your last edit.";
     expect(within(card("Benediction")).queryByText(STALE)).toBeNull();
     // "Across the service" stays until the next review.
     expect(screen.getByRole("region", { name: "Across the service" })).toBeInTheDocument();
-    await review(user);
-    expect(screen.queryByText(STALE)).toBeNull();
+    // The second review announces the same words as the first, so wait for the faded notes to go.
+    await user.click(reviewButton());
+    await waitFor(() => expect(screen.queryByText(STALE)).toBeNull());
     expect(within(opening).getByText(STOCK)).not.toHaveClass("text-muted-foreground");
     expect(within(card("Benediction")).getByText("Looks good.")).toBeInTheDocument();
   });
@@ -1042,7 +1122,7 @@ import {
           }
 ````
 
-- [ ] **Step 6 (agent): The card shows faded notes under the line**
+- [ ] **Step 6 (agent): The card shows faded notes under the line, which describes the list**
 
 **In `frontend/src/components/builder/liturgy/card-notes.tsx`, replace:**
 
@@ -1085,6 +1165,7 @@ import { cn } from "@/lib/utils";
 ````tsx
   disabled = false,
   faded = false,
+  describedBy,
 }: {
   notes: Note[];
   label: string;
@@ -1093,9 +1174,11 @@ import { cn } from "@/lib/utils";
   disabled?: boolean;
   /** The card changed since its review: the chips and sentences are dimmed, still readable. */
   faded?: boolean;
+  /** The id of the line that says why they are dimmed. */
+  describedBy?: string;
 }) {
   return (
-    <ul aria-label={label} className="grid gap-2">
+    <ul aria-label={label} aria-describedby={describedBy} className="grid gap-2">
       {notes.map((note) => (
         <li key={note.id} className="flex min-w-0 items-start gap-2">
           <Badge variant="outline" className={cn("mt-0.5 shrink-0", faded && "text-muted-foreground")}>
@@ -1117,9 +1200,26 @@ import { cn } from "@/lib/utils";
  * nothing when it was not reviewed, its notes were all dismissed, or it was
  * "Looks good." and has changed since. When the card changed after its review
  * (reviewer follow-up 1) the notes stay, dimmed, under "From before your last
- * edit.", which is plain text inside the notes, so it is read with them and
- * is part of the textarea's description; it is not announced as it appears
- * (it appears as the member types).
+ * edit.", which is plain text inside the notes, so it is read with them, is
+ * part of the textarea's description and describes the list; it is not
+ * announced as it appears (it appears as the member types).
+````
+
+**In `frontend/src/components/builder/liturgy/card-notes.tsx`, replace:**
+
+````tsx
+/** The id of a card's "Revise with these notes" button. */
+````
+
+**with:**
+
+````tsx
+/** The id of a card's "From before your last edit." line, which describes its faded notes. */
+function staleId(key: SectionKey): string {
+  return `card-${key}-stale`;
+}
+
+/** The id of a card's "Revise with these notes" button. */
 ````
 
 **In `frontend/src/components/builder/liturgy/card-notes.tsx`, replace:**
@@ -1136,23 +1236,28 @@ import { cn } from "@/lib/utils";
 
 ````tsx
     <div id={notesId(sectionKey)} className="grid gap-2 rounded-md bg-muted/40 p-3">
-      {notes.stale ? <p className="text-sm font-medium text-muted-foreground">{STALE_LINE}</p> : null}
+      {notes.stale ? (
+        <p id={staleId(sectionKey)} className="text-sm font-medium text-muted-foreground">
+          {STALE_LINE}
+        </p>
+      ) : null}
       <NoteList
         notes={notes.notes}
         label={`Notes on ${label}`}
         disabled={revising}
         faded={notes.stale}
+        describedBy={notes.stale ? staleId(sectionKey) : undefined}
 ````
 
 - [ ] **Step 7 (agent): Run the three files three times, the suite, types and lint**
 
 ```bash
-for i in 1 2 3; do (cd frontend && npx vitest run src/lib/liturgy/notes.test.ts src/lib/liturgy/review.test.tsx src/components/builder/liturgy/review-step.test.tsx 2>&1 | grep -E "Tests "); done
-(cd frontend && npx vitest run 2>&1 | grep -E "Test Files|Tests ")
+for i in 1 2 3; do (cd frontend && npx vitest run src/lib/liturgy/notes.test.ts src/lib/liturgy/review.test.tsx src/components/builder/liturgy/review-step.test.tsx 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests "); done
+(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")
 (cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")
 ```
 
-**Expected:** `      Tests  29 passed (29)` three times; ` Test Files  78 passed (78)` and `      Tests  572 passed (572)`; `typecheck 0`, `lint 0`.
+**Expected:** ` Test Files  3 passed (3)` and `      Tests  29 passed (29)` three times, with no `×` or `FAIL` line; ` Test Files  78 passed (78)` and `      Tests  572 passed (572)`; `typecheck 0`, `lint 0`. A `×` or `FAIL` line names the failing test: make it deterministic (Step 6 of T6), never rerun until green.
 
 - [ ] **Step 8 (agent): Commit**
 
@@ -1173,7 +1278,7 @@ Counts after Task 3: backend **1220 passed, 11 skipped**; frontend **572 in 78**
 ### Task 4: Revise on typed and saved text, with a confirm (owner answers 2, 3; clarifications 8, 11-14)
 
 **Files:**
-- Modify: `frontend/src/lib/liturgy/notes.ts`, `frontend/src/lib/liturgy/notes.test.ts`, `frontend/src/lib/liturgy/review.tsx`, `frontend/src/lib/liturgy/review.test.tsx`, `frontend/src/components/builder/liturgy/card-notes.tsx`, `frontend/src/components/builder/liturgy/review-step.test.tsx`
+- Modify: `frontend/src/lib/liturgy/notes.ts`, `frontend/src/lib/liturgy/notes.test.ts`, `frontend/src/lib/liturgy/review.tsx`, `frontend/src/lib/liturgy/review.test.tsx`, `frontend/src/components/builder/liturgy/card-notes.tsx`, `frontend/src/components/builder/liturgy/review-step.test.tsx`, `backend/usecases/liturgy_review.py` (its docstring only)
 
 - [ ] **Step 1 (agent): Write the failing tests**
 
@@ -1312,6 +1417,37 @@ Counts after Task 3: backend **1220 passed, 11 skipped**; frontend **572 in 78**
     expect(within(call).getByText("Your text")).toBeInTheDocument();
   });
 
+  it("closes Replace your text? when the notes change meanwhile, sending nothing; focus goes to the heading once Revise is gone", async () => {
+    const { user, api } = renderStep();
+    await review(user);
+    const call = card("Call to Worship");
+    await user.click(within(call).getByRole("button", { name: "Revise with these notes" }));
+    expect(await screen.findByRole("alertdialog", { name: "Replace your text?" })).toBeInTheDocument();
+    // Another tab clears the card: no notes are left to revise with.
+    act(() => {
+      const theirs = withCard(stored(), "call_to_worship", "", "empty");
+      window.dispatchEvent(
+        new StorageEvent("storage", { key: KEY, newValue: JSON.stringify({ ...theirs, updated_at: "2026-09-29T17:00:00.000Z" }) }),
+      );
+    });
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(within(call).queryByRole("list", { name: "Notes on Call to Worship" })).toBeNull();
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Call to Worship" })).toHaveFocus());
+    // Another tab edits another card: the review changed, so the confirm closes; Revise is still there and takes focus.
+    const confession = card("Prayer of Confession");
+    await user.click(within(confession).getByRole("button", { name: "Revise with these notes" }));
+    expect(await screen.findByRole("alertdialog", { name: "Replace your text?" })).toBeInTheDocument();
+    act(() => {
+      const theirs = withCard(stored(), "opening_prayer", "Holy One, hear us.", "typed");
+      window.dispatchEvent(
+        new StorageEvent("storage", { key: KEY, newValue: JSON.stringify({ ...theirs, updated_at: "2026-09-29T17:01:00.000Z" }) }),
+      );
+    });
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    await waitFor(() => expect(within(confession).getByRole("button", { name: "Revise with these notes" })).toHaveFocus());
+    expect(api.requests.some((r) => r.path === "/liturgy/revise")).toBe(false);
+  });
+
   it("keeps the card read-only while it revises; Cancel keeps the text and notes and returns focus to Revise", async () => {
 ````
 
@@ -1335,11 +1471,12 @@ Counts after Task 3: backend **1220 passed, 11 skipped**; frontend **572 in 78**
 (cd frontend && npx vitest run src/lib/liturgy/notes.test.ts src/lib/liturgy/review.test.tsx src/components/builder/liturgy/review-step.test.tsx 2>&1 | grep -E "^ +× |Tests ")
 ```
 
-**Expected:** these four lines (order may vary; typed and saved text has no Revise yet), then `⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯` and `      Tests  4 failed | 26 passed (30)`:
+**Expected:** these five lines (order may vary; typed and saved text has no Revise yet), then `⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯` and `      Tests  5 failed | 26 passed (31)`:
 ```
    × the reviewer's notes (R Notes) > offers Revise on AI, typed and saved text with a note left, never on the church default or a blank card
    × Revise with these notes (R Revise) > is offered on AI, typed and archived cards with a note left; the Benediction only once it no longer follows the default
    × Revise with these notes (R Revise) > asks before revising typed or saved text: Keep my text sends nothing; Revise text revises the current text, with Undo
+   × Revise with these notes (R Revise) > closes Replace your text? when the notes change meanwhile, sending nothing; focus goes to the heading once Revise is gone
    × Revise with these notes (R Revise) > keeps Cancel while a one-note card revises, with its × off, even when another tab's edit fades the notes
 ```
 
@@ -1406,6 +1543,22 @@ export function canRevise(card: LiturgyCard, review: CardReview | undefined): bo
   /** True when the revision started (`canRevise`, not already revising, not being written, no 429 wait). */
 ````
 
+**In `backend/usecases/liturgy_review.py`, replace:**
+
+````python
+revise_section: one complete() call that edits an AI draft to address the
+notes left on it and keeps the rest. The system message
+````
+
+**with:**
+
+````python
+revise_section: one complete() call that edits a card's text to address the
+notes left on it and keeps the rest: an AI draft, typed text or a saved
+service's (reviewer follow-up 1; the origin is not sent, and the client asks
+before replacing the member's own text). The system message
+````
+
 - [ ] **Step 4 (agent): The confirm on the card**
 
 **In `frontend/src/components/builder/liturgy/card-notes.tsx`, replace:**
@@ -1437,6 +1590,18 @@ import { needsRegenerateConfirm } from "@/lib/liturgy/cards";
 **In `frontend/src/components/builder/liturgy/card-notes.tsx`, replace:**
 
 ````tsx
+import { canRevise, LOOKS_GOOD, STALE_LINE, TAG_LABELS, type Note } from "@/lib/liturgy/notes";
+````
+
+**with:**
+
+````tsx
+import { canRevise, LOOKS_GOOD, STALE_LINE, TAG_LABELS, type Note, type ServiceReview } from "@/lib/liturgy/notes";
+````
+
+**In `frontend/src/components/builder/liturgy/card-notes.tsx`, replace:**
+
+````tsx
  * "Revise with these notes" (R "Revise") shows only on an AI card with a note
  * left, and not while the card is being written; the card's heading
  * describes it. While it runs the button
@@ -1451,7 +1616,9 @@ import { needsRegenerateConfirm } from "@/lib/liturgy/cards";
  * card's heading describes it. On typed or saved text it asks first ("Replace
  * your text?", the same rule as Regenerate's): "Keep my text" returns focus to
  * the button, "Revise text" starts it and the closing dialog sends focus to its
- * Cancel. While it runs the button
+ * Cancel. The dialog closes, sending nothing, when the notes change while it
+ * asks (Revise no longer offered, or a new review or another tab's edit), and
+ * focus goes to Revise, else the heading. While it runs the button
 ````
 
 **In `frontend/src/components/builder/liturgy/card-notes.tsx`, replace:**
@@ -1467,6 +1634,8 @@ import { needsRegenerateConfirm } from "@/lib/liturgy/cards";
   const cancelRef = useRef<HTMLButtonElement>(null);
   const focusCancel = useRef(false);
   const [confirming, setConfirming] = useState(false);
+  /** The review the confirm was opened on. */
+  const [askedOn, setAskedOn] = useState<ServiceReview | null>(null);
   /** "Revise text" was chosen, so the closing dialog sends focus to the revision's Cancel. */
   const confirmed = useRef(false);
 ````
@@ -1474,6 +1643,16 @@ import { needsRegenerateConfirm } from "@/lib/liturgy/cards";
 **In `frontend/src/components/builder/liturgy/card-notes.tsx`, replace:**
 
 ````tsx
+  if (notes === undefined || notes.notes.length === 0) {
+    // The notes went while the card revises (another tab edited it): Cancel stays.
+    if (revisingRow !== null) return revisingRow;
+    return notes?.found === 0 ? (
+      <p id={notesId(sectionKey)} className="flex items-center gap-1.5 text-sm text-muted-foreground">
+        <CheckIcon className="size-4" aria-hidden="true" />
+        {LOOKS_GOOD}
+      </p>
+    ) : null;
+  }
   const offered = canRevise(draft.liturgy.cards[sectionKey], notes) && !busy;
 ````
 
@@ -1482,6 +1661,63 @@ import { needsRegenerateConfirm } from "@/lib/liturgy/cards";
 ````tsx
   const card = draft.liturgy.cards[sectionKey];
   const offered = canRevise(card, notes) && !busy;
+  // The confirm closes once Revise is no longer offered or the notes it asked about changed (another tab's edit,
+  // a new review), so it never revises with notes the member is not looking at.
+  if (confirming && (!offered || review.review !== askedOn)) setConfirming(false);
+  // Rendered after the notes in every branch below, so it stays mounted (and sends focus back) as the notes go.
+  const dialog = (
+    <ConfirmDialog
+      open={confirming}
+      onOpenChange={setConfirming}
+      title="Replace your text?"
+      description={`Revise replaces the text in ${label} with a version that addresses these notes. You can undo right after.`}
+      confirmLabel="Revise text"
+      cancelLabel="Keep my text"
+      onConfirm={() => {
+        confirmed.current = true;
+        setConfirming(false);
+        review.revise(sectionKey);
+      }}
+      // Keep my text: back to Revise. Revise text: Revise is gone, so the revision's Cancel (Revise if it did not
+      // start). The heading when neither is there (the notes went while it asked).
+      finalFocus={() => {
+        const cancel = confirmed.current ? cancelRef.current : null;
+        if (cancel !== null && cancel.isConnected) return cancel;
+        return document.getElementById(reviseId(sectionKey)) ?? document.getElementById(headingId);
+      }}
+    />
+  );
+  if (notes === undefined || notes.notes.length === 0) {
+    // The notes went while the card revises (another tab edited it): Cancel stays.
+    const rest =
+      revisingRow ??
+      (notes?.found === 0 ? (
+        <p id={notesId(sectionKey)} className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          <CheckIcon className="size-4" aria-hidden="true" />
+          {LOOKS_GOOD}
+        </p>
+      ) : null);
+    return (
+      <>
+        {rest}
+        {dialog}
+      </>
+    );
+  }
+````
+
+**In `frontend/src/components/builder/liturgy/card-notes.tsx`, replace:**
+
+````tsx
+  return (
+    <div id={notesId(sectionKey)} className="grid gap-2 rounded-md bg-muted/40 p-3">
+````
+
+**with:**
+
+````tsx
+  const shown = (
+    <div id={notesId(sectionKey)} className="grid gap-2 rounded-md bg-muted/40 p-3">
 ````
 
 **In `frontend/src/components/builder/liturgy/card-notes.tsx`, replace:**
@@ -1491,11 +1727,6 @@ import { needsRegenerateConfirm } from "@/lib/liturgy/cards";
                 // Focus moves to Cancel only when the revision started.
                 if (review.revise(sectionKey)) focusCancel.current = true;
               }}
-            >
-              Revise with these notes
-            </Button>
-          </div>
-        ) : null)}
 ````
 
 **with:**
@@ -1504,63 +1735,68 @@ import { needsRegenerateConfirm } from "@/lib/liturgy/cards";
               onClick={() => {
                 if (needsRegenerateConfirm(card)) {
                   confirmed.current = false;
+                  setAskedOn(review.review);
                   setConfirming(true);
                   return;
                 }
                 // Focus moves to Cancel only when the revision started.
                 if (review.revise(sectionKey)) focusCancel.current = true;
               }}
-            >
-              Revise with these notes
-            </Button>
-          </div>
-        ) : null)}
-      <ConfirmDialog
-        open={confirming}
-        onOpenChange={setConfirming}
-        title="Replace your text?"
-        description={`Revise replaces the text in ${label} with a version that addresses these notes. You can undo right after.`}
-        confirmLabel="Revise text"
-        cancelLabel="Keep my text"
-        onConfirm={() => {
-          confirmed.current = true;
-          setConfirming(false);
-          review.revise(sectionKey);
-        }}
-        // Keep my text: back to Revise. Revise text: Revise is gone, so the revision's Cancel (Revise or the heading if it did not start).
-        finalFocus={() => {
-          if (!confirmed.current) return true;
-          const cancel = cancelRef.current;
-          if (cancel !== null && cancel.isConnected) return cancel;
-          return document.getElementById(reviseId(sectionKey)) ?? document.getElementById(headingId);
-        }}
-      />
+````
+
+**In `frontend/src/components/builder/liturgy/card-notes.tsx`, replace:**
+
+````tsx
+      ) : null}
+    </div>
+  );
+}
+
+/** The "Across the service" box at the top of the step (R "Notes"): notes about more than one prayer, at most 3. */
+````
+
+**with:**
+
+````tsx
+      ) : null}
+    </div>
+  );
+  return (
+    <>
+      {shown}
+      {dialog}
+    </>
+  );
+}
+
+/** The "Across the service" box at the top of the step (R "Notes"): notes about more than one prayer, at most 3. */
 ````
 
 - [ ] **Step 5 (agent): Run the three files three times, the suite, types and lint**
 
 ```bash
-for i in 1 2 3; do (cd frontend && npx vitest run src/lib/liturgy/notes.test.ts src/lib/liturgy/review.test.tsx src/components/builder/liturgy/review-step.test.tsx 2>&1 | grep -E "Tests "); done
-(cd frontend && npx vitest run 2>&1 | grep -E "Test Files|Tests ")
+for i in 1 2 3; do (cd frontend && npx vitest run src/lib/liturgy/notes.test.ts src/lib/liturgy/review.test.tsx src/components/builder/liturgy/review-step.test.tsx 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests "); done
+(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")
 (cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")
 ```
 
-**Expected:** `      Tests  30 passed (30)` three times; ` Test Files  78 passed (78)` and `      Tests  573 passed (573)`; `typecheck 0`, `lint 0`.
+**Expected:** ` Test Files  3 passed (3)` and `      Tests  31 passed (31)` three times, with no `×` or `FAIL` line; ` Test Files  78 passed (78)` and `      Tests  574 passed (574)`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 6 (agent): Commit**
 
 ```bash
-git add frontend/src/lib/liturgy/notes.ts frontend/src/lib/liturgy/notes.test.ts frontend/src/lib/liturgy/review.tsx frontend/src/lib/liturgy/review.test.tsx frontend/src/components/builder/liturgy/card-notes.tsx frontend/src/components/builder/liturgy/review-step.test.tsx
+git add frontend/src/lib/liturgy/notes.ts frontend/src/lib/liturgy/notes.test.ts frontend/src/lib/liturgy/review.tsx frontend/src/lib/liturgy/review.test.tsx frontend/src/components/builder/liturgy/card-notes.tsx frontend/src/components/builder/liturgy/review-step.test.tsx backend/usecases/liturgy_review.py
 git commit -q -m "Liturgy step: Revise on typed and saved text, with a confirm (follow-up 1; owner answers 2, 3)" -m "Revise with these notes is offered on typed and saved text too, after
 Replace your text? (Revise text, Keep my text), with Undo after, and
-focus as Regenerate's confirm. A Benediction following the church default
+focus as Regenerate's confirm. The confirm closes, sending nothing, if the
+notes change while it asks. A Benediction following the church default
 has none; once edited it is typed text. The backend never restricted the
-origin, so it is unchanged." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+origin, so only its docstring changes." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 git log --oneline -1
 ```
 
-Counts after Task 4: backend **1220 passed, 11 skipped**; frontend **573 in 78**.
+Counts after Task 4: backend **1220 passed, 11 skipped**; frontend **574 in 78**.
 
 ### Task 5: Docs: the manual check and R's amendment (owner answer 6; clarification 15)
 
@@ -1610,7 +1846,7 @@ goes into "Reviewer follow-up 1 record".
 
 ````markdown
 - [ ] **8.** Start a review and tap **Cancel**: the spinner goes and nothing changes. Start one and choose **New service**: no notes remain.
-- [ ] (owner, after follow-up 1) **9.** On a real review: no note only praises a prayer ("… fits well", "good focus on …"); a card with a "Cites …" note has no second note about naming the reading; a prayer named in "Several prayers open with …" has no note of its own about its opening.
+- [ ] (owner, after follow-up 1) **9.** On a real review: no note only praises a prayer ("… fits well", "good focus on …"); a card with a "Cites …" note has no second note about naming the reading; a prayer named in "Several prayers open with …" has no note of its own about its opening, and "Across the service" has no second, AI-worded version of that note.
 ````
 
 **Append to `docs/superpowers/specs/2026-09-26-service-reviewer-design.md`:**
@@ -1623,8 +1859,8 @@ goes into "Reviewer follow-up 1 record".
 
 - **No praise notes.** The output contract says a note is only for something to change, never praise or a description of what already works, and a prayer that is fine gets no notes. No code filter guesses at compliments.
 - **Revise on typed and saved text** (reverses decision 4). Revise is offered on a card with text and a note left whose origin is AI, typed or from a saved service; typed and saved text asks first ("Replace your text?", "Revise replaces the text in {Label} with a version that addresses these notes. You can undo right after.", "Revise text", "Keep my text"), and Undo follows, as on AI cards. The revised text is an AI draft. A Benediction that follows the church default has no Revise; once edited it is typed text.
-- **Faded notes after an edit** (replaces "Notes go away when the text changes"). After typing, Undo, "Use church default" or another tab's edit, a card's notes stay, dimmed, under "From before your last edit.", each still dismissable, with Revise still offered (it sends the current text and the remaining notes) until the next review. A successful Regenerate or Revise removes the card's notes; Clear text (a blank card) removes them; "Looks good." goes after any edit. "Across the service" is unchanged: it stays until the next review, its own dismiss or New service. A card changed while the review ran still gets no notes.
-- **No restated code notes.** On a card with a code "Cites …" note, an AI note tagged rules that speaks of citing or naming scripture is dropped; on a card whose opening a code "Several prayers open with …" note names, an AI note tagged repetition that speaks of how the prayer opens, or quotes its opening, is dropped. The prompt also says not to make a code note's point in other words.
+- **Faded notes after an edit** (replaces "Notes go away when the text changes"). After typing, Undo, "Use church default" or another tab's edit (another tab's Regenerate or Revise included), a card's notes stay, dimmed, under "From before your last edit.", each still dismissable, with Revise still offered (it sends the current text and the remaining notes) until the next review. A successful Regenerate or Revise removes the card's notes, and Undo after it brings the text back without them; Clear text (a blank card) removes them; "Looks good." goes after any edit. "Across the service" is unchanged: it stays until the next review, its own dismiss or New service. A card changed while the review ran still gets no notes.
+- **No restated code notes.** On a card with a code "Cites …" note, an AI note tagged rules that speaks of citing or naming scripture is dropped; on a card whose opening a code "Several prayers open with …" note names, an AI note tagged repetition that speaks of how the prayer opens, or quotes its opening, is dropped, and so is an AI note across the service on prayers that open alike. The prompt also says not to make a code note's point in other words.
 
 Later, planned on its own: Revise from "Across the service".
 ````
@@ -1656,9 +1892,9 @@ git log --oneline -1
 
 - [ ] **Step 4 (controller): Review the batch (T1-T5) and backup push**
 
-One review of the whole batch: the contract and code-notes strings exactly as clarifications 1-2; `drop_restated` drops only what clarifications 3-4 say and never a code note; no INFO line gains text; `pruneReview` fades and drops exactly as clarification 5; Regenerate and Revise forget the card (`onWritten`, `forgetCard`); "Across the service" unchanged; the line is plain text in the notes (clarification 9); `canRevise` and the confirm as clarifications 11-12, with the owner's copy verbatim; focus never drops to the page; 44 px targets and wrapping at 375 px unchanged; the docs match. Fixes are `Fix: <what> (Task <n> review)` commits. Then the backup push.
+One review of the whole batch: the contract and code-notes strings exactly as clarifications 1-2; `code_notes_intro` names only the points the code notes invite (clarification 2); `drop_restated` and the across-the-service filter drop only what clarifications 3-4 say and never a code note; no INFO line gains text; `pruneReview` fades and drops exactly as clarification 5; Regenerate and Revise forget the card (`onWritten`, `forgetCard`); "Across the service" unchanged; the line is plain text in the notes (clarification 9); `canRevise` and the confirm as clarifications 11-12 (it closes, sending nothing, when the notes change while it asks), with the owner's copy verbatim; focus never drops to the page; 44 px targets and wrapping at 375 px unchanged; the docs match. Fixes are `Fix: <what> (Task <n> review)` commits. Then the backup push.
 
-Counts after Task 5: backend **1220 passed, 11 skipped**; frontend **573 in 78**.
+Counts after Task 5: backend **1220 passed, 11 skipped**; frontend **574 in 78**.
 
 ### Task 6: Verification and the draft PR (owner's yes before the PR is opened and before it is marked ready)
 
@@ -1676,18 +1912,18 @@ git log --oneline --grep '^Plan: reviewer follow-up 1' -1
 git rev-list --count origin/claude/slice-2-plan-4q33le..HEAD
 ```
 
-**Expected:** nothing (or `?? .claude/`); `0`; `<sha> Plan: reviewer follow-up 1 (owner answers 2026-10-01)`; `0`. If `main` moved: `git merge origin/main -m "Merge origin/main into claude/slice-2-plan-4q33le (Task 6)"` with the trailer as a second `-m`; on a conflict, `git merge --abort` and tell the owner.
+**Expected:** nothing (or `?? .claude/`); `0`; `<sha> Plan: reviewer follow-up 1 review fixes (owner answers 2026-10-01)`; `0`. If `main` moved: `git merge origin/main -m "Merge origin/main into claude/slice-2-plan-4q33le (Task 6)"` with the trailer as a second `-m`; on a conflict, `git merge --abort` and tell the owner.
 
 - [ ] **Step 2 (agent): Both suites, the changed files three times, types, lint, the build**
 
 ```bash
 .venv/bin/python -m pytest -q | tail -1
-for i in 1 2 3; do (cd frontend && npx vitest run 2>&1 | grep -E "Test Files|Tests |FAIL"); done
+for i in 1 2 3; do (cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests "); done
 (cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")
 (cd frontend && NEXT_PUBLIC_SUPABASE_URL=https://ci-placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-placeholder NEXT_PUBLIC_API_URL=http://localhost:8000 npm run build 2>&1 | grep -E "Compiled successfully|Error")
 ```
 
-**Expected:** `1220 passed, 11 skipped in <t>s`; three times ` Test Files  78 passed (78)` and `      Tests  573 passed (573)` with no `FAIL`; `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s` and no `Error` (the build runs in the real checkout; a font `Failed to fetch` only: say so and rely on CI).
+**Expected:** `1220 passed, 11 skipped in <t>s`; three times ` Test Files  78 passed (78)` and `      Tests  574 passed (574)` with no `×` or `FAIL` line (one names the failing test: Step 6); `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s` and no `Error` (the build runs in the real checkout; a font `Failed to fetch` only: say so and rely on CI).
 
 - [ ] **Step 3 (agent): The API files are unchanged, the gates, the paths, the commits**
 
@@ -1716,7 +1952,7 @@ frontend/src/lib/liturgy/notes.ts
 frontend/src/lib/liturgy/review.test.tsx
 frontend/src/lib/liturgy/review.tsx
 ```
-`0`; the subjects oldest first: `Docs: Voices of the Church owner decisions (pre-spec, 2026-10-01)`, the plan's (`WIP plan: reviewer follow-up 1` …, `Plan: reviewer follow-up 1 (owner answers 2026-10-01)`), then T1-T5's five subjects as written above, then any `Fix: …` lines; only `trailer check done`.
+`0`; the subjects oldest first: `Docs: Voices of the Church owner decisions (pre-spec, 2026-10-01)`, the plan's (`WIP plan: reviewer follow-up 1` …, `Plan: reviewer follow-up 1 review fixes (owner answers 2026-10-01)`), then T1-T5's five subjects as written above, then any `Fix: …` lines; only `trailer check done`.
 
 - [ ] **Step 4 (agent → OWNER): Ask to open the draft PR**
 
@@ -1727,7 +1963,7 @@ gh pr list -R bbrown62450/church --head claude/slice-2-plan-4q33le --state open 
 
 **Expected:** one `✓ Logged in` line; `[]`. Send the owner exactly this, and wait for a clear yes:
 
-> Reviewer follow-up 1 is verified on this machine: backend 1220 passed, 11 skipped (1217 before); frontend 573 tests in 78 files (570 before), three runs in a row; typecheck, lint and the production build are clean; the API is unchanged. It makes the four changes you chose: no praise notes, Revise on your own text after "Replace your text?", dimmed notes under "From before your last edit." after an edit, and no AI notes that restate a citation or a repeated opening. May I open the pull request as a **draft** titled "Reviewer follow-up 1: no praise, Revise on your text, faded notes", so the checks run? Merging stays with you.
+> Reviewer follow-up 1 is verified on this machine: backend 1220 passed, 11 skipped (1217 before); frontend 574 tests in 78 files (570 before), three runs in a row; typecheck, lint and the production build are clean; the API is unchanged. It makes the four changes you chose: no praise notes, Revise on your own text after "Replace your text?", dimmed notes under "From before your last edit." after an edit, and no AI notes that restate a citation or a repeated opening. May I open the pull request as a **draft** titled "Reviewer follow-up 1: no praise, Revise on your text, faded notes", so the checks run? Merging stays with you.
 
 - [ ] **Step 5 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
 
@@ -1739,11 +1975,11 @@ Reviewer follow-up 1 (owner answers of 2026-10-01 after the reviewer's phone che
 - No praise notes: the review's output contract says a note is only for something to change; a fine prayer gets no notes.
 - Revise with these notes on typed and saved text, after "Replace your text?" (Revise text / Keep my text), with Undo. A Benediction following the church default has none.
 - After an edit a card's notes stay, dimmed, under "From before your last edit." until the next review; a new AI draft or a successful revision removes them.
-- AI notes that only restate a code note (citing scripture on a card with a Cites note; how a prayer opens when "Several prayers open with" already says so) are dropped.
+- AI notes that only restate a code note (citing scripture on a card with a Cites note; how a prayer opens, on the card or across the service, when "Several prayers open with" already says so) are dropped, and the prompt names only the restatements the code notes invite.
 
 Later, planned on its own: Revise from "Across the service".
 
-Tests: backend 1217 → 1220 passed, 11 → 11 skipped; frontend 570 → 573 in 78 → 78 files
+Tests: backend 1217 → 1220 passed, 11 → 11 skipped; frontend 570 → 574 in 78 → 78 files
 
 After merge (Task 7): a four-step check on the owner's phone, then a short "Reviewer follow-up 1 record" in docs/ops-runbook.md.
 
@@ -1757,22 +1993,22 @@ gh pr create -R bbrown62450/church --draft --base main --head claude/slice-2-pla
 gh pr checks <N> -R bbrown62450/church --watch --interval 30
 ```
 
-Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1220 passed, 11 skipped`, backend-postgres `11 passed, 1220 deselected`, frontend `573 passed` in 78 files. Then send: "PR #<N> is green: backend 1220 passed, 11 skipped; 573 frontend tests in 78 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R bbrown62450/church`.
+Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1220 passed, 11 skipped`, backend-postgres `11 passed, 1220 deselected`, frontend `574 passed` in 78 files. Then send: "PR #<N> is green: backend 1220 passed, 11 skipped; 574 frontend tests in 78 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R bbrown62450/church`.
 
 - [ ] **Step 6: Fix any failure in its owning task**
 
 | Failing check or test | Owning task |
 |---|---|
-| `test_usecase_liturgy_review.py` (the prompt test, the INFO test, the budget test) | T1, T2 |
+| `test_usecase_liturgy_review.py` (the prompt tests, the restated-note tests, the INFO test, the budget test) | T1, T2 |
 | `notes.test.ts`, `review.test.tsx`, `generation.test.tsx`, review-step's fading cases | T3 |
-| review-step's Revise cases | T4 |
+| review-step's Revise cases (the confirm, and its closing when the notes change) | T4 |
 | `test_docs.py`, `test_slice1_docs.py` | T5 |
 | a flaky run | its task: wait with `findBy`/`waitFor`, never sleep |
 | anything else | report to the owner before changing anything |
 
 For each fix: change only the owning task's files; rerun Steps 2-3; commit `Fix: <what> (Task <n>, follow-up 1 final verification)` with the trailer; after the PR exists, ask the owner before pushing it.
 
-Expected counts after this task: backend `1220 passed, 11 skipped`; frontend `573 passed` in 78 files.
+Expected counts after this task: backend `1220 passed, 11 skipped`; frontend `574 passed` in 78 files.
 
 ### Task 7: Merge, the owner's phone check (four steps), the record (OWNER + agent)
 
@@ -1795,13 +2031,13 @@ RUN=$(gh run list -R bbrown62450/church --workflow ci.yml --branch main --commit
 
 - [ ] **Step 2 (OWNER, then agent): Phone, step 1 of 4: no praise notes**
 
-> On your phone, open https://worship-service-builder.vercel.app (signed in, in your church). Tap **⋮** next to Summary, choose **New service** (tap **Start new service** if it asks), then tap **3 Liturgy**. In **Call to Worship** type: `Leader: Gracious God, as John 21 tells, you call us. People: We come.` Then tap **Generate empty sections (5)** and wait for "Wrote 5 sections.". In **Opening Prayer**, make the very first words `Gracious God,` (type over the start if needed). Now tap **Review service**. Read every note: is any of them only praise, saying something already works ("fits well", "good focus on …") rather than asking for a change? Cards with nothing to fix should say "Looks good.".
+> On your phone, open https://worship-service-builder.vercel.app (signed in, in your church). Tap **⋮** next to Summary, choose **New service** (tap **Start new service** if it asks), then tap **3 Liturgy**. In **Call to Worship** type: `Leader: Gracious God, as John 21 tells, you call us. People: We come.` Then tap **Generate empty sections** and wait until it says it wrote them ("Wrote … sections."). In **Opening Prayer**, make the very first words `Gracious God,` (type over the start if needed). Now tap **Review service**. Read every note: is any of them only praise, saying something already works ("fits well", "good focus on …") rather than asking for a change? Cards with nothing to fix should say "Looks good.".
 
 Record the number of notes, any that only praised (quote it), and the "Looks good." cards.
 
 - [ ] **Step 3 (OWNER, then agent): Phone, step 2 of 4: no restated notes**
 
-> Still on that review: your **Call to Worship** should have the note `Cites John 21. Draw on the reading's themes without naming it.` Is there a second note on it that says the same thing in other words (about citing or naming the reading)? At the top, **Across the service** should say `Several prayers open with "Gracious God".` Does the Call to Worship or the Opening Prayer have its own note about how it opens?
+> Still on that review: your **Call to Worship** should have the note `Cites John 21. Draw on the reading's themes without naming it.` Is there a second note on it that says the same thing in other words (about citing or naming the reading)? At the top, **Across the service** should say `Several prayers open with "Gracious God".` Does the Call to Worship or the Opening Prayer have its own note about how it opens? And does **Across the service** show a second, AI-worded version of that note (saying the prayers begin or open alike)?
 
 Record yes or no for each, quoting any restated note.
 
@@ -1847,7 +2083,7 @@ or church id is recorded here.
 |---|---|---|
 | Merge and deploy | PR #<N> merged <UTC time> (<Eastern time>), merge commit `<short sha>`. CI on `main` (run <run id>): success | <date> |
 | 1. No praise notes (phone: <phone and browser>) | <n notes, none only praise; Looks good on n cards. / Praise seen: "…"> | <date> |
-| 2. No restated notes | <The Call to Worship had only the code Cites note on citing; no card restated the opening. / Restated: "…"> | <date> |
+| 2. No restated notes | <The Call to Worship had only the code Cites note on citing; no card restated the opening; Across the service had no AI-worded second note on it. / Restated: "…"> | <date> |
 | 3. Revise on your text | <"Replace your text?" asked first; Keep my text changed nothing; revised in <n> s, addressed the note, kept the form; Undo brought the text back. / …> | <date> |
 | 4. Dimmed notes after typing | <The notes stayed, dimmed, under "From before your last edit."; Looks good went; a new review replaced them. / …> | <date> |
 | Follow-ups | <None. / One line per follow-up.> Next: Revise from "Across the service" (planned on its own); then 5a (saving and archiving services and the Word files). | <date> |
@@ -1894,7 +2130,7 @@ gh pr checks claude/slice-2-plan-4q33le -R bbrown62450/church --watch
 
 Code only (notes were never saved; no draft shape changed). On the owner's yes for each outward command: a branch `claude/revert-reviewer-followup-1` from `origin/main`, `git revert -m 1 --no-commit <merge sha>`, a commit "Revert reviewer follow-up 1 (PR #<N>)" with the trailer, both suites (`1217 passed, 11 skipped`; `570 passed` in 78), a PR, CI, and the merge on the owner's yes; record it in the follow-up record.
 
-Expected counts after this task: backend `1220 passed, 11 skipped` on `main`; frontend `573 passed` in 78 files. The records PR adds no test.
+Expected counts after this task: backend `1220 passed, 11 skipped` on `main`; frontend `574 passed` in 78 files. The records PR adds no test.
 
 ---
 
@@ -1905,9 +2141,13 @@ Expected counts after this task: backend `1220 passed, 11 skipped` on `main`; fr
 - **T3 keeps `canRevise` as it is,** so its DOM tests stay on AI cards; T4 widens it and updates the two cases that depended on typed cards having no Revise (the "offered on" test and the other-tab Cancel test, whose focus now goes to Revise on the now-typed card).
 
 **Replay of the finished plan (2026-10-01).** The directives of T1-T5 were applied in order onto a fresh detached worktree of `faa0ecb` (a symlink to the repo's `.venv` and to `frontend/node_modules`), running each task's test commands:
-- All 61 directives applied (T1 4, T2 4, T3 34, T4 15, T5 4); every Replace anchor occurred exactly once; after T2, T3, T4 and T5 the tree was identical to the build worktree's.
-- Every "see it fail" output matched as quoted (T1 `1 failed, 13 passed`; T2 `2 failed, 14 passed`; T3 eight failures, `8 failed | 21 passed (29)`; T4 four failures, `4 failed | 26 passed (30)`), and every count matched the table: backend 1218, then 1220 (11 skipped); frontend 572, then 573 in 78 files; typecheck 0 and lint 0; the docs tests `89 passed`, owner markers `4`, no em dash added; the OpenAPI export and `gen:api` left the API files unchanged.
+- All 61 directives applied (T1 4, T2 4, T3 34, T4 15, T5 4); every Replace anchor occurred exactly once; after T2, T3, T4 and T5 the tree was identical to the build worktree's. (Superseded by the replay after the review fixes, below.)
+- Every "see it fail" output matched as then quoted (T1 `1 failed, 13 passed`; T2 `2 failed, 14 passed`; T3 eight failures, `8 failed | 21 passed (29)`; T4 four failures, `4 failed | 26 passed (30)`), and every count matched the table then: backend 1218, then 1220 (11 skipped); frontend 572, then 573 in 78 files; typecheck 0 and lint 0; the docs tests `89 passed`, owner markers `4`, no em dash added; the OpenAPI export and `gen:api` left the API files unchanged.
 - **One flaky run:** during T3's checks the three frontend files once reported `1 failed | 28 passed (29)`; the failing test's name was not captured, and 45 further runs of the same files (T3 and T4 trees) all passed. T6 Step 2 runs the suite three times; a failure there is Step 6's (make the test deterministic, never retry), and the build's review should look at the new DOM tests' waits first.
+
+**Review fixes and replay (2026-10-01, after the owner's "all recommended").** The plan's review asked for ten changes, all applied: (1) `RESTATES_OPENING` matches only an opening verb followed by a comparison, after the section names are taken out (`SECTION_NAMES`, `speaks_of_opening`), with four kept table cases; (2) `code_notes_intro` brackets only the points the code notes invite, tested with and without; (3) the same opening test drops an AI note across the service when the code note names the opening, tested both ways, and T7 Step 3 asks about it; (4) the confirm stays mounted in every branch of `CardNotes`, closes when Revise stops being offered or the review changes, and falls back to the heading, with a new test; (5) the T3, T4 and T6 greps name a failing test, and the faded-notes test waits for the line to go on the second review; (6) the faded list is described by the line (`aria-describedby`), tested; (7, 8) clarification 5 and question 4 state Undo after Revise or Regenerate and another tab's Regenerate or Revise; (9) T4 updates the module docstring on `revise_section`; (10) T7 Step 2 names no count. The directives of T1-T5 were then replayed onto a fresh detached worktree of the branch at `332fe18` (`faa0ecb` plus docs only; symlinks to the repo's `.venv` and `frontend/node_modules`), running each task's commands:
+- All 68 directives applied (T1 6, T2 4, T3 35, T4 19, T5 4); every Replace anchor occurred exactly once; the result matched the build worktree's but for two comments.
+- Every "see it fail" output matched as quoted (T1 two failures, `2 failed, 12 passed`; T2 `2 failed, 14 passed`; T3 eight failures, `8 failed | 21 passed (29)`; T4 five failures, `5 failed | 26 passed (31)`), and every count matched the table: backend 1218, then 1220 (11 skipped); frontend 572, then 574 in 78 files (three files three times after T3 and T4, the whole suite three times at the end, with no `×` or `FAIL` line); typecheck 0 and lint 0; the docs tests `89 passed`, owner markers `4`, no em dash added, `2 files changed, 18 insertions(+), 3 deletions(-)`; the OpenAPI export and `gen:api` left the API files unchanged; no raw HTML. No flaky run this time.
 - Not run while planning: the production build (Turbopack refuses the replay's symlinked `node_modules`; T6 runs it in the real checkout), the pushes, the PR and CI, the merge and the owner's checks, and any call to OpenAI.
 
 ## Spec coverage
@@ -1915,26 +2155,26 @@ Expected counts after this task: backend `1220 passed, 11 skipped` on `main`; fr
 | Owner answer or R item | Task(s) and tests |
 |---|---|
 | 1. No praise notes (contract rule, pinned) | T1 `test_the_prompt_asks_for_no_praise_and_no_restated_code_notes`; T7 Step 2 |
-| 2. Revise on typed and archive text, the confirm, Undo, focus | T4 `notes.test.ts` "offers Revise on AI, typed and saved text …"; review-step "is offered on AI, typed and archived cards …", "asks before revising typed or saved text …", the other-tab Cancel test (focus to Revise); T7 Step 4 |
+| 2. Revise on typed and archive text, the confirm, Undo, focus | T4 `notes.test.ts` "offers Revise on AI, typed and saved text …"; review-step "is offered on AI, typed and archived cards …", "asks before revising typed or saved text …", "closes Replace your text? when the notes change meanwhile …" (nothing sent; focus to the heading or Revise), the other-tab Cancel test (focus to Revise); T7 Step 4 |
 | 2. The backend allows any origin | clarification 14 (no change; `ReviseIn` has no origin) |
 | 3. The Benediction following the default has no Revise; once edited it has | T4 review-step "is offered on …" (the Benediction part); `notes.test.ts` (`followsDefault`) |
 | 4. Faded notes: typing, Undo, other tab, Use church default; dismissable; Revise on current text; Looks good goes; a new review replaces; memory only | T3 `notes.test.ts` "fades a card's notes …"; review-step "fades a card's notes …", "keeps faded notes readable …"; T4 "asks before revising …" (Revise from a faded card sends the current text); T7 Step 5 |
 | 4. Regenerate and Revise success clear | T3 `notes.test.ts` "forgets a card's notes …", review-step "fades … drops them when it is regenerated or cleared"; `review.test.tsx` "sends the card's text …" (no notes after a revision); T4 "asks before revising …" (notes go after Revise) |
 | 4. "Across the service" unchanged; the in-flight rule kept | T3 "keeps faded notes readable …" (the box stays); RP's "drops the notes of a card edited while the review ran …" unchanged |
-| 4. Screen readers | T3 "keeps faded notes readable …" (`toHaveAccessibleDescription` contains the line); clarification 9 |
-| 5. No restated citation or opening notes; firmer prompt | T1 (the prompt line), T2 `test_ai_notes_that_restate_a_code_note_in_other_words_are_dropped` (table), `test_the_review_drops_restated_citation_and_opening_notes`; T7 Step 3 |
+| 4. Screen readers | T3 "keeps faded notes readable …" (the textarea's description contains the line; the list "Notes on Opening Prayer" is described by it); clarification 9 |
+| 5. No restated citation or opening notes; firmer prompt | T1 `test_the_prompt_asks_for_no_praise_and_no_restated_code_notes` (the line, with brackets only for the code notes present); T2 `test_ai_notes_that_restate_a_code_note_in_other_words_are_dropped` (table, with the kept notes that name a section or use "open" otherwise), `test_the_review_drops_restated_citation_and_opening_notes` (per card and across the service); T7 Step 3 |
 | 6. Process: one PR, one batch, phone check, records, manual-verification items | T5 (items 4, 5, 9; R's amendment), T5 Step 4 (the batch review), T6, T7 |
 | R decision 4 (Revise only on AI cards) | reversed by owner answer 2: T4, R's amendment (T5) |
 | R "Notes go away when the text changes" | replaced by owner answer 4: T3, R's amendment (T5) |
 
 ## Questions for the owner
 
-Your answers of 2026-10-01 (1-6, "all recommended") are binding and already in the plan. These are the choices the plan makes where you did not say; each is written as recommended, and none blocks the build.
+Your answers of 2026-10-01 (1-6, "all recommended") are binding and already in the plan. These are the choices the plan makes where you did not say; each is written as recommended. **Answered 2026-10-01: "all recommended" (binding;** see "Owner answers to this plan's questions"). The plan's review afterwards added the Undo and other-tab notes to question 4 and narrowed question 2; neither changes an answer.
 
 1. **The no-praise wording** (clarification 1): "A note is only for something to change. Never praise or describe what already works. If a prayer is fine, give it no notes: its notes list is empty." Recommended: accept.
-2. **Which restated opening notes go** (clarification 4): on a prayer named in "Several prayers open with …", only its AI repetition notes that talk about how it opens (or quote the opening) go; a repetition note about something else in that prayer ("Repeats "mercy" four times.") stays. Recommended: accept (narrower than dropping every repetition note on that card, so a real point is not lost).
+2. **Which restated opening notes go** (clarification 4): on a prayer named in "Several prayers open with …", only its AI repetition notes that talk about how it opens ("Opens like …", "Begins the same way as …") or quote the opening go; a repetition note about something else in that prayer stays, even when it names the Opening Prayer ("Repeats "mercy" four times.", "Repeats "mercy" from the Opening Prayer."). In "Across the service", an AI note that the prayers open alike goes too, since the code note already says it. Recommended: accept (narrower than dropping every repetition note on that card, so a real point is not lost).
 3. **Which restated citation notes go** (clarification 3): only "Rules" notes about citing or naming scripture, and only on a card that already has the "Cites …" note. Recommended: accept.
-4. **What fades and what goes** (clarification 5): typing, Undo, "Use church default" and another tab's edit fade the notes; a successful Regenerate or Revise, Clear text and New service remove them; once dimmed, they stay dimmed until the next review even if Undo puts the old words back. Recommended: accept.
+4. **What fades and what goes** (clarification 5): typing, Undo, "Use church default" and another tab's edit fade the notes; a successful Regenerate or Revise, Clear text and New service remove them; once dimmed, they stay dimmed until the next review even if Undo puts the old words back. Undo after a successful Revise or Regenerate brings the text back without the notes. Another tab's Regenerate or Revise dims this tab's notes under the same line rather than removing them (accepted; a possible later follow-up). Recommended: accept.
 5. **"Across the service"** stays as it is after an edit, not dimmed (clarification 6). Recommended: accept.
 6. **The dialog's other button** is "Keep my text", as on Regenerate's dialog (clarification 12). Recommended: accept.
 7. **After Revise on your text** the card shows "AI draft"; Undo brings back "Your text" (clarification 13). Recommended: accept.
