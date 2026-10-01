@@ -674,6 +674,23 @@ describe("Generate and Regenerate (S Generate and Regenerate, AI bar)", () => {
     expect(within(op).getByRole("heading", { name: "Opening Prayer" })).toHaveFocus();
   });
 
+  it("keeps focus on the card when a run ends without text and nothing can be tried again", async () => {
+    const held = heldGenerate();
+    const { user } = renderStep(testDraft(), { "POST /liturgy/generate": held.handler });
+    const cw = await screen.findByRole("region", { name: "Call to Worship" });
+    await user.click(within(cw).getByRole("button", { name: "Generate" }));
+    await waitFor(() => expect(within(cw).getByRole("button", { name: "Cancel Call to Worship" })).toHaveFocus());
+    await held.release("call_to_worship", {
+      status: 200,
+      body: { results: [sectionFailure("call_to_worship", "ai_not_configured", "AI not configured. Type this section yourself.")] },
+    });
+    await waitFor(() => expect(errorIn("Call to Worship")).toHaveTextContent("AI not configured. Type this section yourself."));
+    expect(within(errorIn("Call to Worship") as HTMLElement).queryByRole("button", { name: "Try again" })).toBeNull();
+    // Cancel went with the run; the card's new Generate takes focus, not the page.
+    await waitFor(() => expect(within(cw).getByRole("button", { name: "Generate" })).toHaveFocus());
+    expect(document.body).not.toHaveFocus();
+  });
+
   it("keeps a 429's wait when the member leaves the step and comes back, and the AI bar waits too", async () => {
     const view = renderStep(testDraft(), {
       "POST /liturgy/generate": fakeError(429, "rate_limited", "Too many requests. Try again in 30 seconds.", {

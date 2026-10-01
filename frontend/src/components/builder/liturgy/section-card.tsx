@@ -94,7 +94,9 @@ export function useRetryWait(retryAt: number | undefined): boolean {
  * Try again, Undo, Clear, the confirm dialog's Replace text), focus moves to
  * a control that survives or to the card's heading (`tabIndex={-1}`). A
  * retryable error replaces the action row: if focus was in it, it moves to
- * Try again (or the heading while a 429's wait keeps Try again off).
+ * Try again (or the heading while a 429's wait keeps Try again off). A run
+ * that ends with the card still empty and no Try again leaves focus on the
+ * card's Generate (or its heading), not the page.
  */
 export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLength, aiAvailable }: SectionCardProps) {
   const { draft, update } = useDraft();
@@ -159,6 +161,20 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
     const retry = retryRef.current;
     (retry !== null && !retry.disabled ? retry : headingRef.current)?.focus();
   }, [error]);
+
+  // A run ended with the card still empty and no Try again (an error that trying again cannot fix, or a result
+  // discarded because the card changed): Cancel went while it had focus, so the card's Generate (or heading) takes it.
+  const hadRun = useRef(run !== undefined);
+  useEffect(() => {
+    const before = hadRun.current;
+    hadRun.current = run !== undefined;
+    if (!before || run !== undefined || hasText || error?.retryable || !rowHadFocus.current) return;
+    const active = document.activeElement;
+    if (active !== null && active !== document.body) return; // focus already went somewhere on purpose
+    rowHadFocus.current = false;
+    const generate = actionRef.current;
+    (generate !== null && generate.isConnected && !generate.disabled ? generate : headingRef.current)?.focus();
+  }, [run, hasText, error]);
 
   function edit(text: string) {
     // Typing in a queued card cancels its request, which was never sent; the typed text stays.
