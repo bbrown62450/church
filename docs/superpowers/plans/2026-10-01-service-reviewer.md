@@ -40,7 +40,7 @@
   `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
 - TDD: write the failing test first and see it fail as quoted.
 - **Backup push after every task** (standing rule): the controller, not the task agent, runs `git push origin claude/slice-2-plan-4q33le` after each task's commit and review (never `--force`). A fix asked for by a review is a new commit, `Fix: <what> (Task <n> review)`. The container can restart and lose uncommitted work: commit as soon as a task's checks pass.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1183 → 1216 passed, 11 → 11 skipped; frontend 539 → 563 in 75 → 78 files`.
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1183 → 1216 passed, 11 → 11 skipped; frontend 539 → 564 in 75 → 78 files`.
 - New prose for the owner has no em dashes and no flattery, and leads with the point. Strings quoted from R or already approved keep their own punctuation ("Still working — this can take up to a minute.").
 - Ask the owner before any push to a PR, PR creation, marking ready, merging, or any production or settings action. Owner steps go one at a time, in plain words.
 
@@ -67,9 +67,9 @@ A directive that does not match exactly once is a stop: the tree is not what the
   | T7 | 0 | 1216 passed, 11 skipped | +4 (`lib/liturgy/notes.test.ts`, new; +1 file) | 546 in 76 |
   | T8 | 0 | 1216 passed, 11 skipped | +6 (`lib/liturgy/review.test.tsx`, new; +1 file) | 552 in 77 |
   | T9 | 0 | 1216 passed, 11 skipped | +6 (`components/builder/liturgy/review-step.test.tsx`, new; +1 file) | 558 in 78 |
-  | T10 | 0 | 1216 passed, 11 skipped | +5 (`review-step.test.tsx` +4, `lib/liturgy/errors.test.ts` +1) | 563 in 78 |
-  | T11 | 0 (one assertion in `test_slice1_docs.py` edited) | 1216 passed, 11 skipped | 0 | 563 in 78 |
-  | T12, T13 | 0 | 1216 passed, 11 skipped | 0 | 563 in 78 |
+  | T10 | 0 | 1216 passed, 11 skipped | +6 (`review-step.test.tsx` +5, `lib/liturgy/errors.test.ts` +1) | 564 in 78 |
+  | T11 | 0 (one assertion in `test_slice1_docs.py` edited) | 1216 passed, 11 skipped | 0 | 564 in 78 |
+  | T12, T13 | 0 | 1216 passed, 11 skipped | 0 | 564 in 78 |
 
 - CI `backend-postgres` stays at `11 passed, 1216 deselected` (no Postgres test is added).
 - Backend table-driven tests loop over their cases inside one function, so counts stay stable when cases are added.
@@ -82,7 +82,7 @@ A directive that does not match exactly once is a stop: the tree is not what the
 
 ### Messages (verbatim)
 - From R: "Review service"; "Cancel"; "Still working" is the app's approved "Still working — this can take up to a minute."; the tags "Checklist", "Rules", "Voice", "Read aloud", "Theology", "Repetition"; "Looks good."; "Across the service"; "Revise with these notes"; "Only quick checks ran. The full review isn't available right now."; the code notes `Stock phrase "{match}". Say it more naturally.`, `Names Ordinary Time. Leave the season unnamed.`, `Cites {match}. Draw on the reading's themes without naming it.`, `Several prayers open with "{words}".`; revise's 422 "This prayer is too long to revise."; the revise instruction "Revise this draft to address these notes only. Keep everything that works. Keep the same form (Leader/People lines where present) and about the same length. Output only the revised text."; the role "a tough, fair liturgical editor for a moderate Reformed (PC(USA)) congregation"; the new season sentence (T1).
-- New in this plan (owner-visible, clarification 22): "Reviewing…"; "Revising…"; "Revised with these notes." with "Undo"; toasts "The service changed, so the revised draft for {Label} was discarded." and "Kept your edits, so the revised draft for {Label} was not used."; read out only: "Review finished. No notes.", "Review finished. 1 note.", "Review finished. {n} notes."; names for assistive technology: "Cancel review", "Dismiss note: {note}", "Cancel revising {Label}", "Notes on {Label}", "Notes across the service".
+- New in this plan (owner-visible, clarification 22): "Reviewing…"; "Revising…"; "Revised with these notes." with "Undo"; toasts "The service changed, so the revised draft for {Label} was discarded." and "Kept your edits, so the revised draft for {Label} was not used."; read out only: "Review finished. No notes.", "Review finished. 1 note.", "Review finished. {n} notes.", each followed by " Only quick checks ran." when the AI part was missing; names for assistive technology: "Cancel review", "Dismiss note: {note}", "Cancel revising {Label}", "Notes on {Label}", "Notes across the service".
 - Reused: revise's AI errors are the OpenAI client's sentences ("AI isn't set up on this app yet.", "The AI service is busy. Try again in a minute.", "The AI took too long to answer. Try again.", "The AI service had a problem. Try again."); a failed review shows the app's usual sentence ("Something went wrong. (Ref: …)", "This is taking too long. Try again.", "Can't reach the server. Check your connection and try again."); a 429 on revise "Too many requests — try again in N s.".
 
 ### Codes, statuses, buckets and timeouts
@@ -133,8 +133,8 @@ The code and F win over R and S4, and the owner's answers over all three. **[own
 19. **[owner-visible] "Looks good."** shows only for a card that was reviewed and came back with no notes; a card whose notes were all dismissed shows nothing; a card not reviewed (empty, off, or changed since) shows nothing.
 20. **[owner-visible] A review's life.** The answer replaces every note from the last review (a card changed while it ran gets none, by S4's stale rule on text and origin; a card changed while the sermon text loads, before anything is sent, is left out of the request, as 4b's pre-send check leaves a changed card unsent, and a new service by then sends nothing). Cancel stops the wait and keeps the notes already shown, as does a review that fails, which shows its message under the header (the app's usual sentences); a 401 or a lost church shows nothing (the app signs out or falls back). "New service" cancels a running review and every revision silently and clears every note.
 21. **[owner-visible] "Across the service" stays** until the next review, its own dismiss or New service; editing one card does not clear it, since its notes are about several prayers.
-22. **[owner-visible] New copy not in R.** Visible: "Reviewing…" (beside the spinner); "Revising…" (on the busy Revise button); "Revised with these notes." with **Undo** (the Undo line after a Revise); the toasts "The service changed, so the revised draft for {Label} was discarded." and "Kept your edits, so the revised draft for {Label} was not used." (a revision whose card changed meanwhile; no em dash, unlike 4b's approved generation toasts); a check mark before "Looks good.". Read out only: "Review finished. No notes.", "Review finished. 1 note.", "Review finished. {n} notes.". Names for assistive technology: "Cancel review" (the button shows "Cancel"), "Dismiss note: {the note}", "Cancel revising {Label}", "Notes on {Label}", "Notes across the service". Reused, already approved: "Still working — this can take up to a minute.".
-23. **[owner-visible] Revise's rules.** The button shows on an AI card with a note left, and not while the AI is writing that card. While it runs the card is read-only and its Regenerate, ⋯ menu and any Undo line's Undo are off; the notes stay until the revised text lands. A failure shows under the notes and Revise stays, to try again. Revise is offered even when the review's AI part was missing (quick checks only); with the AI off it answers "AI isn't set up on this app yet.". A revision's result replaces the card only while it still holds what was sent and the service is the same; otherwise nothing changes and a toast says why. The same check runs once the sermon text has loaded, before anything is sent (4b's pre-send check): a card changed by then sends nothing and shows the same toast.
+22. **[owner-visible] New copy not in R.** Visible: "Reviewing…" (beside the spinner); "Revising…" (on the busy Revise button); "Revised with these notes." with **Undo** (the Undo line after a Revise); the toasts "The service changed, so the revised draft for {Label} was discarded." and "Kept your edits, so the revised draft for {Label} was not used." (a revision whose card changed meanwhile; no em dash, unlike 4b's approved generation toasts); a check mark before "Looks good.". Read out only: "Review finished. No notes.", "Review finished. 1 note.", "Review finished. {n} notes.", each followed by " Only quick checks ran." when `ai_status` is not "ok", so a screen reader hears what the quiet line shows. Names for assistive technology: "Cancel review" (the button shows "Cancel"), "Dismiss note: {the note}", "Cancel revising {Label}", "Notes on {Label}", "Notes across the service". Reused, already approved: "Still working — this can take up to a minute.".
+23. **[owner-visible] Revise's rules.** The button shows on an AI card with a note left, and not while the AI is writing that card. While it runs the card is read-only and its Regenerate, ⋯ menu and any Undo line's Undo are off; the notes stay until the revised text lands. A failure shows under the notes and Revise stays, to try again. Revise is offered even when the review's AI part was missing (quick checks only); with the AI off it answers "AI isn't set up on this app yet.". A 429 (on Revise or on Generate) holds both: until its wait ends every Revise button is off (it keeps focus) and nothing is sent, and the card shows "Too many requests — try again in N s.". A revision's result replaces the card only while it still holds what was sent and the service is the same; otherwise nothing changes and a toast says why. The same check runs once the sermon text has loaded, before anything is sent (4b's pre-send check): a card changed by then sends nothing and shows the same toast.
 24. **[owner-visible] Where things sit.** "Review service" is at the right of the "Liturgy" heading (under it on a narrow phone); the spinner line, a failed review's message and the quick-checks line come under the header; the "Across the service" box comes next, above the sermon title; a card's notes come under its text and hint, before its Undo line and any AI error.
 25. **Focus and screen readers (F §4.9; owner decision 1).** The Review button is one button (Base UI `focusableWhenDisabled`), so focus stays on it as it turns into Cancel and back. Dismissing a note moves focus to the next note's ×, else the previous one's, else the card's heading (the Review button when the "Across the service" box goes). Revise moves focus to its Cancel (only when `revise()` reports that it started); each "Revise with these notes" button is described by its card's heading (`aria-describedby`); when the revision ends focus goes to the Undo line's button (revised), the Revise button (failed or cancelled) or the heading. A card's notes describe its textarea (`aria-describedby`); the end of a review is announced politely, and the "Reviewing…" line is a live region that is always there with its text shown only while a review runs; touch targets are 44 px below `md`; chips and sentences wrap at 375 px.
 26. **[owner-visible] 100 s on the client (owner answer 3).** `ENDPOINT_TIMEOUTS` gains `"POST /liturgy/review": 100_000` and `"POST /liturgy/revise": 100_000` (R and S4 said 90 000; F's 4b row already said 100 000). A review or revision that takes longer shows "This is taking too long. Try again.".
@@ -3047,10 +3047,11 @@ Counts after Task 7: backend **1216 passed, 11 skipped**; frontend **546 in 76**
 - Modify: `frontend/src/lib/liturgy/generation.tsx`, `frontend/src/components/builder/builder-shell.tsx`, `frontend/src/components/builder/liturgy/section-card.tsx` (the "revised" Undo line)
 
 **Interfaces:**
-- Consumes: T6 (`reviewService`, `reviseSection`, `reviewTargets`, `buildReviewRequest`, `buildReviseRequest`), T7 (the notes' rules); 4b's `useDraft` (`peek`, `update`), `useApi`, `reportAuthErrors`, `cardErrorFrom`, `applyGenerated`, `useLiturgyGeneration().setUndo`, `SECTION_LABELS`.
+- Consumes: T6 (`reviewService`, `reviseSection`, `reviewTargets`, `buildReviewRequest`, `buildReviseRequest`), T7 (the notes' rules); 4b's `useDraft` (`peek`, `update`), `useApi`, `reportAuthErrors`, `cardErrorFrom`, `applyGenerated`, `useLiturgyGeneration()` (`setUndo`, `rateLimitedUntil`), `SECTION_LABELS`.
 - Produces (later users: T9, T10):
   - `useSermonLoader(church, waitMs = SERMON_WAIT_MS) -> (signal) => Promise<SermonText | null>`; `generation.tsx` re-exports `SERMON_WAIT_MS`
   - `UndoEntry.kind` gains `"revised"`, shown as "Revised with these notes."
+  - `LiturgyGeneration.noteRateLimit(retryAt)`: a 429's wait from Revise, kept with Generate's in `rateLimitedUntil` (the later wins)
   - `LiturgyReviewProvider({church, sermonWaitMs?, children})`, `useLiturgyReview() -> {review, running, error, announcement, start, cancel, dismiss, revising, reviseErrors, revise, cancelRevise}` (`revise(key)` returns whether it started), `reviewDoneMessage(n)`
 
 - [ ] **Step 1 (agent): Write the failing tests**
@@ -3216,6 +3217,7 @@ describe("the review (R User experience, API)", () => {
     expect(window.localStorage.getItem(KEY)).not.toContain("runs long");
     expect(reviewDoneMessage(1)).toBe("Review finished. 1 note.");
     expect(reviewDoneMessage(0)).toBe("Review finished. No notes.");
+    expect(reviewDoneMessage(2, true)).toBe("Review finished. 2 notes. Only quick checks ran.");
   });
 
   it("gives no notes to a card edited while the review ran; Cancel and a failure keep the notes already shown", async () => {
@@ -3547,6 +3549,46 @@ export type UndoEntry = { kind: "replaced" | "cleared" | "revised"; previous: Ca
 **In `frontend/src/lib/liturgy/generation.tsx`, replace:**
 
 ````tsx
+  /** When the last 429's wait ends (ms since the epoch), or null; nothing is sent before then. */
+  rateLimitedUntil: number | null;
+````
+
+**with:**
+
+````tsx
+  /** When the last 429's wait ends (ms since the epoch), or null; nothing is sent before then. */
+  rateLimitedUntil: number | null;
+  /** The service reviewer's Revise got a 429: Generate and Revise wait until `retryAt` (the later wait wins). */
+  noteRateLimit: (retryAt: number) => void;
+````
+
+**In `frontend/src/lib/liturgy/generation.tsx`, replace:**
+
+````tsx
+  const value = useMemo<LiturgyGeneration>(
+    () => ({ runs, errors, undo, bulk, rateLimitedUntil, generate, cancel, cancelBulk, dismissError, setUndo, clearUndo, applyUndo }),
+    [runs, errors, undo, bulk, rateLimitedUntil, generate, cancel, cancelBulk, dismissError, setUndo, clearUndo, applyUndo],
+  );
+````
+
+**with:**
+
+````tsx
+  const noteRateLimit = useCallback((retryAt: number) => {
+    if (retryAt <= (limitedUntil.current ?? 0)) return;
+    limitedUntil.current = retryAt;
+    setRateLimitedUntil(retryAt);
+  }, []);
+
+  const value = useMemo<LiturgyGeneration>(
+    () => ({ runs, errors, undo, bulk, rateLimitedUntil, noteRateLimit, generate, cancel, cancelBulk, dismissError, setUndo, clearUndo, applyUndo }),
+    [runs, errors, undo, bulk, rateLimitedUntil, noteRateLimit, generate, cancel, cancelBulk, dismissError, setUndo, clearUndo, applyUndo],
+  );
+````
+
+**In `frontend/src/lib/liturgy/generation.tsx`, replace:**
+
+````tsx
   const queryClient = useQueryClient();
   const churchTranslation = church.effective_translation;
 ````
@@ -3654,8 +3696,10 @@ const UNDO_LINES = {
  *   every revision silently and drops all notes.
  * - `revise(key)`: an AI card with notes left; its text and remaining notes,
  *   with the sermon text, in one `POST /liturgy/revise` (100 s); it returns
- *   whether it started. Nothing is sent when the card changed while the
- *   sermon text loaded (the same toast as below). The result
+ *   whether it started. Nothing is sent while a 429's wait is not over
+ *   (`rateLimitedUntil`, Generate's or Revise's: the card shows the wait), nor
+ *   when the card changed while the sermon text loaded (the same toast as
+ *   below); a 429 here starts that wait for Generate too. The result
  *   replaces the card (origin "ai") only while the card still holds what was
  *   sent and the service is the same; then the generation provider's Undo
  *   line ("revised") keeps the previous text and origin. Otherwise nothing
@@ -3683,7 +3727,7 @@ import { reportAuthErrors, useApi } from "@/lib/queries/client";
 import { reviewService, reviseSection } from "@/lib/queries/liturgy";
 
 import { applyGenerated, type CardSnapshot } from "./cards";
-import { cardErrorFrom, type CardError } from "./errors";
+import { cardErrorFrom, rateLimitMessage, type CardError } from "./errors";
 import { useLiturgyGeneration } from "./generation";
 import { applyReview, canRevise, captureReview, dismissNote, noteCount, pruneReview, type ServiceReview } from "./notes";
 import { buildReviewRequest, buildReviseRequest, reviewTargets } from "./request";
@@ -3710,10 +3754,10 @@ export type LiturgyReview = {
 
 const ReviewContext = createContext<LiturgyReview | null>(null);
 
-/** The line read out when a review ends. */
-export function reviewDoneMessage(notes: number): string {
-  if (notes === 0) return "Review finished. No notes.";
-  return notes === 1 ? "Review finished. 1 note." : `Review finished. ${notes} notes.`;
+/** The line read out when a review ends; `quickOnly` when its AI part was missing. */
+export function reviewDoneMessage(notes: number, quickOnly = false): string {
+  const done = notes === 0 ? "Review finished. No notes." : notes === 1 ? "Review finished. 1 note." : `Review finished. ${notes} notes.`;
+  return quickOnly ? `${done} Only quick checks ran.` : done;
 }
 
 type Sent = { createdAt: string; text: string; origin: LiturgyCard["origin"] };
@@ -3754,7 +3798,7 @@ export function LiturgyReviewProvider({
 }) {
   const { draft, update, peek } = useDraft();
   const api = useApi();
-  const { setUndo } = useLiturgyGeneration();
+  const { setUndo, rateLimitedUntil, noteRateLimit } = useLiturgyGeneration();
   const loadSermon = useSermonLoader(church, sermonWaitMs);
   const [review, setReview] = useState<ServiceReview | null>(null);
   const [running, setRunning] = useState(false);
@@ -3842,7 +3886,7 @@ export function LiturgyReviewProvider({
         if (!mounted.current || active.current !== controller) return;
         const { review: next } = applyReview(peek(), ask, result);
         setReview(next);
-        if (next !== null) setAnnouncement(reviewDoneMessage(noteCount(next)));
+        if (next !== null) setAnnouncement(reviewDoneMessage(noteCount(next), next.aiStatus !== "ok"));
       } catch (e) {
         if (!mounted.current || active.current !== controller) return;
         setError(handleFailure(e)?.message ?? null);
@@ -3872,6 +3916,13 @@ export function LiturgyReviewProvider({
       const card = asked.liturgy.cards[key];
       const notes = reviewRef.current?.cards[key];
       if (!canRevise(card, notes) || notes === undefined) return false;
+      if (rateLimitedUntil !== null && Date.now() < rateLimitedUntil) {
+        // A 429's wait (Generate's or Revise's) is not over: nothing is sent, and the card shows the wait.
+        const seconds = Math.ceil((rateLimitedUntil - Date.now()) / 1000);
+        const waiting: CardError = { code: "rate_limited", message: rateLimitMessage(seconds), retryable: true, retryAfterSeconds: seconds };
+        setReviseErrors((current) => ({ ...current, [key]: waiting }));
+        return false;
+      }
       const sent: Sent = { createdAt: asked.created_at, text: card.text, origin: card.origin };
       const controller = new AbortController();
       revisions.current.set(key, controller);
@@ -3903,6 +3954,7 @@ export function LiturgyReviewProvider({
         } catch (e) {
           if (!mounted.current || revisions.current.get(key) !== controller) return;
           const failure = handleFailure(e);
+          if (failure?.retryAfterSeconds !== undefined) noteRateLimit(Date.now() + failure.retryAfterSeconds * 1000);
           if (failure !== null) setReviseErrors((current) => ({ ...current, [key]: failure }));
         } finally {
           if (revisions.current.get(key) === controller) {
@@ -3913,7 +3965,7 @@ export function LiturgyReviewProvider({
       })();
       return true;
     },
-    [api, handleFailure, loadSermon, peek, setUndo, update],
+    [api, handleFailure, loadSermon, noteRateLimit, peek, rateLimitedUntil, setUndo, update],
   );
 
   const cancelRevise = useCallback((key: SectionKey) => {
@@ -4265,6 +4317,7 @@ describe("Review service (R User experience)", () => {
     });
     await user.click(await screen.findByRole("button", { name: "Review service" }));
     expect(await screen.findByText(QUICK)).toBeInTheDocument();
+    expect(screen.getByText("Review finished. 1 note. Only quick checks ran.")).toBeInTheDocument(); // read out too
     expect(within(card("Opening Prayer")).getByText(STOCK)).toBeInTheDocument();
     const reviews = () => api.requests.filter((r) => r.path === "/liturgy/review").length;
     for (const status of ["busy", "timeout", "rate_limited", "error"] as const) {
@@ -4272,7 +4325,7 @@ describe("Review service (R User experience)", () => {
       const before = reviews();
       await user.click(reviewButton());
       await waitFor(() => expect(reviews()).toBe(before + 1));
-      expect(await screen.findByText("Review finished. No notes.")).toBeInTheDocument();
+      expect(await screen.findByText("Review finished. No notes. Only quick checks ran.")).toBeInTheDocument();
       expect(screen.getByText(QUICK)).toBeInTheDocument();
     }
     api.set("POST /liturgy/review", reviewRoute(() => ANSWER));
@@ -4710,7 +4763,7 @@ On an AI card with a note left (and not while the AI is writing it), the notes e
 - Modify: `frontend/src/components/builder/liturgy/card-notes.tsx`, `frontend/src/components/builder/liturgy/section-card.tsx`, `frontend/src/lib/liturgy/errors.ts`; tests `frontend/src/components/builder/liturgy/review-step.test.tsx`, `frontend/src/lib/liturgy/errors.test.ts`
 
 **Interfaces:**
-- Consumes: T7 (`canRevise`), T8 (`revise`, `cancelRevise`, `revising`, `reviseErrors`), T9 (`CardNotes`); 4b's `PendingButton`, the card's `undoRef` and `headingRef`.
+- Consumes: T7 (`canRevise`), T8 (`revise`, `cancelRevise`, `revising`, `reviseErrors`, `rateLimitedUntil`), T9 (`CardNotes`); 4b's `PendingButton`, `useRetryWait`, the card's `undoRef` and `headingRef`.
 - Produces: `CardNotes`'s `busy` prop, `reviseId(key)`; `cardErrorFrom` maps an `ApiError` with `ai_busy`, `ai_timeout` or `ai_upstream_error` to the server's message, with Try again.
 
 - [ ] **Step 1 (agent): Write the failing tests**
@@ -4857,6 +4910,24 @@ describe("Revise with these notes (R Revise)", () => {
     expect(within(opening).getByRole("button", { name: "Undo" })).toBeDisabled();
     expect(within(opening).getByRole("button", { name: "Regenerate" })).toBeDisabled();
   });
+
+  it("waits out a 429: the card shows the wait, and no Revise sends until it ends", async () => {
+    const { user, api } = renderStep(seeded(), {
+      "POST /liturgy/revise": fakeError(429, "rate_limited", "Too many requests. Try again in 30 seconds.", { details: { retry_after_seconds: 30 } }),
+    });
+    await review(user);
+    const opening = card("Opening Prayer");
+    await user.click(within(opening).getByRole("button", { name: "Revise with these notes" }));
+    expect(await within(opening).findByRole("alert")).toHaveTextContent("Too many requests — try again in 30 s.");
+    const again = within(opening).getByRole("button", { name: "Revise with these notes" });
+    expect(again).toHaveAttribute("aria-disabled", "true");
+    expect(again).toHaveFocus();
+    await user.click(again);
+    const other = within(card("Assurance of Pardon")).getByRole("button", { name: "Revise with these notes" });
+    expect(other).toHaveAttribute("aria-disabled", "true"); // one wait for every card, and for Generate
+    await user.click(other);
+    expect(api.requests.filter((r) => r.path === "/liturgy/revise")).toHaveLength(1);
+  });
 });
 ````
 
@@ -4895,7 +4966,7 @@ describe("Revise with these notes (R Revise)", () => {
 (cd frontend && npx vitest run src/components/builder/liturgy/review-step.test.tsx src/lib/liturgy/errors.test.ts 2>&1 | grep -E "^ +(✓|×)|Tests ")
 ```
 
-**Expected:** nine lines starting `✓` (4b's three error tests and T9's six) and five starting `×`: `cardErrorFrom (S errors.ts) > shows the server's sentence for the AI codes Revise gets as HTTP statuses (the service reviewer)` (a 503 `ai_busy` still reads "Something went wrong. (Ref: …)") and the four `Revise with these notes (R Revise) > …` tests (there is no Revise button yet); then `      Tests  5 failed | 9 passed (14)`.
+**Expected:** nine lines starting `✓` (4b's three error tests and T9's six) and six starting `×`: `cardErrorFrom (S errors.ts) > shows the server's sentence for the AI codes Revise gets as HTTP statuses (the service reviewer)` (a 503 `ai_busy` still reads "Something went wrong. (Ref: …)") and the five `Revise with these notes (R Revise) > …` tests (there is no Revise button yet); then `      Tests  6 failed | 9 passed (15)`.
 
 - [ ] **Step 3 (agent): Revise on the card**
 
@@ -4956,7 +5027,21 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useDraft } from "@/lib/draft/context";
 import type { SectionKey } from "@/lib/draft/schema";
+import { useLiturgyGeneration } from "@/lib/liturgy/generation";
 import { canRevise, LOOKS_GOOD, TAG_LABELS, type Note } from "@/lib/liturgy/notes";
+````
+
+**In `frontend/src/components/builder/liturgy/card-notes.tsx`, replace:**
+
+````tsx
+import { REVIEW_BUTTON_ID } from "./review-bar";
+````
+
+**with:**
+
+````tsx
+import { REVIEW_BUTTON_ID } from "./review-bar";
+import { useRetryWait } from "./section-card";
 ````
 
 **In `frontend/src/components/builder/liturgy/card-notes.tsx`, replace:**
@@ -5000,7 +5085,8 @@ export function CardNotes({ sectionKey, label, headingId }: { sectionKey: Sectio
  * left, and not while the card is being written; the card's heading
  * describes it. While it runs the button
  * reads "Revising…" beside a Cancel ×, which takes focus; a failure shows its
- * message here and leaves the button to try again. The card itself moves
+ * message here and leaves the button to try again. While a 429's wait
+ * (Generate's or Revise's) is not over, the button is off but keeps focus. The card itself moves
  * focus when the revision ends (`SectionCard`).
  */
 export function CardNotes({
@@ -5023,6 +5109,7 @@ export function CardNotes({
   const focusCancel = useRef(false);
   const revising = review.revising[sectionKey] === true;
   const failure = review.reviseErrors[sectionKey];
+  const waiting = useRetryWait(useLiturgyGeneration().rateLimitedUntil ?? undefined);
   useEffect(() => {
     if (!focusCancel.current) return;
     focusCancel.current = false;
@@ -5080,6 +5167,9 @@ export function CardNotes({
               variant="outline"
               size="touch"
               aria-describedby={headingId}
+              focusableWhenDisabled
+              disabled={waiting}
+              className="data-disabled:pointer-events-none data-disabled:opacity-50"
               onClick={() => {
                 // Focus moves to Cancel only when the revision started.
                 if (review.revise(sectionKey)) focusCancel.current = true;
@@ -5236,7 +5326,7 @@ for i in 1 2 3; do (cd frontend && npx vitest run src/components/builder/liturgy
 (cd frontend && npm run typecheck >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")
 ```
 
-**Expected:** `      Tests  14 passed (14)` three times; `      Tests  44 passed (44)`; ` Test Files  78 passed (78)`, `      Tests  563 passed (563)`; `typecheck 0`, `lint 0`.
+**Expected:** `      Tests  15 passed (15)` three times; `      Tests  44 passed (44)`; ` Test Files  78 passed (78)`, `      Tests  564 passed (564)`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5 (agent): Commit**
 
@@ -5250,7 +5340,7 @@ Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 git log --oneline -1
 ```
 
-Counts after Task 10: backend **1216 passed, 11 skipped**; frontend **563 in 78**.
+Counts after Task 10: backend **1216 passed, 11 skipped**; frontend **564 in 78**.
 
 ### Task 11: Docs: F's §1.8 row, the plan notes in S4 and R, the manual check and its heading pin (owner answers 1-4; R Testing "Append a manual check at 375 px"; clarifications 1-31)
 
@@ -5375,7 +5465,7 @@ git log --oneline -1
 
 Review T9-T11 together: R's strings verbatim ("Looks good.", "Only quick checks ran. The full review isn't available right now.", the six tags, "Across the service", "Revise with these notes"); the new strings exactly as clarification 22 lists them; 44 px targets and wrapping at 375 px (classes: `size-11` below `md`, `flex-wrap`, `min-w-0`, `wrap-anywhere`); focus never drops to the page; the docs match the clarifications. Then the backup push.
 
-Counts after Task 11: backend **1216 passed, 11 skipped**; frontend **563 in 78**.
+Counts after Task 11: backend **1216 passed, 11 skipped**; frontend **564 in 78**.
 
 ### Task 12: Whole-branch verification and the pull request (owner's yes before the PR is opened and before it is marked ready) (R Testing; S4 reviewer amendment Testing and acceptance; F §1.11, §2.2, §2.5, §4.1, §4.4, §5.2, §5.4; owner answers 1, 4; standing rules)
 
@@ -5420,7 +5510,7 @@ for d in 8 400; do echo "clock +$d days"; (cd frontend && WSB_CLOCK_SHIFT_DAYS=$
 (cd frontend && npm run typecheck >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")
 ```
 
-**Expected:** three times ` Test Files  78 passed (78)` and `      Tests  563 passed (563)` with no `FAIL`; then `clock +8 days` and `clock +400 days`, each followed by the same two lines; `0`; `typecheck 0` and `lint 0`. A run that fails even once is a failure (Step 14): make the test deterministic, never retry it.
+**Expected:** three times ` Test Files  78 passed (78)` and `      Tests  564 passed (564)` with no `FAIL`; then `clock +8 days` and `clock +400 days`, each followed by the same two lines; `0`; `typecheck 0` and `lint 0`. A run that fails even once is a failure (Step 14): make the test deterministic, never retry it.
 
 - [ ] **Step 3 (agent): Backend suite, the Postgres marker count, the reviewer's files three times**
 
@@ -5556,7 +5646,7 @@ git rev-list --count origin/main..HEAD
 
 Send the owner exactly this, with `<count>` filled in, and wait for a clear yes:
 
-> The service reviewer is verified on this machine: backend 1216 passed, 11 skipped (1183 before); frontend 563 tests in 78 files (539 in 75 before), three runs in a row and with the clock moved 8 and 400 days ahead; typecheck, lint and the production build are clean; the API files are current with the two new routes; the checks are clean (no prayer text in the logs, no AI text saved, the screens use the query functions, both new calls wait up to 100 seconds); the 41 changed files and <count> commits are as planned and backed up. It also changes the writer's default wording on the season, as you approved. May I open the pull request as a **draft** titled "Service reviewer: Review service, notes and Revise", so the checks run? I will come back with the results and ask again before marking it ready. Merging stays with you.
+> The service reviewer is verified on this machine: backend 1216 passed, 11 skipped (1183 before); frontend 564 tests in 78 files (539 in 75 before), three runs in a row and with the clock moved 8 and 400 days ahead; typecheck, lint and the production build are clean; the API files are current with the two new routes; the checks are clean (no prayer text in the logs, no AI text saved, the screens use the query functions, both new calls wait up to 100 seconds); the 41 changed files and <count> commits are as planned and backed up. It also changes the writer's default wording on the season, as you approved. May I open the pull request as a **draft** titled "Service reviewer: Review service, notes and Revise", so the checks run? I will come back with the results and ask again before marking it ready. Merging stays with you.
 
 Add one line per note from Steps 1-8 (a merge from `main`, a skipped font download, a `Fix:` commit).
 
@@ -5575,7 +5665,7 @@ What members see
 
 Backend: review_checks.py (stock seasonal phrases, Ordinary Time, scripture references from scripture_refs.BOOKS, repeated openings), usecases/liturgy_review.py (the AI review in JSON mode inside a 75 s deadline, charged one ai token only when the AI runs; Revise inside generation's 80 s deadline with the section's token budget), POST /liturgy/review (always 200 with ai_status) and POST /liturgy/revise (AI failures as HTTP statuses). Client timeouts 100 s for both (owner answer 3; F §1.8).
 
-Tests: backend 1183 → 1216 passed, 11 → 11 skipped; frontend 539 → 563 in 75 → 78 files
+Tests: backend 1183 → 1216 passed, 11 → 11 skipped; frontend 539 → 564 in 75 → 78 files
 
 After merge (Task 13): a guided check on the owner's phone (seven steps), a quick look on a computer and an optional Console timing of a real review, then a short "Service reviewer record" in docs/ops-runbook.md.
 
@@ -5583,7 +5673,7 @@ After merge (Task 13): a guided check on the owner's phone (seven steps), a quic
 
 https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS
 EOF
-grep -cx 'Tests: backend 1183 → 1216 passed, 11 → 11 skipped; frontend 539 → 563 in 75 → 78 files' "<scratch>/reviewer-pr-body.md"
+grep -cx 'Tests: backend 1183 → 1216 passed, 11 → 11 skipped; frontend 539 → 564 in 75 → 78 files' "<scratch>/reviewer-pr-body.md"
 git fetch origin && test "$(git rev-list --count HEAD..origin/main)" = 0 && test "$(git rev-list --count origin/claude/slice-2-plan-4q33le..HEAD)" = 0 && echo "branch is current and backed up"
 gh pr create -R bbrown62450/church --draft --base main --head claude/slice-2-plan-4q33le \
   --title "Service reviewer: Review service, notes and Revise" \
@@ -5611,13 +5701,13 @@ RUN=$(gh run list -R bbrown62450/church --workflow ci.yml --branch claude/slice-
 RUN=$(gh run list -R bbrown62450/church --workflow ci.yml --branch claude/slice-2-plan-4q33le --commit "$(git rev-parse HEAD)" --limit 1 --json databaseId --jq '.[0].databaseId'); for job in frontend backend backend-postgres; do JOB=$(gh run view "$RUN" -R bbrown62450/church --json jobs --jq ".jobs[] | select(.name == \"$job\") | .databaseId"); echo "$job:"; gh run view -R bbrown62450/church --job "$JOB" --log | grep -E "Test Files +[0-9]+ passed|Tests +[0-9]+ passed|Compiled successfully|[0-9]+ passed|pg_smoke: OK" | sed -E 's/^.*Z //'; done
 ```
 
-**Expected:** `backend: success`, `backend-postgres: success`, `frontend: success`; frontend `Test Files  78 passed (78)`, `Tests  563 passed (563)`, `✓ Compiled successfully`; backend `1216 passed, 11 skipped`; backend-postgres `pg_smoke: OK` and `11 passed, 1216 deselected`. If a required job fails on a new runner image (`ubuntu-latest` moves on 2026-10-19), report a setup failure to the owner before changing any file.
+**Expected:** `backend: success`, `backend-postgres: success`, `frontend: success`; frontend `Test Files  78 passed (78)`, `Tests  564 passed (564)`, `✓ Compiled successfully`; backend `1216 passed, 11 skipped`; backend-postgres `pg_smoke: OK` and `11 passed, 1216 deselected`. If a required job fails on a new runner image (`ubuntu-latest` moves on 2026-10-19), report a setup failure to the owner before changing any file.
 
 - [ ] **Step 13 (agent → OWNER): Report CI and ask to mark the PR ready**
 
 Send exactly this, filled in, and wait for a clear yes:
 
-> PR #<N> (<url>) is green (run <run id>): backend 1216 passed, 11 skipped; the Postgres job is clean; 563 frontend tests in 78 files and the build are fine; the Vercel preview built. May I mark it ready for review? Merging stays with you.
+> PR #<N> (<url>) is green (run <run id>): backend 1216 passed, 11 skipped; the Postgres job is clean; 564 frontend tests in 78 files and the build are fine; the Vercel preview built. May I mark it ready for review? Merging stays with you.
 
 On the yes:
 
@@ -5649,7 +5739,7 @@ gh pr view <N> -R bbrown62450/church --json isDraft,state --jq '"draft=\(.isDraf
 
 For each fix: change only the owning task's files; rerun Steps 2-8; commit `Fix: <what> (Task <n>, reviewer final verification)` with both trailer lines; have it reviewed; before Step 10 ask the controller for the backup push; after it, ask the owner ("May I push the fix for <what> to PR #<N>?") and on the yes push, then repeat Steps 11-13.
 
-Expected counts after this task: backend `1216 passed, 11 skipped` (CI `backend-postgres`: `11 passed, 1216 deselected`); frontend `563 passed` in 78 files. No commit unless Step 14 needed one.
+Expected counts after this task: backend `1216 passed, 11 skipped` (CI `backend-postgres`: `11 passed, 1216 deselected`); frontend `564 passed` in 78 files. No commit unless Step 14 needed one.
 
 ### Task 13: Merge and after (OWNER + agent): the merge, the deploy, a guided check on the phone, a look on a computer, a timed review, the record (R Testing; owner answer 4; F §5.5)
 
@@ -5885,7 +5975,7 @@ gh pr checks claude/revert-service-reviewer -R bbrown62450/church --watch
 
 **Expected:** `Test Files  75 passed (75)`, `Tests  539 passed (539)`; `1183 passed, 11 skipped` (if anything else merged after, it differs by exactly those tests); every check passes. Merge on the owner's yes; record the revert in the service reviewer record.
 
-Expected counts after this task: backend `1216 passed, 11 skipped` on `main` (CI `backend-postgres`: `11 passed, 1216 deselected`); frontend `563 passed` in 78 files. The records PR adds no test.
+Expected counts after this task: backend `1216 passed, 11 skipped` on `main` (CI `backend-postgres`: `11 passed, 1216 deselected`); frontend `564 passed` in 78 files. The records PR adds no test.
 
 ---
 
@@ -5918,11 +6008,11 @@ Filled in while Tasks 1-11 are built: each change from the plan as written, its 
 
 **Replay of the finished plan (2026-10-01).** The plan text was replayed onto a fresh detached worktree of `3957d45` (`npm ci` in its `frontend`; a symlink to the repo's `.venv`) by a script that applies every Create, Append and Replace directive of Tasks 1-11 in order and runs every bash block not marked "(not replayed)". Results:
 - All 90 directives applied (91 after the review fixes); every Replace anchor occurred exactly once; after each task's commit the tree was identical to the build commit of that task.
-- Every "see it fail" output matched as quoted above (T1-T11), and every count matched the table: backend 1184, 1191, 1203, 1208, 1216 (11 skipped throughout); frontend 539/75 through T5, then 542/75, 546/76, 552/77, 558/78, 563/78. T3's usecase file passed three runs, T8's provider file, T9's step file and T10's two files three runs each; typecheck and lint were 0 after every frontend task; T11's docs tests printed `89 passed`, the owner-marker count `4` and the diff stat `5 files changed, 41 insertions(+), 3 deletions(-)`.
-- T12 Steps 2-8 on the replayed tree (with `3957d45` for `origin/main`): `563 passed` in 78 files three times and with the clock moved 8 and 400 days, 0 act warnings, typecheck 0, lint 0; `1216 passed, 11 skipped`, `11 skipped, 1216 deselected`, the reviewer's four backend files `32 passed` three times; `✓ Compiled successfully` with the five builder routes and the exact route list (no new page); the generated files unchanged, with the four liturgy paths and the seven new schemas; every gate as expected (the `LEGACY_SYSTEM_PROMPT` gate first hit `test_ops_workflows.py`, which checks the runbook's contingency text, so it now leaves tests out); 40 changed paths, `15 A` and `25 M` (the plan file is the 41st and 16th `A` on the real branch); the 11 commit subjects equal the plan's.
+- Every "see it fail" output matched as quoted above (T1-T11), and every count matched the table: backend 1184, 1191, 1203, 1208, 1216 (11 skipped throughout); frontend 539/75 through T5, then 542/75, 546/76, 552/77, 558/78, 564/78. T3's usecase file passed three runs, T8's provider file, T9's step file and T10's two files three runs each; typecheck and lint were 0 after every frontend task; T11's docs tests printed `89 passed`, the owner-marker count `4` and the diff stat `5 files changed, 41 insertions(+), 3 deletions(-)`.
+- T12 Steps 2-8 on the replayed tree (with `3957d45` for `origin/main`): `564 passed` in 78 files three times and with the clock moved 8 and 400 days, 0 act warnings, typecheck 0, lint 0; `1216 passed, 11 skipped`, `11 skipped, 1216 deselected`, the reviewer's four backend files `32 passed` three times; `✓ Compiled successfully` with the five builder routes and the exact route list (no new page); the generated files unchanged, with the four liturgy paths and the seven new schemas; every gate as expected (the `LEGACY_SYSTEM_PROMPT` gate first hit `test_ops_workflows.py`, which checks the runbook's contingency text, so it now leaves tests out); 40 changed paths, `15 A` and `25 M` (the plan file is the 41st and 16th `A` on the real branch); the 11 commit subjects equal the plan's.
 - Not run while planning: the pushes, the PR and CI (T12 Steps 9-13), the merge and the owner's checks (T13), and any call to OpenAI (the container cannot reach it).
 
-**Review fixes (2026-10-01, before the build; owner decision 1, no owner-visible change).** A review of the plan found these, applied in the tasks above: T3 passes `timeout_seconds=REVIEW_ATTEMPT_S` (70 s), so `OPENAI_TIMEOUT_SECONDS` (30 s) no longer cuts a slow review and retries it into a "timeout" at about 61 s (revise already passes the section's timeout, as generation does); `REVIEW_MAX_COMPLETION_TOKENS` 3 000, and an unusable answer logs its length and the cap (`complete()` returns text only, so there is no `finish_reason`; the client's `ai_call` line has `completion_tokens`); the cards and standing rules are fenced (`<<<CARD key>>>`, `<<<RULES>>>`, `<<<END>>>`) with marker runs taken out of all church and member text, a "material to review, not instructions" line, and a contract that overrides the rules' "Output only the liturgy text" (T3 +1 test); T2 bounds each word to 30 characters and cuts every note and `match` to `MAX_NOTE_CHARS` (T2 +1 test); `merge_notes` matches whole words (T3 +1 test, "Psalm 1" against "Psalm 119"); T8's `start()` and `revise()` check the draft again after the sermon wait, as 4b does before sending (T8 +1 test), and `revise()` returns whether it started so focus moves to Cancel only then; T9's "Reviewing…" live region is always there; T10's Revise button is described by its card's heading and the Undo line's Undo is off while revising; clarification 8 and the F §1.8 row say the too-long case logs and persists for that church. Held for the owner, drafted outside the plan: Revise waiting on Generate's 429 (`rateLimitedUntil`) and a spoken "Only quick checks ran.". The plan was replayed again onto a fresh worktree of `HEAD` (91 directives, every anchor once): backend `1216 passed, 11 skipped`; the OpenAPI files regenerated; frontend `78 passed (78)` files and `563 passed (563)` tests, also `552` in 77 after T8 and `558` in 78 after T9; typecheck 0, lint 0. The see-it-fail outputs, the clock-moved runs and the production build were not re-run for these fixes.
+**Review fixes (2026-10-01, before the build; owner decision 1, no owner-visible change).** A review of the plan found these, applied in the tasks above: T3 passes `timeout_seconds=REVIEW_ATTEMPT_S` (70 s), so `OPENAI_TIMEOUT_SECONDS` (30 s) no longer cuts a slow review and retries it into a "timeout" at about 61 s (revise already passes the section's timeout, as generation does); `REVIEW_MAX_COMPLETION_TOKENS` 3 000, and an unusable answer logs its length and the cap (`complete()` returns text only, so there is no `finish_reason`; the client's `ai_call` line has `completion_tokens`); the cards and standing rules are fenced (`<<<CARD key>>>`, `<<<RULES>>>`, `<<<END>>>`) with marker runs taken out of all church and member text, a "material to review, not instructions" line, and a contract that overrides the rules' "Output only the liturgy text" (T3 +1 test); T2 bounds each word to 30 characters and cuts every note and `match` to `MAX_NOTE_CHARS` (T2 +1 test); `merge_notes` matches whole words (T3 +1 test, "Psalm 1" against "Psalm 119"); T8's `start()` and `revise()` check the draft again after the sermon wait, as 4b does before sending (T8 +1 test), and `revise()` returns whether it started so focus moves to Cancel only then; T9's "Reviewing…" live region is always there; T10's Revise button is described by its card's heading and the Undo line's Undo is off while revising; clarification 8 and the F §1.8 row say the too-long case logs and persists for that church. Held for the owner, drafted outside the plan: Revise waiting on Generate's 429 (`rateLimitedUntil`) and a spoken "Only quick checks ran.". The plan was replayed again onto a fresh worktree of `HEAD` (91 directives, every anchor once): backend `1216 passed, 11 skipped`; the OpenAPI files regenerated; frontend `78 passed (78)` files and `564 passed (564)` tests, also `552` in 77 after T8 and `558` in 78 after T9; typecheck 0, lint 0. The see-it-fail outputs, the clock-moved runs and the production build were not re-run for these fixes.
 
 ## Spec coverage
 
@@ -6003,5 +6093,9 @@ The owner's answers of 2026-10-01 (1-4, "all recommended") are binding and alrea
 6. **New wording not in the spec** (clarification 22): "Reviewing…" by the spinner; "Revising…" on the busy button; "Revised with these notes." with Undo; the messages "The service changed, so the revised draft for {Label} was discarded." and "Kept your edits, so the revised draft for {Label} was not used."; for screen readers, "Review finished. 2 notes." (or "1 note.", "No notes."). Recommended: accept, or give other words.
 7. **Revise's rules and where things sit** (clarifications 23, 24): Revise shows on AI cards with notes left, not while the AI is writing that card; while it runs the card is locked; it is offered even when only the quick checks ran. "Review service" sits at the right of the "Liturgy" heading; the "Across the service" box sits under it, above the sermon title; a card's notes sit under its text. Recommended: accept.
 8. **100 seconds** (clarification 26): both new calls wait up to 100 s, as Generate does. Recommended: as approved (owner answer 3).
+9. **Revise respects the AI wait** (plan review finding 2): after a 429 on Generate or Revise, Revise is disabled until the wait ends, as Generate is. Recommended: accept.
+10. **Screen readers hear "Only quick checks ran."** (plan review finding 6b) after "Review finished. …" when the AI part did not run. Recommended: accept.
+
+**Owner answer (2026-10-01): "all recommended, yes start building."** Questions 1-10 are accepted as recommended; findings 2 and 6b are in the plan.
 
 Owner steps still to come: the PR on your yes and ready on your yes (T12), the merge on your yes, then the guided phone check, the look on a computer and the timed review, one step at a time (T13), and the records PR.
