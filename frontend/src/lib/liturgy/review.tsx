@@ -54,7 +54,7 @@
  *   kept first prayer no longer opening with the words. Each success drops
  *   that card's own notes, as any revision does. The note goes once every one
  *   of them was revised, fewer than two prayers still share the opening (an
- *   Undo may have brought it back), and only while the review it came from is
+ *   Undo may have brought it back, or the AI kept it), and only while the review it came from is
  *   still the one shown (`generation`); otherwise it stays.
  * - `announcement`: the polite line read out when a review ends.
  */

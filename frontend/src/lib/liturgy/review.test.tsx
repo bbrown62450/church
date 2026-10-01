@@ -442,6 +442,32 @@ describe("Revise the other prayers (reviewer follow-up 2)", () => {
     expect(screen.getByText(KEPT)).toBeInTheDocument();
   });
 
+  it("keeps the note and offers the button again when every one was revised but the AI kept the opening (owner answer A)", async () => {
+    const { route, release } = gated({
+      opening_prayer: "Gracious God, hear us.",
+      prayer_of_confession: "Gracious God, we confess our sins.",
+      assurance: "Gracious God, you forgive us.",
+    });
+    const api = await begun(route);
+    act(() => release("opening_prayer"));
+    await waitFor(() => expect(sentNotes(api)).toHaveLength(2));
+    act(() => release("prayer_of_confession"));
+    await waitFor(() => expect(sentNotes(api)).toHaveLength(3));
+    act(() => release("assurance"));
+    await waitFor(() => expect(handle.current?.revising).toEqual({}));
+    expect(draftHandle.current?.peek().liturgy.cards.assurance).toEqual({ enabled: true, text: "Gracious God, you forgive us.", origin: "ai" });
+    expect(handle.current?.reviseErrors).toEqual({});
+    expect(screen.getByText(KEPT)).toBeInTheDocument();
+    // The prayers still share the opening, so the button offers them again.
+    let again: boolean | undefined;
+    act(() => {
+      again = handle.current?.reviseAcross("service-0");
+    });
+    expect(again).toBe(true);
+    await waitFor(() => expect(sentNotes(api)).toHaveLength(4));
+    expect(sentNotes(api)[3]).toEqual(["opening_prayer", "Gracious God, hear us.", [ACROSS]]);
+  });
+
   it("stops when a 429's wait began before the next prayer's turn: nothing more is sent, the wait shows on it, the note stays", async () => {
     const { route, release } = gated({ opening_prayer: "Holy One, hear us." });
     const api = await begun(route);
