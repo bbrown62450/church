@@ -19,9 +19,11 @@
  *   and keeps the notes already shown. A request-level failure (timeout, the
  *   network, a 5xx) keeps them too and shows its message in `error`; a 401 or
  *   a lost church goes to the app's handling and shows nothing.
- * - Every draft change prunes the notes of cards whose text or origin changed
- *   (`pruneReview`); a new service (a new `created_at`) cancels the review and
- *   every revision silently and drops all notes.
+ * - Every draft change marks the notes of cards whose text or origin changed
+ *   as stale, shown faded until the next review (`pruneReview`; reviewer
+ *   follow-up 1); a successful Regenerate (`onWritten`) or Revise drops the
+ *   card's notes (`forgetCard`); a new service (a new `created_at`) cancels
+ *   the review and every revision silently and drops all notes.
  * - `revise(key)`: an AI card with notes left; its text and remaining notes,
  *   with the sermon text, in one `POST /liturgy/revise` (100 s); it returns
  *   whether it started. Nothing is sent while the AI writes the card, nor while a 429's wait is not over
@@ -57,7 +59,16 @@ import { reviewService, reviseSection } from "@/lib/queries/liturgy";
 import { applyGenerated, type CardSnapshot } from "./cards";
 import { cardErrorFrom, type CardError } from "./errors";
 import { useLiturgyGeneration } from "./generation";
-import { applyReview, canRevise, captureReview, dismissNote, noteCount, pruneReview, type ServiceReview } from "./notes";
+import {
+  applyReview,
+  canRevise,
+  captureReview,
+  dismissNote,
+  forgetCard,
+  noteCount,
+  pruneReview,
+  type ServiceReview,
+} from "./notes";
 import { buildReviewRequest, buildReviseRequest, reviewTargets } from "./request";
 import { SECTION_LABELS } from "./sections";
 import { useSermonLoader } from "./sermon";
@@ -129,7 +140,7 @@ export function LiturgyReviewProvider({
 }) {
   const { draft, update, peek } = useDraft();
   const api = useApi();
-  const { runs, setUndo, rateLimitedUntil, noteRateLimit } = useLiturgyGeneration();
+  const { runs, setUndo, rateLimitedUntil, noteRateLimit, onWritten } = useLiturgyGeneration();
   const loadSermon = useSermonLoader(church, sermonWaitMs);
   const [review, setReview] = useState<ServiceReview | null>(null);
   const [running, setRunning] = useState(false);
@@ -157,13 +168,16 @@ export function LiturgyReviewProvider({
     };
   }, []);
 
-  // Every draft change, during render: notes whose card changed go (typing, Regenerate, Revise, Clear text, the
-  // church default, Undo), so they never show for a single frame, and an Undo never brings them back.
+  // Every draft change, during render: notes whose card changed fade (typing, Undo, the church default, another
+  // tab), and a blank card's go, so neither shows for a single frame as if nothing had changed.
   const [pruned, setPruned] = useState(draft);
   if (pruned !== draft) {
     setPruned(draft);
     setReview((current) => pruneReview(current, draft));
   }
+
+  // A Regenerate (or Generate) wrote a new AI draft: the card's notes were about the text it replaced.
+  useEffect(() => onWritten((key) => setReview((current) => forgetCard(current, key))), [onWritten]);
 
   // A new service (or a saved one loaded): the review and every revision belonged to the old draft.
   const createdAt = draft.created_at;
@@ -278,7 +292,10 @@ export function LiturgyReviewProvider({
             return applyGenerated(d, key, text);
           });
           if (out.verdict !== "apply") reviseToast(key, out.verdict);
-          else if (out.previous !== null) setUndo(key, { kind: "revised", previous: out.previous, after: text });
+          else if (out.previous !== null) {
+            setUndo(key, { kind: "revised", previous: out.previous, after: text });
+            setReview((current) => forgetCard(current, key)); // the notes were addressed
+          }
         } catch (e) {
           if (!mounted.current || revisions.current.get(key) !== controller) return;
           const failure = handleFailure(e);

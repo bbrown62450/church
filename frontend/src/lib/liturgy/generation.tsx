@@ -44,6 +44,9 @@
  * - Undo restores the card only while it still holds the text the action
  *   left (`after`): an edit since (another tab) wins, and the Undo line goes.
  *   The service reviewer's Revise sets the same kind of Undo ("revised").
+ * - `onWritten(listener)`: told the card's key each time an AI draft is
+ *   written into it (the service reviewer drops that card's notes; reviewer
+ *   follow-up 1). Returns the unsubscribe.
  */
 import {
   createContext,
@@ -116,6 +119,8 @@ export type LiturgyGeneration = {
   setUndo: (key: SectionKey, entry: UndoEntry | null) => void;
   clearUndo: () => void;
   applyUndo: (key: SectionKey) => void;
+  /** Calls `listener` with the card's key whenever an AI draft is written into it; returns the unsubscribe. */
+  onWritten: (listener: (key: SectionKey) => void) => () => void;
 };
 
 const GenerationContext = createContext<LiturgyGeneration | null>(null);
@@ -206,6 +211,7 @@ export function LiturgyGenerationProvider({
   const bulkRef = useRef<Bulk | null>(null);
   const batchSeq = useRef(0);
   const service = useRef(draft.created_at);
+  const writtenListeners = useRef(new Set<(key: SectionKey) => void>());
 
   useEffect(() => {
     mounted.current = true;
@@ -302,6 +308,7 @@ export function LiturgyGenerationProvider({
       // Over text: Undo brings it back. Over a blank card: any "Cleared." line is stale now.
       const replaced = out.previous !== null && out.previous.text.trim() !== "";
       setUndo(key, replaced && out.previous !== null ? { kind: "replaced", previous: out.previous, after: text } : null);
+      for (const listener of writtenListeners.current) listener(key);
       return true;
     },
     [update, setUndo],
@@ -462,9 +469,17 @@ export function LiturgyGenerationProvider({
     setRateLimitedUntil(retryAt);
   }, []);
 
+  const onWritten = useCallback((listener: (key: SectionKey) => void) => {
+    const listeners = writtenListeners.current;
+    listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
+    };
+  }, []);
+
   const value = useMemo<LiturgyGeneration>(
-    () => ({ runs, errors, undo, bulk, rateLimitedUntil, noteRateLimit, generate, cancel, cancelBulk, dismissError, setUndo, clearUndo, applyUndo }),
-    [runs, errors, undo, bulk, rateLimitedUntil, noteRateLimit, generate, cancel, cancelBulk, dismissError, setUndo, clearUndo, applyUndo],
+    () => ({ runs, errors, undo, bulk, rateLimitedUntil, noteRateLimit, generate, cancel, cancelBulk, dismissError, setUndo, clearUndo, applyUndo, onWritten }),
+    [runs, errors, undo, bulk, rateLimitedUntil, noteRateLimit, generate, cancel, cancelBulk, dismissError, setUndo, clearUndo, applyUndo, onWritten],
   );
   return <GenerationContext value={value}>{children}</GenerationContext>;
 }

@@ -60,7 +60,7 @@ function Probe() {
   const r = review.review;
   const cards = (["call_to_worship", "opening_prayer", "benediction"] as SectionKey[]).map((key) => {
     const notes = r?.cards[key];
-    const shown = notes === undefined ? "none" : notes.notes.map((n) => n.text).join(" | ") || "looks good";
+    const shown = notes === undefined ? "none" : `${notes.stale ? "faded " : ""}${notes.notes.map((n) => n.text).join(" | ") || "looks good"}`;
     return `${key}: ${api.draft.liturgy.cards[key].text} [${api.draft.liturgy.cards[key].origin}] notes ${shown}; revising ${review.revising[key] ? "yes" : "no"}; error ${review.reviseErrors[key]?.message ?? "none"}; undo ${generation.undo[key]?.kind ?? "none"}`;
   });
   return (
@@ -253,7 +253,8 @@ describe("Revise with these notes (R Revise)", () => {
     act(() => draftHandle.current?.update((d) => editCardText(d, "opening_prayer", "My own words.")));
     release();
     expect(await screen.findByText("Kept your edits, so the revised draft for Opening Prayer was not used.")).toBeInTheDocument();
-    expect(screen.getByText(/^opening_prayer: My own words\. \[typed\] notes none; revising no;/)).toBeInTheDocument();
+    // The toast (sonner, a timer) and the end of the revision (a React update) can land in either order: wait for both.
+    expect(await screen.findByText(/^opening_prayer: My own words\. \[typed\] notes faded Stock phrase .* \| The prayer runs long\.; revising no;/)).toBeInTheDocument();
 
     act(() => draftHandle.current?.update((d) => card(d, "opening_prayer", "Holy One, as we journey.", "ai")));
     act(() => handle.current?.start());
@@ -289,7 +290,8 @@ describe("Revise with these notes (R Revise)", () => {
     act(() => draftHandle.current?.update((d) => editCardText(d, "opening_prayer", "My own words.")));
     act(() => loads[1]());
     expect(await screen.findByText("Kept your edits, so the revised draft for Opening Prayer was not used.")).toBeInTheDocument();
-    expect(screen.getByText(/^opening_prayer: My own words\. \[typed\] notes none; revising no;/)).toBeInTheDocument();
+    // The toast (sonner, a timer) and the end of the revision (a React update) can land in either order: wait for both.
+    expect(await screen.findByText(/^opening_prayer: My own words\. \[typed\] notes faded Stock phrase .* \| The prayer runs long\.; revising no;/)).toBeInTheDocument();
     expect(api.requests.some((r) => r.path === "/liturgy/revise")).toBe(false);
   });
 });

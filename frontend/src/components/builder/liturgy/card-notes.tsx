@@ -11,8 +11,9 @@ import { useDraft } from "@/lib/draft/context";
 import type { SectionKey } from "@/lib/draft/schema";
 import { rateLimitMessage } from "@/lib/liturgy/errors";
 import { useLiturgyGeneration } from "@/lib/liturgy/generation";
-import { canRevise, LOOKS_GOOD, TAG_LABELS, type Note } from "@/lib/liturgy/notes";
+import { canRevise, LOOKS_GOOD, STALE_LINE, TAG_LABELS, type Note } from "@/lib/liturgy/notes";
 import { useLiturgyReview } from "@/lib/liturgy/review";
+import { cn } from "@/lib/utils";
 
 import { REVIEW_BUTTON_ID } from "./review-bar";
 import { useRetryWait } from "./section-card";
@@ -50,21 +51,27 @@ export function NoteList({
   label,
   onDismiss,
   disabled = false,
+  faded = false,
+  describedBy,
 }: {
   notes: Note[];
   label: string;
   onDismiss: (id: string) => void;
   /** The card is being revised with these notes: none can go meanwhile. */
   disabled?: boolean;
+  /** The card changed since its review: the chips and sentences are dimmed, still readable. */
+  faded?: boolean;
+  /** The id of the line that says why they are dimmed. */
+  describedBy?: string;
 }) {
   return (
-    <ul aria-label={label} className="grid gap-2">
+    <ul aria-label={label} aria-describedby={describedBy} className="grid gap-2">
       {notes.map((note) => (
         <li key={note.id} className="flex min-w-0 items-start gap-2">
-          <Badge variant="outline" className="mt-0.5 shrink-0">
+          <Badge variant="outline" className={cn("mt-0.5 shrink-0", faded && "text-muted-foreground")}>
             {TAG_LABELS[note.tag]}
           </Badge>
-          <p className="min-w-0 flex-1 text-sm wrap-anywhere">{note.text}</p>
+          <p className={cn("min-w-0 flex-1 text-sm wrap-anywhere", faded && "text-muted-foreground")}>{note.text}</p>
           <Button
             id={`note-${note.id}-dismiss`}
             variant="ghost"
@@ -88,6 +95,11 @@ function WaitLine({ until }: { until: number }) {
   return <span className="text-sm text-muted-foreground">{rateLimitMessage(seconds)}</span>;
 }
 
+/** The id of a card's "From before your last edit." line, which describes its faded notes. */
+function staleId(key: SectionKey): string {
+  return `card-${key}-stale`;
+}
+
 /** The id of a card's "Revise with these notes" button. */
 export function reviseId(key: SectionKey): string {
   return `card-${key}-revise`;
@@ -96,8 +108,12 @@ export function reviseId(key: SectionKey): string {
 /**
  * A card's notes under its text (R "Notes"): at most 3, most important
  * first; "Looks good." when the card was reviewed and came back with none;
- * nothing when it was not reviewed, its notes were all dismissed, or its text
- * changed since.
+ * nothing when it was not reviewed, its notes were all dismissed, or it was
+ * "Looks good." and has changed since. When the card changed after its review
+ * (reviewer follow-up 1) the notes stay, dimmed, under "From before your last
+ * edit.", which is plain text inside the notes, so it is read with them, is
+ * part of the textarea's description and describes the list; it is not
+ * announced as it appears (it appears as the member types).
  *
  * "Revise with these notes" (R "Revise") shows only on an AI card with a note
  * left, and not while the card is being written; the card's heading
@@ -172,10 +188,17 @@ export function CardNotes({
   const waitShown = offered && !revising && waiting && limitedUntil !== undefined && !(failureShown && failure.code === "rate_limited");
   return (
     <div id={notesId(sectionKey)} className="grid gap-2 rounded-md bg-muted/40 p-3">
+      {notes.stale ? (
+        <p id={staleId(sectionKey)} className="text-sm font-medium text-muted-foreground">
+          {STALE_LINE}
+        </p>
+      ) : null}
       <NoteList
         notes={notes.notes}
         label={`Notes on ${label}`}
         disabled={revising}
+        faded={notes.stale}
+        describedBy={notes.stale ? staleId(sectionKey) : undefined}
         onDismiss={(id) => {
           remember(notes.notes, id);
           review.dismiss(sectionKey, id);
