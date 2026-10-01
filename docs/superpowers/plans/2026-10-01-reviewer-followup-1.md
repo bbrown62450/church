@@ -23,14 +23,14 @@
 - Run commands from the repo root; the working directory resets between commands. Frontend as `(cd frontend && …)`. No foreground `sleep`.
 - Backend: one file `.venv/bin/python -m pytest -q <file> 2>&1 | tail -2`; the suite `.venv/bin/python -m pytest -q | tail -1`. Frontend: one file `(cd frontend && npx vitest run <path> 2>&1 | grep -E "Tests ")`; the suite `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")` (a failure is named); then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`.
 - No route or schema changes, so the OpenAPI snapshot and `schema.d.ts` are not regenerated (T6 checks they are unchanged).
-- Branch `claude/slice-2-plan-4q33le`, at `origin/main` `faa0ecb` plus this plan's commits (`WIP plan: reviewer follow-up 1`, then `Plan: reviewer follow-up 1 (owner answers 2026-10-01)` (twice), then `Plan: reviewer follow-up 1 review fixes (owner answers 2026-10-01)`). Stage files by name; `.claude/` stays untracked.
+- Branch `claude/slice-2-plan-4q33le`, at `origin/main` `faa0ecb` plus this plan's commits (`WIP plan: reviewer follow-up 1`, then `Plan: reviewer follow-up 1 (owner answers 2026-10-01)` (twice), then `Plan: reviewer follow-up 1 review fixes (owner answers 2026-10-01)`), then T1-T5, the review fixes `a0959fb` and `Plan: reviewer follow-up 1 build notes and counts`. Stage files by name; `.claude/` stays untracked.
 - `main` is protected (`backend`, `backend-postgres`, `frontend`, up to date). Merge only with `gh pr merge <N> --merge -R bbrown62450/church`, only on the owner's explicit yes.
 - Every commit message has a subject, a body and, as its last paragraph (a separate `-m`), these two lines:
   `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`
   `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
 - TDD: write the failing test first and see it fail as quoted.
 - **Backup push after every task** (standing rule): the controller runs `git push origin claude/slice-2-plan-4q33le` after each task's commit (never `--force`). A fix asked for by the review is a new commit, `Fix: <what> (Task <n> review)`.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1217 → 1220 passed, 11 → 11 skipped; frontend 570 → 574 in 78 → 78 files`.
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1217 → 1222 passed, 11 → 11 skipped; frontend 570 → 581 in 78 → 78 files` (the counts after the review fixes, `a0959fb`; see "Build notes").
 - New prose for the owner has no em dashes and no flattery. The owner's copy is exact: "Replace your text?", "Revise replaces the text in {Label} with a version that addresses these notes. You can undo right after.", "Revise text", "From before your last edit.".
 - Ask the owner before any push to a PR, PR creation, marking ready, merging, or any production or settings action. Owner steps go one at a time, in plain words.
 
@@ -47,9 +47,11 @@ As in RP: **Create `path`:** the block is the whole file; **Append to `path`:** 
   | T2 | +2 (`test_usecase_liturgy_review.py`) | 1220 passed, 11 skipped | 0 | 570 in 78 |
   | T3 | 0 | 1220 passed, 11 skipped | +2 (`notes.test.ts` +1, `review-step.test.tsx` +1; others edited) | 572 in 78 |
   | T4 | 0 | 1220 passed, 11 skipped | +2 (`review-step.test.tsx`; others edited) | 574 in 78 |
-  | T5-T7 | 0 | 1220 passed, 11 skipped | 0 | 574 in 78 |
+  | T5 | 0 | 1220 passed, 11 skipped | 0 | 574 in 78 |
+  | Review fixes (`a0959fb`) | +2 (`test_usecase_liturgy_review.py`) | 1222 passed, 11 skipped | +7 (`review-step.test.tsx` +6, `generation.test.tsx` +1) | 581 in 78 |
+  | T6-T7 | 0 | 1222 passed, 11 skipped | 0 | 581 in 78 |
 
-- CI `backend-postgres` stays at `11 passed, 1220 deselected`.
+- CI `backend-postgres` stays at `11 passed, 1222 deselected` (1220 before the review fixes).
 
 ### Layering and code rules (carried)
 - `usecases/liturgy_review.py` imports no FastAPI, Starlette or Streamlit; routes stay plain `def` and unchanged; tests use `FakeAI`; the `ai` bucket and its charging are unchanged (one token per review that reaches the AI, one per revision).
@@ -82,7 +84,7 @@ The owner answered "all recommended" to "Questions for the owner" (1-8) on 2026-
 The owner's answers win over R and RP; the code wins over both where they disagree. **[owner-visible]** items are put to the owner in "Questions for the owner" (each written as recommended; the owner answered "all recommended" on 2026-10-01).
 
 1. **[owner-visible] The no-praise rule, worded** (owner answer 1). The contract's last sentence "Give a card an empty notes list when it is fine." becomes "A note is only for something to change. Never praise or describe what already works. If a prayer is fine, give it no notes: its notes list is empty." The role already says the editor points out problems. Nothing in code inspects a note for praise.
-2. **[owner-visible] The firmer "do not repeat" line** (owner answer 5). `CODE_NOTES_INTRO` becomes "Notes already found by code. The pastor sees them already, so do not repeat them or make the same point in other words", then, in brackets, only the points these code notes invite, joined by ", or ": "another note on citing or naming scripture on a card that already has a Cites note" when a card has a code "Cites …" note (`CITES_PREFIX`), and "on prayers that open alike" when a code note across the service names an opening; with neither (say, only a stock-phrase note) there are no brackets; then ":" (`code_notes_intro`). So the AI is never told about a citation or an opening the service does not have. It still comes only when there are code notes.
+2. **[owner-visible] The firmer "do not repeat" line** (owner answer 5). `CODE_NOTES_INTRO` becomes "Notes already found by code. The pastor sees them already, so do not repeat them or make the same point in other words", then, in brackets, only the points these code notes invite, after "for example, a note " and joined by ", or ": "on citing or naming scripture on a card that already has a Cites note" when a card has a code "Cites …" note (`CITES_PREFIX`), and "on prayers that open alike" when a code note across the service names an opening; with neither (say, only a stock-phrase note) there are no brackets; then ":" (`code_notes_intro`). So the AI is never told about a citation or an opening the service does not have. It still comes only when there are code notes.
 3. **[owner-visible] Which restated citation notes go** (owner answer 5). Only on a card that has a code "Cites …" note, and only AI notes tagged `rules`, matching (any case) `\b(?:cit(?:e|es|ed|ing|ation)s?|nam(?:e|es|ed|ing)\s+(?:the\s+)?(?:reading|passage|scripture|text)s?|scripture\s+references?)\b`: "cite(s/d)", "citing", "citation(s)", "name(s/d)/naming (the) reading/passage/scripture/text(s)", "scripture reference(s)". "Recites", "excited" and "Names God only as Father" do not match; a `theology` note that mentions citing is kept. The whole-word repeat rule of RP clarification 11 still runs after it.
 4. **[owner-visible] Which restated opening notes go** (owner answer 5). Only on a card whose opening words are the words of a code "Several prayers open with …" note (the same key as `check_openings`: the first two words after any "Leader:"/"People:" label, any case), and only AI notes tagged `repetition` that either speak of how the prayer opens or quote the opening words. "Speak of how it opens" (`speaks_of_opening`): once the section names (`SECTION_LABELS`, any case, so "the Opening Prayer") are taken out of the note, it matches (any case) `\b(?:opens?|opened|opening|begins?|beginning|began|starts?|started|starting)\s+(?:with|like|alike|the\s+same|as)\b`: "Opens like …", "Begins the same way as …", "both begin alike". A repetition note about something else on that card is kept ("Repeats "mercy" four times.", "Repeats "mercy" from the Opening Prayer.", ""Open our hearts" also appears in the Confession.", "Echoes the Opening Prayer word for word in its last line.", "Starts and ends with the same petition."): narrower than "drop AI repetition notes on that card", so a real repetition point inside one prayer is not lost. Across the service, when a code note names a shared opening, an AI `repetition` note there that speaks of prayers opening alike ("The Call to Worship and Opening Prayer both begin alike.") is dropped the same way, before `merge_notes`; one quoting the opening was already dropped (RP clarification 11).
 5. **[owner-visible] What fades and what goes** (owner answer 4). Faded, under "From before your last edit.": typing, Undo, "Use church default", another tab's edit (any change to the text or the origin, as before). Gone: a successful Regenerate or Generate (its new draft replaced the text the notes were about), a successful Revise (it addressed them), Clear text (a blank card shows no notes; Undo of Clear does not bring them back), New service. A card that showed "Looks good.", or whose notes were all dismissed, shows nothing after an edit. Once faded, a card stays faded until the next Review, even when Undo puts back the exact words that were reviewed. A failed or cancelled Regenerate or Revise leaves the text, so the notes stay as they were. Undo after a successful Revise or Regenerate brings the text back without the notes (they went with the revision or the new draft; the next Review brings fresh ones). Another tab's Regenerate or Revise reaches this tab as an edit, so here the card's notes fade under the same line instead of going: accepted (this tab cannot tell another tab's AI draft from its typing); a possible later follow-up.
@@ -138,7 +140,7 @@ The owner's answers win over R and RP; the code wins over both where they disagr
 **with:**
 
 ````python
-    assert user.endswith(liturgy_review.CODE_NOTES_INTRO + " (another note on prayers that open alike):\n" +
+    assert user.endswith(liturgy_review.CODE_NOTES_INTRO + " (for example, a note on prayers that open alike):\n" +
 ````
 
 **Append to `backend/tests/test_usecase_liturgy_review.py`:**
@@ -164,8 +166,8 @@ def test_the_prompt_asks_for_no_praise_and_no_restated_code_notes(church):
     ai = FakeAI(reply=answer())
     run(church, cards=[*CARDS, ReviewCard("assurance", "ai", "As John 21:1-19 tells, you are forgiven.")], ai=ai)
     user = ai.calls[0]["messages"][1]["content"]
-    assert (f"{intro} (another note on citing or naming scripture on a card that already has a Cites note, "
-            f"or on prayers that open alike):\n- call_to_worship: {STOCK}\n- assurance: Cites John 21:1-19.") in user
+    assert (f"{intro} (for example, a note on citing or naming scripture on a card that already has a Cites "
+            f"note, or on prayers that open alike):\n- call_to_worship: {STOCK}\n- assurance: Cites John 21:1-19.") in user
 ````
 
 - [ ] **Step 2 (agent): Run it and see it fail**
@@ -226,7 +228,7 @@ def code_notes_intro(code_notes: Mapping[str, Sequence[Note]], service_notes: Se
     cites = any(n.text.startswith(CITES_PREFIX) for notes in code_notes.values() for n in notes)
     points = [point for point, present in ((RESTATED_CITING, cites), (RESTATED_OPENING, bool(service_notes)))
               if present]
-    return CODE_NOTES_INTRO + (f" (another note {', or '.join(points)})" if points else "") + ":\n"
+    return CODE_NOTES_INTRO + (f" (for example, a note {', or '.join(points)})" if points else "") + ":\n"
 
 
 def _readings(scriptures: Sequence[str]) -> str:
@@ -1912,7 +1914,7 @@ git log --oneline --grep '^Plan: reviewer follow-up 1' -1
 git rev-list --count origin/claude/slice-2-plan-4q33le..HEAD
 ```
 
-**Expected:** nothing (or `?? .claude/`); `0`; `<sha> Plan: reviewer follow-up 1 review fixes (owner answers 2026-10-01)`; `0`. If `main` moved: `git merge origin/main -m "Merge origin/main into claude/slice-2-plan-4q33le (Task 6)"` with the trailer as a second `-m`; on a conflict, `git merge --abort` and tell the owner.
+**Expected:** nothing (or `?? .claude/`); `0`; `<sha> Plan: reviewer follow-up 1 build notes and counts`; `0`. If `main` moved: `git merge origin/main -m "Merge origin/main into claude/slice-2-plan-4q33le (Task 6)"` with the trailer as a second `-m`; on a conflict, `git merge --abort` and tell the owner.
 
 - [ ] **Step 2 (agent): Both suites, the changed files three times, types, lint, the build**
 
@@ -1923,7 +1925,7 @@ for i in 1 2 3; do (cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Te
 (cd frontend && NEXT_PUBLIC_SUPABASE_URL=https://ci-placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-placeholder NEXT_PUBLIC_API_URL=http://localhost:8000 npm run build 2>&1 | grep -E "Compiled successfully|Error")
 ```
 
-**Expected:** `1220 passed, 11 skipped in <t>s`; three times ` Test Files  78 passed (78)` and `      Tests  574 passed (574)` with no `×` or `FAIL` line (one names the failing test: Step 6); `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s` and no `Error` (the build runs in the real checkout; a font `Failed to fetch` only: say so and rely on CI).
+**Expected:** `1222 passed, 11 skipped in <t>s`; three times ` Test Files  78 passed (78)` and `      Tests  581 passed (581)` with no `×` or `FAIL` line (one names the failing test: Step 6); `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s` and no `Error` (the build runs in the real checkout; a font `Failed to fetch` only: say so and rely on CI).
 
 - [ ] **Step 3 (agent): The API files are unchanged, the gates, the paths, the commits**
 
@@ -1937,7 +1939,7 @@ git log --reverse --no-merges --format=%s origin/main..HEAD
 for c in $(git rev-list origin/main..HEAD); do git show -s --format=%B "$c" | grep -q '^Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>$' || echo "no trailer: $(git show -s --format='%h %s' "$c")"; done; echo "trailer check done"
 ```
 
-**Expected:** nothing from `git status`; `imports grep exit 1`; `raw html grep exit 1`; exactly these 12 paths (this plan and the 11 files the tasks change), plus `docs/superpowers/specs/2026-10-01-voices-of-the-church-decisions.md` from the docs-only commit `2607566 Docs: Voices of the Church owner decisions (pre-spec, 2026-10-01)`, which landed on the branch before this plan (name it in Step 4's message; it changes no code):
+**Expected:** nothing from `git status`; `imports grep exit 1`; `raw html grep exit 1`; exactly these 13 paths (this plan, the 11 files the tasks change, and `generation.test.tsx`, which the review fixes `a0959fb` added a test to), plus `docs/superpowers/specs/2026-10-01-voices-of-the-church-decisions.md` from the docs-only commit `2607566 Docs: Voices of the Church owner decisions (pre-spec, 2026-10-01)`, which landed on the branch before this plan (name it in Step 4's message; it changes no code):
 ```
 backend/tests/test_usecase_liturgy_review.py
 backend/usecases/liturgy_review.py
@@ -1946,13 +1948,14 @@ docs/superpowers/plans/2026-10-01-reviewer-followup-1.md
 docs/superpowers/specs/2026-09-26-service-reviewer-design.md
 frontend/src/components/builder/liturgy/card-notes.tsx
 frontend/src/components/builder/liturgy/review-step.test.tsx
+frontend/src/lib/liturgy/generation.test.tsx
 frontend/src/lib/liturgy/generation.tsx
 frontend/src/lib/liturgy/notes.test.ts
 frontend/src/lib/liturgy/notes.ts
 frontend/src/lib/liturgy/review.test.tsx
 frontend/src/lib/liturgy/review.tsx
 ```
-`0`; the subjects oldest first: `Docs: Voices of the Church owner decisions (pre-spec, 2026-10-01)`, the plan's (`WIP plan: reviewer follow-up 1` …, `Plan: reviewer follow-up 1 review fixes (owner answers 2026-10-01)`), then T1-T5's five subjects as written above, then any `Fix: …` lines; only `trailer check done`.
+`0`; the subjects oldest first: `Docs: Voices of the Church owner decisions (pre-spec, 2026-10-01)`, the plan's (`WIP plan: reviewer follow-up 1` …, `Plan: reviewer follow-up 1 review fixes (owner answers 2026-10-01)`), then T1-T5's five subjects as written above, then `Reviewer follow-up 1 review fixes (owner decision 1)` and `Plan: reviewer follow-up 1 build notes and counts`, then any `Fix: …` lines; only `trailer check done`.
 
 - [ ] **Step 4 (agent → OWNER): Ask to open the draft PR**
 
@@ -1963,7 +1966,7 @@ gh pr list -R bbrown62450/church --head claude/slice-2-plan-4q33le --state open 
 
 **Expected:** one `✓ Logged in` line; `[]`. Send the owner exactly this, and wait for a clear yes:
 
-> Reviewer follow-up 1 is verified on this machine: backend 1220 passed, 11 skipped (1217 before); frontend 574 tests in 78 files (570 before), three runs in a row; typecheck, lint and the production build are clean; the API is unchanged. It makes the four changes you chose: no praise notes, Revise on your own text after "Replace your text?", dimmed notes under "From before your last edit." after an edit, and no AI notes that restate a citation or a repeated opening. May I open the pull request as a **draft** titled "Reviewer follow-up 1: no praise, Revise on your text, faded notes", so the checks run? Merging stays with you.
+> Reviewer follow-up 1 is verified on this machine: backend 1222 passed, 11 skipped (1217 before); frontend 581 tests in 78 files (570 before), three runs in a row; typecheck, lint and the production build are clean; the API is unchanged. It makes the four changes you chose: no praise notes, Revise on your own text after "Replace your text?", dimmed notes under "From before your last edit." after an edit, and no AI notes that restate a citation or a repeated opening. May I open the pull request as a **draft** titled "Reviewer follow-up 1: no praise, Revise on your text, faded notes", so the checks run? Merging stays with you.
 
 - [ ] **Step 5 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
 
@@ -1979,7 +1982,7 @@ Reviewer follow-up 1 (owner answers of 2026-10-01 after the reviewer's phone che
 
 Later, planned on its own: Revise from "Across the service".
 
-Tests: backend 1217 → 1220 passed, 11 → 11 skipped; frontend 570 → 574 in 78 → 78 files
+Tests: backend 1217 → 1222 passed, 11 → 11 skipped; frontend 570 → 581 in 78 → 78 files
 
 After merge (Task 7): a four-step check on the owner's phone, then a short "Reviewer follow-up 1 record" in docs/ops-runbook.md.
 
@@ -1993,7 +1996,7 @@ gh pr create -R bbrown62450/church --draft --base main --head claude/slice-2-pla
 gh pr checks <N> -R bbrown62450/church --watch --interval 30
 ```
 
-Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1220 passed, 11 skipped`, backend-postgres `11 passed, 1220 deselected`, frontend `574 passed` in 78 files. Then send: "PR #<N> is green: backend 1220 passed, 11 skipped; 574 frontend tests in 78 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R bbrown62450/church`.
+Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1222 passed, 11 skipped`, backend-postgres `11 passed, 1222 deselected`, frontend `581 passed` in 78 files. Then send: "PR #<N> is green: backend 1222 passed, 11 skipped; 581 frontend tests in 78 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R bbrown62450/church`.
 
 - [ ] **Step 6: Fix any failure in its owning task**
 
@@ -2008,7 +2011,7 @@ Run the last line with `run_in_background: true`. **Expected:** the PR URL; ever
 
 For each fix: change only the owning task's files; rerun Steps 2-3; commit `Fix: <what> (Task <n>, follow-up 1 final verification)` with the trailer; after the PR exists, ask the owner before pushing it.
 
-Expected counts after this task: backend `1220 passed, 11 skipped`; frontend `574 passed` in 78 files.
+Expected counts after this task: backend `1222 passed, 11 skipped`; frontend `581 passed` in 78 files.
 
 ### Task 7: Merge, the owner's phone check (four steps), the record (OWNER + agent)
 
@@ -2130,7 +2133,7 @@ gh pr checks claude/slice-2-plan-4q33le -R bbrown62450/church --watch
 
 Code only (notes were never saved; no draft shape changed). On the owner's yes for each outward command: a branch `claude/revert-reviewer-followup-1` from `origin/main`, `git revert -m 1 --no-commit <merge sha>`, a commit "Revert reviewer follow-up 1 (PR #<N>)" with the trailer, both suites (`1217 passed, 11 skipped`; `570 passed` in 78), a PR, CI, and the merge on the owner's yes; record it in the follow-up record.
 
-Expected counts after this task: backend `1220 passed, 11 skipped` on `main`; frontend `574 passed` in 78 files. The records PR adds no test.
+Expected counts after this task: backend `1222 passed, 11 skipped` on `main`; frontend `581 passed` in 78 files. The records PR adds no test.
 
 ---
 
@@ -2149,6 +2152,8 @@ Expected counts after this task: backend `1220 passed, 11 skipped` on `main`; fr
 - All 68 directives applied (T1 6, T2 4, T3 35, T4 19, T5 4); every Replace anchor occurred exactly once; the result matched the build worktree's but for two comments.
 - Every "see it fail" output matched as quoted (T1 two failures, `2 failed, 12 passed`; T2 `2 failed, 14 passed`; T3 eight failures, `8 failed | 21 passed (29)`; T4 five failures, `5 failed | 26 passed (31)`), and every count matched the table: backend 1218, then 1220 (11 skipped); frontend 572, then 574 in 78 files (three files three times after T3 and T4, the whole suite three times at the end, with no `×` or `FAIL` line); typecheck 0 and lint 0; the docs tests `89 passed`, owner markers `4`, no em dash added, `2 files changed, 18 insertions(+), 3 deletions(-)`; the OpenAPI export and `gen:api` left the API files unchanged; no raw HTML. No flaky run this time.
 - Not run while planning: the production build (Turbopack refuses the replay's symlinked `node_modules`; T6 runs it in the real checkout), the pushes, the PR and CI, the merge and the owner's checks, and any call to OpenAI.
+
+**Review fixes (a0959fb).** The build's whole-branch review asked for one important pair and seven minor changes, made in one commit under owner decision 1 (no owner-visible change beyond what the owner chose), so the code now differs from the T1-T4 directives above where it says here; the directives are kept as built. (I1) "Replace your text?" closes, sending nothing, only on this card's changes: Revise no longer offered, this card's review entry replaced (a new review, the card went stale or lost its notes) or its text changed (another tab's edit, even to a card already faded); other cards' changes leave it open (clarification 12's "the review it was opened on is replaced" is now this card's entry and text). (M4) The text that describes these rules (the module docstring, the `drop_restated` comment, `CardNotes`'s docstring) was rewritten to match. (M3) A 429's wait beginning while the dialog asks closes it, and the wait shows beside Revise. (I2) The citing pattern also matches "references", "by name", "names (up to three words) the reading/passage/scripture/text/Gospel/psalm/lesson/epistle" and "refers to (up to two words) the Gospel ..."; a possessive after the scripture word ("Name the reading's central image ...", "the passages' setting") is about the reading's content, so it stays (clarification 3 widened). (M1) Across the service, an AI note on prayers opening alike is kept when it quotes something and none of it is an opening the code note names (`drop_restated_across`; 'both open with "We confess"' stays). (M2) On a card, a restated opening note goes only when it also puts the prayer beside others (`CROSS_PRAYER`: both, also, other(s), another, several, alike, "same as", "like the", "as in" ..., or a section's name), so 'Uses "Gracious God" three times.' and "Begins with 'we' three lines in a row." stay (clarification 4 narrowed). (M5) Tests: backend +2 (`test_a_note_across_the_service_on_another_shared_opening_is_kept`, `test_the_citing_pattern_runs_in_linear_time_on_100_kb`) and new table rows; frontend +7 (`review-step.test.tsx` +6: the confirm closing on staleness, on another tab's edit to a faded card, on a new review and on a 429, Undo after revising saved text, a failed or cancelled Regenerate keeping faded notes; `generation.test.tsx` +1). (M6) Each `onWritten` listener runs on its own: one that throws is logged (`console.error`) and the others and the write still run. (M7) The code-notes brackets read "(for example, a note on ...)" instead of "(another note on ...)" (clarification 2 and the T1 sketch above now quote the code). The T3 build also made two `review.test.tsx` waits deterministic (`findByText`; test only). Counts after the fixes: backend **1222 passed, 11 skipped**; frontend **581 in 78 files**.
 
 ## Spec coverage
 
