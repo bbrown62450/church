@@ -1531,6 +1531,7 @@
           "notes": {
             "items": {
               "maxLength": 240,
+              "minLength": 1,
               "type": "string"
             },
             "maxItems": 3,
@@ -1579,6 +1580,7 @@
           },
           "text": {
             "maxLength": 20000,
+            "minLength": 1,
             "title": "Text",
             "type": "string"
           }

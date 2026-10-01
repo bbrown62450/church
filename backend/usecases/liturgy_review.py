@@ -22,14 +22,17 @@ review_service:
    the start of the usecase, with 70 s attempts (REVIEW_ATTEMPT_S) in place of
    OPENAI_TIMEOUT_SECONDS. AI failures and invalid JSON keep the code notes
    and say why in ai_status; upstream text is never returned.
-7. Tolerant parsing (unknown sections and tags dropped, a note trimmed to 240
-   characters, Voice dropped when there is no profile), then the merge: code
-   notes first, an AI note that quotes a code note's text as whole words
-   dropped, at most 3 per card and 3 across the service.
+7. Tolerant parsing (unknown or non-string sections and tags dropped, a note
+   trimmed to 240 characters, Voice dropped when there is no profile; any
+   other parsing failure is "error" with the code notes kept), then the
+   merge: code notes first, an AI note that quotes a code note's text as
+   whole words (any whitespace between them) dropped, at most 3 per card and
+   3 across the service.
 
 The cards and the standing rules are fenced (<<<CARD key>>> or <<<RULES>>>,
 then <<<END>>>), with any run of three or more < or > taken out of the
-church's and the member's text first, so a card cannot close its fence or
+church's and the member's text first (the occasion, readings and sermon
+text too), so a card cannot close its fence or
 open another; the prompt says they are material to review, not
 instructions, and that the JSON contract sets the answer's format.
 
@@ -170,7 +173,8 @@ class _Unusable(Exception):
 
 
 def _readings(scriptures: Sequence[str]) -> str:
-    lines = [" ".join(s.split())[:200] for s in scriptures if s and s.strip()]
+    lines = [" ".join(_unfenced(s).split())[:200] for s in scriptures if s and s.strip()]
+    lines = [line for line in lines if line]
     return "Readings:\n" + "\n".join(f"- {line}" for line in lines) if lines else "Readings: None specified."
 
 
@@ -187,7 +191,8 @@ def build_review_prompt(cards: Sequence[ReviewCard], *, system_prompt: str, rubr
               for key in SECTION_ORDER if key in present and checklists.get(key)]
     rules = _unfenced(system_prompt)
     profile = _unfenced(profile).strip()[:prayer_library.MAX_PROFILE_CHARS]
-    sermon_block = liturgy_prompts.sermon_text_block(*(sermon or (None, None)))
+    ref, text = sermon or (None, None)
+    sermon_block = liturgy_prompts.sermon_text_block(_unfenced(ref), _unfenced(text)) if sermon else ""
     texts = {c.section: _unfenced(c.text)[:MAX_CARD_CHARS] for c in cards}
     noted = [f"- {key}: {n.text}" for key in present for n in code_notes.get(key, ())]
     noted += [f"- across the service: {n.text}" for n in service_notes]
@@ -267,12 +272,13 @@ def parse_review(raw: str, sections: Sequence[str], *, voice: bool) -> tuple[dic
     per_card: dict[str, list[Note]] = {key: [] for key in sections}
     items = data.get("cards")
     for item in items if isinstance(items, list) else []:
-        if isinstance(item, Mapping) and item.get("section") in per_card:
+        section = item.get("section") if isinstance(item, Mapping) else None
+        if isinstance(section, str) and section in per_card:     # a list or dict section is unhashable
             notes = item.get("notes")
             for raw_note in notes if isinstance(notes, list) else []:
                 note = _ai_note(raw_note, voice=voice)
                 if note is not None:
-                    per_card[item["section"]].append(note)
+                    per_card[section].append(note)
     service = data.get("service_notes")
     across = [n for n in (_ai_note(r, voice=voice) for r in (service if isinstance(service, list) else []))
               if n is not None]
@@ -280,9 +286,10 @@ def parse_review(raw: str, sections: Sequence[str], *, voice: bool) -> tuple[dic
 
 
 def merge_notes(code: Sequence[Note], ai: Sequence[Note], limit: int) -> tuple[Note, ...]:
-    """Code notes first; an AI note that quotes a code note's text as whole words (any case) is a
-    repeat, so "Psalm 1" is not repeated by a note on "Psalm 119" or "Psalm 1:3"."""
-    repeats = [re.compile(r"(?<!\w)" + re.escape(n.match) + r"(?![\w:])", re.IGNORECASE) for n in code if n.match]
+    """Code notes first; an AI note that quotes a code note's text as whole words (any case, any
+    whitespace between them) is a repeat, so "Psalm 1" is not repeated by a note on "Psalm 119" or "Psalm 1:3"."""
+    repeats = [re.compile(r"(?<!\w)" + r"\s+".join(map(re.escape, n.match.split())) + r"(?![\w:])", re.IGNORECASE)
+               for n in code if n.match.split()]
     kept = [n for n in ai if not any(p.search(n.text) for p in repeats)]
     return tuple([*code, *kept][:limit])
 
@@ -372,6 +379,9 @@ def _ask_ai(church_id, occasion, scriptures, cards, sermon, code, code_service, 
         # ai_call line logs completion_tokens, which equal the cap when the answer was cut off.
         logger.warning("liturgy.review unusable answer chars=%d max_completion_tokens=%d",
                        len(raw) if isinstance(raw, str) else 0, REVIEW_MAX_COMPLETION_TOKENS)
+        return "error"
+    except Exception as exc:                                     # a backstop: the code notes stay
+        logger.error("liturgy.review parse failed error=%s", type(exc).__name__)   # no answer text
         return "error"
     for key, notes in per_card.items():
         ai_notes[key].extend(notes)

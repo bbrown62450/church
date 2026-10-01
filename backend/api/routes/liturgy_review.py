@@ -62,11 +62,25 @@ class ReviseIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     section: SectionKey
-    text: str = Field(max_length=20_000)
-    notes: list[Annotated[str, Field(max_length=240)]] = Field(min_length=1, max_length=3)
+    text: str = Field(min_length=1, max_length=20_000)
+    notes: list[Annotated[str, Field(min_length=1, max_length=240)]] = Field(min_length=1, max_length=3)
     occasion: str = Field("", max_length=300)
     scriptures: Scriptures = Field(default_factory=list, max_length=20)
     sermon_text: Optional[SermonText] = None
+
+    @field_validator("text")
+    @classmethod
+    def text_not_blank(cls, text: str) -> str:
+        if not text.strip():
+            raise ValueError("The draft is empty.")
+        return text
+
+    @field_validator("notes")
+    @classmethod
+    def notes_not_blank(cls, notes: list[str]) -> list[str]:
+        if any(not note.strip() for note in notes):
+            raise ValueError("A note is empty.")
+        return notes
 
 
 class NoteOut(BaseModel):

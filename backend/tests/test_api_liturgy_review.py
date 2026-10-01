@@ -147,6 +147,10 @@ def test_invalid_bodies_are_422_with_fields_and_never_reach_the_ai(client, churc
         ({k: v for k, v in REVISE.items() if k != "text"}, "text"),
         (dict(REVISE, system_prompt="mine"), "system_prompt"),
         (dict(REVISE, sermon_text={"ref": "r" * 201, "text": "x"}), "sermon_text.ref"),
+        (dict(REVISE, text=""), "text"),                                          # an empty draft
+        (dict(REVISE, text=" \n\t "), "text"),                                    # a blank draft
+        (dict(REVISE, notes=[""]), "notes.0"),                                    # an empty note
+        (dict(REVISE, notes=[STOCK, "  \n "]), "notes"),                          # a blank note
     ]
     for path, cases in (("/liturgy/review", review_cases), ("/liturgy/revise", revise_cases)):
         for body, field in cases:
