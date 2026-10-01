@@ -467,6 +467,25 @@ recorded here.
 | 4. Faded notes | After typing, the card's notes stayed dimmed under "From before your last edit."; Review service again replaced them with fresh notes | 2026-10-01 |
 | Follow-ups | Accepted, not fixed: notes on a Benediction following the church default fade (rather than go) when the default itself changes; another tab's Regenerate or Revise fades this tab's notes. Next: Revise from "Across the service", planned on its own (owner, 2026-10-01). Then 5a (saving and archiving services and the Word files), Voices of the Church (decisions in `docs/superpowers/specs/2026-10-01-voices-of-the-church-decisions.md`), 6a. Still open: first-line matching research (Hymnary.org), the NUL-character 500 (app-wide), and the two slice 1 test churches (kept for now, owner) | 2026-10-01 |
 
+### Reviewer follow-up 2 record
+
+Reviewer follow-up 2 (Revise the other prayers: the code note "Several
+prayers open with ..." gets a button that keeps the first prayer and revises
+the others one at a time, in service order, each told to avoid the shared
+opening and the new openings before it, with one confirm when the owner's
+text is involved and Undo on each card) merged as PR #38. No database change,
+no new variable and no API change, so production stays at
+`0004_invites_reusable` (head). The owner's check was a three-step guided
+check on a phone. No token, email address or church id is recorded here.
+
+| Step | Result | Date |
+|---|---|---|
+| Merge | PR #38 merged 22:24 UTC (18:24 Eastern), merge commit `fc4e6af` | 2026-10-01 |
+| 1. Revise the other prayers (phone) | "Replace your text?" named Opening Prayer and Prayer of Confession; "Keep my text" changed nothing; "Revise text" revised them one at a time in about 20 s; both new texts opened differently from "Gracious God" and from each other; the Call to Worship kept the owner's words exactly | 2026-10-01 |
+| 2. Undo on each card | Undo on the Opening Prayer alone brought the owner's words back; the Prayer of Confession kept its revision | 2026-10-01 |
+| 3. The note | The note went once both revisions came back; after the Undo, Review service brought it back, and the confirm then named only the Opening Prayer | 2026-10-01 |
+| Follow-ups | Open question for the owner (needs copy): screen readers are not told why "Revise the other prayers" is off while a prayer is busy, nothing is announced when a batch ends or stops, and a batch that stops for a reason other than a 429 says nothing about why. Next: 5a (saving and archiving services and the Word files), Voices of the Church (decisions in `docs/superpowers/specs/2026-10-01-voices-of-the-church-decisions.md`), 6a. Still open: first-line matching research (Hymnary.org), the NUL-character 500 (app-wide), and the two slice 1 test churches (kept for now, owner) | 2026-10-01 |
+
 ## Backups
 
 - **Workflow:** `.github/workflows/backup.yml` (`db-backup`). Daily at 08:37 UTC,
