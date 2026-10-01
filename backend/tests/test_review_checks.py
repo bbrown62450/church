@@ -79,6 +79,7 @@ def test_every_book_name_and_alias_in_scripture_refs_books_is_caught_with_a_chap
         ("Ps. 23 is a comfort.", "Ps. 23"),
         ("In 1 Corinthians 13 love is patient.", "1 Corinthians 13"),
         ("Gen 1–2 tells of creation.", "Gen 1–2"),
+        ("Gen 1-2:3 tells of creation.", "Gen 1-2:3"),     # a chapter-to-verse range, cited in full
         ("Psalm 1-2 open the psalter.", "Psalm 1-2"),
         ("Like Mark\n4:35-41, calm us.", "Mark 4:35-41"),       # quoted with one space
     ]

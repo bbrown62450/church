@@ -24,7 +24,7 @@
  *   every revision silently and drops all notes.
  * - `revise(key)`: an AI card with notes left; its text and remaining notes,
  *   with the sermon text, in one `POST /liturgy/revise` (100 s); it returns
- *   whether it started. Nothing is sent while a 429's wait is not over
+ *   whether it started. Nothing is sent while the AI writes the card, nor while a 429's wait is not over
  *   (`rateLimitedUntil`, Generate's or Revise's: the card shows the wait), nor
  *   when the card changed while the sermon text loaded (the same toast as
  *   below); a 429 here starts that wait for Generate too. The result
@@ -55,7 +55,7 @@ import { reportAuthErrors, useApi } from "@/lib/queries/client";
 import { reviewService, reviseSection } from "@/lib/queries/liturgy";
 
 import { applyGenerated, type CardSnapshot } from "./cards";
-import { cardErrorFrom, rateLimitMessage, type CardError } from "./errors";
+import { cardErrorFrom, type CardError } from "./errors";
 import { useLiturgyGeneration } from "./generation";
 import { applyReview, canRevise, captureReview, dismissNote, noteCount, pruneReview, type ServiceReview } from "./notes";
 import { buildReviewRequest, buildReviseRequest, reviewTargets } from "./request";
@@ -74,11 +74,14 @@ export type LiturgyReview = {
   dismiss: (where: SectionKey | "service", id: string) => void;
   /** Cards whose revision is running. */
   revising: Partial<Record<SectionKey, true>>;
-  reviseErrors: Partial<Record<SectionKey, CardError>>;
-  /** True when the revision started (an AI card with notes left, not already revising). */
+  /** A revision's failure; a 429's carries `retryAt` (ms since the epoch), when its wait ends. */
+  reviseErrors: Partial<Record<SectionKey, ReviseError>>;
+  /** True when the revision started (an AI card with notes left, not already revising, not being written, no 429 wait). */
   revise: (key: SectionKey) => boolean;
   cancelRevise: (key: SectionKey) => void;
 };
+
+export type ReviseError = CardError & { retryAt?: number };
 
 const ReviewContext = createContext<LiturgyReview | null>(null);
 
@@ -126,14 +129,14 @@ export function LiturgyReviewProvider({
 }) {
   const { draft, update, peek } = useDraft();
   const api = useApi();
-  const { setUndo, rateLimitedUntil, noteRateLimit } = useLiturgyGeneration();
+  const { runs, setUndo, rateLimitedUntil, noteRateLimit } = useLiturgyGeneration();
   const loadSermon = useSermonLoader(church, sermonWaitMs);
   const [review, setReview] = useState<ServiceReview | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState("");
   const [revising, setRevising] = useState<Partial<Record<SectionKey, true>>>({});
-  const [reviseErrors, setReviseErrors] = useState<Partial<Record<SectionKey, CardError>>>({});
+  const [reviseErrors, setReviseErrors] = useState<Partial<Record<SectionKey, ReviseError>>>({});
   const reviewRef = useRef<ServiceReview | null>(null);
   const active = useRef<AbortController | null>(null);
   const revisions = useRef(new Map<SectionKey, AbortController>());
@@ -244,13 +247,10 @@ export function LiturgyReviewProvider({
       const card = asked.liturgy.cards[key];
       const notes = reviewRef.current?.cards[key];
       if (!canRevise(card, notes) || notes === undefined) return false;
-      if (rateLimitedUntil !== null && Date.now() < rateLimitedUntil) {
-        // A 429's wait (Generate's or Revise's) is not over: nothing is sent, and the card shows the wait.
-        const seconds = Math.ceil((rateLimitedUntil - Date.now()) / 1000);
-        const waiting: CardError = { code: "rate_limited", message: rateLimitMessage(seconds), retryable: true, retryAfterSeconds: seconds };
-        setReviseErrors((current) => ({ ...current, [key]: waiting }));
-        return false;
-      }
+      // The AI is writing this card (Generate, Regenerate, Try again): one request at a time per card.
+      if (runs[key] !== undefined) return false;
+      // A 429's wait (Generate's or Revise's) is not over: nothing is sent (the card shows the wait, its Revise off).
+      if (rateLimitedUntil !== null && Date.now() < rateLimitedUntil) return false;
       const sent: Sent = { createdAt: asked.created_at, text: card.text, origin: card.origin };
       const controller = new AbortController();
       revisions.current.set(key, controller);
@@ -282,8 +282,11 @@ export function LiturgyReviewProvider({
         } catch (e) {
           if (!mounted.current || revisions.current.get(key) !== controller) return;
           const failure = handleFailure(e);
-          if (failure?.retryAfterSeconds !== undefined) noteRateLimit(Date.now() + failure.retryAfterSeconds * 1000);
-          if (failure !== null) setReviseErrors((current) => ({ ...current, [key]: failure }));
+          if (failure === null) return;
+          // A 429's alert goes when its wait ends (`CardNotes`); Generate waits as long.
+          const retryAt = failure.retryAfterSeconds === undefined ? undefined : Date.now() + failure.retryAfterSeconds * 1000;
+          if (retryAt !== undefined) noteRateLimit(retryAt);
+          setReviseErrors((current) => ({ ...current, [key]: retryAt === undefined ? failure : { ...failure, retryAt } }));
         } finally {
           if (revisions.current.get(key) === controller) {
             revisions.current.delete(key);
@@ -293,7 +296,7 @@ export function LiturgyReviewProvider({
       })();
       return true;
     },
-    [api, handleFailure, loadSermon, noteRateLimit, peek, rateLimitedUntil, setUndo, update],
+    [api, handleFailure, loadSermon, noteRateLimit, peek, rateLimitedUntil, runs, setUndo, update],
   );
 
   const cancelRevise = useCallback((key: SectionKey) => {

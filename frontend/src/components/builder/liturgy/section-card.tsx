@@ -107,7 +107,8 @@ export function useRetryWait(retryAt: number | undefined): boolean {
  *
  * The service reviewer's notes show under the text (`CardNotes`), and
  * describe the textarea while they show. While "Revise with these notes"
- * runs, the card is read-only and its Regenerate, ⋯ menu and Undo are off; when it
+ * runs, the card is read-only and its Regenerate, Try again, ⋯ menu and Undo are off; switching
+ * the card off cancels it silently; when it
  * ends, focus goes to the Undo line's button (the text was revised), the
  * Revise button (it failed or was cancelled) or the heading.
  */
@@ -169,15 +170,17 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
   });
 
   // A revision ended: its Cancel went, so the Undo line (revised), the Revise button (failed, cancelled) or the heading.
+  // An older Undo line (Replaced, Cleared) is not the revision's: focus skips it.
   const wasRevising = useRef(revising);
+  const revised = undo?.kind === "revised";
   useEffect(() => {
     const before = wasRevising.current;
     wasRevising.current = revising;
     if (!before || revising) return;
     const active = document.activeElement;
     if (active !== null && active !== document.body) return; // focus already went somewhere on purpose
-    (undoRef.current ?? document.getElementById(reviseId(key)) ?? headingRef.current)?.focus();
-  }, [revising, key]);
+    ((revised ? undoRef.current : null) ?? document.getElementById(reviseId(key)) ?? headingRef.current)?.focus();
+  }, [revising, revised, key]);
 
   // A retryable error took the action row's place while focus was in it: Try again (or the heading) takes it.
   useEffect(() => {
@@ -214,8 +217,9 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
   }
 
   function toggle(enabled: boolean) {
-    // Switching a running card off cancels it silently; switching it back on does not restart it.
+    // Switching a running or revising card off cancels it silently; switching it back on does not restart it.
     if (run !== undefined) generation.cancel([key]);
+    if (revising) review.cancelRevise(key);
     update((d) => setCardEnabled(d, key, enabled));
     generation.dismissError(key);
   }
@@ -378,7 +382,7 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
               {error.retryable || error.link ? (
                 <AlertDescription className="flex flex-wrap gap-2 pt-2">
                   {error.retryable ? (
-                    <Button ref={retryRef} variant="outline" size="touch" disabled={retryWaiting} onClick={write}>
+                    <Button ref={retryRef} variant="outline" size="touch" disabled={retryWaiting || revising} onClick={write}>
                       Try again
                     </Button>
                   ) : null}

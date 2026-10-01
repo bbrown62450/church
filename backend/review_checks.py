@@ -103,7 +103,7 @@ def _reference_pattern() -> re.Pattern[str]:
     books = "|".join(_key_pattern(key) for key in scripture_book_keys())
     return re.compile(
         r"(?<![\w])(?P<book>" + books + r")\s+"
-        r"(?P<loc>\d{1,3}(?:[-–]\d{1,3}(?![:\d])|:\d{1,3}[a-d]?(?:[-–]\d{1,3}(?::\d{1,3})?[a-d]?)?)?)(?![\w:])",
+        r"(?P<loc>\d{1,3}(?:[-–]\d{1,3}(?::\d{1,3}[a-d]?)?|:\d{1,3}[a-d]?(?:[-–]\d{1,3}(?::\d{1,3})?[a-d]?)?)?)(?![\w:])",
         re.IGNORECASE,
     )
 
