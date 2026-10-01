@@ -248,3 +248,14 @@ Append a manual check at 375 px to `docs/manual-verification.md`.
 ## Notes from the implementation plan (2026-10-01)
 
 `docs/superpowers/plans/2026-10-01-service-reviewer.md` builds this add-on as one PR. The owner's answers of 2026-10-01 set the client timeout for both routes to 100 000 ms (not 90 000; F §1.8) and confirm the writer's new season guidance ships with it. The slice 4 spec's "Notes from the service reviewer plan" lists where the plan reads this spec more precisely.
+
+## Amendment 2026-10-01: reviewer follow-up 1 (owner decisions after the phone check)
+
+`docs/superpowers/plans/2026-10-01-reviewer-followup-1.md` changes four things, on the owner's decisions of 2026-10-01 ("all recommended"):
+
+- **No praise notes.** The output contract says a note is only for something to change, never praise or a description of what already works, and a prayer that is fine gets no notes. No code filter guesses at compliments.
+- **Revise on typed and saved text** (reverses decision 4). Revise is offered on a card with text and a note left whose origin is AI, typed or from a saved service; typed and saved text asks first ("Replace your text?", "Revise replaces the text in {Label} with a version that addresses these notes. You can undo right after.", "Revise text", "Keep my text"), and Undo follows, as on AI cards. The revised text is an AI draft. A Benediction that follows the church default has no Revise; once edited it is typed text.
+- **Faded notes after an edit** (replaces "Notes go away when the text changes"). After typing, Undo, "Use church default" or another tab's edit (another tab's Regenerate or Revise included), a card's notes stay, dimmed, under "From before your last edit.", each still dismissable, with Revise still offered (it sends the current text and the remaining notes) until the next review. A successful Regenerate or Revise removes the card's notes, and Undo after it brings the text back without them; Clear text (a blank card) removes them; "Looks good." goes after any edit. "Across the service" is unchanged: it stays until the next review, its own dismiss or New service. A card changed while the review ran still gets no notes.
+- **No restated code notes.** On a card with a code "Cites …" note, an AI note tagged rules that speaks of citing or naming scripture is dropped; on a card whose opening a code "Several prayers open with …" note names, an AI note tagged repetition that speaks of how the prayer opens, or quotes its opening, is dropped, and so is an AI note across the service on prayers that open alike. The prompt also says not to make a code note's point in other words.
+
+Later, planned on its own: Revise from "Across the service".
