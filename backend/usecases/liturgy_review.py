@@ -33,9 +33,22 @@ church's and the member's text first, so a card cannot close its fence or
 open another; the prompt says they are material to review, not
 instructions, and that the JSON contract sets the answer's format.
 
-Logs one `liturgy.review` INFO line per call; prompts, cards and answers only
-at DEBUG (F §2.5). Writes nothing. No FastAPI, Starlette or Streamlit here
-(tests/test_no_streamlit_in_core.py).
+revise_section: one complete() call that edits an AI draft to address the
+notes left on it and keeps the rest. The system message is the church's
+merged system prompt with the voice profile appended (as the writer gets
+it); the user message is the section, its checklist, the occasion and
+readings, the sermon text, the draft, the notes and the instruction. The
+section's slice 4 token budget and per-attempt timeout apply, inside the same
+80 s deadline as generation (usecases.liturgy.GENERATE_BUDGET_S). Over
+MAX_PROMPT_CHARS the voice profile goes first, then the sermon text, then the
+checklist; a draft still too long with only the fixed instructions is 422
+prompt_invalid "This prayer is too long to revise." with no AI call. AI
+failures are raised as their HTTP errors (503, 504, 502) with this app's
+messages, like /hymns/suggestions.
+
+Logs one `liturgy.review` or `liturgy.revise` INFO line per call; prompts,
+cards, notes and answers only at DEBUG (F §2.5). Writes nothing. No FastAPI,
+Starlette or Streamlit here (tests/test_no_streamlit_in_core.py).
 """
 from __future__ import annotations
 
@@ -53,11 +66,13 @@ import prayer_library
 import review_checks
 import service_rubric
 from db import session_scope
-from domain_errors import Busy, DomainError, NotConfigured, RateLimited, UpstreamError, UpstreamTimeout
+from domain_errors import (Busy, DomainError, InvalidInput, NotConfigured, RateLimited, UpstreamError,
+                           UpstreamTimeout)
 from integrations import openai_client
-from liturgy_config import SECTION_LABELS, SECTION_ORDER
+from liturgy_config import LIMITS, SECTION_LABELS, SECTION_ORDER, SECTIONS_BY_KEY
 from repos import churches
 from review_checks import Note
+from usecases.liturgy import GENERATE_BUDGET_S
 
 logger = logging.getLogger(__name__)
 
@@ -370,3 +385,119 @@ def _log(facts: Mapping[str, Any], started: float, clock: Callable[[], float], *
     details = " ".join(f"{key}={value}" for key, value in facts.items())
     logger.info("liturgy.review %s ai_status=%s duration_ms=%d outcome=%s", details, ai_status,
                 round((clock() - started) * 1000), outcome)
+
+
+# --- Revise with these notes (reviewer spec, "Revise" and its Budget) ---
+
+REVISE_INSTRUCTION = (
+    "Revise this draft to address these notes only. Keep everything that works. Keep the same form "
+    "(Leader/People lines where present) and about the same length. Output only the revised text."
+)
+TOO_LONG_TO_REVISE = "This prayer is too long to revise."
+REVISE_BUDGET_S = GENERATE_BUDGET_S       # 80 s from the start of the usecase, as a generated section
+MAX_ANSWER_CHARS = LIMITS.max_section_text
+
+
+def build_revise_prompt(section: str, text: str, notes: Sequence[str], *, system_prompt: str,
+                        rubric: Mapping[str, Any], profile: str, occasion: str, scriptures: Sequence[str],
+                        sermon: Optional[tuple[str, str]]) -> ReviewPrompt:
+    """Revise's [system, user] messages within MAX_PROMPT_CHARS. Raises
+    InvalidInput(prompt_invalid) when the draft and the fixed instructions alone are too long."""
+    label = SECTION_LABELS[section]
+    points = service_rubric.merge_rubric(dict(rubric) if rubric else None)["prayers"].get(section) or []
+    blocks = {
+        "profile": (profile or "").strip()[:prayer_library.MAX_PROFILE_CHARS],
+        "sermon": liturgy_prompts.sermon_text_block(*(sermon or (None, None))),
+        "checklist": service_rubric.format_checklist(label, list(points)) if points else "",
+    }
+    blocks = {name: block for name, block in blocks.items() if block}
+    listed = "\n".join(f"- {' '.join(note.split())}" for note in notes)
+    dropped: list[str] = []
+    while True:
+        system = system_prompt + ("\n\n" + liturgy_prompts.VOICE_PROFILE_INTRO + blocks["profile"]
+                                  if "profile" in blocks else "")
+        user = "\n\n".join(filter(None, [
+            f"Section: {label}",
+            blocks.get("checklist", ""),
+            "Occasion: " + (" ".join(occasion.split())[:300] or "Not given."),
+            _readings(scriptures),
+            blocks.get("sermon", ""),
+            "Current draft:\n" + text,
+            "Notes:\n" + listed,
+            REVISE_INSTRUCTION,
+        ]))
+        if len(system) + len(user) <= liturgy_prompts.MAX_PROMPT_CHARS:
+            return ReviewPrompt(messages=[{"role": "system", "content": system},
+                                          {"role": "user", "content": user}], dropped=tuple(dropped))
+        name = next((n for n in ("profile", "sermon", "checklist") if n in blocks), None)
+        if name is None:
+            raise InvalidInput(TOO_LONG_TO_REVISE, code="prompt_invalid")
+        del blocks[name]
+        dropped.append(name)
+
+
+def revise_section(*, church_id: uuid.UUID, user_id: uuid.UUID, section: str, text: str, notes: Sequence[str],
+                   occasion: str, scriptures: Sequence[str], sermon: Optional[tuple[str, str]] = None,
+                   ai: Any = openai_client, clock: Callable[[], float] = time.monotonic) -> str:
+    """The revised draft, stripped (see the module docstring). user_id is for
+    the rate limit only, which the route's dependency has already charged."""
+    started = clock()
+    facts: dict[str, Any] = {"church": church_id, "section": section, "notes": len(notes)}
+    try:
+        revised = _revise(church_id, section, text, notes, occasion, scriptures, sermon, ai,
+                          started + REVISE_BUDGET_S, facts)
+    except DomainError as exc:
+        _log_revise(facts, started, clock, outcome=exc.code)
+        raise
+    except Exception:
+        _log_revise(facts, started, clock, outcome="internal_error")
+        raise
+    _log_revise(facts, started, clock, outcome="ok")
+    return revised
+
+
+def _revise(church_id, section, text, notes, occasion, scriptures, sermon, ai, deadline, facts) -> str:
+    if not ai.ai_available():
+        raise NotConfigured(openai_client.NOT_CONFIGURED_MESSAGE, code="ai_not_configured")
+    with session_scope() as s:                                   # read, then close (F §1.8)
+        stored = churches.get_church_prompts(church_id, session=s)
+        rubric = churches.get_church_rubric_overrides(church_id, session=s)
+        church = churches.get_church(church_id, session=s)
+        library = prayer_library.read_library((church or {}).get("settings"))
+    facts.update(rubric="custom" if rubric else "default", sermon="yes" if sermon else "no",
+                 voice="profile" if library.voice_profile.strip() else "none")
+    prompt = build_revise_prompt(section, text, notes, system_prompt=liturgy_prompts.merge_prompts(stored)["system"],
+                                 rubric=rubric, profile=library.voice_profile, occasion=occasion,
+                                 scriptures=scriptures, sermon=sermon)
+    facts["dropped"] = ",".join(prompt.dropped) or "-"
+    spec = SECTIONS_BY_KEY[section]
+    extra = {} if spec.timeout_seconds is None else {"timeout_seconds": spec.timeout_seconds}
+    if logger.isEnabledFor(logging.DEBUG):                       # prompts at DEBUG only (F §2.5)
+        logger.debug("liturgy.revise section=%s messages=%r", section, prompt.messages)
+    try:
+        answer = ai.complete(prompt.messages, max_completion_tokens=spec.max_completion_tokens,
+                             deadline=deadline, **extra)
+    except NotConfigured:
+        raise NotConfigured(openai_client.NOT_CONFIGURED_MESSAGE, code="ai_not_configured") from None
+    except Busy:
+        raise Busy(openai_client.BUSY_MESSAGE, code="ai_busy") from None
+    except UpstreamTimeout:
+        raise UpstreamTimeout(openai_client.TIMEOUT_MESSAGE, code="ai_timeout") from None
+    except UpstreamError:
+        raise UpstreamError(openai_client.UPSTREAM_MESSAGE, code="ai_upstream_error") from None
+    except Exception:
+        logger.exception("liturgy.revise section=%s unexpected error", section)
+        raise UpstreamError(openai_client.UPSTREAM_MESSAGE, code="ai_upstream_error") from None
+    answer = answer.strip() if isinstance(answer, str) else ""
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug("liturgy.revise section=%s answer=%r", section, answer)
+    if not answer or len(answer) > MAX_ANSWER_CHARS:
+        logger.warning("liturgy.revise section=%s unusable answer chars=%d", section, len(answer))
+        raise UpstreamError(openai_client.UPSTREAM_MESSAGE, code="ai_upstream_error")
+    return answer
+
+
+def _log_revise(facts: Mapping[str, Any], started: float, clock: Callable[[], float], *, outcome: str) -> None:
+    """One line per call: never a prompt, the draft, a note or an answer."""
+    details = " ".join(f"{key}={value}" for key, value in facts.items())
+    logger.info("liturgy.revise %s duration_ms=%d outcome=%s", details, round((clock() - started) * 1000), outcome)
