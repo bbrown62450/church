@@ -102,7 +102,7 @@ def test_the_prompt_carries_the_church_s_rules_present_checklists_profile_and_co
     assert "<<<CARD opening_prayer>>> Opening Prayer (an AI draft):\nGracious God" in user
     assert "<<<CARD benediction>>> Benediction (the church's default):\nGo in peace.\n<<<END>>>" in user
     assert "(an AI draft):\n" + "P" * 4000 + "\n<<<END>>>" in user and "P" * 4001 not in user   # cut for review only
-    assert user.endswith("Notes already found by code. Do not repeat them:\n"
+    assert user.endswith(liturgy_review.CODE_NOTES_INTRO + " (another note on prayers that open alike):\n" +
                          f"- call_to_worship: {STOCK}\n"
                          '- across the service: Several prayers open with "Gracious God".')
     assert (user.index("<<<CARD call_to_worship>>>") < user.index("<<<CARD opening_prayer>>>")
@@ -354,3 +354,25 @@ def test_the_info_line_carries_no_prayer_text_or_notes(church, caplog):
     assert "liturgy.review" in info and " cards=1 code_notes=1 ai=1 " in info
     assert "ai_status=ok" in info and "notes=2" in info and "outcome=ok" in info
     assert "SECRET" not in info and "journey" not in info
+
+
+# --- reviewer follow-up 1 (owner answers 2026-10-01): no praise notes, no restated code notes ---
+
+NO_PRAISE = ("A note is only for something to change. Never praise or describe what already works. "
+             "If a prayer is fine, give it no notes")
+
+
+def test_the_prompt_asks_for_no_praise_and_no_restated_code_notes(church):
+    intro = ("Notes already found by code. The pastor sees them already, so do not repeat them or make the same "
+             "point in other words")
+    ai = FakeAI(reply=answer())
+    run(church, cards=CARDS[:1], ai=ai)                 # only a stock-phrase note: nothing in brackets
+    system, user = (m["content"] for m in ai.calls[0]["messages"])
+    assert NO_PRAISE in system and "Give a card an empty notes list when it is fine." not in system
+    assert user.endswith(f"{intro}:\n- call_to_worship: {STOCK}")
+    # A Cites note and a shared opening: the brackets name both.
+    ai = FakeAI(reply=answer())
+    run(church, cards=[*CARDS, ReviewCard("assurance", "ai", "As John 21:1-19 tells, you are forgiven.")], ai=ai)
+    user = ai.calls[0]["messages"][1]["content"]
+    assert (f"{intro} (another note on citing or naming scripture on a card that already has a Cites note, "
+            f"or on prayers that open alike):\n- call_to_worship: {STOCK}\n- assurance: Cites John 21:1-19.") in user

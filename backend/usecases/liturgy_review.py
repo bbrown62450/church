@@ -118,7 +118,8 @@ CONTRACT = (
     "Each tag is one of checklist, rules, voice, read_aloud, theology, repetition. Give at most 3 notes per "
     "card, most important first, and at most 3 service_notes, for problems that involve more than one prayer. "
     "Each note is one sentence of 240 characters or fewer that names the specific phrase at issue. "
-    "Give a card an empty notes list when it is fine."
+    "A note is only for something to change. Never praise or describe what already works. "
+    "If a prayer is fine, give it no notes: its notes list is empty."
 )
 ORIGIN_LABELS = {
     "ai": "an AI draft",
@@ -126,7 +127,11 @@ ORIGIN_LABELS = {
     "archive": "from a saved service",
     "default": "the church's default",
 }
-CODE_NOTES_INTRO = "Notes already found by code. Do not repeat them:\n"
+CODE_NOTES_INTRO = ("Notes already found by code. The pastor sees them already, so do not repeat them or make "
+                    "the same point in other words")
+CITES_PREFIX = review_checks.CITES_NOTE.split("{match}", 1)[0]          # "Cites "
+RESTATED_CITING = "on citing or naming scripture on a card that already has a Cites note"
+RESTATED_OPENING = "on prayers that open alike"
 CARDS_INTRO = "The prayers, in service order:"
 FENCE_END = "<<<END>>>"
 _FENCE_MARKS = re.compile(r"[<>]{3,}")      # any run that could open or close a fence
@@ -170,6 +175,15 @@ class ReviewPrompt:
 
 class _Unusable(Exception):
     """The AI's answer is not a JSON object: an AI failure ("error")."""
+
+
+def code_notes_intro(code_notes: Mapping[str, Sequence[Note]], service_notes: Sequence[Note]) -> str:
+    """CODE_NOTES_INTRO, naming in brackets only the restatements these code notes invite: citing, when a card
+    has a "Cites ..." note; openings, when a note across the service names one (reviewer follow-up 1)."""
+    cites = any(n.text.startswith(CITES_PREFIX) for notes in code_notes.values() for n in notes)
+    points = [point for point, present in ((RESTATED_CITING, cites), (RESTATED_OPENING, bool(service_notes)))
+              if present]
+    return CODE_NOTES_INTRO + (f" (another note {', or '.join(points)})" if points else "") + ":\n"
 
 
 def _readings(scriptures: Sequence[str]) -> str:
@@ -216,7 +230,7 @@ def build_review_prompt(cards: Sequence[ReviewCard], *, system_prompt: str, rubr
             _readings(scriptures),
             sermon_block,
             CARDS_INTRO + "\n\n" + listed,
-            CODE_NOTES_INTRO + "\n".join(noted) if noted else "",
+            code_notes_intro(code_notes, service_notes) + "\n".join(noted) if noted else "",
         ]))
         return [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
