@@ -23,9 +23,11 @@ import {
   type CardOrigin,
 } from "@/lib/liturgy/cards";
 import { useLiturgyGeneration } from "@/lib/liturgy/generation";
+import { useLiturgyReview } from "@/lib/liturgy/review";
 import { useAutosize } from "@/lib/use-autosize";
 import { cn } from "@/lib/utils";
 
+import { CardNotes, notesId } from "./card-notes";
 import { STILL_WORKING, useStillWorking } from "./use-still-working";
 
 /** The status chip for each origin (S "Section card"). */
@@ -102,10 +104,14 @@ export function useRetryWait(retryAt: number | undefined): boolean {
  * Try again (or the heading while a 429's wait keeps Try again off). A run
  * that ends with the card still empty and no Try again leaves focus on the
  * card's Generate (or its heading), not the page.
+ *
+ * The service reviewer's notes show under the text (`CardNotes`), and
+ * describe the textarea while they show.
  */
 export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLength, aiAvailable }: SectionCardProps) {
   const { draft, update } = useDraft();
   const generation = useLiturgyGeneration();
+  const reviewed = useLiturgyReview().review?.cards[spec.key];
   const key = spec.key;
   const card = draft.liturgy.cards[key];
   const run = generation.runs[key];
@@ -135,11 +141,13 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
   const followsDefault = key === "benediction" && card.origin === "default";
   const hint = key === "benediction" ? (followsDefault ? spec.hint : null) : key === "assurance" ? null : spec.hint;
   const showCounter = card.text.length > COUNTER_FROM;
+  const notesShown = reviewed !== undefined && (reviewed.notes.length > 0 || reviewed.found === 0);
   const describedBy =
     [
       hint ? `card-${key}-hint` : null,
       key === "assurance" ? `card-${key}-response` : null,
       showCounter ? `card-${key}-count` : null,
+      notesShown ? notesId(key) : null,
       error ? `card-${key}-error` : null,
     ]
       .filter(Boolean)
@@ -330,6 +338,7 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
               {hint}
             </p>
           ) : null}
+          <CardNotes sectionKey={key} label={spec.label} headingId={headingId} />
           {/* Always there, so the line is announced when it appears (a region inserted with its text often is not). */}
           <p className="sr-only" aria-live="polite">
             {undo ? `${spec.label}: ${UNDO_LINES[undo.kind]}` : null}

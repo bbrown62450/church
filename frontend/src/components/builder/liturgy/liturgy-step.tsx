@@ -26,7 +26,9 @@ import { AddCustomElementDialog } from "./add-custom-element-dialog";
 import { AiBar } from "./ai-bar";
 import { CommunionCard } from "./communion-card";
 import { CustomElementCard } from "./custom-element-card";
+import { ServiceNotes } from "./card-notes";
 import { OutlineLandmark } from "./outline-landmark";
+import { ReviewButton, ReviewStatus } from "./review-bar";
 import { SectionCard } from "./section-card";
 import { SermonTitleField } from "./sermon-title-field";
 
@@ -57,6 +59,10 @@ function LiturgySkeleton() {
  * §4.6); the AI runs live in the builder shell's generation provider, and the
  * step's Undo lines go when it unmounts. On mount it scrolls to the card the
  * address names (`#card-…`, `#custom-…`).
+ *
+ * The header holds the service reviewer's "Review service" button; its
+ * progress, failure and "Only quick checks ran…" line follow, then the
+ * "Across the service" box. Custom elements are never reviewed.
  */
 export function LiturgyStep() {
   const configQuery = useLiturgyConfig();
@@ -169,9 +175,16 @@ export function LiturgyStep() {
 
   return (
     <section aria-labelledby="liturgy-step-title" className="grid gap-6">
-      <h2 id="liturgy-step-title" className="text-lg font-semibold">
-        Liturgy
-      </h2>
+      <div className="grid gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 id="liturgy-step-title" className="text-lg font-semibold">
+            Liturgy
+          </h2>
+          <ReviewButton />
+        </div>
+        <ReviewStatus />
+        <ServiceNotes />
+      </div>
       <SermonTitleField maxLength={config.limits.max_sermon_title} />
       <AiBar aiAvailable={config.ai_available} />
       <section aria-labelledby="order-of-worship" className="grid gap-3">
