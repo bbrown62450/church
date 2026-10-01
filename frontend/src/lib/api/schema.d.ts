@@ -253,6 +253,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/liturgy/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Review Service
+         * @description Notes for every card sent and across the service: the code checks always,
+         *     the AI review when it can run (75 s deadline; F §1.8). Charged 1 `ai` token
+         *     only when the AI is called (40 per 10 min per user, 400 per day per church).
+         */
+        post: operations["review_service_liturgy_review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/liturgy/revise": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revise Section
+         * @description The draft revised to address these notes only; the rest is kept. Charged
+         *     1 `ai` token per request (F §1.8).
+         */
+        post: operations["revise_section_liturgy_revise_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me": {
         parameters: {
             query?: never;
@@ -329,6 +372,16 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** CardNotesOut */
+        CardNotesOut: {
+            /** Notes */
+            notes: components["schemas"]["NoteOut"][];
+            /**
+             * Section
+             * @enum {string}
+             */
+            section: "call_to_worship" | "opening_prayer" | "prayer_of_confession" | "assurance" | "prayer_for_illumination" | "prayers_of_the_people" | "offertory_prayer" | "benediction";
+        };
         /** ChurchOut */
         ChurchOut: {
             /**
@@ -709,6 +762,21 @@ export interface components {
             churches: components["schemas"]["ChurchOut"][];
             user: components["schemas"]["UserOut"];
         };
+        /** NoteOut */
+        NoteOut: {
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "code" | "ai";
+            /**
+             * Tag
+             * @enum {string}
+             */
+            tag: "checklist" | "rules" | "voice" | "read_aloud" | "theology" | "repetition";
+            /** Text */
+            text: string;
+        };
         /** OutlineItemOut */
         OutlineItemOut: {
             /** Anchors After */
@@ -825,6 +893,71 @@ export interface components {
             db: "ok";
             /** Ok */
             ok: boolean;
+        };
+        /** ReviewCardIn */
+        ReviewCardIn: {
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "ai" | "typed" | "archive" | "default";
+            /**
+             * Section
+             * @enum {string}
+             */
+            section: "call_to_worship" | "opening_prayer" | "prayer_of_confession" | "assurance" | "prayer_for_illumination" | "prayers_of_the_people" | "offertory_prayer" | "benediction";
+            /** Text */
+            text: string;
+        };
+        /** ReviewIn */
+        ReviewIn: {
+            /** Cards */
+            cards: components["schemas"]["ReviewCardIn"][];
+            /**
+             * Occasion
+             * @default
+             */
+            occasion: string;
+            /** Scriptures */
+            scriptures?: string[];
+            sermon_text?: components["schemas"]["SermonText"] | null;
+        };
+        /** ReviewOut */
+        ReviewOut: {
+            /**
+             * Ai Status
+             * @enum {string}
+             */
+            ai_status: "ok" | "not_configured" | "busy" | "timeout" | "rate_limited" | "error";
+            /** Cards */
+            cards: components["schemas"]["CardNotesOut"][];
+            /** Service Notes */
+            service_notes: components["schemas"]["NoteOut"][];
+        };
+        /** ReviseIn */
+        ReviseIn: {
+            /** Notes */
+            notes: string[];
+            /**
+             * Occasion
+             * @default
+             */
+            occasion: string;
+            /** Scriptures */
+            scriptures?: string[];
+            /**
+             * Section
+             * @enum {string}
+             */
+            section: "call_to_worship" | "opening_prayer" | "prayer_of_confession" | "assurance" | "prayer_for_illumination" | "prayers_of_the_people" | "offertory_prayer" | "benediction";
+            sermon_text?: components["schemas"]["SermonText"] | null;
+            /** Text */
+            text: string;
+        };
+        /** ReviseOut */
+        ReviseOut: {
+            /** Text */
+            text: string;
         };
         /** RubricModel */
         RubricModel: {
@@ -1810,6 +1943,159 @@ export interface operations {
             };
             /** @description Service Unavailable */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    review_service_liturgy_review_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-church-id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    revise_section_liturgy_revise_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-church-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviseIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviseOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Gateway Timeout */
+            504: {
                 headers: {
                     [name: string]: unknown;
                 };

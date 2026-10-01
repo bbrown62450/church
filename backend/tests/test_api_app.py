@@ -284,6 +284,8 @@ def test_routes_document_the_error_body():
         ("/hymns/suggestions", "post"): {"401", "403", "422", "429", "502", "503", "504"},
         ("/liturgy/config", "get"): {"401", "422", "503"},
         ("/liturgy/generate", "post"): {"401", "403", "404", "422", "429", "503"},
+        ("/liturgy/review", "post"): {"401", "403", "422", "503"},
+        ("/liturgy/revise", "post"): {"401", "403", "422", "429", "502", "503", "504"},
     }
     for (path, method), statuses in expected.items():
         responses = schema["paths"][path][method]["responses"]

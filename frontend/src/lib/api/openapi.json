@@ -1,6 +1,37 @@
 {
   "components": {
     "schemas": {
+      "CardNotesOut": {
+        "properties": {
+          "notes": {
+            "items": {
+              "$ref": "#/components/schemas/NoteOut"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "section": {
+            "enum": [
+              "call_to_worship",
+              "opening_prayer",
+              "prayer_of_confession",
+              "assurance",
+              "prayer_for_illumination",
+              "prayers_of_the_people",
+              "offertory_prayer",
+              "benediction"
+            ],
+            "title": "Section",
+            "type": "string"
+          }
+        },
+        "required": [
+          "section",
+          "notes"
+        ],
+        "title": "CardNotesOut",
+        "type": "object"
+      },
       "ChurchOut": {
         "properties": {
           "id": {
@@ -1054,6 +1085,41 @@
         "title": "MeOut",
         "type": "object"
       },
+      "NoteOut": {
+        "properties": {
+          "source": {
+            "enum": [
+              "code",
+              "ai"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "tag": {
+            "enum": [
+              "checklist",
+              "rules",
+              "voice",
+              "read_aloud",
+              "theology",
+              "repetition"
+            ],
+            "title": "Tag",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tag",
+          "text",
+          "source"
+        ],
+        "title": "NoteOut",
+        "type": "object"
+      },
       "OutlineItemOut": {
         "properties": {
           "anchors_after": {
@@ -1335,6 +1401,207 @@
           "db"
         ],
         "title": "ReadyOut",
+        "type": "object"
+      },
+      "ReviewCardIn": {
+        "additionalProperties": false,
+        "properties": {
+          "origin": {
+            "enum": [
+              "ai",
+              "typed",
+              "archive",
+              "default"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "section": {
+            "enum": [
+              "call_to_worship",
+              "opening_prayer",
+              "prayer_of_confession",
+              "assurance",
+              "prayer_for_illumination",
+              "prayers_of_the_people",
+              "offertory_prayer",
+              "benediction"
+            ],
+            "title": "Section",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 20000,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "section",
+          "origin",
+          "text"
+        ],
+        "title": "ReviewCardIn",
+        "type": "object"
+      },
+      "ReviewIn": {
+        "additionalProperties": false,
+        "properties": {
+          "cards": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewCardIn"
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Cards",
+            "type": "array"
+          },
+          "occasion": {
+            "default": "",
+            "maxLength": 300,
+            "title": "Occasion",
+            "type": "string"
+          },
+          "scriptures": {
+            "items": {
+              "maxLength": 200,
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Scriptures",
+            "type": "array"
+          },
+          "sermon_text": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SermonText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "cards"
+        ],
+        "title": "ReviewIn",
+        "type": "object"
+      },
+      "ReviewOut": {
+        "properties": {
+          "ai_status": {
+            "enum": [
+              "ok",
+              "not_configured",
+              "busy",
+              "timeout",
+              "rate_limited",
+              "error"
+            ],
+            "title": "Ai Status",
+            "type": "string"
+          },
+          "cards": {
+            "items": {
+              "$ref": "#/components/schemas/CardNotesOut"
+            },
+            "title": "Cards",
+            "type": "array"
+          },
+          "service_notes": {
+            "items": {
+              "$ref": "#/components/schemas/NoteOut"
+            },
+            "title": "Service Notes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "cards",
+          "service_notes",
+          "ai_status"
+        ],
+        "title": "ReviewOut",
+        "type": "object"
+      },
+      "ReviseIn": {
+        "additionalProperties": false,
+        "properties": {
+          "notes": {
+            "items": {
+              "maxLength": 240,
+              "type": "string"
+            },
+            "maxItems": 3,
+            "minItems": 1,
+            "title": "Notes",
+            "type": "array"
+          },
+          "occasion": {
+            "default": "",
+            "maxLength": 300,
+            "title": "Occasion",
+            "type": "string"
+          },
+          "scriptures": {
+            "items": {
+              "maxLength": 200,
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Scriptures",
+            "type": "array"
+          },
+          "section": {
+            "enum": [
+              "call_to_worship",
+              "opening_prayer",
+              "prayer_of_confession",
+              "assurance",
+              "prayer_for_illumination",
+              "prayers_of_the_people",
+              "offertory_prayer",
+              "benediction"
+            ],
+            "title": "Section",
+            "type": "string"
+          },
+          "sermon_text": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SermonText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "text": {
+            "maxLength": 20000,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "section",
+          "text",
+          "notes"
+        ],
+        "title": "ReviseIn",
+        "type": "object"
+      },
+      "ReviseOut": {
+        "properties": {
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "ReviseOut",
         "type": "object"
       },
       "RubricModel": {
@@ -3182,6 +3449,242 @@
           }
         },
         "summary": "Generate Liturgy"
+      }
+    },
+    "/liturgy/review": {
+      "post": {
+        "description": "Notes for every card sent and across the service: the code checks always,\nthe AI review when it can run (75 s deadline; F \u00a71.8). Charged 1 `ai` token\nonly when the AI is called (40 per 10 min per user, 400 per day per church).",
+        "operationId": "review_service_liturgy_review_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-church-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Church-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Review Service"
+      }
+    },
+    "/liturgy/revise": {
+      "post": {
+        "description": "The draft revised to address these notes only; the rest is kept. Charged\n1 `ai` token per request (F \u00a71.8).",
+        "operationId": "revise_section_liturgy_revise_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-church-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Church-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviseIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviseOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Gateway Timeout"
+          }
+        },
+        "summary": "Revise Section"
       }
     },
     "/me": {
