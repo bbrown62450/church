@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { nextSunday, todayIn } from "@/lib/dates";
-import { churchProfile, testDraft, USER_ID } from "@/test/fixtures";
+import { CHURCH_IDS, churchProfile, DRAFT_NOW, testDraft, USER_ID } from "@/test/fixtures";
 
 import { churchZone, corruptDraftKey, draftKey, draftV1Schema, DRAFT_VERSION, freshDraft, SECTION_KEYS } from "./schema";
 
@@ -43,10 +43,15 @@ describe("draft schema and freshDraft (F §4.6)", () => {
     for (const key of SECTION_KEYS) {
       expect(d.liturgy.cards[key], key).toEqual({
         enabled: key !== "prayers_of_the_people",
-        text: "",
+        text: key === "benediction" ? "Halverson" : "", // the church default (slice 4b)
         origin: key === "benediction" ? "default" : "empty",
       });
     }
+    const user = { id: USER_ID };
+    const none = freshDraft({ church: churchProfile({ default_benediction: "" }), user, now: DRAFT_NOW });
+    expect(none.liturgy.cards.benediction).toEqual({ enabled: true, text: "", origin: "default" });
+    const older = freshDraft({ church: { id: CHURCH_IDS.grace, timezone: "America/New_York" }, user, now: DRAFT_NOW });
+    expect(older.liturgy.cards.benediction.text).toBe("Halverson"); // an API without the field
   });
 
   it("uses the church's zone, strictly after today, and the browser's zone when the zone is not valid", () => {

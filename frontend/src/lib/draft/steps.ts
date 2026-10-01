@@ -5,8 +5,8 @@
  * `SHIPPED_STEPS` holds the steps whose content has shipped. An unshipped
  * step shows the "Available soon" card, the muted status "Soon" (Review: "Not
  * in archive"), and `stillNeeded` ignores it. Slice 2b shipped none (owner
- * answer Q1, 2026-09-28); slice 2c ships "readings" and slice 3b "hymns".
- * Slice 4 adds "liturgy", 5a "review".
+ * answer Q1, 2026-09-28); slice 2c ships "readings", slice 3b "hymns" and
+ * slice 4b "liturgy". 5a adds "review".
  */
 import type { StepId } from "./schema";
 
@@ -31,7 +31,7 @@ export const STEPS: readonly Step[] = [
   { id: "review", number: 4, label: "Review & send", short: "Review", href: "/builder/review", previous: "liturgy", next: null },
 ];
 
-export const SHIPPED_STEPS: ReadonlySet<StepId> = new Set<StepId>(["readings", "hymns"]);
+export const SHIPPED_STEPS: ReadonlySet<StepId> = new Set<StepId>(["readings", "hymns", "liturgy"]);
 
 export function stepById(id: StepId): Step {
   const step = STEPS.find((s) => s.id === id);

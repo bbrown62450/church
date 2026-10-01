@@ -20,7 +20,8 @@ import { useDraft } from "@/lib/draft/context";
 import { applyReadingSet, editOccasion, setPick, setTranslation } from "@/lib/draft/readings";
 import { draftKey, type DraftV1 } from "@/lib/draft/schema";
 import { pickFromHymn, setSlot } from "@/lib/hymns/picks";
-import { installFakeApi } from "@/test/fake-api";
+import { addCustomElement, editCardText } from "@/lib/liturgy/cards";
+import { installFakeApi, type FakeHandler, type RecordedRequest } from "@/test/fake-api";
 import {
   church,
   churchProfile,
@@ -30,7 +31,9 @@ import {
   hymnListRoute,
   lectionary,
   lectionaryRoute,
+  liturgyConfig,
   me,
+  sectionResult,
   testDraft,
   translations,
   USER_ID,
@@ -64,13 +67,15 @@ function DraftProbe() {
   );
 }
 
-function renderBuilder(page: ReactElement, path: string, lookup = lectionaryRoute()) {
+function renderBuilder(page: ReactElement, path: string, lookup = lectionaryRoute(), routes: Record<string, FakeHandler> = {}) {
   installFakeApi({
     "GET /church": churchProfile(),
     "GET /lectionary/readings": lookup,
     "GET /translations": translations(),
     "GET /hymnals": hymnals(),
     "GET /hymns": hymnListRoute(),
+    "GET /liturgy/config": liturgyConfig(),
+    ...routes,
   });
   return renderWithProviders(<BuilderLayout>{page}</BuilderLayout>, { me: me(), church: church(), path });
 }
@@ -102,7 +107,7 @@ describe("builder shell (F §4.7)", () => {
       expect(steps.map((link) => link.textContent)).toEqual([
         "1 Date & readings 1 of 3", // shipped in 2c: a date, no occasion, no readings
         "2 Hymns 0 of 3", // shipped in 3b: no hymn chosen
-        "3 Liturgy Soon",
+        "3 Liturgy 1 of 7", // shipped in 4b: the Benediction follows the church default
         "4 Review & send Not in archive",
       ]);
       expect(steps.map((link) => link.getAttribute("href"))).toEqual([
@@ -113,7 +118,7 @@ describe("builder shell (F §4.7)", () => {
       ]);
       expect(steps.filter((link) => link.getAttribute("aria-current") === "step")).toEqual([steps[number - 1]]);
 
-      const card = screen.getByRole("region", { name: label });
+      const card = await screen.findByRole("region", { name: label }); // Liturgy's shows once its config loads
       if (number === 1) {
         // Date & readings is the real step from slice 2c.
         expect(within(card).getByLabelText("Service date")).toHaveValue("2026-10-04");
@@ -121,6 +126,10 @@ describe("builder shell (F §4.7)", () => {
       } else if (number === 2) {
         // Hymns is the real step from slice 3b.
         expect(within(card).getByText("Choose an opening, response and closing hymn.")).toBeInTheDocument();
+        expect(within(card).queryByRole("heading", { name: "Available soon" })).toBeNull();
+      } else if (number === 3) {
+        // Liturgy is the real step from slice 4b.
+        expect(await within(card).findByRole("textbox", { name: "Sermon title" })).toBeInTheDocument();
         expect(within(card).queryByRole("heading", { name: "Available soon" })).toBeNull();
       } else {
         expect(within(card).getByRole("heading", { name: "Available soon" })).toBeInTheDocument();
@@ -139,9 +148,29 @@ describe("builder shell (F §4.7)", () => {
           "No Opening hymn — Choose one",
           "No Response hymn — Choose one",
           "No Closing hymn — Choose one",
+          "Call to Worship is empty — Write or generate it",
+          "Opening Prayer is empty — Write or generate it",
+          "Prayer of Confession is empty — Write or generate it",
+          "Assurance of Pardon is empty — Write or generate it",
+          "Prayer for Illumination is empty — Write or generate it",
+          "Offertory Prayer is empty — Write or generate it",
+          "No sermon title — Add one",
         ]);
         const links = within(needed).getAllByRole("link").map((link) => link.getAttribute("href"));
-        expect(links).toEqual(["/builder/readings", "/builder/readings", "/builder/hymns", "/builder/hymns", "/builder/hymns"]);
+        expect(links).toEqual([
+          "/builder/readings",
+          "/builder/readings",
+          "/builder/hymns",
+          "/builder/hymns",
+          "/builder/hymns",
+          "/builder/liturgy#card-call_to_worship",
+          "/builder/liturgy#card-opening_prayer",
+          "/builder/liturgy#card-prayer_of_confession",
+          "/builder/liturgy#card-assurance",
+          "/builder/liturgy#card-prayer_for_illumination",
+          "/builder/liturgy#card-offertory_prayer",
+          "/builder/liturgy",
+        ]);
       } else {
         expect(screen.queryByRole("heading", { name: "Still needed" })).toBeNull();
       }
@@ -170,7 +199,7 @@ describe("builder shell (F §4.7)", () => {
     }
   });
 
-  it("shows the summary: the date and occasion, the readings, the hymns, Available soon for liturgy, and where the draft is kept", async () => {
+  it("shows the summary: the date and occasion, the readings, the hymns, the liturgy, and where the draft is kept", async () => {
     // A controllable (min-width: 64rem) query, so the test can widen the window past lg.
     const wide = { matches: false, listeners: new Set<() => void>() };
     vi.spyOn(window, "matchMedia").mockImplementation(
@@ -207,7 +236,7 @@ describe("builder shell (F §4.7)", () => {
     const hymnsBlock = within(aside).getByRole("link", { name: "Hymns" }).closest("h3");
     expect(hymnsBlock?.nextElementSibling).toHaveTextContent(/^No Opening hymnNo Response hymnNo Closing hymn$/);
     const liturgy = within(aside).getByRole("link", { name: "Liturgy" }).closest("h3");
-    expect(liturgy?.nextElementSibling).toHaveTextContent(/^Available soon$/);
+    expect(liturgy?.nextElementSibling).toHaveTextContent(/^1 of 7 liturgy sections readyCommunion: YesNo custom elements$/);
     expect(within(aside).getByRole("link", { name: "Date" })).toHaveAttribute("href", "/builder/readings");
     expect(within(aside).getByText("Draft saved on this device · Not in archive")).toBeInTheDocument();
 
@@ -420,5 +449,60 @@ describe("the shell with Hymns shipped (slice 3b)", () => {
     const sheet = await screen.findByRole("dialog", { name: "Summary" });
     expect(within(sheet).getByText("Response · #649 Amazing Grace")).toBeInTheDocument();
     expect(within(sheet).getByText("Opening · #403 Come, Thou Almighty King")).toBeInTheDocument();
+  });
+});
+
+describe("the shell with Liturgy shipped (slice 4b)", () => {
+  it("counts the liturgy, lists it in the summary with the sections being written, and in Still needed", async () => {
+    let d = editCardText(testDraft(), "call_to_worship", "Come, let us worship.");
+    d = addCustomElement(d, { label: "Anthem", text: "", insert_after: "sermon" }, "a");
+    seed({ ...d, liturgy: { ...d.liturgy, include_communion: false, communion_origin: "user" } });
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const view = renderBuilder(<LiturgyStepPage />, "/builder/liturgy", lectionaryRoute(), {
+      "POST /liturgy/generate": async (req: RecordedRequest) => {
+        await held;
+        return { results: [sectionResult((req.body as { sections: ["opening_prayer"] }).sections[0], "Gracious God")] };
+      },
+    });
+    const progress = await screen.findByRole("navigation", { name: "Steps" });
+    expect(within(progress).getAllByRole("link")[2]).toHaveTextContent("3 Liturgy 2 of 7");
+    const aside = screen.getByRole("complementary", { name: "Summary" });
+    const block = within(aside).getByRole("link", { name: "Liturgy" }).closest("h3")?.nextElementSibling as HTMLElement;
+    expect(within(block).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+      "2 of 7 liturgy sections ready",
+      "Communion: No",
+      "1 custom element",
+    ]);
+    expect(within(aside).getByRole("link", { name: "Liturgy" })).toHaveAttribute("href", "/builder/liturgy");
+    expect(block).not.toHaveTextContent("Available soon");
+
+    // While a section is written the first line says so, and the line goes when it is done.
+    const opening = await screen.findByRole("region", { name: "Opening Prayer" });
+    await view.user.click(within(opening).getByRole("button", { name: "Generate" }));
+    await waitFor(() => expect(block).toHaveTextContent("2 of 7 liturgy sections ready · Writing 1 section…"));
+    release();
+    await waitFor(() => expect(within(block).getAllByRole("listitem")[0]).toHaveTextContent(/^3 of 7 liturgy sections ready$/));
+    expect(within(progress).getAllByRole("link")[2]).toHaveTextContent("3 Liturgy 3 of 7");
+    view.unmount();
+
+    renderBuilder(<ReviewStepPage />, "/builder/review");
+    const needed = await screen.findByRole("region", { name: "Still needed" });
+    const liturgyRows = within(needed)
+      .getAllByRole("listitem")
+      .map((li) => li.textContent)
+      .filter((text) => /empty|sermon/.test(text ?? ""));
+    expect(liturgyRows).toEqual([
+      "Prayer of Confession is empty — Write or generate it",
+      "Assurance of Pardon is empty — Write or generate it",
+      "Prayer for Illumination is empty — Write or generate it",
+      "Offertory Prayer is empty — Write or generate it",
+      "No sermon title — Add one",
+    ]);
+    const hrefs = within(needed)
+      .getAllByRole("link", { name: "Write or generate it" })
+      .map((link) => link.getAttribute("href"));
+    expect(hrefs[0]).toBe("/builder/liturgy#card-prayer_of_confession");
+    expect(within(needed).getAllByRole("link", { name: "Add one" }).at(-1)).toHaveAttribute("href", "/builder/liturgy");
   });
 });

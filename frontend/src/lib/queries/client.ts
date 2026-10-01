@@ -54,15 +54,21 @@ function churchIdOf(source: AnyQuery | AnyMutation): string | null {
  * nothing, so one sign-out is ever in flight.
  */
 export function handleAuthErrors(error: unknown, source: AnyQuery | AnyMutation): void {
+  reportAuthErrors(error, churchIdOf(source));
+}
+
+/**
+ * `handleAuthErrors` for a call made outside the caches (slice 4b: the
+ * liturgy generation queue): a 401 asks for sign-out; a `no_church_access`
+ * 403 reports `churchId` lost. Nothing while signing out.
+ */
+export function reportAuthErrors(error: unknown, churchId: string | null): void {
   if (isSigningOut()) return;
   if (error instanceof ApiError && error.status === 401) {
     authEvents.signOutRequired();
     return;
   }
-  if (isNoChurchAccess(error)) {
-    const churchId = churchIdOf(source);
-    if (churchId) authEvents.churchAccessLost(churchId);
-  }
+  if (isNoChurchAccess(error) && churchId) authEvents.churchAccessLost(churchId);
 }
 
 /** A client with the F §4.4 defaults; `overrides` replace single defaults (tests pass `{ queries: { retry: false } }`). */

@@ -6,7 +6,7 @@ import type { ApiErrorCode } from "@/lib/api/errors";
 import { beginSignOut, resetSigningOutForTests } from "@/lib/auth";
 
 import { authEvents } from "./auth-events";
-import { isRetryable, makeQueryClient } from "./client";
+import { isRetryable, makeQueryClient, reportAuthErrors } from "./client";
 import { keys } from "./keys";
 
 // Node project: no setup-dom.ts here. lib/auth imports the Supabase client, which these tests never call.
@@ -93,6 +93,14 @@ describe("handleAuthErrors (through makeQueryClient's caches)", () => {
     await failQuery(keys.churchProfile("c-1"), roleError);
     await failMutation({ churchId: "c-1" }, roleError);
     expect(events).toEqual([]);
+  });
+
+  it("reportAuthErrors does the same for a call made outside the caches (slice 4b generation)", () => {
+    reportAuthErrors(new ApiError(401, "unauthenticated", "Please sign in."), "c-3");
+    reportAuthErrors(noChurchAccess(), "c-3");
+    reportAuthErrors(new ApiError(403, "forbidden", "Only church admins can do this."), "c-3");
+    reportAuthErrors(new ApiError(429, "rate_limited", "Too many requests."), "c-3");
+    expect(events).toEqual(["signOutRequired", "churchAccessLost:c-3"]);
   });
 
   it("emits nothing while signing out", async () => {

@@ -3,7 +3,7 @@ import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import type { ApiError } from "@/lib/api/client";
 import type { Passage, Passages } from "@/lib/api/types";
 
-import { useApi } from "./client";
+import { useApi, type Api } from "./client";
 import { keys } from "./keys";
 
 /** Passage text keeps for a day, except an `unavailable` answer, which is asked again on the next expand or focus. */
@@ -78,8 +78,27 @@ export function passageText(p: Passage): string | null {
 export function usePassage(ref: string, translation: string, enabled: boolean): UseQueryResult<Passage, ApiError> {
   const api = useApi();
   return useQuery<Passage, ApiError>({
+    ...passageQuery(api, translation, ref),
+    enabled,
+    // A 429 must wait out Retry-After, so coming back to the tab, reconnecting or
+    // reopening the row doesn't ask again early (see `useLectionary`).
+    refetchOnWindowFocus: (query) => query.state.error?.status !== 429,
+    refetchOnReconnect: (query) => query.state.error?.status !== 429,
+    refetchOnMount: (query) => query.state.error?.status !== 429,
+    retryOnMount: (query) => query.state.error?.status !== 429,
+  });
+}
+
+/**
+ * The key, fetch and freshness `usePassage` uses, for a fetch outside a
+ * component: slice 4b's liturgy provider reads the sermon text with
+ * `queryClient.fetchQuery(passageQuery(...))`, so a passage step 1 already
+ * loaded is reused and concurrent reads share one request.
+ */
+export function passageQuery(api: Api, translation: string, ref: string) {
+  return {
     queryKey: keys.passage(translation, ref),
-    queryFn: ({ signal }) =>
+    queryFn: ({ signal }: { signal: AbortSignal }) =>
       passageLimiter(async () => {
         const body = await api.user<Passages>("/scripture/passages", {
           method: "POST",
@@ -88,13 +107,6 @@ export function usePassage(ref: string, translation: string, enabled: boolean): 
         });
         return body.passages[0];
       }, signal),
-    enabled,
-    staleTime: (query) => passageStaleTime(query.state.data),
-    // A 429 must wait out Retry-After, so coming back to the tab, reconnecting or
-    // reopening the row doesn't ask again early (see `useLectionary`).
-    refetchOnWindowFocus: (query) => query.state.error?.status !== 429,
-    refetchOnReconnect: (query) => query.state.error?.status !== 429,
-    refetchOnMount: (query) => query.state.error?.status !== 429,
-    retryOnMount: (query) => query.state.error?.status !== 429,
-  });
+    staleTime: (query: { state: { data: Passage | undefined } }) => passageStaleTime(query.state.data),
+  };
 }

@@ -46,3 +46,18 @@ export type HymnMatch = components["schemas"]["HymnMatchOut"];
 export type HymnSuggestionBody = components["schemas"]["HymnSuggestionIn"];
 export type HymnSuggestions = components["schemas"]["HymnSuggestionsOut"];
 export type SuggestedHymn = components["schemas"]["SuggestedHymnOut"];
+
+/** `GET /liturgy/config` (slice 4a): the sections, custom places, order of worship, communion text, limits and `ai_available`. */
+export type LiturgyConfig = components["schemas"]["LiturgyConfigOut"];
+export type LiturgySection = components["schemas"]["SectionSpecOut"];
+export type OutlineItem = components["schemas"]["OutlineItemOut"];
+export type CommunionBlock = components["schemas"]["CommunionBlockOut"];
+/** `POST /liturgy/generate` (slice 4a): the body the step sends (one section, no overrides) and the answer. */
+export type GenerateLiturgyBody = components["schemas"]["GenerateLiturgyIn"];
+export type GenerateLiturgyResult = components["schemas"]["GenerateLiturgyOut"];
+export type SectionResult = components["schemas"]["SectionResult"];
+/** A section's failure inside the 200 (the declared deviation from F §1.5). */
+export type SectionError = components["schemas"]["SectionError"];
+/** The effective NT reading and its text, never ESV (shared with the reviewer's routes). */
+export type SermonText = components["schemas"]["SermonText"];
+export type HymnRef = components["schemas"]["HymnRef"];

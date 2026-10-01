@@ -27,6 +27,19 @@ function Probe() {
   );
 }
 
+/** The Benediction card and the latest draft `peek` returns, for the liturgy defaults (slice 4b). */
+function BenedictionProbe() {
+  const { draft, peek } = useDraft();
+  return (
+    <div>
+      <p>Benediction: {draft.liturgy.cards.benediction.text || "empty"}</p>
+      <button type="button" onClick={() => window.alert(peek().liturgy.cards.benediction.text)}>
+        Peek
+      </button>
+    </div>
+  );
+}
+
 function renderProbe() {
   return render(
     <DraftProvider userId={USER_ID} church={GRACE}>
@@ -59,6 +72,51 @@ describe("DraftProvider and useDraft (F §4.6 Persistence)", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
+  });
+
+  it("fills the Benediction from the church profile, follows a new default, and peek reads the latest draft (slice 4b)", () => {
+    window.localStorage.setItem(KEY, JSON.stringify(testDraft()));
+    const alert = vi.spyOn(window, "alert").mockImplementation(() => {});
+    const view = render(
+      <DraftProvider userId={USER_ID} church={churchProfile({ default_benediction: "Go in peace." })}>
+        <BenedictionProbe />
+      </DraftProvider>,
+    );
+    expect(screen.getByText("Benediction: Go in peace.")).toBeInTheDocument();
+    view.rerender(
+      <DraftProvider userId={USER_ID} church={churchProfile({ default_benediction: "" })}>
+        <BenedictionProbe />
+      </DraftProvider>,
+    );
+    expect(screen.getByText("Benediction: empty")).toBeInTheDocument();
+    act(() => screen.getByRole("button", { name: "Peek" }).click());
+    expect(alert).toHaveBeenCalledWith("");
+    // An older API without the field: the fallback.
+    view.rerender(
+      <DraftProvider userId={USER_ID} church={{ id: GRACE.id, timezone: GRACE.timezone }}>
+        <BenedictionProbe />
+      </DraftProvider>,
+    );
+    expect(screen.getByText("Benediction: Halverson")).toBeInTheDocument();
+  });
+
+  it("keeps peek, update and replace the same functions across edits, so callbacks built on them do not change per keystroke", () => {
+    window.localStorage.setItem(KEY, JSON.stringify(testDraft()));
+    const { result } = renderHook(() => useDraft(), {
+      wrapper: ({ children }) => (
+        <DraftProvider userId={USER_ID} church={GRACE}>
+          {children}
+        </DraftProvider>
+      ),
+    });
+    const first = result.current;
+    act(() => first.update((d) => editOccasion(d, "Harvest")));
+    act(() => first.update((d) => editOccasion(d, "Harvest Home")));
+    expect(result.current.draft).not.toBe(first.draft);
+    expect(result.current.peek).toBe(first.peek);
+    expect(result.current.update).toBe(first.update);
+    expect(result.current.replace).toBe(first.replace);
+    expect(result.current.peek().readings.occasion).toBe("Harvest Home");
   });
 
   it("useDraft throws outside the provider", () => {

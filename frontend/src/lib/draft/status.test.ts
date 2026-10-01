@@ -31,14 +31,14 @@ function withCard(key: keyof DraftV1["liturgy"]["cards"], card: Partial<DraftV1[
 }
 
 describe("steps (S steps.ts)", () => {
-  it("lists the four steps in order, ships Date & readings (2c) and Hymns (3b), and reads a step from its path", () => {
+  it("lists the four steps in order, ships Date & readings (2c), Hymns (3b) and Liturgy (4b), and reads a step from its path", () => {
     expect(STEPS.map((s) => [s.number, s.label, s.href, s.previous, s.next])).toEqual([
       [1, "Date & readings", "/builder/readings", null, "hymns"],
       [2, "Hymns", "/builder/hymns", "readings", "liturgy"],
       [3, "Liturgy", "/builder/liturgy", "hymns", "review"],
       [4, "Review & send", "/builder/review", "liturgy", null],
     ]);
-    expect([...SHIPPED_STEPS]).toEqual(["readings", "hymns"]);
+    expect([...SHIPPED_STEPS]).toEqual(["readings", "hymns", "liturgy"]);
     expect(stepById("liturgy").label).toBe("Liturgy");
     expect(stepFromPath("/builder/hymns")).toBe("hymns");
     expect(stepFromPath("/builder/review/")).toBe("review");
@@ -51,7 +51,8 @@ describe("steps (S steps.ts)", () => {
 describe("stepStatus (F §4.7)", () => {
   it("shows Soon for unshipped steps and Not in archive for Review", () => {
     const d = testDraft();
-    expect(STEPS.map((s) => stepStatus(d, s.id).kind)).toEqual(["incomplete", "incomplete", "soon", "not_in_archive"]);
+    expect(STEPS.map((s) => stepStatus(d, s.id).kind)).toEqual(["incomplete", "incomplete", "incomplete", "not_in_archive"]);
+    expect(stepStatus(d, "liturgy", READINGS)).toEqual({ kind: "soon" });
     expect(stepStatus(d, "readings", new Set())).toEqual({ kind: "soon" });
     expect(stepStatus(d, "review", ALL)).toEqual({ kind: "not_in_archive" });
   });
@@ -90,7 +91,7 @@ describe("stepStatus (F §4.7)", () => {
     expect(stepStatus(oneHymn, "hymns", ALL)).toEqual({ kind: "incomplete", done: 1, total: 3 });
     expect(stepStatus(withCard("call_to_worship", { text: "Come" }), "liturgy", ALL)).toEqual({
       kind: "incomplete",
-      done: 1,
+      done: 2, // and the Benediction, following the church default (slice 4b)
       total: 7,
     });
   });
@@ -158,6 +159,24 @@ describe("isPristine and the hymns step (owner answer 1, 2026-09-29)", () => {
   });
 });
 
+describe("isPristine and the liturgy step (owner answer 1, 2026-09-30)", () => {
+  it("counts a switch moved from its default and text that prints, never a card following the church default", () => {
+    // Everything that ends up in the service counts: text, the switches, communion, the title, custom elements.
+    expect(isPristine(withCard("call_to_worship", { enabled: false }))).toBe(false);
+    expect(isPristine(withCard("prayers_of_the_people", { enabled: true }))).toBe(false);
+    expect(isPristine(withCard("benediction", { enabled: false }))).toBe(false);
+    expect(isPristine(withCard("opening_prayer", { text: "Gracious God", origin: "typed" }))).toBe(false);
+    // A Benediction still following the church default is not the user's work, whatever the default says.
+    expect(isPristine(withCard("benediction", { text: "Go in peace.", origin: "default" }))).toBe(true);
+    expect(isPristine(withCard("benediction", { text: "", origin: "default" }))).toBe(true);
+    // Text that prints nothing is not work: blank typing, a blank title.
+    expect(isPristine(withCard("assurance", { text: "  \n ", origin: "empty" }))).toBe(true);
+    expect(isPristine(withLiturgy({ sermon_title: "   " }))).toBe(true);
+    // A card switched off and back on again is as it was.
+    expect(isPristine(withCard("call_to_worship", { enabled: true }))).toBe(true);
+  });
+});
+
 describe("stillNeeded (S Review \"Still needed\")", () => {
   it("lists only shipped steps' gaps", () => {
     const fresh = setDate(testDraft(), "");
@@ -181,17 +200,50 @@ describe("stillNeeded (S Review \"Still needed\")", () => {
     const archived = { ...HYMN, hymn_id: null }; // shown as "Not in your hymnal", still a pick
     const all = withSlots({ opening: HYMN, response: archived, closing: HYMN });
     expect(stepStatus(all, "hymns")).toEqual({ kind: "complete" });
-    expect(stillNeeded(filled)).toEqual([
+    const hymnsShipped = new Set<StepId>(["readings", "hymns"]); // the liturgy's rows are 4b's test below
+    expect(stillNeeded(filled, hymnsShipped)).toEqual([
       { step: "hymns", message: "No Opening hymn", action: "Choose one" },
       { step: "hymns", message: "No Response hymn", action: "Choose one" },
       { step: "hymns", message: "No Closing hymn", action: "Choose one" },
     ]);
-    expect(stillNeeded(withSlots({ response: HYMN }))).toEqual([
+    expect(stillNeeded(withSlots({ response: HYMN }), hymnsShipped)).toEqual([
       { step: "hymns", message: "No Opening hymn", action: "Choose one" },
       { step: "hymns", message: "No Closing hymn", action: "Choose one" },
     ]);
-    expect(stillNeeded(all)).toEqual([]);
+    expect(stillNeeded(all, hymnsShipped)).toEqual([]);
     expect(stillNeeded(filled, READINGS)).toEqual([]); // before 3b: no hymn rows
-    expect(stillNeeded(filled).some((item) => item.step === "liturgy")).toBe(false); // liturgy not shipped
+    expect(stillNeeded(filled, hymnsShipped).some((item) => item.step === "liturgy")).toBe(false);
+  });
+
+  it("counts the liturgy's enabled cards with text and lists the empty ones and a missing title (slice 4b)", () => {
+    const d = testDraft(); // the Benediction follows the church default: 1 of 7
+    expect(stepStatus(d, "liturgy")).toEqual({ kind: "incomplete", done: 1, total: 7 });
+    const allOff = withLiturgy({
+      cards: Object.fromEntries(
+        Object.entries(d.liturgy.cards).map(([key, card]) => [key, { ...card, enabled: false }]),
+      ) as DraftV1["liturgy"]["cards"],
+    });
+    expect(stepStatus(allOff, "liturgy")).toEqual({ kind: "complete" }); // every card off
+    const rows = stillNeeded(withCard("assurance", { enabled: false })).filter((item) => item.step === "liturgy");
+    expect(rows).toEqual([
+      { step: "liturgy", message: "Call to Worship is empty", action: "Write or generate it", href: "/builder/liturgy#card-call_to_worship" },
+      { step: "liturgy", message: "Opening Prayer is empty", action: "Write or generate it", href: "/builder/liturgy#card-opening_prayer" },
+      {
+        step: "liturgy",
+        message: "Prayer of Confession is empty",
+        action: "Write or generate it",
+        href: "/builder/liturgy#card-prayer_of_confession",
+      },
+      {
+        step: "liturgy",
+        message: "Prayer for Illumination is empty",
+        action: "Write or generate it",
+        href: "/builder/liturgy#card-prayer_for_illumination",
+      },
+      { step: "liturgy", message: "Offertory Prayer is empty", action: "Write or generate it", href: "/builder/liturgy#card-offertory_prayer" },
+      { step: "liturgy", message: "No sermon title", action: "Add one" },
+    ]);
+    const titled = withLiturgy({ sermon_title: "Living Water" });
+    expect(stillNeeded(titled).some((item) => item.message === "No sermon title")).toBe(false);
   });
 });

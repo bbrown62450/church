@@ -10,6 +10,8 @@
 import { z } from "zod";
 
 import { isFirstSundayOfMonth, isValidDateIso, nextSunday, todayIn } from "@/lib/dates";
+import { DEFAULT_BENEDICTION_FALLBACK } from "@/lib/liturgy/defaults";
+import { DEFAULT_ENABLED } from "@/lib/liturgy/sections";
 
 export const DRAFT_VERSION = 1;
 
@@ -97,8 +99,12 @@ export const draftV1Schema = z.object({
 export type DraftV1 = z.infer<typeof draftV1Schema>;
 export type DraftReadings = DraftV1["readings"];
 
-/** The profile fields `freshDraft` needs (`GET /church`, slice 2a). */
-export type DraftChurch = { id: string; timezone?: string | null; timezone_valid?: boolean };
+/**
+ * The profile fields the draft needs (`GET /church`): the zone for
+ * `freshDraft` (slice 2a) and the church's default benediction, which an
+ * untouched Benediction card shows (slice 4a; an older API leaves it out).
+ */
+export type DraftChurch = { id: string; timezone?: string | null; timezone_valid?: boolean; default_benediction?: string };
 
 /** The church's zone for `todayIn`, or undefined (the browser's zone) when the profile says it is not valid. */
 export function churchZone(church: DraftChurch): string | undefined {
@@ -108,8 +114,9 @@ export function churchZone(church: DraftChurch): string | undefined {
 /**
  * A fresh draft (F §4.6 "Fresh draft"): dated the next Sunday strictly after
  * today in the church's zone, every field empty, the cards enabled except the
- * Prayers of the People, the benediction card `default`-origin (slice 4 fills
- * its text), communion on for a first Sunday, a new save key, on step 1.
+ * Prayers of the People, the benediction card `default`-origin with the
+ * church's default benediction ("Halverson" when the profile has none; slice
+ * 4b), communion on for a first Sunday, a new save key, on step 1.
  */
 export function freshDraft({
   church,
@@ -125,7 +132,9 @@ export function freshDraft({
   const cards = Object.fromEntries(
     SECTION_KEYS.map((key) => [
       key,
-      { enabled: key !== "prayers_of_the_people", text: "", origin: key === "benediction" ? "default" : "empty" },
+      key === "benediction"
+        ? { enabled: DEFAULT_ENABLED[key], text: church.default_benediction ?? DEFAULT_BENEDICTION_FALLBACK, origin: "default" }
+        : { enabled: DEFAULT_ENABLED[key], text: "", origin: "empty" },
     ]),
   ) as Record<SectionKey, LiturgyCard>;
   return {

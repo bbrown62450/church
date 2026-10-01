@@ -13,7 +13,7 @@ describe("draftToServicePayload (provisional; 5a replaces it)", () => {
       occasion: "",
       scriptures: [],
       hymns: { opening: null, response: null, closing: null },
-      liturgy: {},
+      liturgy: { benediction: "Halverson" }, // the church default (slice 4b)
       sermon_title: "",
       selected_ot_ref: "",
       selected_nt_ref: "",
@@ -47,7 +47,7 @@ describe("draftToServicePayload (provisional; 5a replaces it)", () => {
     });
     const payload = draftToServicePayload(d);
     expect(payload.scriptures).toEqual(["Isaiah 5:1-7", "Psalm 80:7-15"]);
-    expect(payload.liturgy).toEqual({ call_to_worship: "Come, let us worship." });
+    expect(payload.liturgy).toEqual({ call_to_worship: "Come, let us worship.", benediction: "Halverson" });
     expect(payload.hymns.response).toEqual({ hymn_id: "h1", title: "Amazing Grace", number: 649, hymnal: "GG2013" });
     expect(payload.hymns.opening).toBeNull();
     expect(payload.hymnal).toBe("GG2013");

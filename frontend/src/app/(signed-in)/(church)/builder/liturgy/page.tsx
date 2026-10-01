@@ -1,8 +1,8 @@
 "use client";
 
-import { StepPlaceholder } from "@/components/builder/step-placeholder";
+import { LiturgyStep } from "@/components/builder/liturgy/liturgy-step";
 
-/** Step: Liturgy. Slice 4 replaces the placeholder. */
+/** Step: Liturgy (slice 4b). */
 export default function LiturgyStepPage() {
-  return <StepPlaceholder step="liturgy" />;
+  return <LiturgyStep />;
 }

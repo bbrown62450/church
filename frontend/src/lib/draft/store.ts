@@ -17,6 +17,13 @@
  *   `updated_at` instead of now, so it never outranks a real edit made in
  *   another tab on a copy this tab has not seen yet. `setLastStep` changes only `last_step` and
  *   never bumps `updated_at`. `replace(next)` stores `normalizePicks(next)`.
+ * - Liturgy defaults (slice 4b; slice 4 spec "Draft store integration"): with
+ *   `liturgyDefaults`, every load, change and replace also runs
+ *   `applyLiturgyDefaults`, so an untouched Benediction shows the church's
+ *   default and untouched communion follows the date. A load it changes is
+ *   stamped 1 ms after the stored draft, and `setLiturgyDefaults` (the
+ *   profile refetched with a new default) is an automatic change, so neither
+ *   outranks another tab's edit. An adopted draft gets the defaults in memory.
  * - A failed write switches to memory-only with one "memory_only" notice and
  *   stays pending, so the next flush (hide, pagehide) retries it.
  * - Another tab's write for this key is adopted when its `updated_at` is
@@ -30,6 +37,7 @@
  * during a render.
  */
 import { isValidDateIso, nextSunday, todayIn } from "@/lib/dates";
+import { applyLiturgyDefaults, type LiturgyDefaults } from "@/lib/liturgy/defaults";
 import { readLocal, removeLocal, tryWriteLocal } from "@/lib/storage";
 
 import { parseStoredDraft } from "./migrate";
@@ -59,6 +67,8 @@ export type DraftStoreOptions = {
   storage?: DraftStorage;
   now?: () => Date;
   notify?: (notice: DraftNotice) => void;
+  /** The church's liturgy defaults; without them (slice 2's tests) the store changes no card. */
+  liturgyDefaults?: LiturgyDefaults;
 };
 
 /**
@@ -98,8 +108,16 @@ export class DraftStore {
   private warnedMemoryOnly = false;
   /** The raw value that could not be restored, backed up in `start`. */
   private corruptRaw: string | null = null;
+  private defaults: LiturgyDefaults | null;
 
-  constructor({ userId, church, storage = browserDraftStorage, now = () => new Date(), notify = () => {} }: DraftStoreOptions) {
+  constructor({
+    userId,
+    church,
+    storage = browserDraftStorage,
+    now = () => new Date(),
+    notify = () => {},
+    liturgyDefaults,
+  }: DraftStoreOptions) {
     this.userId = userId;
     this.churchId = church.id;
     this.key = draftKey(userId, church.id);
@@ -107,6 +125,7 @@ export class DraftStore {
     this.storage = storage;
     this.now = now;
     this.notify = notify;
+    this.defaults = liturgyDefaults ?? null;
 
     const fresh = () => freshDraft({ church, user: { id: userId }, now: now() });
     const raw = storage.read(this.key);
@@ -125,7 +144,7 @@ export class DraftStore {
         this.pendingWrite = true;
       }
     }
-    const rolled = rollForward(draft, todayIn(churchZone(church), now()));
+    const rolled = this.withDefaults(rollForward(draft, todayIn(churchZone(church), now())));
     if (rolled !== draft) {
       // Just after the stored stamp, not now: a newer unwritten edit from another tab still wins.
       const storedAt = Date.parse(draft.updated_at);
@@ -161,7 +180,7 @@ export class DraftStore {
   }
 
   update = (recipe: (d: DraftV1) => DraftV1): void => {
-    const next = recipe(this.snapshot.draft);
+    const next = this.withDefaults(recipe(this.snapshot.draft));
     if (next === this.snapshot.draft) return;
     this.set({ ...next, updated_at: this.now().toISOString() });
     this.schedule();
@@ -170,7 +189,7 @@ export class DraftStore {
   /** An automatic change: stamped 1 ms after the current draft, so any real edit (here or in another tab) outranks it. */
   autoUpdate = (recipe: (d: DraftV1) => DraftV1): void => {
     const current = this.snapshot.draft;
-    const next = recipe(current);
+    const next = this.withDefaults(recipe(current));
     if (next === current) return;
     const at = Date.parse(current.updated_at);
     this.set({ ...next, updated_at: (Number.isFinite(at) ? new Date(at + 1) : this.now()).toISOString() });
@@ -178,8 +197,15 @@ export class DraftStore {
   };
 
   replace = (next: DraftV1): void => {
-    this.set(normalizePicks({ ...next, updated_at: this.now().toISOString() }));
+    this.set(this.withDefaults(normalizePicks({ ...next, updated_at: this.now().toISOString() })));
     this.schedule();
+  };
+
+  /** The church's defaults changed (a profile refetch): an automatic change for a card still following them. */
+  setLiturgyDefaults = (next: LiturgyDefaults): void => {
+    if (this.defaults?.defaultBenediction === next.defaultBenediction) return;
+    this.defaults = next;
+    this.autoUpdate((d) => d);
   };
 
   setLastStep = (step: StepId): void => {
@@ -235,9 +261,13 @@ export class DraftStore {
     }
     if (!isNewer(stored.updated_at, this.snapshot.draft.updated_at)) return false;
     this.cancelWrite();
-    this.set(normalizePicks(stored));
+    this.set(this.withDefaults(normalizePicks(stored)));
     this.notify("adopted");
     return true;
+  }
+
+  private withDefaults(d: DraftV1): DraftV1 {
+    return this.defaults === null ? d : applyLiturgyDefaults(d, this.defaults);
   }
 
   private schedule(): void {

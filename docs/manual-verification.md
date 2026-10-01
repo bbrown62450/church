@@ -181,3 +181,29 @@ email address or a church id.
 - [ ] (owner, after 3b) **10.** In GG2013, **Suggest hymns** for a real Sunday: the ideas lean older and familiar, and any hymn written in 1970 or later shows "Written {year}". A picker search for a known modern hymn shows the badge; a nineteenth-century hymn does not.
 - [ ] (owner, after 3b) **11.** On a Sunday in the Season after Pentecost (for example 2026-10-04), **Suggest hymns** offers no Palm Sunday, Holy Week, Easter, Advent or Christmas hymns unless the readings call for one.
 - [ ] (owner, after 3b) **12.** After choosing a hymn or a hymnal, **New service** asks "Start a new service?". Turning Exclude on or off does not make it ask; Suggest fills empty slots, which does.
+
+## Slice 4
+
+Run on the production URL https://worship-service-builder.vercel.app, at 375 px
+(Chrome device mode, iPhone SE) and on desktop, and the Streamlit smoke on
+https://liturgy-frozen.streamlit.app. These are the slice 4 spec's manual
+checks (slice 4 spec → Manual checklist), with check 10 for "New service"
+(owner answer 1, 2026-09-30) and check 11 for a long section (owner answer 2).
+After the 4b merge the owner's guided check (owner answer 4: six short steps
+on the phone, given one at a time, then a quick look on a computer) covers the
+items marked "(owner, after 4b)", some of them in part; its result goes into
+`docs/ops-runbook.md` → "Slice 4b record", which says what ran. The rest can
+be run at any time and recorded the same way. The AI's words differ every
+time, so record what the page shows, never an email address or a church id.
+
+- [ ] (owner, after 4b) **1.** Open Liturgy on a fresh draft: the 8 cards in the order of worship, Prayers of the People off; Benediction "Halverson" with "Church default"; the landmark rows show the chosen hymns and readings.
+- [ ] (owner, after 4b) **2.** Type a Call to Worship. Tap **Generate empty sections (5)**: the 5 empty switched-on sections fill within about a minute and one message says "Wrote 5 sections."; the Call to Worship is unchanged, character for character; the Benediction is untouched.
+- [ ] (owner, after 4b) **3.** Regenerate the typed card: "Replace your text?" appears; **Replace text**, then **Undo** brings the typed text back.
+- [ ] **4.** Start a bulk run, go to Hymns and back: the results are there. Cancel a run: the card is unchanged.
+- [ ] **5.** Refresh mid-edit: the text is kept. Switch church and back: each church keeps its own liturgy.
+- [ ] **6.** Communion is on for a first-Sunday date, off after changing the date, and stays as set after a toggle; **Use default** follows the date again. Its text shows under **Show communion text**.
+- [ ] (owner, after 4b) **7.** Add, edit, move and remove (then **Undo**) a custom element. It shows right after its place.
+- [ ] (owner, after 4b) **8.** At 375 px: no sideways scroll; the keyboard does not cover the focused text; the footer (Back, Next) hides while typing and comes back after; touch targets are at least 44 px. The Prayers of the People card's header fits: its switch, title and ⋯ on one line, and "Pastor's copy only" with the status chip (for example "Empty") on the line below. Switching a section off shows "Off — not in the service. Any text is kept." and switching it on shows the text again.
+- [ ] **9.** Regression: sign in, switch church, open every shipped nav item; the Streamlit smoke check on https://liturgy-frozen.streamlit.app: load the church, load an archived service, open Settings (F §6.3).
+- [ ] (owner, after 4b) **10.** **New service** asks "Start a new service?" after a card's text, a section switched on or off, a sermon title, a communion toggle or a custom element; on a fresh draft whose Benediction still shows the church default it does not ask.
+- [ ] **11.** Switch on Prayers of the People and tap **Generate**: it fills (about 5 s in the 4a check; the page waits up to 100 s).

@@ -11,6 +11,11 @@ const ENDPOINT_TIMEOUTS: Record<string, number> = {
   "POST /scripture/passages": 30_000,
   // Slice 3 (S API; F §1.8): the server answers within its 75 s deadline.
   "POST /hymns/suggestions": 90_000,
+  // Slice 4 (F §1.8 amendment, owner answer 2, 2026-09-30): a section answers within
+  // 85 s (4a's 80 s deadline plus a last connect). The timer starts after getAccessToken(),
+  // so the other 15 s cover the server's sign-in key fetch (at most 5 s), latency and the proxy.
+  // The service reviewer's routes (the slice after 4b) reuse this value.
+  "POST /liturgy/generate": 100_000,
 };
 
 export function timeoutFor(method: string, path: string): number {

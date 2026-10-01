@@ -24,7 +24,7 @@ export function StillNeeded({ shipped = SHIPPED_STEPS }: { shipped?: ReadonlySet
         {items.map((item) => (
           <li key={`${item.step}:${item.message}`}>
             {item.message} —{" "}
-            <Link href={stepById(item.step).href} className="font-medium underline underline-offset-4">
+            <Link href={item.href ?? stepById(item.step).href} className="font-medium underline underline-offset-4">
               {item.action}
             </Link>
           </li>

@@ -12,6 +12,8 @@
 import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { toast } from "sonner";
 
+import { DEFAULT_BENEDICTION_FALLBACK } from "@/lib/liturgy/defaults";
+
 import type { DraftChurch, DraftV1, StepId } from "./schema";
 import { DraftStore, type DraftNotice, type Persistence } from "./store";
 
@@ -25,6 +27,8 @@ export type DraftApi = {
   replace: (next: DraftV1) => void;
   /** Navigation only: never bumps `updated_at`. */
   setLastStep: (step: StepId) => void;
+  /** The latest draft now, for code that runs outside a render (slice 4b's generation provider). */
+  peek: () => DraftV1;
   persistence: Persistence;
 };
 
@@ -54,8 +58,18 @@ export function DraftProvider({
   church: DraftChurch;
   children: ReactNode;
 }) {
-  const [store] = useState(() => new DraftStore({ userId, church, notify }));
+  const defaultBenediction = church.default_benediction ?? DEFAULT_BENEDICTION_FALLBACK;
+  const [store] = useState(
+    () => new DraftStore({ userId, church, notify, liturgyDefaults: { defaultBenediction } }),
+  );
   const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
+  // Built once, so callbacks that read the draft through it (the generation provider's) keep their identity across edits.
+  const [peek] = useState(() => () => store.getSnapshot().draft);
+
+  // The profile refetched with another default (6a's Settings): untouched Benediction cards follow it.
+  useEffect(() => {
+    store.setLiturgyDefaults({ defaultBenediction });
+  }, [store, defaultBenediction]);
 
   useEffect(() => {
     store.start();
@@ -85,8 +99,9 @@ export function DraftProvider({
       autoUpdate: store.autoUpdate,
       replace: store.replace,
       setLastStep: store.setLastStep,
+      peek,
     }),
-    [snapshot, store],
+    [snapshot, store, peek],
   );
   return <DraftContext value={value}>{children}</DraftContext>;
 }

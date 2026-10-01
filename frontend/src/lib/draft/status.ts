@@ -3,6 +3,8 @@
  * Pure functions of the draft; the shell decides what an unshipped step shows.
  */
 import { inSupportedRange, isValidDateIso } from "@/lib/dates";
+import { DEFAULT_ENABLED, SECTION_LABELS } from "@/lib/liturgy/sections";
+import { liturgyCounts } from "@/lib/liturgy/summary";
 import { cleanLines } from "@/lib/scripture-refs";
 
 import { SECTION_KEYS, SLOTS, type DraftV1, type Slot, type StepId } from "./schema";
@@ -61,8 +63,9 @@ export function stepStatus(
   if (step === "hymns") {
     return counted(SLOTS.filter((slot) => draft.hymns.slots[slot] !== null).length, SLOTS.length);
   }
-  const enabled = SECTION_KEYS.map((key) => draft.liturgy.cards[key]).filter((card) => card.enabled);
-  return counted(enabled.filter((card) => card.text.trim() !== "").length, enabled.length);
+  // Liturgy: the enabled cards with text, from the count the summary shows too (slice 4b); all off is complete.
+  const { ready, enabled } = liturgyCounts(draft);
+  return counted(ready, enabled);
 }
 
 /**
@@ -75,7 +78,12 @@ export function stepStatus(
  * translation, so they look past it with `withoutTranslation` (owner answer
  * A, 2026-09-29). A hymn in any slot and a chosen hymnal count too; the
  * Exclude switch and the AI's other ideas never do (owner answer 1,
- * 2026-09-29, slice 3b; the same fields the fingerprint payload holds).
+ * 2026-09-29, slice 3b; the same fields the fingerprint payload holds). On
+ * the Liturgy step everything that ends up in the service counts: card text,
+ * a card switched away from its default, communion the user set, the sermon
+ * title and custom elements; a Benediction still following the church
+ * default (origin "default") and text that prints nothing (blank after
+ * trimming) do not (owner answer 1, 2026-09-30, slice 4b).
  */
 export function isPristine(draft: DraftV1): boolean {
   const r = draft.readings;
@@ -90,10 +98,11 @@ export function isPristine(draft: DraftV1): boolean {
     draft.hymns.hymnal === null &&
     SECTION_KEYS.every((key) => {
       const card = l.cards[key];
-      return card.origin === "default" || (card.origin === "empty" && card.text === "");
+      const text = card.origin === "default" || (card.origin === "empty" && card.text.trim() === "");
+      return card.enabled === DEFAULT_ENABLED[key] && text;
     }) &&
     l.communion_origin === "default" &&
-    l.sermon_title === "" &&
+    l.sermon_title.trim() === "" &&
     l.custom_elements.length === 0 &&
     draft.editing === null
   );
@@ -117,12 +126,16 @@ export type NeededItem = {
   message: string;
   /** The link text: "Choose one" */
   action: string;
+  /** Where the link goes when not the step's own page: "/builder/liturgy#card-call_to_worship" (slice 4b). */
+  href?: string;
 };
 
 /**
  * What Review lists under "Still needed", from shipped steps only: the
  * readings' gaps (2c), then one row per empty hymn slot in slot order (3b,
- * F §4.7's wording). Slice 4 adds the liturgy's rows.
+ * F §4.7's wording), then one row per switched-on liturgy card with no text,
+ * linking to that card, and "No sermon title" (4b, the wording 5a's Review
+ * checklist reuses).
  */
 export function stillNeeded(draft: DraftV1, shipped: ReadonlySet<StepId> = SHIPPED_STEPS): NeededItem[] {
   const items: NeededItem[] = [];
@@ -139,6 +152,21 @@ export function stillNeeded(draft: DraftV1, shipped: ReadonlySet<StepId> = SHIPP
     for (const slot of SLOTS) {
       if (draft.hymns.slots[slot] !== null) continue;
       items.push({ step: "hymns", message: `No ${SLOT_NAMES[slot]} hymn`, action: "Choose one" });
+    }
+  }
+  if (shipped.has("liturgy")) {
+    for (const key of SECTION_KEYS) {
+      const card = draft.liturgy.cards[key];
+      if (!card.enabled || card.text.trim() !== "") continue;
+      items.push({
+        step: "liturgy",
+        message: `${SECTION_LABELS[key]} is empty`,
+        action: "Write or generate it",
+        href: `/builder/liturgy#card-${key}`,
+      });
+    }
+    if (draft.liturgy.sermon_title.trim() === "") {
+      items.push({ step: "liturgy", message: "No sermon title", action: "Add one" });
     }
   }
   return items;

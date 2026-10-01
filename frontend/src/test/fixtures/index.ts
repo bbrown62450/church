@@ -4,6 +4,7 @@
  */
 import type {
   ChurchProfile,
+  GenerateLiturgyBody,
   Hymn,
   HymnMatch,
   Hymnals,
@@ -12,12 +13,18 @@ import type {
   InviteAccepted,
   InvitePreview,
   Lectionary,
+  LiturgyConfig,
+  LiturgySection,
+  OutlineItem,
   ScriptureMatches,
+  SectionError,
+  SectionResult,
   SuggestedHymn,
   Translations,
 } from "@/lib/api/types";
 import type { Church, Me } from "@/lib/church";
 import { freshDraft, type DraftV1 } from "@/lib/draft/schema";
+import { SECTION_LABELS } from "@/lib/liturgy/sections";
 
 /** Ids that read well in failure output (valid UUIDs, like the API's). */
 export const CHURCH_IDS = {
@@ -278,5 +285,148 @@ export function hymnSuggestions(
     excluded_recent_count: 0,
     slots: { opening: out(slots.opening), response: out(slots.response), closing: out(slots.closing) },
     ...overrides,
+  };
+}
+
+// --- slice 4b: the liturgy config and the generation answers --------------------
+
+/**
+ * `GET /liturgy/config` as 4a serves it (slice 4a record: 8 sections, 17
+ * places, 16 outline items, `ai_available` true), with the communion text
+ * shortened to its first seven blocks. `liturgy.test.tsx` pins the sections,
+ * places and outline to the shared fixtures.
+ */
+export function liturgyConfig(overrides: Partial<LiturgyConfig> = {}): LiturgyConfig {
+  const section = (
+    key: LiturgySection["key"],
+    label: string,
+    hint: string | null = null,
+    extra: Partial<LiturgySection> = {},
+  ): LiturgySection => ({ key, label, default_enabled: true, rows: 4, pastor_copy_only: false, hint, ...extra });
+  const landmark = (
+    key: string,
+    label: string,
+    value_source: OutlineItem["value_source"],
+    anchors: string[] = [key],
+    fixed_text: string | null = null,
+  ): OutlineItem => ({ kind: "landmark", key, label, value_source, fixed_text, anchors_after: anchors });
+  const card = (key: string, label: string, anchors: string[] = [key]): OutlineItem => ({
+    kind: "section",
+    key,
+    label,
+    value_source: "none",
+    fixed_text: null,
+    anchors_after: anchors,
+  });
+  return {
+    sections: [
+      section("call_to_worship", "Call to Worship", "Start lines with “Leader:” or “People:”. People lines print in bold."),
+      section("opening_prayer", "Opening Prayer"),
+      section("prayer_of_confession", "Prayer of Confession", "Printed in bold for everyone to read together."),
+      section("assurance", "Assurance of Pardon", "Added automatically after your text."),
+      section("prayer_for_illumination", "Prayer for Illumination"),
+      section("prayers_of_the_people", "Prayers of the People", null, { default_enabled: false, rows: 8, pastor_copy_only: true }),
+      section("offertory_prayer", "Offertory Prayer"),
+      section("benediction", "Benediction", "Your church's default benediction. Admins can change it in Settings."),
+    ],
+    custom_placements: [
+      ["call_to_worship", "After Call to Worship"],
+      ["opening_prayer", "After Opening Prayer"],
+      ["first_hymn", "After First Hymn"],
+      ["prayer_of_confession", "After Prayer of Confession"],
+      ["assurance", "After Assurance of Pardon"],
+      ["prayer_for_illumination", "After Prayer for Illumination"],
+      ["ot_reading", "After First Reading"],
+      ["nt_reading", "After New Testament Reading"],
+      ["sermon", "After Sermon"],
+      ["affirmation_of_faith", "After Affirmation of Faith"],
+      ["second_hymn", "After Second Hymn"],
+      ["communion", "After Communion"],
+      ["prayers_of_the_people", "After Prayers of the People"],
+      ["offertory_prayer", "After Offertory Prayer"],
+      ["third_hymn", "After Third Hymn"],
+      ["benediction", "Before Benediction"],
+      ["end", "At the end (after Benediction)"],
+    ].map(([key, label]) => ({ key, label })),
+    outline: [
+      card("call_to_worship", "Call to Worship"),
+      card("opening_prayer", "Opening Prayer"),
+      landmark("first_hymn", "First Hymn", "hymn_opening"),
+      card("prayer_of_confession", "Prayer of Confession"),
+      card("assurance", "Assurance of Pardon"),
+      card("prayer_for_illumination", "Prayer for Illumination"),
+      landmark("ot_reading", "First Reading", "reading_ot"),
+      landmark("nt_reading", "New Testament Reading", "reading_nt"),
+      landmark("sermon", "Sermon Title", "sermon_title"),
+      landmark("affirmation_of_faith", "Affirmation of Faith", "fixed", ["affirmation_of_faith"], "Apostles' Creed"),
+      landmark("second_hymn", "Second Hymn", "hymn_response"),
+      {
+        kind: "communion",
+        key: "communion",
+        label: "The Sacrament of the Lord's Supper",
+        value_source: "none",
+        fixed_text: null,
+        anchors_after: ["communion"],
+      },
+      card("prayers_of_the_people", "Prayers of the People"),
+      card("offertory_prayer", "Offertory Prayer"),
+      landmark("third_hymn", "Third Hymn", "hymn_closing", ["third_hymn", "benediction"]),
+      card("benediction", "Benediction", ["end"]),
+    ],
+    assurance_response: "People: Thanks be to God! Amen.",
+    default_benediction_fallback: "Halverson",
+    communion: {
+      title: "The Sacrament of the Lord's Supper",
+      toggle_label: "Include communion liturgy (The Sacrament of the Lord's Supper)",
+      default_rule: "first_sunday_of_month",
+      blocks: [
+        { style: "heading1", text: "The Sacrament of the Lord's Supper" },
+        { style: "blank", text: "" },
+        { style: "heading2", text: "Invitation to the Table" },
+        { style: "text", text: "This is the table of our Lord Jesus Christ." },
+        { style: "heading2", text: "Great Thanksgiving" },
+        { style: "text", text: "The Lord be with you." },
+        { style: "response", text: "And also with you." },
+      ],
+    },
+    limits: {
+      max_section_text: 20_000,
+      max_sermon_title: 300,
+      max_custom_elements: 30,
+      max_custom_label: 200,
+      max_custom_text: 10_000,
+      max_sections_per_request: 4,
+    },
+    ai_available: true,
+    ...overrides,
+  };
+}
+
+/** A section written by the AI (`status: "generated"`). */
+export function sectionResult(section: SectionResult["section"], text: string): SectionResult {
+  return { section, status: "generated", text, error: null };
+}
+
+/** A section's failure inside the 200 (`status: "error"`), with the server's message. */
+export function sectionFailure(section: SectionResult["section"], code: SectionError["code"], message: string): SectionResult {
+  return { section, status: "error", text: null, error: { code, message } };
+}
+
+/**
+ * A fake-API handler for `POST /liturgy/generate`: `answer(section, body)`
+ * gives the section's result (wrapped in `{results: [...]}`) or a whole
+ * response (`fakeError(...)`); by default "{Label} written by the AI.".
+ */
+export function generateRoute(
+  answer: (
+    section: SectionResult["section"],
+    body: GenerateLiturgyBody,
+  ) => SectionResult | { status: number } | Promise<SectionResult | { status: number }> = (section) =>
+    sectionResult(section, `${SECTION_LABELS[section]} written by the AI.`),
+) {
+  return async (req: { body: unknown }) => {
+    const body = req.body as GenerateLiturgyBody;
+    const out = await answer(body.sections[0], body);
+    return "section" in out ? { results: [out] } : out;
   };
 }
