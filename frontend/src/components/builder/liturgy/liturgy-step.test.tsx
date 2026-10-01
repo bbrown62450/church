@@ -243,9 +243,13 @@ describe("the Liturgy step (S User experience)", () => {
     const text = within(cw).getByRole("textbox", { name: "Call to Worship" });
     expect(text).toHaveValue("");
     expect(within(cw).getByText("Empty")).toBeInTheDocument();
-    expect(within(cw).getByText("Cleared.")).toBeInTheDocument();
+    expect(within(cw).getByText("Cleared.")).not.toHaveAttribute("aria-live");
+    // Announced through the card's live region, which is there before the line appears.
+    const announced = within(cw).getByText("Call to Worship: Cleared.", { selector: "[aria-live=polite]" });
     await user.click(within(cw).getByRole("button", { name: "Undo" }));
     expect(text).toHaveValue("Come.");
+    expect(announced).toBeInTheDocument();
+    expect(announced).toBeEmptyDOMElement();
     expect(within(cw).getByText("Your text")).toBeInTheDocument();
     expect(within(cw).queryByText("Cleared.")).toBeNull();
     await user.click(within(cw).getByRole("button", { name: "More actions for Call to Worship" }));
@@ -307,6 +311,16 @@ describe("the Liturgy step (S User experience)", () => {
     await waitFor(() => expect(scroll).toHaveBeenCalled());
     expect(scroll.mock.contexts[0]).toBe(document.getElementById("card-assurance"));
   });
+
+  it("scrolls nowhere, and still shows the step, when the address is malformed (M4)", async () => {
+    window.location.hash = "#card-%E0";
+    const scroll = vi.spyOn(Element.prototype, "scrollIntoView");
+    renderStep();
+    expect(await screen.findByRole("region", { name: "Assurance of Pardon" })).toBeInTheDocument();
+    // The scroll effect runs in the commit that shows the cards; the sermon title field is there by then too.
+    expect(screen.getByRole("textbox", { name: "Sermon title" })).toBeInTheDocument();
+    expect(scroll).not.toHaveBeenCalled();
+  });
 });
 
 describe("the card's own draft (S Card origin transitions)", () => {
@@ -361,6 +375,13 @@ function errorIn(label: string): HTMLElement | null {
   return card(label).querySelector<HTMLElement>('[data-slot="alert"]');
 }
 
+/** The AI bar's button is off with `aria-disabled`, never `disabled`, so it keeps focus (T1-T10 review). */
+function expectBarOff(button: HTMLElement, off = true) {
+  expect(button).not.toHaveAttribute("disabled");
+  if (off) expect(button).toHaveAttribute("aria-disabled", "true");
+  else expect(button).not.toHaveAttribute("aria-disabled", "true");
+}
+
 describe("Generate and Regenerate (S Generate and Regenerate, AI bar)", () => {
   it("Generate sends one section as the church, no overrides, and writes an AI draft with no toast", async () => {
     const { user, api } = renderStep();
@@ -398,7 +419,7 @@ describe("Generate and Regenerate (S Generate and Regenerate, AI bar)", () => {
     // Typed text, a card that is off and the Benediction's default are never sent or changed.
     expect(screen.getByRole("textbox", { name: "Call to Worship" })).toHaveValue("Come, let us worship.");
     expect(screen.getByRole("textbox", { name: "Benediction" })).toHaveValue("Halverson");
-    expect(within(bar).getByRole("button", { name: "Generate empty sections (0)" })).toBeDisabled();
+    expectBarOff(within(bar).getByRole("button", { name: "Generate empty sections (0)" }));
     expect(within(bar).getByText("Every switched-on section has text. Use Regenerate on a card for a new AI draft.")).toBeInTheDocument();
   });
 
@@ -482,7 +503,12 @@ describe("Generate and Regenerate (S Generate and Regenerate, AI bar)", () => {
     expect(within(card("Call to Worship")).getByRole("alert")).toHaveTextContent("AI not configured. Type this section yourself.");
     await user.click(within(bar).getByRole("button", { name: "Generate empty sections (4)" }));
     const marked = ["Call to Worship", "Prayer of Confession", "Prayer for Illumination", "Offertory Prayer"];
-    for (const label of marked) expect(errorIn(label)).toHaveTextContent("AI not configured. Type this section yourself.");
+    for (const label of marked) {
+      expect(errorIn(label)).toHaveTextContent("AI not configured. Type this section yourself.");
+      // Not announced once per card: the banner already says it.
+      expect(within(card(label)).queryByText("AI not configured. Type this section yourself.", { selector: "[aria-live=polite]" })).toBeNull();
+    }
+    expect(screen.queryByRole("alert")).toBeNull();
     for (const label of ["Opening Prayer", "Assurance of Pardon", "Prayers of the People", "Benediction"]) {
       expect(errorIn(label)).toBeNull();
     }
@@ -599,7 +625,7 @@ describe("Generate and Regenerate (S Generate and Regenerate, AI bar)", () => {
     await user.click(screen.getByRole("button", { name: "More actions" }));
     await user.click(await screen.findByRole("menuitem", { name: "New service" }));
     expect(await screen.findByText("The service changed, so the AI drafts were discarded.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Generate empty sections (6)" })).toBeEnabled();
+    expectBarOff(screen.getByRole("button", { name: "Generate empty sections (6)" }), false);
     expect(errorIn("Call to Worship")).toBeNull();
     expect(within(card("Call to Worship")).queryByText("Cleared.")).toBeNull();
     // The answers still on their way land nowhere; a new run works as usual.
@@ -614,7 +640,7 @@ describe("Generate and Regenerate (S Generate and Regenerate, AI bar)", () => {
     expect(held.sent).toEqual(["call_to_worship", "opening_prayer", "prayer_of_confession", "assurance", "offertory_prayer"]);
   });
 
-  it("keeps focus on the card when its control goes: Replace text, Cancel, Keep my text, Try again, Clear and Undo", async () => {
+  it("keeps focus on the card when its control goes: Replace text, Cancel, Keep my text, an error, Try again, Clear and Undo", async () => {
     const held = heldGenerate();
     const { user } = renderStep(withCard("opening_prayer", { text: "Gracious God", origin: "typed" }), { "POST /liturgy/generate": held.handler });
     const op = await screen.findByRole("region", { name: "Opening Prayer" });
@@ -630,11 +656,15 @@ describe("Generate and Regenerate (S Generate and Regenerate, AI bar)", () => {
     // Try again: its alert goes, so the card's Cancel.
     const cw = card("Call to Worship");
     await user.click(within(cw).getByRole("button", { name: "Generate" }));
+    await waitFor(() => expect(within(cw).getByRole("button", { name: "Cancel Call to Worship" })).toHaveFocus());
     await held.release("call_to_worship", {
       status: 200,
       body: { results: [sectionFailure("call_to_worship", "ai_timeout", "The AI took too long to answer. Try again.")] },
     });
-    await user.click(within(await within(cw).findByRole("alert")).getByRole("button", { name: "Try again" }));
+    // The error replaces the row whose Cancel had focus: its Try again takes it.
+    const retry = within(await within(cw).findByRole("alert")).getByRole("button", { name: "Try again" });
+    await waitFor(() => expect(retry).toHaveFocus());
+    await user.click(retry);
     await waitFor(() => expect(within(cw).getByRole("button", { name: "Cancel Call to Worship" })).toHaveFocus());
     // Clear: the ⋯ menu is off on an empty card, so "Cleared. Undo"; Undo: the card's heading.
     await user.click(within(op).getByRole("button", { name: "More actions for Opening Prayer" }));
@@ -652,7 +682,7 @@ describe("Generate and Regenerate (S Generate and Regenerate, AI bar)", () => {
     });
     await view.user.click(within(await screen.findByRole("region", { name: "Offertory Prayer" })).getByRole("button", { name: "Generate" }));
     expect(within(await within(card("Offertory Prayer")).findByRole("alert")).getByRole("button", { name: "Try again" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Generate empty sections (6)" })).toBeDisabled();
+    expectBarOff(screen.getByRole("button", { name: "Generate empty sections (6)" }));
     const page = (step: ReactNode) => (
       <>
         <BuilderLayout>{step}</BuilderLayout>
@@ -669,7 +699,7 @@ describe("Generate and Regenerate (S Generate and Regenerate, AI bar)", () => {
     view.rerender(page(<LiturgyStep />));
     const offertory = await screen.findByRole("region", { name: "Offertory Prayer" });
     expect(within(within(offertory).getByRole("alert")).getByRole("button", { name: "Try again" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Generate empty sections (6)" })).toBeEnabled();
+    expectBarOff(screen.getByRole("button", { name: "Generate empty sections (6)" }), false);
   });
 
   it("keeps writing while the member is on another step, and the result is there on return", async () => {
@@ -698,6 +728,7 @@ describe("Generate and Regenerate (S Generate and Regenerate, AI bar)", () => {
     const { user } = renderStep(testDraft(), { "POST /liturgy/generate": held.handler });
     await user.click(await screen.findByRole("button", { name: "Generate empty sections (6)" }));
     await waitFor(() => expect(held.sent).toHaveLength(3));
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus(); // the same button, so focus stays
     await held.release(
       "call_to_worship",
       fakeError(429, "rate_limited", "Too many requests. Try again in 30 seconds.", { details: { retry_after_seconds: 30 } }),
@@ -710,8 +741,11 @@ describe("Generate and Regenerate (S Generate and Regenerate, AI bar)", () => {
     await held.release("prayer_of_confession");
     expect(await screen.findByText("Wrote 2 of 6 sections. The rest show what went wrong.")).toBeInTheDocument();
     expect(held.sent).toEqual(["call_to_worship", "opening_prayer", "prayer_of_confession"]);
-    // The AI bar waits as well.
-    expect(screen.getByRole("button", { name: "Generate empty sections (4)" })).toBeDisabled();
+    // The AI bar waits as well, and keeps focus while it does.
+    expectBarOff(screen.getByRole("button", { name: "Generate empty sections (4)" }));
+    expect(screen.getByRole("button", { name: "Generate empty sections (4)" })).toHaveFocus();
+    await user.click(screen.getByRole("button", { name: "Generate empty sections (4)" }));
+    expect(held.sent).toHaveLength(3); // its click does nothing while it waits
   });
 
   it("enables Try again once a 429's wait has passed", async () => {
@@ -759,7 +793,7 @@ describe("Generate and Regenerate (S Generate and Regenerate, AI bar)", () => {
     expect(within(card("Call to Worship")).getByText(STILL_WORKING)).toHaveAttribute("aria-live", "polite");
     expect(screen.getByText(`Writing 1 of 6… ${STILL_WORKING}`)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(screen.getByRole("button", { name: "Generate empty sections (6)" })).toBeEnabled();
+    expectBarOff(screen.getByRole("button", { name: "Generate empty sections (6)" }), false);
     expect(screen.queryByText(STILL_WORKING)).toBeNull();
   });
 
@@ -820,6 +854,7 @@ describe("the communion card (S Communion card)", () => {
     await user.click(within(communion).getByRole("button", { name: "Use default" }));
     expect(toggle).not.toBeChecked();
     expect(within(communion).queryByRole("button", { name: "Use default" })).toBeNull();
+    expect(toggle).toHaveFocus(); // the button went; focus did not drop to the page
     // The fixed text, read-only, from the config.
     expect(within(communion).queryByText("And also with you.")).toBeNull();
     await user.click(within(communion).getByRole("button", { name: "Show communion text" }));
@@ -934,8 +969,8 @@ describe("custom elements (S Custom elements)", () => {
     const anthem = await screen.findByRole("region", { name: "Anthem" });
     await user.click(within(anthem).getByRole("button", { name: "More actions for Anthem" }));
     await user.click(await screen.findByRole("menuitem", { name: "Remove" }));
-    // After the Sermon row come two landmark rows and the communion card, then Prayers of the People.
-    await waitFor(() => expect(within(card("Prayers of the People")).getByRole("heading", { name: "Prayers of the People" })).toHaveFocus());
+    // After the Sermon row come two landmark rows, then the communion card, whose heading takes focus.
+    await waitFor(() => expect(within(card(COMMUNION)).getByRole("heading", { name: COMMUNION })).toHaveFocus());
     await user.click(within(card("Minute for Mission")).getByRole("button", { name: "More actions for Minute for Mission" }));
     await user.click(await screen.findByRole("menuitem", { name: "Remove" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Add custom element" })).toHaveFocus());
@@ -984,5 +1019,118 @@ describe("custom elements (S Custom elements)", () => {
     );
     expect(await screen.findByRole("region", { name: "Hope's Anthem" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Grace's Anthem" })).toBeNull();
+  });
+});
+
+// --- T1-T10 review fixes ----------------------------------------------------------------
+
+describe("after the T1-T10 review", () => {
+  it("a 429's wait outlives New service and an error typed over: the AI bar waits and Generate sends nothing", async () => {
+    const { user, api } = renderStep(testDraft(), { "POST /liturgy/generate": fakeError(429, "rate_limited", "Too many requests. Try again in 30 seconds.", { details: { retry_after_seconds: 30 } }) });
+    await user.click(within(await screen.findByRole("region", { name: "Offertory Prayer" })).getByRole("button", { name: "Generate" }));
+    expect(await within(card("Offertory Prayer")).findByRole("alert")).toHaveTextContent("Too many requests — try again in 30 s.");
+    // Typing over the error takes it away, not the wait.
+    await user.type(within(card("Offertory Prayer")).getByRole("textbox", { name: "Offertory Prayer" }), "We offer");
+    expect(errorIn("Offertory Prayer")).toBeNull();
+    expectBarOff(screen.getByRole("button", { name: "Generate empty sections (5)" }));
+    vi.setSystemTime(new Date(DRAFT_NOW.getTime() + 10_000)); // a new created_at; 20 s of the wait left
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    await user.click(await screen.findByRole("menuitem", { name: "New service" }));
+    const confirm = await screen.findByRole("alertdialog", { name: "Start a new service?" });
+    await user.click(within(confirm).getByRole("button", { name: "Start new service" }));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Offertory Prayer" })).toHaveValue(""));
+    expectBarOff(screen.getByRole("button", { name: "Generate empty sections (6)" }));
+    await user.click(within(card("Call to Worship")).getByRole("button", { name: "Generate" }));
+    expect(await within(card("Call to Worship")).findByRole("alert")).toHaveTextContent("Too many requests — try again in 20 s.");
+    expect(within(within(card("Call to Worship")).getByRole("alert")).getByRole("button", { name: "Try again" })).toBeDisabled();
+    expect(generateCalls(api.requests)).toHaveLength(1);
+  });
+
+  it("keeps focus on the AI bar's button when a bulk run ends, and its click does nothing while it is off", async () => {
+    const held = heldGenerate();
+    const { user } = renderStep(testDraft(), { "POST /liturgy/generate": held.handler });
+    await user.click(await screen.findByRole("button", { name: "Generate empty sections (6)" }));
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
+    for (const key of ["call_to_worship", "opening_prayer", "prayer_of_confession", "assurance", "prayer_for_illumination", "offertory_prayer"] as const) {
+      await held.release(key);
+    }
+    expect(await screen.findByText("Wrote 6 sections.")).toBeInTheDocument();
+    const button = screen.getByRole("button", { name: "Generate empty sections (0)" });
+    expect(button).toHaveFocus();
+    expectBarOff(button);
+    await user.click(button);
+    expect(held.sent).toHaveLength(6);
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+  });
+
+  it("Try again asks first when the card holds the user's own text", async () => {
+    const { user, api } = renderStep(withCard("opening_prayer", { text: "Gracious God", origin: "typed" }), {
+      "POST /liturgy/generate": generateRoute((section) => sectionFailure(section, "ai_timeout", "The AI took too long to answer. Try again.")),
+    });
+    const op = await screen.findByRole("region", { name: "Opening Prayer" });
+    await user.click(within(op).getByRole("button", { name: "Regenerate" }));
+    await user.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Replace text" }));
+    const alert = await within(op).findByRole("alert");
+    expect(within(op).getByRole("textbox", { name: "Opening Prayer" })).toHaveValue("Gracious God");
+    await user.click(within(alert).getByRole("button", { name: "Try again" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "Replace your text?" });
+    await user.click(within(dialog).getByRole("button", { name: "Keep my text" }));
+    expect(generateCalls(api.requests)).toHaveLength(1);
+    expect(within(op).getByRole("textbox", { name: "Opening Prayer" })).toHaveValue("Gracious God");
+  });
+
+  it("after adding the 30th element its heading takes focus, since Add custom element is then off", async () => {
+    const many = Array.from({ length: 29 }, (_, i) => ({ id: `e${i}`, label: `Element ${i}`, text: "", insert_after: "end" }));
+    const { user } = renderStep(withElements(many));
+    await user.click(await screen.findByRole("button", { name: "Add custom element" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add custom element" });
+    await user.type(within(dialog).getByRole("textbox", { name: "Label" }), "Anthem");
+    await user.click(within(dialog).getByRole("button", { name: "Add" }));
+    const added = await screen.findByRole("region", { name: "Anthem" });
+    await waitFor(() => expect(within(added).getByRole("heading", { name: "Anthem" })).toHaveFocus());
+    expect(screen.getByRole("button", { name: "Add custom element" })).toBeDisabled();
+  });
+
+  it("Add checks the latest draft: another tab that filled the list wins, with the limit's message", async () => {
+    const many = Array.from({ length: 29 }, (_, i) => ({ id: `e${i}`, label: `Element ${i}`, text: "", insert_after: "end" }));
+    const { user } = renderStep(withElements(many));
+    await user.click(await screen.findByRole("button", { name: "Add custom element" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add custom element" });
+    await user.type(within(dialog).getByRole("textbox", { name: "Label" }), "Anthem");
+    await waitFor(() => expect(stored().liturgy.custom_elements).toHaveLength(29));
+    const theirs = JSON.stringify({
+      ...withElements([...many, { id: "t", label: "Theirs", text: "", insert_after: "end" }], stored()),
+      updated_at: "2026-09-29T17:00:00.000Z",
+    });
+    window.localStorage.setItem(KEY, theirs); // the other tab's write, then its event here
+    act(() => {
+      window.dispatchEvent(new StorageEvent("storage", { key: KEY, newValue: theirs }));
+    });
+    await user.click(within(dialog).getByRole("button", { name: "Add" }));
+    // The toast and the step's own line.
+    await waitFor(() => expect(screen.getAllByText("You can add up to 30 custom elements.")).toHaveLength(2));
+    expect(screen.getByRole("region", { name: "Theirs" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Anthem" })).toBeNull();
+    expect(stored().liturgy.custom_elements.map((e) => e.label)).not.toContain("Anthem");
+    expect(stored().liturgy.custom_elements).toHaveLength(30);
+  });
+
+  it("Undo of Remove does nothing once New service has replaced the draft", async () => {
+    const { user } = renderStep(withElements([{ id: "a", label: "Anthem", text: "", insert_after: "sermon" }]));
+    const anthem = await screen.findByRole("region", { name: "Anthem" });
+    await user.click(within(anthem).getByRole("button", { name: "More actions for Anthem" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Remove" }));
+    const toastText = await screen.findByText("Removed “Anthem”.");
+    vi.setSystemTime(new Date(DRAFT_NOW.getTime() + 60_000)); // the new draft's created_at differs
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    await user.click(await screen.findByRole("menuitem", { name: "New service" }));
+    const fresh = new Date(DRAFT_NOW.getTime() + 60_000).toISOString();
+    await waitFor(() => expect(stored().created_at).toBe(fresh));
+    await user.click(within(toastText.closest("li") as HTMLElement).getByRole("button", { name: "Undo" }));
+    // Positive first: the fresh draft is the one on screen and stored; then nothing came back into it.
+    await waitFor(() => expect(screen.queryByText("Removed “Anthem”.")).toBeNull());
+    expect(screen.queryByRole("region", { name: "Anthem" })).toBeNull();
+    expect(stored().created_at).toBe(fresh);
+    expect(stored().liturgy.custom_elements).toEqual([]);
   });
 });

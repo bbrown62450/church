@@ -48,9 +48,12 @@ function LiturgySkeleton() {
  * Word files print it: a card for each section, muted landmark rows for the
  * hymns, readings, sermon and creed, the communion card after the Second
  * Hymn, and each custom element right after the item that owns its place (an
- * unknown place reads as the end), then "Add custom element" (at most 30;
- * Remove offers Undo in a toast that never outlives the step). It reads and
- * writes only the draft (F
+ * unknown place reads as the end), then "Add custom element" (at most 30,
+ * checked again on Add against the latest draft, since another tab may have
+ * added; the 30th card's heading takes focus, as the Add button is then off;
+ * Remove offers Undo in a toast that never outlives the step, and does
+ * nothing once the service has been replaced). It reads and writes only the
+ * draft (F
  * §4.6); the AI runs live in the builder shell's generation provider, and the
  * step's Undo lines go when it unmounts. On mount it scrolls to the card the
  * address names (`#card-…`, `#custom-…`).
@@ -68,6 +71,8 @@ export function LiturgyStep() {
   /** After Remove: the id of the heading that takes focus (the next card's), or null for the Add button. */
   const focusAfterRemove = useRef<string | null | undefined>(undefined);
   const addRef = useRef<HTMLButtonElement>(null);
+  /** The element whose Add filled the list: its heading takes focus when the dialog closes. */
+  const focusAfterAdd = useRef<string | null>(null);
   const loaded = config !== undefined;
 
   // "Just replaced" and "Cleared" lines disappear when the step unmounts (S "Section card").
@@ -126,9 +131,18 @@ export function LiturgyStep() {
   }
 
   function add(element: Omit<CustomElement, "id">) {
+    // Another tab may have filled the list while the dialog was open.
+    const count = peek().liturgy.custom_elements.length;
+    if (count >= maxCustom) {
+      toast.message(`You can add up to ${maxCustom} custom elements.`);
+      setAdding(false);
+      return;
+    }
     const id = crypto.randomUUID();
     update((d) => addCustomElement(d, element, id));
     scrollTo.current = id;
+    // The Add button is off once the list is full, so focus cannot go back to it.
+    focusAfterAdd.current = count + 1 >= maxCustom ? id : null;
     setAdding(false);
   }
 
@@ -140,7 +154,10 @@ export function LiturgyStep() {
     focusAfterRemove.current = at >= 0 && at + 1 < headings.length ? headings[at + 1].id : null;
     update((d) => removeCustomElement(d, element.id)?.draft ?? d);
     const label = element.label.trim() === "" ? "Custom element" : element.label.trim();
+    const service = draft.created_at;
     showUndo(`Removed “${label}”.`, () => {
+      // New service (or a saved service loaded) since: the element belonged to the old one.
+      if (peek().created_at !== service) return;
       // Another element may have been added meanwhile: never past the limit.
       if (peek().liturgy.custom_elements.length >= maxCustom) {
         toast.message(`You can add up to ${maxCustom} custom elements.`);
@@ -219,6 +236,11 @@ export function LiturgyStep() {
         placements={config.custom_placements}
         limits={config.limits}
         onAdd={add}
+        finalFocus={() => {
+          const id = focusAfterAdd.current;
+          focusAfterAdd.current = null;
+          return (id === null ? null : document.getElementById(`custom-${id}-title`)) ?? true;
+        }}
       />
     </section>
   );

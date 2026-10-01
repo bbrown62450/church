@@ -248,6 +248,33 @@ describe("DraftStore and the liturgy defaults (slice 4 spec, Draft store integra
     // Without defaults (slice 2's tests), the store changes nothing.
     expect(makeStore(memoryStorage({ [KEY]: JSON.stringify(old) }).storage).store.getSnapshot().draft).toEqual(old);
   });
+
+  it("gives an adopted draft the default in memory only, so a newer write from another tab still wins", () => {
+    const { storage, writes } = memoryStorage();
+    const store = defaultsStore(storage);
+    store.start();
+    vi.runAllTimers();
+    writes.length = 0;
+    const mine = store.getSnapshot().draft;
+    const benediction = (d: DraftV1, text: string, origin: "default" | "typed"): DraftV1 => ({
+      ...d,
+      liturgy: { ...d.liturgy, cards: { ...d.liturgy.cards, benediction: { enabled: true, text, origin } } },
+    });
+    // The other tab wrote before its profile loaded: a blank Benediction still following the default.
+    const theirs = { ...benediction(editOccasion(mine, "From the other tab"), "", "default"), updated_at: new Date(Date.parse(mine.updated_at) + 1).toISOString() };
+    store.handleStorageEvent(KEY, JSON.stringify(theirs));
+    const adopted = store.getSnapshot().draft;
+    expect(adopted.readings.occasion).toBe("From the other tab");
+    expect(adopted.liturgy.cards.benediction).toEqual({ enabled: true, text: "Halverson", origin: "default" });
+    expect(adopted.updated_at).toBe(theirs.updated_at); // not stamped: the default is not an edit
+    vi.runAllTimers();
+    expect(writes).toEqual([]); // and not written back over the other tab's copy
+    // The other tab then types its own Benediction, 1 ms later: adopted, the default does not outrank it.
+    const typed = { ...benediction(theirs, "Go in peace.", "typed"), updated_at: new Date(Date.parse(theirs.updated_at) + 1).toISOString() };
+    store.handleStorageEvent(KEY, JSON.stringify(typed));
+    expect(store.getSnapshot().draft.liturgy.cards.benediction).toEqual({ enabled: true, text: "Go in peace.", origin: "typed" });
+    expect(store.getSnapshot().draft.updated_at).toBe(typed.updated_at);
+  });
 });
 
 describe("DraftStore changes (S store.ts)", () => {

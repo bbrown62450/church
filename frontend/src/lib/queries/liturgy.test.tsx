@@ -9,7 +9,7 @@ import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import type { ReactNode } from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "@/lib/api/client";
 import { timeoutFor } from "@/lib/api/timeouts";
@@ -49,7 +49,10 @@ describe("liturgy queries (S API client usage)", () => {
     ]);
     const query = queryClient.getQueryCache().find({ queryKey: keys.liturgyConfig() });
     expect(query?.isStale()).toBe(false);
-    render(() => useLiturgyConfig(), queryClient);
+    // A second mount reads the cache: had it been stale, it would render as fetching (TanStack's optimistic result).
+    const again = render(() => useLiturgyConfig(), queryClient);
+    expect(again.result.current.data).toBe(result.current.data);
+    expect(again.result.current.isFetching).toBe(false);
     expect(api.requests).toHaveLength(1);
   });
 
@@ -70,6 +73,29 @@ describe("liturgy queries (S API client usage)", () => {
     await expect(generateSection(result.current.church, "call_to_worship", body, controller.signal)).rejects.toMatchObject(
       new ApiError(0, "aborted", "The request was cancelled."),
     );
+  });
+
+  it("waits 100 seconds for a section before giving up, not less (owner answer 2)", async () => {
+    const api = installFakeApi({ "POST /liturgy/generate": () => new Promise<never>(() => {}) });
+    const { result } = render(() => useApi());
+    const body = { occasion: "", scriptures: [], hymns: {}, sections: ["call_to_worship" as const] };
+    vi.useFakeTimers();
+    try {
+      let settled = false;
+      const pending = generateSection(result.current.church, "call_to_worship", body);
+      void pending.then(
+        () => (settled = true),
+        () => (settled = true),
+      );
+      const failed = expect(pending).rejects.toMatchObject({ status: 0, code: "timeout" });
+      await vi.advanceTimersByTimeAsync(99_999);
+      expect(api.requests).toHaveLength(1);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      await failed;
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("uses a test config equal to the shared fixtures 4a's API is pinned to", () => {

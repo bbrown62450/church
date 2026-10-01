@@ -63,6 +63,8 @@ export function DraftProvider({
     () => new DraftStore({ userId, church, notify, liturgyDefaults: { defaultBenediction } }),
   );
   const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
+  // Built once, so callbacks that read the draft through it (the generation provider's) keep their identity across edits.
+  const [peek] = useState(() => () => store.getSnapshot().draft);
 
   // The profile refetched with another default (6a's Settings): untouched Benediction cards follow it.
   useEffect(() => {
@@ -97,9 +99,9 @@ export function DraftProvider({
       autoUpdate: store.autoUpdate,
       replace: store.replace,
       setLastStep: store.setLastStep,
-      peek: () => store.getSnapshot().draft,
+      peek,
     }),
-    [snapshot, store],
+    [snapshot, store, peek],
   );
   return <DraftContext value={value}>{children}</DraftContext>;
 }

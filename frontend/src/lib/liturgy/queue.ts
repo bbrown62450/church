@@ -6,7 +6,9 @@
  * at once, and its outcome is never delivered; a task cancelled before its
  * `run` was called never runs. A task's outcome is delivered before the next
  * task starts, so `done` can still cancel the waiting ones (S step 7: a 429
- * stops the queue).
+ * stops the queue). An error thrown by `done` goes to `onError` (by default
+ * the console) instead of becoming an unhandled rejection, and the queue
+ * moves on.
  */
 export type TaskOutcome<T> = { ok: true; value: T } | { ok: false; error: unknown };
 
@@ -21,7 +23,18 @@ export type TaskQueue = {
 
 type Task = { key: string; start: () => void; controller: AbortController };
 
-export function createTaskQueue({ concurrency }: { concurrency: number }): TaskQueue {
+function reportToConsole(error: unknown): void {
+  console.error("The liturgy queue's done() threw:", error);
+}
+
+export function createTaskQueue({
+  concurrency,
+  onError = reportToConsole,
+}: {
+  concurrency: number;
+  /** Where an error thrown by a task's `done` goes. */
+  onError?: (error: unknown) => void;
+}): TaskQueue {
   const waiting: Task[] = [];
   const running = new Map<string, Task>();
 
@@ -60,6 +73,8 @@ export function createTaskQueue({ concurrency }: { concurrency: number }): TaskQ
             running.delete(key);
             try {
               done(outcome);
+            } catch (error) {
+              onError(error);
             } finally {
               pump();
             }

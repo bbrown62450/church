@@ -25,6 +25,11 @@ export type CardError = {
 
 export const AI_NOT_CONFIGURED_MESSAGE = "AI not configured. Type this section yourself.";
 
+/** A 429's card message, with the seconds left to wait. */
+export function rateLimitMessage(seconds: number): string {
+  return `Too many requests — try again in ${seconds} s.`;
+}
+
 const RETRYABLE_SECTION_CODES: ReadonlySet<string> = new Set(["ai_busy", "ai_timeout", "ai_upstream_error"]);
 
 /** The error marked on a card locally when the config says AI is off; the same text as the server's. */
@@ -56,13 +61,18 @@ export function cardErrorFrom(e: unknown): CardError | null {
         ? { code: e.code, message: e.message, retryable: true }
         : {
             code: e.code,
-            message: `Too many requests — try again in ${e.retryAfterSeconds} s.`,
+            message: rateLimitMessage(e.retryAfterSeconds),
             retryable: true,
             retryAfterSeconds: e.retryAfterSeconds,
           };
     case "ai_not_configured":
     case "prompt_invalid":
+    // A 422 is the same request each time: trying again cannot help.
+    case "invalid_request":
       return { code: e.code, message: e.message, retryable: false };
+    case "auth_unavailable":
+      // The server's own sentence ("Sign-in is temporarily unavailable. Try again shortly.") says what happened.
+      return { code: e.code, message: e.message, retryable: true };
     default:
       // timeout and network_error carry their own full sentences; a 5xx reads "Something went wrong. (Ref: …)".
       return { code: e.code, message: e.status >= 500 ? describeError(e) : e.message, retryable: true };

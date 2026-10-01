@@ -13,8 +13,8 @@
  * - `sermon_text`: the effective NT reading's passage, from `sermonSource`
  *   and the batch's one passage fetch (T6); left out when there is none.
  */
-import type { GenerateLiturgyBody, HymnRef, Passage, SermonText } from "@/lib/api/types";
-import { effectivePicks } from "@/lib/draft/readings";
+import type { ChurchProfile, GenerateLiturgyBody, HymnRef, Passage, SermonText, Translations } from "@/lib/api/types";
+import { effectivePicks, effectiveTranslation } from "@/lib/draft/readings";
 import type { DraftV1, HymnPick, SectionKey } from "@/lib/draft/schema";
 import { cleanRefs, clipChars, MAX_REF_LENGTH, MAX_REFS } from "@/lib/hymns/match-request";
 import { passageText } from "@/lib/queries/passages";
@@ -52,14 +52,19 @@ export function buildGenerateRequest(draft: DraftV1, section: SectionKey, sermon
 
 /**
  * Which passage the sermon text is: the effective NT reading (the explicit
- * pick, else the automatic one; never a Psalm), in the draft's translation or
- * the church's, with WEB instead of ESV (Crossway's terms: ESV text is never
- * sent to the AI). `ref` is the reading as the passage cache keys it.
+ * pick, else the automatic one; never a Psalm), in the translation step 1
+ * shows (`effectiveTranslation`: the draft's when the server still offers it,
+ * else the church's), with WEB instead of ESV (Crossway's terms: ESV text is
+ * never sent to the AI). `ref` is the reading as the passage cache keys it.
  */
-export function sermonSource(draft: DraftV1, churchTranslation: string): { ref: string; translation: string } | null {
+export function sermonSource(
+  draft: DraftV1,
+  church: Pick<ChurchProfile, "effective_translation">,
+  translations: Translations | undefined,
+): { ref: string; translation: string } | null {
   const nt = effectivePicks(draft).nt;
   if (nt === null || clipChars(nt.trim(), MAX_REF_LENGTH) === "") return null;
-  const translation = draft.readings.translation ?? churchTranslation;
+  const translation = effectiveTranslation(draft, church, translations);
   return { ref: nt, translation: translation === "esv" ? "web" : translation };
 }
 

@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 import type { Passage } from "@/lib/api/types";
 import { editScriptureLines, setPick, setTranslation } from "@/lib/draft/readings";
 import type { DraftV1, HymnPick } from "@/lib/draft/schema";
-import { hymnId, testDraft } from "@/test/fixtures";
+import { hymnId, testDraft, translations } from "@/test/fixtures";
 
 import { buildGenerateRequest, MAX_SERMON_TEXT, sermonSource, sermonText } from "./request";
 
@@ -84,14 +84,30 @@ describe("buildGenerateRequest (S request.ts)", () => {
 });
 
 describe("sermonSource (S Sermon text)", () => {
+  const offered = translations();
+  const church = (effective_translation: string) => ({ effective_translation });
+
   it("is the effective NT reading, never a Psalm, in the draft's translation with WEB for ESV", () => {
-    expect(sermonSource(testDraft(), "web")).toBeNull(); // no readings
-    expect(sermonSource(withReadings(["Psalm 23"]), "web")).toBeNull(); // a Psalm is never the NT reading
+    expect(sermonSource(testDraft(), church("web"), offered)).toBeNull(); // no readings
+    expect(sermonSource(withReadings(["Psalm 23"]), church("web"), offered)).toBeNull(); // a Psalm is never the NT reading
     const d = withReadings(OCT_4);
-    expect(sermonSource(d, "web")).toEqual({ ref: "Philippians 3:4b-14", translation: "web" }); // the automatic pick
-    expect(sermonSource(setPick(d, "nt", "Matthew 21:33-46"), "kjv")).toEqual({ ref: "Matthew 21:33-46", translation: "kjv" });
-    expect(sermonSource(d, "esv")).toEqual({ ref: "Philippians 3:4b-14", translation: "web" }); // Crossway's terms
-    expect(sermonSource(setTranslation(d, "esv", "web"), "web")?.translation).toBe("web");
-    expect(sermonSource(setTranslation(d, "kjv", "web"), "web")?.translation).toBe("kjv");
+    expect(sermonSource(d, church("web"), offered)).toEqual({ ref: "Philippians 3:4b-14", translation: "web" }); // the automatic pick
+    expect(sermonSource(setPick(d, "nt", "Matthew 21:33-46"), church("kjv"), offered)).toEqual({
+      ref: "Matthew 21:33-46",
+      translation: "kjv",
+    });
+    expect(sermonSource(d, church("esv"), offered)).toEqual({ ref: "Philippians 3:4b-14", translation: "web" }); // Crossway's terms
+    expect(sermonSource(setTranslation(d, "esv", "web"), church("web"), offered)?.translation).toBe("web");
+    expect(sermonSource(setTranslation(d, "kjv", "web"), church("web"), offered)?.translation).toBe("kjv");
+  });
+
+  it("uses the translation step 1 shows: the church's when the stored one is not offered or the list has not loaded", () => {
+    const kjv = setTranslation(withReadings(OCT_4), "kjv", "web");
+    const noKjv = translations({ items: [{ id: "web", label: "World English Bible (WEB)" }] });
+    expect(sermonSource(kjv, church("web"), noKjv)?.translation).toBe("web");
+    expect(sermonSource(kjv, church("web"), undefined)?.translation).toBe("web");
+    // ESV dropped from the server (no key): the church's own translation, and never ESV text.
+    const esv = setTranslation(withReadings(OCT_4), "esv", "kjv");
+    expect(sermonSource(esv, church("kjv"), translations({ esv_available: false, items: offered.items.slice(0, 2) }))?.translation).toBe("kjv");
   });
 });

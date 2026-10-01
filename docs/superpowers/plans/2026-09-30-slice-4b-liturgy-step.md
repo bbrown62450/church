@@ -42,7 +42,7 @@
   `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
 - Commit subjects read "Area: plain words (S …, owner answer …)". Use TDD: write the failing test first and see it fail as quoted.
 - **Backup push after every task** (standing rule): the controller, not the task agent, backs the branch up after each task's commit and review with `git push origin claude/slice-2-plan-4q33le` (never `--force`; while no PR is open it asks nobody; Vercel may build a preview). A fix asked for by a task's review is a new commit, `Fix: <what> (Task <n> review)`, never an amend of a pushed commit; T13 lists it. The container can restart and lose uncommitted work, so commit as soon as a task's checks pass. If the push is refused because the remote moved, stop and ask the controller.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then the session link, and includes the line "Tests: frontend 442 → 517 in 64 → 75 files; backend 1183 → 1183 passed, 11 → 11 skipped".
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then the session link, and includes the line "Tests: frontend 442 → 538 in 64 → 75 files; backend 1183 → 1183 passed, 11 → 11 skipped".
 - New prose for the owner has no em dashes and no flattery, and leads with the point. Copy quoted from S keeps its own punctuation (for example "Off — not in the service. Any text is kept.", "Still working — this can take up to a minute.", "Too many requests — try again in N s.", "Kept your edits — the new AI draft for {Label} was not used.", "{Card label} is empty — Write or generate it").
 - Ask the owner before any push to a PR, PR creation, marking ready, merging, or any production or settings action.
 
@@ -70,7 +70,8 @@ A directive that does not match exactly once is a stop: the tree is not what the
   | T10 | +9 (`liturgy-step.test.tsx`; T8's outline test edited, 0) | 0 | 515 in 75 | unchanged |
   | T11 | +2 (`draft/status.test.ts` +1, `builder-shell.test.tsx` +1; three status tests, two shell tests and the shell helper edited, 0) | 0 | 517 in 75 | unchanged |
   | T12 | 0 | 0 | 517 in 75 | 1183 passed, 11 skipped (one assertion in `test_slice1_docs.py` edited) |
-  | T13, T14 | 0 | 0 | 517 in 75 | 1183 passed, 11 skipped |
+  | T1-T10 review fixes | +21 (`liturgy-step.test.tsx` +7, `lib/liturgy/generation.test.tsx` +7; one each in `queries/liturgy.test.tsx`, `liturgy/errors.test.ts`, `liturgy/request.test.ts`, `liturgy/queue.test.ts`, `draft/context.test.tsx`, `draft/store.test.ts`, `use-autosize.test.tsx`; ten step tests, and one each in `request.test.ts`, `generation.test.tsx` and `queries/liturgy.test.tsx`, edited, 0) | 0 | 538 in 75 | unchanged |
+  | T13, T14 | 0 | 0 | 538 in 75 | 1183 passed, 11 skipped |
 
 - CI `backend-postgres` stays at `11 passed, 1183 deselected` (4b adds no Postgres test).
 - The step tests fake only `Date` and wait on the app's real timers (the draft's 400 ms writes, the fake API's answers), so `liturgy-step.test.tsx` takes about 21 s; one test fakes `setTimeout` as well (the 8-second "Still working" line) and says why, and one waits out a real 1-second `Retry-After`. Six heavier tests carry `{ timeout: 10_000 }` with a comment.
@@ -8135,7 +8136,7 @@ Below, `<scratch>` is the absolute path of the session's scratchpad directory, a
 
 **Interfaces:**
 - Consumes: everything from T1-T12, in particular each task's commit subject (Step 8 reads them from this plan between `### Task 1:` and `### Task 13:`), the cumulative counts (Baselines and counts), `SHIPPED_STEPS` (T11), and CI (`.github/workflows/ci.yml`, unchanged: `backend`, `backend-postgres`, `frontend` with lint, typecheck, `API types match the OpenAPI snapshot (F §5.4)`, test and build).
-- Produces: PR `<N>` (`claude/slice-2-plan-4q33le` → `main`), titled `Slice 4b: the Liturgy step`, not a draft after Step 13, CI green on the branch head, its body holding the line `Tests: frontend 442 → 517 in 64 → 75 files; backend 1183 → 1183 passed, 11 → 11 skipped` and ending with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and the session link. Later user: T14.
+- Produces: PR `<N>` (`claude/slice-2-plan-4q33le` → `main`), titled `Slice 4b: the Liturgy step`, not a draft after Step 13, CI green on the branch head, its body holding the line `Tests: frontend 442 → 538 in 64 → 75 files; backend 1183 → 1183 passed, 11 → 11 skipped` and ending with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and the session link. Later user: T14.
 
 - [ ] **Step 1 (agent): Bring the branch up to date with `origin/main`**
 
@@ -8176,7 +8177,7 @@ for d in 8 400; do echo "clock +$d days"; (cd frontend && WSB_CLOCK_SHIFT_DAYS=$
 (cd frontend && npm run typecheck >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")
 ```
 
-**Expected:** three times ` Test Files  75 passed (75)` and `      Tests  517 passed (517)` (baseline 442 in 64; after T1-T11: 446, 455, 464, 468, 471, 476, 479, 490, 506, 515, 517) and no `FAIL`; then `clock +8 days` and `clock +400 days`, each followed by the same two lines and no `FAIL`; `0`; `typecheck 0` and `lint 0`. Any other number: find the task whose count drifted. A run that fails even once is a failure (Step 14): make the test deterministic (fake only `Date`, set to `DRAFT_NOW`; await the UI with `findBy`/`waitFor`) rather than retrying it.
+**Expected:** three times ` Test Files  75 passed (75)` and `      Tests  538 passed (538)` (baseline 442 in 64; after T1-T11: 446, 455, 464, 468, 471, 476, 479, 490, 506, 515, 517; after the T1-T10 review fixes: 538) and no `FAIL`; then `clock +8 days` and `clock +400 days`, each followed by the same two lines and no `FAIL`; `0`; `typecheck 0` and `lint 0`. Any other number: find the task whose count drifted. A run that fails even once is a failure (Step 14): make the test deterministic (fake only `Date`, set to `DRAFT_NOW`; await the UI with `findBy`/`waitFor`) rather than retrying it.
 
 - [ ] **Step 3 (agent): Run the backend suite and the Postgres marker count**
 
@@ -8334,7 +8335,7 @@ diff "<scratch>/slice4b-plan-subjects.txt" "<scratch>/slice4b-branch-subjects.tx
 git log --reverse --format='%h %s' origin/main..HEAD
 ```
 
-**Expected:** `12` (one commit for each of T1-T12); `commit list diff exit 0` with no output before it; the branch's commits oldest first: the plan's own commits (`WIP plan: slice 4b` several times, then `Plan: slice 4b liturgy step (S slice 4; owner answers 2026-09-30)`), then the twelve task commits from `<sha> Draft: liturgy that prints is unsaved work; a card following the church default is not (owner answer 1)` to `<sha> Docs: slice 4b notes in S and F, the 100 s timeout, and the slice 4 manual checklist (owner answers 1, 2, 4; F §1.8, §4.6, §4.7)` (plus a Step 1 merge, if any). A `diff` line is a failure unless it is a `>` line `Fix: … (Task <n> review)` (a review fix), `Fix: … (Task <n>, slice 4b final verification)` (Step 14) or `Plan: …` (a plan correction the controller committed), each named in the Step 9 message.
+**Expected:** `12` (one commit for each of T1-T12); `commit list diff exit 0` with no output before it; the branch's commits oldest first: the plan's own commits (`WIP plan: slice 4b` several times, then `Plan: slice 4b liturgy step (S slice 4; owner answers 2026-09-30)`), then the twelve task commits from `<sha> Draft: liturgy that prints is unsaved work; a card following the church default is not (owner answer 1)` to `<sha> Docs: slice 4b notes in S and F, the 100 s timeout, and the slice 4 manual checklist (owner answers 1, 2, 4; F §1.8, §4.6, §4.7)` (plus a Step 1 merge, if any). A `diff` line is a failure unless it is a `>` line `Fix: … (Task <n> review)` (a review fix), `Liturgy: firmer waits, focus and wording after review (review 4b T1-T10)` (the T1-T10 review fixes, Build notes), `Fix: … (Task <n>, slice 4b final verification)` (Step 14) or `Plan: …` (a plan correction the controller committed), each named in the Step 9 message.
 
 - [ ] **Step 9 (agent → OWNER): Ask for the go-ahead to open the draft PR**
 
@@ -8348,7 +8349,7 @@ git rev-list --count origin/main..HEAD
 
 Send the owner exactly this, with `<count>` filled in, and wait for a clear yes:
 
-> Slice 4b is verified on this machine: 517 frontend tests in 75 files pass three runs in a row and with the clock moved 8 and 400 days ahead (442 in 64 before); typecheck, lint and the production build are clean; the backend is unchanged at 1183 passed, 11 skipped; the API types did not change; the checks are clean (every page is a client component, no link to the old app, the screens use the query hooks, no new browser storage, Date & readings, Hymns and Liturgy are the steps switched on, the AI waits up to 100 seconds); the changed files (61) and commits (<count>) are as planned, and every commit is already backed up on the branch. May I open the pull request as a **draft** titled "Slice 4b: the Liturgy step", so the checks run? I will come back with the results and ask again before marking it ready. Merging stays with you (Task 14).
+> Slice 4b is verified on this machine: 538 frontend tests in 75 files pass three runs in a row and with the clock moved 8 and 400 days ahead (442 in 64 before); typecheck, lint and the production build are clean; the backend is unchanged at 1183 passed, 11 skipped; the API types did not change; the checks are clean (every page is a client component, no link to the old app, the screens use the query hooks, no new browser storage, Date & readings, Hymns and Liturgy are the steps switched on, the AI waits up to 100 seconds); the changed files (61) and commits (<count>) are as planned, and every commit is already backed up on the branch. May I open the pull request as a **draft** titled "Slice 4b: the Liturgy step", so the checks run? I will come back with the results and ask again before marking it ready. Merging stays with you (Task 14).
 
 Add one line per note from Steps 1-8 (a merge from `main`, a skipped font download, a `Fix:` commit, how the dialog was made). A no leaves the branch as it is.
 
@@ -8366,7 +8367,7 @@ The step
 
 Owner answers (2026-09-30): what counts as unsaved work (1); the AI waits up to 100 seconds, recorded in F §1.8 (2); the footer hides while typing on a phone (3; already built in 2b, now tested here); a guided phone check after the merge (4). @@DIALOG_LINE@@
 
-Tests: frontend 442 → 517 in 64 → 75 files; backend 1183 → 1183 passed, 11 → 11 skipped
+Tests: frontend 442 → 538 in 64 → 75 files; backend 1183 → 1183 passed, 11 → 11 skipped
 
 After merge (Task 14): a guided check on the owner's phone (six steps) and a quick look on a computer, then a short "Slice 4b record" in docs/ops-runbook.md.
 
@@ -8380,7 +8381,7 @@ Replace `@@DIALOG_LINE@@` with `The dialog is generated from the base-nova regis
 
 ```bash
 grep -c '@@' "<scratch>/slice4b-pr-body.md"
-grep -cx 'Tests: frontend 442 → 517 in 64 → 75 files; backend 1183 → 1183 passed, 11 → 11 skipped' "<scratch>/slice4b-pr-body.md"
+grep -cx 'Tests: frontend 442 → 538 in 64 → 75 files; backend 1183 → 1183 passed, 11 → 11 skipped' "<scratch>/slice4b-pr-body.md"
 git fetch origin && test "$(git rev-list --count HEAD..origin/main)" = 0 && test "$(git rev-list --count origin/claude/slice-2-plan-4q33le..HEAD)" = 0 && echo "branch is current and backed up"
 gh pr create -R bbrown62450/church --draft --base main --head claude/slice-2-plan-4q33le \
   --title "Slice 4b: the Liturgy step" \
@@ -8411,13 +8412,13 @@ RUN=$(gh run list -R bbrown62450/church --workflow ci.yml --branch claude/slice-
 RUN=$(gh run list -R bbrown62450/church --workflow ci.yml --branch claude/slice-2-plan-4q33le --commit "$(git rev-parse HEAD)" --limit 1 --json databaseId --jq '.[0].databaseId'); JOB=$(gh run view "$RUN" -R bbrown62450/church --json jobs --jq '.jobs[] | select(.name == "backend-postgres") | .databaseId'); gh run view -R bbrown62450/church --job "$JOB" --log | grep -E "pg_smoke: OK|[0-9]+ (passed|failed)"
 ```
 
-**Expected:** `run <id>`; `backend: success`, `backend-postgres: success`, `frontend: success`; frontend `Test Files  75 passed (75)`, `Tests  517 passed (517)`, `✓ Compiled successfully` and the five `/builder` route lines; backend `1183 passed, 11 skipped in …s`; backend-postgres `pg_smoke: OK` and `11 passed, 1183 deselected` (with the one warning the 4a run showed). If a required job failed on or after 2026-10-19, first check the runner image (`Image: ubuntu-24.04` expected; GitHub moves `ubuntu-latest` then) and report a setup failure on a new image to the owner before changing any 4b file.
+**Expected:** `run <id>`; `backend: success`, `backend-postgres: success`, `frontend: success`; frontend `Test Files  75 passed (75)`, `Tests  538 passed (538)`, `✓ Compiled successfully` and the five `/builder` route lines; backend `1183 passed, 11 skipped in …s`; backend-postgres `pg_smoke: OK` and `11 passed, 1183 deselected` (with the one warning the 4a run showed). If a required job failed on or after 2026-10-19, first check the runner image (`Image: ubuntu-24.04` expected; GitHub moves `ubuntu-latest` then) and report a setup failure on a new image to the owner before changing any 4b file.
 
 - [ ] **Step 13 (agent → OWNER): Report CI and ask to mark the PR ready**
 
 Send exactly this, with the values filled in, and wait for a clear yes:
 
-> PR #<N> (<url>) is green (run <run id>): 517 frontend tests in 75 files, the build is fine; the backend is at 1183 passed, 11 skipped; the Postgres job is clean; the Vercel preview built. May I mark it ready for review? Merging stays with you (Task 14).
+> PR #<N> (<url>) is green (run <run id>): 538 frontend tests in 75 files, the build is fine; the backend is at 1183 passed, 11 skipped; the Postgres job is clean; the Vercel preview built. May I mark it ready for review? Merging stays with you (Task 14).
 
 On the yes:
 
@@ -8451,7 +8452,7 @@ Read the failure (for CI: `gh run view <run-id> -R bbrown62450/church --log-fail
 
 For each fix: change only the owning task's files; rerun Steps 2-8; commit with the subject `Fix: <what> (Task <n>, slice 4b final verification)` and both trailer lines; have that task re-reviewed; before Step 10, ask the controller for the backup push; after it, the branch is the PR's, so ask the owner first ("May I push the fix for <what> to PR #<N>?") and on the yes run `git push origin claude/slice-2-plan-4q33le`, then repeat Steps 11-12 and send Step 13's message with the new run. An infrastructure failure with no test output gets one `gh run rerun <run-id> -R bbrown62450/church --failed` first.
 
-Expected counts after this task: frontend `517 passed` in 75 files (CI the same); backend `1183 passed, 11 skipped` (CI `backend-postgres`: `11 passed, 1183 deselected`). No commit unless Step 14 needed a fix.
+Expected counts after this task: frontend `538 passed` in 75 files (CI the same); backend `1183 passed, 11 skipped` (CI `backend-postgres`: `11 passed, 1183 deselected`). No commit unless Step 14 needed a fix.
 
 ### Task 14: Merge and after (OWNER + agent): the merge, the deploy, a guided check on the phone and a look on a computer, the slice 4b record (S Manual checklist, AC11-AC18; F §5.5; owner answers 1, 2, 4)
 
@@ -8478,7 +8479,7 @@ git rev-parse HEAD
 git rev-list --count HEAD..origin/main
 ```
 
-**Expected:** `OPEN draft=false MERGEABLE CLEAN <sha>` with `<sha>` equal to `git rev-parse HEAD`; `0`. If `main` moved (count not `0`, or `BEHIND`): merge it as in T13 Step 1, rerun T13 Steps 2-3 (`517 passed` in 75 files, plus any tests the merge brought; `1183 passed, 11 skipped`), push with the owner's yes, wait for green checks, and run this step again. `BLOCKED`: a required check is not green; fix it (T13 Step 14). Never merge with `--admin`.
+**Expected:** `OPEN draft=false MERGEABLE CLEAN <sha>` with `<sha>` equal to `git rev-parse HEAD`; `0`. If `main` moved (count not `0`, or `BEHIND`): merge it as in T13 Step 1, rerun T13 Steps 2-3 (`538 passed` in 75 files, plus any tests the merge brought; `1183 passed, 11 skipped`), push with the owner's yes, wait for green checks, and run this step again. `BLOCKED`: a required check is not green; fix it (T13 Step 14). Never merge with `--admin`.
 
 - [ ] **Step 2 (agent → OWNER): Ask to merge, then merge**
 
@@ -8654,7 +8655,7 @@ gh pr checks claude/revert-slice-4b -R bbrown62450/church --watch
 
 **Expected:** Vitest `Test Files  64 passed (64)`, `Tests  442 passed (442)` (if anything else merged after 4b, it differs by exactly those tests); `1183 passed, 11 skipped`; every check passes. Merge on the owner's yes, then the owner checks that the site signs in and shows the builder with Liturgy "Available soon". Record the revert as a row of the slice 4b record (or its own records PR if Step 12 already merged).
 
-Expected counts after this task: frontend `517 passed` in 75 files on `main`; backend `1183 passed, 11 skipped` (CI `backend-postgres`: `11 passed, 1183 deselected`). The records PR adds no test.
+Expected counts after this task: frontend `538 passed` in 75 files on `main`; backend `1183 passed, 11 skipped` (CI `backend-postgres`: `11 passed, 1183 deselected`). The records PR adds no test.
 
 ---
 
@@ -8711,6 +8712,22 @@ A container restart interrupted the first replay, so the plan was replayed again
 - T13 Steps 2-8: 517 in 75 three times and with the clock moved 8 and 400 days, 0 act warnings, typecheck and lint 0; `11 skipped, 1183 deselected`; `✓ Compiled successfully` with the five `/builder` routes and the exact route list; `gen:api` changed nothing; every gate as expected (10 client components, the greps exit 1, `SHIPPED_STEPS` with "liturgy", the two "Available soon" files, the 100 000 row, only `test_slice1_docs.py` among the guarded paths, every trailer present); 60 changed paths (`32 A`, `28 M`; the plan file is the 61st and 33rd `A` on the real branch); the 12 commit subjects equal the plan's (the plan's commit stood in by `4dfed3b`).
 - After the plan review fixes the whole replay ran again on a new worktree of `4dfed3b` (`npm ci`; the repo's `.venv`), with every result above as now stated; the T10 red run and T12's diff stat were taken from it. The only status noise was `?? .venv`, the symlink to the repo's `.venv` that the throwaway worktree needs.
 - No other plan text needed a fix. T14's anchors were checked against the tree: the runbook's "Slice 4a record" heading, its `| Follow-ups | 4b: the Liturgy step,` row and `## Backups` exist in that order, and the outline's place label "After Opening Prayer" (T14 Step 8) is the config's.
+
+**T1-T10 review fixes (2026-10-01, after T12; one commit, "Liturgy: firmer waits, focus and wording after review (review 4b T1-T10)"):**
+- **The reviews of T1-T4, T5-T7 and T8-T10** found the items below; the controller accepted the **[owner-visible]** ones, which correct screens that misled. No file outside T1-T12's set changed, so T13's 61 changed paths stand; +21 tests (538 in 75 files; the count table, T13's gates, the PR-body line and the owner messages follow). Left as is (accepted): Cancel frees a queue slot while the server keeps working on the cancelled section.
+  - Tests that prove what they say: `generateSection`'s 100 s timeout under fake timers (still pending at 99 999 ms, `timeout` at 100 000 ms); the config's second mount is checked through TanStack's optimistic result (`isFetching` false, the cached data), not by a request count taken before any refetch could start.
+  - **[owner-visible]** Card errors: a 422 `invalid_request` has no Try again; a 503 `auth_unavailable` shows the server's sentence ("Sign-in is temporarily unavailable. Try again shortly.") instead of "Something went wrong.".
+  - The sermon text's translation is `effectiveTranslation(draft, church, translations)`, as step 1 shows it: a stored translation the server no longer offers falls back to the church's (the provider reads `GET /translations` from the cache, or once, only when the draft names a translation). `sermonSource` takes the church and the list.
+  - `queue.ts` catches an error thrown by a task's `done` and reports it (`onError`, the console by default) instead of leaving an unhandled rejection; the next task still starts. `cards.ts`'s comments say the card is captured at the click (clarification 33).
+  - **[owner-visible]** A 429's wait lives in the provider (`rateLimitedUntil`): New service, typing over the error or dismissing it no longer ends it. The AI bar waits on it, and `generate()` sends nothing before it ends, marking the cards "Too many requests — try again in N s." with the seconds left.
+  - **[owner-visible]** The bulk toast (`bulkMessage`): one section that failed reads "Couldn't write the section. It shows what went wrong."; none written, "Couldn't write any sections. They show what went wrong."; a card dropped by the stale rule (its own toast says why) is never one that "shows what went wrong", so "Wrote 3 of 4 sections." stands alone when no card shows an error. "Wrote n sections." and "Wrote k of n sections. The rest show what went wrong." are unchanged.
+  - **[owner-visible]** The Add custom element dialog scrolls inside the window at `md` and up (`md:max-h-[calc(100dvh-2rem)] md:overflow-y-auto` on the use; the generated `dialog.tsx` is untouched), and the bottom sheet's footer pads for the home indicator (`env(safe-area-inset-bottom)`).
+  - `useAutosize` sizes the field again on a window resize and when its width changes (`ResizeObserver`, width only).
+  - Undo restores a card only while it still holds the text the action left (`UndoEntry.after`); another tab's edit since wins and the Undo line goes. `useDraft().peek` is built once, so the provider's callbacks keep their identity across keystrokes.
+  - Focus: the AI bar's Generate and Cancel are one button, `aria-disabled` (`focusableWhenDisabled`) rather than `disabled`, so focus stays when a run ends or a 429's wait starts; a retryable error that replaces the action row holding focus moves it to Try again (the heading while Try again waits); after the 30th custom element its heading takes focus (Add is then off); after "Use default" the communion switch does; the communion heading has `data-card-heading`, so Remove's focus move counts it.
+  - Add re-checks the latest draft and refuses past 30 with "You can add up to 30 custom elements." (another tab may have filled the list). **[owner-visible]** Remove's Undo does nothing once New service has replaced the draft (it compares `created_at`).
+  - Small a11y: with AI off, a bulk click marks the cards quietly (the banner already says so); the "Replaced…"/"Cleared." line is announced through a live region that is always in the card ("{Label}: Cleared."), not `aria-live` on the inserted line.
+  - Tests added: the provider (New service mid-run gives one toast, a 429's `retryAt` and `rateLimitedUntil`, cancel on unmount, "Cleared. Undo" removed when a result lands, Undo after another tab's edit, a stale drop in a bulk run, `bulkMessage`), the store (an adopted draft gets the default in memory and loses to a newer write from another tab), the step (the wait across New service, the bar's focus, Try again asking first on the user's own text, a malformed `#hash` (M4), the 30th element's focus, Add against a full list, Undo after New service). Three runs of `liturgy-step.test.tsx` passed (43 tests), the suite passed 538 in 75 three ways (as is, clock +8 and +400 days) with 0 act warnings, typecheck and lint 0.
 
 ## Spec coverage
 

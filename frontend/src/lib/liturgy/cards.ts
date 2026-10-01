@@ -11,8 +11,9 @@
  * - `staleVerdict` is the rule for a result that arrives after its request
  *   started (S "Generate and Regenerate" step 6). The generation provider
  *   applies it, and the service reviewer (the slice after 4b) reuses it for
- *   review results: capture the card when the request starts, compare when
- *   the answer arrives.
+ *   review results: capture the card when the member asks (the click, or
+ *   "Replace text"; clarification 33), compare before the queued request is
+ *   sent and again when the answer arrives.
  */
 import type { DraftV1, LiturgyCard, SectionKey } from "@/lib/draft/schema";
 import { SECTION_KEYS } from "@/lib/draft/schema";
@@ -166,7 +167,7 @@ export function needsRegenerateConfirm(card: LiturgyCard): boolean {
 
 export type CapturedCard = { createdAt: string; text: string; origin: CardOrigin };
 
-/** What a run remembers when its request starts. */
+/** What a run remembers when the member asks (the click, or "Replace text"), not when its request starts (clarification 33). */
 export function captureCard(d: DraftV1, key: SectionKey): CapturedCard {
   const card = d.liturgy.cards[key];
   return { createdAt: d.created_at, text: card.text, origin: card.origin };

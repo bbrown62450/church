@@ -62,4 +62,19 @@ describe("cardErrorFrom (S errors.ts)", () => {
     ).toBeNull();
     expect(cardErrorFrom(new Error("boom"))).toEqual({ code: "unknown", message: "Something went wrong.", retryable: true });
   });
+
+  it("offers no Try again for a 422, and keeps the server's sentence for a 503 auth_unavailable", () => {
+    expect(cardErrorFrom(new ApiError(422, "invalid_request", "The request was not valid."))).toEqual({
+      code: "invalid_request",
+      message: "The request was not valid.",
+      retryable: false,
+    });
+    expect(
+      cardErrorFrom(
+        new ApiError(503, "auth_unavailable", "Sign-in is temporarily unavailable. Try again shortly.", {
+          requestId: "4f9a2c1e8b7d4e6fa0c3b5d7e9f1a2b4",
+        }),
+      ),
+    ).toEqual({ code: "auth_unavailable", message: "Sign-in is temporarily unavailable. Try again shortly.", retryable: true });
+  });
 });

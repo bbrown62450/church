@@ -85,19 +85,25 @@ export function useRetryWait(retryAt: number | undefined): boolean {
  * a running card off, cancels its run. An error shows in an alert under the
  * text with Try again when trying again can help; the text never changes.
  * While the card runs its Undo line is hidden, so Undo cannot change the text
- * a queued run is about to replace.
+ * a queued run is about to replace; it also goes once the card no longer
+ * holds the text the action left (another tab edited it). The line is
+ * announced through a live region that is always there, as is a bulk run's
+ * error (an error the AI bar's banner already explains is not announced).
  *
  * Focus never drops to the page: when the control that had it goes (Cancel,
  * Try again, Undo, Clear, the confirm dialog's Replace text), focus moves to
- * a control that survives or to the card's heading (`tabIndex={-1}`).
+ * a control that survives or to the card's heading (`tabIndex={-1}`). A
+ * retryable error replaces the action row: if focus was in it, it moves to
+ * Try again (or the heading while a 429's wait keeps Try again off).
  */
 export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLength, aiAvailable }: SectionCardProps) {
   const { draft, update } = useDraft();
   const generation = useLiturgyGeneration();
   const key = spec.key;
   const card = draft.liturgy.cards[key];
-  const undo = generation.undo[key];
   const run = generation.runs[key];
+  // Hidden while the card runs, and gone once its text is not what the action left.
+  const undo = run === undefined && generation.undo[key]?.after === card.text ? generation.undo[key] : undefined;
   const error = generation.errors[key];
   const still = useStillWorking(run?.phase === "writing");
   const retryWaiting = useRetryWait(error?.retryAt);
@@ -112,6 +118,10 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
   const focusNext = useRef<(() => HTMLElement | null) | null>(null);
   /** The ⋯ menu's item moved focus itself, so the closing menu leaves it there. */
   const menuMovedFocus = useRef(false);
+  const retryRef = useRef<HTMLButtonElement>(null);
+  /** Focus is (or was, when its row went) in the action row: Generate, Regenerate, Waiting…, Cancel. */
+  const rowHadFocus = useRef(false);
+  const shownError = useRef(error);
   useAutosize(textRef, card.text, card.enabled);
   const headingId = `card-${key}-title`;
   const hasText = card.text.trim() !== "";
@@ -138,6 +148,18 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
     (usable ? element : headingRef.current)?.focus();
   });
 
+  // A retryable error took the action row's place while focus was in it: Try again (or the heading) takes it.
+  useEffect(() => {
+    const before = shownError.current;
+    shownError.current = error;
+    if (error === undefined || !error.retryable || error === before || !rowHadFocus.current) return;
+    rowHadFocus.current = false;
+    const active = document.activeElement;
+    if (active !== null && active !== document.body) return; // focus already went somewhere on purpose
+    const retry = retryRef.current;
+    (retry !== null && !retry.disabled ? retry : headingRef.current)?.focus();
+  }, [error]);
+
   function edit(text: string) {
     // Typing in a queued card cancels its request, which was never sent; the typed text stays.
     if (run?.phase === "queued") generation.cancel([key]);
@@ -157,7 +179,7 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
     const previous = { text: card.text, origin: card.origin };
     update((d) => clearCard(d, key));
     generation.dismissError(key);
-    generation.setUndo(key, { kind: "cleared", previous });
+    generation.setUndo(key, { kind: "cleared", previous, after: "" });
     // The ⋯ menu may be disabled now (an empty card); focus goes to "Cleared. Undo".
     menuMovedFocus.current = true;
     focusNext.current = () => undoRef.current;
@@ -287,8 +309,12 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
               {hint}
             </p>
           ) : null}
-          {undo && run === undefined ? (
-            <p className="flex flex-wrap items-center gap-x-1 text-sm" aria-live="polite">
+          {/* Always there, so the line is announced when it appears (a region inserted with its text often is not). */}
+          <p className="sr-only" aria-live="polite">
+            {undo ? `${spec.label}: ${UNDO_LINES[undo.kind]}` : null}
+          </p>
+          {undo ? (
+            <p className="flex flex-wrap items-center gap-x-1 text-sm">
               {UNDO_LINES[undo.kind]}
               <Button ref={undoRef} variant="link" className="h-11 px-1 md:h-auto" onClick={undoLast}>
                 Undo
@@ -297,7 +323,7 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
           ) : null}
           {/* A bulk run's errors are announced politely here, not as one alert per card. */}
           <p className="sr-only" aria-live="polite">
-            {error?.bulk ? error.message : null}
+            {error?.bulk && !error.quiet ? error.message : null}
           </p>
           {error ? (
             <Alert id={`card-${key}-error`} variant="destructive" role={error.bulk ? undefined : "alert"}>
@@ -306,7 +332,7 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
               {error.retryable || error.link ? (
                 <AlertDescription className="flex flex-wrap gap-2 pt-2">
                   {error.retryable ? (
-                    <Button variant="outline" size="touch" disabled={retryWaiting} onClick={write}>
+                    <Button ref={retryRef} variant="outline" size="touch" disabled={retryWaiting} onClick={write}>
                       Try again
                     </Button>
                   ) : null}
@@ -320,7 +346,16 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
             </Alert>
           ) : null}
           {error?.retryable ? null : (
-            <div className="flex flex-wrap items-center justify-end gap-2">
+            <div
+              className="flex flex-wrap items-center justify-end gap-2"
+              onFocus={() => {
+                rowHadFocus.current = true;
+              }}
+              onBlur={(event) => {
+                // Focus moving elsewhere; a removed button (the row going) leaves the flag for the effect above.
+                if (event.relatedTarget !== null && !event.currentTarget.contains(event.relatedTarget)) rowHadFocus.current = false;
+              }}
+            >
               {run ? (
                 <>
                   {run.phase === "queued" ? (

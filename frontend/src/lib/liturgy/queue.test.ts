@@ -116,4 +116,22 @@ describe("createTaskQueue (S queue.ts)", () => {
     expect(h.started).toEqual(["a", "b"]);
     expect([h.queue.runningKeys(), h.queue.waitingKeys()]).toEqual([[], []]);
   });
+
+  it("reports an error thrown by done instead of leaving it unhandled, and starts the next task", async () => {
+    const reported: unknown[] = [];
+    const queue = createTaskQueue({ concurrency: 1, onError: (error) => reported.push(error) });
+    const started: string[] = [];
+    const boom = new Error("done threw");
+    queue.push(
+      "x",
+      () => (started.push("x"), Promise.resolve("X")),
+      () => {
+        throw boom;
+      },
+    );
+    queue.push("y", () => (started.push("y"), new Promise<string>(() => {})), () => {});
+    await tick();
+    expect(reported).toEqual([boom]);
+    expect(started).toEqual(["x", "y"]);
+  });
 });

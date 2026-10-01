@@ -20,7 +20,13 @@ import { STILL_WORKING, useStillWorking } from "./use-still-working";
  * "Writing k of n…" while a bulk run goes, the no-AI banner, and the two
  * notices (no context; every section off). With AI off the button still
  * marks the empty cards, and sends nothing (S step 0). After a 429 the
- * button waits as the cards' Try again does.
+ * button waits until the provider's `rateLimitedUntil`, which New service or
+ * a dismissed error does not end.
+ *
+ * Generate and Cancel are one button, so focus stays on it when a bulk run
+ * starts or ends; when there is nothing to do or a 429's wait is on it is
+ * `aria-disabled` (still focusable, its click ignored) rather than
+ * `disabled`, which would drop focus to the page.
  */
 export function AiBar({ aiAvailable }: { aiAvailable: boolean }) {
   const { draft } = useDraft();
@@ -28,8 +34,7 @@ export function AiBar({ aiAvailable }: { aiAvailable: boolean }) {
   const targets = sectionsNeedingAi(draft).filter((key) => generation.runs[key] === undefined);
   const bulk = generation.bulk;
   const still = useStillWorking(bulk !== null);
-  const retryAt = Math.max(0, ...Object.values(generation.errors).map((e) => e?.retryAt ?? 0));
-  const retryWaiting = useRetryWait(retryAt === 0 ? undefined : retryAt);
+  const retryWaiting = useRetryWait(generation.rateLimitedUntil ?? undefined);
   const r = draft.readings;
   const noContext = r.occasion.trim() === "" && cleanLines(r.scriptures).length === 0;
   const allOff = liturgyCounts(draft).enabled === 0;
@@ -43,19 +48,16 @@ export function AiBar({ aiAvailable }: { aiAvailable: boolean }) {
         </Alert>
       )}
       <div>
-        {bulk ? (
-          <Button variant="outline" size="touch" onClick={() => generation.cancelBulk()}>
-            Cancel
-          </Button>
-        ) : (
-          <Button
-            size="touch"
-            disabled={targets.length === 0 || retryWaiting}
-            onClick={() => generation.generate(targets, { aiAvailable, bulk: true })}
-          >
-            Generate empty sections ({targets.length})
-          </Button>
-        )}
+        <Button
+          variant={bulk ? "outline" : "default"}
+          size="touch"
+          focusableWhenDisabled
+          disabled={bulk === null && (targets.length === 0 || retryWaiting)}
+          className="data-disabled:pointer-events-none data-disabled:opacity-50"
+          onClick={() => (bulk ? generation.cancelBulk() : generation.generate(targets, { aiAvailable, bulk: true }))}
+        >
+          {bulk ? "Cancel" : `Generate empty sections (${targets.length})`}
+        </Button>
       </div>
       {bulk ? (
         <p className="text-sm" aria-live="polite">

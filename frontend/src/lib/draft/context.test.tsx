@@ -100,6 +100,25 @@ describe("DraftProvider and useDraft (F §4.6 Persistence)", () => {
     expect(screen.getByText("Benediction: Halverson")).toBeInTheDocument();
   });
 
+  it("keeps peek, update and replace the same functions across edits, so callbacks built on them do not change per keystroke", () => {
+    window.localStorage.setItem(KEY, JSON.stringify(testDraft()));
+    const { result } = renderHook(() => useDraft(), {
+      wrapper: ({ children }) => (
+        <DraftProvider userId={USER_ID} church={GRACE}>
+          {children}
+        </DraftProvider>
+      ),
+    });
+    const first = result.current;
+    act(() => first.update((d) => editOccasion(d, "Harvest")));
+    act(() => first.update((d) => editOccasion(d, "Harvest Home")));
+    expect(result.current.draft).not.toBe(first.draft);
+    expect(result.current.peek).toBe(first.peek);
+    expect(result.current.update).toBe(first.update);
+    expect(result.current.replace).toBe(first.replace);
+    expect(result.current.peek().readings.occasion).toBe("Harvest Home");
+  });
+
   it("useDraft throws outside the provider", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     expect(() => renderHook(() => useDraft())).toThrow("useDraft() must be used inside <DraftProvider>.");

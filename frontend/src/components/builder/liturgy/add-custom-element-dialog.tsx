@@ -1,5 +1,6 @@
 "use client";
 
+import type { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { useRef, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,10 @@ import type { CustomElement } from "@/lib/liturgy/cards";
  * (optional) and Place (defaulting to the first place, "After Call to
  * Worship", as app.py did). A blank label says "Label is required." and
  * focuses the field. After Add the fields are empty the next time it opens.
+ * Taller than the window it scrolls inside (85 dvh as a sheet, the window
+ * less 2 rem as a dialog), and the sheet's footer clears the home indicator.
+ * `finalFocus` says where focus goes when it closes (Base UI's default: the
+ * control that opened it).
  */
 export function AddCustomElementDialog({
   open,
@@ -32,12 +37,14 @@ export function AddCustomElementDialog({
   placements,
   limits,
   onAdd,
+  finalFocus,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   placements: LiturgyConfig["custom_placements"];
   limits: LiturgyConfig["limits"];
   onAdd: (element: Omit<CustomElement, "id">) => void;
+  finalFocus?: DialogPrimitive.Popup.Props["finalFocus"];
 }) {
   const first = placements[0]?.key ?? "end";
   const [label, setLabel] = useState("");
@@ -75,7 +82,8 @@ export function AddCustomElementDialog({
     >
       <DialogContent
         showCloseButton={false}
-        className="max-md:top-auto max-md:bottom-0 max-md:left-0 max-md:max-w-none! max-md:translate-x-0 max-md:translate-y-0 max-md:rounded-b-none max-md:max-h-[85dvh] max-md:overflow-y-auto max-md:pb-[calc(1rem+env(safe-area-inset-bottom))] md:max-w-lg"
+        {...(finalFocus === undefined ? {} : { finalFocus })}
+        className="max-md:top-auto max-md:bottom-0 max-md:left-0 max-md:max-w-none! max-md:translate-x-0 max-md:translate-y-0 max-md:rounded-b-none max-md:max-h-[85dvh] max-md:overflow-y-auto md:max-h-[calc(100dvh-2rem)] md:max-w-lg md:overflow-y-auto"
       >
         <DialogHeader>
           <DialogTitle>Add custom element</DialogTitle>
@@ -136,7 +144,7 @@ export function AddCustomElementDialog({
               </SelectContent>
             </Select>
           </div>
-          <DialogFooter>
+          <DialogFooter className="max-md:rounded-b-none max-md:pb-[calc(1rem+env(safe-area-inset-bottom))]">
             <DialogClose render={<Button type="button" variant="outline" size="touch" className="md:h-8" />}>Cancel</DialogClose>
             <Button type="submit" size="touch" className="md:h-8">
               Add

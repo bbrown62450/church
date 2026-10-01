@@ -13,9 +13,10 @@
  * - `generate(keys, {aiAvailable, bulk})`: with AI off it sends nothing and
  *   marks each switched-on empty card "AI not configured" (S step 0).
  *   Otherwise every key is queued; the batch first reads the sermon text once
- *   (the effective NT reading, WEB for ESV, `queryClient.fetchQuery` through
- *   `passageQuery`, at most 10 s; a failure or a timeout just leaves it out),
- *   then each section is one request, at most 3 in flight.
+ *   (the effective NT reading in the translation step 1 shows, WEB for ESV,
+ *   `queryClient.fetchQuery` through `passageQuery`, at most 10 s; a failure
+ *   or a timeout just leaves it out), then each section is one request, at
+ *   most 3 in flight.
  * - The card is captured (`captureCard`) when the member asks (the click, or
  *   "Replace text"), not when the request starts. Before a queued request is
  *   sent, and again when its answer arrives, `staleVerdict` decides against
@@ -30,10 +31,18 @@
  *   (another tab) still meets the stale rule.
  * - A 429 stops the queue: that card and every queued one show the retry
  *   message, with the moment the wait ends (`retryAt`), so leaving the step
- *   and coming back does not restart it. A 401 or a lost church goes to the app's handling
- *   (`reportAuthErrors`) and shows nothing on the card.
- * - A bulk run ends with one toast: "Wrote n sections." or "Wrote k of n
- *   sections. The rest show what went wrong." (cancelled cards not counted).
+ *   and coming back does not restart it. The provider keeps that moment too
+ *   (`rateLimitedUntil`), which New service, Try again's card being typed
+ *   over or an error dismissed never clear: until then the AI bar waits and
+ *   `generate()` sends nothing, marking the cards with the wait instead. A
+ *   401 or a lost church goes to the app's handling (`reportAuthErrors`) and
+ *   shows nothing on the card.
+ * - A bulk run ends with one toast (`bulkMessage`): "Wrote n sections.", or
+ *   "Wrote k of n sections. The rest show what went wrong."; cancelled cards
+ *   are not counted, and a card dropped by the stale rule (its own toast says
+ *   why) is not called one that shows what went wrong.
+ * - Undo restores the card only while it still holds the text the action
+ *   left (`after`): an edit since (another tab) wins, and the Undo line goes.
  */
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -50,10 +59,11 @@ import { toast } from "sonner";
 
 import { ApiError } from "@/lib/api/client";
 import { isNoChurchAccess } from "@/lib/api/errors";
-import type { ChurchProfile, SectionResult, SermonText } from "@/lib/api/types";
+import type { ChurchProfile, SectionResult, SermonText, Translations } from "@/lib/api/types";
 import { useDraft } from "@/lib/draft/context";
 import type { SectionKey } from "@/lib/draft/schema";
 import { reportAuthErrors, useApi } from "@/lib/queries/client";
+import { keys as queryKeys } from "@/lib/queries/keys";
 import { generateSection } from "@/lib/queries/liturgy";
 import { passageQuery } from "@/lib/queries/passages";
 
@@ -66,7 +76,7 @@ import {
   type CardSnapshot,
   type StaleVerdict,
 } from "./cards";
-import { cardErrorFrom, localAiNotConfigured, type CardError } from "./errors";
+import { cardErrorFrom, localAiNotConfigured, rateLimitMessage, type CardError } from "./errors";
 import { createTaskQueue, type TaskOutcome } from "./queue";
 import { buildGenerateRequest, sermonSource, sermonText } from "./request";
 import { SECTION_LABELS } from "./sections";
@@ -77,14 +87,16 @@ export const MAX_IN_FLIGHT = 3;
 export const SERMON_WAIT_MS = 10_000;
 
 export type CardRun = { phase: "queued" | "writing"; since: number };
-export type UndoEntry = { kind: "replaced" | "cleared"; previous: CardSnapshot };
+/** `after`: the text the card held right after the action (the AI text written, or "" for Clear); Undo needs it still there. */
+export type UndoEntry = { kind: "replaced" | "cleared"; previous: CardSnapshot; after: string };
 export type BulkRun = { total: number; done: number };
 /**
  * A card's error as the step shows it: `retryAt` (ms since the epoch) is when
  * a 429's wait ends; `bulk` marks an error from "Generate empty sections",
- * announced politely rather than as one alert per card.
+ * announced politely rather than as one alert per card; `quiet` is not
+ * announced at all (AI is off: the AI bar's banner already says so).
  */
-export type CardErrorState = CardError & { retryAt?: number; bulk?: boolean };
+export type CardErrorState = CardError & { retryAt?: number; bulk?: boolean; quiet?: boolean };
 
 export type LiturgyGeneration = {
   runs: Partial<Record<SectionKey, CardRun>>;
@@ -92,6 +104,8 @@ export type LiturgyGeneration = {
   undo: Partial<Record<SectionKey, UndoEntry>>;
   /** "Generate empty sections" while it runs. */
   bulk: BulkRun | null;
+  /** When the last 429's wait ends (ms since the epoch), or null; nothing is sent before then. */
+  rateLimitedUntil: number | null;
   generate: (keys: SectionKey[], opts: { aiAvailable: boolean; bulk?: boolean }) => void;
   /** Cancels these cards' runs (every run when omitted); the cards return to where they were. */
   cancel: (keys?: SectionKey[]) => void;
@@ -105,7 +119,8 @@ export type LiturgyGeneration = {
 
 const GenerationContext = createContext<LiturgyGeneration | null>(null);
 
-type Bulk = { keys: Set<SectionKey>; total: number; done: number; written: number };
+/** `done` counts the settled cards, `written` those applied, `shown` those that show an error. */
+type Bulk = { keys: Set<SectionKey>; total: number; done: number; written: number; shown: number };
 
 /** A queued run that found its card changed before it was sent: nothing is sent. */
 class StaleRun extends Error {
@@ -138,10 +153,27 @@ function without<T>(record: Partial<Record<SectionKey, T>>, keys: readonly Secti
   return next;
 }
 
-function bulkToast(written: number, done: number): void {
-  if (done === 0) return;
-  if (written === done) toast.message(done === 1 ? "Wrote 1 section." : `Wrote ${done} sections.`);
-  else toast.message(`Wrote ${written} of ${done} sections. The rest show what went wrong.`);
+/**
+ * A bulk run's one toast (S "AI bar"; clarifications 15, 16): `done` cards
+ * settled, `written` of them applied, `shown` of them showing an error. The
+ * rest were dropped by the stale rule: they show nothing (their own toast
+ * said why), so the toast never sends the member to look at them. Null when
+ * nothing settled (the run was cancelled whole).
+ */
+export function bulkMessage(written: number, done: number, shown: number): string | null {
+  if (done === 0) return null;
+  if (written === done) return done === 1 ? "Wrote 1 section." : `Wrote ${done} sections.`;
+  const failedShown = written + shown === done;
+  if (written === 0) {
+    if (done === 1) return shown === 1 ? "Couldn't write the section. It shows what went wrong." : "Couldn't write the section.";
+    if (failedShown) return "Couldn't write any sections. They show what went wrong.";
+    if (shown === 0) return "Couldn't write any sections.";
+    return `Couldn't write any sections. ${shown === 1 ? "One shows" : `${shown} show`} what went wrong.`;
+  }
+  const wrote = `Wrote ${written} of ${done} sections.`;
+  if (failedShown) return `${wrote} The rest show what went wrong.`;
+  if (shown === 0) return wrote;
+  return `${wrote} ${shown === 1 ? "One shows" : `${shown} show`} what went wrong.`;
 }
 
 export function LiturgyGenerationProvider({
@@ -157,11 +189,14 @@ export function LiturgyGenerationProvider({
   const { draft, update, peek } = useDraft();
   const api = useApi();
   const queryClient = useQueryClient();
+  const churchTranslation = church.effective_translation;
   const [queue] = useState(() => createTaskQueue({ concurrency: MAX_IN_FLIGHT }));
   const [runs, setRuns] = useState<Partial<Record<SectionKey, CardRun>>>({});
   const [errors, setErrors] = useState<Partial<Record<SectionKey, CardErrorState>>>({});
   const [undo, setUndoState] = useState<Partial<Record<SectionKey, UndoEntry>>>({});
   const [bulk, setBulk] = useState<BulkRun | null>(null);
+  const [rateLimitedUntil, setRateLimitedUntil] = useState<number | null>(null);
+  const limitedUntil = useRef<number | null>(null);
   const mounted = useRef(true);
   /** Cards waiting for their batch's sermon text: key → batch id. */
   const pending = useRef(new Map<SectionKey, number>());
@@ -209,18 +244,24 @@ export function LiturgyGenerationProvider({
     setUndoState((current) => (entry === null ? without(current, [key]) : { ...current, [key]: entry }));
   }, []);
 
-  /** A card left the bulk run: settled (counted, `wrote` when applied) or cancelled (not counted). */
-  const leaveBulk = useCallback((key: SectionKey, how: "wrote" | "failed" | "cancelled") => {
+  /**
+   * A card left the bulk run: settled (counted: `wrote` when applied, `failed`
+   * when its card shows an error, `dropped` by the stale rule) or cancelled
+   * (not counted).
+   */
+  const leaveBulk = useCallback((key: SectionKey, how: "wrote" | "failed" | "dropped" | "cancelled") => {
     const b = bulkRef.current;
     if (b === null || !b.keys.has(key)) return;
     b.keys.delete(key);
     if (how === "cancelled") b.total -= 1;
     else b.done += 1;
     if (how === "wrote") b.written += 1;
+    if (how === "failed") b.shown += 1;
     if (b.keys.size === 0) {
       bulkRef.current = null;
       setBulk(null);
-      bulkToast(b.written, b.done);
+      const message = bulkMessage(b.written, b.done, b.shown);
+      if (message !== null) toast.message(message);
     } else {
       setBulk({ total: b.total, done: b.done });
     }
@@ -260,7 +301,7 @@ export function LiturgyGenerationProvider({
       }
       // Over text: Undo brings it back. Over a blank card: any "Cleared." line is stale now.
       const replaced = out.previous !== null && out.previous.text.trim() !== "";
-      setUndo(key, replaced && out.previous !== null ? { kind: "replaced", previous: out.previous } : null);
+      setUndo(key, replaced && out.previous !== null ? { kind: "replaced", previous: out.previous, after: text } : null);
       return true;
     },
     [update, setUndo],
@@ -274,19 +315,19 @@ export function LiturgyGenerationProvider({
       if (!outcome.ok && outcome.error instanceof StaleRun) {
         captured.current.delete(key);
         staleToast(key, outcome.error.verdict);
-        leaveBulk(key, "failed");
+        leaveBulk(key, "dropped");
         return;
       }
       if (outcome.ok) {
         const result = outcome.value;
         if (result.status !== "error" && result.text !== null) {
-          leaveBulk(key, applyResult(key, result.text) ? "wrote" : "failed");
+          leaveBulk(key, applyResult(key, result.text) ? "wrote" : "dropped");
           return;
         }
         captured.current.delete(key);
         const failure = cardErrorFrom(result.error ?? new Error("no text"));
         setError(key, failure === null ? null : errorState(failure, inBulk));
-        leaveBulk(key, "failed");
+        leaveBulk(key, failure === null ? "dropped" : "failed");
         return;
       }
       captured.current.delete(key);
@@ -299,6 +340,10 @@ export function LiturgyGenerationProvider({
         // S step 7: the whole queue stops, and every card still waiting shows the same message.
         const waiting = [...queue.waitingKeys(), ...pending.current.keys()] as SectionKey[];
         const stamped = errorState(error, inBulk);
+        if (stamped.retryAt !== undefined && stamped.retryAt > (limitedUntil.current ?? 0)) {
+          limitedUntil.current = stamped.retryAt;
+          setRateLimitedUntil(stamped.retryAt);
+        }
         for (const other of waiting) {
           const otherInBulk = bulkRef.current?.keys.has(other) ?? false;
           dropRun(other);
@@ -313,10 +358,12 @@ export function LiturgyGenerationProvider({
 
   const loadSermon = useCallback(
     (signal: AbortSignal): Promise<SermonText | null> => {
-      const source = sermonSource(peek(), church.effective_translation);
-      if (source === null) return Promise.resolve(null);
+      const draft = peek();
       return new Promise((resolve) => {
+        let settled = false;
         const done = (value: SermonText | null) => {
+          if (settled) return;
+          settled = true;
           clearTimeout(timer);
           signal.removeEventListener("abort", onAbort);
           resolve(value);
@@ -324,13 +371,26 @@ export function LiturgyGenerationProvider({
         const onAbort = () => done(null);
         const timer = setTimeout(() => done(null), sermonWaitMs);
         signal.addEventListener("abort", onAbort, { once: true });
-        queryClient.fetchQuery(passageQuery(api, source.translation, source.ref)).then(
-          (passage) => done(sermonText(source.ref, passage)),
-          () => done(null),
-        );
+        void (async () => {
+          // The translation step 1 shows: the draft's only while the server still offers it (the list, cached or fetched once).
+          const translations =
+            draft.readings.translation === null
+              ? undefined
+              : await queryClient
+                  .fetchQuery({
+                    queryKey: queryKeys.translations(),
+                    queryFn: ({ signal: s }) => api.user<Translations>("/translations", { signal: s }),
+                    staleTime: Infinity,
+                  })
+                  .catch(() => undefined);
+          const source = sermonSource(draft, { effective_translation: churchTranslation }, translations);
+          if (source === null) return done(null);
+          const passage = await queryClient.fetchQuery(passageQuery(api, source.translation, source.ref));
+          done(sermonText(source.ref, passage));
+        })().catch(() => done(null));
       });
     },
-    [api, church.effective_translation, peek, queryClient, sermonWaitMs],
+    [api, churchTranslation, peek, queryClient, sermonWaitMs],
   );
 
   const send = useCallback(
@@ -356,25 +416,33 @@ export function LiturgyGenerationProvider({
     (keys: SectionKey[], { aiAvailable, bulk: isBulk = false }: { aiAvailable: boolean; bulk?: boolean }) => {
       const draft = peek();
       if (!aiAvailable) {
-        // S step 0: nothing is sent; each targeted switched-on empty card says so.
+        // S step 0: nothing is sent; each targeted switched-on empty card says so (a bulk run quietly: the banner already does).
         const empty = keys.filter((key) => {
           const card = draft.liturgy.cards[key];
           return card.enabled && card.text.trim() === "";
         });
-        const marked = errorState(localAiNotConfigured(), isBulk);
+        const marked: CardErrorState = { ...errorState(localAiNotConfigured(), isBulk), quiet: isBulk };
         setErrors((current) => ({ ...current, ...Object.fromEntries(empty.map((key) => [key, marked])) }));
         return;
       }
       const busy = new Set<SectionKey>([...pending.current.keys(), ...(queue.runningKeys() as SectionKey[]), ...(queue.waitingKeys() as SectionKey[])]);
       const fresh = keys.filter((key) => !busy.has(key));
       if (fresh.length === 0) return;
+      const until = limitedUntil.current;
+      if (until !== null && Date.now() < until) {
+        // A 429's wait is not over (New service, or the error typed over, does not end it): nothing is sent.
+        const seconds = Math.ceil((until - Date.now()) / 1000);
+        const waiting: CardErrorState = { code: "rate_limited", message: rateLimitMessage(seconds), retryable: true, retryAt: until, bulk: isBulk };
+        setErrors((current) => ({ ...current, ...Object.fromEntries(fresh.map((key) => [key, waiting])) }));
+        return;
+      }
       const since = Date.now();
       // The card as the member saw it when they asked (the click, or "Replace text").
       for (const key of fresh) captured.current.set(key, captureCard(draft, key));
       setErrors((current) => without(current, fresh));
       setRuns((current) => ({ ...current, ...Object.fromEntries(fresh.map((key) => [key, { phase: "queued", since }])) }));
       if (isBulk) {
-        bulkRef.current = { keys: new Set(fresh), total: fresh.length, done: 0, written: 0 };
+        bulkRef.current = { keys: new Set(fresh), total: fresh.length, done: 0, written: 0, shown: 0 };
         setBulk({ total: fresh.length, done: 0 });
       }
       const batch = ++batchSeq.current;
@@ -418,15 +486,16 @@ export function LiturgyGenerationProvider({
     (key: SectionKey) => {
       const entry = undo[key];
       if (!entry) return;
-      update((d) => restoreCard(d, key, entry.previous));
+      // Only over the text the action left: an edit since (another tab) is the member's and stays.
+      update((d) => (d.liturgy.cards[key].text === entry.after ? restoreCard(d, key, entry.previous) : d));
       setUndo(key, null);
     },
     [undo, update, setUndo],
   );
 
   const value = useMemo<LiturgyGeneration>(
-    () => ({ runs, errors, undo, bulk, generate, cancel, cancelBulk, dismissError, setUndo, clearUndo, applyUndo }),
-    [runs, errors, undo, bulk, generate, cancel, cancelBulk, dismissError, setUndo, clearUndo, applyUndo],
+    () => ({ runs, errors, undo, bulk, rateLimitedUntil, generate, cancel, cancelBulk, dismissError, setUndo, clearUndo, applyUndo }),
+    [runs, errors, undo, bulk, rateLimitedUntil, generate, cancel, cancelBulk, dismissError, setUndo, clearUndo, applyUndo],
   );
   return <GenerationContext value={value}>{children}</GenerationContext>;
 }
