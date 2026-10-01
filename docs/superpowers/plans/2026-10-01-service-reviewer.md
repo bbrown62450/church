@@ -40,7 +40,7 @@
   `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
 - TDD: write the failing test first and see it fail as quoted.
 - **Backup push after every task** (standing rule): the controller, not the task agent, runs `git push origin claude/slice-2-plan-4q33le` after each task's commit and review (never `--force`). A fix asked for by a review is a new commit, `Fix: <what> (Task <n> review)`. The container can restart and lose uncommitted work: commit as soon as a task's checks pass.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1183 → 1216 passed, 11 → 11 skipped; frontend 539 → 564 in 75 → 78 files`.
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1183 → 1217 passed, 11 → 11 skipped; frontend 539 → 570 in 75 → 78 files`.
 - New prose for the owner has no em dashes and no flattery, and leads with the point. Strings quoted from R or already approved keep their own punctuation ("Still working — this can take up to a minute.").
 - Ask the owner before any push to a PR, PR creation, marking ready, merging, or any production or settings action. Owner steps go one at a time, in plain words.
 
@@ -68,10 +68,11 @@ A directive that does not match exactly once is a stop: the tree is not what the
   | T8 | 0 | 1216 passed, 11 skipped | +6 (`lib/liturgy/review.test.tsx`, new; +1 file) | 552 in 77 |
   | T9 | 0 | 1216 passed, 11 skipped | +6 (`components/builder/liturgy/review-step.test.tsx`, new; +1 file) | 558 in 78 |
   | T10 | 0 | 1216 passed, 11 skipped | +6 (`review-step.test.tsx` +5, `lib/liturgy/errors.test.ts` +1) | 564 in 78 |
-  | T11 | 0 (one assertion in `test_slice1_docs.py` edited) | 1216 passed, 11 skipped | 0 | 564 in 78 |
-  | T12, T13 | 0 | 1216 passed, 11 skipped | 0 | 564 in 78 |
+  | Review fixes (`406dcd6`, `7f0b51d`) | +1 (`test_usecase_liturgy_review.py`) | 1217 passed, 11 skipped | +6 (`review-step.test.tsx`) | 570 in 78 |
+  | T11 | 0 (one assertion in `test_slice1_docs.py` edited) | 1217 passed, 11 skipped | 0 | 570 in 78 |
+  | T12, T13 | 0 | 1217 passed, 11 skipped | 0 | 570 in 78 |
 
-- CI `backend-postgres` stays at `11 passed, 1216 deselected` (no Postgres test is added).
+- CI `backend-postgres` stays at `11 passed, 1217 deselected` (no Postgres test is added).
 - Backend table-driven tests loop over their cases inside one function, so counts stay stable when cases are added.
 - The DOM tests fake only `Date` (`DRAFT_NOW`) and wait on the app's real timers; one test fakes `setTimeout` too (the 8 s "Still working" line) and says why. `review-step.test.tsx` takes about 6 s.
 
@@ -5447,7 +5448,7 @@ grep -n '\[owner' docs/ops-runbook.md | grep -v 'An entry marked' | wc -l
 git diff --stat
 ```
 
-**Expected:** `89 passed in <t>s`; `4`; `1216 passed, 11 skipped in <t>s`; five files changed, about 41 insertions and 3 deletions.
+**Expected:** `89 passed in <t>s`; `4`; `1217 passed, 11 skipped in <t>s`; five files changed, about 41 insertions and 3 deletions (in the build, six: the slice 4 notes gained the review fixes' line and this plan its counts and build notes).
 
 - [ ] **Step 4 (agent): Commit**
 
@@ -5465,7 +5466,7 @@ git log --oneline -1
 
 Review T9-T11 together: R's strings verbatim ("Looks good.", "Only quick checks ran. The full review isn't available right now.", the six tags, "Across the service", "Revise with these notes"); the new strings exactly as clarification 22 lists them; 44 px targets and wrapping at 375 px (classes: `size-11` below `md`, `flex-wrap`, `min-w-0`, `wrap-anywhere`); focus never drops to the page; the docs match the clarifications. Then the backup push.
 
-Counts after Task 11: backend **1216 passed, 11 skipped**; frontend **564 in 78**.
+Counts after Task 11: backend **1217 passed, 11 skipped**; frontend **570 in 78** (the review fixes after Task 10 added 1 and 6).
 
 ### Task 12: Whole-branch verification and the pull request (owner's yes before the PR is opened and before it is marked ready) (R Testing; S4 reviewer amendment Testing and acceptance; F §1.11, §2.2, §2.5, §4.1, §4.4, §5.2, §5.4; owner answers 1, 4; standing rules)
 
@@ -5510,7 +5511,7 @@ for d in 8 400; do echo "clock +$d days"; (cd frontend && WSB_CLOCK_SHIFT_DAYS=$
 (cd frontend && npm run typecheck >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")
 ```
 
-**Expected:** three times ` Test Files  78 passed (78)` and `      Tests  564 passed (564)` with no `FAIL`; then `clock +8 days` and `clock +400 days`, each followed by the same two lines; `0`; `typecheck 0` and `lint 0`. A run that fails even once is a failure (Step 14): make the test deterministic, never retry it.
+**Expected:** three times ` Test Files  78 passed (78)` and `      Tests  570 passed (570)` with no `FAIL`; then `clock +8 days` and `clock +400 days`, each followed by the same two lines; `0`; `typecheck 0` and `lint 0`. A run that fails even once is a failure (Step 14): make the test deterministic, never retry it.
 
 - [ ] **Step 3 (agent): Backend suite, the Postgres marker count, the reviewer's files three times**
 
@@ -5520,7 +5521,7 @@ for d in 8 400; do echo "clock +$d days"; (cd frontend && WSB_CLOCK_SHIFT_DAYS=$
 for i in 1 2 3; do .venv/bin/python -m pytest -q backend/tests/test_review_checks.py backend/tests/test_usecase_liturgy_review.py backend/tests/test_usecase_liturgy_revise.py backend/tests/test_api_liturgy_review.py 2>&1 | tail -1; done
 ```
 
-**Expected:** `1216 passed, 11 skipped in <t>s`; `11 skipped, 1216 deselected in <t>s`; `32 passed in <t>s` three times.
+**Expected:** `1217 passed, 11 skipped in <t>s`; `11 skipped, 1217 deselected in <t>s`; `33 passed in <t>s` three times.
 
 - [ ] **Step 4 (agent): The production build**
 
@@ -5556,7 +5557,7 @@ git diff --name-only origin/main...HEAD -- backend/migrations backend/db require
 for c in $(git rev-list origin/main..HEAD); do git show -s --format=%B "$c" | grep -q '^Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>$' || echo "no trailer: $(git show -s --format='%h %s' "$c")"; done; echo "trailer check done"
 ```
 
-**Expected:** the first grep prints nothing; the second lists the review's two DEBUG lines (messages, answer), its WARNING (an unusable answer's length), its `logger.exception` (no text) and its `_log` INFO line, and the same five for revise (with the section key): read each, none formats a prompt, a card, a note or an answer at INFO; the third prints nothing; `legacy grep exit 1` (the runbook's contingency text is checked by `test_ops_workflows.py`, which the filter leaves out); `0`; `apiFetch in UI grep exit 1`; `storage grep exit 1`; `raw html grep exit 1`; two lines ending `100_000,`; `0`; only `trailer check done`.
+**Expected:** the first grep prints nothing; the second lists the review's two DEBUG lines (messages, answer), its WARNING (an unusable answer's length), its `logger.exception` (no text), its ERROR on a parsing failure (the exception's type only, from the review fixes) and its `_log` INFO line, and revise's two DEBUG lines, WARNING, `logger.exception` and INFO line (with the section key): read each, none formats a prompt, a card, a note or an answer at INFO; the third prints nothing; `legacy grep exit 1` (the runbook's contingency text is checked by `test_ops_workflows.py`, which the filter leaves out); `0`; `apiFetch in UI grep exit 1`; `storage grep exit 1`; `raw html grep exit 1`; two lines ending `100_000,`; `0`; only `trailer check done`.
 
 - [ ] **Step 7 (agent): The exact list of changed paths**
 
@@ -5646,7 +5647,7 @@ git rev-list --count origin/main..HEAD
 
 Send the owner exactly this, with `<count>` filled in, and wait for a clear yes:
 
-> The service reviewer is verified on this machine: backend 1216 passed, 11 skipped (1183 before); frontend 564 tests in 78 files (539 in 75 before), three runs in a row and with the clock moved 8 and 400 days ahead; typecheck, lint and the production build are clean; the API files are current with the two new routes; the checks are clean (no prayer text in the logs, no AI text saved, the screens use the query functions, both new calls wait up to 100 seconds); the 41 changed files and <count> commits are as planned and backed up. It also changes the writer's default wording on the season, as you approved. May I open the pull request as a **draft** titled "Service reviewer: Review service, notes and Revise", so the checks run? I will come back with the results and ask again before marking it ready. Merging stays with you.
+> The service reviewer is verified on this machine: backend 1217 passed, 11 skipped (1183 before); frontend 570 tests in 78 files (539 in 75 before), three runs in a row and with the clock moved 8 and 400 days ahead; typecheck, lint and the production build are clean; the API files are current with the two new routes; the checks are clean (no prayer text in the logs, no AI text saved, the screens use the query functions, both new calls wait up to 100 seconds); the 41 changed files and <count> commits are as planned and backed up. It also changes the writer's default wording on the season, as you approved. May I open the pull request as a **draft** titled "Service reviewer: Review service, notes and Revise", so the checks run? I will come back with the results and ask again before marking it ready. Merging stays with you.
 
 Add one line per note from Steps 1-8 (a merge from `main`, a skipped font download, a `Fix:` commit).
 
@@ -5665,7 +5666,7 @@ What members see
 
 Backend: review_checks.py (stock seasonal phrases, Ordinary Time, scripture references from scripture_refs.BOOKS, repeated openings), usecases/liturgy_review.py (the AI review in JSON mode inside a 75 s deadline, charged one ai token only when the AI runs; Revise inside generation's 80 s deadline with the section's token budget), POST /liturgy/review (always 200 with ai_status) and POST /liturgy/revise (AI failures as HTTP statuses). Client timeouts 100 s for both (owner answer 3; F §1.8).
 
-Tests: backend 1183 → 1216 passed, 11 → 11 skipped; frontend 539 → 564 in 75 → 78 files
+Tests: backend 1183 → 1217 passed, 11 → 11 skipped; frontend 539 → 570 in 75 → 78 files
 
 After merge (Task 13): a guided check on the owner's phone (seven steps), a quick look on a computer and an optional Console timing of a real review, then a short "Service reviewer record" in docs/ops-runbook.md.
 
@@ -5673,7 +5674,7 @@ After merge (Task 13): a guided check on the owner's phone (seven steps), a quic
 
 https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS
 EOF
-grep -cx 'Tests: backend 1183 → 1216 passed, 11 → 11 skipped; frontend 539 → 564 in 75 → 78 files' "<scratch>/reviewer-pr-body.md"
+grep -cx 'Tests: backend 1183 → 1217 passed, 11 → 11 skipped; frontend 539 → 570 in 75 → 78 files' "<scratch>/reviewer-pr-body.md"
 git fetch origin && test "$(git rev-list --count HEAD..origin/main)" = 0 && test "$(git rev-list --count origin/claude/slice-2-plan-4q33le..HEAD)" = 0 && echo "branch is current and backed up"
 gh pr create -R bbrown62450/church --draft --base main --head claude/slice-2-plan-4q33le \
   --title "Service reviewer: Review service, notes and Revise" \
@@ -5701,13 +5702,13 @@ RUN=$(gh run list -R bbrown62450/church --workflow ci.yml --branch claude/slice-
 RUN=$(gh run list -R bbrown62450/church --workflow ci.yml --branch claude/slice-2-plan-4q33le --commit "$(git rev-parse HEAD)" --limit 1 --json databaseId --jq '.[0].databaseId'); for job in frontend backend backend-postgres; do JOB=$(gh run view "$RUN" -R bbrown62450/church --json jobs --jq ".jobs[] | select(.name == \"$job\") | .databaseId"); echo "$job:"; gh run view -R bbrown62450/church --job "$JOB" --log | grep -E "Test Files +[0-9]+ passed|Tests +[0-9]+ passed|Compiled successfully|[0-9]+ passed|pg_smoke: OK" | sed -E 's/^.*Z //'; done
 ```
 
-**Expected:** `backend: success`, `backend-postgres: success`, `frontend: success`; frontend `Test Files  78 passed (78)`, `Tests  564 passed (564)`, `✓ Compiled successfully`; backend `1216 passed, 11 skipped`; backend-postgres `pg_smoke: OK` and `11 passed, 1216 deselected`. If a required job fails on a new runner image (`ubuntu-latest` moves on 2026-10-19), report a setup failure to the owner before changing any file.
+**Expected:** `backend: success`, `backend-postgres: success`, `frontend: success`; frontend `Test Files  78 passed (78)`, `Tests  570 passed (570)`, `✓ Compiled successfully`; backend `1217 passed, 11 skipped`; backend-postgres `pg_smoke: OK` and `11 passed, 1217 deselected`. If a required job fails on a new runner image (`ubuntu-latest` moves on 2026-10-19), report a setup failure to the owner before changing any file.
 
 - [ ] **Step 13 (agent → OWNER): Report CI and ask to mark the PR ready**
 
 Send exactly this, filled in, and wait for a clear yes:
 
-> PR #<N> (<url>) is green (run <run id>): backend 1216 passed, 11 skipped; the Postgres job is clean; 564 frontend tests in 78 files and the build are fine; the Vercel preview built. May I mark it ready for review? Merging stays with you.
+> PR #<N> (<url>) is green (run <run id>): backend 1217 passed, 11 skipped; the Postgres job is clean; 570 frontend tests in 78 files and the build are fine; the Vercel preview built. May I mark it ready for review? Merging stays with you.
 
 On the yes:
 
@@ -5739,7 +5740,7 @@ gh pr view <N> -R bbrown62450/church --json isDraft,state --jq '"draft=\(.isDraf
 
 For each fix: change only the owning task's files; rerun Steps 2-8; commit `Fix: <what> (Task <n>, reviewer final verification)` with both trailer lines; have it reviewed; before Step 10 ask the controller for the backup push; after it, ask the owner ("May I push the fix for <what> to PR #<N>?") and on the yes push, then repeat Steps 11-13.
 
-Expected counts after this task: backend `1216 passed, 11 skipped` (CI `backend-postgres`: `11 passed, 1216 deselected`); frontend `564 passed` in 78 files. No commit unless Step 14 needed one.
+Expected counts after this task: backend `1217 passed, 11 skipped` (CI `backend-postgres`: `11 passed, 1217 deselected`); frontend `570 passed` in 78 files. No commit unless Step 14 needed one.
 
 ### Task 13: Merge and after (OWNER + agent): the merge, the deploy, a guided check on the phone, a look on a computer, a timed review, the record (R Testing; owner answer 4; F §5.5)
 
@@ -5975,7 +5976,7 @@ gh pr checks claude/revert-service-reviewer -R bbrown62450/church --watch
 
 **Expected:** `Test Files  75 passed (75)`, `Tests  539 passed (539)`; `1183 passed, 11 skipped` (if anything else merged after, it differs by exactly those tests); every check passes. Merge on the owner's yes; record the revert in the service reviewer record.
 
-Expected counts after this task: backend `1216 passed, 11 skipped` on `main` (CI `backend-postgres`: `11 passed, 1216 deselected`); frontend `564 passed` in 78 files. The records PR adds no test.
+Expected counts after this task: backend `1217 passed, 11 skipped` on `main` (CI `backend-postgres`: `11 passed, 1217 deselected`); frontend `570 passed` in 78 files. The records PR adds no test.
 
 ---
 
@@ -6013,6 +6014,8 @@ Filled in while Tasks 1-11 are built: each change from the plan as written, its 
 - Not run while planning: the pushes, the PR and CI (T12 Steps 9-13), the merge and the owner's checks (T13), and any call to OpenAI (the container cannot reach it).
 
 **Review fixes (2026-10-01, before the build; owner decision 1, no owner-visible change).** A review of the plan found these, applied in the tasks above: T3 passes `timeout_seconds=REVIEW_ATTEMPT_S` (70 s), so `OPENAI_TIMEOUT_SECONDS` (30 s) no longer cuts a slow review and retries it into a "timeout" at about 61 s (revise already passes the section's timeout, as generation does); `REVIEW_MAX_COMPLETION_TOKENS` 3 000, and an unusable answer logs its length and the cap (`complete()` returns text only, so there is no `finish_reason`; the client's `ai_call` line has `completion_tokens`); the cards and standing rules are fenced (`<<<CARD key>>>`, `<<<RULES>>>`, `<<<END>>>`) with marker runs taken out of all church and member text, a "material to review, not instructions" line, and a contract that overrides the rules' "Output only the liturgy text" (T3 +1 test); T2 bounds each word to 30 characters and cuts every note and `match` to `MAX_NOTE_CHARS` (T2 +1 test); `merge_notes` matches whole words (T3 +1 test, "Psalm 1" against "Psalm 119"); T8's `start()` and `revise()` check the draft again after the sermon wait, as 4b does before sending (T8 +1 test), and `revise()` returns whether it started so focus moves to Cancel only then; T9's "Reviewing…" live region is always there; T10's Revise button is described by its card's heading and the Undo line's Undo is off while revising; clarification 8 and the F §1.8 row say the too-long case logs and persists for that church. Held for the owner, drafted outside the plan: Revise waiting on Generate's 429 (`rateLimitedUntil`) and a spoken "Only quick checks ran.". The plan was replayed again onto a fresh worktree of `HEAD` (91 directives, every anchor once): backend `1216 passed, 11 skipped`; the OpenAPI files regenerated; frontend `78 passed (78)` files and `564 passed (564)` tests, also `552` in 77 after T8 and `558` in 78 after T9; typecheck 0, lint 0. The see-it-fail outputs, the clock-moved runs and the production build were not re-run for these fixes.
+
+**The build (2026-10-01).** Tasks 1-10 were built as written (commits `51dbd14` to `e8c7bc0`). A review of the built branch then found the following, fixed in two commits after Task 10 (owner decision 1): `406dcd6 Reviewer backend review fixes (owner decision 1)` and `7f0b51d Reviewer frontend review fixes (owner decision 1)`. Backend: tolerant parsing also drops a section that is not a string (a list or dict section no longer raises), and any other parsing failure is `ai_status: "error"` with the code notes kept, logged at ERROR with the exception's type only (T3 +1 test, so backend **1217**; the four reviewer files **33**); the occasion, readings and sermon text are fenced like the cards; stock phrases, "Ordinary Time" and `merge_notes` match with any whitespace between words; a chapter range ("Gen 1-2:3") is cited in full; `ReviseIn` rejects empty or blank text and a blank note with a 422 (the OpenAPI file gains two `minLength: 1`). Frontend (`review-step.test.tsx` +6, so **570** in 78 files): switching a revising card off cancels its revision silently; "Revising…" and Cancel always show while a card revises, with its notes' × off; Try again is off while revising, and `revise()` refuses a card the AI is writing; after a cancelled or failed revision focus goes to Revise unless the Undo line is that revision's; a disabled Revise shows the 429 wait beside it, and Revise's own 429 alert clears when the wait ends. Task 11 records these in the slice 4 spec's plan notes and updates this plan's counts (the table, T11-T13, the PR's `Tests:` line and the CI numbers). The two subjects are not `Fix: …` lines, so T12 Step 8's diff shows them as `>` lines: name them in Step 9's message.
 
 ## Spec coverage
 
