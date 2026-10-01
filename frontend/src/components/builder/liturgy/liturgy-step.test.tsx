@@ -14,7 +14,8 @@ import BuilderLayout from "@/app/(signed-in)/(church)/builder/layout";
 import ReviewStepPage from "@/app/(signed-in)/(church)/builder/review/page";
 import { Toaster } from "@/components/ui/sonner";
 import type { GenerateLiturgyBody } from "@/lib/api/types";
-import { editOccasion, editScriptureLines, setPick } from "@/lib/draft/readings";
+import { useDraft } from "@/lib/draft/context";
+import { editOccasion, editScriptureLines, setDate, setPick } from "@/lib/draft/readings";
 import { draftKey, type DraftV1, type SectionKey } from "@/lib/draft/schema";
 import { editCardText } from "@/lib/liturgy/cards";
 import { authEvents } from "@/lib/queries/auth-events";
@@ -22,6 +23,7 @@ import { keys } from "@/lib/queries/keys";
 import { fakeError, installFakeApi, type FakeHandler, type FakeResponse, type RecordedRequest } from "@/test/fake-api";
 import {
   church,
+  CHURCH_IDS,
   churchProfile,
   DRAFT_NOW,
   generateRoute,
@@ -37,6 +39,8 @@ import {
 import { renderWithProviders } from "@/test/render";
 
 import { LiturgyStep } from "./liturgy-step";
+import { UNDO_TOAST_MS } from "../hymns/use-undo-toasts";
+
 import { STILL_WORKING } from "./use-still-working";
 
 const KEY = draftKey(USER_ID, church().id);
@@ -145,6 +149,7 @@ describe("the Liturgy step (S User experience)", () => {
       "Sermon Title · [Sermon title]",
       "Affirmation of Faith · Apostles' Creed",
       "Second Hymn",
+      "Include communion liturgy (The Sacrament of the Lord's Supper)",
       "Prayers of the People",
       "Offertory Prayer",
       "Third Hymn · Sent Forth by God's Blessing",
@@ -777,5 +782,207 @@ describe("Generate and Regenerate (S Generate and Regenerate, AI bar)", () => {
     renderStep(editOccasion(testDraft(), "Harvest Home"));
     expect(await screen.findByRole("button", { name: "Generate empty sections (6)" })).toBeInTheDocument();
     expect(screen.queryByText(/No occasion or readings yet/)).toBeNull();
+  });
+});
+
+// --- slice 4b T10: communion and custom elements ------------------------------------------
+
+/** Moves the draft's date, as Date & readings would (the communion default follows it). */
+function MoveDate() {
+  const { update } = useDraft();
+  return (
+    <button type="button" onClick={() => update((d) => setDate(d, "2026-10-11"))}>
+      Move to October 11
+    </button>
+  );
+}
+
+function withElements(elements: DraftV1["liturgy"]["custom_elements"], d: DraftV1 = testDraft()): DraftV1 {
+  return { ...d, liturgy: { ...d.liturgy, custom_elements: elements } };
+}
+
+const COMMUNION = "Include communion liturgy (The Sacrament of the Lord's Supper)";
+
+describe("the communion card (S Communion card)", () => {
+  it("follows the first-Sunday rule until toggled, says why, restores the default, and shows the fixed text", async () => {
+    const { user } = renderStep(testDraft(), {}, <MoveDate />);
+    const communion = await screen.findByRole("region", { name: COMMUNION });
+    const toggle = within(communion).getByRole("switch", { name: COMMUNION });
+    expect(toggle).toBeChecked();
+    expect(within(communion).getByText("On by default — October 4, 2026 is the first Sunday of the month.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Move to October 11" }));
+    expect(toggle).not.toBeChecked();
+    expect(within(communion).getByText("Off by default — it's on by default only on the first Sunday of the month.")).toBeInTheDocument();
+    await user.click(toggle);
+    expect(toggle).toBeChecked();
+    expect(within(communion).getByText("You changed this.")).toBeInTheDocument();
+    await waitFor(() => expect(stored().liturgy).toMatchObject({ include_communion: true, communion_origin: "user" }));
+    await user.click(within(communion).getByRole("button", { name: "Use default" }));
+    expect(toggle).not.toBeChecked();
+    expect(within(communion).queryByRole("button", { name: "Use default" })).toBeNull();
+    // The fixed text, read-only, from the config.
+    expect(within(communion).queryByText("And also with you.")).toBeNull();
+    await user.click(within(communion).getByRole("button", { name: "Show communion text" }));
+    expect(within(communion).getByRole("heading", { level: 4, name: "The Sacrament of the Lord's Supper" })).toBeInTheDocument();
+    expect(within(communion).getByRole("heading", { level: 5, name: "Invitation to the Table" })).toBeInTheDocument();
+    expect(within(communion).getByText("And also with you.")).toHaveClass("font-semibold");
+    expect(within(communion).getByText("Printed after the Second Hymn. The same text is used for every service.")).toBeInTheDocument();
+  });
+
+  it("says when communion came from a saved service", async () => {
+    const d = testDraft();
+    renderStep({ ...d, liturgy: { ...d.liturgy, include_communion: false, communion_origin: "archive" } });
+    const communion = await screen.findByRole("region", { name: COMMUNION });
+    expect(within(communion).getByText("Set from the saved service.")).toBeInTheDocument();
+    expect(within(communion).getByRole("button", { name: "Use default" })).toBeInTheDocument();
+  });
+});
+
+describe("custom elements (S Custom elements)", () => {
+  it("requires a label, adds after its place with the fields trimmed, scrolls to it, and opens empty next time", async () => {
+    const scroll = vi.spyOn(Element.prototype, "scrollIntoView");
+    const { user } = renderStep();
+    await user.click(await screen.findByRole("button", { name: "Add custom element" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add custom element" });
+    expect(within(dialog).getByText("A heading and text printed in the Word files at the place you choose.")).toBeInTheDocument();
+    expect(within(dialog).getByRole("combobox", { name: "Place" })).toHaveTextContent("After Call to Worship");
+    await user.click(within(dialog).getByRole("button", { name: "Add" }));
+    expect(within(dialog).getByText("Label is required.")).toBeInTheDocument();
+    expect(within(dialog).getByRole("textbox", { name: "Label" })).toHaveFocus();
+    await user.type(within(dialog).getByRole("textbox", { name: "Label" }), "  Children's Moment ");
+    expect(within(dialog).queryByText("Label is required.")).toBeNull();
+    await user.type(within(dialog).getByRole("textbox", { name: "Text (optional)" }), "Come forward. ");
+    await user.click(within(dialog).getByRole("combobox", { name: "Place" }));
+    await user.click(await screen.findByRole("option", { name: "After Opening Prayer" }));
+    await user.click(within(dialog).getByRole("button", { name: "Add" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    const added = await screen.findByRole("region", { name: "Children's Moment" });
+    expect(outline().slice(0, 4)).toEqual(["Call to Worship", "Opening Prayer", "Children's Moment", "First Hymn"]);
+    expect(within(added).getByText("Custom")).toBeInTheDocument();
+    expect(within(added).getByRole("textbox", { name: "Text" })).toHaveValue("Come forward.");
+    await waitFor(() =>
+      expect(stored().liturgy.custom_elements).toEqual([
+        { id: expect.any(String), label: "Children's Moment", text: "Come forward.", insert_after: "opening_prayer" },
+      ]),
+    );
+    await waitFor(() => expect(scroll.mock.contexts).toContain(added));
+    await user.click(screen.getByRole("button", { name: "Add custom element" }));
+    const again = await screen.findByRole("dialog", { name: "Add custom element" });
+    expect(within(again).getByRole("textbox", { name: "Label" })).toHaveValue("");
+    expect(within(again).getByRole("combobox", { name: "Place" })).toHaveTextContent("After Call to Worship");
+  });
+
+  it("edits the label, text and place inline; a blank label says it won't print, and an unknown place is the end", async () => {
+    const { user } = renderStep(
+      withElements([
+        { id: "a", label: "Anthem", text: "<b>Choir</b>", insert_after: "sermon" },
+        { id: "b", label: "Minute for Mission", text: "", insert_after: "bogus" },
+      ]),
+    );
+    const anthem = await screen.findByRole("region", { name: "Anthem" });
+    expect(within(anthem).getByRole("textbox", { name: "Text" })).toHaveValue("<b>Choir</b>");
+    const rows = outline();
+    expect(rows.indexOf("Anthem")).toBe(rows.indexOf("Sermon Title · [Sermon title]") + 1);
+    expect(rows.at(-1)).toBe("Minute for Mission"); // an unknown place prints at the end
+    expect(within(card("Minute for Mission")).getByRole("combobox", { name: "Place" })).toHaveTextContent("At the end (after Benediction)");
+    await user.click(within(anthem).getByRole("combobox", { name: "Place" }));
+    await user.click(await screen.findByRole("option", { name: "After Second Hymn" }));
+    await waitFor(() => expect(outline().indexOf("Anthem")).toBe(outline().indexOf("Second Hymn") + 1));
+    const label = within(card("Anthem")).getByRole("textbox", { name: "Label" });
+    await user.clear(label);
+    const blank = screen.getByRole("region", { name: "Custom element" });
+    expect(within(blank).getByText("Add a label, or remove this element — it won't be printed without one.")).toBeInTheDocument();
+    await user.type(label, "Choir Anthem");
+    await waitFor(() =>
+      expect(stored().liturgy.custom_elements[0]).toEqual({ id: "a", label: "Choir Anthem", text: "<b>Choir</b>", insert_after: "second_hymn" }),
+    );
+  });
+
+  it("Remove offers Undo, which puts the element back at the same index", async () => {
+    const { user } = renderStep(
+      withElements([
+        { id: "a", label: "Anthem", text: "", insert_after: "sermon" },
+        { id: "b", label: "Children's Moment", text: "", insert_after: "sermon" },
+      ]),
+    );
+    const anthem = await screen.findByRole("region", { name: "Anthem" });
+    await user.click(within(anthem).getByRole("button", { name: "More actions for Anthem" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Remove" }));
+    expect(screen.queryByRole("region", { name: "Anthem" })).toBeNull();
+    const toastText = await screen.findByText("Removed “Anthem”.");
+    await waitFor(() => expect(stored().liturgy.custom_elements.map((e) => e.id)).toEqual(["b"]));
+    expect(UNDO_TOAST_MS).toBe(8000);
+    await user.click(within(toastText.closest("li") as HTMLElement).getByRole("button", { name: "Undo" }));
+    expect(await screen.findByRole("region", { name: "Anthem" })).toBeInTheDocument();
+    await waitFor(() => expect(stored().liturgy.custom_elements.map((e) => e.id)).toEqual(["a", "b"]));
+  });
+
+  it("stops at 30 elements", async () => {
+    const thirty = Array.from({ length: 30 }, (_, i) => ({ id: `e${i}`, label: `Element ${i}`, text: "", insert_after: "end" }));
+    renderStep(withElements(thirty));
+    expect(await screen.findByRole("button", { name: "Add custom element" })).toBeDisabled();
+    expect(screen.getByText("You can add up to 30 custom elements.")).toBeInTheDocument();
+  });
+
+  it("after Remove, focus goes to the next card's heading, or to Add custom element when none follows", async () => {
+    const { user } = renderStep(
+      withElements([
+        { id: "a", label: "Anthem", text: "", insert_after: "sermon" },
+        { id: "b", label: "Minute for Mission", text: "", insert_after: "end" },
+      ]),
+    );
+    const anthem = await screen.findByRole("region", { name: "Anthem" });
+    await user.click(within(anthem).getByRole("button", { name: "More actions for Anthem" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Remove" }));
+    // After the Sermon row come two landmark rows and the communion card, then Prayers of the People.
+    await waitFor(() => expect(within(card("Prayers of the People")).getByRole("heading", { name: "Prayers of the People" })).toHaveFocus());
+    await user.click(within(card("Minute for Mission")).getByRole("button", { name: "More actions for Minute for Mission" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Remove" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Add custom element" })).toHaveFocus());
+  });
+
+  // Heavy: 30 cards, a Remove and an Add through the dialog; near Vitest's 5 s default on a busy machine.
+  it("Undo of Remove never goes past 30 elements", { timeout: 10_000 }, async () => {
+    const thirty = Array.from({ length: 30 }, (_, i) => ({ id: `e${i}`, label: `Element ${i}`, text: "", insert_after: "end" }));
+    const { user } = renderStep(withElements(thirty));
+    const first = await screen.findByRole("region", { name: "Element 0" });
+    await user.click(within(first).getByRole("button", { name: "More actions for Element 0" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Remove" }));
+    const toastText = await screen.findByText("Removed “Element 0”.");
+    await user.click(screen.getByRole("button", { name: "Add custom element" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add custom element" });
+    await user.type(within(dialog).getByRole("textbox", { name: "Label" }), "Anthem");
+    await user.click(within(dialog).getByRole("button", { name: "Add" }));
+    expect(await screen.findByRole("region", { name: "Anthem" })).toBeInTheDocument();
+    await user.click(within(toastText.closest("li") as HTMLElement).getByRole("button", { name: "Undo" }));
+    // The toast and the step's own line.
+    await waitFor(() => expect(screen.getAllByText("You can add up to 30 custom elements.")).toHaveLength(2));
+    expect(screen.queryByRole("region", { name: "Element 0" })).toBeNull();
+    await waitFor(() => expect(stored().liturgy.custom_elements).toHaveLength(30));
+  });
+
+  it("keeps each church's elements in its own draft (streamlit_tests/test_streamlit_tenancy.py)", async () => {
+    const hope = church({ id: CHURCH_IDS.hope, name: "Hope" });
+    window.localStorage.setItem(
+      draftKey(USER_ID, hope.id),
+      JSON.stringify({ ...withElements([{ id: "h", label: "Hope's Anthem", text: "", insert_after: "end" }]), church_id: hope.id }),
+    );
+    const grace = renderStep(withElements([{ id: "g", label: "Grace's Anthem", text: "", insert_after: "end" }]));
+    expect(await screen.findByRole("region", { name: "Grace's Anthem" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Hope's Anthem" })).toBeNull();
+    grace.unmount();
+    installFakeApi({
+      "GET /church": churchProfile({ ...hope }),
+      "GET /lectionary/readings": lectionaryRoute(),
+      "GET /liturgy/config": liturgyConfig(),
+    });
+    renderWithProviders(
+      <BuilderLayout>
+        <LiturgyStep />
+      </BuilderLayout>,
+      { me: me({ churches: [church(), hope] }), church: hope, path: "/builder/liturgy" },
+    );
+    expect(await screen.findByRole("region", { name: "Hope's Anthem" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Grace's Anthem" })).toBeNull();
   });
 });
