@@ -446,6 +446,27 @@ or church id is recorded here.
 | Streamlit smoke on liturgy-frozen | Not run: the reviewer changes no data, and merges never reach liturgy-frozen | 2026-10-01 |
 | Follow-ups | Next, one small PR (owner, 2026-10-01): 1. notes only for something to change, never praise; 2. Revise on typed text with a confirm and Undo; 3. after an edit, keep the card's notes faded under "From before your last edit."; 4. drop AI notes that restate a code note (citation, repeated opening). Then 5. Revise from "Across the service", planned on its own. After that: 5a (saving and archiving services and the Word files). 6a: Settings for the default benediction, the liturgy prompts and the prayer library (the voice profile turns on the Voice check). Still open: first-line matching research (Hymnary.org), the NUL-character 500 (app-wide), and the two slice 1 test churches (kept for now, owner) | 2026-10-01 |
 
+### Reviewer follow-up 1 record
+
+Reviewer follow-up 1 (no praise notes; Revise with these notes on typed and
+saved text after "Replace your text?", with Undo; a card's notes kept, dimmed,
+under "From before your last edit." after an edit; AI notes that restate a
+citation or a repeated opening dropped) merged as PR #36, following the
+owner's answers after the service reviewer's phone check (2026-10-01). No
+database change and no new variable, so production stays at
+`0004_invites_reusable` (head); the API is unchanged. The owner's check was a
+four-step guided check on a phone. No token, email address or church id is
+recorded here.
+
+| Step | Result | Date |
+|---|---|---|
+| Merge and deploy | PR #36 merged 18:43 UTC (14:43 Eastern), merge commit `8c2980c`. CI on `main` (run 36908924923): success. API `/health/ready`: 200 | 2026-10-01 |
+| 1. No praise notes (phone) | A real review: no note only praised a prayer; at least one card showed "Looks good." | 2026-10-01 |
+| 2. No restated notes | The typed Call to Worship had the code "Cites John 21" note and one real checklist note, with no second note on citing; the Opening Prayer had no note on its opening; "Across the service" showed only the code note "Several prayers open with "Gracious God"." | 2026-10-01 |
+| 3. Revise on your text | "Replace your text?" asked; "Keep my text" changed nothing; "Revise text" addressed the notes; Undo brought the owner's text back | 2026-10-01 |
+| 4. Faded notes | After typing, the card's notes stayed dimmed under "From before your last edit."; Review service again replaced them with fresh notes | 2026-10-01 |
+| Follow-ups | Accepted, not fixed: notes on a Benediction following the church default fade (rather than go) when the default itself changes; another tab's Regenerate or Revise fades this tab's notes. Next: Revise from "Across the service", planned on its own (owner, 2026-10-01). Then 5a (saving and archiving services and the Word files), Voices of the Church (decisions in `docs/superpowers/specs/2026-10-01-voices-of-the-church-decisions.md`), 6a. Still open: first-line matching research (Hymnary.org), the NUL-character 500 (app-wide), and the two slice 1 test churches (kept for now, owner) | 2026-10-01 |
+
 ## Backups
 
 - **Workflow:** `.github/workflows/backup.yml` (`db-backup`). Daily at 08:37 UTC,
