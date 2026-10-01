@@ -60,6 +60,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -219,7 +220,8 @@ export function LiturgyReviewProvider({
   /** Numbers each review shown (`ServiceReview.generation`). */
   const generation = useRef(0);
 
-  useEffect(() => {
+  // At commit, not after paint: a Revise pressed as soon as the notes show must see them (a passive effect could lag).
+  useLayoutEffect(() => {
     reviewRef.current = review;
   }, [review]);
 
