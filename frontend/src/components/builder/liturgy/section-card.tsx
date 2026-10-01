@@ -40,7 +40,12 @@ export const ORIGIN_CHIPS: Record<CardOrigin, string> = {
 /** The counter shows past this many characters (S "Other card rules"). */
 export const COUNTER_FROM = 18_000;
 
-const UNDO_LINES = { replaced: "Replaced with a new AI draft.", cleared: "Cleared." } as const;
+const UNDO_LINES = {
+  replaced: "Replaced with a new AI draft.",
+  cleared: "Cleared.",
+  // The service reviewer's "Revise with these notes".
+  revised: "Revised with these notes.",
+} as const;
 
 export type SectionCardProps = {
   spec: LiturgySection;
