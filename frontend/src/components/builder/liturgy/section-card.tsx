@@ -27,7 +27,7 @@ import { useLiturgyReview } from "@/lib/liturgy/review";
 import { useAutosize } from "@/lib/use-autosize";
 import { cn } from "@/lib/utils";
 
-import { CardNotes, notesId } from "./card-notes";
+import { CardNotes, notesId, reviseId } from "./card-notes";
 import { STILL_WORKING, useStillWorking } from "./use-still-working";
 
 /** The status chip for each origin (S "Section card"). */
@@ -106,12 +106,17 @@ export function useRetryWait(retryAt: number | undefined): boolean {
  * card's Generate (or its heading), not the page.
  *
  * The service reviewer's notes show under the text (`CardNotes`), and
- * describe the textarea while they show.
+ * describe the textarea while they show. While "Revise with these notes"
+ * runs, the card is read-only and its Regenerate, ⋯ menu and Undo are off; when it
+ * ends, focus goes to the Undo line's button (the text was revised), the
+ * Revise button (it failed or was cancelled) or the heading.
  */
 export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLength, aiAvailable }: SectionCardProps) {
   const { draft, update } = useDraft();
   const generation = useLiturgyGeneration();
-  const reviewed = useLiturgyReview().review?.cards[spec.key];
+  const review = useLiturgyReview();
+  const reviewed = review.review?.cards[spec.key];
+  const revising = review.revising[spec.key] === true;
   const key = spec.key;
   const card = draft.liturgy.cards[key];
   const run = generation.runs[key];
@@ -162,6 +167,17 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
     const usable = element !== null && element.isConnected && !(element as HTMLButtonElement).disabled;
     (usable ? element : headingRef.current)?.focus();
   });
+
+  // A revision ended: its Cancel went, so the Undo line (revised), the Revise button (failed, cancelled) or the heading.
+  const wasRevising = useRef(revising);
+  useEffect(() => {
+    const before = wasRevising.current;
+    wasRevising.current = revising;
+    if (!before || revising) return;
+    const active = document.activeElement;
+    if (active !== null && active !== document.body) return; // focus already went somewhere on purpose
+    (undoRef.current ?? document.getElementById(reviseId(key)) ?? headingRef.current)?.focus();
+  }, [revising, key]);
 
   // A retryable error took the action row's place while focus was in it: Try again (or the heading) takes it.
   useEffect(() => {
@@ -289,7 +305,7 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
         <DropdownMenu>
           <DropdownMenuTrigger
             aria-label={`More actions for ${spec.label}`}
-            disabled={menuItems.length === 0 || run !== undefined}
+            disabled={menuItems.length === 0 || run !== undefined || revising}
             className={cn(buttonVariants({ variant: "ghost", size: "icon-lg" }), "size-11 shrink-0 md:size-8")}
           >
             <EllipsisIcon aria-hidden="true" />
@@ -316,7 +332,7 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
             value={card.text}
             placeholder="Type your own text, or tap Generate."
             maxLength={maxLength}
-            readOnly={run?.phase === "writing"}
+            readOnly={run?.phase === "writing" || revising}
             rows={spec.rows}
             style={{ minHeight: `calc(${spec.rows}lh + 1rem + 2px)` }}
             className="max-h-[60vh] overflow-y-auto"
@@ -338,7 +354,7 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
               {hint}
             </p>
           ) : null}
-          <CardNotes sectionKey={key} label={spec.label} headingId={headingId} />
+          <CardNotes sectionKey={key} label={spec.label} headingId={headingId} busy={run !== undefined} />
           {/* Always there, so the line is announced when it appears (a region inserted with its text often is not). */}
           <p className="sr-only" aria-live="polite">
             {undo ? `${spec.label}: ${UNDO_LINES[undo.kind]}` : null}
@@ -346,7 +362,7 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
           {undo ? (
             <p className="flex flex-wrap items-center gap-x-1 text-sm">
               {UNDO_LINES[undo.kind]}
-              <Button ref={undoRef} variant="link" className="h-11 px-1 md:h-auto" onClick={undoLast}>
+              <Button ref={undoRef} variant="link" className="h-11 px-1 md:h-auto" disabled={revising} onClick={undoLast}>
                 Undo
               </Button>
             </p>
@@ -411,7 +427,7 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
               ) : hasText ? (
                 <>
                   {aiAvailable ? null : <span className="text-sm text-muted-foreground">AI isn&apos;t set up</span>}
-                  <Button ref={actionRef} variant="outline" size="touch" disabled={!aiAvailable} onClick={write}>
+                  <Button ref={actionRef} variant="outline" size="touch" disabled={!aiAvailable || revising} onClick={write}>
                     Regenerate
                   </Button>
                 </>

@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import BuilderLayout from "@/app/(signed-in)/(church)/builder/layout";
 import { Toaster } from "@/components/ui/sonner";
-import type { ReviewBody } from "@/lib/api/types";
+import type { ReviewBody, ReviseBody } from "@/lib/api/types";
 import { draftKey, type DraftV1, type SectionKey } from "@/lib/draft/schema";
 import { fakeError, installFakeApi, type FakeHandler } from "@/test/fake-api";
 import {
@@ -24,6 +24,7 @@ import {
   reviewNote,
   reviewResult,
   reviewRoute,
+  reviseRoute,
   testDraft,
   USER_ID,
 } from "@/test/fixtures";
@@ -67,6 +68,10 @@ const ANSWER = reviewResult({
   ],
   service_notes: [reviewNote("repetition", 'Several prayers open with "Gracious God".', "code")],
 });
+
+function stored(): DraftV1 {
+  return JSON.parse(window.localStorage.getItem(KEY) ?? "null") as DraftV1;
+}
 
 function renderStep(draft: DraftV1 = seeded(), routes: Record<string, FakeHandler> = {}) {
   window.localStorage.setItem(KEY, JSON.stringify(draft));
@@ -273,5 +278,107 @@ describe("Review service (R User experience)", () => {
     expect(screen.queryByText(/Reviewing…/)).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
     expect(api.requests.filter((r) => r.path === "/liturgy/review")).toHaveLength(1);
+  });
+});
+
+describe("Revise with these notes (R Revise)", () => {
+  it("is offered only on AI cards with a note left; typed, archived and default cards get notes but no Revise", async () => {
+    const { user } = renderStep();
+    await review(user);
+    expect(within(card("Opening Prayer")).getByRole("button", { name: "Revise with these notes" })).toBeInTheDocument();
+    expect(within(card("Assurance of Pardon")).getByRole("button", { name: "Revise with these notes" })).toHaveAccessibleDescription(
+      "Assurance of Pardon",
+    );
+    expect(within(card("Call to Worship")).getByText(STOCK)).toBeInTheDocument();
+    expect(within(card("Call to Worship")).queryByRole("button", { name: "Revise with these notes" })).toBeNull();
+    expect(within(card("Prayer of Confession")).queryByRole("button", { name: "Revise with these notes" })).toBeNull();
+    expect(within(card("Benediction")).queryByRole("button", { name: "Revise with these notes" })).toBeNull();
+    // Its last note dismissed, an AI card has nothing to revise with.
+    await user.click(within(card("Assurance of Pardon")).getByRole("button", { name: /^Dismiss note:/ }));
+    expect(within(card("Assurance of Pardon")).queryByRole("button", { name: "Revise with these notes" })).toBeNull();
+  });
+
+  it("sends the card's text and remaining notes, replaces it as an AI draft with Undo, and Undo brings the draft back", async () => {
+    const { user, api } = renderStep(seeded(), {
+      "POST /liturgy/revise": reviseRoute(() => ({ text: "Gracious God, hear us now." })),
+    });
+    await review(user);
+    const opening = card("Opening Prayer");
+    await user.click(within(opening).getByRole("button", { name: "Dismiss note: The second clause is hard to say aloud." }));
+    await user.click(within(opening).getByRole("button", { name: "Revise with these notes" }));
+    expect(await within(opening).findByText("Revised with these notes.")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Opening Prayer" })).toHaveValue("Gracious God, hear us now.");
+    expect(within(opening).getByText("AI draft")).toBeInTheDocument();
+    expect(within(opening).queryByRole("list", { name: "Notes on Opening Prayer" })).toBeNull(); // the notes went with the text
+    expect(within(opening).getByRole("button", { name: "Undo" })).toHaveFocus();
+    const sent = api.requests.find((r) => r.path === "/liturgy/revise")?.body as ReviseBody;
+    expect(sent).toMatchObject({ section: "opening_prayer", text: "Gracious God, as we journey, hear us.", notes: [STOCK] });
+    await waitFor(() => expect(stored().liturgy.cards.opening_prayer).toEqual({ enabled: true, text: "Gracious God, hear us now.", origin: "ai" }));
+    await user.click(within(opening).getByRole("button", { name: "Undo" }));
+    expect(screen.getByRole("textbox", { name: "Opening Prayer" })).toHaveValue("Gracious God, as we journey, hear us.");
+    expect(within(opening).queryByText("Revised with these notes.")).toBeNull();
+    expect(within(card("Call to Worship")).getByText(STOCK)).toBeInTheDocument(); // other cards keep theirs
+  });
+
+  it("keeps the card read-only while it revises; Cancel keeps the text and notes and returns focus to Revise", async () => {
+    const { user } = renderStep(seeded(), { "POST /liturgy/revise": () => new Promise<never>(() => {}) });
+    await review(user);
+    const opening = card("Opening Prayer");
+    await user.click(within(opening).getByRole("button", { name: "Revise with these notes" }));
+    const cancel = within(opening).getByRole("button", { name: "Cancel revising Opening Prayer" });
+    expect(cancel).toHaveFocus();
+    expect(within(opening).getByRole("button", { name: "Revising…" })).toBeDisabled();
+    expect(screen.getByRole("textbox", { name: "Opening Prayer" })).toHaveAttribute("readonly");
+    expect(within(opening).getByRole("button", { name: "Regenerate" })).toBeDisabled();
+    expect(within(opening).getByRole("button", { name: "More actions for Opening Prayer" })).toBeDisabled();
+    await user.click(cancel);
+    expect(within(opening).getByRole("button", { name: "Revise with these notes" })).toHaveFocus();
+    expect(screen.getByRole("textbox", { name: "Opening Prayer" })).not.toHaveAttribute("readonly");
+    expect(screen.getByRole("textbox", { name: "Opening Prayer" })).toHaveValue("Gracious God, as we journey, hear us.");
+    expect(within(opening).getByText(STOCK)).toBeInTheDocument();
+  });
+
+  it("shows why a revision failed under the notes, keeps the text, and Revise tries again; Undo is off while it revises", async () => {
+    const { user, api } = renderStep(seeded(), {
+      "POST /liturgy/revise": fakeError(422, "prompt_invalid", "This prayer is too long to revise."),
+    });
+    await review(user);
+    const opening = card("Opening Prayer");
+    await user.click(within(opening).getByRole("button", { name: "Revise with these notes" }));
+    expect(await within(opening).findByRole("alert")).toHaveTextContent("This prayer is too long to revise.");
+    expect(within(opening).getByRole("button", { name: "Revise with these notes" })).toHaveFocus();
+    expect(screen.getByRole("textbox", { name: "Opening Prayer" })).toHaveValue("Gracious God, as we journey, hear us.");
+    api.set("POST /liturgy/revise", fakeError(503, "ai_busy", "The AI service is busy. Try again in a minute."));
+    await user.click(within(opening).getByRole("button", { name: "Revise with these notes" }));
+    expect(await within(opening).findByText("The AI service is busy. Try again in a minute.")).toBeInTheDocument();
+    api.set("POST /liturgy/revise", reviseRoute());
+    await user.click(within(opening).getByRole("button", { name: "Revise with these notes" }));
+    expect(await within(opening).findByText("Revised with these notes.")).toBeInTheDocument();
+    expect(within(opening).queryByRole("alert")).toBeNull();
+    expect(screen.getByRole("textbox", { name: "Opening Prayer" })).toHaveValue("Opening Prayer revised with the notes.");
+    // Reviewed again and revised again: the Undo line's Undo is off while it runs, as Regenerate and ⋯ are.
+    api.set("POST /liturgy/revise", () => new Promise<never>(() => {}));
+    await review(user);
+    await user.click(within(opening).getByRole("button", { name: "Revise with these notes" }));
+    expect(within(opening).getByRole("button", { name: "Undo" })).toBeDisabled();
+    expect(within(opening).getByRole("button", { name: "Regenerate" })).toBeDisabled();
+  });
+
+  it("waits out a 429: the card shows the wait, and no Revise sends until it ends", async () => {
+    const { user, api } = renderStep(seeded(), {
+      "POST /liturgy/revise": fakeError(429, "rate_limited", "Too many requests. Try again in 30 seconds.", { details: { retry_after_seconds: 30 } }),
+    });
+    await review(user);
+    const opening = card("Opening Prayer");
+    await user.click(within(opening).getByRole("button", { name: "Revise with these notes" }));
+    expect(await within(opening).findByRole("alert")).toHaveTextContent("Too many requests — try again in 30 s.");
+    const again = within(opening).getByRole("button", { name: "Revise with these notes" });
+    expect(again).toHaveAttribute("aria-disabled", "true");
+    expect(again).toHaveFocus();
+    await user.click(again);
+    const other = within(card("Assurance of Pardon")).getByRole("button", { name: "Revise with these notes" });
+    expect(other).toHaveAttribute("aria-disabled", "true"); // one wait for every card, and for Generate
+    await user.click(other);
+    expect(api.requests.filter((r) => r.path === "/liturgy/revise")).toHaveLength(1);
   });
 });

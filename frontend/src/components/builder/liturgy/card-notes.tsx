@@ -1,15 +1,20 @@
 "use client";
 
-import { CheckIcon, XIcon } from "lucide-react";
+import { CheckIcon, CircleAlertIcon, XIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 
+import { PendingButton } from "@/components/app/pending-button";
+import { Alert, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useDraft } from "@/lib/draft/context";
 import type { SectionKey } from "@/lib/draft/schema";
-import { LOOKS_GOOD, TAG_LABELS, type Note } from "@/lib/liturgy/notes";
+import { useLiturgyGeneration } from "@/lib/liturgy/generation";
+import { canRevise, LOOKS_GOOD, TAG_LABELS, type Note } from "@/lib/liturgy/notes";
 import { useLiturgyReview } from "@/lib/liturgy/review";
 
 import { REVIEW_BUTTON_ID } from "./review-bar";
+import { useRetryWait } from "./section-card";
 
 /** The id of a card's notes, which describe its textarea. */
 export function notesId(key: SectionKey): string {
@@ -64,16 +69,51 @@ export function NoteList({ notes, label, onDismiss }: { notes: Note[]; label: st
   );
 }
 
+/** The id of a card's "Revise with these notes" button. */
+export function reviseId(key: SectionKey): string {
+  return `card-${key}-revise`;
+}
+
 /**
  * A card's notes under its text (R "Notes"): at most 3, most important
  * first; "Looks good." when the card was reviewed and came back with none;
  * nothing when it was not reviewed, its notes were all dismissed, or its text
  * changed since.
+ *
+ * "Revise with these notes" (R "Revise") shows only on an AI card with a note
+ * left, and not while the card is being written; the card's heading
+ * describes it. While it runs the button
+ * reads "Revising…" beside a Cancel ×, which takes focus; a failure shows its
+ * message here and leaves the button to try again. While a 429's wait
+ * (Generate's or Revise's) is not over, the button is off but keeps focus. The card itself moves
+ * focus when the revision ends (`SectionCard`).
  */
-export function CardNotes({ sectionKey, label, headingId }: { sectionKey: SectionKey; label: string; headingId: string }) {
+export function CardNotes({
+  sectionKey,
+  label,
+  headingId,
+  busy = false,
+}: {
+  sectionKey: SectionKey;
+  label: string;
+  headingId: string;
+  /** The card is being written by the AI: no Revise. */
+  busy?: boolean;
+}) {
   const review = useLiturgyReview();
+  const { draft } = useDraft();
   const notes = review.review?.cards[sectionKey];
   const remember = useDismissFocus(() => document.getElementById(headingId));
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const focusCancel = useRef(false);
+  const revising = review.revising[sectionKey] === true;
+  const failure = review.reviseErrors[sectionKey];
+  const waiting = useRetryWait(useLiturgyGeneration().rateLimitedUntil ?? undefined);
+  useEffect(() => {
+    if (!focusCancel.current) return;
+    focusCancel.current = false;
+    cancelRef.current?.focus();
+  });
   if (notes === undefined) return null;
   if (notes.notes.length === 0) {
     return notes.found === 0 ? (
@@ -83,6 +123,7 @@ export function CardNotes({ sectionKey, label, headingId }: { sectionKey: Sectio
       </p>
     ) : null;
   }
+  const offered = canRevise(draft.liturgy.cards[sectionKey], notes) && !busy;
   return (
     <div id={notesId(sectionKey)} className="grid gap-2 rounded-md bg-muted/40 p-3">
       <NoteList
@@ -93,6 +134,49 @@ export function CardNotes({ sectionKey, label, headingId }: { sectionKey: Sectio
           review.dismiss(sectionKey, id);
         }}
       />
+      {offered || revising ? (
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {revising ? (
+            <>
+              <PendingButton pending pendingLabel="Revising…" size="touch">
+                Revising…
+              </PendingButton>
+              <Button
+                ref={cancelRef}
+                variant="ghost"
+                size="icon-lg"
+                className="size-11 md:size-8"
+                aria-label={`Cancel revising ${label}`}
+                onClick={() => review.cancelRevise(sectionKey)}
+              >
+                <XIcon aria-hidden="true" />
+              </Button>
+            </>
+          ) : (
+            <Button
+              id={reviseId(sectionKey)}
+              variant="outline"
+              size="touch"
+              aria-describedby={headingId}
+              focusableWhenDisabled
+              disabled={waiting}
+              className="data-disabled:pointer-events-none data-disabled:opacity-50"
+              onClick={() => {
+                // Focus moves to Cancel only when the revision started.
+                if (review.revise(sectionKey)) focusCancel.current = true;
+              }}
+            >
+              Revise with these notes
+            </Button>
+          )}
+        </div>
+      ) : null}
+      {failure && !revising ? (
+        <Alert variant="destructive" role="alert">
+          <CircleAlertIcon aria-hidden="true" />
+          <AlertTitle className="whitespace-normal">{failure.message}</AlertTitle>
+        </Alert>
+      ) : null}
     </div>
   );
 }
