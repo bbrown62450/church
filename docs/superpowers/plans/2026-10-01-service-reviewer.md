@@ -144,6 +144,20 @@ The code and F win over R and S4, and the owner's answers over all three. **[own
 30. **The manual check** is appended as "## Service reviewer" to `docs/manual-verification.md` (R Testing), with the owner's guided steps marked "(owner, after the reviewer)"; `test_slice1_docs.py`'s heading pin grows by that heading (one assertion edited, no new test).
 31. **The owner's checks after the merge (owner answer 4).** A guided phone check of seven short steps, one at a time, a quick look on a computer, and an optional Console call of `POST /liturgy/review` that times a real review (T13); then a records PR with a "Service reviewer record".
 
+### Spec, F and code mismatches found while planning
+Each is resolved in the clarification named; the code and F won unless an owner answer said otherwise.
+- R (UX "Review service") and S4 ("Timeouts") give a 90 000 ms client timeout; F §1.8 has said 100 000 since the 4b plan, and owner answer 3 confirms it (clarification 26).
+- S4's "Freeze contingency" paragraph asks for `LEGACY_SYSTEM_PROMPT`, `legacy_default_prompts()`, a wrapper smoke test and a `streamlit_tests` case; F §6.1's amendment of 2026-09-28 says the contingency is not in effect, and owner answer 2 says it is off (clarification 2).
+- R's old season sentences match the code ("..."), but its new sentence uses "…"; the plan copies R exactly (clarification 2).
+- R says `review_checks` returns `Note(tag, text, source="code")`; the merge needs the quoted text a repeat contains, so `Note` also carries `match`, left out of equality and of the API (clarification 11).
+- R builds the reference pattern from "every alias in `BOOKS`"; `BOOKS` stores aliases normalized, without periods, and `parse_refs` also reads `PARSE_ALIASES`, which R excludes ("no second list"): the pattern allows a period itself and uses `BOOKS` only (clarification 5).
+- R lists Regenerate among what clears a card's notes; with the stale rule the notes go when its new draft lands, not at the click (clarification 18).
+- R names Revise's HTTP codes but not their messages; generation's per-section sentence ("… Type this section yourself.") does not fit, so Revise uses the OpenAI client's sentences (clarification 13), and 4b's `cardErrorFrom`, which showed "Something went wrong." for an unknown 5xx, gains the three AI codes (clarification 27).
+- R's review budget says only that the review never answers `prompt_invalid`; when the church's own text alone is too long, the AI is skipped with `ai_status: "error"` (clarification 8).
+- S4's "Sermon text" assumes the review can reuse generation's passage fetch; it lived inside `LiturgyGenerationProvider`, so it moves to `lib/liturgy/sermon.ts` unchanged (clarification 17).
+- S4's Testing puts the add-on's cases in slice 4's files (`cards.test.ts`, the generation tests); the rules live in new modules, so their tests do too (clarification 29).
+- F §1.8 already lists 100 000 for both routes (4b plan); owner answer 3 asks for an amendment row, so T11 adds one with the server deadlines (clarification 12).
+
 ### Risks carried into the plan
 - **The AI review's quality and timing are unmeasured.** The container cannot reach OpenAI; the tests use `FakeAI`. A full service is a prompt of up to 24 000 characters and an answer of up to 2 000 tokens in JSON mode; `gpt-4.1-mini` wrote a 2 820-character Prayers of the People in about 5 s, so a review is expected in 10-30 s, inside the 75 s deadline. T13 Step 6 times a real one. Invalid JSON or a slow answer still leaves the code notes.
 - **The new season wording changes every new AI draft** for churches without a saved system prompt, the owner's included (clarification 2). T13's phone check generates one section to see it.
@@ -5250,7 +5264,7 @@ for i in 1 2 3; do .venv/bin/python -m pytest -q backend/tests/test_review_check
 grep -nE "^(import|from) (fastapi|starlette|streamlit)" backend/review_checks.py backend/usecases/liturgy_review.py
 grep -nE "logger\.(info|warning|error|debug|exception)" backend/usecases/liturgy_review.py
 grep -nE "try:|select\(|session_scope" backend/api/routes/liturgy_review.py
-grep -rn "LEGACY_SYSTEM_PROMPT\|legacy_default_prompts" backend --include=*.py; echo "legacy grep exit $?"
+grep -rn "LEGACY_SYSTEM_PROMPT\|legacy_default_prompts" backend --include=*.py | grep -v "^backend/tests/"; echo "legacy grep exit $?"
 grep -c "do not name or refer to the liturgical season" backend/liturgy_prompts.py
 grep -rn "apiFetch" frontend/src/components frontend/src/app --include=*.ts --include=*.tsx | grep -vE "\.test\.tsx?:"; echo "apiFetch in UI grep exit $?"
 grep -rnE "window\.(local|session)Storage|(local|session)Storage\.(getItem|setItem|removeItem|key|clear)" frontend/src --include=*.ts --include=*.tsx | grep -vE "^frontend/src/lib/storage\.ts:|\.test\.tsx?:|^frontend/src/test/"; echo "storage grep exit $?"
@@ -5260,7 +5274,7 @@ git diff --name-only origin/main...HEAD -- backend/migrations backend/db require
 for c in $(git rev-list origin/main..HEAD); do git show -s --format=%B "$c" | grep -q '^Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>$' || echo "no trailer: $(git show -s --format='%h %s' "$c")"; done; echo "trailer check done"
 ```
 
-**Expected:** the first grep prints nothing; the second lists the review's two DEBUG lines (messages, answer), its WARNING (an unusable answer's length), its `logger.exception` (no text) and its `_log` INFO line, and the same five for revise (with the section key): read each, none formats a prompt, a card, a note or an answer at INFO; the third prints nothing; `legacy grep exit 1`; `0`; `apiFetch in UI grep exit 1`; `storage grep exit 1`; `raw html grep exit 1`; two lines ending `100_000,`; `0`; only `trailer check done`.
+**Expected:** the first grep prints nothing; the second lists the review's two DEBUG lines (messages, answer), its WARNING (an unusable answer's length), its `logger.exception` (no text) and its `_log` INFO line, and the same five for revise (with the section key): read each, none formats a prompt, a card, a note or an answer at INFO; the third prints nothing; `legacy grep exit 1` (the runbook's contingency text is checked by `test_ops_workflows.py`, which the filter leaves out); `0`; `apiFetch in UI grep exit 1`; `storage grep exit 1`; `raw html grep exit 1`; two lines ending `100_000,`; `0`; only `trailer check done`.
 
 - [ ] **Step 7 (agent): The exact list of changed paths**
 
