@@ -419,6 +419,33 @@ or church id is recorded here.
 | Streamlit smoke on liturgy-frozen | Not run: 4b changes no data, and merges never reach liturgy-frozen | 2026-10-01 |
 | Follow-ups | Next: the service reviewer as its own slice (owner answer 3, 2026-09-30). 5a: saving and archiving services and the Word files, including the "First Reading" heading and recording hymn use on every save (leaving a service's own date out of the recent-use lookup). 6a: Settings for the default benediction, the liturgy prompts and the prayer library. Still open from earlier slices: first-line matching research (Hymnary.org), the NUL-character 500 (app-wide), and the two slice 1 test churches (kept for now, owner) | 2026-10-01 |
 
+### Service reviewer record
+
+The service reviewer (Review service on the Liturgy step: code checks and an
+AI review leaving notes under each card and in an "Across the service" box,
+Revise with these notes on AI cards with Undo, and the writer's new season
+guidance) merged as PR #34. No database change and no new variable, so
+production stays at `0004_invites_reusable` (head); both new calls wait up to
+100 s (owner answer 3, 2026-10-01). The owner's check was a guided check on a
+phone, a look on a computer and a timed review in the Console (owner answer
+4), covering the "(owner, after the reviewer)" items of
+`docs/manual-verification.md` → "Service reviewer". No token, email address
+or church id is recorded here.
+
+| Step | Result | Date |
+|---|---|---|
+| Merge and deploy | PR #34 merged 16:08 UTC (12:08 Eastern), merge commit `0c8256b`. CI on `main` (run 36889737690): success. Deploy Logs: no Running upgrade; AI configured (model=gpt-4.1-mini); no Traceback | 2026-10-01 |
+| 1. Review service (phone) | The review took about 15 s; the typed Call to Worship had the "As we journey" stock-phrase note. Found: the AI also left praise as notes (the Prayer of Confession got three approving notes), so Revise was offered with nothing to fix (follow-up 1) | 2026-10-01 |
+| 2. A note, dismissed | The × removed only that note; the others stayed | 2026-10-01 |
+| 3. No Revise on typed text | The typed card had its note and no Revise; AI cards with notes had it. Owner decision: Revise on typed text too, with a confirm and Undo (follow-up 2; reverses reviewer decision 4) | 2026-10-01 |
+| 4. Revise with Undo | Revised in about 10 s, addressed the note; Undo brought the draft back | 2026-10-01 |
+| 5. Typing clears notes | The card's notes went at once, as built. Owner decision A: keep them, faded, under "From before your last edit." (follow-up 3) | 2026-10-01 |
+| 6. Across the service | The box said: Several prayers open with "Gracious God". Owner request: Revise from this box (follow-up 5) | 2026-10-01 |
+| 7. Quick checks only; the phone layout | Not shown (the AI answered), covered by the tests; nothing ran off the screen; the × buttons were easy to tap | 2026-10-01 |
+| Computer and timed review | The layout looked right. Console: review 200 in 3524 ms, ai_status=ok; the code notes as expected; 4 AI notes, two of them restating code notes in other words (follow-up 4) | 2026-10-01 |
+| Streamlit smoke on liturgy-frozen | Not run: the reviewer changes no data, and merges never reach liturgy-frozen | 2026-10-01 |
+| Follow-ups | Next, one small PR (owner, 2026-10-01): 1. notes only for something to change, never praise; 2. Revise on typed text with a confirm and Undo; 3. after an edit, keep the card's notes faded under "From before your last edit."; 4. drop AI notes that restate a code note (citation, repeated opening). Then 5. Revise from "Across the service", planned on its own. After that: 5a (saving and archiving services and the Word files). 6a: Settings for the default benediction, the liturgy prompts and the prayer library (the voice profile turns on the Voice check). Still open: first-line matching research (Hymnary.org), the NUL-character 500 (app-wide), and the two slice 1 test churches (kept for now, owner) | 2026-10-01 |
+
 ## Backups
 
 - **Workflow:** `.github/workflows/backup.yml` (`db-backup`). Daily at 08:37 UTC,
