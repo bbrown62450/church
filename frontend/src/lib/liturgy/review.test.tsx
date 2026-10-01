@@ -295,3 +295,115 @@ describe("Revise with these notes (R Revise)", () => {
     expect(api.requests.some((r) => r.path === "/liturgy/revise")).toBe(false);
   });
 });
+
+describe("Revise the other prayers (reviewer follow-up 2)", () => {
+  const OPENING = 'Several prayers open with "Gracious God".';
+  const ACROSS = 'Opens with "Gracious God" like the Call to Worship; open differently.';
+
+  /** Each prayer's revision waits for its own release; `sent` lists the sections in the order they were sent. */
+  function gated(answers: Partial<Record<SectionKey, string>>) {
+    const gates = new Map<string, () => void>();
+    const route = reviseRoute(async (body) => {
+      await new Promise<void>((resolve) => gates.set(body.section, resolve));
+      return { text: answers[body.section as SectionKey] ?? "" };
+    });
+    return { route, release: (key: SectionKey) => gates.get(key)?.() };
+  }
+
+  function threeShare(): DraftV1 {
+    let d = card(seeded(), "call_to_worship", "Leader: Gracious God, come.", "typed");
+    d = card(d, "prayer_of_confession", "Gracious God, we confess.", "archive");
+    return card(d, "assurance", "Gracious God, you forgive.", "ai");
+  }
+
+  const ANSWER_ACROSS = reviewResult({
+    cards: [{ section: "opening_prayer", notes: [reviewNote("read_aloud", "The prayer runs long.")] }],
+    service_notes: [reviewNote("repetition", OPENING, "code"), reviewNote("repetition", "Two prayers say journey.")],
+  });
+
+  function sentNotes(api: ReturnType<typeof renderProvider>) {
+    return api.requests.filter((r) => r.path === "/liturgy/revise").map((r) => r.body as ReviseBody).map((b) => [b.section, b.text, b.notes]);
+  }
+
+  it("revises every prayer but the first one at a time, each told the openings so far; the note goes once all were revised", async () => {
+    const { route, release } = gated({
+      opening_prayer: "Holy One, hear us.",
+      prayer_of_confession: "Merciful God, we confess.",
+      assurance: "Leader: Loving God, you forgive.",
+    });
+    const api = renderProvider({ "POST /liturgy/review": reviewRoute(() => ANSWER_ACROSS), "POST /liturgy/revise": route }, churchProfile(), threeShare());
+    act(() => handle.current?.start());
+    expect(await screen.findByText("said: Review finished. 3 notes.")).toBeInTheDocument();
+    const started: (boolean | undefined)[] = [];
+    act(() => {
+      started.push(handle.current?.reviseAcross("service-1")); // an AI note: the app does not know the prayers
+      started.push(handle.current?.reviseAcross("service-0"));
+      started.push(handle.current?.reviseAcross("service-0")); // already running
+    });
+    expect(started).toEqual([false, true, false]);
+    // One at a time, in service order; every one shows as revising from the start.
+    await waitFor(() => expect(sentNotes(api)).toHaveLength(1));
+    expect(handle.current?.revising).toEqual({ opening_prayer: true, prayer_of_confession: true, assurance: true });
+    expect(screen.getByText(`status: ok; service: ${OPENING} | Two prayers say journey.`)).toBeInTheDocument();
+    act(() => release("opening_prayer"));
+    expect(await screen.findByText("opening_prayer: Holy One, hear us. [ai] notes none; revising no; error none; undo revised")).toBeInTheDocument();
+    await waitFor(() => expect(sentNotes(api)).toHaveLength(2));
+    act(() => release("prayer_of_confession"));
+    await waitFor(() => expect(sentNotes(api)).toHaveLength(3));
+    expect(sentNotes(api)).toEqual([
+      ["opening_prayer", "Gracious God, as we journey, hear us.", [ACROSS]],
+      ["prayer_of_confession", "Gracious God, we confess.", [`${ACROSS.slice(0, -1)}, not with "Holy One".`]],
+      ["assurance", "Gracious God, you forgive.", [`${ACROSS.slice(0, -1)}, not with "Holy One" or "Merciful God".`]],
+    ]);
+    expect(screen.getByText(`status: ok; service: ${OPENING} | Two prayers say journey.`)).toBeInTheDocument();
+    act(() => release("assurance"));
+    expect(await screen.findByText("status: ok; service: Two prayers say journey.")).toBeInTheDocument();
+    expect(handle.current?.revising).toEqual({});
+    expect(screen.getByText(/^call_to_worship: Leader: Gracious God, come\. \[typed\] notes none; revising no; error none; undo none$/)).toBeInTheDocument();
+    expect(draftHandle.current?.peek().liturgy.cards.prayer_of_confession).toEqual({ enabled: true, text: "Merciful God, we confess.", origin: "ai" });
+    expect(draftHandle.current?.peek().liturgy.cards.assurance).toEqual({ enabled: true, text: "Leader: Loving God, you forgive.", origin: "ai" });
+  });
+
+  it("never removes the note of a newer review, even one with the same note", async () => {
+    const { route, release } = gated({ opening_prayer: "Holy One, hear us.", prayer_of_confession: "Merciful God, we confess.", assurance: "Loving God, you forgive." });
+    const api = renderProvider({ "POST /liturgy/review": reviewRoute(() => ANSWER_ACROSS), "POST /liturgy/revise": route }, churchProfile(), threeShare());
+    act(() => handle.current?.start());
+    expect(await screen.findByText("said: Review finished. 3 notes.")).toBeInTheDocument();
+    act(() => void handle.current?.reviseAcross("service-0"));
+    await waitFor(() => expect(sentNotes(api)).toHaveLength(1));
+    act(() => release("opening_prayer"));
+    await waitFor(() => expect(sentNotes(api)).toHaveLength(2));
+    act(() => release("prayer_of_confession"));
+    await waitFor(() => expect(sentNotes(api)).toHaveLength(3));
+    // A new review while the last one runs: it brings the same note (same id, same words).
+    act(() => handle.current?.start());
+    await waitFor(() => expect(api.requests.filter((r) => r.path === "/liturgy/review")).toHaveLength(2));
+    expect(await screen.findByText("running: no")).toBeInTheDocument();
+    act(() => release("assurance"));
+    expect(await screen.findByText(/^opening_prayer: Holy One, hear us\. \[ai\]/)).toBeInTheDocument();
+    await waitFor(() => expect(handle.current?.revising).toEqual({}));
+    expect(draftHandle.current?.peek().liturgy.cards.assurance.text).toBe("Loving God, you forgive.");
+    expect(screen.getByText(`status: ok; service: ${OPENING} | Two prayers say journey.`)).toBeInTheDocument();
+  });
+
+  it("skips a prayer switched off before its turn (another tab), sending nothing for it and keeping the note", async () => {
+    const { route, release } = gated({ opening_prayer: "Holy One, hear us.", assurance: "Loving God, you forgive." });
+    const api = renderProvider({ "POST /liturgy/review": reviewRoute(() => ANSWER_ACROSS), "POST /liturgy/revise": route }, churchProfile(), threeShare());
+    act(() => handle.current?.start());
+    expect(await screen.findByText("said: Review finished. 3 notes.")).toBeInTheDocument();
+    act(() => void handle.current?.reviseAcross("service-0"));
+    await waitFor(() => expect(sentNotes(api)).toHaveLength(1));
+    // Switched off while it waits, with no Cancel (as another tab's change arrives): its turn sends nothing.
+    act(() => draftHandle.current?.update((d) => card(d, "prayer_of_confession", "Gracious God, we confess.", "archive", false)));
+    act(() => release("opening_prayer"));
+    await waitFor(() => expect(sentNotes(api)).toHaveLength(2));
+    expect(sentNotes(api).map(([section]) => section)).toEqual(["opening_prayer", "assurance"]);
+    expect(handle.current?.revising).toEqual({ assurance: true });
+    act(() => release("assurance"));
+    await waitFor(() => expect(handle.current?.revising).toEqual({}));
+    expect(draftHandle.current?.peek().liturgy.cards.assurance).toEqual({ enabled: true, text: "Loving God, you forgive.", origin: "ai" });
+    expect(draftHandle.current?.peek().liturgy.cards.prayer_of_confession).toEqual({ enabled: false, text: "Gracious God, we confess.", origin: "archive" });
+    expect(screen.queryByText(/revised draft for Prayer of Confession/)).toBeNull(); // skipped silently, as a switch-off in this tab
+    expect(screen.getByText(`status: ok; service: ${OPENING} | Two prayers say journey.`)).toBeInTheDocument();
+  });
+});
