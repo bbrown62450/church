@@ -318,3 +318,34 @@ def test_the_budget_drops_the_example_then_the_profile_then_the_sermon():
         assert ("described here:" in system) is ("profile" not in dropped)
         assert ("For voice only" in user) is ("example" not in dropped)
         assert ("Sermon text (Mark 4:35-41)" in user) is ("sermon" not in dropped)
+
+
+# --- the service reviewer: the writer's new season guidance (reviewer spec,
+# "Writer: new season guidance"; slice 4 spec, reviewer amendment, "Tests before and after") ---
+
+NEW_SEASON_GUIDANCE = (
+    "Let the season's themes come through when the time calls for it, and name the season or festival "
+    "where it is natural; saying 'Easter' or 'Christmas' more than once is fine. Avoid canned or repetitive "
+    "seasonal language: no stock phrases like 'in this season of…,' 'as we journey through…,' or "
+    "'on this Nth Sunday…,' and never name Ordinary Time."
+)
+OLD_SEASON_SENTENCES = (
+    "The occasion is given only to guide tone and theme — do not name or refer to the liturgical season or "
+    "calendar in the text itself:",
+    "no 'in this ordinary time,' 'in this season of...,' 'as we journey through...,' 'on this Nth Sunday...,' "
+    "or similar.",
+    "Exception: on a major festival (Christmas Eve/Day, Easter, Pentecost) you may name the day itself, at most "
+    "once across the piece.",
+)
+
+
+def test_the_default_system_prompt_has_the_new_season_guidance_and_none_of_the_old():
+    for prompt in (lp.DEFAULT_SYSTEM_PROMPT, lp.default_prompts()["system"]):
+        assert NEW_SEASON_GUIDANCE in prompt
+        for old in OLD_SEASON_SENTENCES:
+            assert old not in prompt, old
+    assert lp.SEASON_GUIDANCE == NEW_SEASON_GUIDANCE          # the reviewer's prompt quotes the same rule
+    # The rest of the voice is unchanged: it still forbids citing passages and still varies openings.
+    assert "Do not directly cite or name scripture passages" in lp.DEFAULT_SYSTEM_PROMPT
+    assert "Vary how you address God" in lp.DEFAULT_SYSTEM_PROMPT
+    assert lp.check_template("system", lp.DEFAULT_SYSTEM_PROMPT).ok
