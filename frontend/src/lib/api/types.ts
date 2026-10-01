@@ -61,3 +61,14 @@ export type SectionError = components["schemas"]["SectionError"];
 /** The effective NT reading and its text, never ESV (shared with the reviewer's routes). */
 export type SermonText = components["schemas"]["SermonText"];
 export type HymnRef = components["schemas"]["HymnRef"];
+
+/** `POST /liturgy/review` (the service reviewer): every switched-on card with text, and the notes back. */
+export type ReviewBody = components["schemas"]["ReviewIn"];
+export type ReviewCardBody = components["schemas"]["ReviewCardIn"];
+export type ReviewResult = components["schemas"]["ReviewOut"];
+export type ReviewNote = components["schemas"]["NoteOut"];
+/** Why the AI part of a review is missing ("ok" when it ran): a field, not an error code (F §1.5). */
+export type AiStatus = ReviewResult["ai_status"];
+/** `POST /liturgy/revise` (the service reviewer): one AI card's text and its remaining notes; the revised text. */
+export type ReviseBody = components["schemas"]["ReviseIn"];
+export type ReviseResult = components["schemas"]["ReviseOut"];

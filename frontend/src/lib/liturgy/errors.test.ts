@@ -77,4 +77,17 @@ describe("cardErrorFrom (S errors.ts)", () => {
       ),
     ).toEqual({ code: "auth_unavailable", message: "Sign-in is temporarily unavailable. Try again shortly.", retryable: true });
   });
+
+  it("shows the server's sentence for the AI codes Revise gets as HTTP statuses (the service reviewer)", () => {
+    const cases: [number, string, string, boolean][] = [
+      [503, "ai_not_configured", "AI isn't set up on this app yet.", false],
+      [503, "ai_busy", "The AI service is busy. Try again in a minute.", true],
+      [504, "ai_timeout", "The AI took too long to answer. Try again.", true],
+      [502, "ai_upstream_error", "The AI service had a problem. Try again.", true],
+      [422, "prompt_invalid", "This prayer is too long to revise.", false],
+    ];
+    for (const [status, code, message, retryable] of cases) {
+      expect(cardErrorFrom(new ApiError(status, code as never, message)), code).toEqual({ code, message, retryable });
+    }
+  });
 });

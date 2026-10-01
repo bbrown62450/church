@@ -244,3 +244,7 @@ Append a manual check at 375 px to `docs/manual-verification.md`.
 - **The service rubric** in the new app. The rubric storage is already on main, and the ops session is folding
   the rubric into the slice 3, 4 and 6a specs.
 - **The prayer library** (slice 6a) is optional: the Voice check simply skips until a profile exists.
+
+## Notes from the implementation plan (2026-10-01)
+
+`docs/superpowers/plans/2026-10-01-service-reviewer.md` builds this add-on as one PR. The owner's answers of 2026-10-01 set the client timeout for both routes to 100 000 ms (not 90 000; F §1.8) and confirm the writer's new season guidance ships with it. The slice 4 spec's "Notes from the service reviewer plan" lists where the plan reads this spec more precisely.

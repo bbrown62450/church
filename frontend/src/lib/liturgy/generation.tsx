@@ -13,10 +13,10 @@
  * - `generate(keys, {aiAvailable, bulk})`: with AI off it sends nothing and
  *   marks each switched-on empty card "AI not configured" (S step 0).
  *   Otherwise every key is queued; the batch first reads the sermon text once
- *   (the effective NT reading in the translation step 1 shows, WEB for ESV,
- *   `queryClient.fetchQuery` through `passageQuery`, at most 10 s; a failure
- *   or a timeout just leaves it out), then each section is one request, at
- *   most 3 in flight.
+ *   (`useSermonLoader` in `sermon.ts`, shared with the service reviewer: the
+ *   effective NT reading in the translation step 1 shows, WEB for ESV, at
+ *   most 10 s; a failure or a timeout just leaves it out), then each section
+ *   is one request, at most 3 in flight.
  * - The card is captured (`captureCard`) when the member asks (the click, or
  *   "Replace text"), not when the request starts. Before a queued request is
  *   sent, and again when its answer arrives, `staleVerdict` decides against
@@ -43,8 +43,8 @@
  *   why) is not called one that shows what went wrong.
  * - Undo restores the card only while it still holds the text the action
  *   left (`after`): an edit since (another tab) wins, and the Undo line goes.
+ *   The service reviewer's Revise sets the same kind of Undo ("revised").
  */
-import { useQueryClient } from "@tanstack/react-query";
 import {
   createContext,
   useCallback,
@@ -59,13 +59,11 @@ import { toast } from "sonner";
 
 import { ApiError } from "@/lib/api/client";
 import { isNoChurchAccess } from "@/lib/api/errors";
-import type { ChurchProfile, SectionResult, SermonText, Translations } from "@/lib/api/types";
+import type { ChurchProfile, SectionResult, SermonText } from "@/lib/api/types";
 import { useDraft } from "@/lib/draft/context";
 import type { SectionKey } from "@/lib/draft/schema";
 import { reportAuthErrors, useApi } from "@/lib/queries/client";
-import { keys as queryKeys } from "@/lib/queries/keys";
 import { generateSection } from "@/lib/queries/liturgy";
-import { passageQuery } from "@/lib/queries/passages";
 
 import {
   applyGenerated,
@@ -78,17 +76,18 @@ import {
 } from "./cards";
 import { cardErrorFrom, localAiNotConfigured, rateLimitMessage, type CardError } from "./errors";
 import { createTaskQueue, type TaskOutcome } from "./queue";
-import { buildGenerateRequest, sermonSource, sermonText } from "./request";
+import { buildGenerateRequest } from "./request";
 import { SECTION_LABELS } from "./sections";
+import { SERMON_WAIT_MS, useSermonLoader } from "./sermon";
+
+export { SERMON_WAIT_MS } from "./sermon";
 
 /** At most 3 requests in flight, leaving one of the server's 4 AI slots free (S step 3). */
 export const MAX_IN_FLIGHT = 3;
-/** How long a batch waits for the sermon text before going without it (S "Sermon text"). */
-export const SERMON_WAIT_MS = 10_000;
 
 export type CardRun = { phase: "queued" | "writing"; since: number };
 /** `after`: the text the card held right after the action (the AI text written, or "" for Clear); Undo needs it still there. */
-export type UndoEntry = { kind: "replaced" | "cleared"; previous: CardSnapshot; after: string };
+export type UndoEntry = { kind: "replaced" | "cleared" | "revised"; previous: CardSnapshot; after: string };
 export type BulkRun = { total: number; done: number };
 /**
  * A card's error as the step shows it: `retryAt` (ms since the epoch) is when
@@ -106,6 +105,8 @@ export type LiturgyGeneration = {
   bulk: BulkRun | null;
   /** When the last 429's wait ends (ms since the epoch), or null; nothing is sent before then. */
   rateLimitedUntil: number | null;
+  /** The service reviewer's Revise got a 429: Generate and Revise wait until `retryAt` (the later wait wins). */
+  noteRateLimit: (retryAt: number) => void;
   generate: (keys: SectionKey[], opts: { aiAvailable: boolean; bulk?: boolean }) => void;
   /** Cancels these cards' runs (every run when omitted); the cards return to where they were. */
   cancel: (keys?: SectionKey[]) => void;
@@ -188,8 +189,7 @@ export function LiturgyGenerationProvider({
 }) {
   const { draft, update, peek } = useDraft();
   const api = useApi();
-  const queryClient = useQueryClient();
-  const churchTranslation = church.effective_translation;
+  const loadSermon = useSermonLoader(church, sermonWaitMs);
   const [queue] = useState(() => createTaskQueue({ concurrency: MAX_IN_FLIGHT }));
   const [runs, setRuns] = useState<Partial<Record<SectionKey, CardRun>>>({});
   const [errors, setErrors] = useState<Partial<Record<SectionKey, CardErrorState>>>({});
@@ -356,43 +356,6 @@ export function LiturgyGenerationProvider({
     [applyResult, church.id, dropRun, leaveBulk, queue, setError],
   );
 
-  const loadSermon = useCallback(
-    (signal: AbortSignal): Promise<SermonText | null> => {
-      const draft = peek();
-      return new Promise((resolve) => {
-        let settled = false;
-        const done = (value: SermonText | null) => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(timer);
-          signal.removeEventListener("abort", onAbort);
-          resolve(value);
-        };
-        const onAbort = () => done(null);
-        const timer = setTimeout(() => done(null), sermonWaitMs);
-        signal.addEventListener("abort", onAbort, { once: true });
-        void (async () => {
-          // The translation step 1 shows: the draft's only while the server still offers it (the list, cached or fetched once).
-          const translations =
-            draft.readings.translation === null
-              ? undefined
-              : await queryClient
-                  .fetchQuery({
-                    queryKey: queryKeys.translations(),
-                    queryFn: ({ signal: s }) => api.user<Translations>("/translations", { signal: s }),
-                    staleTime: Infinity,
-                  })
-                  .catch(() => undefined);
-          const source = sermonSource(draft, { effective_translation: churchTranslation }, translations);
-          if (source === null) return done(null);
-          const passage = await queryClient.fetchQuery(passageQuery(api, source.translation, source.ref));
-          done(sermonText(source.ref, passage));
-        })().catch(() => done(null));
-      });
-    },
-    [api, churchTranslation, peek, queryClient, sermonWaitMs],
-  );
-
   const send = useCallback(
     (key: SectionKey, sermon: SermonText | null) => {
       queue.push(
@@ -493,9 +456,15 @@ export function LiturgyGenerationProvider({
     [undo, update, setUndo],
   );
 
+  const noteRateLimit = useCallback((retryAt: number) => {
+    if (retryAt <= (limitedUntil.current ?? 0)) return;
+    limitedUntil.current = retryAt;
+    setRateLimitedUntil(retryAt);
+  }, []);
+
   const value = useMemo<LiturgyGeneration>(
-    () => ({ runs, errors, undo, bulk, rateLimitedUntil, generate, cancel, cancelBulk, dismissError, setUndo, clearUndo, applyUndo }),
-    [runs, errors, undo, bulk, rateLimitedUntil, generate, cancel, cancelBulk, dismissError, setUndo, clearUndo, applyUndo],
+    () => ({ runs, errors, undo, bulk, rateLimitedUntil, noteRateLimit, generate, cancel, cancelBulk, dismissError, setUndo, clearUndo, applyUndo }),
+    [runs, errors, undo, bulk, rateLimitedUntil, noteRateLimit, generate, cancel, cancelBulk, dismissError, setUndo, clearUndo, applyUndo],
   );
   return <GenerationContext value={value}>{children}</GenerationContext>;
 }

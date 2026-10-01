@@ -15,7 +15,9 @@
  * query has data (tests, a cold cache) a step-shaped skeleton shows.
  * `<LectionarySync>` looks up the draft's date and fills the readings on
  * every step (slice 2c). `<LiturgyGenerationProvider>` holds the Liturgy
- * step's AI runs, so they keep going on the other steps (slice 4b).
+ * step's AI runs, so they keep going on the other steps (slice 4b), and
+ * `<LiturgyReviewProvider>` the service reviewer's review, notes and
+ * revisions, in memory only.
  */
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
@@ -26,6 +28,7 @@ import { DraftProvider, useDraft } from "@/lib/draft/context";
 import type { DraftChurch } from "@/lib/draft/schema";
 import { stepFromPath } from "@/lib/draft/steps";
 import { LiturgyGenerationProvider } from "@/lib/liturgy/generation";
+import { LiturgyReviewProvider } from "@/lib/liturgy/review";
 import { useMeContext } from "@/lib/me-context";
 import { useChurchProfile } from "@/lib/queries/church";
 
@@ -45,9 +48,11 @@ export function BuilderShell({ children }: { children: ReactNode }) {
   return (
     <DraftProvider key={`${me.user.id}:${church.id}`} userId={me.user.id} church={profile.data}>
       <LiturgyGenerationProvider church={profile.data}>
-        <LectionarySync>
-          <BuilderFrame church={profile.data}>{children}</BuilderFrame>
-        </LectionarySync>
+        <LiturgyReviewProvider church={profile.data}>
+          <LectionarySync>
+            <BuilderFrame church={profile.data}>{children}</BuilderFrame>
+          </LectionarySync>
+        </LiturgyReviewProvider>
       </LiturgyGenerationProvider>
     </DraftProvider>
   );

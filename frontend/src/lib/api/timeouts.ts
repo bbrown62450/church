@@ -16,6 +16,10 @@ const ENDPOINT_TIMEOUTS: Record<string, number> = {
   // so the other 15 s cover the server's sign-in key fetch (at most 5 s), latency and the proxy.
   // The service reviewer's routes (the slice after 4b) reuse this value.
   "POST /liturgy/generate": 100_000,
+  // The service reviewer (owner answer 3, 2026-10-01; F §1.8): a review answers within its 75 s
+  // deadline plus a last connect, and a revision within generation's 85 s; the same margin.
+  "POST /liturgy/review": 100_000,
+  "POST /liturgy/revise": 100_000,
 };
 
 export function timeoutFor(method: string, path: string): number {

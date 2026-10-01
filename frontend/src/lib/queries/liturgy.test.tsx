@@ -16,11 +16,11 @@ import { timeoutFor } from "@/lib/api/timeouts";
 import { ChurchProvider } from "@/lib/church-context";
 import { PLACEMENT_KEYS } from "@/lib/liturgy/cards";
 import { installFakeApi } from "@/test/fake-api";
-import { church, CHURCH_IDS, liturgyConfig, sectionResult } from "@/test/fixtures";
+import { church, CHURCH_IDS, liturgyConfig, reviewNote, reviewResult, sectionResult } from "@/test/fixtures";
 
 import { makeQueryClient, useApi } from "./client";
 import { keys } from "./keys";
-import { generateSection, useLiturgyConfig } from "./liturgy";
+import { generateSection, reviewService, reviseSection, useLiturgyConfig } from "./liturgy";
 
 /** A shared fixture, read from the repo (the tests run in `frontend/`). */
 function shared<T>(name: string): T {
@@ -96,6 +96,25 @@ describe("liturgy queries (S API client usage)", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("reviews the service and revises a card as the church, each waiting up to 100 seconds (owner answer 3)", async () => {
+    expect(timeoutFor("POST", "/liturgy/review")).toBe(100_000);
+    expect(timeoutFor("POST", "/liturgy/revise")).toBe(100_000);
+    const answer = reviewResult({
+      cards: [{ section: "opening_prayer", notes: [reviewNote("rules", "Names Ordinary Time. Leave the season unnamed.", "code")] }],
+      ai_status: "not_configured",
+    });
+    const api = installFakeApi({ "POST /liturgy/review": answer, "POST /liturgy/revise": { text: "Revised." } });
+    const { result } = render(() => useApi());
+    const review = { occasion: "", scriptures: [], cards: [{ section: "opening_prayer" as const, origin: "ai" as const, text: "In Ordinary Time" }] };
+    await expect(reviewService(result.current.church, review)).resolves.toEqual(answer);
+    const revise = { section: "opening_prayer" as const, text: "In Ordinary Time", notes: ["Names Ordinary Time."], occasion: "" };
+    await expect(reviseSection(result.current.church, revise)).resolves.toBe("Revised.");
+    expect(api.requests.map((r) => [r.method, r.path, r.headers["X-Church-Id"], r.body])).toEqual([
+      ["POST", "/liturgy/review", CHURCH_IDS.grace, review],
+      ["POST", "/liturgy/revise", CHURCH_IDS.grace, revise],
+    ]);
   });
 
   it("uses a test config equal to the shared fixtures 4a's API is pinned to", () => {

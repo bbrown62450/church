@@ -207,3 +207,23 @@ time, so record what the page shows, never an email address or a church id.
 - [ ] **9.** Regression: sign in, switch church, open every shipped nav item; the Streamlit smoke check on https://liturgy-frozen.streamlit.app: load the church, load an archived service, open Settings (F §6.3).
 - [ ] (owner, after 4b) **10.** **New service** asks "Start a new service?" after a card's text, a section switched on or off, a sermon title, a communion toggle or a custom element; on a fresh draft whose Benediction still shows the church default it does not ask.
 - [ ] **11.** Switch on Prayers of the People and tap **Generate**: it fills (about 5 s in the 4a check; the page waits up to 100 s).
+
+## Service reviewer
+
+Run on the production URL https://worship-service-builder.vercel.app, at 375 px
+(Chrome device mode, iPhone SE) and on desktop. These are the reviewer spec's
+manual check (Testing) and the owner's guided check (owner answer 4,
+2026-10-01): after the merge the owner runs the items marked "(owner, after
+the reviewer)" on a phone, one step at a time, and takes a quick look on a
+computer; the result goes into `docs/ops-runbook.md` → "Service reviewer
+record". The AI's words differ every time, so record what the page shows,
+never an email address or a church id.
+
+- [ ] (owner, after the reviewer) **1.** On a liturgy with a typed Call to Worship and a few AI sections, tap **Review service**: a spinner and "Reviewing…", then notes under the cards (a tag such as "Rules" or "Read aloud", one sentence, an ×), "Looks good." on a card with none, and, when prayers repeat each other, an "Across the service" box at the top.
+- [ ] (owner, after the reviewer) **2.** Dismiss one note with its ×: only that note goes.
+- [ ] (owner, after the reviewer) **3.** On an AI card with a note, tap **Revise with these notes**: the text is replaced, "Revised with these notes. Undo" shows, and **Undo** brings the draft back.
+- [ ] (owner, after the reviewer) **4.** The typed card has notes but no **Revise with these notes** button.
+- [ ] (owner, after the reviewer) **5.** Type in a card that has notes: its notes go at once; the other cards keep theirs.
+- [ ] **6.** With the AI unavailable (or after a review that says so), the quick checks still show with "Only quick checks ran. The full review isn't available right now."
+- [ ] (owner, after the reviewer) **7.** At 375 px: no sideways scroll; the Review service button sits beside or under "Liturgy"; note chips and sentences wrap; every × and button is at least 44 px.
+- [ ] **8.** Start a review and tap **Cancel**: the spinner goes and nothing changes. Start one and choose **New service**: no notes remain.

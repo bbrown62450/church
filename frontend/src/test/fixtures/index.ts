@@ -16,6 +16,10 @@ import type {
   LiturgyConfig,
   LiturgySection,
   OutlineItem,
+  ReviewBody,
+  ReviewNote,
+  ReviewResult,
+  ReviseBody,
   ScriptureMatches,
   SectionError,
   SectionResult,
@@ -429,4 +433,37 @@ export function generateRoute(
     const out = await answer(body.sections[0], body);
     return "section" in out ? { results: [out] } : out;
   };
+}
+
+// --- the service reviewer: review and revise answers -------------------------------
+
+/** One note as `POST /liturgy/review` returns it (an AI note unless `source` says "code"). */
+export function reviewNote(tag: ReviewNote["tag"], text: string, source: ReviewNote["source"] = "ai"): ReviewNote {
+  return { tag, text, source };
+}
+
+/** A review answer: by default the AI ran and found nothing. */
+export function reviewResult(overrides: Partial<ReviewResult> = {}): ReviewResult {
+  return { cards: [], service_notes: [], ai_status: "ok", ...overrides };
+}
+
+/**
+ * A fake-API handler for `POST /liturgy/review`: `answer(body)` gives the
+ * answer or a whole response (`fakeError(...)`); by default every card sent
+ * comes back with no notes ("Looks good.").
+ */
+export function reviewRoute(
+  answer: (body: ReviewBody) => ReviewResult | { status: number } | Promise<ReviewResult | { status: number }> = (body) =>
+    reviewResult({ cards: body.cards.map((c) => ({ section: c.section, notes: [] })) }),
+) {
+  return async (req: { body: unknown }) => answer(req.body as ReviewBody);
+}
+
+/** A fake-API handler for `POST /liturgy/revise`: by default "{Label} revised with the notes.". */
+export function reviseRoute(
+  answer: (body: ReviseBody) => { text: string } | { status: number } | Promise<{ text: string } | { status: number }> = (body) => ({
+    text: `${SECTION_LABELS[body.section]} revised with the notes.`,
+  }),
+) {
+  return async (req: { body: unknown }) => answer(req.body as ReviseBody);
 }

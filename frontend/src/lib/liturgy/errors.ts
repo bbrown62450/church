@@ -8,6 +8,10 @@
  * `null` means the card shows nothing: a cancel (the card returns to where it
  * was), and a 401 or a lost church, which the app's global handling already
  * acts on (sign-out, another church).
+ *
+ * The service reviewer's Revise gets the AI codes as HTTP statuses (503, 504,
+ * 502, as /hymns/suggestions): they show the server's own sentence, as they
+ * do inside generation's 200.
  */
 import { ApiError } from "@/lib/api/client";
 import { describeError, isNoChurchAccess } from "@/lib/api/errors";
@@ -72,6 +76,11 @@ export function cardErrorFrom(e: unknown): CardError | null {
       return { code: e.code, message: e.message, retryable: false };
     case "auth_unavailable":
       // The server's own sentence ("Sign-in is temporarily unavailable. Try again shortly.") says what happened.
+      return { code: e.code, message: e.message, retryable: true };
+    case "ai_busy":
+    case "ai_timeout":
+    case "ai_upstream_error":
+      // Revise (the service reviewer): the server's sentence, as inside generation's 200.
       return { code: e.code, message: e.message, retryable: true };
     default:
       // timeout and network_error carry their own full sentences; a 5xx reads "Something went wrong. (Ref: …)".
