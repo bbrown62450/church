@@ -764,3 +764,185 @@ describe("Revise with these notes (R Revise)", () => {
     expect(api.requests.some((r) => r.path === "/liturgy/revise")).toBe(false);
   });
 });
+
+describe("Revise the other prayers (reviewer follow-up 2)", () => {
+  const OPENING = 'Several prayers open with "Gracious God".';
+  const ACROSS = 'Opens with "Gracious God" like the Call to Worship; open differently.';
+
+  function across() {
+    return screen.getByRole("region", { name: "Across the service" });
+  }
+
+  function revisions(api: ReturnType<typeof renderStep>["api"]) {
+    return api.requests.filter((r) => r.path === "/liturgy/revise").map((r) => r.body as ReviseBody);
+  }
+
+  /** Each prayer's revision waits for its own release. */
+  function gated(answers: Partial<Record<SectionKey, string>>) {
+    const gates = new Map<string, () => void>();
+    const route = reviseRoute(async (body) => {
+      await new Promise<void>((resolve) => gates.set(body.section, resolve));
+      return { text: answers[body.section as SectionKey] ?? "" };
+    });
+    return { route, release: (key: SectionKey) => gates.get(key)?.() };
+  }
+
+  function otherTab(d: DraftV1, at: string) {
+    act(() => {
+      window.dispatchEvent(new StorageEvent("storage", { key: KEY, newValue: JSON.stringify({ ...d, updated_at: at }) }));
+    });
+  }
+
+  it("shows only on the code note about a shared opening and revises every prayer but the first one at a time, each with its own Revising…, Cancel and Undo", async () => {
+    const { route, release } = gated({ opening_prayer: "Holy One, hear us.", assurance: "Leader: Through Christ you are forgiven." });
+    let d = withCard(seeded(), "call_to_worship", "Leader: Gracious God, we gather.", "typed");
+    d = withCard(d, "assurance", "gracious god, in Christ we are forgiven.", "ai");
+    const answer = reviewResult({ cards: ANSWER.cards, service_notes: [...ANSWER.service_notes, reviewNote("repetition", "Two prayers say journey.")] });
+    const { user, api } = renderStep(d, { "POST /liturgy/review": reviewRoute(() => answer), "POST /liturgy/revise": route });
+    await user.click(await screen.findByRole("button", { name: "Review service" }));
+    await screen.findByText("Review finished. 7 notes.");
+    const button = within(across()).getByRole("button", { name: "Revise the other prayers" }); // one: not on the AI note
+    expect(button).toHaveAccessibleDescription(OPENING);
+    await user.click(button);
+    expect(screen.queryByRole("alertdialog")).toBeNull(); // only AI text is revised: no confirm
+    expect(button).toHaveAttribute("aria-disabled", "true");
+    expect(button).toHaveFocus();
+    // One at a time: the Opening Prayer is sent; both show Revising… with their own Cancel from the start.
+    await waitFor(() => expect(revisions(api)).toHaveLength(1));
+    expect(within(card("Opening Prayer")).getByRole("button", { name: "Cancel revising Opening Prayer" })).toBeInTheDocument();
+    expect(within(card("Assurance of Pardon")).getByRole("button", { name: "Cancel revising Assurance of Pardon" })).toBeInTheDocument();
+    act(() => release("opening_prayer"));
+    expect(await within(card("Opening Prayer")).findByText("Revised with these notes.")).toBeInTheDocument();
+    await waitFor(() => expect(revisions(api)).toHaveLength(2));
+    expect(revisions(api).map((b) => [b.section, b.notes])).toEqual([
+      ["opening_prayer", [ACROSS]],
+      ["assurance", [`${ACROSS.slice(0, -1)}, not with "Holy One".`]],
+    ]);
+    act(() => release("assurance"));
+    expect(await within(card("Assurance of Pardon")).findByText("Revised with these notes.")).toBeInTheDocument();
+    await waitFor(() => expect(within(across()).queryByText(OPENING)).toBeNull()); // every one revised: the note goes
+    expect(within(across()).getByText("Two prayers say journey.")).toBeInTheDocument();
+    // Focus moves as a dismiss would: the next note's ×, not the last card's Undo.
+    await waitFor(() => expect(within(across()).getByRole("button", { name: "Dismiss note: Two prayers say journey." })).toHaveFocus());
+    expect(screen.getByRole("textbox", { name: "Call to Worship" })).toHaveValue("Leader: Gracious God, we gather."); // the first is kept
+    await user.click(within(card("Opening Prayer")).getByRole("button", { name: "Undo" }));
+    expect(screen.getByRole("textbox", { name: "Opening Prayer" })).toHaveValue("Gracious God, as we journey, hear us.");
+    expect(screen.getByRole("textbox", { name: "Assurance of Pardon" })).toHaveValue("Leader: Through Christ you are forgiven.");
+  });
+
+  it("asks once when your text is involved, closing when one of them changes; Keep my text sends nothing; a 429 stops the rest and keeps the note", async () => {
+    let d = withCard(seeded(), "call_to_worship", "Gracious God, we gather.", "ai");
+    d = withCard(d, "opening_prayer", "Gracious God, hear us.", "typed");
+    d = withCard(d, "prayer_of_confession", "Gracious God, we confess.", "archive");
+    d = withCard(d, "assurance", "Gracious God, you forgive us.", "ai");
+    const answer = reviewResult({
+      cards: [
+        { section: "call_to_worship", notes: [] },
+        { section: "opening_prayer", notes: [reviewNote("read_aloud", "The second clause is hard to say aloud.")] },
+        { section: "prayer_of_confession", notes: [] },
+        { section: "assurance", notes: [] },
+      ],
+      service_notes: [reviewNote("repetition", OPENING, "code")],
+    });
+    const { user, api } = renderStep(d, {
+      "POST /liturgy/review": reviewRoute(() => answer),
+      "POST /liturgy/revise": reviseRoute((body) =>
+        body.section === "opening_prayer"
+          ? { text: "Holy One, hear us." }
+          : body.section === "assurance"
+            ? { text: "Loving God, you forgive us." }
+            : fakeError(429, "rate_limited", "Too many requests. Try again in 30 seconds.", { details: { retry_after_seconds: 30 } }),
+      ),
+    });
+    await user.click(await screen.findByRole("button", { name: "Review service" }));
+    await screen.findByText("Review finished. 2 notes.");
+    const button = within(across()).getByRole("button", { name: "Revise the other prayers" });
+    await user.click(button);
+    const dialog = await screen.findByRole("alertdialog", { name: "Replace your text?" });
+    expect(dialog).toHaveTextContent(
+      "Revise replaces the text in Opening Prayer, Prayer of Confession and Assurance of Pardon. You can undo each right after.",
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Keep my text" }));
+    await waitFor(() => expect(button).toHaveFocus());
+    expect(revisions(api)).toHaveLength(0);
+    // Another tab changes the Confession's text, keeping its opening: the confirm closes, sending nothing.
+    await user.click(button);
+    await screen.findByRole("alertdialog");
+    otherTab(withCard(stored(), "prayer_of_confession", "Gracious God, we confess our sins.", "archive"), "2026-09-29T16:59:00.000Z");
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    await waitFor(() => expect(button).toHaveFocus());
+    expect(revisions(api)).toHaveLength(0);
+    await user.click(button);
+    await user.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Revise text" }));
+    await waitFor(() => expect(button).toHaveFocus());
+    expect(await within(card("Opening Prayer")).findByText("Revised with these notes.")).toBeInTheDocument();
+    expect(await within(card("Prayer of Confession")).findByRole("alert")).toHaveTextContent("Too many requests — try again in 30 s.");
+    // The 429 stopped the batch: the Assurance was never sent and is no longer revising.
+    expect(revisions(api).map((b) => [b.section, b.text])).toEqual([
+      ["opening_prayer", "Gracious God, hear us."],
+      ["prayer_of_confession", "Gracious God, we confess our sins."],
+    ]);
+    expect(within(card("Assurance of Pardon")).queryByRole("button", { name: "Cancel revising Assurance of Pardon" })).toBeNull();
+    expect(screen.getByRole("textbox", { name: "Assurance of Pardon" })).toHaveValue("Gracious God, you forgive us.");
+    // Not every one was revised: the note stays, and the button now offers the ones left, off until the wait ends.
+    expect(within(across()).getByText(OPENING)).toBeInTheDocument();
+    const again = within(across()).getByRole("button", { name: "Revise the other prayers" });
+    expect(again).toHaveAttribute("aria-disabled", "true");
+    expect(within(across()).getByText("Too many requests — try again in 30 s.")).toBeInTheDocument();
+    await user.click(again);
+    expect(again).toHaveFocus();
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(revisions(api)).toHaveLength(2);
+  });
+
+  it("goes when fewer than two switched-on prayers share the opening, closing its confirm; Cancel skips a prayer not sent yet, moves on from the running one, and keeps the note", async () => {
+    let d = withCard(seeded(), "call_to_worship", "Leader: Gracious God, we gather.", "typed");
+    d = withCard(d, "opening_prayer", "Gracious God, hear us.", "typed");
+    d = withCard(d, "prayer_of_confession", "Gracious God, we confess.", "archive", false);
+    const answer = reviewResult({
+      cards: [
+        { section: "call_to_worship", notes: [reviewNote("rules", STOCK, "code")] },
+        { section: "opening_prayer", notes: [] },
+      ],
+      service_notes: [reviewNote("repetition", OPENING, "code")],
+    });
+    const { user, api } = renderStep(d, {
+      "POST /liturgy/review": reviewRoute(() => answer),
+      "POST /liturgy/revise": reviseRoute(() => new Promise<never>(() => {})),
+    });
+    await user.click(await screen.findByRole("button", { name: "Review service" }));
+    await screen.findByText("Review finished. 2 notes.");
+    await user.click(within(across()).getByRole("button", { name: "Revise the other prayers" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "Replace your text?" });
+    expect(dialog).toHaveTextContent("Revise replaces the text in Opening Prayer. You can undo each right after.");
+    // Another tab gives the Opening Prayer a new opening: the switched-off Confession does not count, so none is shared.
+    otherTab(withCard(stored(), "opening_prayer", "Holy One, hear us.", "typed"), "2026-09-29T16:59:00.000Z");
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(within(across()).queryByRole("button", { name: "Revise the other prayers" })).toBeNull();
+    expect(within(across()).getByText(OPENING)).toBeInTheDocument(); // the note stays until the next review
+    await waitFor(() => expect(reviewButton()).toHaveFocus());
+    // Back to "Gracious God" there and in the Assurance, and the Confession switched on: three to revise.
+    otherTab(
+      withCard(withCard(stored(), "opening_prayer", "Gracious God, hear us now.", "typed"), "assurance", "Gracious God, you forgive.", "ai"),
+      "2026-09-29T16:59:30.000Z",
+    );
+    await user.click(screen.getByRole("switch", { name: "Include Prayer of Confession" }));
+    await user.click(within(across()).getByRole("button", { name: "Revise the other prayers" }));
+    const three = await screen.findByRole("alertdialog");
+    expect(three).toHaveTextContent("Revise replaces the text in Opening Prayer, Prayer of Confession and Assurance of Pardon.");
+    await user.click(within(three).getByRole("button", { name: "Revise text" }));
+    await waitFor(() => expect(revisions(api)).toHaveLength(1));
+    // Cancel on the Confession, not sent yet: it is skipped. Cancel on the running Opening Prayer: on to the Assurance.
+    await user.click(within(card("Prayer of Confession")).getByRole("button", { name: "Cancel revising Prayer of Confession" }));
+    await user.click(within(card("Opening Prayer")).getByRole("button", { name: "Cancel revising Opening Prayer" }));
+    await waitFor(() => expect(revisions(api)).toHaveLength(2));
+    expect(revisions(api).map((b) => b.section)).toEqual(["opening_prayer", "assurance"]);
+    await user.click(within(card("Assurance of Pardon")).getByRole("button", { name: "Cancel revising Assurance of Pardon" }));
+    expect(revisions(api)).toHaveLength(2);
+    expect(within(across()).getByText(OPENING)).toBeInTheDocument();
+    expect(within(across()).getByRole("button", { name: "Revise the other prayers" })).not.toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("textbox", { name: "Opening Prayer" })).toHaveValue("Gracious God, hear us now.");
+    expect(screen.getByRole("textbox", { name: "Prayer of Confession" })).toHaveValue("Gracious God, we confess.");
+    expect(screen.getByRole("textbox", { name: "Assurance of Pardon" })).toHaveValue("Gracious God, you forgive.");
+  });
+});
