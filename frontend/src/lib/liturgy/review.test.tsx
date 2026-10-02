@@ -139,7 +139,8 @@ describe("the review (R User experience, API)", () => {
     expect(await screen.findByText("said: Review finished. 4 notes.")).toBeInTheDocument();
     expect(screen.getByText("running: no")).toBeInTheDocument();
     expect(screen.getByText(`opening_prayer: Gracious God, as we journey, hear us. [ai] notes ${STOCK} | The prayer runs long.; revising no; error none; undo none`)).toBeInTheDocument();
-    expect(screen.getByText((text) => text.startsWith(`benediction: ${DEFAULT_BENEDICTION_FALLBACK} [default] notes looks good;`))).toBeInTheDocument();
+    // Not sent, so no notes and no "Looks good." (an answer for it would be ignored).
+    expect(screen.getByText((text) => text.startsWith(`benediction: ${DEFAULT_BENEDICTION_FALLBACK} [default] notes none;`))).toBeInTheDocument();
     expect(screen.getByText("status: ok; service: Two prayers say journey.")).toBeInTheDocument();
     const passages = api.requests.filter((r) => r.path === "/scripture/passages");
     expect(passages.map((r) => r.body)).toEqual([{ refs: ["Philippians 3:4b-14"], translation: "web" }]);
@@ -149,8 +150,7 @@ describe("the review (R User experience, API)", () => {
     expect(body.cards.map((c) => [c.section, c.origin])).toEqual([
       ["call_to_worship", "typed"],
       ["opening_prayer", "ai"],
-      ["benediction", "default"],
-    ]);
+    ]); // the Benediction follows the church default: not reviewed (owner, 2026-10-02)
     expect(body.sermon_text).toEqual({ ref: "Philippians 3:4b-14", text: "I press on toward the goal." });
     // Never saved: the stored draft holds no note.
     await waitFor(() => expect(window.localStorage.getItem(KEY)).toContain("as we journey"));
@@ -280,7 +280,7 @@ describe("Revise with these notes (R Revise)", () => {
     act(() => loads[0]());
     expect(await screen.findByText("said: Review finished. 3 notes.")).toBeInTheDocument();
     const sent = api.requests.find((r) => r.path === "/liturgy/review")?.body as ReviewBody;
-    expect(sent.cards.map((c) => c.section)).toEqual(["opening_prayer", "benediction"]);
+    expect(sent.cards.map((c) => c.section)).toEqual(["opening_prayer"]);
 
     // A new NT reading, so Revise loads its sermon text again; the card is edited meanwhile.
     act(() => draftHandle.current?.update((d) => editScriptureLines(d, "Isaiah 5:1-7\nPsalm 80:7-15\nRomans 8:1-11\nMatthew 21:33-46")));

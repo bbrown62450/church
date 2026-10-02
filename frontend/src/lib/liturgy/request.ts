@@ -98,10 +98,16 @@ export function sermonText(ref: string, passage: Passage | undefined): SermonTex
   return { ref: clipChars(ref.trim(), MAX_REF_LENGTH), text: clipChars(text, MAX_SERMON_TEXT) };
 }
 
-/** What "Review service" sends: every switched-on card with text after trimming, in section order. */
+/**
+ * What "Review service" sends: every switched-on card with text after
+ * trimming, in section order, except a Benediction that follows the church
+ * default (origin "default"; owner, 2026-10-02): the church's fixed text is
+ * not the member's to change, so it gets no notes and no shared-opening count.
+ */
 export function reviewTargets(draft: DraftV1): SectionKey[] {
   return SECTION_KEYS.filter((key) => {
     const card = draft.liturgy.cards[key];
+    if (key === "benediction" && card.origin === "default") return false;
     return card.enabled && card.text.trim() !== "";
   });
 }

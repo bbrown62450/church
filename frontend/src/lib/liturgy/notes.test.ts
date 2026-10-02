@@ -205,7 +205,7 @@ describe("Revise the other prayers (reviewer follow-up 2)", () => {
     expect([[], ["A"], ["A", "B"], ["A", "B", "C"]].map(listLabels)).toEqual(["", "A", "A and B", "A, B and C"]);
   });
 
-  it("finds the prayers as the draft is now: the first kept, a default Benediction kept, switched-off cards left out", () => {
+  it("finds the prayers as the draft is now: the first kept, a default Benediction and switched-off cards left out", () => {
     let d = withText(testDraft(), "call_to_worship", "Leader: Gracious God, we gather.", "typed");
     d = withText(d, "opening_prayer", "gracious god! Hear us.", "ai");
     d = withText(d, "prayer_of_confession", "Gracious God, we confess.", "archive");
@@ -214,7 +214,7 @@ describe("Revise the other prayers (reviewer follow-up 2)", () => {
     d = withText(d, "benediction", "Gracious God, go with us.", "default");
     expect(acrossTargets(d, "Gracious God")).toEqual({ words: "Gracious God", first: "call_to_worship", others: ["opening_prayer", "assurance"] });
     expect(acrossTargets(d, "Holy One")).toBeNull();
-    // Only the first and a Benediction following the default still share it: nothing to revise.
+    // Only the first and a Benediction following the default share it: the default is not reviewed (owner, 2026-10-02), so no shared opening.
     const left = withText(withText(d, "opening_prayer", "Holy One, hear us.", "ai"), "assurance", "", "empty");
     expect(acrossTargets(left, "Gracious God")).toBeNull();
     // Once edited, the Benediction is typed text and is revised; a lone opening is no shared one.
