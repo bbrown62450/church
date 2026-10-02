@@ -33,7 +33,11 @@
  *   when the provider mounts, slice 5a-3). A flush that finds a strictly
  *   newer stored draft adopts it instead of writing. A value written by an
  *   older version of the app (an open tab not yet reloaded) is never adopted,
- *   however new: its fresh draft would replace this one (slice 5a-3).
+ *   however new: its fresh draft would replace this one (slice 5a-3). A flush
+ *   writes over such a value even with nothing scheduled, and a store loaded
+ *   from one takes the next current-version draft it reads, so a page that
+ *   mounts after the builder (Services) gets the builder's draft back (5a-3
+ *   build review M3).
  *
  * React wiring (listeners, toasts, flush on hide and unmount) is in
  * `context.tsx`. This class touches storage only in `start`, `flush`,
@@ -101,6 +105,12 @@ function storedVersion(raw: string): number {
   }
 }
 
+/** A draft an older version of the app wrote: it declares a version, below this one's. */
+function isOlderApp(raw: string): boolean {
+  const version = storedVersion(raw);
+  return version >= 1 && version < DRAFT_VERSION;
+}
+
 function isNewer(candidate: string, current: string): boolean {
   const a = Date.parse(candidate);
   const b = Date.parse(current);
@@ -123,6 +133,15 @@ export class DraftStore {
   private warnedMemoryOnly = false;
   /** The raw value that could not be restored, backed up in `start`. */
   private corruptRaw: string | null = null;
+  /** That value could not be backed up, so it stays in the main key until the user edits. */
+  private keepStored = false;
+  /**
+   * Loaded from a value an older version of the app wrote (an open tab not
+   * yet reloaded, or the first load after an update): the next current-version
+   * draft found in storage is this tab's own draft put back (the builder's
+   * flush as it unmounts), so it is taken whatever its time (build review M3).
+   */
+  private loadedOlder = false;
   private defaults: LiturgyDefaults | null;
 
   constructor({
@@ -153,6 +172,7 @@ export class DraftStore {
         const stored = parseStoredDraft(raw, { userId, churchId: church.id });
         draft = normalizePicks(stored);
         this.pendingWrite = draft !== stored;
+        this.loadedOlder = storedVersion(raw) < DRAFT_VERSION;
       } catch {
         this.corruptRaw = raw;
         draft = fresh();
@@ -189,7 +209,10 @@ export class DraftStore {
       const backedUp = this.storage.write(this.corruptKey, this.corruptRaw);
       this.notify("restore_failed");
       // Without a backup, keep the unrestorable value in the main key until the user edits.
-      if (!backedUp) this.pendingWrite = false;
+      if (!backedUp) {
+        this.pendingWrite = false;
+        this.keepStored = true;
+      }
     }
     if (this.pendingWrite) this.schedule();
   }
@@ -255,11 +278,21 @@ export class DraftStore {
     this.adoptIfNewer(this.storage.read(this.key), quiet);
   };
 
-  /** Writes a scheduled change now (hide, pagehide, unmount). */
+  /**
+   * Writes a scheduled change now (hide, pagehide, unmount; Save). With
+   * nothing scheduled it still writes over a value an older version of the
+   * app wrote (an open tab not yet reloaded), so the next provider (Services
+   * after the builder, a reload) reads this draft, not that tab's fresh one
+   * (build review M3).
+   */
   flush = (): void => {
-    if (!this.pendingWrite) return;
-    // Another tab's strictly newer draft whose storage event has not arrived yet: take it, never overwrite it.
-    if (this.adoptIfNewer(this.storage.read(this.key))) return;
+    const raw = this.storage.read(this.key);
+    if (!this.pendingWrite) {
+      if (this.keepStored || raw === null || !isOlderApp(raw)) return;
+    } else if (this.adoptIfNewer(raw)) {
+      // Another tab's strictly newer draft whose storage event has not arrived yet: take it, never overwrite it.
+      return;
+    }
     this.cancelWrite();
     const ok = this.storage.write(this.key, JSON.stringify(this.snapshot.draft));
     const persistence: Persistence = ok ? "ok" : "memory-only";
@@ -269,6 +302,7 @@ export class DraftStore {
     }
     // A failed write stays pending (no timer), so the next flush retries it.
     if (!ok) this.pendingWrite = true;
+    else this.loadedOlder = this.keepStored = false;
     if (!ok && !this.warnedMemoryOnly) {
       this.warnedMemoryOnly = true;
       this.notify("memory_only");
@@ -290,7 +324,8 @@ export class DraftStore {
     } catch {
       return false;
     }
-    if (!isNewer(stored.updated_at, this.snapshot.draft.updated_at)) return false;
+    if (!this.loadedOlder && !isNewer(stored.updated_at, this.snapshot.draft.updated_at)) return false;
+    this.loadedOlder = false;
     this.cancelWrite();
     this.set(this.withDefaults(normalizePicks(stored)));
     if (!quiet) this.notify("adopted");

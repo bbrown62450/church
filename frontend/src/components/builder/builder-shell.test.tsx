@@ -240,13 +240,15 @@ describe("builder shell (F §4.7)", () => {
     const liturgy = within(aside).getByRole("link", { name: "Liturgy" }).closest("h3");
     expect(liturgy?.nextElementSibling).toHaveTextContent(/^1 of 7 liturgy sections readyCommunion: YesNo custom elements$/);
     expect(within(aside).getByRole("link", { name: "Date" })).toHaveAttribute("href", "/builder/readings");
-    expect(within(aside).getByText("Draft saved on this device · Not in archive")).toBeInTheDocument();
+    const archive = within(aside).getByRole("link", { name: "Not in archive" }); // only the archive half links (build review M5)
+    expect(archive).toHaveAttribute("href", "/builder/review");
+    expect(archive.closest("p")).toHaveTextContent(/^Draft saved on this device · Not in archive$/);
 
     // Below lg the same panel opens in a bottom sheet from "Summary".
     await user.click(screen.getByRole("button", { name: "Summary" }));
     const sheet = await screen.findByRole("dialog", { name: "Summary" });
     expect(within(sheet).getByText("Sunday, October 4, 2026")).toBeInTheDocument();
-    expect(within(sheet).getByText("Draft saved on this device · Not in archive")).toBeInTheDocument();
+    expect(within(sheet).getByRole("link", { name: "Not in archive" }).closest("p")).toHaveTextContent("Draft saved on this device · Not in archive");
     // The sheet only shows below lg, so its Close is a 44 px square throughout.
     expect(within(sheet).getByRole("button", { name: "Close" })).toHaveClass("size-11");
     await user.click(within(sheet).getByRole("button", { name: "Close" }));

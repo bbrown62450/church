@@ -49,7 +49,7 @@ export function archiveSummary(draft: DraftV1): string {
  * `lg`, the bottom sheet below it. Each block links to its step. The Readings
  * block and the occasion line show once "readings" ships (slice 2c), the three
  * hymns once "hymns" ships (slice 3b), the liturgy counts once "liturgy" ships
- * (slice 4b); 5a-3 wires the archive half of the status line, which links to Review.
+ * (slice 4b); 5a-3 wires the archive half of the status line, which (alone) links to Review.
  */
 export function SummaryPanel({ shipped = SHIPPED_STEPS, onNavigate }: { shipped?: ReadonlySet<StepId>; onNavigate?: () => void }) {
   const { draft, persistence } = useDraft();
@@ -90,12 +90,13 @@ export function SummaryPanel({ shipped = SHIPPED_STEPS, onNavigate }: { shipped?
         {liturgyShipped ? <LiturgySummaryBlock /> : <Soon />}
       </Block>
       <p className="border-t pt-3 text-xs text-muted-foreground">
+        {saved} ·{" "}
         <Link
           href={stepById("review").href}
           onClick={onNavigate}
           className="inline-flex min-h-11 items-center underline-offset-4 hover:underline lg:min-h-0"
         >
-          {saved} · {archiveSummary(draft)}
+          {archiveSummary(draft)}
         </Link>
       </p>
     </div>

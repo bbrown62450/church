@@ -8,8 +8,9 @@
  * writes (`storage` events, and a direct read when the page is shown again), a
  * quiet direct read once mounted (slice 5a-3: a page whose provider replaced
  * another's, Services after the builder, takes the edit the other flushed as
- * it unmounted), a flush when the page is hidden or left, a flush on unmount
- * (a church switch), and the three toasts.
+ * it unmounted), a quiet read whenever `resync` says another provider in this
+ * tab may have written (5a-3 build review M1), a flush when the page is hidden
+ * or left, a flush on unmount (a church switch), and the three toasts.
  */
 import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { toast } from "sonner";
@@ -31,6 +32,8 @@ export type DraftApi = {
   setLastStep: (step: StepId) => void;
   /** The latest draft now, for code that runs outside a render (slice 4b's generation provider). */
   peek: () => DraftV1;
+  /** Writes a scheduled change now: Save, whose answer can come after the builder unmounted (5a-3 build review M1). */
+  flush: () => void;
   persistence: Persistence;
   /** The church's current default Benediction (its own, else the fallback), as the store applies it. */
   defaultBenediction: string;
@@ -56,10 +59,17 @@ const DraftContext = createContext<DraftApi | null>(null);
 export function DraftProvider({
   userId,
   church,
+  resync,
   children,
 }: {
   userId: string;
   church: DraftChurch;
+  /**
+   * Subscribes to moments when another provider in this tab may have written
+   * the draft (the Services page: a save that settled after the builder
+   * unmounted); each call re-reads storage quietly. Returns the unsubscribe.
+   */
+  resync?: (sync: () => void) => () => void;
   children: ReactNode;
 }) {
   const defaultBenediction = church.default_benediction ?? DEFAULT_BENEDICTION_FALLBACK;
@@ -97,6 +107,8 @@ export function DraftProvider({
     };
   }, [store]);
 
+  useEffect(() => (resync ? resync(() => store.syncFromStorage({ quiet: true })) : undefined), [store, resync]);
+
   const value = useMemo<DraftApi>(
     () => ({
       draft: snapshot.draft,
@@ -106,6 +118,7 @@ export function DraftProvider({
       replace: store.replace,
       setLastStep: store.setLastStep,
       peek,
+      flush: store.flush,
       defaultBenediction,
     }),
     [snapshot, store, peek, defaultBenediction],

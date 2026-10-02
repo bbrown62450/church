@@ -10,7 +10,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import ServicesRoute from "@/app/(signed-in)/(church)/services/page";
 import { Toaster } from "@/components/ui/sonner";
-import type { ServiceSummary } from "@/lib/api/types";
+import type { ChurchProfile, ServiceSummary } from "@/lib/api/types";
+import { DraftProvider } from "@/lib/draft/context";
+import { useSaveService } from "@/lib/queries/services";
 import { formatSavedAt } from "@/lib/dates";
 import { serviceToDraft } from "@/lib/draft/mapping";
 import { editOccasion } from "@/lib/draft/readings";
@@ -59,6 +61,26 @@ function stored(): DraftV1 {
 function rows(n: number, from = 0): ServiceSummary[] {
   return Array.from({ length: n }, (_, i) =>
     serviceSummary({ id: `00000000-0000-4000-8000-${String(from + i + 1).padStart(12, "0")}`, occasion: `Service ${from + i + 1}` }),
+  );
+}
+
+/** The Review step's Save without the rest of the builder, then the Services route in its place. */
+function SaveThenLeave({ page }: { page: "builder" | "services" }) {
+  if (page === "services") return <ServicesRoute />;
+  const profile = churchProfile();
+  return (
+    <DraftProvider userId={USER_ID} church={profile}>
+      <SaveProbe church={profile} />
+    </DraftProvider>
+  );
+}
+
+function SaveProbe({ church }: { church: ChurchProfile }) {
+  const save = useSaveService(church);
+  return (
+    <button type="button" onClick={() => save.mutate({})}>
+      Probe save
+    </button>
   );
 }
 
@@ -147,6 +169,21 @@ describe("Services (slice 5a-3)", () => {
     expect(screen.getByText("Service 40")).toBeInTheDocument();
   });
 
+  it("Show more shows a row only once when a save between pages shifted the list", async () => {
+    const errors = vi.spyOn(console, "error");
+    const { user } = renderServices(testDraft(), {
+      "GET /services?limit=20&offset=0": servicePage(rows(20), { total: 45 }),
+      // A service saved meanwhile pushed Service 20 onto the second page.
+      "GET /services?limit=20&offset=20": servicePage(rows(20, 19), { total: 46, offset: 20 }),
+    });
+    expect(await screen.findByText("Showing 20 of 45")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Show more" }));
+    expect(await screen.findByText("Showing 39 of 46")).toBeInTheDocument();
+    expect(screen.getAllByText("Service 20")).toHaveLength(1);
+    expect(screen.getByText("Service 39")).toBeInTheDocument();
+    expect(errors.mock.calls.flat().join(" ")).not.toMatch(/same key/);
+  });
+
   it("after Show more, a delete reads every page again and the count follows; an undated row's menu names its occasion", async () => {
     const undatedId = "88888888-8888-4888-8888-888888888888";
     const undated = serviceSummary({ id: undatedId, service_date_iso: null, service_date: "", occasion: "Service 40" });
@@ -231,6 +268,35 @@ describe("Services (slice 5a-3)", () => {
     expect(api.requests.filter((r) => r.method === "DELETE")).toHaveLength(1);
     expect(stored().editing).toBeNull();
     expect(stored().readings.occasion).toBe("");
+  });
+
+  it("a save still in flight when the builder was left counts once it lands: Editing, and no question before opening", async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    window.localStorage.setItem(KEY, JSON.stringify(editOccasion(testDraft(), "Harvest")));
+    const api = installFakeApi({
+      "GET /church": churchProfile(),
+      "GET /services": servicePage([serviceSummary()]),
+      "POST /services": async () => {
+        await held;
+        return { status: 201, body: savedService({ occasion: "Harvest", saved_at: "2026-10-02T15:00:00+00:00" }) };
+      },
+      [`GET /services/${SERVICE_ID}`]: savedService(),
+    });
+    const view = renderWithProviders(<SaveThenLeave page="builder" />, { me: me(), church: church(), path: "/builder/review" });
+    await view.user.click(screen.getByRole("button", { name: "Probe save" }));
+    await waitFor(() => expect(api.requests.some((r) => r.method === "POST")).toBe(true));
+    view.rerender(<SaveThenLeave page="services" />);
+    const open = await screen.findByRole("button", { name: /World Communion Sunday/ });
+    expect(within(open.closest("li") as HTMLElement).queryByText("Editing")).toBeNull();
+
+    vi.setSystemTime(new Date(DRAFT_NOW.getTime() + 60_000)); // the answer comes a minute later
+    release();
+    await waitFor(() => expect(within(open.closest("li") as HTMLElement).getByText("Editing")).toBeInTheDocument());
+    expect(stored().editing?.service_id).toBe(SERVICE_ID);
+    await view.user.click(open);
+    await waitFor(() => expect(testRouter.push).toHaveBeenCalledWith("/builder/review"));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
   });
 
   it("names an untitled, undated service, and a delete that finds it gone says so", async () => {

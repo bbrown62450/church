@@ -30,6 +30,7 @@ import {
   churchProfile,
   DRAFT_NOW,
   gg2013,
+  hymnId,
   hymnals,
   hymnListRoute,
   lectionaryRoute,
@@ -139,7 +140,7 @@ describe("Review & send: the Word documents (slice 5a-1)", () => {
     const step = screen.getByRole("region", { name: "Review & send" });
     expect(within(step).getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual(["Still to do", "Archive", "Word documents"]);
     const archive = screen.getByRole("region", { name: "Archive" });
-    expect(within(archive).getByText("Not in the archive yet.")).toBeInTheDocument();
+    expect(within(archive).getByText("Not in the archive yet.")).toHaveAttribute("aria-live", "polite");
     expect(within(archive).getByRole("button", { name: "Save to archive" })).toHaveClass("h-11");
     expect(within(archive).getByRole("button", { name: "Start a new service" })).toHaveClass("h-11");
     expect(screen.queryByText(/coming soon/i)).toBeNull();
@@ -245,6 +246,7 @@ describe("Review & send: the Word documents (slice 5a-1)", () => {
     const archive = screen.getByRole("region", { name: "Archive" });
     expect(within(archive).getByText(SAVE_NEEDS_DATE)).toBeInTheDocument();
     expect(within(archive).getByRole("button", { name: "Save to archive" })).toBeDisabled();
+    expect(within(archive).getByRole("button", { name: "Save to archive" })).toHaveAccessibleDescription(SAVE_NEEDS_DATE);
     expect(within(screen.getByRole("region", { name: "Still to do" })).getByText(/No service date/)).toBeInTheDocument();
     expect(documentRequests(api)).toEqual([]);
   });
@@ -284,6 +286,7 @@ describe("Review & send: the Word documents (slice 5a-1)", () => {
       const archive = screen.getByRole("region", { name: "Archive" });
       expect(within(archive).getByText(SAVE_FIX_READINGS)).toBeInTheDocument();
       expect(within(archive).getByRole("button", { name: "Save to archive" })).toBeDisabled();
+      expect(within(archive).getByRole("button", { name: "Save to archive" })).toHaveAccessibleDescription(SAVE_FIX_READINGS);
       expect(documentRequests(api)).toEqual([]);
       unmount();
       window.localStorage.clear();
@@ -320,6 +323,13 @@ function serviceRequests(api: { requests: RecordedRequest[] }, method: string) {
   return api.requests.filter((r) => r.method === method && r.path.startsWith("/services"));
 }
 
+/** The summary's status line, found by its archive half: the only part that links (to Review). */
+function summaryStatus(aside: HTMLElement, archive: string) {
+  const link = within(aside).getByRole("link", { name: archive });
+  expect(link).toHaveAttribute("href", "/builder/review");
+  return link.closest("p");
+}
+
 /** The draft as last written to localStorage. */
 function stored(): DraftV1 {
   return JSON.parse(window.localStorage.getItem(KEY) ?? "null") as DraftV1;
@@ -340,7 +350,7 @@ describe("Review & send: saving (slice 5a-3)", () => {
     const progress = screen.getByRole("navigation", { name: "Steps" });
     const aside = screen.getByRole("complementary", { name: "Summary" });
     expect(within(progress).getAllByRole("link")[3]).toHaveTextContent("4 Review & send Not in archive");
-    expect(within(aside).getByText("Draft saved on this device · Not in archive")).toBeInTheDocument();
+    expect(summaryStatus(aside, "Not in archive")).toHaveTextContent("Draft saved on this device · Not in archive");
 
     await user.click(within(card).getByRole("button", { name: "Save to archive" }));
     expect(await screen.findByText(SAVED_MESSAGE)).toBeInTheDocument();
@@ -350,7 +360,9 @@ describe("Review & send: saving (slice 5a-3)", () => {
     expect(post.body).toMatchObject({ service_date_iso: "2026-10-04", occasion: "Harvest", include_communion: true });
     expect(within(card).getByText(`Saved to the archive · ${formatSavedAt(FIRST_SAVE)}`)).toBeInTheDocument();
     expect(within(progress).getAllByRole("link")[3]).toHaveTextContent("4 Review & send Saved");
-    expect(within(aside).getByText(`Draft saved on this device · In archive (saved ${formatSavedAt(FIRST_SAVE)})`)).toBeInTheDocument();
+    expect(summaryStatus(aside, `In archive (saved ${formatSavedAt(FIRST_SAVE)})`)).toHaveTextContent(
+      `Draft saved on this device · In archive (saved ${formatSavedAt(FIRST_SAVE)})`,
+    );
     await waitFor(() => expect(stored().editing).toEqual({ service_id: SERVICE_ID, saved_at: FIRST_SAVE, date_iso: "2026-10-04" }));
     expect(stored().save_key).not.toBe(d.save_key); // a definitive answer: the next POST gets a new key
     expect(stored().save_key_fingerprint).toBeNull();
@@ -362,9 +374,9 @@ describe("Review & send: saving (slice 5a-3)", () => {
     await user.click(screen.getByRole("button", { name: "Probe edit" }));
     expect(within(card).getByText(`Unsaved changes · last saved ${formatSavedAt(FIRST_SAVE)}`)).toBeInTheDocument();
     expect(within(progress).getAllByRole("link")[3]).toHaveTextContent("4 Review & send Unsaved changes");
-    expect(
-      within(aside).getByText(`Draft saved on this device · In archive (saved ${formatSavedAt(FIRST_SAVE)}) · Unsaved changes`),
-    ).toBeInTheDocument();
+    expect(summaryStatus(aside, `In archive (saved ${formatSavedAt(FIRST_SAVE)}) · Unsaved changes`)).toHaveTextContent(
+      `Draft saved on this device · In archive (saved ${formatSavedAt(FIRST_SAVE)}) · Unsaved changes`,
+    );
 
     await user.click(within(card).getByRole("button", { name: "Save changes" }));
     await waitFor(() => expect(within(card).getByText(`Saved to the archive · ${formatSavedAt(SECOND_SAVE)}`)).toBeInTheDocument());
@@ -466,6 +478,39 @@ describe("Review & send: saving (slice 5a-3)", () => {
     await waitFor(() => expect(stored().editing).toEqual({ service_id: SERVICE_ID, saved_at: SECOND_SAVE, date_iso: "2026-10-04" }));
     expect(serviceRequests(api, "PUT").map((r) => r.headers["if-match"])).toEqual([FIRST_SAVE, FIRST_SAVE]);
     expect(serviceRequests(api, "POST")).toEqual([]);
+  });
+
+  it("a lost answer's 409 is still that save when the server found a hymn by its title and the body cut a long text", async () => {
+    const long = "Sing to the Lord. ".repeat(600); // 10,800 characters: the body cuts a custom element's text to 10,000
+    let d = opened({ saved_at: FIRST_SAVE });
+    d = { ...d, liturgy: { ...d.liturgy, custom_elements: [{ ...d.liturgy.custom_elements[0], text: long }] } };
+    d = setSlot(d, "closing", { hymn_id: null, title: "old  favorite", number: null, hymnal: "PH1990" });
+    let puts = 0;
+    const { api, user } = renderReview(d, {
+      [`PUT /services/${SERVICE_ID}`]: () => {
+        puts += 1;
+        if (puts === 1) throw new TypeError("Failed to fetch");
+        return fakeError(409, "conflict", CONFLICT_MESSAGE, { details: { current_saved_at: SECOND_SAVE } });
+      },
+      // As the archive keeps it: the closing hymn found in the church's hymnal by title, the text cut and trimmed.
+      [`GET /services/${SERVICE_ID}`]: savedService({
+        saved_at: SECOND_SAVE,
+        hymns: {
+          ...savedService().hymns,
+          closing: { hymn_id: hymnId(9), title: "Old Favorite", number: 12, hymnal: "PH1990", in_hymnal: true },
+        },
+        custom_elements: [{ label: "Anthem", text: long.slice(0, 10_000).trim(), insert_after: "sermon" }],
+      }),
+    });
+    const card = await archiveCard();
+    await user.click(within(card).getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(puts).toBe(1));
+    await user.click(await within(card).findByRole("button", { name: "Save changes" }));
+    expect(await screen.findByText(SAVED_MESSAGE)).toBeInTheDocument();
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(serviceRequests(api, "PUT")).toHaveLength(2);
+    expect((serviceRequests(api, "PUT")[1].body as { custom_elements: { text: string }[] }).custom_elements[0].text).toHaveLength(10_000);
+    await waitFor(() => expect(stored().editing?.saved_at).toBe(SECOND_SAVE));
   });
 
   it("saves as a new service, and says so, when the saved copy was deleted", async () => {

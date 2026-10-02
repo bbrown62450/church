@@ -31,7 +31,7 @@
  *   edited resets the draft (F §4.6 rule 2), keeping the translation as New
  *   service does. A 404 refreshes the list.
  */
-import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -39,7 +39,7 @@ import { ApiError } from "@/lib/api/client";
 import { errorToastMessage, isNoChurchAccess } from "@/lib/api/errors";
 import type { DeletedOut, ServiceOut, ServicePage } from "@/lib/api/types";
 import { useChurch } from "@/lib/church-context";
-import { serviceBody } from "@/lib/documents";
+import { savedCopyFingerprint, serviceBody } from "@/lib/documents";
 import { useDraft } from "@/lib/draft/context";
 import { fingerprint } from "@/lib/draft/fingerprint";
 import { draftToServicePayload, markSaved, serviceToDraft } from "@/lib/draft/mapping";
@@ -94,6 +94,25 @@ export function useServices() {
   });
 }
 
+/** Save's mutation key, so a page with its own draft provider can tell when a save settles. */
+export const SAVE_SERVICE_KEY = ["saveService"] as const;
+
+/**
+ * For `DraftProvider`'s `resync`: calls `sync` each time a save settles. A
+ * save that finishes after the builder unmounted (Services opened while it
+ * was in flight) records itself through the builder's store; the Services
+ * page's provider then reads it from storage, so its rows show "Editing" and
+ * opening another service asks nothing it should not (build review M1).
+ */
+export function resyncAfterSave(queryClient: QueryClient): (sync: () => void) => () => void {
+  return (sync) =>
+    queryClient.getMutationCache().subscribe((event) => {
+      if (event.type !== "updated" || (event.action.type !== "success" && event.action.type !== "error")) return;
+      const key = event.mutation.options.mutationKey;
+      if (key?.[0] === SAVE_SERVICE_KEY[0]) sync();
+    });
+}
+
 export type SaveVariables = { asNew?: boolean };
 type Saved = { service: ServiceOut; fp: string; fellBack: boolean };
 
@@ -101,9 +120,9 @@ export function useSaveService(church: DraftChurch) {
   const api = useApi();
   const queryClient = useQueryClient();
   const router = useRouter();
-  const me = useMeContext();
-  const { peek, update, autoUpdate } = useDraft();
+  const { peek, update, autoUpdate, flush } = useDraft();
   return useChurchMutation<Saved, ApiError, SaveVariables>({
+    mutationKey: SAVE_SERVICE_KEY,
     mutationFn: async ({ asNew = false }) => {
       const draft = peek();
       const fp = fingerprint(draftToServicePayload(draft));
@@ -122,12 +141,17 @@ export function useSaveService(church: DraftChurch) {
         }
       }
 
-      /** The archive's copy when it is what this save sends (a draft that leaves the hymnal to the church sent none); else null. */
+      /**
+       * The archive's copy when it is what this save sends, both read as the
+       * archive keeps them (`savedCopyFingerprint`: a hymn the server resolved
+       * by title, a text the body cut to its limit; a body that leaves the
+       * hymnal to the church sends none); else null.
+       */
       async function sameAsSent(serviceId: string): Promise<ServiceOut | null> {
         try {
           const theirs = await api.church<ServiceOut>(`/services/${serviceId}`);
-          const payload = draftToServicePayload(serviceToDraft(theirs, { church, user: me.user }));
-          return fingerprint(draft.hymns.hymnal === null ? { ...payload, hymnal: null } : payload) === fp ? theirs : null;
+          const withHymnal = body.hymnal != null;
+          return savedCopyFingerprint(theirs, { withHymnal }) === savedCopyFingerprint(body, { withHymnal }) ? theirs : null;
         } catch {
           return null;
         }
@@ -163,6 +187,10 @@ export function useSaveService(church: DraftChurch) {
       void queryClient.invalidateQueries({ queryKey: hymnsKey(church.id) });
       toast.success(fellBack ? SAVED_AFTER_DELETE_MESSAGE : SAVED_MESSAGE);
     },
+    // Written now, not 400 ms later: the builder may have unmounted while the
+    // save was in flight, and the Services page re-reads the stored draft as
+    // this mutation settles (`resyncAfterSave`, build review M1).
+    onSettled: () => flush(),
     onError: (e) => {
       if (handledElsewhere(e) || isConflict(e)) return;
       if (isHymnGone(e)) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { toast } from "sonner";
 
 import { PendingButton } from "@/components/app/pending-button";
@@ -60,6 +60,9 @@ export function SaveCard({ church }: { church: DraftChurch }) {
   const dated = hasServiceDate(draft);
   const readingsError = hasReadingsError(draft);
   const note = copyNote(draft);
+  const ids = { status: useId(), date: useId(), readings: useId(), note: useId() };
+  // Why Save is off, or why it saves a copy, is part of the button's description (build review M4).
+  const describedBy = [!dated && ids.date, readingsError && ids.readings, note && ids.note].filter(Boolean).join(" ") || undefined;
 
   function run(asNew: boolean) {
     save.mutate(
@@ -91,12 +94,22 @@ export function SaveCard({ church }: { church: DraftChurch }) {
         <h2 id="archive-title" className="text-base font-medium">
           Archive
         </h2>
-        <p className="text-sm text-muted-foreground">{archiveStatusLine(draft)}</p>
-        {dated ? null : <p className="text-sm text-muted-foreground">{SAVE_NEEDS_DATE}</p>}
-        {readingsError ? <p className="text-sm text-muted-foreground">{SAVE_FIX_READINGS}</p> : null}
+        <p id={ids.status} aria-live="polite" className="text-sm text-muted-foreground">
+          {archiveStatusLine(draft)}
+        </p>
+        {dated ? null : (
+          <p id={ids.date} className="text-sm text-muted-foreground">
+            {SAVE_NEEDS_DATE}
+          </p>
+        )}
+        {readingsError ? (
+          <p id={ids.readings} className="text-sm text-muted-foreground">
+            {SAVE_FIX_READINGS}
+          </p>
+        ) : null}
       </div>
       {note ? (
-        <p id="save-note" className="text-sm text-muted-foreground">
+        <p id={ids.note} className="text-sm text-muted-foreground">
           {note}
         </p>
       ) : null}
@@ -106,7 +119,7 @@ export function SaveCard({ church }: { church: DraftChurch }) {
           className="w-full sm:w-fit"
           pending={save.isPending}
           disabled={!dated || readingsError}
-          aria-describedby={note ? "save-note" : undefined}
+          aria-describedby={describedBy}
           onClick={() => run(false)}
         >
           {LABELS[mode]}

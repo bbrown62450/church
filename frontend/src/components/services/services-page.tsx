@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
@@ -19,7 +20,7 @@ import { DraftProvider, useDraft } from "@/lib/draft/context";
 import { isDirty } from "@/lib/draft/status";
 import { useMeContext } from "@/lib/me-context";
 import { useChurchProfile } from "@/lib/queries/church";
-import { useDeleteService, useOpenService, useServices } from "@/lib/queries/services";
+import { resyncAfterSave, useDeleteService, useOpenService, useServices } from "@/lib/queries/services";
 
 import { serviceDateLabel, ServiceRow } from "./service-row";
 
@@ -29,6 +30,11 @@ export function deleteDescription(s: ServiceSummary, churchName: string, editing
   const when = serviceDateLabel(s) === "No date" ? " (no date)" : ` on ${serviceDateLabel(s)}`;
   const text = `${name}${when} will be removed from the archive for everyone in ${churchName}. This can't be undone.`;
   return editing ? `${text} You're editing this service. Your current draft will be cleared too.` : text;
+}
+
+function uniqueById(services: ServiceSummary[]): ServiceSummary[] {
+  const seen = new Set<string>();
+  return services.filter((s) => (seen.has(s.id) ? false : (seen.add(s.id), true)));
 }
 
 function ListSkeleton() {
@@ -45,7 +51,9 @@ function ListSkeleton() {
  * `/services` (slice 5a spec, "Services page"; F §4.1, §4.8): the church's
  * saved services, 20 at a time, newest service date first, and "New
  * service". The page has its own `DraftProvider` (the builder's is not
- * mounted here), so a row shows "Editing" for the service the draft holds,
+ * mounted here; it re-reads the stored draft when a save settles, so a save
+ * still in flight when the builder was left counts), so a row shows "Editing"
+ * for the service the draft holds,
  * opening a service replaces the draft (after "Replace your unsaved draft?"
  * when there is something to lose) and the builder then opens on Review, and
  * deleting the service being edited clears the draft. Every delete asks
@@ -55,10 +63,12 @@ export function ServicesPage() {
   const me = useMeContext();
   const church = useChurch();
   const profile = useChurchProfile(church.id);
+  const queryClient = useQueryClient();
+  const [resync] = useState(() => resyncAfterSave(queryClient));
   return (
     <main className="mx-auto grid w-full max-w-2xl content-start gap-4 px-4 py-4">
       {profile.data ? (
-        <DraftProvider key={`${me.user.id}:${church.id}`} userId={me.user.id} church={profile.data}>
+        <DraftProvider key={`${me.user.id}:${church.id}`} userId={me.user.id} church={profile.data} resync={resync}>
           <ServicesArchive church={profile.data} />
         </DraftProvider>
       ) : (
@@ -91,7 +101,8 @@ function ServicesArchive({ church }: { church: ChurchProfile }) {
     });
   }
 
-  const items = list.data?.pages.flatMap((page) => page.items) ?? [];
+  // A service saved or deleted between two pages shifts the offsets, so a row can come twice: keep the first.
+  const items = uniqueById(list.data?.pages.flatMap((page) => page.items) ?? []);
   const total = list.data?.pages.at(-1)?.total ?? 0;
 
   let body;

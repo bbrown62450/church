@@ -366,6 +366,31 @@ describe("DraftStore changes (S store.ts)", () => {
     expect(notices).toEqual([]);
   });
 
+  it("puts its draft back over an old tab's with nothing to write, and a store loaded from the old tab's takes it (build review M3)", () => {
+    const { storage, data } = memoryStorage({ [KEY]: JSON.stringify(testDraft()) });
+    const builder = makeStore(storage).store;
+    builder.update((d) => editOccasion(d, "Mine"));
+    builder.flush();
+    const mine = builder.getSnapshot().draft;
+    // An open tab still running version 1 code writes its fresh draft, a minute later, with nothing pending here.
+    data.set(KEY, JSON.stringify({ ...testDraft(), version: 1, updated_at: new Date(Date.parse(mine.updated_at) + 60_000).toISOString() }));
+    // Services renders before the builder unmounts, so its store loads the old tab's draft...
+    const services = makeStore(storage);
+    expect(services.store.getSnapshot().draft.readings.occasion).toBe("");
+    builder.flush(); // ...then the builder unmounts and flushes,
+    expect(stored(data)).toMatchObject({ version: 2, readings: { occasion: "Mine" } });
+    services.store.syncFromStorage({ quiet: true }); // and Services reads it back once mounted.
+    expect(services.store.getSnapshot().draft).toMatchObject({ readings: { occasion: "Mine" }, updated_at: mine.updated_at });
+    expect(services.notices).toEqual([]);
+    // Once it has its own draft, the times decide again.
+    data.set(KEY, JSON.stringify({ ...mine, readings: { ...mine.readings, occasion: "Older" }, updated_at: new Date(DRAFT_NOW.getTime() - 1000).toISOString() }));
+    services.store.syncFromStorage();
+    expect(services.store.getSnapshot().draft.readings.occasion).toBe("Mine");
+    // A current-version draft is never written over with nothing pending.
+    builder.flush();
+    expect(stored(data).readings.occasion).toBe("Older");
+  });
+
   it("switches to memory-only when a write fails, and reports it once", () => {
     const { storage, data } = memoryStorage();
     storage.failWrites = true;
