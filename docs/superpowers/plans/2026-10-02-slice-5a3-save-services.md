@@ -22,7 +22,7 @@
 
 ### Commands and process
 - Run commands from the repo root; the working directory resets between commands. Frontend as `(cd frontend && …)`. No foreground `sleep`.
-- Frontend: one or more files `(cd frontend && npx vitest run <paths> 2>&1 | grep -E "^ +× |\[ src/|Tests ")` (a file that cannot load shows as `FAIL … [ src/… ]`); the suite `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")` (a failure is named); then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`. Backend, as a check only: `.venv/bin/python -m pytest -q | tail -1`.
+- Frontend: one or more files `(cd frontend && npx vitest run <paths> 2>&1 | grep -E "^ +× |\[ src/|Tests ")` (a file that cannot load shows as `FAIL … [ src/… ]`; the `×` lines may come in another order than quoted, since Vitest reports files as they finish); the suite `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")` (a failure is named); then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`. Backend, as a check only: `.venv/bin/python -m pytest -q | tail -1`.
 - The API does not change: never run `export_openapi.py` or `gen:api` to change anything (T7 runs them to show nothing changes).
 - Branch `claude/slice-2-plan-4q33le`, at `a789fb8` plus this plan's commits (`WIP plan: slice 5a-3` …, then `Plan: slice 5a-3, Save and the Services page (owner answers 2026-10-01/02)`), then T1-T6. Stage files by name (paths with parentheses in single quotes); `.claude/` stays untracked.
 - `main` is protected (`backend`, `backend-postgres`, `frontend`, up to date). Merge only with `gh pr merge <N> --merge -R bbrown62450/church`, only on the owner's explicit yes.
@@ -81,7 +81,7 @@ Answers 3 and 7 concern 5a-1's Word file and are not repeated here.
 **Already decided in S, cited, not asked again:** confirm before opening over unsaved work ("Replace your unsaved draft?", S "Services page" Open flow; F §4.6 "Loading" step 1; behavior change 10); changing the date means Save as new service (S UX "Save card"; behavior change 14; parity with app.py:1029-1035); 20 a page and no search (S "Services page"; Scope "Archive search … Not planned"); any member can delete, with S's confirm text (S "Delete flow"; owner decision 5); hymn use is recorded on save only (S behavior change 3; owner decision 9).
 
 ### Owner answers to this plan's questions
-Pending: "Questions for the owner" (end of this plan) lists the choices made here, each written as recommended.
+Pending: "Questions for the owner" (end of this plan) lists the twelve choices made here, each written as recommended.
 
 **Later, out of scope:** 5b (email: the Review step's email card, Gmail, contacts), 6a (Settings), the printed bulletin, Voices of the Church.
 ## Spec clarifications
@@ -4167,7 +4167,21 @@ Expected counts after this task: frontend `645 passed` in 83 files on `main`; ba
 ---
 ## Build notes
 
-(written after the replay)
+**How this plan was written (2026-10-02).** Each task's code was built and run in a throwaway worktree of `a789fb8` (the repo's `.venv`, a hard-linked copy of `frontend/node_modules`), one commit per task; the directives were then generated from those commits (a new file as **Create**, `mapping.ts` whole, the docs' additions as **Append**, every other change as **In … replace** with just enough context to occur once in the file as it stands at that point) and replayed onto a fresh worktree of the branch head by a script that applies each task's Step 1 and Step 3 directives by their line ranges and runs that task's commands. While building:
+- **`isDirty` moved to `status.ts`.** `reviewStatus` belongs in `status.ts` beside `stepStatus`, and needs `isDirty`, but `fingerprint.ts` (where `isDirty` was) imports `status.ts` for `isPristine`; moving it leaves `fingerprint.ts` with no imports and no cycle.
+- **`replace` writes at once.** With the Services page's own provider, the builder it opens built its store from storage while the Services page's store still held the opened service in its 400 ms write delay (React renders the new route before the old one unmounts and flushes), so the builder showed the old draft. Writing on `replace` fixes it for New service and the delete reset too (T1 "replace writes at once, …").
+- **The summary's status line is one link.** Splitting it into text and a link broke `getByText("Draft saved on this device · Not in archive")` in 2b's and 3b's tests (Testing Library matches one element's own text); the whole line links to Review instead, which also gives a bigger target.
+- **Toasts between tests.** sonner replays a toast still showing to the next `Toaster`, so a second test found "Service saved" twice; `review-send-step.test.tsx` and `services-page.test.tsx` call `toast.dismiss()` after each test, as `liturgy-step.test.tsx` does before each.
+- **`isConflict` returns a boolean, not a type guard:** as `e is ApiError` it narrowed `onError`'s already-typed error to `never` in the other branch (typecheck).
+- **The row test reads each row's first button:** the menu button's name ("More actions for October 4, 2026") also matched a pattern on the year.
+- **Hymn use skips a service's own date** (`hymn_usage.usage_near`: "D itself excluded"), so T8's phone step 3 dates the new service a week after the saved one; manual-verification item 13 says so.
+- **The production build** ran in the build worktree: `✓ Compiled successfully`, with `/services` among the routes.
+- Vitest reports failures as files finish, so the `×` lines of a "see it fail" step may come in another order than quoted (T1's did in the replay); the set and the `Tests` line are what count.
+
+**Replay of the finished plan (2026-10-02).** The directives of T1-T6 were applied in order onto a fresh detached worktree of the branch head (`a789fb8` plus the plan commits), running each step's commands:
+- All 108 directives applied (T1 10 + 10, T2 12 + 19, T3 2 + 4, T4 23 + 18, T5 3 + 4, T6 3); every Replace anchor occurred exactly once, and every Append landed on the file as the task before left it. After T6, `frontend/src` and the three docs equaled the build worktree's (`diff -r`: empty).
+- Every "see it fail" output matched as quoted (T1's `×` lines in another order), and every count matched the table: frontend 622, 628, 629, 637 in 82, then 645 in 83; the task's files `40`, `25`, `13`, `27` (three times) and `14` (three times) passed; typecheck 0 and lint 0 after each of T1-T5; `note grep exit 1` after T4; T6 `89 passed`, `4`, `0`, `3 files changed, 26 insertions(+)`, backend `1335 passed, 16 skipped`. At the end the whole frontend suite three times, `645 passed` in 83 each, no `×` or `FAIL`; `export_openapi.py` and `gen:api` changed nothing; no raw HTML. No flaky run.
+- Not run while planning: the pushes, the PR and CI, the merge, and the owner's phone check.
 
 ## Spec coverage
 
