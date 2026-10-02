@@ -1,7 +1,8 @@
 # Printed Bulletin: Design
 
 Date: 2026-10-02
-Status: owner answers of 2026-10-02 ("all recommended") are binding; PR 1 has its plan
+Status: owner answers of 2026-10-02 ("all recommended") are binding, with the layout decided as
+**layout B** (owner, 2026-10-02, binding; below); PR 1 has its plan
 (`docs/superpowers/plans/2026-10-02-printed-bulletin-1.md`); PR 2 and PR 3 get their own plans.
 Builds on:
 - `2026-10-02-printed-bulletin-idea.md` (the idea note)
@@ -13,17 +14,17 @@ Builds on:
 
 The app makes the pastor's Word working files, but the church still builds the real Sunday
 bulletin by hand. The owner's sample (First Presbyterian Church's bulletin for September 27, 2026,
-shared in the session and not committed) shows what it holds: a folded booklet on legal paper with a
+shared in the session and not committed) shows what it holds: booklet pages on legal paper, two to a side, with a
 cover, the order of worship with the leaders' names, the readings in full, the sung responses, and an
 announcements page. Most of the order of worship is already in the draft. This design makes the
-app print the booklet, first from what it knows (PR 1), then with the weekly and standing details
+app print it, first from what it knows (PR 1), then with the weekly and standing details
 (PR 2) and the cover picture (PR 3).
 
 ## Owner answers (Beau, 2026-10-02, "all recommended"; binding)
 
 | # | Answer |
 |---|---|
-| 1 | **Output:** a print-ready PDF in the folded legal-landscape booklet layout, plus an editable Word version. |
+| 1 | **Output:** a print-ready PDF in the folded legal-landscape booklet layout, plus an editable Word version. (The layout is now B, below: two pages to a side in reading order, not folded.) |
 | 2 | **Standing church settings:** church name, address, phone, email, website, Facebook name; the standing worship leader, liturgist and organist; the "*Congregation stands if able" note and which elements get the star; the Gloria Patri words. **Weekly:** prelude and postlude (title, composer), a per-element leader when different, announcements. |
 | 3 | **Announcements:** a simple form for ushers, deacon of the week and coffee hour, plus free-text boxes for activities, prayer concerns and collection items; each carries forward from last week. |
 | 4 | **Cover picture:** uploaded each week, with the option to keep last week's; printed under the church name with the scripture reference and date over it. |
@@ -32,15 +33,25 @@ app print the booklet, first from what it knows (PR 1), then with the weekly and
 | 7 | **Keep the pastor's and bulletin Word copies;** add a third download, "Download printed bulletin". |
 | 8 | **Weekly fields on a new "Bulletin" step** between Liturgy and Review; standing church details in a small **Bulletin settings** panel now, folded into 6a later. |
 | 9 | **Three PRs:** (1) the booklet PDF (and Word) from what the app already knows, placeholders for the rest; (2) the weekly fields and announcements (and the standing settings panel); (3) the cover picture upload. |
-| 10 | **Checks:** a guided phone check after each PR, and a print test on legal paper at the church after PR 1 (folds and margins). |
+| 10 | **Checks:** a guided phone check after each PR, and a print test on legal paper at the church after PR 1 (folds and margins; with layout B, the page order and the margins). |
+
+### Owner decisions after the answers (Beau, 2026-10-02; binding)
+
+- **Layout B.** The printed PDF matches the owner's sample: legal paper, landscape, two booklet
+  pages side by side in **reading order** (side 1 is the cover and page 1, side 2 pages 2 and 3,
+  and so on). No folding imposition and no padding to a multiple of 4: N pages take ceil(N/2)
+  sides, and an odd N leaves the last side's right half blank. The announcements page is the last
+  page, as in the sample. This replaces the folded layout of answer 1 and of this spec's first
+  draft; the folded booklet is a later option ("Later options" below), not built in PR 1.
+- **The PR 1 plan's Questions 1-12:** "all recommended", with question 3 (the PDF's layout)
+  answered as layout B.
 
 ## The sample, read closely
 
 The sample PDF is three legal-landscape pages (1008 x 612 pt), each holding two 7 x 8.5 in pages
-side by side in **reading order**: cover | 1, 2 | 3, 4 | 5. That is a viewing layout (it was the
-mailing copy); it does not fold into a booklet. Six booklet pages are a sheet and a half; a folded
-booklet needs a multiple of 4. So the app's PDF is **imposed** for printing (below), and the print
-test (answer 10) confirms the fold, the page order and the margins on the church's printer.
+side by side in **reading order**: cover | 1, 2 | 3, 4 | 5. It does not fold into a booklet, and
+that is what the owner chose (layout B): the app's PDF has the same two-up reading order, and the
+print test (answer 10) confirms the page order and the margins on the church's printer.
 
 What the sample prints, in order: the cover (church name; picture with the sermon reference and the
 date over it; address, phone, email, website, "FB: ..."); "THE SERVICE FOR THE LORD'S DAY" with the
@@ -60,28 +71,33 @@ announcements page last.
   page number centered 20 pt from the bottom. Body Times 11 pt on 13 pt leading; the church name on
   the cover 28 pt bold; contact lines Helvetica 12 pt (the sample uses a sans face there).
 - **Pages in reading order:** the cover (unnumbered), the inside pages numbered from 1, the
-  announcements page last (the back cover).
-- **Imposition:** the page count rounds up to a multiple of 4 with blank pages placed just before
-  the announcements page, so announcements stay on the back. Sheet k (0-based) of a booklet of N
-  pages prints (N-1-2k | 2k) on its front and (2k+1 | N-2-2k) on its back. Print on both sides,
-  flipped on the short edge, and fold. With the sample's content that is 8 pages on 2 sheets.
-- **One version** (answer 6): the PDF is the imposed booklet. Read on a phone it is in sheet order;
-  the Word version is in reading order.
+  announcements page last (numbered, as in the sample).
+- **Two to a side (layout B):** each legal landscape side (1008 x 612 pt) holds two booklet pages
+  side by side in reading order: side 1 is the cover | page 1, side 2 is page 2 | page 3, and so on.
+  Any page count: N pages take ceil(N/2) sides; nothing is padded; an odd N leaves the last side's
+  right half blank (no page number there). Nothing is folded, so the sheets can be printed on one
+  side or both. With the sample's content (shorter readings) that is 5 pages on 3 sides; the
+  owner's sample has 6 pages on 3 sides.
+- **One version** (answer 6): the PDF reads in order on a phone too (the first page shows the
+  cover and page 1 side by side); the Word version has the same pages one to a page.
 - **Word version:** the same pages in reading order on 7 x 8.5 in pages (Times New Roman 11 pt,
-  0.5 in margins, leaders at a right tab stop, page numbers from the first inside page). It does not
-  set Word's Book fold (its effect on page size differs between Word and other editors); to print it
-  as a booklet, use Word's Book fold or the printer's booklet setting. The PDF is the print copy.
+  0.5 in margins, leaders at a right tab stop, page numbers from the first inside page). To print
+  it two to a legal sheet as the PDF does, use the printer's "2 pages per sheet" setting. The PDF
+  is the print copy.
 
 ### PDF library
 | Option | License | Install on Railway | Fit |
 |---|---|---|---|
-| **reportlab 5** + **pypdf 6** (chosen) | BSD; BSD-3-Clause | pure-Python wheels (`py3-none-any`); reportlab pulls Pillow and charset-normalizer wheels, no system library | platypus flows text across pages (keep-with-next, tables for the right-aligned leader); pypdf places two pages on each legal sheet (`merge_transformed_page`) and reads text back in tests |
+| **reportlab 5** (chosen; runtime) | BSD | a pure-Python wheel (`py3-none-any`); it pulls Pillow (a binary wheel with its libraries inside) and charset-normalizer (already installed through requests), no system library | platypus flows text across pages (keep-with-next, tables for the right-aligned leader); one page template with two frames lays two booklet pages on each legal side in reading order, in one pass |
+| **pypdf 6** (tests only) | BSD-3-Clause | pure-Python wheel, in `requirements-dev.txt` only | reads the PDF's text back in the tests; the first draft also used it at runtime to impose the folded booklet, which layout B does not need |
 | fpdf2 | LGPL-3.0 | pure Python | simpler flow model; LGPL is not the permissive license asked for |
 | WeasyPrint | BSD | needs Pango and other system libraries | ruled out (system deps) |
 | PyMuPDF | AGPL | wheels | ruled out (license) |
 
-Both were installed from PyPI into `.venv` while planning (reportlab 5.0.1, pypdf 6.19.0) and go in
-`backend/requirements.txt` as `reportlab>=5.0,<6` and `pypdf>=6.0,<7`.
+Both were installed from PyPI into `.venv` while planning (reportlab 5.0.1, pypdf 6.19.0):
+`reportlab>=5.0,<6` in `backend/requirements.txt` (the only new runtime package), `pypdf>=6.0,<7` in
+`requirements-dev.txt` (CI only). Two pages per side need no imposition library: reportlab draws
+them directly.
 
 ### Fonts
 The PDF uses the standard Times family (and Helvetica for the contact lines), which every PDF viewer
@@ -198,7 +214,8 @@ week's picture", and a preview.
 
 ### Review & send (PR 1)
 A **Printed bulletin** card after the Word documents card: what it prints, a note that PR 1 prints
-[placeholders] for what the app does not know yet, **Download printed bulletin** (the PDF, primary)
+[placeholders] for what the app does not know yet, **Download printed bulletin** (the PDF, primary;
+"Ready to print on legal paper, two pages to a side.")
 and **Download Word version** (outline), each with its own "Preparing…"/"Still working…", gated by
 the service date and the readings like the Word copies, with the same error toasts and the same save
 tip after a download. The Word documents card does not change.
@@ -221,14 +238,14 @@ tip after a download. The Word documents card does not change.
 
 ## Testing
 
-- Pure: the booklet's page order (`booklet_positions`, `booklet_sides`: every page once, blanks
-  before the back page, 4/8/12 pages), the date and the filenames, reading paragraphs, the order of
+- Pure: the date and the filenames, reading paragraphs, the order of
   worship (element order, leaders, stars, Leader/People and the Assurance as the Word copies read
   them, custom elements, empty slots, communion, the credit line and the unavailable text), the
   cover and the back page.
-- Render: the PDF's sheets are 1008 x 612 pt, the side count is half a multiple of 4, text read back
-  with pypdf is in booklet order (side 1: the back page then the cover; side 2: page 1 ...), a long
-  service takes another sheet, an unprintable character becomes "?"; the Word file is 7 x 8.5 in
+- Render: the PDF's sides are 1008 x 612 pt, text read back with pypdf and split into each side's
+  halves is in reading order (side 1: the cover then page 1; side 2: pages 2 and 3 ...), N pages
+  take ceil(N/2) sides with the announcements last (an even and an odd count; an odd count's last
+  right half blank), an unprintable character becomes "?"; the Word file is 7 x 8.5 in
   with the parts starting new pages and the leader at a tab.
 - API: both formats with their headers, the readings fetched in the draft's translation (a fake
   `fetch_part`), the fallback to the church's translation, no readings fetch nothing, the
@@ -240,22 +257,30 @@ tip after a download. The Word documents card does not change.
 
 ## Risks
 
-- **The printer's duplex setting.** "Flip on short edge" is the usual booklet setting for landscape
-  sheets; a printer that flips the other way prints the backs upside down. The print test finds out;
-  the fix is a note on the card or rotated backs, a small change.
-- **Blank pages.** A short service pads with up to three blank pages before the back. PR 2's
-  announcements fill some of that; the print test shows whether the owner wants "Notes" pages instead.
-- **The PDF on a phone** reads in sheet order (answer 6: one version). The Word version reads in
-  order.
+- **Printing on both sides.** Layout B prints fine on one side. On both sides, the printer's
+  two-sided setting must keep the backs upright (for landscape sheets usually "flip on short edge");
+  the print test records what the church uses.
+- **A blank half.** An odd page count leaves the last side's right half blank. PR 2's announcements
+  may fill it; the print test shows whether the owner wants a "Notes" page there.
 - **Upstream scripture text** can be slow or missing; the file still prints, with the placeholder.
+
+## Later options
+
+- **Folded booklet.** The PDF imposed for folding: the page count rounded up to a multiple of 4
+  with blank pages just before the announcements (which then sit on the back cover); sheet k
+  (0-based) of N pages prints (N-1-2k | 2k) on its front and (2k+1 | N-2-2k) on its back; printed
+  on both sides, flipped on the short edge, and folded in half. It was the first draft's layout and
+  is not built (owner decision, layout B); it would come back as a choice beside layout B, with its
+  own card wording and a print test of the fold.
 
 ## Notes from the PR 1 plan (2026-10-02)
 
 - reportlab 5.0.1 and pypdf 6.19.0 installed from PyPI into `.venv` as pure-Python wheels; the
-  plan's code was built and its directives replayed on a fresh worktree (backend 1335 → 1363 passed,
-  frontend 655 → 660 in 83 files).
-- A service shaped like the owner's sample (names replaced by placeholders) renders as five booklet
-  pages (cover, three inside pages, announcements), padded to eight on two legal sheets; the
-  imposed sides were rendered to images and compared with the sample's pages.
+  plan's code was built and its directives replayed on a fresh worktree (backend 1335 → 1357 passed,
+  frontend 655 → 660 in 83 files; layout B, 2026-10-02).
+- A service shaped like the owner's sample (names replaced by placeholders, shorter readings)
+  renders as five booklet pages (cover, three inside pages, announcements) on three legal sides,
+  the last right half blank; the sides were rendered to images and compared with the sample's
+  three pages: the same two-up reading order.
 - The Word file was checked by reading it back with python-docx; LibreOffice in the planning
   container could not open any `.docx`, so the owner's phone check is its first visual check.

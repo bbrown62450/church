@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship the first of the three printed bulletin PRs (owner answer 9, 2026-10-02): **the Sunday bulletin as a folded booklet, built from what the app already knows.** After it merges, a member on step 4 of the Service Builder (`/builder/review`) sees a new **Printed bulletin** card below the Word documents, with **Download printed bulletin** (a print-ready PDF: legal paper, landscape, two booklet pages per side, already in the order a folded booklet needs) and **Download Word version** (the same booklet in reading order, to change before printing). The booklet follows the owner's sample: a cover with the church's name, the picture's place with the sermon reading and the date, and the contact lines; "THE SERVICE FOR THE LORD'S DAY" with the order of worship under four section headings, each element in bold capitals with its leader right-aligned, the readings printed in full in the translation chosen on step 1 with a credit line, the Gloria Patri, the Apostles' Creed, the stars and "*Congregation stands if able"; and an announcements page on the back. What the app does not know yet (the church's address and contacts, the people who lead, the service time, the prelude and postlude, the cover picture, the announcements) prints as `[placeholders]`; PR 2 and PR 3 fill them. No database change (Alembic head stays `0005_services_extras`), no new variable; two new Python packages (reportlab, pypdf); production Streamlit (branch `streamlit-frozen`) is untouched.
+**Goal:** Ship the first of the three printed bulletin PRs (owner answer 9, 2026-10-02): **the Sunday bulletin, built from what the app already knows.** After it merges, a member on step 4 of the Service Builder (`/builder/review`) sees a new **Printed bulletin** card below the Word documents, with **Download printed bulletin** (a print-ready PDF: legal paper, landscape, two booklet pages to a side in reading order, as the owner's sample: layout B, owner decision 5) and **Download Word version** (the same pages one to a page, to change before printing). The booklet follows the owner's sample: a cover with the church's name, the picture's place with the sermon reading and the date, and the contact lines; "THE SERVICE FOR THE LORD'S DAY" with the order of worship under four section headings, each element in bold capitals with its leader right-aligned, the readings printed in full in the translation chosen on step 1 with a credit line, the Gloria Patri, the Apostles' Creed, the stars and "*Congregation stands if able"; and an announcements page last. What the app does not know yet (the church's address and contacts, the people who lead, the service time, the prelude and postlude, the cover picture, the announcements) prints as `[placeholders]`; PR 2 and PR 3 fill them. No database change (Alembic head stays `0005_services_extras`), no new variable; one new runtime Python package (reportlab) and one test-only package (pypdf); production Streamlit (branch `streamlit-frozen`) is untouched.
 
-**Architecture:** Backend first. `backend/printed_bulletin.py` (new, pure) turns a resolved service into the booklet's content as plain data (`Line`s of `Span`s for the cover, the order of worship and the back page), and holds the page order of a folded booklet (`booklet_positions`, `booklet_sides`), the date line and the filenames. `backend/printed_pdf.py` lays that content out with reportlab in reading order (7 x 8.5 in pages), counts the pages, renders again with the back page's number known, and imposes the pages onto legal landscape sheets with pypdf. `backend/printed_docx.py` writes the same content with python-docx in reading order. `usecases/documents.build_printed` cleans the input, reads the church's name and resolves the hymns in one short read, fetches the two readings' text through `usecases.passages` (charging the `scripture` bucket per part first), and renders. `POST /documents/printed` (church-scoped, plain `def`) answers the bytes with the 5a headers. Frontend: `printedRequest` and `printedFilename` beside the Word copies' helpers, `useDownloadPrinted` beside `useDownloadDocument`, and `PrintedCard` on the Review step.
+**Architecture:** Backend first. `backend/printed_bulletin.py` (new, pure) turns a resolved service into the booklet's content as plain data (`Line`s of `Span`s for the cover, the order of worship and the back page), and holds the date line and the filenames. `backend/printed_pdf.py` lays that content out with reportlab in one pass on legal landscape sides, each with two 7 x 8.5 in frames (one per booklet page), so the pages run in reading order two to a side (layout B: side 1 is the cover and page 1, side 2 pages 2 and 3, …; nothing folded or padded); the tests read the PDF back with pypdf. `backend/printed_docx.py` writes the same content with python-docx in reading order. `usecases/documents.build_printed` cleans the input, reads the church's name and resolves the hymns in one short read, fetches the two readings' text through `usecases.passages` (charging the `scripture` bucket per part first), and renders. `POST /documents/printed` (church-scoped, plain `def`) answers the bytes with the 5a headers. Frontend: `printedRequest` and `printedFilename` beside the Word copies' helpers, `useDownloadPrinted` beside `useDownloadDocument`, and `PrintedCard` on the Review step.
 
-**Tech Stack:** Python 3.11 (`.venv`), FastAPI 0.141, python-docx 1.2.0, **reportlab 5.0.1** (`reportlab>=5.0,<6`, BSD) and **pypdf 6.19.0** (`pypdf>=6.0,<7`, BSD-3-Clause), pytest; Next 16, React 19, TypeScript 5, Base UI, TanStack Query 5, sonner, Vitest 3 with Testing Library.
+**Tech Stack:** Python 3.11 (`.venv`), FastAPI 0.141, python-docx 1.2.0, **reportlab 5.0.1** (`reportlab>=5.0,<6`, BSD; runtime) and **pypdf 6.19.0** (`pypdf>=6.0,<7`, BSD-3-Clause; tests only, in `requirements-dev.txt`), pytest; Next 16, React 19, TypeScript 5, Base UI, TanStack Query 5, sonner, Vitest 3 with Testing Library.
 
 **Source documents:**
 - Spec ("S"): `docs/superpowers/specs/2026-10-02-printed-bulletin-design.md` (owner answers 1-10; "The sample, read closely"; Decisions: layout and page order, PDF library, fonts, what prints where, scripture text, API; "Scope by PR" PR 1; Testing; Risks).
@@ -24,15 +24,15 @@
 - Run commands from the repo root; the working directory resets between commands. Frontend as `(cd frontend && …)`. No foreground `sleep`.
 - Backend: one or more files `.venv/bin/python -m pytest -q <paths> 2>&1 | tail -3`; the suite `.venv/bin/python -m pytest -q | tail -1`. Frontend: one or more files `(cd frontend && npx vitest run <paths> 2>&1 | grep -E "^ +× |\[ src/|Tests ")` (a file that cannot load shows as `FAIL … [ src/… ]`; the `×` lines may come in another order than quoted); the suite `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")`; then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`.
 - The API changes (T3), so T3 regenerates the snapshot and the types in the same commit: `.venv/bin/python backend/scripts/export_openapi.py` then `(cd frontend && npm run gen:api)`. Never edit `openapi.json` or `schema.d.ts` by hand.
-- Two new runtime packages (T2): `reportlab>=5.0,<6` and `pypdf>=6.0,<7` in `backend/requirements.txt` (CI and Railway install it; `requirements-dev.txt` includes it). T2 Step 1 installs them into `.venv`.
-- Branch `claude/slice-2-plan-4q33le`, at `0b7f5e2` plus this plan's commits (`WIP spec/plan: printed bulletin` …, `Spec: printed bulletin (owner answers 2026-10-02)`, `Plan: printed bulletin PR 1 (owner answers 2026-10-02)`), then T1-T6. Stage files by name (paths with parentheses in single quotes); `.claude/` stays untracked.
+- One new runtime package and one test package (T2): `reportlab>=5.0,<6` in `backend/requirements.txt` (Railway and CI install it) and `pypdf>=6.0,<7` in `requirements-dev.txt` (CI only: the tests read the PDF back; no runtime module imports it). T2 Step 1 installs both into `.venv`.
+- Branch `claude/slice-2-plan-4q33le`, at `0b7f5e2` plus this plan's commits (`WIP spec/plan: printed bulletin` …, `Spec: printed bulletin (owner answers 2026-10-02)`, `Plan: printed bulletin PR 1 (owner answers 2026-10-02)`, `Spec and plan: printed bulletin layout B (owner, 2026-10-02)`, and any later spec or plan commit), then T1-T6. Stage files by name (paths with parentheses in single quotes); `.claude/` stays untracked.
 - `main` is protected (`backend`, `backend-postgres`, `frontend`, up to date). Merge only with `gh pr merge <N> --merge -R bbrown62450/church`, only on the owner's explicit yes.
 - Every commit message has a subject, a body and, as its last paragraph (a separate `-m`), these two lines:
   `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`
   `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
 - TDD: write the failing test first and see it fail as quoted.
 - **Backup push after every task** (standing rule): the controller runs `git push origin claude/slice-2-plan-4q33le` after each task's commit (never `--force`; on a network error retry after 2, 4, 8 and 16 s). A fix asked for by a review is a new commit, `Fix: <what> (Task <n> review)`. The container can restart and lose uncommitted work: commit as soon as a task's checks pass.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1335 → 1363 passed, 16 → 16 skipped; frontend 655 → 660 in 83 → 83 files`.
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1335 → 1357 passed, 16 → 16 skipped; frontend 655 → 660 in 83 → 83 files`.
 - New prose for the owner has no em dashes and no flattery. New user-facing copy is exactly the list in clarification 17 and has no em dashes; existing copy keeps its own punctuation.
 - No church id, email address, token, database URL or real person's name, address, phone or email in any doc, commit, test or record (the tests use "Example Church" and `example.com`).
 - Ask the owner before any push to a PR, PR creation, marking ready, merging, or any production or settings action. Owner steps go one at a time, in plain words.
@@ -46,14 +46,14 @@ As in the 5a plans: **Create `path`:** the block is the whole file; **Append to 
 
   | After | Backend (delta) | Backend | Frontend (delta) | Frontend |
   |---|---|---|---|---|
-  | T1 | +13 (`test_printed_bulletin.py`, one test in five cases) | 1348 passed, 16 skipped | 0 | 655 in 83 |
-  | T2 | +5 (`test_printed_render.py`; `test_no_streamlit_in_core.py` edited) | 1353 passed, 16 skipped | 0 | 655 in 83 |
-  | T3 | +10 (`test_api_printed.py`, one test in four cases) | 1363 passed, 16 skipped | 0 | 655 in 83 |
-  | T4 | 0 | 1363 passed, 16 skipped | +2 (`download.test.ts` 1, `documents.test.ts` 1) | 657 in 83 |
-  | T5 | 0 | 1363 passed, 16 skipped | +3 (`review-send-step.test.tsx`; one case edited) | 660 in 83 |
-  | T6 | 0 (`test_slice1_docs.py` edited) | 1363 passed, 16 skipped | 0 | 660 in 83 |
+  | T1 | +7 (`test_printed_bulletin.py`) | 1342 passed, 16 skipped | 0 | 655 in 83 |
+  | T2 | +5 (`test_printed_render.py`; `test_no_streamlit_in_core.py` edited) | 1347 passed, 16 skipped | 0 | 655 in 83 |
+  | T3 | +10 (`test_api_printed.py`, one test in four cases) | 1357 passed, 16 skipped | 0 | 655 in 83 |
+  | T4 | 0 | 1357 passed, 16 skipped | +2 (`download.test.ts` 1, `documents.test.ts` 1) | 657 in 83 |
+  | T5 | 0 | 1357 passed, 16 skipped | +3 (`review-send-step.test.tsx`; one case edited) | 660 in 83 |
+  | T6 | 0 (`test_slice1_docs.py` edited) | 1357 passed, 16 skipped | 0 | 660 in 83 |
 
-- CI `backend-postgres` goes from `16 passed, 1335 deselected` to `16 passed, 1363 deselected` (no new Postgres test: nothing here writes).
+- CI `backend-postgres` goes from `16 passed, 1335 deselected` to `16 passed, 1357 deselected` (no new Postgres test: nothing here writes).
 
 ### Layering and code rules (carried)
 - `printed_bulletin`, `printed_pdf`, `printed_docx` and `usecases/documents.py` import no FastAPI, Starlette or Streamlit (`test_no_streamlit_in_core.py` gains the three new modules, T2); the route is a plain `def` with no SQL and no try/except (F §2.2 rule 1); `build_printed` reads in one short `session_scope` that closes before the readings are fetched and the file is rendered.
@@ -67,9 +67,11 @@ As in the 5a plans: **Create `path`:** the block is the whole file; **Append to 
 2. **Production Streamlit** (branch `streamlit-frozen`) is frozen and retired for real use; merges never reach it.
 3. **`main` is branch-protected**; Railway and Vercel deploy on merge.
 4. **The spec's decisions** stand as written in S.
+5. **Layout B** (Beau, 2026-10-02, binding; it supersedes the folded layout of answer 1 and of the first draft of this plan): the PDF matches the owner's sample: legal paper, landscape, two booklet pages side by side in **reading order** (side 1 is the cover and page 1, side 2 pages 2 and 3, and so on), no folding imposition and no padding to a multiple of 4; an odd page count leaves the last side's right half blank. The announcements page is the last page, as in the sample. The folded booklet ("Folded booklet": imposed sides to print on both sides and fold) is a documented later option, not built in PR 1 (S "Later options").
+6. **The plan's Questions 1-12** (below): "all recommended" (Beau, 2026-10-02, binding), with question 3 as layout B (decision 5).
 
 ### Owner answers (Beau, 2026-10-02, "all recommended"; binding)
-1. **Output:** a print-ready PDF in the folded legal-landscape booklet layout, plus an editable Word version.
+1. **Output:** a print-ready PDF in the folded legal-landscape booklet layout, plus an editable Word version. (The layout is now B, owner decision 5: two pages to a legal side in reading order, not folded.)
 2. **Standing church settings** (PR 2): church name, address, phone, email, website, Facebook name; the standing worship leader, liturgist, organist; the "*Congregation stands if able" note and which elements get the star; the Gloria Patri words. **Weekly** (PR 2): prelude and postlude (title, composer), per-element leader if different, announcements.
 3. **Announcements** (PR 2): a simple form for ushers, deacon of the week, coffee hour, plus free-text boxes for activities, prayer concerns, collection items; each carries forward from last week.
 4. **Cover picture** (PR 3): uploaded each week with the option to keep last week's; printed under the church name with the scripture reference and date over it.
@@ -78,7 +80,7 @@ As in the 5a plans: **Create `path`:** the block is the whole file; **Append to 
 7. **Keep the pastor's and bulletin Word copies;** add a third download, "Download printed bulletin".
 8. **Weekly fields on a new "Bulletin" step** between Liturgy and Review; standing church details in a small Bulletin settings panel now, folded into 6a later (PR 2).
 9. **Three PRs:** (1) the booklet PDF (and Word) from what the app already knows, placeholders for the rest: **this plan**; (2) the weekly fields and announcements (and the standing settings panel); (3) the cover picture upload. PR 2 and PR 3 get their own plans.
-10. **Checks:** a guided phone check after each PR, plus a print test on legal paper at the church after PR 1 (folds and margins): T8 here.
+10. **Checks:** a guided phone check after each PR, plus a print test on legal paper at the church after PR 1 (folds and margins; with layout B: the page order and the margins): T8 here.
 
 **Later, out of scope:** PR 2 (the Bulletin step, the settings panel, `churches.settings["bulletin"]`, `services.bulletin` with migration `0006_services_bulletin`, carry forward, pasted reading text), PR 3 (the cover picture, `bulletin_images`, migration `0007_bulletin_images`), Voices of the Church, 6a.
 
@@ -88,8 +90,8 @@ The owner's answers win over S and F; the code wins over both where they disagre
 
 1. **[owner-visible] What PR 1 ships** (owner answer 9). The booklet's content, the PDF and the Word file, `POST /documents/printed`, and the Printed bulletin card. Not here: the Bulletin step, the settings panel, any stored bulletin field, the cover picture, pasted reading text, a migration. The Word documents card does not change.
 2. **[owner-visible] The Review step's layout** (owner answer 7): "Still to do", the Archive card, the Word documents card (unchanged), then the new **Printed bulletin** card. The two Word copies keep their place and wording.
-3. **[owner-visible] The Printed bulletin card** (clarification 17 has the strings): its heading, one sentence on what the booklet holds, one on the placeholders, then **Download printed bulletin** (filled; the PDF) with "Ready to print on legal paper: both sides, flipped on the short edge, then folded in half." and **Download Word version** (outlined) with "The same bulletin as a Word file, to change before printing.". Each button has its own "Preparing…" (then "Still working…" after 8 s) and a polite status line for screen readers ("Printed bulletin: Preparing…", "Word version: Preparing…"). Both are off without a service date ("Choose a service date on step 1 to download.") or while step 1 shows a message ("Fix the readings on step 1 to download."), as the Word copies. A failure is a toast with the server's message (none after a 401 or a lost church); after a download of an unsaved service the card shows the save tip, as the Word documents card does.
-4. **[owner-visible] The PDF is the imposed booklet** (owner answers 1, 6; S "Layout and page order"). Booklet pages are 7 x 8.5 in with 0.5 in margins; the cover is unnumbered, the inside pages are numbered from 1 at the bottom center, and the announcements page is last. The page count rounds up to a multiple of 4 with blank pages just before the announcements page, so the announcements stay on the back cover. Each legal landscape side holds two pages in booklet order (sheet k's front: pages N-1-2k and 2k; its back: 2k+1 and N-2-2k, counting from 0). Printed on both sides, flipped on the short edge, and folded, the stack reads in order. On a phone the PDF reads in sheet order (the first side is the back page and the cover); the Word version reads in order. With the sample's content, 8 pages on 2 sheets.
+3. **[owner-visible] The Printed bulletin card** (clarification 17 has the strings): its heading, one sentence on what the booklet holds, one on the placeholders, then **Download printed bulletin** (filled; the PDF) with "Ready to print on legal paper, two pages to a side." and **Download Word version** (outlined) with "The same bulletin as a Word file, to change before printing.". Each button has its own "Preparing…" (then "Still working…" after 8 s) and a polite status line for screen readers ("Printed bulletin: Preparing…", "Word version: Preparing…"). Both are off without a service date ("Choose a service date on step 1 to download.") or while step 1 shows a message ("Fix the readings on step 1 to download."), as the Word copies. A failure is a toast with the server's message (none after a 401 or a lost church); after a download of an unsaved service the card shows the save tip, as the Word documents card does.
+4. **[owner-visible] The PDF is layout B** (owner decision 5; answers 1, 6; S "Layout and page order"). Booklet pages are 7 x 8.5 in with 0.5 in margins; the cover is unnumbered, the inside pages are numbered from 1 at the bottom center, and the announcements page is the last page (numbered, as the sample's). Each legal landscape side holds two booklet pages side by side in reading order: side 1 is the cover and page 1, side 2 pages 2 and 3, and so on. Any page count works: N pages take ceil(N/2) sides, nothing is padded, and an odd N leaves the last side's right half blank (no number there). Nothing is folded, so the PDF reads in order on a phone too: the first page shows the cover and page 1 side by side. The Word version has the same pages one to a page. With the sample's content (shorter prayers and readings), 5 pages on 3 sides; the owner's sample itself has 6 pages on 3 sides. The folded booklet is a later option ("Folded booklet", S "Later options"), not built here.
 5. **[owner-visible] What the order of worship prints** (S "What prints where"): `liturgy_config.OUTLINE`'s order with the sample's additions, under "GATHERING FOR WORSHIP", "RECEIVING THE WORD", "RESPONDING TO THE WORD" and "SENDING OUT TO SERVE": Prelude, Welcome and Announcements, Call to Worship, Opening Prayer, the opening hymn, Prayer of Confession (bold), Assurance of Pardon (the Leader line, then "People: Thanks be to God! Amen." in bold), Sung Response "Gloria Patri" with its words, Prayer for Illumination; First Reading and New Testament Reading with their text and the credit line; Sermon; Affirmation of Faith "The Apostles' Creed" with its text (bold); the response hymn; the communion liturgy when it is on; "PRAYERS OF THE PEOPLE/THE LORD'S PRAYER" as a heading only (the prayers are the pastor's to pray; the bulletin Word copy also leaves them out); Offering Our Gifts; Sung Response "Doxology"; Offertory Prayer; the closing hymn; Benediction (as the draft has it, so the church default prints with its quotation marks and "- Richard Halverson"); Postlude; "*Congregation stands if able". Custom elements print after their anchor; an empty hymn slot, a switched-off or blank section and a missing reading print nothing, as in the Word copies; a blank sermon title prints "[Sermon title]".
 6. **[owner-visible] How elements look** (the sample): the label in bold capitals; a hymn as `*HYMN:  #409  "God Is Here!"` (number, then the title in bold italic quotation marks; no number, no "#"); a reading as `FIRST READING:  Psalm 25:1-9`; the sermon as `SERMON:  "Who Said?"`; the music as `PRELUDE:  '[Prelude title]'` with `- [Composer]` indented below; Leader lines in normal type and People lines in bold, each with a hanging indent; the leader's name right-aligned on the element's line.
 7. **[owner-visible] Leaders until PR 2** (owner answer 2): `[Liturgist]` on Welcome, Call to Worship, Opening Prayer, Confession, Assurance, Prayer for Illumination and the First Reading; `[Worship leader]` on the New Testament Reading, the Sermon, Prayers of the People and the Offertory Prayer; `[Organist]` on the Prelude and Postlude (the sample's pattern). The hymns, sung responses, Affirmation, Offering and Benediction have none. The header reads "[Worship leader], Worship Leader", "[Liturgist], Liturgist", "[Organist], Organist" and the date line ends with "[Service time]". PR 2 makes the roles and the people settings.
@@ -99,16 +101,16 @@ The owner's answers win over S and F; the code wins over both where they disagre
 11. **The route** (S API). `POST /documents/printed`, church-scoped (`require_church`; any member), body `PrintedDocumentIn = {format: "pdf" | "docx", translation: string (trimmed, at most 20) | null, service: ServiceDraft}` (`extra="forbid"`), answer 200 with the bytes and `Content-Type: application/pdf` or the Word type, `Content-Disposition: attachment; filename="printed_bulletin_October_04_2026.pdf"; filename*=UTF-8''printed_bulletin_October_04_2026.pdf` (or `.docx`) and `Cache-Control: no-store`. A new route, not a third `variant` on `POST /documents`: its body and answer differ, and `DocumentIn` and its 14 API tests stay as they are. No `Idempotency-Key` (a pure render that writes nothing). Errors stay JSON: the hymn 404 and the 422s as `/documents`; 429 `rate_limited` when the `scripture` bucket is empty (one token per upstream part, charged before any fetch, so a 429 fetches nothing; no readings, no charge); 403 for a church that is gone. OpenAPI declares a binary 200 under both types. The client waits up to 30 s (`timeouts.ts`), as for `/scripture/passages`.
 12. **[owner-visible] Names and dates.** The booklet writes the date as "October 4, 2026" (no leading zero, as the sample's "September 27, 2026"); the Word copies keep "October 04, 2026". The files are `printed_bulletin_October_04_2026.pdf` and `printed_bulletin_October_04_2026.docx` (the Word copies' date form, so they sort together). The PDF's title is "Printed bulletin".
 13. **[owner-visible] Fonts** (S "Fonts"): the PDF uses the standard Times family and Helvetica for the contact lines, not embedded (every viewer and printer has them; no font file in the repo); a character outside Windows-1252 prints as "?" after NFKC (a ligature becomes plain letters). The Word file uses Times New Roman 11 pt (Arial for the contact lines).
-14. **[owner-visible] The Word version** (owner answer 1): the same content in reading order on 7 x 8.5 in pages, 0.5 in margins, each part (cover, service, announcements) starting a page, the leader at a right tab stop, page numbers from the first inside page (none on the cover), the picture's place as a bordered box. It does not set Word's Book fold; to print it as a booklet, use Word's Book fold or the printer's booklet setting (the card points to the PDF for printing).
+14. **[owner-visible] The Word version** (owner answer 1): the same content in reading order on 7 x 8.5 in pages, 0.5 in margins, each part (cover, service, announcements) starting a page, the leader at a right tab stop, page numbers from the first inside page (none on the cover), the picture's place as a bordered box. To print it two pages to a legal sheet as the PDF does, use the printer's "2 pages per sheet" setting (the card points to the PDF for printing).
 15. **[owner-visible] The cover and the back page until PR 2 and PR 3:** the church's name (from the app), a bordered box with "[Cover picture]" and, over its lower part, the sermon reading (the New Testament reading, else the first reading) and the date; then "[Street address]", "[City, State ZIP]", "[Phone]", "[Email]", "[Website]", "FB: [Facebook name]". The back page: "ANNOUNCEMENTS", the date, "Ushers/Counters: [Names]", "Deacon of the Week: [Name]", "Coffee Hour: [Name]", "THIS WEEK'S ACTIVITIES AT A GLANCE" with "[Activities]", "PRAYERS AND CONCERNS" with "[Prayer concerns]", "ITEMS FOR COLLECTION" with "[Collection items]".
 16. **Cleaning and safety.** The service is cleaned by `archive.clean_input` (as `/documents`); the church's name and each fetched text go through `_xml_safe` too, so the Word file never meets a character it cannot hold; the PDF escapes its markup. Nothing is stored or cached; downloads record no hymn use.
-17. **[owner-visible] Every new user-facing string** (no em dashes). On the screen: "Printed bulletin"; "The folded booklet: the cover, the order of worship with the readings in full, and the announcements."; "For now, the church's details, the people who lead, the music and the announcements print as [placeholders]."; "Download printed bulletin"; "Ready to print on legal paper: both sides, flipped on the short edge, then folded in half."; "Download Word version"; "The same bulletin as a Word file, to change before printing."; for screen readers only "Printed bulletin: Preparing…", "Printed bulletin: Still working…", "Word version: Preparing…", "Word version: Still working…". Reused as they are: "Preparing…", "Still working…", "Choose a service date on step 1 to download.", "Fix the readings on step 1 to download.", "Tip: save this service so its hymns count as recently used.", and the existing error toasts (a 429 reads "Too many requests. Try again in {n} seconds."). In the files: "THE SERVICE FOR THE LORD'S DAY"; "[Worship leader], Worship Leader"; "[Liturgist], Liturgist"; "[Organist], Organist"; "[Service time]"; "GATHERING FOR WORSHIP"; "RECEIVING THE WORD"; "RESPONDING TO THE WORD"; "SENDING OUT TO SERVE"; "PRELUDE:", "POSTLUDE:", "'[Prelude title]'", "'[Postlude title]'", "- [Composer]"; "WELCOME AND ANNOUNCEMENTS"; the section labels in capitals ("CALL TO WORSHIP", "OPENING PRAYER", "PRAYER OF CONFESSION", "ASSURANCE OF PARDON", "PRAYER FOR ILLUMINATION", "OFFERTORY PRAYER", "*BENEDICTION"); "*HYMN:"; "*SUNG RESPONSE:" with "Gloria Patri" and "Doxology"; the Gloria Patri words; "FIRST READING:"; "NEW TESTAMENT READING:"; "[Reading text unavailable]"; "Scripture readings are from the {translation label}."; "SERMON:"; "[Sermon title]"; "*AFFIRMATION OF FAITH:" with "The Apostles' Creed" and its text; "PRAYERS OF THE PEOPLE/THE LORD'S PRAYER"; "OFFERING OUR GIFTS"; "*Congregation stands if able"; "[Liturgist]", "[Worship leader]", "[Organist]"; "[Cover picture]"; "[Street address]", "[City, State ZIP]", "[Phone]", "[Email]", "[Website]", "FB: [Facebook name]"; "ANNOUNCEMENTS"; "Ushers/Counters: [Names]"; "Deacon of the Week: [Name]"; "Coffee Hour: [Name]"; "THIS WEEK'S ACTIVITIES AT A GLANCE"; "[Activities]"; "PRAYERS AND CONCERNS"; "[Prayer concerns]"; "ITEMS FOR COLLECTION"; "[Collection items]"; the PDF title "Printed bulletin". The files use curly quotation marks and apostrophes, as the sample.
+17. **[owner-visible] Every new user-facing string** (no em dashes). Changed for layout B (owner decision 5) from the first draft of this plan: the PDF button's line "Ready to print on legal paper, two pages to a side." (was "…: both sides, flipped on the short edge, then folded in half."), and the card's summary, which drops "folded" ("The booklet: …"); nothing else changes. On the screen: "Printed bulletin"; "The booklet: the cover, the order of worship with the readings in full, and the announcements."; "For now, the church's details, the people who lead, the music and the announcements print as [placeholders]."; "Download printed bulletin"; "Ready to print on legal paper, two pages to a side."; "Download Word version"; "The same bulletin as a Word file, to change before printing."; for screen readers only "Printed bulletin: Preparing…", "Printed bulletin: Still working…", "Word version: Preparing…", "Word version: Still working…". Reused as they are: "Preparing…", "Still working…", "Choose a service date on step 1 to download.", "Fix the readings on step 1 to download.", "Tip: save this service so its hymns count as recently used.", and the existing error toasts (a 429 reads "Too many requests. Try again in {n} seconds."). In the files: "THE SERVICE FOR THE LORD'S DAY"; "[Worship leader], Worship Leader"; "[Liturgist], Liturgist"; "[Organist], Organist"; "[Service time]"; "GATHERING FOR WORSHIP"; "RECEIVING THE WORD"; "RESPONDING TO THE WORD"; "SENDING OUT TO SERVE"; "PRELUDE:", "POSTLUDE:", "'[Prelude title]'", "'[Postlude title]'", "- [Composer]"; "WELCOME AND ANNOUNCEMENTS"; the section labels in capitals ("CALL TO WORSHIP", "OPENING PRAYER", "PRAYER OF CONFESSION", "ASSURANCE OF PARDON", "PRAYER FOR ILLUMINATION", "OFFERTORY PRAYER", "*BENEDICTION"); "*HYMN:"; "*SUNG RESPONSE:" with "Gloria Patri" and "Doxology"; the Gloria Patri words; "FIRST READING:"; "NEW TESTAMENT READING:"; "[Reading text unavailable]"; "Scripture readings are from the {translation label}."; "SERMON:"; "[Sermon title]"; "*AFFIRMATION OF FAITH:" with "The Apostles' Creed" and its text; "PRAYERS OF THE PEOPLE/THE LORD'S PRAYER"; "OFFERING OUR GIFTS"; "*Congregation stands if able"; "[Liturgist]", "[Worship leader]", "[Organist]"; "[Cover picture]"; "[Street address]", "[City, State ZIP]", "[Phone]", "[Email]", "[Website]", "FB: [Facebook name]"; "ANNOUNCEMENTS"; "Ushers/Counters: [Names]"; "Deacon of the Week: [Name]"; "Coffee Hour: [Name]"; "THIS WEEK'S ACTIVITIES AT A GLANCE"; "[Activities]"; "PRAYERS AND CONCERNS"; "[Prayer concerns]"; "ITEMS FOR COLLECTION"; "[Collection items]"; the PDF title "Printed bulletin". The files use curly quotation marks and apostrophes, as the sample.
 18. **Logging** (F §2.5): one INFO line per file, `documents.printed church=<id> format=<pdf|docx> bytes=<n> ms=<n>`; never a reading, a hymn or any text.
 19. **Docs.** T6 appends "## Printed bulletin" to `docs/manual-verification.md` with items marked "(owner, after PR 1)" and "(owner, print test)" (the `##` pin in `test_slice1_docs.py` grows to eight). The runbook record is T8's.
 
 ### Risks
-- **The printer's duplex.** "Flip on short edge" is the usual booklet setting for landscape sheets; a printer that flips the other way prints the backs upside down. T8's print test finds out; the fix (rotated backs, or a different instruction on the card) is a small follow-up.
-- **Blank pages.** A short service pads with up to three blank pages before the back page. PR 2's announcements fill some of it; the print test asks whether the owner wants anything there.
+- **Printing on both sides.** Layout B prints fine on one side. A church that prints both sides of each sheet must pick the printer's two-sided setting that keeps the backs upright (for landscape sheets usually "flip on short edge"); T8's print test records the setting used. A note on the card would be new copy, so any change is a follow-up for the owner.
+- **A blank half.** An odd page count leaves the last side's right half blank (the sample's 6 pages fill 3 sides). PR 2's announcements may fill it; the print test asks whether the owner wants anything there.
 - **Upstream text.** bible-api can be slow or missing a passage; the file still prints with "[Reading text unavailable]" within the passages' 20 s deadline, inside the client's 30 s.
 - **Fonts not embedded.** A viewer substitutes its own Times; a reading with characters outside Windows-1252 shows "?". The print test and the phone check look at the readings; the fix is embedding Liberation Serif (S "Fonts").
 - **iOS and a PDF download.** As for the Word copies (5a-1's check passed with the share sheet); T8 step 1 checks the PDF.
@@ -119,8 +121,8 @@ The owner's answers win over S and F; the code wins over both where they disagre
 
 | Path | What | Task |
 |---|---|---|
-| `backend/printed_bulletin.py` (+ `backend/tests/test_printed_bulletin.py`) | `Span`, `Line`, `Reading`, `PrintedService`; `order_of_worship`, `cover`, `announcements`; `booklet_positions`, `booklet_sides`; `printed_date`, `printed_filename`, `reading_paragraphs`; the placeholders and fixed texts | T1 |
-| `backend/printed_pdf.py`, `backend/printed_docx.py` (+ `backend/tests/test_printed_render.py`) | `render_pdf` (reportlab, then pypdf imposition), `to_pdf_text`; `render_docx` | T2 |
+| `backend/printed_bulletin.py` (+ `backend/tests/test_printed_bulletin.py`) | `Span`, `Line`, `Reading`, `PrintedService`; `order_of_worship`, `cover`, `announcements`; `printed_date`, `printed_filename`, `reading_paragraphs`; the placeholders and fixed texts | T1 |
+| `backend/printed_pdf.py`, `backend/printed_docx.py` (+ `backend/tests/test_printed_render.py`) | `render_pdf` (reportlab: two frames to a legal side, in reading order), `to_pdf_text`; `render_docx` | T2 |
 | `backend/tests/test_api_printed.py` | the route, the readings, the bucket, access | T3 |
 | `frontend/src/components/builder/review/printed-card.tsx` | the Printed bulletin card | T5 |
 
@@ -128,7 +130,8 @@ The owner's answers win over S and F; the code wins over both where they disagre
 
 | Path | Change | Task |
 |---|---|---|
-| `backend/requirements.txt` | `reportlab>=5.0,<6`, `pypdf>=6.0,<7` | T2 |
+| `backend/requirements.txt` | `reportlab>=5.0,<6` | T2 |
+| `requirements-dev.txt` | `pypdf>=6.0,<7` (the tests read the PDF back) | T2 |
 | `backend/tests/test_no_streamlit_in_core.py` | the three new modules | T2 |
 | `backend/usecases/documents.py` | `effective_translation`, `reading_texts`, `build_printed` | T3 |
 | `backend/api/routes/documents.py` | `PrintedDocumentIn`, `POST /documents/printed` | T3 |
@@ -138,13 +141,13 @@ The owner's answers win over S and F; the code wins over both where they disagre
 | `docs/manual-verification.md`, `backend/tests/test_slice1_docs.py` | "## Printed bulletin"; the pin | T6 |
 | `docs/ops-runbook.md` | "### Printed bulletin PR 1 record" (the records PR, after the merge) | T8 |
 
-**Counts in the PR:** 26 paths: 9 created (the spec, this plan, and the seven new code and test files above), 17 modified (the 16 above but the runbook, and `docs/ops-runbook.md`, whose 5a-3 record rides along until a records PR merges it). **Untouched:** migrations, `db/models.py`, `api/schemas.py`, `service_output.py`, `worship_service.py`, `liturgy_config.py`, `scripture_fetcher.py`, `usecases/passages.py`, `documents-card.tsx`, the draft schema, `app.py`, Streamlit.
+**Counts in the PR:** 27 paths: 9 created (the spec, this plan, and the seven new code and test files above), 18 modified (the 17 above but the runbook, and `docs/ops-runbook.md`, whose 5a-3 record rides along until a records PR merges it). **Untouched:** migrations, `db/models.py`, `api/schemas.py`, `service_output.py`, `worship_service.py`, `liturgy_config.py`, `scripture_fetcher.py`, `usecases/passages.py`, `documents-card.tsx`, the draft schema, `app.py`, Streamlit.
 
 **Task order and review batch:** T1 → T6, each one commit and a backup push; then one review of the whole batch with its fixes as `Fix: …` commits; T7 verifies and opens the draft PR on the owner's yes; T8 merges on the owner's yes, runs the phone check and the print test, and writes the record.
 
 ---
 
-### Task 1: The booklet's content and page order: `printed_bulletin` (owner answers 1, 2, 5; S "Layout and page order", "What prints where"; clarifications 4-10, 12, 15)
+### Task 1: The booklet's content: `printed_bulletin` (owner answers 1, 2, 5; S "What prints where"; clarifications 5-10, 12, 15)
 
 **Files:**
 - Create: `backend/tests/test_printed_bulletin.py`, `backend/printed_bulletin.py`
@@ -154,11 +157,9 @@ The owner's answers win over S and F; the code wins over both where they disagre
 **Create `backend/tests/test_printed_bulletin.py`:**
 
 ````python
-"""The printed bulletin's content and page order (printed bulletin spec, PR 1;
+"""The printed bulletin's content (printed bulletin spec, PR 1;
 printed_bulletin.py)."""
 import datetime
-
-import pytest
 
 import printed_bulletin as pb
 from liturgy_config import ASSURANCE_RESPONSE, DEFAULT_BENEDICTION_FALLBACK
@@ -188,30 +189,6 @@ def service(**changes) -> pb.PrintedService:
 
 def texts(lines: list[pb.Line]) -> list[str]:
     return [line.text for line in lines]
-
-
-@pytest.mark.parametrize("pages, positions", [
-    (1, [None, None, None, 0]),
-    (4, [0, 1, 2, 3]),
-    (5, [0, 1, 2, 3, None, None, None, 4]),
-    (6, [0, 1, 2, 3, 4, None, None, 5]),
-    (9, [0, 1, 2, 3, 4, 5, 6, 7, None, None, None, 8]),
-])
-def test_the_booklet_pads_to_whole_sheets_with_blanks_before_the_back_page(pages, positions):
-    assert pb.booklet_positions(pages) == positions
-
-
-def test_the_sides_fold_into_reading_order():
-    assert pb.booklet_sides(4) == [(3, 0), (1, 2)]
-    assert pb.booklet_sides(8) == [(7, 0), (1, 6), (5, 2), (3, 4)]
-    assert pb.booklet_sides(12) == [(11, 0), (1, 10), (9, 2), (3, 8), (7, 4), (5, 6)]
-    for total in (4, 8, 12, 16):        # every page exactly once
-        assert sorted(page for side in pb.booklet_sides(total) for page in side) == list(range(total))
-    for bad in (0, 2, 6):
-        with pytest.raises(ValueError):
-            pb.booklet_sides(bad)
-    with pytest.raises(ValueError):
-        pb.booklet_positions(0)
 
 
 def test_the_date_and_the_filenames():
@@ -315,7 +292,7 @@ ERROR backend/tests/test_printed_bulletin.py
 
 ````python
 """The printed bulletin's content (printed bulletin spec, PR 1): what the
-folded booklet prints, page by page, as plain data that printed_pdf and
+bulletin prints, page by page, as plain data that printed_pdf and
 printed_docx both render. Pure: no database, FastAPI, reportlab or
 python-docx here.
 
@@ -329,7 +306,6 @@ python-docx here.
 - Anything the app does not know yet (the church's address, the people who
   lead, the music, the announcements) prints as a [bracketed placeholder];
   PR 2 fills them from the Bulletin step and the bulletin settings.
-- booklet_positions, booklet_sides: the page order of a folded booklet.
 - printed_date, printed_filename, PDF_MIME.
 """
 from __future__ import annotations
@@ -346,7 +322,7 @@ from service_output import MONTHS, ResolvedHymn, ResolvedService, safe_date, ser
 PDF_MIME = "application/pdf"
 Format = Literal["pdf", "docx"]
 
-# The one page of the booklet: half a legal sheet (14 x 8.5 in) folded, 7 x 8.5 in.
+# One booklet page: half a legal sheet (14 x 8.5 in, landscape), 7 x 8.5 in.
 PAGE_WIDTH = 504.0          # points
 PAGE_HEIGHT = 612.0
 
@@ -432,33 +408,6 @@ def printed_date(d: datetime.date) -> str:
 def printed_filename(fmt: Format, d: datetime.date) -> str:
     """printed_bulletin_October_04_2026.pdf (or .docx), the Word copies' date form."""
     return f"printed_bulletin_{safe_date(service_date_display(d))}.{fmt}"
-
-
-# --- the booklet's page order ---
-
-def booklet_positions(pages: int) -> list[Optional[int]]:
-    """The booklet's pages in reading order as indexes of the rendered pages:
-    `pages` rounded up to a multiple of 4 (one folded sheet holds 4), the
-    blank pages (None) just before the last page, so the announcements stay
-    on the back cover."""
-    if pages < 1:
-        raise ValueError("a booklet has at least one page")
-    blanks = -pages % 4
-    return [*range(pages - 1), *([None] * blanks), pages - 1]
-
-
-def booklet_sides(total: int) -> list[tuple[int, int]]:
-    """Each printed side as (left page, right page), 0-based booklet pages:
-    sheet k's front is (total-1-2k, 2k), its back (2k+1, total-2-2k). Printed
-    on both sides, flipped on the short edge, the stack folds into reading
-    order. total=8: [(7, 0), (1, 6), (5, 2), (3, 4)]."""
-    if total < 4 or total % 4:
-        raise ValueError("a folded booklet has a multiple of 4 pages")
-    sides = []
-    for k in range(total // 4):
-        sides.append((total - 1 - 2 * k, 2 * k))
-        sides.append((2 * k + 1, total - 2 - 2 * k))
-    return sides
 
 
 # --- text helpers ---
@@ -681,33 +630,32 @@ def announcements(ps: PrintedService) -> list[Line]:
 - [ ] **Step 4: See it pass, and the suite**
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_printed_bulletin.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`
-**Expected:** `13 passed in <t>s`; `1348 passed, 16 skipped in <t>s`.
+**Expected:** `7 passed in <t>s`; `1342 passed, 16 skipped in <t>s`.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add backend/printed_bulletin.py backend/tests/test_printed_bulletin.py
-git commit -q -m "Printed bulletin PR 1: the booklet's content and page order" -m "printed_bulletin turns a resolved service into the folded booklet's
+git commit -q -m "Printed bulletin PR 1: the booklet's content" -m "printed_bulletin turns a resolved service into the printed bulletin's
 content as plain data: the cover, the order of worship in OUTLINE order
 with the owner's sample's additions and section headings, and the
 announcements page, with [placeholders] for what PR 2 and PR 3 bring. It
-also holds the booklet's page order (blank pages before the back page;
-sheet sides for printing on both sides), the date line and the filenames." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+also holds the date line and the filenames." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1348 passed, 16 skipped`; frontend `655 passed` in 83 files.
+Expected counts after this task: backend `1342 passed, 16 skipped`; frontend `655 passed` in 83 files.
 
-### Task 2: The PDF and the Word file: `printed_pdf`, `printed_docx` (owner answers 1, 6; S "PDF library", "Fonts", "Layout and page order"; clarifications 4, 13, 14)
+### Task 2: The PDF and the Word file: `printed_pdf`, `printed_docx` (owner decision 5; answers 1, 6; S "PDF library", "Fonts", "Layout and page order"; clarifications 4, 13, 14)
 
 **Files:**
 - Create: `backend/tests/test_printed_render.py`, `backend/printed_pdf.py`, `backend/printed_docx.py`
-- Modify: `backend/tests/test_no_streamlit_in_core.py`, `backend/requirements.txt`
+- Modify: `backend/tests/test_no_streamlit_in_core.py`, `backend/requirements.txt`, `requirements-dev.txt`
 
 - [ ] **Step 1: Install the two packages**
 
 Run: `.venv/bin/pip install -q "reportlab>=5.0,<6" "pypdf>=6.0,<7" 2>&1 | grep -v notice; .venv/bin/python -c "import reportlab, pypdf; print(reportlab.Version, pypdf.__version__)"`
-**Expected:** no error line; `5.0.1 6.19.0` (a later 5.x or 6.x is fine: say so). Both are pure-Python wheels (`py3-none-any`); reportlab brings Pillow and charset-normalizer wheels, so Railway needs no system library.
+**Expected:** no error line; `5.0.1 6.19.0` (a later 5.x or 6.x is fine: say so). Both are pure-Python wheels (`py3-none-any`). reportlab is the only runtime package; it brings Pillow (a binary wheel with its libraries inside) and charset-normalizer (already installed through requests), so Railway needs no system library. pypdf is for the tests only (`requirements-dev.txt`).
 
 - [ ] **Step 2: Write the failing tests**
 
@@ -749,21 +697,36 @@ def sides(content: bytes) -> list[str]:
     return [" ".join(page.extract_text().split()) for page in PdfReader(BytesIO(content)).pages]
 
 
-def test_the_pdf_is_legal_landscape_sheets_in_booklet_order():
+def halves(content: bytes) -> list[str]:
+    """Each side's left and right booklet page, by where the text is drawn."""
+    out = []
+    for page in PdfReader(BytesIO(content)).pages:
+        parts: list[list[str]] = [[], []]
+
+        def visit(text, cm, tm, _font, _size):
+            if text.strip():
+                parts[tm[4] * cm[0] + tm[5] * cm[2] + cm[4] >= pb.PAGE_WIDTH].append(text)
+
+        page.extract_text(visitor_text=visit)
+        out += [" ".join(" ".join(half).split()) for half in parts]
+    return out
+
+
+def test_the_pdf_is_legal_landscape_sides_with_two_pages_each_in_reading_order():
     content = printed_pdf.render_pdf(service())
     assert content.startswith(b"%PDF-")
     reader = PdfReader(BytesIO(content))
-    assert [(float(p.mediabox.width), float(p.mediabox.height)) for p in reader.pages] == [(1008.0, 612.0)] * 4
-    text = sides(content)
-    # Each side reads left page, then right page; a page's number comes first.
-    # Side 1 (the outside of the folded sheets): the back page (7), then the cover (no number).
-    assert text[0].startswith("7 ANNOUNCEMENTS September 27, 2026")
-    assert text[0].index("ANNOUNCEMENTS") < text[0].index("Example Church") < text[0].index("FB: [Facebook name]")
-    assert "Matthew 21:23-32 September 27, 2026" in text[0]
-    # Sides 2-4: page 1 | blank, blank | page 2, page 3 | blank (5 pages padded to 8).
-    assert text[1].startswith("1 THE SERVICE FOR THE LORD’S DAY Example Church [Worship leader], Worship Leader")
-    assert text[2].startswith("2 NEW TESTAMENT READING: Matthew 21:23-32")
-    assert text[3].startswith("3 POSTLUDE:") and text[3].endswith("*Congregation stands if able")
+    assert [(float(p.mediabox.width), float(p.mediabox.height)) for p in reader.pages] == [(1008.0, 612.0)] * 3
+    pages = halves(content)
+    # Side 1: the cover (no number), then page 1; side 2: pages 2 and 3; side 3: the
+    # announcements (page 4) and a blank right half (5 pages, nothing padded).
+    assert pages[0].startswith("Example Church [Cover picture] Matthew 21:23-32 September 27, 2026 [Street address]")
+    assert pages[0].endswith("FB: [Facebook name]")
+    assert pages[1].startswith("1 THE SERVICE FOR THE LORD’S DAY Example Church [Worship leader], Worship Leader")
+    assert pages[2].startswith("2 NEW TESTAMENT READING: Matthew 21:23-32")
+    assert pages[3].startswith("3 POSTLUDE:") and pages[3].endswith("*Congregation stands if able")
+    assert pages[4].startswith("4 ANNOUNCEMENTS September 27, 2026") and pages[4].endswith("[Collection items]")
+    assert pages[5] == ""
 
 
 def test_the_pdf_prints_the_service_and_its_readings():
@@ -778,11 +741,13 @@ def test_the_pdf_prints_the_service_and_its_readings():
         assert expected in text, expected
 
 
-def test_a_longer_service_takes_more_sheets_and_stays_a_multiple_of_four():
-    short, long = printed_pdf.render_pdf(service()), printed_pdf.render_pdf(service(300))
-    assert len(PdfReader(BytesIO(short)).pages) == 4                # 8 booklet pages: two sheets
-    assert len(PdfReader(BytesIO(long)).pages) == 6                 # 12 booklet pages: three sheets
-    assert sides(long)[0].startswith("11 ANNOUNCEMENTS")
+def test_any_page_count_takes_half_as_many_sides_rounded_up_with_the_announcements_last():
+    for verses, count in ((100, 6), (300, 9)):               # an even and an odd page count
+        pages = halves(printed_pdf.render_pdf(service(verses)))
+        assert len(pages) == 2 * -(-count // 2), verses       # ceil(count / 2) sides, two halves each
+        printed, blank = pages[:count], pages[count:]
+        assert [page.split(" ", 1)[0] for page in printed[1:]] == [str(n) for n in range(1, count)]
+        assert printed[-1].startswith(f"{count - 1} ANNOUNCEMENTS") and blank == [""] * (count % 2)
 
 
 def test_characters_the_standard_fonts_cannot_print_become_a_question_mark():
@@ -849,10 +814,19 @@ python-docx>=1.0.0
 
 ````text
 python-docx>=1.0.0
-# The printed bulletin's PDF (printed bulletin spec): reportlab lays the booklet
-# out and pypdf imposes it onto legal sheets. Both are pure Python wheels (BSD
-# licenses) and need no system library on Railway; <next major until reviewed.
+# The printed bulletin's PDF (printed bulletin spec): reportlab lays it out, two
+# pages to a legal sheet. A pure Python wheel (BSD license); it brings Pillow (a
+# binary wheel with its libraries inside) and charset-normalizer (already here
+# through requests), so Railway needs no system library; <next major until
+# reviewed.
 reportlab>=5.0,<6
+````
+
+**Append to `requirements-dev.txt`:**
+
+````text
+# backend/tests read the printed bulletin's PDF back (printed bulletin spec);
+# test-only, the API does not import it. Pure Python wheel, BSD-3-Clause.
 pypdf>=6.0,<7
 ````
 
@@ -860,14 +834,15 @@ pypdf>=6.0,<7
 
 ````python
 """The printed bulletin as a print-ready PDF (printed bulletin spec, PR 1):
-a folded booklet on legal paper, landscape, two pages per side.
+legal paper, landscape, two 7 x 8.5 in booklet pages side by side in reading
+order (layout B, the owner's sample): side 1 is the cover and page 1, side 2
+pages 2 and 3, and so on, with the announcements page last. Nothing is
+folded or padded: an odd page count leaves the last side's right half blank.
 
-render_pdf lays the booklet out in reading order with reportlab (cover,
-order of worship, announcements; 7 x 8.5 in pages, Times), counts the pages,
-renders again with the back page's number known, then imposes the pages
-onto legal sheets with pypdf (printed_bulletin.booklet_positions and
-booklet_sides): print on both sides, flipped on the short edge, and fold.
-The fonts are the PDF standard Times family, which every viewer and printer
+render_pdf lays the bulletin out with reportlab in one pass: each legal side
+has two frames, one per booklet page, so the text flows from the left half
+to the right half and on to the next side (cover, order of worship,
+announcements, each starting a new booklet page). The fonts are the PDF standard Times family, which every viewer and printer
 has, so nothing is embedded; a character outside their Windows-1252 set
 prints as "?" (to_pdf_text). Pure: no database or FastAPI.
 """
@@ -877,12 +852,11 @@ import unicodedata
 from io import BytesIO
 from xml.sax.saxutils import escape
 
-from pypdf import PageObject, PdfReader, PdfWriter, Transformation
 from reportlab.lib.colors import Color
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 from reportlab.lib.styles import ParagraphStyle
-from reportlab.platypus import (BaseDocTemplate, Flowable, Frame, NextPageTemplate, PageBreak, PageTemplate,
-                                Paragraph, Spacer, Table, TableStyle)
+from reportlab.platypus import (BaseDocTemplate, Flowable, Frame, FrameBreak, PageTemplate, Paragraph, Spacer,
+                                Table, TableStyle)
 
 import printed_bulletin as pb
 
@@ -997,56 +971,40 @@ def _story(ps: pb.PrintedService, width: float) -> list[Flowable]:
         _CoverPicture(width - 60, 300, label.text, reference.text, date.text),
         Spacer(1, 30),
         *(Paragraph(_markup(line), STYLES["contact"]) for line in contact),
-        NextPageTemplate("inside"),
-        PageBreak(),
+        FrameBreak(),
     ]
     story += [_flowable(line, width) for line in pb.order_of_worship(ps)]
-    story += [NextPageTemplate("back"), PageBreak()]
+    story.append(FrameBreak())
     story += [_flowable(line, width) for line in pb.announcements(ps)]
     return story
 
 
-def _reading_order(ps: pb.PrintedService, back_number: int | None) -> bytes:
-    """The booklet in reading order, one 7 x 8.5 in page each: the cover
-    unnumbered, the inside pages numbered from 1, the back page `back_number`."""
-    buf = BytesIO()
-    frame = Frame(MARGIN, MARGIN, pb.PAGE_WIDTH - 2 * MARGIN, pb.PAGE_HEIGHT - 2 * MARGIN,
-                  leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0)
+class _TwoUp(BaseDocTemplate):
+    """Legal landscape sides, each two booklet pages (a frame each) in reading
+    order. A booklet page's number is drawn when its frame begins, so a half
+    that nothing flows into (the last side's right half when the page count
+    is odd) stays blank; the cover (booklet page 0) has none."""
 
-    def number(canvas, doc, value):
-        if value is not None:
-            canvas.setFont("Times-Bold", 10)
-            canvas.drawCentredString(pb.PAGE_WIDTH / 2, FOOTER, str(value))
-
-    doc = BaseDocTemplate(buf, pagesize=(pb.PAGE_WIDTH, pb.PAGE_HEIGHT), title="Printed bulletin",
-                          leftMargin=MARGIN, rightMargin=MARGIN, topMargin=MARGIN, bottomMargin=MARGIN,
-                          invariant=1)
-    doc.addPageTemplates([
-        PageTemplate("cover", [frame]),
-        PageTemplate("inside", [frame], onPage=lambda c, d: number(c, d, c.getPageNumber() - 1)),
-        PageTemplate("back", [frame], onPage=lambda c, d: number(c, d, back_number)),
-    ])
-    doc.build(_story(ps, pb.PAGE_WIDTH - 2 * MARGIN))
-    return buf.getvalue()
+    def handle_frameBegin(self, resume=0, pageTopFlowables=None):
+        super().handle_frameBegin(resume, pageTopFlowables)
+        half = self.pageTemplate.frames.index(self.frame)
+        number = 2 * (self.page - 1) + half
+        if number:
+            self.canv.setFont("Times-Bold", 10)
+            self.canv.drawCentredString(half * pb.PAGE_WIDTH + pb.PAGE_WIDTH / 2, FOOTER, str(number))
 
 
 def render_pdf(ps: pb.PrintedService) -> bytes:
-    """The print-ready booklet: legal sheets, landscape, in booklet_sides order."""
-    pages = len(PdfReader(BytesIO(_reading_order(ps, None))).pages)
-    positions = pb.booklet_positions(pages)
-    reader = PdfReader(BytesIO(_reading_order(ps, len(positions) - 1)))
-    writer = PdfWriter()
-    for left, right in pb.booklet_sides(len(positions)):
-        sheet = PageObject.create_blank_page(width=SHEET_WIDTH, height=pb.PAGE_HEIGHT)
-        for booklet_page, x in ((left, 0.0), (right, pb.PAGE_WIDTH)):
-            index = positions[booklet_page]
-            if index is not None:
-                sheet.merge_transformed_page(reader.pages[index], Transformation().translate(tx=x, ty=0))
-        writer.add_page(sheet)
-    writer.add_metadata({"/Title": "Printed bulletin"})
-    out = BytesIO()
-    writer.write(out)
-    return out.getvalue()
+    """The print-ready bulletin: legal sides, landscape, two pages to a side in reading order."""
+    buf = BytesIO()
+    frames = [Frame(x + MARGIN, MARGIN, pb.PAGE_WIDTH - 2 * MARGIN, pb.PAGE_HEIGHT - 2 * MARGIN,
+                    leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0, id=f"half{x:.0f}")
+              for x in (0.0, pb.PAGE_WIDTH)]
+    doc = _TwoUp(buf, pagesize=(SHEET_WIDTH, pb.PAGE_HEIGHT), title="Printed bulletin", invariant=1,
+                 leftMargin=MARGIN, rightMargin=MARGIN, topMargin=MARGIN, bottomMargin=MARGIN)
+    doc.addPageTemplates([PageTemplate("side", frames)])
+    doc.build(_story(ps, pb.PAGE_WIDTH - 2 * MARGIN))
+    return buf.getvalue()
 ````
 
 **Create `backend/printed_docx.py`:**
@@ -1058,8 +1016,8 @@ The same pages as printed_pdf in reading order, one 7 x 8.5 in page each
 (half a legal sheet), 0.5 in margins, Times New Roman 11 pt: the cover, the
 order of worship and the announcements, each starting a page, numbered from
 the first inside page. An element's leader sits at a right tab stop. To print
-a booklet from it, use Word's Book fold (Layout, Margins, Multiple pages) or
-the printer's booklet setting; the PDF is already arranged for printing.
+it as the PDF prints, two pages to a legal sheet, use the printer's "2 pages
+per sheet" setting; the PDF is already arranged that way.
 Pure: no database or FastAPI.
 """
 from __future__ import annotations
@@ -1179,21 +1137,22 @@ def render_docx(ps: pb.PrintedService) -> bytes:
 - [ ] **Step 5: See them pass, and the suite**
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_printed_render.py backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`
-**Expected:** `8 passed in <t>s`; `1353 passed, 16 skipped in <t>s`.
+**Expected:** `8 passed in <t>s`; `1347 passed, 16 skipped in <t>s`.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add backend/requirements.txt backend/printed_pdf.py backend/printed_docx.py backend/tests/test_printed_render.py backend/tests/test_no_streamlit_in_core.py
-git commit -q -m "Printed bulletin PR 1: the PDF and the Word file (reportlab, pypdf)" -m "printed_pdf lays the booklet out with reportlab in reading order (7 x 8.5
-in pages, Times), then imposes it onto legal landscape sheets with pypdf,
-ready to print on both sides and fold. printed_docx writes the same pages
-in reading order for editing. Both packages are pure-Python wheels with
-BSD licenses." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+git add backend/requirements.txt requirements-dev.txt backend/printed_pdf.py backend/printed_docx.py backend/tests/test_printed_render.py backend/tests/test_no_streamlit_in_core.py
+git commit -q -m "Printed bulletin PR 1: the PDF and the Word file (reportlab)" -m "printed_pdf lays the bulletin out with reportlab on legal landscape
+sides, two 7 x 8.5 in pages to a side in reading order (layout B, the
+owner's sample: the cover and page 1, then pages 2 and 3, ...), nothing
+folded or padded. printed_docx writes the same pages one to a page for
+editing. reportlab (BSD) is the one new runtime package; pypdf
+(BSD-3-Clause) reads the PDF back in the tests only." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1353 passed, 16 skipped`; frontend `655 passed` in 83 files.
+Expected counts after this task: backend `1347 passed, 16 skipped`; frontend `655 passed` in 83 files.
 
 ### Task 3: `POST /documents/printed` with the readings' text (owner answers 5, 7; S API, "Scripture text"; clarifications 10, 11, 16, 18)
 
@@ -1386,8 +1345,8 @@ is a RuntimeError, which the API turns into a logged 500.
 ````python
 is a RuntimeError, which the API turns into a logged 500.
 
-build_printed (the printed bulletin, PR 1) does the same for the folded
-booklet, as a PDF or a Word file, and adds what the booklet prints beyond the
+build_printed (the printed bulletin, PR 1) does the same for the printed
+bulletin, as a PDF or a Word file, and adds what the booklet prints beyond the
 Word copies: the church's name (read with the hymns) and the two readings'
 text, fetched in the translation step 1 shows (the draft's when this
 deployment offers it, else the church's: readings.ts effectiveTranslation).
@@ -1540,7 +1499,7 @@ try/except (F §2.2 rule 1).
 try/except (F §2.2 rule 1).
 
 POST /documents/printed (printed bulletin spec, PR 1): the printed bulletin,
-a folded booklet, as a print-ready PDF or an editable Word file. Its own
+two booklet pages to a legal sheet, as a print-ready PDF or an editable Word file. Its own
 route because its body (format, translation) and its answer differ; it
 fetches the readings' text, so it charges the `scripture` bucket one token
 per upstream part (a 429 before any fetch), as POST /scripture/passages.
@@ -1635,7 +1594,7 @@ def create_printed(payload: PrintedDocumentIn, church: ActiveChurch = Depends(re
 - [ ] **Step 4: Regenerate the API files; see them pass, and the suite**
 
 Run: `.venv/bin/python backend/scripts/export_openapi.py && (cd frontend && npm run gen:api >/dev/null) && git diff --stat -- frontend/src/lib/api` then `grep -c '"#/components/schemas/PrintedDocumentIn"' frontend/src/lib/api/openapi.json` then `.venv/bin/python -m pytest -q backend/tests/test_api_printed.py backend/tests/test_openapi_contract.py backend/tests/test_route_guards.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?")`
-**Expected:** `Wrote …/frontend/src/lib/api/openapi.json`, then ` frontend/src/lib/api/openapi.json | 164 +++…`, ` frontend/src/lib/api/schema.d.ts  | 113 +++…`, ` 2 files changed, 277 insertions(+)`; `1`; `18 passed in <t>s`; `1363 passed, 16 skipped in <t>s`; `typecheck 0`.
+**Expected:** `Wrote …/frontend/src/lib/api/openapi.json`, then ` frontend/src/lib/api/openapi.json | 164 +++…`, ` frontend/src/lib/api/schema.d.ts  | 113 +++…`, ` 2 files changed, 277 insertions(+)`; `1`; `18 passed in <t>s`; `1357 passed, 16 skipped in <t>s`; `typecheck 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -1650,7 +1609,7 @@ placeholder. Nothing is stored or cached." -m "Co-Authored-By: Claude Opus 5.5 <
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1363 passed, 16 skipped`; frontend `655 passed` in 83 files.
+Expected counts after this task: backend `1357 passed, 16 skipped`; frontend `655 passed` in 83 files.
 
 ### Task 4: The request, the filename and the download (S API; F §1.8, §1.9, §4.5; clarifications 3, 10-12)
 
@@ -1929,7 +1888,7 @@ saves the file, one mutation per button." -m "Co-Authored-By: Claude Opus 5.5 <n
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1363 passed, 16 skipped`; frontend `657 passed` in 83 files.
+Expected counts after this task: backend `1357 passed, 16 skipped`; frontend `657 passed` in 83 files.
 
 ### Task 5: The Printed bulletin card on Review & send (owner answers 1, 7; clarifications 2, 3, 17; F §4.8, §4.9)
 
@@ -2019,7 +1978,7 @@ describe("Review & send: the printed bulletin (printed bulletin PR 1)", () => {
     const printed = within(card).getByRole("button", { name: "Download printed bulletin" });
     const word = within(card).getByRole("button", { name: "Download Word version" });
     expect(printed).toHaveAccessibleDescription(
-      "Ready to print on legal paper: both sides, flipped on the short edge, then folded in half.",
+      "Ready to print on legal paper, two pages to a side.",
     );
     expect(word).toHaveAccessibleDescription("The same bulletin as a Word file, to change before printing.");
     for (const button of [printed, word]) {
@@ -2103,7 +2062,7 @@ const FILES: readonly PrintedFile[] = [
   {
     format: "pdf",
     name: "Printed bulletin",
-    description: "Ready to print on legal paper: both sides, flipped on the short edge, then folded in half.",
+    description: "Ready to print on legal paper, two pages to a side.",
     action: "Download printed bulletin",
   },
   {
@@ -2115,7 +2074,7 @@ const FILES: readonly PrintedFile[] = [
 ];
 
 export const PRINTED_SUMMARY =
-  "The folded booklet: the cover, the order of worship with the readings in full, and the announcements.";
+  "The booklet: the cover, the order of worship with the readings in full, and the announcements.";
 export const PLACEHOLDERS_NOTE =
   "For now, the church's details, the people who lead, the music and the announcements print as [placeholders].";
 
@@ -2151,8 +2110,8 @@ function FileRow({ file, disabled, onDownloaded }: { file: PrintedFile; disabled
 
 /**
  * The printed bulletin card (printed bulletin spec, PR 1; owner answers 1 and
- * 7, 2026-10-02): the folded booklet as a print-ready PDF (primary) and as a
- * Word file to change, each built on the server from the draft at the tap,
+ * 7, 2026-10-02): the booklet as a print-ready PDF (primary; two pages to a
+ * legal sheet in reading order, layout B) and as a Word file to change, each built on the server from the draft at the tap,
  * with the readings in full in the translation step 1 shows. Pending labels,
  * errors, the date and readings gates and the save tip work as on the Word
  * documents card. PR 1 prints what the app does not know yet as
@@ -2234,14 +2193,14 @@ Run: `for i in 1 2 3; do (cd frontend && npx vitest run src/components/builder/r
 ```bash
 git add frontend/src/components/builder/review/printed-card.tsx frontend/src/components/builder/review/review-send-step.tsx frontend/src/components/builder/review/review-send-step.test.tsx
 git commit -q -m "Printed bulletin PR 1: the Printed bulletin card on Review & send" -m "A card below the Word documents with Download printed bulletin (the
-PDF, ready to print on legal paper and fold) and Download Word version,
+PDF, two pages to a legal sheet) and Download Word version,
 each built from the draft at the tap, with its own pending label, the
 date and readings gates, error toasts and the save tip. A line says
 what still prints as [placeholders]." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1363 passed, 16 skipped`; frontend `660 passed` in 83 files.
+Expected counts after this task: backend `1357 passed, 16 skipped`; frontend `660 passed` in 83 files.
 
 ### Task 6: Docs: the manual check items and their heading pin (owner answer 10; clarification 19)
 
@@ -2266,12 +2225,12 @@ test)"; the results go into `docs/ops-runbook.md` → "Printed bulletin PR 1
 record". PR 2 and PR 3 add their own items here. Record what the page, the
 file and the paper show, never an email address or a church id.
 
-- [ ] (owner, after PR 1) **1.** Build a service with readings, hymns and liturgy and open **4 Review & send**. Under **Printed bulletin**, tap **Download printed bulletin**: "Preparing…", then the share or preview sheet with `printed_bulletin_October_04_2026.pdf` (for that date). The PDF's pages are wide (legal, landscape), two booklet pages each: the first has the announcements on the left and the cover (church name, the picture's box with the reading and the date) on the right; the next has "THE SERVICE FOR THE LORD'S DAY" on the left.
+- [ ] (owner, after PR 1) **1.** Build a service with readings, hymns and liturgy and open **4 Review & send**. Under **Printed bulletin**, tap **Download printed bulletin**: "Preparing…", then the share or preview sheet with `printed_bulletin_October_04_2026.pdf` (for that date). The PDF's pages are wide (legal, landscape), two booklet pages each, in reading order: the first has the cover (church name, the picture's box with the reading and the date) on the left and page 1, "THE SERVICE FOR THE LORD'S DAY", on the right; the announcements are the last page.
 - [ ] (owner, after PR 1) **2.** In that PDF the readings are printed in full in the translation chosen on step 1, followed by "Scripture readings are from the …"; hymns read like `*HYMN: #409 "God Is Here!"`; the people lines are bold; the names, music and announcements show as [placeholders].
 - [ ] (owner, after PR 1) **3.** Tap **Download Word version**: `printed_bulletin_October_04_2026.docx` opens in reading order (cover, the service, the announcements), on small pages.
 - [ ] **4.** On step 1 choose another translation (for example KJV), then download again: the readings and the credit line change to it.
 - [ ] (owner, after PR 1) **5.** At 375 px: no sideways scroll on **Review & send**; the two new buttons are full width and at least 44 px tall. Clear the service date: both are off with "Choose a service date on step 1 to download."
-- [ ] (owner, print test) **6.** At the church, print the PDF on legal paper, both sides, flipped on the short edge. Fold the stack in half: the cover is on the front, the pages run 1, 2, 3 … in order, the announcements are on the back, nothing is upside down, and no text is cut off at the edges or the fold.
+- [ ] (owner, print test) **6.** At the church, print the PDF on legal paper (one side or both, as the church usually does). Each sheet holds two pages side by side, not folded: the cover and page 1, then pages 2 and 3, and so on, with the announcements last. Check that the pages read 1, 2, 3 … in order, nothing is upside down, the page numbers are there, and no text is cut off at the edges or between the two pages.
 ````
 
 **In `backend/tests/test_slice1_docs.py`, replace:**
@@ -2312,12 +2271,12 @@ Run: `.venv/bin/python -m pytest -q backend/tests/test_slice1_docs.py backend/te
 git add docs/manual-verification.md backend/tests/test_slice1_docs.py
 git commit -q -m "Docs: printed bulletin PR 1 manual checks" -m "docs/manual-verification.md gains \"## Printed bulletin\": the owner's
 phone check after PR 1 (the PDF, its content, the Word version, the
-layout) and the print test at the church (both sides, short edge, fold,
-margins). The heading pin in test_slice1_docs.py grows to eight." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+layout) and the print test at the church (the page order and the
+margins, two pages to a side). The heading pin in test_slice1_docs.py grows to eight." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1363 passed, 16 skipped`; frontend `660 passed` in 83 files.
+Expected counts after this task: backend `1357 passed, 16 skipped`; frontend `660 passed` in 83 files.
 
 ### Task 7: Verification and the draft PR (owner's yes before the PR is opened and before it is marked ready)
 
@@ -2354,7 +2313,7 @@ open('<scratch>/printed-sample.pdf', 'wb').write(printed_pdf.render_pdf(ps)); op
 ")
 ```
 
-**Expected:** `1363 passed, 16 skipped in <t>s`; three times ` Test Files  83 passed (83)` and `      Tests  660 passed (660)` with no `×` or `FAIL` line (one names the failing test: Step 6); `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s` and no `Error` (a font `Failed to fetch` only: say so and rely on CI); `sample written`. Open the sample PDF and look at it: four legal landscape sides, the first with the announcements left and the cover right; attach both samples to the owner's message in Step 4 if the channel allows files, else describe them.
+**Expected:** `1357 passed, 16 skipped in <t>s`; three times ` Test Files  83 passed (83)` and `      Tests  660 passed (660)` with no `×` or `FAIL` line (one names the failing test: Step 6); `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s` and no `Error` (a font `Failed to fetch` only: say so and rely on CI); `sample written`. Open the sample PDF and look at it: three legal landscape sides in reading order, the first with the cover left and page 1 right, the last with the announcements (page 4) left and its right half blank; attach both samples to the owner's message in Step 4 if the channel allows files, else describe them.
 
 - [ ] **Step 3 (agent): The API files match, the gates, the paths, the commits**
 
@@ -2396,8 +2355,9 @@ M	frontend/src/lib/documents.ts
 M	frontend/src/lib/download.test.ts
 M	frontend/src/lib/download.ts
 M	frontend/src/lib/queries/documents.ts
+M	requirements-dev.txt
 ```
-`0`; the subjects oldest first: `Runbook: slice 5a-3 record (merged; owner's five-step phone check)` (when it rides along), the spec and plan commits (`WIP spec/plan: printed bulletin` …, `Spec: printed bulletin (owner answers 2026-10-02)`, `Plan: printed bulletin PR 1 (owner answers 2026-10-02)`), then T1-T6's six subjects as written above, then any `Fix: …` lines; only `trailer check done`.
+`0`; the subjects oldest first: `Runbook: slice 5a-3 record (merged; owner's five-step phone check)` (when it rides along), the spec and plan commits (`WIP spec/plan: printed bulletin` …, `Spec: printed bulletin (owner answers 2026-10-02)`, `Plan: printed bulletin PR 1 (owner answers 2026-10-02)`, `Spec and plan: printed bulletin layout B (owner, 2026-10-02)`, and any later spec or plan commit), then T1-T6's six subjects as written above, then any `Fix: …` lines; only `trailer check done`.
 
 - [ ] **Step 4 (agent → OWNER): Ask to open the draft PR**
 
@@ -2408,24 +2368,24 @@ gh pr list -R bbrown62450/church --head claude/slice-2-plan-4q33le --state open 
 
 **Expected:** one `✓ Logged in` line; `[]`. Send the owner exactly this, and wait for a clear yes:
 
-> The printed bulletin's first PR is verified on this machine: backend 1363 passed, 16 skipped (1335 before); frontend 660 tests in 83 files (655 before), three runs in a row; typecheck, lint and the production build are clean. It adds one API route, `POST /documents/printed`, two Python packages (reportlab and pypdf, both free to use), and no database change. On step 4 a new "Printed bulletin" card gives you the folded booklet as a PDF ready to print on legal paper, and as a Word file. Names, music, the church's details and the announcements print as [placeholders] until the next PR. May I open the pull request as a **draft** titled "Printed bulletin PR 1: the booklet from what the app knows", so the checks run? Merging stays with you.
+> The printed bulletin's first PR is verified on this machine: backend 1357 passed, 16 skipped (1335 before); frontend 660 tests in 83 files (655 before), three runs in a row; typecheck, lint and the production build are clean. It adds one API route, `POST /documents/printed`, one Python package (reportlab, free to use; a second, pypdf, is only for the tests), and no database change. On step 4 a new "Printed bulletin" card gives you the bulletin as a PDF ready to print on legal paper, two pages to a side in order as in your sample, and as a Word file. Names, music, the church's details and the announcements print as [placeholders] until the next PR. May I open the pull request as a **draft** titled "Printed bulletin PR 1: the booklet from what the app knows", so the checks run? Merging stays with you.
 
 - [ ] **Step 5 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
 
 (not replayed)
 ```bash
 cat > "<scratch>/printed1-pr-body.md" <<'BODY'
-Printed bulletin PR 1: the Sunday bulletin as a folded booklet, built from what the app already knows (the first of three printed bulletin PRs; owner answers of 2026-10-02). Spec: docs/superpowers/specs/2026-10-02-printed-bulletin-design.md. Plan: docs/superpowers/plans/2026-10-02-printed-bulletin-1.md. No database change, no new variable; one new route; two new Python packages.
+Printed bulletin PR 1: the Sunday bulletin, built from what the app already knows (the first of three printed bulletin PRs; owner answers of 2026-10-02). Spec: docs/superpowers/specs/2026-10-02-printed-bulletin-design.md. Plan: docs/superpowers/plans/2026-10-02-printed-bulletin-1.md. No database change, no new variable; one new route; one new Python package (reportlab; pypdf for the tests only).
 
 - POST /documents/printed (church-scoped, any member): {format: pdf | docx, translation, service: ServiceDraft} in, the file out, with Content-Disposition (printed_bulletin_October_04_2026.pdf) and Cache-Control: no-store. The readings' text is fetched in the draft's translation (else the church's) and charged to the scripture bucket per part first.
-- printed_bulletin (pure): the cover, the order of worship (OUTLINE order with the sample's additions and four section headings; leaders right-aligned; stars) and the announcements page, with [placeholders] for what PR 2 and PR 3 bring; the booklet's page order.
-- printed_pdf: reportlab lays out 7 x 8.5 in pages; pypdf imposes them onto legal landscape sheets (blank pages before the back page). printed_docx: the same pages in reading order. reportlab (BSD) and pypdf (BSD-3-Clause) are pure-Python wheels.
+- printed_bulletin (pure): the cover, the order of worship (OUTLINE order with the sample's additions and four section headings; leaders right-aligned; stars) and the announcements page, with [placeholders] for what PR 2 and PR 3 bring.
+- printed_pdf: reportlab lays out legal landscape sides, two 7 x 8.5 in pages to a side in reading order (layout B, the owner's sample; nothing folded or padded). printed_docx: the same pages one to a page. reportlab (BSD) is a pure-Python wheel; pypdf (BSD-3-Clause, requirements-dev.txt) reads the PDF back in the tests.
 - Review & send: a Printed bulletin card after the Word documents, with Download printed bulletin (PDF) and Download Word version.
 - docs/manual-verification.md: "## Printed bulletin" (the phone check and the print test).
 
 Later: PR 2 (the Bulletin step, the settings panel, announcements, services.bulletin), PR 3 (the cover picture).
 
-Tests: backend 1335 → 1363 passed, 16 → 16 skipped; frontend 655 → 660 in 83 → 83 files
+Tests: backend 1335 → 1357 passed, 16 → 16 skipped; frontend 655 → 660 in 83 → 83 files
 
 After merge (Task 8): a short check on the owner's phone, a print test at the church, then a "Printed bulletin PR 1 record" in docs/ops-runbook.md.
 
@@ -2439,7 +2399,7 @@ gh pr create -R bbrown62450/church --draft --base main --head claude/slice-2-pla
 gh pr checks <N> -R bbrown62450/church --watch --interval 30
 ```
 
-Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1363 passed, 16 skipped` (CI installs reportlab and pypdf from `requirements-dev.txt`), backend-postgres `16 passed, 1363 deselected`, frontend `660 passed` in 83 files. Then send: "PR #<N> is green: backend 1363 passed, 16 skipped; 660 frontend tests in 83 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R bbrown62450/church`.
+Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1357 passed, 16 skipped` (CI installs reportlab and pypdf from `requirements-dev.txt`), backend-postgres `16 passed, 1357 deselected`, frontend `660 passed` in 83 files. Then send: "PR #<N> is green: backend 1357 passed, 16 skipped; 660 frontend tests in 83 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R bbrown62450/church`.
 
 - [ ] **Step 6: Fix any failure in its owning task**
 
@@ -2456,17 +2416,17 @@ Run the last line with `run_in_background: true`. **Expected:** the PR URL; ever
 
 For each fix: change only the owning task's files; rerun Steps 2-3; commit `Fix: <what> (Task <n>, printed bulletin PR 1 final verification)` with the trailer; after the PR exists, ask the owner before pushing it.
 
-Expected counts after this task: backend `1363 passed, 16 skipped`; frontend `660 passed` in 83 files.
+Expected counts after this task: backend `1357 passed, 16 skipped`; frontend `660 passed` in 83 files.
 
 ### Task 8: Merge, the owner's phone check (four steps), the print test, the record (OWNER + agent)
 
-No schema change, so Railway's deploy has nothing to migrate (production stays at `0005_services_extras`); Railway installs the two new packages from `backend/requirements.txt` and serves the new route, Vercel the new card. The owner's check is **one step at a time** (send one, wait for the report or "next"), on the phone, on the production URL, in the owner's own church; then the print test at the church, when the owner is there. The agent writes each result into `<scratch>/printed1-t8-results.md` (not committed). Record what the page, the files and the paper showed, never a token, an email address, a church id or a church member's name.
+No schema change, so Railway's deploy has nothing to migrate (production stays at `0005_services_extras`); Railway installs the new package (reportlab) from `backend/requirements.txt` and serves the new route, Vercel the new card. The owner's check is **one step at a time** (send one, wait for the report or "next"), on the phone, on the production URL, in the owner's own church; then the print test at the church, when the owner is there. The agent writes each result into `<scratch>/printed1-t8-results.md` (not committed). Record what the page, the files and the paper showed, never a token, an email address, a church id or a church member's name.
 
 **Files:** Modify (the records PR, Step 9): `docs/ops-runbook.md`: insert `### Printed bulletin PR 1 record` right before `## Backups` (after the last record above it, today the "Slice 5a-3 record" table, whose last row starts `| Follow-ups | 5a is complete.`). A `###` heading, because `test_ops_workflows.py` pins the `##` list.
 
 - [ ] **Step 1 (agent → OWNER): Ask to merge, then merge**
 
-Check first (not replayed): `gh pr view <N> -R bbrown62450/church --json state,isDraft,mergeable,mergeStateStatus --jq '"\(.state) draft=\(.isDraft) \(.mergeable) \(.mergeStateStatus)"'` → `OPEN draft=false MERGEABLE CLEAN`. Send: "PR #<N> (printed bulletin PR 1) is ready, green and up to date with main. There is no database change; Railway installs two new packages on its deploy. Then I will ask you for four short checks on your phone, one at a time, and later a print test at the church. May I merge it with a merge commit?" On a clear yes:
+Check first (not replayed): `gh pr view <N> -R bbrown62450/church --json state,isDraft,mergeable,mergeStateStatus --jq '"\(.state) draft=\(.isDraft) \(.mergeable) \(.mergeStateStatus)"'` → `OPEN draft=false MERGEABLE CLEAN`. Send: "PR #<N> (printed bulletin PR 1) is ready, green and up to date with main. There is no database change; Railway installs one new package on its deploy. Then I will ask you for four short checks on your phone, one at a time, and later a print test at the church. May I merge it with a merge commit?" On a clear yes:
 
 (not replayed)
 ```bash
@@ -2475,11 +2435,11 @@ gh pr view <N> -R bbrown62450/church --json state,mergeCommit,mergedAt --jq '"\(
 RUN=$(gh run list -R bbrown62450/church --workflow ci.yml --branch main --commit "$(gh pr view <N> -R bbrown62450/church --json mergeCommit --jq .mergeCommit.oid)" --limit 1 --json databaseId --jq '.[0].databaseId'); gh run watch "$RUN" -R bbrown62450/church --exit-status --interval 30 >/dev/null; echo "ci exit $?"
 ```
 
-**Expected:** `MERGED <merge sha> <UTC time>`; `ci exit 0` (run it in the background). Record both. Wait about three minutes for Railway (it installs the packages) and Vercel before Step 2. If the owner can see Railway's deploy log, a line installing `reportlab` and `pypdf` and a clean startup are expected; a failed deploy keeps the old version running (Step R).
+**Expected:** `MERGED <merge sha> <UTC time>`; `ci exit 0` (run it in the background). Record both. Wait about three minutes for Railway (it installs the package) and Vercel before Step 2. If the owner can see Railway's deploy log, a line installing `reportlab` and a clean startup are expected; a failed deploy keeps the old version running (Step R).
 
 - [ ] **Step 2 (OWNER, then agent): Phone, step 1 of 4: the PDF downloads and opens (manual-verification item 1)**
 
-> On your phone, open https://worship-service-builder.vercel.app and pull down to reload it, so the phone runs the new version. Build a service as you normally would, or keep the one you have: a date, readings, hymns, liturgy and a sermon title. Tap **4 Review & send**. Below **Word documents** there is a new card, **Printed bulletin**. Tap **Download printed bulletin**. The button says "Preparing…" for a few seconds (it fetches the readings); then your phone should show its share or preview sheet for a file named like `printed_bulletin_October_04_2026.pdf` (with your date). Open it. The pages are wide, each with two booklet pages side by side. Is the first page the announcements on the left and the cover on the right (your church's name, a box with the reading and the date, then the address lines in brackets)? Is the next page "THE SERVICE FOR THE LORD'S DAY" on the left?
+> On your phone, open https://worship-service-builder.vercel.app and pull down to reload it, so the phone runs the new version. Build a service as you normally would, or keep the one you have: a date, readings, hymns, liturgy and a sermon title. Tap **4 Review & send**. Below **Word documents** there is a new card, **Printed bulletin**. Tap **Download printed bulletin**. The button says "Preparing…" for a few seconds (it fetches the readings); then your phone should show its share or preview sheet for a file named like `printed_bulletin_October_04_2026.pdf` (with your date). Open it. The pages are wide, each with two booklet pages side by side. Is the first page the cover on the left (your church's name, a box with the reading and the date, then the address lines in brackets) and "THE SERVICE FOR THE LORD'S DAY" (page 1) on the right? Do the pages run in order, with the announcements last?
 
 Record whether the sheet appeared, the filename, how long "Preparing…" showed, and each answer. **If no download started or the file is empty**, record it and stop: it is a follow-up for the owner to decide; the Word copies are unaffected.
 
@@ -2499,9 +2459,9 @@ Record the answers and any difference the owner names (each a follow-up for the 
 
 - [ ] **Step 6 (OWNER at the church, then agent): The print test (owner answer 10; item 6)**
 
-> When you are at the church: download the printed bulletin for this Sunday (or use the file from step 1), and print it on **legal** paper, **both sides**, with **flip on short edge** (some printers call it "short-edge binding" or "tablet"). Fold the stack in half. Please check: is the cover on the front and the announcements on the back; do the pages run 1, 2, 3 … in order with nothing upside down; is any text cut off at the edges or at the fold; are the page numbers there; is the type easy to read? If there are blank pages before the back, would you rather have something there (for example "Notes")? A photo of the folded booklet, if you like.
+> When you are at the church: download the printed bulletin for this Sunday (or use the file from step 1), and print it on **legal** paper, one side or both, as you usually do (if both: the printer's two-sided setting that keeps the backs upright, for wide pages usually "flip on short edge"). Each sheet has two pages side by side, nothing to fold. Please check: is the cover first and the announcements last; do the pages run 1, 2, 3 … in order with nothing upside down; is any text cut off at the edges or between the two pages; are the page numbers there; is the type easy to read? If the last sheet has an empty right half, would you rather have something there (for example "Notes")? A photo of the printed sheets, if you like.
 
-Record the printer's duplex setting used, each answer, and any change the owner asks for (a follow-up: rotated backs, different margins, a font size, notes pages).
+Record whether it was printed on one side or both (and the two-sided setting used), each answer, and any change the owner asks for (a follow-up: different margins, a font size, a notes page, or the folded booklet as a later option).
 
 - [ ] **Step 7 (agent): Fill the results**
 
@@ -2523,14 +2483,14 @@ grep -n '^### ' docs/ops-runbook.md | awk -F: '$1 < '"$(grep -n '^## Backups$' d
 ```markdown
 ### Printed bulletin PR 1 record
 
-Printed bulletin PR 1 (the Sunday bulletin as a folded booklet from what the
-app knows: `POST /documents/printed`, the print-ready PDF on legal paper and
+Printed bulletin PR 1 (the Sunday bulletin from what the app knows, two
+pages to a legal side: `POST /documents/printed`, the print-ready PDF on legal paper and
 the Word version, the Printed bulletin card on Review & send, with
 [placeholders] for the church's details, the people, the music and the
 announcements) merged as PR #<N>, the first of three printed bulletin PRs
 (owner answers of 2026-10-02). No database change and no new variable;
-production stays at `0005_services_extras`; two new Python packages
-(reportlab, pypdf). The owner's check was four steps on a phone and a print
+production stays at `0005_services_extras`; one new Python package
+(reportlab; pypdf for the tests only). The owner's check was four steps on a phone and a print
 test at the church, covering the "(owner, after PR 1)" and "(owner, print
 test)" items of `docs/manual-verification.md` → "Printed bulletin". No token,
 email address, church id or member's name is recorded here.
@@ -2538,11 +2498,11 @@ email address, church id or member's name is recorded here.
 | Step | Result | Date |
 |---|---|---|
 | Merge and deploy | PR #<N> merged <UTC time> (<Eastern time>), merge commit `<short sha>`. CI on `main` (run <run id>): success | <date> |
-| 1. The PDF (phone: <phone and browser>) | <The share sheet opened with printed_bulletin_<date>.pdf after about <n> s; the first side had the announcements and the cover, the next "THE SERVICE FOR THE LORD'S DAY". / …> | <date> |
+| 1. The PDF (phone: <phone and browser>) | <The share sheet opened with printed_bulletin_<date>.pdf after about <n> s; the first side had the cover and page 1 ("THE SERVICE FOR THE LORD'S DAY"), the pages in order, the announcements last. / …> | <date> |
 | 2. What it prints | <Both readings in full in <translation> with the credit line; hymns, People lines, Gloria Patri and the Creed as the sample; placeholders as expected. / Differences: …> | <date> |
 | 3. Word version | <Opened in reading order on small pages and edited. / …> | <date> |
 | 4. The page on the phone | <No sideways scroll; full-width buttons; off without a date with the message. / …> | <date> |
-| 5. Print test (<printer>, legal, both sides, <duplex setting>) | <Folded in order with the cover front and announcements back; nothing upside down or cut off; page numbers present; <blank pages: owner's wish>. / …> | <date> |
+| 5. Print test (<printer>, legal, <one side / both sides, setting>) | <Two pages to a side in order, the cover first and the announcements last; nothing upside down or cut off; page numbers present; <empty half: owner's wish>. / …> | <date> |
 | Follow-ups | <None. / One line per follow-up.> Next: printed bulletin PR 2 (the Bulletin step, the settings panel, announcements, `services.bulletin` with migration `0006_services_bulletin`), then PR 3 (the cover picture), Voices of the Church, 6a. Still open: the screen-reader copy for "Revise the other prayers", first-line matching research (Hymnary.org), the NUL-character 500 outside `/documents`, and the two slice 1 test churches (kept for now, owner) | <date> |
 ```
 
@@ -2583,39 +2543,39 @@ gh pr checks claude/slice-2-plan-4q33le -R bbrown62450/church --watch
 
 - [ ] **Step R (only if the release must come out): Revert**
 
-Code only (no data or schema to undo; nothing was stored). On the owner's yes for each outward command: a branch `claude/revert-printed-1` from `origin/main`, `git revert -m 1 --no-commit <merge sha>`, a commit "Revert printed bulletin PR 1 (PR #<N>)" with the trailer, both suites (`1335 passed, 16 skipped`; `655 passed` in 83), a PR, CI, and the merge on the owner's yes; record it in the record. Review then shows the Word documents card only. The two packages stay installed on Railway until its next deploy from the reverted requirements, which removes them; harmless either way.
+Code only (no data or schema to undo; nothing was stored). On the owner's yes for each outward command: a branch `claude/revert-printed-1` from `origin/main`, `git revert -m 1 --no-commit <merge sha>`, a commit "Revert printed bulletin PR 1 (PR #<N>)" with the trailer, both suites (`1335 passed, 16 skipped`; `655 passed` in 83), a PR, CI, and the merge on the owner's yes; record it in the record. Review then shows the Word documents card only. The package stays installed on Railway until its next deploy from the reverted requirements, which removes it; harmless either way.
 
-Expected counts after this task: backend `1363 passed, 16 skipped` on `main`; frontend `660 passed` in 83 files. The records PR adds no test.
+Expected counts after this task: backend `1357 passed, 16 skipped` on `main`; frontend `660 passed` in 83 files. The records PR adds no test.
 
 ---
 ## Build notes
 
 **How this plan was written (2026-10-02).** reportlab 5.0.1 and pypdf 6.19.0 were installed from PyPI into the repo's `.venv` (both `py3-none-any` wheels; reportlab pulled Pillow 12.3.0, already present, and charset-normalizer). Each task's code was built and run in a throwaway worktree of `0b7f5e2` (the repo's `.venv`, a symlink to `frontend/node_modules`); the directives were then generated from that worktree against `0b7f5e2` (a new file as **Create**, an addition at the end of a file as **Append**, every other change as **In … replace** with just enough context to occur once in the file as it stands at that point) and replayed onto a fresh worktree of the branch head by `ap2.py` (each task's test step and code step by their line ranges), running that task's commands. While building:
-- **Two passes, then imposition.** reportlab cannot read a PDF back, so `render_pdf` renders the reading-order booklet once to count its pages (the back page's number depends on the padding), renders again with that number, and pypdf places the pages two to a legal sheet with `merge_transformed_page`. Rendering both passes and imposing takes about 0.3 s for the sample.
-- **Page numbers come first in the text.** The page number is drawn by the page template before the page's content, so pypdf reads each half as "<number> <text>"; the render test reads each side's text from its start (`"1 THE SERVICE FOR THE LORD'S DAY …"`).
+- **Layout B in one pass (owner decision 5, 2026-10-02).** The first draft rendered the reading-order pages, counted them, rendered again and imposed them into folded-booklet order with pypdf (`merge_transformed_page`). For layout B reportlab draws the two pages per side itself: one page template on a legal landscape page with two 7 x 8.5 in frames, `FrameBreak` between the cover, the order of worship and the announcements, so the text flows left half, right half, next side. No count, no second pass and no padding, so pypdf left the runtime (it stays in `requirements-dev.txt` to read the PDF back in the tests). Rendering the sample takes about 0.15 s.
+- **Page numbers come first in the text.** `_TwoUp.handle_frameBegin` draws a booklet page's number when its frame begins, before the frame's content, so pypdf reads each half as "<number> <text>"; a half nothing flows into (the last right half of an odd page count) never begins, so it stays blank with no number. The render tests split each side's text into its two halves by the x position pypdf reports (`halves`).
 - **The leader's column is a one-row table** (`Table` with zero padding, the element's paragraph and a right-aligned paragraph), which keeps the two baselines together and wraps a long label under itself; `keepWithNext` keeps an element's heading with its first line.
 - **The readings' parts are cased as written** ("Isaiah 5:1-7"): `fetch_part` lowercases only its cache key, so the API test's fake matches the case sent.
 - **The church's name is read in the hymns' session** (`repos.churches.get_church`), and a church gone between the guard and the read is the guard's 403, as `usecases.church_profile` does.
 - **LibreOffice cannot open a `.docx` in this container** (any file, 5a-1's sample included: "source file could not be loaded"), so the Word file was checked by reading it back with python-docx (page size, margins, page breaks, tab stops, bold People lines, the PAGE field), not by rendering it. T8's step 3 opens it on the owner's phone.
-- **The sample booklet.** A service shaped like the owner's sample (the same order, hymns, sermon title and lengths of prayers and readings, all names replaced by placeholders and "Example Church") renders as five booklet pages padded to eight on two sheets, as S expects; the sides were rendered to images with PyMuPDF (outside the repo) and compared with the sample's pages: same order, headings, bold and italic, right-aligned leaders, and similar density per page.
+- **The sample.** A service shaped like the owner's sample (the same order, hymns, sermon title and lengths of prayers, shorter readings, all names replaced by placeholders and "Example Church") renders as five booklet pages on three legal sides (cover | 1, 2 | 3, announcements | blank); the sides were rendered to images with PyMuPDF (outside the repo) and compared with the owner's three sample pages (cover | 1, 2 | 3, 4 | 5): the same reading order two to a side, headings, bold and italic, right-aligned leaders, page numbers from the first inside page, and the announcements last.
 
 **Replay of the finished plan (2026-10-02).** The directives of T1-T6 were applied in order onto a fresh detached worktree of the branch head (`0b7f5e2` plus the spec and plan commits), running each step's commands:
 - All 40 directives applied (T1 1 + 1, T2 2 + 3, T3 1 + 12, T4 5 + 10, T5 4 + 4, T6 3); every Replace anchor occurred exactly once, and every Append landed on the file as the task before left it. After T6, `backend`, `frontend/src` and `docs/manual-verification.md` equaled the build worktree's (`diff -r`: empty).
-- Every "see it fail" output matched as quoted, and every count matched the table: backend 1348, 1353, 1363 (16 skipped); T2's files `8 passed`, T3's `18 passed`; frontend 657 then 660 in 83; T4's files `9 passed`, T5's `21 passed` three times; typecheck 0 and lint 0 after T3-T5; the OpenAPI export and `gen:api` gave `2 files changed, 277 insertions(+)` and `1`; T6 `89 passed`, `4`, `0`, `2 files changed, 23 insertions(+), 3 deletions(-)`; no raw HTML; the imports grep exit 1; the 26 paths of T7 Step 3 exactly; no migration, workflow, package or Streamlit path. The production build (`npm run build` with a hard-linked copy of `node_modules`) `✓ Compiled successfully`. T7 Step 2's sample snippet wrote both files. No flaky run.
+- Every "see it fail" output matched as quoted, and every count matched the table: backend 1348, 1353, 1357 (16 skipped); T2's files `8 passed`, T3's `18 passed`; frontend 657 then 660 in 83; T4's files `9 passed`, T5's `21 passed` three times; typecheck 0 and lint 0 after T3-T5; the OpenAPI export and `gen:api` gave `2 files changed, 277 insertions(+)` and `1`; T6 `89 passed`, `4`, `0`, `2 files changed, 23 insertions(+), 3 deletions(-)`; no raw HTML; the imports grep exit 1; the 26 paths of T7 Step 3 exactly; no migration, workflow, package or Streamlit path. The production build (`npm run build` with a hard-linked copy of `node_modules`) `✓ Compiled successfully`. T7 Step 2's sample snippet wrote both files. No flaky run.
 - Not run while planning: the pushes, the PR and CI (CI installs the two packages from `requirements-dev.txt`), the merge, Railway's deploy, the owner's phone check and the print test.
 
 ## Spec coverage
 
 | Owner answer or S item | Task(s) and tests |
 |---|---|
-| 1. Print-ready PDF in the folded legal-landscape booklet layout | T2 `test_the_pdf_is_legal_landscape_sheets_in_booklet_order`, `test_a_longer_service_takes_more_sheets_and_stays_a_multiple_of_four`; T1 `test_the_booklet_pads_to_whole_sheets_with_blanks_before_the_back_page` (5 cases), `test_the_sides_fold_into_reading_order`; T8 steps 1 and the print test |
+| 1 and decision 5. Print-ready PDF, layout B (two pages to a legal landscape side in reading order, not folded or padded) | T2 `test_the_pdf_is_legal_landscape_sides_with_two_pages_each_in_reading_order` (5 pages on 3 sides, the last right half blank), `test_any_page_count_takes_half_as_many_sides_rounded_up_with_the_announcements_last` (6 and 9 pages); T8 steps 1 and the print test |
 | 1. An editable Word version | T2 `test_the_word_file_is_the_same_booklet_in_reading_order`; T3 `test_the_word_file_downloads_too`; T5 "downloads the PDF … names the Word version itself …"; T8 step 3 |
 | 2. Standing and weekly fields (PR 2): placeholders now, the sample's leaders and stars as defaults | T1 `test_the_order_of_worship_follows_the_outline_with_the_sample_s_parts`, `test_each_element_prints_as_the_sample`, `test_the_cover_and_the_back_page`; clarifications 7-9, 15 |
 | 3. Announcements (PR 2) | the back page's placeholders (T1 `test_the_cover_and_the_back_page`); S "Data model" |
 | 4. Cover picture (PR 3) | the picture's place with the reading and the date (T1, T2 side 1 text); S "Data model" |
 | 5. Full text in step 1's translation with a credit line | T3 `test_the_pdf_downloads_with_the_file_headers_and_the_readings_text`, `test_a_translation_not_offered_here_prints_in_the_church_s` (3 requests), `test_no_readings_fetch_nothing`; T1 `test_a_reading_prints_as_paragraphs`, the unavailable text in `test_each_element_prints_as_the_sample`; T4 `printedRequest` (the draft's translation); T5 (the body's translation) |
 | 5. Pasting licensed text (PR 2) | S "Scripture text"; out of scope |
-| 6. One version | clarification 4 (the PDF is the imposed booklet; no mailing variant) |
+| 6. One version | clarification 4 (the PDF is layout B, which reads in order on a phone too; no mailing variant) |
 | 7. Keep both Word copies; a third download | T5 "shows the card after the Word documents …" (the heading order, the Word documents card unchanged); 5a-1's documents tests unchanged and passing |
 | 8. The Bulletin step and the settings panel (PR 2) | out of scope (S "Scope by PR") |
 | 9. Three PRs; this one from what the app knows | the plan's scope; T7 Step 3 (no migration or `backend/db` path; 5 revisions) |
@@ -2631,11 +2591,11 @@ S items **not** in PR 1 (owner answer 9): the Bulletin step, the settings panel 
 
 ## Questions for the owner
 
-Your answers of 2026-10-02 (1-10) are binding and already in the plan. These are the choices this plan makes where you did not say; each is written as recommended.
+Your answers of 2026-10-02 (1-10) are binding and already in the plan. These are the choices this plan makes where you did not say; each is written as recommended. **Answered (Beau, 2026-10-02, binding): "all recommended", with question 3 as layout B (owner decision 5).**
 
 1. **Where the new card goes** (clarification 2): Review & send keeps "Still to do", the Archive card and the Word documents card as they are; the new **Printed bulletin** card comes last. Recommended: accept.
-2. **The card's wording** (clarifications 3, 17): heading "Printed bulletin"; "The folded booklet: the cover, the order of worship with the readings in full, and the announcements."; "For now, the church's details, the people who lead, the music and the announcements print as [placeholders]."; **Download printed bulletin** (filled) with "Ready to print on legal paper: both sides, flipped on the short edge, then folded in half."; **Download Word version** (outlined) with "The same bulletin as a Word file, to change before printing."; "Preparing…", then "Still working…" after 8 seconds; off without a date or with a readings problem, with the existing messages; the existing save tip after a download. Recommended: accept.
-3. **The PDF is arranged for printing** (clarification 4): each legal page holds two booklet pages in the order the fold needs, so on your phone the first page shows the announcements and the cover side by side. Extra pages needed to fill the last sheet are blank and sit just before the announcements, which stay on the back. The Word version reads in order. Recommended: accept (one version, your answer 6).
+2. **The card's wording** (clarifications 3, 17): heading "Printed bulletin"; "The booklet: the cover, the order of worship with the readings in full, and the announcements."; "For now, the church's details, the people who lead, the music and the announcements print as [placeholders]."; **Download printed bulletin** (filled) with "Ready to print on legal paper, two pages to a side."; **Download Word version** (outlined) with "The same bulletin as a Word file, to change before printing."; "Preparing…", then "Still working…" after 8 seconds; off without a date or with a readings problem, with the existing messages; the existing save tip after a download. Recommended: accept.
+3. **The PDF's layout** (clarification 4; owner decision 5): layout B, as your sample: each legal page holds two booklet pages side by side in reading order, so on your phone the first page shows the cover and page 1 side by side, then pages 2 and 3, and so on, with the announcements last. Nothing is folded or padded; an odd number of pages leaves the last sheet's right half blank. The folded booklet stays a later option. Answered: layout B.
 4. **What the service prints, and in what order** (clarification 5): the app's order of worship with your sample's additions (Prelude; Welcome and Announcements; Gloria Patri after the Assurance; Offering Our Gifts and the Doxology before the Offertory Prayer; Postlude) under "GATHERING FOR WORSHIP", "RECEIVING THE WORD", "RESPONDING TO THE WORD" and "SENDING OUT TO SERVE"; "PRAYERS OF THE PEOPLE/THE LORD'S PRAYER" as a heading only, without the prayers' text; the communion liturgy after the second hymn when it is on. Recommended: accept.
 5. **The readings are "FIRST READING" and "NEW TESTAMENT READING"** (clarification 6), as in the Word copies since 5a, not "OLD TESTAMENT READING" as in your sample (the first reading is sometimes not from the Old Testament). Recommended: accept.
 6. **Who leads, until your settings arrive in PR 2** (clarification 7): "[Liturgist]" from the Welcome through the First Reading, "[Worship leader]" from the New Testament Reading through the Offertory Prayer, "[Organist]" on the Prelude and Postlude; the header reads "[Worship leader], Worship Leader", "[Liturgist], Liturgist", "[Organist], Organist", with "[Service time]" across from the date. Recommended: accept.
@@ -2643,7 +2603,7 @@ Your answers of 2026-10-02 (1-10) are binding and already in the plan. These are
 8. **The readings' text** (clarification 10): printed in full in the translation chosen on step 1 (if this app no longer offers it, your church's default), followed by "Scripture readings are from the {translation}." (for example "the World English Bible (WEB)"); a reading the Bible service cannot supply prints "[Reading text unavailable]" and the file still downloads (PR 2 adds a box to paste your own). Recommended: accept.
 9. **The date and the file names** (clarification 12): the booklet writes "October 4, 2026" (as your sample), the files are `printed_bulletin_October_04_2026.pdf` and `printed_bulletin_October_04_2026.docx`. Recommended: accept.
 10. **The cover and the back page until PR 2 and PR 3** (clarification 15): your church's name, a framed box for the picture with the sermon reading and the date in it, then "[Street address]", "[City, State ZIP]", "[Phone]", "[Email]", "[Website]", "FB: [Facebook name]"; the back page has "ANNOUNCEMENTS", the date, "Ushers/Counters: [Names]", "Deacon of the Week: [Name]", "Coffee Hour: [Name]", "THIS WEEK'S ACTIVITIES AT A GLANCE" with "[Activities]", "PRAYERS AND CONCERNS" with "[Prayer concerns]", and "ITEMS FOR COLLECTION" with "[Collection items]". Recommended: accept.
-11. **Type** (clarifications 13, 14): Times 11 point with the contact lines in a plain sans type, as your sample; the PDF uses the fonts every printer has rather than carrying its own (a rare character outside them prints as "?"). The Word version uses Times New Roman on 7 x 8.5 inch pages; to print it as a booklet use Word's "Book fold" or the printer's booklet setting, or print the PDF. Recommended: accept.
+11. **Type** (clarifications 13, 14): Times 11 point with the contact lines in a plain sans type, as your sample; the PDF uses the fonts every printer has rather than carrying its own (a rare character outside them prints as "?"). The Word version uses Times New Roman on 7 x 8.5 inch pages; to print it two to a legal sheet use the printer's "2 pages per sheet" setting, or print the PDF. Recommended: accept.
 12. **Printed bulletin downloads count toward the Bible text limit** (clarification 11): each download fetches the two readings, which counts like opening them on step 1 (60 passage parts per person every 5 minutes, far above normal use); past it, the existing "Too many requests. Try again in {n} seconds." message shows. Recommended: accept.
 
 Owner steps still to come: the plan's approval; the draft PR on your yes and ready on your yes (T7); the merge on your yes, then four phone checks one at a time, the print test at the church, and the records PR (T8).
