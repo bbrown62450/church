@@ -4,12 +4,12 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { editScriptureLines, setPick } from "@/lib/draft/readings";
+import { editScriptureLines, setPick, setTranslation } from "@/lib/draft/readings";
 import { pickFromHymn, setSlot } from "@/lib/hymns/picks";
 import { addCustomElement, editCardText, setCardEnabled, setCommunion, setSermonTitle } from "@/lib/liturgy/cards";
 import { gg2013, savedService, testDraft } from "@/test/fixtures";
 
-import { documentRequest, savedCopyFingerprint, wordSafe } from "./documents";
+import { documentRequest, printedRequest, savedCopyFingerprint, wordSafe } from "./documents";
 import { DEFAULT_BENEDICTION_FALLBACK } from "@/lib/liturgy/defaults";
 
 const OCT_4 = ["Isaiah 5:1-7", "Psalm 80:7-15", "Philippians 3:4b-14", "Matthew 21:33-46"];
@@ -98,6 +98,17 @@ describe("documentRequest (slice 5a)", () => {
     expect(wordSafe("a\u0000b\u0008c\u001fd\ufffee\uffff")).toBe("abcde");
     expect(wordSafe("tab\there")).toBe("tab\there");
     expect(wordSafe("lone \ud800 \udc00 pair \ud83d\ude00")).toBe("lone   pair \ud83d\ude00");
+  });
+});
+
+describe("printedRequest (printed bulletin PR 1)", () => {
+  it("sends the format, the draft's translation (null: the church's) and the service the Word copies send", () => {
+    const d = editScriptureLines(testDraft(), OCT_4.join("\n"));
+    expect(printedRequest(d, "pdf")).toEqual({ format: "pdf", translation: null, service: documentRequest(d, "bulletin").service });
+    expect(printedRequest(setTranslation(d, "kjv", "web"), "docx")).toMatchObject({ format: "docx", translation: "kjv" });
+    // An id the server would refuse (over 20 characters) goes as null: the church's translation.
+    const odd = { ...d, readings: { ...d.readings, translation: "x".repeat(21) } };
+    expect(printedRequest(odd, "pdf").translation).toBeNull();
   });
 });
 
