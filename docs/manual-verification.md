@@ -235,3 +235,24 @@ goes into "Reviewer follow-up 2 record".
 - [ ] **8.** Start a review and tap **Cancel**: the spinner goes and nothing changes. Start one and choose **New service**: no notes remain.
 - [ ] (owner, after follow-up 1) **9.** On a real review: no note only praises a prayer ("… fits well", "good focus on …"); a card with a "Cites …" note has no second note about naming the reading; a prayer named in "Several prayers open with …" has no note of its own about its opening, and "Across the service" has no second, AI-worded version of that note.
 - [ ] (owner, after follow-up 2) **10.** With two or three prayers opening with the same words, **Review service**: under "Several prayers open with "…"." in "Across the service" there is **Revise the other prayers** (an AI note there has none). Tap it: the first of those prayers keeps its text; each of the others shows "Revising…" with its own Cancel from the start, and they are revised one at a time (about 10 s each), each with a new opening, different from the first and from each other, and "Revised with these notes. Undo"; the note goes once all were revised with new openings (if the AI kept the opening, the note and its button stay). When one of them is your own or saved text, "Replace your text?" asks first, once, naming them; **Keep my text** changes nothing. **Undo** on one card brings back only that card's text.
+
+## Slice 5a
+
+Run on the production URL https://worship-service-builder.vercel.app, on an
+iPhone with Safari at 375 px and on desktop Chrome. These are the slice 5a
+spec's manual checks (Testing → Manual checks) for the Word downloads, as
+amended on 2026-10-01 (three PRs; no Streamlit check). After the 5a-1 merge
+the owner's guided check (owner answer 8, one step at a time on the phone)
+covers the items marked "(owner, after 5a-1)"; its result goes into
+`docs/ops-runbook.md` → "Slice 5a-1 record". 5a-2 and 5a-3 add their own
+items here. Record what the page and the file show, never an email address
+or a church id.
+
+- [ ] (owner, after 5a-1) **1.** Build a service and open **4 Review & send**. Tap **Download bulletin copy**: the button says "Preparing…", then the share or preview sheet opens with `worship_October_04_2026.docx` (for that date). The file opens; it has the title, the date as "October 04, 2026", "First Reading", the sermon title, and no Prayers of the People.
+- [ ] (owner, after 5a-1) **2.** Switch on Prayers of the People with text: the **pastor's copy** includes it and the bulletin copy does not. With it off, the pastor's copy says "Same as the bulletin copy for this service. Prayers of the People is empty or turned off."
+- [ ] (owner, after 5a-1) **3.** Leave the Opening hymn empty and choose a Response hymn: the file has "Second Hymn" and no "First Hymn"; no hymn line ends in "#None".
+- [ ] **4.** With RCL readings and no NT pick, the NT reading is the epistle, not the Psalm. Pick the Gospel as the NT reading, then edit that line: the Bulletin readings select shows "Automatic: {epistle}", and a new download prints that epistle.
+- [ ] **5.** On desktop Chrome the download has the server's filename, and the file looks like the Streamlit one: Times New Roman 11 pt, Word's Heading 2 headings, People lines and the Prayer of Confession in bold, communion after the Second Hymn.
+- [ ] **6.** Clear the service date: both download buttons are off with "Choose a service date on step 1 to download."
+- [ ] (owner, after 5a-1) **7.** At 375 px: no sideways scroll on **Review & send**; the download buttons are full width and at least 44 px tall.
+- [ ] **8.** Switch church: a download uses that church's draft.
