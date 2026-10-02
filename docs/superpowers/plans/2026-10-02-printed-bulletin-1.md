@@ -107,6 +107,7 @@ The owner's answers win over S and F; the code wins over both where they disagre
 17. **[owner-visible] Every new user-facing string** (no em dashes). Changed for layout B (owner decision 5) from the first draft of this plan: the PDF button's line "Ready to print on legal paper, two pages to a side." (was "…: both sides, flipped on the short edge, then folded in half."), and the card's summary, which drops "folded" ("The booklet: …"); nothing else changes. On the screen: "Printed bulletin"; "The booklet: the cover, the order of worship with the readings in full, and the announcements."; "For now, the church's details, the people who lead, the music and the announcements print as [placeholders]."; "Download printed bulletin"; "Ready to print on legal paper, two pages to a side."; "Download Word version"; "The same bulletin as a Word file, to change before printing."; for screen readers only "Printed bulletin: Preparing…", "Printed bulletin: Still working…", "Word version: Preparing…", "Word version: Still working…". Reused as they are: "Preparing…", "Still working…", "Choose a service date on step 1 to download.", "Fix the readings on step 1 to download.", "Tip: save this service so its hymns count as recently used.", and the existing error toasts (a 429 reads "Too many requests. Try again in {n} seconds."). In the files: "THE SERVICE FOR THE LORD'S DAY"; "[Worship leader], Worship Leader"; "[Liturgist], Liturgist"; "[Organist], Organist"; "[Service time]"; "GATHERING FOR WORSHIP"; "RECEIVING THE WORD"; "RESPONDING TO THE WORD"; "SENDING OUT TO SERVE"; "PRELUDE:", "POSTLUDE:", "'[Prelude title]'", "'[Postlude title]'", "- [Composer]"; "WELCOME AND ANNOUNCEMENTS"; the section labels in capitals ("CALL TO WORSHIP", "OPENING PRAYER", "PRAYER OF CONFESSION", "ASSURANCE OF PARDON", "PRAYER FOR ILLUMINATION", "OFFERTORY PRAYER", "*BENEDICTION"); "*HYMN:"; "*SUNG RESPONSE:" with "Gloria Patri" and "Doxology"; the Gloria Patri words; "FIRST READING:"; "NEW TESTAMENT READING:"; "[Reading text unavailable]"; "Scripture readings are from the {translation label}."; "SERMON:"; "[Sermon title]"; "*AFFIRMATION OF FAITH:" with "The Apostles' Creed" and its text; "PRAYERS OF THE PEOPLE/THE LORD'S PRAYER"; "OFFERING OUR GIFTS"; "*Congregation stands if able"; "[Liturgist]", "[Worship leader]", "[Organist]"; "[Cover picture]"; "[Street address]", "[City, State ZIP]", "[Phone]", "[Email]", "[Website]", "FB: [Facebook name]"; "ANNOUNCEMENTS"; "Ushers/Counters: [Names]"; "Deacon of the Week: [Name]"; "Coffee Hour: [Name]"; "THIS WEEK'S ACTIVITIES AT A GLANCE"; "[Activities]"; "PRAYERS AND CONCERNS"; "[Prayer concerns]"; "ITEMS FOR COLLECTION"; "[Collection items]"; the PDF title "Printed bulletin". The files use curly quotation marks and apostrophes, as the sample.
 18. **Logging** (F §2.5): one INFO line per file, `documents.printed church=<id> format=<pdf|docx> bytes=<n> ms=<n>`; never a reading, a hymn or any text.
 19. **Docs.** T6 appends "## Printed bulletin" to `docs/manual-verification.md` with items marked "(owner, after PR 1)" and "(owner, print test)" (the `##` pin in `test_slice1_docs.py` grows to eight). The runbook record is T8's.
+20. **Headings and long readings** (owner decision 1, plan review 2026-10-02; no new copy). A heading starts the next booklet page only when less than a few lines are left below it (`printed_pdf.KEEP`: 60 pt under a section heading, 47 pt under an element), so no heading ends a page alone, and a long reading or prayer starts right under its heading and runs on to the next page. The first draft kept each element with the whole next paragraph (reportlab `keepWithNext`), which moved a long reading and its heading to the next page and left up to most of a page blank.
 
 ### Risks
 - **Printing on both sides.** Layout B prints fine on one side. A church that prints both sides of each sheet must pick the printer's two-sided setting that keeps the backs upright (for landscape sheets usually "flip on short edge"); T8's print test records the setting used. A note on the card would be new copy, so any change is a follow-up for the owner.
@@ -646,7 +647,7 @@ Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 
 Expected counts after this task: backend `1342 passed, 16 skipped`; frontend `655 passed` in 83 files.
 
-### Task 2: The PDF and the Word file: `printed_pdf`, `printed_docx` (owner decision 5; answers 1, 6; S "PDF library", "Fonts", "Layout and page order"; clarifications 4, 13, 14)
+### Task 2: The PDF and the Word file: `printed_pdf`, `printed_docx` (owner decision 5; answers 1, 6; S "PDF library", "Fonts", "Layout and page order"; clarifications 4, 13, 14, 20)
 
 **Files:**
 - Create: `backend/tests/test_printed_render.py`, `backend/printed_pdf.py`, `backend/printed_docx.py`
@@ -716,17 +717,16 @@ def test_the_pdf_is_legal_landscape_sides_with_two_pages_each_in_reading_order()
     content = printed_pdf.render_pdf(service())
     assert content.startswith(b"%PDF-")
     reader = PdfReader(BytesIO(content))
-    assert [(float(p.mediabox.width), float(p.mediabox.height)) for p in reader.pages] == [(1008.0, 612.0)] * 3
+    assert [(float(p.mediabox.width), float(p.mediabox.height)) for p in reader.pages] == [(1008.0, 612.0)] * 2
     pages = halves(content)
-    # Side 1: the cover (no number), then page 1; side 2: pages 2 and 3; side 3: the
-    # announcements (page 4) and a blank right half (5 pages, nothing padded).
+    # Side 1: the cover (no number), then page 1; side 2: pages 2 and 3 (the announcements, last).
     assert pages[0].startswith("Example Church [Cover picture] Matthew 21:23-32 September 27, 2026 [Street address]")
     assert pages[0].endswith("FB: [Facebook name]")
     assert pages[1].startswith("1 THE SERVICE FOR THE LORD’S DAY Example Church [Worship leader], Worship Leader")
-    assert pages[2].startswith("2 NEW TESTAMENT READING: Matthew 21:23-32")
-    assert pages[3].startswith("3 POSTLUDE:") and pages[3].endswith("*Congregation stands if able")
-    assert pages[4].startswith("4 ANNOUNCEMENTS September 27, 2026") and pages[4].endswith("[Collection items]")
-    assert pages[5] == ""
+    # The long reading starts under its heading on page 1 and runs on to page 2 (no gap before it).
+    assert f"NEW TESTAMENT READING: Matthew 21:23-32 [Worship leader] {VERSE.strip()}" in pages[1]
+    assert pages[2].startswith("2 And he answered") and pages[2].endswith("*Congregation stands if able")
+    assert pages[3].startswith("3 ANNOUNCEMENTS September 27, 2026") and pages[3].endswith("[Collection items]")
 
 
 def test_the_pdf_prints_the_service_and_its_readings():
@@ -855,8 +855,8 @@ from xml.sax.saxutils import escape
 from reportlab.lib.colors import Color
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 from reportlab.lib.styles import ParagraphStyle
-from reportlab.platypus import (BaseDocTemplate, Flowable, Frame, FrameBreak, PageTemplate, Paragraph, Spacer,
-                                Table, TableStyle)
+from reportlab.platypus import (BaseDocTemplate, CondPageBreak, Flowable, Frame, FrameBreak, PageTemplate, Paragraph,
+                                Spacer, Table, TableStyle)
 
 import printed_bulletin as pb
 
@@ -864,6 +864,12 @@ SHEET_WIDTH = 2 * pb.PAGE_WIDTH        # legal, landscape: 14 x 8.5 in
 MARGIN = 36.0                          # 0.5 in on every side
 FOOTER = 20.0                          # the page number's baseline
 RIGHT_COLUMN = 120.0                   # the leader's column on an element line
+# A heading starts the next booklet page when less than this is left below it
+# (a section heading: itself, an element and a line; an element: itself and
+# two lines), so no heading ends a page alone and a long reading still starts
+# under its heading instead of leaving a gap (keepWithNext would move the
+# whole reading to the next page).
+KEEP = {"section": 60.0, "element": 47.0}
 
 _GRAY = Color(0.45, 0.45, 0.45)
 
@@ -921,11 +927,14 @@ def _markup(line: pb.Line) -> str:
     return "".join(out)
 
 
+def _flowables(line: pb.Line, width: float) -> list[Flowable]:
+    keep = [CondPageBreak(KEEP[line.style])] if line.style in KEEP else []
+    return [*keep, _flowable(line, width)]
+
+
 def _flowable(line: pb.Line, width: float) -> Flowable:
     paragraph = Paragraph(_markup(line), STYLES[line.style])
     if not line.right:
-        if line.style == "element":
-            paragraph.keepWithNext = 1
         return paragraph
     right = Paragraph(escape(to_pdf_text(line.right)), STYLES["right"])
     table = Table([[paragraph, right]], colWidths=[width - RIGHT_COLUMN, RIGHT_COLUMN])
@@ -933,7 +942,6 @@ def _flowable(line: pb.Line, width: float) -> Flowable:
                                ("RIGHTPADDING", (0, 0), (-1, -1), 0), ("TOPPADDING", (0, 0), (-1, -1), 0),
                                ("BOTTOMPADDING", (0, 0), (-1, -1), 0)]))
     table.spaceBefore = STYLES[line.style].spaceBefore
-    table.keepWithNext = 1
     return table
 
 
@@ -973,9 +981,9 @@ def _story(ps: pb.PrintedService, width: float) -> list[Flowable]:
         *(Paragraph(_markup(line), STYLES["contact"]) for line in contact),
         FrameBreak(),
     ]
-    story += [_flowable(line, width) for line in pb.order_of_worship(ps)]
+    story += [f for line in pb.order_of_worship(ps) for f in _flowables(line, width)]
     story.append(FrameBreak())
-    story += [_flowable(line, width) for line in pb.announcements(ps)]
+    story += [f for line in pb.announcements(ps) for f in _flowables(line, width)]
     return story
 
 
@@ -2553,7 +2561,7 @@ Expected counts after this task: backend `1357 passed, 16 skipped` on `main`; fr
 **How this plan was written (2026-10-02).** reportlab 5.0.1 and pypdf 6.19.0 were installed from PyPI into the repo's `.venv` (both `py3-none-any` wheels; reportlab pulled Pillow 12.3.0, already present, and charset-normalizer). Each task's code was built and run in a throwaway worktree of `0b7f5e2` (the repo's `.venv`, a symlink to `frontend/node_modules`); the directives were then generated from that worktree against `0b7f5e2` (a new file as **Create**, an addition at the end of a file as **Append**, every other change as **In … replace** with just enough context to occur once in the file as it stands at that point) and replayed onto a fresh worktree of the branch head by `ap2.py` (each task's test step and code step by their line ranges), running that task's commands. While building:
 - **Layout B in one pass (owner decision 5, 2026-10-02).** The first draft rendered the reading-order pages, counted them, rendered again and imposed them into folded-booklet order with pypdf (`merge_transformed_page`). For layout B reportlab draws the two pages per side itself: one page template on a legal landscape page with two 7 x 8.5 in frames, `FrameBreak` between the cover, the order of worship and the announcements, so the text flows left half, right half, next side. No count, no second pass and no padding, so pypdf left the runtime (it stays in `requirements-dev.txt` to read the PDF back in the tests). Rendering the sample takes about 0.15 s.
 - **Page numbers come first in the text.** `_TwoUp.handle_frameBegin` draws a booklet page's number when its frame begins, before the frame's content, so pypdf reads each half as "<number> <text>"; a half nothing flows into (the last right half of an odd page count) never begins, so it stays blank with no number. The render tests split each side's text into its two halves by the x position pypdf reports (`halves`).
-- **The leader's column is a one-row table** (`Table` with zero padding, the element's paragraph and a right-aligned paragraph), which keeps the two baselines together and wraps a long label under itself; `keepWithNext` keeps an element's heading with its first line.
+- **The leader's column is a one-row table** (`Table` with zero padding, the element's paragraph and a right-aligned paragraph), which keeps the two baselines together and wraps a long label under itself; a `CondPageBreak` before each heading (clarification 20) keeps a heading off the bottom of a page without moving a long reading after it.
 - **The readings' parts are cased as written** ("Isaiah 5:1-7"): `fetch_part` lowercases only its cache key, so the API test's fake matches the case sent.
 - **The church's name is read in the hymns' session** (`repos.churches.get_church`), and a church gone between the guard and the read is the guard's 403, as `usecases.church_profile` does.
 - **LibreOffice cannot open a `.docx` in this container** (any file, 5a-1's sample included: "source file could not be loaded"), so the Word file was checked by reading it back with python-docx (page size, margins, page breaks, tab stops, bold People lines, the PAGE field), not by rendering it. T8's step 3 opens it on the owner's phone.
@@ -2569,6 +2577,7 @@ Expected counts after this task: backend `1357 passed, 16 skipped` on `main`; fr
 | Owner answer or S item | Task(s) and tests |
 |---|---|
 | 1 and decision 5. Print-ready PDF, layout B (two pages to a legal landscape side in reading order, not folded or padded) | T2 `test_the_pdf_is_legal_landscape_sides_with_two_pages_each_in_reading_order` (5 pages on 3 sides, the last right half blank), `test_any_page_count_takes_half_as_many_sides_rounded_up_with_the_announcements_last` (6 and 9 pages); T8 steps 1 and the print test |
+| Clarification 20 (headings stay with their text; a long reading starts under its heading) | T2 `test_the_pdf_is_legal_landscape_sides_with_two_pages_each_in_reading_order` (the New Testament reading starts on page 1 and runs on to page 2) |
 | 1. An editable Word version | T2 `test_the_word_file_is_the_same_booklet_in_reading_order`; T3 `test_the_word_file_downloads_too`; T5 "downloads the PDF … names the Word version itself …"; T8 step 3 |
 | 2. Standing and weekly fields (PR 2): placeholders now, the sample's leaders and stars as defaults | T1 `test_the_order_of_worship_follows_the_outline_with_the_sample_s_parts`, `test_each_element_prints_as_the_sample`, `test_the_cover_and_the_back_page`; clarifications 7-9, 15 |
 | 3. Announcements (PR 2) | the back page's placeholders (T1 `test_the_cover_and_the_back_page`); S "Data model" |
