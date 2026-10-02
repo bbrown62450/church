@@ -30,7 +30,7 @@ import type {
   Translations,
 } from "@/lib/api/types";
 import { effectivePicks, effectiveTranslation } from "@/lib/draft/readings";
-import { SECTION_KEYS, type DraftV1, type HymnPick, type SectionKey } from "@/lib/draft/schema";
+import { SECTION_KEYS, type DraftV1, type HymnPick, type LiturgyCard, type SectionKey } from "@/lib/draft/schema";
 import { cleanRefs, clipChars, MAX_REF_LENGTH, MAX_REFS } from "@/lib/hymns/match-request";
 import { passageText } from "@/lib/queries/passages";
 
@@ -98,16 +98,34 @@ export function sermonText(ref: string, passage: Passage | undefined): SermonTex
   return { ref: clipChars(ref.trim(), MAX_REF_LENGTH), text: clipChars(text, MAX_SERMON_TEXT) };
 }
 
+/** Streamlit's default Benediction, stored as this one word in services saved there (app.py `DEFAULT_BENEDICTION`). */
+const STREAMLIT_BENEDICTION = "halverson";
+
+/**
+ * A Benediction that is the church's default, whatever its origin (slice
+ * 5a-3): one that follows the default (origin "default"), or whose text is
+ * the church's current default (trimmed, exactly) or Streamlit's "Halverson"
+ * (any case). A save, or opening a saved service, makes the default text
+ * the service's own (origin "archive"), and it is still the church's text.
+ */
+export function isDefaultBenediction(card: LiturgyCard, defaultBenediction: string): boolean {
+  if (card.origin === "default") return true;
+  const text = card.text.trim();
+  return (text !== "" && text === defaultBenediction.trim()) || text.toLowerCase() === STREAMLIT_BENEDICTION;
+}
+
 /**
  * What "Review service" sends: every switched-on card with text after
- * trimming, in section order, except a Benediction that follows the church
- * default (origin "default"; owner, 2026-10-02): the church's fixed text is
- * not the member's to change, so it gets no notes and no shared-opening count.
+ * trimming, in section order, except a Benediction that is the church's
+ * default (`isDefaultBenediction`; owner, 2026-10-02, and the 5a-3 review):
+ * the church's fixed text is not the member's to change, so it gets no notes
+ * and no shared-opening count. `defaultBenediction` is the church's current
+ * default (`useDraft().defaultBenediction`).
  */
-export function reviewTargets(draft: DraftV1): SectionKey[] {
+export function reviewTargets(draft: DraftV1, defaultBenediction: string): SectionKey[] {
   return SECTION_KEYS.filter((key) => {
     const card = draft.liturgy.cards[key];
-    if (key === "benediction" && card.origin === "default") return false;
+    if (key === "benediction" && isDefaultBenediction(card, defaultBenediction)) return false;
     return card.enabled && card.text.trim() !== "";
   });
 }

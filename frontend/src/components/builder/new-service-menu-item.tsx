@@ -6,9 +6,8 @@ import { useState, type ReactNode } from "react";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { useDraft } from "@/lib/draft/context";
-import { isDirty } from "@/lib/draft/fingerprint";
 import { freshDraft, type DraftChurch } from "@/lib/draft/schema";
-import { withoutTranslation } from "@/lib/draft/status";
+import { isDirty, withoutTranslation } from "@/lib/draft/status";
 import { useMeContext } from "@/lib/me-context";
 
 /**

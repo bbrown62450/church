@@ -1,22 +1,28 @@
 /**
- * Step status, "nothing to lose" and "Still needed" (F §4.7; S "status.ts").
- * Pure functions of the draft; the shell decides what an unshipped step shows.
+ * Step status, "nothing to lose", unsaved changes, the archive status and
+ * "Still to do" (F §4.7; S "status.ts"). Pure functions of the draft; the
+ * shell decides what an unshipped step shows.
  */
 import { inSupportedRange, isValidDateIso } from "@/lib/dates";
 import { DEFAULT_ENABLED, SECTION_LABELS } from "@/lib/liturgy/sections";
 import { liturgyCounts } from "@/lib/liturgy/summary";
 import { cleanLines } from "@/lib/scripture-refs";
 
+import { fingerprint } from "./fingerprint";
+import { draftToServicePayload } from "./mapping";
 import { SECTION_KEYS, SLOTS, type DraftV1, type Slot, type StepId } from "./schema";
 import { SHIPPED_STEPS } from "./steps";
+
+/** Review's status (S `reviewStatus`): never saved, saved as it is now, or changed since the last save or open. */
+export type ReviewStatus = "not_in_archive" | "saved" | "unsaved_changes";
 
 export type StepStatus =
   | { kind: "complete" }
   | { kind: "incomplete"; done: number; total: number }
   /** A step whose content has not shipped: the muted "Soon". */
   | { kind: "soon" }
-  /** Review before slice 5a (and a draft that was never saved). */
-  | { kind: "not_in_archive" };
+  /** Review: "Not in archive", "Saved" (with the ✓ of a complete step) or "Unsaved changes". */
+  | { kind: ReviewStatus };
 
 function counted(done: number, total: number): StepStatus {
   return done === total ? { kind: "complete" } : { kind: "incomplete", done, total };
@@ -60,15 +66,15 @@ export function hasServiceDate(draft: DraftV1): boolean {
  * characters; more than 20 readings or a line over 200) does not count, so
  * the step is never "Complete" with an error on screen (owner answer E,
  * 2026-09-29); hymns the three slots; liturgy the enabled cards that
- * have text. Review reads "Not in archive" until 5a adds "Saved" and
- * "Unsaved changes". An unshipped step (other than Review) is "Soon".
+ * have text. Review is `reviewStatus` once it ships (slice 5a-3), and "Not
+ * in archive" before. An unshipped step (other than Review) is "Soon".
  */
 export function stepStatus(
   draft: DraftV1,
   step: StepId,
   shipped: ReadonlySet<StepId> = SHIPPED_STEPS,
 ): StepStatus {
-  if (step === "review") return { kind: "not_in_archive" };
+  if (step === "review") return { kind: shipped.has("review") ? reviewStatus(draft) : "not_in_archive" };
   if (!shipped.has(step)) return { kind: "soon" };
   if (step === "readings") {
     const r = draft.readings;
@@ -124,6 +130,33 @@ export function isPristine(draft: DraftV1): boolean {
   );
 }
 
+/** Never saved: dirty means not pristine. Saved or opened: the payload differs from what was saved (moved here from `fingerprint.ts`, slice 5a-3). */
+export function isDirty(draft: DraftV1): boolean {
+  if (draft.saved_fingerprint === null) return !isPristine(draft);
+  return fingerprint(draftToServicePayload(draft)) !== draft.saved_fingerprint;
+}
+
+/**
+ * Review's archive status (S `reviewStatus`), shown by the step bar, the
+ * summary and the Save card: "not_in_archive" until the draft is saved or
+ * opened from the archive, then "saved" or "unsaved_changes".
+ */
+export function reviewStatus(draft: DraftV1): ReviewStatus {
+  if (draft.editing === null) return "not_in_archive";
+  return isDirty(draft) ? "unsaved_changes" : "saved";
+}
+
+/**
+ * What Save does (S `saveMode`): "new" for a draft not in the archive,
+ * "update" for a saved service whose date is unchanged, "copy" (Save as new
+ * service) when the date differs from the saved one, an undated saved
+ * service included (parity: app.py:1029-1035).
+ */
+export function saveMode(draft: DraftV1): "new" | "update" | "copy" {
+  if (draft.editing === null) return "new";
+  return draft.readings.date_iso === draft.editing.date_iso ? "update" : "copy";
+}
+
 /**
  * A copy of the draft with the translation override cleared, for the checks
  * that keep the translation and so never count it as something to lose:
@@ -147,11 +180,12 @@ export type NeededItem = {
 };
 
 /**
- * What Review lists under "Still needed", from shipped steps only: the
- * readings' gaps (2c), then one row per empty hymn slot in slot order (3b,
- * F §4.7's wording), then one row per switched-on liturgy card with no text,
- * linking to that card, and "No sermon title" (4b, the wording 5a's Review
- * checklist reuses).
+ * What Review lists under "Still to do", from shipped steps only: the
+ * readings' gaps (2c), then per hymn slot in slot order an empty slot (3b,
+ * F §4.7's wording) or a hymn that is not in the hymnal, as an opened saved
+ * service can hold (5a-3, S "Review checklist"), then one row per
+ * switched-on liturgy card with no text, linking to that card, and "No
+ * sermon title" (4b).
  */
 export function stillNeeded(draft: DraftV1, shipped: ReadonlySet<StepId> = SHIPPED_STEPS): NeededItem[] {
   const items: NeededItem[] = [];
@@ -166,8 +200,11 @@ export function stillNeeded(draft: DraftV1, shipped: ReadonlySet<StepId> = SHIPP
   }
   if (shipped.has("hymns")) {
     for (const slot of SLOTS) {
-      if (draft.hymns.slots[slot] !== null) continue;
-      items.push({ step: "hymns", message: `No ${SLOT_NAMES[slot]} hymn`, action: "Choose one" });
+      const pick = draft.hymns.slots[slot];
+      if (pick === null) items.push({ step: "hymns", message: `No ${SLOT_NAMES[slot]} hymn`, action: "Choose one" });
+      else if (pick.hymn_id === null) {
+        items.push({ step: "hymns", message: `${pick.title} isn't in your hymnal`, action: "Choose a replacement" });
+      }
     }
   }
   if (shipped.has("liturgy")) {

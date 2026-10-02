@@ -13,6 +13,7 @@ import type { DraftV1, SectionKey } from "@/lib/draft/schema";
 import { reviewNote, reviewResult, testDraft } from "@/test/fixtures";
 
 import { applyGenerated, clearCard, editCardText, restoreChurchDefault } from "./cards";
+import { DEFAULT_BENEDICTION_FALLBACK } from "./defaults";
 import {
   acrossNote,
   acrossTargets,
@@ -176,7 +177,7 @@ describe("Revise the other prayers (reviewer follow-up 2)", () => {
     const keys: SectionKey[] = ["call_to_worship", "opening_prayer", "prayer_of_confession"];
     for (const { texts, words } of fixture.groups) {
       const d = texts.reduce((acc, t, i) => withText(acc, keys[i], t, "typed"), testDraft());
-      const found = acrossTargets(d, words ?? openingWords(texts[0]).join(" "));
+      const found = acrossTargets(d, words ?? openingWords(texts[0]).join(" "), DEFAULT_BENEDICTION_FALLBACK);
       expect(found === null ? null : [found.first, ...found.others], texts.join(" / ")).toEqual(words === null ? null : keys.slice(0, texts.length));
     }
     const text = fixture.opening_note.replace("{words}", "Gracious God");
@@ -212,13 +213,13 @@ describe("Revise the other prayers (reviewer follow-up 2)", () => {
     d = { ...d, liturgy: { ...d.liturgy, cards: { ...d.liturgy.cards, prayer_of_confession: { ...d.liturgy.cards.prayer_of_confession, enabled: false } } } };
     d = withText(d, "assurance", "People: Gracious   God, you forgive.", "archive");
     d = withText(d, "benediction", "Gracious God, go with us.", "default");
-    expect(acrossTargets(d, "Gracious God")).toEqual({ words: "Gracious God", first: "call_to_worship", others: ["opening_prayer", "assurance"] });
-    expect(acrossTargets(d, "Holy One")).toBeNull();
+    expect(acrossTargets(d, "Gracious God", DEFAULT_BENEDICTION_FALLBACK)).toEqual({ words: "Gracious God", first: "call_to_worship", others: ["opening_prayer", "assurance"] });
+    expect(acrossTargets(d, "Holy One", DEFAULT_BENEDICTION_FALLBACK)).toBeNull();
     // Only the first and a Benediction following the default share it: the default is not reviewed (owner, 2026-10-02), so no shared opening.
     const left = withText(withText(d, "opening_prayer", "Holy One, hear us.", "ai"), "assurance", "", "empty");
-    expect(acrossTargets(left, "Gracious God")).toBeNull();
+    expect(acrossTargets(left, "Gracious God", DEFAULT_BENEDICTION_FALLBACK)).toBeNull();
     // Once edited, the Benediction is typed text and is revised; a lone opening is no shared one.
-    expect(acrossTargets(withText(left, "benediction", "Gracious God, go with us. Amen.", "typed"), "gracious god")?.others).toEqual(["benediction"]);
-    expect(acrossTargets(withText(left, "benediction", "Go in peace.", "typed"), "Gracious God")).toBeNull();
+    expect(acrossTargets(withText(left, "benediction", "Gracious God, go with us. Amen.", "typed"), "gracious god", DEFAULT_BENEDICTION_FALLBACK)?.others).toEqual(["benediction"]);
+    expect(acrossTargets(withText(left, "benediction", "Go in peace.", "typed"), "Gracious God", DEFAULT_BENEDICTION_FALLBACK)).toBeNull();
   });
 });

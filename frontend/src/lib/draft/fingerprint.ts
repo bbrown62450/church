@@ -1,11 +1,10 @@
 /**
- * Unsaved-changes detection (F §4.6 "Unsaved changes"; S "fingerprint.ts").
- * `fingerprint` is 32-bit FNV-1a over the UTF-8 bytes of a stable JSON
- * string (object keys sorted at every level), as 8 hex digits.
+ * The fingerprint behind unsaved-changes detection (F §4.6 "Unsaved changes";
+ * S "fingerprint.ts"): 32-bit FNV-1a over the UTF-8 bytes of a stable JSON
+ * string (object keys sorted at every level), as 8 hex digits. `isDirty`,
+ * which compares it, is in `status.ts` (slice 5a-3), beside the Review
+ * statuses that read it.
  */
-import { draftToServicePayload } from "./mapping";
-import type { DraftV1 } from "./schema";
-import { isPristine } from "./status";
 
 function stable(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(stable);
@@ -38,10 +37,4 @@ export function fnv1a32(text: string): string {
 
 export function fingerprint(payload: unknown): string {
   return fnv1a32(stableStringify(payload));
-}
-
-/** Never saved: dirty means not pristine. Saved or loaded: the payload differs from what was saved. */
-export function isDirty(draft: DraftV1): boolean {
-  if (draft.saved_fingerprint === null) return !isPristine(draft);
-  return fingerprint(draftToServicePayload(draft)) !== draft.saved_fingerprint;
 }

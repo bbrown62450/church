@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { lectionary, testDraft } from "@/test/fixtures";
 
+import { fingerprint } from "./fingerprint";
+import { draftToServicePayload } from "./mapping";
 import {
   applyReadingSet,
   chooseReadingSet,
@@ -12,7 +14,7 @@ import {
   setTranslation,
 } from "./readings";
 import type { DraftV1, HymnPick, StepId } from "./schema";
-import { isPristine, stepStatus, stillNeeded, withoutTranslation } from "./status";
+import { isDirty, isPristine, reviewStatus, saveMode, stepStatus, stillNeeded, withoutTranslation } from "./status";
 import { SHIPPED_STEPS, STEPS, stepById, stepFromPath } from "./steps";
 import { DEFAULT_BENEDICTION_FALLBACK } from "@/lib/liturgy/defaults";
 
@@ -32,14 +34,14 @@ function withCard(key: keyof DraftV1["liturgy"]["cards"], card: Partial<DraftV1[
 }
 
 describe("steps (S steps.ts)", () => {
-  it("lists the four steps in order, ships Date & readings (2c), Hymns (3b) and Liturgy (4b), and reads a step from its path", () => {
+  it("lists the four steps in order, ships all four (2c, 3b, 4b and Review in 5a-3), and reads a step from its path", () => {
     expect(STEPS.map((s) => [s.number, s.label, s.href, s.previous, s.next])).toEqual([
       [1, "Date & readings", "/builder/readings", null, "hymns"],
       [2, "Hymns", "/builder/hymns", "readings", "liturgy"],
       [3, "Liturgy", "/builder/liturgy", "hymns", "review"],
       [4, "Review & send", "/builder/review", "liturgy", null],
     ]);
-    expect([...SHIPPED_STEPS]).toEqual(["readings", "hymns", "liturgy"]);
+    expect([...SHIPPED_STEPS]).toEqual(["readings", "hymns", "liturgy", "review"]);
     expect(stepById("liturgy").label).toBe("Liturgy");
     expect(stepFromPath("/builder/hymns")).toBe("hymns");
     expect(stepFromPath("/builder/review/")).toBe("review");
@@ -190,7 +192,7 @@ describe("stillNeeded (S Review \"Still needed\")", () => {
     expect(stillNeeded(applyReadingSet(testDraft(), lectionary("2026-10-04"), 0), READINGS)).toEqual([]);
   });
 
-  it("counts the hymns step n of 3 and lists each empty slot once it ships (slice 3b)", () => {
+  it("counts the hymns step n of 3 and lists each empty slot (slice 3b) and a hymn not in the hymnal (5a-3)", () => {
     const filled = applyReadingSet(testDraft(), lectionary("2026-10-04"), 0);
     const withSlots = (slots: Partial<DraftV1["hymns"]["slots"]>) => ({
       ...filled,
@@ -211,7 +213,10 @@ describe("stillNeeded (S Review \"Still needed\")", () => {
       { step: "hymns", message: "No Opening hymn", action: "Choose one" },
       { step: "hymns", message: "No Closing hymn", action: "Choose one" },
     ]);
-    expect(stillNeeded(all, hymnsShipped)).toEqual([]);
+    expect(stillNeeded(all, hymnsShipped)).toEqual([
+      { step: "hymns", message: "Amazing Grace isn't in your hymnal", action: "Choose a replacement" },
+    ]);
+    expect(stillNeeded(withSlots({ opening: HYMN, response: HYMN, closing: HYMN }), hymnsShipped)).toEqual([]);
     expect(stillNeeded(filled, READINGS)).toEqual([]); // before 3b: no hymn rows
     expect(stillNeeded(filled, hymnsShipped).some((item) => item.step === "liturgy")).toBe(false);
   });
@@ -246,5 +251,36 @@ describe("stillNeeded (S Review \"Still needed\")", () => {
     ]);
     const titled = withLiturgy({ sermon_title: "Living Water" });
     expect(stillNeeded(titled).some((item) => item.message === "No sermon title")).toBe(false);
+  });
+});
+
+describe("the archive status and what Save does (slice 5a-3; S status.ts)", () => {
+  const saved = (d: DraftV1, dateIso: string | null = d.readings.date_iso): DraftV1 => ({
+    ...d,
+    editing: { service_id: "s1", saved_at: "2026-10-01T14:42:00+00:00", date_iso: dateIso },
+    saved_fingerprint: fingerprint(draftToServicePayload(d)),
+  });
+
+  it("reviewStatus is not in the archive, saved, or changed since; the step bar shows it once Review ships", () => {
+    const fresh = testDraft();
+    expect(reviewStatus(fresh)).toBe("not_in_archive");
+    expect(reviewStatus(editOccasion(fresh, "Harvest"))).toBe("not_in_archive"); // never saved
+    const clean = saved(editOccasion(fresh, "Harvest"));
+    expect(reviewStatus(clean)).toBe("saved");
+    expect(isDirty(clean)).toBe(false);
+    expect(reviewStatus(editOccasion(clean, "Harvest Home"))).toBe("unsaved_changes");
+    expect(reviewStatus(editOccasion(clean, "Harvest  "))).toBe("saved"); // trimmed as the server trims it
+    expect(stepStatus(clean, "review")).toEqual({ kind: "saved" });
+    expect(stepStatus(editOccasion(clean, "Harvest Home"), "review")).toEqual({ kind: "unsaved_changes" });
+    expect(stepStatus(fresh, "review")).toEqual({ kind: "not_in_archive" });
+    expect(stepStatus(clean, "review", READINGS)).toEqual({ kind: "not_in_archive" }); // before 5a-3
+  });
+
+  it("saveMode saves new, saves changes on the saved date, and saves a copy on another date or for an undated service", () => {
+    const d = testDraft();
+    expect(saveMode(d)).toBe("new");
+    expect(saveMode(saved(d))).toBe("update");
+    expect(saveMode(setDate(saved(d), "2026-10-11"))).toBe("copy");
+    expect(saveMode(saved(d, null))).toBe("copy"); // a saved service with no date
   });
 });

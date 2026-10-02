@@ -22,9 +22,9 @@ export const REVIEW_BUTTON_ID = "review-service";
  * review starts or ends.
  */
 export function ReviewButton() {
-  const { draft } = useDraft();
+  const { draft, defaultBenediction } = useDraft();
   const review = useLiturgyReview();
-  const ready = reviewTargets(draft).length > 0;
+  const ready = reviewTargets(draft, defaultBenediction).length > 0;
   return (
     <Button
       id={REVIEW_BUTTON_ID}

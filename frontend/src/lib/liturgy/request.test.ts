@@ -8,11 +8,13 @@
 import { describe, expect, it } from "vitest";
 
 import type { Passage } from "@/lib/api/types";
+import { markSaved } from "@/lib/draft/mapping";
 import { editScriptureLines, setPick, setTranslation } from "@/lib/draft/readings";
 import type { DraftV1, HymnPick } from "@/lib/draft/schema";
-import { hymnId, testDraft, translations } from "@/test/fixtures";
+import { hymnId, savedService, testDraft, translations } from "@/test/fixtures";
 
 import { editCardText } from "./cards";
+import { DEFAULT_BENEDICTION_FALLBACK } from "./defaults";
 import {
   buildGenerateRequest,
   buildReviewRequest,
@@ -134,7 +136,7 @@ describe("buildReviewRequest and buildReviseRequest (the service reviewer, R API
     d = withCard(d, "prayer_of_confession", { text: "Merciful God", origin: "archive", enabled: false }); // off: not sent
     d = withCard(d, "prayers_of_the_people", { text: "x".repeat(20_005), origin: "ai", enabled: true });
     d = withCard(d, "assurance", { text: "Leader: Friends,", origin: "empty" });             // defensive: never "empty"
-    const keys = reviewTargets(d);
+    const keys = reviewTargets(d, DEFAULT_BENEDICTION_FALLBACK);
     expect(keys).toEqual(["call_to_worship", "assurance", "prayers_of_the_people"]); // the default Benediction: not reviewed
     const sermon = { ref: "Matthew 21:33-46", text: "Listen to another parable." };
     const body = buildReviewRequest(d, keys, sermon);
@@ -155,12 +157,28 @@ describe("buildReviewRequest and buildReviseRequest (the service reviewer, R API
 
   it("leaves out a Benediction following the church default; a typed, AI or saved one is reviewed (owner, 2026-10-02)", () => {
     const d = withCard(withReadings(OCT_4), "benediction", { text: "Go in peace.", origin: "default", enabled: true });
-    expect(reviewTargets(d)).toEqual([]); // the only card: nothing to review
+    expect(reviewTargets(d, DEFAULT_BENEDICTION_FALLBACK)).toEqual([]); // the only card: nothing to review
     for (const origin of ["typed", "ai", "archive"] as const) {
       const other = withCard(d, "benediction", { origin });
-      expect(reviewTargets(other)).toEqual(["benediction"]);
-      expect(buildReviewRequest(other, reviewTargets(other), null).cards).toEqual([{ section: "benediction", origin, text: "Go in peace." }]);
+      expect(reviewTargets(other, DEFAULT_BENEDICTION_FALLBACK)).toEqual(["benediction"]);
+      expect(buildReviewRequest(other, reviewTargets(other, DEFAULT_BENEDICTION_FALLBACK), null).cards).toEqual([
+        { section: "benediction", origin, text: "Go in peace." },
+      ]);
     }
+  });
+
+  it("leaves out a saved Benediction that is the church default or Streamlit's \"Halverson\"; an edited one is reviewed (5a-3)", () => {
+    const saved = markSaved(withReadings(OCT_4), savedService(), "0000abcd");
+    expect(saved.liturgy.cards.benediction).toEqual({ enabled: true, text: DEFAULT_BENEDICTION_FALLBACK, origin: "archive" });
+    expect(reviewTargets(saved, DEFAULT_BENEDICTION_FALLBACK)).toEqual([]); // the church's text, now the service's own: not sent
+    expect(reviewTargets(withCard(saved, "benediction", { text: `  ${DEFAULT_BENEDICTION_FALLBACK}\n` }), DEFAULT_BENEDICTION_FALLBACK)).toEqual([]);
+    const edited = editCardText(saved, "benediction", `${DEFAULT_BENEDICTION_FALLBACK} Amen.`);
+    expect(reviewTargets(edited, DEFAULT_BENEDICTION_FALLBACK)).toEqual(["benediction"]);
+    expect(reviewTargets(saved, "The Lord bless you and keep you.")).toEqual(["benediction"]); // the church's default changed since
+    for (const text of ["Halverson", " halverson "]) {
+      expect(reviewTargets(withCard(saved, "benediction", { text }), DEFAULT_BENEDICTION_FALLBACK)).toEqual([]);
+    }
+    expect(reviewTargets(withCard(saved, "benediction", { text: "Halverson, adapted" }), DEFAULT_BENEDICTION_FALLBACK)).toEqual(["benediction"]);
   });
 
   it("sends one card's text and its remaining notes to revise, with the same context", () => {

@@ -32,6 +32,8 @@ export type DraftApi = {
   /** The latest draft now, for code that runs outside a render (slice 4b's generation provider). */
   peek: () => DraftV1;
   persistence: Persistence;
+  /** The church's current default Benediction (its own, else the fallback), as the store applies it. */
+  defaultBenediction: string;
 };
 
 export const DRAFT_MESSAGES = {
@@ -104,8 +106,9 @@ export function DraftProvider({
       replace: store.replace,
       setLastStep: store.setLastStep,
       peek,
+      defaultBenediction,
     }),
-    [snapshot, store, peek],
+    [snapshot, store, peek, defaultBenediction],
   );
   return <DraftContext value={value}>{children}</DraftContext>;
 }

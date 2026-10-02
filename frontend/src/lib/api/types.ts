@@ -62,6 +62,17 @@ export type SectionError = components["schemas"]["SectionError"];
 export type SermonText = components["schemas"]["SermonText"];
 export type HymnRef = components["schemas"]["HymnRef"];
 
+/**
+ * `/services` (slice 5a-2): a saved service as the builder opens it (`GET`,
+ * `POST`, `PUT`), one saved slot's hymn, one row of the list, a page of rows,
+ * and the answer to a delete.
+ */
+export type ServiceOut = components["schemas"]["ServiceOut"];
+export type ArchivedHymn = components["schemas"]["ArchivedHymn"];
+export type ServiceSummary = components["schemas"]["ServiceSummary"];
+export type ServicePage = components["schemas"]["Page_ServiceSummary_"];
+export type DeletedOut = components["schemas"]["DeletedOut"];
+
 /** `POST /liturgy/review` (the service reviewer): every switched-on card with text, and the notes back. */
 export type ReviewBody = components["schemas"]["ReviewIn"];
 export type ReviewCardBody = components["schemas"]["ReviewCardIn"];
