@@ -1,0 +1,13 @@
+{
+  "_about": "The Word files' date line and filenames (slice 5a spec, service_output; F §1.9): the date as Streamlit printed it ('%B %d, %Y', day zero-padded, English months whatever the locale) and worship_{date}.docx or worship_pastor_{date}.docx with ', ' and ' ' turned into '_'. backend/service_output runs every case (test_service_output.py); frontend/src/lib/download.ts does too (download.test.ts).",
+  "cases": [
+    {"date": "2026-10-04", "variant": "bulletin", "display": "October 04, 2026", "filename": "worship_October_04_2026.docx"},
+    {"date": "2026-10-04", "variant": "pastor", "display": "October 04, 2026", "filename": "worship_pastor_October_04_2026.docx"},
+    {"date": "2026-10-11", "variant": "bulletin", "display": "October 11, 2026", "filename": "worship_October_11_2026.docx"},
+    {"date": "2026-12-25", "variant": "pastor", "display": "December 25, 2026", "filename": "worship_pastor_December_25_2026.docx"},
+    {"date": "2027-01-03", "variant": "bulletin", "display": "January 03, 2027", "filename": "worship_January_03_2027.docx"},
+    {"date": "2027-02-28", "variant": "bulletin", "display": "February 28, 2027", "filename": "worship_February_28_2027.docx"},
+    {"date": "2027-05-09", "variant": "pastor", "display": "May 09, 2027", "filename": "worship_pastor_May_09_2027.docx"},
+    {"date": "2028-09-03", "variant": "bulletin", "display": "September 03, 2028", "filename": "worship_September_03_2028.docx"}
+  ]
+}
