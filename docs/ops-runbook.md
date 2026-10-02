@@ -486,6 +486,26 @@ check on a phone. No token, email address or church id is recorded here.
 | 3. The note | The note went once both revisions came back; after the Undo, Review service brought it back, and the confirm then named only the Opening Prayer | 2026-10-01 |
 | Follow-ups | Open question for the owner (needs copy): screen readers are not told why "Revise the other prayers" is off while a prayer is busy, nothing is announced when a batch ends or stops, and a batch that stops for a reason other than a 429 says nothing about why. Next: 5a (saving and archiving services and the Word files), Voices of the Church (decisions in `docs/superpowers/specs/2026-10-01-voices-of-the-church-decisions.md`), 6a. Still open: first-line matching research (Hymnary.org), the NUL-character 500 (app-wide), and the two slice 1 test churches (kept for now, owner) | 2026-10-01 |
 
+### Slice 5a-1 record
+
+Slice 5a-1 (Word downloads: the bulletin copy and the pastor's copy built by
+the server from the draft, on the Review & send step) merged as PR #40, the
+first of three 5a PRs. No database change and no new variable, so production
+stays at `0004_invites_reusable` (head). The Word files keep Streamlit's
+layout with "First Reading", hymn headings by slot and no "#None"; the
+built-in Benediction is now the full Halverson text (owner, 2026-10-02). The
+owner's check was a four-step guided check on a phone. No token, email
+address or church id is recorded here.
+
+| Step | Result | Date |
+|---|---|---|
+| Merge | PR #40 merged 12:57 UTC (08:57 Eastern), merge commit `cc442fd` | 2026-10-02 |
+| 1. Bulletin copy (phone) | Downloaded after waiting on the share sheet about a minute; title, occasion, date ("October 04, 2026" style), "First Reading" and the sermon title right; Prayers of the People left out | 2026-10-02 |
+| 2. Pastor's copy | Included Prayers of the People; the bulletin copy still left it out; with the prayers off, the card said "Same as the bulletin copy for this service. Prayers of the People is empty or turned off." | 2026-10-02 |
+| 3. Hymn headings | With the Opening hymn cleared, "Second Hymn" printed and no "First Hymn"; no "#None" | 2026-10-02 |
+| 4. Layout | The step fits the phone with no sideways scrolling; the buttons are full width and easy to tap; the archive note showed. The comparison with an old Streamlit file was not done (owner: not needed) | 2026-10-02 |
+| Follow-ups | Next: a small change so Review service leaves out a Benediction that follows the church default (owner, 2026-10-02). Then 5a-2 (saving, migration `0005_services_extras`; deleting a service recalculates hymn use, Streamlit retired), 5a-3 (Save card, Services page), the printed bulletin (`docs/superpowers/specs/2026-10-02-printed-bulletin-idea.md`), Voices of the Church, 6a. Hymn use is not recorded until 5a-3's Save. Still open: the screen-reader copy for "Revise the other prayers", first-line matching research (Hymnary.org), the NUL-character 500 outside `/documents`, and the two slice 1 test churches (kept for now, owner) | 2026-10-02 |
+
 ## Backups
 
 - **Workflow:** `.github/workflows/backup.yml` (`db-backup`). Daily at 08:37 UTC,
