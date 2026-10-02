@@ -4,7 +4,7 @@
 
 **Goal:** Ship the third and last of the three 5a PRs (owner answer 1, 2026-10-01): **saving from the app, and the Services page.** After it merges, step 4 of the Service Builder (`/builder/review`) shows, top to bottom, a banner while the draft is a saved service, "Still to do" (4b's "Still needed", renamed, with "Everything's ready." when nothing is missing), an **Archive** card (where the draft stands, **Save to archive** / **Save changes** / **Save as new service**, **Start a new service**, and a dialog when someone else saved first), and the **Word documents** card from 5a-1. Saving records the service's hymns as used for its date (5a-2's server rule), so the Hymns step's "Used …" marks and the 12-week exclusion see services built in the app from then on. A new **Services** item in the menu lists the church's saved services, 20 at a time, newest service date first; a member opens one into the builder (after "Replace your unsaved draft?" when there is something to lose) or deletes one after confirming. The step bar's Review item and the summary's status line show "Saved" or "Unsaved changes". **Frontend only**: no backend change (5a-2's `/services` routes already do everything this needs), no migration (production stays at `0005_services_extras`), no new variable; production Streamlit (branch `streamlit-frozen`) is untouched.
 
-**Architecture:** Bottom up, all in `frontend/src`. The draft becomes version 2 (`editing.date_iso`, `save_key_fingerprint`) with a tested migration; `lib/draft/save-key.ts` holds the save key rule; the store writes a replaced draft at once. `lib/draft/mapping.ts` gets its final form: `draftToServicePayload` (trimmed as the server trims), `serviceToDraft` and `markSaved`; `status.ts` gains `isDirty` (moved from `fingerprint.ts`), `reviewStatus`, `saveMode` and the "not in your hymnal" row, and `"review"` joins `SHIPPED_STEPS`. `lib/queries/services.ts` has `useServices`, `useSaveService` (PUT with `If-Match`, POST with the draft's key, the deleted-copy fallback, one retry after `idempotency_mismatch`), `useOpenService` and `useDeleteService`; the save sends the Word downloads' body (`serviceBody`), which stays within the server's limits. Review gains `EditingBanner`, `SaveCard` and `ConflictDialog`; `/services` renders `ServicesPage` with its own draft provider and `ServiceRow`; `AppNav` gains "Services".
+**Architecture:** Bottom up, all in `frontend/src`. The draft becomes version 2 (`editing.date_iso`, `save_key_fingerprint`) with a tested migration; `lib/draft/save-key.ts` holds the save key rule; the store writes a replaced draft at once. `lib/draft/mapping.ts` gets its final form: `draftToServicePayload` (trimmed as the server trims), `serviceToDraft` and `markSaved`; `status.ts` gains `isDirty` (moved from `fingerprint.ts`), `reviewStatus`, `saveMode` and the "not in your hymnal" row, and `"review"` joins `SHIPPED_STEPS`. `lib/queries/services.ts` has `useServices`, `useSaveService` (PUT with `If-Match`, POST with the draft's key, the deleted-copy fallback, one retry after `idempotency_mismatch`), `useOpenService` and `useDeleteService`; the save sends the Word downloads' body (`serviceBody`), which stays within the server's limits. The store never adopts a draft an older app wrote and reads storage once its provider mounts; "Review service" skips a Benediction that is the church's default whatever its origin (`reviewTargets(draft, defaultBenediction)`, with `defaultBenediction` from `useDraft()`). Review gains `EditingBanner`, `SaveCard` and `ConflictDialog`; `/services` renders `ServicesPage` with its own draft provider and `ServiceRow`; `AppNav` gains "Services".
 
 **Tech Stack:** Next 16, React 19, TypeScript 5, Base UI, TanStack Query 5, zod, sonner, Vitest 3 with Testing Library. The backend (Python 3.11, FastAPI, pytest) is only run as a check.
 
@@ -25,14 +25,14 @@
 - Run commands from the repo root; the working directory resets between commands. Frontend as `(cd frontend && …)`. No foreground `sleep`.
 - Frontend: one or more files `(cd frontend && npx vitest run <paths> 2>&1 | grep -E "^ +× |\[ src/|Tests ")` (a file that cannot load shows as `FAIL … [ src/… ]`; the `×` lines may come in another order than quoted, since Vitest reports files as they finish); the suite `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")` (a failure is named); then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`. Backend, as a check only: `.venv/bin/python -m pytest -q | tail -1`.
 - The API does not change: never run `export_openapi.py` or `gen:api` to change anything (T7 runs them to show nothing changes).
-- Branch `claude/slice-2-plan-4q33le`, at `a789fb8` plus this plan's commits (`WIP plan: slice 5a-3` …, then `Plan: slice 5a-3, Save and the Services page (owner answers 2026-10-01/02)` and its follow-up) and the two idea-doc commits, then T1-T6. Stage files by name (paths with parentheses in single quotes); `.claude/` stays untracked.
+- Branch `claude/slice-2-plan-4q33le`, at `a789fb8` plus this plan's commits (`WIP plan: slice 5a-3` …, then `Plan: slice 5a-3, Save and the Services page (owner answers 2026-10-01/02)` and its two follow-ups, the second `Plan: slice 5a-3 review fixes (owner answers 2026-10-02)`) and the two idea-doc commits, then T1-T6. Stage files by name (paths with parentheses in single quotes); `.claude/` stays untracked.
 - `main` is protected (`backend`, `backend-postgres`, `frontend`, up to date). Merge only with `gh pr merge <N> --merge -R bbrown62450/church`, only on the owner's explicit yes.
 - Every commit message has a subject, a body and, as its last paragraph (a separate `-m`), these two lines:
   `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`
   `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
 - TDD: write the failing test first and see it fail as quoted.
 - **Backup push after every task** (standing rule): the controller runs `git push origin claude/slice-2-plan-4q33le` after each task's commit (never `--force`; on a network error retry after 2, 4, 8 and 16 s). A fix asked for by a review is a new commit, `Fix: <what> (Task <n> review)`. The container can restart and lose uncommitted work: commit as soon as a task's checks pass.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1335 → 1335 passed, 16 → 16 skipped; frontend 618 → 645 in 81 → 83 files`.
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1335 → 1335 passed, 16 → 16 skipped; frontend 618 → 650 in 81 → 83 files`.
 - New prose for the owner has no em dashes and no flattery. New user-facing copy is exactly the list in clarification 18 and has no em dashes; existing copy keeps its own punctuation (the checklist's rows read "{message} — {link}", as 4b shipped them).
 - No church id, email address, token or database URL in any doc, commit or record.
 - Ask the owner before any push to a PR, PR creation, marking ready, merging, or any production or settings action. Owner steps go one at a time, in plain words.
@@ -46,12 +46,12 @@ As in the 5a-1 plan: **Create `path`:** the block is the whole file (for `fronte
 
   | After | Frontend (delta) | Frontend | Backend |
   |---|---|---|---|
-  | T1 | +4 (`save-key.test.ts` 2, `migrate.test.ts` 1, `store.test.ts` 1; `schema.test.ts`, `status.test.ts` edited) | 622 in 82 | 1335 passed, 16 skipped |
-  | T2 | +6 (`mapping.test.ts` 4, `status.test.ts` 2; `fingerprint.test.ts` edited) | 628 in 82 | 1335 passed, 16 skipped |
-  | T3 | +1 (`dates.test.ts`) | 629 in 82 | 1335 passed, 16 skipped |
-  | T4 | +8 (`review-send-step.test.tsx`; its other cases and `builder-shell.test.tsx` edited) | 637 in 82 | 1335 passed, 16 skipped |
-  | T5 | +8 (`services-page.test.tsx`; `app-header.test.tsx` edited) | 645 in 83 | 1335 passed, 16 skipped |
-  | T6 | 0 (docs) | 645 in 83 | 1335 passed, 16 skipped |
+  | T1 | +6 (`save-key.test.ts` 2, `store.test.ts` 2, `migrate.test.ts` 1, `context.test.tsx` 1; `schema.test.ts`, `status.test.ts` edited) | 624 in 82 | 1335 passed, 16 skipped |
+  | T2 | +7 (`mapping.test.ts` 4, `status.test.ts` 2, `request.test.ts` 1; `fingerprint.test.ts`, `notes.test.ts` edited) | 631 in 82 | 1335 passed, 16 skipped |
+  | T3 | +1 (`dates.test.ts`) | 632 in 82 | 1335 passed, 16 skipped |
+  | T4 | +9 (`review-send-step.test.tsx`; its other cases and `builder-shell.test.tsx` edited) | 641 in 82 | 1335 passed, 16 skipped |
+  | T5 | +9 (`services-page.test.tsx`; `app-header.test.tsx` edited) | 650 in 83 | 1335 passed, 16 skipped |
+  | T6 | 0 (docs) | 650 in 83 | 1335 passed, 16 skipped |
 
 - CI `backend-postgres` stays `16 passed, 1335 deselected`.
 
@@ -81,8 +81,12 @@ Answers 3 and 7 concern 5a-1's Word file and are not repeated here.
 
 **Already decided in S, cited, not asked again:** confirm before opening over unsaved work ("Replace your unsaved draft?", S "Services page" Open flow; F §4.6 "Loading" step 1; behavior change 10); changing the date means Save as new service (S UX "Save card"; behavior change 14; parity with app.py:1029-1035); 20 a page and no search (S "Services page"; Scope "Archive search … Not planned"); any member can delete, with S's confirm text (S "Delete flow"; owner decision 5); hymn use is recorded on save only (S behavior change 3; owner decision 9).
 
-### Owner answers to this plan's questions
-Pending: "Questions for the owner" (end of this plan) lists the twelve choices made here, each written as recommended.
+### Owner answers to this plan's questions (Beau, 2026-10-02, binding)
+"All recommended": questions 1-12 at the end of this plan are accepted as written, with two changes from the plan's review that the owner approved the same day:
+- **C1. "Review service" skips the church's Benediction however it got there.** A Benediction is not reviewed when it follows the default (origin "default", as before), or when its text is the church's current default (trimmed, exactly) or Streamlit's one-word "Halverson" (any case), whatever its origin. A save and an opened service make the default text the service's own (origin "archive", owner answer 4), and services saved in Streamlit hold "Halverson"; without this, "Review service" would review the church's own Benediction after every save and in every opened service. An edited Benediction is reviewed as before (clarification 6, question 5).
+- **I3. The conflict dialog says what reloading costs, and saving yours is the primary choice:** a second line "Reloading replaces your changes on this device."; "Save mine as a new service" is the primary button and "Reload their version" an outline one (clarifications 9 and 18, question 6).
+
+Under owner decision 1 (no owner-visible change, or none beyond a screen-reader name): clarifications 23-27.
 
 **Later, out of scope:** 5b (email: the Review step's email card, Gmail, contacts), 6a (Settings), the printed bulletin, Voices of the Church.
 ## Spec clarifications
@@ -99,10 +103,10 @@ The owner's answers win over S and F; the code wins over both where they disagre
    - "Saving…" while it runs (the `PendingButton` keeps focus); success is the toast "Service saved" and the status line moves to "Saved to the archive · …".
    - The button is off only without a service date ("Choose a service date on step 1 to save.") or while a Date & readings field shows its message ("Fix the readings on step 1 to save."), the same two conditions as the downloads (5a-1 build review fix 6). It stays on when nothing changed: a save then stores the same service again with a new time (S: Save is available whenever the date is valid).
    - **"Start a new service"** (outline button): clarification 13.
-6. **[owner-visible] What a save does to the draft** (owner answer 4; S `useSaveService` onSuccess; F §4.6 "Save keeps it as the working copy"). The draft stays on screen as the working copy. `editing` becomes the saved service (`service_id`, `saved_at`, `date_iso` from the answer), `saved_fingerprint` the fingerprint of the payload that was sent, so the draft reads "Saved" (or "Unsaved changes" if it was edited while the save ran). Then what followed a default becomes the saved service's own, as when a saved service is opened: a Benediction that followed the church default keeps its text with origin "archive" ("empty" when that text was blank), and communion that followed the first-Sunday rule keeps its setting with origin "archive". So a later change of the church's default Benediction does not change this service, and a later date change does not flip its communion; the Liturgy step's communion card then says "Set from the saved service." with "Use default", as it does for an opened service, and the Benediction card offers "Use church default" as for any text not following the default. One consequence, the same as for an opened service: "Review service" (the reviewer) now reviews that Benediction too, since it is the service's own text. Communion the user set stays "user". Neither change touches the payload, so the draft stays "Saved".
+6. **[owner-visible] What a save does to the draft** (owner answer 4; S `useSaveService` onSuccess; F §4.6 "Save keeps it as the working copy"). The draft stays on screen as the working copy. `editing` becomes the saved service (`service_id`, `saved_at`, `date_iso` from the answer), `saved_fingerprint` the fingerprint of the payload that was sent, so the draft reads "Saved" (or "Unsaved changes" if it was edited while the save ran). Then what followed a default becomes the saved service's own, as when a saved service is opened: a Benediction that followed the church default keeps its text with origin "archive" ("empty" when that text was blank), and communion that followed the first-Sunday rule keeps its setting with origin "archive". So a later change of the church's default Benediction does not change this service, and a later date change does not flip its communion; the Liturgy step's communion card then says "Set from the saved service." with "Use default", as it does for an opened service, and the Benediction card offers "Use church default" as for any text not following the default. "Review service" (the reviewer) still leaves that Benediction out while its text is the church's current default (owner, 2026-10-02, C1): it skips a Benediction whose text is the default (trimmed, exactly) or Streamlit's "Halverson" (any case), whatever its origin, as well as one following the default; once edited it is reviewed like the other prayers. The same holds for an opened service. Communion the user set stays "user". Neither change touches the payload, so the draft stays "Saved".
 7. **Reviewer notes** (owner answer 9). They live in memory and are keyed by the draft's `created_at` (`notes.ts`). Saving keeps `created_at`, so the notes stay; opening a saved service (from Services, or "Reload their version" in the conflict dialog) builds a new draft with a new `created_at`, so they go, and any AI run on the old draft is cancelled, as New service does. Nothing about them is sent with a save.
 8. **[owner-visible] "Readings for … are available"** (owner answer 5). `showAvailableBanner` returns false while the draft is a saved service and its date is still the saved date (`editing.date_iso === readings.date_iso`): after opening a saved service, and also after saving a draft whose readings were typed or edited, the saved readings are the service's own for that date. On another date the banner shows as before (the lectionary then has sets for a date the saved readings were not chosen for); back on the saved date it goes again. A saved service with no date has no saved date, so the banner behaves as for any draft.
-9. **[owner-visible] The conflict dialog** (S UX "Save card" Conflict; F §1.7). A `PUT` answered 409 opens an AlertDialog titled "Someone else changed this service" whose text is the server's message, "This service was changed by someone else. Reload it to see their changes." Three buttons: **"Reload their version"** (`GET /services/{id}`, then the draft becomes their saved copy; the dialog is the confirmation; toast "Loaded the latest version."; "Loading…" while it runs); **"Save mine as a new service"** (a POST with the save key; theirs stays in the archive; toast "Service saved"; "Saving…" while it runs); **"Cancel"** (nothing changes; the draft keeps "Unsaved changes" or "Saved" as it was). While one action runs the other is off. If their copy was deleted meanwhile, "Reload their version" toasts "That service is no longer in the archive." and closes the dialog; the next "Save changes" then saves a new service (clarification 10).
+9. **[owner-visible] The conflict dialog** (S UX "Save card" Conflict; F §1.7; owner, 2026-10-02, I3). A `PUT` answered 409 first reads the service (`GET /services/{id}`): when the archive's copy is exactly what this save sent, the 409 answers this device's own earlier save whose answer was lost, so it is the save (clarification 24). Otherwise it opens an AlertDialog titled "Someone else changed this service" whose text is the server's message, "This service was changed by someone else. Reload it to see their changes.", and below it "Reloading replaces your changes on this device." Three buttons: **"Save mine as a new service"**, the primary one (a POST with the save key; theirs stays in the archive; toast "Service saved"; "Saving…" while it runs); **"Reload their version"**, an outline one (`GET /services/{id}`, then the draft becomes their saved copy; the dialog is the confirmation; toast "Loaded the latest version."; "Loading…" while it runs); **"Cancel"** (nothing changes; the draft keeps "Unsaved changes" or "Saved" as it was). While one action runs the other is off. If their copy was deleted meanwhile, "Reload their version" toasts "That service is no longer in the archive." and closes the dialog; the next "Save changes" then saves a new service (clarification 10).
 10. **[owner-visible] The other outcomes of a save** (S UX "Save card"; S "Save key rule"; F §1.6):
     - **The saved copy was deleted** (a `PUT` answered 404 with no `details.field`): the client POSTs at once and toasts "The archived copy was deleted, so this was saved as a new service." (S).
     - **A hymn the church no longer has** (404 with `details.field = "hymns.<slot>.hymn_id"`): a toast with the server's message, "A chosen hymn is no longer in your hymnal. Choose it again on the Hymns step.", and the action **"Go to Hymns"**. After the hymn is replaced, Save works at once: the rejected try's key is never used again.
@@ -113,7 +117,7 @@ The owner's answers win over S and F; the code wins over both where they disagre
 13. **[owner-visible] "Start a new service"** (S UX "Save card"; F §4.6 item 1). It runs New service's existing flow (`useNewService`, the header menu's "New service" since 2b): a draft with nothing to lose resets at once; otherwise the existing question "Start a new service?", "This clears the current draft on this device.", "Start new service". S's own copy for this question ("Your current draft has changes that aren't saved to the archive. Starting a new service discards them." / "Discard and start new") is not used, so both doors ask the same thing in the words the owner already knows. A saved draft with no unsaved changes counts as nothing to lose (it is in the archive). The fresh draft keeps the Bible translation, as New service does; the builder opens Date & readings.
 14. **[owner-visible] The Services page** (S "Services page"; F §4.1, §4.2, §4.8). `/services`, a client page in the `(church)` layout:
     - Header: "Services", "Saved services for {church name}.", and **"New service"** (the same flow as clarification 13).
-    - The list: 20 rows a page, newest service date first, undated last (the server's order). Each row is one button (at least 44 px tall) that opens the service, with three lines: the date ("October 4, 2026"; a legacy row's stored date text when it has no readable date; else "No date"), the occasion (else "No occasion"), and "Created by {name} · last saved {Oct 1, 10:42 AM}" ("Last saved {…}" when the author is gone; the author never changes on a later save, so the line does not claim the author made the last save). A badge "Editing" marks the service the draft holds. Beside each row a 44 px menu button ("More actions for {date}") holds **"Delete…"**.
+    - The list: 20 rows a page, newest service date first, undated last (the server's order). Each row is one button (at least 44 px tall) that opens the service, with three lines: the date ("October 4, 2026"; a legacy row's stored date text when it has no readable date; else "No date"), the occasion (else "No occasion"), and "Created by {name} · last saved {Oct 1, 10:42 AM}" ("Last saved {…}" when the author is gone; the author never changes on a later save, so the line does not claim the author made the last save). A badge "Editing" marks the service the draft holds. Beside each row a 44 px menu button ("More actions for {date}", with ", {occasion}" after it for a row with no date, so undated rows differ; clarification 27) holds **"Delete…"**.
     - Below the list: "Showing {n} of {total}" and, while there are more, **"Show more"** ("Loading…" while it loads).
     - Loading: five skeleton rows. An error shows the error state with **Retry**, never an empty list. Empty: "No saved services yet", "Services you save from the builder appear here." and **"Build a service"** (to `/builder`).
     - No search, no sorting choice, no filters (S).
@@ -128,20 +132,24 @@ The owner's answers win over S and F; the code wins over both where they disagre
 18. **[owner-visible] Every new user-facing string** (no em dashes):
     - Review: "You're editing the saved service for {October 4, 2026}. Changes stay on this device until you save."; "This saved service has no date. It's set to {Sunday, October 11, 2026} for now."; "Check the date"; "Still to do" (was "Still needed"); "Everything's ready."; "{Title} isn't in your hymnal" with "Choose a replacement"; "Not in the archive yet."; "Saved to the archive · {time}"; "Unsaved changes · last saved {time}"; "Save to archive"; "Save changes"; "Save as new service"; "The date changed from {date} to {date}, so this will be saved as a new service. The {October 4} service stays in the archive."; "The saved service has no date, so this will be saved as a new service on {date}. The undated service stays in the archive."; "Choose a service date on step 1 to save."; "Fix the readings on step 1 to save."; "Start a new service"; "Tip: save this service so its hymns count as recently used."
     - Toasts: "Service saved"; "The archived copy was deleted, so this was saved as a new service."; "Loaded the latest version."; the action "Go to Hymns".
-    - The conflict dialog: "Someone else changed this service"; "Reload their version"; "Save mine as a new service"; "Loading…" (its pending label); the body is the server's message.
+    - The conflict dialog: "Someone else changed this service"; "Reloading replaces your changes on this device." (owner, 2026-10-02); "Reload their version"; "Save mine as a new service"; "Loading…" (its pending label); the body is the server's message.
     - Status: "Saved", "Unsaved changes" (step bar); "In archive (saved {time})" and "In archive (saved {time}) · Unsaved changes" (summary).
-    - Services: "Services" (menu and heading); "Saved services for {church}."; "New service" (the header menu's existing words); "No date"; "No occasion"; "Created by {name} · last saved {time}"; "Last saved {time}"; "Editing"; "Opening…"; "More actions for {date}" (screen readers); "Delete…"; "Showing {n} of {total}"; "Show more"; "Loading…"; "No saved services yet"; "Services you save from the builder appear here."; "Build a service"; "Replace your unsaved draft?"; "Your current draft for {date} has changes that aren't saved to the archive. Opening this service replaces it."; "Replace draft"; "Delete this service?"; "“{occasion}” on {date} will be removed from the archive for everyone in {church}. This can't be undone."; "“{occasion}” (no date) will be removed …"; "Untitled service"; "You're editing this service. Your current draft will be cleared too."; "Delete service".
+    - Services: "Services" (menu and heading); "Saved services for {church}."; "New service" (the header menu's existing words); "No date"; "No occasion"; "Created by {name} · last saved {time}"; "Last saved {time}"; "Editing"; "Opening…"; "More actions for {date}" and, for a row with no date, "More actions for No date, {occasion}" (screen readers); "Delete…"; "Showing {n} of {total}"; "Show more"; "Loading…"; "No saved services yet"; "Services you save from the builder appear here."; "Build a service"; "Replace your unsaved draft?"; "Your current draft for {date} has changes that aren't saved to the archive. Opening this service replaces it."; "Replace draft"; "Delete this service?"; "“{occasion}” on {date} will be removed from the archive for everyone in {church}. This can't be undone."; "“{occasion}” (no date) will be removed …"; "Untitled service"; "You're editing this service. Your current draft will be cleared too."; "Delete service".
     - From the API, unchanged: "This service was changed by someone else. Reload it to see their changes."; "That service is no longer in the archive."; "A chosen hymn is no longer in your hymnal. Choose it again on the Hymns step."; "This request was already sent with different details." Reused unchanged: "Start a new service?", "This clears the current draft on this device.", "Start new service", "Saving…", "Cancel", "Retry", "Loading" (screen readers).
 19. **The draft, version 2** (S "Draft schema change"; F §4.6 "Versioning"). `DRAFT_VERSION` 1 → 2: `editing` is `{service_id, saved_at, date_iso: YYYY-MM-DD | null}`, and `save_key_fingerprint: string | null` is new (null in a fresh draft). `migrations[1]`: `editing` stays null when null, otherwise gains `date_iso` from `readings.date_iso` (null when that is not a real date); `save_key_fingerprint` starts null. No version 1 draft has `editing` set (nothing could save), so the migration only adds the field; it has its unit test, and a stored version 3 is "a future version" (restore fails, the raw value is backed up, as F says). The names `DraftV1` and `draftV1Schema` stay, so no importer changes. Two more store changes: **`replace` writes the draft at once** (New service, an opened service, the reset after a delete), since the Services page has its own provider and the builder it opens reads the stored draft when it mounts, before that page unmounts and flushes; and `isDirty` moves from `fingerprint.ts` to `status.ts`, beside `reviewStatus` and `saveMode`, so `status.ts` can use it without an import cycle (`fingerprint.ts` imported `status.ts`). `draftToServicePayload` takes its final form (S "mapping.ts"): occasion, card texts, sermon title and custom elements trimmed as the server trims them, so a trailing space never reads as "Unsaved changes" against what the server stored; before 5a-3 no draft has a `saved_fingerprint`, so the change of fingerprint affects nothing stored (S says so).
 20. **Query keys and invalidations** (F §4.4). The list: `["church", id, "services", {limit: 20}]`, an infinite query, the next offset `offset + items.length` while below `total`. A save: `setQueryData(["church", id, "service", sid])`, then `services` and `hymns` invalidated (a save rebuilds that date's hymn use, so `recently_used` changes). A delete: `removeQueries` for that service, then `services` and `hymns` (owner answer 6), awaited, so the row is gone when the dialog closes. Opening: `GET /services/{id}` every time (S `staleTime: 0`), the answer cached under `service`. A 404 on open or delete invalidates `services`.
-21. **Screen readers and the phone** (F §4.8, §4.9). The Archive card is a region named by its heading; the save sentence describes the button; the `PendingButton`s keep focus while pending ("Saving…", "Loading…"); success and failure are announced by the toasts. The conflict dialog and both confirmations are AlertDialogs (focus trapped; Escape cancels; 44 px buttons below `md`). On Services, each row is one button whose name reads the date, the "Editing" badge, the occasion and the saved line; "Opening…" replaces the saved line and the button is `aria-busy`; each menu button is named "More actions for {date}"; the delete dialog returns focus to "New service" (the row it came from is gone). Five skeleton rows sit in a `status` named "Loading". All text renders as React text.
+21. **Screen readers and the phone** (F §4.8, §4.9). The Archive card is a region named by its heading; the save sentence describes the button; the `PendingButton`s keep focus while pending ("Saving…", "Loading…"); success and failure are announced by the toasts. The conflict dialog and both confirmations are AlertDialogs (focus trapped; Escape cancels; 44 px buttons below `md`). On Services, each row is one button whose name reads the date, the "Editing" badge, the occasion and the saved line; "Opening…" replaces the saved line and the button is `aria-busy`; each menu button is named "More actions for {date}" (plus ", {occasion}" when the row has no date); the delete dialog returns focus to "New service" (the row it came from is gone). Five skeleton rows sit in a `status` named "Loading". All text renders as React text.
 22. **Docs** (T6). S gains "Amendment 2026-10-02: 5a-3 as planned"; F's Amendments index gains a row (§4.2, §4.6, §4.7); `docs/manual-verification.md` → "Slice 5a" gains items 12-17, items 12-16 marked "(owner, after 5a-3)". The runbook record is T8's. The 5a-2 record commit (`a789fb8`, `docs/ops-runbook.md`) is not on `main` yet and rides along in this PR.
+23. **An older app's draft is never adopted** (owner decision 1; review fix I1). `DraftStore.adoptIfNewer` refuses a stored value whose raw `version` is below `DRAFT_VERSION`, from a `storage` event, a direct read or a flush. An open tab still running version 1 code cannot read a version 2 draft, starts fresh and, once it writes, puts a version 1 draft in the key; without this, a version 2 tab would migrate and adopt it (it is "newer") and lose its own draft. This tab keeps its draft and its next write replaces the old one. T1 "never adopts a draft an older version of the app wrote, …".
+24. **A 409 that answers this device's own save** (owner decision 1; review fix I2). A `PUT` has no idempotency key: if one times out after the server saved it, the retry carries the old `If-Match` and meets a 409 for this device's own save. So on a 409, `useSaveService` reads the service (`GET /services/{id}`), builds `serviceToDraft` from it and compares `fingerprint(draftToServicePayload(…))` with the fingerprint it sent (with the hymnal as the draft sent it: a draft that leaves the hymnal to the church sends none and the server fills it in). Equal: the save went through, so it is recorded as one (`markSaved`, "Service saved"). Different, or the read fails: the conflict dialog, as before. T4 "after a save whose answer was lost, a 409 is that save …".
+25. **The provider reads storage once mounted** (owner decision 1; review fix I4). `DraftProvider`'s mount effect calls `store.syncFromStorage({ quiet: true })` after `start()`. The Services page's provider is built while the builder's is still mounted, so it read the draft before the builder's last edit (up to 400 ms old) was written; the builder's provider writes it as it unmounts, and that cleanup runs before the new provider's mount effect, so this read takes it. It adopts quietly (no "Updated from another tab.": the edit came from this tab). T1 "reads the stored draft once mounted, …".
+26. **The save key's bookkeeping is an automatic change** (owner decision 1; review fix M1). `keyForPost` and `settlePost` go through `autoUpdate`, stamped just after the draft, so recording a key never outranks an edit made in another tab meanwhile.
+27. **An undated row's menu names its occasion** (owner decision 1; review fix M2). Screen-reader name only: "More actions for No date, {occasion}" (no occasion: "More actions for No date"), so two undated rows' menus differ. T5 "after Show more, a delete reads every page again and the count follows; …" also checks that a delete after Show more refreshes both pages and the count (M3).
 
 ### Risks
-- **An open tab still running the old app** (version 1 code) that enters the builder after a new tab wrote a version 2 draft cannot read it: it says "We couldn't restore your unsaved draft.", keeps the raw value in its backup slot and starts fresh. T8 Step 2 has the owner reload the app before the check; saved services are in the archive either way.
+- **An open tab still running the old app** (version 1 code) that enters the builder after a new tab wrote a version 2 draft cannot read it: it says "We couldn't restore your unsaved draft.", keeps the raw value in its backup slot and starts fresh. The version 1 draft it then writes is never adopted by a tab running the new code (clarification 23), which keeps its own draft and writes over it; the two tabs overwrite each other until the old one is reloaded. T8 Step 2 has the owner reload the app before the check; saved services are in the archive either way.
 - **Reverting 5a-3** has the same effect once in each browser: the version 1 code finds a version 2 draft (T8 Step R). Saved services and hymn use stay.
 - **A timed-out save that in fact succeeded, then an edit, then Save** creates a second service (S Risks, accepted): the edit gives a new key. Services lists both, and either can be deleted.
-- **The draft held by Services is read when that page mounts**, before the builder's last edit (at most 400 ms old) is written; the builder writes it when it unmounts, and a later save or open reads storage again. Only a "Replace your unsaved draft?" asked within that 400 ms could miss an edit made in it.
 - **No polling:** a service changed or deleted elsewhere is found out at the next save (clarifications 9, 10, 16) or when the list refreshes (on focus, after a save or delete).
 
 ## File Structure
@@ -163,7 +171,9 @@ The owner's answers win over S and F; the code wins over both where they disagre
 
 | Path | Change | Task |
 |---|---|---|
-| `frontend/src/lib/draft/schema.ts`, `migrate.ts`, `store.ts` (+ `schema.test.ts`, `migrate.test.ts`, `store.test.ts`, `status.test.ts`) | version 2 and its migration; `replace` writes at once; a test draft's `editing` gains `date_iso` | T1 |
+| `frontend/src/lib/draft/schema.ts`, `migrate.ts`, `store.ts` (+ `schema.test.ts`, `migrate.test.ts`, `store.test.ts`, `status.test.ts`) | version 2 and its migration; `replace` writes at once; an older app's draft is never adopted; a test draft's `editing` gains `date_iso` | T1 |
+| `frontend/src/lib/draft/context.tsx` (+ `context.test.tsx`) | the quiet read once mounted (T1); `defaultBenediction` in `useDraft()` (T2) | T1, T2 |
+| `frontend/src/lib/liturgy/request.ts`, `notes.ts`, `review.tsx` (+ `request.test.ts`, `notes.test.ts`), `frontend/src/components/builder/liturgy/card-notes.tsx`, `review-bar.tsx` | "Review service" skips the church's Benediction whatever its origin (C1) | T2 |
 | `frontend/src/lib/draft/mapping.ts` (whole file), `status.ts`, `steps.ts`, `fingerprint.ts`, `readings.ts` (+ `mapping.test.ts`, `status.test.ts`, `fingerprint.test.ts`) | the final payload, `serviceToDraft`, `markSaved`; `isDirty`, `reviewStatus`, `saveMode`, the hymnal row; `"review"` shipped; owner answer 5 | T2 |
 | `frontend/src/lib/api/types.ts`, `frontend/src/test/fixtures/index.ts` | the `/services` aliases; `savedService`, `serviceSummary`, `servicePage` | T2 |
 | `frontend/src/components/builder/step-progress.tsx`, `new-service-menu-item.tsx` | "Saved", "Unsaved changes"; `isDirty`'s new home | T2 |
@@ -173,20 +183,20 @@ The owner's answers win over S and F; the code wins over both where they disagre
 | `docs/superpowers/specs/2026-09-25-slice-5a-documents-archive-design.md`, `docs/superpowers/specs/2026-09-25-migration-foundations-design.md`, `docs/manual-verification.md` | the amendment; the Amendments row; items 12-17 | T6 |
 | `docs/ops-runbook.md` | "### Slice 5a-2 record" (commit `a789fb8`, riding along); "### Slice 5a-3 record" (the records PR, after the merge) | T8 |
 
-**Counts in the PR:** 12 created (this plan, the 10 files above, and the ride-along `docs/superpowers/specs/2026-10-02-pew-voices-idea.md`), 34 modified (the 33 code and docs files above, and `docs/ops-runbook.md` through the 5a-2 record commit; the 5a-3 record comes in the records PR after the merge): 46 paths. **Untouched:** every backend file, migrations, `openapi.json`, `schema.d.ts`, `lib/api/client.ts`, `lib/queries/keys.ts`, `lib/draft/context.tsx`, `liturgy/*`, `hymns/*`, `readings/*`, `app.py`, Streamlit.
+**Counts in the PR:** 12 created (this plan, the 10 files above, and the ride-along `docs/superpowers/specs/2026-10-02-pew-voices-idea.md`), 43 modified (the 42 code and docs files above, and `docs/ops-runbook.md` through the 5a-2 record commit; the 5a-3 record comes in the records PR after the merge): 55 paths. **Untouched:** every backend file, migrations, `openapi.json`, `schema.d.ts`, `lib/api/client.ts`, `lib/queries/keys.ts`, `lib/liturgy/*` but `request.ts`, `notes.ts` and `review.tsx`, `hymns/*`, `readings/*`, `app.py`, Streamlit.
 
 **Task order and review batch:** T1 → T6, each one commit and a backup push; then one review of the whole batch with its fixes as `Fix: …` commits; T7 verifies and opens the draft PR on the owner's yes; T8 merges on the owner's yes, takes the owner through the phone check and writes the record.
 
 ---
-### Task 1: The draft, version 2: the saved service's date and the save key (S "Draft schema change", "Save key rule"; F §1.6, §4.6; clarifications 10, 19)
+### Task 1: The draft, version 2: the saved service's date and the save key (S "Draft schema change", "Save key rule"; F §1.6, §4.6; clarifications 10, 19, 23, 25)
 
 **Files:**
 - Create: `frontend/src/lib/draft/save-key.ts`, `frontend/src/lib/draft/save-key.test.ts`
-- Modify: `frontend/src/lib/draft/schema.ts`, `frontend/src/lib/draft/migrate.ts`, `frontend/src/lib/draft/store.ts`, `frontend/src/lib/draft/schema.test.ts`, `frontend/src/lib/draft/migrate.test.ts`, `frontend/src/lib/draft/store.test.ts`, `frontend/src/lib/draft/status.test.ts`
+- Modify: `frontend/src/lib/draft/schema.ts`, `frontend/src/lib/draft/migrate.ts`, `frontend/src/lib/draft/store.ts`, `frontend/src/lib/draft/context.tsx`, `frontend/src/lib/draft/schema.test.ts`, `frontend/src/lib/draft/migrate.test.ts`, `frontend/src/lib/draft/store.test.ts`, `frontend/src/lib/draft/status.test.ts`, `frontend/src/lib/draft/context.test.tsx`
 
 - [ ] **Step 1 (agent): Write the failing tests**
 
-`status.test.ts` only gains `date_iso` in a draft's `editing` (the version 2 shape); `store.test.ts`'s "future version" becomes 3.
+`status.test.ts` only gains `date_iso` in a draft's `editing` (the version 2 shape); `store.test.ts`'s "future version" becomes 3. `store.test.ts` also checks that an older app's draft is never adopted (clarification 23) and `context.test.tsx` that a provider reads storage once mounted (clarification 25).
 
 **In `frontend/src/lib/draft/migrate.test.ts`, replace:**
 
@@ -369,25 +379,93 @@ describe("the save key (slice 5a spec, Save key rule; F §1.6)", () => {
     expect(makeStore(storage).store.getSnapshot().draft.editing).toEqual(next.editing);
   });
 
+  it("never adopts a draft an older version of the app wrote, however new, and writes over it (slice 5a-3: an old tab)", () => {
+    const { storage, data } = memoryStorage({ [KEY]: JSON.stringify(testDraft()) });
+    const { store, notices } = makeStore(storage);
+    store.update((d) => editOccasion(d, "Mine"));
+    const mine = store.getSnapshot().draft;
+    // An open tab still running version 1 code writes its fresh draft, a minute later.
+    const old = JSON.stringify({ ...testDraft(), version: 1, updated_at: new Date(Date.parse(mine.updated_at) + 60_000).toISOString() });
+    store.handleStorageEvent(KEY, old);
+    data.set(KEY, old);
+    store.syncFromStorage();
+    expect(store.getSnapshot().draft).toBe(mine);
+    store.flush();
+    expect(stored(data)).toMatchObject({ version: 2, readings: { occasion: "Mine" } });
+    expect(notices).toEqual([]);
+  });
+
   it("switches to memory-only when a write fails, and reports it once", () => {
+````
+
+**In `frontend/src/lib/draft/context.test.tsx`, replace:**
+
+````tsx
+import { act, render, renderHook, screen } from "@testing-library/react";
+````
+
+**with:**
+
+````tsx
+import { act, render, renderHook, screen } from "@testing-library/react";
+import { useState } from "react";
+````
+
+**In `frontend/src/lib/draft/context.test.tsx`, replace:**
+
+````tsx
+  it("adopts a newer draft from another tab and says so", () => {
+````
+
+**with:**
+
+````tsx
+  it("reads the stored draft once mounted, so a provider that replaces another sees its last edit, quietly (slice 5a-3)", () => {
+    window.localStorage.setItem(KEY, JSON.stringify(testDraft()));
+    function Swap() {
+      const [page, setPage] = useState("builder");
+      return (
+        <>
+          <button type="button" onClick={() => setPage("services")}>
+            Go
+          </button>
+          <DraftProvider key={page} userId={USER_ID} church={GRACE}>
+            <Probe />
+          </DraftProvider>
+        </>
+      );
+    }
+    render(<Swap />);
+    vi.setSystemTime(DRAFT_NOW.getTime() + 1000);
+    act(() => screen.getByRole("button", { name: "Edit" }).click());
+    expect(storedOccasion()).toBe(""); // still in the 400 ms write delay
+    // The new provider reads storage while it renders, before the old one flushes as it unmounts.
+    act(() => screen.getByRole("button", { name: "Go" }).click());
+    expect(screen.getByText("Occasion: Harvest")).toBeInTheDocument();
+    expect(toastInfo).not.toHaveBeenCalled(); // this tab's own edit: not "Updated from another tab."
+  });
+
+  it("adopts a newer draft from another tab and says so", () => {
 ````
 
 - [ ] **Step 2 (agent): Run them and see them fail**
 
 ```bash
-(cd frontend && npx vitest run src/lib/draft/save-key.test.ts src/lib/draft/migrate.test.ts src/lib/draft/schema.test.ts src/lib/draft/store.test.ts src/lib/draft/status.test.ts 2>&1 | grep -E "^ +× |\[ src/|Tests ")
+(cd frontend && npx vitest run src/lib/draft/save-key.test.ts src/lib/draft/migrate.test.ts src/lib/draft/schema.test.ts src/lib/draft/store.test.ts src/lib/draft/status.test.ts src/lib/draft/context.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")
 ```
 
-**Expected:** five failures and `save-key.test.ts` cannot load (`./save-key` does not exist yet):
+**Expected:** seven failures and `save-key.test.ts` cannot load (`./save-key` does not exist yet):
 ```
    × draft migrate and parseStoredDraft (F §4.6 Versioning) > round-trips a stored draft <t>ms
    × draft migrate and parseStoredDraft (F §4.6 Versioning) > migrates a version 1 draft: editing gains the draft's date, and save_key_fingerprint starts null (slice 5a-3) <t>ms
    × DraftStore changes (S store.ts) > replace writes at once, so a page that mounts next reads it (slice 5a-3: Services opens the builder) <t>ms
+   × DraftStore changes (S store.ts) > never adopts a draft an older version of the app wrote, however new, and writes over it (slice 5a-3: an old tab) <t>ms
    × draft schema and freshDraft (F §4.6) > a fresh draft is dated next Sunday with every field empty and the F §4.6 defaults <t>ms
    × draft schema and freshDraft (F §4.6) > accepts an empty date and generous strings, and rejects impossible values <t>ms
+   × DraftProvider and useDraft (F §4.6 Persistence) > reads the stored draft once mounted, so a provider that replaces another sees its last edit, quietly (slice 5a-3) <t>ms
  FAIL  |unit| src/lib/draft/save-key.test.ts [ src/lib/draft/save-key.test.ts ]
-⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
-      Tests  5 failed | 33 passed (38)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  7 failed | 39 passed (46)
 ```
 
 - [ ] **Step 3 (agent): Version 2, its migration, the save key, `replace` writes at once**
@@ -576,40 +654,191 @@ export const DRAFT_VERSION = 2;
     this.flush();
 ````
 
+**In `frontend/src/lib/draft/store.ts`, replace:**
+
+````ts
+ * - Another tab's write for this key is adopted when its `updated_at` is
+ *   strictly newer ("adopted"), from its `storage` event or, when this tab is
+ *   shown again, from a direct read (`syncFromStorage`, slice 2c). A flush
+ *   that finds a strictly newer stored draft adopts it instead of writing.
+````
+
+**with:**
+
+````ts
+ * - Another tab's write for this key is adopted when its `updated_at` is
+ *   strictly newer ("adopted"), from its `storage` event or, when this tab is
+ *   shown again, from a direct read (`syncFromStorage`, slice 2c; quietly
+ *   when the provider mounts, slice 5a-3). A flush that finds a strictly
+ *   newer stored draft adopts it instead of writing. A value written by an
+ *   older version of the app (an open tab not yet reloaded) is never adopted,
+ *   however new: its fresh draft would replace this one (slice 5a-3).
+````
+
+**In `frontend/src/lib/draft/store.ts`, replace:**
+
+````ts
+import { churchZone, corruptDraftKey, draftKey, freshDraft, type DraftChurch, type DraftV1, type StepId } from "./schema";
+````
+
+**with:**
+
+````ts
+import { churchZone, corruptDraftKey, draftKey, DRAFT_VERSION, freshDraft, type DraftChurch, type DraftV1, type StepId } from "./schema";
+````
+
+**In `frontend/src/lib/draft/store.ts`, replace:**
+
+````ts
+function isNewer(candidate: string, current: string): boolean {
+````
+
+**with:**
+
+````ts
+/** The `version` a stored value declares; 0 when it has none or cannot be read. */
+function storedVersion(raw: string): number {
+  try {
+    const value: unknown = JSON.parse(raw);
+    const version = typeof value === "object" && value !== null ? (value as { version?: unknown }).version : undefined;
+    return typeof version === "number" ? version : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function isNewer(candidate: string, current: string): boolean {
+````
+
+**In `frontend/src/lib/draft/store.ts`, replace:**
+
+````ts
+   * and a fill stamped now would outrank that tab's just-written typing.
+   */
+  syncFromStorage = (): void => {
+    this.adoptIfNewer(this.storage.read(this.key));
+  };
+````
+
+**with:**
+
+````ts
+   * and a fill stamped now would outrank that tab's just-written typing.
+   * `quiet` (the provider's mount, slice 5a-3): a page whose provider replaced
+   * another's (Services after the builder) takes the edit the other wrote
+   * when it unmounted, with no "adopted" notice: it came from this tab.
+   */
+  syncFromStorage = ({ quiet = false }: { quiet?: boolean } = {}): void => {
+    this.adoptIfNewer(this.storage.read(this.key), quiet);
+  };
+````
+
+**In `frontend/src/lib/draft/store.ts`, replace:**
+
+````ts
+  /** True when the stored draft was strictly newer and is now this tab's. */
+  private adoptIfNewer(raw: string | null): boolean {
+    if (raw === null) return false;
+````
+
+**with:**
+
+````ts
+  /**
+   * True when the stored draft was strictly newer and is now this tab's. A
+   * value an older version of the app wrote (version below `DRAFT_VERSION`)
+   * is never adopted: an open tab still running the old code writes a fresh
+   * draft over a newer one it cannot read, and migrating that would blank this
+   * tab's draft (slice 5a-3). This tab's next write replaces it.
+   */
+  private adoptIfNewer(raw: string | null, quiet = false): boolean {
+    if (raw === null || storedVersion(raw) < DRAFT_VERSION) return false;
+````
+
+**In `frontend/src/lib/draft/store.ts`, replace:**
+
+````ts
+    this.notify("adopted");
+    return true;
+````
+
+**with:**
+
+````ts
+    if (!quiet) this.notify("adopted");
+    return true;
+````
+
+**In `frontend/src/lib/draft/context.tsx`, replace:**
+
+````tsx
+ * writes (`storage` events, and a direct read when the page is shown again), a
+ * flush when the page is hidden or left, a flush on unmount (a church switch),
+ * and the three toasts.
+````
+
+**with:**
+
+````tsx
+ * writes (`storage` events, and a direct read when the page is shown again), a
+ * quiet direct read once mounted (slice 5a-3: a page whose provider replaced
+ * another's, Services after the builder, takes the edit the other flushed as
+ * it unmounted), a flush when the page is hidden or left, a flush on unmount
+ * (a church switch), and the three toasts.
+````
+
+**In `frontend/src/lib/draft/context.tsx`, replace:**
+
+````tsx
+    store.start();
+    const onStorage
+````
+
+**with:**
+
+````tsx
+    store.start();
+    // Read after the provider this one replaced has flushed on unmount (its cleanup runs before this effect).
+    store.syncFromStorage({ quiet: true });
+    const onStorage
+````
+
 - [ ] **Step 4 (agent): Run the files, the suite, the types and lint**
 
 ```bash
-(cd frontend && npx vitest run src/lib/draft/save-key.test.ts src/lib/draft/migrate.test.ts src/lib/draft/schema.test.ts src/lib/draft/store.test.ts src/lib/draft/status.test.ts 2>&1 | grep -E "^ +× |\[ src/|Tests ")
+(cd frontend && npx vitest run src/lib/draft/save-key.test.ts src/lib/draft/migrate.test.ts src/lib/draft/schema.test.ts src/lib/draft/store.test.ts src/lib/draft/status.test.ts src/lib/draft/context.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")
 (cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")
 (cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")
 ```
 
-**Expected:** `      Tests  40 passed (40)`; ` Test Files  82 passed (82)` and `      Tests  622 passed (622)` with no `×` or `FAIL` line; `typecheck 0`, `lint 0`.
+**Expected:** `      Tests  48 passed (48)`; ` Test Files  82 passed (82)` and `      Tests  624 passed (624)` with no `×` or `FAIL` line; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5 (agent): Commit**
 
 ```bash
-git add frontend/src/lib/draft/save-key.ts frontend/src/lib/draft/save-key.test.ts frontend/src/lib/draft/schema.ts frontend/src/lib/draft/migrate.ts frontend/src/lib/draft/store.ts frontend/src/lib/draft/schema.test.ts frontend/src/lib/draft/migrate.test.ts frontend/src/lib/draft/store.test.ts frontend/src/lib/draft/status.test.ts
+git add frontend/src/lib/draft/save-key.ts frontend/src/lib/draft/save-key.test.ts frontend/src/lib/draft/schema.ts frontend/src/lib/draft/migrate.ts frontend/src/lib/draft/store.ts frontend/src/lib/draft/context.tsx frontend/src/lib/draft/schema.test.ts frontend/src/lib/draft/migrate.test.ts frontend/src/lib/draft/store.test.ts frontend/src/lib/draft/status.test.ts frontend/src/lib/draft/context.test.tsx
 git commit -q -m "Draft version 2: the saved service's date and the save key (5a-3; F 4.6, 1.6)" -m "The draft gains editing.date_iso and save_key_fingerprint (DRAFT_VERSION
 2, with a tested migration from 1: editing gains the draft's date, the
 fingerprint starts null). lib/draft/save-key.ts keeps the POST /services
 key for an identical retry after an unknown outcome and replaces it after
 any answer or a changed body. The store writes a replaced draft at once,
-so the Services page can open the builder on it." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+so the Services page can open the builder on it; it never adopts a draft
+an older app wrote, and the provider reads storage once mounted (quietly),
+so a page that replaces the builder sees its last edit." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 git log --oneline -1
 ```
 
-Counts after Task 1: frontend **622 in 82**; backend **1335 passed, 16 skipped** (unchanged).
+Counts after Task 1: frontend **624 in 82**; backend **1335 passed, 16 skipped** (unchanged).
 
-### Task 2: The final mapping, `serviceToDraft`, `markSaved`, and the Review statuses (owner answers 4, 5, 9; S "mapping.ts", `status.ts`, "Step status and summary panel"; F §4.6, §4.7; clarifications 3, 6, 7, 8, 17, 19)
+### Task 2: The final mapping, `serviceToDraft`, `markSaved`, and the Review statuses (owner answers 4, 5, 9; owner, 2026-10-02, C1; S "mapping.ts", `status.ts`, "Step status and summary panel"; F §4.6, §4.7; clarifications 3, 6, 7, 8, 17, 19)
 
 **Files:**
-- Modify: `frontend/src/lib/draft/mapping.ts` (**Create**: T2 rewrites it whole), `frontend/src/lib/draft/status.ts`, `frontend/src/lib/draft/steps.ts`, `frontend/src/lib/draft/fingerprint.ts`, `frontend/src/lib/draft/readings.ts`, `frontend/src/lib/api/types.ts`, `frontend/src/components/builder/step-progress.tsx`, `frontend/src/components/builder/new-service-menu-item.tsx`, `frontend/src/test/fixtures/index.ts`, `frontend/src/lib/draft/mapping.test.ts`, `frontend/src/lib/draft/status.test.ts`, `frontend/src/lib/draft/fingerprint.test.ts`
+- Modify: `frontend/src/lib/draft/mapping.ts` (**Create**: T2 rewrites it whole), `frontend/src/lib/draft/status.ts`, `frontend/src/lib/draft/steps.ts`, `frontend/src/lib/draft/fingerprint.ts`, `frontend/src/lib/draft/readings.ts`, `frontend/src/lib/draft/context.tsx`, `frontend/src/lib/liturgy/request.ts`, `frontend/src/lib/liturgy/notes.ts`, `frontend/src/lib/liturgy/review.tsx`, `frontend/src/components/builder/liturgy/card-notes.tsx`, `frontend/src/components/builder/liturgy/review-bar.tsx`, `frontend/src/lib/api/types.ts`, `frontend/src/components/builder/step-progress.tsx`, `frontend/src/components/builder/new-service-menu-item.tsx`, `frontend/src/test/fixtures/index.ts`, `frontend/src/lib/draft/mapping.test.ts`, `frontend/src/lib/draft/status.test.ts`, `frontend/src/lib/draft/fingerprint.test.ts`, `frontend/src/lib/liturgy/request.test.ts`, `frontend/src/lib/liturgy/notes.test.ts`
 
 - [ ] **Step 1 (agent): Write the failing tests and the fixtures**
 
-The fixtures gain a saved service as `GET /services/{id}` returns it (`savedService`: October 4, GG2013 #1 as the Opening hymn, an empty Response slot, a Closing hymn no longer in the hymnal, two sections, communion, an Anthem), one list row (`serviceSummary`) and a page (`servicePage`); `fingerprint.test.ts` imports `isDirty` from its new home.
+The fixtures gain a saved service as `GET /services/{id}` returns it (`savedService`: October 4, GG2013 #1 as the Opening hymn, an empty Response slot, a Closing hymn no longer in the hymnal, two sections, communion, an Anthem), one list row (`serviceSummary`) and a page (`servicePage`); `fingerprint.test.ts` imports `isDirty` from its new home. `request.test.ts` checks the owner's C1 (a saved Benediction that is the church default, or "Halverson", is not sent; an edited one is), and its and `notes.test.ts`'s calls pass the church's default Benediction.
 
 **In `frontend/src/lib/draft/fingerprint.test.ts`, replace:**
 
@@ -1004,13 +1233,146 @@ export function servicePage(items: ServiceSummary[], overrides: Partial<ServiceP
 
 ````
 
+**In `frontend/src/lib/liturgy/request.test.ts`, replace:**
+
+````ts
+import type { Passage } from "@/lib/api/types";
+import { editScriptureLines, setPick, setTranslation } from "@/lib/draft/readings";
+import type { DraftV1, HymnPick } from "@/lib/draft/schema";
+import { hymnId, testDraft, translations } from "@/test/fixtures";
+
+import { editCardText } from "./cards";
+````
+
+**with:**
+
+````ts
+import type { Passage } from "@/lib/api/types";
+import { markSaved } from "@/lib/draft/mapping";
+import { editScriptureLines, setPick, setTranslation } from "@/lib/draft/readings";
+import type { DraftV1, HymnPick } from "@/lib/draft/schema";
+import { hymnId, savedService, testDraft, translations } from "@/test/fixtures";
+
+import { editCardText } from "./cards";
+import { DEFAULT_BENEDICTION_FALLBACK } from "./defaults";
+````
+
+**In `frontend/src/lib/liturgy/request.test.ts`, replace:**
+
+````ts
+    const keys = reviewTargets(d);
+````
+
+**with:**
+
+````ts
+    const keys = reviewTargets(d, DEFAULT_BENEDICTION_FALLBACK);
+````
+
+**In `frontend/src/lib/liturgy/request.test.ts`, replace:**
+
+````ts
+    expect(reviewTargets(d)).toEqual([]); // the only card: nothing to review
+    for (const origin of ["typed", "ai", "archive"] as const) {
+      const other = withCard(d, "benediction", { origin });
+      expect(reviewTargets(other)).toEqual(["benediction"]);
+      expect(buildReviewRequest(other, reviewTargets(other), null).cards).toEqual([{ section: "benediction", origin, text: "Go in peace." }]);
+    }
+  });
+````
+
+**with:**
+
+````ts
+    expect(reviewTargets(d, DEFAULT_BENEDICTION_FALLBACK)).toEqual([]); // the only card: nothing to review
+    for (const origin of ["typed", "ai", "archive"] as const) {
+      const other = withCard(d, "benediction", { origin });
+      expect(reviewTargets(other, DEFAULT_BENEDICTION_FALLBACK)).toEqual(["benediction"]);
+      expect(buildReviewRequest(other, reviewTargets(other, DEFAULT_BENEDICTION_FALLBACK), null).cards).toEqual([
+        { section: "benediction", origin, text: "Go in peace." },
+      ]);
+    }
+  });
+
+  it("leaves out a saved Benediction that is the church default or Streamlit's \"Halverson\"; an edited one is reviewed (5a-3)", () => {
+    const saved = markSaved(withReadings(OCT_4), savedService(), "0000abcd");
+    expect(saved.liturgy.cards.benediction).toEqual({ enabled: true, text: DEFAULT_BENEDICTION_FALLBACK, origin: "archive" });
+    expect(reviewTargets(saved, DEFAULT_BENEDICTION_FALLBACK)).toEqual([]); // the church's text, now the service's own: not sent
+    expect(reviewTargets(withCard(saved, "benediction", { text: `  ${DEFAULT_BENEDICTION_FALLBACK}\n` }), DEFAULT_BENEDICTION_FALLBACK)).toEqual([]);
+    const edited = editCardText(saved, "benediction", `${DEFAULT_BENEDICTION_FALLBACK} Amen.`);
+    expect(reviewTargets(edited, DEFAULT_BENEDICTION_FALLBACK)).toEqual(["benediction"]);
+    expect(reviewTargets(saved, "The Lord bless you and keep you.")).toEqual(["benediction"]); // the church's default changed since
+    for (const text of ["Halverson", " halverson "]) {
+      expect(reviewTargets(withCard(saved, "benediction", { text }), DEFAULT_BENEDICTION_FALLBACK)).toEqual([]);
+    }
+    expect(reviewTargets(withCard(saved, "benediction", { text: "Halverson, adapted" }), DEFAULT_BENEDICTION_FALLBACK)).toEqual(["benediction"]);
+  });
+````
+
+**In `frontend/src/lib/liturgy/notes.test.ts`, replace:**
+
+````ts
+import { applyGenerated, clearCard, editCardText, restoreChurchDefault } from "./cards";
+````
+
+**with:**
+
+````ts
+import { applyGenerated, clearCard, editCardText, restoreChurchDefault } from "./cards";
+import { DEFAULT_BENEDICTION_FALLBACK } from "./defaults";
+````
+
+**In `frontend/src/lib/liturgy/notes.test.ts`, replace:**
+
+````ts
+      const found = acrossTargets(d, words ?? openingWords(texts[0]).join(" "));
+````
+
+**with:**
+
+````ts
+      const found = acrossTargets(d, words ?? openingWords(texts[0]).join(" "), DEFAULT_BENEDICTION_FALLBACK);
+````
+
+**In `frontend/src/lib/liturgy/notes.test.ts`, replace:**
+
+````ts
+    expect(acrossTargets(d, "Gracious God")).toEqual({ words: "Gracious God", first: "call_to_worship", others: ["opening_prayer", "assurance"] });
+    expect(acrossTargets(d, "Holy One")).toBeNull();
+````
+
+**with:**
+
+````ts
+    expect(acrossTargets(d, "Gracious God", DEFAULT_BENEDICTION_FALLBACK)).toEqual({ words: "Gracious God", first: "call_to_worship", others: ["opening_prayer", "assurance"] });
+    expect(acrossTargets(d, "Holy One", DEFAULT_BENEDICTION_FALLBACK)).toBeNull();
+````
+
+**In `frontend/src/lib/liturgy/notes.test.ts`, replace:**
+
+````ts
+    expect(acrossTargets(left, "Gracious God")).toBeNull();
+    // Once edited, the Benediction is typed text and is revised; a lone opening is no shared one.
+    expect(acrossTargets(withText(left, "benediction", "Gracious God, go with us. Amen.", "typed"), "gracious god")?.others).toEqual(["benediction"]);
+    expect(acrossTargets(withText(left, "benediction", "Go in peace.", "typed"), "Gracious God")).toBeNull();
+````
+
+**with:**
+
+````ts
+    expect(acrossTargets(left, "Gracious God", DEFAULT_BENEDICTION_FALLBACK)).toBeNull();
+    // Once edited, the Benediction is typed text and is revised; a lone opening is no shared one.
+    expect(acrossTargets(withText(left, "benediction", "Gracious God, go with us. Amen.", "typed"), "gracious god", DEFAULT_BENEDICTION_FALLBACK)?.others).toEqual(["benediction"]);
+    expect(acrossTargets(withText(left, "benediction", "Go in peace.", "typed"), "Gracious God", DEFAULT_BENEDICTION_FALLBACK)).toBeNull();
+````
+
 - [ ] **Step 2 (agent): Run them and see them fail**
 
 ```bash
-(cd frontend && npx vitest run src/lib/draft/mapping.test.ts src/lib/draft/status.test.ts src/lib/draft/fingerprint.test.ts 2>&1 | grep -E "^ +× |\[ src/|Tests ")
+(cd frontend && npx vitest run src/lib/draft/mapping.test.ts src/lib/draft/status.test.ts src/lib/draft/fingerprint.test.ts src/lib/liturgy/request.test.ts src/lib/liturgy/notes.test.ts 2>&1 | grep -E "^ +× |\[ src/|Tests ")
 ```
 
-**Expected:** eleven failures (`isDirty`, `serviceToDraft`, `markSaved`, `reviewStatus` and `saveMode` are not where the tests import them yet; Review is not shipped; no hymnal row; the payload is not trimmed):
+**Expected:** twelve failures (`isDirty`, `serviceToDraft`, `markSaved`, `reviewStatus` and `saveMode` are not where the tests import them yet; Review is not shipped; no hymnal row; the payload is not trimmed); `notes.test.ts` and the other `request.test.ts` cases pass, since an extra argument changes nothing yet:
 ```
    × fingerprint and isDirty (F §4.6 Unsaved changes) > isDirty: never saved means not pristine; saved means the payload changed <t>ms
    × fingerprint and isDirty (F §4.6 Unsaved changes) > after a save, a slot or hymnal change is unsaved; the Exclude switch and other ideas are not (owner answer 1) <t>ms
@@ -1023,8 +1385,9 @@ export function servicePage(items: ServiceSummary[], overrides: Partial<ServiceP
    × stillNeeded (S Review "Still needed") > counts the hymns step n of 3 and lists each empty slot (slice 3b) and a hymn not in the hymnal (5a-3) <t>ms
    × the archive status and what Save does (slice 5a-3; S status.ts) > reviewStatus is not in the archive, saved, or changed since; the step bar shows it once Review ships <t>ms
    × the archive status and what Save does (slice 5a-3; S status.ts) > saveMode saves new, saves changes on the saved date, and saves a copy on another date or for an undated service <t>ms
-⎯⎯⎯⎯⎯⎯ Failed Tests 11 ⎯⎯⎯⎯⎯⎯⎯
-      Tests  11 failed | 14 passed (25)
+   × buildReviewRequest and buildReviseRequest (the service reviewer, R API) > leaves out a saved Benediction that is the church default or Streamlit's "Halverson"; an edited one is reviewed (5a-3) <t>ms
+⎯⎯⎯⎯⎯⎯ Failed Tests 12 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  12 failed | 28 passed (40)
 ```
 
 - [ ] **Step 3 (agent): The mapping, the statuses, Review shipped, the readings banner**
@@ -1548,20 +1911,279 @@ export const SHIPPED_STEPS: ReadonlySet<StepId> = new Set<StepId>(["readings", "
 export const SHIPPED_STEPS: ReadonlySet<StepId> = new Set<StepId>(["readings", "hymns", "liturgy", "review"]);
 ````
 
+**In `frontend/src/lib/liturgy/request.ts`, replace:**
+
+````ts
+import { SECTION_KEYS, type DraftV1, type HymnPick, type SectionKey } from "@/lib/draft/schema";
+````
+
+**with:**
+
+````ts
+import { SECTION_KEYS, type DraftV1, type HymnPick, type LiturgyCard, type SectionKey } from "@/lib/draft/schema";
+````
+
+**In `frontend/src/lib/liturgy/request.ts`, replace:**
+
+````ts
+/**
+ * What "Review service" sends: every switched-on card with text after
+ * trimming, in section order, except a Benediction that follows the church
+ * default (origin "default"; owner, 2026-10-02): the church's fixed text is
+ * not the member's to change, so it gets no notes and no shared-opening count.
+ */
+export function reviewTargets(draft: DraftV1): SectionKey[] {
+  return SECTION_KEYS.filter((key) => {
+    const card = draft.liturgy.cards[key];
+    if (key === "benediction" && card.origin === "default") return false;
+````
+
+**with:**
+
+````ts
+/** Streamlit's default Benediction, stored as this one word in services saved there (app.py `DEFAULT_BENEDICTION`). */
+const STREAMLIT_BENEDICTION = "halverson";
+
+/**
+ * A Benediction that is the church's default, whatever its origin (slice
+ * 5a-3): one that follows the default (origin "default"), or whose text is
+ * the church's current default (trimmed, exactly) or Streamlit's "Halverson"
+ * (any case). A save, or opening a saved service, makes the default text
+ * the service's own (origin "archive"), and it is still the church's text.
+ */
+export function isDefaultBenediction(card: LiturgyCard, defaultBenediction: string): boolean {
+  if (card.origin === "default") return true;
+  const text = card.text.trim();
+  return (text !== "" && text === defaultBenediction.trim()) || text.toLowerCase() === STREAMLIT_BENEDICTION;
+}
+
+/**
+ * What "Review service" sends: every switched-on card with text after
+ * trimming, in section order, except a Benediction that is the church's
+ * default (`isDefaultBenediction`; owner, 2026-10-02, and the 5a-3 review):
+ * the church's fixed text is not the member's to change, so it gets no notes
+ * and no shared-opening count. `defaultBenediction` is the church's current
+ * default (`useDraft().defaultBenediction`).
+ */
+export function reviewTargets(draft: DraftV1, defaultBenediction: string): SectionKey[] {
+  return SECTION_KEYS.filter((key) => {
+    const card = draft.liturgy.cards[key];
+    if (key === "benediction" && isDefaultBenediction(card, defaultBenediction)) return false;
+````
+
+**In `frontend/src/lib/liturgy/notes.ts`, replace:**
+
+````ts
+ * switched-on cards with text (the review's own rule, so never a Benediction
+ * following the church default: owner, 2026-10-02) whose first two words
+````
+
+**with:**
+
+````ts
+ * switched-on cards with text (the review's own rule, so never a Benediction
+ * that is the church default: owner, 2026-10-02) whose first two words
+````
+
+**In `frontend/src/lib/liturgy/notes.ts`, replace:**
+
+````ts
+export function acrossTargets(d: DraftV1, words: string): AcrossTargets | null {
+  const key = words.toLowerCase();
+  const sharing = reviewTargets(d).filter((k) => {
+````
+
+**with:**
+
+````ts
+export function acrossTargets(d: DraftV1, words: string, defaultBenediction: string): AcrossTargets | null {
+  const key = words.toLowerCase();
+  const sharing = reviewTargets(d, defaultBenediction).filter((k) => {
+````
+
+**In `frontend/src/lib/draft/context.tsx`, replace:**
+
+````tsx
+  peek: () => DraftV1;
+  persistence: Persistence;
+};
+````
+
+**with:**
+
+````tsx
+  peek: () => DraftV1;
+  persistence: Persistence;
+  /** The church's current default Benediction (its own, else the fallback), as the store applies it. */
+  defaultBenediction: string;
+};
+````
+
+**In `frontend/src/lib/draft/context.tsx`, replace:**
+
+````tsx
+      peek,
+    }),
+    [snapshot, store, peek],
+````
+
+**with:**
+
+````tsx
+      peek,
+      defaultBenediction,
+    }),
+    [snapshot, store, peek, defaultBenediction],
+````
+
+**In `frontend/src/lib/liturgy/review.tsx`, replace:**
+
+````tsx
+  const { draft, update, peek } = useDraft();
+````
+
+**with:**
+
+````tsx
+  const { draft, update, peek, defaultBenediction } = useDraft();
+````
+
+**In `frontend/src/lib/liturgy/review.tsx`, replace:**
+
+````tsx
+    const keys = reviewTargets(asked);
+````
+
+**with:**
+
+````tsx
+    const keys = reviewTargets(asked, defaultBenediction);
+````
+
+**In `frontend/src/lib/liturgy/review.tsx`, replace:**
+
+````tsx
+  }, [api, handleFailure, loadSermon, peek]);
+````
+
+**with:**
+
+````tsx
+  }, [api, defaultBenediction, handleFailure, loadSermon, peek]);
+````
+
+**In `frontend/src/lib/liturgy/review.tsx`, replace:**
+
+````tsx
+        if (!batch.all || acrossTargets(peek(), batch.words) !== null) return;
+````
+
+**with:**
+
+````tsx
+        if (!batch.all || acrossTargets(peek(), batch.words, defaultBenediction) !== null) return;
+````
+
+**In `frontend/src/lib/liturgy/review.tsx`, replace:**
+
+````tsx
+      step();
+    },
+    [peek],
+  );
+````
+
+**with:**
+
+````tsx
+      step();
+    },
+    [defaultBenediction, peek],
+  );
+````
+
+**In `frontend/src/lib/liturgy/review.tsx`, replace:**
+
+````tsx
+      const targets = acrossTargets(asked, words);
+````
+
+**with:**
+
+````tsx
+      const targets = acrossTargets(asked, words, defaultBenediction);
+````
+
+**In `frontend/src/lib/liturgy/review.tsx`, replace:**
+
+````tsx
+    [peek, rateLimitedUntil, runAcross, runs],
+````
+
+**with:**
+
+````tsx
+    [defaultBenediction, peek, rateLimitedUntil, runAcross, runs],
+````
+
+**In `frontend/src/components/builder/liturgy/card-notes.tsx`, replace:**
+
+````tsx
+  const review = useLiturgyReview();
+  const { draft } = useDraft();
+  const { runs, rateLimitedUntil } = useLiturgyGeneration();
+````
+
+**with:**
+
+````tsx
+  const review = useLiturgyReview();
+  const { draft, defaultBenediction } = useDraft();
+  const { runs, rateLimitedUntil } = useLiturgyGeneration();
+````
+
+**In `frontend/src/components/builder/liturgy/card-notes.tsx`, replace:**
+
+````tsx
+    const targets = words === null ? null : acrossTargets(draft, words);
+````
+
+**with:**
+
+````tsx
+    const targets = words === null ? null : acrossTargets(draft, words, defaultBenediction);
+````
+
+**In `frontend/src/components/builder/liturgy/review-bar.tsx`, replace:**
+
+````tsx
+  const { draft } = useDraft();
+  const review = useLiturgyReview();
+  const ready = reviewTargets(draft).length > 0;
+````
+
+**with:**
+
+````tsx
+  const { draft, defaultBenediction } = useDraft();
+  const review = useLiturgyReview();
+  const ready = reviewTargets(draft, defaultBenediction).length > 0;
+````
+
 - [ ] **Step 4 (agent): Run the files, the suite, the types and lint**
 
 ```bash
-(cd frontend && npx vitest run src/lib/draft/mapping.test.ts src/lib/draft/status.test.ts src/lib/draft/fingerprint.test.ts 2>&1 | grep -E "^ +× |\[ src/|Tests ")
+(cd frontend && npx vitest run src/lib/draft/mapping.test.ts src/lib/draft/status.test.ts src/lib/draft/fingerprint.test.ts src/lib/liturgy/request.test.ts src/lib/liturgy/notes.test.ts 2>&1 | grep -E "^ +× |\[ src/|Tests ")
 (cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")
 (cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")
 ```
 
-**Expected:** `      Tests  25 passed (25)`; ` Test Files  82 passed (82)` and `      Tests  628 passed (628)` with no `×` or `FAIL` line (the builder shell's Review item still reads "Not in archive" for a fresh draft); `typecheck 0`, `lint 0`.
+**Expected:** `      Tests  40 passed (40)`; ` Test Files  82 passed (82)` and `      Tests  631 passed (631)` with no `×` or `FAIL` line (the builder shell's Review item still reads "Not in archive" for a fresh draft); `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5 (agent): Commit**
 
 ```bash
-git add frontend/src/lib/draft/mapping.ts frontend/src/lib/draft/status.ts frontend/src/lib/draft/steps.ts frontend/src/lib/draft/fingerprint.ts frontend/src/lib/draft/readings.ts frontend/src/lib/api/types.ts frontend/src/components/builder/step-progress.tsx frontend/src/components/builder/new-service-menu-item.tsx frontend/src/test/fixtures/index.ts frontend/src/lib/draft/mapping.test.ts frontend/src/lib/draft/status.test.ts frontend/src/lib/draft/fingerprint.test.ts
+git add frontend/src/lib/draft/mapping.ts frontend/src/lib/draft/status.ts frontend/src/lib/draft/steps.ts frontend/src/lib/draft/fingerprint.ts frontend/src/lib/draft/readings.ts frontend/src/lib/draft/context.tsx frontend/src/lib/liturgy/request.ts frontend/src/lib/liturgy/notes.ts frontend/src/lib/liturgy/review.tsx frontend/src/components/builder/liturgy/card-notes.tsx frontend/src/components/builder/liturgy/review-bar.tsx frontend/src/lib/api/types.ts frontend/src/components/builder/step-progress.tsx frontend/src/components/builder/new-service-menu-item.tsx frontend/src/test/fixtures/index.ts frontend/src/lib/draft/mapping.test.ts frontend/src/lib/draft/status.test.ts frontend/src/lib/draft/fingerprint.test.ts frontend/src/lib/liturgy/request.test.ts frontend/src/lib/liturgy/notes.test.ts
 git commit -q -m "Draft mapping and statuses: serviceToDraft, markSaved, Saved and Unsaved changes (5a-3; owner answers 4, 5)" -m "draftToServicePayload takes its final form (text trimmed as the server
 trims it). serviceToDraft opens a saved service as a new draft that is
 already Saved; markSaved records a save and keeps a default Benediction
@@ -1569,14 +2191,16 @@ and communion as saved (owner answer 4). status.ts gains isDirty (moved
 from fingerprint.ts), reviewStatus, saveMode and the 'isn't in your
 hymnal' row; Review ships, so the step bar shows Saved or Unsaved
 changes. No 'Readings for ... are available' while the date is the saved
-date (owner answer 5)." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+date (owner answer 5). Review service skips a Benediction that is the
+church default (or Streamlit's Halverson) whatever its origin, so a save
+does not put the church's text up for review (owner, 2026-10-02)." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 git log --oneline -1
 ```
 
-Counts after Task 2: frontend **628 in 82**; backend **1335 passed, 16 skipped**.
+Counts after Task 2: frontend **631 in 82**; backend **1335 passed, 16 skipped**.
 
-### Task 3: The archive's queries and the save time (S `lib/queries/services.ts`, `useSaveService`, `useDeleteService`; F §1.6, §1.7, §4.4; clarifications 9-12, 15, 16, 17, 20)
+### Task 3: The archive's queries and the save time (S `lib/queries/services.ts`, `useSaveService`, `useDeleteService`; F §1.6, §1.7, §4.4; clarifications 9-12, 15, 16, 17, 20, 24, 26)
 
 **Files:**
 - Create: `frontend/src/lib/queries/services.ts`
@@ -1757,16 +2381,20 @@ export function documentRequest(draft: DraftV1, variant: DocumentVariant): Docum
  *
  * - `useServices()`: the list, 20 a page, newest service date first (the
  *   server's order), "Show more" reading the next offset.
- * - `useSaveService()`: Save. "Save changes" PUTs with `If-Match` (the
+ * - `useSaveService(church)`: Save. "Save changes" PUTs with `If-Match` (the
  *   `saved_at` the draft holds); a 404 without `details.field` (the service
- *   was deleted) POSTs instead and says so; a 409 is left to the Save card
- *   (the conflict dialog). "Save to archive", "Save as new service" and the
- *   dialog's "Save mine as a new service" POST with the draft's save key
- *   (`save-key.ts`): replaced after any answer, kept for an identical retry
- *   after an unknown outcome, and one automatic retry with a new key after
- *   `idempotency_mismatch`. Success records the save in the draft
- *   (`markSaved`), caches the service, and refreshes the list and the hymns
- *   (a save rebuilds that date's hymn use, so `recently_used` changes).
+ *   was deleted) POSTs instead and says so. A 409 reads the archive's copy:
+ *   when it is what this save sends (this device's earlier save went through
+ *   but its answer was lost, a timeout), that is the save; otherwise the 409
+ *   is left to the Save card (the conflict dialog). "Save to archive", "Save
+ *   as new service" and the dialog's "Save mine as a new service" POST with
+ *   the draft's save key (`save-key.ts`, kept through `autoUpdate`, so the
+ *   bookkeeping never outranks an edit in another tab): replaced after any
+ *   answer, kept for an identical retry after an unknown outcome, and one
+ *   automatic retry with a new key after `idempotency_mismatch`. Success
+ *   records the save in the draft (`markSaved`), caches the service, and
+ *   refreshes the list and the hymns (a save rebuilds that date's hymn use,
+ *   so `recently_used` changes).
  *   A replayed POST answer (the same key and body within 15 minutes) is the
  *   first answer; if that service was changed or deleted since, the next
  *   "Save changes" meets the 409 or the 404 above, which already handle it.
@@ -1844,12 +2472,12 @@ export function useServices() {
 export type SaveVariables = { asNew?: boolean };
 type Saved = { service: ServiceOut; fp: string; fellBack: boolean };
 
-export function useSaveService() {
+export function useSaveService(church: DraftChurch) {
   const api = useApi();
-  const church = useChurch();
   const queryClient = useQueryClient();
   const router = useRouter();
-  const { peek, update } = useDraft();
+  const me = useMeContext();
+  const { peek, update, autoUpdate } = useDraft();
   return useChurchMutation<Saved, ApiError, SaveVariables>({
     mutationFn: async ({ asNew = false }) => {
       const draft = peek();
@@ -1857,15 +2485,26 @@ export function useSaveService() {
       const body = serviceBody(draft);
 
       async function post(retried: boolean): Promise<ServiceOut> {
-        update((d) => keyForPost(d, fp));
+        autoUpdate((d) => keyForPost(d, fp));
         try {
           const out = await api.church<ServiceOut>("/services", { method: "POST", json: body, idempotencyKey: peek().save_key });
-          update((d) => settlePost(d, "success"));
+          autoUpdate((d) => settlePost(d, "success"));
           return out;
         } catch (e) {
-          update((d) => settlePost(d, settleOutcome(e)));
+          autoUpdate((d) => settlePost(d, settleOutcome(e)));
           if (!retried && e instanceof ApiError && e.code === "idempotency_mismatch") return post(true);
           throw e;
+        }
+      }
+
+      /** The archive's copy when it is what this save sends (a draft that leaves the hymnal to the church sent none); else null. */
+      async function sameAsSent(serviceId: string): Promise<ServiceOut | null> {
+        try {
+          const theirs = await api.church<ServiceOut>(`/services/${serviceId}`);
+          const payload = draftToServicePayload(serviceToDraft(theirs, { church, user: me.user }));
+          return fingerprint(draft.hymns.hymnal === null ? { ...payload, hymnal: null } : payload) === fp ? theirs : null;
+        } catch {
+          return null;
         }
       }
 
@@ -1879,6 +2518,12 @@ export function useSaveService() {
           });
           return { service, fp, fellBack: false };
         } catch (e) {
+          // A 409 that answers this device's own earlier save (its answer was lost): already saved.
+          if (isConflict(e)) {
+            const theirs = await sameAsSent(editing.service_id);
+            if (theirs !== null) return { service: theirs, fp, fellBack: false };
+            throw e;
+          }
           // The saved copy was deleted (a 404 with no field): save this one as a new service.
           if (!(e instanceof ApiError) || e.status !== 404 || e.details?.field !== undefined) throw e;
           return { service: await post(false), fp, fellBack: true };
@@ -1966,8 +2611,10 @@ export function useDeleteService(church: DraftChurch) {
 ```bash
 git add frontend/src/lib/queries/services.ts frontend/src/lib/dates.ts frontend/src/lib/documents.ts frontend/src/lib/dates.test.ts
 git commit -q -m "Archive queries: save, open, delete and the list; the save time (5a-3; F 1.6, 1.7, 4.4)" -m "lib/queries/services.ts: useServices (20 a page), useSaveService (PUT
-with If-Match; POST with the draft's key; the deleted-copy fallback; one
-retry after idempotency_mismatch; a 409 left to the Save card),
+with If-Match; POST with the draft's key, kept through autoUpdate; the
+deleted-copy fallback; one retry after idempotency_mismatch; a 409 that
+answers this device's own lost save counts as saved, any other is left to
+the Save card),
 useOpenService and useDeleteService, each refreshing the list and the
 hymns as F 4.4 says. A save sends the downloads' body (serviceBody), so it
 never meets a 422 for a length. formatSavedAt shows a save time in the
@@ -1976,9 +2623,9 @@ Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 git log --oneline -1
 ```
 
-Counts after Task 3: frontend **629 in 82**; backend **1335 passed, 16 skipped**.
+Counts after Task 3: frontend **632 in 82**; backend **1335 passed, 16 skipped**.
 
-### Task 4: Review & send: the Archive card, the conflict dialog, the banner, "Still to do" (owner answers 2, 4, 9; S UX "Review step" items 1-4, "Step status and summary panel", "Mobile specifics"; F §4.7, §4.8, §4.9; clarifications 2-6, 9, 10, 13, 17, 18, 21)
+### Task 4: Review & send: the Archive card, the conflict dialog, the banner, "Still to do" (owner answers 2, 4, 9; owner, 2026-10-02, I3; S UX "Review step" items 1-4, "Step status and summary panel", "Mobile specifics"; F §4.7, §4.8, §4.9; clarifications 2-6, 9, 10, 13, 17, 18, 21, 24)
 
 **Files:**
 - Create: `frontend/src/components/builder/review/save-card.tsx`, `frontend/src/components/builder/review/conflict-dialog.tsx`, `frontend/src/components/builder/review/editing-banner.tsx`
@@ -1986,7 +2633,7 @@ Counts after Task 3: frontend **629 in 82**; backend **1335 passed, 16 skipped**
 
 - [ ] **Step 1 (agent): Write the failing tests**
 
-`review-send-step.test.tsx` gains "Review & send: saving" (eight cases: a new save then Save changes with every status; the banner, the hymn row and the two copy cases; the conflict dialog both ways; the deleted copy; Go to Hymns and a new key; the key kept, replaced and the mismatch retried; Start a new service; the save tip), a `Probe` button that changes the draft as another step would, and `toast.dismiss()` after each test (sonner replays a toast still showing to the next `Toaster`); its first case now checks the new order and its two "off" cases check Save too. `builder-shell.test.tsx` reads "Still to do" and "Everything's ready.".
+`review-send-step.test.tsx` gains "Review & send: saving" (nine cases: a new save then Save changes with every status; the banner, the hymn row and the two copy cases; the conflict dialog both ways, with its second line and its primary button; a 409 after a lost answer that is the save itself; the deleted copy; Go to Hymns and a new key; the key kept, replaced and the mismatch retried; Start a new service; the save tip), a `Probe` button that changes the draft as another step would, and `toast.dismiss()` after each test (sonner replays a toast still showing to the next `Toaster`); its first case now checks the new order and its two "off" cases check Save too. `builder-shell.test.tsx` reads "Still to do" and "Everything's ready.".
 
 **In `frontend/src/components/builder/builder-shell.test.tsx`, replace:**
 
@@ -2176,7 +2823,7 @@ import { FIX_READINGS, NEEDS_DATE, SAME_AS_BULLETIN } from "./documents-card";
 import { testRouter } from "@/test/mocks";
 import { renderWithProviders } from "@/test/render";
 
-import { CONFLICT_TITLE } from "./conflict-dialog";
+import { CONFLICT_TITLE, RELOAD_REPLACES } from "./conflict-dialog";
 import { FIX_READINGS, NEEDS_DATE, SAME_AS_BULLETIN, SAVE_HINT } from "./documents-card";
 import { CONFLICT_MESSAGE, LOADED_LATEST, SAVE_FIX_READINGS, SAVE_NEEDS_DATE } from "./save-card";
 import { SAVED_AFTER_DELETE_MESSAGE, SAVED_MESSAGE } from "@/lib/queries/services";
@@ -2447,21 +3094,28 @@ describe("Review & send: saving (slice 5a-3)", () => {
   });
 
   it("on a conflict, reloads their version or saves mine as a new service", async () => {
-    const { api, user } = renderReview(opened({ saved_at: FIRST_SAVE }), {
-      [`PUT /services/${SERVICE_ID}`]: fakeError(409, "conflict", CONFLICT_MESSAGE, { details: { current_saved_at: SECOND_SAVE } }),
-      [`GET /services/${SERVICE_ID}`]: savedService({ occasion: "Their occasion", saved_at: SECOND_SAVE }),
-      "POST /services": () => ({ status: 201, body: savedService({ id: OTHER_ID, saved_at: "2026-10-02T15:10:00+00:00" }) }),
-    });
+    const { api, user } = renderReview(
+      opened({ saved_at: FIRST_SAVE }),
+      {
+        [`PUT /services/${SERVICE_ID}`]: fakeError(409, "conflict", CONFLICT_MESSAGE, { details: { current_saved_at: SECOND_SAVE } }),
+        [`GET /services/${SERVICE_ID}`]: savedService({ occasion: "Their occasion", saved_at: SECOND_SAVE }),
+        "POST /services": () => ({ status: 201, body: savedService({ id: OTHER_ID, saved_at: "2026-10-02T15:10:00+00:00" }) }),
+      },
+      <Probe edit={(draft) => editOccasion(draft, "My occasion")} />,
+    );
     const card = await archiveCard();
     await user.click(within(card).getByRole("button", { name: "Save changes" }));
     const dialog = await screen.findByRole("alertdialog", { name: CONFLICT_TITLE });
-    expect(dialog).toHaveTextContent(CONFLICT_MESSAGE);
+    expect(dialog).toHaveAccessibleDescription(`${CONFLICT_MESSAGE} ${RELOAD_REPLACES}`);
+    expect(within(dialog).getByRole("button", { name: "Save mine as a new service" })).toHaveClass("bg-primary"); // the primary choice
+    expect(within(dialog).getByRole("button", { name: "Reload their version" })).toHaveClass("bg-background"); // outline
     await user.click(within(dialog).getByRole("button", { name: "Reload their version" }));
     expect(await screen.findByText(LOADED_LATEST)).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
     expect(stored()).toMatchObject({ readings: { occasion: "Their occasion" }, editing: { saved_at: SECOND_SAVE } });
     expect(within(card).getByText(`Saved to the archive · ${formatSavedAt(SECOND_SAVE)}`)).toBeInTheDocument();
 
+    await user.click(screen.getByRole("button", { name: "Probe edit" })); // and they save again meanwhile
     await user.click(within(card).getByRole("button", { name: "Save changes" }));
     const again = await screen.findByRole("alertdialog", { name: CONFLICT_TITLE });
     await user.click(within(again).getByRole("button", { name: "Save mine as a new service" }));
@@ -2469,6 +3123,29 @@ describe("Review & send: saving (slice 5a-3)", () => {
     await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
     expect(serviceRequests(api, "POST")).toHaveLength(1);
     await waitFor(() => expect(stored().editing?.service_id).toBe(OTHER_ID));
+  });
+
+  it("after a save whose answer was lost, a 409 is that save when the archive's copy is what was sent", async () => {
+    const errorToast = vi.spyOn(toast, "error");
+    let puts = 0;
+    const { api, user } = renderReview(editOccasion(opened({ saved_at: FIRST_SAVE }), "Harvest Home"), {
+      [`PUT /services/${SERVICE_ID}`]: () => {
+        puts += 1;
+        if (puts === 1) throw new TypeError("Failed to fetch"); // the server saved it; the answer never came
+        return fakeError(409, "conflict", CONFLICT_MESSAGE, { details: { current_saved_at: SECOND_SAVE } });
+      },
+      [`GET /services/${SERVICE_ID}`]: savedService({ occasion: "Harvest Home", saved_at: SECOND_SAVE }),
+    });
+    const card = await archiveCard();
+    await user.click(within(card).getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(errorToast).toHaveBeenCalledTimes(1));
+    await user.click(within(card).getByRole("button", { name: "Save changes" }));
+    expect(await screen.findByText(SAVED_MESSAGE)).toBeInTheDocument();
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(within(card).getByText(`Saved to the archive · ${formatSavedAt(SECOND_SAVE)}`)).toBeInTheDocument();
+    await waitFor(() => expect(stored().editing).toEqual({ service_id: SERVICE_ID, saved_at: SECOND_SAVE, date_iso: "2026-10-04" }));
+    expect(serviceRequests(api, "PUT").map((r) => r.headers["if-match"])).toEqual([FIRST_SAVE, FIRST_SAVE]);
+    expect(serviceRequests(api, "POST")).toEqual([]);
   });
 
   it("saves as a new service, and says so, when the saved copy was deleted", async () => {
@@ -2626,13 +3303,15 @@ import {
 } from "@/components/ui/alert-dialog";
 
 export const CONFLICT_TITLE = "Someone else changed this service";
+export const RELOAD_REPLACES = "Reloading replaces your changes on this device.";
 
 /**
  * The 409 dialog (slice 5a spec, UX "Save card" Conflict; F §1.7): the
- * server's message, then "Reload their version" (the dialog is the
- * confirmation: the draft becomes their saved copy), "Save mine as a new
- * service" (a POST; theirs stays) and "Cancel" (nothing changes). Each action
- * button shows its own pending label; the dialog stays open until it ends.
+ * server's message and that reloading replaces this device's changes, then
+ * "Save mine as a new service" (the primary button: a POST; theirs stays),
+ * "Reload their version" (the dialog is the confirmation: the draft becomes
+ * their saved copy) and "Cancel" (nothing changes). Each action button shows
+ * its own pending label; the dialog stays open until it ends.
  */
 export function ConflictDialog({
   open,
@@ -2657,7 +3336,9 @@ export function ConflictDialog({
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{CONFLICT_TITLE}</AlertDialogTitle>
-          <AlertDialogDescription>{message}</AlertDialogDescription>
+          <AlertDialogDescription className="grid gap-2">
+            <span>{message}</span> <span>{RELOAD_REPLACES}</span>
+          </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel size="touch" className="md:h-8">
@@ -2667,21 +3348,15 @@ export function ConflictDialog({
             variant="outline"
             size="touch"
             className="md:h-8"
-            pending={saving}
-            disabled={busy}
-            onClick={() => onSaveAsNew()}
-          >
-            Save mine as a new service
-          </PendingButton>
-          <PendingButton
-            size="touch"
-            className="md:h-8"
             pending={reloading}
             pendingLabel="Loading…"
             disabled={busy}
             onClick={() => onReload()}
           >
             Reload their version
+          </PendingButton>
+          <PendingButton size="touch" className="md:h-8" pending={saving} disabled={busy} onClick={() => onSaveAsNew()}>
+            Save mine as a new service
           </PendingButton>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -2964,7 +3639,7 @@ const LABELS = { new: "Save to archive", update: "Save changes", copy: "Save as 
  */
 export function SaveCard({ church }: { church: DraftChurch }) {
   const { draft } = useDraft();
-  const save = useSaveService();
+  const save = useSaveService(church);
   const reload = useOpenService(church);
   const newService = useNewService(church);
   const [conflict, setConflict] = useState<string | null>(null);
@@ -3168,7 +3843,7 @@ for i in 1 2 3; do (cd frontend && npx vitest run src/components/builder/review/
 grep -rn "Saving services to the archive" frontend/src; echo "note grep exit $?"
 ```
 
-**Expected:** three times `      Tests  27 passed (27)`; ` Test Files  82 passed (82)` and `      Tests  637 passed (637)` with no `×` or `FAIL` line; `typecheck 0`, `lint 0`; `note grep exit 1` (5a-1's note is gone).
+**Expected:** three times `      Tests  28 passed (28)`; ` Test Files  82 passed (82)` and `      Tests  641 passed (641)` with no `×` or `FAIL` line; `typecheck 0`, `lint 0`; `note grep exit 1` (5a-1's note is gone).
 
 - [ ] **Step 5 (agent): Commit**
 
@@ -3179,15 +3854,16 @@ to do (4b's list renamed, Everything's ready. when nothing is missing, a
 row per hymn not in the hymnal), the Archive card (Save to archive, Save
 changes or Save as new service with why, Start a new service) and the
 Word documents with the save tip. A 409 opens Someone else changed this
-service (Reload their version, Save mine as a new service, Cancel). The
+service (it says reloading replaces your changes on this device; Save
+mine as a new service first, Reload their version, Cancel). The
 summary's status line shows the archive half and links to Review." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 git log --oneline -1
 ```
 
-Counts after Task 4: frontend **637 in 82**; backend **1335 passed, 16 skipped**.
+Counts after Task 4: frontend **641 in 82**; backend **1335 passed, 16 skipped**.
 
-### Task 5: The Services page and the menu item (owner answer 6; S "Services page", "Mobile specifics"; F §4.1, §4.2, §4.8, §4.9; clarifications 14-16, 18, 21)
+### Task 5: The Services page and the menu item (owner answer 6; S "Services page", "Mobile specifics"; F §4.1, §4.2, §4.8, §4.9; clarifications 14-16, 18, 21, 27)
 
 **Files:**
 - Create: `frontend/src/app/(signed-in)/(church)/services/page.tsx`, `frontend/src/components/services/services-page.tsx`, `frontend/src/components/services/service-row.tsx`, `frontend/src/components/services/services-page.test.tsx`
@@ -3375,6 +4051,33 @@ describe("Services (slice 5a-3)", () => {
     expect(screen.getByText("Service 40")).toBeInTheDocument();
   });
 
+  it("after Show more, a delete reads every page again and the count follows; an undated row's menu names its occasion", async () => {
+    const undatedId = "88888888-8888-4888-8888-888888888888";
+    const undated = serviceSummary({ id: undatedId, service_date_iso: null, service_date: "", occasion: "Service 40" });
+    let deleted = false;
+    const { user, api } = renderServices(testDraft(), {
+      "GET /services?limit=20&offset=0": () => servicePage(rows(20), { total: deleted ? 44 : 45 }),
+      "GET /services?limit=20&offset=20": () =>
+        servicePage(deleted ? rows(19, 20) : [...rows(19, 20), undated], { total: deleted ? 44 : 45, offset: 20 }),
+      [`DELETE /services/${undatedId}`]: () => {
+        deleted = true;
+        return { deleted: true };
+      },
+    });
+    expect(await screen.findByText("Showing 20 of 45")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Show more" }));
+    expect(await screen.findByText("Showing 40 of 45")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "More actions for No date, Service 40" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Delete…" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "Delete this service?" });
+    await user.click(within(dialog).getByRole("button", { name: "Delete service" }));
+    expect(await screen.findByText("Showing 39 of 44")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(screen.queryByText("Service 40")).toBeNull();
+    const [first, more] = ["/services?limit=20&offset=0", "/services?limit=20&offset=20"];
+    expect(listRequests(api).map((r) => r.path)).toEqual([first, more, first, more]);
+  });
+
   it("opens a service into the builder at once when the draft has nothing unsaved", async () => {
     const { user, api } = renderServices(testDraft(), {
       "GET /services": servicePage([serviceSummary()]),
@@ -3526,6 +4229,13 @@ export function savedByLine(s: ServiceSummary): string {
   return s.created_by ? `Created by ${s.created_by.name} · last saved ${at}` : `Last saved ${at}`;
 }
 
+/** The row menu's name for screen readers: "More actions for {date}", plus the occasion when the service has no date, so undated rows differ. */
+export function moreActionsLabel(s: ServiceSummary): string {
+  const date = serviceDateLabel(s);
+  const occasion = s.occasion.trim();
+  return !s.service_date_iso && occasion !== "" ? `More actions for ${date}, ${occasion}` : `More actions for ${date}`;
+}
+
 /**
  * One saved service (slice 5a spec, "Services page" List): the date, the
  * occasion, who created it and when it was last saved, "Editing" when the
@@ -3566,7 +4276,7 @@ export function ServiceRow({
       </button>
       <DropdownMenu>
         <DropdownMenuTrigger
-          aria-label={`More actions for ${date}`}
+          aria-label={moreActionsLabel(service)}
           disabled={disabled}
           className={cn(buttonVariants({ variant: "ghost", size: "icon-lg" }), "m-1 size-11 shrink-0")}
         >
@@ -3788,7 +4498,7 @@ for i in 1 2 3; do (cd frontend && npx vitest run src/components/services/servic
 (cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")
 ```
 
-**Expected:** three times `      Tests  14 passed (14)`; ` Test Files  83 passed (83)` and `      Tests  645 passed (645)` with no `×` or `FAIL` line; `typecheck 0`, `lint 0`.
+**Expected:** three times `      Tests  15 passed (15)`; ` Test Files  83 passed (83)` and `      Tests  650 passed (650)` with no `×` or `FAIL` line; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5 (agent): Commit**
 
@@ -3805,7 +4515,7 @@ Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 git log --oneline -1
 ```
 
-Counts after Task 5: frontend **645 in 83**; backend **1335 passed, 16 skipped**.
+Counts after Task 5: frontend **650 in 83**; backend **1335 passed, 16 skipped**.
 
 ### Task 6: Docs: S's amendment, F's index row, the manual check items (owner answers 2026-10-01/02; clarification 22)
 
@@ -3862,6 +4572,8 @@ Plan: `docs/superpowers/plans/2026-10-02-slice-5a3-save-services.md`. The owner'
 6. **The Services page** renders its own draft provider (the builder's is not mounted there), and the draft store now writes a replaced draft at once (New service, opening, the reset after a delete), so the builder it opens reads it. Rows open on a tap; "Delete…" is in the row's menu.
 7. **The draft is version 2** (`editing.date_iso`, `save_key_fingerprint`); the names `DraftV1` and `draftV1Schema` stay. `isDirty` moved from `fingerprint.ts` to `status.ts`, beside `reviewStatus` and `saveMode`.
 8. **A replayed `POST /services` answer may be stale** (5a-2 plan, clarification 4); there is no special handling: a later "Save changes" meets the 409 or the deleted-copy 404, which already handle it.
+9. **The conflict dialog** adds "Reloading replaces your changes on this device." under the server's message, and "Save mine as a new service" is its primary button, "Reload their version" an outline one (owner, 2026-10-02). A 409 whose service in the archive is exactly what was sent (this device's earlier save went through but its answer was lost) is recorded as the save, with no dialog.
+10. **"Review service" skips the church's Benediction whatever its origin** (owner, 2026-10-02): one following the default, or whose text is the church's current default (trimmed) or Streamlit's "Halverson" (any case), so a save or an opened service never puts the church's text up for review.
 ````
 
 - [ ] **Step 2 (agent): Check the docs tests and the suites**
@@ -3874,7 +4586,7 @@ git diff --stat | tail -1
 .venv/bin/python -m pytest -q | tail -1
 ```
 
-**Expected:** `89 passed in <t>s`; `4`; `0` (no em dash added); `3 files changed, 26 insertions(+)`; `1335 passed, 16 skipped in <t>s`.
+**Expected:** `89 passed in <t>s`; `4`; `0` (no em dash added); `3 files changed, 28 insertions(+)`; `1335 passed, 16 skipped in <t>s`.
 
 - [ ] **Step 3 (agent): Commit**
 
@@ -3894,7 +4606,7 @@ git log --oneline -1
 
 One review of the whole batch: the draft migration and the save key exactly as clarifications 10 and 19; `serviceToDraft` and `markSaved` as clarification 6 and S; "Saved" means the payload equals the last one saved or opened; the save's request order and every outcome in clarifications 9-12 (PUT with `If-Match` and no key; POST with the draft's key; the fallback; one mismatch retry; no toast after a 401 or a lost church, none of its own for a 409); the invalidations of clarification 20; the Services page opens and deletes as clarifications 15-16; the copy exactly clarification 18, no em dash; 44 px targets, wrapping at 375 px, the names and descriptions of clarification 21; no backend, API or migration file touched. Fixes are `Fix: <what> (Task <n> review)` commits. Then the backup push.
 
-Counts after Task 6: frontend **645 in 83**; backend **1335 passed, 16 skipped**.
+Counts after Task 6: frontend **650 in 83**; backend **1335 passed, 16 skipped**.
 
 ### Task 7: Verification and the draft PR (owner's yes before the PR is opened and before it is marked ready)
 
@@ -3924,7 +4636,7 @@ for i in 1 2 3; do (cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Te
 (cd frontend && NEXT_PUBLIC_SUPABASE_URL=https://ci-placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-placeholder NEXT_PUBLIC_API_URL=http://localhost:8000 npm run build 2>&1 | grep -E "Compiled successfully|Error|/services")
 ```
 
-**Expected:** `1335 passed, 16 skipped in <t>s`; three times ` Test Files  83 passed (83)` and `      Tests  645 passed (645)` with no `×` or `FAIL` line (one names the failing test: Step 6); `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s`, a route line for `/services` and no `Error` (a font `Failed to fetch` only: say so and rely on CI).
+**Expected:** `1335 passed, 16 skipped in <t>s`; three times ` Test Files  83 passed (83)` and `      Tests  650 passed (650)` with no `×` or `FAIL` line (one names the failing test: Step 6); `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s`, a route line for `/services` and no `Error` (a font `Failed to fetch` only: say so and rely on CI).
 
 - [ ] **Step 3 (agent): The API files unchanged, the gates, the paths, the commits**
 
@@ -3937,7 +4649,7 @@ git log --reverse --no-merges --format=%s origin/main..HEAD
 for c in $(git rev-list origin/main..HEAD); do git show -s --format=%B "$c" | grep -q '^Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>$' || echo "no trailer: $(git show -s --format='%h %s' "$c")"; done; echo "trailer check done"
 ```
 
-**Expected:** nothing from `git status` (the API did not change); `raw html grep exit 1`; exactly these 46 paths (without `M docs/ops-runbook.md` when Step 1 printed `0`, and without the idea doc if it reached `main` another way):
+**Expected:** nothing from `git status` (the API did not change); `raw html grep exit 1`; exactly these 55 paths (without `M docs/ops-runbook.md` when Step 1 printed `0`, and without the idea doc if it reached `main` another way):
 ```
 M	docs/manual-verification.md
 M	docs/ops-runbook.md
@@ -3950,6 +4662,8 @@ A	frontend/src/app/(signed-in)/(church)/services/page.tsx
 M	frontend/src/components/app/app-header.test.tsx
 M	frontend/src/components/app/app-nav.tsx
 M	frontend/src/components/builder/builder-shell.test.tsx
+M	frontend/src/components/builder/liturgy/card-notes.tsx
+M	frontend/src/components/builder/liturgy/review-bar.tsx
 M	frontend/src/components/builder/new-service-menu-item.tsx
 A	frontend/src/components/builder/review/conflict-dialog.tsx
 M	frontend/src/components/builder/review/documents-card.tsx
@@ -3967,6 +4681,8 @@ M	frontend/src/lib/api/types.ts
 M	frontend/src/lib/dates.test.ts
 M	frontend/src/lib/dates.ts
 M	frontend/src/lib/documents.ts
+M	frontend/src/lib/draft/context.test.tsx
+M	frontend/src/lib/draft/context.tsx
 M	frontend/src/lib/draft/fingerprint.test.ts
 M	frontend/src/lib/draft/fingerprint.ts
 M	frontend/src/lib/draft/mapping.test.ts
@@ -3983,10 +4699,15 @@ M	frontend/src/lib/draft/status.ts
 M	frontend/src/lib/draft/steps.ts
 M	frontend/src/lib/draft/store.test.ts
 M	frontend/src/lib/draft/store.ts
+M	frontend/src/lib/liturgy/notes.test.ts
+M	frontend/src/lib/liturgy/notes.ts
+M	frontend/src/lib/liturgy/request.test.ts
+M	frontend/src/lib/liturgy/request.ts
+M	frontend/src/lib/liturgy/review.tsx
 A	frontend/src/lib/queries/services.ts
 M	frontend/src/test/fixtures/index.ts
 ```
-`0` (no backend, workflow, package, API snapshot or Streamlit path); the subjects oldest first: `Runbook: slice 5a-2 record (merged; 0005 on production; owner's checks)` (unless on `main`), then in branch order `WIP plan: slice 5a-3`, `Docs: Hear it from the pews idea (owner, 2026-10-02)`, `Docs: Hear it from the pews goes after 6a (owner, 2026-10-02)`, `WIP plan: slice 5a-3`, `Plan: slice 5a-3, Save and the Services page (owner answers 2026-10-01/02)` and its follow-up, then T1-T6's six subjects as written above, then any `Fix: …` lines; only `trailer check done`.
+`0` (no backend, workflow, package, API snapshot or Streamlit path); the subjects oldest first: `Runbook: slice 5a-2 record (merged; 0005 on production; owner's checks)` (unless on `main`), then in branch order `WIP plan: slice 5a-3`, `Docs: Hear it from the pews idea (owner, 2026-10-02)`, `Docs: Hear it from the pews goes after 6a (owner, 2026-10-02)`, `WIP plan: slice 5a-3`, `Plan: slice 5a-3, Save and the Services page (owner answers 2026-10-01/02)`, `Plan: slice 5a-3, the ride-along idea doc in the path list`, `Plan: slice 5a-3 review fixes (owner answers 2026-10-02)`, then T1-T6's six subjects as written above, then any `Fix: …` lines; only `trailer check done`.
 
 - [ ] **Step 4 (agent → OWNER): Ask to open the draft PR**
 
@@ -3997,7 +4718,7 @@ gh pr list -R bbrown62450/church --head claude/slice-2-plan-4q33le --state open 
 
 **Expected:** one `✓ Logged in` line; `[]`. Send the owner exactly this, and wait for a clear yes:
 
-> Slice 5a-3 (the Save card and the Services page) is verified on this machine: frontend 645 tests in 83 files (618 in 81 before), three runs in a row; backend 1335 passed, 16 skipped, unchanged (no backend change in this PR); typecheck, lint and the production build are clean. On step 4 you get Save to archive, Save changes or Save as new service, Start a new service, and a dialog when someone else saved first; the menu gains Services, where you open or delete saved services. Saving records the hymns as used. No database change. May I open the pull request as a **draft** titled "Slice 5a-3: the Save card and the Services page", so the checks run? Merging stays with you.
+> Slice 5a-3 (the Save card and the Services page) is verified on this machine: frontend 650 tests in 83 files (618 in 81 before), three runs in a row; backend 1335 passed, 16 skipped, unchanged (no backend change in this PR); typecheck, lint and the production build are clean. On step 4 you get Save to archive, Save changes or Save as new service, Start a new service, and a dialog when someone else saved first (Save mine as a new service first, as you chose); Review service leaves your church's Benediction alone after a save; the menu gains Services, where you open or delete saved services. Saving records the hymns as used. No database change. May I open the pull request as a **draft** titled "Slice 5a-3: the Save card and the Services page", so the checks run? Merging stays with you.
 
 - [ ] **Step 5 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
 
@@ -4006,10 +4727,11 @@ gh pr list -R bbrown62450/church --head claude/slice-2-plan-4q33le --state open 
 cat > "<scratch>/slice5a3-pr-body.md" <<'BODY'
 Slice 5a-3: the Save card and the Services page (the last of three 5a PRs; owner answers of 2026-10-01/02). Plan: docs/superpowers/plans/2026-10-02-slice-5a3-save-services.md. Frontend only: no backend change, no migration, no new variable. The 5a-2 runbook record and the "Hear it from the pews" idea doc ride along.
 
-- Review & send: a banner while the draft is a saved service; Still to do (renamed from Still needed, with Everything's ready. and a row per hymn not in the hymnal); the Archive card (Save to archive / Save changes / Save as new service with why; Start a new service); the Word documents with a save tip. A 409 opens "Someone else changed this service" (Reload their version, Save mine as a new service, Cancel); a deleted saved copy is saved as new, with a toast; a hymn the church no longer has offers Go to Hymns.
+- Review & send: a banner while the draft is a saved service; Still to do (renamed from Still needed, with Everything's ready. and a row per hymn not in the hymnal); the Archive card (Save to archive / Save changes / Save as new service with why; Start a new service); the Word documents with a save tip. A 409 opens "Someone else changed this service" ("Reloading replaces your changes on this device."; Save mine as a new service, the primary button; Reload their version; Cancel), unless the archive already holds exactly what was sent (a lost answer), which counts as saved; a deleted saved copy is saved as new, with a toast; a hymn the church no longer has offers Go to Hymns.
+- Review service skips a Benediction that is the church default (or Streamlit's "Halverson") whatever its origin, so a save or an opened service does not put it up for review (owner, 2026-10-02).
 - A save keeps a default-following Benediction and communion as saved (owner answer 4); no "Readings for ... are available" while the date is the saved date (owner answer 5); reviewer notes stay on save and go on open (owner answer 9).
 - Services (new menu item): 20 a page, newest service date first; open into the builder (with "Replace your unsaved draft?" when needed); delete after confirming (hymn use recalculated by the server).
-- Draft version 2 (editing.date_iso, save_key_fingerprint) with a tested migration; the save key rule (F 1.6) in lib/draft/save-key.ts; serviceToDraft and the final draftToServicePayload; the step bar and summary show Saved or Unsaved changes.
+- Draft version 2 (editing.date_iso, save_key_fingerprint) with a tested migration; a draft an older app wrote is never adopted; the provider reads storage once mounted; the save key rule (F 1.6) in lib/draft/save-key.ts; serviceToDraft and the final draftToServicePayload; the step bar and summary show Saved or Unsaved changes.
 - The 5a spec gains its 5a-3 amendment; manual-verification items 12-17.
 
 Tests: backend 1335 → 1335 passed, 16 → 16 skipped; frontend 618 → 645 in 81 → 83 files
@@ -4026,14 +4748,14 @@ gh pr create -R bbrown62450/church --draft --base main --head claude/slice-2-pla
 gh pr checks <N> -R bbrown62450/church --watch --interval 30
 ```
 
-Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1335 passed, 16 skipped`, backend-postgres `16 passed, 1335 deselected`, frontend `645 passed` in 83 files. Then send: "PR #<N> is green: 645 frontend tests in 83 files; the backend is unchanged at 1335 passed; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R bbrown62450/church`.
+Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1335 passed, 16 skipped`, backend-postgres `16 passed, 1335 deselected`, frontend `650 passed` in 83 files. Then send: "PR #<N> is green: 650 frontend tests in 83 files; the backend is unchanged at 1335 passed; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R bbrown62450/church`.
 
 - [ ] **Step 6: Fix any failure in its owning task**
 
 | Failing check or test | Owning task |
 |---|---|
-| `save-key.test.ts`, `migrate.test.ts`, `schema.test.ts`, `store.test.ts` | T1 |
-| `mapping.test.ts`, `status.test.ts`, `fingerprint.test.ts`, `readings.test.ts`, `documents.test.ts` (the payload) | T2 |
+| `save-key.test.ts`, `migrate.test.ts`, `schema.test.ts`, `store.test.ts`, `context.test.tsx` | T1 |
+| `mapping.test.ts`, `status.test.ts`, `fingerprint.test.ts`, `readings.test.ts`, `documents.test.ts` (the payload), `request.test.ts`, `notes.test.ts`, `review.test.tsx` | T2 |
 | `dates.test.ts`, `dates.guard.test.ts` | T3 |
 | `review-send-step.test.tsx`, `builder-shell.test.tsx`, `church-switch.test.tsx`, `liturgy-step.test.tsx` | T4 |
 | `services-page.test.tsx`, `app-header.test.tsx` | T5 |
@@ -4043,7 +4765,7 @@ Run the last line with `run_in_background: true`. **Expected:** the PR URL; ever
 
 For each fix: change only the owning task's files; rerun Steps 2-3; commit `Fix: <what> (Task <n>, 5a-3 final verification)` with the trailer; after the PR exists, ask the owner before pushing it.
 
-Expected counts after this task: frontend `645 passed` in 83 files; backend `1335 passed, 16 skipped`.
+Expected counts after this task: frontend `650 passed` in 83 files; backend `1335 passed, 16 skipped`.
 
 ### Task 8: Merge, the owner's guided phone check (five steps), the record (OWNER + agent)
 
@@ -4164,7 +4886,7 @@ gh pr checks claude/slice-2-plan-4q33le -R bbrown62450/church --watch
 
 Code only (no data or schema to undo: the services saved and the hymn use recorded meanwhile stay in the archive, where 5a-2's routes keep them). On the owner's yes for each outward command: a branch `claude/revert-slice-5a3` from `origin/main`, `git revert -m 1 --no-commit <merge sha>`, a commit "Revert slice 5a-3 (PR #<N>)" with the trailer, both suites (`1335 passed, 16 skipped`; `618 passed` in 81), a PR, CI, and the merge on the owner's yes; record it in the 5a-3 record. Tell the owner first: the reverted app reads drafts as version 1, so each browser's current draft (version 2) is not restored once ("We couldn't restore your unsaved draft."; the raw value stays in `wsb:draft-corrupt:…`); saved services are unaffected. Review then shows the "Saving services to the archive is coming soon." note again.
 
-Expected counts after this task: frontend `645 passed` in 83 files on `main`; backend `1335 passed, 16 skipped`. The records PR adds no test.
+Expected counts after this task: frontend `650 passed` in 83 files on `main`; backend `1335 passed, 16 skipped`. The records PR adds no test.
 
 ---
 ## Build notes
@@ -4181,15 +4903,21 @@ Expected counts after this task: frontend `645 passed` in 83 files on `main`; ba
 - Vitest reports failures as files finish, so the `×` lines of a "see it fail" step may come in another order than quoted (T1's did in the replay); the set and the `Tests` line are what count.
 
 **Replay of the finished plan (2026-10-02).** The directives of T1-T6 were applied in order onto a fresh detached worktree of the branch head (`a789fb8` plus the plan commits and the two idea-doc commits), running each step's commands:
-- All 108 directives applied (T1 10 + 10, T2 12 + 19, T3 2 + 4, T4 23 + 18, T5 3 + 4, T6 3); every Replace anchor occurred exactly once, and every Append landed on the file as the task before left it. After T6, `frontend/src` and the three docs equaled the build worktree's (`diff -r`: empty).
-- Every "see it fail" output matched as quoted (T1's `×` lines in another order), and every count matched the table: frontend 622, 628, 629, 637 in 82, then 645 in 83; the task's files `40`, `25`, `13`, `27` (three times) and `14` (three times) passed; typecheck 0 and lint 0 after each of T1-T5; `note grep exit 1` after T4; T6 `89 passed`, `4`, `0`, `3 files changed, 26 insertions(+)`, backend `1335 passed, 16 skipped`. At the end the whole frontend suite three times, `645 passed` in 83 each, no `×` or `FAIL`; `export_openapi.py` and `gen:api` changed nothing; no raw HTML. No flaky run.
+- All 141 directives applied (T1 12 + 18, T2 19 + 35, T3 2 + 4, T4 23 + 18, T5 3 + 4, T6 3; replayed again after the review fixes, below); every Replace anchor occurred exactly once, and every Append landed on the file as the task before left it. After T6, `frontend/src` and the three docs equaled the build worktree's (`diff -r`: empty).
+- Every "see it fail" output matched as quoted (T1's `×` lines in another order), and every count matched the table: frontend 624, 631, 632, 641 in 82, then 650 in 83; the task's files `48`, `40`, `13`, `28` (three times) and `15` (three times) passed; typecheck 0 and lint 0 after each of T1-T5; `note grep exit 1` after T4; T6 `89 passed`, `4`, `0`, `3 files changed, 28 insertions(+)`, backend `1335 passed, 16 skipped`. At the end the whole frontend suite three times, `650 passed` in 83 each, no `×` or `FAIL`; `export_openapi.py` and `gen:api` changed nothing; no raw HTML. No flaky run.
 - Not run while planning: the pushes, the PR and CI, the merge, and the owner's phone check.
+
+**Review fixes (2026-10-02, after the owner's "all recommended").** The plan's review found that a save (owner answer 4) and an opened service make the default Benediction "archive", so "Review service" would review the church's own text after every save; that a timed-out `PUT` that went through meets a 409 for its own save; that an old tab's version 1 write would be adopted and blank a version 2 draft; and that Services read the draft before the builder's last edit was written. The owner approved C1 and I3 (owner answers to this plan's questions); I1, I2, I4, M1-M3 are clarifications 23-27 under owner decision 1. They were built on the finished build worktree (all six tasks applied), the directives written into T1-T5 (T1 and T2 gained new **In … replace** directives, T3-T5's **Create** blocks and T4's test block were edited), and the whole plan replayed onto a fresh worktree of the branch head as above. While building:
+- **A quiet read on mount.** Adopting at mount would toast "Updated from another tab." for this tab's own edit, so `syncFromStorage` takes `{ quiet: true }` there.
+- **The 409 check compares the hymnal as sent.** A draft that leaves the hymnal to the church (null) sends none and the server fills it in, so the compared payload keeps the draft's null; otherwise a save from a never-opened draft would always look different.
+- **A lost answer, in the test, is a dropped connection** (`TypeError("Failed to fetch")`): the client's own 20 s timer would need fake timers around user-event, and the save takes the same path for both (an unknown outcome).
+- **The conflict test edits the draft before its second save:** with the 409 check, saving the reloaded copy unchanged is (rightly) "Service saved", not the dialog.
 
 ## Spec coverage
 
 | Owner answer or S item | Task(s) and tests |
 |---|---|
-| 1. Three PRs; this one is the Save card and the Services page; no backend change | the plan's scope; T7 Step 3 (46 paths; `0` backend, API snapshot or migration paths; regenerating the API changes nothing); clarification 1 |
+| 1. Three PRs; this one is the Save card and the Services page; no backend change | the plan's scope; T7 Step 3 (55 paths; `0` backend, API snapshot or migration paths; regenerating the API changes nothing); clarification 1 |
 | 2. No order-of-worship preview | T4 "shows Still to do, the Archive card and both copies … in that order" (the step's three h2s) |
 | 4. A save keeps a default Benediction and communion as saved | T2 "markSaved records the save and keeps a default Benediction and communion as saved (owner answer 4)"; T4 "saves a new service with the draft's key, …" (the stored draft's origins after the save) |
 | 5. No "Readings for … are available" while the date is the saved date | T2 "opens a saved service as a new draft that is already Saved, …" (hidden on the saved date, shown on another, hidden again back on it) |
@@ -4216,6 +4944,9 @@ Expected counts after this task: frontend `645 passed` in 83 files on `main`; ba
 | F §4.4 invalidations | T3 `lib/queries/services.ts` (clarification 20); T5's refetch counts after a 404 |
 | F §4.6 `replace` writes at once (the Services page opens the builder) | T1 "replace writes at once, …"; T5 "opens a service into the builder at once …" (the stored draft after the tap) |
 | `formatSavedAt` | T3 `dates.test.ts` |
+| Owner, 2026-10-02, C1: "Review service" skips the church's Benediction whatever its origin | T2 `request.test.ts` "leaves out a saved Benediction that is the church default or Streamlit's \"Halverson\"; an edited one is reviewed (5a-3)"; clarification 6 |
+| Owner, 2026-10-02, I3: the conflict dialog's second line and primary button | T4 "on a conflict, reloads their version or saves mine as a new service" (the description, the buttons' variants) |
+| Clarifications 23-27 (review fixes I1, I2, I4, M1, M2, M3) | T1 "never adopts a draft an older version of the app wrote, …" and `context.test.tsx` "reads the stored draft once mounted, …"; T4 "after a save whose answer was lost, a 409 is that save …"; T3 `autoUpdate` (M1, exercised by T4's key cases); T5 "after Show more, a delete reads every page again …" |
 | 5a-2 record follow-up: a stored element over today's limits | clarification 12 (`serviceBody`); 5a-1's `documents.test.ts` "stays within the ServiceDraft limits …" covers the cutting |
 | S acceptance criterion 14 (frontend) | T4 and T5 as above; `SHIPPED_STEPS` (T2) |
 
@@ -4223,19 +4954,19 @@ S items **not** in 5a-3 (owner answers 1, 2): the order-of-worship card and its 
 
 ## Questions for the owner
 
-Your answers of 2026-10-01 and 2026-10-02 are binding and already in the plan, and so are the choices the spec already made (asking before opening over unsaved work, Save as new service on a new date, 20 a page with no search, any member may delete with the spec's question, hymn use recorded on save only). These are the choices this plan makes where you did not say; each is written as recommended.
+**Answered 2026-10-02: "all recommended"** (binding), with the two changes C1 and I3 you approved, written into questions 5 and 6 below and into "Owner answers to this plan's questions". Your answers of 2026-10-01 and 2026-10-02 are binding and already in the plan, and so are the choices the spec already made (asking before opening over unsaved work, Save as new service on a new date, 20 a page with no search, any member may delete with the spec's question, hymn use recorded on save only). These are the choices this plan makes where you did not say.
 
-1. **Review & send, top to bottom** (clarification 2): the banner (only while you are editing a saved service), "Still to do", the **Archive** card, then **Word documents**. The Archive card moves above the downloads, and "Saving services to the archive is coming soon." goes. Recommended: accept.
-2. **"Still to do"** (clarification 3): "Still needed" is renamed "Still to do", keeps every row, adds "{Title} isn't in your hymnal" with the link "Choose a replacement", and says "Everything's ready." when nothing is missing. Recommended: accept.
-3. **The banner** (clarification 4): "You're editing the saved service for October 4, 2026. Changes stay on this device until you save." For a saved service without a date (you have none today): "This saved service has no date. It's set to Sunday, October 11, 2026 for now." with "Check the date". It does not repeat the hymns that are not in your hymnal, since "Still to do" right below lists them. Recommended: accept.
-4. **The Archive card** (clarification 5): "Not in the archive yet." / "Saved to the archive · Oct 1, 10:42 AM" / "Unsaved changes · last saved Oct 1, 10:42 AM"; the button "Save to archive", "Save changes" or "Save as new service" (with "The date changed from October 4, 2026 to October 11, 2026, so this will be saved as a new service. The October 4 service stays in the archive."); "Saving…", then "Service saved". It is off only without a date ("Choose a service date on step 1 to save.") or while step 1 shows a message ("Fix the readings on step 1 to save."); it stays on when nothing changed. Recommended: accept.
-5. **After a save** (clarification 6, your answer 4): a Benediction or communion that followed the default becomes the service's own, so the Liturgy step says "Set from the saved service." with "Use default" for communion, as for an opened service, and "Review service" then reviews that Benediction like the other prayers. Recommended: accept.
-6. **When someone else saved first** (clarification 9): "Someone else changed this service" with "This service was changed by someone else. Reload it to see their changes." and three choices: "Reload their version" (your unsaved changes go; "Loaded the latest version."), "Save mine as a new service" (theirs stays), "Cancel". Recommended: accept.
-7. **Other save problems** (clarification 10): if the saved copy was deleted, yours is saved as a new service with "The archived copy was deleted, so this was saved as a new service."; a hymn no longer in your hymnal shows the existing message with a "Go to Hymns" button; a connection problem shows the usual message, and saving again is safe (it never saves twice). Recommended: accept.
-8. **"Start a new service"** (clarification 13) asks the same question as the menu's "New service" ("Start a new service?" / "This clears the current draft on this device." / "Start new service"), and only when something is unsaved, instead of new wording. Recommended: accept.
-9. **The Services page** (clarification 14): "Services", "Saved services for {your church}.", a "New service" button; each row shows the date, the occasion and "Created by {name} · last saved {time}", with "Editing" on the one you have open; tap a row to open it; "Delete…" is behind the ⋮ button; "Showing 20 of 45" and "Show more" at the bottom; "No saved services yet" / "Services you save from the builder appear here." / "Build a service" when empty. Recommended: accept.
-10. **Opening and deleting** (clarifications 15, 16): opening asks "Replace your unsaved draft?" only when something is unsaved (choosing another Bible translation counts, since opening resets it), says "Opening…", and lands on Review & send. Deleting asks with the spec's words ("“World Communion Sunday” on October 4, 2026 will be removed from the archive for everyone in {church}. This can't be undone.", plus "You're editing this service. Your current draft will be cleared too." when it is the open one), and the row simply goes, with no message. A service someone deletes while you have it open stays on your screen; "Save changes" then saves it as a new one and says so. Recommended: accept.
-11. **Where the status shows** (clarification 17): the step bar's "4 Review & send" reads "Not in archive", "Saved" (with a ✓) or "Unsaved changes"; the summary's last line reads "Draft saved on this device · In archive (saved Oct 1, 10:42 AM)" (plus "· Unsaved changes") and takes you to Review; times are in your phone's time zone, with the year only when it is not this year; after a download of an unsaved service the card adds "Tip: save this service so its hymns count as recently used."; the menu gains "Services" after "Builder". Recommended: accept.
-12. **A save sends what the downloads send** (clarification 12): anything over the app's length limits is saved cut to the limit, exactly as the Word file prints it (only possible for an old saved custom element, never for anything typed in the app today), so a save never fails with an unexplained "not valid". Recommended: accept.
+1. **Review & send, top to bottom** (clarification 2): the banner (only while you are editing a saved service), "Still to do", the **Archive** card, then **Word documents**. The Archive card moves above the downloads, and "Saving services to the archive is coming soon." goes. Accepted.
+2. **"Still to do"** (clarification 3): "Still needed" is renamed "Still to do", keeps every row, adds "{Title} isn't in your hymnal" with the link "Choose a replacement", and says "Everything's ready." when nothing is missing. Accepted.
+3. **The banner** (clarification 4): "You're editing the saved service for October 4, 2026. Changes stay on this device until you save." For a saved service without a date (you have none today): "This saved service has no date. It's set to Sunday, October 11, 2026 for now." with "Check the date". It does not repeat the hymns that are not in your hymnal, since "Still to do" right below lists them. Accepted.
+4. **The Archive card** (clarification 5): "Not in the archive yet." / "Saved to the archive · Oct 1, 10:42 AM" / "Unsaved changes · last saved Oct 1, 10:42 AM"; the button "Save to archive", "Save changes" or "Save as new service" (with "The date changed from October 4, 2026 to October 11, 2026, so this will be saved as a new service. The October 4 service stays in the archive."); "Saving…", then "Service saved". It is off only without a date ("Choose a service date on step 1 to save.") or while step 1 shows a message ("Fix the readings on step 1 to save."); it stays on when nothing changed. Accepted.
+5. **After a save** (clarification 6, your answer 4): a Benediction or communion that followed the default becomes the service's own, so the Liturgy step says "Set from the saved service." with "Use default" for communion, as for an opened service. "Review service" still leaves out a Benediction whose text is your church's default (or Streamlit's "Halverson"), however it got there; once you edit it, it is reviewed like the other prayers (your change, 2026-10-02). Accepted.
+6. **When someone else saved first** (clarification 9): "Someone else changed this service" with "This service was changed by someone else. Reload it to see their changes." and below it "Reloading replaces your changes on this device." (your change, 2026-10-02), and three choices: "Save mine as a new service" (theirs stays; the main button, your change), "Reload their version" (your unsaved changes go; "Loaded the latest version."), "Cancel". Accepted.
+7. **Other save problems** (clarification 10): if the saved copy was deleted, yours is saved as a new service with "The archived copy was deleted, so this was saved as a new service."; a hymn no longer in your hymnal shows the existing message with a "Go to Hymns" button; a connection problem shows the usual message, and saving again is safe (it never saves twice). Accepted.
+8. **"Start a new service"** (clarification 13) asks the same question as the menu's "New service" ("Start a new service?" / "This clears the current draft on this device." / "Start new service"), and only when something is unsaved, instead of new wording. Accepted.
+9. **The Services page** (clarification 14): "Services", "Saved services for {your church}.", a "New service" button; each row shows the date, the occasion and "Created by {name} · last saved {time}", with "Editing" on the one you have open; tap a row to open it; "Delete…" is behind the ⋮ button; "Showing 20 of 45" and "Show more" at the bottom; "No saved services yet" / "Services you save from the builder appear here." / "Build a service" when empty. Accepted.
+10. **Opening and deleting** (clarifications 15, 16): opening asks "Replace your unsaved draft?" only when something is unsaved (choosing another Bible translation counts, since opening resets it), says "Opening…", and lands on Review & send. Deleting asks with the spec's words ("“World Communion Sunday” on October 4, 2026 will be removed from the archive for everyone in {church}. This can't be undone.", plus "You're editing this service. Your current draft will be cleared too." when it is the open one), and the row simply goes, with no message. A service someone deletes while you have it open stays on your screen; "Save changes" then saves it as a new one and says so. Accepted.
+11. **Where the status shows** (clarification 17): the step bar's "4 Review & send" reads "Not in archive", "Saved" (with a ✓) or "Unsaved changes"; the summary's last line reads "Draft saved on this device · In archive (saved Oct 1, 10:42 AM)" (plus "· Unsaved changes") and takes you to Review; times are in your phone's time zone, with the year only when it is not this year; after a download of an unsaved service the card adds "Tip: save this service so its hymns count as recently used."; the menu gains "Services" after "Builder". Accepted.
+12. **A save sends what the downloads send** (clarification 12): anything over the app's length limits is saved cut to the limit, exactly as the Word file prints it (only possible for an old saved custom element, never for anything typed in the app today), so a save never fails with an unexplained "not valid". Accepted.
 
 Owner steps still to come: the plan's approval; the draft PR on your yes and ready on your yes (T7); the merge on your yes, then five phone checks one at a time and the records PR (T8).
