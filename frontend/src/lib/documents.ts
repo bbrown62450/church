@@ -2,8 +2,8 @@
  * The `POST /documents` body (slice 5a spec, `useDownloadDocument`; F §4.6
  * "Draft → API payload"). Pure.
  *
- * The service is `draftToServicePayload(draft)` (the provisional mapping the
- * save will share, 5a-3), kept within the `ServiceDraft` limits so a draft
+ * The service is `draftToServicePayload(draft)` (the mapping the save shares,
+ * `serviceBody`, 5a-3), kept within the `ServiceDraft` limits so a draft
  * never meets a 422: the occasion and readings as every liturgy request sends
  * them (trimmed; the first 20 readings, each cut to 200; `request.ts`), the
  * two bulletin picks trimmed and cut to 200 as well, the hymns as `HymnRef`s (an id that is not a UUID goes as null, so the pick's own
@@ -49,28 +49,35 @@ function isBlankLabel(label: string): boolean {
   return wordSafe(label).trim() === "";
 }
 
-export function documentRequest(draft: DraftV1, variant: DocumentVariant): DocumentBody {
+/**
+ * The service as `POST /documents` and `POST`/`PUT /services` send it (slice
+ * 5a-3: the Save card sends the same body as the downloads, so a save never
+ * meets a 422 for a length either, a stored custom element longer than
+ * today's limits included).
+ */
+export function serviceBody(draft: DraftV1): DocumentBody["service"] {
   const payload = draftToServicePayload(draft);
   const slots = draft.hymns.slots;
   return {
-    variant,
-    service: {
-      ...payload,
-      ...readingsContext(draft),
-      selected_ot_ref: clipChars(payload.selected_ot_ref.trim(), MAX_REF_LENGTH),
-      selected_nt_ref: clipChars(payload.selected_nt_ref.trim(), MAX_REF_LENGTH),
-      hymns: { opening: hymnRef(slots.opening), response: hymnRef(slots.response), closing: hymnRef(slots.closing) },
-      hymnal: payload.hymnal === null ? null : clipChars(payload.hymnal, MAX_HYMNAL),
-      liturgy: Object.fromEntries(Object.entries(payload.liturgy).map(([key, text]) => [key, clipChars(text, MAX_CARD_TEXT)])),
-      sermon_title: clipChars(payload.sermon_title.trim(), MAX_SERMON_TITLE),
-      custom_elements: payload.custom_elements
-        .filter((element) => !isBlankLabel(element.label))
-        .slice(0, MAX_CUSTOM_ELEMENTS)
-        .map((element) => ({
-          label: clipChars(element.label.trim(), MAX_CUSTOM_LABEL),
-          text: clipChars(element.text, MAX_CUSTOM_TEXT),
-          insert_after: normalizePlacement(element.insert_after) as Placement,
-        })),
-    },
+    ...payload,
+    ...readingsContext(draft),
+    selected_ot_ref: clipChars(payload.selected_ot_ref.trim(), MAX_REF_LENGTH),
+    selected_nt_ref: clipChars(payload.selected_nt_ref.trim(), MAX_REF_LENGTH),
+    hymns: { opening: hymnRef(slots.opening), response: hymnRef(slots.response), closing: hymnRef(slots.closing) },
+    hymnal: payload.hymnal === null ? null : clipChars(payload.hymnal, MAX_HYMNAL),
+    liturgy: Object.fromEntries(Object.entries(payload.liturgy).map(([key, text]) => [key, clipChars(text, MAX_CARD_TEXT)])),
+    sermon_title: clipChars(payload.sermon_title.trim(), MAX_SERMON_TITLE),
+    custom_elements: payload.custom_elements
+      .filter((element) => !isBlankLabel(element.label))
+      .slice(0, MAX_CUSTOM_ELEMENTS)
+      .map((element) => ({
+        label: clipChars(element.label.trim(), MAX_CUSTOM_LABEL),
+        text: clipChars(element.text, MAX_CUSTOM_TEXT),
+        insert_after: normalizePlacement(element.insert_after) as Placement,
+      })),
   };
+}
+
+export function documentRequest(draft: DraftV1, variant: DocumentVariant): DocumentBody {
+  return { variant, service: serviceBody(draft) };
 }
