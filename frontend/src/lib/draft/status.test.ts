@@ -115,7 +115,7 @@ describe("isPristine (S status.ts)", () => {
       ["custom element", withLiturgy({ custom_elements: [{ id: "1", label: "Anthem", text: "", insert_after: "assurance" }] })],
       ["a pick", setPick(testDraft(), "ot", "Isaiah 5:1-7")],
       ["a hymn", testDraft((d) => ({ ...d, hymns: { ...d.hymns, slots: { ...d.hymns.slots, closing: HYMN } } }))],
-      ["editing", testDraft((d) => ({ ...d, editing: { service_id: "s1", saved_at: "2026-09-29T16:00:00Z" } }))],
+      ["editing", testDraft((d) => ({ ...d, editing: { service_id: "s1", saved_at: "2026-09-29T16:00:00Z", date_iso: "2026-10-04" } }))],
       ["user fields", editOccasion(testDraft(), "Harvest")],
       ["archive fields", testDraft((d) => ({ ...d, readings: { ...d.readings, fields_origin: "archive" } }))],
       // Owner answer Q2 (2026-09-29): a picked date, a chosen reading set and a translation override.

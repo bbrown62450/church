@@ -1,8 +1,11 @@
 /**
- * The per-church unsaved draft, version 1 (F §4.6; S "Draft store").
+ * The per-church unsaved draft, version 2 (F §4.6; S "Draft store").
  *
- * This is F §4.6's `DraftV1` without the two fields slice 5a adds with its own
- * version bump (`save_key_fingerprint`, `editing.date_iso`). Strings are
+ * This is F §4.6's draft shape. Version 2 (slice 5a-3) added the two fields
+ * slice 5a brings with its own version bump: `editing.date_iso` (the saved
+ * service's date; null for an undated saved service) and
+ * `save_key_fingerprint` (`save-key.ts`). The names `DraftV1` and
+ * `draftV1Schema` stay, so no importer changes. Strings are
  * bounded generously (20 000) so a stored draft is never rejected for
  * length; the UI limits live in the components. `readings.scriptures` holds
  * the raw lines, blanks included; `cleanLines()` derives everything else.
@@ -13,7 +16,7 @@ import { isFirstSundayOfMonth, isValidDateIso, nextSunday, todayIn } from "@/lib
 import { DEFAULT_BENEDICTION_FALLBACK } from "@/lib/liturgy/defaults";
 import { DEFAULT_ENABLED } from "@/lib/liturgy/sections";
 
-export const DRAFT_VERSION = 1;
+export const DRAFT_VERSION = 2;
 
 export const STEP_IDS = ["readings", "hymns", "liturgy", "review"] as const;
 export type StepId = (typeof STEP_IDS)[number];
@@ -66,7 +69,8 @@ export const draftV1Schema = z.object({
   updated_at: timestamp,
   last_step: z.enum(STEP_IDS),
   save_key: text,
-  editing: z.object({ service_id: text, saved_at: text }).nullable(),
+  save_key_fingerprint: text.nullable(),
+  editing: z.object({ service_id: text, saved_at: text, date_iso: dateIso.nullable() }).nullable(),
   saved_fingerprint: text.nullable(),
   readings: z.object({
     date_iso: dateIsoOrEmpty,
@@ -117,7 +121,7 @@ export function churchZone(church: DraftChurch): string | undefined {
  * Prayers of the People, the benediction card `default`-origin with the
  * church's default benediction (DEFAULT_BENEDICTION_FALLBACK, the full
  * Halverson text, when the profile has none; slice 4b), communion on for a
- * first Sunday, a new save key, on step 1.
+ * first Sunday, a new save key with no pending fingerprint, on step 1.
  */
 export function freshDraft({
   church,
@@ -146,6 +150,7 @@ export function freshDraft({
     updated_at: stamp,
     last_step: "readings",
     save_key: crypto.randomUUID(),
+    save_key_fingerprint: null,
     editing: null,
     saved_fingerprint: null,
     readings: {

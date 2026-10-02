@@ -1,4 +1,5 @@
 import { act, render, renderHook, screen } from "@testing-library/react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 
@@ -145,6 +146,31 @@ describe("DraftProvider and useDraft (F §4.6 Persistence)", () => {
     click("Edit");
     unmount(); // a church switch unmounts the provider
     expect(storedOccasion()).toBe("Harvest");
+  });
+
+  it("reads the stored draft once mounted, so a provider that replaces another sees its last edit, quietly (slice 5a-3)", () => {
+    window.localStorage.setItem(KEY, JSON.stringify(testDraft()));
+    function Swap() {
+      const [page, setPage] = useState("builder");
+      return (
+        <>
+          <button type="button" onClick={() => setPage("services")}>
+            Go
+          </button>
+          <DraftProvider key={page} userId={USER_ID} church={GRACE}>
+            <Probe />
+          </DraftProvider>
+        </>
+      );
+    }
+    render(<Swap />);
+    vi.setSystemTime(DRAFT_NOW.getTime() + 1000);
+    act(() => screen.getByRole("button", { name: "Edit" }).click());
+    expect(storedOccasion()).toBe(""); // still in the 400 ms write delay
+    // The new provider reads storage while it renders, before the old one flushes as it unmounts.
+    act(() => screen.getByRole("button", { name: "Go" }).click());
+    expect(screen.getByText("Occasion: Harvest")).toBeInTheDocument();
+    expect(toastInfo).not.toHaveBeenCalled(); // this tab's own edit: not "Updated from another tab."
   });
 
   it("adopts a newer draft from another tab and says so", () => {

@@ -7,14 +7,30 @@
  * and toasts. Every change to `DraftV1` bumps the version and adds a
  * migration here with a unit test.
  */
+import { isValidDateIso } from "@/lib/dates";
+
 import { DRAFT_VERSION, draftV1Schema, type DraftV1 } from "./schema";
 
 export type StoredDraft = Record<string, unknown>;
 /** Upgrades a version-v draft to version v + 1 (it need not set `version`). */
 export type Migration = (draft: StoredDraft) => StoredDraft;
 
-/** `migrations[v]` upgrades version v to v + 1. Empty at version 1; slice 5a adds `1`. */
-export const migrations: Readonly<Record<number, Migration>> = {};
+/**
+ * `migrations[v]` upgrades version v to v + 1.
+ *
+ * 1 → 2 (slice 5a-3; F §4.6): `editing`, when set, gains `date_iso`, the
+ * draft's own date (null when that is not a real date); `save_key_fingerprint`
+ * starts null. No version 1 draft has `editing` set: nothing could save before
+ * 5a-3.
+ */
+export const migrations: Readonly<Record<number, Migration>> = {
+  1: (draft) => {
+    const readings = isRecord(draft.readings) ? draft.readings : {};
+    const date = typeof readings.date_iso === "string" && isValidDateIso(readings.date_iso) ? readings.date_iso : null;
+    const editing = isRecord(draft.editing) ? { ...draft.editing, date_iso: date } : null;
+    return { ...draft, editing, save_key_fingerprint: null };
+  },
+};
 
 export class DraftRestoreError extends Error {
   constructor(message: string) {

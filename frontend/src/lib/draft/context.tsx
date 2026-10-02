@@ -6,8 +6,10 @@
  * church; the `(church)` layout's keyed remount already gives each church its
  * own provider. The provider wires the store to the browser: another tab's
  * writes (`storage` events, and a direct read when the page is shown again), a
- * flush when the page is hidden or left, a flush on unmount (a church switch),
- * and the three toasts.
+ * quiet direct read once mounted (slice 5a-3: a page whose provider replaced
+ * another's, Services after the builder, takes the edit the other flushed as
+ * it unmounted), a flush when the page is hidden or left, a flush on unmount
+ * (a church switch), and the three toasts.
  */
 import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { toast } from "sonner";
@@ -73,6 +75,8 @@ export function DraftProvider({
 
   useEffect(() => {
     store.start();
+    // Read after the provider this one replaced has flushed on unmount (its cleanup runs before this effect).
+    store.syncFromStorage({ quiet: true });
     const onStorage = (event: StorageEvent) => store.handleStorageEvent(event.key, event.newValue);
     // Hidden: write now. Shown: take another tab's newer draft before this tab's
     // lectionary fill can act on a stale copy (its storage event may still be on the way).

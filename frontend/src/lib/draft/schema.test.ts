@@ -9,15 +9,16 @@ import { DEFAULT_BENEDICTION_FALLBACK } from "@/lib/liturgy/defaults";
 describe("draft schema and freshDraft (F §4.6)", () => {
   it("a fresh draft is dated next Sunday with every field empty and the F §4.6 defaults", () => {
     const d = testDraft();
-    expect(DRAFT_VERSION).toBe(1);
+    expect(DRAFT_VERSION).toBe(2);
     expect(draftV1Schema.parse(d)).toEqual(d);
     expect(d).toMatchObject({
-      version: 1,
+      version: 2,
       user_id: USER_ID,
       church_id: churchProfile().id,
       created_at: "2026-09-29T16:00:00.000Z",
       updated_at: "2026-09-29T16:00:00.000Z",
       last_step: "readings",
+      save_key_fingerprint: null,
       editing: null,
       saved_fingerprint: null,
       readings: {
@@ -78,7 +79,9 @@ describe("draft schema and freshDraft (F §4.6)", () => {
       { ...d, readings: { ...d.readings, date_iso: "2026-02-30" } },
       { ...d, readings: { ...d.readings, occasion: `${long}x` } },
       { ...d, last_step: "summary" },
-      { ...d, version: 2 },
+      { ...d, version: 3 },
+      { ...d, editing: { service_id: "s1", saved_at: "2026-10-01T14:42:00+00:00" } }, // version 2 needs editing.date_iso
+      { ...d, editing: { service_id: "s1", saved_at: "2026-10-01T14:42:00+00:00", date_iso: "2026-02-30" } },
       { ...d, readings: { ...d.readings, fields_origin: "typed" } },
       { ...d, liturgy: { ...d.liturgy, cards: { ...d.liturgy.cards, benediction: undefined } } },
       { ...d, updated_at: "not a time" },

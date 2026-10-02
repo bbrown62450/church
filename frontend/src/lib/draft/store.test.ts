@@ -90,7 +90,7 @@ describe("DraftStore load (F §4.6 Versioning)", () => {
   });
 
   it("backs up a draft it cannot restore, starts fresh and reports it once", () => {
-    for (const raw of ["{not json", JSON.stringify({ ...testDraft(), version: 2 }), JSON.stringify({ version: 1 })]) {
+    for (const raw of ["{not json", JSON.stringify({ ...testDraft(), version: 3 }), JSON.stringify({ version: 1 })]) {
       const { storage, data } = memoryStorage({ [KEY]: raw });
       const { store, notices } = makeStore(storage);
       store.start();
@@ -103,7 +103,7 @@ describe("DraftStore load (F §4.6 Versioning)", () => {
     }
 
     // The backup cannot be written (quota): the unrestorable draft stays in the main key until the user edits.
-    const raw = JSON.stringify({ ...testDraft(), version: 2 });
+    const raw = JSON.stringify({ ...testDraft(), version: 3 });
     const { storage, data } = memoryStorage({ [KEY]: raw, [corruptDraftKey(USER_ID, GRACE.id)]: "older backup" });
     storage.failKeys.add(corruptDraftKey(USER_ID, GRACE.id));
     const { store, notices } = makeStore(storage);
@@ -339,6 +339,31 @@ describe("DraftStore changes (S store.ts)", () => {
       updated_at: time.now().toISOString(),
       readings: { selected_nt_ref: "" },
     });
+  });
+
+  it("replace writes at once, so a page that mounts next reads it (slice 5a-3: Services opens the builder)", () => {
+    const { storage, data } = memoryStorage();
+    const { store } = makeStore(storage);
+    const next = { ...testDraft(), editing: { service_id: "s1", saved_at: "2026-10-01T14:42:00+00:00", date_iso: "2026-10-04" } };
+    store.replace(next);
+    expect(stored(data)).toMatchObject({ editing: next.editing, save_key: next.save_key }); // no timer run
+    expect(makeStore(storage).store.getSnapshot().draft.editing).toEqual(next.editing);
+  });
+
+  it("never adopts a draft an older version of the app wrote, however new, and writes over it (slice 5a-3: an old tab)", () => {
+    const { storage, data } = memoryStorage({ [KEY]: JSON.stringify(testDraft()) });
+    const { store, notices } = makeStore(storage);
+    store.update((d) => editOccasion(d, "Mine"));
+    const mine = store.getSnapshot().draft;
+    // An open tab still running version 1 code writes its fresh draft, a minute later.
+    const old = JSON.stringify({ ...testDraft(), version: 1, updated_at: new Date(Date.parse(mine.updated_at) + 60_000).toISOString() });
+    store.handleStorageEvent(KEY, old);
+    data.set(KEY, old);
+    store.syncFromStorage();
+    expect(store.getSnapshot().draft).toBe(mine);
+    store.flush();
+    expect(stored(data)).toMatchObject({ version: 2, readings: { occasion: "Mine" } });
+    expect(notices).toEqual([]);
   });
 
   it("switches to memory-only when a write fails, and reports it once", () => {
