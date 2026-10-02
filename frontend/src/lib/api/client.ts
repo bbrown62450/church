@@ -87,8 +87,13 @@ function errorFromResponse(res: Response, text: string): ApiError {
   });
 }
 
-/** Call the FastAPI backend. The server re-checks the church on every request. */
-export async function apiFetch<T>(path: string, opts: ApiOptions): Promise<T> {
+/**
+ * Sends one request with the shared headers, timeout and abort (F §4.5) and
+ * reads the body with `read` before the timer stops, so a stalled body also
+ * times out. A failure to send or read is `timeout`, `aborted` or
+ * `network_error` (status 0).
+ */
+async function send<B>(path: string, opts: ApiOptions, read: (res: Response) => Promise<B>): Promise<{ res: Response; body: B }> {
   const {
     token,
     churchId,
@@ -128,18 +133,15 @@ export async function apiFetch<T>(path: string, opts: ApiOptions): Promise<T> {
 
   const normalizedBaseUrl = baseUrl.replace(/\/+$/, "");
 
-  let res: Response;
-  let text: string;
   try {
-    res = await fetchImpl(`${normalizedBaseUrl}${path}`, {
+    const res = await fetchImpl(`${normalizedBaseUrl}${path}`, {
       ...init,
       method,
       headers,
       body,
       signal: controller.signal,
     });
-    // Read the body before the timer stops: a stalled body also times out.
-    text = res.status === 204 ? "" : await res.text();
+    return { res, body: await read(res) };
   } catch {
     if (timedOut) throw new ApiError(0, "timeout", TIMEOUT_MESSAGE);
     if (controller.signal.aborted) throw new ApiError(0, "aborted", ABORTED_MESSAGE);
@@ -148,7 +150,11 @@ export async function apiFetch<T>(path: string, opts: ApiOptions): Promise<T> {
     clearTimeout(timer);
     callerSignal?.removeEventListener("abort", onCallerAbort);
   }
+}
 
+/** Call the FastAPI backend. The server re-checks the church on every request. */
+export async function apiFetch<T>(path: string, opts: ApiOptions): Promise<T> {
+  const { res, body: text } = await send(path, opts, (r) => (r.status === 204 ? Promise.resolve("") : r.text()));
   if (res.ok) {
     if (!text) return undefined as T;
     try {
@@ -161,4 +167,37 @@ export async function apiFetch<T>(path: string, opts: ApiOptions): Promise<T> {
     }
   }
   throw errorFromResponse(res, text);
+}
+
+/** A file from the API (`POST /documents`, slice 5a) and the name its `Content-Disposition` gives, if any. */
+export type BlobResult = { blob: Blob; filename: string | null };
+
+/**
+ * `apiFetch` for a route that answers with a file (F §1.9, §4.5): the same
+ * headers, timeout, abort and error mapping; a 2xx returns the bytes and the
+ * server's filename; an error body is read as JSON into an `ApiError`.
+ */
+export async function apiFetchBlob(path: string, opts: ApiOptions): Promise<BlobResult> {
+  const { res, body } = await send<Blob | string>(path, opts, (r) => (r.ok ? r.blob() : r.text()));
+  if (!res.ok) throw errorFromResponse(res, typeof body === "string" ? body : "");
+  return { blob: body as Blob, filename: parseContentDispositionFilename(res.headers.get("Content-Disposition")) };
+}
+
+/**
+ * The filename in a `Content-Disposition` header: `filename*=UTF-8''…` decoded
+ * first, else `filename="…"` (or unquoted), else null.
+ */
+export function parseContentDispositionFilename(header: string | null): string | null {
+  if (!header) return null;
+  const encoded = /filename\*\s*=\s*UTF-8''([^;\s]+)/i.exec(header);
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded[1]);
+    } catch {
+      // A malformed escape: fall back to the plain name.
+    }
+  }
+  const plain = /filename\s*=\s*(?:"([^"]*)"|([^;\s]+))/i.exec(header);
+  const name = (plain?.[1] ?? plain?.[2] ?? "").trim();
+  return name === "" ? null : name;
 }
