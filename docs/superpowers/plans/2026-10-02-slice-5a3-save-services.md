@@ -14,6 +14,7 @@
 - The 5a-1 and 5a-2 plans: `docs/superpowers/plans/2026-10-01-slice-5a1-documents.md` (`documentRequest` within the limits, the Word documents card) and `docs/superpowers/plans/2026-10-02-slice-5a2-saving.md` (the routes and messages in its clarification 3, the church-scoped key in clarification 4 and its stale-replay note, `PUT`'s check order in clarification 5, "what is sent is stored" in clarification 7, `ServiceOut` with `ArchivedHymns` and `CustomElementOut` in clarification 12 and its build notes).
 - Format model: the 5a-1 plan.
 - Facts checked for this plan (branch `claude/slice-2-plan-4q33le` at `a789fb8` = `origin/main` `c9c8c6b` plus the runbook commit "Runbook: slice 5a-2 record", 2026-10-02): backend `1335 passed, 16 skipped`; frontend `618 passed` in 81 files; typecheck and lint clean; Alembic head `0005_services_extras` (production too: runbook "Slice 5a-2 record"; 26 saved services, 0 undated); 4 runbook owner markers. `DRAFT_VERSION` is 1 and `migrations` is empty; `editing` is `{service_id, saved_at}`; nothing sets it. `mapping.ts` is the provisional mapping (untrimmed text); `isDirty` is in `fingerprint.ts`, which imports `status.ts`. `SHIPPED_STEPS` is readings, hymns, liturgy; `stepStatus` returns "Not in archive" for Review. Review renders `StillNeeded` ("Still needed", nothing when empty), the Word documents card and a dashed "Saving services to the archive is coming soon." box. `showAvailableBanner` shows for archive fields whose `date_origin` is not "archive". `DraftStore.replace` writes 400 ms later. `NAV_ITEMS` holds Builder only. `lib/queries/keys.ts` already has `services` and `service`; `client.ts` already sends `ifMatch` and `idempotencyKey`; `schema.d.ts` already has `ServiceOut`, `ServiceSummary`, `Page_ServiceSummary_`, `ArchivedHymn(s)`, `CustomElementOut`, `DeletedOut` (5a-2). `CustomElementOut` keeps a stored element over today's limits, which a re-save would send back and the server would refuse with 422 (5a-2 record, Follow-ups). The reviewer's notes are dropped when `created_at` changes. sonner replays a toast still showing to the next `Toaster` (`liturgy-step.test.tsx` dismisses them).
+- While this plan was written, two docs commits from the owner's session landed on the branch (`8ef6251` and `71d50e1`, the "Hear it from the pews" idea, `docs/superpowers/specs/2026-10-02-pew-voices-idea.md`); they ride along in this PR with the 5a-2 record and touch nothing the tasks change.
 - Every task's code was written and run by the planner in a throwaway worktree of `a789fb8`, and the plan's directives were then replayed onto a fresh worktree of `a789fb8` (see "Build notes").
 
 ## Global Constraints
@@ -24,7 +25,7 @@
 - Run commands from the repo root; the working directory resets between commands. Frontend as `(cd frontend && …)`. No foreground `sleep`.
 - Frontend: one or more files `(cd frontend && npx vitest run <paths> 2>&1 | grep -E "^ +× |\[ src/|Tests ")` (a file that cannot load shows as `FAIL … [ src/… ]`; the `×` lines may come in another order than quoted, since Vitest reports files as they finish); the suite `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")` (a failure is named); then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`. Backend, as a check only: `.venv/bin/python -m pytest -q | tail -1`.
 - The API does not change: never run `export_openapi.py` or `gen:api` to change anything (T7 runs them to show nothing changes).
-- Branch `claude/slice-2-plan-4q33le`, at `a789fb8` plus this plan's commits (`WIP plan: slice 5a-3` …, then `Plan: slice 5a-3, Save and the Services page (owner answers 2026-10-01/02)`), then T1-T6. Stage files by name (paths with parentheses in single quotes); `.claude/` stays untracked.
+- Branch `claude/slice-2-plan-4q33le`, at `a789fb8` plus this plan's commits (`WIP plan: slice 5a-3` …, then `Plan: slice 5a-3, Save and the Services page (owner answers 2026-10-01/02)` and its follow-up) and the two idea-doc commits, then T1-T6. Stage files by name (paths with parentheses in single quotes); `.claude/` stays untracked.
 - `main` is protected (`backend`, `backend-postgres`, `frontend`, up to date). Merge only with `gh pr merge <N> --merge -R bbrown62450/church`, only on the owner's explicit yes.
 - Every commit message has a subject, a body and, as its last paragraph (a separate `-m`), these two lines:
   `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`
@@ -172,7 +173,7 @@ The owner's answers win over S and F; the code wins over both where they disagre
 | `docs/superpowers/specs/2026-09-25-slice-5a-documents-archive-design.md`, `docs/superpowers/specs/2026-09-25-migration-foundations-design.md`, `docs/manual-verification.md` | the amendment; the Amendments row; items 12-17 | T6 |
 | `docs/ops-runbook.md` | "### Slice 5a-2 record" (commit `a789fb8`, riding along); "### Slice 5a-3 record" (the records PR, after the merge) | T8 |
 
-**Counts in the PR:** 11 created (this plan and the 10 files above), 34 modified (the 33 code and docs files above, and `docs/ops-runbook.md` through the 5a-2 record commit; the 5a-3 record comes in the records PR after the merge): 45 paths. **Untouched:** every backend file, migrations, `openapi.json`, `schema.d.ts`, `lib/api/client.ts`, `lib/queries/keys.ts`, `lib/draft/context.tsx`, `liturgy/*`, `hymns/*`, `readings/*`, `app.py`, Streamlit.
+**Counts in the PR:** 12 created (this plan, the 10 files above, and the ride-along `docs/superpowers/specs/2026-10-02-pew-voices-idea.md`), 34 modified (the 33 code and docs files above, and `docs/ops-runbook.md` through the 5a-2 record commit; the 5a-3 record comes in the records PR after the merge): 46 paths. **Untouched:** every backend file, migrations, `openapi.json`, `schema.d.ts`, `lib/api/client.ts`, `lib/queries/keys.ts`, `lib/draft/context.tsx`, `liturgy/*`, `hymns/*`, `readings/*`, `app.py`, Streamlit.
 
 **Task order and review batch:** T1 → T6, each one commit and a backup push; then one review of the whole batch with its fixes as `Fix: …` commits; T7 verifies and opens the draft PR on the owner's yes; T8 merges on the owner's yes, takes the owner through the phone check and writes the record.
 
@@ -3936,13 +3937,14 @@ git log --reverse --no-merges --format=%s origin/main..HEAD
 for c in $(git rev-list origin/main..HEAD); do git show -s --format=%B "$c" | grep -q '^Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>$' || echo "no trailer: $(git show -s --format='%h %s' "$c")"; done; echo "trailer check done"
 ```
 
-**Expected:** nothing from `git status` (the API did not change); `raw html grep exit 1`; exactly these 45 paths (without `M docs/ops-runbook.md` when Step 1 printed `0`):
+**Expected:** nothing from `git status` (the API did not change); `raw html grep exit 1`; exactly these 46 paths (without `M docs/ops-runbook.md` when Step 1 printed `0`, and without the idea doc if it reached `main` another way):
 ```
 M	docs/manual-verification.md
 M	docs/ops-runbook.md
 A	docs/superpowers/plans/2026-10-02-slice-5a3-save-services.md
 M	docs/superpowers/specs/2026-09-25-migration-foundations-design.md
 M	docs/superpowers/specs/2026-09-25-slice-5a-documents-archive-design.md
+A	docs/superpowers/specs/2026-10-02-pew-voices-idea.md
 M	frontend/src/app/(signed-in)/(church)/builder/review/page.tsx
 A	frontend/src/app/(signed-in)/(church)/services/page.tsx
 M	frontend/src/components/app/app-header.test.tsx
@@ -3984,7 +3986,7 @@ M	frontend/src/lib/draft/store.ts
 A	frontend/src/lib/queries/services.ts
 M	frontend/src/test/fixtures/index.ts
 ```
-`0` (no backend, workflow, package, API snapshot or Streamlit path); the subjects oldest first: `Runbook: slice 5a-2 record (merged; 0005 on production; owner's checks)` (unless on `main`), the plan's (`WIP plan: slice 5a-3` …, `Plan: slice 5a-3, Save and the Services page (owner answers 2026-10-01/02)`, any later plan commits), then T1-T6's six subjects as written above, then any `Fix: …` lines; only `trailer check done`.
+`0` (no backend, workflow, package, API snapshot or Streamlit path); the subjects oldest first: `Runbook: slice 5a-2 record (merged; 0005 on production; owner's checks)` (unless on `main`), then in branch order `WIP plan: slice 5a-3`, `Docs: Hear it from the pews idea (owner, 2026-10-02)`, `Docs: Hear it from the pews goes after 6a (owner, 2026-10-02)`, `WIP plan: slice 5a-3`, `Plan: slice 5a-3, Save and the Services page (owner answers 2026-10-01/02)` and its follow-up, then T1-T6's six subjects as written above, then any `Fix: …` lines; only `trailer check done`.
 
 - [ ] **Step 4 (agent → OWNER): Ask to open the draft PR**
 
@@ -4002,7 +4004,7 @@ gh pr list -R bbrown62450/church --head claude/slice-2-plan-4q33le --state open 
 (not replayed)
 ```bash
 cat > "<scratch>/slice5a3-pr-body.md" <<'BODY'
-Slice 5a-3: the Save card and the Services page (the last of three 5a PRs; owner answers of 2026-10-01/02). Plan: docs/superpowers/plans/2026-10-02-slice-5a3-save-services.md. Frontend only: no backend change, no migration, no new variable. The 5a-2 runbook record rides along.
+Slice 5a-3: the Save card and the Services page (the last of three 5a PRs; owner answers of 2026-10-01/02). Plan: docs/superpowers/plans/2026-10-02-slice-5a3-save-services.md. Frontend only: no backend change, no migration, no new variable. The 5a-2 runbook record and the "Hear it from the pews" idea doc ride along.
 
 - Review & send: a banner while the draft is a saved service; Still to do (renamed from Still needed, with Everything's ready. and a row per hymn not in the hymnal); the Archive card (Save to archive / Save changes / Save as new service with why; Start a new service); the Word documents with a save tip. A 409 opens "Someone else changed this service" (Reload their version, Save mine as a new service, Cancel); a deleted saved copy is saved as new, with a toast; a hymn the church no longer has offers Go to Hymns.
 - A save keeps a default-following Benediction and communion as saved (owner answer 4); no "Readings for ... are available" while the date is the saved date (owner answer 5); reviewer notes stay on save and go on open (owner answer 9).
@@ -4178,7 +4180,7 @@ Expected counts after this task: frontend `645 passed` in 83 files on `main`; ba
 - **The production build** ran in the build worktree: `✓ Compiled successfully`, with `/services` among the routes.
 - Vitest reports failures as files finish, so the `×` lines of a "see it fail" step may come in another order than quoted (T1's did in the replay); the set and the `Tests` line are what count.
 
-**Replay of the finished plan (2026-10-02).** The directives of T1-T6 were applied in order onto a fresh detached worktree of the branch head (`a789fb8` plus the plan commits), running each step's commands:
+**Replay of the finished plan (2026-10-02).** The directives of T1-T6 were applied in order onto a fresh detached worktree of the branch head (`a789fb8` plus the plan commits and the two idea-doc commits), running each step's commands:
 - All 108 directives applied (T1 10 + 10, T2 12 + 19, T3 2 + 4, T4 23 + 18, T5 3 + 4, T6 3); every Replace anchor occurred exactly once, and every Append landed on the file as the task before left it. After T6, `frontend/src` and the three docs equaled the build worktree's (`diff -r`: empty).
 - Every "see it fail" output matched as quoted (T1's `×` lines in another order), and every count matched the table: frontend 622, 628, 629, 637 in 82, then 645 in 83; the task's files `40`, `25`, `13`, `27` (three times) and `14` (three times) passed; typecheck 0 and lint 0 after each of T1-T5; `note grep exit 1` after T4; T6 `89 passed`, `4`, `0`, `3 files changed, 26 insertions(+)`, backend `1335 passed, 16 skipped`. At the end the whole frontend suite three times, `645 passed` in 83 each, no `×` or `FAIL`; `export_openapi.py` and `gen:api` changed nothing; no raw HTML. No flaky run.
 - Not run while planning: the pushes, the PR and CI, the merge, and the owner's phone check.
@@ -4187,7 +4189,7 @@ Expected counts after this task: frontend `645 passed` in 83 files on `main`; ba
 
 | Owner answer or S item | Task(s) and tests |
 |---|---|
-| 1. Three PRs; this one is the Save card and the Services page; no backend change | the plan's scope; T7 Step 3 (45 paths; `0` backend, API snapshot or migration paths; regenerating the API changes nothing); clarification 1 |
+| 1. Three PRs; this one is the Save card and the Services page; no backend change | the plan's scope; T7 Step 3 (46 paths; `0` backend, API snapshot or migration paths; regenerating the API changes nothing); clarification 1 |
 | 2. No order-of-worship preview | T4 "shows Still to do, the Archive card and both copies … in that order" (the step's three h2s) |
 | 4. A save keeps a default Benediction and communion as saved | T2 "markSaved records the save and keeps a default Benediction and communion as saved (owner answer 4)"; T4 "saves a new service with the draft's key, …" (the stored draft's origins after the save) |
 | 5. No "Readings for … are available" while the date is the saved date | T2 "opens a saved service as a new draft that is already Saved, …" (hidden on the saved date, shown on another, hidden again back on it) |
