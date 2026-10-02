@@ -20,6 +20,8 @@
 from __future__ import annotations
 
 import datetime
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from typing import Literal, Optional
 from urllib.parse import quote
 
@@ -77,3 +79,60 @@ def is_legacy_error_placeholder(text: str) -> bool:
     """Streamlit's stored generation errors (worship_service.py:713, 722, 764 before slice 4)."""
     stripped = text.strip()
     return stripped.endswith("]") and stripped.startswith(LEGACY_ERROR_PREFIXES)
+
+
+SLOTS = ("opening", "response", "closing")
+
+
+@dataclass(frozen=True)
+class ResolvedHymn:
+    """A slot's hymn as it prints: the database's title and number for a hymn id, else the snapshot sent."""
+    title: str
+    number: Optional[int]
+    hymn_id: Optional[object] = None          # uuid.UUID when the hymn is in the church's hymnal
+    hymnal: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class CustomElement:
+    label: str
+    text: str
+    insert_after: str                          # a liturgy_config placement key
+
+
+@dataclass(frozen=True)
+class ResolvedService:
+    """A service ready to print: cleaned input with its hymns resolved (usecases.documents)."""
+    service_date: datetime.date
+    occasion: str = ""
+    scriptures: tuple[str, ...] = ()
+    hymns: Mapping[str, Optional[ResolvedHymn]] = field(default_factory=dict)
+    liturgy: Mapping[str, str] = field(default_factory=dict)
+    sermon_title: str = ""
+    selected_ot_ref: str = ""
+    selected_nt_ref: str = ""
+    include_communion: bool = False
+    custom_elements: tuple[CustomElement, ...] = ()
+
+
+def render_docx(resolved: ResolvedService, variant: Variant) -> bytes:
+    """The Word file of one variant: worship_service.build_docx with the resolved
+    readings, the slot hymns and the variant's flags."""
+    import worship_service          # here, not at the top: worship_service imports hymn_line from this module
+
+    ot, nt = resolve_doc_readings(list(resolved.scriptures), resolved.selected_ot_ref, resolved.selected_nt_ref)
+    hymns = {slot: None if (h := resolved.hymns.get(slot)) is None else {"title": h.title, "number": h.number}
+             for slot in SLOTS}
+    return worship_service.build_docx(
+        occasion=resolved.occasion,
+        date_display=service_date_display(resolved.service_date),
+        hymns_by_slot=hymns,
+        liturgy=dict(resolved.liturgy),
+        ot_ref=ot,
+        nt_ref=nt,
+        sermon_title=resolved.sermon_title,
+        include_communion=resolved.include_communion,
+        custom_elements=[{"label": e.label, "text": e.text, "insert_after": e.insert_after}
+                         for e in resolved.custom_elements],
+        **VARIANTS[variant],
+    )
