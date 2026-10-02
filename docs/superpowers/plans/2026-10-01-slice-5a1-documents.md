@@ -23,14 +23,14 @@
 - Run commands from the repo root; the working directory resets between commands. Frontend as `(cd frontend && …)`. No foreground `sleep`.
 - Backend: one file `.venv/bin/python -m pytest -q <file> 2>&1 | tail -3`; the suite `.venv/bin/python -m pytest -q | tail -1`. Frontend: one file `(cd frontend && npx vitest run <path> 2>&1 | grep -E "^ +× |Tests ")`; the suite `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")` (a failure is named); then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`.
 - The API changes (T3), so T3 regenerates the snapshot and the types in the same commit: `.venv/bin/python backend/scripts/export_openapi.py` then `(cd frontend && npm run gen:api)`. Never edit `openapi.json` or `schema.d.ts` by hand.
-- Branch `claude/slice-2-plan-4q33le`, at `origin/main` `934ffb9` plus this plan's commits (`WIP plan: slice 5a-1`, then `Plan: slice 5a-1, Word downloads (owner answers 2026-10-01)`), then T1-T7. Stage files by name (paths with parentheses in single quotes); `.claude/` stays untracked.
+- Branch `claude/slice-2-plan-4q33le`, at `origin/main` `934ffb9` plus this plan's commits (`WIP plan: slice 5a-1`, then `Plan: slice 5a-1, Word downloads (owner answers 2026-10-01)`, then `Plan: slice 5a-1 review fixes (owner answers 2026-10-01)`), then T1-T7. Stage files by name (paths with parentheses in single quotes); `.claude/` stays untracked.
 - `main` is protected (`backend`, `backend-postgres`, `frontend`, up to date). Merge only with `gh pr merge <N> --merge -R bbrown62450/church`, only on the owner's explicit yes.
 - Every commit message has a subject, a body and, as its last paragraph (a separate `-m`), these two lines:
   `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`
   `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
 - TDD: write the failing test first and see it fail as quoted.
 - **Backup push after every task** (standing rule): the controller runs `git push origin claude/slice-2-plan-4q33le` after each task's commit (never `--force`). A fix asked for by a review is a new commit, `Fix: <what> (Task <n> review)`. The container can restart and lose uncommitted work: commit as soon as a task's checks pass.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1223 → 1254 passed, 11 → 11 skipped; frontend 597 → 609 in 78 → 81 files`.
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1223 → 1256 passed, 11 → 11 skipped; frontend 597 → 611 in 78 → 81 files`.
 - New prose for the owner has no em dashes and no flattery. New user-facing copy is exactly the list in clarification 16 and has no em dashes; existing copy keeps its own punctuation ("No service date — Choose one", the hymn line "Holy, Holy, Holy — #138" printed in the file, as Streamlit printed it).
 - Ask the owner before any push to a PR, PR creation, marking ready, merging, or any production or settings action. Owner steps go one at a time, in plain words.
 
@@ -45,13 +45,13 @@ As in the 4b plan: **Create `path`:** the block is the whole file; **Append to `
   |---|---|---|---|---|
   | T1 | +6 (`test_service_output.py`) | 1229 passed, 11 skipped | 0 | 597 in 78 |
   | T2 | +8 (`test_build_docx_characterization.py`, one test in two cases; two files edited) | 1237 passed, 11 skipped | 0 | 597 in 78 |
-  | T3 | +17 (`test_usecase_documents.py` 5, `test_api_documents.py` 12 with one test in six cases; one file edited) | 1254 passed, 11 skipped | 0 | 597 in 78 |
-  | T4 | 0 | 1254 passed, 11 skipped | +4 (`client.test.ts`) | 601 in 78 |
-  | T5 | 0 | 1254 passed, 11 skipped | +3 (`download.test.ts` 1, `documents.test.ts` 2) | 604 in 80 |
-  | T6 | 0 | 1254 passed, 11 skipped | +5 (`review-send-step.test.tsx`; `builder-shell.test.tsx` edited) | 609 in 81 |
-  | T7-T9 | 0 (`test_slice1_docs.py` edited) | 1254 passed, 11 skipped | 0 | 609 in 81 |
+  | T3 | +19 (`test_usecase_documents.py` 5, `test_api_documents.py` 14 with one test in six cases; one file edited) | 1256 passed, 11 skipped | 0 | 597 in 78 |
+  | T4 | 0 | 1256 passed, 11 skipped | +4 (`client.test.ts`) | 601 in 78 |
+  | T5 | 0 | 1256 passed, 11 skipped | +4 (`download.test.ts` 2, `documents.test.ts` 2) | 605 in 80 |
+  | T6 | 0 | 1256 passed, 11 skipped | +6 (`review-send-step.test.tsx`; `builder-shell.test.tsx` edited) | 611 in 81 |
+  | T7-T9 | 0 (`test_slice1_docs.py` edited) | 1256 passed, 11 skipped | 0 | 611 in 81 |
 
-- CI `backend-postgres` goes from `11 passed, 1223 deselected` to `11 passed, 1254 deselected` (no new Postgres test: nothing here writes).
+- CI `backend-postgres` goes from `11 passed, 1223 deselected` to `11 passed, 1256 deselected` (no new Postgres test: nothing here writes).
 
 ### Layering and code rules (carried)
 - `service_output`, `usecases/archive.py` and `usecases/documents.py` import no FastAPI, Starlette or Streamlit (`test_no_streamlit_in_core.py` gains them, T3); the route is a plain `def` with no SQL and no try/except (F §2.2 rule 1); `build_document` reads in one short `session_scope` that closes before rendering (S "Data access").
@@ -77,6 +77,9 @@ As in the 4b plan: **Create `path`:** the block is the whole file; **Append to `
 8. **Checks:** a guided phone check after each PR (T9 here). For PR 2, not this one: a backup, read-only counts and the migration's `--sql` preview. No Streamlit compatibility check (Streamlit retired).
 9. **Reviewer notes stay in memory:** opening a saved service clears them; saving keeps them (accepted as is; PR 3).
 
+### Owner answers to this plan's questions (Beau, 2026-10-01, binding)
+The owner answered "all recommended" to "Questions for the owner" (1-7, at the end of this plan) on 2026-10-01. Each choice stands as written there and in its clarification (2, 3, 5 and 16, 4, 14, 11, 9). The plan review's fixes that followed (clarification 19) use owner decision 1 and add no copy.
+
 **Later, out of scope:** PR 2 (5a-2: `/services`, hymn use recorded on save and recalculated on delete, `0005_services_extras`, a backup and the `--sql` preview first), PR 3 (5a-3: the Save card, the Services page, `serviceToDraft`, the draft version bump, `"review"` in `SHIPPED_STEPS`), 5b (email).
 ## Spec clarifications
 
@@ -86,23 +89,24 @@ The owner's answers win over S and F; the code wins over both where they disagre
 2. **[owner-visible] The Review step's layout** (owner answers 1, 2), top to bottom in one column: "Still needed" (clarification 3), the **Word documents** card (clarifications 4, 5), then a dashed **Archive** card: "Saving services to the archive is coming soon." (the place 5a-3's Save card takes). No order-of-worship card (owner answer 2), no editing banner (5a-3), no email card: S's "keep using the current app for this part" is no longer true (owner answer 6), and 5b brings email. The "Available soon" card goes, and `StepPlaceholder`, which nothing else uses, is deleted (`StillNeeded` stays until 5a-3 replaces it).
 3. **[owner-visible] The checklist stays as 4b shipped it:** the heading "Still needed", one row per gap with its link ("No service date — Choose one", "No Opening hymn — Choose one", "Call to Worship is empty — Write or generate it", "No sermon title — Add one", …), and nothing when nothing is missing. S's rename to "Still to do", its "Everything's ready." line and its "{Title} isn't in your hymnal" row wait for 5a-3: only an opened saved service can hold a hymn that is not in the hymnal, and renaming now would change copy the owner has already checked twice.
 4. **[owner-visible] Only the service date gates a download** (S UX, F decision D9). Both buttons need a valid date in the supported range (`hasServiceDate`, as the lectionary lookup); without one both are off and the card says "Choose a service date on step 1 to download." (the "No service date — Choose one" row above links there). Anything else missing does not block: the file prints what there is, "[Sermon title]" for a blank title (parity), and leaves out an empty hymn slot or reading.
-5. **[owner-visible] The Word documents card** (S UX item 4, without the save hint): "Bulletin copy" with "The order of worship with hymns, readings and the sermon title. Leaves out Prayers of the People." and **Download bulletin copy** (primary); "Pastor's copy" with "Everything in the bulletin copy, plus Prayers of the People." and **Download pastor's copy** (outline); under the pastor's copy, while Prayers of the People is off or blank, "Same as the bulletin copy for this service. Prayers of the People is empty or turned off.". Each button has its own pending label, "Preparing…", then "Still working…" after 8 s (F §1.8; `useStillWorking`), and the other button stays usable. Success opens the browser's download (an iPhone's share or preview sheet) with no toast; a failure is a toast with the message (`errorToastMessage`: the server's sentence, such as "A chosen hymn is no longer in your hymnal. Choose it again on the Hymns step."; "Can't reach the server. Check your connection and try again."; "This is taking too long. Try again."; "Something went wrong. (Ref: …)"), and no file. S's "Tip: save this service so its hymns count as recently used." comes with Save in 5a-3.
+5. **[owner-visible] The Word documents card** (S UX item 4, without the save hint): "Bulletin copy" with "The order of worship with hymns, readings and the sermon title. Leaves out Prayers of the People." and **Download bulletin copy** (primary); "Pastor's copy" with "Everything in the bulletin copy, plus Prayers of the People." and **Download pastor's copy** (outline); under the pastor's copy, while Prayers of the People is off or blank, "Same as the bulletin copy for this service. Prayers of the People is empty or turned off.". Each button has its own pending label, "Preparing…", then "Still working…" after 8 s (F §1.8; `useStillWorking`), and the other button stays usable. Success opens the browser's download (an iPhone's share or preview sheet) with no toast; a failure is a toast with the message (`errorToastMessage`: the server's sentence, such as "A chosen hymn is no longer in your hymnal. Choose it again on the Hymns step."; "Can't reach the server. Check your connection and try again."; "This is taking too long. Try again."; "Something went wrong. (Ref: …)"), and no file. A 401 or a lost church shows no toast of its own: the app's handling (sign-in, the church's own message) already says it, as Suggest hymns does (clarification 19). S's "Tip: save this service so its hymns count as recently used." comes with Save in 5a-3.
 6. **The route** (S API, F §1.9). `POST /documents`, church-scoped (`require_church`; any member, owner decision 5), body `DocumentIn = {variant: "bulletin" | "pastor", service: ServiceDraft}` (`extra="forbid"`), answer 200 with the bytes and exactly `Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document`, `Content-Disposition: attachment; filename="worship_October_04_2026.docx"; filename*=UTF-8''worship_October_04_2026.docx` (pastor: `worship_pastor_…`) and `Cache-Control: no-store`. **No `Idempotency-Key`**: it is a pure render that writes nothing, so a retry is harmless (F §1.6 is for writes). **No rate-limit bucket** (S "Timeouts"): local work, well under 3 s, nothing paid. Errors stay JSON: 404 `not_found` with `details.field = "hymns.<slot>.hymn_id"` for a hymn id the church does not have (slice 4's message), 422 `invalid_request` with `fields` (Pydantic, or "Give each custom element a label."), a logged 500 `internal_error` without python-docx. OpenAPI declares `response_class=Response` and a binary 200 under the docx type.
 7. **What the documents read** (S `ServiceDraft`, `build_docx`). The date (the date line and the filename), the occasion (the title), the scripture **references** (never passage texts: S removes `scripture_full_texts`, and Streamlit printed references only), the two bulletin picks (re-resolved on the server by `resolve_readings`, so a stale pick prints the automatic reading), the three hymns by slot (an id is looked up in the church and its current title and number print, F §1.3; a null id prints the snapshot sent), the liturgy (the switched-on cards with text, the Benediction included while it follows the church default, as the Liturgy step shows it), the sermon title, communion on or off (the fixed text from `liturgy_config.COMMUNION_BLOCKS`), and the custom elements (label, text, place). `hymnal` is accepted, for 5a-2, and ignored by the documents.
-8. **Cleaning on the server** (S `clean_input`): every string trimmed, blank scripture lines and blank liturgy dropped, Streamlit's stored error texts (`[Error generating …]`, `[Configure OPENAI_API_KEY to generate …]`, `[Your OPENAI_API_KEY contains invalid …]`) dropped, a blank custom label a 422 on `custom_elements.<i>.label`. A hymn whose title is blank prints nothing in its slot.
-9. **[owner-visible] The body stays within the server's limits** (`lib/documents.ts`). It is `draftToServicePayload(draft)` (the provisional mapping, F §4.6) with the occasion and readings exactly as every liturgy request sends them (trimmed; the first 20 readings, each cut to 200; `request.ts`'s `readingsContext`), the hymns as `HymnRef`s (`hymnRef`: a non-UUID id goes as null), each text cut to its `liturgy_config.LIMITS` length, custom elements without a label left out (`build_docx` never printed them, and the server would refuse them) and each place read through `normalizePlacement`, as the Liturgy step places it. So a draft never meets a 422; an occasion over 300 characters, which step 1 already flags, prints cut at 300.
-10. **The download on the client** (F §1.9, §4.5). `apiFetchBlob` shares one `send()` with `apiFetch` (headers, the timeout and the caller's signal combined by hand, the error mapping, so `ApiError` codes and messages are the same); a 2xx returns `{blob, filename}`, the filename from `Content-Disposition` (`filename*` decoded first, then `filename`, else null). `POST /documents` gets 30 000 ms in `timeouts.ts`. `useDownloadDocument(variant)` is a `useChurchMutation` (so a 401 or a lost church goes through `handleAuthErrors`), one per button; at the tap it reads the latest draft (`peek`), posts, and calls `downloadBlob(blob, filename ?? docxFilename(variant, date))`: an object URL clicked through a hidden `<a download>`, revoked after 60 s (at once breaks Safari). Nothing is cached or kept. `docxFilename` and `service_output.docx_filename` run the same shared fixture (`docx_filenames.json`).
+8. **Cleaning on the server** (S `clean_input`): every string trimmed, blank scripture lines and blank liturgy dropped, Streamlit's stored error texts (`[Error generating …]`, `[Configure OPENAI_API_KEY to generate …]`, `[Your OPENAI_API_KEY contains invalid …]`) dropped, a blank custom label a 422 on `custom_elements.<i>.label`. A hymn whose title is blank prints nothing in its slot. Before any of that, characters a Word file cannot hold are taken out of every string (clarification 19).
+9. **[owner-visible] The body stays within the server's limits** (`lib/documents.ts`). It is `draftToServicePayload(draft)` (the provisional mapping, F §4.6) with the occasion and readings exactly as every liturgy request sends them (trimmed; the first 20 readings, each cut to 200; `request.ts`'s `readingsContext`), the two bulletin picks trimmed and cut to 200 (`MAX_REF_LENGTH`, as the readings), the hymns as `HymnRef`s (`hymnRef`: a non-UUID id goes as null), each text cut to its `liturgy_config.LIMITS` length, custom elements without a label left out (`build_docx` never printed them, and the server would refuse them) and each place read through `normalizePlacement`, as the Liturgy step places it. So a draft never meets a 422; an occasion over 300 characters, which step 1 already flags, prints cut at 300.
+10. **The download on the client** (F §1.9, §4.5). `apiFetchBlob` shares one `send()` with `apiFetch` (headers, the timeout and the caller's signal combined by hand, the error mapping, so `ApiError` codes and messages are the same); a 2xx returns `{blob, filename}`, the filename from `Content-Disposition` (`filename*` decoded first, then `filename`, else null). `POST /documents` gets 30 000 ms in `timeouts.ts`. `useDownloadDocument(variant)` is a `useChurchMutation` (so a 401 or a lost church goes through `handleAuthErrors`), one per button; at the tap it reads the latest draft (`peek`), posts, and calls `downloadBlob(blob, filename ?? docxFilename(variant, date))`: an object URL clicked through a hidden `<a download>`, revoked after 5 minutes (at once breaks Safari, and an iPhone's "Download?" sheet can wait for the member's answer; clarification 19). Nothing is cached or kept. `docxFilename` and `service_output.docx_filename` run the same shared fixture (`docx_filenames.json`).
 11. **[owner-visible] The iPhone fallback is documented, not built** (owner answer 7). Built now it would add a third state to each button, keep an object URL alive until the second tap, and add copy ("Save {filename}"), all for a failure no test here can reproduce. If T9's phone step 1 finds the download does not start, the follow-up is one small PR: after the file arrives, the button becomes a real `<a download>` link reading "Save {filename}"; `downloadBlob` stays the one place to change.
-12. **`build_docx`'s parity is pinned** (owner answer 3; S "Changed modules"; F §2.3.1). `test_build_docx_characterization.py` carries a verbatim copy of the old function (`legacy_build_docx`, using the module's unchanged helpers) and compares the document XML in the same run: a full service in both variants must equal the old output with "Old Testament Reading" read as "First Reading", and the styles part must be identical; a sparse service must be identical. The new keyword signature is S's (`occasion, date_display, hymns_by_slot, liturgy, ot_ref, nt_ref, sermon_title, include_sermon, include_prayers_of_the_people, include_communion, custom_elements`), it returns bytes, and `include_placeholders` and `scripture_full_texts` are gone. `test_liturgy_config.py` loses `DOCX_HEADINGS_UNTIL_5A`, so OUTLINE's labels are the docx headings, "First Reading" included; `test_communion_docx.py`'s helper moves to the new signature (its comparison is unchanged). No shim for `app.py` on `main` (it already cannot import `worship_service`; production Streamlit runs from `streamlit-frozen`).
+12. **`build_docx`'s parity is pinned** (owner answer 3; S "Changed modules"; F §2.3.1). `test_build_docx_characterization.py` carries a verbatim copy of the old function (`legacy_build_docx`) and of the three helpers it calls whose output the parity rests on (`_add_leader_people_paragraph`, `_add_assurance_paragraph`, `_add_custom_elements_after`, copied from `934ffb9`, so a later change to the module's helpers cannot move both sides at once; `_add_communion_liturgy` stays imported, as `test_communion_docx.py` pins it) and compares the document XML in the same run: a full service in both variants must equal the old output with "Old Testament Reading" read as "First Reading", and the styles part must be identical; a sparse service must be identical. The new keyword signature is S's (`occasion, date_display, hymns_by_slot, liturgy, ot_ref, nt_ref, sermon_title, include_sermon, include_prayers_of_the_people, include_communion, custom_elements`), it returns bytes, and `include_placeholders` and `scripture_full_texts` are gone. `test_liturgy_config.py` loses `DOCX_HEADINGS_UNTIL_5A`, so OUTLINE's labels are the docx headings, "First Reading" included; `test_communion_docx.py`'s helper moves to the new signature (its comparison is unchanged). No shim for `app.py` on `main` (it already cannot import `worship_service`; production Streamlit runs from `streamlit-frozen`).
 13. **Names kept from S's hand-offs to 5b:** `usecases.documents.build_document(church_id, data, variant) -> DocumentResult(content, filename)`, `service_output.service_date_display`, `service_output.DOCX_MIME`, `ServiceDraft` (with `to_input()`) and `CustomElementIn` in `api/schemas.py`, `usecases.archive.ServiceInput`. `ServiceDraft.service_date_iso` uses 2a's strict `IsoDate` (only a whole `YYYY-MM-DD`; "2026-10-04T00:00:00" is a 422, as on `GET /lectionary/readings`). `ServiceInput`'s custom elements are `service_output.CustomElement` (a plain dataclass, so `service_output` stays below the usecases); its hymns are slice 4's `HymnRefData`. 5a-2 extends `usecases/archive.py` with saving, listing, opening and deleting.
 14. **[owner-visible] Downloads record no hymn use** (S behavior change 3; owner decision 9). Hymn use is recorded on Save from 5a-2. With Streamlit retired (owner answer 6), nothing records it between this merge and 5a-2's, so the hymns step's "Used …" marks and the 12-week exclusion do not see services built in the meantime.
 15. **Screen readers and the phone** (F §4.9). The step is a region named "Review & send"; the card is a region named by its "Word documents" heading, each copy an item with its own heading. Each button is described by its copy's sentence (and the "Same as the bulletin copy …" helper when shown, `aria-describedby`). While a file is prepared, a polite status in that row reads "Bulletin copy: Preparing…" (or "… Still working…"), so the change of the button's name is announced with its context; an error is announced by the toast. The buttons are `size="touch"` (44 px) and full width below `sm`. The `PendingButton` pattern (disabled while pending, F §4.8) is the app's own.
 16. **[owner-visible] Every new user-facing string** (no em dashes): "Word documents"; "Bulletin copy"; "The order of worship with hymns, readings and the sermon title. Leaves out Prayers of the People."; "Download bulletin copy"; "Pastor's copy"; "Everything in the bulletin copy, plus Prayers of the People."; "Download pastor's copy"; "Same as the bulletin copy for this service. Prayers of the People is empty or turned off."; "Preparing…"; "Still working…"; for screen readers only "Bulletin copy: Preparing…", "Bulletin copy: Still working…", "Pastor's copy: Preparing…", "Pastor's copy: Still working…"; "Choose a service date on step 1 to download."; "Archive"; "Saving services to the archive is coming soon."; from the API only (the UI never sends a blank label) "Give each custom element a label."; in the file, "First Reading" in place of "Old Testament Reading". The filenames are Streamlit's. Error toasts reuse existing messages (clarification 5).
 17. **Logging** (F §2.5): one INFO line per file, `documents.build church=<id> variant=<v> bytes=<n> ms=<n>`; never the occasion, a reading, a hymn or any text.
 18. **Docs** (owner answers 1-9). T7 appends S's amendment (the three PRs; owner answers 1-9; answer 6 supersedes open question 1 and behavior change 4; manual check 10 and the Streamlit smoke dropped), and `docs/manual-verification.md` gains "## Slice 5a" with items marked "(owner, after 5a-1)" (the `##` pin in `test_slice1_docs.py` grows to seven). The runbook record is T9's.
+19. **The plan review's fixes** (owner decision 1, 2026-10-01; no new copy). (a) **Characters a Word file cannot hold.** python-docx refuses XML-invalid characters (a NUL, a vertical tab pasted from Word as a soft line break, a form feed, a lone surrogate) with a `ValueError` (a lone surrogate: `UnicodeEncodeError`), so such a string made `POST /documents` a 500 "Something went wrong.". `usecases.archive.clean_input` now runs every string through `_xml_safe` before trimming and the blank checks (the occasion, the scriptures, the liturgy texts, the sermon title, both bulletin picks, each hymn's title and hymnal, each custom element's label and text), and `resolve_hymn_refs` does the same for the database's hymn title: a vertical tab or form feed becomes a line break (python-docx prints `"\n"` as `<w:br/>`, checked), the other control characters, U+FFFE, U+FFFF and lone surrogates are dropped. A label of only such characters is the blank-label 422. This fixes the NUL 500 for `/documents` only; the app-wide item stays open for the other routes (T9's record). (b) **No second message after a 401 or a lost church** (clarification 5): `CopyRow`'s `onError` returns early for `e.status === 401 || isNoChurchAccess(e)`, as `suggest-hymns-button.tsx` does. (c) **The object URL lives 5 minutes, not 60 s** (clarification 10): an iPhone's "Download?" sheet waits for the member, and a URL revoked under it fails the save; T9's phone step 1 waits about a minute on the sheet. (d) **The bulletin picks stay within the server's 200** (clarification 9): only a picked line over 200 characters could reach the 422. (e) **The parity test copies its helpers** (clarification 12).
 
 ### Risks
-- **iOS Safari and a download after an `await`.** Safari may not treat the delayed click as the member's tap. T9 step 1 checks it on the owner's phone; the fallback is clarification 11.
+- **iOS Safari and a download after an `await`.** Safari may not treat the delayed click as the member's tap. T9 step 1 checks it on the owner's phone (waiting a minute on the sheet, so the 5-minute object URL is exercised); the fallback is clarification 11.
 - **The XML comparison depends on python-docx writing the same XML for the same calls.** Both documents are built in the same run with the same library, so a python-docx upgrade cannot make it flaky; it only fails when `build_docx` really prints something else.
 - **No hymn use is recorded until 5a-2** (clarification 14). 5a-2 is next; its delete-recalculates rule (owner answer 6) and a save rebuild the date's rows.
 
@@ -374,7 +378,7 @@ Counts after Task 1: backend **1229 passed, 11 skipped**; frontend **597 in 78**
 
 - [ ] **Step 1 (agent): Write the failing tests: the old function, copied verbatim, and the parity and change tests**
 
-`legacy_build_docx` is `build_docx` exactly as it is at `934ffb9`, statement for statement (its docstring, its python-docx check and its numbered comments left out); the helpers it calls are imported from `worship_service`, where they do not change.
+`legacy_build_docx` is `build_docx` exactly as it is at `934ffb9`, statement for statement (its docstring, its python-docx check and its numbered comments left out). The three helpers whose output the parity rests on (`_add_leader_people_paragraph`, `_add_assurance_paragraph`, `_add_custom_elements_after`) are copied verbatim from `934ffb9` into the test too, so a later change to `worship_service`'s helpers cannot move both sides at once; `_add_communion_liturgy` (the text of `liturgy_config.COMMUNION_BLOCKS`, pinned by `test_communion_docx.py`) stays imported (clarification 12).
 
 **Create `backend/tests/test_build_docx_characterization.py`:**
 
@@ -382,12 +386,15 @@ Counts after Task 1: backend **1229 passed, 11 skipped**; frontend **597 in 78**
 """The Word file keeps Streamlit's layout (slice 5a spec, Testing
 "Characterization comes first"; F §2.3.1; owner answer 3, 2026-10-01: exact
 parity). legacy_build_docx is a verbatim copy of worship_service.build_docx as
-it was before slice 5a (main at 934ffb9), using the module's unchanged helpers;
-each case renders both and compares the document XML in the same run, so the
-python-docx version cannot matter. The only differences allowed are the
+it was before slice 5a (main at 934ffb9), with verbatim copies of the three
+helpers it calls whose output the parity rests on (so a later change to them in
+worship_service cannot move both sides at once; the communion helper, pinned by
+test_communion_docx.py, is imported); each case renders both and compares the
+document XML in the same run, so the python-docx version cannot matter. The only differences allowed are the
 documented ones: the first reading's heading reads "First Reading", hymn
 headings follow slots, a hymn without a number prints no "#None", and the
 readings come from resolve_readings (render_docx)."""
+import re
 from datetime import date
 from io import BytesIO
 from typing import Any, Dict, List, Optional
@@ -400,12 +407,75 @@ from docx.shared import Pt
 import liturgy_config as lc
 import service_output as so
 import worship_service
-from worship_service import (
-    _add_assurance_paragraph,
-    _add_communion_liturgy,
-    _add_custom_elements_after,
-    _add_leader_people_paragraph,
-)
+from liturgy_config import ASSURANCE_RESPONSE
+from worship_service import _add_communion_liturgy
+
+# --- worship_service's helpers as they were at 934ffb9, verbatim ---
+
+
+def _add_leader_people_paragraph(doc, text: str) -> None:
+    """Add paragraph(s): each Leader: (normal), each People: (bold). Supports multiple Leader/People pairs."""
+    if not text or not text.strip():
+        return
+    # Find all "Leader:" and "People:" in order (case-insensitive)
+    pattern = re.compile(r"\b(Leader|People):\s*", re.IGNORECASE)
+    pos = 0
+    parts = []
+    for m in pattern.finditer(text):
+        if m.start() > pos:
+            parts.append(("", text[pos : m.start()].strip()))  # preamble if any
+        role = "Leader" if m.group(1).lower() == "leader" else "People"
+        end = pattern.search(text, m.end())
+        content_end = end.start() if end else len(text)
+        content = text[m.end() : content_end].strip()
+        parts.append((role, content))
+        pos = content_end
+    if not parts:
+        doc.add_paragraph(text)
+        return
+    for role, content in parts:
+        if not content and role == "":
+            continue
+        if role == "People":
+            p = doc.add_paragraph()
+            p.add_run("People: ")
+            r = p.add_run(content)
+            r.bold = True
+        else:
+            line = ("Leader: " + content) if role == "Leader" else content
+            if line:
+                doc.add_paragraph(line)
+
+
+def _add_assurance_paragraph(doc, leader_text: str) -> None:
+    """Add Assurance: Leader line then liturgy_config.ASSURANCE_RESPONSE in bold
+    (the one copy the 4b card shows too)."""
+    leader_clean = (leader_text or "").strip()
+    if leader_clean.startswith("Leader:"):
+        leader_clean = leader_clean[7:].strip()
+    if leader_clean:
+        doc.add_paragraph("Leader: " + leader_clean)
+    # Always add the congregational response
+    p = doc.add_paragraph()
+    r = p.add_run(ASSURANCE_RESPONSE)
+    r.bold = True
+
+
+def _add_custom_elements_after(
+    doc,
+    anchor: str,
+    custom_elements: List[Dict[str, Any]],
+) -> None:
+    """Add any custom elements that are inserted after this anchor."""
+    for ce in custom_elements:
+        if ce.get("insert_after") == anchor and ce.get("label"):
+            doc.add_paragraph(ce["label"], style="Heading 2")
+            if ce.get("text"):
+                doc.add_paragraph(ce["text"])
+            doc.add_paragraph()
+
+
+# --- worship_service.build_docx as it was at 934ffb9, verbatim ---
 
 
 def legacy_build_docx(
@@ -1473,6 +1543,25 @@ def test_a_blank_custom_label_is_the_usecase_s_422(client, church):
     assert r.json()["error"]["fields"] == {"custom_elements.0.label": "Give each custom element a label."}
 
 
+def test_characters_a_word_file_cannot_hold_are_cleaned_not_a_500(client, church):
+    """A vertical tab (Word's soft line break, pasted) or a form feed becomes a
+    line break; a NUL or another control character is dropped (clarification 19)."""
+    service = {**SERVICE, "liturgy": {"opening_prayer": "a\x0bb\x00c"}, "sermon_title": "Living\x0cWater\x1f"}
+    r = post(client, church, {"variant": "bulletin", "service": service})
+    assert r.status_code == 200, r.text
+    text = lines(r.content)
+    assert text[text.index("Opening Prayer") + 1] == "a\nbc"
+    assert text[text.index("Sermon Title") + 1] == "Living\nWater"
+
+
+def test_a_label_of_only_a_nul_is_the_blank_label_422(client, church):
+    body = {"variant": "bulletin", "service": {**SERVICE, "custom_elements": [
+        {"label": "\x00", "text": "Words", "insert_after": "end"}]}}
+    r = post(client, church, body)
+    assert r.status_code == 422, r.text
+    assert r.json()["error"]["fields"] == {"custom_elements.0.label": "Give each custom element a label."}
+
+
 def test_without_python_docx_it_is_a_logged_500(tmp_db, church, monkeypatch):
     monkeypatch.setattr(worship_service, "Document", None)
     client = make_api_client()
@@ -1516,20 +1605,24 @@ needs; 5a-2 adds saving, listing, opening and deleting services here.
 
 - ServiceInput: the domain copy of api.schemas.ServiceDraft, built by its
   to_input() in the route (usecases never import api/*). 5b's email takes it too.
-- clean_input: strips every string, drops blank scriptures, and drops liturgy
-  that is blank or one of Streamlit's stored error texts; a custom element
-  whose label is blank after trimming is a 422 on that field.
+- clean_input: takes out of every string the characters a Word file cannot
+  hold (_xml_safe: python-docx refuses them), then strips every string, drops
+  blank scriptures, and drops liturgy that is blank or one of Streamlit's
+  stored error texts; a custom element whose label is blank after that is a
+  422 on that field.
 - resolve_hymn_refs: each slot's hymn, its id resolved within the church in
   one query (the database's title and number win over the client's copy, F
   §1.3); an id the church does not have is a 404 naming the slot; a null id
-  keeps the snapshot sent; a blank title is an empty slot. The same hymn in
-  two slots is allowed (parity).
+  keeps the snapshot sent; a blank title is an empty slot (the database's
+  title goes through _xml_safe too). The same hymn in two slots is allowed
+  (parity).
 
 No FastAPI, Starlette or Streamlit here (test_no_streamlit_in_core.py).
 """
 from __future__ import annotations
 
 import datetime
+import re
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
@@ -1541,6 +1634,17 @@ from service_output import SLOTS, CustomElement, ResolvedHymn, is_legacy_error_p
 from usecases.liturgy import HYMN_GONE_MESSAGE, HymnRefData
 
 CUSTOM_LABEL_MESSAGE = "Give each custom element a label."
+
+# What XML 1.0 cannot hold, after a vertical tab or form feed becomes a line
+# break: the other C0 controls (tab, newline and carriage return are allowed),
+# U+FFFE, U+FFFF and lone surrogates. python-docx raises on them (a 500).
+_XML_BAD = re.compile("[\x00-\x08\x0e-\x1f\ufffe\uffff\ud800-\udfff]")
+
+
+def _xml_safe(s: str) -> str:
+    """s as a Word file can hold it: a vertical tab (Word's soft line break,
+    pasted) or a form feed becomes a line break, the rest of _XML_BAD goes."""
+    return _XML_BAD.sub("", s.replace("\x0b", "\n").replace("\x0c", "\n"))
 
 
 @dataclass(frozen=True)
@@ -1559,25 +1663,28 @@ class ServiceInput:
 
 
 def clean_input(data: ServiceInput) -> ServiceInput:
-    """The input with every string trimmed and nothing blank kept (see the module docstring)."""
+    """The input with every string made Word-safe and trimmed, and nothing blank kept (see the module docstring)."""
+    def clean(text: str) -> str:
+        return _xml_safe(text).strip()
+
     for i, element in enumerate(data.custom_elements):
-        if not element.label.strip():
+        if not clean(element.label):
             raise InvalidInput(CUSTOM_LABEL_MESSAGE, field=f"custom_elements.{i}.label")
-    liturgy = {key: text.strip() for key, text in data.liturgy.items()
-               if text.strip() and not is_legacy_error_placeholder(text)}
+    liturgy = {key: text for key, raw in data.liturgy.items()
+               if (text := clean(raw)) and not is_legacy_error_placeholder(text)}
     hymns = {slot: None if (ref := data.hymns.get(slot)) is None else replace(
-        ref, title=ref.title.strip(), hymnal=ref.hymnal.strip() if ref.hymnal else ref.hymnal) for slot in SLOTS}
+        ref, title=clean(ref.title), hymnal=clean(ref.hymnal) if ref.hymnal else ref.hymnal) for slot in SLOTS}
     return replace(
         data,
-        occasion=data.occasion.strip(),
-        scriptures=tuple(line.strip() for line in data.scriptures if line.strip()),
+        occasion=clean(data.occasion),
+        scriptures=tuple(text for line in data.scriptures if (text := clean(line))),
         hymns=hymns,
-        hymnal=(data.hymnal or "").strip() or None,
+        hymnal=clean(data.hymnal or "") or None,
         liturgy=liturgy,
-        sermon_title=data.sermon_title.strip(),
-        selected_ot_ref=data.selected_ot_ref.strip(),
-        selected_nt_ref=data.selected_nt_ref.strip(),
-        custom_elements=tuple(CustomElement(e.label.strip(), e.text.strip(), e.insert_after)
+        sermon_title=clean(data.sermon_title),
+        selected_ot_ref=clean(data.selected_ot_ref),
+        selected_nt_ref=clean(data.selected_nt_ref),
+        custom_elements=tuple(CustomElement(clean(e.label), clean(e.text), e.insert_after)
                               for e in data.custom_elements),
     )
 
@@ -1596,7 +1703,7 @@ def resolve_hymn_refs(session, church_id: uuid.UUID,
             record = found.get(ref.hymn_id)
             if record is None:
                 raise NotFound(HYMN_GONE_MESSAGE, details={"field": f"hymns.{slot}.hymn_id"})
-            title = (record.title or "").strip()
+            title = _xml_safe(record.title or "").strip()
             resolved[slot] = ResolvedHymn(title, record.number, record.id, record.hymnal) if title else None
         else:
             title = ref.title.strip()
@@ -1833,7 +1940,7 @@ grep -nE "^(import|from) (fastapi|starlette|streamlit)" backend/service_output.p
 (cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")
 ```
 
-**Expected:** `28 passed in <t>s`; `imports grep exit 1`; `1254 passed, 11 skipped in <t>s`; `typecheck 0`, `lint 0`.
+**Expected:** `30 passed in <t>s`; `imports grep exit 1`; `1256 passed, 11 skipped in <t>s`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 6 (agent): Commit**
 
@@ -1851,7 +1958,7 @@ Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 git log --oneline -1
 ```
 
-Counts after Task 3: backend **1254 passed, 11 skipped**; frontend **597 in 78**.
+Counts after Task 3: backend **1256 passed, 11 skipped**; frontend **597 in 78**.
 
 ### Task 4: `apiFetchBlob` (S "Library code"; F §1.8, §1.9, §4.5; clarification 10)
 
@@ -2156,7 +2263,7 @@ Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 git log --oneline -1
 ```
 
-Counts after Task 4: backend **1254 passed, 11 skipped**; frontend **601 in 78**.
+Counts after Task 4: backend **1256 passed, 11 skipped**; frontend **601 in 78**.
 
 ### Task 5: The body, the filename and the download (S `download.ts`, `useDownloadDocument`; F §1.9, §4.6; clarifications 9, 10)
 
@@ -2171,9 +2278,9 @@ Counts after Task 4: backend **1254 passed, 11 skipped**; frontend **601 in 78**
 ````ts
 import { readFileSync } from "node:fs";
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { docxFilename, type DocumentVariant } from "./download";
+import { docxFilename, downloadBlob, REVOKE_AFTER_MS, type DocumentVariant } from "./download";
 
 type Case = { date: string; variant: DocumentVariant; display: string; filename: string };
 const { cases } = JSON.parse(
@@ -2184,6 +2291,34 @@ describe("docxFilename (slice 5a; F §1.9)", () => {
   it("names each file as the server does (shared/docx_filenames.json)", () => {
     expect(cases).toHaveLength(8);
     for (const c of cases) expect(docxFilename(c.variant, c.date), c.date).toBe(c.filename);
+  });
+});
+
+describe("downloadBlob (slice 5a; F §1.9)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("clicks a hidden download link and keeps the file's URL 5 minutes, so an iPhone's Download? sheet can wait", () => {
+    vi.useFakeTimers();
+    const link = { click: vi.fn(), remove: vi.fn() } as unknown as HTMLAnchorElement;
+    const appendChild = vi.fn();
+    vi.stubGlobal("document", { createElement: vi.fn(() => link), body: { appendChild } });
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:test/1");
+    const revoke = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+
+    downloadBlob(new Blob(["PK"]), "worship_October_04_2026.docx");
+    expect(link).toMatchObject({ href: "blob:test/1", download: "worship_October_04_2026.docx", hidden: true });
+    expect(appendChild).toHaveBeenCalledWith(link);
+    expect(link.click).toHaveBeenCalledOnce();
+    expect(link.remove).toHaveBeenCalledOnce();
+    expect(REVOKE_AFTER_MS).toBe(5 * 60_000);
+    vi.advanceTimersByTime(REVOKE_AFTER_MS - 1);
+    expect(revoke).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(revoke).toHaveBeenCalledWith("blob:test/1");
   });
 });
 ````
@@ -2266,6 +2401,12 @@ describe("documentRequest (slice 5a)", () => {
     expect(service.sermon_title).toHaveLength(300);
     expect(service.custom_elements).toHaveLength(30);
     expect(service.custom_elements?.[0]).toEqual({ label: "L".repeat(200), text: "T".repeat(10_000), insert_after: "end" });
+
+    // A picked reading over 200 characters goes cut, as its line does, so the pick still names that line.
+    const long = `Matthew 21:33-46 ${"x".repeat(190)}`;
+    const picked = documentRequest(setPick(editScriptureLines(testDraft(), `Isaiah 5:1-7\n${long}`), "nt", long), "bulletin").service;
+    expect(picked.scriptures).toEqual(["Isaiah 5:1-7", long.slice(0, 200)]);
+    expect(picked.selected_nt_ref).toBe(long.slice(0, 200));
   });
 });
 ````
@@ -2300,9 +2441,10 @@ Caused by: Error: Failed to load url ./download (resolved id: ./download) in …
  *   (`service_output.docx_filename`), for a response without
  *   `Content-Disposition`; shared/docx_filenames.json keeps the two equal.
  * - `downloadBlob(blob, filename)`: an object URL clicked through a hidden
- *   `<a download>`; the URL is revoked after 60 s, since revoking at once
- *   breaks Safari. On iPhone this opens the share or preview sheet (accepted,
- *   owner answer 7, 2026-10-01).
+ *   `<a download>`; the URL is revoked after 5 minutes, since revoking at once
+ *   breaks Safari and an iPhone's "Download?" sheet can wait for the member's
+ *   answer. On iPhone this opens the share or preview sheet (accepted, owner
+ *   answer 7, 2026-10-01).
  */
 export type DocumentVariant = "bulletin" | "pastor";
 
@@ -2321,7 +2463,7 @@ const MONTHS = [
   "December",
 ];
 
-export const REVOKE_AFTER_MS = 60_000;
+export const REVOKE_AFTER_MS = 5 * 60_000;
 
 /** "2026-10-04" → "worship_October_04_2026.docx" (pastor: "worship_pastor_October_04_2026.docx"). */
 export function docxFilename(variant: DocumentVariant, dateIso: string): string {
@@ -2397,7 +2539,7 @@ export function readingsContext(draft: DraftV1): { occasion: string; scriptures:
  * save will share, 5a-3), kept within the `ServiceDraft` limits so a draft
  * never meets a 422: the occasion and readings as every liturgy request sends
  * them (trimmed; the first 20 readings, each cut to 200; `request.ts`), the
- * hymns as `HymnRef`s (an id that is not a UUID goes as null, so the pick's own
+ * two bulletin picks trimmed and cut to 200 as well, the hymns as `HymnRef`s (an id that is not a UUID goes as null, so the pick's own
  * title prints), each text cut to its limit (`liturgy_config.LIMITS`), custom
  * elements without a label left out (the Word file never printed them) and
  * each place read as `normalizePlacement` does on the Liturgy step.
@@ -2406,7 +2548,7 @@ import type { components } from "@/lib/api/schema";
 import { draftToServicePayload } from "@/lib/draft/mapping";
 import type { DraftV1 } from "@/lib/draft/schema";
 import type { DocumentVariant } from "@/lib/download";
-import { clipChars } from "@/lib/hymns/match-request";
+import { clipChars, MAX_REF_LENGTH } from "@/lib/hymns/match-request";
 import { normalizePlacement } from "@/lib/liturgy/cards";
 import { hymnRef, MAX_CARD_TEXT, MAX_HYMNAL, readingsContext } from "@/lib/liturgy/request";
 
@@ -2427,6 +2569,8 @@ export function documentRequest(draft: DraftV1, variant: DocumentVariant): Docum
     service: {
       ...payload,
       ...readingsContext(draft),
+      selected_ot_ref: clipChars(payload.selected_ot_ref.trim(), MAX_REF_LENGTH),
+      selected_nt_ref: clipChars(payload.selected_nt_ref.trim(), MAX_REF_LENGTH),
       hymns: { opening: hymnRef(slots.opening), response: hymnRef(slots.response), closing: hymnRef(slots.closing) },
       hymnal: payload.hymnal === null ? null : clipChars(payload.hymnal, MAX_HYMNAL),
       liturgy: Object.fromEntries(Object.entries(payload.liturgy).map(([key, text]) => [key, clipChars(text, MAX_CARD_TEXT)])),
@@ -2576,7 +2720,7 @@ export function useDownloadDocument(variant: DocumentVariant) {
 (cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")
 ```
 
-**Expected:** `Tests  3 passed (3)`; ` Test Files  80 passed (80)` and `      Tests  604 passed (604)` with no `×` or `FAIL` line; `typecheck 0`, `lint 0`.
+**Expected:** `Tests  4 passed (4)`; ` Test Files  80 passed (80)` and `      Tests  605 passed (605)` with no `×` or `FAIL` line; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5 (agent): Commit**
 
@@ -2585,15 +2729,16 @@ git add frontend/src/lib/download.ts frontend/src/lib/download.test.ts frontend/
 git commit -q -m "Client: the documents body, the file's name and the download (5a-1; F 1.9, 4.6)" -m "documentRequest builds POST /documents' body from the draft within the
 ServiceDraft limits (the occasion and readings as every liturgy request
 sends them, HymnRefs, texts cut to their limits, unlabelled custom elements
-left out, places normalized). docxFilename names a file as the server does
-(shared fixture); downloadBlob saves it through an object URL kept 60 s.
+left out, places normalized, the bulletin picks cut to 200). docxFilename names a file as the server does
+(shared fixture); downloadBlob saves it through an object URL kept 5
+minutes.
 useDownloadDocument is one mutation per button, reading the draft at the
 tap; useApi() gains churchBlob." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 git log --oneline -1
 ```
 
-Counts after Task 5: backend **1254 passed, 11 skipped**; frontend **604 in 80**.
+Counts after Task 5: backend **1256 passed, 11 skipped**; frontend **605 in 80**.
 
 ### Task 6: The Review & send step: Still needed, the Word documents, the archive note (owner answers 1, 2, 3, 7; S UX "Review step" items 2 and 4, "Mobile specifics"; F §4.7, §4.8, §4.9; clarifications 1-5, 11, 15, 16)
 
@@ -2616,6 +2761,7 @@ Counts after Task 5: backend **1254 passed, 11 skipped**; frontend **604 in 80**
  * September 29, 2026, so a fresh draft is dated Sunday, October 4, 2026.
  */
 import { act, screen, waitFor, within } from "@testing-library/react";
+import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import BuilderLayout from "@/app/(signed-in)/(church)/builder/layout";
@@ -2752,8 +2898,8 @@ describe("Review & send: the Word documents (slice 5a-1)", () => {
         liturgy: { call_to_worship: "Leader: Come. People: We come.", benediction: "Halverson" },
       },
     });
-    expect(revoked).toEqual([]); // kept for 60 s: revoking at once breaks Safari
-    expect(REVOKE_AFTER_MS).toBe(60_000);
+    expect(revoked).toEqual([]); // kept 5 minutes: revoking at once breaks Safari
+    expect(REVOKE_AFTER_MS).toBe(300_000);
     expect(within(card).getByRole("button", { name: "Download bulletin copy" })).toBeEnabled();
   });
 
@@ -2798,6 +2944,25 @@ describe("Review & send: the Word documents (slice 5a-1)", () => {
     expect(clicks).toEqual([]);
     expect(URL.createObjectURL).not.toHaveBeenCalled();
     expect(within(card).getByRole("button", { name: "Download bulletin copy" })).toBeEnabled();
+  });
+
+  it("adds no message of its own after a 401 or a lost church, and saves no file", async () => {
+    const errorToast = vi.spyOn(toast, "error");
+    const responses = [
+      fakeError(401, "unauthorized", "Sign in again."),
+      fakeError(403, "forbidden", "You no longer have access to this church.", { details: { reason: "no_church_access" } }),
+    ];
+    for (const response of responses) {
+      const { api, user, unmount } = renderReview(testDraft(), { "POST /documents": response });
+      const card = await documentsCard();
+      await user.click(within(card).getByRole("button", { name: "Download bulletin copy" }));
+      await waitFor(() => expect(documentRequests(api)).toHaveLength(1));
+      await waitFor(() => expect(within(card).getByRole("button", { name: "Download bulletin copy" })).toBeEnabled());
+      unmount();
+    }
+    expect(errorToast).not.toHaveBeenCalled();
+    expect(clicks).toEqual([]);
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
   });
 
   it("turns both buttons off without a service date, and says why", async () => {
@@ -2911,7 +3076,7 @@ import { toast } from "sonner";
 
 import { PendingButton } from "@/components/app/pending-button";
 import { useStillWorking } from "@/components/builder/liturgy/use-still-working";
-import { errorToastMessage } from "@/lib/api/errors";
+import { errorToastMessage, isNoChurchAccess } from "@/lib/api/errors";
 import { useDraft } from "@/lib/draft/context";
 import type { DraftV1 } from "@/lib/draft/schema";
 import { hasServiceDate } from "@/lib/draft/status";
@@ -2970,7 +3135,15 @@ function CopyRow({ copy, disabled, helper }: { copy: Copy; disabled: boolean; he
         pendingLabel={pendingLabel}
         disabled={disabled}
         aria-describedby={helper ? `${id}-description ${id}-helper` : `${id}-description`}
-        onClick={() => download.mutate(undefined, { onError: (e) => toast.error(errorToastMessage(e)) })}
+        onClick={() =>
+          download.mutate(undefined, {
+            onError: (e) => {
+              // A 401 or a lost church is handled globally (sign-in, the church's own message): no second message.
+              if (e.status === 401 || isNoChurchAccess(e)) return;
+              toast.error(errorToastMessage(e));
+            },
+          })
+        }
       >
         <DownloadIcon data-icon="inline-start" aria-hidden="true" />
         {copy.action}
@@ -2988,7 +3161,8 @@ function CopyRow({ copy, disabled, helper }: { copy: Copy; disabled: boolean; he
  * built on the server from the draft as it is at the tap. Each button has its
  * own "Preparing…" ("Still working…" after 8 s); the file then goes to the
  * browser's download (on iPhone, the share or preview sheet), with no toast;
- * a failure is a toast with the server's message. Both buttons need a valid
+ * a failure is a toast with the server's message (none after a 401 or a lost
+ * church: the app's own handling says it). Both buttons need a valid
  * service date, nothing else: what is missing is listed above, and the file
  * prints what there is ("[Sermon title]" for a blank title).
  */
@@ -3117,7 +3291,7 @@ for i in 1 2 3; do (cd frontend && npx vitest run src/components/builder/review 
 grep -c "—" frontend/src/components/builder/review/documents-card.tsx frontend/src/components/builder/review/review-send-step.tsx
 ```
 
-**Expected:** three times `      Tests  16 passed (16)` (5 new, 11 in the shell test) with no `×` or `FAIL` line; ` Test Files  81 passed (81)` and `      Tests  609 passed (609)`; `typecheck 0`, `lint 0`; `…/documents-card.tsx:0` and `…/review-send-step.tsx:0` (no em dash in new copy).
+**Expected:** three times `      Tests  17 passed (17)` (6 new, 11 in the shell test) with no `×` or `FAIL` line; ` Test Files  81 passed (81)` and `      Tests  611 passed (611)`; `typecheck 0`, `lint 0`; `…/documents-card.tsx:0` and `…/review-send-step.tsx:0` (no em dash in new copy).
 
 - [ ] **Step 5 (agent): Commit**
 
@@ -3126,15 +3300,15 @@ git add frontend/src/components/builder/review/documents-card.tsx frontend/src/c
 git commit -q -m "Review step: Still needed, the Word documents and the archive note (5a-1; owner answers 1, 2, 7)" -m "Step 4 renders its real content: the 4b Still needed list, a Word
 documents card (Download bulletin copy, Download pastor's copy, each with
 its own Preparing... and Still working... after 8 s, the helper when the
-two copies are the same, a toast with the message on failure, off only
-without a service date) and a note that saving to the archive is coming.
+two copies are the same, a toast with the message on failure but none
+after a 401 or a lost church, off only without a service date) and a note that saving to the archive is coming.
 StepPlaceholder, which nothing else used, is deleted. The fake API passes
 a real Response through for files." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 git log --oneline -1
 ```
 
-`git rm` in Step 3 already staged the deletion. Counts after Task 6: backend **1254 passed, 11 skipped**; frontend **609 in 81**.
+`git rm` in Step 3 already staged the deletion. Counts after Task 6: backend **1256 passed, 11 skipped**; frontend **611 in 81**.
 
 ### Task 7: Docs: S's amendment, the manual check and its heading pin (owner answers 1-9; clarification 18)
 
@@ -3219,7 +3393,7 @@ grep -c "—" <(git diff -U0 -- docs | grep '^+' | grep -v '^+++')
 git diff --stat | tail -1
 ```
 
-**Expected:** `89 passed in <t>s`; `4`; `0` (no em dash added); `1254 passed, 11 skipped in <t>s`; `3 files changed, 41 insertions(+), 3 deletions(-)`.
+**Expected:** `89 passed in <t>s`; `4`; `0` (no em dash added); `1256 passed, 11 skipped in <t>s`; `3 files changed, 41 insertions(+), 3 deletions(-)`.
 
 - [ ] **Step 3 (agent): Commit**
 
@@ -3239,7 +3413,7 @@ git log --oneline -1
 
 One review of the whole batch: `build_docx`'s output equals the old function's but for the four documented changes (the XML tests), and nothing else in `worship_service` moved; the route's headers exactly as F §1.9 and clarification 6, no idempotency and no bucket; `build_document` reads in one short session, writes nothing and logs no text; `ServiceDraft`'s limits are slice 4's and `HymnRef`, `SlotHymns`, `SectionKey` are unchanged (F §1.3); `apiFetch` behaves exactly as before (its tests unchanged) and `apiFetchBlob` maps errors the same way; `documentRequest` never sends what the server refuses; one mutation per button, nothing cached; the card's copy exactly clarification 16, no em dash; 44 px targets, wrapping at 375 px, the status lines and descriptions as clarification 15; the docs match. Fixes are `Fix: <what> (Task <n> review)` commits. Then the backup push.
 
-Counts after Task 7: backend **1254 passed, 11 skipped**; frontend **609 in 81**.
+Counts after Task 7: backend **1256 passed, 11 skipped**; frontend **611 in 81**.
 
 ### Task 8: Verification and the draft PR (owner's yes before the PR is opened and before it is marked ready)
 
@@ -3267,7 +3441,7 @@ for i in 1 2 3; do (cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Te
 (cd frontend && NEXT_PUBLIC_SUPABASE_URL=https://ci-placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-placeholder NEXT_PUBLIC_API_URL=http://localhost:8000 npm run build 2>&1 | grep -E "Compiled successfully|Error")
 ```
 
-**Expected:** `1254 passed, 11 skipped in <t>s`; three times ` Test Files  81 passed (81)` and `      Tests  609 passed (609)` with no `×` or `FAIL` line (one names the failing test: Step 6); `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s` and no `Error` (the build runs in the real checkout; a font `Failed to fetch` only: say so and rely on CI).
+**Expected:** `1256 passed, 11 skipped in <t>s`; three times ` Test Files  81 passed (81)` and `      Tests  611 passed (611)` with no `×` or `FAIL` line (one names the failing test: Step 6); `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s` and no `Error` (the build runs in the real checkout; a font `Failed to fetch` only: say so and rely on CI).
 
 - [ ] **Step 3 (agent): The API files match, the gates, the paths, the commits**
 
@@ -3335,7 +3509,7 @@ gh pr list -R bbrown62450/church --head claude/slice-2-plan-4q33le --state open 
 
 **Expected:** one `✓ Logged in` line; `[]`. Send the owner exactly this, and wait for a clear yes:
 
-> Slice 5a-1 (Word downloads) is verified on this machine: backend 1254 passed, 11 skipped (1223 before); frontend 609 tests in 81 files (597 in 78 before), three runs in a row; typecheck, lint and the production build are clean. It adds one API route, `POST /documents`, and no database change. On step 4 you get "Download bulletin copy" and "Download pastor's copy", built from your draft each time, in Streamlit's layout with "First Reading", hymn headings by slot and no "#None". Saving comes in the next two PRs. May I open the pull request as a **draft** titled "Slice 5a-1: Word downloads", so the checks run? Merging stays with you.
+> Slice 5a-1 (Word downloads) is verified on this machine: backend 1256 passed, 11 skipped (1223 before); frontend 611 tests in 81 files (597 in 78 before), three runs in a row; typecheck, lint and the production build are clean. It adds one API route, `POST /documents`, and no database change. On step 4 you get "Download bulletin copy" and "Download pastor's copy", built from your draft each time, in Streamlit's layout with "First Reading", hymn headings by slot and no "#None". Saving comes in the next two PRs. May I open the pull request as a **draft** titled "Slice 5a-1: Word downloads", so the checks run? Merging stays with you.
 
 - [ ] **Step 5 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
 
@@ -3353,7 +3527,7 @@ Slice 5a-1: Word downloads end to end (the first of three 5a PRs; owner answers 
 
 Later: 5a-2 (saving, 0005_services_extras), 5a-3 (Save card, Services page).
 
-Tests: backend 1223 → 1254 passed, 11 → 11 skipped; frontend 597 → 609 in 78 → 81 files
+Tests: backend 1223 → 1256 passed, 11 → 11 skipped; frontend 597 → 611 in 78 → 81 files
 
 After merge (Task 9): a short check on the owner's phone, then a "Slice 5a-1 record" in docs/ops-runbook.md.
 
@@ -3367,7 +3541,7 @@ gh pr create -R bbrown62450/church --draft --base main --head claude/slice-2-pla
 gh pr checks <N> -R bbrown62450/church --watch --interval 30
 ```
 
-Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1254 passed, 11 skipped`, backend-postgres `11 passed, 1254 deselected`, frontend `609 passed` in 81 files. Then send: "PR #<N> is green: backend 1254 passed, 11 skipped; 609 frontend tests in 81 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R bbrown62450/church`.
+Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1256 passed, 11 skipped`, backend-postgres `11 passed, 1256 deselected`, frontend `611 passed` in 81 files. Then send: "PR #<N> is green: backend 1256 passed, 11 skipped; 611 frontend tests in 81 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R bbrown62450/church`.
 
 - [ ] **Step 6: Fix any failure in its owning task**
 
@@ -3385,7 +3559,7 @@ Run the last line with `run_in_background: true`. **Expected:** the PR URL; ever
 
 For each fix: change only the owning task's files; rerun Steps 2-3; commit `Fix: <what> (Task <n>, 5a-1 final verification)` with the trailer; after the PR exists, ask the owner before pushing it.
 
-Expected counts after this task: backend `1254 passed, 11 skipped`; frontend `609 passed` in 81 files.
+Expected counts after this task: backend `1256 passed, 11 skipped`; frontend `611 passed` in 81 files.
 
 ### Task 9: Merge, the owner's phone check (four steps), the record (OWNER + agent)
 
@@ -3408,9 +3582,9 @@ RUN=$(gh run list -R bbrown62450/church --workflow ci.yml --branch main --commit
 
 - [ ] **Step 2 (OWNER, then agent): Phone, step 1 of 4: the bulletin copy downloads and opens**
 
-> On your phone, open https://worship-service-builder.vercel.app (signed in, in your church) and build a service as you normally would, or keep the one you have: a date, readings, at least one hymn, a few liturgy sections and a sermon title. Tap **4 Review & send**. Under **Word documents**, tap **Download bulletin copy**. The button says "Preparing…" for a moment; then your phone should show its share or preview sheet for a file named like `worship_October_04_2026.docx` (with your date). Open it (Word, Files or the preview). Does it start with "Worship Service", the occasion and the date written like "October 04, 2026"? Is the first reading under the heading "First Reading", and is the sermon title there? Is Prayers of the People left out? If nothing happened after "Preparing…", tell me that too.
+> On your phone, open https://worship-service-builder.vercel.app (signed in, in your church) and build a service as you normally would, or keep the one you have: a date, readings, at least one hymn, a few liturgy sections and a sermon title. Tap **4 Review & send**. Under **Word documents**, tap **Download bulletin copy**. The button says "Preparing…" for a moment; then your phone should show its share or preview sheet (or a "Download?" question) for a file named like `worship_October_04_2026.docx` (with your date). Wait about a minute on that sheet before you confirm it, then open the file (Word, Files or the preview). Does it start with "Worship Service", the occasion and the date written like "October 04, 2026"? Is the first reading under the heading "First Reading", and is the sermon title there? Is Prayers of the People left out? If nothing happened after "Preparing…", tell me that too.
 
-Record whether the sheet or a download appeared, the filename, how long "Preparing…" showed, and each answer. **If no download started**, record it and stop here: the follow-up is clarification 11's "Save {filename}" link, a small PR for the owner to approve; the remaining steps can wait for it.
+Record whether the sheet or a download appeared, the filename, how long "Preparing…" showed, whether the file still saved after the minute's wait, and each answer. **If no download started**, record it and stop here: the follow-up is clarification 11's "Save {filename}" link, a small PR for the owner to approve; the remaining steps can wait for it.
 
 - [ ] **Step 3 (OWNER, then agent): Phone, step 2 of 4: the pastor's copy**
 
@@ -3456,11 +3630,11 @@ id is recorded here.
 | Step | Result | Date |
 |---|---|---|
 | Merge and deploy | PR #<N> merged <UTC time> (<Eastern time>), merge commit `<short sha>`. CI on `main` (run <run id>): success | <date> |
-| 1. Bulletin copy (phone: <phone and browser>) | <The share sheet opened with worship_<date>.docx after about <n> s; the file had the title, the date line, First Reading and the sermon title, and no Prayers of the People. / No download started: follow-up "Save {filename}" link (clarification 11).> | <date> |
+| 1. Bulletin copy (phone: <phone and browser>) | <The share sheet opened with worship_<date>.docx after about <n> s and still saved it after a minute's wait; the file had the title, the date line, First Reading and the sermon title, and no Prayers of the People. / No download started: follow-up "Save {filename}" link (clarification 11).> | <date> |
 | 2. Pastor's copy | <Included Prayers of the People; the bulletin copy did not; with it off, the card said "Same as the bulletin copy …". / …> | <date> |
 | 3. Hymn headings by slot | <"Second Hymn" with the Response hymn and no "First Hymn"; no "#None". / …> | <date> |
 | 4. The page and the layout | <No sideways scroll; full-width buttons; the archive note showed; the file matched the old layout but for First Reading. / …> | <date> |
-| Follow-ups | <None. / One line per follow-up.> Next: 5a-2 (saving: `/services`, hymn use recorded on save and recalculated on delete, `0005_services_extras`, with a backup, read-only counts and the `--sql` preview first), then 5a-3 (the Save card, the Services page). Hymn use is not recorded until 5a-2. Still open: the reviewer's screen-reader copy question (Reviewer follow-up 2 record), first-line matching research (Hymnary.org), the NUL-character 500 (app-wide), and the two slice 1 test churches (kept for now, owner) | <date> |
+| Follow-ups | <None. / One line per follow-up.> Next: 5a-2 (saving: `/services`, hymn use recorded on save and recalculated on delete, `0005_services_extras`, with a backup, read-only counts and the `--sql` preview first), then 5a-3 (the Save card, the Services page). Hymn use is not recorded until 5a-2. Still open: the reviewer's screen-reader copy question (Reviewer follow-up 2 record), first-line matching research (Hymnary.org), the NUL-character 500 on the other routes (app-wide; `/documents` cleans such characters since 5a-1), and the two slice 1 test churches (kept for now, owner) | <date> |
 ```
 
 Replace every `<…>` from the results file, keeping one alternative where a cell offers two. Then:
@@ -3504,7 +3678,7 @@ gh pr checks claude/slice-2-plan-4q33le -R bbrown62450/church --watch
 
 Code only (no data was written; no draft shape changed). On the owner's yes for each outward command: a branch `claude/revert-slice-5a1` from `origin/main`, `git revert -m 1 --no-commit <merge sha>`, a commit "Revert slice 5a-1 (PR #<N>)" with the trailer, both suites (`1223 passed, 11 skipped`; `597 passed` in 78), a PR, CI, and the merge on the owner's yes; record it in the 5a-1 record. Review then shows the "Available soon" card again.
 
-Expected counts after this task: backend `1254 passed, 11 skipped` on `main`; frontend `609 passed` in 81 files. The records PR adds no test.
+Expected counts after this task: backend `1256 passed, 11 skipped` on `main`; frontend `611 passed` in 81 files. The records PR adds no test.
 
 ---
 ## Build notes
@@ -3520,6 +3694,11 @@ Expected counts after this task: backend `1254 passed, 11 skipped` on `main`; fr
 - All directives applied (T1 3, T2 17, T3 10, T4 5, T5 13, T6 9, T7 3); every Replace anchor occurred exactly once, and every Append landed on the file as the task before left it. After T7 the tree was identical to the build worktree's (`git diff` between the two: empty).
 - Every "see it fail" output matched as quoted (T1 one collection error; T2 `8 failed`, then `3 failed, 11 passed`; T3 one collection error; T4 `4 failed | 18 passed (22)`; T5 two files that cannot load; T6 one file that cannot load and `1 failed | 10 passed (11)`), and every count matched the table: backend 1229, 1237, 1254 (11 skipped); frontend 601 in 78, 604 in 80, 609 in 81; the T6 files three times and the whole suite three times at the end, with no `×` or `FAIL` line; typecheck 0 and lint 0 after T3-T6; the OpenAPI export and `gen:api` gave `2 files changed, 448 insertions(+)` and, run again at the end, no change; the docs tests `89 passed`, owner markers `4`, no em dash added, `3 files changed, 41 insertions(+), 3 deletions(-)`; four revisions; no raw HTML; the 38 code paths of T8 Step 3 exactly. No flaky run.
 - One check was corrected by the replay: T2 Step 5's grep first matched "Old Testament Reading" in the new comment that records the rename; it now looks for the old `add_paragraph("Old Testament Reading"` call only. T3 Step 4's count is `7`, not 4 (each schema also appears in a `$ref`).
+
+**Review fixes and their replay (2026-10-01).** After the owner's "all recommended", the plan review's five fixes went in (clarification 19): `_xml_safe` in `clean_input` and for the database's hymn title, with two API tests (T3: `test_api_documents.py` 12 → 14); no toast after a 401 or a lost church, with a DOM test (T6: 5 → 6 cases); the object URL kept 5 minutes, with a `downloadBlob` timing test (T5: `download.test.ts` 1 → 2) and the one-minute wait in T9's phone step 1; the bulletin picks cut to 200 (T5, a case added to the limits test); the three helpers copied into the parity test (T2, its count unchanged). Checked first: python-docx 1.2.0 writes `"a\nbc"` as `a`, `<w:br/>`, `bc` and reads it back as `"a\nbc"`. Then the whole plan was replayed again onto a fresh detached worktree of the branch head (`934ffb9` plus the plan commits, so the same code), the same way:
+- All directives applied with the same counts (T1 3, T2 17, T3 10, T4 5, T5 13, T6 9, T7 3), every Replace anchor exactly once.
+- Every "see it fail" output matched as quoted (unchanged), and the counts matched the table: backend 1229, 1237, 1256 (11 skipped); T3's files `30 passed`; frontend 601 in 78, 605 in 80 (T5's files `4 passed`), 611 in 81 (T6's files `17 passed` three times); the whole frontend suite three times at the end, 611 each, no `×` or `FAIL`; typecheck 0 and lint 0 after T3-T6; the OpenAPI change still `2 files changed, 448 insertions(+)` and `7` (the schemas did not change), no change when regenerated at the end; T7 `89 passed`, `4`, `0`, `3 files changed, 41 insertions(+), 3 deletions(-)`; four revisions; no raw HTML; the 39 paths of T8 Step 3 exactly. No flaky run.
+- Each new test was seen to fail with its fix undone (`_xml_safe` returning its input: both new API tests fail, the first with a 500; the `onError` guard removed: the DOM case fails; `REVOKE_AFTER_MS` at 60 s: the timing test fails; the NT pick unclipped: the limits test fails).
 - Not run while planning: the production build (Turbopack refuses the replay's symlinked `node_modules`; T8 runs it in the real checkout), the pushes, the PR and CI, the merge and the owner's checks, and a download on a real phone.
 
 ## Spec coverage
@@ -3535,15 +3714,15 @@ Expected counts after this task: backend `1254 passed, 11 skipped` on `main`; fr
 | 7. iOS sheet accepted; the "Save {filename}" fallback | clarification 11 (documented, not built); T9 step 1 decides |
 | 8. A guided phone check | T9 Steps 2-5; `docs/manual-verification.md` "## Slice 5a" (T7) |
 | S API `/documents` row, F §1.9 headers, CORS exposure | T3 `test_both_copies_download_with_the_file_headers`, `test_the_filename_header_is_readable_cross_origin` |
-| S API errors: hymn 404 with `details.field`, 422 with `fields`, 500 without python-docx | T3 `test_only_members_and_only_the_church_s_hymns`, `test_a_bad_body_is_a_422_naming_the_field` (6 cases), `test_a_blank_custom_label_is_the_usecase_s_422`, `test_without_python_docx_it_is_a_logged_500`; T2 `test_without_python_docx_it_raises` |
+| S API errors: hymn 404 with `details.field`, 422 with `fields`, 500 without python-docx | T3 `test_only_members_and_only_the_church_s_hymns`, `test_a_bad_body_is_a_422_naming_the_field` (6 cases), `test_a_blank_custom_label_is_the_usecase_s_422`, `test_a_label_of_only_a_nul_is_the_blank_label_422`, `test_without_python_docx_it_is_a_logged_500`; T2 `test_without_python_docx_it_raises` |
 | S AC10 (member allowed, non-member 403, isolation) | T3 `test_any_member_may_download`, `test_only_members_and_only_the_church_s_hymns` (`assert_church_isolated`); `test_route_guards.py` unchanged and passing |
-| S `clean_input`, `resolve_hymn_refs`; `build_document` writes nothing, logs no text | T3 `test_clean_input_trims_and_drops_blanks_and_streamlit_errors`, `test_a_blank_custom_label_is_a_422_on_its_field`, `test_hymn_ids_resolve_in_the_church_and_snapshots_are_kept`, `test_build_document_writes_nothing`, the log assertions |
+| S `clean_input`, `resolve_hymn_refs`; `build_document` writes nothing, logs no text | T3 `test_characters_a_word_file_cannot_hold_are_cleaned_not_a_500` (clarification 19), `test_clean_input_trims_and_drops_blanks_and_streamlit_errors`, `test_a_blank_custom_label_is_a_422_on_its_field`, `test_hymn_ids_resolve_in_the_church_and_snapshots_are_kept`, `test_build_document_writes_nothing`, the log assertions |
 | S behavior change 7 / AC4 (stale pick prints the automatic reading) | T1 `test_doc_readings_are_resolve_readings` (every `scripture_refs.json` case); T2 `test_render_docx_prints_the_readings_the_screen_shows` |
 | S `service_output` helpers (`hymn_line`, `content_disposition`, `VARIANTS`, `is_legacy_error_placeholder`) | T1 `test_headers_and_variants`, `test_hymn_lines_never_print_none`, `test_legacy_error_placeholders`, `test_the_date_line_never_reads_the_locale` |
 | F §4.5 `apiFetchBlob`; F §1.8 30 s | T4 `client.test.ts` (four cases) |
-| S `docxFilename` with the shared fixture; `downloadBlob` (60 s revoke) | T5 `download.test.ts`; T6 "downloads the bulletin copy …" (header name, no early revoke) |
-| F §4.6 the payload; within the limits | T5 `documents.test.ts` (two cases) |
-| S UX "Word documents card": pending per button, Still working after 8 s, helper, errors, invalid date | T6 the five DOM cases |
+| S `docxFilename` with the shared fixture; `downloadBlob` (5-minute revoke) | T5 `download.test.ts` (two cases); T6 "downloads the bulletin copy …" (header name, no early revoke) |
+| F §4.6 the payload; within the limits (the picks cut to 200) | T5 `documents.test.ts` (two cases) |
+| S UX "Word documents card": pending per button, Still working after 8 s, helper, errors (none of its own after a 401 or a lost church), invalid date | T6 the six DOM cases |
 | F §4.9 descriptions, status lines, 44 px | T6 "shows Still needed, both copies …" (descriptions, `h-11`), "names the pastor's copy …" (status lines) |
 | `StepPlaceholder` deleted | T6 Step 3 grep; `builder-shell.test.tsx` |
 | Layering (no FastAPI or Streamlit below the API) | T3 `test_no_streamlit_in_core.py` (four modules added) and the imports grep |
@@ -3553,7 +3732,7 @@ S items **not** in 5a-1 (by owner answer 1 or 2): the editing banner, the Save c
 
 ## Questions for the owner
 
-Your answers of 2026-10-01 (1-9) are binding and already in the plan. These are the choices the plan makes where you did not say; each is written as recommended.
+Your answers of 2026-10-01 (1-9) are binding and already in the plan. These are the choices the plan makes where you did not say; each is written as recommended. **Answered 2026-10-01: "all recommended"** (binding; recorded under "Owner decisions").
 
 1. **The Review step's layout** (clarification 2): "Still needed", then the Word documents card, then a dashed "Archive" box saying "Saving services to the archive is coming soon." No email box (5b brings email, and "keep using the current app" is no longer true). Recommended: accept.
 2. **"Still needed" stays exactly as you checked it in 4b** (clarification 3): same heading and rows, nothing shown when nothing is missing. The rename to "Still to do" and an "Everything's ready." line wait for 5a-3, with Save. Recommended: accept.
