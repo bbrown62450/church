@@ -7,8 +7,13 @@ worship_service cannot move both sides at once; the communion helper, pinned by
 test_communion_docx.py, is imported); each case renders both and compares the
 document XML in the same run, so the python-docx version cannot matter. The only differences allowed are the
 documented ones: the first reading's heading reads "First Reading", hymn
-headings follow slots, a hymn without a number prints no "#None", and the
-readings come from resolve_readings (render_docx)."""
+headings follow slots, a hymn without a number prints no "#None", the
+readings come from resolve_readings (render_docx), a blank occasion prints no
+second title line (owner decision A, 2026-10-02: Streamlit printed an empty
+line break), and an Assurance with a typed "People:" label prints the text
+before the label, then the fixed response once (owner decision B, 2026-10-02:
+Streamlit printed the typed response inside the Leader line and then the fixed
+one too)."""
 import re
 from datetime import date
 from io import BytesIO
@@ -372,3 +377,55 @@ def test_without_python_docx_it_raises(monkeypatch):
     monkeypatch.setattr(worship_service, "Document", None)
     with pytest.raises(RuntimeError, match="python-docx is required"):
         so.render_docx(_resolved(), "bulletin")
+
+
+def test_a_blank_occasion_prints_no_second_title_line_the_one_allowed_title_difference():
+    """Owner decision A (2026-10-02): Streamlit's title run ended in an empty
+    line break; the new one prints "Worship Service" alone. Everything else
+    is as Streamlit printed it."""
+    new = worship_service.build_docx(**{**new_kwargs(include_sermon=True, include_prayers_of_the_people=True),
+                                        "occasion": ""})
+    old = legacy_build_docx(**{**legacy_kwargs(include_sermon=True, include_prayers_of_the_people=True),
+                               "occasion": ""}).getvalue()
+    assert Document(BytesIO(new)).paragraphs[0].text == "Worship Service"
+    assert Document(BytesIO(old)).paragraphs[0].text == "Worship Service\n"
+    allowed = body_xml(old).replace("Old Testament Reading", "First Reading").replace(
+        "<w:t>Worship Service</w:t>\n      <w:br/>", "<w:t>Worship Service</w:t>", 1)
+    assert body_xml(new) == allowed
+
+
+@pytest.mark.parametrize("typed, leader", [
+    ("Leader: In Jesus Christ we are forgiven. People: Thanks be to God!", "In Jesus Christ we are forgiven."),
+    ("Leader: In Jesus Christ we are forgiven.\npeople: Amen.", "In Jesus Christ we are forgiven."),
+    ("In Christ we are forgiven.\nPEOPLE: Thanks be to God! Amen.", "In Christ we are forgiven."),
+    ("People: Thanks be to God!", None),
+])
+def test_a_typed_people_label_in_the_assurance_prints_the_response_once(typed, leader):
+    """Owner decision B (2026-10-02): the text prints up to the typed label
+    (trimmed), then the fixed bold response once. Streamlit printed the typed
+    response inside the Leader line; that is the one allowed difference."""
+    liturgy = {"assurance": typed}
+    kw = dict(date_display="", hymns_by_slot={}, ot_ref=None, nt_ref=None, include_sermon=False,
+              include_prayers_of_the_people=False)
+    rows = outline(worship_service.build_docx(occasion="Sunday", liturgy=liturgy, **kw))
+    start = rows.index(("Heading 2", "Assurance of Pardon", False))
+    expected = ([("Normal", f"Leader: {leader}", False)] if leader else []) + [
+        ("Normal", lc.ASSURANCE_RESPONSE, True), ("Normal", "", False)]
+    assert rows[start + 1:start + 1 + len(expected)] == expected
+    assert [t for _s, t, _b in rows].count(lc.ASSURANCE_RESPONSE) == 1
+    old = [t for _s, t, _b in outline(legacy_build_docx(occasion="Sunday", date="", scriptures=[], hymns=[],
+                                                           liturgy=liturgy, include_sermon=False,
+                                                           include_prayers_of_the_people=False).getvalue())]
+    assert any("people:" in t.lower() and t != lc.ASSURANCE_RESPONSE for t in old)     # what Streamlit printed
+
+
+def test_an_assurance_with_no_people_label_prints_as_streamlit_did():
+    for typed in ("Leader: In Jesus Christ we are forgiven.", "God's peopled earth: forgiven.",
+                  "Leader: The Lord's-People: forgiven."):
+        liturgy = {"assurance": typed}
+        new = worship_service.build_docx(occasion="Sunday", date_display="", hymns_by_slot={}, liturgy=liturgy,
+                                         ot_ref=None, nt_ref=None, include_sermon=False,
+                                         include_prayers_of_the_people=False)
+        old = legacy_build_docx(occasion="Sunday", date="", scriptures=[], hymns=[], liturgy=liturgy,
+                                include_sermon=False, include_prayers_of_the_people=False).getvalue()
+        assert body_xml(new) == body_xml(old), typed

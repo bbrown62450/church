@@ -15,6 +15,7 @@ import ReviewStepPage from "@/app/(signed-in)/(church)/builder/review/page";
 import { Toaster } from "@/components/ui/sonner";
 import { draftKey, type DraftV1 } from "@/lib/draft/schema";
 import { pickFromHymn, setSlot } from "@/lib/hymns/picks";
+import { editScriptureLines } from "@/lib/draft/readings";
 import { editCardText, setCardEnabled } from "@/lib/liturgy/cards";
 import { REVOKE_AFTER_MS } from "@/lib/download";
 import { fakeError, installFakeApi, type FakeHandler, type RecordedRequest } from "@/test/fake-api";
@@ -34,7 +35,7 @@ import {
 } from "@/test/fixtures";
 import { renderWithProviders } from "@/test/render";
 
-import { NEEDS_DATE, SAME_AS_BULLETIN } from "./documents-card";
+import { FIX_READINGS, NEEDS_DATE, SAME_AS_BULLETIN } from "./documents-card";
 
 const KEY = draftKey(USER_ID, church().id);
 const NAME = "worship_October_04_2026.docx";
@@ -119,6 +120,7 @@ describe("Review & send: the Word documents (slice 5a-1)", () => {
       expect(button).toHaveClass("h-11"); // 44 px on a phone
     }
     expect(within(card).queryByText(NEEDS_DATE)).toBeNull();
+    expect(within(card).queryByText(FIX_READINGS)).toBeNull();
     expect(screen.getByRole("region", { name: "Still needed" })).toBeInTheDocument();
     const archive = screen.getByRole("region", { name: "Archive" });
     expect(archive).toHaveTextContent("Saving services to the archive is coming soon.");
@@ -165,13 +167,16 @@ describe("Review & send: the Word documents (slice 5a-1)", () => {
     const pastor = within(card).getByRole("button", { name: "Download pastor's copy" });
     expect(pastor).toHaveAccessibleDescription("Everything in the bulletin copy, plus Prayers of the People.");
     await user.click(pastor);
-    expect(await within(card).findByRole("button", { name: "Preparing…" })).toBeDisabled();
+    const preparing = await within(card).findByRole("button", { name: "Preparing…" });
+    expect(preparing).toHaveAttribute("aria-disabled", "true");
+    expect(preparing).toBe(pastor); // the same button, so keyboard focus stays on it (build review fix 4)
+    expect(pastor).toHaveFocus();
     expect(within(card).getByRole("button", { name: "Download bulletin copy" })).toBeEnabled();
     expect(within(card).getAllByRole("status").map((s) => s.textContent)).toEqual(["", "Pastor's copy: Preparing…"]);
     act(() => {
       vi.advanceTimersByTime(8_000);
     });
-    expect(within(card).getByRole("button", { name: "Still working…" })).toBeDisabled();
+    expect(within(card).getByRole("button", { name: "Still working…" })).toHaveAttribute("aria-disabled", "true");
     expect(within(card).getAllByRole("status")[1]).toHaveTextContent("Pastor's copy: Still working…");
     release();
     await waitFor(() => expect(clicks).toEqual([{ download: "worship_pastor_October_04_2026.docx", href: "blob:test/1" }]));
@@ -220,5 +225,43 @@ describe("Review & send: the Word documents (slice 5a-1)", () => {
     expect(within(card).getByRole("button", { name: "Download pastor's copy" })).toBeDisabled();
     expect(within(screen.getByRole("region", { name: "Still needed" })).getByText(/No service date/)).toBeInTheDocument();
     expect(documentRequests(api)).toEqual([]);
+  });
+
+  it("still shows the failure after the member leaves Review mid-download (build review fix 5)", async () => {
+    const errorToast = vi.spyOn(toast, "error");
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const failure = fakeError(404, "not_found", HYMN_GONE, { details: { field: "hymns.response.hymn_id" } });
+    const { api, user, unmount } = renderReview(testDraft(), {
+      "POST /documents": async () => {
+        await held;
+        return failure;
+      },
+    });
+    const card = await documentsCard();
+    await user.click(within(card).getByRole("button", { name: "Download bulletin copy" }));
+    await waitFor(() => expect(documentRequests(api)).toHaveLength(1));
+    unmount();
+    release();
+    await waitFor(() => expect(errorToast).toHaveBeenCalledWith(HYMN_GONE));
+    expect(clicks).toEqual([]);
+  });
+
+  it("turns both buttons off while a Date & readings field shows its message, and says why (build review fix 6)", async () => {
+    const tooMany = editScriptureLines(testDraft(), Array.from({ length: 21 }, (_, i) => `Psalm ${i + 1}`).join("\n"));
+    const d = testDraft();
+    const longLine = editScriptureLines(d, `Isaiah 5:1-7\n${"x".repeat(201)}`);
+    const longOccasion = { ...d, readings: { ...d.readings, occasion: "o".repeat(301) } };
+    for (const draft of [tooMany, longLine, longOccasion]) {
+      const { api, unmount } = renderReview(draft);
+      const card = await documentsCard();
+      expect(within(card).getByText(FIX_READINGS)).toBeInTheDocument();
+      expect(within(card).queryByText(NEEDS_DATE)).toBeNull();
+      expect(within(card).getByRole("button", { name: "Download bulletin copy" })).toBeDisabled();
+      expect(within(card).getByRole("button", { name: "Download pastor's copy" })).toBeDisabled();
+      expect(documentRequests(api)).toEqual([]);
+      unmount();
+      window.localStorage.clear();
+    }
   });
 });

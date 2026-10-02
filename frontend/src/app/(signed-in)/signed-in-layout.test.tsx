@@ -71,7 +71,7 @@ describe("(signed-in) layout", () => {
 
     // The error stays on screen with a busy Retry; a second tap sends nothing.
     const retry = await screen.findByRole("button", { name: "Retry" });
-    await waitFor(() => expect(retry).toBeDisabled());
+    await waitFor(() => expect(retry).toHaveAttribute("aria-disabled", "true"));
     expect(retry).toHaveAttribute("aria-busy", "true");
     expect(screen.getByText("Something went wrong. (Ref: 4f9a2c1e)")).toBeInTheDocument();
     await user.click(retry);

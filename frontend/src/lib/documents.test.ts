@@ -9,7 +9,7 @@ import { pickFromHymn, setSlot } from "@/lib/hymns/picks";
 import { addCustomElement, editCardText, setCardEnabled, setCommunion, setSermonTitle } from "@/lib/liturgy/cards";
 import { gg2013, testDraft } from "@/test/fixtures";
 
-import { documentRequest } from "./documents";
+import { documentRequest, wordSafe } from "./documents";
 
 const OCT_4 = ["Isaiah 5:1-7", "Psalm 80:7-15", "Philippians 3:4b-14", "Matthew 21:33-46"];
 
@@ -79,5 +79,23 @@ describe("documentRequest (slice 5a)", () => {
     const picked = documentRequest(setPick(editScriptureLines(testDraft(), `Isaiah 5:1-7\n${long}`), "nt", long), "bulletin").service;
     expect(picked.scriptures).toEqual(["Isaiah 5:1-7", long.slice(0, 200)]);
     expect(picked.selected_nt_ref).toBe(long.slice(0, 200));
+  });
+
+  it("leaves out a label of only characters the server strips, so it never meets the blank-label 422 (build review fix 8)", () => {
+    let d = testDraft();
+    d = addCustomElement(d, { label: "\u0000", text: "NUL only", insert_after: "end" }, "a");
+    d = addCustomElement(d, { label: " \u0001\u001f\r\n\u000b\u000c ", text: "Controls only", insert_after: "end" }, "b");
+    d = addCustomElement(d, { label: "\ufffe\uffff\ud800", text: "Non-characters only", insert_after: "end" }, "c");
+    d = addCustomElement(d, { label: "\u0000Anthem", text: "Kept", insert_after: "sermon" }, "d");
+
+    const { service } = documentRequest(d, "bulletin");
+    expect(service.custom_elements).toEqual([{ label: "\u0000Anthem", text: "Kept", insert_after: "sermon" }]);
+  });
+
+  it("wordSafe reads text as the server's _xml_safe does", () => {
+    expect(wordSafe("a\r\nb\rc\u000bd\u000ce")).toBe("a\nb\nc\nd\ne");
+    expect(wordSafe("a\u0000b\u0008c\u001fd\ufffee\uffff")).toBe("abcde");
+    expect(wordSafe("tab\there")).toBe("tab\there");
+    expect(wordSafe("lone \ud800 \udc00 pair \ud83d\ude00")).toBe("lone   pair \ud83d\ude00");
   });
 });

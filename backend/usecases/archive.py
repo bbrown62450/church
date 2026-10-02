@@ -41,8 +41,12 @@ _XML_BAD = re.compile("[\x00-\x08\x0e-\x1f\ufffe\uffff\ud800-\udfff]")
 
 
 def _xml_safe(s: str) -> str:
-    """s as a Word file can hold it: a vertical tab (Word's soft line break,
-    pasted) or a form feed becomes a line break, the rest of _XML_BAD goes."""
+    """s as a Word file can hold it: a Windows or old-Mac line ending ("\\r\\n",
+    "\\r") becomes one line break first (python-docx would print a carriage
+    return as a second break; build review fix 1), a vertical tab (Word's soft
+    line break, pasted) or a form feed becomes a line break, the rest of
+    _XML_BAD goes."""
+    s = s.replace("\r\n", "\n").replace("\r", "\n")
     return _XML_BAD.sub("", s.replace("\x0b", "\n").replace("\x0c", "\n"))
 
 

@@ -30,6 +30,25 @@ export const OCCASION_MAX = 300;
 export const MAX_READINGS = 20;
 export const MAX_LINE = 200;
 
+/** The inline messages for the raw scripture lines (S UX item 5); blank lines are allowed and not counted, and a line is measured trimmed. */
+export function scriptureProblems(lines: readonly string[]): string[] {
+  const problems: string[] = [];
+  if (lines.filter((line) => line.trim() !== "").length > MAX_READINGS) problems.push("Up to 20 readings.");
+  const long = lines.findIndex((line) => line.trim().length > MAX_LINE);
+  if (long >= 0) problems.push(`Line ${long + 1} is too long (max 200 characters).`);
+  return problems;
+}
+
+/**
+ * True while a Date & readings field shows its message for a value it holds
+ * (an occasion over 300 characters, more than 20 readings or a line over
+ * 200): the Word documents card blocks downloads until it is fixed (5a-1
+ * build review fix 6). A missing or bad date has its own message there.
+ */
+export function hasReadingsError(draft: DraftV1): boolean {
+  return draft.readings.occasion.length > OCCASION_MAX || scriptureProblems(draft.readings.scriptures).length > 0;
+}
+
 /** A date the lectionary lookup and the archive accept. */
 export function hasServiceDate(draft: DraftV1): boolean {
   return isValidDateIso(draft.readings.date_iso) && inSupportedRange(draft.readings.date_iso);
@@ -53,10 +72,7 @@ export function stepStatus(
   if (!shipped.has(step)) return { kind: "soon" };
   if (step === "readings") {
     const r = draft.readings;
-    const scripturesOk =
-      cleanLines(r.scriptures).length > 0 &&
-      r.scriptures.filter((line) => line.trim() !== "").length <= MAX_READINGS &&
-      r.scriptures.every((line) => line.trim().length <= MAX_LINE);
+    const scripturesOk = cleanLines(r.scriptures).length > 0 && scriptureProblems(r.scriptures).length === 0;
     const done = [hasServiceDate(draft), r.occasion.trim() !== "" && r.occasion.length <= OCCASION_MAX, scripturesOk];
     return counted(done.filter(Boolean).length, 3);
   }

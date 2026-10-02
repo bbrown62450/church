@@ -240,7 +240,7 @@ describe("JoinInvite", () => {
     const { user } = renderJoin();
 
     await user.click(await screen.findByRole("button", { name: "Join Grace" }));
-    expect(screen.getByRole("button", { name: "Joining…" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Joining…" })).toHaveAttribute("aria-disabled", "true");
     expect(screen.getByRole("button", { name: "Not now" })).toBeDisabled();
     release();
 

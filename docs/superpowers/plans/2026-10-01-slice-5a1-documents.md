@@ -3701,6 +3701,18 @@ Expected counts after this task: backend `1256 passed, 11 skipped` on `main`; fr
 - Each new test was seen to fail with its fix undone (`_xml_safe` returning its input: both new API tests fail, the first with a 500; the `onError` guard removed: the DOM case fails; `REVOKE_AFTER_MS` at 60 s: the timing test fails; the NT pick unclipped: the limits test fails).
 - Not run while planning: the production build (Turbopack refuses the replay's symlinked `node_modules`; T8 runs it in the real checkout), the pushes, the PR and CI, the merge and the owner's checks, and a download on a real phone.
 
+**Build review fixes (owner answers 2026-10-02).** The build review (no Critical or Important findings) listed minor ones; the owner's decisions went in on top of `014826b`:
+- **A.** `build_docx`: a blank occasion prints no second title line (`"Worship Service" + (f"\n{occasion}" if occasion else "")`; Streamlit ended the title run in an empty `<w:br/>`). The parity test allows exactly that difference (`test_a_blank_occasion_prints_no_second_title_line_the_one_allowed_title_difference`) and its docstring lists it with the others.
+- **B.** `_add_assurance_paragraph`: a typed "People:" label (any case, at a line start or after whitespace) cuts the text there (trimmed); the fixed bold response prints once. The parity test allows it (four cases) and pins that text without such a label still prints exactly as Streamlit did.
+- **1.** `_xml_safe` turns `"\r\n"` and `"\r"` into `"\n"` first, so a pasted Windows text prints one break, not two (`test_usecase_documents.py`).
+- **4.** `PendingButton` keeps keyboard focus while pending: Base UI's `focusableWhenDisabled` (`aria-disabled`, clicks, Enter, Space and a form submit ignored) with the disabled look (`pointer-events-none opacity-50`); a plain `disabled` stays native. Its other users (ErrorState, ConfirmDialog, the onboarding forms, the hymn and liturgy buttons) behave the same; their tests now read `aria-disabled` for the pending state. Tested: focus stays on the same button through pending and back.
+- **5.** `useDownloadDocument` shows the failure toast from its own `onError` (still none after a 401 or `no_church_access`), so it shows after the card unmounts too (a DOM case unmounts mid-request).
+- **6.** Both downloads are off while a Date & readings field shows its message (more than 20 readings, a line over 200, an occasion over 300), with "Fix the readings on step 1 to download." (approved copy). `scriptureProblems` moved from the field to `lib/draft/status.ts`, where `stepStatus` and the new `hasReadingsError` use it too (a DOM case, three drafts).
+- **7.** `StillNeeded` loses its `mt-6`: its one caller (Review's `gap-6` grid) spaces it; the old caller (the placeholder page) is gone.
+- **8.** `documents.ts` reads a custom label through `wordSafe` (the server's `_xml_safe`) before the blank check, so a label of only control characters is left out instead of meeting the 422 (two unit cases).
+- Not changed: the default Benediction text (pending the owner's wording).
+- Counts: backend **1263 passed, 11 skipped** (+7: `test_build_docx_characterization.py` +6, `test_usecase_documents.py` +1); frontend **617 in 81** (+6: `pending-button.test.tsx` +2, `documents.test.ts` +2, `review-send-step.test.tsx` +2), three runs, no `×` or `FAIL`; typecheck 0 and lint 0.
+
 ## Spec coverage
 
 | Owner answer or S item | Task(s) and tests |

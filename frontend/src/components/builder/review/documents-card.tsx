@@ -1,14 +1,12 @@
 "use client";
 
 import { DownloadIcon } from "lucide-react";
-import { toast } from "sonner";
 
 import { PendingButton } from "@/components/app/pending-button";
 import { useStillWorking } from "@/components/builder/liturgy/use-still-working";
-import { errorToastMessage, isNoChurchAccess } from "@/lib/api/errors";
 import { useDraft } from "@/lib/draft/context";
 import type { DraftV1 } from "@/lib/draft/schema";
-import { hasServiceDate } from "@/lib/draft/status";
+import { hasReadingsError, hasServiceDate } from "@/lib/draft/status";
 import type { DocumentVariant } from "@/lib/download";
 import { useDownloadDocument } from "@/lib/queries/documents";
 
@@ -31,6 +29,7 @@ const COPIES: readonly Copy[] = [
 
 export const SAME_AS_BULLETIN = "Same as the bulletin copy for this service. Prayers of the People is empty or turned off.";
 export const NEEDS_DATE = "Choose a service date on step 1 to download.";
+export const FIX_READINGS = "Fix the readings on step 1 to download.";
 
 /** The pastor's copy prints nothing more when Prayers of the People is off or blank (inv F1). */
 function sameAsBulletin(draft: DraftV1): boolean {
@@ -64,15 +63,7 @@ function CopyRow({ copy, disabled, helper }: { copy: Copy; disabled: boolean; he
         pendingLabel={pendingLabel}
         disabled={disabled}
         aria-describedby={helper ? `${id}-description ${id}-helper` : `${id}-description`}
-        onClick={() =>
-          download.mutate(undefined, {
-            onError: (e) => {
-              // A 401 or a lost church is handled globally (sign-in, the church's own message): no second message.
-              if (e.status === 401 || isNoChurchAccess(e)) return;
-              toast.error(errorToastMessage(e));
-            },
-          })
-        }
+        onClick={() => download.mutate()}
       >
         <DownloadIcon data-icon="inline-start" aria-hidden="true" />
         {copy.action}
@@ -91,13 +82,18 @@ function CopyRow({ copy, disabled, helper }: { copy: Copy; disabled: boolean; he
  * own "Preparing…" ("Still working…" after 8 s); the file then goes to the
  * browser's download (on iPhone, the share or preview sheet), with no toast;
  * a failure is a toast with the server's message (none after a 401 or a lost
- * church: the app's own handling says it). Both buttons need a valid
- * service date, nothing else: what is missing is listed above, and the file
- * prints what there is ("[Sermon title]" for a blank title).
+ * church: the app's own handling says it; the toast comes from
+ * `useDownloadDocument`, so it shows after the card unmounts too). Both
+ * buttons need a valid service date and no Date & readings field message (an
+ * occasion over 300, more than 20 readings or a line over 200: "Fix the
+ * readings on step 1 to download.", build review fix 6), nothing else: what
+ * is missing is listed above, and the file prints what there is ("[Sermon
+ * title]" for a blank title).
  */
 export function DocumentsCard() {
   const { draft } = useDraft();
   const dated = hasServiceDate(draft);
+  const readingsError = hasReadingsError(draft);
   const same = sameAsBulletin(draft);
   return (
     <section aria-labelledby="documents-title" className="grid gap-4 rounded-lg border p-4">
@@ -106,13 +102,14 @@ export function DocumentsCard() {
           Word documents
         </h2>
         {dated ? null : <p className="text-sm text-muted-foreground">{NEEDS_DATE}</p>}
+        {readingsError ? <p className="text-sm text-muted-foreground">{FIX_READINGS}</p> : null}
       </div>
       <ul className="grid gap-6">
         {COPIES.map((copy) => (
           <CopyRow
             key={copy.variant}
             copy={copy}
-            disabled={!dated}
+            disabled={!dated || readingsError}
             helper={copy.variant === "pastor" && same ? SAME_AS_BULLETIN : null}
           />
         ))}

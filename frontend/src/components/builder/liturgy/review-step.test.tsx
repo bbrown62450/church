@@ -548,7 +548,7 @@ describe("Revise with these notes (R Revise)", () => {
     await user.click(within(opening).getByRole("button", { name: "Revise with these notes" }));
     const cancel = within(opening).getByRole("button", { name: "Cancel revising Opening Prayer" });
     expect(cancel).toHaveFocus();
-    expect(within(opening).getByRole("button", { name: "Revising…" })).toBeDisabled();
+    expect(within(opening).getByRole("button", { name: "Revising…" })).toHaveAttribute("aria-disabled", "true");
     expect(screen.getByRole("textbox", { name: "Opening Prayer" })).toHaveAttribute("readonly");
     expect(within(opening).getByRole("button", { name: "Regenerate" })).toBeDisabled();
     expect(within(opening).getByRole("button", { name: "More actions for Opening Prayer" })).toBeDisabled();

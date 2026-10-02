@@ -57,7 +57,7 @@ describe("ErrorState", () => {
     );
 
     const retry = screen.getByRole("button", { name: "Retry" });
-    expect(retry).toBeDisabled();
+    expect(retry).toHaveAttribute("aria-disabled", "true");
     expect(retry).toHaveAttribute("aria-busy", "true");
     await user.click(retry);
     expect(onRetry).not.toHaveBeenCalled();

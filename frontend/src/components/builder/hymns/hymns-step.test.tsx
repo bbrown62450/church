@@ -728,7 +728,7 @@ describe("Suggest hymns (S AI suggestion flow)", () => {
     const answer = held(THREE_EACH);
     const { user } = renderStep(testDraft(), { "POST /hymns/suggestions": answer.handler });
     await user.click(await suggestButton());
-    expect(await screen.findByRole("button", { name: "Suggesting…" })).toBeDisabled();
+    expect(await screen.findByRole("button", { name: "Suggesting…" })).toHaveAttribute("aria-disabled", "true");
     const input = await readyPicker("Response");
     await user.type(input, "650");
     await user.click(await screen.findByRole("option", { name: /#650 Amazing Grace/ }));

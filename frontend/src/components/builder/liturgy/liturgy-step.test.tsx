@@ -528,7 +528,7 @@ describe("Generate and Regenerate (S Generate and Regenerate, AI bar)", () => {
     const { user } = renderStep(testDraft(), { "POST /liturgy/generate": held.handler });
     const cw = await screen.findByRole("region", { name: "Call to Worship" });
     await user.click(within(cw).getByRole("button", { name: "Generate" }));
-    expect(await within(cw).findByRole("button", { name: "Writing…" })).toBeDisabled();
+    expect(await within(cw).findByRole("button", { name: "Writing…" })).toHaveAttribute("aria-disabled", "true");
     expect(within(cw).getByRole("textbox", { name: "Call to Worship" })).toHaveAttribute("readonly");
     expect(within(cw).getByRole("button", { name: "More actions for Call to Worship" })).toBeDisabled();
     await user.click(within(cw).getByRole("button", { name: "Cancel Call to Worship" }));

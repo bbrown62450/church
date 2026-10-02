@@ -78,10 +78,20 @@ def _add_communion_liturgy(doc) -> None:
             doc.add_paragraph()
 
 
+# A typed "People:" label in the Assurance (any case, at a line start or after
+# whitespace, as _add_leader_people_paragraph reads labels): the text prints up
+# to it and the fixed response prints once (owner decision B, 2026-10-02).
+_ASSURANCE_PEOPLE = re.compile(r"(?:^|(?<=\s))People:", re.IGNORECASE | re.MULTILINE)
+
+
 def _add_assurance_paragraph(doc, leader_text: str) -> None:
     """Add Assurance: Leader line then liturgy_config.ASSURANCE_RESPONSE in bold
-    (the one copy the 4b card shows too)."""
+    (the one copy the 4b card shows too). Text from a typed "People:" label on
+    is left out, so the response is never printed twice (owner decision B)."""
     leader_clean = (leader_text or "").strip()
+    people = _ASSURANCE_PEOPLE.search(leader_clean)
+    if people:
+        leader_clean = leader_clean[: people.start()].strip()
     if leader_clean.startswith("Leader:"):
         leader_clean = leader_clean[7:].strip()
     if leader_clean:
@@ -135,7 +145,10 @@ def build_docx(
     confession), with slice 5a's changes: hymn headings follow slots
     (opening "First Hymn", response "Second Hymn", closing "Third Hymn"; an
     empty slot prints nothing), a hymn without a number prints no "#None", and
-    the first reading's heading is "First Reading". ot_ref and nt_ref arrive
+    the first reading's heading is "First Reading"; a blank occasion prints
+    no second title line (owner decision A) and an Assurance with a typed
+    "People:" label prints only the text before it, then the fixed response
+    once (owner decision B). ot_ref and nt_ref arrive
     resolved (service_output.resolve_doc_readings); None leaves a reading out.
     Both variants include the sermon title; only the pastor's copy includes
     Prayers of the People (service_output.VARIANTS). Custom elements print
@@ -154,7 +167,8 @@ def build_docx(
     # Title
     title = doc.add_paragraph()
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = title.add_run(f"Worship Service\n{occasion}")
+    # A blank occasion prints no second line (owner decision A, 2026-10-02).
+    run = title.add_run("Worship Service" + (f"\n{occasion}" if occasion else ""))
     run.bold = True
     run.font.size = Pt(16)
     run.font.name = "Times New Roman"

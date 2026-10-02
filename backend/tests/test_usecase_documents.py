@@ -63,6 +63,18 @@ def test_clean_input_trims_and_drops_blanks_and_streamlit_errors():
     assert clean.custom_elements == (CustomElement("Anthem", "Choir", "sermon"),)
 
 
+def test_clean_input_makes_windows_and_old_mac_line_endings_one_break():
+    """Build review fix 1: "\\r\\n" and "\\r" become "\\n" before anything else,
+    so a pasted Windows text prints one line break, not two."""
+    clean = archive.clean_input(service(
+        liturgy={"opening_prayer": "One\r\nTwo\rThree\r\n\r\nFour"}, sermon_title="Living\r\nWater",
+        custom_elements=(CustomElement("An\r\nthem", "Choir\r\nsings", "sermon"),)))
+    assert clean.liturgy == {"opening_prayer": "One\nTwo\nThree\n\nFour"}
+    assert clean.sermon_title == "Living\nWater"
+    assert clean.custom_elements == (CustomElement("An\nthem", "Choir\nsings", "sermon"),)
+    assert "\r" not in archive._xml_safe("a\r\nb\rc\x0bd")
+
+
 def test_a_blank_custom_label_is_a_422_on_its_field():
     with pytest.raises(InvalidInput) as caught:
         archive.clean_input(service(custom_elements=(CustomElement("Anthem", "", "sermon"),

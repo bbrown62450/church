@@ -8,9 +8,15 @@
  * the server's name, or `docxFilename` when the header is missing. Nothing is
  * cached or kept: each tap builds the file from the draft as it is then. A
  * 401 or a lost church goes through the cache's `handleAuthErrors`
- * (`useChurchMutation`); the caller shows any other error.
+ * (`useChurchMutation`) with no second message; any other error is a toast
+ * with the server's message, from the mutation's own `onError` so it still
+ * shows when the card has unmounted (the member left Review mid-download;
+ * 5a-1 build review fix 5).
  */
+import { toast } from "sonner";
+
 import type { ApiError } from "@/lib/api/client";
+import { errorToastMessage, isNoChurchAccess } from "@/lib/api/errors";
 import { documentRequest } from "@/lib/documents";
 import { useDraft } from "@/lib/draft/context";
 import { docxFilename, downloadBlob, type DocumentVariant } from "@/lib/download";
@@ -28,6 +34,11 @@ export function useDownloadDocument(variant: DocumentVariant) {
       const name = filename ?? docxFilename(variant, body.service.service_date_iso);
       downloadBlob(blob, name);
       return name;
+    },
+    onError: (e) => {
+      // A 401 or a lost church is handled globally (sign-in, the church's own message): no second message.
+      if (e.status === 401 || isNoChurchAccess(e)) return;
+      toast.error(errorToastMessage(e));
     },
   });
 }

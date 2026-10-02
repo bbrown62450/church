@@ -33,7 +33,7 @@ describe("ConfirmDialog", () => {
     expect(screen.getByRole("alertdialog")).toBeInTheDocument();
 
     rerender(<ConfirmDialog {...props} pending />);
-    expect(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Saving…" })).toBeDisabled();
+    expect(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Saving…" })).toHaveAttribute("aria-disabled", "true");
   });
 
   it("Cancel closes the dialog without confirming", async () => {

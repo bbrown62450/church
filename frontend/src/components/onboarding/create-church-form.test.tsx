@@ -271,7 +271,7 @@ describe("CreateChurchForm", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
-    expect(screen.getByRole("button", { name: "Creating church…" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Creating church…" })).toHaveAttribute("aria-disabled", "true");
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(7_999);
