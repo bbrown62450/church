@@ -3,6 +3,7 @@ Backend "usecases/archive.py", Testing `test_archive_usecase.py`; owner
 answers 4 and 6, 2026-10-01). SQLite (`tmp_db`); the row lock and the
 concurrent saves are in test_services_postgres.py."""
 import logging
+import re
 import uuid
 from datetime import date, datetime, timedelta, timezone
 
@@ -13,7 +14,8 @@ from db import session_scope
 from db.models import Church, Hymn, HymnUsage, Service
 from domain_errors import Conflict, InvalidInput, NotFound
 from hymn_usage import record_usage
-from service_output import CustomElement
+from repos.services import DATED_PREFIX
+from service_output import CustomElement, normalize_date_iso
 from usecases import archive
 from usecases.liturgy import HymnRefData
 
@@ -234,6 +236,18 @@ def test_the_check_order_is_404_then_422_then_409_then_the_input(church, pastor)
     assert stored(record.id)["occasion"] == "World Communion Sunday"        # nothing was written
 
 
+def test_if_match_star_saves_over_any_version_and_a_list_is_unreadable(church, pastor):
+    record = archive.create_service(church, pastor, service())
+    archive.replace_service(church, record.id, service(), if_match=record.saved_at)     # record.saved_at is stale now
+    for star in ("*", ' * '):
+        assert archive.replace_service(church, record.id, service(), if_match=star).id == record.id
+    with pytest.raises(NotFound):
+        archive.replace_service(church, uuid.uuid4(), service(), if_match="*")          # "*" needs the row
+    with pytest.raises(InvalidInput) as several:
+        archive.replace_service(church, record.id, service(), if_match=f'"{record.saved_at}", "{record.saved_at}"')
+    assert several.value.message == "If-Match must be the service's saved_at timestamp."
+
+
 def test_another_church_s_service_is_not_found(church, pastor, make_church):
     record = archive.create_service(church, pastor, service())
     other = make_church(name="Hope")
@@ -351,18 +365,33 @@ def test_the_list_is_newest_service_date_first_with_undated_last(church, pastor,
     ids = {}
     for name, date_iso, minutes, author in (("old", "2026-09-27", 0, pastor), ("blank", "", 1, None),
                                             ("new", "2026-10-11", 2, gone_author), ("none", None, 3, None),
-                                            ("same-day-later", "2026-10-11", 5, pastor)):
+                                            ("notion", "2026-10-11T00:00:00.000Z", 4, None),
+                                            ("same-day-later", "2026-10-11", 5, pastor),
+                                            ("words", "Sept 13", 6, None), ("impossible", "2026-02-30", 7, None)):
         ids[name] = legacy_row(church, service_date_iso=date_iso, occasion=name, created_by=author,
                                saved_at=base + timedelta(minutes=minutes))
     page = archive.list_services(church, limit=20, offset=0)
-    assert [i.occasion for i in page.items] == ["same-day-later", "new", "old", "none", "blank"]
-    assert (page.total, page.limit, page.offset) == (5, 20, 0)
-    new = page.items[1]
+    # A time part sorts by its date; "Sept 13" and an impossible date are undated, as the API reports them.
+    assert [i.occasion for i in page.items] == ["same-day-later", "notion", "new", "old",
+                                                "impossible", "words", "none", "blank"]
+    assert (page.total, page.limit, page.offset) == (8, 20, 0)
+    new = page.items[2]
     assert new.created_by == archive.Author(gone_author, "gone@example.com")     # a blank name: the email
     assert (new.service_date_iso, new.saved_at) == ("2026-10-11", "2026-09-01T00:02:00+00:00")
-    assert page.items[3].service_date_iso is None and page.items[3].created_by is None
-    window = archive.list_services(church, limit=2, offset=2)
-    assert [i.occasion for i in window.items] == ["old", "none"] and window.total == 5
+    assert page.items[1].service_date_iso == "2026-10-11"
+    assert all(i.service_date_iso is None for i in page.items[4:]) and page.items[6].created_by is None
+    window = archive.list_services(church, limit=2, offset=3)
+    assert [i.occasion for i in window.items] == ["old", "impossible"] and window.total == 8
+
+
+def test_the_list_sort_reads_the_same_dates_as_normalize_date_iso():
+    """repos.services.DATED_PREFIX (the SQL sort) and normalize_date_iso (the API) agree."""
+    samples = [f"{y:04d}-{m:02d}-{d:02d}" for y in (0, 1, 4, 100, 400, 1900, 2000, 2024, 2026, 2100, 9999)
+               for m in range(14) for d in range(33)]
+    samples += ["", "Sept 13", "October 4", "2026-10-04T00:00:00.000Z", " 2026-10-04", "\uff12\uff10\uff12\uff16-10-04",
+                "26-10-04", "2026-10-4", "2026-10-04x"]
+    for raw in samples:
+        assert (re.search(DATED_PREFIX, raw) is not None) == (normalize_date_iso(raw) is not None), raw
 
 
 def test_saving_logs_ids_and_counts_never_text(church, pastor, caplog):

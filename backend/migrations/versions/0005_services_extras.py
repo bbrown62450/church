@@ -6,10 +6,11 @@ no custom elements ([]) and no hymnal (null).
 - services.custom_elements JSON NULL: the custom elements a saved service
   prints, [{label, text, insert_after}].
 - services.hymnal VARCHAR NULL: the hymnal the service's hymns came from.
-- ix_services_church_date on services (church_id, service_date_iso): for
-  the archive list's order (newest service date first, per church); the
-  hymn-use rebuild uses its church_id prefix (its LIKE on the date is not
-  index-assisted under a non-C collation).
+- ix_services_church_date on services (church_id, service_date_iso): finds
+  one church's services, for the archive list and the hymn-use rebuild. Its
+  church_id prefix does the work: the list sorts on an expression of the
+  date (repos/services.py LIST_ORDER) and the rebuild's LIKE on the date is
+  not index-assisted under a non-C collation, so neither uses the date column.
 
 On Postgres env.py runs SET LOCAL lock_timeout = '5s' (and statement_timeout
 '60s') first, so a lock held elsewhere fails the deploy after 5 s instead of

@@ -393,6 +393,49 @@
         "title": "CustomElementIn",
         "type": "object"
       },
+      "CustomElementOut": {
+        "description": "A custom element as a saved service returns it. No input limits or\nextra=\"forbid\": a stored row is shown as read (the usecase normalizes it),\nnever rejected on the way out.",
+        "properties": {
+          "insert_after": {
+            "enum": [
+              "call_to_worship",
+              "opening_prayer",
+              "first_hymn",
+              "prayer_of_confession",
+              "assurance",
+              "prayer_for_illumination",
+              "ot_reading",
+              "nt_reading",
+              "sermon",
+              "affirmation_of_faith",
+              "second_hymn",
+              "communion",
+              "prayers_of_the_people",
+              "offertory_prayer",
+              "third_hymn",
+              "benediction",
+              "end"
+            ],
+            "title": "Insert After",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "text",
+          "insert_after"
+        ],
+        "title": "CustomElementOut",
+        "type": "object"
+      },
       "DeletedOut": {
         "description": "DELETE /services/{id}; 6a and 6b reuse it for their deletes.",
         "properties": {
@@ -2270,7 +2313,7 @@
           },
           "custom_elements": {
             "items": {
-              "$ref": "#/components/schemas/CustomElementIn"
+              "$ref": "#/components/schemas/CustomElementOut"
             },
             "title": "Custom Elements",
             "type": "array"

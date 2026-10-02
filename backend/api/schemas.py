@@ -273,6 +273,16 @@ class CustomElementIn(BaseModel):
     insert_after: Placement
 
 
+class CustomElementOut(BaseModel):
+    """A custom element as a saved service returns it. No input limits or
+    extra="forbid": a stored row is shown as read (the usecase normalizes it),
+    never rejected on the way out."""
+
+    label: str
+    text: str
+    insert_after: Placement
+
+
 class ServiceDraft(BaseModel):
     """One service (inventory §2.1 plus hymnal, F §1.3). The limits are slice
     4's (GenerateLiturgyIn, liturgy_config.LIMITS); HymnRef, SlotHymns and
@@ -363,7 +373,7 @@ class ServiceOut(BaseModel):
     selected_ot_ref: str
     selected_nt_ref: str
     include_communion: bool
-    custom_elements: list[CustomElementIn]
+    custom_elements: list[CustomElementOut]
     created_by: Optional[AuthorOut]     # null when the author's account was removed
     saved_at: str                       # ISO 8601 with "+00:00"; send it back as If-Match
 

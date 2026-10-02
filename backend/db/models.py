@@ -180,7 +180,8 @@ class Service(Base):
 
     __table_args__ = (
         Index("ix_services_church_saved_at", "church_id", "saved_at"),
-        # The archive list's order (5a-2); the hymn-use rebuild uses its church_id prefix.
+        # One church's services, for the archive list and the hymn-use rebuild (5a-2):
+        # its church_id prefix; the list sorts on an expression of the date.
         Index("ix_services_church_date", "church_id", "service_date_iso"),
     )
 

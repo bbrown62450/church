@@ -590,6 +590,23 @@ export interface components {
             text: string;
         };
         /**
+         * CustomElementOut
+         * @description A custom element as a saved service returns it. No input limits or
+         *     extra="forbid": a stored row is shown as read (the usecase normalizes it),
+         *     never rejected on the way out.
+         */
+        CustomElementOut: {
+            /**
+             * Insert After
+             * @enum {string}
+             */
+            insert_after: "call_to_worship" | "opening_prayer" | "first_hymn" | "prayer_of_confession" | "assurance" | "prayer_for_illumination" | "ot_reading" | "nt_reading" | "sermon" | "affirmation_of_faith" | "second_hymn" | "communion" | "prayers_of_the_people" | "offertory_prayer" | "third_hymn" | "benediction" | "end";
+            /** Label */
+            label: string;
+            /** Text */
+            text: string;
+        };
+        /**
          * DeletedOut
          * @description DELETE /services/{id}; 6a and 6b reuse it for their deletes.
          */
@@ -1275,7 +1292,7 @@ export interface components {
         ServiceOut: {
             created_by: components["schemas"]["AuthorOut"] | null;
             /** Custom Elements */
-            custom_elements: components["schemas"]["CustomElementIn"][];
+            custom_elements: components["schemas"]["CustomElementOut"][];
             /** Hymnal */
             hymnal: string | null;
             hymns: components["schemas"]["ArchivedHymns"];

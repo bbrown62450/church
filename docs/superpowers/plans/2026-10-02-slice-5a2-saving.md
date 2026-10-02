@@ -119,6 +119,7 @@ The owner's answers win over S and F; the code wins over both where they disagre
 - **Hymn-use rows that no saved service backs** are replaced when their date is rebuilt (clarification 8). With Streamlit retired, nothing writes such rows any more; existing ones (Prepare, imported history) stay until a service on their date is saved or deleted.
 - **Concurrency on SQLite** (local dev) is not covered: no row lock, no advisory lock. The Postgres tests cover production's behavior (T6).
 - **Opening a legacy service reads the church's hymn titles in Python** (`repos.hymns.find_hymns_by_titles`, only when a slot has no id that still resolves). Narrowing the query with `lower(title) IN (…)` is not safe: it would miss a stored title with a no-break space, a run of spaces or a letter whose `casefold` differs from `lower` (SQLite's `lower` folds ASCII only), all of which `normalize_title` matches. A church has a few thousand hymns at most; T4's `test_a_title_match_ignores_case_and_spacing_in_the_stored_title` pins the behavior.
+- **The list's `total` and its page are two statements** (`repos.services.list_page`: a `count(*)`, then the page) under READ COMMITTED, so a save or delete committed between them can make `total` disagree with the page by one. Accepted (owner decision 1 on the build review, 2026-10-02): the next request is right, and one statement (a window `count(*) OVER ()`) would give no total for a page past the end.
 - **No UI exercises the routes until 5a-3.** The API tests are the check; the owner's phone check after the merge is a regression check only (T9).
 
 ## File Structure
@@ -376,10 +377,11 @@ no custom elements ([]) and no hymnal (null).
 - services.custom_elements JSON NULL: the custom elements a saved service
   prints, [{label, text, insert_after}].
 - services.hymnal VARCHAR NULL: the hymnal the service's hymns came from.
-- ix_services_church_date on services (church_id, service_date_iso): for
-  the archive list's order (newest service date first, per church); the
-  hymn-use rebuild uses its church_id prefix (its LIKE on the date is not
-  index-assisted under a non-C collation).
+- ix_services_church_date on services (church_id, service_date_iso): finds
+  one church's services, for the archive list and the hymn-use rebuild. Its
+  church_id prefix does the work: the list sorts on an expression of the
+  date (repos/services.py LIST_ORDER) and the rebuild's LIKE on the date is
+  not index-assisted under a non-C collation, so neither uses the date column.
 
 On Postgres env.py runs SET LOCAL lock_timeout = '5s' (and statement_timeout
 '60s') first, so a lock held elsewhere fails the deploy after 5 s instead of
@@ -444,7 +446,8 @@ def downgrade() -> None:
 
     __table_args__ = (
         Index("ix_services_church_saved_at", "church_id", "saved_at"),
-        # The archive list's order (5a-2); the hymn-use rebuild uses its church_id prefix.
+        # One church's services, for the archive list and the hymn-use rebuild (5a-2):
+        # its church_id prefix; the list sorts on an expression of the date.
         Index("ix_services_church_date", "church_id", "service_date_iso"),
     )
 
@@ -3350,6 +3353,14 @@ Expected counts after this task: backend `1332 passed, 16 skipped` on `main`; fr
 - Not run while planning: the production build (T8 runs it in the real checkout; no frontend source changed), the pushes, the PR and CI, the backup, the owner's queries on production, the merge and the deploy.
 
 **Review fixes (2026-10-02, after the owner's "all recommended").** A review of the replayed plan found no critical or important issue; its minor findings changed: the rebuild deletes a date's rows by prefix (`LIKE '<date>%'`), so imported rows with a time part go too (T3 gains `test_imported_rows_with_a_time_part_go_when_their_date_is_rebuilt`); the owner's count query casts `hymns::json` (so it runs whether the column is `json` or `jsonb`) and says `undated` counts date patterns only; a smaller `old_style_hymn_lists` is no longer a stop; the index's stated purpose (the list's order; the rebuild uses its `church_id` prefix); `find_hymns_by_titles` keeps its Python filter (a SQL narrowing would miss titles `normalize_title` matches; Risks, and T4 gains `test_a_title_match_ignores_case_and_spacing_in_the_stored_title`); the F acceptance item 16 waiver in Spec coverage; the stale-replay note in clarification 4. The replay counts above are the pre-fix ones; the count table now reads T3 +17 and T4 +25 (backend 1284, 1309, 1331, then 1332 with 16 skipped).
+
+**Build review fixes (2026-10-02, owner decision 1: fix them all).** A review of the built branch found no defect in the idempotency church scope, the advisory lock order, the PUT row lock and 409, the delete-and-rebuild transaction, tenancy or the README SQL; its findings changed:
+- **The list sorts on the date the API reads.** `LIST_ORDER` sorted the raw `service_date_iso` (`nullif(…, '')`), so on Postgres a legacy `"Sept 13"` sorted above every dated row although the API reports it undated (confirmed on Postgres 16). It now sorts on `repos.services.SORT_DATE`, a `CASE` that keeps the first 10 characters when the value starts with a real calendar date (`DATED_PREFIX`, a regular expression with Gregorian leap years that both Postgres's `~` and SQLite's `REGEXP` run) and is NULL otherwise. So `"2026-10-11T00:00:00.000Z"` sorts with 2026-10-11 (then the latest save), and `""`, NULL, `"Sept 13"` and the impossible `"2026-02-30"` go last, exactly the rows `normalize_date_iso` reads as undated. Both list-order tests (SQLite, Postgres) gained the `"Sept 13"`, `"2026-10-11T00:00:00.000Z"` and `"2026-02-30"` rows; `test_the_list_sort_reads_the_same_dates_as_normalize_date_iso` checks the expression against `normalize_date_iso` on every month 00-13 and day 00-32 of eleven years (0000, the leap-year edges, 9999) and the odd spellings. README step 2's `undated` count is unchanged (it counts unreadable patterns only, as it says).
+- **The index's stated purpose:** `ix_services_church_date` finds one church's services (its `church_id` prefix); the list sorts on an expression and the rebuild's `LIKE` is not index-assisted, so neither uses its date column (migration and model docstrings).
+- **The list's two statements** (count, then page): accepted, in Risks.
+- **`If-Match: *`** (RFC 9110: any current version) saves over whatever is there; the row must still exist (404 first). A list of several values stays a 422 ("If-Match must be the service's saved_at timestamp."). T4 gains `test_if_match_star_saves_over_any_version_and_a_list_is_unreadable`; the API check-order test ends with a `*` PUT.
+- **`ServiceOut.custom_elements` uses `CustomElementOut`** (no input limits, no `extra="forbid"`), so a stored element longer than the input limits opens instead of failing validation on the way out (500). T5 gains `test_a_stored_element_over_the_input_limits_still_opens`. `openapi.json` and `schema.d.ts` regenerated with the commands above (a `CustomElementOut` schema; `ServiceOut` refers to it); typecheck clean.
+- Counts: backend 1332 → **1335 passed, 16 skipped** (+3); Postgres-marked `16 passed, 1335 deselected` (local Postgres 16); frontend 618 in 81 unchanged. The review's "1313 collected" came from its own environment (its per-file counts matched the plan); the full `.venv/bin/python -m pytest -q` in this checkout gives 1332 + 16 before these fixes and 1335 + 16 after.
 
 ## Spec coverage
 

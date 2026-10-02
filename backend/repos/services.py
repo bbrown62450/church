@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from db import session_scope
@@ -33,10 +33,26 @@ class SummaryRow:
     author_email: Optional[str]
 
 
-# Newest service date first, with NULL and a legacy "" last; then the latest
-# save, then the id (F §1.4: nulls_last spelled out, an id tie-breaker).
-LIST_ORDER = (func.nullif(Service.service_date_iso, "").desc().nulls_last(),
-              Service.saved_at.desc(), Service.id.desc())
+# A stored service_date_iso that starts with a real calendar date YYYY-MM-DD
+# (Gregorian leap years; year 0000 is not a date): the same strings
+# service_output.normalize_date_iso reads as dated, so "2026-02-30" is undated
+# here as in the API. Written for both Postgres (ARE: `~`) and SQLite (the
+# pysqlite REGEXP function SQLAlchemy registers, Python's re); a test checks it
+# against normalize_date_iso.
+DATED_PREFIX = (r"^(?!0000)(?:[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])"
+                r"|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))"
+                r"|(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)")
+
+# The date the list sorts on: the first 10 characters of a dated row (so
+# "2026-10-11T00:00:00.000Z" sorts as 2026-10-11), NULL for anything else
+# (NULL, "", "Sept 13", "2026-02-30").
+SORT_DATE = case((Service.service_date_iso.regexp_match(DATED_PREFIX), func.substr(Service.service_date_iso, 1, 10)),
+                 else_=None)
+
+# Newest service date first, undated rows last; then the latest save, then the
+# id (F §1.4: nulls_last spelled out, an id tie-breaker). An expression, so no
+# index serves the sort; the list reads one church's rows.
+LIST_ORDER = (SORT_DATE.desc().nulls_last(), Service.saved_at.desc(), Service.id.desc())
 
 
 def _in(session: Optional[Session], work):

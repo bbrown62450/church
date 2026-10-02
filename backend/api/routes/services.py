@@ -6,8 +6,9 @@ no try/except.
 - POST /services: 201 ServiceOut. An Idempotency-Key replays the first answer
   for the same user in the same church (F §1.6 and its church-scope
   amendment): run_idempotent gets church.id.
-- PUT /services/{id}: If-Match carries the saved_at last received; 404, then
-  422 (If-Match missing or unreadable), then 409, then the body's own errors.
+- PUT /services/{id}: If-Match carries the saved_at last received ("*"
+  saves over whatever is there); 404, then 422 (If-Match missing or
+  unreadable, a list of several included), then 409, then the body's own errors.
 - DELETE /services/{id}: {"deleted": true}; the date's hymn use is then
   recalculated from the services still saved for it (owner answer 6).
 - GET /services: 20 a page by default, newest service date first, undated last.

@@ -139,11 +139,14 @@ def test_the_list_puts_blank_and_missing_dates_last_as_on_sqlite(world):
     base = datetime(2026, 9, 1, tzinfo=timezone.utc)
     with session_scope() as s:
         for minutes, (name, date_iso) in enumerate((("old", "2026-09-27"), ("blank", ""), ("new", "2026-10-11"),
-                                                    ("none", None), ("same-day-later", "2026-10-11"))):
+                                                    ("none", None), ("notion", "2026-10-11T00:00:00.000Z"),
+                                                    ("same-day-later", "2026-10-11"), ("words", "Sept 13"),
+                                                    ("impossible", "2026-02-30"))):
             s.add(Service(church_id=church, created_by=user, service_date_iso=date_iso, occasion=name,
                           hymns=[], liturgy={}, scriptures=[], saved_at=base + timedelta(minutes=minutes)))
     page = archive.list_services(church, limit=20, offset=0)
-    assert [i.occasion for i in page.items] == ["same-day-later", "new", "old", "none", "blank"]
+    assert [i.occasion for i in page.items] == ["same-day-later", "notion", "new", "old",
+                                                "impossible", "words", "none", "blank"]
 
 
 def readme_sql(n: int) -> str:

@@ -177,6 +177,8 @@ def test_put_check_order_and_messages(client, church):
     assert ok.status_code == 200
     stale = call(client, "PUT", path, church, json=SERVICE, **{"If-Match": made["saved_at"]})
     assert (stale.status_code, stale.json()["error"]["details"]) == (409, {"current_saved_at": ok.json()["saved_at"]})
+    star = call(client, "PUT", path, church, json=SERVICE, **{"If-Match": "*"})       # any current version
+    assert (star.status_code, star.json()["id"]) == (200, made["id"])
 
 
 @pytest.mark.parametrize("method, path", [("GET", "/services/not-a-uuid"), ("PUT", "/services/not-a-uuid"),
@@ -216,6 +218,15 @@ def test_a_stored_unknown_place_comes_back_as_end_and_survives_a_put(client, chu
     r = call(client, "PUT", f"/services/{made['id']}", church,
              json={**SERVICE, "custom_elements": opened["custom_elements"]}, **{"If-Match": opened["saved_at"]})
     assert r.status_code == 200 and r.json()["custom_elements"] == opened["custom_elements"]
+
+
+def test_a_stored_element_over_the_input_limits_still_opens(client, church):
+    made = create(client, church)
+    long = {"label": "L" * 201, "text": "t" * 10_001, "insert_after": "end"}
+    with session_scope() as s:
+        s.get(Service, uuid.UUID(made["id"])).custom_elements = [long] * 31
+    r = call(client, "GET", f"/services/{made['id']}", church)
+    assert r.status_code == 200 and r.json()["custom_elements"] == [long] * 31     # shown as read, not a 500
 
 
 # --- Idempotency-Key (F §1.6 and its church-scope amendment) ------------------------------

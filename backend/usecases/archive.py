@@ -217,14 +217,18 @@ def saved_at_text(value: datetime.datetime) -> str:
     return _utc(value).isoformat()
 
 
-def parse_if_match(value: Optional[str]) -> datetime.datetime:
+def parse_if_match(value: Optional[str]) -> Optional[datetime.datetime]:
     """The saved_at an If-Match header carries, in UTC: surrounding quotes and a
-    W/ prefix are ignored; missing or blank is 422 "If-Match is required.",
-    anything else that is not an ISO 8601 timestamp is 422 "If-Match must be
-    the service's saved_at timestamp."."""
+    W/ prefix are ignored; "*" (RFC 9110: any current version) is None, which
+    matches whatever is saved; missing or blank is 422 "If-Match is
+    required.", anything else that is not one ISO 8601 timestamp (a list of
+    several included) is 422 "If-Match must be the service's saved_at
+    timestamp."."""
     if value is None or not value.strip():
         raise InvalidInput(IF_MATCH_REQUIRED_MESSAGE)
     text = value.strip()
+    if text == "*":
+        return None
     if text.startswith("W/"):
         text = text[2:].strip()
     text = text.strip('"').strip()
@@ -390,7 +394,7 @@ def replace_service(church_id: uuid.UUID, service_id: uuid.UUID, data: ServiceIn
             raise NotFound(SERVICE_GONE_MESSAGE)
         expected = parse_if_match(if_match)
         current = _utc(row.saved_at)
-        if expected != current:
+        if expected is not None and expected != current:
             raise Conflict(CONFLICT_MESSAGE, details={"current_saved_at": current.isoformat()})
         clean = clean_input(data)
         hymns = resolve_hymn_refs(s, cid, clean.hymns)
