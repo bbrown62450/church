@@ -1,21 +1,27 @@
 /**
- * Review & send in slice 5a-1 (slice 5a spec, UX "Word documents card",
- * Testing `review-step.test.tsx` "Downloads" and "Invalid date"; owner answers
- * 2 and 3, 2026-10-01). The step renders inside the builder layout with a
- * Toaster; `URL.createObjectURL` and the link's click are stubbed, so a
- * download is recorded instead of navigating. The clock is fixed at Tuesday,
- * September 29, 2026, so a fresh draft is dated Sunday, October 4, 2026.
+ * Review & send (slice 5a spec, UX "Review step", Testing
+ * `review-step.test.tsx`; owner answers 2-5 and 9, 2026-10-01): the Word
+ * documents (5a-1) and saving (5a-3). The step renders inside the builder
+ * layout with a Toaster; `URL.createObjectURL` and the link's click are
+ * stubbed, so a download is recorded instead of navigating. The clock is
+ * fixed at Tuesday, September 29, 2026, so a fresh draft is dated Sunday,
+ * October 4, 2026. A test that needs an edit made elsewhere in the builder
+ * renders a probe button that applies it.
  */
 import { act, screen, waitFor, within } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import BuilderLayout from "@/app/(signed-in)/(church)/builder/layout";
 import ReviewStepPage from "@/app/(signed-in)/(church)/builder/review/page";
 import { Toaster } from "@/components/ui/sonner";
+import { formatSavedAt } from "@/lib/dates";
+import { useDraft } from "@/lib/draft/context";
+import { serviceToDraft } from "@/lib/draft/mapping";
 import { draftKey, type DraftV1 } from "@/lib/draft/schema";
 import { pickFromHymn, setSlot } from "@/lib/hymns/picks";
-import { editScriptureLines } from "@/lib/draft/readings";
+import { editOccasion, editScriptureLines, setDate } from "@/lib/draft/readings";
 import { editCardText, setCardEnabled } from "@/lib/liturgy/cards";
 import { REVOKE_AFTER_MS } from "@/lib/download";
 import { fakeError, installFakeApi, type FakeHandler, type RecordedRequest } from "@/test/fake-api";
@@ -29,13 +35,19 @@ import {
   lectionaryRoute,
   liturgyConfig,
   me,
+  savedService,
+  SERVICE_ID,
   testDraft,
   translations,
   USER_ID,
 } from "@/test/fixtures";
+import { testRouter } from "@/test/mocks";
 import { renderWithProviders } from "@/test/render";
 
-import { FIX_READINGS, NEEDS_DATE, SAME_AS_BULLETIN } from "./documents-card";
+import { CONFLICT_TITLE, RELOAD_REPLACES } from "./conflict-dialog";
+import { FIX_READINGS, NEEDS_DATE, SAME_AS_BULLETIN, SAVE_HINT } from "./documents-card";
+import { CONFLICT_MESSAGE, LOADED_LATEST, SAVE_FIX_READINGS, SAVE_NEEDS_DATE } from "./save-card";
+import { SAVED_AFTER_DELETE_MESSAGE, SAVED_MESSAGE } from "@/lib/queries/services";
 import { DEFAULT_BENEDICTION_FALLBACK } from "@/lib/liturgy/defaults";
 
 const KEY = draftKey(USER_ID, church().id);
@@ -53,7 +65,7 @@ function docx(headers: Record<string, string> = { "Content-Disposition": `attach
 let clicks: { download: string; href: string }[];
 let revoked: string[];
 
-function renderReview(draft: DraftV1 = testDraft(), routes: Record<string, FakeHandler> = {}) {
+function renderReview(draft: DraftV1 = testDraft(), routes: Record<string, FakeHandler> = {}, probe: ReactNode = null) {
   window.localStorage.setItem(KEY, JSON.stringify(draft));
   const api = installFakeApi({
     "GET /church": churchProfile(),
@@ -68,6 +80,7 @@ function renderReview(draft: DraftV1 = testDraft(), routes: Record<string, FakeH
     <>
       <BuilderLayout>
         <ReviewStepPage />
+        {probe}
       </BuilderLayout>
       <Toaster />
     </>,
@@ -100,12 +113,13 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  toast.dismiss(); // sonner replays a toast still showing to the next Toaster
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
 describe("Review & send: the Word documents (slice 5a-1)", () => {
-  it("shows Still needed, both copies with what they hold, and the archive note, with no placeholder", async () => {
+  it("shows Still to do, the Archive card and both copies with what they hold, in that order, with no placeholder", async () => {
     renderReview();
     const card = await documentsCard();
     expect(within(card).getAllByRole("heading", { level: 3 }).map((h) => h.textContent)).toEqual(["Bulletin copy", "Pastor's copy"]);
@@ -122,9 +136,13 @@ describe("Review & send: the Word documents (slice 5a-1)", () => {
     }
     expect(within(card).queryByText(NEEDS_DATE)).toBeNull();
     expect(within(card).queryByText(FIX_READINGS)).toBeNull();
-    expect(screen.getByRole("region", { name: "Still needed" })).toBeInTheDocument();
+    const step = screen.getByRole("region", { name: "Review & send" });
+    expect(within(step).getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual(["Still to do", "Archive", "Word documents"]);
     const archive = screen.getByRole("region", { name: "Archive" });
-    expect(archive).toHaveTextContent("Saving services to the archive is coming soon.");
+    expect(within(archive).getByText("Not in the archive yet.")).toBeInTheDocument();
+    expect(within(archive).getByRole("button", { name: "Save to archive" })).toHaveClass("h-11");
+    expect(within(archive).getByRole("button", { name: "Start a new service" })).toHaveClass("h-11");
+    expect(screen.queryByText(/coming soon/i)).toBeNull();
     expect(screen.queryByText("Available soon")).toBeNull();
   });
 
@@ -217,14 +235,17 @@ describe("Review & send: the Word documents (slice 5a-1)", () => {
     expect(URL.createObjectURL).not.toHaveBeenCalled();
   });
 
-  it("turns both buttons off without a service date, and says why", async () => {
+  it("turns both buttons and Save off without a service date, and says why", async () => {
     const d = testDraft();
     const { api } = renderReview({ ...d, readings: { ...d.readings, date_iso: "" } });
     const card = await documentsCard();
     expect(within(card).getByText(NEEDS_DATE)).toBeInTheDocument();
     expect(within(card).getByRole("button", { name: "Download bulletin copy" })).toBeDisabled();
     expect(within(card).getByRole("button", { name: "Download pastor's copy" })).toBeDisabled();
-    expect(within(screen.getByRole("region", { name: "Still needed" })).getByText(/No service date/)).toBeInTheDocument();
+    const archive = screen.getByRole("region", { name: "Archive" });
+    expect(within(archive).getByText(SAVE_NEEDS_DATE)).toBeInTheDocument();
+    expect(within(archive).getByRole("button", { name: "Save to archive" })).toBeDisabled();
+    expect(within(screen.getByRole("region", { name: "Still to do" })).getByText(/No service date/)).toBeInTheDocument();
     expect(documentRequests(api)).toEqual([]);
   });
 
@@ -248,7 +269,7 @@ describe("Review & send: the Word documents (slice 5a-1)", () => {
     expect(clicks).toEqual([]);
   });
 
-  it("turns both buttons off while a Date & readings field shows its message, and says why (build review fix 6)", async () => {
+  it("turns both buttons and Save off while a Date & readings field shows its message, and says why (build review fix 6)", async () => {
     const tooMany = editScriptureLines(testDraft(), Array.from({ length: 21 }, (_, i) => `Psalm ${i + 1}`).join("\n"));
     const d = testDraft();
     const longLine = editScriptureLines(d, `Isaiah 5:1-7\n${"x".repeat(201)}`);
@@ -260,9 +281,293 @@ describe("Review & send: the Word documents (slice 5a-1)", () => {
       expect(within(card).queryByText(NEEDS_DATE)).toBeNull();
       expect(within(card).getByRole("button", { name: "Download bulletin copy" })).toBeDisabled();
       expect(within(card).getByRole("button", { name: "Download pastor's copy" })).toBeDisabled();
+      const archive = screen.getByRole("region", { name: "Archive" });
+      expect(within(archive).getByText(SAVE_FIX_READINGS)).toBeInTheDocument();
+      expect(within(archive).getByRole("button", { name: "Save to archive" })).toBeDisabled();
       expect(documentRequests(api)).toEqual([]);
       unmount();
       window.localStorage.clear();
     }
+  });
+});
+
+// --- slice 5a-3: saving ------------------------------------------------------------
+
+const FIRST_SAVE = "2026-10-01T14:42:00.123456+00:00";
+const SECOND_SAVE = "2026-10-02T15:05:00+00:00";
+const OTHER_ID = "66666666-6666-4666-8666-666666666666";
+
+/** A button the test presses to change the draft as another step would. */
+function Probe({ edit }: { edit: (d: DraftV1) => DraftV1 }) {
+  const { update } = useDraft();
+  return (
+    <button type="button" onClick={() => update(edit)}>
+      Probe edit
+    </button>
+  );
+}
+
+/** The draft as `serviceToDraft` opens `savedService(overrides)`. */
+function opened(overrides: Parameters<typeof savedService>[0] = {}): DraftV1 {
+  return serviceToDraft(savedService(overrides), { church: churchProfile(), user: { id: USER_ID } });
+}
+
+function archiveCard() {
+  return screen.findByRole("region", { name: "Archive" });
+}
+
+function serviceRequests(api: { requests: RecordedRequest[] }, method: string) {
+  return api.requests.filter((r) => r.method === method && r.path.startsWith("/services"));
+}
+
+/** The draft as last written to localStorage. */
+function stored(): DraftV1 {
+  return JSON.parse(window.localStorage.getItem(KEY) ?? "null") as DraftV1;
+}
+
+describe("Review & send: saving (slice 5a-3)", () => {
+  it("saves a new service with the draft's key, saves changes with If-Match, and every status follows", async () => {
+    const d = editOccasion(testDraft(), "Harvest");
+    const { api, user } = renderReview(
+      d,
+      {
+        "POST /services": () => ({ status: 201, body: savedService({ occasion: "Harvest", saved_at: FIRST_SAVE }) }),
+        [`PUT /services/${SERVICE_ID}`]: () => savedService({ occasion: "Harvest Home", saved_at: SECOND_SAVE }),
+      },
+      <Probe edit={(draft) => editOccasion(draft, "Harvest Home")} />,
+    );
+    const card = await archiveCard();
+    const progress = screen.getByRole("navigation", { name: "Steps" });
+    const aside = screen.getByRole("complementary", { name: "Summary" });
+    expect(within(progress).getAllByRole("link")[3]).toHaveTextContent("4 Review & send Not in archive");
+    expect(within(aside).getByText("Draft saved on this device · Not in archive")).toBeInTheDocument();
+
+    await user.click(within(card).getByRole("button", { name: "Save to archive" }));
+    expect(await screen.findByText(SAVED_MESSAGE)).toBeInTheDocument();
+    const [post] = serviceRequests(api, "POST");
+    expect(post.headers["idempotency-key"]).toBe(d.save_key);
+    expect(post.headers["x-church-id"]).toBe(church().id);
+    expect(post.body).toMatchObject({ service_date_iso: "2026-10-04", occasion: "Harvest", include_communion: true });
+    expect(within(card).getByText(`Saved to the archive · ${formatSavedAt(FIRST_SAVE)}`)).toBeInTheDocument();
+    expect(within(progress).getAllByRole("link")[3]).toHaveTextContent("4 Review & send Saved");
+    expect(within(aside).getByText(`Draft saved on this device · In archive (saved ${formatSavedAt(FIRST_SAVE)})`)).toBeInTheDocument();
+    await waitFor(() => expect(stored().editing).toEqual({ service_id: SERVICE_ID, saved_at: FIRST_SAVE, date_iso: "2026-10-04" }));
+    expect(stored().save_key).not.toBe(d.save_key); // a definitive answer: the next POST gets a new key
+    expect(stored().save_key_fingerprint).toBeNull();
+    expect(stored().created_at).toBe(d.created_at); // the same draft, so the reviewer's notes stay (owner answer 9)
+    // Owner answer 4: what followed a default is now the saved service's own.
+    expect(stored().liturgy.cards.benediction.origin).toBe("archive");
+    expect(stored().liturgy.communion_origin).toBe("archive");
+
+    await user.click(screen.getByRole("button", { name: "Probe edit" }));
+    expect(within(card).getByText(`Unsaved changes · last saved ${formatSavedAt(FIRST_SAVE)}`)).toBeInTheDocument();
+    expect(within(progress).getAllByRole("link")[3]).toHaveTextContent("4 Review & send Unsaved changes");
+    expect(
+      within(aside).getByText(`Draft saved on this device · In archive (saved ${formatSavedAt(FIRST_SAVE)}) · Unsaved changes`),
+    ).toBeInTheDocument();
+
+    await user.click(within(card).getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(within(card).getByText(`Saved to the archive · ${formatSavedAt(SECOND_SAVE)}`)).toBeInTheDocument());
+    const [put] = serviceRequests(api, "PUT");
+    expect(put.path).toBe(`/services/${SERVICE_ID}`);
+    expect(put.headers["if-match"]).toBe(FIRST_SAVE);
+    expect(put.headers["idempotency-key"]).toBeUndefined();
+    expect(put.body).toMatchObject({ occasion: "Harvest Home" });
+    expect(serviceRequests(api, "POST")).toHaveLength(1);
+  });
+
+  it("opens with the banner and the hymn to replace, and saves a copy when the date changed or the service had none", async () => {
+    const moved = setDate(opened(), "2026-10-11");
+    const first = renderReview(moved, {
+      "POST /services": () => ({ status: 201, body: savedService({ id: OTHER_ID, service_date_iso: "2026-10-11", saved_at: SECOND_SAVE }) }),
+    });
+    const card = await archiveCard();
+    expect(screen.getByText("You're editing the saved service for October 4, 2026. Changes stay on this device until you save.")).toBeInTheDocument();
+    const todo = screen.getByRole("region", { name: "Still to do" });
+    expect(within(todo).getByText(/Old Favorite isn't in your hymnal/)).toBeInTheDocument();
+    expect(within(todo).getByRole("link", { name: "Choose a replacement" })).toHaveAttribute("href", "/builder/hymns");
+    const button = within(card).getByRole("button", { name: "Save as new service" });
+    expect(button).toHaveAccessibleDescription(
+      "The date changed from October 4, 2026 to October 11, 2026, so this will be saved as a new service. The October 4 service stays in the archive.",
+    );
+    await first.user.click(button);
+    expect(await screen.findByText(SAVED_MESSAGE)).toBeInTheDocument();
+    expect(serviceRequests(first.api, "PUT")).toEqual([]);
+    expect(serviceRequests(first.api, "POST")).toHaveLength(1);
+    await waitFor(() => expect(stored().editing?.service_id).toBe(OTHER_ID));
+    expect(within(card).getByRole("button", { name: "Save changes" })).toBeInTheDocument();
+    first.unmount();
+    window.localStorage.clear();
+
+    const second = renderReview(opened({ service_date_iso: null, service_date: "" }), {
+      "POST /services": () => ({ status: 201, body: savedService({ id: OTHER_ID, saved_at: SECOND_SAVE }) }),
+    });
+    const undated = await archiveCard();
+    expect(screen.getByText(/This saved service has no date\. It's set to Sunday, October 4, 2026 for now\./)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Check the date" })).toHaveAttribute("href", "/builder/readings");
+    expect(within(undated).getByRole("button", { name: "Save as new service" })).toHaveAccessibleDescription(
+      "The saved service has no date, so this will be saved as a new service on October 4, 2026. The undated service stays in the archive.",
+    );
+    await second.user.click(within(undated).getByRole("button", { name: "Save as new service" }));
+    expect(await screen.findByText("You're editing the saved service for October 4, 2026. Changes stay on this device until you save.")).toBeInTheDocument();
+    expect(screen.queryByText(/has no date/)).toBeNull();
+  });
+
+  it("on a conflict, reloads their version or saves mine as a new service", async () => {
+    const { api, user } = renderReview(
+      opened({ saved_at: FIRST_SAVE }),
+      {
+        [`PUT /services/${SERVICE_ID}`]: fakeError(409, "conflict", CONFLICT_MESSAGE, { details: { current_saved_at: SECOND_SAVE } }),
+        [`GET /services/${SERVICE_ID}`]: savedService({ occasion: "Their occasion", saved_at: SECOND_SAVE }),
+        "POST /services": () => ({ status: 201, body: savedService({ id: OTHER_ID, saved_at: "2026-10-02T15:10:00+00:00" }) }),
+      },
+      <Probe edit={(draft) => editOccasion(draft, "My occasion")} />,
+    );
+    const card = await archiveCard();
+    await user.click(within(card).getByRole("button", { name: "Save changes" }));
+    const dialog = await screen.findByRole("alertdialog", { name: CONFLICT_TITLE });
+    expect(dialog).toHaveAccessibleDescription(`${CONFLICT_MESSAGE} ${RELOAD_REPLACES}`);
+    expect(within(dialog).getByRole("button", { name: "Save mine as a new service" })).toHaveClass("bg-primary"); // the primary choice
+    expect(within(dialog).getByRole("button", { name: "Reload their version" })).toHaveClass("bg-background"); // outline
+    await user.click(within(dialog).getByRole("button", { name: "Reload their version" }));
+    expect(await screen.findByText(LOADED_LATEST)).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(stored()).toMatchObject({ readings: { occasion: "Their occasion" }, editing: { saved_at: SECOND_SAVE } });
+    expect(within(card).getByText(`Saved to the archive · ${formatSavedAt(SECOND_SAVE)}`)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Probe edit" })); // and they save again meanwhile
+    await user.click(within(card).getByRole("button", { name: "Save changes" }));
+    const again = await screen.findByRole("alertdialog", { name: CONFLICT_TITLE });
+    await user.click(within(again).getByRole("button", { name: "Save mine as a new service" }));
+    expect(await screen.findByText(SAVED_MESSAGE)).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(serviceRequests(api, "POST")).toHaveLength(1);
+    await waitFor(() => expect(stored().editing?.service_id).toBe(OTHER_ID));
+  });
+
+  it("after a save whose answer was lost, a 409 is that save when the archive's copy is what was sent", async () => {
+    const errorToast = vi.spyOn(toast, "error");
+    let puts = 0;
+    const { api, user } = renderReview(editOccasion(opened({ saved_at: FIRST_SAVE }), "Harvest Home"), {
+      [`PUT /services/${SERVICE_ID}`]: () => {
+        puts += 1;
+        if (puts === 1) throw new TypeError("Failed to fetch"); // the server saved it; the answer never came
+        return fakeError(409, "conflict", CONFLICT_MESSAGE, { details: { current_saved_at: SECOND_SAVE } });
+      },
+      [`GET /services/${SERVICE_ID}`]: savedService({ occasion: "Harvest Home", saved_at: SECOND_SAVE }),
+    });
+    const card = await archiveCard();
+    await user.click(within(card).getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(errorToast).toHaveBeenCalledTimes(1));
+    await user.click(within(card).getByRole("button", { name: "Save changes" }));
+    expect(await screen.findByText(SAVED_MESSAGE)).toBeInTheDocument();
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(within(card).getByText(`Saved to the archive · ${formatSavedAt(SECOND_SAVE)}`)).toBeInTheDocument();
+    await waitFor(() => expect(stored().editing).toEqual({ service_id: SERVICE_ID, saved_at: SECOND_SAVE, date_iso: "2026-10-04" }));
+    expect(serviceRequests(api, "PUT").map((r) => r.headers["if-match"])).toEqual([FIRST_SAVE, FIRST_SAVE]);
+    expect(serviceRequests(api, "POST")).toEqual([]);
+  });
+
+  it("saves as a new service, and says so, when the saved copy was deleted", async () => {
+    const { api, user } = renderReview(opened(), {
+      [`PUT /services/${SERVICE_ID}`]: fakeError(404, "not_found", "That service is no longer in the archive."),
+      "POST /services": () => ({ status: 201, body: savedService({ id: OTHER_ID, saved_at: SECOND_SAVE }) }),
+    });
+    const card = await archiveCard();
+    await user.click(within(card).getByRole("button", { name: "Save changes" }));
+    expect(await screen.findByText(SAVED_AFTER_DELETE_MESSAGE)).toBeInTheDocument();
+    const [post] = serviceRequests(api, "POST");
+    expect(post.headers["idempotency-key"]).toBeTruthy();
+    await waitFor(() => expect(stored().editing?.service_id).toBe(OTHER_ID));
+  });
+
+  it("offers Go to Hymns for a hymn the church no longer has, and the corrected save uses a new key", async () => {
+    const [holy, praise] = gg2013();
+    const failure = fakeError(404, "not_found", HYMN_GONE, { details: { field: "hymns.opening.hymn_id" } });
+    let posts = 0;
+    const { api, user } = renderReview(
+      setSlot(testDraft(), "opening", pickFromHymn(holy)),
+      {
+        "POST /services": () => {
+          posts += 1;
+          return posts === 1 ? failure : { status: 201, body: savedService({ saved_at: FIRST_SAVE }) };
+        },
+      },
+      <Probe edit={(draft) => setSlot(draft, "opening", pickFromHymn(praise))} />,
+    );
+    const card = await archiveCard();
+    await user.click(within(card).getByRole("button", { name: "Save to archive" }));
+    expect(await screen.findByText(HYMN_GONE)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Go to Hymns" }));
+    expect(testRouter.push).toHaveBeenCalledWith("/builder/hymns");
+    await user.click(screen.getByRole("button", { name: "Probe edit" }));
+    await user.click(within(card).getByRole("button", { name: "Save to archive" }));
+    expect(await screen.findByText(SAVED_MESSAGE)).toBeInTheDocument();
+    const [first, second] = serviceRequests(api, "POST");
+    expect(second.headers["idempotency-key"]).not.toBe(first.headers["idempotency-key"]);
+  });
+
+  it("keeps the key for an identical retry after an unknown outcome, replaces it after an edit, and retries a mismatch once", async () => {
+    const errorToast = vi.spyOn(toast, "error");
+    let posts = 0;
+    const { api, user } = renderReview(
+      editOccasion(testDraft(), "Harvest"),
+      {
+        "POST /services": () => {
+          posts += 1;
+          if (posts <= 2) throw new TypeError("Failed to fetch");
+          if (posts === 3) return fakeError(422, "idempotency_mismatch", "This request was already sent with different details.");
+          return { status: 201, body: savedService({ saved_at: FIRST_SAVE }) };
+        },
+      },
+      <Probe edit={(draft) => editOccasion(draft, "Harvest Home")} />,
+    );
+    const card = await archiveCard();
+    const save = () => user.click(within(card).getByRole("button", { name: "Save to archive" }));
+    await save();
+    await waitFor(() => expect(errorToast).toHaveBeenCalledTimes(1));
+    await save(); // unchanged: the same key, so a stored first answer would be replayed
+    await waitFor(() => expect(errorToast).toHaveBeenCalledTimes(2));
+    await user.click(screen.getByRole("button", { name: "Probe edit" }));
+    await save(); // changed: a new key; the mismatch is retried once with another
+    expect(await screen.findByText(SAVED_MESSAGE)).toBeInTheDocument();
+    const keys = serviceRequests(api, "POST").map((r) => r.headers["idempotency-key"]);
+    expect(keys).toHaveLength(4);
+    expect(keys[1]).toBe(keys[0]);
+    expect(new Set(keys.slice(1)).size).toBe(3);
+    expect(errorToast).toHaveBeenCalledTimes(2); // no message for the mismatch
+  });
+
+  it("Start a new service asks first when the draft has unsaved work, and not when it is saved", async () => {
+    const first = renderReview(editOccasion(testDraft(), "Harvest"));
+    const card = await archiveCard();
+    await first.user.click(within(card).getByRole("button", { name: "Start a new service" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "Start a new service?" });
+    await first.user.click(within(dialog).getByRole("button", { name: "Start new service" }));
+    expect(testRouter.push).toHaveBeenCalledWith("/builder/readings");
+    expect(stored().readings.occasion).toBe("");
+    first.unmount();
+    window.localStorage.clear();
+    testRouter.push.mockClear();
+
+    const second = renderReview(opened());
+    const savedCard = await archiveCard();
+    await second.user.click(within(savedCard).getByRole("button", { name: "Start a new service" }));
+    expect(testRouter.push).toHaveBeenCalledWith("/builder/readings");
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(stored().editing).toBeNull();
+  });
+
+  it("after a download, says that saving records the hymns, until the service is saved", async () => {
+    const { user } = renderReview(testDraft(), {
+      "POST /documents": () => docx(),
+      "POST /services": () => ({ status: 201, body: savedService({ saved_at: FIRST_SAVE }) }),
+    });
+    const documents = await documentsCard();
+    expect(within(documents).queryByText(SAVE_HINT)).toBeNull();
+    await user.click(within(documents).getByRole("button", { name: "Download bulletin copy" }));
+    expect(await within(documents).findByText(SAVE_HINT)).toBeInTheDocument();
+    await user.click(within(await archiveCard()).getByRole("button", { name: "Save to archive" }));
+    await waitFor(() => expect(within(documents).queryByText(SAVE_HINT)).toBeNull());
   });
 });

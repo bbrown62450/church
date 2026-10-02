@@ -132,8 +132,9 @@ describe("builder shell (F §4.7)", () => {
         expect(await within(card).findByRole("textbox", { name: "Sermon title" })).toBeInTheDocument();
         expect(within(card).queryByRole("heading", { name: "Available soon" })).toBeNull();
       } else {
-        // Review & send is the real step from slice 5a-1: Still needed, the Word documents, the archive note.
+        // Review & send is the real step from slice 5a-1: Still to do, the Archive card (5a-3), the Word documents.
         expect(within(card).getByRole("heading", { name: "Word documents" })).toBeInTheDocument();
+        expect(within(card).getByRole("button", { name: "Save to archive" })).toBeEnabled();
         expect(within(card).getByRole("button", { name: "Download bulletin copy" })).toBeEnabled();
         expect(within(card).queryByRole("heading", { name: "Available soon" })).toBeNull();
       }
@@ -142,7 +143,7 @@ describe("builder shell (F §4.7)", () => {
       expect(links.map((link) => link.textContent)).toEqual(footer);
       // Review lists what the shipped steps still need; the other steps do not.
       if (number === 4) {
-        const needed = screen.getByRole("region", { name: "Still needed" });
+        const needed = screen.getByRole("region", { name: "Still to do" });
         expect(within(needed).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
           "No occasion — Add one",
           "No scripture readings — Add one",
@@ -173,7 +174,7 @@ describe("builder shell (F §4.7)", () => {
           "/builder/liturgy",
         ]);
       } else {
-        expect(screen.queryByRole("heading", { name: "Still needed" })).toBeNull();
+        expect(screen.queryByRole("heading", { name: "Still to do" })).toBeNull();
       }
 
       // The frame fills what the header leaves (the (church) layout's flex column), with no hard-coded header height.
@@ -358,7 +359,7 @@ describe("the shell with Date & readings shipped (slice 2c)", () => {
     ]);
   });
 
-  it("shows the readings status, Still needed rows, the occasion and the bulletin chips", async () => {
+  it("shows the readings status, Still to do, the occasion and the bulletin chips", async () => {
     const filled = applyReadingSet(testDraft(), lectionary("2026-10-04"), 0);
     seed(setPick(filled, "nt", "Matthew 21:33-46"));
     installFakeApi({
@@ -379,7 +380,8 @@ describe("the shell with Date & readings shipped (slice 2c)", () => {
 
     const progress = (await screen.findAllByRole("navigation", { name: "Steps" }))[1];
     expect(within(progress).getAllByRole("link")[0]).toHaveTextContent("1 Date & readings Complete");
-    expect(screen.queryByRole("heading", { name: "Still needed" })).toBeNull(); // nothing missing
+    // Nothing missing (slice 5a-3: the checklist says so).
+    expect(screen.getByRole("region", { name: "Still to do" })).toHaveTextContent("Still to doEverything's ready.");
 
     const summary = screen.getByRole("region", { name: "Shipped summary" });
     expect(within(summary).getByText("Nineteenth Sunday after Pentecost")).toBeInTheDocument();
@@ -400,7 +402,7 @@ describe("the shell with Date & readings shipped (slice 2c)", () => {
       </BuilderLayout>,
       { me: me(), church: church(), path: "/builder/review" },
     );
-    const section = await screen.findByRole("region", { name: "Still needed" });
+    const section = await screen.findByRole("region", { name: "Still to do" });
     expect(within(section).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
       "No occasion — Add one",
       "No scripture readings — Add one",
@@ -439,7 +441,7 @@ describe("the shell with Hymns shipped (slice 3b)", () => {
     ]);
     expect(within(aside).getByRole("link", { name: "Hymns" })).toHaveAttribute("href", "/builder/hymns");
     expect(hymnsBlock).not.toHaveTextContent("Available soon");
-    const needed = screen.getByRole("region", { name: "Still needed" });
+    const needed = screen.getByRole("region", { name: "Still to do" });
     expect(within(needed).getAllByRole("listitem").map((li) => li.textContent)).toContain("No Response hymn — Choose one");
 
     await user.click(screen.getByRole("button", { name: "Fill Response" }));
@@ -454,7 +456,7 @@ describe("the shell with Hymns shipped (slice 3b)", () => {
 });
 
 describe("the shell with Liturgy shipped (slice 4b)", () => {
-  it("counts the liturgy, lists it in the summary with the sections being written, and in Still needed", async () => {
+  it("counts the liturgy, lists it in the summary with the sections being written, and in Still to do", async () => {
     let d = editCardText(testDraft(), "call_to_worship", "Come, let us worship.");
     d = addCustomElement(d, { label: "Anthem", text: "", insert_after: "sermon" }, "a");
     seed({ ...d, liturgy: { ...d.liturgy, include_communion: false, communion_origin: "user" } });
@@ -488,7 +490,7 @@ describe("the shell with Liturgy shipped (slice 4b)", () => {
     view.unmount();
 
     renderBuilder(<ReviewStepPage />, "/builder/review");
-    const needed = await screen.findByRole("region", { name: "Still needed" });
+    const needed = await screen.findByRole("region", { name: "Still to do" });
     const liturgyRows = within(needed)
       .getAllByRole("listitem")
       .map((li) => li.textContent)
