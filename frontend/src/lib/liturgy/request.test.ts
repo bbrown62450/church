@@ -135,7 +135,7 @@ describe("buildReviewRequest and buildReviseRequest (the service reviewer, R API
     d = withCard(d, "prayers_of_the_people", { text: "x".repeat(20_005), origin: "ai", enabled: true });
     d = withCard(d, "assurance", { text: "Leader: Friends,", origin: "empty" });             // defensive: never "empty"
     const keys = reviewTargets(d);
-    expect(keys).toEqual(["call_to_worship", "assurance", "prayers_of_the_people", "benediction"]);
+    expect(keys).toEqual(["call_to_worship", "assurance", "prayers_of_the_people"]); // the default Benediction: not reviewed
     const sermon = { ref: "Matthew 21:33-46", text: "Listen to another parable." };
     const body = buildReviewRequest(d, keys, sermon);
     expect(body).toEqual({
@@ -145,13 +145,22 @@ describe("buildReviewRequest and buildReviseRequest (the service reviewer, R API
         { section: "call_to_worship", origin: "typed", text: "Leader: Come!" },
         { section: "assurance", origin: "typed", text: "Leader: Friends," },
         { section: "prayers_of_the_people", origin: "ai", text: "x".repeat(20_000) },
-        { section: "benediction", origin: "default", text: "Go in peace." },
       ],
       sermon_text: sermon,
     });
     const generate = buildGenerateRequest(d, "opening_prayer", sermon);
     expect([body.occasion, body.scriptures, body.sermon_text]).toEqual([generate.occasion, generate.scriptures, generate.sermon_text]);
     expect(buildReviewRequest(d, keys, null)).not.toHaveProperty("sermon_text");
+  });
+
+  it("leaves out a Benediction following the church default; a typed, AI or saved one is reviewed (owner, 2026-10-02)", () => {
+    const d = withCard(withReadings(OCT_4), "benediction", { text: "Go in peace.", origin: "default", enabled: true });
+    expect(reviewTargets(d)).toEqual([]); // the only card: nothing to review
+    for (const origin of ["typed", "ai", "archive"] as const) {
+      const other = withCard(d, "benediction", { origin });
+      expect(reviewTargets(other)).toEqual(["benediction"]);
+      expect(buildReviewRequest(other, reviewTargets(other), null).cards).toEqual([{ section: "benediction", origin, text: "Go in peace." }]);
+    }
   });
 
   it("sends one card's text and its remaining notes to revise, with the same context", () => {

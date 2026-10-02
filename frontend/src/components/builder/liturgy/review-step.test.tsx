@@ -128,6 +128,13 @@ describe("Review service (R User experience)", () => {
     await empty.user.click(off);
     expect(empty.api.requests.some((r) => r.path === "/liturgy/review")).toBe(false);
     empty.unmount();
+    // A switched-on Benediction following the church default is not reviewed (owner, 2026-10-02): alone, it is no service to review.
+    const onlyDefault = renderStep(testDraft((d) => withCard(d, "benediction", DEFAULT_BENEDICTION_FALLBACK, "default")));
+    const stillOff = await screen.findByRole("button", { name: "Review service" });
+    expect(stillOff).toHaveAttribute("aria-disabled", "true");
+    await onlyDefault.user.click(stillOff);
+    expect(onlyDefault.api.requests.some((r) => r.path === "/liturgy/review")).toBe(false);
+    onlyDefault.unmount();
 
     const { user, api } = renderStep();
     await review(user);
@@ -138,21 +145,21 @@ describe("Review service (R User experience)", () => {
       ["opening_prayer", "ai"],
       ["prayer_of_confession", "archive"],
       ["assurance", "ai"],
-      ["benediction", "default"],
-    ]);
+    ]); // never the Benediction while it follows the church default
     expect(JSON.stringify(sent)).not.toContain("Children's Moment");
     const opening = within(card("Opening Prayer")).getByRole("list", { name: "Notes on Opening Prayer" });
     expect(within(opening).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
       `Rules${STOCK}`,
       "Read aloudThe second clause is hard to say aloud.",
     ]);
-    expect(within(card("Benediction")).getByText("Looks good.")).toBeInTheDocument();
+    expect(within(card("Benediction")).queryByText("Looks good.")).toBeNull(); // the church default: not reviewed
+    expect(within(card("Benediction")).queryByRole("list", { name: "Notes on Benediction" })).toBeNull();
     expect(within(card("Offertory Prayer")).queryByText("Looks good.")).toBeNull(); // empty: not reviewed
     const box = screen.getByRole("region", { name: "Across the service" });
     expect(within(box).getByText('Several prayers open with "Gracious God".')).toBeInTheDocument();
     expect(within(box).getByText("Repetition")).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Benediction" })).toHaveAccessibleDescription(
-      "Your church's default benediction. Admins can change it in Settings. Looks good.",
+      "Your church's default benediction. Admins can change it in Settings.",
     );
     expect(screen.queryByText(QUICK)).toBeNull();
     expect(reviewButton()).toHaveFocus(); // focus stays on the one button
@@ -312,7 +319,7 @@ describe("Review service (R User experience)", () => {
 });
 
 describe("Revise with these notes (R Revise)", () => {
-  it("is offered on AI, typed and archived cards with a note left; the Benediction only once it no longer follows the default", async () => {
+  it("is offered on AI, typed and archived cards with a note left; the Benediction is reviewed only once it no longer follows the default", async () => {
     const answer = reviewResult({
       cards: [
         ...ANSWER.cards.filter((c) => c.section !== "benediction"),
@@ -320,9 +327,9 @@ describe("Revise with these notes (R Revise)", () => {
       ],
       service_notes: ANSWER.service_notes,
     });
-    const { user } = renderStep(seeded(), { "POST /liturgy/review": reviewRoute(() => answer) });
+    const { user, api } = renderStep(seeded(), { "POST /liturgy/review": reviewRoute(() => answer) });
     await user.click(await screen.findByRole("button", { name: "Review service" }));
-    await screen.findByText("Review finished. 7 notes.");
+    await screen.findByText("Review finished. 6 notes."); // the default Benediction is not sent; an answer for it is ignored
     for (const label of ["Opening Prayer", "Call to Worship", "Prayer of Confession"]) {
       expect(within(card(label)).getByRole("button", { name: "Revise with these notes" }), label).toBeInTheDocument();
     }
@@ -330,11 +337,15 @@ describe("Revise with these notes (R Revise)", () => {
       "Assurance of Pardon",
     );
     const benediction = card("Benediction");
-    expect(within(benediction).getByText("The last line is long.")).toBeInTheDocument();
-    expect(within(benediction).queryByRole("button", { name: "Revise with these notes" })).toBeNull(); // follows the church default
+    expect(within(benediction).queryByText("The last line is long.")).toBeNull(); // follows the church default: not reviewed
+    expect(within(benediction).queryByRole("button", { name: "Revise with these notes" })).toBeNull();
     await user.type(screen.getByRole("textbox", { name: "Benediction" }), " Amen.");
-    expect(within(benediction).getByText(STALE)).toBeInTheDocument();
-    expect(within(benediction).getByRole("button", { name: "Revise with these notes" })).toBeInTheDocument(); // now your text
+    await user.click(reviewButton());
+    await screen.findByText("Review finished. 7 notes."); // now your text: reviewed
+    const second = api.requests.filter((r) => r.path === "/liturgy/review")[1]?.body as ReviewBody;
+    expect(second.cards.at(-1)).toEqual({ section: "benediction", origin: "typed", text: `${DEFAULT_BENEDICTION_FALLBACK} Amen.` });
+    expect(within(benediction).getByText("The last line is long.")).toBeInTheDocument();
+    expect(within(benediction).getByRole("button", { name: "Revise with these notes" })).toBeInTheDocument();
     // Its last note dismissed, a card has nothing to revise with.
     await user.click(within(card("Assurance of Pardon")).getByRole("button", { name: /^Dismiss note:/ }));
     expect(within(card("Assurance of Pardon")).queryByRole("button", { name: "Revise with these notes" })).toBeNull();

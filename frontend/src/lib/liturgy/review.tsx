@@ -9,7 +9,8 @@
  *
  * - The notes live here, in memory only (`notes.ts`): never in the draft, the
  *   archive or `localStorage`.
- * - `start()`: every switched-on card with text (`reviewTargets`), captured
+ * - `start()`: every switched-on card with text (`reviewTargets`; never a
+ *   Benediction following the church default, owner 2026-10-02), captured
  *   when pressed, with the same resolved sermon text as generation
  *   (`useSermonLoader`), in one `POST /liturgy/review` (100 s). Once the
  *   sermon text has loaded the cards are checked again (4b's pre-send check):
