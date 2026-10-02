@@ -278,3 +278,22 @@ covers the items marked "(owner, after 5a-3)"; its result goes into
 - [ ] (owner, after 5a-3) **15.** Save that copy, then delete it from **Services** ("Delete this service?", "Delete service"): it leaves the list, and if it was the one being edited the draft starts fresh.
 - [ ] (owner, after 5a-3) **16.** At 375 px: no sideways scroll on **Review & send** or **Services**; the buttons and rows are easy to tap.
 - [ ] **17.** In a second browser with the same service open, save it in one, then "Save changes" in the other: "Someone else changed this service"; "Reload their version" and "Save mine as a new service" both work.
+
+## Printed bulletin
+
+Run on the production URL https://worship-service-builder.vercel.app, on an
+iPhone with Safari at 375 px and on desktop Chrome. These are the printed
+bulletin spec's manual checks for PR 1 (the booklet from what the app knows,
+with [placeholders] for the rest). After the PR 1 merge the owner's guided
+check (one step at a time on the phone) covers the items marked "(owner,
+after PR 1)", and the print test at the church covers "(owner, print
+test)"; the results go into `docs/ops-runbook.md` → "Printed bulletin PR 1
+record". PR 2 and PR 3 add their own items here. Record what the page, the
+file and the paper show, never an email address or a church id.
+
+- [ ] (owner, after PR 1) **1.** Build a service with readings, hymns and liturgy and open **4 Review & send**. Under **Printed bulletin**, tap **Download printed bulletin**: "Preparing…", then the share or preview sheet with `printed_bulletin_October_04_2026.pdf` (for that date). The PDF's pages are wide (legal, landscape), two booklet pages each, in reading order: the first has the cover (church name, the picture's box with the reading and the date) on the left and page 1, "THE SERVICE FOR THE LORD'S DAY", on the right; the announcements are the last page.
+- [ ] (owner, after PR 1) **2.** In that PDF the readings are printed in full in the translation chosen on step 1, followed by "Scripture readings are from the …"; hymns read like `*HYMN: #409 "God Is Here!"`; the people lines are bold; the names, music and announcements show as [placeholders].
+- [ ] (owner, after PR 1) **3.** Tap **Download Word version**: `printed_bulletin_October_04_2026.docx` opens in reading order (cover, the service, the announcements), on small pages.
+- [ ] **4.** On step 1 choose another translation (for example KJV), then download again: the readings and the credit line change to it.
+- [ ] (owner, after PR 1) **5.** At 375 px: no sideways scroll on **Review & send**; the two new buttons are full width and at least 44 px tall. Clear the service date: both are off with "Choose a service date on step 1 to download."
+- [ ] (owner, print test) **6.** At the church, print the PDF on legal paper (one side or both, as the church usually does). Each sheet holds two pages side by side, not folded: the cover and page 1, then pages 2 and 3, and so on, with the announcements last. Check that the pages read 1, 2, 3 … in order, nothing is upside down, the page numbers are there, and no text is cut off at the edges or between the two pages.

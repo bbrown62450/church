@@ -17,9 +17,9 @@ import { toast } from "sonner";
 
 import type { ApiError } from "@/lib/api/client";
 import { errorToastMessage, isNoChurchAccess } from "@/lib/api/errors";
-import { documentRequest } from "@/lib/documents";
+import { documentRequest, printedRequest } from "@/lib/documents";
 import { useDraft } from "@/lib/draft/context";
-import { docxFilename, downloadBlob, type DocumentVariant } from "@/lib/download";
+import { docxFilename, downloadBlob, printedFilename, type DocumentVariant, type PrintedFormat } from "@/lib/download";
 
 import { useApi, useChurchMutation } from "./client";
 
@@ -37,6 +37,28 @@ export function useDownloadDocument(variant: DocumentVariant) {
     },
     onError: (e) => {
       // A 401 or a lost church is handled globally (sign-in, the church's own message): no second message.
+      if (e.status === 401 || isNoChurchAccess(e)) return;
+      toast.error(errorToastMessage(e));
+    },
+  });
+}
+
+/**
+ * The printed bulletin (printed bulletin spec, PR 1): as `useDownloadDocument`,
+ * one mutation per button, posting `printedRequest` to `/documents/printed`.
+ */
+export function useDownloadPrinted(format: PrintedFormat) {
+  const api = useApi();
+  const { peek } = useDraft();
+  return useChurchMutation<string, ApiError, void>({
+    mutationFn: async () => {
+      const body = printedRequest(peek(), format);
+      const { blob, filename } = await api.churchBlob("/documents/printed", { method: "POST", json: body });
+      const name = filename ?? printedFilename(format, body.service.service_date_iso);
+      downloadBlob(blob, name);
+      return name;
+    },
+    onError: (e) => {
       if (e.status === 401 || isNoChurchAccess(e)) return;
       toast.error(errorToastMessage(e));
     },

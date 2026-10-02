@@ -16,12 +16,13 @@ import type { components } from "@/lib/api/schema";
 import { fingerprint } from "@/lib/draft/fingerprint";
 import { draftToServicePayload } from "@/lib/draft/mapping";
 import { SLOTS, type DraftV1, type Slot } from "@/lib/draft/schema";
-import type { DocumentVariant } from "@/lib/download";
+import type { DocumentVariant, PrintedFormat } from "@/lib/download";
 import { clipChars, MAX_REF_LENGTH } from "@/lib/hymns/match-request";
 import { normalizePlacement } from "@/lib/liturgy/cards";
 import { hymnRef, MAX_CARD_TEXT, MAX_HYMNAL, readingsContext } from "@/lib/liturgy/request";
 
 export type DocumentBody = components["schemas"]["DocumentIn"];
+export type PrintedBody = components["schemas"]["PrintedDocumentIn"];
 type Placement = components["schemas"]["CustomElementIn"]["insert_after"];
 
 /** liturgy_config.LIMITS (slice 4a), the server's ServiceDraft limits. */
@@ -142,4 +143,22 @@ export function savedCopyFingerprint(s: SavedCopy, { withHymnal = true }: { with
 
 export function documentRequest(draft: DraftV1, variant: DocumentVariant): DocumentBody {
   return { variant, service: serviceBody(draft) };
+}
+
+/** The server's `PrintedDocumentIn.translation` limit. */
+const MAX_TRANSLATION = 20;
+
+/**
+ * The `POST /documents/printed` body (printed bulletin spec, PR 1): the same
+ * service, the format, and the draft's translation (null: the church's). The
+ * server prints in it when it still offers it, else in the church's, as step
+ * 1 shows the readings (`effectiveTranslation`).
+ */
+export function printedRequest(draft: DraftV1, format: PrintedFormat): PrintedBody {
+  const translation = draft.readings.translation;
+  return {
+    format,
+    translation: translation && translation.length <= MAX_TRANSLATION ? translation : null,
+    service: serviceBody(draft),
+  };
 }

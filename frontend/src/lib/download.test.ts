@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { docxFilename, downloadBlob, REVOKE_AFTER_MS, type DocumentVariant } from "./download";
+import { docxFilename, downloadBlob, printedFilename, REVOKE_AFTER_MS, type DocumentVariant } from "./download";
 
 type Case = { date: string; variant: DocumentVariant; display: string; filename: string };
 const { cases } = JSON.parse(
@@ -13,6 +13,13 @@ describe("docxFilename (slice 5a; F §1.9)", () => {
   it("names each file as the server does (shared/docx_filenames.json)", () => {
     expect(cases).toHaveLength(8);
     for (const c of cases) expect(docxFilename(c.variant, c.date), c.date).toBe(c.filename);
+  });
+});
+
+describe("printedFilename (printed bulletin PR 1)", () => {
+  it("names the printed bulletin as the server does (printed_bulletin.printed_filename)", () => {
+    expect(printedFilename("pdf", "2026-10-04")).toBe("printed_bulletin_October_04_2026.pdf");
+    expect(printedFilename("docx", "2026-12-25")).toBe("printed_bulletin_December_25_2026.docx");
   });
 });
 

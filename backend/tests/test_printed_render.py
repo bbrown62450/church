@@ -1,0 +1,119 @@
+"""The printed bulletin's two files (printed bulletin spec, PR 1): the
+print-ready PDF (printed_pdf) and the Word file (printed_docx), read back
+with pypdf and python-docx."""
+import datetime
+from io import BytesIO
+
+from docx import Document
+from docx.oxml.ns import qn
+from docx.shared import Inches
+from pypdf import PdfReader
+
+import printed_bulletin as pb
+import printed_docx
+import printed_pdf
+from service_output import ResolvedHymn, ResolvedService
+
+VERSE = "And he answered, I will not; but afterward he repented and went. "
+
+
+def service(verses: int = 20) -> pb.PrintedService:
+    resolved = ResolvedService(
+        service_date=datetime.date(2026, 9, 27), scriptures=("Psalm 25:1-9", "Matthew 21:23-32"),
+        hymns={"opening": ResolvedHymn("God Is Here!", 409), "response": None,
+               "closing": ResolvedHymn("Jesus Shall Reign Where’er the Sun", 265)},
+        liturgy={"call_to_worship": "Leader: Lift up your hearts. People: We come, ready to listen and learn.",
+                 "opening_prayer": "God of wisdom and truth, hear us. Amen",
+                 "benediction": "Go in peace. - A Friend"},
+        sermon_title="Who Said?")
+    return pb.PrintedService("Example Church", resolved, pb.Reading("Psalm 25:1-9", "In you, Lord, I put my trust."),
+                             pb.Reading("Matthew 21:23-32", VERSE * verses), "World English Bible (WEB)")
+
+
+def sides(content: bytes) -> list[str]:
+    return [" ".join(page.extract_text().split()) for page in PdfReader(BytesIO(content)).pages]
+
+
+def halves(content: bytes) -> list[str]:
+    """Each side's left and right booklet page, by where the text is drawn."""
+    out = []
+    for page in PdfReader(BytesIO(content)).pages:
+        parts: list[list[str]] = [[], []]
+
+        def visit(text, cm, tm, _font, _size):
+            if text.strip():
+                parts[tm[4] * cm[0] + tm[5] * cm[2] + cm[4] >= pb.PAGE_WIDTH].append(text)
+
+        page.extract_text(visitor_text=visit)
+        out += [" ".join(" ".join(half).split()) for half in parts]
+    return out
+
+
+def test_the_pdf_is_legal_landscape_sides_with_two_pages_each_in_reading_order():
+    content = printed_pdf.render_pdf(service())
+    assert content.startswith(b"%PDF-")
+    reader = PdfReader(BytesIO(content))
+    assert [(float(p.mediabox.width), float(p.mediabox.height)) for p in reader.pages] == [(1008.0, 612.0)] * 2
+    pages = halves(content)
+    # Side 1: the cover (no number), then page 1; side 2: pages 2 and 3 (the announcements, last).
+    assert pages[0].startswith("Example Church [Cover picture] Matthew 21:23-32 September 27, 2026 [Street address]")
+    assert pages[0].endswith("FB: [Facebook name]")
+    assert pages[1].startswith("1 THE SERVICE FOR THE LORD’S DAY Example Church [Worship leader], Worship Leader")
+    # The long reading starts under its heading on page 1 and runs on to page 2 (no gap before it).
+    assert f"NEW TESTAMENT READING: Matthew 21:23-32 [Worship leader] {VERSE.strip()}" in pages[1]
+    assert pages[2].startswith("2 And he answered") and pages[2].endswith("*Congregation stands if able")
+    assert pages[3].startswith("3 ANNOUNCEMENTS September 27, 2026") and pages[3].endswith("[Collection items]")
+
+
+def test_the_pdf_prints_the_service_and_its_readings():
+    text = " ".join(sides(printed_pdf.render_pdf(service())))
+    for expected in ("*HYMN: #409 “God Is Here!”", "*HYMN: #265 “Jesus Shall Reign Where’er the Sun”",
+                     "CALL TO WORSHIP [Liturgist]", "Leader: Lift up your hearts.",
+                     "People: We come, ready to listen and learn.", "FIRST READING: Psalm 25:1-9",
+                     "In you, Lord, I put my trust.", "NEW TESTAMENT READING: Matthew 21:23-32 [Worship leader]",
+                     "Scripture readings are from the World English Bible (WEB).", "SERMON: “Who Said?”",
+                     "I believe in God, the Father almighty", "*Congregation stands if able",
+                     "POSTLUDE: ‘[Postlude title]’ [Organist]", "Go in peace. - A Friend"):
+        assert expected in text, expected
+
+
+def test_any_page_count_takes_half_as_many_sides_rounded_up_with_the_announcements_last():
+    for verses, count in ((100, 6), (300, 9)):               # an even and an odd page count
+        pages = halves(printed_pdf.render_pdf(service(verses)))
+        assert len(pages) == 2 * -(-count // 2), verses       # ceil(count / 2) sides, two halves each
+        printed, blank = pages[:count], pages[count:]
+        assert [page.split(" ", 1)[0] for page in printed[1:]] == [str(n) for n in range(1, count)]
+        assert printed[-1].startswith(f"{count - 1} ANNOUNCEMENTS") and blank == [""] * (count % 2)
+
+
+def test_characters_the_standard_fonts_cannot_print_become_a_question_mark():
+    assert printed_pdf.to_pdf_text("“Grace” – ﬁne ש") == "“Grace” – fine ?"
+    assert printed_pdf.to_pdf_text("½ cup… é a\u200bb\ufeff") == "½ cup… é ab"     # pasted invisibles drop
+    resolved = ResolvedService(service_date=datetime.date(2026, 9, 27), sermon_title="Shalom שלום")
+    text = " ".join(sides(printed_pdf.render_pdf(pb.PrintedService("Example Church", resolved))))
+    assert "SERMON: “Shalom ????”" in text
+
+
+def test_the_word_file_is_the_same_booklet_in_reading_order():
+    doc = Document(BytesIO(printed_docx.render_docx(service())))
+    section = doc.sections[0]
+    assert (section.page_width, section.page_height) == (Inches(7), Inches(8.5))
+    assert section.left_margin == Inches(0.5) and section.different_first_page_header_footer
+    paragraphs = [p.text for p in doc.paragraphs]
+    assert paragraphs[0] == "Example Church"
+    assert doc.tables[0].cell(0, 0).paragraphs[1].text == "Matthew 21:23-32"
+    starts = [p.text for p in doc.paragraphs if p.paragraph_format.page_break_before]
+    assert starts == ["THE SERVICE FOR THE LORD’S DAY", "ANNOUNCEMENTS"]
+    for expected in ("*HYMN:  #409  “God Is Here!”", "CALL TO WORSHIP\t[Liturgist]",
+                     "People: We come, ready to listen and learn.", "FIRST READING:  Psalm 25:1-9\t[Liturgist]",
+                     "Scripture readings are from the World English Bible (WEB).", "*Congregation stands if able",
+                     "FB: [Facebook name]", "Coffee Hour: [Name]"):
+        assert expected in paragraphs, expected
+    people = next(p for p in doc.paragraphs if p.text.startswith("People: We come"))
+    assert all(run.bold for run in people.runs)
+    assert 'w:instrText xml:space="preserve">PAGE<' in section.footer._element.xml
+    # The page numbers start at 0 on the cover, so the first inside page is 1; pgNumType sits in the
+    # schema's order (after pgMar, before cols and titlePg), not at the end (PR 1 build review fix 1).
+    children = [child.tag.split("}")[1] for child in section._sectPr]
+    assert children == ["footerReference", "pgSz", "pgMar", "pgNumType", "cols", "titlePg", "docGrid"]
+    assert section._sectPr.find(qn("w:pgNumType")).get(qn("w:start")) == "0"

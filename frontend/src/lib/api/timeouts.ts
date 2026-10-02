@@ -22,6 +22,8 @@ const ENDPOINT_TIMEOUTS: Record<string, number> = {
   "POST /liturgy/revise": 100_000,
   // Slice 5a (F §1.8): a Word file is local work on the server, well under 3 s; 30 s covers a slow phone network.
   "POST /documents": 30_000,
+  // The printed bulletin (printed bulletin spec): the readings' text within the passages' 20 s deadline, then the file.
+  "POST /documents/printed": 30_000,
 };
 
 export function timeoutFor(method: string, path: string): number {

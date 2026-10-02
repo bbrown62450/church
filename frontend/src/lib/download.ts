@@ -9,8 +9,12 @@
  *   breaks Safari and an iPhone's "Download?" sheet can wait for the member's
  *   answer. On iPhone this opens the share or preview sheet (accepted, owner
  *   answer 7, 2026-10-01).
+ * - `printedFilename(format, dateIso)`: the printed bulletin's name
+ *   (`printed_bulletin.printed_filename`), for the same fallback.
  */
 export type DocumentVariant = "bulletin" | "pastor";
+/** The printed bulletin's two files (printed bulletin spec, PR 1). */
+export type PrintedFormat = "pdf" | "docx";
 
 const MONTHS = [
   "January",
@@ -34,6 +38,12 @@ export function docxFilename(variant: DocumentVariant, dateIso: string): string 
   const [year, month, day] = dateIso.split("-");
   const prefix = variant === "pastor" ? "worship_pastor_" : "worship_";
   return `${prefix}${MONTHS[Number(month) - 1]}_${day}_${year}.docx`;
+}
+
+/** "2026-10-04" → "printed_bulletin_October_04_2026.pdf" (`printed_bulletin.printed_filename`). */
+export function printedFilename(format: PrintedFormat, dateIso: string): string {
+  const [year, month, day] = dateIso.split("-");
+  return `printed_bulletin_${MONTHS[Number(month) - 1]}_${day}_${year}.${format}`;
 }
 
 export function downloadBlob(blob: Blob, filename: string): void {

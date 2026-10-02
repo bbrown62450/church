@@ -531,6 +531,26 @@ address, church id or database URL is recorded here.
 | 5. After deploy (owner, read-only) | version `0005_services_extras`, new_columns 2, new_index 1; counts again `0005_services_extras`, 26, 0, 26 (no row changed). Phone: the Hymns step loads and the bulletin download works | 2026-10-02 |
 | Follow-ups | Next: 5a-3 (Save card and Services page; saving records hymn use; a re-save of a stored custom element over today's limits is a 422 on that field, which 5a-3 must handle). Then the printed bulletin, Voices of the Church, 6a. Still open: the screen-reader copy for "Revise the other prayers", first-line matching research (Hymnary.org), the NUL-character 500 outside `/documents`, and the two slice 1 test churches (kept for now, owner) | 2026-10-02 |
 
+### Slice 5a-3 record
+
+Slice 5a-3 (the Save card on Review & send and the Services page: save,
+save changes, save as new service, open and delete saved services; draft
+version 2) merged as PR #44, the last of three 5a PRs. Frontend only: no
+backend change, no migration (production stays at `0005_services_extras`).
+Saving records hymn use again, so the recently-used marks work from here on.
+The owner's check was a five-step guided check on a phone. No token, email
+address or church id is recorded here.
+
+| Step | Result | Date |
+|---|---|---|
+| Merge | PR #44 merged 18:53 UTC (14:53 Eastern), merge commit `3b1ed13` | 2026-10-02 |
+| 1. Save (phone, after a reload) | "Save to archive" saved the service; Services listed it at its date with the "Editing" badge | 2026-10-02 |
+| 2. Save changes | After a small edit, "Save changes" saved and the time moved on | 2026-10-02 |
+| 3. Hymn use | On a new service a week later, the saved service's hymns showed as recently used with its date | 2026-10-02 |
+| 4. Open and save as new | Opening the saved service showed the editing banner; occasion and readings matched with no "Readings for ... are available" box; a new date gave "Save as new service", and both services were listed | 2026-10-02 |
+| 5. Delete and layout | The copy was deleted after the confirm and the original stayed; Services and Review & send fit the phone with easy targets | 2026-10-02 |
+| Follow-ups | 5a is complete. Next: the printed bulletin (`docs/superpowers/specs/2026-10-02-printed-bulletin-idea.md`), Voices of the Church, 6a (Settings, including persona editing), then Hear it from the pews (`docs/superpowers/specs/2026-10-02-pew-voices-idea.md`). Still open: the screen-reader copy for "Revise the other prayers", first-line matching research (Hymnary.org), the NUL-character 500 outside `/documents`, and the two slice 1 test churches (kept for now, owner) | 2026-10-02 |
+
 ## Backups
 
 - **Workflow:** `.github/workflows/backup.yml` (`db-backup`). Daily at 08:37 UTC,

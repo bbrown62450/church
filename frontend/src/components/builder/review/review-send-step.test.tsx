@@ -21,7 +21,7 @@ import { useDraft } from "@/lib/draft/context";
 import { serviceToDraft } from "@/lib/draft/mapping";
 import { draftKey, type DraftV1 } from "@/lib/draft/schema";
 import { pickFromHymn, setSlot } from "@/lib/hymns/picks";
-import { editOccasion, editScriptureLines, setDate } from "@/lib/draft/readings";
+import { editOccasion, editScriptureLines, setDate, setTranslation } from "@/lib/draft/readings";
 import { editCardText, setCardEnabled } from "@/lib/liturgy/cards";
 import { REVOKE_AFTER_MS } from "@/lib/download";
 import { fakeError, installFakeApi, type FakeHandler, type RecordedRequest } from "@/test/fake-api";
@@ -47,6 +47,7 @@ import { renderWithProviders } from "@/test/render";
 
 import { CONFLICT_TITLE, RELOAD_REPLACES } from "./conflict-dialog";
 import { FIX_READINGS, NEEDS_DATE, SAME_AS_BULLETIN, SAVE_HINT } from "./documents-card";
+import { PLACEHOLDERS_NOTE, PRINTED_SUMMARY } from "./printed-card";
 import { CONFLICT_MESSAGE, LOADED_LATEST, SAVE_FIX_READINGS, SAVE_NEEDS_DATE } from "./save-card";
 import { SAVED_AFTER_DELETE_MESSAGE, SAVED_MESSAGE } from "@/lib/queries/services";
 import { DEFAULT_BENEDICTION_FALLBACK } from "@/lib/liturgy/defaults";
@@ -138,7 +139,12 @@ describe("Review & send: the Word documents (slice 5a-1)", () => {
     expect(within(card).queryByText(NEEDS_DATE)).toBeNull();
     expect(within(card).queryByText(FIX_READINGS)).toBeNull();
     const step = screen.getByRole("region", { name: "Review & send" });
-    expect(within(step).getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual(["Still to do", "Archive", "Word documents"]);
+    expect(within(step).getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual([
+      "Still to do",
+      "Archive",
+      "Word documents",
+      "Printed bulletin",
+    ]);
     const archive = screen.getByRole("region", { name: "Archive" });
     expect(within(archive).getByText("Not in the archive yet.")).toHaveAttribute("aria-live", "polite");
     expect(within(archive).getByRole("button", { name: "Save to archive" })).toHaveClass("h-11");
@@ -291,6 +297,80 @@ describe("Review & send: the Word documents (slice 5a-1)", () => {
       unmount();
       window.localStorage.clear();
     }
+  });
+});
+
+// --- the printed bulletin (printed bulletin spec, PR 1) ------------------------------
+
+const PDF_NAME = "printed_bulletin_October_04_2026.pdf";
+
+function pdf() {
+  return new Response(new Uint8Array([0x25, 0x50, 0x44, 0x46]), {
+    status: 200,
+    headers: { "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="${PDF_NAME}"` },
+  });
+}
+
+function printedRequests(api: { requests: RecordedRequest[] }) {
+  return api.requests.filter((r) => r.method === "POST" && r.path === "/documents/printed");
+}
+
+describe("Review & send: the printed bulletin (printed bulletin PR 1)", () => {
+  it("shows the card after the Word documents with what it prints and both files", async () => {
+    renderReview();
+    const card = await screen.findByRole("region", { name: "Printed bulletin" });
+    expect(within(card).getByText(PRINTED_SUMMARY)).toBeInTheDocument();
+    expect(within(card).getByText(PLACEHOLDERS_NOTE)).toBeInTheDocument();
+    const printed = within(card).getByRole("button", { name: "Download printed bulletin" });
+    const word = within(card).getByRole("button", { name: "Download Word version" });
+    expect(printed).toHaveAccessibleDescription(
+      "Ready to print on legal paper, two pages to a side.",
+    );
+    expect(word).toHaveAccessibleDescription("The same bulletin as a Word file, to change before printing.");
+    for (const button of [printed, word]) {
+      expect(button).toBeEnabled();
+      expect(button).toHaveClass("h-11");
+    }
+  });
+
+  it("downloads the PDF with the draft's translation, and names the Word version itself when the header is missing", async () => {
+    const d = setTranslation(editCardText(testDraft(), "call_to_worship", "Leader: Come. People: We come."), "kjv", "web");
+    const { api, user } = renderReview(d, {
+      "POST /documents/printed": (request: RecordedRequest) => ((request.body as { format: string }).format === "pdf" ? pdf() : docx({})),
+    });
+    const card = await screen.findByRole("region", { name: "Printed bulletin" });
+    await user.click(within(card).getByRole("button", { name: "Download printed bulletin" }));
+    await waitFor(() => expect(clicks).toEqual([{ download: PDF_NAME, href: "blob:test/1" }]));
+    expect(printedRequests(api)[0].body).toMatchObject({
+      format: "pdf",
+      translation: "kjv",
+      service: { service_date_iso: "2026-10-04", liturgy: { call_to_worship: "Leader: Come. People: We come." } },
+    });
+    expect(printedRequests(api)[0].headers["x-church-id"]).toBe(church().id);
+    expect(await within(card).findByText(SAVE_HINT)).toBeInTheDocument();
+    await user.click(within(card).getByRole("button", { name: "Download Word version" }));
+    await waitFor(() => expect(clicks).toHaveLength(2));
+    expect(clicks[1].download).toBe("printed_bulletin_October_04_2026.docx");
+    expect((printedRequests(api)[1].body as { format: string }).format).toBe("docx");
+  });
+
+  it("turns both off without a service date, and shows the server's message when a download fails", async () => {
+    const d = testDraft();
+    const undated = renderReview({ ...d, readings: { ...d.readings, date_iso: "" } });
+    let card = await screen.findByRole("region", { name: "Printed bulletin" });
+    expect(within(card).getByText(NEEDS_DATE)).toBeInTheDocument();
+    expect(within(card).getByRole("button", { name: "Download printed bulletin" })).toBeDisabled();
+    expect(within(card).getByRole("button", { name: "Download Word version" })).toBeDisabled();
+    undated.unmount();
+    window.localStorage.clear();
+
+    const { user } = renderReview(testDraft(), {
+      "POST /documents/printed": fakeError(404, "not_found", HYMN_GONE, { details: { field: "hymns.response.hymn_id" } }),
+    });
+    card = await screen.findByRole("region", { name: "Printed bulletin" });
+    await user.click(within(card).getByRole("button", { name: "Download printed bulletin" }));
+    expect(await screen.findByText(HYMN_GONE)).toBeInTheDocument();
+    expect(clicks).toEqual([]);
   });
 });
 
