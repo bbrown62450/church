@@ -360,7 +360,7 @@ SCHEMA_HEAD = "0005_services_extras"
 .venv/bin/python -m pytest -q backend/tests/test_migrations.py backend/tests/test_schema_check.py backend/tests/test_api_app.py 2>&1 | tail -1
 ```
 
-**Expected:** {{FAIL_T1}}
+**Expected:** `14 failed, 52 passed, 4 skipped in <t>s`: the three `0005` tests (the head is still `0004`, so the columns never appear, `UPDATE services SET custom_elements` has no column, and `0004_invites_reusable:0005_services_extras` names an unknown revision), nine head and drift tests in `test_schema_check.py`, two startup tests in `test_api_app.py`.
 
 - [ ] **Step 3 (agent): The revision, the model, the README**
 
@@ -483,7 +483,7 @@ def downgrade() -> None:
 .venv/bin/python -m pytest -q | tail -1
 ```
 
-**Expected:** {{PASS_T1}}; `8` (the eight preview lines of clarification 14); `1266 passed, 11 skipped in <t>s`. With a local Postgres, also: `TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres | tail -1` → `11 passed, 1266 deselected` (the alembic cycle on Postgres is CI's).
+**Expected:** `70 passed, 4 skipped in <t>s`; `8` (the eight preview lines of clarification 14); `1266 passed, 11 skipped in <t>s`. With a local Postgres, also: `TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres | tail -1` → `11 passed, 1266 deselected` (the alembic cycle on Postgres is CI's).
 
 - [ ] **Step 5 (agent): Commit**
 
@@ -544,7 +544,7 @@ def test_concurrent_same_key_requests_run_the_call_once():
 .venv/bin/python -m pytest -q backend/tests/test_idempotency.py 2>&1 | tail -1
 ```
 
-**Expected:** {{FAIL_T2}}
+**Expected:** `1 failed, 15 passed in <t>s` (`run_idempotent() got an unexpected keyword argument 'church_id'`).
 
 - [ ] **Step 3 (agent): `church_id` joins the store key**
 
@@ -633,7 +633,7 @@ _Key = tuple[uuid.UUID, Optional[uuid.UUID], str, str, uuid.UUID]
 .venv/bin/python -m pytest -q | tail -1
 ```
 
-**Expected:** {{PASS_T2}}; `1267 passed, 11 skipped in <t>s`.
+**Expected:** `34 passed in <t>s`; `1267 passed, 11 skipped in <t>s`.
 
 - [ ] **Step 5 (agent): Commit**
 
@@ -840,7 +840,7 @@ def test_only_a_yyyy_mm_dd_date_is_accepted(church, bad):
 .venv/bin/python -m pytest -q backend/tests/test_usage_rebuild.py 2>&1 | grep -E "^E +ImportError|error"
 ```
 
-**Expected:** {{FAIL_T3}}
+**Expected:** `5 failed, 6 passed in <t>s` (`AttributeError`: `service_output` has no `normalize_date_iso`, `coerce_number`, `StoredHymn`, `slot_map`, `stored_hymns`); then `E   ImportError: cannot import name 'rebuild_usage_for_date' from 'hymn_usage' (…)`, `!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!` and `1 error in <t>s`.
 
 - [ ] **Step 3 (agent): The readers, the writer and the rebuild**
 
@@ -1100,7 +1100,7 @@ def rebuild_usage_for_date(church_id, date_iso: str, *, session: Session) -> int
 .venv/bin/python -m pytest -q | tail -1
 ```
 
-**Expected:** {{PASS_T3}}; `1283 passed, 11 skipped in <t>s`.
+**Expected:** `40 passed, 1 skipped in <t>s`; `1283 passed, 11 skipped in <t>s`.
 
 - [ ] **Step 5 (agent): Commit**
 
@@ -1517,7 +1517,7 @@ def test_saving_logs_ids_and_counts_never_text(church, pastor, caplog):
 .venv/bin/python -m pytest -q backend/tests/test_usecase_archive.py backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -1
 ```
 
-**Expected:** {{FAIL_T4}}
+**Expected:** `25 failed, 2 passed in <t>s`: every `test_usecase_archive.py` case (`AttributeError`: `usecases.archive` has no `create_service`, `Author`, …) and `test_usecases_package_imports_no_fastapi_or_streamlit` (`No module named 'repos.services'`).
 
 - [ ] **Step 3 (agent): The repo, the title lookup, the usecases**
 
@@ -2052,7 +2052,7 @@ grep -nE "^(import|from) (fastapi|starlette|streamlit)" backend/usecases/archive
 .venv/bin/python -m pytest -q | tail -1
 ```
 
-**Expected:** {{PASS_T4}}; `imports grep exit 1`; `1307 passed, 11 skipped in <t>s`.
+**Expected:** `48 passed in <t>s`; `imports grep exit 1`; `1307 passed, 11 skipped in <t>s`.
 
 - [ ] **Step 5 (agent): Commit**
 
@@ -2351,7 +2351,7 @@ def test_the_same_key_in_two_churches_saves_in_each(client, church, pastor, make
 .venv/bin/python -m pytest -q backend/tests/test_api_services.py 2>&1 | tail -1
 ```
 
-**Expected:** {{FAIL_T5}}
+**Expected:** `22 failed in <t>s` (no `/services` routes yet, so every request misses).
 
 - [ ] **Step 3 (agent): The response models, the routes, the router**
 
@@ -2555,7 +2555,7 @@ git diff --stat -- frontend/src/lib/api | tail -1
 grep -c '"/services"\|"/services/{service_id}"\|"ServiceOut"\|"ServiceSummary"\|"ArchivedHymn"\|"ArchivedHymns"\|"AuthorOut"\|"DeletedOut"\|"Page_ServiceSummary_"' frontend/src/lib/api/openapi.json
 ```
 
-**Expected:** `Wrote …/frontend/src/lib/api/openapi.json`; a `🚀 src/lib/api/openapi.json → src/lib/api/schema.d.ts` line; {{OPENAPI_STAT}}; `15` (the two paths, the seven schemas and their `$ref`s).
+**Expected:** `Wrote …/frontend/src/lib/api/openapi.json`; a `🚀 src/lib/api/openapi.json → src/lib/api/schema.d.ts` line; ` 2 files changed, 1499 insertions(+), 24 deletions(-)` (the deletions are git aligning moved neighbors; no schema is removed); `15` (the two paths, the seven schemas and their `$ref`s).
 
 - [ ] **Step 5 (agent): Run the files, the suite, the types**
 
@@ -2566,7 +2566,7 @@ grep -c '"/services"\|"/services/{service_id}"\|"ServiceOut"\|"ServiceSummary"\|
 (cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")
 ```
 
-**Expected:** {{PASS_T5}}; `1329 passed, 11 skipped in <t>s`; ` Test Files  81 passed (81)` and `      Tests  618 passed (618)`; `typecheck 0`, `lint 0`.
+**Expected:** `49 passed in <t>s`; `1329 passed, 11 skipped in <t>s`; ` Test Files  81 passed (81)` and `      Tests  618 passed (618)`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 6 (agent): Commit**
 
@@ -2790,7 +2790,7 @@ def test_the_readme_shows_the_0005_preview_exactly():
 .venv/bin/python -m pytest -q backend/tests/test_migrations.py backend/tests/test_services_postgres.py 2>&1 | tail -1
 ```
 
-**Expected:** {{FAIL_T6}}
+**Expected:** `1 failed, 24 passed, 8 skipped in <t>s`: `test_the_readme_shows_the_0005_preview_exactly` (the README has no "Before 0005_services_extras" section yet); the five Postgres tests and three in `test_migrations.py` skip without `TEST_DATABASE_URL` (with a local Postgres, `test_the_owner_s_read_only_queries_count_as_the_api_reads` fails too, for the same reason).
 
 - [ ] **Step 3 (agent): The owner's steps in the migrations README**
 
@@ -2902,7 +2902,7 @@ for this.
 .venv/bin/python -m pytest -q | tail -1
 ```
 
-**Expected:** {{PASS_T6}}; `1330 passed, 16 skipped in <t>s`. With a local, throwaway Postgres: `TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres | tail -1` → `16 passed, 1330 deselected`; without one, say so (CI's `backend-postgres` job runs them).
+**Expected:** `31 passed, 8 skipped in <t>s`; `1330 passed, 16 skipped in <t>s`. With a local, throwaway Postgres: `TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres | tail -1` → `16 passed, 1330 deselected`; without one, say so (CI's `backend-postgres` job runs them).
 
 - [ ] **Step 5 (agent): Commit**
 
@@ -2971,7 +2971,7 @@ grep -c "—" <(git diff -U0 -- docs | grep '^+' | grep -v '^+++')
 git diff --stat | tail -1
 ```
 
-**Expected:** `89 passed in <t>s`; `4`; `0` (no em dash added); `1330 passed, 16 skipped in <t>s`; {{DOCS_STAT}}.
+**Expected:** `89 passed in <t>s`; `4`; `0` (no em dash added); `1330 passed, 16 skipped in <t>s`; ` 2 files changed, 22 insertions(+)`.
 
 - [ ] **Step 3 (agent): Commit**
 
@@ -3292,7 +3292,20 @@ Expected counts after this task: backend `1330 passed, 16 skipped` on `main`; fr
 ---
 ## Build notes
 
-{{BUILD_NOTES}}
+**How this plan was written (2026-10-02).** Each task's code was built and run in a throwaway worktree of `2cd4b79` (the repo's `.venv`, the checkout's `node_modules`, and a local Postgres 16 started for the `postgres` marker; CI uses 17), then the directives were generated from those files and replayed onto a fresh detached worktree of `2cd4b79` by a script that applies every Create, Append and Replace directive of T1-T7 in order and runs each step's commands. While building:
+- **The advisory lock needed a deterministic test.** Two saves released together at a barrier recorded the full union even with the lock removed (each `DELETE` ran before the other transaction committed), so the 20-round union test alone could not show the lock's worth. `test_a_rebuild_waits_for_another_on_the_same_date_only` holds the lock in one transaction and gives a second rebuild of the same date a 200 ms `lock_timeout`: it times out with the lock and does not without it (checked by removing the lock). The 20-round test stays as the spec's no-deadlock, no-`IntegrityError` check. The PUT race test fails (two saves, no conflict) with `with_for_update()` removed (checked).
+- **The PUT race test's last read undoes its patch** (`monkeypatch.undo()`): a lone call through the two-party barrier in `repos.services.get_service` would wait 10 s and break it.
+- **`slot_map` reads the raw stored value.** A 5a-2 row's empty slot (`title: ""`) parses to `None`, so deciding "every entry has a slot" on the parsed entries would have sent 5a-2's own rows down the positional path.
+- **The README preview test splits on the 5a-2 section first:** the 1a runbook in the same README has its own "Read the SQL the upgrade will run" step.
+- **The author's name in the API test is "Pat Tor":** `get_current_user` refreshes the users row from the sign-in token (`tests.jwt_helpers`).
+- **CI's Postgres cycle by hand:** on the local Postgres, `alembic upgrade head`, `check`, `downgrade base`, `upgrade head`, then `downgrade 0004_invites_reusable`, `upgrade head`, `check`: all clean (`No new upgrade operations detected.`).
+- **No frontend source changed;** the `openapi.json` diff shows 24 deletions only because git aligns the inserted schemas against moved neighbors.
+
+**Replay of the finished plan (2026-10-02).** The directives of T1-T7 were applied in order onto a fresh detached worktree of `2cd4b79` (symlinked `.venv`, hard-linked `frontend/node_modules`), running each step's commands, with `TEST_DATABASE_URL` pointing at the local Postgres for an extra `-m postgres` run after each suite:
+- All 40 directives applied (T1 9, T2 6, T3 8, T4 7, T5 5, T6 3, T7 2); every Replace anchor occurred exactly once, and every Append landed on the file as the task before left it. After T7 the tree equaled the build worktree's (`diff -r` of `backend`, `frontend/src` and `docs` but the plan: empty).
+- Every "see it fail" output matched as quoted (T1 `14 failed, 52 passed, 4 skipped`; T2 `1 failed, 15 passed`; T3 `5 failed, 6 passed` and the collection error; T4 `25 failed, 2 passed`; T5 `22 failed`; T6 `1 failed, 24 passed, 8 skipped`), and every count matched the table: backend 1266, 1267, 1283, 1307, 1329 (11 skipped), 1330 (16 skipped); the Postgres-marked runs `11 passed, <n> deselected` through T5 and `16 passed, 1330 deselected` from T6; the offline SQL `8` lines; the OpenAPI change `2 files changed, 1499 insertions(+), 24 deletions(-)` and `15`; frontend `618` in 81, typecheck 0, lint 0 after T5; T7 `89 passed`, `4`, `0`, `2 files changed, 22 insertions(+)`; `imports grep exit 1`.
+- **Step R checked:** in the replay worktree, `git revert --no-commit` of T1-T7 and `git checkout` of Step R's six files from the tip gave `1267 passed, 11 skipped` and typecheck 0.
+- Not run while planning: the production build (T8 runs it in the real checkout; no frontend source changed), the pushes, the PR and CI, the backup, the owner's queries on production, the merge and the deploy.
 
 ## Spec coverage
 
