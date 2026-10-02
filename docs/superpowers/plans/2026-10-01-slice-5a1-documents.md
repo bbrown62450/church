@@ -30,7 +30,7 @@
   `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
 - TDD: write the failing test first and see it fail as quoted.
 - **Backup push after every task** (standing rule): the controller runs `git push origin claude/slice-2-plan-4q33le` after each task's commit (never `--force`). A fix asked for by a review is a new commit, `Fix: <what> (Task <n> review)`. The container can restart and lose uncommitted work: commit as soon as a task's checks pass.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1223 → 1256 passed, 11 → 11 skipped; frontend 597 → 611 in 78 → 81 files`.
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1223 → 1263 passed, 11 → 11 skipped; frontend 597 → 617 in 78 → 81 files`.
 - New prose for the owner has no em dashes and no flattery. New user-facing copy is exactly the list in clarification 16 and has no em dashes; existing copy keeps its own punctuation ("No service date — Choose one", the hymn line "Holy, Holy, Holy — #138" printed in the file, as Streamlit printed it).
 - Ask the owner before any push to a PR, PR creation, marking ready, merging, or any production or settings action. Owner steps go one at a time, in plain words.
 
@@ -49,9 +49,11 @@ As in the 4b plan: **Create `path`:** the block is the whole file; **Append to `
   | T4 | 0 | 1256 passed, 11 skipped | +4 (`client.test.ts`) | 601 in 78 |
   | T5 | 0 | 1256 passed, 11 skipped | +4 (`download.test.ts` 2, `documents.test.ts` 2) | 605 in 80 |
   | T6 | 0 | 1256 passed, 11 skipped | +6 (`review-send-step.test.tsx`; `builder-shell.test.tsx` edited) | 611 in 81 |
-  | T7-T9 | 0 (`test_slice1_docs.py` edited) | 1256 passed, 11 skipped | 0 | 611 in 81 |
+  | T7 | 0 (`test_slice1_docs.py` edited) | 1256 passed, 11 skipped | 0 | 611 in 81 |
+  | Build review fixes (2026-10-02) | +7 (`test_build_docx_characterization.py` 6, `test_usecase_documents.py` 1) | 1263 passed, 11 skipped | +6 (`pending-button.test.tsx` 2, `documents.test.ts` 2, `review-send-step.test.tsx` 2) | 617 in 81 |
+  | Benediction text, T8-T9 | 0 (cases inside existing tests) | 1263 passed, 11 skipped | 0 | 617 in 81 |
 
-- CI `backend-postgres` goes from `11 passed, 1223 deselected` to `11 passed, 1256 deselected` (no new Postgres test: nothing here writes).
+- CI `backend-postgres` goes from `11 passed, 1223 deselected` to `11 passed, 1263 deselected` (no new Postgres test: nothing here writes).
 
 ### Layering and code rules (carried)
 - `service_output`, `usecases/archive.py` and `usecases/documents.py` import no FastAPI, Starlette or Streamlit (`test_no_streamlit_in_core.py` gains them, T3); the route is a plain `def` with no SQL and no try/except (F §2.2 rule 1); `build_document` reads in one short `session_scope` that closes before rendering (S "Data access").
@@ -3441,7 +3443,7 @@ for i in 1 2 3; do (cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Te
 (cd frontend && NEXT_PUBLIC_SUPABASE_URL=https://ci-placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-placeholder NEXT_PUBLIC_API_URL=http://localhost:8000 npm run build 2>&1 | grep -E "Compiled successfully|Error")
 ```
 
-**Expected:** `1256 passed, 11 skipped in <t>s`; three times ` Test Files  81 passed (81)` and `      Tests  611 passed (611)` with no `×` or `FAIL` line (one names the failing test: Step 6); `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s` and no `Error` (the build runs in the real checkout; a font `Failed to fetch` only: say so and rely on CI).
+**Expected:** `1263 passed, 11 skipped in <t>s`; three times ` Test Files  81 passed (81)` and `      Tests  617 passed (617)` with no `×` or `FAIL` line (one names the failing test: Step 6); `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s` and no `Error` (the build runs in the real checkout; a font `Failed to fetch` only: say so and rely on CI).
 
 - [ ] **Step 3 (agent): The API files match, the gates, the paths, the commits**
 
@@ -3509,7 +3511,7 @@ gh pr list -R bbrown62450/church --head claude/slice-2-plan-4q33le --state open 
 
 **Expected:** one `✓ Logged in` line; `[]`. Send the owner exactly this, and wait for a clear yes:
 
-> Slice 5a-1 (Word downloads) is verified on this machine: backend 1256 passed, 11 skipped (1223 before); frontend 611 tests in 81 files (597 in 78 before), three runs in a row; typecheck, lint and the production build are clean. It adds one API route, `POST /documents`, and no database change. On step 4 you get "Download bulletin copy" and "Download pastor's copy", built from your draft each time, in Streamlit's layout with "First Reading", hymn headings by slot and no "#None". Saving comes in the next two PRs. May I open the pull request as a **draft** titled "Slice 5a-1: Word downloads", so the checks run? Merging stays with you.
+> Slice 5a-1 (Word downloads) is verified on this machine: backend 1263 passed, 11 skipped (1223 before); frontend 617 tests in 81 files (597 in 78 before), three runs in a row; typecheck, lint and the production build are clean. It adds one API route, `POST /documents`, and no database change. On step 4 you get "Download bulletin copy" and "Download pastor's copy", built from your draft each time, in Streamlit's layout with "First Reading", hymn headings by slot and no "#None". Saving comes in the next two PRs. May I open the pull request as a **draft** titled "Slice 5a-1: Word downloads", so the checks run? Merging stays with you.
 
 - [ ] **Step 5 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
 
@@ -3527,7 +3529,7 @@ Slice 5a-1: Word downloads end to end (the first of three 5a PRs; owner answers 
 
 Later: 5a-2 (saving, 0005_services_extras), 5a-3 (Save card, Services page).
 
-Tests: backend 1223 → 1256 passed, 11 → 11 skipped; frontend 597 → 611 in 78 → 81 files
+Tests: backend 1223 → 1263 passed, 11 → 11 skipped; frontend 597 → 617 in 78 → 81 files
 
 After merge (Task 9): a short check on the owner's phone, then a "Slice 5a-1 record" in docs/ops-runbook.md.
 
@@ -3541,7 +3543,7 @@ gh pr create -R bbrown62450/church --draft --base main --head claude/slice-2-pla
 gh pr checks <N> -R bbrown62450/church --watch --interval 30
 ```
 
-Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1256 passed, 11 skipped`, backend-postgres `11 passed, 1256 deselected`, frontend `611 passed` in 81 files. Then send: "PR #<N> is green: backend 1256 passed, 11 skipped; 611 frontend tests in 81 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R bbrown62450/church`.
+Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1263 passed, 11 skipped`, backend-postgres `11 passed, 1263 deselected`, frontend `617 passed` in 81 files. Then send: "PR #<N> is green: backend 1263 passed, 11 skipped; 617 frontend tests in 81 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R bbrown62450/church`.
 
 - [ ] **Step 6: Fix any failure in its owning task**
 
@@ -3559,7 +3561,7 @@ Run the last line with `run_in_background: true`. **Expected:** the PR URL; ever
 
 For each fix: change only the owning task's files; rerun Steps 2-3; commit `Fix: <what> (Task <n>, 5a-1 final verification)` with the trailer; after the PR exists, ask the owner before pushing it.
 
-Expected counts after this task: backend `1256 passed, 11 skipped`; frontend `611 passed` in 81 files.
+Expected counts after this task: backend `1263 passed, 11 skipped`; frontend `617 passed` in 81 files.
 
 ### Task 9: Merge, the owner's phone check (four steps), the record (OWNER + agent)
 
@@ -3678,7 +3680,7 @@ gh pr checks claude/slice-2-plan-4q33le -R bbrown62450/church --watch
 
 Code only (no data was written; no draft shape changed). On the owner's yes for each outward command: a branch `claude/revert-slice-5a1` from `origin/main`, `git revert -m 1 --no-commit <merge sha>`, a commit "Revert slice 5a-1 (PR #<N>)" with the trailer, both suites (`1223 passed, 11 skipped`; `597 passed` in 78), a PR, CI, and the merge on the owner's yes; record it in the 5a-1 record. Review then shows the "Available soon" card again.
 
-Expected counts after this task: backend `1256 passed, 11 skipped` on `main`; frontend `611 passed` in 81 files. The records PR adds no test.
+Expected counts after this task: backend `1263 passed, 11 skipped` on `main`; frontend `617 passed` in 81 files. The records PR adds no test.
 
 ---
 ## Build notes

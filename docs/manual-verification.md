@@ -196,7 +196,7 @@ items marked "(owner, after 4b)", some of them in part; its result goes into
 be run at any time and recorded the same way. The AI's words differ every
 time, so record what the page shows, never an email address or a church id.
 
-- [ ] (owner, after 4b) **1.** Open Liturgy on a fresh draft: the 8 cards in the order of worship, Prayers of the People off; Benediction "Halverson" with "Church default"; the landmark rows show the chosen hymns and readings.
+- [ ] (owner, after 4b) **1.** Open Liturgy on a fresh draft: the 8 cards in the order of worship, Prayers of the People off; Benediction with the full Halverson text ("You go nowhere by accident. ..." in quotation marks, ending "- Richard Halverson"; owner decision 2026-10-02) and "Church default"; the landmark rows show the chosen hymns and readings.
 - [ ] (owner, after 4b) **2.** Type a Call to Worship. Tap **Generate empty sections (5)**: the 5 empty switched-on sections fill within about a minute and one message says "Wrote 5 sections."; the Call to Worship is unchanged, character for character; the Benediction is untouched.
 - [ ] (owner, after 4b) **3.** Regenerate the typed card: "Replace your text?" appears; **Replace text**, then **Undo** brings the typed text back.
 - [ ] **4.** Start a bulk run, go to Hymns and back: the results are there. Cancel a run: the card is unchanged.
@@ -248,7 +248,7 @@ covers the items marked "(owner, after 5a-1)"; its result goes into
 items here. Record what the page and the file show, never an email address
 or a church id.
 
-- [ ] (owner, after 5a-1) **1.** Build a service and open **4 Review & send**. Tap **Download bulletin copy**: the button says "Preparing…", then the share or preview sheet opens with `worship_October_04_2026.docx` (for that date). The file opens; it has the title, the date as "October 04, 2026", "First Reading", the sermon title, and no Prayers of the People.
+- [ ] (owner, after 5a-1) **1.** Build a service and open **4 Review & send**. Tap **Download bulletin copy**: the button says "Preparing…", then the share or preview sheet opens with `worship_October_04_2026.docx` (for that date). The file opens; it has the title, the date as "October 04, 2026", "First Reading", the sermon title, the Benediction as the full Halverson text in quotation marks ending "- Richard Halverson" (unless the church saved its own), and no Prayers of the People.
 - [ ] (owner, after 5a-1) **2.** Switch on Prayers of the People with text: the **pastor's copy** includes it and the bulletin copy does not. With it off, the pastor's copy says "Same as the bulletin copy for this service. Prayers of the People is empty or turned off."
 - [ ] (owner, after 5a-1) **3.** Leave the Opening hymn empty and choose a Response hymn: the file has "Second Hymn" and no "First Hymn"; no hymn line ends in "#None".
 - [ ] **4.** With RCL readings and no NT pick, the NT reading is the epistle, not the Psalm. Pick the Gospel as the NT reading, then edit that line: the Bulletin readings select shows "Automatic: {epistle}", and a new download prints that epistle.
