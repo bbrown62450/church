@@ -28,6 +28,9 @@ _ALIGN = {"header": WD_ALIGN_PARAGRAPH.CENTER, "section": WD_ALIGN_PARAGRAPH.CEN
           "contact": WD_ALIGN_PARAGRAPH.CENTER, "center": WD_ALIGN_PARAGRAPH.CENTER}
 _SPACE_BEFORE = {"element": 8, "section": 12, "note": 10, "credit": 4, "center": 3}
 _SIZE = {"title": 28, "credit": 9, "contact": 12}
+# The w:sectPr children that follow w:pgNumType (ECMA-376 CT_SectPr).
+_AFTER_PG_NUM_TYPE = ("w:cols", "w:formProt", "w:vAlign", "w:noEndnote", "w:titlePg", "w:textDirection", "w:bidi",
+                      "w:rtlGutter", "w:docGrid", "w:printerSettings", "w:sectPrChange")
 
 
 def _add_line(doc, line: pb.Line):
@@ -74,7 +77,9 @@ def _page_number_footer(section) -> None:
         run._r.append(el)
     start = OxmlElement("w:pgNumType")
     start.set(qn("w:start"), "0")
-    section._sectPr.append(start)
+    # In the schema's place (before cols, titlePg, docGrid), not appended at the end: Word reads sectPr
+    # strictly in order (PR 1 build review fix 1).
+    section._sectPr.insert_element_before(start, *_AFTER_PG_NUM_TYPE)
 
 
 def render_docx(ps: pb.PrintedService) -> bytes:

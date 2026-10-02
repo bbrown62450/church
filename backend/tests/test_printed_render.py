@@ -5,6 +5,7 @@ import datetime
 from io import BytesIO
 
 from docx import Document
+from docx.oxml.ns import qn
 from docx.shared import Inches
 from pypdf import PdfReader
 
@@ -111,3 +112,8 @@ def test_the_word_file_is_the_same_booklet_in_reading_order():
     people = next(p for p in doc.paragraphs if p.text.startswith("People: We come"))
     assert all(run.bold for run in people.runs)
     assert 'w:instrText xml:space="preserve">PAGE<' in section.footer._element.xml
+    # The page numbers start at 0 on the cover, so the first inside page is 1; pgNumType sits in the
+    # schema's order (after pgMar, before cols and titlePg), not at the end (PR 1 build review fix 1).
+    children = [child.tag.split("}")[1] for child in section._sectPr]
+    assert children == ["footerReference", "pgSz", "pgMar", "pgNumType", "cols", "titlePg", "docGrid"]
+    assert section._sectPr.find(qn("w:pgNumType")).get(qn("w:start")) == "0"
