@@ -111,15 +111,29 @@ def test_first_sunday_cases():
         assert lc.is_first_sunday_of_month(date.fromisoformat(case["date"])) is case["expected"], case
 
 
+HALVERSON = ("\u201cYou go nowhere by accident. Wherever you go, God is sending you. Wherever you are, "
+             "God has put you there. God has a purpose in your being there. Christ lives in you and has "
+             "something he wants to do through you where you are. Believe this and go in the grace and "
+             "love and power of Jesus Christ.\u201d - Richard Halverson")   # owner, 2026-10-02
+
+
 def test_resolve_default_benediction():
     cases = [
-        (None, "Halverson"),
-        ({}, "Halverson"),
-        ({"default_benediction": 5}, "Halverson"),
-        ({"default_benediction": None}, "Halverson"),
+        (None, HALVERSON),
+        ({}, HALVERSON),
+        ({"default_benediction": 5}, HALVERSON),
+        ({"default_benediction": None}, HALVERSON),
         ({"default_benediction": ""}, ""),
+        ({"default_benediction": "   "}, "   "),
         ({"default_benediction": "May the Lord bless you…"}, "May the Lord bless you…"),
-        ("not a mapping", "Halverson"),
+        # The old seed's shorthand (trimmed, any case) is the full text.
+        ({"default_benediction": "Halverson"}, HALVERSON),
+        ({"default_benediction": "  halverson \n"}, HALVERSON),
+        ({"default_benediction": "HALVERSON"}, HALVERSON),
+        ({"default_benediction": "Halverson."}, "Halverson."),
+        ({"default_benediction": "Halverson benediction"}, "Halverson benediction"),
+        ({"default_benediction": HALVERSON}, HALVERSON),
+        ("not a mapping", HALVERSON),
     ]
     for settings, expected in cases:
         assert lc.resolve_default_benediction(settings) == expected, settings
@@ -132,7 +146,7 @@ def test_normalize_placement_limits_and_fixed_text():
     assert lc.LIMITS == lc.Limits(max_section_text=20_000, max_sermon_title=300, max_custom_elements=30,
                                   max_custom_label=200, max_custom_text=10_000, max_sections_per_request=4)
     assert lc.ASSURANCE_RESPONSE == "People: Thanks be to God! Amen."
-    assert lc.DEFAULT_BENEDICTION_FALLBACK == "Halverson"
+    assert lc.DEFAULT_BENEDICTION_FALLBACK == HALVERSON
     assert lc.COMMUNION_TOGGLE_LABEL == "Include communion liturgy (The Sacrament of the Lord's Supper)"
     assert lc.COMMUNION_BLOCKS[0] == lc.CommunionBlock("heading1", lc.COMMUNION_TITLE)
     assert [b.text for b in lc.COMMUNION_BLOCKS if b.style == "heading2"] == [

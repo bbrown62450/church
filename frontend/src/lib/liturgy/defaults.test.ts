@@ -28,11 +28,15 @@ describe("liturgy defaults (S Benediction and the church default; Communion card
   });
 
   it("keeps the Benediction on the church default only while it follows it, including an empty default", () => {
-    expect(DEFAULT_BENEDICTION_FALLBACK).toBe("Halverson");
+    expect(DEFAULT_BENEDICTION_FALLBACK).toBe(
+      "\u201cYou go nowhere by accident. Wherever you go, God is sending you. Wherever you are, God has put you there. " +
+        "God has a purpose in your being there. Christ lives in you and has something he wants to do through you where you are. " +
+        "Believe this and go in the grace and love and power of Jesus Christ.\u201d - Richard Halverson",
+    ); // owner, 2026-10-02
     const fresh = testDraft();
-    const filled = applyLiturgyDefaults(fresh, { defaultBenediction: "Halverson" });
-    expect(filled.liturgy.cards.benediction).toEqual({ enabled: true, text: "Halverson", origin: "default" });
-    expect(applyLiturgyDefaults(filled, { defaultBenediction: "Halverson" })).toBe(filled);
+    const filled = applyLiturgyDefaults(fresh, { defaultBenediction: DEFAULT_BENEDICTION_FALLBACK });
+    expect(filled.liturgy.cards.benediction).toEqual({ enabled: true, text: DEFAULT_BENEDICTION_FALLBACK, origin: "default" });
+    expect(applyLiturgyDefaults(filled, { defaultBenediction: DEFAULT_BENEDICTION_FALLBACK })).toBe(filled);
     const changed = applyLiturgyDefaults(filled, { defaultBenediction: "The Lord bless you and keep you." });
     expect(changed.liturgy.cards.benediction.text).toBe("The Lord bless you and keep you.");
     expect(applyLiturgyDefaults(filled, { defaultBenediction: "" }).liturgy.cards.benediction).toEqual({

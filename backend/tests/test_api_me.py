@@ -12,6 +12,7 @@ from api.main import create_app
 from api.security import TokenVerifier
 from db import session_scope
 from db.models import Church, User
+from liturgy_config import DEFAULT_BENEDICTION_FALLBACK
 from tests.jwt_helpers import ISSUER, SIGNING_KEY, make_token
 
 
@@ -83,7 +84,7 @@ def test_church_returns_the_active_church_for_a_member(client, make_user, make_c
         "timezone": "America/New_York", "timezone_valid": True, "bible_translation": None,
         "effective_translation": "web", "effective_translation_label": "World English Bible (WEB)",
         "default_hymnal": None, "effective_hymnal": None,     # slice 3: no hymns in this church
-        "default_benediction": "Halverson",                   # slice 4: the fallback
+        "default_benediction": DEFAULT_BENEDICTION_FALLBACK,  # slice 4: the full Halverson text
     }
 
 

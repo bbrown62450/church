@@ -104,7 +104,7 @@ class LiturgyConfigOut(BaseModel):
     custom_placements: list[PlacementOut]   # the 17, in app.py's order
     outline: list[OutlineItemOut]
     assurance_response: str                 # "People: Thanks be to God! Amen."
-    default_benediction_fallback: str       # "Halverson"
+    default_benediction_fallback: str       # the full Halverson text (owner, 2026-10-02)
     communion: CommunionOut
     limits: LiturgyLimitsOut
     ai_available: bool                      # openai_client.ai_available(); never why

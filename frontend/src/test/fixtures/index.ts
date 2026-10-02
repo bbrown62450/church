@@ -28,6 +28,7 @@ import type {
 } from "@/lib/api/types";
 import type { Church, Me } from "@/lib/church";
 import { freshDraft, type DraftV1 } from "@/lib/draft/schema";
+import { DEFAULT_BENEDICTION_FALLBACK } from "@/lib/liturgy/defaults";
 import { SECTION_LABELS } from "@/lib/liturgy/sections";
 
 /** Ids that read well in failure output (valid UUIDs, like the API's). */
@@ -81,7 +82,7 @@ export function inviteAccepted(overrides: Partial<InviteAccepted> = {}): InviteA
 
 // --- slice 2b: the church profile, drafts and lectionary answers ------------------
 
-/** `GET /church` for Grace (`ChurchProfileOut`, slices 2a, 3a and 4a): New York, WEB, GG2013, Halverson. */
+/** `GET /church` for Grace (`ChurchProfileOut`, slices 2a, 3a and 4a): New York, WEB, GG2013, the full Halverson benediction. */
 export function churchProfile(overrides: Partial<ChurchProfile> = {}): ChurchProfile {
   return {
     ...church(),
@@ -92,7 +93,7 @@ export function churchProfile(overrides: Partial<ChurchProfile> = {}): ChurchPro
     effective_translation_label: "World English Bible (WEB)",
     default_hymnal: null,
     effective_hymnal: "GG2013",
-    default_benediction: "Halverson",
+    default_benediction: DEFAULT_BENEDICTION_FALLBACK, // what the API resolves an unset or "Halverson" default to
     ...overrides,
   };
 }
@@ -378,7 +379,7 @@ export function liturgyConfig(overrides: Partial<LiturgyConfig> = {}): LiturgyCo
       card("benediction", "Benediction", ["end"]),
     ],
     assurance_response: "People: Thanks be to God! Amen.",
-    default_benediction_fallback: "Halverson",
+    default_benediction_fallback: DEFAULT_BENEDICTION_FALLBACK,
     communion: {
       title: "The Sacrament of the Lord's Supper",
       toggle_label: "Include communion liturgy (The Sacrament of the Lord's Supper)",

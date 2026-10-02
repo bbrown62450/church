@@ -3,8 +3,10 @@
  * integration"; F §4.6 "Defaults apply only while origin is `default`"):
  *
  * - A Benediction card whose origin is "default" shows the church's
- *   `default_benediction` (GET /church; "Halverson" when an older API leaves it
- *   out), including "" (no default: the card is empty).
+ *   `default_benediction` (GET /church; DEFAULT_BENEDICTION_FALLBACK when an
+ *   older API leaves it out), including "" (no default: the card is empty).
+ *   The server resolves a saved shorthand "Halverson" to the full text, so the
+ *   profile's value is used as is.
  * - Communion whose origin is "default" follows the first-Sunday rule for the
  *   draft's date (`isFirstSundayOfMonth`, slice 2's port of
  *   `liturgy_config.is_first_sunday_of_month`, run against
@@ -17,7 +19,14 @@
 import { isFirstSundayOfMonth } from "@/lib/dates";
 import type { DraftV1 } from "@/lib/draft/schema";
 
-export const DEFAULT_BENEDICTION_FALLBACK = "Halverson";
+/** The built-in Benediction (owner, 2026-10-02): the full Halverson text, as
+ * the owner's bulletin prints it. Mirrors liturgy_config.DEFAULT_BENEDICTION_FALLBACK
+ * (GET /liturgy/config's default_benediction_fallback). */
+export const DEFAULT_BENEDICTION_FALLBACK =
+  "\u201cYou go nowhere by accident. Wherever you go, God is sending you. Wherever you are, " +
+  "God has put you there. God has a purpose in your being there. Christ lives in you and has " +
+  "something he wants to do through you where you are. Believe this and go in the grace and " +
+  "love and power of Jesus Christ.\u201d - Richard Halverson";
 
 export type LiturgyDefaults = { defaultBenediction: string };
 

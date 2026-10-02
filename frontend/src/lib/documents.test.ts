@@ -10,6 +10,7 @@ import { addCustomElement, editCardText, setCardEnabled, setCommunion, setSermon
 import { gg2013, testDraft } from "@/test/fixtures";
 
 import { documentRequest, wordSafe } from "./documents";
+import { DEFAULT_BENEDICTION_FALLBACK } from "@/lib/liturgy/defaults";
 
 const OCT_4 = ["Isaiah 5:1-7", "Psalm 80:7-15", "Philippians 3:4b-14", "Matthew 21:33-46"];
 
@@ -40,7 +41,7 @@ describe("documentRequest (slice 5a)", () => {
           closing: null,
         },
         hymnal: null,
-        liturgy: { call_to_worship: "Leader: Come. People: We come.", benediction: "Halverson" },
+        liturgy: { call_to_worship: "Leader: Come. People: We come.", benediction: DEFAULT_BENEDICTION_FALLBACK },
         sermon_title: "Living Water",
         selected_ot_ref: "",
         selected_nt_ref: "Matthew 21:33-46",

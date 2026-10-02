@@ -37,7 +37,7 @@ class ChurchProfileOut(ChurchOut):
     effective_translation_label: str        # its label, for when GET /translations fails
     default_hymnal: Optional[str]           # slice 3: the stored default hymnal (read only), or null
     effective_hymnal: Optional[str]         # slice 3: the hymnal the builder opens; null with no hymns
-    default_benediction: str                # slice 4: the church's default, "Halverson" when unset; "" = none
+    default_benediction: str                # slice 4: the church's default; full Halverson text when unset or "Halverson"; "" = none
 
 
 class MeOut(BaseModel):

@@ -217,7 +217,17 @@ COMMUNION_BLOCKS: tuple[CommunionBlock, ...] = (
     CommunionBlock("blank", ""),
 )
 
-DEFAULT_BENEDICTION_FALLBACK = "Halverson"      # app.py:67 (owner decision 9: the seed)
+# Owner decision 2026-10-02: the built-in Benediction is the full Halverson text,
+# with quotes and attribution as the owner's bulletin prints it (the Streamlit
+# seed, app.py DEFAULT_BENEDICTION, was the shorthand "Halverson"). A saved
+# default that is exactly "Halverson" (trimmed, any case) resolves to it too.
+DEFAULT_BENEDICTION_FALLBACK = (
+    "\u201cYou go nowhere by accident. Wherever you go, God is sending you. Wherever you are, "
+    "God has put you there. God has a purpose in your being there. Christ lives in you and has "
+    "something he wants to do through you where you are. Believe this and go in the grace and "
+    "love and power of Jesus Christ.\u201d - Richard Halverson"
+)
+HALVERSON_SHORTHAND = "halverson"               # compared trimmed and casefolded
 
 
 @dataclass(frozen=True)
@@ -241,6 +251,12 @@ def is_first_sunday_of_month(d: date) -> bool:
 
 def resolve_default_benediction(settings: Optional[Mapping[str, Any]]) -> str:
     """settings["default_benediction"] when it is a string (including "", meaning
-    "no default"); anything else, or no settings, is "Halverson"."""
+    "no default"), except that the shorthand "Halverson" (trimmed, any case: the
+    old seed) is the full Halverson text; anything else, or no settings, is
+    DEFAULT_BENEDICTION_FALLBACK (the full Halverson text)."""
     value = settings.get("default_benediction") if isinstance(settings, Mapping) else None
-    return value if isinstance(value, str) else DEFAULT_BENEDICTION_FALLBACK
+    if not isinstance(value, str):
+        return DEFAULT_BENEDICTION_FALLBACK
+    if value.strip().casefold() == HALVERSON_SHORTHAND:
+        return DEFAULT_BENEDICTION_FALLBACK
+    return value

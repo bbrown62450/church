@@ -36,6 +36,7 @@ import {
 import { renderWithProviders } from "@/test/render";
 
 import { FIX_READINGS, NEEDS_DATE, SAME_AS_BULLETIN } from "./documents-card";
+import { DEFAULT_BENEDICTION_FALLBACK } from "@/lib/liturgy/defaults";
 
 const KEY = draftKey(USER_ID, church().id);
 const NAME = "worship_October_04_2026.docx";
@@ -143,7 +144,7 @@ describe("Review & send: the Word documents (slice 5a-1)", () => {
       service: {
         service_date_iso: "2026-10-04",
         hymns: { opening: { hymn_id: holy.id, title: holy.title, number: holy.number }, response: null, closing: null },
-        liturgy: { call_to_worship: "Leader: Come. People: We come.", benediction: "Halverson" },
+        liturgy: { call_to_worship: "Leader: Come. People: We come.", benediction: DEFAULT_BENEDICTION_FALLBACK },
       },
     });
     expect(revoked).toEqual([]); // kept 5 minutes: revoking at once breaks Safari

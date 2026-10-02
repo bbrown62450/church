@@ -115,8 +115,9 @@ export function churchZone(church: DraftChurch): string | undefined {
  * A fresh draft (F §4.6 "Fresh draft"): dated the next Sunday strictly after
  * today in the church's zone, every field empty, the cards enabled except the
  * Prayers of the People, the benediction card `default`-origin with the
- * church's default benediction ("Halverson" when the profile has none; slice
- * 4b), communion on for a first Sunday, a new save key, on step 1.
+ * church's default benediction (DEFAULT_BENEDICTION_FALLBACK, the full
+ * Halverson text, when the profile has none; slice 4b), communion on for a
+ * first Sunday, a new save key, on step 1.
  */
 export function freshDraft({
   church,
