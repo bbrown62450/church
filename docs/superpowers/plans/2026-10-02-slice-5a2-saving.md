@@ -30,7 +30,7 @@
   `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
 - TDD: write the failing test first and see it fail as quoted.
 - **Backup push after every task** (standing rule): the controller runs `git push origin claude/slice-2-plan-4q33le` after each task's commit (never `--force`; on a network error retry after 2, 4, 8 and 16 s). A fix asked for by a review is a new commit, `Fix: <what> (Task <n> review)`. The container can restart and lose uncommitted work: commit as soon as a task's checks pass.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1263 → 1332 passed, 11 → 16 skipped; frontend 618 → 618 in 81 → 81 files`.
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1263 → 1335 passed, 11 → 16 skipped; frontend 618 → 618 in 81 → 81 files`.
 - New prose for the owner has no em dashes and no flattery. No new user-facing copy in the app (clarification 1); the API's messages are the spec's, listed in clarification 3.
 - No church id, email address, token or database URL in any doc, commit or record.
 - Ask the owner before any push to a PR, PR creation, marking ready, merging, or any production or settings action (the backup run included). Owner steps go one at a time, in plain words.
@@ -51,8 +51,9 @@ As in the 5a-1 plan: **Create `path`:** the block is the whole file; **Append to
   | T5 | +22 (`test_api_services.py`, three tests in 2, 6 and 4 cases) | 1331 passed, 11 skipped | 618 in 81 |
   | T6 | +1 run, +5 skipped (`test_migrations.py` 1; `test_services_postgres.py` 5, Postgres only) | 1332 passed, 16 skipped | 618 in 81 |
   | T7 | 0 (docs) | 1332 passed, 16 skipped | 618 in 81 |
+  | Build review fixes | +3 (`test_usecase_archive.py` 2, `test_api_services.py` 1; owner decision 1, 2026-10-02: Build notes) | 1335 passed, 16 skipped | 618 in 81 |
 
-- CI `backend-postgres` goes from `11 passed, 1263 deselected` to `16 passed, 1332 deselected`. With a local Postgres (`TEST_DATABASE_URL`), the same numbers locally.
+- CI `backend-postgres` goes from `11 passed, 1263 deselected` to `16 passed, 1332 deselected` after T6 and `16 passed, 1335 deselected` after the build review fixes. With a local Postgres (`TEST_DATABASE_URL`), the same numbers locally.
 
 ### Layering and code rules (carried)
 - `usecases/archive.py`, `repos/services.py`, `hymn_usage.py` and `service_output.py` import no FastAPI, Starlette or Streamlit (`test_no_streamlit_in_core.py` gains `repos.services` and `hymn_usage`, T4). The routes are plain `def`, one usecase call each, no SQL and no try/except (F §2.2 rule 1). Usecases own the transactions (`with session_scope() as s:`) and pass `session=s` down (F §2.2 rule 3).
@@ -3066,7 +3067,7 @@ ls backend/migrations/versions | grep -c '^0'
 (cd frontend && NEXT_PUBLIC_SUPABASE_URL=https://ci-placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-placeholder NEXT_PUBLIC_API_URL=http://localhost:8000 npm run build 2>&1 | grep -E "Compiled successfully|Error")
 ```
 
-**Expected:** `1332 passed, 16 skipped in <t>s`; ` Test Files  81 passed (81)` and `      Tests  618 passed (618)` with no `×` or `FAIL` line (one names the failing test: Step 6); `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s` and no `Error` (a font `Failed to fetch` only: say so and rely on CI). With a local, throwaway Postgres also `TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres | tail -1` → `16 passed, 1332 deselected`.
+**Expected:** `1335 passed, 16 skipped in <t>s`; ` Test Files  81 passed (81)` and `      Tests  618 passed (618)` with no `×` or `FAIL` line (one names the failing test: Step 6); `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s` and no `Error` (a font `Failed to fetch` only: say so and rely on CI). With a local, throwaway Postgres also `TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres | tail -1` → `16 passed, 1335 deselected`.
 
 - [ ] **Step 3 (agent): The API files match, the preview, the gates, the paths, the commits**
 
@@ -3110,7 +3111,7 @@ M	docs/superpowers/specs/2026-09-25-slice-5a-documents-archive-design.md
 M	frontend/src/lib/api/openapi.json
 M	frontend/src/lib/api/schema.d.ts
 ```
-`0`; the subjects oldest first: the runbook commit (`Runbook: default Benediction skipped by Review service (PR #42, owner's phone check)`) unless it is on `main`, the plan's (`WIP plan: slice 5a-2` …, `Plan: slice 5a-2, saving backend and migration (owner answers 2026-10-01/02)`, `Plan: slice 5a-2 review fixes (owner answers 2026-10-02)`), then T1-T7's seven subjects as written above, then any `Fix: …` lines; only `trailer check done`.
+`0`; the subjects oldest first: the runbook commit (`Runbook: default Benediction skipped by Review service (PR #42, owner's phone check)`) unless it is on `main`, the plan's (`WIP plan: slice 5a-2` …, `Plan: slice 5a-2, saving backend and migration (owner answers 2026-10-01/02)`, `Plan: slice 5a-2 review fixes (owner answers 2026-10-02)`), then T1-T7's seven subjects as written above, then `Slice 5a-2 build review fixes (owner decision 1)`, `Plan: slice 5a-2 final counts` and any `Fix: …` lines; only `trailer check done`.
 
 - [ ] **Step 4 (agent → OWNER): Ask to open the draft PR**
 
@@ -3121,7 +3122,7 @@ gh pr list -R bbrown62450/church --head claude/slice-2-plan-4q33le --state open 
 
 **Expected:** one `✓ Logged in` line; `[]`. Send the owner exactly this, and wait for a clear yes:
 
-> Slice 5a-2 (saving, on the server side) is verified on this machine: backend 1332 passed, 16 skipped (1263 and 11 before; the 5 new skipped ones are database-concurrency tests that CI runs on Postgres); frontend 618 tests in 81 files, unchanged; typecheck, lint and the production build are clean. It adds the /services routes (save, list, open, save changes, delete) and one database change, migration 0005: two new empty columns and an index. Nothing changes on screen yet; the Save button and the Services page come in 5a-3. Before it merges I will ask you for the backup, the counts and a look at the SQL, one at a time. May I open the pull request as a **draft** titled "Slice 5a-2: saving backend and migration 0005", so the checks run? Merging stays with you.
+> Slice 5a-2 (saving, on the server side) is verified on this machine: backend 1335 passed, 16 skipped (1263 and 11 before; the 5 new skipped ones are database-concurrency tests that CI runs on Postgres); frontend 618 tests in 81 files, unchanged; typecheck, lint and the production build are clean. It adds the /services routes (save, list, open, save changes, delete) and one database change, migration 0005: two new empty columns and an index. Nothing changes on screen yet; the Save button and the Services page come in 5a-3. Before it merges I will ask you for the backup, the counts and a look at the SQL, one at a time. May I open the pull request as a **draft** titled "Slice 5a-2: saving backend and migration 0005", so the checks run? Merging stays with you.
 
 - [ ] **Step 5 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
 
@@ -3137,7 +3138,7 @@ Slice 5a-2: saving on the server, and migration 0005_services_extras (the second
 - repos/services.py for the queries; service_archive.py (Streamlit's) untouched.
 - OpenAPI snapshot and types regenerated; no frontend code changed.
 
-Tests: backend 1263 → 1332 passed, 11 → 16 skipped; frontend 618 → 618 in 81 → 81 files
+Tests: backend 1263 → 1335 passed, 11 → 16 skipped; frontend 618 → 618 in 81 → 81 files
 
 After merge (Task 9): the owner's after-deploy check (one read-only query) and a short phone check, then a "Slice 5a-2 record" in docs/ops-runbook.md.
 
@@ -3151,7 +3152,7 @@ gh pr create -R bbrown62450/church --draft --base main --head claude/slice-2-pla
 gh pr checks <N> -R bbrown62450/church --watch --interval 30
 ```
 
-Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1332 passed, 16 skipped`, backend-postgres `16 passed, 1332 deselected` (after its `alembic upgrade head`, `alembic check`, `downgrade base`, `upgrade head` steps, now through `0005`), frontend `618 passed` in 81 files. Then send: "PR #<N> is green: backend 1332 passed, 16 skipped; the Postgres job ran the migration up, down and up again and passed its 16 tests; 618 frontend tests in 81 files. May I mark it ready for review? Merging stays with you, after the backup, the counts and the SQL check." On the yes: `gh pr ready <N> -R bbrown62450/church`.
+Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1335 passed, 16 skipped`, backend-postgres `16 passed, 1335 deselected` (after its `alembic upgrade head`, `alembic check`, `downgrade base`, `upgrade head` steps, now through `0005`), frontend `618 passed` in 81 files. Then send: "PR #<N> is green: backend 1335 passed, 16 skipped; the Postgres job ran the migration up, down and up again and passed its 16 tests; 618 frontend tests in 81 files. May I mark it ready for review? Merging stays with you, after the backup, the counts and the SQL check." On the yes: `gh pr ready <N> -R bbrown62450/church`.
 
 - [ ] **Step 6: Fix any failure in its owning task**
 
@@ -3168,7 +3169,7 @@ Run the last line with `run_in_background: true`. **Expected:** the PR URL; ever
 
 For each fix: change only the owning task's files; rerun Steps 2-3; commit `Fix: <what> (Task <n>, 5a-2 final verification)` with the trailer; after the PR exists, ask the owner before pushing it.
 
-Expected counts after this task: backend `1332 passed, 16 skipped`; frontend `618 passed` in 81 files.
+Expected counts after this task: backend `1335 passed, 16 skipped`; frontend `618 passed` in 81 files.
 
 ### Task 9: Before the merge (backup, counts, SQL), the merge, the after-deploy checks, the record (OWNER + agent)
 
@@ -3332,7 +3333,7 @@ gh pr checks claude/slice-2-plan-4q33le -R bbrown62450/church --watch
 
 On the owner's yes for each outward command (clarification 18; README "Reverting 5a-2"): a branch `claude/revert-slice-5a2` from `origin/main`; `git revert -m 1 --no-commit <merge sha>`; then put back the schema and its tests from the merge commit, `git checkout <merge sha> -- backend/migrations/versions/0005_services_extras.py backend/db/models.py backend/migrations/README.md backend/tests/test_migrations.py backend/tests/test_schema_check.py backend/tests/test_api_app.py`; a commit "Revert slice 5a-2 (PR #<N>), keeping migration 0005" with the trailer; both suites (`1267 passed, 11 skipped`: the baseline plus T1's three and T6's README test; `618 passed` in 81); a PR, CI, and the merge on the owner's yes; record it in the 5a-2 record. Never `alembic downgrade` production for this: the database stays at `0005_services_extras`, which the older code ignores.
 
-Expected counts after this task: backend `1332 passed, 16 skipped` on `main`; frontend `618 passed` in 81 files. The records PR adds no test.
+Expected counts after this task: backend `1335 passed, 16 skipped` on `main`; frontend `618 passed` in 81 files. The records PR adds no test.
 
 ---
 ## Build notes
@@ -3361,6 +3362,8 @@ Expected counts after this task: backend `1332 passed, 16 skipped` on `main`; fr
 - **`If-Match: *`** (RFC 9110: any current version) saves over whatever is there; the row must still exist (404 first). A list of several values stays a 422 ("If-Match must be the service's saved_at timestamp."). T4 gains `test_if_match_star_saves_over_any_version_and_a_list_is_unreadable`; the API check-order test ends with a `*` PUT.
 - **`ServiceOut.custom_elements` uses `CustomElementOut`** (no input limits, no `extra="forbid"`), so a stored element longer than the input limits opens instead of failing validation on the way out (500). T5 gains `test_a_stored_element_over_the_input_limits_still_opens`. `openapi.json` and `schema.d.ts` regenerated with the commands above (a `CustomElementOut` schema; `ServiceOut` refers to it); typecheck clean.
 - Counts: backend 1332 → **1335 passed, 16 skipped** (+3); Postgres-marked `16 passed, 1335 deselected` (local Postgres 16); frontend 618 in 81 unchanged. The review's "1313 collected" came from its own environment (its per-file counts matched the plan); the full `.venv/bin/python -m pytest -q` in this checkout gives 1332 + 16 before these fixes and 1335 + 16 after.
+
+**Final verification (T8 Steps 1-3, 2026-10-02; no PR, no workflow run).** At `4ff780c` (the build review fixes) on `origin/main` `bdfd422`: `HEAD..origin/main` 0 (no merge needed), the branch pushed (0 ahead of its remote), `runbook commit on main: 1` (so `M docs/ops-runbook.md` rides along: the PR #42 phone-check runbook commit `2cd4b79`), 5 revision files, 4 on `main`. Backend `1335 passed, 16 skipped`; Postgres-marked `16 passed, 1335 deselected` on a throwaway local Postgres 16 (under `/var/lib/postgresql`, stopped and deleted after), and CI's cycle there by hand (`upgrade head`, `check`: `No new upgrade operations detected.`, `downgrade base`, `upgrade head`, `pg_smoke.py`: OK); frontend `618 passed` in 81 files, typecheck 0, lint 0, `✓ Compiled successfully`. Regenerating `openapi.json` and `schema.d.ts` changed nothing; the `--sql` preview is README step 3's eight lines exactly; `imports grep exit 1`; the 27 planned paths plus `docs/ops-runbook.md`; `0` frontend, Streamlit, `env.py`, `service_archive.py` or workflow paths; every commit has the trailer. No secret, real email address or church id in the diff (only `@example.com` test users, fixed test UUIDs, the repo slug); no em dash in new prose for the owner (the one in the diff is the plan's own em-dash check). `streamlit-frozen` untouched.
 
 ## Spec coverage
 
