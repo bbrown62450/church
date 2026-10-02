@@ -96,7 +96,7 @@ The owner's answers win over S and F; the code wins over both where they disagre
 8. **[owner-visible] Stars until PR 2:** the three hymns, both sung responses, the Affirmation of Faith and the Benediction (the sample's); "*Congregation stands if able" ends the service.
 9. **[owner-visible] Fixed texts until PR 2:** the Gloria Patri "Glory be to the Father, and to the Son, and to the Holy Ghost; as it was in the beginning, is now, and ever shall be, world without end. Amen, amen." (the traditional words, as the sample; PR 2 makes them a setting); the Apostles' Creed in its traditional wording, as the sample prints it (public domain). The Doxology prints its title only, as the sample. The sample's offering note and "Please remain seated to the end of the Postlude" are church wording and wait for PR 2's settings.
 10. **[owner-visible] The readings' text** (owner answer 5; S "Scripture text"). The two readings the Word copies print (`resolve_doc_readings`), fetched when the file is built, in the draft's translation when this deployment offers it, else the church's default when offered, else WEB (step 1's rule). The first alternative that comes back prints; verse line breaks become spaces; a blank line starts a paragraph. After the readings: "Scripture readings are from the {label}." (for example "the World English Bible (WEB)"). A reading whose text does not come back prints "[Reading text unavailable]"; the file never fails for it. Readings with more than 20 upstream parts in all are not fetched (both print the placeholder).
-11. **The route** (S API). `POST /documents/printed`, church-scoped (`require_church`; any member), body `PrintedDocumentIn = {format: "pdf" | "docx", translation: string (trimmed, at most 20) | null, service: ServiceDraft}` (`extra="forbid"`), answer 200 with the bytes and `Content-Type: application/pdf` or the Word type, `Content-Disposition: attachment; filename="printed_bulletin_October_04_2026.pdf"; filename*=UTF-8''printed_bulletin_October_04_2026.pdf` (or `.docx`) and `Cache-Control: no-store`. A new route, not a third `variant` on `POST /documents`: its body and answer differ, and `DocumentIn` and its 22 tests stay as they are. No `Idempotency-Key` (a pure render that writes nothing). Errors stay JSON: the hymn 404 and the 422s as `/documents`; 429 `rate_limited` when the `scripture` bucket is empty (one token per upstream part, charged before any fetch, so a 429 fetches nothing; no readings, no charge); 403 for a church that is gone. OpenAPI declares a binary 200 under both types. The client waits up to 30 s (`timeouts.ts`), as for `/scripture/passages`.
+11. **The route** (S API). `POST /documents/printed`, church-scoped (`require_church`; any member), body `PrintedDocumentIn = {format: "pdf" | "docx", translation: string (trimmed, at most 20) | null, service: ServiceDraft}` (`extra="forbid"`), answer 200 with the bytes and `Content-Type: application/pdf` or the Word type, `Content-Disposition: attachment; filename="printed_bulletin_October_04_2026.pdf"; filename*=UTF-8''printed_bulletin_October_04_2026.pdf` (or `.docx`) and `Cache-Control: no-store`. A new route, not a third `variant` on `POST /documents`: its body and answer differ, and `DocumentIn` and its 14 API tests stay as they are. No `Idempotency-Key` (a pure render that writes nothing). Errors stay JSON: the hymn 404 and the 422s as `/documents`; 429 `rate_limited` when the `scripture` bucket is empty (one token per upstream part, charged before any fetch, so a 429 fetches nothing; no readings, no charge); 403 for a church that is gone. OpenAPI declares a binary 200 under both types. The client waits up to 30 s (`timeouts.ts`), as for `/scripture/passages`.
 12. **[owner-visible] Names and dates.** The booklet writes the date as "October 4, 2026" (no leading zero, as the sample's "September 27, 2026"); the Word copies keep "October 04, 2026". The files are `printed_bulletin_October_04_2026.pdf` and `printed_bulletin_October_04_2026.docx` (the Word copies' date form, so they sort together). The PDF's title is "Printed bulletin".
 13. **[owner-visible] Fonts** (S "Fonts"): the PDF uses the standard Times family and Helvetica for the contact lines, not embedded (every viewer and printer has them; no font file in the repo); a character outside Windows-1252 prints as "?" after NFKC (a ligature becomes plain letters). The Word file uses Times New Roman 11 pt (Arial for the contact lines).
 14. **[owner-visible] The Word version** (owner answer 1): the same content in reading order on 7 x 8.5 in pages, 0.5 in margins, each part (cover, service, announcements) starting a page, the leader at a right tab stop, page numbers from the first inside page (none on the cover), the picture's place as a bordered box. It does not set Word's Book fold; to print it as a booklet, use Word's Book fold or the printer's booklet setting (the card points to the PDF for printing).
@@ -138,7 +138,7 @@ The owner's answers win over S and F; the code wins over both where they disagre
 | `docs/manual-verification.md`, `backend/tests/test_slice1_docs.py` | "## Printed bulletin"; the pin | T6 |
 | `docs/ops-runbook.md` | "### Printed bulletin PR 1 record" (the records PR, after the merge) | T8 |
 
-**Counts in the PR:** <<PATHCOUNT>>. **Untouched:** migrations, `db/models.py`, `api/schemas.py`, `service_output.py`, `worship_service.py`, `liturgy_config.py`, `scripture_fetcher.py`, `usecases/passages.py`, `documents-card.tsx`, the draft schema, `app.py`, Streamlit.
+**Counts in the PR:** 26 paths: 9 created (the spec, this plan, and the seven new code and test files above), 17 modified (the 16 above but the runbook, and `docs/ops-runbook.md`, whose 5a-3 record rides along until a records PR merges it). **Untouched:** migrations, `db/models.py`, `api/schemas.py`, `service_output.py`, `worship_service.py`, `liturgy_config.py`, `scripture_fetcher.py`, `usecases/passages.py`, `documents-card.tsx`, the draft schema, `app.py`, Streamlit.
 
 **Task order and review batch:** T1 → T6, each one commit and a backup push; then one review of the whole batch with its fixes as `Fix: …` commits; T7 verifies and opens the draft PR on the owner's yes; T8 merges on the owner's yes, runs the phone check and the print test, and writes the record.
 
@@ -302,9 +302,11 @@ def test_the_cover_and_the_back_page():
 - [ ] **Step 2: See it fail**
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_printed_bulletin.py 2>&1 | tail -3`
-**Expected:**
+**Expected** (`printed_bulletin` does not exist yet: `ModuleNotFoundError` above these lines):
 ```
-<<FAIL_T1>>
+ERROR backend/tests/test_printed_bulletin.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in <t>s
 ```
 
 - [ ] **Step 3: Write `printed_bulletin`**
@@ -825,10 +827,14 @@ def test_the_word_file_is_the_same_booklet_in_reading_order():
 
 - [ ] **Step 3: See them fail**
 
-Run: `.venv/bin/python -m pytest -q backend/tests/test_printed_render.py backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -3`
-**Expected:**
+Run: `.venv/bin/python -m pytest -q backend/tests/test_printed_render.py 2>&1 | tail -3` then `.venv/bin/python -m pytest -q backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -2`
+**Expected** (`printed_pdf` and `printed_docx` do not exist yet):
 ```
-<<FAIL_T2>>
+ERROR backend/tests/test_printed_render.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in <t>s
+FAILED backend/tests/test_no_streamlit_in_core.py::test_usecases_package_imports_no_fastapi_or_streamlit
+1 failed, 2 passed in <t>s
 ```
 
 - [ ] **Step 4: Add the packages, write `printed_pdf` and `printed_docx`**
@@ -1173,7 +1179,7 @@ def render_docx(ps: pb.PrintedService) -> bytes:
 - [ ] **Step 5: See them pass, and the suite**
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_printed_render.py backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`
-**Expected:** `<<PASS_T2>>`; `1353 passed, 16 skipped in <t>s`.
+**Expected:** `8 passed in <t>s`; `1353 passed, 16 skipped in <t>s`.
 
 - [ ] **Step 6: Commit**
 
@@ -1360,9 +1366,11 @@ def test_a_bad_body_is_a_422_naming_the_field(client, church, calls, change, fie
 - [ ] **Step 2: See them fail**
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_api_printed.py 2>&1 | tail -3`
-**Expected:**
+**Expected** (every request is a 404: the route does not exist yet):
 ```
-<<FAIL_T3>>
+FAILED backend/tests/test_api_printed.py::test_a_bad_body_is_a_422_naming_the_field[change2-variant]
+FAILED backend/tests/test_api_printed.py::test_a_bad_body_is_a_422_naming_the_field[change3-service.service_date_iso]
+10 failed in <t>s
 ```
 
 - [ ] **Step 3: The usecase and the route**
@@ -1627,7 +1635,7 @@ def create_printed(payload: PrintedDocumentIn, church: ActiveChurch = Depends(re
 - [ ] **Step 4: Regenerate the API files; see them pass, and the suite**
 
 Run: `.venv/bin/python backend/scripts/export_openapi.py && (cd frontend && npm run gen:api >/dev/null) && git diff --stat -- frontend/src/lib/api` then `grep -c '"#/components/schemas/PrintedDocumentIn"' frontend/src/lib/api/openapi.json` then `.venv/bin/python -m pytest -q backend/tests/test_api_printed.py backend/tests/test_openapi_contract.py backend/tests/test_route_guards.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?")`
-**Expected:** `Wrote …/frontend/src/lib/api/openapi.json`, then `<<OPENAPI_STAT>>`; `1`; `<<PASS_T3>>`; `1363 passed, 16 skipped in <t>s`; `typecheck 0`.
+**Expected:** `Wrote …/frontend/src/lib/api/openapi.json`, then ` frontend/src/lib/api/openapi.json | 164 +++…`, ` frontend/src/lib/api/schema.d.ts  | 113 +++…`, ` 2 files changed, 277 insertions(+)`; `1`; `18 passed in <t>s`; `1363 passed, 16 skipped in <t>s`; `typecheck 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -1734,9 +1742,12 @@ describe("savedCopyFingerprint (5a-3 build review M2)", () => {
 - [ ] **Step 2: See them fail**
 
 Run: `(cd frontend && npx vitest run src/lib/download.test.ts src/lib/documents.test.ts 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
-**Expected:**
+**Expected** (the two new helpers are not exported yet):
 ```
-<<FAIL_T4>>
+   × printedFilename (printed bulletin PR 1) > names the printed bulletin as the server does (printed_bulletin.printed_filename) <t>ms
+   × printedRequest (printed bulletin PR 1) > sends the format, the draft's translation (null: the church's) and the service the Word copies send <t>ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  2 failed | 7 passed (9)
 ```
 
 - [ ] **Step 3: Write the helpers and the mutation**
@@ -1905,7 +1916,7 @@ export function useDownloadPrinted(format: PrintedFormat) {
 - [ ] **Step 4: See them pass, the suite, types and lint**
 
 Run: `(cd frontend && npx vitest run src/lib/download.test.ts src/lib/documents.test.ts 2>&1 | grep -E "^ +× |\[ src/|Tests ")` then the suite, then typecheck and lint.
-**Expected:** `      Tests  <<PASS_T4>> passed (<<PASS_T4>>)`; ` Test Files  83 passed (83)` and `      Tests  657 passed (657)`; `typecheck 0`, `lint 0`.
+**Expected:** `      Tests  9 passed (9)`; ` Test Files  83 passed (83)` and `      Tests  657 passed (657)`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -2061,9 +2072,10 @@ describe("Review & send: the printed bulletin (printed bulletin PR 1)", () => {
 - [ ] **Step 2: See them fail**
 
 Run: `(cd frontend && npx vitest run src/components/builder/review/review-send-step.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
-**Expected:**
+**Expected** (the file cannot load: `./printed-card` does not exist yet):
 ```
-<<FAIL_T5>>
+ FAIL  |dom| src/components/builder/review/review-send-step.test.tsx [ src/components/builder/review/review-send-step.test.tsx ]
+      Tests  no tests
 ```
 
 - [ ] **Step 3: Write the card and add it to the step**
@@ -2215,7 +2227,7 @@ import { PrintedCard } from "./printed-card";
 - [ ] **Step 4: See them pass (three runs), the suite, types and lint**
 
 Run: `for i in 1 2 3; do (cd frontend && npx vitest run src/components/builder/review/review-send-step.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests "); done` then the suite, then typecheck and lint, then `grep -rn "dangerouslySetInnerHTML" frontend/src --include=*.tsx; echo "raw html grep exit $?"`.
-**Expected:** three times `      Tests  <<PASS_T5>> passed (<<PASS_T5>>)`; ` Test Files  83 passed (83)` and `      Tests  660 passed (660)`; `typecheck 0`, `lint 0`; `raw html grep exit 1`.
+**Expected:** three times `      Tests  21 passed (21)`; ` Test Files  83 passed (83)` and `      Tests  660 passed (660)`; `typecheck 0`, `lint 0`; `raw html grep exit 1`.
 
 - [ ] **Step 5: Commit**
 
@@ -2292,7 +2304,7 @@ file and the paper show, never an email address or a church id.
 - [ ] **Step 2: Check the docs**
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_slice1_docs.py backend/tests/test_docs.py backend/tests/test_ops_workflows.py 2>&1 | tail -1` then `grep -n '\[owner' docs/ops-runbook.md | grep -v 'An entry marked' | wc -l` then `git diff -U0 docs/manual-verification.md | grep '^+' | grep -c '—'` then `git diff --stat`
-**Expected:** `89 passed in <t>s`; `4`; `0`; `<<T6_STAT>>`.
+**Expected:** `89 passed in <t>s`; `4`; `0`; ` backend/tests/test_slice1_docs.py |  7 ++++---`, ` docs/manual-verification.md       | 19 +++++++++++++++++++`, ` 2 files changed, 23 insertions(+), 3 deletions(-)`.
 
 - [ ] **Step 3: Commit**
 
@@ -2358,7 +2370,32 @@ for c in $(git rev-list origin/main..HEAD); do git show -s --format=%B "$c" | gr
 
 **Expected:** nothing from `git status` (the committed snapshot and types are current); `imports grep exit 1`; `raw html grep exit 1`; exactly these paths (without `M docs/ops-runbook.md` when Step 1 printed `0`):
 ```
-<<PATHS>>
+M	backend/api/routes/documents.py
+A	backend/printed_bulletin.py
+A	backend/printed_docx.py
+A	backend/printed_pdf.py
+M	backend/requirements.txt
+A	backend/tests/test_api_printed.py
+M	backend/tests/test_no_streamlit_in_core.py
+A	backend/tests/test_printed_bulletin.py
+A	backend/tests/test_printed_render.py
+M	backend/tests/test_slice1_docs.py
+M	backend/usecases/documents.py
+M	docs/manual-verification.md
+M	docs/ops-runbook.md
+A	docs/superpowers/plans/2026-10-02-printed-bulletin-1.md
+A	docs/superpowers/specs/2026-10-02-printed-bulletin-design.md
+A	frontend/src/components/builder/review/printed-card.tsx
+M	frontend/src/components/builder/review/review-send-step.test.tsx
+M	frontend/src/components/builder/review/review-send-step.tsx
+M	frontend/src/lib/api/openapi.json
+M	frontend/src/lib/api/schema.d.ts
+M	frontend/src/lib/api/timeouts.ts
+M	frontend/src/lib/documents.test.ts
+M	frontend/src/lib/documents.ts
+M	frontend/src/lib/download.test.ts
+M	frontend/src/lib/download.ts
+M	frontend/src/lib/queries/documents.ts
 ```
 `0`; the subjects oldest first: `Runbook: slice 5a-3 record (merged; owner's five-step phone check)` (when it rides along), the spec and plan commits (`WIP spec/plan: printed bulletin` …, `Spec: printed bulletin (owner answers 2026-10-02)`, `Plan: printed bulletin PR 1 (owner answers 2026-10-02)`), then T1-T6's six subjects as written above, then any `Fix: …` lines; only `trailer check done`.
 
@@ -2553,7 +2590,19 @@ Expected counts after this task: backend `1363 passed, 16 skipped` on `main`; fr
 ---
 ## Build notes
 
-<<BUILDNOTES>>
+**How this plan was written (2026-10-02).** reportlab 5.0.1 and pypdf 6.19.0 were installed from PyPI into the repo's `.venv` (both `py3-none-any` wheels; reportlab pulled Pillow 12.3.0, already present, and charset-normalizer). Each task's code was built and run in a throwaway worktree of `0b7f5e2` (the repo's `.venv`, a symlink to `frontend/node_modules`); the directives were then generated from that worktree against `0b7f5e2` (a new file as **Create**, an addition at the end of a file as **Append**, every other change as **In … replace** with just enough context to occur once in the file as it stands at that point) and replayed onto a fresh worktree of the branch head by `ap2.py` (each task's test step and code step by their line ranges), running that task's commands. While building:
+- **Two passes, then imposition.** reportlab cannot read a PDF back, so `render_pdf` renders the reading-order booklet once to count its pages (the back page's number depends on the padding), renders again with that number, and pypdf places the pages two to a legal sheet with `merge_transformed_page`. Rendering both passes and imposing takes about 0.3 s for the sample.
+- **Page numbers come first in the text.** The page number is drawn by the page template before the page's content, so pypdf reads each half as "<number> <text>"; the render test reads each side's text from its start (`"1 THE SERVICE FOR THE LORD'S DAY …"`).
+- **The leader's column is a one-row table** (`Table` with zero padding, the element's paragraph and a right-aligned paragraph), which keeps the two baselines together and wraps a long label under itself; `keepWithNext` keeps an element's heading with its first line.
+- **The readings' parts are cased as written** ("Isaiah 5:1-7"): `fetch_part` lowercases only its cache key, so the API test's fake matches the case sent.
+- **The church's name is read in the hymns' session** (`repos.churches.get_church`), and a church gone between the guard and the read is the guard's 403, as `usecases.church_profile` does.
+- **LibreOffice cannot open a `.docx` in this container** (any file, 5a-1's sample included: "source file could not be loaded"), so the Word file was checked by reading it back with python-docx (page size, margins, page breaks, tab stops, bold People lines, the PAGE field), not by rendering it. T8's step 3 opens it on the owner's phone.
+- **The sample booklet.** A service shaped like the owner's sample (the same order, hymns, sermon title and lengths of prayers and readings, all names replaced by placeholders and "Example Church") renders as five booklet pages padded to eight on two sheets, as S expects; the sides were rendered to images with PyMuPDF (outside the repo) and compared with the sample's pages: same order, headings, bold and italic, right-aligned leaders, and similar density per page.
+
+**Replay of the finished plan (2026-10-02).** The directives of T1-T6 were applied in order onto a fresh detached worktree of the branch head (`0b7f5e2` plus the spec and plan commits), running each step's commands:
+- All 40 directives applied (T1 1 + 1, T2 2 + 3, T3 1 + 12, T4 5 + 10, T5 4 + 4, T6 3); every Replace anchor occurred exactly once, and every Append landed on the file as the task before left it. After T6, `backend`, `frontend/src` and `docs/manual-verification.md` equaled the build worktree's (`diff -r`: empty).
+- Every "see it fail" output matched as quoted, and every count matched the table: backend 1348, 1353, 1363 (16 skipped); T2's files `8 passed`, T3's `18 passed`; frontend 657 then 660 in 83; T4's files `9 passed`, T5's `21 passed` three times; typecheck 0 and lint 0 after T3-T5; the OpenAPI export and `gen:api` gave `2 files changed, 277 insertions(+)` and `1`; T6 `89 passed`, `4`, `0`, `2 files changed, 23 insertions(+), 3 deletions(-)`; no raw HTML; the imports grep exit 1; the 26 paths of T7 Step 3 exactly; no migration, workflow, package or Streamlit path. The production build (`npm run build` with a hard-linked copy of `node_modules`) `✓ Compiled successfully`. T7 Step 2's sample snippet wrote both files. No flaky run.
+- Not run while planning: the pushes, the PR and CI (CI installs the two packages from `requirements-dev.txt`), the merge, Railway's deploy, the owner's phone check and the print test.
 
 ## Spec coverage
 
