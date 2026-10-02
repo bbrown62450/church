@@ -428,3 +428,102 @@ Server major recorded for slice 1a: 17 (`server_version` 17.6 on 2026-09-25,
   on `main` through a PR (the owner's yes). The schema stays at
   `0004_invites_reusable`; every 1a change is expand-only, so the older code
   runs on it.
+
+## Before 0005_services_extras (slice 5a-2)
+
+Railway's Pre-deploy Command (`alembic upgrade head`) applies
+`0005_services_extras` when the slice 5a-2 PR merges. First, as the owner
+decided on 2026-10-01: a backup, read-only counts of the saved services, and
+a look at the SQL. No Streamlit check (Streamlit is retired). Nothing here
+changes data. The agent guides the owner one step at a time and records the
+results in `docs/ops-runbook.md` → "Slice 5a-2 record", never with an email
+address, a church id or a database URL.
+
+### Step 1: Backup
+
+Actions → db-backup → Run workflow (branch `main`), or
+`gh workflow run db-backup --ref main`. It must finish green with an
+artifact `db-backup`. Record the run URL.
+
+### Step 2: Count the saved services (read-only)
+
+Supabase → the project → SQL Editor → New query. Paste this and Run:
+
+```sql
+-- Read-only: what the archive holds before 0005. Changes nothing.
+SELECT (SELECT version_num FROM alembic_version) AS version,
+       count(*) AS services,
+       count(*) FILTER (WHERE coalesce(substr(service_date_iso, 1, 10), '')
+                              !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$') AS undated,
+       count(*) FILTER (WHERE CASE WHEN json_typeof(hymns::json) = 'array'
+                                   THEN json_array_length(hymns::json) = 0
+                                        OR EXISTS (SELECT 1 FROM json_array_elements(hymns::json) AS e
+                                                   WHERE json_typeof(e) <> 'object' OR e ->> 'slot' IS NULL)
+                                   ELSE true END) AS old_style_hymn_lists
+FROM services;
+```
+
+One row. Expected before the merge: `version` is `0004_invites_reusable`
+(anything else: stop); `services` is the number of saved services in all
+churches; `undated` is how many have no readable date (the list shows them
+last); it counts unreadable date patterns only (no `YYYY-MM-DD` at the
+start), so an impossible date such as `2026-02-30` is not in it, although
+the app reads it as undated. `old_style_hymn_lists` normally equals
+`services`, because every service so far was saved by Streamlit, whose hymn
+lists have no slots (they are read by position); a smaller number is not a
+stop: tell the agent, who records it.
+
+### Step 3: Read the SQL the upgrade will run
+
+The agent renders it from the PR's code without connecting to any database
+(from `backend/`):
+
+```bash
+DATABASE_URL=postgresql://preview@localhost:1/preview ../.venv/bin/alembic upgrade 0004_invites_reusable:0005_services_extras --sql 2>/dev/null | grep -v -e '^--' -e '^$'
+```
+
+Expected, exactly (`backend/tests/test_migrations.py` pins it):
+
+```
+BEGIN;
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '60s';
+ALTER TABLE services ADD COLUMN custom_elements JSON;
+ALTER TABLE services ADD COLUMN hymnal VARCHAR;
+CREATE INDEX ix_services_church_date ON services (church_id, service_date_iso);
+UPDATE alembic_version SET version_num='0005_services_extras' WHERE alembic_version.version_num = '0004_invites_reusable';
+COMMIT;
+```
+
+Two new empty columns and one index, in one transaction: no row is copied,
+changed or deleted. If another connection holds a lock on `services` for
+more than 5 s, the deploy fails and the previous release keeps serving; run
+the deploy again.
+
+### Step 4: After the deploy (read-only)
+
+SQL Editor:
+
+```sql
+-- Read-only: is 0005 applied? Changes nothing.
+SELECT (SELECT version_num FROM alembic_version) AS version,
+       (SELECT count(*) FROM information_schema.columns
+         WHERE table_schema = 'public' AND table_name = 'services'
+           AND column_name IN ('custom_elements', 'hymnal')) AS new_columns,
+       (SELECT count(*) FROM pg_indexes
+         WHERE schemaname = 'public' AND indexname = 'ix_services_church_date') AS new_index;
+```
+
+Expected: `0005_services_extras`, `2`, `1`. Then step 2's query again: the
+same `services`, `undated` and `old_style_hymn_lists` (no row changed; the
+app cannot save a service until 5a-3).
+
+### Reverting 5a-2
+
+The schema stays at `0005_services_extras`: its columns are nullable and the
+code before 5a-2 ignores them. Revert the merge commit, then restore
+`backend/migrations/versions/0005_services_extras.py` and the two `Service`
+columns and the index in `backend/db/models.py` from the merge commit in the
+same PR, so Railway's `alembic upgrade head` still finds the database at
+head and `alembic check` stays clean. Never `alembic downgrade` production
+for this.

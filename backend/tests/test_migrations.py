@@ -756,3 +756,13 @@ def test_offline_sql_for_0005_is_two_column_adds_and_one_index_under_the_timeout
     command.upgrade(cfg, "0004_invites_reusable:0005_services_extras", sql=True)
     lines = [line for line in buffer.getvalue().splitlines() if line.strip() and not line.startswith("--")]
     assert lines == PREVIEW_0005
+
+
+def test_the_readme_shows_the_0005_preview_exactly():
+    """The owner reads backend/migrations/README.md → "Before 0005_services_extras",
+    step 3, against the agent's rendering; both must be PREVIEW_0005."""
+    readme = (Path(__file__).resolve().parents[1] / "migrations" / "README.md").read_text(encoding="utf-8")
+    section = readme.split("\n## Before 0005_services_extras (slice 5a-2)\n", 1)[1]
+    step = section.split("\n### Step 3: Read the SQL the upgrade will run\n", 1)[1].split("\n### ", 1)[0]
+    block = "BEGIN;" + step.split("\n```\nBEGIN;", 1)[1].split("\n```", 1)[0]   # the bare fence
+    assert block.splitlines() == PREVIEW_0005
