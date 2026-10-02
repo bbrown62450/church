@@ -266,3 +266,15 @@ as before; the results go into `docs/ops-runbook.md` → "Slice 5a-2 record".
 - [ ] (owner, before the 5a-2 merge) **9.** A green `db-backup` run; the read-only counts (version `0004_invites_reusable`, saved services, undated, old-style hymn lists); the SQL preview read: two `ADD COLUMN` lines and one `CREATE INDEX` between `BEGIN;` and `COMMIT;`, under the 5 s lock timeout.
 - [ ] (owner, after 5a-2) **10.** The after-deploy query shows `0005_services_extras`, `2`, `1`, and the counts are unchanged.
 - [ ] (owner, after 5a-2) **11.** On the phone the builder works as before: **2 Hymns** lists the hymnal, and **4 Review & send** still downloads the bulletin copy. Nothing new shows; "Saving services to the archive is coming soon." is still there.
+
+Slice 5a-3 adds the Save card on **4 Review & send** and the **Services**
+page. The owner's guided check after the merge (five steps on the phone)
+covers the items marked "(owner, after 5a-3)"; its result goes into
+`docs/ops-runbook.md` → "Slice 5a-3 record".
+
+- [ ] (owner, after 5a-3) **12.** On **4 Review & send**, tap **Save to archive**: "Service saved", and the card says "Saved to the archive · {date and time}". **Services** in the menu lists the service at its date, with "Editing". After an edit the card says "Unsaved changes · last saved …" and the button "Save changes"; saving again says "Saved to the archive" with the new time.
+- [ ] (owner, after 5a-3) **13.** **Start a new service**, date it a week after the saved service (a service's own date is never marked), then on **2 Hymns**: the saved service's hymns are marked as recently used.
+- [ ] (owner, after 5a-3) **14.** On **Services**, open the saved service (after "Replace your unsaved draft?" if the draft has changes): Review shows "You're editing the saved service for {date}. …"; step 1 shows the saved occasion and readings, with no "Readings for … are available". Change the date: the button reads "Save as new service" and says why.
+- [ ] (owner, after 5a-3) **15.** Save that copy, then delete it from **Services** ("Delete this service?", "Delete service"): it leaves the list, and if it was the one being edited the draft starts fresh.
+- [ ] (owner, after 5a-3) **16.** At 375 px: no sideways scroll on **Review & send** or **Services**; the buttons and rows are easy to tap.
+- [ ] **17.** In a second browser with the same service open, save it in one, then "Save changes" in the other: "Someone else changed this service"; "Reload their version" and "Save mine as a new service" both work.
