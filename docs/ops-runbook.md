@@ -506,6 +506,10 @@ address or church id is recorded here.
 | 4. Layout | The step fits the phone with no sideways scrolling; the buttons are full width and easy to tap; the archive note showed. The comparison with an old Streamlit file was not done (owner: not needed) | 2026-10-02 |
 | Follow-ups | Next: a small change so Review service leaves out a Benediction that follows the church default (owner, 2026-10-02). Then 5a-2 (saving, migration `0005_services_extras`; deleting a service recalculates hymn use, Streamlit retired), 5a-3 (Save card, Services page), the printed bulletin (`docs/superpowers/specs/2026-10-02-printed-bulletin-idea.md`), Voices of the Church, 6a. Hymn use is not recorded until 5a-3's Save. Still open: the screen-reader copy for "Revise the other prayers", first-line matching research (Hymnary.org), the NUL-character 500 outside `/documents`, and the two slice 1 test churches (kept for now, owner) | 2026-10-02 |
 
+### Review service: default Benediction skipped (record)
+
+PR #42 merged 2026-10-02 13:48 UTC (merge commit `bdfd422`): "Review service" leaves out a Benediction that follows the church default (owner, 2026-10-02). No backend, API or database change. Owner's phone check (2026-10-02): after a review, the default Benediction had no notes and no "Looks good."; the other cards got their notes.
+
 ## Backups
 
 - **Workflow:** `.github/workflows/backup.yml` (`db-backup`). Daily at 08:37 UTC,

@@ -256,3 +256,13 @@ or a church id.
 - [ ] **6.** Clear the service date: both download buttons are off with "Choose a service date on step 1 to download."
 - [ ] (owner, after 5a-1) **7.** At 375 px: no sideways scroll on **Review & send**; the download buttons are full width and at least 44 px tall.
 - [ ] **8.** Switch church: a download uses that church's draft.
+
+Slice 5a-2 (saving on the server and `0005_services_extras`) changes nothing
+on screen; saving from the app comes with 5a-3. Its items are the owner's
+production steps around the merge (`backend/migrations/README.md` →
+"Before 0005_services_extras") and a short phone check that the builder works
+as before; the results go into `docs/ops-runbook.md` → "Slice 5a-2 record".
+
+- [ ] (owner, before the 5a-2 merge) **9.** A green `db-backup` run; the read-only counts (version `0004_invites_reusable`, saved services, undated, old-style hymn lists); the SQL preview read: two `ADD COLUMN` lines and one `CREATE INDEX` between `BEGIN;` and `COMMIT;`, under the 5 s lock timeout.
+- [ ] (owner, after 5a-2) **10.** The after-deploy query shows `0005_services_extras`, `2`, `1`, and the counts are unchanged.
+- [ ] (owner, after 5a-2) **11.** On the phone the builder works as before: **2 Hymns** lists the hymnal, and **4 Review & send** still downloads the bulletin copy. Nothing new shows; "Saving services to the archive is coming soon." is still there.

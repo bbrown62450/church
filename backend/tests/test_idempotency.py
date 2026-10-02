@@ -182,6 +182,23 @@ def test_keys_are_scoped_per_route_and_method():
     assert len(store) == 3
 
 
+def test_keys_are_scoped_per_church():
+    """F §1.6 church-scope amendment (2026-09-28): a church-scoped route passes its
+    church, so the same user and key in another church runs the call again."""
+    church_a, church_b = uuid.UUID(int=10), uuid.UUID(int=11)
+    store, calls = IdempotencyStore(), []
+    first = _direct(store, calls, church_id=church_a)
+    other_church = _direct(store, calls, church_id=church_b)
+    user_scoped = _direct(store, calls)                                # church_id None: POST /churches
+    replay = _direct(store, calls, church_id=church_a)
+    assert len(calls) == 3
+    assert REPLAYED_HEADER.lower() not in first.headers
+    assert REPLAYED_HEADER.lower() not in other_church.headers
+    assert REPLAYED_HEADER.lower() not in user_scoped.headers
+    assert replay.headers[REPLAYED_HEADER] == "true"
+    assert len(store) == 3
+
+
 def test_concurrent_same_key_requests_run_the_call_once():
     store, calls, responses = IdempotencyStore(), [], []
     barrier = threading.Barrier(2)

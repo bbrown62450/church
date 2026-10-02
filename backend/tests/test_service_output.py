@@ -67,3 +67,56 @@ def test_legacy_error_placeholders():
         assert so.is_legacy_error_placeholder(text), text
     for text in ("[Sermon title]", "Error generating", "[Error generating call_to_worship", ""):
         assert not so.is_legacy_error_placeholder(text), text
+
+
+# --- slice 5a-2: stored dates and hymns (5a spec, "Normalizing stored data") ---
+
+def test_normalize_date_iso_keeps_a_real_date_and_recovers_a_time_part():
+    assert so.normalize_date_iso("2026-10-04") == "2026-10-04"
+    assert so.normalize_date_iso("2026-10-04T00:00:00.000Z") == "2026-10-04"     # Notion-era
+    for raw in ("", None, "October 4", "2026-02-30", "2026-13-01", "26-10-04", "２０２６-10-04", 20261004, " 2026-10-04"):
+        assert so.normalize_date_iso(raw) is None, raw
+
+
+def test_coerce_number():
+    assert [so.coerce_number(v) for v in (138, "138", " 12 ", 7.0, 0)] == [138, 138, 12, 7, 0]
+    assert [so.coerce_number(v) for v in (None, True, "12a", "", 7.5, "²", [1])] == [None] * 7
+
+
+def test_stored_hymn_entries_never_raise_and_keep_every_entry():
+    assert so.stored_hymn_entries("Holy") == [] and so.stored_hymn_entries({"title": "x"}) == []
+    assert so.stored_hymn_entries(None) == []
+    entries = so.stored_hymn_entries([
+        None, 42, {"title": 7}, {"title": "  "},
+        {"title": " Holy, Holy, Holy ", "number": "138", "slot": "closing", "hymn_id": "abc", "hymnal": "GG2013"},
+        {"title": "Fourth", "number": None, "slot": "bogus", "hymn_id": 5, "hymnal": " "},
+    ])
+    assert entries[:4] == [None, None, None, None]
+    assert entries[4] == so.StoredHymn("closing", "Holy, Holy, Holy", 138, "abc", "GG2013")
+    assert entries[5] == so.StoredHymn(None, "Fourth", None, None, None)
+
+
+def test_slot_map_by_slot_or_by_position():
+    react = so.stored_hymns({"opening": None, "response": so.ResolvedHymn("B", 2), "closing": so.ResolvedHymn("C", None)})
+    by_slot = so.slot_map(react)
+    assert by_slot["opening"] is None
+    assert (by_slot["response"].title, by_slot["closing"].title) == ("B", "C")
+    # Streamlit's compacted list: by position, a 4th entry ignored.
+    legacy = so.slot_map([{"title": "A", "number": 1}, {"title": "B"}, {"title": "C"}, {"title": "D"}])
+    assert [legacy[s].title for s in so.SLOTS] == ["A", "B", "C"]
+    # One entry without a slot makes the whole list positional.
+    mixed = so.slot_map([{"slot": "closing", "title": "C"}, {"title": "A"}])
+    assert (mixed["opening"].title, mixed["response"].title, mixed["closing"]) == ("C", "A", None)
+    assert so.slot_map([]) == so.slot_map("x") == {"opening": None, "response": None, "closing": None}
+
+
+def test_stored_hymns_writes_three_slot_entries_never_null_titles():
+    import uuid
+
+    hymn_id = "3f0c1b9e-0000-4000-8000-000000000001"
+    assert so.stored_hymns({"opening": so.ResolvedHymn("Holy, Holy, Holy", 138, uuid.UUID(hymn_id), "GG2013"),
+                            "closing": so.ResolvedHymn("Old Favorite", 12, None, "PH1990")}) == [
+        {"slot": "opening", "title": "Holy, Holy, Holy", "number": 138, "hymn_id": hymn_id, "hymnal": "GG2013"},
+        {"slot": "response", "title": "", "number": None, "hymn_id": None, "hymnal": None},
+        {"slot": "closing", "title": "Old Favorite", "number": 12, "hymn_id": None, "hymnal": "PH1990"},
+    ]

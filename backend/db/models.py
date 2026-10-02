@@ -172,9 +172,17 @@ class Service(Base):
     selected_nt_ref = Column(String)
     include_communion = Column(Boolean, nullable=False, default=False)
     saved_at = Column(DateTime(timezone=True), nullable=False, default=_utcnow)
+    # Revision 0005_services_extras (slice 5a-2). NULL means "not recorded": a
+    # service saved before 5a-2 (by Streamlit) has neither, and the API reads
+    # them as no custom elements ([]) and no hymnal (null).
+    custom_elements = Column(JSON, nullable=True)   # [{label, text, insert_after}]
+    hymnal = Column(String, nullable=True)          # the hymnal the hymns came from
 
     __table_args__ = (
         Index("ix_services_church_saved_at", "church_id", "saved_at"),
+        # One church's services, for the archive list and the hymn-use rebuild (5a-2):
+        # its church_id prefix; the list sorts on an expression of the date.
+        Index("ix_services_church_date", "church_id", "service_date_iso"),
     )
 
 

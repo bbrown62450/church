@@ -273,6 +273,16 @@ class CustomElementIn(BaseModel):
     insert_after: Placement
 
 
+class CustomElementOut(BaseModel):
+    """A custom element as a saved service returns it. No input limits or
+    extra="forbid": a stored row is shown as read (the usecase normalizes it),
+    never rejected on the way out."""
+
+    label: str
+    text: str
+    insert_after: Placement
+
+
 class ServiceDraft(BaseModel):
     """One service (inventory §2.1 plus hymnal, F §1.3). The limits are slice
     4's (GenerateLiturgyIn, liturgy_config.LIMITS); HymnRef, SlotHymns and
@@ -311,3 +321,70 @@ class ServiceDraft(BaseModel):
             selected_ot_ref=self.selected_ot_ref, selected_nt_ref=self.selected_nt_ref,
             include_communion=self.include_communion,
             custom_elements=tuple(CustomElement(e.label, e.text, e.insert_after) for e in self.custom_elements))
+
+
+# --- slice 5a-2: the archive (5a spec, "Schemas"; GET/POST/PUT/DELETE /services) ---
+
+class DeletedOut(BaseModel):
+    """DELETE /services/{id}; 6a and 6b reuse it for their deletes."""
+
+    deleted: Literal[True] = True
+
+
+class AuthorOut(BaseModel):
+    """Who first saved a service: the member's name, else their email (owner decision 5)."""
+
+    id: uuid.UUID
+    name: str
+
+
+class ArchivedHymn(BaseModel):
+    """A saved slot's hymn. in_hymnal: the hymn is in the church's hymnal now
+    (by its id, else by title and number), with its current title, number and
+    hymnal; otherwise the stored snapshot, hymn_id null."""
+
+    hymn_id: Optional[uuid.UUID]
+    title: str
+    number: Optional[int]
+    hymnal: Optional[str]
+    in_hymnal: bool
+
+
+class ArchivedHymns(BaseModel):
+    """The three slots of a saved service, each always present (null = empty)."""
+
+    opening: Optional[ArchivedHymn]
+    response: Optional[ArchivedHymn]
+    closing: Optional[ArchivedHymn]
+
+
+class ServiceOut(BaseModel):
+    """A saved service as the builder opens it (GET, POST and PUT /services)."""
+
+    id: uuid.UUID
+    service_date_iso: Optional[str]     # YYYY-MM-DD; null for an undated legacy row
+    service_date: str                   # the stored display date ("October 04, 2026")
+    occasion: str
+    scriptures: list[str]
+    hymns: ArchivedHymns
+    hymnal: Optional[str]
+    liturgy: dict[SectionKey, str]
+    sermon_title: str
+    selected_ot_ref: str
+    selected_nt_ref: str
+    include_communion: bool
+    custom_elements: list[CustomElementOut]
+    created_by: Optional[AuthorOut]     # null when the author's account was removed
+    saved_at: str                       # ISO 8601 with "+00:00"; send it back as If-Match
+
+
+class ServiceSummary(BaseModel):
+    """One row of GET /services."""
+
+    id: uuid.UUID
+    service_date_iso: Optional[str]
+    service_date: str
+    occasion: str
+    sermon_title: str
+    saved_at: str
+    created_by: Optional[AuthorOut]
