@@ -91,7 +91,7 @@ afterEach(() => {
 });
 
 describe("builder shell (F §4.7)", () => {
-  it("renders each step route inside the shell: progress, the step or its placeholder card, and the footer links", async () => {
+  it("renders each step route inside the shell: progress, the step, and the footer links", async () => {
     const cases: [string, ReactElement, number, string, string[]][] = [
       ["/builder/readings", <ReadingsStepPage key="r" />, 1, "Date & readings", ["Next: Hymns"]],
       ["/builder/hymns", <HymnsStepPage key="h" />, 2, "Hymns", ["Back", "Next: Liturgy"]],
@@ -132,9 +132,10 @@ describe("builder shell (F §4.7)", () => {
         expect(await within(card).findByRole("textbox", { name: "Sermon title" })).toBeInTheDocument();
         expect(within(card).queryByRole("heading", { name: "Available soon" })).toBeNull();
       } else {
-        expect(within(card).getByRole("heading", { name: "Available soon" })).toBeInTheDocument();
-        expect(within(card).getByText("Keep using the current app for this part.")).toBeInTheDocument();
-        expect(within(card).queryByRole("link")).toBeNull(); // no link to the old app (owner answer Q2)
+        // Review & send is the real step from slice 5a-1: Still needed, the Word documents, the archive note.
+        expect(within(card).getByRole("heading", { name: "Word documents" })).toBeInTheDocument();
+        expect(within(card).getByRole("button", { name: "Download bulletin copy" })).toBeEnabled();
+        expect(within(card).queryByRole("heading", { name: "Available soon" })).toBeNull();
       }
 
       const links = within(screen.getByRole("navigation", { name: "Step navigation" })).getAllByRole("link");

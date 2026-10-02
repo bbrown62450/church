@@ -1,0 +1,122 @@
+"use client";
+
+import { DownloadIcon } from "lucide-react";
+import { toast } from "sonner";
+
+import { PendingButton } from "@/components/app/pending-button";
+import { useStillWorking } from "@/components/builder/liturgy/use-still-working";
+import { errorToastMessage, isNoChurchAccess } from "@/lib/api/errors";
+import { useDraft } from "@/lib/draft/context";
+import type { DraftV1 } from "@/lib/draft/schema";
+import { hasServiceDate } from "@/lib/draft/status";
+import type { DocumentVariant } from "@/lib/download";
+import { useDownloadDocument } from "@/lib/queries/documents";
+
+type Copy = { variant: DocumentVariant; title: string; description: string; action: string };
+
+const COPIES: readonly Copy[] = [
+  {
+    variant: "bulletin",
+    title: "Bulletin copy",
+    description: "The order of worship with hymns, readings and the sermon title. Leaves out Prayers of the People.",
+    action: "Download bulletin copy",
+  },
+  {
+    variant: "pastor",
+    title: "Pastor's copy",
+    description: "Everything in the bulletin copy, plus Prayers of the People.",
+    action: "Download pastor's copy",
+  },
+];
+
+export const SAME_AS_BULLETIN = "Same as the bulletin copy for this service. Prayers of the People is empty or turned off.";
+export const NEEDS_DATE = "Choose a service date on step 1 to download.";
+
+/** The pastor's copy prints nothing more when Prayers of the People is off or blank (inv F1). */
+function sameAsBulletin(draft: DraftV1): boolean {
+  const card = draft.liturgy.cards.prayers_of_the_people;
+  return !card.enabled || card.text.trim() === "";
+}
+
+function CopyRow({ copy, disabled, helper }: { copy: Copy; disabled: boolean; helper: string | null }) {
+  const download = useDownloadDocument(copy.variant);
+  const slow = useStillWorking(download.isPending);
+  const pendingLabel = slow ? "Still working…" : "Preparing…";
+  const id = `${copy.variant}-copy`;
+  return (
+    <li className="grid gap-2">
+      <h3 id={`${id}-title`} className="text-base font-medium">
+        {copy.title}
+      </h3>
+      <p id={`${id}-description`} className="text-sm text-muted-foreground">
+        {copy.description}
+      </p>
+      {helper ? (
+        <p id={`${id}-helper`} className="text-sm text-muted-foreground">
+          {helper}
+        </p>
+      ) : null}
+      <PendingButton
+        size="touch"
+        variant={copy.variant === "bulletin" ? "default" : "outline"}
+        className="w-full sm:w-fit"
+        pending={download.isPending}
+        pendingLabel={pendingLabel}
+        disabled={disabled}
+        aria-describedby={helper ? `${id}-description ${id}-helper` : `${id}-description`}
+        onClick={() =>
+          download.mutate(undefined, {
+            onError: (e) => {
+              // A 401 or a lost church is handled globally (sign-in, the church's own message): no second message.
+              if (e.status === 401 || isNoChurchAccess(e)) return;
+              toast.error(errorToastMessage(e));
+            },
+          })
+        }
+      >
+        <DownloadIcon data-icon="inline-start" aria-hidden="true" />
+        {copy.action}
+      </PendingButton>
+      <p role="status" className="sr-only">
+        {download.isPending ? `${copy.title}: ${pendingLabel}` : ""}
+      </p>
+    </li>
+  );
+}
+
+/**
+ * The Word documents card (slice 5a spec, UX "Word documents card"; owner
+ * answers 3 and 7, 2026-10-01): the bulletin copy and the pastor's copy, each
+ * built on the server from the draft as it is at the tap. Each button has its
+ * own "Preparing…" ("Still working…" after 8 s); the file then goes to the
+ * browser's download (on iPhone, the share or preview sheet), with no toast;
+ * a failure is a toast with the server's message (none after a 401 or a lost
+ * church: the app's own handling says it). Both buttons need a valid
+ * service date, nothing else: what is missing is listed above, and the file
+ * prints what there is ("[Sermon title]" for a blank title).
+ */
+export function DocumentsCard() {
+  const { draft } = useDraft();
+  const dated = hasServiceDate(draft);
+  const same = sameAsBulletin(draft);
+  return (
+    <section aria-labelledby="documents-title" className="grid gap-4 rounded-lg border p-4">
+      <div className="grid gap-1">
+        <h2 id="documents-title" className="text-base font-medium">
+          Word documents
+        </h2>
+        {dated ? null : <p className="text-sm text-muted-foreground">{NEEDS_DATE}</p>}
+      </div>
+      <ul className="grid gap-6">
+        {COPIES.map((copy) => (
+          <CopyRow
+            key={copy.variant}
+            copy={copy}
+            disabled={!dated}
+            helper={copy.variant === "pastor" && same ? SAME_AS_BULLETIN : null}
+          />
+        ))}
+      </ul>
+    </section>
+  );
+}
