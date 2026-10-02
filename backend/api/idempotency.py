@@ -11,9 +11,13 @@ RateLimited (its 429 is returned, the entry dropped, so the same key runs again
 after Retry-After). Never a 5xx: a 5xx DomainError drops the entry, and any
 other exception drops it and propagates (the app's handlers turn it into a 500).
 
-The store is in memory, keyed by (user_id, method, route template, key), with a
-15-minute TTL and at most 10 000 entries. That is enough for one uvicorn
-worker; if --workers ever exceeds 1, move it to a Postgres table first (F §1.6).
+The store is in memory, keyed by (user_id, church_id, method, route template,
+key), with a 15-minute TTL and at most 10 000 entries. church_id is None for a
+user-scoped route (POST /churches); a church-scoped route passes the resolved
+church (5a-2's POST /services), so a key sent in two churches never replays
+one church's answer in the other (F §1.6, church-scope amendment 2026-09-28).
+That is enough for one uvicorn worker; if --workers ever exceeds 1, move it to
+a Postgres table first (F §1.6).
 A request waits on a per-key threading.Lock while an identical one is running,
 so run_idempotent must only be called from sync `def` routes (they run in the
 threadpool); calling it from an `async def` route would block the event loop.
@@ -38,7 +42,7 @@ REPLAYED_HEADER = "Idempotent-Replayed"
 IDEMPOTENCY_TTL_SECONDS = 15 * 60
 MAX_ENTRIES = 10_000
 
-_Key = tuple[uuid.UUID, str, str, uuid.UUID]
+_Key = tuple[uuid.UUID, Optional[uuid.UUID], str, str, uuid.UUID]
 
 
 def idempotency_key(required: bool = False) -> Callable[..., Optional[uuid.UUID]]:
@@ -165,20 +169,22 @@ def run_idempotent(
     status_code: int,
     call: Callable[[], BaseModel],
     method: str = "POST",
+    church_id: Optional[uuid.UUID] = None,
     store: Optional[IdempotencyStore] = None,
 ) -> Response:
-    """Run `call` once per (user, method, route, key) and replay its response.
+    """Run `call` once per (user, church, method, route, key) and replay its response.
 
     `route` is the route template (e.g. "/churches"), `payload` the parsed
     request body (its SHA-256 over sorted-key JSON is compared on a repeat),
-    `status_code` the success status. Blocks on a threading.Lock while an
+    `status_code` the success status, `church_id` the resolved church of a
+    church-scoped route (None: user-scoped). Blocks on a threading.Lock while an
     identical request is running: call it only from sync `def` routes.
     Slice 5b adds a `store_error` keyword (F §1.6).
     """
     if key is None:
         return _success(call(), status_code)
     target = store if store is not None else _process_store()
-    scope = (user_id, method.upper(), route, key)
+    scope = (user_id, church_id, method.upper(), route, key)
     body_hash = _body_hash(payload)
     while True:
         entry = target.claim(scope, body_hash)
