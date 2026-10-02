@@ -7,6 +7,7 @@ from typing import Annotated, Generic, Literal, Optional, TypeVar
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, StringConstraints
 
+import liturgy_config
 from api.errors import ErrorBody  # noqa: F401  (re-exported: every error response's body, F §1.5)
 
 T = TypeVar("T")
@@ -252,3 +253,61 @@ class SermonText(BaseModel):
 
     ref: str = Field(max_length=200)
     text: str = Field(max_length=20_000)
+
+
+# --- slice 5a: the service a member builds (5a spec, "Schemas"; shared with 5b's
+# POST /bulletin-emails). 5a-1 uses it for POST /documents; 5a-2 for /services. ---
+
+# The 17 placement keys, liturgy_config.CUSTOM_PLACEMENTS' order (= PLACEMENT_KEYS).
+Placement = Literal[tuple(key for key, _label in liturgy_config.CUSTOM_PLACEMENTS)]
+
+
+class CustomElementIn(BaseModel):
+    """A custom element as the builder sends it. A label that is blank after
+    trimming is the usecase's 422 ("Give each custom element a label.")."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    label: str = Field(max_length=liturgy_config.LIMITS.max_custom_label)
+    text: str = Field(default="", max_length=liturgy_config.LIMITS.max_custom_text)
+    insert_after: Placement
+
+
+class ServiceDraft(BaseModel):
+    """One service (inventory §2.1 plus hymnal, F §1.3). The limits are slice
+    4's (GenerateLiturgyIn, liturgy_config.LIMITS); HymnRef, SlotHymns and
+    SectionKey are imported unchanged. Usecases take `to_input()`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    service_date_iso: IsoDate
+    occasion: str = Field(default="", max_length=300)
+    scriptures: list[Annotated[str, Field(max_length=200)]] = Field(default_factory=list, max_length=20)
+    hymns: SlotHymns = Field(default_factory=SlotHymns)
+    # null = the church's effective hymnal (5a-2 stores it); documents ignore it.
+    hymnal: Optional[Annotated[str, StringConstraints(strip_whitespace=True, max_length=20)]] = None
+    liturgy: dict[SectionKey, Annotated[str, Field(max_length=liturgy_config.LIMITS.max_section_text)]] = Field(
+        default_factory=dict)
+    sermon_title: str = Field(default="", max_length=liturgy_config.LIMITS.max_sermon_title)
+    selected_ot_ref: str = Field(default="", max_length=200)
+    selected_nt_ref: str = Field(default="", max_length=200)
+    include_communion: bool = False
+    custom_elements: list[CustomElementIn] = Field(default_factory=list,
+                                                   max_length=liturgy_config.LIMITS.max_custom_elements)
+
+    def to_input(self):
+        """The usecases' copy (usecases.archive.ServiceInput); usecases never import api/*."""
+        from service_output import CustomElement
+        from usecases.archive import ServiceInput
+        from usecases.liturgy import HymnRefData
+
+        def hymn(ref: Optional[HymnRef]) -> Optional[HymnRefData]:
+            return None if ref is None else HymnRefData(ref.hymn_id, ref.title, ref.number, ref.hymnal)
+
+        return ServiceInput(
+            service_date=self.service_date_iso, occasion=self.occasion, scriptures=tuple(self.scriptures),
+            hymns={slot: hymn(getattr(self.hymns, slot)) for slot in ("opening", "response", "closing")},
+            hymnal=self.hymnal, liturgy=dict(self.liturgy), sermon_title=self.sermon_title,
+            selected_ot_ref=self.selected_ot_ref, selected_nt_ref=self.selected_nt_ref,
+            include_communion=self.include_communion,
+            custom_elements=tuple(CustomElement(e.label, e.text, e.insert_after) for e in self.custom_elements))

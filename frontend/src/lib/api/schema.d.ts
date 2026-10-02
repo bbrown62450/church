@@ -38,6 +38,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Document
+         * @description Built from the body every time; nothing is stored or cached (owner decision 4).
+         */
+        post: operations["create_document_documents_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -472,6 +492,34 @@ export interface components {
              * @default
              */
             timezone: string;
+        };
+        /**
+         * CustomElementIn
+         * @description A custom element as the builder sends it. A label that is blank after
+         *     trimming is the usecase's 422 ("Give each custom element a label.").
+         */
+        CustomElementIn: {
+            /**
+             * Insert After
+             * @enum {string}
+             */
+            insert_after: "call_to_worship" | "opening_prayer" | "first_hymn" | "prayer_of_confession" | "assurance" | "prayer_for_illumination" | "ot_reading" | "nt_reading" | "sermon" | "affirmation_of_faith" | "second_hymn" | "communion" | "prayers_of_the_people" | "offertory_prayer" | "third_hymn" | "benediction" | "end";
+            /** Label */
+            label: string;
+            /**
+             * Text
+             * @default
+             */
+            text: string;
+        };
+        /** DocumentIn */
+        DocumentIn: {
+            service: components["schemas"]["ServiceDraft"];
+            /**
+             * Variant
+             * @enum {string}
+             */
+            variant: "bulletin" | "pastor";
         };
         /**
          * ErrorBody
@@ -1072,6 +1120,55 @@ export interface components {
             text: string;
         };
         /**
+         * ServiceDraft
+         * @description One service (inventory §2.1 plus hymnal, F §1.3). The limits are slice
+         *     4's (GenerateLiturgyIn, liturgy_config.LIMITS); HymnRef, SlotHymns and
+         *     SectionKey are imported unchanged. Usecases take `to_input()`.
+         */
+        ServiceDraft: {
+            /** Custom Elements */
+            custom_elements?: components["schemas"]["CustomElementIn"][];
+            /** Hymnal */
+            hymnal?: string | null;
+            hymns?: components["schemas"]["SlotHymns"];
+            /**
+             * Include Communion
+             * @default false
+             */
+            include_communion: boolean;
+            /** Liturgy */
+            liturgy?: {
+                [key: string]: string;
+            };
+            /**
+             * Occasion
+             * @default
+             */
+            occasion: string;
+            /** Scriptures */
+            scriptures?: string[];
+            /**
+             * Selected Nt Ref
+             * @default
+             */
+            selected_nt_ref: string;
+            /**
+             * Selected Ot Ref
+             * @default
+             */
+            selected_ot_ref: string;
+            /**
+             * Sermon Title
+             * @default
+             */
+            sermon_title: string;
+            /**
+             * Service Date Iso
+             * Format: date
+             */
+            service_date_iso: string;
+        };
+        /**
          * SlotHymns
          * @description The three hymn slots (F §1.3): slice 4's GenerateLiturgyIn.hymns, 5a's ServiceDraft.hymns.
          */
@@ -1283,6 +1380,78 @@ export interface operations {
             };
             /** @description Too Many Requests */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    create_document_documents_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-church-id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocumentIn"];
+            };
+        };
+        responses: {
+            /** @description The Word file (Content-Disposition names it). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": string;
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
