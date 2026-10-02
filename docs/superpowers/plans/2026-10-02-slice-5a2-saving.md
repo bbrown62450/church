@@ -23,14 +23,14 @@
 - Run commands from the repo root; the working directory resets between commands. Frontend as `(cd frontend && …)`. No foreground `sleep`.
 - Backend: one file `.venv/bin/python -m pytest -q <file> 2>&1 | tail -3`; the suite `.venv/bin/python -m pytest -q | tail -1`. Postgres-marked tests run only with `TEST_DATABASE_URL` set to a local, throwaway Postgres (`tests/pg_helpers.require_local_test_url`); without it they skip, and CI's `backend-postgres` job runs them. Frontend: the suite `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")`, then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`.
 - The API changes (T5), so T5 regenerates the snapshot and the types in the same commit: `.venv/bin/python backend/scripts/export_openapi.py` then `(cd frontend && npm run gen:api)`. Never edit `openapi.json` or `schema.d.ts` by hand.
-- Branch `claude/slice-2-plan-4q33le`, at `2cd4b79` plus this plan's commits (`WIP plan: slice 5a-2` …, then `Plan: slice 5a-2, saving backend and migration (owner answers 2026-10-01/02)`), then T1-T7. Stage files by name; `.claude/` stays untracked.
+- Branch `claude/slice-2-plan-4q33le`, at `2cd4b79` plus this plan's commits (`WIP plan: slice 5a-2` …, then `Plan: slice 5a-2, saving backend and migration (owner answers 2026-10-01/02)` and `Plan: slice 5a-2 review fixes (owner answers 2026-10-02)`), then T1-T7. Stage files by name; `.claude/` stays untracked.
 - `main` is protected (`backend`, `backend-postgres`, `frontend`, up to date). Merge only with `gh pr merge <N> --merge -R bbrown62450/church`, only on the owner's explicit yes.
 - Every commit message has a subject, a body and, as its last paragraph (a separate `-m`), these two lines:
   `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`
   `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
 - TDD: write the failing test first and see it fail as quoted.
 - **Backup push after every task** (standing rule): the controller runs `git push origin claude/slice-2-plan-4q33le` after each task's commit (never `--force`; on a network error retry after 2, 4, 8 and 16 s). A fix asked for by a review is a new commit, `Fix: <what> (Task <n> review)`. The container can restart and lose uncommitted work: commit as soon as a task's checks pass.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1263 → 1330 passed, 11 → 16 skipped; frontend 618 → 618 in 81 → 81 files`.
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1263 → 1332 passed, 11 → 16 skipped; frontend 618 → 618 in 81 → 81 files`.
 - New prose for the owner has no em dashes and no flattery. No new user-facing copy in the app (clarification 1); the API's messages are the spec's, listed in clarification 3.
 - No church id, email address, token or database URL in any doc, commit or record.
 - Ask the owner before any push to a PR, PR creation, marking ready, merging, or any production or settings action (the backup run included). Owner steps go one at a time, in plain words.
@@ -46,13 +46,13 @@ As in the 5a-1 plan: **Create `path`:** the block is the whole file; **Append to
   |---|---|---|---|
   | T1 | +3 (`test_migrations.py`; `test_schema_check.py`, `test_api_app.py` edited) | 1266 passed, 11 skipped | 618 in 81 |
   | T2 | +1 (`test_idempotency.py`) | 1267 passed, 11 skipped | 618 in 81 |
-  | T3 | +16 (`test_service_output.py` 5, `test_usage_rebuild.py` 11 with one test in five cases) | 1283 passed, 11 skipped | 618 in 81 |
-  | T4 | +24 (`test_usecase_archive.py`, one test in five cases; `test_no_streamlit_in_core.py` edited) | 1307 passed, 11 skipped | 618 in 81 |
-  | T5 | +22 (`test_api_services.py`, three tests in 2, 6 and 4 cases) | 1329 passed, 11 skipped | 618 in 81 |
-  | T6 | +1 run, +5 skipped (`test_migrations.py` 1; `test_services_postgres.py` 5, Postgres only) | 1330 passed, 16 skipped | 618 in 81 |
-  | T7 | 0 (docs) | 1330 passed, 16 skipped | 618 in 81 |
+  | T3 | +17 (`test_service_output.py` 5, `test_usage_rebuild.py` 12 with one test in five cases) | 1284 passed, 11 skipped | 618 in 81 |
+  | T4 | +25 (`test_usecase_archive.py`, one test in five cases; `test_no_streamlit_in_core.py` edited) | 1309 passed, 11 skipped | 618 in 81 |
+  | T5 | +22 (`test_api_services.py`, three tests in 2, 6 and 4 cases) | 1331 passed, 11 skipped | 618 in 81 |
+  | T6 | +1 run, +5 skipped (`test_migrations.py` 1; `test_services_postgres.py` 5, Postgres only) | 1332 passed, 16 skipped | 618 in 81 |
+  | T7 | 0 (docs) | 1332 passed, 16 skipped | 618 in 81 |
 
-- CI `backend-postgres` goes from `11 passed, 1263 deselected` to `16 passed, 1330 deselected`. With a local Postgres (`TEST_DATABASE_URL`), the same numbers locally.
+- CI `backend-postgres` goes from `11 passed, 1263 deselected` to `16 passed, 1332 deselected`. With a local Postgres (`TEST_DATABASE_URL`), the same numbers locally.
 
 ### Layering and code rules (carried)
 - `usecases/archive.py`, `repos/services.py`, `hymn_usage.py` and `service_output.py` import no FastAPI, Starlette or Streamlit (`test_no_streamlit_in_core.py` gains `repos.services` and `hymn_usage`, T4). The routes are plain `def`, one usecase call each, no SQL and no try/except (F §2.2 rule 1). Usecases own the transactions (`with session_scope() as s:`) and pass `session=s` down (F §2.2 rule 3).
@@ -77,7 +77,7 @@ As in the 5a-1 plan: **Create `path`:** the block is the whole file; **Append to
 Answers 2, 3, 5 and 7 concern 5a-1 and 5a-3 and are not repeated here.
 
 ### Owner answers to this plan's questions
-None yet: "Questions for the owner" (end of this plan) lists the choices, each written as recommended. The plan is built as recommended; an answer that differs is a change before T1.
+**All recommended** (Beau, 2026-10-02, binding): the owner answered "all recommended" to the six "Questions for the owner" (end of this plan), so the plan stands as written. The review fixes of 2026-10-02 (commit `Plan: slice 5a-2 review fixes (owner answers 2026-10-02)`) change no owner-visible behavior: the time-part fix makes clarification 8 do what Question 3 already says (imported hymn-use entries on a recalculated date go).
 
 **Later, out of scope:** 5a-3 (the Save card, the conflict dialog, the Services page, `serviceToDraft`, `draftToServicePayload`'s final form, the save key in the draft, the draft version bump, `"review"` in `SHIPPED_STEPS`, the query hooks `useServices`, `useSaveService`, `useDeleteService`), 5b (email).
 
@@ -97,11 +97,11 @@ The owner's answers win over S and F; the code wins over both where they disagre
    | `PUT /services/{service_id}` | 200 `ServiceOut` with a new `saved_at`; `If-Match` required | as clarification 5 |
    | `DELETE /services/{service_id}` | 200 `DeletedOut` `{"deleted": true}` | 404 "That service is no longer in the archive." |
 
-4. **The idempotency key is scoped to the church** (F §1.6, amendment 2026-09-28). `run_idempotent` gains `church_id: Optional[uuid.UUID] = None` and keys its store by `(user_id, church_id, method, route, key)`. `POST /services` passes `church.id`; `POST /churches` passes nothing (user-scoped, unchanged). So a key sent in two churches saves in each and never replays one church's answer to the other. Everything else is slice 1's: a replay returns the stored 201 with `Idempotent-Replayed: true`, a stored 4xx (the hymn 404) holds the key, a different body is `idempotency_mismatch`, no 5xx is stored.
+4. **The idempotency key is scoped to the church** (F §1.6, amendment 2026-09-28). `run_idempotent` gains `church_id: Optional[uuid.UUID] = None` and keys its store by `(user_id, church_id, method, route, key)`. `POST /services` passes `church.id`; `POST /churches` passes nothing (user-scoped, unchanged). So a key sent in two churches saves in each and never replays one church's answer to the other. Everything else is slice 1's: a replay returns the stored 201 with `Idempotent-Replayed: true`, a stored 4xx (the hymn 404) holds the key, a different body is `idempotency_mismatch`, no 5xx is stored. A replayed answer is the first answer as it was: within the 15-minute window, if the service was later saved again (`PUT`) or deleted, the replay's `saved_at` (and the service itself) may be stale. 5a-3 must treat a replayed `POST` answer accordingly (for example, a later `PUT` with its `saved_at` can be a 409, and a `GET` of a deleted one a 404).
 5. **`PUT`'s check order** (S "Check order for `PUT`"; F §1.7). A body that fails Pydantic is a 422 first (FastAPI validates before the route runs). Then, in `usecases.archive.replace_service`, inside one transaction: (1) the row `WHERE id AND church_id`, locked `FOR UPDATE` (nothing on SQLite), else 404 with no `details` (the 5a-3 client POSTs then); (2) `If-Match` present, else 422 "If-Match is required.", and readable (`datetime.fromisoformat` after a `W/` prefix and quotes are removed; a naive value is UTC), else 422 "If-Match must be the service's saved_at timestamp."; (3) equal to the stored `saved_at` (to the microsecond), else 409 `conflict` "This service was changed by someone else. Reload it to see their changes." with `details.current_saved_at`; (4) the input (`clean_input`'s label 422, `resolve_hymn_refs`' hymn 404); (5) the write. Two PUTs with the same `If-Match` give one 200 and one 409 (the row lock; Postgres test, T6).
 6. **What a save writes** (F §6.2; S acceptance criterion 6): `hymns` as exactly 3 entries in slot order `{slot, title, number, hymn_id, hymnal}` (an empty slot `title: ""` and nulls; `hymn_id` the id as a string or JSON null); `service_date_iso` `YYYY-MM-DD` and `service_date_display` "October 04, 2026"; `liturgy` with only the 8 sections, in `SECTION_ORDER`, non-blank, without Streamlit's error texts (`clean_input`); the cleaned occasion, scriptures, sermon title and picks; `custom_elements` as `[{label, text, insert_after}]`; `hymnal` as sent, or, when null, the church's `effective_hymnal` (`usecases.hymns.resolve_default_hymnal`; null for a church with no hymns); `saved_at` now (it moves on every save); `created_by` the saver on POST and never changed by PUT. A hymn id resolves within the church and the database's title, number and hymnal are stored (F §1.3).
 7. **[owner-visible] What is sent is what is stored** (owner answer 4). The server stores the Benediction text and `include_communion` it receives, and injects no church default. In 5a-3 the Save card sends a default-following Benediction as its text, so a saved service keeps the Benediction it had even if the church default changes later; the communion setting likewise.
-8. **[owner-visible] Hymn use follows the saved services** (owner answer 6; S `hymn_usage.py`, amended). `hymn_usage.rebuild_usage_for_date(church_id, date_iso, *, session)` deletes the church's rows for that date and inserts the union of the hymns of every service saved for it (stored dates read through `normalize_date_iso`, so a Notion-era date with a time part counts), deduped by `hymn_search.usage_key(title)` (the title alone, slice 3a; the first saved service's number and title are kept). **Saving** rebuilds the saved date; a **PUT that moves a service to another date** rebuilds both dates; **deleting** rebuilds the date the service leaves, from the services still saved. Consequences: a second service on the same date never erases the first one's hymns; rows that no saved service backs (Streamlit's Prepare, imported history) go when their date is rebuilt; **deleting an undated service changes no hymn use** (it has no date to rebuild). A malformed legacy row (hymns not a list, entries that are not objects, a title that is not text) is skipped, never raised on.
+8. **[owner-visible] Hymn use follows the saved services** (owner answer 6; S `hymn_usage.py`, amended). `hymn_usage.rebuild_usage_for_date(church_id, date_iso, *, session)` deletes the church's rows for that date (every row whose `date_iso` starts with it, `LIKE '<date>%'`, so an imported row with a time part, `2026-10-04T00:00:00.000Z`, goes too; safe because `date_iso` is a validated `YYYY-MM-DD`) and inserts the union of the hymns of every service saved for it (stored dates read through `normalize_date_iso`, so a Notion-era date with a time part counts), deduped by `hymn_search.usage_key(title)` (the title alone, slice 3a; the first saved service's number and title are kept). **Saving** rebuilds the saved date; a **PUT that moves a service to another date** rebuilds both dates; **deleting** rebuilds the date the service leaves, from the services still saved. Consequences: a second service on the same date never erases the first one's hymns; rows that no saved service backs (Streamlit's Prepare, imported history, with or without a time part) go when their date is rebuilt, deleting the last service on a date included; **deleting an undated service changes no hymn use** (it has no date to rebuild). A malformed legacy row (hymns not a list, entries that are not objects, a title that is not text) is skipped, never raised on.
 9. **One transaction, no lost union, no deadlock** (S Risks; F §7.4). The service write and the rebuild share one `session_scope`; a failure in either rolls back both (SQLite test). On Postgres the rebuild first takes `pg_advisory_xact_lock(hashtextextended('hymn_usage:<church>:<date>', 0))`, so a second save on the same date waits for the first to commit and then sees it; rows go in sorted order with `insert_ignore` (`ON CONFLICT DO NOTHING`); a re-dating PUT rebuilds its two dates in date order. `rebuild_usage_for_date` refuses anything but a real `YYYY-MM-DD` with `ValueError` (a caller's bug), so it can never gather undated services.
 10. **Opening a saved service** (`get_service`; S "Normalizing stored data"). Hymns: `slot_map` reads a list whose every entry has a valid `slot` by slot (what 5a-2 writes), else by position 0-2 (Streamlit's compacted lists; a 4th entry ignored). Each filled slot: a stored `hymn_id` that still resolves in the church gives the hymn's current title, number and hymnal with `in_hymnal: true`; otherwise the church's hymns with the same `normalize_title` (and the same number, when the entry has one) are ranked by hymnal (the entry's, then the service's, then the church's effective hymnal, then any other in code order), then the lowest number (nulls last), then the lowest id; no match keeps the snapshot with `hymn_id: null`, `in_hymnal: false`. Liturgy: only the 8 sections, non-blank, trimmed, without Streamlit's error texts. Custom elements: every stored object kept in order, a non-text label or text read as `""`, an unknown or missing `insert_after` read as `"end"` (never dropped, so it survives open then save). `service_date_iso`: `normalize_date_iso` (the first 10 characters when they are a real date, else null). `saved_at`: UTC, `+00:00`.
 11. **The list** (`list_services`; S API; F §1.4): a projection with no JSON columns, ordered `NULLIF(service_date_iso, '') DESC NULLS LAST, saved_at DESC, id DESC` (so undated rows come last on SQLite and Postgres alike; Postgres test, T6), `total` the church's count, `created_by` `{id, name}` with the name falling back to the email, null when the author was removed.
@@ -118,6 +118,7 @@ The owner's answers win over S and F; the code wins over both where they disagre
 - **A lock on `services` at deploy time.** A long-running query holding a conflicting lock would make `ALTER TABLE` wait; `lock_timeout` turns that into a failed deploy after 5 s with the previous release still serving. T9 Step 5 has the owner check the deploy and `/health/ready` (which answers 503 `schema_behind` in production if the schema were behind).
 - **Hymn-use rows that no saved service backs** are replaced when their date is rebuilt (clarification 8). With Streamlit retired, nothing writes such rows any more; existing ones (Prepare, imported history) stay until a service on their date is saved or deleted.
 - **Concurrency on SQLite** (local dev) is not covered: no row lock, no advisory lock. The Postgres tests cover production's behavior (T6).
+- **Opening a legacy service reads the church's hymn titles in Python** (`repos.hymns.find_hymns_by_titles`, only when a slot has no id that still resolves). Narrowing the query with `lower(title) IN (…)` is not safe: it would miss a stored title with a no-break space, a run of spaces or a letter whose `casefold` differs from `lower` (SQLite's `lower` folds ASCII only), all of which `normalize_title` matches. A church has a few thousand hymns at most; T4's `test_a_title_match_ignores_case_and_spacing_in_the_stored_title` pins the behavior.
 - **No UI exercises the routes until 5a-3.** The API tests are the check; the owner's phone check after the merge is a regression check only (T9).
 
 ## File Structure
@@ -375,9 +376,10 @@ no custom elements ([]) and no hymnal (null).
 - services.custom_elements JSON NULL: the custom elements a saved service
   prints, [{label, text, insert_after}].
 - services.hymnal VARCHAR NULL: the hymnal the service's hymns came from.
-- ix_services_church_date on services (church_id, service_date_iso): the
-  archive list's order (newest service date first) and the hymn-use rebuild
-  for one date.
+- ix_services_church_date on services (church_id, service_date_iso): for
+  the archive list's order (newest service date first, per church); the
+  hymn-use rebuild uses its church_id prefix (its LIKE on the date is not
+  index-assisted under a non-C collation).
 
 On Postgres env.py runs SET LOCAL lock_timeout = '5s' (and statement_timeout
 '60s') first, so a lock held elsewhere fails the deploy after 5 s instead of
@@ -442,7 +444,7 @@ def downgrade() -> None:
 
     __table_args__ = (
         Index("ix_services_church_saved_at", "church_id", "saved_at"),
-        # The archive list's order and the hymn-use rebuild for one date (5a-2).
+        # The archive list's order (5a-2); the hymn-use rebuild uses its church_id prefix.
         Index("ix_services_church_date", "church_id", "service_date_iso"),
     )
 
@@ -491,7 +493,8 @@ def downgrade() -> None:
 git add backend/migrations/versions/0005_services_extras.py backend/db/models.py backend/migrations/README.md backend/tests/test_migrations.py backend/tests/test_schema_check.py backend/tests/test_api_app.py
 git commit -q -m "Migration 0005_services_extras: services.custom_elements, services.hymnal and ix_services_church_date (5a-2)" -m "Expand-only (F 3.4): two nullable columns with no default and no
 backfill, and the index (church_id, service_date_iso) for the archive
-list and the hymn-use rebuild. Batch mode both ways, as 0004; env.py's
+list's order (the hymn-use rebuild uses its church_id prefix). Batch
+mode both ways, as 0004; env.py's
 SET LOCAL lock_timeout = '5s' runs first on Postgres. Tests: up from 0004
 keeping rows, an insert without the columns, down to the 0004 table, the
 exact offline SQL the owner will read (owner answer 8); the head and the
@@ -825,6 +828,29 @@ def test_only_that_date_and_that_church(church, make_church):
     assert usage(other) == [(8, "Their Prepared")]                      # another church
 
 
+def test_imported_rows_with_a_time_part_go_when_their_date_is_rebuilt(church):
+    # Imported (Notion-era) history may store "2026-10-04T00:00:00.000Z": the rebuild
+    # deletes by the date prefix, also when the last service on that date is deleted.
+    def imported(title, number):
+        with session_scope() as s:
+            s.add(HymnUsage(church_id=church, date_iso=f"{D}T00:00:00.000Z", hymn_number=number, hymn_title=title))
+
+    def every_row():
+        with session_scope() as s:
+            return sorted(s.execute(select(HymnUsage.date_iso, HymnUsage.hymn_number, HymnUsage.hymn_title)
+                                    .where(HymnUsage.church_id == church)).all())
+
+    imported("Imported", 7)
+    sid = add_service(church, slots(("Holy, Holy, Holy", 138)))
+    assert rebuild(church) == 1
+    assert every_row() == [(D, 138, "Holy, Holy, Holy")]
+    imported("Imported Again", 8)
+    with session_scope() as s:
+        s.delete(s.get(Service, sid))
+    assert rebuild(church) == 0
+    assert every_row() == []
+
+
 @pytest.mark.parametrize("bad", [None, "", "2026-13-01", "2026-10-04T00:00:00", "October 04, 2026"])
 def test_only_a_yyyy_mm_dd_date_is_accepted(church, bad):
     record_usage(church, D, [{"title": "Holy, Holy, Holy", "number": 138}])
@@ -1047,7 +1073,10 @@ record_usage stays for the frozen Streamlit branch's tests (slice 7).
 def rebuild_usage_for_date(church_id, date_iso: str, *, session: Session) -> int:
     """Replace the church's hymn_usage rows for `date_iso` with the hymns of
     every service saved for that date (their union), in the caller's
-    transaction; return the number of rows written.
+    transaction; return the number of rows written. "Rows for the date" are
+    those whose date_iso starts with it, so an imported row with a time part
+    ("2026-10-04T00:00:00.000Z") goes too; a LIKE prefix is safe because
+    date_iso is a validated YYYY-MM-DD (no wildcard can reach it).
 
     Saving a service rebuilds its date, and deleting one (or moving it to
     another date) rebuilds the date it leaves, so a date's rows always equal
@@ -1085,7 +1114,7 @@ def rebuild_usage_for_date(church_id, date_iso: str, *, session: Session) -> int
             key = usage_key(entry.title) if entry is not None else ""
             if key and key not in first_seen:
                 first_seen[key] = (entry.number, entry.title)
-    session.execute(delete(HymnUsage).where(HymnUsage.church_id == cid, HymnUsage.date_iso == date_iso))
+    session.execute(delete(HymnUsage).where(HymnUsage.church_id == cid, HymnUsage.date_iso.like(f"{date_iso}%")))
     values = [{"church_id": cid, "date_iso": date_iso, "hymn_number": number, "hymn_title": title}
               for _key, (number, title) in sorted(first_seen.items())]
     if values:
@@ -1100,7 +1129,7 @@ def rebuild_usage_for_date(church_id, date_iso: str, *, session: Session) -> int
 .venv/bin/python -m pytest -q | tail -1
 ```
 
-**Expected:** `40 passed, 1 skipped in <t>s`; `1283 passed, 11 skipped in <t>s`.
+**Expected:** `41 passed, 1 skipped in <t>s`; `1284 passed, 11 skipped in <t>s`.
 
 - [ ] **Step 5 (agent): Commit**
 
@@ -1110,7 +1139,8 @@ git commit -q -m "Hymn use: rebuild a date from its saved services; read stored 
 with the union of the hymns of every service saved for it, deduped by
 the title-only usage_key (first saved number and title kept), in the
 caller's transaction, under a per-(church, date) advisory lock on
-Postgres, rows in sorted order. Only a real YYYY-MM-DD is accepted.
+Postgres, rows in sorted order; imported rows with a time part on that
+date go too. Only a real YYYY-MM-DD is accepted.
 service_output gains normalize_date_iso, coerce_number, StoredHymn,
 stored_hymn_entries, slot_map and stored_hymns (F 6.2's 3 slots); a
 malformed legacy row is skipped, never raised on." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
@@ -1118,7 +1148,7 @@ Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 git log --oneline -1
 ```
 
-Counts after Task 3: backend **1283 passed, 11 skipped**; frontend **618 in 81**.
+Counts after Task 3: backend **1284 passed, 11 skipped**; frontend **618 in 81**.
 
 ### Task 4: Saving, opening, listing and deleting (owner answers 4, 6; S `usecases/archive.py`, "Normalizing stored data", "Data access and tenancy"; F §1.7, §2.2; clarifications 5-11, 15, 17)
 
@@ -1429,6 +1459,15 @@ def test_duplicate_titles_resolve_the_same_way_every_time(church):
     assert picks == {ids[1]}                                           # the lowest number
 
 
+def test_a_title_match_ignores_case_and_spacing_in_the_stored_title(church):
+    # find_hymns_by_titles filters in Python with normalize_title: a SQL lower(title) IN (...)
+    # would miss these stored titles (5a-2 plan, Risks).
+    spaced = add_hymn(church, "Be\u00a0Thou  my Vision", 450, "GG2013")
+    sid = legacy_row(church, hymns=[{"title": "be thou my vision", "number": 450}])
+    assert archive.get_service(church, sid).hymns["opening"] == archive.ArchivedHymnData(
+        spaced, "Be\u00a0Thou  my Vision", 450, "GG2013", True)
+
+
 def test_a_stored_id_resolves_to_the_hymn_s_current_title(church, pastor):
     hymn_id = add_hymn(church, "Old Title", 1)
     record = archive.create_service(church, pastor, service(hymns={"opening": HymnRefData(hymn_id, "x", None, None)}))
@@ -1517,7 +1556,7 @@ def test_saving_logs_ids_and_counts_never_text(church, pastor, caplog):
 .venv/bin/python -m pytest -q backend/tests/test_usecase_archive.py backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -1
 ```
 
-**Expected:** `25 failed, 2 passed in <t>s`: every `test_usecase_archive.py` case (`AttributeError`: `usecases.archive` has no `create_service`, `Author`, …) and `test_usecases_package_imports_no_fastapi_or_streamlit` (`No module named 'repos.services'`).
+**Expected:** `26 failed, 2 passed in <t>s`: every `test_usecase_archive.py` case (`AttributeError`: `usecases.archive` has no `create_service`, `Author`, …) and `test_usecases_package_imports_no_fastapi_or_streamlit` (`No module named 'repos.services'`).
 
 - [ ] **Step 3 (agent): The repo, the title lookup, the usecases**
 
@@ -2052,7 +2091,7 @@ grep -nE "^(import|from) (fastapi|starlette|streamlit)" backend/usecases/archive
 .venv/bin/python -m pytest -q | tail -1
 ```
 
-**Expected:** `48 passed in <t>s`; `imports grep exit 1`; `1307 passed, 11 skipped in <t>s`.
+**Expected:** `49 passed in <t>s`; `imports grep exit 1`; `1309 passed, 11 skipped in <t>s`.
 
 - [ ] **Step 5 (agent): Commit**
 
@@ -2073,7 +2112,7 @@ Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 git log --oneline -1
 ```
 
-Counts after Task 4: backend **1307 passed, 11 skipped**; frontend **618 in 81**.
+Counts after Task 4: backend **1309 passed, 11 skipped**; frontend **618 in 81**.
 
 ### Task 5: The `/services` routes (S API, "Schemas"; F §1.2, §1.4, §1.6, §1.7; owner decision 5; clarifications 3, 4, 5, 12, 16)
 
@@ -2566,7 +2605,7 @@ grep -c '"/services"\|"/services/{service_id}"\|"ServiceOut"\|"ServiceSummary"\|
 (cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")
 ```
 
-**Expected:** `49 passed in <t>s`; `1329 passed, 11 skipped in <t>s`; ` Test Files  81 passed (81)` and `      Tests  618 passed (618)`; `typecheck 0`, `lint 0`.
+**Expected:** `49 passed in <t>s`; `1331 passed, 11 skipped in <t>s`; ` Test Files  81 passed (81)` and `      Tests  618 passed (618)`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 6 (agent): Commit**
 
@@ -2584,7 +2623,7 @@ Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 git log --oneline -1
 ```
 
-Counts after Task 5: backend **1329 passed, 11 skipped**; frontend **618 in 81**.
+Counts after Task 5: backend **1331 passed, 11 skipped**; frontend **618 in 81**.
 
 ### Task 6: Postgres tests, and the owner's steps before `0005` (owner answer 8; S Testing "Postgres", acceptance criteria 7, 8, 11; clarifications 9, 11, 14, 18)
 
@@ -2824,9 +2863,9 @@ SELECT (SELECT version_num FROM alembic_version) AS version,
        count(*) AS services,
        count(*) FILTER (WHERE coalesce(substr(service_date_iso, 1, 10), '')
                               !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$') AS undated,
-       count(*) FILTER (WHERE CASE WHEN json_typeof(hymns) = 'array'
-                                   THEN json_array_length(hymns) = 0
-                                        OR EXISTS (SELECT 1 FROM json_array_elements(hymns) AS e
+       count(*) FILTER (WHERE CASE WHEN json_typeof(hymns::json) = 'array'
+                                   THEN json_array_length(hymns::json) = 0
+                                        OR EXISTS (SELECT 1 FROM json_array_elements(hymns::json) AS e
                                                    WHERE json_typeof(e) <> 'object' OR e ->> 'slot' IS NULL)
                                    ELSE true END) AS old_style_hymn_lists
 FROM services;
@@ -2835,9 +2874,12 @@ FROM services;
 One row. Expected before the merge: `version` is `0004_invites_reusable`
 (anything else: stop); `services` is the number of saved services in all
 churches; `undated` is how many have no readable date (the list shows them
-last); `old_style_hymn_lists` equals `services`, because every service so
-far was saved by Streamlit, whose hymn lists have no slots (they are read
-by position).
+last); it counts unreadable date patterns only (no `YYYY-MM-DD` at the
+start), so an impossible date such as `2026-02-30` is not in it, although
+the app reads it as undated. `old_style_hymn_lists` normally equals
+`services`, because every service so far was saved by Streamlit, whose hymn
+lists have no slots (they are read by position); a smaller number is not a
+stop: tell the agent, who records it.
 
 ### Step 3: Read the SQL the upgrade will run
 
@@ -2902,7 +2944,7 @@ for this.
 .venv/bin/python -m pytest -q | tail -1
 ```
 
-**Expected:** `31 passed, 8 skipped in <t>s`; `1330 passed, 16 skipped in <t>s`. With a local, throwaway Postgres: `TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres | tail -1` → `16 passed, 1330 deselected`; without one, say so (CI's `backend-postgres` job runs them).
+**Expected:** `31 passed, 8 skipped in <t>s`; `1332 passed, 16 skipped in <t>s`. With a local, throwaway Postgres: `TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres | tail -1` → `16 passed, 1332 deselected`; without one, say so (CI's `backend-postgres` job runs them).
 
 - [ ] **Step 5 (agent): Commit**
 
@@ -2920,7 +2962,7 @@ Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 git log --oneline -1
 ```
 
-Counts after Task 6: backend **1330 passed, 16 skipped**; frontend **618 in 81**.
+Counts after Task 6: backend **1332 passed, 16 skipped**; frontend **618 in 81**.
 
 ### Task 7: Docs: S's amendment and the manual-verification items (owner answers 2026-10-01/02; clarification 19)
 
@@ -2937,7 +2979,7 @@ Counts after Task 6: backend **1330 passed, 16 skipped**; frontend **618 in 81**
 
 Plan: `docs/superpowers/plans/2026-10-02-slice-5a2-saving.md`. The owner's answers of 2026-10-01 stand (answer 6: deleting a service recalculates that date's hymn use; answer 8: a backup, read-only counts and the `--sql` preview before `0005` runs; no Streamlit check). Where this spec says otherwise, 5a-2 does this:
 
-1. **Hymn use follows the archive.** `hymn_usage.rebuild_usage_for_date` replaces a date's rows with the union of the services saved for it, deduped by `hymn_search.usage_key(title)` (the title alone, slice 3a's key; the first saved number and title are kept). Saving rebuilds the saved date; a PUT that moves a service rebuilds both dates (in date order, so two rebuilds never deadlock); deleting rebuilds the date the service leaves. An undated service changes no hymn use when deleted. A rebuild also removes rows nothing saved backs (Streamlit's Prepare, imported history) for that date. Behavior change 4, open question 1 and acceptance criterion 7's "a delete leaves `hymn_usage` unchanged" are superseded.
+1. **Hymn use follows the archive.** `hymn_usage.rebuild_usage_for_date` replaces a date's rows with the union of the services saved for it, deduped by `hymn_search.usage_key(title)` (the title alone, slice 3a's key; the first saved number and title are kept). Saving rebuilds the saved date; a PUT that moves a service rebuilds both dates (in date order, so two rebuilds never deadlock); deleting rebuilds the date the service leaves. An undated service changes no hymn use when deleted. A rebuild also removes rows nothing saved backs (Streamlit's Prepare, imported history, a stored date with a time part included) for that date. Behavior change 4, open question 1 and acceptance criterion 7's "a delete leaves `hymn_usage` unchanged" are superseded.
 2. **The idempotency store is scoped by church.** `run_idempotent` takes `church_id` and keys entries by (user, church, method, route, key) (F §1.6 amendment 2026-09-28); `POST /services` passes the active church, `POST /churches` passes none.
 3. **Code layout.** The archive's queries are in a new `backend/repos/services.py`; `service_archive.py` (Streamlit's) is unchanged and slice 7 deletes it. `service_output` gains `normalize_date_iso`, `coerce_number`, `StoredHymn`, `stored_hymn_entries`, `slot_map(raw)` (it reads the stored value, so it can tell a slotted list from a compacted one) and `stored_hymns`; `repos/hymns.py` gains `find_hymns_by_titles`. No `test_services_streamlit_compat.py` (Streamlit retired).
 4. **API shapes.** `GET /services` pages 20 by default (`limit` 1-200, `offset` 0-1 000 000). `ServiceOut.hymns` is an object `ArchivedHymns {opening, response, closing}` (each `ArchivedHymn` or null, always present), not a dict. `ServiceOut.saved_at` and `ServiceSummary.saved_at` are ISO 8601 strings in UTC ending `+00:00`; `If-Match` accepts that value quoted, with `W/`, with `Z` or in another offset. A request body that fails validation is a 422 before the PUT check order starts; the order applies to the usecase's checks.
@@ -2971,7 +3013,7 @@ grep -c "—" <(git diff -U0 -- docs | grep '^+' | grep -v '^+++')
 git diff --stat | tail -1
 ```
 
-**Expected:** `89 passed in <t>s`; `4`; `0` (no em dash added); `1330 passed, 16 skipped in <t>s`; ` 2 files changed, 22 insertions(+)`.
+**Expected:** `89 passed in <t>s`; `4`; `0` (no em dash added); `1332 passed, 16 skipped in <t>s`; ` 2 files changed, 22 insertions(+)`.
 
 - [ ] **Step 3 (agent): Commit**
 
@@ -2991,7 +3033,7 @@ git log --oneline -1
 
 One review of the whole batch: the revision is expand-only and its `--sql` is exactly clarification 14's eight lines; the store key has the church and `POST /churches` behaves as before; a save writes F §6.2's shape and the Benediction and communion as sent; the rebuild's union, dedupe, lock and sorted inserts, and its three callers (save, re-dating PUT both dates, delete; none for an undated delete); the PUT check order and messages exactly clarification 5; `get_service`'s normalization as clarification 10, never raising on stored data; every query church-filtered and every route behind `require_church`; no FastAPI below the API; logs without text; the README's queries are read-only and match the tests; no frontend source changed. Fixes are `Fix: <what> (Task <n> review)` commits. Then the backup push.
 
-Counts after Task 7: backend **1330 passed, 16 skipped**; frontend **618 in 81**.
+Counts after Task 7: backend **1332 passed, 16 skipped**; frontend **618 in 81**.
 
 ### Task 8: Verification and the draft PR (owner's yes before the PR is opened and before it is marked ready)
 
@@ -3021,7 +3063,7 @@ ls backend/migrations/versions | grep -c '^0'
 (cd frontend && NEXT_PUBLIC_SUPABASE_URL=https://ci-placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-placeholder NEXT_PUBLIC_API_URL=http://localhost:8000 npm run build 2>&1 | grep -E "Compiled successfully|Error")
 ```
 
-**Expected:** `1330 passed, 16 skipped in <t>s`; ` Test Files  81 passed (81)` and `      Tests  618 passed (618)` with no `×` or `FAIL` line (one names the failing test: Step 6); `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s` and no `Error` (a font `Failed to fetch` only: say so and rely on CI). With a local, throwaway Postgres also `TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres | tail -1` → `16 passed, 1330 deselected`.
+**Expected:** `1332 passed, 16 skipped in <t>s`; ` Test Files  81 passed (81)` and `      Tests  618 passed (618)` with no `×` or `FAIL` line (one names the failing test: Step 6); `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s` and no `Error` (a font `Failed to fetch` only: say so and rely on CI). With a local, throwaway Postgres also `TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres | tail -1` → `16 passed, 1332 deselected`.
 
 - [ ] **Step 3 (agent): The API files match, the preview, the gates, the paths, the commits**
 
@@ -3065,7 +3107,7 @@ M	docs/superpowers/specs/2026-09-25-slice-5a-documents-archive-design.md
 M	frontend/src/lib/api/openapi.json
 M	frontend/src/lib/api/schema.d.ts
 ```
-`0`; the subjects oldest first: the runbook commit (`Runbook: default Benediction skipped by Review service (PR #42, owner's phone check)`) unless it is on `main`, the plan's (`WIP plan: slice 5a-2` …, `Plan: slice 5a-2, saving backend and migration (owner answers 2026-10-01/02)`), then T1-T7's seven subjects as written above, then any `Fix: …` lines; only `trailer check done`.
+`0`; the subjects oldest first: the runbook commit (`Runbook: default Benediction skipped by Review service (PR #42, owner's phone check)`) unless it is on `main`, the plan's (`WIP plan: slice 5a-2` …, `Plan: slice 5a-2, saving backend and migration (owner answers 2026-10-01/02)`, `Plan: slice 5a-2 review fixes (owner answers 2026-10-02)`), then T1-T7's seven subjects as written above, then any `Fix: …` lines; only `trailer check done`.
 
 - [ ] **Step 4 (agent → OWNER): Ask to open the draft PR**
 
@@ -3076,7 +3118,7 @@ gh pr list -R bbrown62450/church --head claude/slice-2-plan-4q33le --state open 
 
 **Expected:** one `✓ Logged in` line; `[]`. Send the owner exactly this, and wait for a clear yes:
 
-> Slice 5a-2 (saving, on the server side) is verified on this machine: backend 1330 passed, 16 skipped (1263 and 11 before; the 5 new skipped ones are database-concurrency tests that CI runs on Postgres); frontend 618 tests in 81 files, unchanged; typecheck, lint and the production build are clean. It adds the /services routes (save, list, open, save changes, delete) and one database change, migration 0005: two new empty columns and an index. Nothing changes on screen yet; the Save button and the Services page come in 5a-3. Before it merges I will ask you for the backup, the counts and a look at the SQL, one at a time. May I open the pull request as a **draft** titled "Slice 5a-2: saving backend and migration 0005", so the checks run? Merging stays with you.
+> Slice 5a-2 (saving, on the server side) is verified on this machine: backend 1332 passed, 16 skipped (1263 and 11 before; the 5 new skipped ones are database-concurrency tests that CI runs on Postgres); frontend 618 tests in 81 files, unchanged; typecheck, lint and the production build are clean. It adds the /services routes (save, list, open, save changes, delete) and one database change, migration 0005: two new empty columns and an index. Nothing changes on screen yet; the Save button and the Services page come in 5a-3. Before it merges I will ask you for the backup, the counts and a look at the SQL, one at a time. May I open the pull request as a **draft** titled "Slice 5a-2: saving backend and migration 0005", so the checks run? Merging stays with you.
 
 - [ ] **Step 5 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
 
@@ -3092,7 +3134,7 @@ Slice 5a-2: saving on the server, and migration 0005_services_extras (the second
 - repos/services.py for the queries; service_archive.py (Streamlit's) untouched.
 - OpenAPI snapshot and types regenerated; no frontend code changed.
 
-Tests: backend 1263 → 1330 passed, 11 → 16 skipped; frontend 618 → 618 in 81 → 81 files
+Tests: backend 1263 → 1332 passed, 11 → 16 skipped; frontend 618 → 618 in 81 → 81 files
 
 After merge (Task 9): the owner's after-deploy check (one read-only query) and a short phone check, then a "Slice 5a-2 record" in docs/ops-runbook.md.
 
@@ -3106,7 +3148,7 @@ gh pr create -R bbrown62450/church --draft --base main --head claude/slice-2-pla
 gh pr checks <N> -R bbrown62450/church --watch --interval 30
 ```
 
-Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1330 passed, 16 skipped`, backend-postgres `16 passed, 1330 deselected` (after its `alembic upgrade head`, `alembic check`, `downgrade base`, `upgrade head` steps, now through `0005`), frontend `618 passed` in 81 files. Then send: "PR #<N> is green: backend 1330 passed, 16 skipped; the Postgres job ran the migration up, down and up again and passed its 16 tests; 618 frontend tests in 81 files. May I mark it ready for review? Merging stays with you, after the backup, the counts and the SQL check." On the yes: `gh pr ready <N> -R bbrown62450/church`.
+Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1332 passed, 16 skipped`, backend-postgres `16 passed, 1332 deselected` (after its `alembic upgrade head`, `alembic check`, `downgrade base`, `upgrade head` steps, now through `0005`), frontend `618 passed` in 81 files. Then send: "PR #<N> is green: backend 1332 passed, 16 skipped; the Postgres job ran the migration up, down and up again and passed its 16 tests; 618 frontend tests in 81 files. May I mark it ready for review? Merging stays with you, after the backup, the counts and the SQL check." On the yes: `gh pr ready <N> -R bbrown62450/church`.
 
 - [ ] **Step 6: Fix any failure in its owning task**
 
@@ -3123,7 +3165,7 @@ Run the last line with `run_in_background: true`. **Expected:** the PR URL; ever
 
 For each fix: change only the owning task's files; rerun Steps 2-3; commit `Fix: <what> (Task <n>, 5a-2 final verification)` with the trailer; after the PR exists, ask the owner before pushing it.
 
-Expected counts after this task: backend `1330 passed, 16 skipped`; frontend `618 passed` in 81 files.
+Expected counts after this task: backend `1332 passed, 16 skipped`; frontend `618 passed` in 81 files.
 
 ### Task 9: Before the merge (backup, counts, SQL), the merge, the after-deploy checks, the record (OWNER + agent)
 
@@ -3156,7 +3198,7 @@ Send, with the query from README step 2 pasted in full inside a code block:
 
 > Second check: one read-only query; it only counts. Open Supabase → your project → SQL Editor → New query, paste the query below, and press Run. You should see one row with four numbers. Please tell me what each column shows: version, services, undated, old_style_hymn_lists.
 
-**Expected:** `version` `0004_invites_reusable`; `services` the number of saved services in all churches; `undated` how many have no readable date; `old_style_hymn_lists` equal to `services`. Record the four values. If `version` is not `0004_invites_reusable`, or `old_style_hymn_lists` differs from `services`, stop and tell the owner what it means before going on.
+**Expected:** `version` `0004_invites_reusable`; `services` the number of saved services in all churches; `undated` how many have no readable date pattern; `old_style_hymn_lists` normally equal to `services`. Record the four values. If `version` is not `0004_invites_reusable`, stop and tell the owner what it means before going on. A smaller `old_style_hymn_lists` is not a stop: those rows already have slot entries (read by slot, as 5a-2 writes them); record the number and say so in the record's Follow-ups row.
 
 - [ ] **Step 3 (agent → OWNER): The SQL the migration will run**
 
@@ -3287,7 +3329,7 @@ gh pr checks claude/slice-2-plan-4q33le -R bbrown62450/church --watch
 
 On the owner's yes for each outward command (clarification 18; README "Reverting 5a-2"): a branch `claude/revert-slice-5a2` from `origin/main`; `git revert -m 1 --no-commit <merge sha>`; then put back the schema and its tests from the merge commit, `git checkout <merge sha> -- backend/migrations/versions/0005_services_extras.py backend/db/models.py backend/migrations/README.md backend/tests/test_migrations.py backend/tests/test_schema_check.py backend/tests/test_api_app.py`; a commit "Revert slice 5a-2 (PR #<N>), keeping migration 0005" with the trailer; both suites (`1267 passed, 11 skipped`: the baseline plus T1's three and T6's README test; `618 passed` in 81); a PR, CI, and the merge on the owner's yes; record it in the 5a-2 record. Never `alembic downgrade` production for this: the database stays at `0005_services_extras`, which the older code ignores.
 
-Expected counts after this task: backend `1330 passed, 16 skipped` on `main`; frontend `618 passed` in 81 files. The records PR adds no test.
+Expected counts after this task: backend `1332 passed, 16 skipped` on `main`; frontend `618 passed` in 81 files. The records PR adds no test.
 
 ---
 ## Build notes
@@ -3307,13 +3349,15 @@ Expected counts after this task: backend `1330 passed, 16 skipped` on `main`; fr
 - **Step R checked:** in the replay worktree, `git revert --no-commit` of T1-T7 and `git checkout` of Step R's six files from the tip gave `1267 passed, 11 skipped` and typecheck 0.
 - Not run while planning: the production build (T8 runs it in the real checkout; no frontend source changed), the pushes, the PR and CI, the backup, the owner's queries on production, the merge and the deploy.
 
+**Review fixes (2026-10-02, after the owner's "all recommended").** A review of the replayed plan found no critical or important issue; its minor findings changed: the rebuild deletes a date's rows by prefix (`LIKE '<date>%'`), so imported rows with a time part go too (T3 gains `test_imported_rows_with_a_time_part_go_when_their_date_is_rebuilt`); the owner's count query casts `hymns::json` (so it runs whether the column is `json` or `jsonb`) and says `undated` counts date patterns only; a smaller `old_style_hymn_lists` is no longer a stop; the index's stated purpose (the list's order; the rebuild uses its `church_id` prefix); `find_hymns_by_titles` keeps its Python filter (a SQL narrowing would miss titles `normalize_title` matches; Risks, and T4 gains `test_a_title_match_ignores_case_and_spacing_in_the_stored_title`); the F acceptance item 16 waiver in Spec coverage; the stale-replay note in clarification 4. The replay counts above are the pre-fix ones; the count table now reads T3 +17 and T4 +25 (backend 1284, 1309, 1331, then 1332 with 16 skipped).
+
 ## Spec coverage
 
 | Owner answer or S item | Task(s) and tests |
 |---|---|
 | 1. Three PRs; this one is the saving backend and `0005` alone | the plan's scope; T8 Step 3 (27 paths, no frontend source); clarification 1 |
 | 4. A saved service keeps its Benediction and communion as saved | T4 `test_create_writes_three_slots_the_display_date_and_the_8_sections` (the Benediction and `include_communion` stored as sent), `test_replace_is_a_full_replace_that_keeps_the_author_and_moves_saved_at`; T5 `test_create_open_list_replace_delete` |
-| 6. Delete recalculates a date's hymn use; save records the date's union, deduped by the title-only key | T3 `test_a_date_s_rows_are_the_union_of_its_saved_services`, `test_rows_nothing_saved_backs_are_replaced`, `test_a_date_with_no_service_left_has_no_rows`, `test_titles_dedupe_by_the_usage_key_and_keep_the_first_saved`, `test_malformed_legacy_rows_are_skipped_not_raised`, `test_only_that_date_and_that_church`, `test_only_a_yyyy_mm_dd_date_is_accepted`; T4 `test_saving_records_the_date_s_union_and_replaces_prepared_rows`, `test_deleting_recalculates_the_date_from_the_services_left`, `test_deleting_an_undated_service_changes_no_hymn_use`, `test_moving_a_service_to_another_date_rebuilds_both_dates`, `test_a_failed_usage_rebuild_rolls_the_save_back`; T5 `test_hymn_use_follows_save_and_delete`; T6 `test_concurrent_saves_on_one_date_record_the_full_union`, `test_a_rebuild_waits_for_another_on_the_same_date_only` |
+| 6. Delete recalculates a date's hymn use; save records the date's union, deduped by the title-only key | T3 `test_a_date_s_rows_are_the_union_of_its_saved_services`, `test_rows_nothing_saved_backs_are_replaced`, `test_a_date_with_no_service_left_has_no_rows`, `test_imported_rows_with_a_time_part_go_when_their_date_is_rebuilt`, `test_titles_dedupe_by_the_usage_key_and_keep_the_first_saved`, `test_malformed_legacy_rows_are_skipped_not_raised`, `test_only_that_date_and_that_church`, `test_only_a_yyyy_mm_dd_date_is_accepted`; T4 `test_saving_records_the_date_s_union_and_replaces_prepared_rows`, `test_deleting_recalculates_the_date_from_the_services_left`, `test_deleting_an_undated_service_changes_no_hymn_use`, `test_moving_a_service_to_another_date_rebuilds_both_dates`, `test_a_failed_usage_rebuild_rolls_the_save_back`; T5 `test_hymn_use_follows_save_and_delete`; T6 `test_concurrent_saves_on_one_date_record_the_full_union`, `test_a_rebuild_waits_for_another_on_the_same_date_only` |
 | 8. Backup, read-only counts, the `--sql` preview first; no Streamlit check | T1 `test_offline_sql_for_0005_is_two_column_adds_and_one_index_under_the_timeouts`; T6 the README section, `test_the_readme_shows_the_0005_preview_exactly`, `test_the_owner_s_read_only_queries_count_as_the_api_reads`; T9 Steps 1-3 and 5 |
 | 9. Reviewer notes not saved | clarification 17 (`ServiceDraft` `extra="forbid"`; T5 `test_a_bad_body_is_a_422_naming_the_field` "extra") |
 | F §1.6 church-scope amendment | T2 `test_keys_are_scoped_per_church`; T5 `test_the_same_key_in_two_churches_saves_in_each`, `test_a_replayed_key_returns_the_first_answer_and_saves_once`, `test_a_corrected_retry_needs_a_new_key` (S acceptance criterion 9, server side) |
@@ -3322,16 +3366,17 @@ Expected counts after this task: backend `1330 passed, 16 skipped` on `main`; fr
 | S acceptance criterion 6 (what a save writes; F §6.2) | T3 `test_stored_hymns_writes_three_slot_entries_never_null_titles`; T4 `test_create_writes_three_slots_the_display_date_and_the_8_sections`, `test_a_null_hymnal_is_stored_as_the_church_s_effective_hymnal` |
 | S acceptance criterion 10 (members allowed, isolation, another church's hymn id) | T5 `test_any_member_may_save_replace_and_delete` (member, admin; the owner in the others), `test_every_route_is_church_isolated` (`assert_church_isolated` on GET list, GET one, POST, DELETE; PUT on B's id 404), `test_another_church_s_hymn_id_is_a_404_naming_the_slot_and_writes_nothing`; T4 `test_another_church_s_service_is_not_found`, `test_a_hymn_the_church_lacks_or_a_blank_label_writes_nothing`; `test_route_guards.py` unchanged and passing |
 | S acceptance criterion 11 (`0005` up, down, single head, `alembic check`, inserts without the columns) | T1 `test_0005_adds_two_nullable_columns_and_the_date_index_and_keeps_rows`, `test_0005_downgrade_gives_back_the_0004_services_table`, `test_head_is_0005_services_extras`, `test_schema_diff_at_baseline_lists_exactly_the_0004_and_0005_changes`; existing `test_upgrade_head_on_empty_sqlite_matches_the_models`, `test_downgrade_base_then_upgrade_head`, `test_there_is_a_single_head`; CI `backend-postgres` alembic cycle |
-| S acceptance criterion 12 (opening: legacy lists, resolution and tie-break, snapshots, filtering, unknown places, dates) | T3 `test_normalize_date_iso_keeps_a_real_date_and_recovers_a_time_part`, `test_stored_hymn_entries_never_raise_and_keep_every_entry`, `test_slot_map_by_slot_or_by_position`, `test_coerce_number`; T4 `test_a_compacted_streamlit_list_maps_by_position_and_resolves_by_title_and_number`, `test_title_matches_prefer_the_entry_s_hymnal_then_the_service_s_then_the_church_s`, `test_duplicate_titles_resolve_the_same_way_every_time`, `test_a_stored_id_resolves_to_the_hymn_s_current_title`, `test_liturgy_custom_elements_and_dates_are_normalized`, `test_an_element_with_an_unknown_place_survives_open_then_save`; T5 `test_a_stored_unknown_place_comes_back_as_end_and_survives_a_put` |
+| S acceptance criterion 12 (opening: legacy lists, resolution and tie-break, snapshots, filtering, unknown places, dates) | T3 `test_normalize_date_iso_keeps_a_real_date_and_recovers_a_time_part`, `test_stored_hymn_entries_never_raise_and_keep_every_entry`, `test_slot_map_by_slot_or_by_position`, `test_coerce_number`; T4 `test_a_compacted_streamlit_list_maps_by_position_and_resolves_by_title_and_number`, `test_title_matches_prefer_the_entry_s_hymnal_then_the_service_s_then_the_church_s`, `test_duplicate_titles_resolve_the_same_way_every_time`, `test_a_title_match_ignores_case_and_spacing_in_the_stored_title`, `test_a_stored_id_resolves_to_the_hymn_s_current_title`, `test_liturgy_custom_elements_and_dates_are_normalized`, `test_an_element_with_an_unknown_place_survives_open_then_save`; T5 `test_a_stored_unknown_place_comes_back_as_end_and_survives_a_put` |
 | S "Data access and tenancy" (one transaction; logs without text) | T4 `test_a_failed_usage_rebuild_rolls_the_save_back`, `test_saving_logs_ids_and_counts_never_text` |
 | Layering (no FastAPI or Streamlit below the API) | T4 `test_no_streamlit_in_core.py` (`repos.services`, `hymn_usage` added) and the imports grep |
 | OpenAPI and types regenerated | T5 Step 4; T8 Step 3; `test_openapi_contract.py` |
+| F acceptance item 16 (a service saved by the new app opens in frozen Streamlit) | waived by owner answers 6 and 8 (Streamlit retired); no `test_services_streamlit_compat.py` (clarification 15) |
 
 S items **not** in 5a-2 (owner answer 1): the Review step's Save card, conflict dialog and editing banner; the Services page; `serviceToDraft`, the final `draftToServicePayload`, `save-key.ts`, the draft version bump, `"review"` in `SHIPPED_STEPS`, the summary's archive half; `useSaveService`, `useServices`, `useDeleteService`, `useOpenService`; `test_services_streamlit_compat.py` (Streamlit retired); `service_archive.py`'s new functions (replaced by `repos/services.py`, clarification 15).
 
 ## Questions for the owner
 
-Your answers of 2026-10-01 and 2026-10-02 (1-9) are binding and already in the plan. These are the choices the plan makes where you did not say; each is written as recommended. The plan is built as recommended.
+Your answers of 2026-10-01 and 2026-10-02 (1-9) are binding and already in the plan. These are the choices the plan makes where you did not say; each is written as recommended. The plan is built as recommended. **Answered 2026-10-02: "all recommended" (binding).**
 
 1. **Nothing new on screen in this PR** (clarifications 1, 16): it is the server side of saving and the database change. The Save button, the Services page and their wording come in 5a-3. Recommended: accept.
 2. **Hymn use stays unrecorded until 5a-3** (clarification 2): saving will record it, but the app cannot save until 5a-3's Save button, so the Hymns step's "Used …" marks keep missing services built until then. Recommended: accept (5a-3 is next).
