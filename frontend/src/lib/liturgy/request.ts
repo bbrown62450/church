@@ -14,7 +14,9 @@
  *   and the batch's one passage fetch (T6); left out when there is none.
  *
  * The service reviewer's bodies (`buildReviewRequest`, `buildReviseRequest`)
- * carry the same occasion, readings and resolved sermon text.
+ * carry the same occasion, readings and resolved sermon text, and the Word
+ * files' body (`lib/documents.ts`, slice 5a) the same occasion, readings and
+ * hymns (`readingsContext`, `hymnRef`).
  */
 import type {
   ChurchProfile,
@@ -40,7 +42,7 @@ export const MAX_CARD_TEXT = 20_000;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function hymnRef(pick: HymnPick | null): HymnRef | null {
+export function hymnRef(pick: HymnPick | null): HymnRef | null {
   if (pick === null) return null;
   const number = pick.number !== null && pick.number >= 0 && pick.number <= 100_000 ? pick.number : null;
   return {
@@ -52,7 +54,7 @@ function hymnRef(pick: HymnPick | null): HymnRef | null {
 }
 
 /** The occasion and readings every liturgy request carries, within the ServiceDraft limits. */
-function readingsContext(draft: DraftV1): { occasion: string; scriptures: string[] } {
+export function readingsContext(draft: DraftV1): { occasion: string; scriptures: string[] } {
   const r = draft.readings;
   return {
     occasion: clipChars(r.occasion.trim(), MAX_OCCASION),
