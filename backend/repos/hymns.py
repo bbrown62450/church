@@ -14,6 +14,7 @@ from db import session_scope
 from db.ids import as_uuid
 from db.models import Hymn, HymnCatalog
 from domain_errors import NotFound
+from hymn_search import normalize_title
 
 
 def _as_uuid(value: Any) -> uuid.UUID:
@@ -349,5 +350,25 @@ def get_hymns_by_ids(church_id, ids, *, session: Optional[Session] = None) -> di
         rows = s.execute(select(*_RECORD_COLUMNS)
                          .where(Hymn.church_id == cid, Hymn.id.in_(sorted(wanted)))).all()
         return {row.id: _record(row) for row in rows}
+
+    return _in(session, work)
+
+
+def find_hymns_by_titles(church_id, title_keys, *, session: Optional[Session] = None) -> list[HymnRecord]:
+    """The church's hymns whose hymn_search.normalize_title(title) is in
+    `title_keys`, ordered by hymnal, number (nulls last), id (slice 5a-2:
+    opening a saved service whose hymn has no id that still resolves). The
+    filter runs in Python, because SQL cannot collapse whitespace the same way
+    on SQLite and Postgres; a church has a few thousand hymns at most, and the
+    caller asks only when some slot needs it."""
+    wanted = {key for key in title_keys if key}
+    if not wanted:
+        return []
+    cid = as_uuid(church_id)
+
+    def work(s: Session) -> list[HymnRecord]:
+        rows = s.execute(select(*_RECORD_COLUMNS).where(Hymn.church_id == cid)
+                         .order_by(Hymn.hymnal.asc(), Hymn.number.asc().nulls_last(), Hymn.id.asc())).all()
+        return [_record(row) for row in rows if normalize_title(row.title) in wanted]
 
     return _in(session, work)
