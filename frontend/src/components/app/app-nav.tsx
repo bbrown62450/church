@@ -5,8 +5,11 @@ import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/utils";
 
-/** Nav items in order; each appears once its slice ships (F §4.2). 5a adds "Services", 5b or 6a "Settings". */
-export const NAV_ITEMS = [{ href: "/builder", label: "Builder" }] as const;
+/** Nav items in order; each appears once its slice ships (F §4.2): "Services" from 5a-3; 5b or 6a adds "Settings". */
+export const NAV_ITEMS = [
+  { href: "/builder", label: "Builder" },
+  { href: "/services", label: "Services" },
+] as const;
 
 /**
  * Primary navigation (F §4.2; S Hand-offs "AppNav"). One element for every
