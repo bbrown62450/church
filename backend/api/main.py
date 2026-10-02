@@ -11,7 +11,7 @@ from api.errors import install_error_handlers
 from api.logging_config import configure_logging
 from api.middleware import RequestIdMiddleware, UnhandledErrorMiddleware
 from api.routes import (churches, documents, health, hymnals, hymns, invites, lectionary, liturgy,
-                        liturgy_review, me, reference, rubric, scripture)
+                        liturgy_review, me, reference, rubric, scripture, services)
 from api.settings import get_settings
 from api.startup import check_app_env, describe_database, enforce_production_guards
 from db import get_engine
@@ -73,6 +73,7 @@ def create_app() -> FastAPI:
     app.include_router(liturgy.router)
     app.include_router(liturgy_review.router)
     app.include_router(documents.router)
+    app.include_router(services.router)
     return app
 
 
