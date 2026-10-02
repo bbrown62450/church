@@ -248,3 +248,14 @@ tip after a download. The Word documents card does not change.
 - **The PDF on a phone** reads in sheet order (answer 6: one version). The Word version reads in
   order.
 - **Upstream scripture text** can be slow or missing; the file still prints, with the placeholder.
+
+## Notes from the PR 1 plan (2026-10-02)
+
+- reportlab 5.0.1 and pypdf 6.19.0 installed from PyPI into `.venv` as pure-Python wheels; the
+  plan's code was built and its directives replayed on a fresh worktree (backend 1335 → 1363 passed,
+  frontend 655 → 660 in 83 files).
+- A service shaped like the owner's sample (names replaced by placeholders) renders as five booklet
+  pages (cover, three inside pages, announcements), padded to eight on two legal sheets; the
+  imposed sides were rendered to images and compared with the sample's pages.
+- The Word file was checked by reading it back with python-docx; LibreOffice in the planning
+  container could not open any `.docx`, so the owner's phone check is its first visual check.
