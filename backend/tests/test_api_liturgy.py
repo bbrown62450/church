@@ -74,7 +74,8 @@ def test_config_serves_liturgy_config(client, owner):
     assert [(p["key"], p["label"]) for p in body["custom_placements"]] == list(liturgy_config.CUSTOM_PLACEMENTS)
     assert body["outline"] == liturgy_config.outline_as_json() and len(body["outline"]) == 16
     assert body["assurance_response"] == "People: Thanks be to God! Amen."
-    assert body["default_benediction_fallback"] == "Halverson"
+    assert body["default_benediction_fallback"] == liturgy_config.DEFAULT_BENEDICTION_FALLBACK
+    assert body["default_benediction_fallback"].endswith("Jesus Christ.\u201d - Richard Halverson")
     assert body["communion"]["default_rule"] == "first_sunday_of_month"
     assert body["communion"]["toggle_label"] == "Include communion liturgy (The Sacrament of the Lord's Supper)"
     assert len(body["communion"]["blocks"]) == len(liturgy_config.COMMUNION_BLOCKS)

@@ -20,6 +20,8 @@ const ENDPOINT_TIMEOUTS: Record<string, number> = {
   // deadline plus a last connect, and a revision within generation's 85 s; the same margin.
   "POST /liturgy/review": 100_000,
   "POST /liturgy/revise": 100_000,
+  // Slice 5a (F §1.8): a Word file is local work on the server, well under 3 s; 30 s covers a slow phone network.
+  "POST /documents": 30_000,
 };
 
 export function timeoutFor(method: string, path: string): number {

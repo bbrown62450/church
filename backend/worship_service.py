@@ -2,17 +2,20 @@
 """
 Worship service generator: the Word document export. The hymn helpers moved
 to hymn_search, hymn_suggest and usecases.hymns in slice 3; liturgy generation
-moved to liturgy_prompts and usecases.liturgy in slice 4.
+moved to liturgy_prompts and usecases.liturgy in slice 4. Slice 5a renders
+the files through service_output.render_docx (POST /documents).
 """
 
 from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Mapping, Sequence
 from typing import Dict, Any, List, Optional
 from io import BytesIO
 
 from liturgy_config import ASSURANCE_RESPONSE, COMMUNION_BLOCKS
+from service_output import hymn_line
 
 logger = logging.getLogger(__name__)
 
@@ -75,10 +78,20 @@ def _add_communion_liturgy(doc) -> None:
             doc.add_paragraph()
 
 
+# A typed "People:" label in the Assurance (any case, at a line start or after
+# whitespace, as _add_leader_people_paragraph reads labels): the text prints up
+# to it and the fixed response prints once (owner decision B, 2026-10-02).
+_ASSURANCE_PEOPLE = re.compile(r"(?:^|(?<=\s))People:", re.IGNORECASE | re.MULTILINE)
+
+
 def _add_assurance_paragraph(doc, leader_text: str) -> None:
     """Add Assurance: Leader line then liturgy_config.ASSURANCE_RESPONSE in bold
-    (the one copy the 4b card shows too)."""
+    (the one copy the 4b card shows too). Text from a typed "People:" label on
+    is left out, so the response is never printed twice (owner decision B)."""
     leader_clean = (leader_text or "").strip()
+    people = _ASSURANCE_PEOPLE.search(leader_clean)
+    if people:
+        leader_clean = leader_clean[: people.start()].strip()
     if leader_clean.startswith("Leader:"):
         leader_clean = leader_clean[7:].strip()
     if leader_clean:
@@ -103,34 +116,49 @@ def _add_custom_elements_after(
             doc.add_paragraph()
 
 
+def _add_hymn(doc, heading: str, hymn: Optional[Mapping[str, Any]]) -> None:
+    """A filled slot's heading and line; an empty slot prints nothing (5a: headings by slot)."""
+    if hymn is None:
+        return
+    doc.add_paragraph(heading, style="Heading 2")
+    doc.add_paragraph(hymn_line(hymn.get("title") or "", hymn.get("number")))
+    doc.add_paragraph()
+
+
 def build_docx(
     *,
     occasion: str,
-    date: str,
-    scriptures: List[str],
-    hymns: List[Dict[str, str]],
-    liturgy: Dict[str, str],
-    include_placeholders: bool = True,
-    sermon_title: Optional[str] = None,
-    selected_ot_ref: Optional[str] = None,
-    selected_nt_ref: Optional[str] = None,
-    scripture_full_texts: Optional[Dict[str, str]] = None,
+    date_display: str,
+    hymns_by_slot: Mapping[str, Optional[Mapping[str, Any]]],
+    liturgy: Mapping[str, str],
+    ot_ref: Optional[str],
+    nt_ref: Optional[str],
+    sermon_title: str = "",
     include_sermon: bool = True,
     include_prayers_of_the_people: bool = True,
     include_communion: bool = False,
-    custom_elements: Optional[List[Dict[str, Any]]] = None,
-) -> BytesIO:
+    custom_elements: Sequence[Mapping[str, Any]] = (),
+) -> bytes:
     """
-    Build a Word document with the worship service order and generated liturgy.
-    include_sermon: include Sermon Title section (for pastor copy; omit for secretary).
-    include_prayers_of_the_people: include Prayers of the People (for pastor copy; omit for secretary).
-    include_communion: include The Sacrament of the Lord's Supper liturgy (e.g. first Sunday of month).
-    Returns a BytesIO buffer containing the .docx.
+    The Word file of a service: Streamlit's layout, paragraph for paragraph
+    (Times New Roman 11 pt, Word's Heading 2, the bold People lines and
+    confession), with slice 5a's changes: hymn headings follow slots
+    (opening "First Hymn", response "Second Hymn", closing "Third Hymn"; an
+    empty slot prints nothing), a hymn without a number prints no "#None", and
+    the first reading's heading is "First Reading"; a blank occasion prints
+    no second title line (owner decision A) and an Assurance with a typed
+    "People:" label prints only the text before it, then the fixed response
+    once (owner decision B). ot_ref and nt_ref arrive
+    resolved (service_output.resolve_doc_readings); None leaves a reading out.
+    Both variants include the sermon title; only the pastor's copy includes
+    Prayers of the People (service_output.VARIANTS). Custom elements print
+    after their anchor, which is emitted even when its item is absent.
+    Returns the .docx bytes.
     """
     if not Document:
         raise RuntimeError("python-docx is required. pip install python-docx")
 
-    custom = custom_elements or []
+    custom = list(custom_elements)
     doc = Document()
     style = doc.styles["Normal"]
     style.font.size = Pt(11)
@@ -139,14 +167,15 @@ def build_docx(
     # Title
     title = doc.add_paragraph()
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = title.add_run(f"Worship Service\n{occasion}")
+    # A blank occasion prints no second line (owner decision A, 2026-10-02).
+    run = title.add_run("Worship Service" + (f"\n{occasion}" if occasion else ""))
     run.bold = True
     run.font.size = Pt(16)
     run.font.name = "Times New Roman"
-    if date:
+    if date_display:
         p = doc.add_paragraph()
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p.add_run(date).font.size = Pt(12)
+        p.add_run(date_display).font.size = Pt(12)
     doc.add_paragraph()
 
     # 1. Call to Worship (Leader / People, People in bold)
@@ -163,12 +192,8 @@ def build_docx(
         doc.add_paragraph()
     _add_custom_elements_after(doc, "opening_prayer", custom)
 
-    # 3. First Hymn
-    if hymns:
-        doc.add_paragraph("First Hymn", style="Heading 2")
-        h = hymns[0]
-        doc.add_paragraph(f"{h.get('title', '')} — #{h.get('number', '')}")
-        doc.add_paragraph()
+    # 3. First Hymn (the opening slot)
+    _add_hymn(doc, "First Hymn", hymns_by_slot.get("opening"))
     _add_custom_elements_after(doc, "first_hymn", custom)
 
     # 4. Prayer of Confession (bold)
@@ -193,23 +218,21 @@ def build_docx(
         doc.add_paragraph()
     _add_custom_elements_after(doc, "prayer_for_illumination", custom)
 
-    # 7. Old Testament Reading (reference only)
-    ot_ref = selected_ot_ref or (scriptures[0] if scriptures else None)
+    # 7. First Reading (reference only; owner decision B renamed "Old Testament Reading")
     if ot_ref:
-        doc.add_paragraph("Old Testament Reading", style="Heading 2")
+        doc.add_paragraph("First Reading", style="Heading 2")
         doc.add_paragraph(ot_ref)
         doc.add_paragraph()
     _add_custom_elements_after(doc, "ot_reading", custom)
 
     # 8. New Testament Reading (reference only)
-    nt_ref = selected_nt_ref or (scriptures[1] if len(scriptures) > 1 else None)
     if nt_ref:
         doc.add_paragraph("New Testament Reading", style="Heading 2")
         doc.add_paragraph(nt_ref)
         doc.add_paragraph()
     _add_custom_elements_after(doc, "nt_reading", custom)
 
-    # 9. Sermon Title (optional; for pastor copy only)
+    # 9. Sermon Title (both copies)
     if include_sermon:
         doc.add_paragraph("Sermon Title", style="Heading 2")
         doc.add_paragraph(sermon_title.strip() if sermon_title and sermon_title.strip() else "[Sermon title]")
@@ -222,20 +245,16 @@ def build_docx(
     doc.add_paragraph()
     _add_custom_elements_after(doc, "affirmation_of_faith", custom)
 
-    # 11. Second Hymn
-    if len(hymns) > 1:
-        doc.add_paragraph("Second Hymn", style="Heading 2")
-        h = hymns[1]
-        doc.add_paragraph(f"{h.get('title', '')} — #{h.get('number', '')}")
-        doc.add_paragraph()
+    # 11. Second Hymn (the response slot)
+    _add_hymn(doc, "Second Hymn", hymns_by_slot.get("response"))
     _add_custom_elements_after(doc, "second_hymn", custom)
 
-    # 11b. Communion liturgy (after second hymn when communion is included)
+    # 11b. Communion liturgy (after the second hymn when communion is included)
     if include_communion:
         _add_communion_liturgy(doc)
     _add_custom_elements_after(doc, "communion", custom)
 
-    # 12. Prayers of the People (optional; for pastor copy only)
+    # 12. Prayers of the People (the pastor's copy only)
     if include_prayers_of_the_people and liturgy.get("prayers_of_the_people"):
         doc.add_paragraph("Prayers of the People", style="Heading 2")
         doc.add_paragraph(liturgy["prayers_of_the_people"])
@@ -249,12 +268,8 @@ def build_docx(
         doc.add_paragraph()
     _add_custom_elements_after(doc, "offertory_prayer", custom)
 
-    # 14. Third Hymn
-    if len(hymns) > 2:
-        doc.add_paragraph("Third Hymn", style="Heading 2")
-        h = hymns[2]
-        doc.add_paragraph(f"{h.get('title', '')} — #{h.get('number', '')}")
-        doc.add_paragraph()
+    # 14. Third Hymn (the closing slot)
+    _add_hymn(doc, "Third Hymn", hymns_by_slot.get("closing"))
     _add_custom_elements_after(doc, "third_hymn", custom)
     _add_custom_elements_after(doc, "benediction", custom)  # "Before Benediction"
 
@@ -267,5 +282,4 @@ def build_docx(
 
     buf = BytesIO()
     doc.save(buf)
-    buf.seek(0)
-    return buf
+    return buf.getvalue()

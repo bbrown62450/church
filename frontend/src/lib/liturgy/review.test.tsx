@@ -34,6 +34,7 @@ import { renderWithProviders } from "@/test/render";
 import { editCardText } from "./cards";
 import { LiturgyGenerationProvider, useLiturgyGeneration } from "./generation";
 import { LiturgyReviewProvider, reviewDoneMessage, useLiturgyReview, type LiturgyReview } from "./review";
+import { DEFAULT_BENEDICTION_FALLBACK } from "@/lib/liturgy/defaults";
 
 const KEY = draftKey(USER_ID, church().id);
 const STOCK = 'Stock phrase "as we journey". Say it more naturally.';
@@ -138,7 +139,7 @@ describe("the review (R User experience, API)", () => {
     expect(await screen.findByText("said: Review finished. 4 notes.")).toBeInTheDocument();
     expect(screen.getByText("running: no")).toBeInTheDocument();
     expect(screen.getByText(`opening_prayer: Gracious God, as we journey, hear us. [ai] notes ${STOCK} | The prayer runs long.; revising no; error none; undo none`)).toBeInTheDocument();
-    expect(screen.getByText(/^benediction: Halverson \[default\] notes looks good;/)).toBeInTheDocument();
+    expect(screen.getByText((text) => text.startsWith(`benediction: ${DEFAULT_BENEDICTION_FALLBACK} [default] notes looks good;`))).toBeInTheDocument();
     expect(screen.getByText("status: ok; service: Two prayers say journey.")).toBeInTheDocument();
     const passages = api.requests.filter((r) => r.path === "/scripture/passages");
     expect(passages.map((r) => r.body)).toEqual([{ refs: ["Philippians 3:4b-14"], translation: "web" }]);

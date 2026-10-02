@@ -6,6 +6,7 @@ import { fingerprint, fnv1a32, isDirty, stableStringify } from "./fingerprint";
 import { draftToServicePayload } from "./mapping";
 import { editOccasion } from "./readings";
 import type { DraftV1 } from "./schema";
+import { DEFAULT_BENEDICTION_FALLBACK } from "@/lib/liturgy/defaults";
 
 describe("fingerprint and isDirty (F §4.6 Unsaved changes)", () => {
   it("is FNV-1a over stable JSON, so key order never changes it", () => {
@@ -31,7 +32,7 @@ describe("fingerprint and isDirty (F §4.6 Unsaved changes)", () => {
       ...d,
       liturgy: {
         ...d.liturgy,
-        cards: { ...d.liturgy.cards, benediction: { enabled: true, text: "Halverson", origin: "default" } },
+        cards: { ...d.liturgy.cards, benediction: { enabled: true, text: DEFAULT_BENEDICTION_FALLBACK, origin: "default" } },
       },
     }));
     expect(isDirty(withDefaultBenediction)).toBe(false);
@@ -64,7 +65,7 @@ describe("fingerprint and isDirty (F §4.6 Unsaved changes)", () => {
         cards: {
           ...d.liturgy.cards,
           call_to_worship: { enabled: true, text: "Come, let us worship.", origin: "typed" },
-          benediction: { enabled: true, text: "Halverson", origin: "default" },
+          benediction: { enabled: true, text: DEFAULT_BENEDICTION_FALLBACK, origin: "default" },
         },
       },
     }));

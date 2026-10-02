@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { apiFetch } from "./client";
+import { apiFetch, apiFetchBlob, parseContentDispositionFilename } from "./client";
+import { timeoutFor } from "./timeouts";
 
 function jsonFetch(status: number, body: unknown, headers: Record<string, string> = {}) {
   return vi.fn<typeof fetch>(
@@ -248,5 +249,95 @@ describe("apiFetch", () => {
 
     const empty = vi.fn<typeof fetch>(async () => new Response("", { status: 200 }));
     await expect(apiFetch("/me", { token: "t", baseUrl: "", fetchImpl: empty })).resolves.toBeUndefined();
+  });
+});
+
+describe("apiFetchBlob (slice 5a; F §1.9, §4.5)", () => {
+  const NAME = "worship_October_04_2026.docx";
+  const DISPOSITION = `attachment; filename="${NAME}"; filename*=UTF-8''${NAME}`;
+
+  function fileFetch(headers: Record<string, string> = { "Content-Disposition": DISPOSITION }) {
+    return vi.fn<typeof fetch>(async () => new Response(new Uint8Array([0x50, 0x4b, 3, 4]), { status: 200, headers }));
+  }
+
+  it("returns the bytes and the server's filename, sending the token, church and JSON body", async () => {
+    const f = fileFetch();
+    const out = await apiFetchBlob("/documents", {
+      token: "t0k",
+      churchId: "c-1",
+      method: "POST",
+      json: { variant: "bulletin" },
+      baseUrl: "https://api.test",
+      fetchImpl: f,
+    });
+    expect(out.filename).toBe(NAME);
+    expect(new Uint8Array(await out.blob.arrayBuffer())).toEqual(new Uint8Array([0x50, 0x4b, 3, 4]));
+    const [url, init] = f.mock.calls[0];
+    expect(url).toBe("https://api.test/documents");
+    const headers = new Headers(init?.headers);
+    expect([headers.get("Authorization"), headers.get("X-Church-Id"), headers.get("Content-Type")]).toEqual([
+      "Bearer t0k",
+      "c-1",
+      "application/json",
+    ]);
+    expect(init?.body).toBe(JSON.stringify({ variant: "bulletin" }));
+    // No header: the caller names the file (docxFilename).
+    await expect(apiFetchBlob("/documents", { token: "t", baseUrl: "", fetchImpl: fileFetch({}) })).resolves.toMatchObject({
+      filename: null,
+    });
+  });
+
+  it("turns a JSON error body into an ApiError, and keeps the client codes", async () => {
+    const body = {
+      error: {
+        code: "not_found",
+        message: "A chosen hymn is no longer in your hymnal. Choose it again on the Hymns step.",
+        request_id: "req-404",
+        details: { field: "hymns.response.hymn_id" },
+      },
+    };
+    await expect(apiFetchBlob("/documents", { token: "t", baseUrl: "", fetchImpl: jsonFetch(404, body) })).rejects.toMatchObject({
+      status: 404,
+      code: "not_found",
+      message: body.error.message,
+      requestId: "req-404",
+      details: { field: "hymns.response.hymn_id" },
+    });
+    const down = vi.fn<typeof fetch>(async () => {
+      throw new TypeError("Failed to fetch");
+    });
+    await expect(apiFetchBlob("/documents", { token: "t", baseUrl: "", fetchImpl: down })).rejects.toMatchObject({
+      status: 0,
+      code: "network_error",
+    });
+    const controller = new AbortController();
+    const pending = apiFetchBlob("/documents", { token: "t", baseUrl: "", fetchImpl: hangingFetch(), signal: controller.signal });
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ code: "aborted" });
+  });
+
+  it("times out after 30 s on POST /documents", async () => {
+    expect(timeoutFor("POST", "/documents")).toBe(30_000);
+    vi.useFakeTimers();
+    const pending = apiFetchBlob("/documents", { token: "t", baseUrl: "", method: "POST", fetchImpl: hangingFetch() });
+    const caught = pending.catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(29_999);
+    let settled = false;
+    void caught.then(() => (settled = true));
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(caught).resolves.toMatchObject({ code: "timeout", message: "This is taking too long. Try again." });
+  });
+
+  it("reads filename* first, then a quoted or plain filename", () => {
+    expect(parseContentDispositionFilename(`attachment; filename="a.docx"; filename*=UTF-8''b%20c.docx`)).toBe("b c.docx");
+    expect(parseContentDispositionFilename(`attachment; filename="worship_pastor_May_09_2027.docx"`)).toBe(
+      "worship_pastor_May_09_2027.docx",
+    );
+    expect(parseContentDispositionFilename("attachment; filename=plain.docx")).toBe("plain.docx");
+    expect(parseContentDispositionFilename(`attachment; filename*=UTF-8''%E0%A4%A; filename="safe.docx"`)).toBe("safe.docx");
+    expect(parseContentDispositionFilename("attachment")).toBeNull();
+    expect(parseContentDispositionFilename(null)).toBeNull();
   });
 });

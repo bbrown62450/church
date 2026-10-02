@@ -16,7 +16,7 @@ export function StillNeeded({ shipped = SHIPPED_STEPS }: { shipped?: ReadonlySet
   const items = stillNeeded(draft, shipped);
   if (items.length === 0) return null;
   return (
-    <section aria-labelledby="still-needed-heading" className="mt-6 grid gap-2">
+    <section aria-labelledby="still-needed-heading" className="grid gap-2">
       <h2 id="still-needed-heading" className="text-base font-medium">
         Still needed
       </h2>

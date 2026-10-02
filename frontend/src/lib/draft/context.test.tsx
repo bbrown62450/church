@@ -7,6 +7,7 @@ import { churchProfile, DRAFT_NOW, testDraft, USER_ID } from "@/test/fixtures";
 import { DRAFT_MESSAGES, DraftProvider, useDraft } from "./context";
 import { editOccasion } from "./readings";
 import { corruptDraftKey, draftKey, type DraftV1 } from "./schema";
+import { DEFAULT_BENEDICTION_FALLBACK } from "@/lib/liturgy/defaults";
 
 const GRACE = churchProfile();
 const KEY = draftKey(USER_ID, GRACE.id);
@@ -97,7 +98,7 @@ describe("DraftProvider and useDraft (F §4.6 Persistence)", () => {
         <BenedictionProbe />
       </DraftProvider>,
     );
-    expect(screen.getByText("Benediction: Halverson")).toBeInTheDocument();
+    expect(screen.getByText(`Benediction: ${DEFAULT_BENEDICTION_FALLBACK}`)).toBeInTheDocument();
   });
 
   it("keeps peek, update and replace the same functions across edits, so callbacks built on them do not change per keystroke", () => {

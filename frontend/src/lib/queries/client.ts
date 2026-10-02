@@ -17,7 +17,7 @@ import {
 } from "@tanstack/react-query";
 import { useMemo } from "react";
 
-import { ApiError, apiFetch, type ApiOptions } from "@/lib/api/client";
+import { ApiError, apiFetch, apiFetchBlob, type ApiOptions, type BlobResult } from "@/lib/api/client";
 import { isNoChurchAccess } from "@/lib/api/errors";
 import { getAccessToken, isSigningOut } from "@/lib/auth";
 import { useChurch, useOptionalChurch } from "@/lib/church-context";
@@ -116,6 +116,9 @@ export function useChurchMutation<TData = unknown, TError = ApiError, TVariables
 /** `apiFetch` with the token (and, for church calls, `X-Church-Id`) filled in. */
 export type ApiCall = <T>(path: string, opts?: Omit<ApiOptions, "token" | "churchId">) => Promise<T>;
 
+/** `apiFetchBlob` with the token and `X-Church-Id` filled in: a church-scoped route that answers with a file. */
+export type BlobCall = (path: string, opts?: Omit<ApiOptions, "token" | "churchId">) => Promise<BlobResult>;
+
 export type Api = {
   /** User-scoped routes (`/me`, 1b's `/churches`, `/invites/*`): no church header. */
   user: ApiCall;
@@ -123,6 +126,8 @@ export type Api = {
   church: ApiCall;
   /** A church-scoped call for a church that is not (yet) provided: the `(church)` layout's `GET /church`. */
   forChurch(churchId: string): ApiCall;
+  /** A church-scoped file (`POST /documents`, slice 5a). Throws when called outside a `ChurchProvider`. */
+  churchBlob: BlobCall;
 };
 
 function boundCall(churchId: string | null): ApiCall {
@@ -134,6 +139,14 @@ const churchOutsideProvider: ApiCall = () => {
   throw new Error("useApi().church needs a ChurchProvider; use useApi().user or forChurch(id).");
 };
 
+function boundBlobCall(churchId: string): BlobCall {
+  return async (path, opts = {}) => apiFetchBlob(path, { ...opts, token: await getAccessToken(), churchId });
+}
+
+const blobOutsideProvider: BlobCall = () => {
+  throw new Error("useApi().churchBlob needs a ChurchProvider.");
+};
+
 /** The bound API clients (F §4.5). Stable while the active church stays the same. */
 export function useApi(): Api {
   const churchId = useOptionalChurch()?.id ?? null;
@@ -142,6 +155,7 @@ export function useApi(): Api {
       user: boundCall(null),
       church: churchId ? boundCall(churchId) : churchOutsideProvider,
       forChurch: (id: string) => boundCall(id),
+      churchBlob: churchId ? boundBlobCall(churchId) : blobOutsideProvider,
     }),
     [churchId],
   );

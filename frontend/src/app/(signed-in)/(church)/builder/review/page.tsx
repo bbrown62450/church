@@ -1,14 +1,8 @@
 "use client";
 
-import { StepPlaceholder } from "@/components/builder/step-placeholder";
-import { StillNeeded } from "@/components/builder/still-needed";
+import { ReviewSendStep } from "@/components/builder/review/review-send-step";
 
-/** Step: Review & send. Slice 5a replaces the placeholder; "Still needed" lists shipped steps' gaps. */
+/** Step: Review & send (slice 5a-1: Still needed and the Word files; 5a-3 adds saving). */
 export default function ReviewStepPage() {
-  return (
-    <>
-      <StepPlaceholder step="review" />
-      <StillNeeded />
-    </>
-  );
+  return <ReviewSendStep />;
 }

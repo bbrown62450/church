@@ -3,10 +3,12 @@
  * route and is always reachable (F D9).
  *
  * `SHIPPED_STEPS` holds the steps whose content has shipped. An unshipped
- * step shows the "Available soon" card, the muted status "Soon" (Review: "Not
- * in archive"), and `stillNeeded` ignores it. Slice 2b shipped none (owner
- * answer Q1, 2026-09-28); slice 2c ships "readings", slice 3b "hymns" and
- * slice 4b "liturgy". 5a adds "review".
+ * step shows the muted status "Soon" (Review: "Not in archive"), and
+ * `stillNeeded` ignores it. Slice 2b shipped none (owner answer Q1,
+ * 2026-09-28); slice 2c ships "readings", slice 3b "hymns" and slice 4b
+ * "liturgy". Review's route has its real content from 5a-1 (Still needed and
+ * the Word files); "review" joins the set in 5a-3, when saving gives it the
+ * statuses "Saved" and "Unsaved changes".
  */
 import type { StepId } from "./schema";
 

@@ -42,6 +42,7 @@ import { LiturgyStep } from "./liturgy-step";
 import { UNDO_TOAST_MS } from "../hymns/use-undo-toasts";
 
 import { STILL_WORKING } from "./use-still-working";
+import { DEFAULT_BENEDICTION_FALLBACK } from "@/lib/liturgy/defaults";
 
 const KEY = draftKey(USER_ID, church().id);
 const [, , COME, , , , , , SENT] = gg2013();
@@ -215,7 +216,7 @@ describe("the Liturgy step (S User experience)", () => {
     const { user, queryClient } = renderStep();
     const benediction = await screen.findByRole("region", { name: "Benediction" });
     const text = within(benediction).getByRole("textbox", { name: "Benediction" });
-    expect(text).toHaveValue("Halverson");
+    expect(text).toHaveValue(DEFAULT_BENEDICTION_FALLBACK);
     expect(within(benediction).getByText("Church default")).toBeInTheDocument();
     expect(within(benediction).getByText("Your church's default benediction. Admins can change it in Settings.")).toBeInTheDocument();
     // An admin changes the default (6a) and the profile refetches.
@@ -225,12 +226,12 @@ describe("the Liturgy step (S User experience)", () => {
     await user.type(text, "Go in peace.");
     expect(within(benediction).getByText("Your text")).toBeInTheDocument();
     expect(within(benediction).queryByText(/Your church's default benediction/)).toBeNull();
-    act(() => queryClient.setQueryData(keys.churchProfile(church().id), churchProfile({ default_benediction: "Halverson" })));
+    act(() => queryClient.setQueryData(keys.churchProfile(church().id), churchProfile({ default_benediction: DEFAULT_BENEDICTION_FALLBACK })));
     await user.click(within(benediction).getByRole("button", { name: "More actions for Benediction" }));
     await user.click(await screen.findByRole("menuitem", { name: "Use church default" }));
-    expect(text).toHaveValue("Halverson");
+    expect(text).toHaveValue(DEFAULT_BENEDICTION_FALLBACK);
     expect(within(benediction).getByText("Church default")).toBeInTheDocument();
-    await waitFor(() => expect(stored().liturgy.cards.benediction).toEqual({ enabled: true, text: "Halverson", origin: "default" }));
+    await waitFor(() => expect(stored().liturgy.cards.benediction).toEqual({ enabled: true, text: DEFAULT_BENEDICTION_FALLBACK, origin: "default" }));
   });
 
   it("Clear text empties a card with an Undo line; Undo brings the text back, and the line goes on the next edit", async () => {
@@ -418,7 +419,7 @@ describe("Generate and Regenerate (S Generate and Regenerate, AI bar)", () => {
     expect(held.most()).toBe(3);
     // Typed text, a card that is off and the Benediction's default are never sent or changed.
     expect(screen.getByRole("textbox", { name: "Call to Worship" })).toHaveValue("Come, let us worship.");
-    expect(screen.getByRole("textbox", { name: "Benediction" })).toHaveValue("Halverson");
+    expect(screen.getByRole("textbox", { name: "Benediction" })).toHaveValue(DEFAULT_BENEDICTION_FALLBACK);
     expectBarOff(within(bar).getByRole("button", { name: "Generate empty sections (0)" }));
     expect(within(bar).getByText("Every switched-on section has text. Use Regenerate on a card for a new AI draft.")).toBeInTheDocument();
   });
@@ -528,7 +529,7 @@ describe("Generate and Regenerate (S Generate and Regenerate, AI bar)", () => {
     const { user } = renderStep(testDraft(), { "POST /liturgy/generate": held.handler });
     const cw = await screen.findByRole("region", { name: "Call to Worship" });
     await user.click(within(cw).getByRole("button", { name: "Generate" }));
-    expect(await within(cw).findByRole("button", { name: "Writing…" })).toBeDisabled();
+    expect(await within(cw).findByRole("button", { name: "Writing…" })).toHaveAttribute("aria-disabled", "true");
     expect(within(cw).getByRole("textbox", { name: "Call to Worship" })).toHaveAttribute("readonly");
     expect(within(cw).getByRole("button", { name: "More actions for Call to Worship" })).toBeDisabled();
     await user.click(within(cw).getByRole("button", { name: "Cancel Call to Worship" }));

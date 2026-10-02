@@ -32,6 +32,7 @@ import {
   staleVerdict,
   updateCustomElement,
 } from "./cards";
+import { DEFAULT_BENEDICTION_FALLBACK } from "@/lib/liturgy/defaults";
 
 type Outline = { outline: { anchors_after: string[] }[] };
 
@@ -66,9 +67,9 @@ describe("card origin transitions (S Frontend changes)", () => {
     expect(clearCard(cleared, "call_to_worship")).toBe(cleared);
     // Use church default (Benediction).
     const edited = editCardText(d, "benediction", "Go in peace.");
-    expect(card(restoreChurchDefault(edited, "Halverson"), "benediction")).toEqual({
+    expect(card(restoreChurchDefault(edited, DEFAULT_BENEDICTION_FALLBACK), "benediction")).toEqual({
       enabled: true,
-      text: "Halverson",
+      text: DEFAULT_BENEDICTION_FALLBACK,
       origin: "default",
     });
     // Undo: previous text and origin.
@@ -86,21 +87,21 @@ describe("card origin transitions (S Frontend changes)", () => {
     d = editCardText(d, "call_to_worship", "Come.");
     d = editCardText(d, "opening_prayer", "   ");
     d = setCardEnabled(d, "assurance", false);
-    d = withCard(d, "benediction", { text: "Halverson", origin: "default" });
+    d = withCard(d, "benediction", { text: DEFAULT_BENEDICTION_FALLBACK, origin: "default" });
     expect(sectionsNeedingAi(d)).toEqual(["opening_prayer", "prayer_of_confession", "prayer_for_illumination", "offertory_prayer"]);
     expect(needsRegenerateConfirm({ enabled: true, text: "Come.", origin: "typed" })).toBe(true);
     expect(needsRegenerateConfirm({ enabled: true, text: "Saved words", origin: "archive" })).toBe(true);
     expect(needsRegenerateConfirm({ enabled: true, text: "Leader: Come!", origin: "ai" })).toBe(false);
-    expect(needsRegenerateConfirm({ enabled: true, text: "Halverson", origin: "default" })).toBe(false);
+    expect(needsRegenerateConfirm({ enabled: true, text: DEFAULT_BENEDICTION_FALLBACK, origin: "default" })).toBe(false);
     expect(needsRegenerateConfirm({ enabled: true, text: "  ", origin: "typed" })).toBe(false);
   });
 });
 
 describe("the stale-result rule (S Generate and Regenerate, step 6)", () => {
   it("drops a result for a replaced draft or an edited card, and applies it to a card still following the default", () => {
-    const d = withCard(testDraft(), "benediction", { text: "Halverson", origin: "default" });
+    const d = withCard(testDraft(), "benediction", { text: DEFAULT_BENEDICTION_FALLBACK, origin: "default" });
     const captured = captureCard(d, "benediction");
-    expect(captured).toEqual({ createdAt: d.created_at, text: "Halverson", origin: "default" });
+    expect(captured).toEqual({ createdAt: d.created_at, text: DEFAULT_BENEDICTION_FALLBACK, origin: "default" });
     expect(staleVerdict(d, "benediction", captured)).toBe("apply");
     expect(staleVerdict({ ...d, created_at: "2026-09-30T12:00:00.000Z" }, "benediction", captured)).toBe("service_changed");
     // The church default changed mid-run: the user asked to replace the default, so apply.

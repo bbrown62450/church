@@ -18,6 +18,7 @@ from sqlalchemy import select, text
 
 from db import get_engine, session_scope
 from db.models import Church, Invite
+from liturgy_config import DEFAULT_BENEDICTION_FALLBACK
 from repos.invites import create_invite, get_invite_by_code
 from repos.memberships import get_role
 from tests.api_helpers import auth_headers, church_headers, make_api_client
@@ -204,7 +205,7 @@ def test_after_accept_get_church_200(world):
         "timezone": "America/New_York", "timezone_valid": True, "bible_translation": None,
         "effective_translation": "web", "effective_translation_label": "World English Bible (WEB)",
         "default_hymnal": None, "effective_hymnal": None,     # slice 3: no hymns in this church
-        "default_benediction": "Halverson",                   # slice 4: the fallback
+        "default_benediction": DEFAULT_BENEDICTION_FALLBACK,  # slice 4: the full Halverson text
     }
 
 

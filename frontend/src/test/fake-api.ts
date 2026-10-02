@@ -8,7 +8,8 @@
  *   recorded request that returns a body or a `FakeResponse`, possibly after an
  *   `await` (a delayed response). A `FakeResponse` is a plain object with a numeric
  *   `status` and no keys other than `status`, `body` and `headers`; build error
- *   responses with `fakeError`.
+ *   responses with `fakeError`. A real `Response` (a file, slice 5a) is returned
+ *   as it is.
  * - Every request is recorded (at call time, before any delay) with lower-case
  *   header names; header lookups on a recorded request ignore case.
  * - An aborted `signal` rejects the call with the signal's reason, as `fetch` does.
@@ -106,6 +107,7 @@ function record(input: RequestInfo | URL, init: RequestInit | undefined): Record
 }
 
 function toResponse(result: unknown): Response {
+  if (result instanceof Response) return result;
   const { status, body, headers = {} } = isFakeResponse(result) ? result : { status: 200, body: result };
   const empty = body === undefined || status === 204 || status === 205 || status === 304;
   return new Response(empty ? null : JSON.stringify(body), {

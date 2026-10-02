@@ -32,6 +32,7 @@ import { renderWithProviders } from "@/test/render";
 
 import { LiturgyStep } from "./liturgy-step";
 import { STILL_WORKING } from "./use-still-working";
+import { DEFAULT_BENEDICTION_FALLBACK } from "@/lib/liturgy/defaults";
 
 const KEY = draftKey(USER_ID, church().id);
 const STOCK = 'Stock phrase "as we journey". Say it more naturally.';
@@ -121,7 +122,7 @@ afterEach(() => {
 
 describe("Review service (R User experience)", () => {
   it("is off until a switched-on card has text, then shows each card's notes, Looks good. and Across the service", async () => {
-    const empty = renderStep(testDraft((d) => withCard(d, "benediction", "Halverson", "default", false)));
+    const empty = renderStep(testDraft((d) => withCard(d, "benediction", DEFAULT_BENEDICTION_FALLBACK, "default", false)));
     const off = await screen.findByRole("button", { name: "Review service" });
     expect(off).toHaveAttribute("aria-disabled", "true");
     await empty.user.click(off);
@@ -548,7 +549,7 @@ describe("Revise with these notes (R Revise)", () => {
     await user.click(within(opening).getByRole("button", { name: "Revise with these notes" }));
     const cancel = within(opening).getByRole("button", { name: "Cancel revising Opening Prayer" });
     expect(cancel).toHaveFocus();
-    expect(within(opening).getByRole("button", { name: "Revising…" })).toBeDisabled();
+    expect(within(opening).getByRole("button", { name: "Revising…" })).toHaveAttribute("aria-disabled", "true");
     expect(screen.getByRole("textbox", { name: "Opening Prayer" })).toHaveAttribute("readonly");
     expect(within(opening).getByRole("button", { name: "Regenerate" })).toBeDisabled();
     expect(within(opening).getByRole("button", { name: "More actions for Opening Prayer" })).toBeDisabled();

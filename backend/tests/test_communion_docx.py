@@ -85,12 +85,12 @@ def _legacy_communion(doc) -> None:
 
 def _service(**overrides):
     kwargs = dict(
-        occasion="World Communion Sunday", date="October 4, 2026",
-        scriptures=["Isaiah 5:1-7", "Matthew 21:33-46"],
-        hymns=[{"title": "Be Thou My Vision", "number": 450}, {"title": "Come, Thou Fount", "number": 475}],
+        occasion="World Communion Sunday", date_display="October 04, 2026",
+        hymns_by_slot={"opening": {"title": "Be Thou My Vision", "number": 450},
+                       "response": {"title": "Come, Thou Fount", "number": 475}, "closing": None},
         liturgy={"prayers_of_the_people": "We pray.", "benediction": "Go in peace."},
-        include_communion=True)
-    return worship_service.build_docx(**{**kwargs, **overrides})
+        ot_ref="Isaiah 5:1-7", nt_ref="Matthew 21:33-46", include_communion=True)
+    return BytesIO(worship_service.build_docx(**{**kwargs, **overrides}))      # bytes since slice 5a
 
 
 def _paragraphs(buf) -> list[tuple[str, str, list[tuple[str, bool]]]]:

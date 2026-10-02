@@ -9,6 +9,7 @@ usecases.church_profile). /me's church items stay ChurchOut.
 import pytest
 
 from api.main import create_app
+from liturgy_config import DEFAULT_BENEDICTION_FALLBACK as HALVERSON
 from repos import churches
 from repos.memberships import add_membership
 from tests.api_helpers import (  # noqa: F401 (isolation_world is a fixture)
@@ -59,7 +60,7 @@ def test_new_fields_including_label(client, make_user, make_church, no_esv_key):
         "effective_translation_label": "King James Version (KJV)",
         "default_hymnal": None,
         "effective_hymnal": None,
-        "default_benediction": "Halverson",
+        "default_benediction": HALVERSON,
     }
 
 
@@ -155,10 +156,13 @@ def test_church_deleted_after_guard_is_403(client, make_user, make_church, monke
 
 
 def test_default_benediction_is_the_church_s_or_halverson(client, make_user, make_church):
-    """Slice 4 (S API; Backend 5; AC9): "" is a stored value meaning no default."""
+    """Slice 4 (S API; Backend 5; AC9): "" is a stored value meaning no default.
+    Owner, 2026-10-02: the fallback is the full Halverson text, and a saved
+    shorthand "Halverson" (the old seed) prints it too."""
     cid = make_church(name="Grace", owner_user_id=make_user(email=EMAIL))
-    assert _profile(client, cid)["default_benediction"] == "Halverson"
+    assert _profile(client, cid)["default_benediction"] == HALVERSON
+    assert HALVERSON.startswith("\u201cYou go nowhere by accident.") and HALVERSON.endswith("- Richard Halverson")
     for stored, expected in (("May the Lord bless you and keep you.", "May the Lord bless you and keep you."),
-                             ("", ""), (5, "Halverson")):
+                             ("", ""), (5, HALVERSON), ("Halverson", HALVERSON), (" halverson ", HALVERSON)):
         churches.update_church(cid, settings={"default_benediction": stored})
         assert _profile(client, cid)["default_benediction"] == expected, stored

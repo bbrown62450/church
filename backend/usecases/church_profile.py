@@ -38,7 +38,7 @@ class ChurchProfile:
     effective_translation_label: str
     default_hymnal: str | None           # slice 3: settings["default_hymnal"], when a non-blank string
     effective_hymnal: str | None         # slice 3: the hymnal the builder opens (GET /hymnals agrees)
-    default_benediction: str             # slice 4: settings["default_benediction"] when a string, else "Halverson"
+    default_benediction: str             # slice 4: resolve_default_benediction (full Halverson text by default)
 
 
 def get_church_profile(church_id: uuid.UUID) -> ChurchProfile:
@@ -54,7 +54,8 @@ def get_church_profile(church_id: uuid.UUID) -> ChurchProfile:
     - default_hymnal, effective_hymnal: usecases.hymns.resolve_default_hymnal,
       read in the same session (slice 3).
     - default_benediction: liturgy_config.resolve_default_benediction(settings)
-      ("" is kept: a church with no default; slice 4).
+      ("" is kept: a church with no default; slice 4). Unset, non-string or
+      the shorthand "Halverson" is the full Halverson text (owner, 2026-10-02).
 
     Raises Forbidden (403 forbidden, details.reason no_church_access) when the
     church is missing or soft-deleted.

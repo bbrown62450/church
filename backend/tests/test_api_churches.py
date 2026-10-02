@@ -15,6 +15,7 @@ from sqlalchemy import func, select
 from api import settings as settings_mod
 from db import session_scope
 from db.models import Church, Hymn, Membership
+from liturgy_config import DEFAULT_BENEDICTION_FALLBACK
 from repos.churches import create_church as repo_create_church
 from repos.memberships import add_membership
 from tests.api_helpers import auth_headers, church_headers, make_api_client
@@ -88,7 +89,7 @@ def test_create_201_listed_in_me_and_usable(client, seed_catalog):
         **body, "timezone": "America/Chicago", "timezone_valid": True, "bible_translation": None,
         "effective_translation": "web", "effective_translation_label": "World English Bible (WEB)",
         "default_hymnal": None, "effective_hymnal": "GG2013",  # slice 3: the seeded catalog is GG2013
-        "default_benediction": "Halverson",                    # slice 4: the fallback
+        "default_benediction": DEFAULT_BENEDICTION_FALLBACK,   # slice 4: the full Halverson text
     }
     with session_scope() as s:
         assert s.get(Church, church_id).timezone == "America/Chicago"

@@ -8,7 +8,7 @@ import { SECTION_KEYS } from "@/lib/draft/schema";
 import { testDraft } from "@/test/fixtures";
 
 import { addCustomElement, editCardText, setCardEnabled, setCommunion } from "./cards";
-import { applyLiturgyDefaults } from "./defaults";
+import { applyLiturgyDefaults, DEFAULT_BENEDICTION_FALLBACK } from "./defaults";
 import { liturgyCounts } from "./summary";
 
 describe("liturgyCounts (S summary.ts)", () => {
@@ -16,7 +16,7 @@ describe("liturgyCounts (S summary.ts)", () => {
     const fresh = applyLiturgyDefaults(testDraft(), { defaultBenediction: "" }); // a church with no default
     expect(liturgyCounts(fresh)).toEqual({ ready: 0, enabled: 7, communion: true, customCount: 0 });
     // The Benediction following a non-blank church default counts as ready.
-    const withDefault = applyLiturgyDefaults(fresh, { defaultBenediction: "Halverson" });
+    const withDefault = applyLiturgyDefaults(fresh, { defaultBenediction: DEFAULT_BENEDICTION_FALLBACK });
     expect(liturgyCounts(withDefault)).toMatchObject({ ready: 1, enabled: 7 });
     expect(liturgyCounts(editCardText(withDefault, "assurance", "  \n "))).toMatchObject({ ready: 1, enabled: 7 });
     const allOff = SECTION_KEYS.reduce((d, key) => setCardEnabled(d, key, false), withDefault);

@@ -14,6 +14,7 @@ import {
 } from "./readings";
 import { corruptDraftKey, draftKey, freshDraft, type DraftV1 } from "./schema";
 import { DraftStore, WRITE_DELAY_MS, type DraftNotice, type DraftStorage } from "./store";
+import { DEFAULT_BENEDICTION_FALLBACK } from "@/lib/liturgy/defaults";
 
 const GRACE = churchProfile();
 const KEY = draftKey(USER_ID, GRACE.id);
@@ -133,7 +134,7 @@ describe("DraftStore load (F §4.6 Versioning)", () => {
       ...d,
       liturgy: {
         ...d.liturgy,
-        cards: { ...d.liturgy.cards, benediction: { enabled: true, text: "Halverson", origin: "default" } },
+        cards: { ...d.liturgy.cards, benediction: { enabled: true, text: DEFAULT_BENEDICTION_FALLBACK, origin: "default" } },
       },
     }));
     const tenDaysLater = clock(new Date(DRAFT_NOW.getTime() + 10 * 86_400_000)); // Friday, October 9
@@ -204,7 +205,7 @@ describe("DraftStore roll-forward and the liturgy step (owner answer 1, 2026-09-
 
 describe("DraftStore and the liturgy defaults (slice 4 spec, Draft store integration)", () => {
   function defaultsStore(storage: DraftStorage, now = clock().now) {
-    return new DraftStore({ userId: USER_ID, church: GRACE, storage, now, liturgyDefaults: { defaultBenediction: "Halverson" } });
+    return new DraftStore({ userId: USER_ID, church: GRACE, storage, now, liturgyDefaults: { defaultBenediction: DEFAULT_BENEDICTION_FALLBACK } });
   }
 
   it("fills a fresh draft's Benediction with the church default and follows a new default until the card is edited", () => {
@@ -212,9 +213,9 @@ describe("DraftStore and the liturgy defaults (slice 4 spec, Draft store integra
     const t = clock();
     const store = defaultsStore(storage, t.now);
     store.start();
-    expect(store.getSnapshot().draft.liturgy.cards.benediction).toEqual({ enabled: true, text: "Halverson", origin: "default" });
+    expect(store.getSnapshot().draft.liturgy.cards.benediction).toEqual({ enabled: true, text: DEFAULT_BENEDICTION_FALLBACK, origin: "default" });
     vi.advanceTimersByTime(WRITE_DELAY_MS);
-    expect(stored(data).liturgy.cards.benediction.text).toBe("Halverson");
+    expect(stored(data).liturgy.cards.benediction.text).toBe(DEFAULT_BENEDICTION_FALLBACK);
 
     // An admin changes the default (6a) and the profile refetches: an automatic change, 1 ms after the draft.
     const before = store.getSnapshot().draft.updated_at;
@@ -228,10 +229,10 @@ describe("DraftStore and the liturgy defaults (slice 4 spec, Draft store integra
 
     // Every change keeps the defaults: New service's fresh draft gets the default too.
     store.update((d) => ({ ...d, liturgy: { ...d.liturgy, cards: { ...d.liturgy.cards, benediction: { enabled: true, text: "Go in peace.", origin: "typed" } } } }));
-    store.setLiturgyDefaults({ defaultBenediction: "Halverson" });
+    store.setLiturgyDefaults({ defaultBenediction: DEFAULT_BENEDICTION_FALLBACK });
     expect(store.getSnapshot().draft.liturgy.cards.benediction.text).toBe("Go in peace.");
     store.replace(freshDraft({ church: GRACE, user: { id: USER_ID }, now: t.now() }));
-    expect(store.getSnapshot().draft.liturgy.cards.benediction).toEqual({ enabled: true, text: "Halverson", origin: "default" });
+    expect(store.getSnapshot().draft.liturgy.cards.benediction).toEqual({ enabled: true, text: DEFAULT_BENEDICTION_FALLBACK, origin: "default" });
   });
 
   it("loads a stored draft with today's default and the date's communion, stamped just after the stored draft", () => {
@@ -242,7 +243,7 @@ describe("DraftStore and the liturgy defaults (slice 4 spec, Draft store integra
     }));
     const { storage } = memoryStorage({ [KEY]: JSON.stringify(old) });
     const draft = defaultsStore(storage).getSnapshot().draft;
-    expect(draft.liturgy.cards.benediction.text).toBe("Halverson");
+    expect(draft.liturgy.cards.benediction.text).toBe(DEFAULT_BENEDICTION_FALLBACK);
     expect(draft.liturgy.include_communion).toBe(true);
     expect(draft.updated_at).toBe("2026-09-29T15:00:00.001Z");
     // Without defaults (slice 2's tests), the store changes nothing.
@@ -265,7 +266,7 @@ describe("DraftStore and the liturgy defaults (slice 4 spec, Draft store integra
     store.handleStorageEvent(KEY, JSON.stringify(theirs));
     const adopted = store.getSnapshot().draft;
     expect(adopted.readings.occasion).toBe("From the other tab");
-    expect(adopted.liturgy.cards.benediction).toEqual({ enabled: true, text: "Halverson", origin: "default" });
+    expect(adopted.liturgy.cards.benediction).toEqual({ enabled: true, text: DEFAULT_BENEDICTION_FALLBACK, origin: "default" });
     expect(adopted.updated_at).toBe(theirs.updated_at); // not stamped: the default is not an edit
     vi.runAllTimers();
     expect(writes).toEqual([]); // and not written back over the other tab's copy

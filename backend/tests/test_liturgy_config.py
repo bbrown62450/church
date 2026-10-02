@@ -111,15 +111,29 @@ def test_first_sunday_cases():
         assert lc.is_first_sunday_of_month(date.fromisoformat(case["date"])) is case["expected"], case
 
 
+HALVERSON = ("\u201cYou go nowhere by accident. Wherever you go, God is sending you. Wherever you are, "
+             "God has put you there. God has a purpose in your being there. Christ lives in you and has "
+             "something he wants to do through you where you are. Believe this and go in the grace and "
+             "love and power of Jesus Christ.\u201d - Richard Halverson")   # owner, 2026-10-02
+
+
 def test_resolve_default_benediction():
     cases = [
-        (None, "Halverson"),
-        ({}, "Halverson"),
-        ({"default_benediction": 5}, "Halverson"),
-        ({"default_benediction": None}, "Halverson"),
+        (None, HALVERSON),
+        ({}, HALVERSON),
+        ({"default_benediction": 5}, HALVERSON),
+        ({"default_benediction": None}, HALVERSON),
         ({"default_benediction": ""}, ""),
+        ({"default_benediction": "   "}, "   "),
         ({"default_benediction": "May the Lord bless you…"}, "May the Lord bless you…"),
-        ("not a mapping", "Halverson"),
+        # The old seed's shorthand (trimmed, any case) is the full text.
+        ({"default_benediction": "Halverson"}, HALVERSON),
+        ({"default_benediction": "  halverson \n"}, HALVERSON),
+        ({"default_benediction": "HALVERSON"}, HALVERSON),
+        ({"default_benediction": "Halverson."}, "Halverson."),
+        ({"default_benediction": "Halverson benediction"}, "Halverson benediction"),
+        ({"default_benediction": HALVERSON}, HALVERSON),
+        ("not a mapping", HALVERSON),
     ]
     for settings, expected in cases:
         assert lc.resolve_default_benediction(settings) == expected, settings
@@ -132,7 +146,7 @@ def test_normalize_placement_limits_and_fixed_text():
     assert lc.LIMITS == lc.Limits(max_section_text=20_000, max_sermon_title=300, max_custom_elements=30,
                                   max_custom_label=200, max_custom_text=10_000, max_sections_per_request=4)
     assert lc.ASSURANCE_RESPONSE == "People: Thanks be to God! Amen."
-    assert lc.DEFAULT_BENEDICTION_FALLBACK == "Halverson"
+    assert lc.DEFAULT_BENEDICTION_FALLBACK == HALVERSON
     assert lc.COMMUNION_TOGGLE_LABEL == "Include communion liturgy (The Sacrament of the Lord's Supper)"
     assert lc.COMMUNION_BLOCKS[0] == lc.CommunionBlock("heading1", lc.COMMUNION_TITLE)
     assert [b.text for b in lc.COMMUNION_BLOCKS if b.style == "heading2"] == [
@@ -140,32 +154,28 @@ def test_normalize_placement_limits_and_fixed_text():
         "Breaking of the Bread and Communion", "Prayer After Communion"]
 
 
-# The docx still prints "Old Testament Reading" until 5a renames it to OUTLINE's
-# "First Reading" (owner decision B; slice 4a plan, clarification 4). 5a deletes
-# this map when it changes build_docx.
-DOCX_HEADINGS_UNTIL_5A = {"ot_reading": "Old Testament Reading"}
-
-
 def test_the_outline_is_build_docx_s_heading_order():
+    from io import BytesIO
+
     from docx import Document
 
     import worship_service
 
-    buf = worship_service.build_docx(
-        occasion="World Communion Sunday", date="October 4, 2026",
-        scriptures=["Isaiah 5:1-7", "Matthew 21:33-46"],
-        hymns=[{"title": f"Hymn {n}", "number": n} for n in (1, 2, 3)],
+    content = worship_service.build_docx(
+        occasion="World Communion Sunday", date_display="October 04, 2026",
+        hymns_by_slot={slot: {"title": f"Hymn {n}", "number": n}
+                       for n, slot in enumerate(("opening", "response", "closing"), start=1)},
         liturgy={key: f"Text of {key}." for key in lc.SECTION_ORDER},
-        sermon_title="Living Water", selected_ot_ref="Isaiah 5:1-7", selected_nt_ref="Matthew 21:33-46",
+        ot_ref="Isaiah 5:1-7", nt_ref="Matthew 21:33-46", sermon_title="Living Water",
         include_sermon=True, include_prayers_of_the_people=True, include_communion=True,
         custom_elements=[{"label": f"CE:{key}", "text": "", "insert_after": key}
                          for key, _label in lc.CUSTOM_PLACEMENTS])
     communion_inside = {b.text for b in lc.COMMUNION_BLOCKS if b.style == "heading2"}
-    printed = [p.text for p in Document(buf).paragraphs
+    printed = [p.text for p in Document(BytesIO(content)).paragraphs
                if p.style.name in ("Heading 1", "Heading 2") and p.text not in communion_inside]
     expected = []
-    for item in lc.OUTLINE:
-        expected.append(DOCX_HEADINGS_UNTIL_5A.get(item.key, item.label))
+    for item in lc.OUTLINE:              # the docx prints OUTLINE's labels, "First Reading" included (5a)
+        expected.append(item.label)
         expected.extend(f"CE:{anchor}" for anchor in item.anchors_after)
     assert printed == expected, (
         "OUTLINE and build_docx disagree: change both in one PR and regenerate "

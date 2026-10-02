@@ -5,6 +5,7 @@ import { lectionary, testDraft } from "@/test/fixtures";
 import { draftToServicePayload } from "./mapping";
 import { applyReadingSet, editScriptureLines, setPick } from "./readings";
 import type { DraftV1 } from "./schema";
+import { DEFAULT_BENEDICTION_FALLBACK } from "@/lib/liturgy/defaults";
 
 describe("draftToServicePayload (provisional; 5a replaces it)", () => {
   it("maps a fresh draft to the ServiceDraft shape", () => {
@@ -13,7 +14,7 @@ describe("draftToServicePayload (provisional; 5a replaces it)", () => {
       occasion: "",
       scriptures: [],
       hymns: { opening: null, response: null, closing: null },
-      liturgy: { benediction: "Halverson" }, // the church default (slice 4b)
+      liturgy: { benediction: DEFAULT_BENEDICTION_FALLBACK }, // the church default (slice 4b)
       sermon_title: "",
       selected_ot_ref: "",
       selected_nt_ref: "",
@@ -47,7 +48,7 @@ describe("draftToServicePayload (provisional; 5a replaces it)", () => {
     });
     const payload = draftToServicePayload(d);
     expect(payload.scriptures).toEqual(["Isaiah 5:1-7", "Psalm 80:7-15"]);
-    expect(payload.liturgy).toEqual({ call_to_worship: "Come, let us worship.", benediction: "Halverson" });
+    expect(payload.liturgy).toEqual({ call_to_worship: "Come, let us worship.", benediction: DEFAULT_BENEDICTION_FALLBACK });
     expect(payload.hymns.response).toEqual({ hymn_id: "h1", title: "Amazing Grace", number: 649, hymnal: "GG2013" });
     expect(payload.hymns.opening).toBeNull();
     expect(payload.hymnal).toBe("GG2013");

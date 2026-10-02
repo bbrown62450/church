@@ -14,6 +14,7 @@ import {
 import type { DraftV1, HymnPick, StepId } from "./schema";
 import { isPristine, stepStatus, stillNeeded, withoutTranslation } from "./status";
 import { SHIPPED_STEPS, STEPS, stepById, stepFromPath } from "./steps";
+import { DEFAULT_BENEDICTION_FALLBACK } from "@/lib/liturgy/defaults";
 
 const READINGS: ReadonlySet<StepId> = new Set<StepId>(["readings"]);
 const ALL: ReadonlySet<StepId> = new Set<StepId>(["readings", "hymns", "liturgy", "review"]);
@@ -101,7 +102,7 @@ describe("isPristine (S status.ts)", () => {
   it("is true for a fresh draft, a lectionary fill and a default benediction with text", () => {
     expect(isPristine(testDraft())).toBe(true);
     expect(isPristine(applyReadingSet(testDraft(), lectionary("2026-10-04"), 0))).toBe(true);
-    expect(isPristine(withCard("benediction", { text: "Halverson", origin: "default" }))).toBe(true);
+    expect(isPristine(withCard("benediction", { text: DEFAULT_BENEDICTION_FALLBACK, origin: "default" }))).toBe(true);
   });
 
   it("is false once anything the user would lose is there", () => {
