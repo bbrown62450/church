@@ -32,7 +32,7 @@
   `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
 - TDD: write the failing test first and see it fail as quoted.
 - **Backup push after every task** (standing rule): the controller runs `git push origin claude/slice-2-plan-4q33le` after each task's commit (never `--force`; on a network error retry after 2, 4, 8 and 16 s). A fix asked for by a review is a new commit, `Fix: <what> (Task <n> review)`. The container can restart and lose uncommitted work: commit as soon as a task's checks pass.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1335 → 1335 passed, 16 → 16 skipped; frontend 618 → 650 in 81 → 83 files`.
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1335 → 1335 passed, 16 → 16 skipped; frontend 618 → 655 in 81 → 83 files` (650 as planned, plus the build review's 5).
 - New prose for the owner has no em dashes and no flattery. New user-facing copy is exactly the list in clarification 18 and has no em dashes; existing copy keeps its own punctuation (the checklist's rows read "{message} — {link}", as 4b shipped them).
 - No church id, email address, token or database URL in any doc, commit or record.
 - Ask the owner before any push to a PR, PR creation, marking ready, merging, or any production or settings action. Owner steps go one at a time, in plain words.
@@ -52,6 +52,7 @@ As in the 5a-1 plan: **Create `path`:** the block is the whole file (for `fronte
   | T4 | +9 (`review-send-step.test.tsx`; its other cases and `builder-shell.test.tsx` edited) | 641 in 82 | 1335 passed, 16 skipped |
   | T5 | +9 (`services-page.test.tsx`; `app-header.test.tsx` edited) | 650 in 83 | 1335 passed, 16 skipped |
   | T6 | 0 (docs) | 650 in 83 | 1335 passed, 16 skipped |
+  | Build review fixes | +5 (`services-page.test.tsx` 2, `review-send-step.test.tsx` 1, `store.test.ts` 1, `documents.test.ts` 1; `builder-shell.test.tsx` and other `review-send-step.test.tsx` cases edited) | 655 in 83 | 1335 passed, 16 skipped |
 
 - CI `backend-postgres` stays `16 passed, 1335 deselected`.
 
@@ -183,7 +184,7 @@ The owner's answers win over S and F; the code wins over both where they disagre
 | `docs/superpowers/specs/2026-09-25-slice-5a-documents-archive-design.md`, `docs/superpowers/specs/2026-09-25-migration-foundations-design.md`, `docs/manual-verification.md` | the amendment; the Amendments row; items 12-17 | T6 |
 | `docs/ops-runbook.md` | "### Slice 5a-2 record" (commit `a789fb8`, riding along); "### Slice 5a-3 record" (the records PR, after the merge) | T8 |
 
-**Counts in the PR:** 12 created (this plan, the 10 files above, and the ride-along `docs/superpowers/specs/2026-10-02-pew-voices-idea.md`), 43 modified (the 42 code and docs files above, and `docs/ops-runbook.md` through the 5a-2 record commit; the 5a-3 record comes in the records PR after the merge): 55 paths. **Untouched:** every backend file, migrations, `openapi.json`, `schema.d.ts`, `lib/api/client.ts`, `lib/queries/keys.ts`, `lib/liturgy/*` but `request.ts`, `notes.ts` and `review.tsx`, `hymns/*`, `readings/*`, `app.py`, Streamlit.
+**Counts in the PR:** 12 created (this plan, the 10 files above, and the ride-along `docs/superpowers/specs/2026-10-02-pew-voices-idea.md`), 43 modified (the 42 code and docs files above, and `docs/ops-runbook.md` through the 5a-2 record commit; the 5a-3 record comes in the records PR after the merge): 55 paths as planned; the build review fixes add `frontend/src/lib/documents.test.ts` (modified), so the PR has 56. **Untouched:** every backend file, migrations, `openapi.json`, `schema.d.ts`, `lib/api/client.ts`, `lib/queries/keys.ts`, `lib/liturgy/*` but `request.ts`, `notes.ts` and `review.tsx`, `hymns/*`, `readings/*`, `app.py`, Streamlit.
 
 **Task order and review batch:** T1 → T6, each one commit and a backup push; then one review of the whole batch with its fixes as `Fix: …` commits; T7 verifies and opens the draft PR on the owner's yes; T8 merges on the owner's yes, takes the owner through the phone check and writes the record.
 
@@ -4636,7 +4637,7 @@ for i in 1 2 3; do (cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Te
 (cd frontend && NEXT_PUBLIC_SUPABASE_URL=https://ci-placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-placeholder NEXT_PUBLIC_API_URL=http://localhost:8000 npm run build 2>&1 | grep -E "Compiled successfully|Error|/services")
 ```
 
-**Expected:** `1335 passed, 16 skipped in <t>s`; three times ` Test Files  83 passed (83)` and `      Tests  650 passed (650)` with no `×` or `FAIL` line (one names the failing test: Step 6); `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s`, a route line for `/services` and no `Error` (a font `Failed to fetch` only: say so and rely on CI).
+**Expected:** `1335 passed, 16 skipped in <t>s`; three times ` Test Files  83 passed (83)` and `      Tests  655 passed (655)` with no `×` or `FAIL` line (one names the failing test: Step 6; 650 before the build review fixes); `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s`, a route line for `/services` and no `Error` (a font `Failed to fetch` only: say so and rely on CI).
 
 - [ ] **Step 3 (agent): The API files unchanged, the gates, the paths, the commits**
 
@@ -4649,7 +4650,7 @@ git log --reverse --no-merges --format=%s origin/main..HEAD
 for c in $(git rev-list origin/main..HEAD); do git show -s --format=%B "$c" | grep -q '^Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>$' || echo "no trailer: $(git show -s --format='%h %s' "$c")"; done; echo "trailer check done"
 ```
 
-**Expected:** nothing from `git status` (the API did not change); `raw html grep exit 1`; exactly these 55 paths (without `M docs/ops-runbook.md` when Step 1 printed `0`, and without the idea doc if it reached `main` another way):
+**Expected:** nothing from `git status` (the API did not change); `raw html grep exit 1`; exactly these 56 paths (55 as planned, and `documents.test.ts` from the build review fixes) (without `M docs/ops-runbook.md` when Step 1 printed `0`, and without the idea doc if it reached `main` another way):
 ```
 M	docs/manual-verification.md
 M	docs/ops-runbook.md
@@ -4680,6 +4681,7 @@ A	frontend/src/components/services/services-page.tsx
 M	frontend/src/lib/api/types.ts
 M	frontend/src/lib/dates.test.ts
 M	frontend/src/lib/dates.ts
+M	frontend/src/lib/documents.test.ts
 M	frontend/src/lib/documents.ts
 M	frontend/src/lib/draft/context.test.tsx
 M	frontend/src/lib/draft/context.tsx
@@ -4707,7 +4709,7 @@ M	frontend/src/lib/liturgy/review.tsx
 A	frontend/src/lib/queries/services.ts
 M	frontend/src/test/fixtures/index.ts
 ```
-`0` (no backend, workflow, package, API snapshot or Streamlit path); the subjects oldest first: `Runbook: slice 5a-2 record (merged; 0005 on production; owner's checks)` (unless on `main`), then in branch order `WIP plan: slice 5a-3`, `Docs: Hear it from the pews idea (owner, 2026-10-02)`, `Docs: Hear it from the pews goes after 6a (owner, 2026-10-02)`, `WIP plan: slice 5a-3`, `Plan: slice 5a-3, Save and the Services page (owner answers 2026-10-01/02)`, `Plan: slice 5a-3, the ride-along idea doc in the path list`, `Plan: slice 5a-3 review fixes (owner answers 2026-10-02)`, then T1-T6's six subjects as written above, then any `Fix: …` lines; only `trailer check done`.
+`0` (no backend, workflow, package, API snapshot or Streamlit path); the subjects oldest first: `Runbook: slice 5a-2 record (merged; 0005 on production; owner's checks)` (unless on `main`), then in branch order `WIP plan: slice 5a-3`, `Docs: Hear it from the pews idea (owner, 2026-10-02)`, `Docs: Hear it from the pews goes after 6a (owner, 2026-10-02)`, `WIP plan: slice 5a-3`, `Plan: slice 5a-3, Save and the Services page (owner answers 2026-10-01/02)`, `Plan: slice 5a-3, the ride-along idea doc in the path list`, `Plan: slice 5a-3 review fixes (owner answers 2026-10-02)`, then T1-T6's six subjects as written above, then `Slice 5a-3 build review fixes (owner decision 1)` and `Plan: slice 5a-3 final counts`, then any `Fix: …` lines; only `trailer check done`.
 
 - [ ] **Step 4 (agent → OWNER): Ask to open the draft PR**
 
@@ -4718,7 +4720,7 @@ gh pr list -R bbrown62450/church --head claude/slice-2-plan-4q33le --state open 
 
 **Expected:** one `✓ Logged in` line; `[]`. Send the owner exactly this, and wait for a clear yes:
 
-> Slice 5a-3 (the Save card and the Services page) is verified on this machine: frontend 650 tests in 83 files (618 in 81 before), three runs in a row; backend 1335 passed, 16 skipped, unchanged (no backend change in this PR); typecheck, lint and the production build are clean. On step 4 you get Save to archive, Save changes or Save as new service, Start a new service, and a dialog when someone else saved first (Save mine as a new service first, as you chose); Review service leaves your church's Benediction alone after a save; the menu gains Services, where you open or delete saved services. Saving records the hymns as used. No database change. May I open the pull request as a **draft** titled "Slice 5a-3: the Save card and the Services page", so the checks run? Merging stays with you.
+> Slice 5a-3 (the Save card and the Services page) is verified on this machine: frontend 655 tests in 83 files (618 in 81 before), three runs in a row; backend 1335 passed, 16 skipped, unchanged (no backend change in this PR); typecheck, lint and the production build are clean. On step 4 you get Save to archive, Save changes or Save as new service, Start a new service, and a dialog when someone else saved first (Save mine as a new service first, as you chose); Review service leaves your church's Benediction alone after a save; the menu gains Services, where you open or delete saved services. Saving records the hymns as used. No database change. May I open the pull request as a **draft** titled "Slice 5a-3: the Save card and the Services page", so the checks run? Merging stays with you.
 
 - [ ] **Step 5 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
 
@@ -4734,7 +4736,7 @@ Slice 5a-3: the Save card and the Services page (the last of three 5a PRs; owner
 - Draft version 2 (editing.date_iso, save_key_fingerprint) with a tested migration; a draft an older app wrote is never adopted; the provider reads storage once mounted; the save key rule (F 1.6) in lib/draft/save-key.ts; serviceToDraft and the final draftToServicePayload; the step bar and summary show Saved or Unsaved changes.
 - The 5a spec gains its 5a-3 amendment; manual-verification items 12-17.
 
-Tests: backend 1335 → 1335 passed, 16 → 16 skipped; frontend 618 → 645 in 81 → 83 files
+Tests: backend 1335 → 1335 passed, 16 → 16 skipped; frontend 618 → 655 in 81 → 83 files
 
 After merge (Task 8): a guided five-step check on the owner's phone, then a "Slice 5a-3 record" in docs/ops-runbook.md.
 
@@ -4748,7 +4750,7 @@ gh pr create -R bbrown62450/church --draft --base main --head claude/slice-2-pla
 gh pr checks <N> -R bbrown62450/church --watch --interval 30
 ```
 
-Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1335 passed, 16 skipped`, backend-postgres `16 passed, 1335 deselected`, frontend `650 passed` in 83 files. Then send: "PR #<N> is green: 650 frontend tests in 83 files; the backend is unchanged at 1335 passed; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R bbrown62450/church`.
+Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1335 passed, 16 skipped`, backend-postgres `16 passed, 1335 deselected`, frontend `655 passed` in 83 files. Then send: "PR #<N> is green: 655 frontend tests in 83 files; the backend is unchanged at 1335 passed; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R bbrown62450/church`.
 
 - [ ] **Step 6: Fix any failure in its owning task**
 
@@ -4765,7 +4767,7 @@ Run the last line with `run_in_background: true`. **Expected:** the PR URL; ever
 
 For each fix: change only the owning task's files; rerun Steps 2-3; commit `Fix: <what> (Task <n>, 5a-3 final verification)` with the trailer; after the PR exists, ask the owner before pushing it.
 
-Expected counts after this task: frontend `650 passed` in 83 files; backend `1335 passed, 16 skipped`.
+Expected counts after this task: frontend `655 passed` in 83 files; backend `1335 passed, 16 skipped`.
 
 ### Task 8: Merge, the owner's guided phone check (five steps), the record (OWNER + agent)
 
@@ -4886,7 +4888,7 @@ gh pr checks claude/slice-2-plan-4q33le -R bbrown62450/church --watch
 
 Code only (no data or schema to undo: the services saved and the hymn use recorded meanwhile stay in the archive, where 5a-2's routes keep them). On the owner's yes for each outward command: a branch `claude/revert-slice-5a3` from `origin/main`, `git revert -m 1 --no-commit <merge sha>`, a commit "Revert slice 5a-3 (PR #<N>)" with the trailer, both suites (`1335 passed, 16 skipped`; `618 passed` in 81), a PR, CI, and the merge on the owner's yes; record it in the 5a-3 record. Tell the owner first: the reverted app reads drafts as version 1, so each browser's current draft (version 2) is not restored once ("We couldn't restore your unsaved draft."; the raw value stays in `wsb:draft-corrupt:…`); saved services are unaffected. Review then shows the "Saving services to the archive is coming soon." note again.
 
-Expected counts after this task: frontend `650 passed` in 83 files on `main`; backend `1335 passed, 16 skipped`. The records PR adds no test.
+Expected counts after this task: frontend `655 passed` in 83 files on `main`; backend `1335 passed, 16 skipped`. The records PR adds no test.
 
 ---
 ## Build notes
@@ -4894,7 +4896,7 @@ Expected counts after this task: frontend `650 passed` in 83 files on `main`; ba
 **How this plan was written (2026-10-02).** Each task's code was built and run in a throwaway worktree of `a789fb8` (the repo's `.venv`, a hard-linked copy of `frontend/node_modules`), one commit per task; the directives were then generated from those commits (a new file as **Create**, `mapping.ts` whole, the docs' additions as **Append**, every other change as **In … replace** with just enough context to occur once in the file as it stands at that point) and replayed onto a fresh worktree of the branch head by a script that applies each task's Step 1 and Step 3 directives by their line ranges and runs that task's commands. While building:
 - **`isDirty` moved to `status.ts`.** `reviewStatus` belongs in `status.ts` beside `stepStatus`, and needs `isDirty`, but `fingerprint.ts` (where `isDirty` was) imports `status.ts` for `isPristine`; moving it leaves `fingerprint.ts` with no imports and no cycle.
 - **`replace` writes at once.** With the Services page's own provider, the builder it opens built its store from storage while the Services page's store still held the opened service in its 400 ms write delay (React renders the new route before the old one unmounts and flushes), so the builder showed the old draft. Writing on `replace` fixes it for New service and the delete reset too (T1 "replace writes at once, …").
-- **The summary's status line is one link.** Splitting it into text and a link broke `getByText("Draft saved on this device · Not in archive")` in 2b's and 3b's tests (Testing Library matches one element's own text); the whole line links to Review instead, which also gives a bigger target.
+- **The summary's status line was one link.** Splitting it into text and a link broke `getByText("Draft saved on this device · Not in archive")` in 2b's and 3b's tests (Testing Library matches one element's own text), so the whole line linked to Review. The build review (M5, below) links only the archive half, and those tests now find the line by that link (`summaryStatus` in `review-send-step.test.tsx`).
 - **Toasts between tests.** sonner replays a toast still showing to the next `Toaster`, so a second test found "Service saved" twice; `review-send-step.test.tsx` and `services-page.test.tsx` call `toast.dismiss()` after each test, as `liturgy-step.test.tsx` does before each.
 - **`isConflict` returns a boolean, not a type guard:** as `e is ApiError` it narrowed `onError`'s already-typed error to `never` in the other branch (typecheck).
 - **The row test reads each row's first button:** the menu button's name ("More actions for October 4, 2026") also matched a pattern on the year.
@@ -4913,11 +4915,20 @@ Expected counts after this task: frontend `650 passed` in 83 files on `main`; ba
 - **A lost answer, in the test, is a dropped connection** (`TypeError("Failed to fetch")`): the client's own 20 s timer would need fake timers around user-event, and the save takes the same path for both (an unknown outcome).
 - **The conflict test edits the draft before its second save:** with the 409 check, saving the reloaded copy unchanged is (rightly) "Service saved", not the dialog.
 
+**Build review fixes (2026-10-02, owner decision 1).** The build review of `c87dcfe..88746fe` found no Critical or Important issue and six Minor ones, fixed in one commit ("Slice 5a-3 build review fixes (owner decision 1)"), with no new copy:
+- **M1, a save that lands after the builder unmounted.** Its `markSaved` went to the builder's unmounted store (written 400 ms later), and the Services page's own provider never heard of it: no "Editing" badge, and a false "Replace your unsaved draft?". Save now flushes its store as it settles (`DraftApi.flush`), its mutation has a key (`SAVE_SERVICE_KEY`), and the Services page passes `resyncAfterSave(queryClient)` as `DraftProvider`'s new `resync`, which re-reads storage quietly when a save settles. Moving `DraftProvider` to the `(church)` layout was the alternative; it would have changed every builder test's setup, so the smaller change was taken. The test advances the clock before the answer comes: with a frozen clock, the save's stamp would equal the stored one and is (rightly) not newer.
+- **M2, the own-save check.** The server fills in a hymn sent without an id when it finds it by title (id, number, its own title) and keeps a text the body cut to its limit, so comparing `serviceToDraft(theirs)` with the uncut draft opened the conflict dialog for this device's own save. `savedCopyFingerprint` (`documents.ts`) reads the body sent and the archive's copy the same way, as the server stores them (Word-safe and trimmed text, blanks dropped, places normalized, each hymn by its normalized title, the hymnal only when sent). Its test uses a custom element's text (10,800 characters, cut to 10,000), since a card's text cannot exceed the draft schema's 20,000 and so is never cut.
+- **M3, an old tab's write on load.** The I1 guard covered adoption only; a provider built after the old tab wrote (Services after the builder, a reload) migrated that tab's version 1 fresh draft. A flush now writes over a value an older app wrote even with nothing pending (never over an unrestorable value it could not back up), and a store loaded from such a value takes the next current-version draft it reads whatever its time, once.
+- **M4** Save's disabled reason ("Choose a service date …", "Fix the readings …") is in its `aria-describedby` with the copy note (ids from `useId`); the archive status line is `aria-live="polite"`. **M5** Only the summary line's archive half links to Review. **M6** "Show more" keeps the first of any service that two pages both hold (a save between page reads shifts the offsets), so React keys stay unique.
+- Each new test was seen failing with its fix taken out. Frontend 655 in 83, three runs; typecheck and lint clean.
+
+**Final verification (2026-10-02, T7 Steps 1-3, without the GitHub steps).** The branch was up to date with `origin/main` (`c9c8c6b`; no merge needed); the 5a-2 runbook record rides along. Backend `1335 passed, 16 skipped`; frontend three times `655 passed` in 83 files with no `×` or `FAIL`; typecheck 0, lint 0; `npm run build` `✓ Compiled successfully` with `/services`. `export_openapi.py` and `gen:api` changed nothing; no migration (5 revision files); no raw HTML; 56 paths (the planned 55 and `documents.test.ts`); no backend, workflow, package, API snapshot or Streamlit path; every commit has the trailer; no token, email address or real church id in the diff, and no em dash in new user-facing copy.
+
 ## Spec coverage
 
 | Owner answer or S item | Task(s) and tests |
 |---|---|
-| 1. Three PRs; this one is the Save card and the Services page; no backend change | the plan's scope; T7 Step 3 (55 paths; `0` backend, API snapshot or migration paths; regenerating the API changes nothing); clarification 1 |
+| 1. Three PRs; this one is the Save card and the Services page; no backend change | the plan's scope; T7 Step 3 (56 paths; `0` backend, API snapshot or migration paths; regenerating the API changes nothing); clarification 1 |
 | 2. No order-of-worship preview | T4 "shows Still to do, the Archive card and both copies … in that order" (the step's three h2s) |
 | 4. A save keeps a default Benediction and communion as saved | T2 "markSaved records the save and keeps a default Benediction and communion as saved (owner answer 4)"; T4 "saves a new service with the draft's key, …" (the stored draft's origins after the save) |
 | 5. No "Readings for … are available" while the date is the saved date | T2 "opens a saved service as a new draft that is already Saved, …" (hidden on the saved date, shown on another, hidden again back on it) |
@@ -4947,6 +4958,7 @@ Expected counts after this task: frontend `650 passed` in 83 files on `main`; ba
 | Owner, 2026-10-02, C1: "Review service" skips the church's Benediction whatever its origin | T2 `request.test.ts` "leaves out a saved Benediction that is the church default or Streamlit's \"Halverson\"; an edited one is reviewed (5a-3)"; clarification 6 |
 | Owner, 2026-10-02, I3: the conflict dialog's second line and primary button | T4 "on a conflict, reloads their version or saves mine as a new service" (the description, the buttons' variants) |
 | Clarifications 23-27 (review fixes I1, I2, I4, M1, M2, M3) | T1 "never adopts a draft an older version of the app wrote, …" and `context.test.tsx` "reads the stored draft once mounted, …"; T4 "after a save whose answer was lost, a 409 is that save …"; T3 `autoUpdate` (M1, exercised by T4's key cases); T5 "after Show more, a delete reads every page again …" |
+| Build review fixes M1-M6 (owner decision 1; Build notes) | `services-page.test.tsx` "a save still in flight when the builder was left counts once it lands: …" (M1) and "Show more shows a row only once when a save between pages shifted the list" (M6); `review-send-step.test.tsx` "a lost answer's 409 is still that save when the server found a hymn by its title and the body cut a long text" (M2), the Save button's description and the live status line (M4), `summaryStatus` (M5); `documents.test.ts` "savedCopyFingerprint (5a-3 build review M2)"; `store.test.ts` "puts its draft back over an old tab's with nothing to write, …" (M3) |
 | 5a-2 record follow-up: a stored element over today's limits | clarification 12 (`serviceBody`); 5a-1's `documents.test.ts` "stays within the ServiceDraft limits …" covers the cutting |
 | S acceptance criterion 14 (frontend) | T4 and T5 as above; `SHIPPED_STEPS` (T2) |
 
