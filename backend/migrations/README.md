@@ -26,7 +26,7 @@ fails its deploy health check.
   `SET LOCAL statement_timeout = '60s'`, and all pending revisions run in one
   transaction, so any failure rolls every one of them back.
 - Revisions live in `migrations/versions/`, one file per revision, named
-  `NNNN_short_slug.py`. Head is `0004_invites_reusable`.
+  `NNNN_short_slug.py`. Head is `0005_services_extras`.
 
 | Revision | What it does |
 |---|---|
@@ -34,6 +34,7 @@ fails its deploy health check.
 | `0002_reconcile` | Guarded adds: `ix_hymns_church_hymnal` (`IF NOT EXISTS`) and the two hymn-facts columns on both hymn tables, only where missing. A no-op on fresh databases, and on production except creating the index if step 6 reports it missing; it fixes a stamped local database made before PR #4. |
 | `0003_lockdown` | Postgres only: row-level security on every `public` table (after the precondition below), and the REVOKEs from `anon` and `authenticated`. Idempotent after the ops lockdown of 2026-09-25. |
 | `0004_invites_reusable` | `invites.reusable` (NOT NULL, default false; existing code-only invites become reusable) and `invites.accepted_by` with the FK `fk_invites_accepted_by_users` (`ON DELETE SET NULL`). |
+| `0005_services_extras` | Slice 5a-2: `services.custom_elements` (JSON) and `services.hymnal` (VARCHAR), both nullable with no default and no backfill, and the index `ix_services_church_date` on `services (church_id, service_date_iso)`. Before it reaches production: "Before 0005_services_extras" below. |
 
 ## Rules for a new revision
 

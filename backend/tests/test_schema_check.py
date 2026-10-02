@@ -76,12 +76,16 @@ from db.schema_check import (
     schema_diff,
 )
 
-EXPECTED_HEAD = "0004_invites_reusable"
-# What a stamped production at 0001_baseline lacks (runbook step 6, sorted).
+EXPECTED_HEAD = "0005_services_extras"
+# What a database stamped at 0001_baseline lacks (runbook step 6, sorted):
+# 0004's invites changes, then 0005's services changes (slice 5a-2).
 BASELINE_DRIFT = [
     "add_column invites.accepted_by",
     "add_column invites.reusable",
+    "add_column services.custom_elements",
+    "add_column services.hymnal",
     "add_fk fk_invites_accepted_by_users",
+    "add_index ix_services_church_date",
 ]
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 SCHEMA_DRIFT = BACKEND_DIR / "scripts" / "schema_drift.py"
@@ -113,7 +117,7 @@ def _load_schema_drift():
     return module
 
 
-def test_head_is_0004_invites_reusable():
+def test_head_is_0005_services_extras():
     script = ScriptDirectory.from_config(alembic_config(configure_logger=False))
     assert script.get_current_head() == EXPECTED_HEAD
 
@@ -147,7 +151,7 @@ def test_an_unknown_revision_is_ahead(tmp_path):
     assert _state_of(url) == RevisionState("0005_from_the_future", EXPECTED_HEAD, "ahead")
 
 
-def test_schema_diff_at_baseline_lists_exactly_the_0004_changes(tmp_path):
+def test_schema_diff_at_baseline_lists_exactly_the_0004_and_0005_changes(tmp_path):
     """0001_baseline stands in for production after `alembic stamp 0001_baseline`."""
     url = _sqlite_file_url(tmp_path)
     _upgrade_to(url, "0001_baseline")

@@ -639,3 +639,120 @@ def test_an_insert_without_reusable_gets_false(sqlite_url):
     finally:
         engine.dispose()
     assert (bool(reusable), accepted_by) == (False, None)
+
+
+# --- Slice 5a-2: 0005_services_extras (F §3.4, §3.5; 5a spec "Data and migrations") ---
+
+# The services columns before 0005, i.e. everything a pre-5a-2 insert names
+# (frozen Streamlit's ORM, migrate_to_db.py): never custom_elements or hymnal.
+_legacy_services = sa.table(
+    "services",
+    sa.column("id", sa.Uuid()),
+    sa.column("church_id", sa.Uuid()),
+    sa.column("created_by", sa.Uuid()),
+    sa.column("service_date_iso", sa.String()),
+    sa.column("service_date_display", sa.String()),
+    sa.column("occasion", sa.String()),
+    sa.column("scriptures", sa.JSON()),
+    sa.column("hymns", sa.JSON()),
+    sa.column("liturgy", sa.JSON()),
+    sa.column("sermon_title", sa.String()),
+    sa.column("selected_ot_ref", sa.String()),
+    sa.column("selected_nt_ref", sa.String()),
+    sa.column("include_communion", sa.Boolean()),
+    sa.column("saved_at", sa.DateTime(timezone=True)),
+)
+
+# What `alembic upgrade 0004_invites_reusable:0005_services_extras --sql` prints
+# on Postgres, comments and blank lines left out: the preview the owner reads
+# before the merge (5a-2 plan, owner answer 8; backend/migrations/README.md).
+PREVIEW_0005 = [
+    "BEGIN;",
+    "SET LOCAL lock_timeout = '5s';",
+    "SET LOCAL statement_timeout = '60s';",
+    "ALTER TABLE services ADD COLUMN custom_elements JSON;",
+    "ALTER TABLE services ADD COLUMN hymnal VARCHAR;",
+    "CREATE INDEX ix_services_church_date ON services (church_id, service_date_iso);",
+    "UPDATE alembic_version SET version_num='0005_services_extras' "
+    "WHERE alembic_version.version_num = '0004_invites_reusable';",
+    "COMMIT;",
+]
+
+
+def _insert_legacy_service(conn, church_id, user_id, *, date_iso="2026-09-27") -> uuid.UUID:
+    service_id = uuid.uuid4()
+    conn.execute(_legacy_services.insert().values(
+        id=service_id, church_id=church_id, created_by=user_id, service_date_iso=date_iso,
+        service_date_display="September 27, 2026", occasion="Pentecost 17", scriptures=["Psalm 25"],
+        hymns=[{"title": "Holy, Holy, Holy", "number": 138}], liturgy={"call_to_worship": "Come."},
+        sermon_title="", selected_ot_ref="", selected_nt_ref="", include_communion=False, saved_at=T9_NOW))
+    return service_id
+
+
+def _services_shape(conn) -> dict:
+    insp = sa.inspect(conn)
+    return {
+        "columns": [(c["name"], str(c["type"]), c["nullable"]) for c in insp.get_columns("services")],
+        "pk": insp.get_pk_constraint("services")["constrained_columns"],
+        "fks": sorted((fk["name"] or "", tuple(fk["constrained_columns"]), fk["referred_table"],
+                       fk["options"].get("ondelete")) for fk in insp.get_foreign_keys("services")),
+        "indexes": sorted((i["name"], tuple(i["column_names"]), bool(i["unique"]))
+                          for i in insp.get_indexes("services")),
+    }
+
+
+def test_0005_adds_two_nullable_columns_and_the_date_index_and_keeps_rows(sqlite_url):
+    _alembic(sqlite_url, "upgrade", "0004_invites_reusable")
+    engine = sa.create_engine(sqlite_url, poolclass=NullPool)
+    try:
+        with engine.begin() as conn:
+            user_id, church_id = _seed_owner_and_church(conn)
+            kept = _insert_legacy_service(conn, church_id, user_id)
+            before = _services_shape(conn)
+        _alembic(sqlite_url, "upgrade", "head")
+        with engine.begin() as conn:
+            at_head = _services_shape(conn)
+            inserted = _insert_legacy_service(conn, church_id, user_id, date_iso="2026-10-04")
+            rows = conn.execute(sa.text(
+                "SELECT id, occasion, custom_elements, hymnal FROM services ORDER BY service_date_iso")).all()
+    finally:
+        engine.dispose()
+    assert at_head["columns"] == before["columns"] + [
+        ("custom_elements", "JSON", True), ("hymnal", "VARCHAR", True)]
+    assert at_head["indexes"] == sorted(before["indexes"] + [
+        ("ix_services_church_date", ("church_id", "service_date_iso"), False)])
+    assert (at_head["pk"], at_head["fks"]) == (before["pk"], before["fks"])
+    # The row from before keeps its data; an insert that names neither column gets NULLs.
+    assert [(uuid.UUID(str(r.id)), r.occasion, r.custom_elements, r.hymnal) for r in rows] == [
+        (kept, "Pentecost 17", None, None), (inserted, "Pentecost 17", None, None)]
+
+
+def test_0005_downgrade_gives_back_the_0004_services_table(sqlite_url):
+    _alembic(sqlite_url, "upgrade", "0004_invites_reusable")
+    engine = sa.create_engine(sqlite_url, poolclass=NullPool)
+    try:
+        with engine.connect() as conn:
+            before = _services_shape(conn)
+        _alembic(sqlite_url, "upgrade", "head")
+        with engine.begin() as conn:
+            user_id, church_id = _seed_owner_and_church(conn)
+            _insert_legacy_service(conn, church_id, user_id)
+            conn.execute(sa.text("UPDATE services SET custom_elements = '[]', hymnal = 'GG2013'"))
+        _alembic(sqlite_url, "downgrade", "0004_invites_reusable")
+        with engine.connect() as conn:
+            after = _services_shape(conn)
+            occasions = conn.execute(sa.text("SELECT occasion FROM services")).scalars().all()
+            version = conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
+    finally:
+        engine.dispose()
+    assert after == before          # the table copy kept every other column, key and index
+    assert occasions == ["Pentecost 17"]
+    assert version == "0004_invites_reusable"
+
+
+def test_offline_sql_for_0005_is_two_column_adds_and_one_index_under_the_timeouts():
+    cfg = alembic_config(url="postgresql://preview@localhost:1/preview", configure_logger=False)
+    cfg.output_buffer = buffer = io.StringIO()
+    command.upgrade(cfg, "0004_invites_reusable:0005_services_extras", sql=True)
+    lines = [line for line in buffer.getvalue().splitlines() if line.strip() and not line.startswith("--")]
+    assert lines == PREVIEW_0005
