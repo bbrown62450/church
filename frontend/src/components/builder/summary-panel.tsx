@@ -4,9 +4,11 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
-import { formatLongDate } from "@/lib/dates";
+import { formatLongDate, formatSavedAt } from "@/lib/dates";
 import { useDraft } from "@/lib/draft/context";
 import { cleanScriptures, effectivePicks } from "@/lib/draft/readings";
+import type { DraftV1 } from "@/lib/draft/schema";
+import { reviewStatus } from "@/lib/draft/status";
 import { SHIPPED_STEPS, stepById, type StepId } from "@/lib/draft/steps";
 import { splitAlternatives } from "@/lib/scripture-refs";
 
@@ -35,12 +37,19 @@ function Soon() {
   return <p>Available soon</p>;
 }
 
+/** The archive half of the status line (S "Step status and summary panel"; slice 5a-3). */
+export function archiveSummary(draft: DraftV1): string {
+  if (draft.editing === null) return "Not in archive";
+  const saved = `In archive (saved ${formatSavedAt(draft.editing.saved_at)})`;
+  return reviewStatus(draft) === "saved" ? saved : `${saved} · Unsaved changes`;
+}
+
 /**
  * The draft at a glance (S "SummaryPanel"; F §4.7): a sticky column from
  * `lg`, the bottom sheet below it. Each block links to its step. The Readings
  * block and the occasion line show once "readings" ships (slice 2c), the three
  * hymns once "hymns" ships (slice 3b), the liturgy counts once "liturgy" ships
- * (slice 4b); 5a wires the archive half of the status line.
+ * (slice 4b); 5a-3 wires the archive half of the status line, which (alone) links to Review.
  */
 export function SummaryPanel({ shipped = SHIPPED_STEPS, onNavigate }: { shipped?: ReadonlySet<StepId>; onNavigate?: () => void }) {
   const { draft, persistence } = useDraft();
@@ -80,7 +89,16 @@ export function SummaryPanel({ shipped = SHIPPED_STEPS, onNavigate }: { shipped?
       <Block title="Liturgy" step="liturgy" onNavigate={onNavigate}>
         {liturgyShipped ? <LiturgySummaryBlock /> : <Soon />}
       </Block>
-      <p className="border-t pt-3 text-xs text-muted-foreground">{saved} · Not in archive</p>
+      <p className="border-t pt-3 text-xs text-muted-foreground">
+        {saved} ·{" "}
+        <Link
+          href={stepById("review").href}
+          onClick={onNavigate}
+          className="inline-flex min-h-11 items-center underline-offset-4 hover:underline lg:min-h-0"
+        >
+          {archiveSummary(draft)}
+        </Link>
+      </p>
     </div>
   );
 }

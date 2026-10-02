@@ -368,7 +368,7 @@ function snapshot(d: DraftV1, keys: readonly SectionKey[]): string {
  */
 export function ServiceNotes() {
   const review = useLiturgyReview();
-  const { draft } = useDraft();
+  const { draft, defaultBenediction } = useDraft();
   const { runs, rateLimitedUntil } = useLiturgyGeneration();
   const limitedUntil = rateLimitedUntil ?? undefined;
   const waiting = useRetryWait(limitedUntil);
@@ -407,7 +407,7 @@ export function ServiceNotes() {
   });
   const offer = (note: Note) => {
     const words = sharedOpening(note);
-    const targets = words === null ? null : acrossTargets(draft, words);
+    const targets = words === null ? null : acrossTargets(draft, words, defaultBenediction);
     if (targets === null) return null;
     const busy = [targets.first, ...targets.others].some((key) => runs[key] !== undefined || review.revising[key] === true);
     return { targets, off: busy || waiting };

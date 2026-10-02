@@ -18,6 +18,10 @@ export function statusText(status: StepStatus): string {
       return "Soon";
     case "not_in_archive":
       return "Not in archive";
+    case "saved":
+      return "Saved";
+    case "unsaved_changes":
+      return "Unsaved changes";
   }
 }
 
@@ -52,7 +56,7 @@ export function StepProgress({ current, shipped = SHIPPED_STEPS }: { current: St
                   aria-hidden="true"
                   className={cn(
                     "h-1.5 rounded-full bg-muted",
-                    status.kind === "complete" && "bg-primary/60",
+                    (status.kind === "complete" || status.kind === "saved") && "bg-primary/60",
                     isCurrent && "bg-primary",
                   )}
                 />
@@ -65,7 +69,7 @@ export function StepProgress({ current, shipped = SHIPPED_STEPS }: { current: St
                     muted ? "lg:text-muted-foreground" : "lg:text-foreground",
                   )}
                 >
-                  {status.kind === "complete" ? <CheckIcon aria-hidden="true" className="size-3" /> : null}
+                  {status.kind === "complete" || status.kind === "saved" ? <CheckIcon aria-hidden="true" className="size-3" /> : null}
                   {statusText(status)}
                 </span>
               </Link>

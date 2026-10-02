@@ -151,14 +151,18 @@ describe("AppHeader", () => {
     expect(onSignOut).toHaveBeenCalledTimes(1);
   });
 
-  it("shows the Builder nav item on church pages, current under /builder, and no nav without churches (F §4.2)", () => {
+  it("shows the Builder and Services nav items on church pages, current under /builder, and no nav without churches (F §4.2)", () => {
     setTestPath("/builder/hymns");
     const { unmount } = render(
       <AppHeader user={pat} churches={[graceAdmin]} active={graceAdmin} onSelectChurch={vi.fn()} onSignOut={vi.fn()} />,
     );
     const nav = screen.getByRole("navigation", { name: "Main" });
     const links = within(nav).getAllByRole("link");
-    expect(links.map((link) => [link.textContent, link.getAttribute("href")])).toEqual([["Builder", "/builder"]]);
+    expect(links.map((link) => [link.textContent, link.getAttribute("href")])).toEqual([
+      ["Builder", "/builder"],
+      ["Services", "/services"],
+    ]);
+    expect(links[1]).not.toHaveAttribute("aria-current");
     expect(links[0]).toHaveAttribute("aria-current", "page");
     expect(links[0]).toHaveClass("h-11", "md:h-9"); // 44 px tap target on phones (F §4.9)
     unmount();

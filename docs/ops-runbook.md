@@ -510,6 +510,27 @@ address or church id is recorded here.
 
 PR #42 merged 2026-10-02 13:48 UTC (merge commit `bdfd422`): "Review service" leaves out a Benediction that follows the church default (owner, 2026-10-02). No backend, API or database change. Owner's phone check (2026-10-02): after a review, the default Benediction had no notes and no "Looks good."; the other cards got their notes.
 
+### Slice 5a-2 record
+
+Slice 5a-2 (saving on the server: `/services` list, open, save, replace and
+delete, hymn use rebuilt from the saved services for each date, and migration
+`0005_services_extras`) merged as PR #43, the second of three 5a PRs. Nothing
+changes on screen; 5a-3 adds the Save card and the Services page, and hymn
+use is not recorded until then. Production moved from `0004_invites_reusable`
+to `0005_services_extras` (two empty nullable columns on `services` and the
+index `ix_services_church_date`; no row changed). The owner's steps followed
+`backend/migrations/README.md` "Before 0005_services_extras". No token, email
+address, church id or database URL is recorded here.
+
+| Step | Result | Date |
+|---|---|---|
+| 1. Backup | db-backup run 37026355654 on `main` (`bdfd422`): success, artifact `db-backup` (about 377 KB, kept 30 days) | 2026-10-02 |
+| 2. Counts before (owner, SQL Editor, read-only) | version `0004_invites_reusable`, services 26, undated 0, old_style_hymn_lists 26 | 2026-10-02 |
+| 3. SQL preview | Rendered from the PR's code without a database: the README's eight lines exactly (two `ADD COLUMN`, one `CREATE INDEX`, the version update, under `lock_timeout 5s`) | 2026-10-02 |
+| 4. Merge and deploy | PR #43 merged 15:23 UTC (11:23 Eastern), merge commit `c9c8c6b`. Deploy log: the pre-deploy step ran with no error, though its "Running upgrade" line was not in the captured log; startup clean, AI configured, `/health/ready` 200; `/services` in OpenAPI; `GET /services` signed out 401 | 2026-10-02 |
+| 5. After deploy (owner, read-only) | version `0005_services_extras`, new_columns 2, new_index 1; counts again `0005_services_extras`, 26, 0, 26 (no row changed). Phone: the Hymns step loads and the bulletin download works | 2026-10-02 |
+| Follow-ups | Next: 5a-3 (Save card and Services page; saving records hymn use; a re-save of a stored custom element over today's limits is a 422 on that field, which 5a-3 must handle). Then the printed bulletin, Voices of the Church, 6a. Still open: the screen-reader copy for "Revise the other prayers", first-line matching research (Hymnary.org), the NUL-character 500 outside `/documents`, and the two slice 1 test churches (kept for now, owner) | 2026-10-02 |
+
 ## Backups
 
 - **Workflow:** `.github/workflows/backup.yml` (`db-backup`). Daily at 08:37 UTC,

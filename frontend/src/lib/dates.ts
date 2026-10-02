@@ -140,6 +140,23 @@ export function isFirstSundayOfMonth(iso: string): boolean {
   return p !== null && weekday(iso) === 0 && p.d <= 7;
 }
 
+/**
+ * When a service was saved (an ISO timestamp from the API, slice 5a-3), in
+ * the viewer's time zone: "Oct 1, 10:42 AM", with the year when it is not
+ * this year ("Dec 31, 2025, 6:30 PM"); "" for an unreadable value.
+ * `timeZone` and `now` are for tests.
+ */
+export function formatSavedAt(iso: string, { timeZone, now = new Date() }: { timeZone?: string; now?: Date } = {}): string {
+  const at = Date.parse(iso);
+  if (!Number.isFinite(at)) return "";
+  const zone = timeZone === undefined ? {} : { timeZone };
+  const year = (t: number) => new Intl.DateTimeFormat("en-US", { year: "numeric", ...zone }).format(t);
+  const withYear = year(at) === year(now.getTime()) ? {} : { year: "numeric" as const };
+  const options: Intl.DateTimeFormatOptions = { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", ...withYear, ...zone };
+  // Newer ICU puts a narrow no-break space before AM/PM; a plain space reads the same everywhere.
+  return new Intl.DateTimeFormat("en-US", options).format(at).replace(/\u202f/g, " ");
+}
+
 /** Years 1900–2199: the range the lectionary lookup accepts. */
 export function inSupportedRange(iso: string): boolean {
   const p = parseIsoDate(iso);

@@ -207,7 +207,7 @@ export function LiturgyReviewProvider({
   sermonWaitMs?: number;
   children: ReactNode;
 }) {
-  const { draft, update, peek } = useDraft();
+  const { draft, update, peek, defaultBenediction } = useDraft();
   const api = useApi();
   const { runs, setUndo, rateLimitedUntil, noteRateLimit, onWritten } = useLiturgyGeneration();
   const loadSermon = useSermonLoader(church, sermonWaitMs);
@@ -285,7 +285,7 @@ export function LiturgyReviewProvider({
   const start = useCallback(() => {
     if (active.current !== null) return;
     const asked = peek();
-    const keys = reviewTargets(asked);
+    const keys = reviewTargets(asked, defaultBenediction);
     if (keys.length === 0) return;
     const ask = captureReview(asked, keys);
     const controller = new AbortController();
@@ -322,7 +322,7 @@ export function LiturgyReviewProvider({
         }
       }
     })();
-  }, [api, handleFailure, loadSermon, peek]);
+  }, [api, defaultBenediction, handleFailure, loadSermon, peek]);
 
   const cancel = useCallback(() => {
     active.current?.abort();
@@ -471,7 +471,7 @@ export function LiturgyReviewProvider({
           setRevising((current) => without(current, key));
         }
         batches.current.delete(batch);
-        if (!batch.all || acrossTargets(peek(), batch.words) !== null) return;
+        if (!batch.all || acrossTargets(peek(), batch.words, defaultBenediction) !== null) return;
         // Every one was revised: the note goes, unless a newer review has replaced it meanwhile.
         setReview((current) =>
           current !== null && current.generation === batch.generation && current.service.some((n) => n.id === batch.noteId)
@@ -481,7 +481,7 @@ export function LiturgyReviewProvider({
       };
       step();
     },
-    [peek],
+    [defaultBenediction, peek],
   );
 
   const reviseAcross = useCallback(
@@ -491,7 +491,7 @@ export function LiturgyReviewProvider({
       const words = note === undefined ? null : sharedOpening(note);
       if (current === null || note === undefined || words === null) return false;
       const asked = peek();
-      const targets = acrossTargets(asked, words);
+      const targets = acrossTargets(asked, words, defaultBenediction);
       if (targets === null) return false;
       // Any of these prayers being written, revised or waiting in a batch: nothing is sent (the button is off).
       const busy = (key: SectionKey) => runs[key] !== undefined || revisions.current.has(key) || inBatch(batches.current, key);
@@ -521,7 +521,7 @@ export function LiturgyReviewProvider({
       runAcross(batch);
       return batch.started > 0;
     },
-    [peek, rateLimitedUntil, runAcross, runs],
+    [defaultBenediction, peek, rateLimitedUntil, runAcross, runs],
   );
 
   const cancelRevise = useCallback((key: SectionKey) => {

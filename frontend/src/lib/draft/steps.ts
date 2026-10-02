@@ -6,9 +6,9 @@
  * step shows the muted status "Soon" (Review: "Not in archive"), and
  * `stillNeeded` ignores it. Slice 2b shipped none (owner answer Q1,
  * 2026-09-28); slice 2c ships "readings", slice 3b "hymns" and slice 4b
- * "liturgy". Review's route has its real content from 5a-1 (Still needed and
+ * "liturgy". Review's route has its real content from 5a-1 (the checklist and
  * the Word files); "review" joins the set in 5a-3, when saving gives it the
- * statuses "Saved" and "Unsaved changes".
+ * statuses "Saved" and "Unsaved changes" (`reviewStatus`).
  */
 import type { StepId } from "./schema";
 
@@ -33,7 +33,7 @@ export const STEPS: readonly Step[] = [
   { id: "review", number: 4, label: "Review & send", short: "Review", href: "/builder/review", previous: "liturgy", next: null },
 ];
 
-export const SHIPPED_STEPS: ReadonlySet<StepId> = new Set<StepId>(["readings", "hymns", "liturgy"]);
+export const SHIPPED_STEPS: ReadonlySet<StepId> = new Set<StepId>(["readings", "hymns", "liturgy", "review"]);
 
 export function stepById(id: StepId): Step {
   const step = STEPS.find((s) => s.id === id);

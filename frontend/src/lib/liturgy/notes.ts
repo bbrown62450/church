@@ -200,14 +200,14 @@ export type AcrossTargets = { words: string; first: SectionKey; others: SectionK
 /**
  * The prayers a shared-opening note is about, as the draft is now: the
  * switched-on cards with text (the review's own rule, so never a Benediction
- * following the church default: owner, 2026-10-02) whose first two words
+ * that is the church default: owner, 2026-10-02) whose first two words
  * are `words`, any case, in service order. `first` is kept; `others` are the
  * rest Revise may rewrite. Null when fewer than two still share the opening
  * or none can be revised.
  */
-export function acrossTargets(d: DraftV1, words: string): AcrossTargets | null {
+export function acrossTargets(d: DraftV1, words: string, defaultBenediction: string): AcrossTargets | null {
   const key = words.toLowerCase();
-  const sharing = reviewTargets(d).filter((k) => {
+  const sharing = reviewTargets(d, defaultBenediction).filter((k) => {
     const opening = openingWords(d.liturgy.cards[k].text);
     return opening.length === 2 && opening.join(" ").toLowerCase() === key;
   });

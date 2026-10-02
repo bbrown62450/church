@@ -23,6 +23,9 @@ import type {
   ScriptureMatches,
   SectionError,
   SectionResult,
+  ServiceOut,
+  ServicePage,
+  ServiceSummary,
   SuggestedHymn,
   Translations,
 } from "@/lib/api/types";
@@ -467,4 +470,60 @@ export function reviseRoute(
   }),
 ) {
   return async (req: { body: unknown }) => answer(req.body as ReviseBody);
+}
+
+// --- slice 5a-3: saved services ---------------------------------------------------
+
+export const SERVICE_ID = "55555555-5555-4555-8555-555555555555";
+
+/**
+ * `GET /services/{id}` (`ServiceOut`, slice 5a-2): Grace's October 4, 2026
+ * service as Pat saved it on October 1 at 14:42 UTC: the Isaiah readings with
+ * the Gospel picked, GG2013 #1 as the Opening hymn, an empty Response slot, a
+ * Closing hymn no longer in the hymnal, two sections, communion, a sermon
+ * title and an Anthem after the sermon.
+ */
+export function savedService(overrides: Partial<ServiceOut> = {}): ServiceOut {
+  return {
+    id: SERVICE_ID,
+    service_date_iso: "2026-10-04",
+    service_date: "October 04, 2026",
+    occasion: "World Communion Sunday",
+    scriptures: ["Isaiah 5:1-7", "Psalm 80:7-15", "Philippians 3:4b-14", "Matthew 21:33-46"],
+    hymns: {
+      opening: { hymn_id: hymnId(1), title: "Holy, Holy, Holy! Lord God Almighty", number: 1, hymnal: "GG2013", in_hymnal: true },
+      response: null,
+      closing: { hymn_id: null, title: "Old Favorite", number: 12, hymnal: "PH1990", in_hymnal: false },
+    },
+    hymnal: "GG2013",
+    liturgy: { call_to_worship: "Leader: Come. People: We come.", benediction: "Go in peace." },
+    sermon_title: "Living Water",
+    selected_ot_ref: "",
+    selected_nt_ref: "Matthew 21:33-46",
+    include_communion: true,
+    custom_elements: [{ label: "Anthem", text: "Choir", insert_after: "sermon" }],
+    created_by: { id: USER_ID, name: "Pat Pastor" },
+    saved_at: "2026-10-01T14:42:00.123456+00:00",
+    ...overrides,
+  };
+}
+
+/** One row of `GET /services` (`ServiceSummary`): `savedService()`'s, unless overridden. */
+export function serviceSummary(overrides: Partial<ServiceSummary> = {}): ServiceSummary {
+  const s = savedService();
+  return {
+    id: s.id,
+    service_date_iso: s.service_date_iso,
+    service_date: s.service_date,
+    occasion: s.occasion,
+    sermon_title: s.sermon_title,
+    saved_at: s.saved_at,
+    created_by: s.created_by,
+    ...overrides,
+  };
+}
+
+/** A page of `GET /services`. */
+export function servicePage(items: ServiceSummary[], overrides: Partial<ServicePage> = {}): ServicePage {
+  return { items, total: items.length, limit: 20, offset: 0, ...overrides };
 }

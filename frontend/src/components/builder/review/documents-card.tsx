@@ -1,12 +1,13 @@
 "use client";
 
 import { DownloadIcon } from "lucide-react";
+import { useState } from "react";
 
 import { PendingButton } from "@/components/app/pending-button";
 import { useStillWorking } from "@/components/builder/liturgy/use-still-working";
 import { useDraft } from "@/lib/draft/context";
 import type { DraftV1 } from "@/lib/draft/schema";
-import { hasReadingsError, hasServiceDate } from "@/lib/draft/status";
+import { hasReadingsError, hasServiceDate, reviewStatus } from "@/lib/draft/status";
 import type { DocumentVariant } from "@/lib/download";
 import { useDownloadDocument } from "@/lib/queries/documents";
 
@@ -30,6 +31,7 @@ const COPIES: readonly Copy[] = [
 export const SAME_AS_BULLETIN = "Same as the bulletin copy for this service. Prayers of the People is empty or turned off.";
 export const NEEDS_DATE = "Choose a service date on step 1 to download.";
 export const FIX_READINGS = "Fix the readings on step 1 to download.";
+export const SAVE_HINT = "Tip: save this service so its hymns count as recently used.";
 
 /** The pastor's copy prints nothing more when Prayers of the People is off or blank (inv F1). */
 function sameAsBulletin(draft: DraftV1): boolean {
@@ -37,7 +39,17 @@ function sameAsBulletin(draft: DraftV1): boolean {
   return !card.enabled || card.text.trim() === "";
 }
 
-function CopyRow({ copy, disabled, helper }: { copy: Copy; disabled: boolean; helper: string | null }) {
+function CopyRow({
+  copy,
+  disabled,
+  helper,
+  onDownloaded,
+}: {
+  copy: Copy;
+  disabled: boolean;
+  helper: string | null;
+  onDownloaded: () => void;
+}) {
   const download = useDownloadDocument(copy.variant);
   const slow = useStillWorking(download.isPending);
   const pendingLabel = slow ? "Still working…" : "Preparing…";
@@ -63,7 +75,7 @@ function CopyRow({ copy, disabled, helper }: { copy: Copy; disabled: boolean; he
         pendingLabel={pendingLabel}
         disabled={disabled}
         aria-describedby={helper ? `${id}-description ${id}-helper` : `${id}-description`}
-        onClick={() => download.mutate()}
+        onClick={() => download.mutate(undefined, { onSuccess: onDownloaded })}
       >
         <DownloadIcon data-icon="inline-start" aria-hidden="true" />
         {copy.action}
@@ -88,10 +100,13 @@ function CopyRow({ copy, disabled, helper }: { copy: Copy; disabled: boolean; he
  * occasion over 300, more than 20 readings or a line over 200: "Fix the
  * readings on step 1 to download.", build review fix 6), nothing else: what
  * is missing is listed above, and the file prints what there is ("[Sermon
- * title]" for a blank title).
+ * title]" for a blank title). After a download while the draft is not saved
+ * as it is (slice 5a-3), a tip says that saving is what records the hymns as
+ * recently used.
  */
 export function DocumentsCard() {
   const { draft } = useDraft();
+  const [downloaded, setDownloaded] = useState(false);
   const dated = hasServiceDate(draft);
   const readingsError = hasReadingsError(draft);
   const same = sameAsBulletin(draft);
@@ -111,9 +126,11 @@ export function DocumentsCard() {
             copy={copy}
             disabled={!dated || readingsError}
             helper={copy.variant === "pastor" && same ? SAME_AS_BULLETIN : null}
+            onDownloaded={() => setDownloaded(true)}
           />
         ))}
       </ul>
+      {downloaded && reviewStatus(draft) !== "saved" ? <p className="text-sm text-muted-foreground">{SAVE_HINT}</p> : null}
     </section>
   );
 }

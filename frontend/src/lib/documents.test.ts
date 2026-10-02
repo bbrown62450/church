@@ -7,9 +7,9 @@ import { describe, expect, it } from "vitest";
 import { editScriptureLines, setPick } from "@/lib/draft/readings";
 import { pickFromHymn, setSlot } from "@/lib/hymns/picks";
 import { addCustomElement, editCardText, setCardEnabled, setCommunion, setSermonTitle } from "@/lib/liturgy/cards";
-import { gg2013, testDraft } from "@/test/fixtures";
+import { gg2013, savedService, testDraft } from "@/test/fixtures";
 
-import { documentRequest, wordSafe } from "./documents";
+import { documentRequest, savedCopyFingerprint, wordSafe } from "./documents";
 import { DEFAULT_BENEDICTION_FALLBACK } from "@/lib/liturgy/defaults";
 
 const OCT_4 = ["Isaiah 5:1-7", "Psalm 80:7-15", "Philippians 3:4b-14", "Matthew 21:33-46"];
@@ -98,5 +98,26 @@ describe("documentRequest (slice 5a)", () => {
     expect(wordSafe("a\u0000b\u0008c\u001fd\ufffee\uffff")).toBe("abcde");
     expect(wordSafe("tab\there")).toBe("tab\there");
     expect(wordSafe("lone \ud800 \udc00 pair \ud83d\ude00")).toBe("lone   pair \ud83d\ude00");
+  });
+});
+
+describe("savedCopyFingerprint (5a-3 build review M2)", () => {
+  it("reads a body and the archive's copy alike: trimmed text, a hymn by its normalized title, the hymnal only when sent", () => {
+    const theirs = savedService();
+    const sent = {
+      ...theirs,
+      occasion: ` ${theirs.occasion}\r\n`,
+      scriptures: [...theirs.scriptures, "  "],
+      hymns: { ...theirs.hymns, opening: { hymn_id: null, title: "holy,  HOLY, holy! lord god almighty", number: null, hymnal: null } },
+      hymnal: null,
+      liturgy: { ...theirs.liturgy, prayer_of_confession: "   " },
+    };
+    expect(savedCopyFingerprint(sent, { withHymnal: false })).toBe(savedCopyFingerprint(theirs, { withHymnal: false }));
+    expect(savedCopyFingerprint(sent)).not.toBe(savedCopyFingerprint(theirs));
+    // A real change still differs.
+    expect(savedCopyFingerprint({ ...theirs, sermon_title: "Other" })).not.toBe(savedCopyFingerprint(theirs));
+    expect(savedCopyFingerprint({ ...theirs, hymns: { ...theirs.hymns, response: theirs.hymns.opening } })).not.toBe(
+      savedCopyFingerprint(theirs),
+    );
   });
 });

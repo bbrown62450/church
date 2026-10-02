@@ -166,10 +166,13 @@ export function selectedSetIndex(d: DraftV1, lect: Lectionary): number | null {
 /**
  * The "Readings for {date} are available" banner (S UX item 3): sets for this
  * date, none equal to the cleaned scriptures, and typed fields not filled from
- * this date's lectionary, or archived fields whose date has changed.
+ * this date's lectionary, or archived fields whose date has changed. Never
+ * while the date is still the saved service's date (owner answer 5,
+ * 2026-10-01): the service's readings are what was saved for that date.
  */
 export function showAvailableBanner(d: DraftV1, lect: Lectionary | undefined): boolean {
   if (!lect || lect.date !== d.readings.date_iso || lect.reading_sets.length === 0) return false;
+  if (d.editing !== null && d.editing.date_iso === d.readings.date_iso) return false;
   const lines = cleanScriptures(d);
   if (lect.reading_sets.some((set) => sameScriptures(set.scriptures, lines))) return false;
   const r = d.readings;

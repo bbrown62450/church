@@ -16,7 +16,8 @@
  *   automatic change (the lectionary fill), stamped 1 ms after the current
  *   `updated_at` instead of now, so it never outranks a real edit made in
  *   another tab on a copy this tab has not seen yet. `setLastStep` changes only `last_step` and
- *   never bumps `updated_at`. `replace(next)` stores `normalizePicks(next)`.
+ *   never bumps `updated_at`. `replace(next)` stores `normalizePicks(next)`
+ *   and writes it at once (slice 5a-3).
  * - Liturgy defaults (slice 4b; slice 4 spec "Draft store integration"): with
  *   `liturgyDefaults`, every load, change and replace also runs
  *   `applyLiturgyDefaults`, so an untouched Benediction shows the church's
@@ -28,8 +29,15 @@
  *   stays pending, so the next flush (hide, pagehide) retries it.
  * - Another tab's write for this key is adopted when its `updated_at` is
  *   strictly newer ("adopted"), from its `storage` event or, when this tab is
- *   shown again, from a direct read (`syncFromStorage`, slice 2c). A flush
- *   that finds a strictly newer stored draft adopts it instead of writing.
+ *   shown again, from a direct read (`syncFromStorage`, slice 2c; quietly
+ *   when the provider mounts, slice 5a-3). A flush that finds a strictly
+ *   newer stored draft adopts it instead of writing. A value written by an
+ *   older version of the app (an open tab not yet reloaded) is never adopted,
+ *   however new: its fresh draft would replace this one (slice 5a-3). A flush
+ *   writes over such a value even with nothing scheduled, and a store loaded
+ *   from one takes the next current-version draft it reads, so a page that
+ *   mounts after the builder (Services) gets the builder's draft back (5a-3
+ *   build review M3).
  *
  * React wiring (listeners, toasts, flush on hide and unmount) is in
  * `context.tsx`. This class touches storage only in `start`, `flush`,
@@ -42,7 +50,7 @@ import { readLocal, removeLocal, tryWriteLocal } from "@/lib/storage";
 
 import { parseStoredDraft } from "./migrate";
 import { normalizePicks, setDate } from "./readings";
-import { churchZone, corruptDraftKey, draftKey, freshDraft, type DraftChurch, type DraftV1, type StepId } from "./schema";
+import { churchZone, corruptDraftKey, draftKey, DRAFT_VERSION, freshDraft, type DraftChurch, type DraftV1, type StepId } from "./schema";
 import { isPristine, withoutTranslation } from "./status";
 
 export const WRITE_DELAY_MS = 400;
@@ -86,6 +94,23 @@ export function rollForward(draft: DraftV1, today: string): DraftV1 {
   return setDate(draft, nextSunday(today), "default");
 }
 
+/** The `version` a stored value declares; 0 when it has none or cannot be read. */
+function storedVersion(raw: string): number {
+  try {
+    const value: unknown = JSON.parse(raw);
+    const version = typeof value === "object" && value !== null ? (value as { version?: unknown }).version : undefined;
+    return typeof version === "number" ? version : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** A draft an older version of the app wrote: it declares a version, below this one's. */
+function isOlderApp(raw: string): boolean {
+  const version = storedVersion(raw);
+  return version >= 1 && version < DRAFT_VERSION;
+}
+
 function isNewer(candidate: string, current: string): boolean {
   const a = Date.parse(candidate);
   const b = Date.parse(current);
@@ -108,6 +133,15 @@ export class DraftStore {
   private warnedMemoryOnly = false;
   /** The raw value that could not be restored, backed up in `start`. */
   private corruptRaw: string | null = null;
+  /** That value could not be backed up, so it stays in the main key until the user edits. */
+  private keepStored = false;
+  /**
+   * Loaded from a value an older version of the app wrote (an open tab not
+   * yet reloaded, or the first load after an update): the next current-version
+   * draft found in storage is this tab's own draft put back (the builder's
+   * flush as it unmounts), so it is taken whatever its time (build review M3).
+   */
+  private loadedOlder = false;
   private defaults: LiturgyDefaults | null;
 
   constructor({
@@ -138,6 +172,7 @@ export class DraftStore {
         const stored = parseStoredDraft(raw, { userId, churchId: church.id });
         draft = normalizePicks(stored);
         this.pendingWrite = draft !== stored;
+        this.loadedOlder = storedVersion(raw) < DRAFT_VERSION;
       } catch {
         this.corruptRaw = raw;
         draft = fresh();
@@ -174,7 +209,10 @@ export class DraftStore {
       const backedUp = this.storage.write(this.corruptKey, this.corruptRaw);
       this.notify("restore_failed");
       // Without a backup, keep the unrestorable value in the main key until the user edits.
-      if (!backedUp) this.pendingWrite = false;
+      if (!backedUp) {
+        this.pendingWrite = false;
+        this.keepStored = true;
+      }
     }
     if (this.pendingWrite) this.schedule();
   }
@@ -196,9 +234,16 @@ export class DraftStore {
     this.schedule();
   };
 
+  /**
+   * New service, an opened saved service, a reset after a delete: written at
+   * once, not 400 ms later (slice 5a-3). The Services page has its own
+   * provider, and the builder it opens reads the stored draft when it mounts,
+   * before that page unmounts and flushes.
+   */
   replace = (next: DraftV1): void => {
     this.set(this.withDefaults(normalizePicks({ ...next, updated_at: this.now().toISOString() })));
     this.schedule();
+    this.flush();
   };
 
   /** The church's defaults changed (a profile refetch): an automatic change for a card still following them. */
@@ -225,16 +270,29 @@ export class DraftStore {
    * strictly newer, before anything on screen (the lectionary fill) acts on
    * this tab's copy. The other tab's `storage` event may not have arrived yet,
    * and a fill stamped now would outrank that tab's just-written typing.
+   * `quiet` (the provider's mount, slice 5a-3): a page whose provider replaced
+   * another's (Services after the builder) takes the edit the other wrote
+   * when it unmounted, with no "adopted" notice: it came from this tab.
    */
-  syncFromStorage = (): void => {
-    this.adoptIfNewer(this.storage.read(this.key));
+  syncFromStorage = ({ quiet = false }: { quiet?: boolean } = {}): void => {
+    this.adoptIfNewer(this.storage.read(this.key), quiet);
   };
 
-  /** Writes a scheduled change now (hide, pagehide, unmount). */
+  /**
+   * Writes a scheduled change now (hide, pagehide, unmount; Save). With
+   * nothing scheduled it still writes over a value an older version of the
+   * app wrote (an open tab not yet reloaded), so the next provider (Services
+   * after the builder, a reload) reads this draft, not that tab's fresh one
+   * (build review M3).
+   */
   flush = (): void => {
-    if (!this.pendingWrite) return;
-    // Another tab's strictly newer draft whose storage event has not arrived yet: take it, never overwrite it.
-    if (this.adoptIfNewer(this.storage.read(this.key))) return;
+    const raw = this.storage.read(this.key);
+    if (!this.pendingWrite) {
+      if (this.keepStored || raw === null || !isOlderApp(raw)) return;
+    } else if (this.adoptIfNewer(raw)) {
+      // Another tab's strictly newer draft whose storage event has not arrived yet: take it, never overwrite it.
+      return;
+    }
     this.cancelWrite();
     const ok = this.storage.write(this.key, JSON.stringify(this.snapshot.draft));
     const persistence: Persistence = ok ? "ok" : "memory-only";
@@ -244,25 +302,33 @@ export class DraftStore {
     }
     // A failed write stays pending (no timer), so the next flush retries it.
     if (!ok) this.pendingWrite = true;
+    else this.loadedOlder = this.keepStored = false;
     if (!ok && !this.warnedMemoryOnly) {
       this.warnedMemoryOnly = true;
       this.notify("memory_only");
     }
   };
 
-  /** True when the stored draft was strictly newer and is now this tab's. */
-  private adoptIfNewer(raw: string | null): boolean {
-    if (raw === null) return false;
+  /**
+   * True when the stored draft was strictly newer and is now this tab's. A
+   * value an older version of the app wrote (version below `DRAFT_VERSION`)
+   * is never adopted: an open tab still running the old code writes a fresh
+   * draft over a newer one it cannot read, and migrating that would blank this
+   * tab's draft (slice 5a-3). This tab's next write replaces it.
+   */
+  private adoptIfNewer(raw: string | null, quiet = false): boolean {
+    if (raw === null || storedVersion(raw) < DRAFT_VERSION) return false;
     let stored: DraftV1;
     try {
       stored = parseStoredDraft(raw, { userId: this.userId, churchId: this.churchId });
     } catch {
       return false;
     }
-    if (!isNewer(stored.updated_at, this.snapshot.draft.updated_at)) return false;
+    if (!this.loadedOlder && !isNewer(stored.updated_at, this.snapshot.draft.updated_at)) return false;
+    this.loadedOlder = false;
     this.cancelWrite();
     this.set(this.withDefaults(normalizePicks(stored)));
-    this.notify("adopted");
+    if (!quiet) this.notify("adopted");
     return true;
   }
 

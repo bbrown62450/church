@@ -6,6 +6,7 @@ import {
   addDays,
   formatAbbrevDate,
   formatLongDate,
+  formatSavedAt,
   formatServiceDate,
   formatShortDate,
   inSupportedRange,
@@ -89,6 +90,14 @@ describe("lib/dates", () => {
     expect(isSunday("2026-10-05")).toBe(false);
     expect(isSunday("")).toBe(false);
     expect(() => addDays("2026-02-30", 1)).toThrow(RangeError);
+  });
+
+  it("formatSavedAt shows a save time in the viewer's zone, with the year only when it is not this year (slice 5a-3)", () => {
+    const now = new Date(Date.UTC(2026, 9, 2, 13, 0));
+    expect(formatSavedAt("2026-10-01T14:42:00.123456+00:00", { timeZone: "America/New_York", now })).toBe("Oct 1, 10:42 AM");
+    expect(formatSavedAt("2026-10-01T14:42:00+00:00", { timeZone: "UTC", now })).toBe("Oct 1, 2:42 PM");
+    expect(formatSavedAt("2025-12-31T23:30:00Z", { timeZone: "America/New_York", now })).toBe("Dec 31, 2025, 6:30 PM");
+    expect(formatSavedAt("not a time")).toBe("");
   });
 
   it("inSupportedRange accepts years 1900-2199 only", () => {

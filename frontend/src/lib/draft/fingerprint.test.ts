@@ -2,10 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import { testDraft } from "@/test/fixtures";
 
-import { fingerprint, fnv1a32, isDirty, stableStringify } from "./fingerprint";
+import { fingerprint, fnv1a32, stableStringify } from "./fingerprint";
 import { draftToServicePayload } from "./mapping";
 import { editOccasion } from "./readings";
 import type { DraftV1 } from "./schema";
+import { isDirty } from "./status";
 import { DEFAULT_BENEDICTION_FALLBACK } from "@/lib/liturgy/defaults";
 
 describe("fingerprint and isDirty (F §4.6 Unsaved changes)", () => {
