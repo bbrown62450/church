@@ -23,7 +23,8 @@ def test_usecases_package_imports_no_fastapi_or_streamlit():
             "cache, integrations.http, "
             "token_bucket, integrations.budget, scripture_refs, scripture_fetcher, integrations.openai_client, hymn_search, hymn_suggest, usecases.hymns, "
             "liturgy_config, prayer_library, liturgy_prompts, usecases.liturgy, review_checks, usecases.liturgy_review, "
-            "service_output, worship_service, usecases.archive, usecases.documents, repos.services, hymn_usage; "
+            "service_output, worship_service, usecases.archive, usecases.documents, repos.services, hymn_usage, "
+            "printed_bulletin, printed_pdf, printed_docx; "
             "bad = sorted({m.split('.')[0] for m in sys.modules} & {'fastapi', 'starlette', 'streamlit'}); "
             "print(bad); sys.exit(1 if bad else 0)")
     result = subprocess.run(
