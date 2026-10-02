@@ -102,8 +102,9 @@ them directly.
 ### Fonts
 The PDF uses the standard Times family (and Helvetica for the contact lines), which every PDF viewer
 and printer has, so nothing is embedded and no font file enters the repo. These fonts cover
-Windows-1252 (curly quotes, dashes, accented Latin letters); any other character prints as "?"
-after NFKC normalization (a "fi" ligature becomes "fi"). If the print test or a translation shows a
+Windows-1252 (curly quotes, dashes, "…", accented Latin letters), which print as they are; any other
+character is NFKC-normalized (a "fi" ligature becomes "fi"), an invisible format character (a
+zero-width space, a byte order mark) is dropped, and what is left prints as "?". If the print test or a translation shows a
 problem, the fix is to embed Liberation Serif (SIL OFL, metric-compatible with Times New Roman), a
 follow-up.
 

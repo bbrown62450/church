@@ -100,7 +100,7 @@ The owner's answers win over S and F; the code wins over both where they disagre
 10. **[owner-visible] The readings' text** (owner answer 5; S "Scripture text"). The two readings the Word copies print (`resolve_doc_readings`), fetched when the file is built, in the draft's translation when this deployment offers it, else the church's default when offered, else WEB (step 1's rule). The first alternative that comes back prints; verse line breaks become spaces; a blank line starts a paragraph. After the readings: "Scripture readings are from the {label}." (for example "the World English Bible (WEB)"). A reading whose text does not come back prints "[Reading text unavailable]"; the file never fails for it. Readings with more than 20 upstream parts in all are not fetched (both print the placeholder).
 11. **The route** (S API). `POST /documents/printed`, church-scoped (`require_church`; any member), body `PrintedDocumentIn = {format: "pdf" | "docx", translation: string (trimmed, at most 20) | null, service: ServiceDraft}` (`extra="forbid"`), answer 200 with the bytes and `Content-Type: application/pdf` or the Word type, `Content-Disposition: attachment; filename="printed_bulletin_October_04_2026.pdf"; filename*=UTF-8''printed_bulletin_October_04_2026.pdf` (or `.docx`) and `Cache-Control: no-store`. A new route, not a third `variant` on `POST /documents`: its body and answer differ, and `DocumentIn` and its 14 API tests stay as they are. No `Idempotency-Key` (a pure render that writes nothing). Errors stay JSON: the hymn 404 and the 422s as `/documents`; 429 `rate_limited` when the `scripture` bucket is empty (one token per upstream part, charged before any fetch, so a 429 fetches nothing; no readings, no charge); 403 for a church that is gone. OpenAPI declares a binary 200 under both types. The client waits up to 30 s (`timeouts.ts`), as for `/scripture/passages`.
 12. **[owner-visible] Names and dates.** The booklet writes the date as "October 4, 2026" (no leading zero, as the sample's "September 27, 2026"); the Word copies keep "October 04, 2026". The files are `printed_bulletin_October_04_2026.pdf` and `printed_bulletin_October_04_2026.docx` (the Word copies' date form, so they sort together). The PDF's title is "Printed bulletin".
-13. **[owner-visible] Fonts** (S "Fonts"): the PDF uses the standard Times family and Helvetica for the contact lines, not embedded (every viewer and printer has them; no font file in the repo); a character outside Windows-1252 prints as "?" after NFKC (a ligature becomes plain letters). The Word file uses Times New Roman 11 pt (Arial for the contact lines).
+13. **[owner-visible] Fonts** (S "Fonts"): the PDF uses the standard Times family and Helvetica for the contact lines, not embedded (every viewer and printer has them; no font file in the repo). Windows-1252 covers the curly quotes and apostrophes, both dashes, "…" and accented Latin letters, which print as they are; any other character is NFKC-normalized (a ligature becomes plain letters), an invisible format character (a zero-width space or joiner, a byte order mark, as pasted text carries) is dropped (plan review 2026-10-02, owner decision 1; the first draft normalized every character first, so "½" printed "1?2" and a zero-width space "?"), and what is left prints as "?" (Hebrew or Greek letters, for example). The Word file uses Times New Roman 11 pt (Arial for the contact lines).
 14. **[owner-visible] The Word version** (owner answer 1): the same content in reading order on 7 x 8.5 in pages, 0.5 in margins, each part (cover, service, announcements) starting a page, the leader at a right tab stop, page numbers from the first inside page (none on the cover), the picture's place as a bordered box. To print it two pages to a legal sheet as the PDF does, use the printer's "2 pages per sheet" setting (the card points to the PDF for printing).
 15. **[owner-visible] The cover and the back page until PR 2 and PR 3:** the church's name (from the app), a bordered box with "[Cover picture]" and, over its lower part, the sermon reading (the New Testament reading, else the first reading) and the date; then "[Street address]", "[City, State ZIP]", "[Phone]", "[Email]", "[Website]", "FB: [Facebook name]". The back page: "ANNOUNCEMENTS", the date, "Ushers/Counters: [Names]", "Deacon of the Week: [Name]", "Coffee Hour: [Name]", "THIS WEEK'S ACTIVITIES AT A GLANCE" with "[Activities]", "PRAYERS AND CONCERNS" with "[Prayer concerns]", "ITEMS FOR COLLECTION" with "[Collection items]".
 16. **Cleaning and safety.** The service is cleaned by `archive.clean_input` (as `/documents`); the church's name and each fetched text go through `_xml_safe` too, so the Word file never meets a character it cannot hold; the PDF escapes its markup. Nothing is stored or cached; downloads record no hymn use.
@@ -752,6 +752,7 @@ def test_any_page_count_takes_half_as_many_sides_rounded_up_with_the_announcemen
 
 def test_characters_the_standard_fonts_cannot_print_become_a_question_mark():
     assert printed_pdf.to_pdf_text("“Grace” – ﬁne ש") == "“Grace” – fine ?"
+    assert printed_pdf.to_pdf_text("½ cup… é a\u200bb\ufeff") == "½ cup… é ab"     # pasted invisibles drop
     resolved = ResolvedService(service_date=datetime.date(2026, 9, 27), sermon_title="Shalom שלום")
     text = " ".join(sides(printed_pdf.render_pdf(pb.PrintedService("Example Church", resolved))))
     assert "SERMON: “Shalom ????”" in text
@@ -875,11 +876,18 @@ _GRAY = Color(0.45, 0.45, 0.45)
 
 
 def to_pdf_text(text: str) -> str:
-    """Text the standard fonts can print: NFKC first (a ligature or a
-    full-width letter becomes plain letters), then any character outside
-    Windows-1252 becomes "?"."""
-    text = unicodedata.normalize("NFKC", text)
-    return "".join(ch if ch in "\n\t" or _cp1252(ch) else "?" for ch in text)
+    """Text the standard fonts can print: a Windows-1252 character stays as
+    it is ("½", "…"); any other is NFKC-normalized (a ligature or a full-width
+    letter becomes plain letters), an invisible format character (a
+    zero-width space or joiner, a byte order mark) is dropped, and what is
+    still outside Windows-1252 becomes "?"."""
+    out = []
+    for ch in text:
+        if ch in "\n\t" or _cp1252(ch):
+            out.append(ch)
+        elif unicodedata.category(ch) != "Cf":
+            out += [c if _cp1252(c) else "?" for c in unicodedata.normalize("NFKC", ch)]
+    return "".join(out)
 
 
 def _cp1252(ch: str) -> bool:
