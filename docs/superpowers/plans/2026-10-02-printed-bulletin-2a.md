@@ -144,7 +144,7 @@ The owner's answers win over S and F; the code wins over both where they disagre
 | `docs/manual-verification.md` | "### Printed bulletin PR 2a: bulletin settings" | T7 |
 | `docs/ops-runbook.md` | "### Printed bulletin PR 2a record" (the records PR, after the merge) | T9 |
 
-**Counts in the PR:** 34 paths: 10 created (this plan and the nine new code and test files above), 24 modified (the 21 code, test and API paths above, `docs/manual-verification.md`, the spec (its PR 2 planning answers, `f2bddda`) and `docs/ops-runbook.md` (the PR 1 record `350f9a5`), which ride along until merged). **Untouched:** migrations, `db/models.py`, `api/schemas.py`, `api/deps.py`, `printed_pdf.py`, `printed_docx.py`, `service_output.py`, the draft schema, `documents-card.tsx`, `app-nav.tsx`, `app.py`, Streamlit.
+**Counts in the PR:** 35 paths: 12 created (this plan and the eleven new code and test files above), 23 modified (the 20 code, test and API paths above, `docs/manual-verification.md`, the spec (its PR 2 planning answers, `f2bddda`) and `docs/ops-runbook.md` (the PR 1 record `350f9a5`), which ride along until merged). **Untouched:** migrations, `db/models.py`, `api/schemas.py`, `api/deps.py`, `printed_pdf.py`, `printed_docx.py`, `service_output.py`, the draft schema, `documents-card.tsx`, `app-nav.tsx`, `app.py`, Streamlit.
 
 **Task order and review batch:** T1 → T7, each one commit and a backup push; then one review of the whole batch with its fixes as `Fix: …` commits; T8 verifies and opens the draft PR on the owner's yes; T9 merges on the owner's yes, runs the phone check and writes the record.
 
@@ -218,7 +218,9 @@ def test_a_field_of_the_wrong_type_is_its_default_and_a_long_text_is_cut():
 Run: `.venv/bin/python -m pytest -q backend/tests/test_bulletin_settings.py 2>&1 | tail -3`
 **Expected** (`bulletin_settings` does not exist yet: `ModuleNotFoundError` above these lines):
 ```
-<<OUT:T1.fail>>
+ERROR backend/tests/test_bulletin_settings.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in <t>s
 ```
 
 - [ ] **Step 3: Write `bulletin_settings`**
@@ -637,7 +639,9 @@ from tests.test_printed_bulletin import SETTINGS
 Run: `.venv/bin/python -m pytest -q backend/tests/test_printed_bulletin.py backend/tests/test_printed_render.py backend/tests/test_api_printed.py 2>&1 | tail -3`
 **Expected** (`PrintedService` has no `settings` yet, and PR 1 still prints the placeholders):
 ```
-<<OUT:T2.fail>>
+FAILED backend/tests/test_printed_render.py::test_the_word_file_is_the_same_booklet_in_reading_order
+FAILED backend/tests/test_api_printed.py::test_the_pdf_downloads_with_the_file_headers_and_the_readings_text
+11 failed, 13 passed in <t>s
 ```
 
 - [ ] **Step 3: Print the settings**
@@ -1073,8 +1077,8 @@ def cover(ps: PrintedService) -> list[Line]:
 
 - [ ] **Step 4: See them pass, and the suite**
 
-Run: `.venv/bin/python -m pytest -q backend/tests/test_printed_bulletin.py backend/tests/test_printed_render.py backend/tests/test_api_printed.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1` then `grep -nE "WORSHIP_LEADER|LITURGIST|ORGANIST|SERVICE_TIME|CONTACT_LINES|STAND_NOTE|STARRED|LEADERS" backend/*.py backend/usecases/*.py; echo "constants grep exit $?"`
-**Expected:** `24 passed in <t>s`; `1367 passed, 16 skipped in <t>s`; `constants grep exit 1` (PR 1's constants are gone; `bulletin_settings` names its own `DEFAULT_LEADERS` and `DEFAULT_STARRED`, which the pattern does not match because it needs the bare names: if the grep prints `DEFAULT_…` lines, read them and confirm they are only those).
+Run: `.venv/bin/python -m pytest -q backend/tests/test_printed_bulletin.py backend/tests/test_printed_render.py backend/tests/test_api_printed.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1` then `grep -nwE "WORSHIP_LEADER|LITURGIST|ORGANIST|SERVICE_TIME|CONTACT_LINES|STAND_NOTE|STARRED|LEADERS" backend/*.py backend/usecases/*.py; echo "constants grep exit $?"`
+**Expected:** `24 passed in <t>s`; `1367 passed, 16 skipped in <t>s`; `constants grep exit 1` (PR 1's constants are gone; `-w` matches whole words only, so `bulletin_settings`'s own `DEFAULT_LEADERS`, `DEFAULT_STARRED` and `DEFAULT_STAND_NOTE` do not match).
 
 - [ ] **Step 5: Commit**
 
@@ -1270,7 +1274,10 @@ def test_the_church_s_bulletin_settings_print_for_every_member(client, church, m
 Run: `.venv/bin/python -m pytest -q backend/tests/test_api_bulletin_settings.py backend/tests/test_api_printed.py backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -4`
 **Expected** (the route does not exist yet: every request is a 404, a member's PUT included; the printed bulletin does not read the settings; `usecases.church_bulletin` cannot be imported):
 ```
-<<OUT:T3.fail>>
+FAILED backend/tests/test_api_bulletin_settings.py::test_only_members_of_the_church
+FAILED backend/tests/test_api_printed.py::test_the_church_s_bulletin_settings_print_for_every_member
+FAILED backend/tests/test_no_streamlit_in_core.py::test_usecases_package_imports_no_fastapi_or_streamlit
+15 failed, 12 passed in <t>s
 ```
 
 - [ ] **Step 3: The repo function, the usecase, the route, and the download**
@@ -1477,7 +1484,7 @@ import printed_bulletin
 - [ ] **Step 4: Regenerate the API files; see them pass, and the suite**
 
 Run: `.venv/bin/python backend/scripts/export_openapi.py && (cd frontend && npm run gen:api >/dev/null) && git diff --stat -- frontend/src/lib/api` then `grep -c '"/church/bulletin-settings"' frontend/src/lib/api/openapi.json` then `.venv/bin/python -m pytest -q backend/tests/test_api_bulletin_settings.py backend/tests/test_api_printed.py backend/tests/test_no_streamlit_in_core.py backend/tests/test_openapi_contract.py backend/tests/test_route_guards.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?")`
-**Expected:** `Wrote …/frontend/src/lib/api/openapi.json`, then <<OUT:T3.stat>>; `1`; `<<OUT:T3.files>>`; `1381 passed, 16 skipped in <t>s`; `typecheck 0`.
+**Expected:** `Wrote …/frontend/src/lib/api/openapi.json`, then ` frontend/src/lib/api/openapi.json | 341 +++…`, ` frontend/src/lib/api/schema.d.ts  | 171 +++…`, ` 2 files changed, 512 insertions(+)`; `1`; `35 passed in <t>s`; `1381 passed, 16 skipped in <t>s`; `typecheck 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -1699,7 +1706,11 @@ describe("bulletin settings (printed bulletin PR 2a)", () => {
 Run: `(cd frontend && npx vitest run src/lib/bulletin-settings.test.ts src/lib/queries/keys.test.ts src/lib/church.test.ts 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
 **Expected** (`bulletin-settings.ts` does not exist; `keys.bulletinSettings` and `isAdmin` are not functions yet):
 ```
-<<OUT:T4.fail>>
+   × keys > starts every church-scoped key with ['church', id] <t>ms
+   × roleLabel > lets owners and admins change the church's settings (printed bulletin PR 2a) <t>ms
+ FAIL  |unit| src/lib/bulletin-settings.test.ts [ src/lib/bulletin-settings.test.ts ]
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  2 failed | 7 passed (9)
 ```
 
 - [ ] **Step 3: The types, the key, `isAdmin`, the library and the queries**
@@ -1931,7 +1942,7 @@ export function useSaveBulletinSettings() {
 - [ ] **Step 4: See them pass, the suite, types and lint**
 
 Run: `(cd frontend && npx vitest run src/lib/bulletin-settings.test.ts src/lib/queries/keys.test.ts src/lib/church.test.ts 2>&1 | grep -E "^ +× |\[ src/|Tests ")` then the suite, then typecheck and lint.
-**Expected:** `      Tests  <<OUT:T4.files>> passed (<<OUT:T4.files>>)`; ` Test Files  84 passed (84)` and `      Tests  664 passed (664)`; `typecheck 0`, `lint 0`.
+**Expected:** `      Tests  12 passed (12)`; ` Test Files  84 passed (84)` and `      Tests  664 passed (664)`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -2067,7 +2078,8 @@ describe("Bulletin settings (printed bulletin PR 2a)", () => {
 Run: `(cd frontend && npx vitest run src/components/bulletin-settings 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
 **Expected** (the file cannot load: the route does not exist yet):
 ```
-<<OUT:T5.fail>>
+ FAIL  |dom| src/components/bulletin-settings/bulletin-settings-page.test.tsx [ src/components/bulletin-settings/bulletin-settings-page.test.tsx ]
+      Tests  no tests
 ```
 
 - [ ] **Step 3: Write the page and its route**
@@ -2539,7 +2551,9 @@ import {
 Run: `(cd frontend && npx vitest run src/components/builder/review/review-send-step.test.tsx src/components/builder/builder-shell.test.tsx src/components/builder/liturgy/liturgy-step.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
 **Expected** (`SETTINGS_NOTE` is not exported yet; everything else passes):
 ```
-<<OUT:T6.fail>>
+   × Review & send: the printed bulletin (printed bulletin PR 1) > lists the bulletin settings still blank and links to them (printed bulletin PR 2a) <t>ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  1 failed | 76 passed (77)
 ```
 
 - [ ] **Step 3: The card's settings block**
@@ -2655,7 +2669,7 @@ function SettingsLine() {
 - [ ] **Step 4: See them pass (three runs), the suite, types and lint**
 
 Run: `for i in 1 2 3; do (cd frontend && npx vitest run src/components/builder/review/review-send-step.test.tsx src/components/builder/builder-shell.test.tsx src/components/builder/liturgy/liturgy-step.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests "); done` then the suite, then typecheck and lint.
-**Expected:** three times `      Tests  <<OUT:T6.files>> passed (<<OUT:T6.files>>)`; ` Test Files  85 passed (85)` and `      Tests  668 passed (668)`; `typecheck 0`, `lint 0`.
+**Expected:** three times `      Tests  77 passed (77)`; ` Test Files  85 passed (85)` and `      Tests  668 passed (668)`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -2701,7 +2715,7 @@ and the file show, never an email address, a phone number or a church id.
 - [ ] **Step 2: Check the docs**
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_slice1_docs.py backend/tests/test_docs.py backend/tests/test_ops_workflows.py 2>&1 | tail -1` then `grep -n '\[owner' docs/ops-runbook.md | grep -v 'An entry marked' | wc -l` then `git diff -U0 docs/manual-verification.md | grep '^+' | grep -c '—'` then `git diff --stat`
-**Expected:** `89 passed in <t>s`; `4`; `0`; <<OUT:T7.stat>>.
+**Expected:** `89 passed in <t>s`; `4`; `0`; ` docs/manual-verification.md | 16 ++++++++++++++++`, ` 1 file changed, 16 insertions(+)`.
 
 - [ ] **Step 3: Commit**
 
@@ -2769,7 +2783,41 @@ for c in $(git rev-list origin/main..HEAD); do git show -s --format=%B "$c" | gr
 
 **Expected:** nothing from `git status` (the committed snapshot and types are current); `imports grep exit 1`; `raw html grep exit 1`; exactly these paths (without `M docs/ops-runbook.md` when Step 1 printed `0`):
 ```
-<<OUT:T8.paths>>
+M	backend/api/main.py
+A	backend/api/routes/bulletin_settings.py
+A	backend/bulletin_settings.py
+M	backend/printed_bulletin.py
+M	backend/repos/churches.py
+A	backend/tests/test_api_bulletin_settings.py
+M	backend/tests/test_api_printed.py
+A	backend/tests/test_bulletin_settings.py
+M	backend/tests/test_no_streamlit_in_core.py
+M	backend/tests/test_printed_bulletin.py
+M	backend/tests/test_printed_render.py
+A	backend/usecases/church_bulletin.py
+M	backend/usecases/documents.py
+M	docs/manual-verification.md
+M	docs/ops-runbook.md
+A	docs/superpowers/plans/2026-10-02-printed-bulletin-2a.md
+M	docs/superpowers/specs/2026-10-02-printed-bulletin-design.md
+A	frontend/src/app/(signed-in)/(church)/bulletin-settings/page.tsx
+M	frontend/src/components/builder/builder-shell.test.tsx
+M	frontend/src/components/builder/liturgy/liturgy-step.test.tsx
+M	frontend/src/components/builder/review/printed-card.tsx
+M	frontend/src/components/builder/review/review-send-step.test.tsx
+A	frontend/src/components/bulletin-settings/bulletin-settings-page.test.tsx
+A	frontend/src/components/bulletin-settings/bulletin-settings-page.tsx
+M	frontend/src/lib/api/openapi.json
+M	frontend/src/lib/api/schema.d.ts
+M	frontend/src/lib/api/types.ts
+A	frontend/src/lib/bulletin-settings.test.ts
+A	frontend/src/lib/bulletin-settings.ts
+M	frontend/src/lib/church.test.ts
+M	frontend/src/lib/church.ts
+A	frontend/src/lib/queries/bulletin-settings.ts
+M	frontend/src/lib/queries/keys.test.ts
+M	frontend/src/lib/queries/keys.ts
+M	frontend/src/test/fixtures/index.ts
 ```
 `0`; the subjects oldest first: `Runbook: printed bulletin PR 1 record (owner's phone check; print test pending)` (when it rides along), `Spec: printed bulletin PR 2 planning answers (owner, 2026-10-02: split into 2a and 2b)`, the plan commits (`WIP plan: printed bulletin PR 2a (bulletin settings)`, `Plan: printed bulletin PR 2a (bulletin settings)` and any later plan commit), then T1-T7's seven subjects as written above, then any `Fix: …` lines; only `trailer check done`.
 
