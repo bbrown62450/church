@@ -205,16 +205,25 @@ prints "[Sermon title]". The communion liturgy prints after the second hymn when
   settings panel (`PUT /church/bulletin-settings`, admin only, as 6a will be); 6a later moves the
   panel into Settings without changing the storage.
 - **Weekly fields** live in the draft and in the saved service: `bulletin: {prelude: {title,
-  composer}, postlude: {title, composer}, leaders: {element key: name}, announcements: {ushers,
-  deacon, coffee_hour, activities, prayer_concerns, collection}, reading_text: {ot, nt},
-  cover_image_id}`. The draft gains the field with a version bump (v2 to v3, migrating with an
+  composer}, postlude: {title, composer}, people: {worship_leader, liturgist, organist} (null:
+  the settings' name; PR 2 planning answer 7), leaders: {element key: name}, announcements:
+  {ushers, deacon, coffee_hour, activities, prayer_concerns, collection, other} (answer 4),
+  reading_text: {ot, nt}, unchecked: [box]}` (`unchecked`: the boxes still holding last week's
+  text, not checked yet, so the marks come back when the service is opened again), and PR 3 adds
+  `cover_image_id` (PR 2b plan, `docs/superpowers/plans/2026-10-03-printed-bulletin-2b.md`). The draft gains the field with a version bump (v2 to v3, migrating with an
   empty `bulletin`); `ServiceDraft.bulletin` is optional; `services` gains one nullable JSON column
   `bulletin` in migration `0006_services_bulletin` (PR 2; a backup, read-only counts and the `--sql`
   preview first, as 0005). A new column rather than a key inside `liturgy`: `liturgy` holds only the
   eight sections and every reader filters it to them.
 - **Carry forward** (answer 3): a new draft's `bulletin` starts from the most recently saved
   service's (by service date, before the draft's date): the announcements, the music and the cover
-  picture id; the per-element leaders and pasted reading texts start empty.
+  picture id; the per-element leaders and pasted reading texts start empty. As planned for PR 2b:
+  only a draft that is not a saved service, when the Bulletin step or Review & send shows it for
+  its date, into each box not yet typed in, edited or kept (a box at a time); each carried box
+  shows "From last week. Check before printing." until it is edited or kept (planning answer 5),
+  and the marks are saved with the service. A saved service saved again as a new service on
+  another date ("Save as new service") is treated the same way: its music and announcements are
+  marked to check, and this week's people, the part leaders and the pasted texts start empty.
 - **Cover picture** (PR 3): stored in Postgres, in a new table `bulletin_images (id, church_id,
   content_type, bytes, width, height, created_by, created_at)` (migration `0007_bulletin_images`).
   The upload is checked (JPEG, PNG or HEIC from a phone; at most 10 MB in), decoded with Pillow
@@ -257,7 +266,10 @@ tip after a download. The Word documents card does not change.
 - **PR 2:** the standing settings (`churches.settings["bulletin"]`, the panel, the GET/PUT route),
   the Bulletin step, the weekly fields in the draft (v3) and in `services.bulletin` (migration
   `0006_services_bulletin`), carry forward, pasted reading text, the placeholders replaced. Then a
-  guided phone check.
+  guided phone check. PR 2b ships backend first as two PRs: 2b-1 (the migration, the API saving,
+  opening, carrying and printing the weekly fields; a page from before 2b-2 keeps working and
+  prints PR 1's placeholders) is merged and live before 2b-2 (the draft v3, the Bulletin step,
+  carry forward and the card). PR 3 follows the same order (its API and migration first).
 - **PR 3:** the cover picture (table `bulletin_images`, migration `0007_bulletin_images`, upload,
   preview, keep last week's, printed in the PDF and the Word file under the church name with the
   reference and date over it). Then a guided phone check and a second short print test (the picture).
