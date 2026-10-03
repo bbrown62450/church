@@ -28,4 +28,5 @@ export const keys = {
   liturgyPrompts: (id: string) => ["church", id, "liturgy-prompts"] as const,
   rubric: (id: string) => ["church", id, "rubric"] as const,
   prayerLibrary: (id: string) => ["church", id, "prayer-library"] as const,
+  bulletinSettings: (id: string) => ["church", id, "bulletin-settings"] as const,
 };

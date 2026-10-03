@@ -29,6 +29,7 @@ describe("keys", () => {
       keys.liturgyPrompts(id),
       keys.rubric(id),
       keys.prayerLibrary(id),
+      keys.bulletinSettings(id),
     ];
     expect(churchKeys.map((key) => key.slice(0, 2))).toEqual(churchKeys.map(() => ["church", id]));
     expect(churchKeys.map((key) => key.slice(2))).toEqual([
@@ -46,6 +47,7 @@ describe("keys", () => {
       ["liturgy-prompts"],
       ["rubric"],
       ["prayer-library"],
+      ["bulletin-settings"],
     ]);
   });
 });

@@ -83,3 +83,6 @@ export type AiStatus = ReviewResult["ai_status"];
 /** `POST /liturgy/revise` (the service reviewer): one AI card's text and its remaining notes; the revised text. */
 export type ReviseBody = components["schemas"]["ReviseIn"];
 export type ReviseResult = components["schemas"]["ReviseOut"];
+
+/** `GET`/`PUT /church/bulletin-settings` (printed bulletin PR 2a): the church's standing bulletin settings. */
+export type BulletinSettings = components["schemas"]["BulletinSettings"];

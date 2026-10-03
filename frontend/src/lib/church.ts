@@ -32,6 +32,11 @@ export function roleLabel(role: Church["role"]): "Owner" | "Admin" | "Member" {
   return ROLE_LABELS[role];
 }
 
+/** Owners and admins: who may edit the church's settings (the server's `require_admin`). */
+export function isAdmin(role: Church["role"]): boolean {
+  return role === "owner" || role === "admin";
+}
+
 export function readStoredChurchId(): string | null {
   return readLocal(ACTIVE_CHURCH_KEY);
 }
