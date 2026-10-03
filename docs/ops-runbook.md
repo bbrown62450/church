@@ -617,6 +617,29 @@ database URL is recorded here.
 | 5. Phone check | A saved service opened, saved its changes, and its printed bulletin looked as before (music and announcements still [placeholders]) | 2026-10-03 |
 | Follow-ups | Next: PR 2b-2 (the Bulletin step), then PR 3 (the cover picture, backend first), Voices of the Church, 6a, Hear it from the pews. Still pending: the PR 1 print test at the church. Left as is from the 2b-1 code review: a 422 echoes the client's own key names; a printed bulletin at the largest allowed sizes takes about 4 s | 2026-10-03 |
 
+### Printed bulletin PR 2b-2 record
+
+Printed bulletin PR 2b-2 (the Bulletin step: a fifth, optional step for the
+music, who leads this week, the announcements and pasted reading text;
+carry forward of last week's music and announcements with "From last week.
+Check before printing." and Keep as is, the marks saved with the service;
+the Printed bulletin card's lists; draft version 3) merged as PR #48, the
+second of the two PR 2b pull requests. Frontend only: no backend change and
+no migration (production stays at `0006_services_bulletin`). The owner's
+check was a four-step guided check on a phone (`docs/manual-verification.md`,
+"Printed bulletin PR 2b: the Bulletin step", items 19-22). No token, email
+address, phone number, street address, church id or announcement text is
+recorded here.
+
+| Step | Result | Date |
+|---|---|---|
+| Merge | PR #48 merged 19:55 UTC (15:55 Eastern), merge commit `e4f3695` | 2026-10-03 |
+| 1. The step | Five steps in the bar on the phone; **4 Bulletin** said "Optional" | 2026-10-03 |
+| 2. Music and announcements | The prelude and postlude printed with their composers and the organist's name; the announcements page showed only what was filled in | 2026-10-03 |
+| 3. Who leads | A change for this week and a Sermon leader printed in page 1's header and beside the Sermon; Bulletin settings kept the usual names | 2026-10-03 |
+| 4. Carry forward | A new service a week after the saved one carried its music and announcements with "From last week"; the marks stayed after saving and opening it from Services | 2026-10-03 |
+| Follow-ups | PR 2b is complete. Next: PR 3 (the cover picture, backend first), Voices of the Church, 6a (Settings, including persona editing), Hear it from the pews. Still pending: the PR 1 print test at the church. Noted in the 2b plan: an edit on the Bulletin step made before changing an opened service's date is set aside with the rest (it returns if the date goes back) | 2026-10-03 |
+
 ## Backups
 
 - **Workflow:** `.github/workflows/backup.yml` (`db-backup`). Daily at 08:37 UTC,
