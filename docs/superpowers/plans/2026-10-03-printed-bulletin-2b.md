@@ -6275,6 +6275,8 @@ S items **not** in 2b: the cover picture (`cover_image_id`, "Keep last week's pi
 
 ## Questions for the owner
 
+**Owner's answer (Beau, 2026-10-03): "all recommended, yes start building".** Questions 1-17 below are accepted as written and are binding for the build.
+
 Your answers of 2026-10-02 (the ten answers, layout B, the PR 1 plan's twelve, the eight PR 2 planning answers) and of 2026-10-03 (the PR 2a plan's fourteen) are binding and already in the plan. These are the choices this plan makes where you did not say; each is written as recommended.
 
 1. **A fifth step, "Bulletin", before Review & send** (clarification 2): the step bar shows five steps (they fit a phone screen; the line above them reads "Step 4 of 5 · Bulletin"), and Review & send becomes step 5. The Bulletin step's status is "Optional", or "2 to check" while boxes from last week are unchecked; it never appears in "Still to do" and never turns off a download or Save. Recommended: accept.
