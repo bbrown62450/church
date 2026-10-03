@@ -31,7 +31,7 @@
   `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
 - TDD: write the failing test first and see it fail as quoted.
 - **Backup push after every task** (standing rule): the controller runs `git push origin claude/slice-2-plan-4q33le` after each task's commit (never `--force`, never a rebase; if the push is rejected, `git pull --no-rebase origin claude/slice-2-plan-4q33le` and push again; on a network error retry after 2, 4, 8 and 16 s). A fix asked for by a review is a new commit, `Fix: <what> (Task <n> review)`. The container can restart and lose uncommitted work: commit as soon as a task's checks pass.
-- Each PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes its tests line: PR 2b-1 `Tests: backend 1395 → ⟦BE3⟧ passed, 16 → 17 skipped; frontend 675 in 85 files (unchanged)`; PR 2b-2 `Tests: frontend 675 → ⟦FE9⟧ in 85 → 87 files; backend ⟦BE3⟧ passed, 17 skipped (unchanged)`.
+- Each PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes its tests line: PR 2b-1 `Tests: backend 1395 → 1425 passed, 16 → 17 skipped; frontend 675 in 85 files (unchanged)`; PR 2b-2 `Tests: frontend 675 → 698 in 85 → 87 files; backend 1425 passed, 17 skipped (unchanged)`.
 - New prose for the owner has no em dashes and no flattery. New user-facing copy is exactly the list in clarification 16 and has no em dashes; existing copy keeps its own punctuation.
 - **PR 2b-1 before PR 2b-2, and each tolerates the other** (clarification 19): nothing in T1-T4 changes a page, a component, the draft, a query or a request body (T5 Step 3 checks it); nothing in T7-T10 changes the server, the API files, a workflow or a package (T11 Step 3 checks it). PR 3 follows the same order.
 - No church id, email address, token, database URL or real person's name, address, phone or email in any doc, commit, test or record. The tests use invented details only: "Example Church", "Rev. Alex Example", "Sam Sample", "Jordan Doe", "Pat Example", "Lee Sample", "Rev. Guest", "The Example family", "Morning Voluntary", "Festive Postlude", "For all who are ill.". None of the owner's sample bulletin's content enters the repo. Prayers and concerns can name people and their health: they live only in the service's bulletin, never in a log line, a commit or the record (clarification 15).
@@ -46,18 +46,18 @@ As in the PR 2a plan: **Create `path`:** the block is the whole file; **Append t
 
   | After | PR | Backend (delta) | Backend | Frontend (delta) | Frontend |
   |---|---|---|---|---|---|
-  | T1 | 2b-1 | +4, +1 skipped (`test_migrations.py` 4; `test_services_postgres.py` 1, Postgres only; `test_schema_check.py`, `test_api_app.py` edited) | ⟦BE1⟧ passed, 17 skipped | 0 | 675 in 85 |
-  | T2 | 2b-1 | +14 (`test_service_bulletin.py` 9, one test in five cases; `test_printed_bulletin.py` 4; `test_printed_render.py` 1; `test_api_printed.py` edited) | ⟦BE2⟧ passed, 17 skipped | 0 | 675 in 85 |
-  | T3 | 2b-1 | +12 (`test_usecase_archive.py` 4; `test_api_services.py` 7, two tests and five new 422 cases; `test_api_printed.py` 1; `test_no_streamlit_in_core.py` edited) | ⟦BE3⟧ passed, 17 skipped | 0 | 675 in 85 |
-  | T4 | 2b-1 | 0 (no test edited: the new items sit under the existing "## Printed bulletin") | ⟦BE3⟧ passed, 17 skipped | 0 | 675 in 85 |
-  | T5, T6 | 2b-1 | 0 (verification, the merge, the record) | ⟦BE3⟧ passed, 17 skipped | 0 | 675 in 85 |
-  | T7 | 2b-2 | 0 | ⟦BE3⟧ passed, 17 skipped | +15 (`bulletin.test.ts` 9, `documents.test.ts` 3, `migrate.test.ts` 1, `status.test.ts` 1, `mapping.test.ts` 1; `schema.test.ts`, `store.test.ts`, `keys.test.ts` edited) | ⟦FE7⟧ in 86 |
-  | T8 | 2b-2 | 0 | ⟦BE3⟧ passed, 17 skipped | +7 (`bulletin-step.test.tsx`; `builder-shell.test.tsx`, `status.test.ts`, `review-send-step.test.tsx` edited) | ⟦FE8⟧ in 87 |
-  | T9 | 2b-2 | 0 | ⟦BE3⟧ passed, 17 skipped | +1 (`review-send-step.test.tsx`; `liturgy-step.test.tsx` edited) | ⟦FE9⟧ in 87 |
-  | T10-T12 | 2b-2 | 0 | ⟦BE3⟧ passed, 17 skipped | 0 | ⟦FE9⟧ in 87 |
+  | T1 | 2b-1 | +4, +1 skipped (`test_migrations.py` 4; `test_services_postgres.py` 1, Postgres only; `test_schema_check.py`, `test_api_app.py` edited) | 1399 passed, 17 skipped | 0 | 675 in 85 |
+  | T2 | 2b-1 | +14 (`test_service_bulletin.py` 9, one test in five cases; `test_printed_bulletin.py` 4; `test_printed_render.py` 1; `test_api_printed.py` edited) | 1413 passed, 17 skipped | 0 | 675 in 85 |
+  | T3 | 2b-1 | +12 (`test_usecase_archive.py` 4; `test_api_services.py` 7, two tests and five new 422 cases; `test_api_printed.py` 1; `test_no_streamlit_in_core.py` edited) | 1425 passed, 17 skipped | 0 | 675 in 85 |
+  | T4 | 2b-1 | 0 (no test edited: the new items sit under the existing "## Printed bulletin") | 1425 passed, 17 skipped | 0 | 675 in 85 |
+  | T5, T6 | 2b-1 | 0 (verification, the merge, the record) | 1425 passed, 17 skipped | 0 | 675 in 85 |
+  | T7 | 2b-2 | 0 | 1425 passed, 17 skipped | +15 (`bulletin.test.ts` 9, `documents.test.ts` 3, `migrate.test.ts` 1, `status.test.ts` 1, `mapping.test.ts` 1; `schema.test.ts`, `store.test.ts`, `keys.test.ts` edited) | 690 in 86 |
+  | T8 | 2b-2 | 0 | 1425 passed, 17 skipped | +7 (`bulletin-step.test.tsx`; `builder-shell.test.tsx`, `status.test.ts`, `review-send-step.test.tsx` edited) | 697 in 87 |
+  | T9 | 2b-2 | 0 | 1425 passed, 17 skipped | +1 (`review-send-step.test.tsx`; `liturgy-step.test.tsx` edited) | 698 in 87 |
+  | T10-T12 | 2b-2 | 0 | 1425 passed, 17 skipped | 0 | 698 in 87 |
 
-- Per PR: **PR 2b-1** backend 1395 → ⟦BE3⟧ passed, 16 → 17 skipped, frontend 675 in 85 (unchanged); **PR 2b-2** frontend 675 → ⟦FE9⟧ in 85 → 87 files, backend unchanged.
-- CI `backend-postgres` goes from `16 passed, 1395 deselected` to `17 passed, ⟦BE1⟧ deselected` after T1 and `17 passed, ⟦BE3⟧ deselected` from T3 on (PR 2b-2 leaves it there). With a local Postgres (`TEST_DATABASE_URL`), the same numbers locally.
+- Per PR: **PR 2b-1** backend 1395 → 1425 passed, 16 → 17 skipped, frontend 675 in 85 (unchanged); **PR 2b-2** frontend 675 → 698 in 85 → 87 files, backend unchanged.
+- CI `backend-postgres` goes from `16 passed, 1395 deselected` to `17 passed, 1399 deselected` after T1 and `17 passed, 1425 deselected` from T3 on (PR 2b-2 leaves it there). With a local Postgres (`TEST_DATABASE_URL`), the same numbers locally.
 
 ### Layering and code rules (carried)
 - `service_bulletin`, `printed_bulletin`, `usecases/archive.py`, `usecases/documents.py` and `repos/services.py` import no FastAPI, Starlette or Streamlit (`test_no_streamlit_in_core.py` gains `service_bulletin`, T3); the route is a plain `def` with one usecase call, no SQL and no try/except (F §2.2 rule 1); the query lives in `repos.services` and filters on `church_id` (F §1.2).
@@ -71,7 +71,7 @@ As in the PR 2a plan: **Create `path`:** the block is the whole file; **Append t
 1. **Standing permission** for safety and reliability fixes with no owner-visible change (carried). Each use is a numbered clarification.
 2. **Production Streamlit** (branch `streamlit-frozen`) is frozen and retired for real use; merges never reach it.
 3. **`main` is branch-protected**; Railway and Vercel deploy on merge; Railway's Pre-deploy Command `alembic upgrade head` applies migrations.
-4. **The spec's decisions** stand as written in S, with the PR 2 planning answers below winning where S's earlier text differs (T7 amends S's "Data model" to match).
+4. **The spec's decisions** stand as written in S, with the PR 2 planning answers below winning where S's earlier text differs (T4 amends S's "Data model" to match).
 5. **Layout B**, the PR 1 plan's twelve answers and the PR 2a plan's fourteen (all "all recommended") stand. PR 2a is merged as PR #46 and recorded.
 
 ### PR 2 planning answers (Beau, 2026-10-02, "all recommended"; binding)
@@ -425,7 +425,7 @@ def test_the_owner_s_read_only_queries_around_0006(world):
 - [ ] **Step 2 (agent): Run them and see them fail**
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_migrations.py backend/tests/test_schema_check.py backend/tests/test_api_app.py 2>&1 | tail -1`
-**Expected:** `⟦T1FAIL⟧`: the four 0006 tests (no revision `0006_services_bulletin` yet; no README section), nine head and drift tests in `test_schema_check.py`, two startup tests in `test_api_app.py`. (With a local Postgres, the two owner-query tests in `test_services_postgres.py` fail too.)
+**Expected:** `15 failed, 56 passed, 4 skipped in <t>s`: the four 0006 tests (no revision `0006_services_bulletin` yet; no README section), nine head and drift tests in `test_schema_check.py`, two startup tests in `test_api_app.py`. (With a local Postgres, the two owner-query tests in `test_services_postgres.py` fail too.)
 
 - [ ] **Step 3 (agent): The revision, the model, the README**
 
@@ -627,7 +627,7 @@ def downgrade() -> None:
 .venv/bin/python -m pytest -q | tail -1
 ```
 
-**Expected:** `⟦T1FILES⟧`; the six lines of clarification 14 exactly (README step 3); `⟦BE1⟧ passed, 17 skipped in <t>s`. With a local, throwaway Postgres: `TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres | tail -1` → `17 passed, ⟦BE1⟧ deselected` (and a `1 warning` from the onboarding timing test, as on `main`), and CI's cycle by hand on an empty database there (from `backend/`, `DATABASE_URL=<local url of an empty database>`): `../.venv/bin/alembic upgrade head`, `check` (`No new upgrade operations detected.`), `downgrade base`, `upgrade head`, `check`; without one, say so (CI's `backend-postgres` runs them).
+**Expected:** `75 passed, 4 skipped in <t>s`; the six lines of clarification 14 exactly (README step 3); `1399 passed, 17 skipped in <t>s`. With a local, throwaway Postgres: `TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres | tail -1` → `17 passed, 1399 deselected` (and a `1 warning` from the onboarding timing test, as on `main`), and CI's cycle by hand on an empty database there (from `backend/`, `DATABASE_URL=<local url of an empty database>`): `../.venv/bin/alembic upgrade head`, `check` (`No new upgrade operations detected.`), `downgrade base`, `upgrade head`, `check`; without one, say so (CI's `backend-postgres` runs them).
 
 - [ ] **Step 5 (agent): Commit**
 
@@ -645,7 +645,7 @@ offline SQL; the head and the baseline drift." -m "Co-Authored-By: Claude Opus 5
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `⟦BE1⟧ passed, 17 skipped`; frontend `675 passed` in 85 files.
+Expected counts after this task: backend `1399 passed, 17 skipped`; frontend `675 passed` in 85 files.
 
 ### Task 2: The week's fields print: `service_bulletin` and `printed_bulletin` (planning answers 3, 4, 7; S "What prints where", "Scripture text"; clarifications 3-6, 8, 10, 19)
 
@@ -1042,9 +1042,11 @@ def test_every_line_break_in_a_free_text_is_a_newline_and_a_pasted_reading_keeps
 Run: `.venv/bin/python -m pytest -q backend/tests/test_service_bulletin.py backend/tests/test_printed_bulletin.py backend/tests/test_printed_render.py 2>&1 | tail -3` then `.venv/bin/python -m pytest -q backend/tests/test_api_printed.py 2>&1 | tail -1`
 **Expected** (`service_bulletin` does not exist yet: `ModuleNotFoundError` above these lines; `test_printed_render.py` imports from `test_printed_bulletin.py`):
 ```
-⟦T2FAIL⟧
+ERROR backend/tests/test_printed_render.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 3 errors during collection !!!!!!!!!!!!!!!!!!!!
+3 errors in <t>s
 ```
-then `⟦T2FAILAPI⟧` (the 2a test's comment changed only; nothing posted still prints the placeholders).
+then `12 passed in <t>s` (the 2a test's comment changed only; nothing posted still prints the placeholders).
 
 - [ ] **Step 3: `service_bulletin` and the printing**
 
@@ -1558,7 +1560,7 @@ def read(raw: object) -> ServiceBulletin:
 - [ ] **Step 4: See them pass, and the suite**
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_service_bulletin.py backend/tests/test_printed_bulletin.py backend/tests/test_printed_render.py backend/tests/test_api_printed.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`
-**Expected:** `⟦T2FILES⟧`; `⟦BE2⟧ passed, 17 skipped in <t>s`.
+**Expected:** `46 passed in <t>s`; `1413 passed, 17 skipped in <t>s`.
 
 - [ ] **Step 5: Commit**
 
@@ -1577,7 +1579,7 @@ Bulletin step) prints PR 1's placeholders." -m "Co-Authored-By: Claude Opus 5.5 
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `⟦BE2⟧ passed, 17 skipped`; frontend `675 passed` in 85 files.
+Expected counts after this task: backend `1413 passed, 17 skipped`; frontend `675 passed` in 85 files.
 
 ### Task 3: The API saves, opens, carries and prints the bulletin (S API, "Data model"; F §1.2, §1.3, §2.2; clarifications 7, 8, 10, 12, 15, 19)
 
@@ -1846,7 +1848,7 @@ def test_a_service_saved_before_2b_carries_an_empty_bulletin(church, pastor):
 - [ ] **Step 2: See them fail**
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_usecase_archive.py backend/tests/test_api_services.py backend/tests/test_api_printed.py backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -1`
-**Expected:** `⟦T3FAIL⟧`: the four usecase tests (`ServiceInput` has no `bulletin`), the seven API tests and cases (`bulletin` is an extra field, a 422 naming `bulletin` rather than the field inside it; no `/services/previous-bulletin`, a 422 for the id), the printed one (a 422 too). `test_no_streamlit_in_core.py` passes (the module exists since T2).
+**Expected:** `12 failed, 65 passed in <t>s`: the four usecase tests (`ServiceInput` has no `bulletin`), the seven API tests and cases (`bulletin` is an extra field, a 422 naming `bulletin` rather than the field inside it; no `/services/previous-bulletin`, a 422 for the id), the printed one (a 422 too). `test_no_streamlit_in_core.py` passes (the module exists since T2).
 
 - [ ] **Step 3: The schemas, the usecases, the repo, the route, the download, the types**
 
@@ -2375,7 +2377,7 @@ export function serviceBulletin(overrides: Partial<ServiceBulletin> = {}): Servi
 (cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")
 ```
 
-**Expected:** `Wrote <repo>/frontend/src/lib/api/openapi.json`, then `⟦T3STAT⟧`; `⟦T3FILES⟧`; `⟦BE3⟧ passed, 17 skipped in <t>s` (`test_openapi_contract.py` and `test_route_guards.py` pass unchanged); ` Test Files  85 passed (85)`, `      Tests  675 passed (675)`; `typecheck 0`, `lint 0`.
+**Expected:** `Wrote <repo>/frontend/src/lib/api/openapi.json`, then ` 2 files changed, 546 insertions(+), 1 deletion(-)`; `77 passed in <t>s`; `1425 passed, 17 skipped in <t>s` (`test_openapi_contract.py` and `test_route_guards.py` pass unchanged); ` Test Files  85 passed (85)`, `      Tests  675 passed (675)`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -2394,7 +2396,7 @@ types regenerated." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `⟦BE3⟧ passed, 17 skipped`; frontend `675 passed` in 85 files.
+Expected counts after this task: backend `1425 passed, 17 skipped`; frontend `675 passed` in 85 files.
 
 ### Task 4: Docs: the owner's checks for PR 2b-1 and the spec's data model (planning answers 1, 5, 8; clarifications 17, 19)
 
@@ -2485,7 +2487,7 @@ street address or a church id.
 - [ ] **Step 2: Check the docs**
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_slice1_docs.py backend/tests/test_docs.py backend/tests/test_ops_workflows.py 2>&1 | tail -1` then `grep -n '^## ' docs/manual-verification.md | tail -1` then `grep -n '\[owner' docs/ops-runbook.md | grep -v 'An entry marked' | wc -l` then `git diff -U0 docs/manual-verification.md docs/superpowers/specs/2026-10-02-printed-bulletin-design.md | grep '^+' | grep -c '—'` then `git diff --stat | tail -1`
-**Expected:** `89 passed in <t>s` (`test_slice1_docs.py` pins the last eight `##` headings, ending `## Printed bulletin`: the new heading is a `###`, so the pin holds); `282:## Printed bulletin`; `4`; `0`; `⟦T4STAT⟧`.
+**Expected:** `89 passed in <t>s` (`test_slice1_docs.py` pins the last eight `##` headings, ending `## Printed bulletin`: the new heading is a `###`, so the pin holds); `282:## Printed bulletin`; `4`; `0`; ` 2 files changed, 39 insertions(+), 5 deletions(-)`.
 
 - [ ] **Step 3: Commit**
 
@@ -2501,7 +2503,7 @@ says 2b-1 ships before 2b-2 and PR 3 follows the same order." -m "Co-Authored-By
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `⟦BE3⟧ passed, 17 skipped`; frontend `675 passed` in 85 files.
+Expected counts after this task: backend `1425 passed, 17 skipped`; frontend `675 passed` in 85 files.
 
 - [ ] **Step 4 (controller): Review the batch (T1-T4) and backup push**
 
@@ -2545,7 +2547,7 @@ open('<scratch>/printed2b-sample.pdf', 'wb').write(printed_pdf.render_pdf(ps)); 
 ")
 ```
 
-**Expected:** `⟦BE3⟧ passed, 17 skipped in <t>s`; ` Test Files  85 passed (85)` and `      Tests  675 passed (675)` with no `×` or `FAIL` line; `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s`, the builder's route lines (`○ /builder`, `○ /builder/hymns`, `○ /builder/liturgy`, `○ /builder/readings`, `○ /builder/review`: no `/builder/bulletin` yet) and no `Error` (a font `Failed to fetch` only: say so and rely on CI); `sample written`. With a local, throwaway Postgres also `TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres | tail -1` → `17 passed, ⟦BE3⟧ deselected`. Open the sample PDF and look at it: two sides; page 1's header with "Rev. Guest, Worship Leader", "PRELUDE: ‘Morning Voluntary’" with "Jordan Doe" and "- Pat Example", the NT reading "Jesus said, What do you think?" followed by "The First Reading is from the World English Bible (WEB).", "SERMON: “Who Said?”" with "Pat Example"; page 2 ending with the postlude and "*Congregation stands if able"; page 3 the announcements, each filled field, the activities on two lines (no "?"), "OTHER ANNOUNCEMENTS" last. Attach both samples to the owner's message in Step 4 if the channel allows files, else describe them.
+**Expected:** `1425 passed, 17 skipped in <t>s`; ` Test Files  85 passed (85)` and `      Tests  675 passed (675)` with no `×` or `FAIL` line; `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s`, the builder's route lines (`○ /builder`, `○ /builder/hymns`, `○ /builder/liturgy`, `○ /builder/readings`, `○ /builder/review`: no `/builder/bulletin` yet) and no `Error` (a font `Failed to fetch` only: say so and rely on CI); `sample written`. With a local, throwaway Postgres also `TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres | tail -1` → `17 passed, 1425 deselected`. Open the sample PDF and look at it: two sides; page 1's header with "Rev. Guest, Worship Leader", "PRELUDE: ‘Morning Voluntary’" with "Jordan Doe" and "- Pat Example", the NT reading "Jesus said, What do you think?" followed by "The First Reading is from the World English Bible (WEB).", "SERMON: “Who Said?”" with "Pat Example"; page 2 ending with the postlude and "*Congregation stands if able"; page 3 the announcements, each filled field, the activities on two lines (no "?"), "OTHER ANNOUNCEMENTS" last. Attach both samples to the owner's message in Step 4 if the channel allows files, else describe them.
 
 - [ ] **Step 3 (agent): The API files match, the preview, the gates, the paths, the commits**
 
@@ -2603,7 +2605,7 @@ gh pr list -R bbrown62450/church --head claude/slice-2-plan-4q33le --state open 
 
 **Expected:** `[]`. Send the owner exactly this, and wait for a clear yes:
 
-> The first half of the Bulletin step (printed bulletin PR 2b-1, the server's part) is verified on this machine: backend ⟦BE3⟧ passed, 17 skipped (1395 and 16 before; the new skipped one is a database check that CI runs on Postgres); frontend unchanged at 675 tests in 85 files; typecheck, lint and the production build are clean. It adds one database change, migration 0006 (one new empty column), and teaches the server to save, open and print a service's bulletin fields (the music, the announcements, this week's names, pasted reading text). Nothing you see changes yet: the builder keeps its four steps, and the printed bulletin keeps its [placeholders] until the second PR (2b-2, the Bulletin step itself), which I will open only after this one is live and checked. Before it merges I will ask you for the backup, the counts and a look at the SQL, one at a time. May I open the pull request as a **draft** titled "Printed bulletin PR 2b-1: the server saves and prints the bulletin fields", so the checks run? Merging stays with you.
+> The first half of the Bulletin step (printed bulletin PR 2b-1, the server's part) is verified on this machine: backend 1425 passed, 17 skipped (1395 and 16 before; the new skipped one is a database check that CI runs on Postgres); frontend unchanged at 675 tests in 85 files; typecheck, lint and the production build are clean. It adds one database change, migration 0006 (one new empty column), and teaches the server to save, open and print a service's bulletin fields (the music, the announcements, this week's names, pasted reading text). Nothing you see changes yet: the builder keeps its four steps, and the printed bulletin keeps its [placeholders] until the second PR (2b-2, the Bulletin step itself), which I will open only after this one is live and checked. Before it merges I will ask you for the backup, the counts and a look at the SQL, one at a time. May I open the pull request as a **draft** titled "Printed bulletin PR 2b-1: the server saves and prints the bulletin fields", so the checks run? Merging stays with you.
 
 - [ ] **Step 5 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
 
@@ -2620,7 +2622,7 @@ Printed bulletin PR 2b-1: the server's half of the Bulletin step (PR 2 planning 
 
 Next: PR 2b-2 (the Bulletin step), opened after this one is live and checked. Then PR 3 (the cover picture), backend first in the same way.
 
-Tests: backend 1395 → ⟦BE3⟧ passed, 16 → 17 skipped; frontend 675 in 85 files (unchanged)
+Tests: backend 1395 → 1425 passed, 16 → 17 skipped; frontend 675 in 85 files (unchanged)
 
 After merge (Task 6): the owner's after-deploy check (one read-only query) and a short phone check that the builder works as before, then a "Printed bulletin PR 2b-1 record" in docs/ops-runbook.md (it rides along in PR 2b-2).
 
@@ -2634,7 +2636,7 @@ gh pr create -R bbrown62450/church --draft --base main --head claude/slice-2-pla
 gh pr checks <N1> -R bbrown62450/church --watch --interval 30
 ```
 
-Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `⟦BE3⟧ passed, 17 skipped`, backend-postgres `17 passed, ⟦BE3⟧ deselected` (after its `alembic upgrade head`, `alembic check`, `downgrade base`, `upgrade head` steps, now through `0006`), frontend `675 passed` in 85 files. Then send: "PR #<N1> is green: backend ⟦BE3⟧ passed, 17 skipped; the Postgres job ran the migration up, down and up again and passed its 17 tests; 675 frontend tests in 85 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you, after the backup, the counts and the SQL check." On the yes: `gh pr ready <N1> -R bbrown62450/church`.
+Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1425 passed, 17 skipped`, backend-postgres `17 passed, 1425 deselected` (after its `alembic upgrade head`, `alembic check`, `downgrade base`, `upgrade head` steps, now through `0006`), frontend `675 passed` in 85 files. Then send: "PR #<N1> is green: backend 1425 passed, 17 skipped; the Postgres job ran the migration up, down and up again and passed its 17 tests; 675 frontend tests in 85 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you, after the backup, the counts and the SQL check." On the yes: `gh pr ready <N1> -R bbrown62450/church`.
 
 - [ ] **Step 6: Fix any failure in its owning task**
 
@@ -2648,7 +2650,7 @@ Run the last line with `run_in_background: true`. **Expected:** the PR URL; ever
 
 For each fix: change only the owning task's files; rerun Steps 2-3; commit `Fix: <what> (Task <n>, printed bulletin PR 2b-1 final verification)` with the trailer; after the PR exists, ask the owner before pushing it.
 
-Expected counts after this task: backend `⟦BE3⟧ passed, 17 skipped`; frontend `675 passed` in 85 files.
+Expected counts after this task: backend `1425 passed, 17 skipped`; frontend `675 passed` in 85 files.
 
 ### Task 6: PR 2b-1: before the merge (backup, counts, SQL), the merge, the after-deploy check, the owner's check, the record (OWNER + agent)
 
@@ -2789,7 +2791,7 @@ git push origin claude/slice-2-plan-4q33le
 
 **Expected:** `0`; `0`; `4`; `89 passed in <t>s`; one commit; the push (a backup push of the branch, no PR). Then tell the owner: "PR 2b-1 is live and recorded. Next I build PR 2b-2, the Bulletin step itself, and come back to you before opening it." PR 2b-2's tasks start now, on the same branch (now even with `main` plus this record).
 
-Expected counts after this task: backend `⟦BE3⟧ passed, 17 skipped` on `main`; frontend `675 passed` in 85 files.
+Expected counts after this task: backend `1425 passed, 17 skipped` on `main`; frontend `675 passed` in 85 files.
 
 ## PR 2b-2: the Bulletin step (T7-T12)
 
@@ -3497,7 +3499,20 @@ describe("the Bulletin step's status (printed bulletin PR 2b)", () => {
 Run: `(cd frontend && npx vitest run src/lib/draft/bulletin.test.ts src/lib/draft/schema.test.ts src/lib/draft/migrate.test.ts src/lib/draft/store.test.ts src/lib/draft/mapping.test.ts src/lib/draft/status.test.ts src/lib/documents.test.ts src/lib/queries/keys.test.ts 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
 **Expected** (`bulletin.ts` does not exist yet, so four files cannot load):
 ```
-⟦T7FAIL⟧
+   × draft schema and freshDraft (F §4.6) > a fresh draft is dated next Sunday with every field empty and the F §4.6 defaults <t>ms
+   × draft schema and freshDraft (F §4.6) > accepts an empty date and generous strings, and rejects impossible values <t>ms
+   × DraftStore changes (S store.ts) > never adopts a draft an older version of the app wrote, however new, and writes over it (slice 5a-3: an old tab) <t>ms
+   × DraftStore changes (S store.ts) > puts its draft back over an old tab's with nothing to write, and a store loaded from the old tab's takes it (build review M3) <t>ms
+   × draft migrate and parseStoredDraft (F §4.6 Versioning) > round-trips a stored draft <t>ms
+   × draft migrate and parseStoredDraft (F §4.6 Versioning) > migrates a version 1 draft: editing gains the draft's date, and save_key_fingerprint starts null (slice 5a-3) <t>ms
+   × draft migrate and parseStoredDraft (F §4.6 Versioning) > migrates a version 2 draft: an empty bulletin, nothing else changed, and a saved draft stays Saved (PR 2b) <t>ms
+   × keys > starts every church-scoped key with ['church', id] <t>ms
+ FAIL  |unit| src/lib/documents.test.ts [ src/lib/documents.test.ts ]
+ FAIL  |unit| src/lib/draft/bulletin.test.ts [ src/lib/draft/bulletin.test.ts ]
+ FAIL  |unit| src/lib/draft/mapping.test.ts [ src/lib/draft/mapping.test.ts ]
+ FAIL  |unit| src/lib/draft/status.test.ts [ src/lib/draft/status.test.ts ]
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  8 failed | 23 passed (31)
 ```
 
 - [ ] **Step 3: The draft v3, the bulletin library, the mapping, the bodies, the statuses, the key and the query**
@@ -4531,7 +4546,7 @@ export function usePreviousBulletin(dateIso: string, enabled: boolean) {
 - [ ] **Step 4: See them pass, the suite, types and lint**
 
 Run: the Step 2 command, then the suite and `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`
-**Expected:** `⟦T7FILES⟧`; ` Test Files  86 passed (86)`, `      Tests  ⟦FE7⟧ passed (⟦FE7⟧)`; `typecheck 0`, `lint 0`.
+**Expected:** `      Tests  72 passed (72)`; ` Test Files  86 passed (86)`, `      Tests  690 passed (690)`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -4551,7 +4566,7 @@ server stores it." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `⟦BE3⟧ passed, 17 skipped`; frontend `⟦FE7⟧ passed` in 86 files.
+Expected counts after this task: backend `1425 passed, 17 skipped`; frontend `690 passed` in 86 files.
 
 ### Task 8: The Bulletin step (S "The Bulletin step"; planning answers 4-7; F §4.7, §4.8; clarifications 2-8, 16, 20)
 
@@ -5033,7 +5048,13 @@ export function previousBulletin(overrides: Partial<PreviousBulletin> = {}): Pre
 Run: `(cd frontend && npx vitest run src/components/builder/bulletin src/components/builder/builder-shell.test.tsx src/lib/draft/status.test.ts src/components/builder/review/review-send-step.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
 **Expected** (the step's route does not exist yet):
 ```
-⟦T8FAIL⟧
+   × steps (S steps.ts) > lists the five steps in order, ships all five (2c, 3b, 4b, Review in 5a-3, Bulletin in PR 2b), and reads a step from its path <t>ms
+   × stepStatus (F §4.7) > shows Soon for unshipped steps and Not in archive for Review <t>ms
+   × Review & send: saving (slice 5a-3) > saves a new service with the draft's key, saves changes with If-Match, and every status follows <t>ms
+ FAIL  |dom| src/components/builder/builder-shell.test.tsx [ src/components/builder/builder-shell.test.tsx ]
+ FAIL  |dom| src/components/builder/bulletin/bulletin-step.test.tsx [ src/components/builder/bulletin/bulletin-step.test.tsx ]
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  3 failed | 34 passed (37)
 ```
 
 - [ ] **Step 3: The step, its route, the carry hook, the five steps**
@@ -5578,7 +5599,7 @@ import { STEPS } from "@/lib/draft/steps";
 - [ ] **Step 4: See them pass (three runs), the suite, types and lint**
 
 Run: the Step 2 command three times, then the suite, typecheck and lint.
-**Expected:** three times `⟦T8FILES⟧`; ` Test Files  87 passed (87)`, `      Tests  ⟦FE8⟧ passed (⟦FE8⟧)`; `typecheck 0`, `lint 0`.
+**Expected:** three times `      Tests  55 passed (55)`; ` Test Files  87 passed (87)`, `      Tests  697 passed (697)`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -5596,7 +5617,7 @@ how many boxes are still to check." -m "Co-Authored-By: Claude Opus 5.5 <noreply
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `⟦BE3⟧ passed, 17 skipped`; frontend `⟦FE8⟧ passed` in 87 files.
+Expected counts after this task: backend `1425 passed, 17 skipped`; frontend `697 passed` in 87 files.
 
 ### Task 9: The Printed bulletin card: the week's fields (planning answers 3, 5, 6; clarifications 7, 9, 16)
 
@@ -5746,7 +5767,11 @@ import { PRINTED_SUMMARY, SETTINGS_NOTE, WEEKLY_NOTE } from "./printed-card";
 Run: `(cd frontend && npx vitest run src/components/builder/review/review-send-step.test.tsx src/components/builder/builder-shell.test.tsx src/components/builder/liturgy/liturgy-step.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
 **Expected:**
 ```
-⟦T9FAIL⟧
+   × Review & send: the printed bulletin (printed bulletin PR 1) > shows the card after the Word documents with what it prints and both files <t>ms
+   × Review & send: the printed bulletin (printed bulletin PR 1) > lists the bulletin settings still blank and links to them (printed bulletin PR 2a) <t>ms
+   × Review & send: the printed bulletin (printed bulletin PR 1) > carries last week's music and announcements in, lists what to check, and prints them (printed bulletin PR 2b) <t>ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  3 failed | 75 passed (78)
 ```
 
 - [ ] **Step 3: The card's lines and the carry**
@@ -5871,7 +5896,7 @@ function NotFilledInLines() {
 - [ ] **Step 4: See them pass (three runs), the suite, types and lint**
 
 Run: the Step 2 command three times, then the suite, typecheck and lint.
-**Expected:** three times `⟦T9FILES⟧`; ` Test Files  87 passed (87)`, `      Tests  ⟦FE9⟧ passed (⟦FE9⟧)`; `typecheck 0`, `lint 0`.
+**Expected:** three times `      Tests  78 passed (78)`; ` Test Files  87 passed (87)`, `      Tests  698 passed (698)`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -5886,7 +5911,7 @@ opening the Bulletin step has them." -m "Co-Authored-By: Claude Opus 5.5 <norepl
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `⟦BE3⟧ passed, 17 skipped`; frontend `⟦FE9⟧ passed` in 87 files.
+Expected counts after this task: backend `1425 passed, 17 skipped`; frontend `698 passed` in 87 files.
 
 ### Task 10: Docs: the manual check items for PR 2b-2 (planning answers 3-7; clarification 17)
 
@@ -5931,7 +5956,7 @@ Expected counts after this task: backend `⟦BE3⟧ passed, 17 skipped`; fronten
 - [ ] **Step 2: Check the docs**
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_slice1_docs.py backend/tests/test_docs.py backend/tests/test_ops_workflows.py 2>&1 | tail -1` then `grep -n '^## ' docs/manual-verification.md | tail -1` then `git diff -U0 docs/manual-verification.md | grep '^+' | grep -c '—'` then `git diff --stat | tail -1`
-**Expected:** `89 passed in <t>s`; `282:## Printed bulletin`; `0`; `⟦T10STAT⟧`.
+**Expected:** `89 passed in <t>s`; `282:## Printed bulletin`; `0`; ` 1 file changed, 10 insertions(+), 1 deletion(-)`.
 
 - [ ] **Step 3: Commit**
 
@@ -5947,7 +5972,7 @@ PR 1's item 2 says where the music and announcements come from now." -m "Co-Auth
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `⟦BE3⟧ passed, 17 skipped`; frontend `⟦FE9⟧ passed` in 87 files.
+Expected counts after this task: backend `1425 passed, 17 skipped`; frontend `698 passed` in 87 files.
 
 - [ ] **Step 4 (controller): Review the batch (T7-T10) and backup push**
 
@@ -5982,7 +6007,7 @@ for i in 1 2 3; do (cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Te
 (cd frontend && NEXT_PUBLIC_SUPABASE_URL=https://ci-placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-placeholder NEXT_PUBLIC_API_URL=http://localhost:8000 npm run build 2>&1 | grep -E "Compiled successfully|Error|/builder/bulletin")
 ```
 
-**Expected:** `⟦BE3⟧ passed, 17 skipped in <t>s`; three times ` Test Files  87 passed (87)` and `      Tests  ⟦FE9⟧ passed (⟦FE9⟧)` with no `×` or `FAIL` line (one names the failing test: Step 6); `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s`, a route line `○ /builder/bulletin`, and no `Error` (a font `Failed to fetch` only: say so and rely on CI). With a local, throwaway Postgres also `TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres | tail -1` → `17 passed, ⟦BE3⟧ deselected`.
+**Expected:** `1425 passed, 17 skipped in <t>s`; three times ` Test Files  87 passed (87)` and `      Tests  698 passed (698)` with no `×` or `FAIL` line (one names the failing test: Step 6); `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s`, a route line `○ /builder/bulletin`, and no `Error` (a font `Failed to fetch` only: say so and rely on CI). With a local, throwaway Postgres also `TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres | tail -1` → `17 passed, 1425 deselected`.
 
 - [ ] **Step 3 (agent): The gates, the paths, the commits**
 
@@ -6039,7 +6064,7 @@ gh pr list -R bbrown62450/church --head claude/slice-2-plan-4q33le --state open 
 
 **Expected:** `[]`. Send the owner exactly this, and wait for a clear yes:
 
-> The Bulletin step (printed bulletin PR 2b-2) is verified on this machine: frontend ⟦FE9⟧ tests in 87 files (675 in 85 before), three runs in a row; backend unchanged at ⟦BE3⟧ passed, 17 skipped; typecheck, lint and the production build are clean. It needs no database change (PR 2b-1 already made it, and it is live). It adds a fifth step, "4 Bulletin", with the prelude and postlude, who leads this week, the announcements and a box to paste a reading's text; a new service starts from last week's music and announcements, each marked "From last week. Check before printing." (the marks are saved with the service); "Save as new service" marks them the same way and starts this week's names empty; the printed bulletin prints them all and leaves out anything blank (and the announcements page when there are none). May I open the pull request as a **draft** titled "Printed bulletin PR 2b-2: the Bulletin step", so the checks run? Merging stays with you.
+> The Bulletin step (printed bulletin PR 2b-2) is verified on this machine: frontend 698 tests in 87 files (675 in 85 before), three runs in a row; backend unchanged at 1425 passed, 17 skipped; typecheck, lint and the production build are clean. It needs no database change (PR 2b-1 already made it, and it is live). It adds a fifth step, "4 Bulletin", with the prelude and postlude, who leads this week, the announcements and a box to paste a reading's text; a new service starts from last week's music and announcements, each marked "From last week. Check before printing." (the marks are saved with the service); "Save as new service" marks them the same way and starts this week's names empty; the printed bulletin prints them all and leaves out anything blank (and the announcements page when there are none). May I open the pull request as a **draft** titled "Printed bulletin PR 2b-2: the Bulletin step", so the checks run? Merging stays with you.
 
 - [ ] **Step 5 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
 
@@ -6057,7 +6082,7 @@ Printed bulletin PR 2b-2: the Bulletin step (PR 2 planning answers of 2026-10-02
 
 Later: PR 3 (the cover picture; backend first, as 2b), 6a (Settings).
 
-Tests: frontend 675 → ⟦FE9⟧ in 85 → 87 files; backend ⟦BE3⟧ passed, 17 skipped (unchanged)
+Tests: frontend 675 → 698 in 85 → 87 files; backend 1425 passed, 17 skipped (unchanged)
 
 After merge (Task 12): a guided phone check, then a "Printed bulletin PR 2b-2 record" in docs/ops-runbook.md.
 
@@ -6071,7 +6096,7 @@ gh pr create -R bbrown62450/church --draft --base main --head claude/slice-2-pla
 gh pr checks <N2> -R bbrown62450/church --watch --interval 30
 ```
 
-Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass`; CI's numbers: backend `⟦BE3⟧ passed, 17 skipped`, backend-postgres `17 passed, ⟦BE3⟧ deselected`, frontend `⟦FE9⟧ passed` in 87 files. Then send: "PR #<N2> is green: ⟦FE9⟧ frontend tests in 87 files; the backend and its Postgres job unchanged and passing; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N2> -R bbrown62450/church`.
+Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass`; CI's numbers: backend `1425 passed, 17 skipped`, backend-postgres `17 passed, 1425 deselected`, frontend `698 passed` in 87 files. Then send: "PR #<N2> is green: 698 frontend tests in 87 files; the backend and its Postgres job unchanged and passing; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N2> -R bbrown62450/church`.
 
 - [ ] **Step 6: Fix any failure in its owning task**
 
@@ -6087,7 +6112,7 @@ Run the last line with `run_in_background: true`. **Expected:** the PR URL; ever
 
 For each fix: change only the owning task's files; rerun Steps 2-3; commit `Fix: <what> (Task <n>, printed bulletin PR 2b-2 final verification)` with the trailer; after the PR exists, ask the owner before pushing it.
 
-Expected counts after this task: backend `⟦BE3⟧ passed, 17 skipped`; frontend `⟦FE9⟧ passed` in 87 files.
+Expected counts after this task: backend `1425 passed, 17 skipped`; frontend `698 passed` in 87 files.
 
 ### Task 12: PR 2b-2: the merge, the phone check, the record (OWNER + agent)
 
@@ -6210,9 +6235,9 @@ gh pr checks claude/slice-2-plan-4q33le -R bbrown62450/church --watch
 
 - [ ] **Step R (only if a release must come out): Revert PR 2b-2 first, keeping the draft v3; PR 2b-1 only after it**
 
-On the owner's yes for each outward command (README "Reverting PR 2b-2 or PR 2b-1"; clarification 20). **PR 2b-2** (the step): a branch `claude/revert-printed-2b-2` from `origin/main`; `git revert -m 1 --no-commit <2b-2 merge sha>`; then put back the draft's reader from the merge commit, so no member's draft is lost: `git checkout <2b-2 merge sha> -- frontend/src/lib/draft/schema.ts frontend/src/lib/draft/schema.test.ts frontend/src/lib/draft/migrate.ts frontend/src/lib/draft/migrate.test.ts frontend/src/lib/draft/store.test.ts 'frontend/src/app/(signed-in)/(church)/builder/page.tsx'` and `sed -i 's/^      version: 2,$/      version: 3,/' frontend/src/lib/draft/mapping.test.ts` (its one pinned version); a commit "Revert printed bulletin PR 2b-2 (PR #<N2>), keeping the draft v3" with the trailer; the frontend suite (`676 passed` in 85: the baseline and the v2 → v3 migration test), typecheck and lint; a PR, CI, and the merge on the owner's yes; record it in the record. The reverted pages read every v3 draft as it is (its bulletin kept, unused, for when the step returns), `/builder` opens Review for a draft left on the Bulletin step, and they send no `bulletin`, which the 2b-1 server takes as before (a PUT keeps the saved one; the printed bulletin prints PR 1's placeholders). Checked while planning: this revert, run on the planning worktree, typechecks, lints and passes `676` tests, and a v3 draft on the Bulletin step opens Review with its fields intact. **PR 2b-1**, only after the 2b-2 revert is live: as before, `git revert -m 1 --no-commit <2b-1 merge sha>`, then `git checkout <2b-1 merge sha> -- backend/migrations/versions/0006_services_bulletin.py backend/db/models.py backend/migrations/README.md backend/tests/test_migrations.py backend/tests/test_schema_check.py backend/tests/test_api_app.py backend/tests/test_services_postgres.py`; both suites (`⟦BE1⟧ passed, 17 skipped`: the baseline plus T1's four and its Postgres one; the frontend as it then is). Never `alembic downgrade` production for this: the database stays at `0006_services_bulletin`, which the older code ignores, and the weekly fields saved meanwhile stay in the column, unread, until 2b returns.
+On the owner's yes for each outward command (README "Reverting PR 2b-2 or PR 2b-1"; clarification 20). **PR 2b-2** (the step): a branch `claude/revert-printed-2b-2` from `origin/main`; `git revert -m 1 --no-commit <2b-2 merge sha>`; then put back the draft's reader from the merge commit, so no member's draft is lost: `git checkout <2b-2 merge sha> -- frontend/src/lib/draft/schema.ts frontend/src/lib/draft/schema.test.ts frontend/src/lib/draft/migrate.ts frontend/src/lib/draft/migrate.test.ts frontend/src/lib/draft/store.test.ts 'frontend/src/app/(signed-in)/(church)/builder/page.tsx'` and `sed -i 's/^      version: 2,$/      version: 3,/' frontend/src/lib/draft/mapping.test.ts` (its one pinned version); a commit "Revert printed bulletin PR 2b-2 (PR #<N2>), keeping the draft v3" with the trailer; the frontend suite (`676 passed` in 85: the baseline and the v2 → v3 migration test), typecheck and lint; a PR, CI, and the merge on the owner's yes; record it in the record. The reverted pages read every v3 draft as it is (its bulletin kept, unused, for when the step returns), `/builder` opens Review for a draft left on the Bulletin step, and they send no `bulletin`, which the 2b-1 server takes as before (a PUT keeps the saved one; the printed bulletin prints PR 1's placeholders). Checked while planning: this revert, run on the planning worktree, typechecks, lints and passes `676` tests, and a v3 draft on the Bulletin step opens Review with its fields intact. **PR 2b-1**, only after the 2b-2 revert is live: as before, `git revert -m 1 --no-commit <2b-1 merge sha>`, then `git checkout <2b-1 merge sha> -- backend/migrations/versions/0006_services_bulletin.py backend/db/models.py backend/migrations/README.md backend/tests/test_migrations.py backend/tests/test_schema_check.py backend/tests/test_api_app.py backend/tests/test_services_postgres.py`; both suites (`1399 passed, 17 skipped`: the baseline plus T1's four and its Postgres one; the frontend as it then is). Never `alembic downgrade` production for this: the database stays at `0006_services_bulletin`, which the older code ignores, and the weekly fields saved meanwhile stay in the column, unread, until 2b returns.
 
-Expected counts after this task: backend `⟦BE3⟧ passed, 17 skipped` on `main`; frontend `⟦FE9⟧ passed` in 87 files. The records PR adds no test.
+Expected counts after this task: backend `1425 passed, 17 skipped` on `main`; frontend `698 passed` in 87 files. The records PR adds no test.
 
 ---
 ## Build notes
@@ -6221,33 +6246,43 @@ Expected counts after this task: backend `⟦BE3⟧ passed, 17 skipped` on `main
 - **`JSON` stores `None` as JSON `null`.** The first Postgres run of the owner's after-deploy query counted three services `WITH bulletin IS NOT NULL` where one had a bulletin: SQLAlchemy's `JSON` type writes a Python `None` as the JSON value `null` unless `none_as_null=True`. The model's column is `JSON(none_as_null=True)` (no DDL change: `alembic check` stays clean), so a service saved without a bulletin is SQL NULL, as the README's query assumes.
 - **5a-2's 0005 test upgraded to `head`;** with 0006 it saw the new column too. It now upgrades to `0005_services_extras` (T1's tests), and 5a-2's Postgres test of the 0005 queries expects the head's version.
 - **`IsoDate` needs `Annotated[IsoDate, Query()]`.** Written as `before: IsoDate = Query(...)`, FastAPI accepted `2026-10-04T00:00:00` (the shape check did not run); in the `Annotated` form, as `/lectionary/readings` has it, it is the 422 the T3 test expects.
-- **"Edited" is a flag, not a comparison.** The first carry rule ("every box blank or still carried") treated a carried box the user cleared as untouched, so a date change would have carried it back in; T4's test of a cleared box caught it. `bulletin.edited` is set by any edit or Keep as is (clarification 7).
-- **The fingerprint leaves an empty bulletin out.** With the bulletin always in `draftToServicePayload`, every draft "Saved" before 2b would have turned "Unsaved changes" after the v3 migration; T4's migration test pins that it stays "Saved".
-- **The regenerated types need the fixture in the same commit.** `ServiceOut.bulletin` is required, so T3 adds `serviceBulletin()` to `savedService()` and the type names to `types.ts`; without it T3's commit would leave typecheck failing until T4.
-- **A sample booklet** (T8 Step 2's snippet) rendered to images: side 1 the cover and page 1 (the week's worship leader in the header, the prelude with the organist and the composer, the pasted NT text with no credit line, the Sermon's week leader), side 2 page 2 (the postlude, the stand note) and page 3 (the announcements, "OTHER ANNOUNCEMENTS" last). Read back as the tests do.
+- **"Edited" is recorded, not compared.** The first carry rule ("every box blank or still carried") treated a carried box the user cleared as untouched, so a date change would have carried it back in; T7's test of a cleared box caught it. `bulletin.edited` records each box edited or kept (clarification 7; a box at a time since the plan review).
+- **The fingerprint leaves an empty bulletin out.** With the bulletin always in `draftToServicePayload`, every draft "Saved" before 2b would have turned "Unsaved changes" after the v3 migration; T7's migration test pins that it stays "Saved".
+- **The regenerated types need the fixture in the same commit.** `ServiceOut.bulletin` is required, so T3 adds `serviceBulletin()` to `savedService()` and the type names to `types.ts`; without it T3's commit would leave typecheck failing until T7.
+- **A sample booklet** (T5 Step 2's snippet) rendered to images: side 1 the cover and page 1 (the week's worship leader in the header, the prelude with the organist and the composer, the pasted NT text, the Sermon's week leader), side 2 page 2 (the postlude, the stand note) and page 3 (the announcements, "OTHER ANNOUNCEMENTS" last). Read back as the tests do.
 - **CI's alembic cycle by hand** on the local Postgres: `upgrade head`, `check` (`No new upgrade operations detected.`), `downgrade base`, `upgrade head`, `check`: all clean, before and after the `none_as_null` change.
 
-**Replay of the finished plan (2026-10-03).** (to be filled after the replay)
+**Plan review fixes (2026-10-03).** An adversarial review of the plan (against its built tree) found nothing critical; its five important and ten minor findings were decided by the controller and applied, the owner-visible ones as questions 3, 7, 9, 12-14, 16 and 17 below. The code was rebuilt in a second throwaway worktree of `d35a76b` (the first plan's commits cherry-picked, then changed), one commit per task's tests and code as before, and every directive regenerated from it:
+- **Two PRs, backend first** (review I1; clarification 19; question 14). The tasks are now T1-T6 (PR 2b-1: the migration, `service_bulletin` and the printing, the API, the docs; the verification, the owner's steps and the merge) and T7-T12 (PR 2b-2: the draft v3, the step, the card, the docs; the verification, the merge, the phone check). To make PR 2b-1 invisible to the pages already live, a body with no bulletin prints PR 1's placeholders (`printed_bulletin.PLACEHOLDERS`; T2's `test_no_bulletin_posted_prints_pr_1_s_placeholders`; `test_api_printed.py`'s 2a test keeps its placeholder check), and T5 Step 3 and T11 Step 3 check that neither PR reaches into the other's files. The README section is now "(printed bulletin PR 2b-1)", its after-deploy count expects `with_bulletin` `0`, and "Reverting PR 2b-2 or PR 2b-1" gives the order.
+- **No carry while a save's outcome is unknown** (review I2): `shouldCarry` and `followSaveMode` wait for `save_key_fingerprint` to be null (T7's "never carries … while a save's outcome is unknown").
+- **The marks are saved** (review I3; question 16): `ServiceBulletin.unchecked` (a list of the nine boxes, read tolerantly, a 422 for an unknown one), sent by `bulletinPayload`, restored by `bulletinFromService`, compared by the 409 check; `carried()` leaves it empty.
+- **Save as new service** (review I4; question 17): `followSaveMode`, run by `useBulletinCarry`, with `bulletin.set_aside` in the draft so changing the date back loses nothing (T7's two tests, T8's step test). `markSaved` drops the set-aside copy.
+- **The owner's carry check picks the Sunday after** (review I5): T12 Step 6 and item 22 say to choose, on step 1, the Sunday one week after the saved service.
+- **Minor:** `edited` is a list of boxes, so typing in one does not stop the others and a failed lookup stays on the step with Try again (M1; T7's and T8's tests); a free text's U+2028, U+2029 and U+0085 (and `\r\n`, `\r`, a vertical tab, a form feed) are newlines in `service_bulletin.read` (M2), and a pasted reading's blank lines one paragraph break, at most 10 000 characters (question 13); `savedCopyFingerprint` reads the bulletin as `read` and `_xml_safe` store it (M3; checked against the server's output for the same input); a 2b-2 rollback keeps the drafts (M4; clarification 20); items 2 and 27 (was 24) reworded and Review's comment says "Step 5" (M5, M10); "Usually {name}" is the settings' leader and a settings failure says "Bulletin settings could not be loaded." with Try again (M6); `aria-controls` only while the panel is shown (M7); the long-text measurements are in Risks (M8); the credit line names the fetched reading when the other is pasted (M9; question 9).
+- **The rollback was run, not only written.** In a third worktree at the built head, T12 Step R's 2b-2 revert (the revert of T7-T10, the six files checked out again, the one `sed`) typechecked, linted and passed `676` frontend tests in 85 files; a probe test (not kept) seeded a v3 draft with `last_step` "bulletin" and a filled announcement, and `/builder` opened `/builder/review` with the draft intact.
+- **The blank-line rule is the same on both sides:** `[ \t]` (not `\s`, whose meaning differs between Python and JavaScript) between the line breaks of a run.
+
+**Replay of the finished plan (2026-10-03).** (T5 and T11 gate results to be added)
 
 ## Spec coverage
 
 | Owner answer or S item | Task(s) and tests |
 |---|---|
-| Planning answer 1: 2b is the step, the weekly fields, pasted text, carry forward, the draft v3 and 0006 | T1-T7; T8 Step 3 (the paths; nothing in the Bulletin settings, the Word copies, the packages, the workflows or Streamlit) |
-| Planning answer 3: a blank field prints nothing; the card lists what is empty | T2 `test_a_blank_weekly_field_prints_nothing`, `test_with_every_announcement_blank_the_announcements_page_is_left_out`; T3 `test_the_church_s_bulletin_settings_print_for_every_member` (none sent, none printed); T4 "lists the blank standing fields, this week's people as changed, then the prelude, postlude and announcements"; T6 "lists the bulletin settings still blank…", "carries last week's…" |
-| Planning answer 4: the announcements with "Other announcements" | T2 `test_the_cover_and_the_back_page` (the page in order, "OTHER ANNOUNCEMENTS" last); T5 "shows the music, who leads, the announcements…" |
-| Planning answer 5: carry forward with a check | T3 `test_last_week_s_bulletin_is_the_latest_service_dated_before_the_date`, `test_a_service_saved_before_2b_carries_an_empty_bulletin`, `test_last_week_s_bulletin_carries_the_music_and_the_announcements`; T4 the three "carry forward" tests and "an edit or Keep as is clears…"; T5 "carries last week's…", "never carries into a saved service…"; T6 "carries last week's music and announcements in, lists what to check, and prints them" |
-| Planning answer 6: optional, never blocks | T4 "the Bulletin step's status" (never in Still to do); T5 (the bar says Optional; `builder-shell` Review's Still to do unchanged); T6 (downloads enabled) |
-| Planning answer 7: who leads, this week's change, "Change who leads a part" | T2 `test_this_week_s_people_and_part_leaders_print_over_the_settings`; T3 the printed test (Rev. Guest, no liturgist, Pat Example on the Sermon); T4 the payload test; T5 "shows the three people from the bulletin settings…" |
-| Planning answer 8: backup, counts, preview, after-deploy check, one at a time | T1 `test_offline_sql_for_0006_is_one_column_add_under_the_timeouts`, `test_the_readme_shows_the_0006_preview_exactly`, `test_the_owner_s_read_only_queries_around_0006`; T9 Steps 1-5 |
-| Answer 5 and S "Scripture text": pasted text wins over fetched | T2 `test_pasted_reading_text_prints_and_leaves_the_credit_line_out`; T3 `test_the_week_s_fields_print_and_a_pasted_reading_is_neither_fetched_nor_charged`; T4 (by reference); T5 "has a box per reading…" |
-| S "Data model": the draft v3, `ServiceDraft.bulletin` optional, `services.bulletin` in 0006 | T1 `test_0006_adds_the_nullable_bulletin_column_and_keeps_rows`, `test_0006_downgrade_gives_back_the_0005_services_table`, the head and drift tests; T3 `test_a_save_stores_the_week_s_bulletin_word_safe_and_never_logs_it`, `test_no_bulletin_sent_stores_none_and_a_replace_without_one_keeps_the_saved_one`, `test_the_week_s_bulletin_is_saved_and_opened_and_an_older_client_keeps_it`, the 422 cases; T4 the schema and migration tests, "opens a saved service's bulletin fields Saved…" |
-| S "The Bulletin step": the fifth step, fits 375 px | T5 (`grid-cols-5`, `h-11` fields; `builder-shell` five links and footers); T9 Step 6 |
-| F §4.6 (never destroy typed input; versioning) | T4 (carry only through `applyCarry`'s checks; 2 → 3 keeps everything); T5 (`autoUpdate`) |
+| Planning answer 1: 2b is the step, the weekly fields, pasted text, carry forward, the draft v3 and 0006 | T1-T4 (PR 2b-1), T7-T10 (PR 2b-2); T5 Step 3 and T11 Step 3 (the paths; nothing in the Bulletin settings, the Word copies, the packages, the workflows or Streamlit) |
+| Planning answer 3: a blank field prints nothing; the card lists what is empty | T2 `test_a_blank_weekly_field_prints_nothing`, `test_with_every_announcement_blank_the_announcements_page_is_left_out`; T7 "lists the blank standing fields, this week's people as changed, then the prelude, postlude and announcements"; T9 "lists the bulletin settings still blank…", "carries last week's…" |
+| Planning answer 4: the announcements with "Other announcements" | T2 `test_the_cover_and_the_back_page` (the page in order, "OTHER ANNOUNCEMENTS" last); T8 "shows the music, who leads, the announcements…" |
+| Planning answer 5: carry forward with a check | T3 `test_last_week_s_bulletin_is_the_latest_service_dated_before_the_date`, `test_a_service_saved_before_2b_carries_an_empty_bulletin`, `test_last_week_s_bulletin_carries_the_music_and_the_announcements`; T7 the carry forward tests, "Save as new service" and "an edit or Keep as is clears…"; T8 "carries last week's…", "never carries into a saved service…", "marks a saved service's music and announcements…"; T9 "carries last week's music and announcements in, lists what to check, and prints them" |
+| Planning answer 6: optional, never blocks | T7 "the Bulletin step's status" (never in Still to do); T8 (the bar says Optional; `builder-shell` Review's Still to do unchanged); T9 (downloads enabled) |
+| Planning answer 7: who leads, this week's change, "Change who leads a part" | T2 `test_this_week_s_people_and_part_leaders_print_over_the_settings`; T3 the printed test (Rev. Guest, no liturgist, Pat Example on the Sermon); T7 the payload test; T8 "shows the three people from the bulletin settings…" (the usual leader under a guest), "says so with Try again when the bulletin settings cannot be loaded…" |
+| Planning answer 8: backup, counts, preview, after-deploy check, one at a time | T1 `test_offline_sql_for_0006_is_one_column_add_under_the_timeouts`, `test_the_readme_shows_the_0006_preview_exactly`, `test_the_owner_s_read_only_queries_around_0006`; T6 Steps 1-5 |
+| Answer 5 and S "Scripture text": pasted text wins over fetched | T2 `test_pasted_reading_text_prints_and_the_credit_line_names_only_fetched_text`, `test_every_line_break_in_a_free_text_is_a_newline_and_a_pasted_reading_keeps_one_blank_line`; T3 `test_the_week_s_fields_print_and_a_pasted_reading_is_neither_fetched_nor_charged`; T7 (by reference); T8 "has a box per reading…" |
+| S "Data model": the draft v3, `ServiceDraft.bulletin` optional, `services.bulletin` in 0006 | T1 `test_0006_adds_the_nullable_bulletin_column_and_keeps_rows`, `test_0006_downgrade_gives_back_the_0005_services_table`, the head and drift tests; T2 `test_no_bulletin_posted_prints_pr_1_s_placeholders`; T3 `test_a_save_stores_the_week_s_bulletin_word_safe_and_never_logs_it`, `test_no_bulletin_sent_stores_none_and_a_replace_without_one_keeps_the_saved_one`, `test_the_week_s_bulletin_is_saved_and_opened_and_an_older_client_keeps_it`, the 422 cases; T7 the schema and migration tests, "opens a saved service's bulletin fields Saved…", the 409 check's reading |
+| S "The Bulletin step": the fifth step, fits 375 px | T8 (`grid-cols-5`, `h-11` fields; `builder-shell` five links and footers); T12 Step 3 |
+| F §4.6 (never destroy typed input; versioning) | T7 (carry only through `applyCarry`'s checks, a box at a time; `followSaveMode` sets aside and gives back; 2 → 3 keeps everything); T8 (`autoUpdate`); T12 Step R (a rollback keeps the drafts) |
 | F §2.5 (logs without text) | T3 the archive and printed tests (no prayer text in a log line) |
-| Layering (no FastAPI or Streamlit below the API) | T3 `test_no_streamlit_in_core.py` (`service_bulletin` added); T8 imports grep |
-| OpenAPI and types regenerated | T3 Step 4; T8 Step 3; `test_openapi_contract.py` |
-| Answer 10: a guided phone check after each PR | T9 Steps 6-9; `docs/manual-verification.md` "### Printed bulletin PR 2b: the Bulletin step" (T7) |
+| Layering (no FastAPI or Streamlit below the API) | T3 `test_no_streamlit_in_core.py` (`service_bulletin` added); T5 imports grep |
+| OpenAPI and types regenerated | T3 Step 4; T5 Step 3, T11 Step 3; `test_openapi_contract.py` |
+| Answer 10: a guided phone check after each PR | T6 Step 6 (PR 2b-1: the builder as before), T12 Steps 3-6 (PR 2b-2); `docs/manual-verification.md` "### Printed bulletin PR 2b: the Bulletin step" (T4, T10) |
 
 S items **not** in 2b: the cover picture (`cover_image_id`, "Keep last week's picture", `bulletin_images`, migration `0007_bulletin_images`: PR 3); the Bulletin settings' move into Settings (6a).
 
@@ -6255,8 +6290,9 @@ S items **not** in 2b: the cover picture (`cover_image_id`, "Keep last week's pi
 
 - The summary panel (the bottom sheet and the `lg` column) shows no Bulletin block; the step bar's status covers it. A block could list the music and the announcement count.
 - A part cannot be set to "no one" for a single week from the step (a blank field follows the usual leader; clarification 4); Bulletin settings does it for every week.
-- PR 3 adds `cover_image_id` to `ServiceBulletin` (the model refuses unknown fields) and carries it forward with the music and announcements.
-- The deploy window (Risks): a field the new frontend sends is refused by the old API for the minutes between the two deploys. A general fix (the API ignoring unknown fields of a newer client for a release) is a platform decision, not 2b's.
+- PR 3 adds `cover_image_id` to `ServiceBulletin` (the model refuses unknown fields) and carries it forward with the music and announcements. Its plan ships backend first, as 2b (clarification 19): the migration `0007_bulletin_images` and the API in one PR, merged and live before the page that sends `cover_image_id`.
+- PR 2b-1's placeholders for a body with no bulletin (`printed_bulletin.PLACEHOLDERS`) can go once no page from before PR 2b-2 can be open (for example with PR 3).
+- A failed carry lookup is reported on the Bulletin step only; Review's card prints without it and says nothing (clarification 7).
 
 ## Questions for the owner
 
@@ -6264,18 +6300,20 @@ Your answers of 2026-10-02 (the ten answers, layout B, the PR 1 plan's twelve, t
 
 1. **A fifth step, "Bulletin", before Review & send** (clarification 2): the step bar shows five steps (they fit a phone screen; the line above them reads "Step 4 of 5 · Bulletin"), and Review & send becomes step 5. The Bulletin step's status is "Optional", or "2 to check" while boxes from last week are unchecked; it never appears in "Still to do" and never turns off a download or Save. Recommended: accept.
 2. **Music** (clarification 3): a title and a composer for the prelude and the postlude, printed as on your bulletin ("PRELUDE: ‘title’", the organist's name on the right, "- composer" under it). A piece with neither title nor composer leaves the whole line out. Recommended: accept.
-3. **Who leads this week** (clarification 4): the worship leader, liturgist and organist show your Bulletin settings' names; changing one here is for this week only ("Changed for this week.", with **Undo the change**), and clearing one means no one this week. Behind **Change who leads a part**, a name for any part, this week only (each shows "Usually {name}"); a blank one keeps the usual leader, so setting "no one" for a single part is done in Bulletin settings. The settings themselves never change from this step. Recommended: accept.
+3. **Who leads this week** (clarification 4): the worship leader, liturgist and organist show your Bulletin settings' names; changing one here is for this week only ("Changed for this week.", with **Undo the change**), and clearing one means no one this week. Behind **Change who leads a part**, a name for any part, this week only; each part shows "Usually" and the name from your settings (not this week's change); a blank one keeps the usual leader, so setting "no one" for a single part is done in Bulletin settings. If your settings cannot be loaded, the step says "Bulletin settings could not be loaded." with **Try again** instead of showing empty names. The settings themselves never change from this step. Recommended: accept.
 4. **The announcements** (clarification 5): ushers and counters, deacon of the week and coffee hour as one line each, as on your bulletin; activities, prayers and concerns, items for collection and other announcements as free text that keeps your line breaks, each under its heading; "Other announcements" prints last under "OTHER ANNOUNCEMENTS". Recommended: accept.
 5. **With no announcements at all, no announcements page** (clarification 6): a blank announcement prints nothing (no heading, no line), and when every one is blank the page is left out of the PDF and the Word version (the bulletin is a page shorter; the card lists "announcements" as not filled in). The other choice is a page with only "ANNOUNCEMENTS" and the date. Recommended: leave the page out.
 6. **What carries forward, and from where** (clarification 7): a new service starts from the music and the announcements of your latest saved service dated before it (the latest date, then the latest save). This week's names, the part leaders and pasted readings start empty. If the latest service was saved before this update (or with nothing filled in), nothing carries, even if an older one had announcements. Recommended: accept.
-7. **When it carries, and "Keep as is"** (clarification 7): it happens when a new service (never one opened from Services) is shown on the Bulletin step or on Review & send; if you then change the date before touching any music or announcement box, it carries again from the right week; once you type in, change, clear or keep a box, it never carries again for that service. Each carried box says "From last week. Check before printing." until you change it; this plan adds a **Keep as is** button beside it so a box that is right need not be retyped (your answer 5 said "until it is edited"). Recommended: yes, add Keep as is.
+7. **When it carries, and "Keep as is"** (clarification 7): it happens when a new service (never one opened from Services) is shown on the Bulletin step or on Review & send, and never while a save's answer is still unknown; if you then change the date, it carries again from the right week into every box you have not touched; once you type in, change, clear or keep a box, last week's never goes into that box again, while the other boxes still fill. Each carried box says "From last week. Check before printing." until you change it; this plan adds a **Keep as is** button beside it so a box that is right need not be retyped (your answer 5 said "until it is edited"). If last week's cannot be loaded, the step says so with **Try again**, and the message stays until it works. Recommended: yes, add Keep as is.
 8. **The Printed bulletin card** (clarification 9): "For now, the music and the announcements print as [placeholders]." goes; it says "The music, the announcements and this week's changes to who leads come from the Bulletin step."; "Not filled in: …" adds prelude, postlude and announcements (and counts this week's names); and "From last week, not checked yet: …" lists the boxes still to check, above the download buttons. Recommended: accept.
-9. **Pasted reading text** (clarification 8): one box per printed reading ("First Reading: …", "New Testament Reading: …"); the text stays with that reading (pick another reading and its box is empty); it prints instead of the text the app fetches, the app does not fetch that reading, and the line "Scripture readings are from the …" is left out when any reading is pasted (paste the translation's own notice with the text if it asks for one). Recommended: accept.
+9. **Pasted reading text** (clarification 8): one box per printed reading ("First Reading: …", "New Testament Reading: …"); the text stays with that reading (pick another reading and its box is empty); it prints instead of the text the app fetches, and the app does not fetch that reading. The credit line follows what was fetched: with both readings fetched, "Scripture readings are from the …" as today; with one pasted and the other fetched, a line for the fetched one only, for example "The New Testament Reading is from the World English Bible (WEB)."; with both pasted, no line (paste the translation's own notice with the text if it asks for one). Recommended: accept.
 10. **Saving** (clarification 10): the Bulletin step's fields are saved with the service and come back when you open it from Services; a change to them shows "Unsaved changes". A service saved before this update stays "Saved". Recommended: accept.
 11. **Prayers and concerns are kept with the service** (clarification 15): like the rest of a saved service, any member of your church who opens it can read them; they are never written to the app's logs, and the check and the record never copy a name from them. Recommended: accept.
-12. **The checks around the merge** (clarification 14; Task 9): as for migration 0005, one at a time: I start the backup on your yes; you run one read-only counting query; I show you the six lines of SQL (one new empty column) and explain them; after the deploy, one more read-only query, then four short phone steps. If this PR ever has to be undone, the new column stays (empty or holding the saved fields, harmless), and each member's unsaved draft starts fresh once. Recommended: accept.
-13. **The limits** (clarifications 3-5, 8): titles 200 characters, composers and names 100, ushers and coffee hour 200, deacon 100, activities, prayers and other announcements 4000 each, collection items 2000, a pasted reading 20 000. Recommended: accept.
-14. **A few minutes after the merge** (Risks): until both the website and the server have updated (a few minutes), a page reloaded early can answer "The request was not valid." on a save or download. I will tell you when both are live before the phone check. Recommended: accept.
+12. **The checks around the merges, and undoing** (clarifications 14, 20; Tasks 6 and 12): around the first PR, as for migration 0005, one at a time: I start the backup on your yes; you run one read-only counting query; I show you the six lines of SQL (one new empty column) and explain them; after the deploy, one more read-only query and a short phone check that the builder works as before. After the second PR, four short phone steps. If the Bulletin step ever has to be undone, it comes out first and alone, and everyone's unsaved draft is kept (its bulletin fields wait unused until the step returns); the new column stays (empty or holding the saved fields, harmless). Recommended: accept.
+13. **The limits** (clarifications 3-5, 8): titles 200 characters, composers and names 100, ushers and coffee hour 200, deacon 100, activities, prayers and other announcements 4000 each, collection items 2000, a pasted reading 10 000 (several blank lines in a row in a pasted reading print as one paragraph break). Recommended: accept.
+14. **Two pull requests, the server first** (clarification 19): the first PR (2b-1) brings the database change and teaches the server to save and print the bulletin fields; nothing you see changes, and the printed bulletin keeps its [placeholders]. Only when it is live and your checks pass do I open the second (2b-2), the Bulletin step itself. So no page ever talks to a server that does not understand it, even if a deploy is slow or fails, and you can keep using the app during both deploys. The cover picture (PR 3) will be done the same way, server first. The other choice is one PR, with a few minutes (longer if a deploy fails) in which a save or download can answer "The request was not valid.". Recommended: two PRs.
 15. **The Word copies stay as they are** (clarification 18): the bulletin copy and the pastor's copy (the working files) do not get the music or the announcements; the printed bulletin's Word version has them. Recommended: accept.
+16. **"From last week" notes are saved with the service** (clarification 7): if you save a service before checking every carried box, the notes stay with it: opening it later from Services, on any device (the secretary's computer, say), still shows "From last week. Check before printing." on those boxes, and the card still lists them, until someone changes them or taps **Keep as is** and saves. The other choice is that the notes belong to one browser only and disappear on save. Recommended: save them with the service.
+17. **"Save as new service" starts a new week** (clarification 7): when you open last week's saved service and change its date to make this week's, the music and announcements stay, each marked "From last week. Check before printing.", and this week's names (worship leader, liturgist, organist and any part's leader) go back to your usual ones and the pasted readings are emptied, as for a new service. If you change the date back, they return. The other choice is that a copy keeps everything unmarked, last week's guest preacher included. Recommended: mark them and start the names fresh.
 
-Owner steps still to come: the plan's approval; the draft PR on your yes and ready on your yes (T8); the backup on your yes, the counts and the SQL check, the merge on your yes, the after-deploy query, the four phone steps and the records PR (T9).
+Owner steps still to come: the plan's approval; for PR 2b-1, the draft PR on your yes and ready on your yes (T5), the backup on your yes, the counts and the SQL check, the merge on your yes, the after-deploy query and the short phone check (T6); for PR 2b-2, the draft PR on your yes and ready on your yes (T11), the merge on your yes, the four phone steps and the records PR (T12).
