@@ -91,7 +91,9 @@ def test_the_pdf_downloads_with_the_file_headers_and_the_readings_text(client, c
     assert "Example Church" in text and "*HYMN: #12 “Old Favorite”" in text
     assert "FIRST READING: Isaiah 5:1-7 [Reading text unavailable] NEW TESTAMENT" in text      # no names saved yet
     assert "NEW TESTAMENT READING: Philippians 3:4b-14 Text of Philippians 3:4-14 (kjv). Second verse." in text
-    assert "Scripture readings are from the King James Version (KJV)." in text
+    # Isaiah's text did not load, so only the New Testament reading is credited (build review fix M5).
+    assert "Scripture readings are from" not in text
+    assert "The New Testament Reading is from the King James Version (KJV)." in text
     assert calls == [("Isaiah 5:1-7", "kjv"), ("Philippians 3:4-14", "kjv")]
     assert "We pray." not in text
     (record,) = [r for r in caplog.records if r.getMessage().startswith("documents.printed")]
@@ -117,6 +119,23 @@ def test_a_translation_not_offered_here_prints_in_the_church_s(client, church, c
         assert r.status_code == 200, r.text
         assert {translation for _part, translation in calls} == {"asv"}
         assert "American Standard Version (ASV)" in pdf_text(r.content)
+
+
+def test_a_c1_control_character_in_a_free_text_does_not_print_as_a_question_mark(client, church, calls):
+    """Build review fix M2: U+0085 is a line break, and the other C1 controls (outside cp1252, so the PDF
+    printed them as "?") are deleted."""
+    bulletin = {
+        "prelude": {"title": "", "composer": ""}, "postlude": {"title": "", "composer": ""},
+        "people": {"worship_leader": None, "liturgist": None, "organist": None}, "leaders": {},
+        "announcements": {"ushers": "", "deacon": "", "coffee_hour": "", "activities": "Line one\x02\x85\x9bLine two",
+                          "prayer_concerns": "", "collection": "", "other": ""},
+        "reading_text": {"ot": "", "nt": "Pasted\x81 text."}, "unchecked": [],
+    }
+    r = post(client, church, {"format": "pdf", "service": {**SERVICE, "bulletin": bulletin}})
+    assert r.status_code == 200, r.text
+    text = pdf_text(r.content)
+    assert "Line one Line two" in text and "Pasted text." in text
+    assert "?" not in text
 
 
 def test_no_readings_fetch_nothing(client, church, calls):
@@ -175,7 +194,8 @@ def test_the_church_s_bulletin_settings_print_for_every_member(client, church, m
     assert "Glory be." in text and text.count("*Please stand if able") == 1
     for gone in ("Organist", "[Organist]", "[Liturgist]", "[Worship leader]", "[Service time]", "[Phone]", "[Email]"):
         assert gone not in text, gone
-    assert "‘[Prelude title]’" in text and "Coffee Hour: [Name]" in text           # the weekly fields: PR 2b
+    # No bulletin was posted (a page from before the Bulletin step): PR 1's weekly placeholders (PR 2b-1).
+    assert "‘[Prelude title]’" in text and "Coffee Hour: [Name]" in text
 
 
 def test_a_stored_control_character_still_prints_in_word(client, church, calls):
@@ -186,3 +206,39 @@ def test_a_stored_control_character_still_prints_in_word(client, church, calls):
     assert r.status_code == 200, r.text
     paragraphs = [p.text for p in Document(BytesIO(r.content)).paragraphs]
     assert "Jordan Doe, Organist" in paragraphs and "(555) 010-0100" in paragraphs   # one line (build review I1)
+
+
+def test_the_week_s_fields_print_and_a_pasted_reading_is_neither_fetched_nor_charged(client, church, owner,
+                                                                                  calls, caplog):
+    """PR 2b: the music, this week's people and part leaders, the announcements and a pasted reading."""
+    with session_scope() as s:
+        s.get(Church, church).settings = {"bulletin": {"liturgist": "Sam Sample", "organist": "Jordan Doe"}}
+    bulletin = {
+        "prelude": {"title": "Morning Voluntary", "composer": "Pat Example"},
+        "postlude": {"title": "Festive Postlude", "composer": ""},
+        "people": {"worship_leader": "Rev. Guest", "liturgist": "", "organist": None},
+        "leaders": {"sermon": "Pat Example"},
+        "announcements": {"ushers": "Sam Sample", "deacon": "", "coffee_hour": "The Example family",
+                          "activities": "", "prayer_concerns": "For all who are ill.", "collection": "",
+                          "other": ""},
+        "reading_text": {"ot": "", "nt": "Pasted text of the reading."},
+        "unchecked": ["prelude"],
+    }
+    ratelimit.consume("scripture", user_id=owner, cost=59)                   # one token left: one part
+    caplog.set_level(logging.INFO, logger="usecases.documents")
+    r = post(client, church, {"format": "pdf", "service": {**SERVICE, "bulletin": bulletin}})
+    assert r.status_code == 200, r.text
+    assert calls == [("Isaiah 5:1-7", "web")]                                # the pasted one is not fetched
+    text = pdf_text(r.content)
+    for expected in ("Rev. Guest, Worship Leader Jordan Doe, Organist October 4, 2026",
+                     "PRELUDE: ‘Morning Voluntary’ Jordan Doe - Pat Example", "SERMON: “Living Water” Pat Example",
+                     "NEW TESTAMENT READING: Philippians 3:4b-14 Rev. Guest Pasted text of the reading.",
+                     "POSTLUDE: ‘Festive Postlude’ Jordan Doe", "ANNOUNCEMENTS October 4, 2026",
+                     "Ushers/Counters: Sam Sample Coffee Hour: The Example family PRAYERS AND CONCERNS "
+                     "For all who are ill."):
+        assert expected in text, expected
+    assert "Sam Sample, Liturgist" not in text and "Scripture readings are from" not in text
+    # The only fetched reading (Isaiah) did not load: no credit line at all (build review fix M5).
+    assert " is from the " not in text
+    (record,) = [r for r in caplog.records if r.getMessage().startswith("documents.printed")]
+    assert "ill" not in record.getMessage() and "Example" not in record.getMessage()

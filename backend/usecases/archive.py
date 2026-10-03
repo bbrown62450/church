@@ -35,6 +35,15 @@ transaction:
   services still saved for it (owner answer 6); an undated service changes
   no hymn use.
 
+Printed bulletin PR 2b adds the week's bulletin fields (service_bulletin):
+clean_input makes them Word-safe; a save stores them in services.bulletin;
+a POST without them stores NULL and a PUT without them keeps the saved ones
+(a client from before 2b), the pasted text of a reading that changed blanked
+(build review fix I1: it is stored by position and would print under the new
+reading); opening reads them tolerantly (NULL is an empty
+bulletin). previous_bulletin gives what a new week carries forward. Nothing
+logs a bulletin's text (prayer concerns can name people).
+
 No FastAPI, Starlette or Streamlit here (test_no_streamlit_in_core.py).
 """
 from __future__ import annotations
@@ -56,8 +65,10 @@ from hymn_usage import rebuild_usage_for_date
 from liturgy_config import SECTION_ORDER, normalize_placement
 from repos import hymns as hymn_repo
 from repos import services as services_repo
+from service_bulletin import ServiceBulletin
+from service_bulletin import read as read_bulletin
 from service_output import (SLOTS, CustomElement, ResolvedHymn, is_legacy_error_placeholder, normalize_date_iso,
-                            service_date_display, slot_map, stored_hymns)
+                            resolve_doc_readings, service_date_display, slot_map, stored_hymns)
 from usecases.hymns import resolve_default_hymnal
 from usecases.liturgy import HYMN_GONE_MESSAGE, HymnRefData
 
@@ -94,6 +105,7 @@ class ServiceInput:
     selected_nt_ref: str = ""
     include_communion: bool = False
     custom_elements: tuple[CustomElement, ...] = ()
+    bulletin: Optional[ServiceBulletin] = None   # None: not sent (a client from before printed bulletin PR 2b)
 
 
 def clean_input(data: ServiceInput) -> ServiceInput:
@@ -120,6 +132,7 @@ def clean_input(data: ServiceInput) -> ServiceInput:
         selected_nt_ref=clean(data.selected_nt_ref),
         custom_elements=tuple(CustomElement(clean(e.label), clean(e.text), e.insert_after)
                               for e in data.custom_elements),
+        bulletin=None if data.bulletin is None else data.bulletin.map_texts(clean),
     )
 
 
@@ -183,6 +196,7 @@ class ServiceRecord:
     selected_nt_ref: str
     include_communion: bool
     custom_elements: list[CustomElement]
+    bulletin: dict                              # service_bulletin's stored shape; empty when none was saved
     created_by: Optional[Author]
     saved_at: str                               # ISO 8601 in UTC, "+00:00"
 
@@ -204,6 +218,13 @@ class ServicePageData:
     total: int
     limit: int
     offset: int
+
+
+@dataclass(frozen=True)
+class PreviousBulletinData:
+    service_id: Optional[uuid.UUID]             # None: no service dated before the date
+    service_date_iso: Optional[str]
+    bulletin: dict                              # what carries: the music and the announcements
 
 
 def _utc(value: datetime.datetime) -> datetime.datetime:
@@ -263,6 +284,8 @@ def _fields(church_id: uuid.UUID, clean: ServiceInput, hymns: Mapping[str, Optio
         "include_communion": clean.include_communion,
         "custom_elements": [{"label": e.label, "text": e.text, "insert_after": e.insert_after}
                             for e in clean.custom_elements],
+        # Not sent: a POST stores NULL and a PUT leaves the column as it is (a saved one comes as _kept_bulletin).
+        **({} if clean.bulletin is None else {"bulletin": clean.bulletin.to_json()}),
         "saved_at": datetime.datetime.now(datetime.timezone.utc),
     }
 
@@ -346,7 +369,7 @@ def _record(session, church_id: uuid.UUID, row) -> ServiceRecord:
         service_date_iso=normalize_date_iso(row.service_date_iso),
         service_date=row.service_date_display or "",
         occasion=row.occasion or "",
-        scriptures=[line for line in row.scriptures if isinstance(line, str)] if isinstance(row.scriptures, list) else [],
+        scriptures=_stored_scriptures(row),
         hymns=_archived_hymns(session, church_id, row),
         hymnal=row.hymnal,
         liturgy=_archived_liturgy(row.liturgy),
@@ -355,6 +378,7 @@ def _record(session, church_id: uuid.UUID, row) -> ServiceRecord:
         selected_nt_ref=row.selected_nt_ref or "",
         include_communion=bool(row.include_communion),
         custom_elements=_archived_custom_elements(row.custom_elements),
+        bulletin=read_bulletin(row.bulletin).to_json(),
         created_by=None if found is None else _author(*found),
         saved_at=saved_at_text(row.saved_at),
     )
@@ -380,6 +404,24 @@ def create_service(church_id: uuid.UUID, user_id: uuid.UUID, data: ServiceInput)
     return record
 
 
+def _stored_scriptures(row) -> list[str]:
+    return [line for line in row.scriptures if isinstance(line, str)] if isinstance(row.scriptures, list) else []
+
+
+def _kept_bulletin(row, clean: ServiceInput) -> ServiceBulletin:
+    """The saved bulletin a PUT without one keeps (a page from before PR 2b-2),
+    with the pasted text of each reading that changed blanked: reading_text is
+    stored by position (first reading, New Testament reading), so it would
+    otherwise print under the new reading (build review fix I1). A reading is
+    the one the files print (service_output.resolve_doc_readings)."""
+    kept = read_bulletin(row.bulletin)
+    old_ot, old_nt = resolve_doc_readings(_stored_scriptures(row), row.selected_ot_ref or "",
+                                          row.selected_nt_ref or "")
+    new_ot, new_nt = resolve_doc_readings(list(clean.scriptures), clean.selected_ot_ref, clean.selected_nt_ref)
+    return replace(kept, ot_text=kept.ot_text if old_ot == new_ot else "",
+                   nt_text=kept.nt_text if old_nt == new_nt else "")
+
+
 def replace_service(church_id: uuid.UUID, service_id: uuid.UUID, data: ServiceInput, *,
                     if_match: Optional[str]) -> ServiceRecord:
     """PUT /services/{id}: the 5a spec's check order (the row, If-Match present
@@ -397,6 +439,8 @@ def replace_service(church_id: uuid.UUID, service_id: uuid.UUID, data: ServiceIn
         if expected is not None and expected != current:
             raise Conflict(CONFLICT_MESSAGE, details={"current_saved_at": current.isoformat()})
         clean = clean_input(data)
+        if clean.bulletin is None and row.bulletin is not None:
+            clean = replace(clean, bulletin=_kept_bulletin(row, clean))
         hymns = resolve_hymn_refs(s, cid, clean.hymns)
         old_date = normalize_date_iso(row.service_date_iso)
         services_repo.update_service(row, _fields(cid, clean, hymns, s), session=s)
@@ -443,3 +487,18 @@ def delete_service(church_id: uuid.UUID, service_id: uuid.UUID) -> None:
         services_repo.delete_service(row, session=s)
         usage_rows = rebuild_usage_for_date(cid, date_iso, session=s) if date_iso else 0
     _log("delete", cid, deleted_id, usage_rows, started)
+
+
+def previous_bulletin(church_id: uuid.UUID, before: datetime.date) -> PreviousBulletinData:
+    """GET /services/previous-bulletin (printed bulletin PR 2b, carry forward):
+    the church's latest service dated before `before` (the latest date, then
+    the latest save; undated services never count) and what of its bulletin
+    carries to a new week: the music and the announcements. A service saved
+    without a bulletin (before 2b) carries an empty one."""
+    cid = as_uuid(church_id)
+    with session_scope() as s:
+        row = services_repo.previous_service(cid, before.isoformat(), session=s)
+        if row is None:
+            return PreviousBulletinData(None, None, ServiceBulletin().to_json())
+        return PreviousBulletinData(row.id, normalize_date_iso(row.service_date_iso),
+                                    read_bulletin(row.bulletin).carried().to_json())

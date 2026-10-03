@@ -12,10 +12,14 @@ no try/except.
 - DELETE /services/{id}: {"deleted": true}; the date's hymn use is then
   recalculated from the services still saved for it (owner answer 6).
 - GET /services: 20 a page by default, newest service date first, undated last.
+- GET /services/previous-bulletin?before=YYYY-MM-DD (printed bulletin PR 2b):
+  what a new week's bulletin carries forward from the latest service dated
+  before that date. Declared before /services/{service_id}, which would
+  otherwise take "previous-bulletin" as an id.
 """
 import uuid
 from dataclasses import asdict
-from typing import Optional
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, Header, Query
 from fastapi.responses import Response
@@ -23,7 +27,7 @@ from fastapi.responses import Response
 from api.deps import ActiveChurch, CurrentUser, get_current_user, require_church
 from api.errors import error_responses
 from api.idempotency import idempotency_key, run_idempotent
-from api.schemas import DeletedOut, Page, ServiceDraft, ServiceOut, ServiceSummary
+from api.schemas import DeletedOut, IsoDate, Page, PreviousBulletinOut, ServiceDraft, ServiceOut, ServiceSummary
 from usecases import archive
 
 router = APIRouter()
@@ -42,6 +46,13 @@ def list_services(
     page = archive.list_services(church.id, limit=limit, offset=offset)
     return Page[ServiceSummary](items=[ServiceSummary(**asdict(item)) for item in page.items], total=page.total,
                                 limit=page.limit, offset=page.offset)
+
+
+@router.get("/services/previous-bulletin", response_model=PreviousBulletinOut,
+            responses=error_responses(401, 403, 422, 503))
+def previous_bulletin(before: Annotated[IsoDate, Query()],
+                      church: ActiveChurch = Depends(require_church)) -> PreviousBulletinOut:
+    return PreviousBulletinOut(**asdict(archive.previous_bulletin(church.id, before)))
 
 
 @router.get("/services/{service_id}", response_model=ServiceOut, responses=error_responses(401, 403, 404, 422, 503))

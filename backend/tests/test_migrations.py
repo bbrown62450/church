@@ -709,7 +709,7 @@ def test_0005_adds_two_nullable_columns_and_the_date_index_and_keeps_rows(sqlite
             user_id, church_id = _seed_owner_and_church(conn)
             kept = _insert_legacy_service(conn, church_id, user_id)
             before = _services_shape(conn)
-        _alembic(sqlite_url, "upgrade", "head")
+        _alembic(sqlite_url, "upgrade", "0005_services_extras")
         with engine.begin() as conn:
             at_head = _services_shape(conn)
             inserted = _insert_legacy_service(conn, church_id, user_id, date_iso="2026-10-04")
@@ -766,3 +766,83 @@ def test_the_readme_shows_the_0005_preview_exactly():
     step = section.split("\n### Step 3: Read the SQL the upgrade will run\n", 1)[1].split("\n### ", 1)[0]
     block = "BEGIN;" + step.split("\n```\nBEGIN;", 1)[1].split("\n```", 1)[0]   # the bare fence
     assert block.splitlines() == PREVIEW_0005
+
+
+# --- Printed bulletin PR 2b: 0006_services_bulletin (F §3.4, §3.5; printed bulletin spec "Data model") ---
+
+# What `alembic upgrade 0005_services_extras:0006_services_bulletin --sql` prints on
+# Postgres, comments and blank lines left out: the preview the owner reads before
+# the merge (PR 2 planning answer 8; backend/migrations/README.md).
+PREVIEW_0006 = [
+    "BEGIN;",
+    "SET LOCAL lock_timeout = '5s';",
+    "SET LOCAL statement_timeout = '60s';",
+    "ALTER TABLE services ADD COLUMN bulletin JSON;",
+    "UPDATE alembic_version SET version_num='0006_services_bulletin' "
+    "WHERE alembic_version.version_num = '0005_services_extras';",
+    "COMMIT;",
+]
+
+
+def test_0006_adds_the_nullable_bulletin_column_and_keeps_rows(sqlite_url):
+    _alembic(sqlite_url, "upgrade", "0005_services_extras")
+    engine = sa.create_engine(sqlite_url, poolclass=NullPool)
+    try:
+        with engine.begin() as conn:
+            user_id, church_id = _seed_owner_and_church(conn)
+            kept = _insert_legacy_service(conn, church_id, user_id)
+            before = _services_shape(conn)
+        _alembic(sqlite_url, "upgrade", "head")
+        with engine.begin() as conn:
+            at_head = _services_shape(conn)
+            inserted = _insert_legacy_service(conn, church_id, user_id, date_iso="2026-10-04")
+            rows = conn.execute(sa.text("SELECT id, occasion, bulletin FROM services ORDER BY service_date_iso")).all()
+    finally:
+        engine.dispose()
+    assert at_head["columns"] == before["columns"] + [("bulletin", "JSON", True)]
+    assert (at_head["pk"], at_head["fks"], at_head["indexes"]) == (before["pk"], before["fks"], before["indexes"])
+    # The row from before keeps its data; an insert that does not name the column gets NULL.
+    assert [(uuid.UUID(str(r.id)), r.occasion, r.bulletin) for r in rows] == [
+        (kept, "Pentecost 17", None), (inserted, "Pentecost 17", None)]
+
+
+def test_0006_downgrade_gives_back_the_0005_services_table(sqlite_url):
+    _alembic(sqlite_url, "upgrade", "0005_services_extras")
+    engine = sa.create_engine(sqlite_url, poolclass=NullPool)
+    try:
+        with engine.connect() as conn:
+            before = _services_shape(conn)
+        _alembic(sqlite_url, "upgrade", "head")
+        with engine.begin() as conn:
+            user_id, church_id = _seed_owner_and_church(conn)
+            _insert_legacy_service(conn, church_id, user_id)
+            conn.execute(sa.text("""UPDATE services SET custom_elements = '[]', hymnal = 'GG2013',
+                                    bulletin = '{"announcements": {"coffee_hour": "Sam Sample"}}'"""))
+        _alembic(sqlite_url, "downgrade", "0005_services_extras")
+        with engine.connect() as conn:
+            after = _services_shape(conn)
+            rows = conn.execute(sa.text("SELECT occasion, hymnal FROM services")).all()
+            version = conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
+    finally:
+        engine.dispose()
+    assert after == before          # the table copy kept every other column, key and index
+    assert [tuple(r) for r in rows] == [("Pentecost 17", "GG2013")]
+    assert version == "0005_services_extras"
+
+
+def test_offline_sql_for_0006_is_one_column_add_under_the_timeouts():
+    cfg = alembic_config(url="postgresql://preview@localhost:1/preview", configure_logger=False)
+    cfg.output_buffer = buffer = io.StringIO()
+    command.upgrade(cfg, "0005_services_extras:0006_services_bulletin", sql=True)
+    lines = [line for line in buffer.getvalue().splitlines() if line.strip() and not line.startswith("--")]
+    assert lines == PREVIEW_0006
+
+
+def test_the_readme_shows_the_0006_preview_exactly():
+    """The owner reads backend/migrations/README.md → "Before 0006_services_bulletin",
+    step 3, against the agent's rendering; both must be PREVIEW_0006."""
+    readme = (Path(__file__).resolve().parents[1] / "migrations" / "README.md").read_text(encoding="utf-8")
+    section = readme.split("\n## Before 0006_services_bulletin (printed bulletin PR 2b-1)\n", 1)[1]
+    step = section.split("\n### Step 3: Read the SQL the upgrade will run\n", 1)[1].split("\n### ", 1)[0]
+    block = "BEGIN;" + step.split("\n```\nBEGIN;", 1)[1].split("\n```", 1)[0]   # the bare fence
+    assert block.splitlines() == PREVIEW_0006

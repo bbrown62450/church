@@ -118,3 +118,12 @@ def update_service(row: Service, fields: dict, *, session: Session) -> Service:
 def delete_service(row: Service, *, session: Session) -> None:
     session.delete(row)
     session.flush()
+
+
+def previous_service(church_id, before_iso: str, *, session: Session) -> Optional[Service]:
+    """The church's service with the latest real date before `before_iso`
+    (YYYY-MM-DD), then the latest save, then the highest id (LIST_ORDER), or
+    None. Undated rows (SORT_DATE NULL) never count (printed bulletin PR 2b)."""
+    stmt = (select(Service).where(Service.church_id == as_uuid(church_id), SORT_DATE < before_iso)
+            .order_by(*LIST_ORDER).limit(1))
+    return session.execute(stmt).scalar_one_or_none()

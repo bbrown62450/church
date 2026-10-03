@@ -76,12 +76,14 @@ from db.schema_check import (
     schema_diff,
 )
 
-EXPECTED_HEAD = "0005_services_extras"
+EXPECTED_HEAD = "0006_services_bulletin"
 # What a database stamped at 0001_baseline lacks (runbook step 6, sorted):
-# 0004's invites changes, then 0005's services changes (slice 5a-2).
+# 0004's invites changes, then 0005's and 0006's services changes (slice 5a-2,
+# printed bulletin PR 2b).
 BASELINE_DRIFT = [
     "add_column invites.accepted_by",
     "add_column invites.reusable",
+    "add_column services.bulletin",
     "add_column services.custom_elements",
     "add_column services.hymnal",
     "add_fk fk_invites_accepted_by_users",
@@ -117,7 +119,7 @@ def _load_schema_drift():
     return module
 
 
-def test_head_is_0005_services_extras():
+def test_head_is_0006_services_bulletin():
     script = ScriptDirectory.from_config(alembic_config(configure_logger=False))
     assert script.get_current_head() == EXPECTED_HEAD
 
@@ -151,7 +153,7 @@ def test_an_unknown_revision_is_ahead(tmp_path):
     assert _state_of(url) == RevisionState("0005_from_the_future", EXPECTED_HEAD, "ahead")
 
 
-def test_schema_diff_at_baseline_lists_exactly_the_0004_and_0005_changes(tmp_path):
+def test_schema_diff_at_baseline_lists_exactly_the_0004_0005_and_0006_changes(tmp_path):
     """0001_baseline stands in for production after `alembic stamp 0001_baseline`."""
     url = _sqlite_file_url(tmp_path)
     _upgrade_to(url, "0001_baseline")

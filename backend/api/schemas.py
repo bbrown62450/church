@@ -7,7 +7,9 @@ from typing import Annotated, Generic, Literal, Optional, TypeVar
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, StringConstraints
 
+import bulletin_settings
 import liturgy_config
+import service_bulletin
 from api.errors import ErrorBody  # noqa: F401  (re-exported: every error response's body, F §1.5)
 
 T = TypeVar("T")
@@ -283,10 +285,76 @@ class CustomElementOut(BaseModel):
     insert_after: Placement
 
 
+# --- printed bulletin PR 2b: the week's bulletin fields (service_bulletin; spec "Data model") ---
+
+def _bulletin_text(name: str):
+    return Annotated[str, Field(max_length=service_bulletin.MAX_LENGTH[name])]
+
+
+class BulletinMusic(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: _bulletin_text("title")
+    composer: _bulletin_text("composer")
+
+
+class BulletinPeople(BaseModel):
+    """This week's people: null prints the standing name from the bulletin settings, "" no one."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    worship_leader: Optional[_bulletin_text("person")]
+    liturgist: Optional[_bulletin_text("person")]
+    organist: Optional[_bulletin_text("person")]
+
+
+class BulletinAnnouncements(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ushers: _bulletin_text("ushers")
+    deacon: _bulletin_text("deacon")
+    coffee_hour: _bulletin_text("coffee_hour")
+    activities: _bulletin_text("activities")
+    prayer_concerns: _bulletin_text("prayer_concerns")
+    collection: _bulletin_text("collection")
+    other: _bulletin_text("other")
+
+
+class BulletinReadingText(BaseModel):
+    """Pasted text of the first and New Testament readings ("" = fetch it)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ot: _bulletin_text("reading_text")
+    nt: _bulletin_text("reading_text")
+
+
+class ServiceBulletin(BaseModel):
+    """The printed bulletin's weekly fields (PR 2b), every field present. Texts
+    are not checked for line breaks: the server reads them tolerantly
+    (service_bulletin.read: a one-line field's line breaks become spaces), so a
+    download never meets a 422 for one. `unchecked` names the boxes whose text
+    came from last week and is not checked yet."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    prelude: BulletinMusic
+    postlude: BulletinMusic
+    people: BulletinPeople
+    leaders: dict[Literal[bulletin_settings.ELEMENT_KEYS], _bulletin_text("person")]
+    announcements: BulletinAnnouncements
+    reading_text: BulletinReadingText
+    # The boxes still holding last week's text, not checked yet (saved, so the marks come back on open).
+    unchecked: list[Literal[service_bulletin.CARRY_KEYS]] = Field(max_length=len(service_bulletin.CARRY_KEYS))
+
+
 class ServiceDraft(BaseModel):
     """One service (inventory §2.1 plus hymnal, F §1.3). The limits are slice
     4's (GenerateLiturgyIn, liturgy_config.LIMITS); HymnRef, SlotHymns and
-    SectionKey are imported unchanged. Usecases take `to_input()`."""
+    SectionKey are imported unchanged. Usecases take `to_input()`.
+    `bulletin` (printed bulletin PR 2b) is optional, so a client from before
+    2b keeps working: a POST without it saves no bulletin, a PUT without it
+    keeps the saved one."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -304,6 +372,7 @@ class ServiceDraft(BaseModel):
     include_communion: bool = False
     custom_elements: list[CustomElementIn] = Field(default_factory=list,
                                                    max_length=liturgy_config.LIMITS.max_custom_elements)
+    bulletin: Optional[ServiceBulletin] = None
 
     def to_input(self):
         """The usecases' copy (usecases.archive.ServiceInput); usecases never import api/*."""
@@ -320,7 +389,8 @@ class ServiceDraft(BaseModel):
             hymnal=self.hymnal, liturgy=dict(self.liturgy), sermon_title=self.sermon_title,
             selected_ot_ref=self.selected_ot_ref, selected_nt_ref=self.selected_nt_ref,
             include_communion=self.include_communion,
-            custom_elements=tuple(CustomElement(e.label, e.text, e.insert_after) for e in self.custom_elements))
+            custom_elements=tuple(CustomElement(e.label, e.text, e.insert_after) for e in self.custom_elements),
+            bulletin=None if self.bulletin is None else service_bulletin.read(self.bulletin.model_dump()))
 
 
 # --- slice 5a-2: the archive (5a spec, "Schemas"; GET/POST/PUT/DELETE /services) ---
@@ -374,6 +444,7 @@ class ServiceOut(BaseModel):
     selected_nt_ref: str
     include_communion: bool
     custom_elements: list[CustomElementOut]
+    bulletin: ServiceBulletin           # PR 2b; nothing filled in for a service saved without one
     created_by: Optional[AuthorOut]     # null when the author's account was removed
     saved_at: str                       # ISO 8601 with "+00:00"; send it back as If-Match
 
@@ -388,3 +459,14 @@ class ServiceSummary(BaseModel):
     sermon_title: str
     saved_at: str
     created_by: Optional[AuthorOut]
+
+
+class PreviousBulletinOut(BaseModel):
+    """GET /services/previous-bulletin (PR 2b, carry forward): the music and the
+    announcements of the church's latest service dated before the date (the
+    people, part leaders and pasted texts empty), or nulls and an empty
+    bulletin when there is none."""
+
+    service_id: Optional[uuid.UUID]
+    service_date_iso: Optional[str]
+    bulletin: ServiceBulletin

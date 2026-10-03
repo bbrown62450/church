@@ -24,6 +24,7 @@ import type {
   ScriptureMatches,
   SectionError,
   SectionResult,
+  ServiceBulletin,
   ServiceOut,
   ServicePage,
   ServiceSummary,
@@ -503,8 +504,23 @@ export function savedService(overrides: Partial<ServiceOut> = {}): ServiceOut {
     selected_nt_ref: "Matthew 21:33-46",
     include_communion: true,
     custom_elements: [{ label: "Anthem", text: "Choir", insert_after: "sermon" }],
+    bulletin: serviceBulletin(),
     created_by: { id: USER_ID, name: "Pat Pastor" },
     saved_at: "2026-10-01T14:42:00.123456+00:00",
+    ...overrides,
+  };
+}
+
+/** A service's bulletin fields (printed bulletin PR 2b) with nothing filled in, unless overridden. */
+export function serviceBulletin(overrides: Partial<ServiceBulletin> = {}): ServiceBulletin {
+  return {
+    prelude: { title: "", composer: "" },
+    postlude: { title: "", composer: "" },
+    people: { worship_leader: null, liturgist: null, organist: null },
+    leaders: {},
+    announcements: { ushers: "", deacon: "", coffee_hour: "", activities: "", prayer_concerns: "", collection: "", other: "" },
+    reading_text: { ot: "", nt: "" },
+    unchecked: [],
     ...overrides,
   };
 }

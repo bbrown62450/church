@@ -2,8 +2,10 @@
 
 The same pages as printed_pdf in reading order, one 7 x 8.5 in page each
 (half a legal sheet), 0.5 in margins, Times New Roman 11 pt: the cover, the
-order of worship and the announcements, each starting a page, numbered from
-the first inside page. An element's leader sits at a right tab stop. To print
+order of worship and the announcements (left out when every announcement is
+blank, PR 2b), each starting a page, numbered from the first inside page.
+A free text's line breaks stay line breaks (python-docx turns "\n" into
+one). An element's leader sits at a right tab stop. To print
 it as the PDF prints, two pages to a legal sheet, use the printer's "2 pages
 per sheet" setting; the PDF is already arranged that way.
 Pure: no database or FastAPI.
@@ -119,6 +121,8 @@ def render_docx(ps: pb.PrintedService) -> bytes:
         _add_line(doc, line)
 
     for part in (pb.order_of_worship(ps), pb.announcements(ps)):
+        if not part:                                   # every announcement blank: no page (PR 2b)
+            continue
         first, *rest = part
         _add_line(doc, first).paragraph_format.page_break_before = True
         for line in rest:

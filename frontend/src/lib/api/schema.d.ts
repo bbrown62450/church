@@ -427,6 +427,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/services/previous-bulletin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Previous Bulletin */
+        get: operations["previous_bulletin_services_previous_bulletin_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/services/{service_id}": {
         parameters: {
             query?: never;
@@ -506,6 +523,52 @@ export interface components {
             id: string;
             /** Name */
             name: string;
+        };
+        /** BulletinAnnouncements */
+        BulletinAnnouncements: {
+            /** Activities */
+            activities: string;
+            /** Coffee Hour */
+            coffee_hour: string;
+            /** Collection */
+            collection: string;
+            /** Deacon */
+            deacon: string;
+            /** Other */
+            other: string;
+            /** Prayer Concerns */
+            prayer_concerns: string;
+            /** Ushers */
+            ushers: string;
+        };
+        /** BulletinMusic */
+        BulletinMusic: {
+            /** Composer */
+            composer: string;
+            /** Title */
+            title: string;
+        };
+        /**
+         * BulletinPeople
+         * @description This week's people: null prints the standing name from the bulletin settings, "" no one.
+         */
+        BulletinPeople: {
+            /** Liturgist */
+            liturgist: string | null;
+            /** Organist */
+            organist: string | null;
+            /** Worship Leader */
+            worship_leader: string | null;
+        };
+        /**
+         * BulletinReadingText
+         * @description Pasted text of the first and New Testament readings ("" = fetch it).
+         */
+        BulletinReadingText: {
+            /** Nt */
+            nt: string;
+            /** Ot */
+            ot: string;
         };
         /** BulletinSettings */
         BulletinSettings: {
@@ -1101,6 +1164,20 @@ export interface components {
             /** Label */
             label: string;
         };
+        /**
+         * PreviousBulletinOut
+         * @description GET /services/previous-bulletin (PR 2b, carry forward): the music and the
+         *     announcements of the church's latest service dated before the date (the
+         *     people, part leaders and pasted texts empty), or nulls and an empty
+         *     bulletin when there is none.
+         */
+        PreviousBulletinOut: {
+            bulletin: components["schemas"]["ServiceBulletin"];
+            /** Service Date Iso */
+            service_date_iso: string | null;
+            /** Service Id */
+            service_id: string | null;
+        };
         /** PrintedDocumentIn */
         PrintedDocumentIn: {
             /**
@@ -1317,12 +1394,37 @@ export interface components {
             text: string;
         };
         /**
+         * ServiceBulletin
+         * @description The printed bulletin's weekly fields (PR 2b), every field present. Texts
+         *     are not checked for line breaks: the server reads them tolerantly
+         *     (service_bulletin.read: a one-line field's line breaks become spaces), so a
+         *     download never meets a 422 for one. `unchecked` names the boxes whose text
+         *     came from last week and is not checked yet.
+         */
+        ServiceBulletin: {
+            announcements: components["schemas"]["BulletinAnnouncements"];
+            /** Leaders */
+            leaders: {
+                [key: string]: string;
+            };
+            people: components["schemas"]["BulletinPeople"];
+            postlude: components["schemas"]["BulletinMusic"];
+            prelude: components["schemas"]["BulletinMusic"];
+            reading_text: components["schemas"]["BulletinReadingText"];
+            /** Unchecked */
+            unchecked: ("prelude" | "postlude" | "ushers" | "deacon" | "coffee_hour" | "activities" | "prayer_concerns" | "collection" | "other")[];
+        };
+        /**
          * ServiceDraft
          * @description One service (inventory §2.1 plus hymnal, F §1.3). The limits are slice
          *     4's (GenerateLiturgyIn, liturgy_config.LIMITS); HymnRef, SlotHymns and
          *     SectionKey are imported unchanged. Usecases take `to_input()`.
+         *     `bulletin` (printed bulletin PR 2b) is optional, so a client from before
+         *     2b keeps working: a POST without it saves no bulletin, a PUT without it
+         *     keeps the saved one.
          */
         ServiceDraft: {
+            bulletin?: components["schemas"]["ServiceBulletin"] | null;
             /** Custom Elements */
             custom_elements?: components["schemas"]["CustomElementIn"][];
             /** Hymnal */
@@ -1370,6 +1472,7 @@ export interface components {
          * @description A saved service as the builder opens it (GET, POST and PUT /services).
          */
         ServiceOut: {
+            bulletin: components["schemas"]["ServiceBulletin"];
             created_by: components["schemas"]["AuthorOut"] | null;
             /** Custom Elements */
             custom_elements: components["schemas"]["CustomElementOut"][];
@@ -3079,6 +3182,67 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    previous_bulletin_services_previous_bulletin_get: {
+        parameters: {
+            query: {
+                before: string;
+            };
+            header?: {
+                "x-church-id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreviousBulletinOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

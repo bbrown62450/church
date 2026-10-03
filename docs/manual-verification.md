@@ -315,3 +315,25 @@ or a church id.
 - [ ] (owner, after PR 2a) **13.** At 375 px: no sideways scroll on **Bulletin settings**; every field, each part's leader and **Stands**, **Save settings** and **Back to Review & send** are easy to tap (44 px).
 - [ ] **14.** After saving the settings, step 1's default translation and the Hymns step's hymnal are unchanged (saving keeps the church's other settings).
 - [ ] **15.** On **Bulletin settings**, change a field without saving and tap **Back to Review & send**: "Discard unsaved changes?" asks first; **Keep editing** stays with the change, **Discard changes** goes back. Reloading the tab with a change unsaved shows the browser's own warning.
+
+### Printed bulletin PR 2b: the Bulletin step
+
+PR 2b ships as two PRs, backend first: **PR 2b-1** (migration
+`0006_services_bulletin`; the server saves, opens, carries and prints the
+week's fields; the builder itself does not change) and, once 2b-1 is live
+and checked, **PR 2b-2** (the Bulletin step). From PR 2b-2 the builder has
+five steps: **4 Bulletin** comes before **5 Review & send** (earlier items
+say "4 Review & send"). Before the PR 2b-1 merge the owner runs the steps of
+`backend/migrations/README.md` → "Before 0006_services_bulletin" (items 16
+and 17); after each merge, the owner's guided check (one step at a time on
+the phone) covers the items marked "(owner, after PR 2b-1)" or "(owner,
+after PR 2b-2)". The results go into `docs/ops-runbook.md` → "Printed
+bulletin PR 2b-1 record" and "Printed bulletin PR 2b-2 record". Use
+invented announcements for the checks, or the church's real ones only on
+the owner's own phone; record what the page and the files show, never a
+name from the prayers and concerns, an email address, a phone number, a
+street address or a church id.
+
+- [ ] (owner, before the PR 2b-1 merge) **16.** A green `db-backup` run; the read-only counts (version `0005_services_extras`, saved services, churches); the SQL preview read: one `ADD COLUMN bulletin JSON` between `BEGIN;` and `COMMIT;`, under the 5 s lock timeout.
+- [ ] (owner, after PR 2b-1) **17.** The after-deploy query shows `0006_services_bulletin`, `1` and `with_bulletin` `0`, and the counts are unchanged (or grew by the services saved since).
+- [ ] (owner, after PR 2b-1) **18.** The builder works as before (four steps): open a saved service from **Services**, tap **Save changes**, and download the printed bulletin from **4 Review & send**: the save works, and the PDF still prints the music and the announcements as [placeholders], as the Printed bulletin card says.

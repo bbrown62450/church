@@ -14,8 +14,18 @@ python-docx here.
   what each leads, the service time, the stars, the stand note and the Gloria
   Patri words) come from the church's bulletin settings (PR 2a,
   bulletin_settings); a blank one prints nothing (PR 2 planning answer 3).
-  The weekly fields (the music, the announcements, the cover picture) print
-  as [bracketed placeholders] until PR 2b's Bulletin step and PR 3 fill them.
+- The week's own fields come from the Bulletin step (PR 2b,
+  service_bulletin): the prelude and postlude, this week's people and part
+  leaders (over the settings' names), the announcements and any pasted
+  reading text. A blank one prints nothing too; with every announcement
+  blank there is no announcements page. A pasted reading prints no credit
+  line; when the other reading is fetched, its own credit line names it
+  ("The New Testament Reading is from the ..."). A fetched reading whose
+  text did not load prints [Reading text unavailable] and is not credited
+  either (build review fix M5). A service posted with no
+  bulletin at all (a page from before the Bulletin step, PR 2b-2) prints
+  PR 1's [placeholders] for the music and the announcements (PLACEHOLDERS).
+  The cover picture prints as a [bracketed placeholder] until PR 3.
 - printed_date, printed_filename, PDF_MIME.
 """
 from __future__ import annotations
@@ -23,11 +33,12 @@ from __future__ import annotations
 import datetime
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from typing import Literal, Optional
 
 from bulletin_settings import GLORIA_PATRI, BulletinSettings
 from liturgy_config import ASSURANCE_RESPONSE, COMMUNION_BLOCKS
+from service_bulletin import Announcements, Music, ServiceBulletin
 from service_output import MONTHS, ResolvedHymn, ResolvedService, safe_date, service_date_display
 
 PDF_MIME = "application/pdf"
@@ -37,9 +48,12 @@ Format = Literal["pdf", "docx"]
 PAGE_WIDTH = 504.0          # points
 PAGE_HEIGHT = 612.0
 
-# The weekly fields' placeholders, until PR 2b's Bulletin step and PR 3 fill them.
-PRELUDE = ("[Prelude title]", "[Composer]")
-POSTLUDE = ("[Postlude title]", "[Composer]")
+# PR 1's weekly placeholders, printed when no bulletin was posted (a page from before PR 2b-2's Bulletin step).
+PLACEHOLDERS = ServiceBulletin(
+    prelude=Music("[Prelude title]", "[Composer]"), postlude=Music("[Postlude title]", "[Composer]"),
+    announcements=Announcements(ushers="[Names]", deacon="[Name]", coffee_hour="[Name]", activities="[Activities]",
+                                prayer_concerns="[Prayer concerns]", collection="[Collection items]"))
+# The cover picture's place, until PR 3 prints the picture.
 COVER_PICTURE = "[Cover picture]"
 TEXT_UNAVAILABLE = "[Reading text unavailable]"
 
@@ -84,6 +98,7 @@ class Line:
 class Reading:
     reference: str
     text: Optional[str]            # None: the text could not be fetched (TEXT_UNAVAILABLE prints)
+    pasted: bool = False           # the Bulletin step's pasted text (PR 2b), not fetched
 
 
 @dataclass(frozen=True)
@@ -94,6 +109,29 @@ class PrintedService:
     nt: Optional[Reading] = None
     translation_label: str = ""
     settings: BulletinSettings = BulletinSettings()      # the church's standing settings (PR 2a)
+    bulletin: Optional[ServiceBulletin] = None           # the week's own fields (PR 2b); None: none posted
+
+
+def week(ps: PrintedService) -> ServiceBulletin:
+    """The week's fields as they print: PR 1's placeholders when no bulletin was posted."""
+    return PLACEHOLDERS if ps.bulletin is None else ps.bulletin
+
+
+@dataclass(frozen=True)
+class WeekSettings(BulletinSettings):
+    """The standing settings as this week prints them (PR 2b): the people
+    with this week's names, and a part's leader this week over its role's."""
+    part_leaders: Mapping[str, str] = field(default_factory=dict)
+
+    def leader(self, key: str) -> str:
+        return self.part_leaders.get(key) or super().leader(key)
+
+
+def this_week(ps: PrintedService) -> WeekSettings:
+    """ps.settings with ps.bulletin's people (a name set for this week, "" for no one) and part leaders."""
+    values = {f.name: getattr(ps.settings, f.name) for f in fields(BulletinSettings)}
+    values.update({role: name for role, name in week(ps).people.items() if name is not None})
+    return WeekSettings(**values, part_leaders=dict(week(ps).leaders))
 
 
 def printed_date(d: datetime.date) -> str:
@@ -112,10 +150,15 @@ _PEOPLE_LEADER = re.compile(r"\b(Leader|People):\s*", re.IGNORECASE)
 _ASSURANCE_PEOPLE = re.compile(r"(?:^|(?<=\s))People:", re.IGNORECASE | re.MULTILINE)
 
 
-def reading_paragraphs(text: str) -> list[str]:
+def reading_paragraphs(text: str, keep_lines: bool = False) -> list[str]:
     """A passage as printed paragraphs: a blank line starts a new paragraph;
-    the verse line breaks inside one become spaces."""
-    paragraphs = [" ".join(chunk.split()) for chunk in re.split(r"\n\s*\n", text)]
+    the verse line breaks inside one become spaces, or, for pasted text
+    (keep_lines; owner, 2026-10-03), stay line breaks as typed."""
+    def join(chunk: str) -> str:
+        if not keep_lines:
+            return " ".join(chunk.split())
+        return "\n".join(" ".join(line.split()) for line in chunk.splitlines() if line.strip())
+    paragraphs = [join(chunk) for chunk in re.split(r"\n\s*\n", text)]
     return [p for p in paragraphs if p]
 
 
@@ -194,7 +237,7 @@ def _reading(s: BulletinSettings, key: str, label: str, reading: Optional[Readin
     lines = [_element(s, key, f"{label}:", Span(f"  {reading.reference}", bold=True))]
     if reading.text is None:
         return [*lines, Line("body", (Span(TEXT_UNAVAILABLE),))]
-    return [*lines, *(Line("body", (Span(p),)) for p in reading_paragraphs(reading.text))]
+    return [*lines, *(Line("body", (Span(p),)) for p in reading_paragraphs(reading.text, keep_lines=reading.pasted))]
 
 
 def _communion(s: BulletinSettings) -> list[Line]:
@@ -216,16 +259,20 @@ def _section(title: str) -> Line:
     return Line("section", (Span(title, bold=True, italic=True),))
 
 
-def _music(s: BulletinSettings, key: str, label: str, piece: tuple[str, str]) -> list[Line]:
-    title, composer = piece
-    return [_element(s, key, f"{label}:", Span("  "), Span(f"‘{title}’", bold=True, italic=True)),
-            Line("indent", (Span(f"- {composer}"),))]
+def _music(s: BulletinSettings, key: str, label: str, piece: Music) -> list[Line]:
+    """PRELUDE: ‘title’ with "- composer" under it; a blank title or composer
+    prints nothing of its own, and a piece with neither prints nothing at all."""
+    if not piece.title and not piece.composer:
+        return []
+    title = (Span("  "), Span(f"‘{piece.title}’", bold=True, italic=True)) if piece.title else ()
+    composer = [Line("indent", (Span(f"- {piece.composer}"),))] if piece.composer else []
+    return [_element(s, key, f"{label}:", *title), *composer]
 
 
 def _header(ps: PrintedService) -> list[Line]:
     """"THE SERVICE FOR THE LORD'S DAY", the church, each person with a name
     ("{name}, Worship Leader"), and the date with the service time across."""
-    s = ps.settings
+    s = this_week(ps)
     people = [Line("header", (Span(f"{getattr(s, role)}, {title}", bold=True),))
               for role, title in ROLE_TITLES.items() if getattr(s, role)]
     return [
@@ -240,14 +287,14 @@ def order_of_worship(ps: PrintedService) -> list[Line]:
     """The inside pages: the service header, then the elements in OUTLINE
     order with the sample's additions, each custom element after its anchor."""
     r = ps.resolved
-    s = ps.settings
+    s = this_week(ps)
     lit: Mapping[str, str] = r.liturgy
     hymns = r.hymns
     sermon = r.sermon_title.strip() or "[Sermon title]"
     lines: list[Line] = [
         *_header(ps),
         _section("GATHERING FOR WORSHIP"),
-        *_music(s, "prelude", "Prelude", PRELUDE),
+        *_music(s, "prelude", "Prelude", week(ps).prelude),
         _element(s, "welcome", "Welcome and Announcements"),
     ]
     if lit.get("call_to_worship"):
@@ -273,8 +320,7 @@ def order_of_worship(ps: PrintedService) -> list[Line]:
     lines += _reading(s, "ot_reading", "First Reading", ps.ot)
     lines += _custom(s, "ot_reading", r)
     lines += _reading(s, "nt_reading", "New Testament Reading", ps.nt)
-    if (ps.ot or ps.nt) and ps.translation_label:
-        lines.append(Line("credit", (Span(f"Scripture readings are from the {ps.translation_label}.", italic=True),)))
+    lines += _credit(ps)
     lines += _custom(s, "nt_reading", r)
     lines.append(_element(s, "sermon", "Sermon:", Span("  "), _quoted(sermon)))
     lines += _custom(s, "sermon", r)
@@ -299,7 +345,7 @@ def order_of_worship(ps: PrintedService) -> list[Line]:
     lines += _custom(s, "third_hymn", r)
     lines += _custom(s, "benediction", r)
     lines += _text_element(s, "benediction", "Benediction", lit.get("benediction", ""))
-    lines += _music(s, "postlude", "Postlude", POSTLUDE)
+    lines += _music(s, "postlude", "Postlude", week(ps).postlude)
     lines += _custom(s, "end", r)
     # Only under a starred element that printed; a custom element's own "*" does not count (build review M2).
     if s.stand_note and any(line.starred for line in lines):
@@ -327,18 +373,46 @@ def cover(ps: PrintedService) -> list[Line]:
     ]
 
 
+# The announcements page (PR 2b; PR 2 planning answer 4), in the sample's order, "Other announcements" last.
+NAMED_ANNOUNCEMENTS = (("ushers", "Ushers/Counters: "), ("deacon", "Deacon of the Week: "),
+                       ("coffee_hour", "Coffee Hour: "))
+ANNOUNCEMENT_SECTIONS = (("activities", "THIS WEEK’S ACTIVITIES AT A GLANCE"),
+                         ("prayer_concerns", "PRAYERS AND CONCERNS"), ("collection", "ITEMS FOR COLLECTION"),
+                         ("other", "OTHER ANNOUNCEMENTS"))
+
+
+def _credit(ps: PrintedService) -> list[Line]:
+    """The translation's credit line, for fetched text that loaded only: a
+    pasted text is the church's own (PR 2b), and a reading whose text could
+    not be fetched prints TEXT_UNAVAILABLE, not the translation's words (build
+    review fix M5). With both readings fetched and loaded, "Scripture readings
+    are from the {label}."; with one of them, a line naming it; with none,
+    no line."""
+    readings = [(name, r) for name, r in (("First Reading", ps.ot), ("New Testament Reading", ps.nt)) if r]
+    fetched = [name for name, r in readings if not r.pasted and r.text is not None]
+    if not fetched or not ps.translation_label:
+        return []
+    if len(fetched) == len(readings):
+        text = f"Scripture readings are from the {ps.translation_label}."
+    else:
+        text = f"The {fetched[0]} is from the {ps.translation_label}."
+    return [Line("credit", (Span(text, italic=True),))]
+
+
 def announcements(ps: PrintedService) -> list[Line]:
-    """The back page: PR 2's announcements form, as placeholders for now."""
+    """The back page: each announcement filled in this week (a free text
+    keeps its lines), the blank ones left out; nothing at all when every one
+    is blank, and the renderers then leave the page out."""
+    a = week(ps).announcements
+    lines = [Line("center", (Span(label, bold=True), Span(getattr(a, key))))
+             for key, label in NAMED_ANNOUNCEMENTS if getattr(a, key)]
+    for key, title in ANNOUNCEMENT_SECTIONS:
+        if getattr(a, key):
+            lines += [_section(title), Line("center", (Span(getattr(a, key)),))]
+    if not lines:
+        return []
     return [
         Line("header", (Span("ANNOUNCEMENTS", bold=True),)),
         Line("header", (Span(printed_date(ps.resolved.service_date), bold=True),)),
-        Line("center", (Span("Ushers/Counters: ", bold=True), Span("[Names]"))),
-        Line("center", (Span("Deacon of the Week: ", bold=True), Span("[Name]"))),
-        Line("center", (Span("Coffee Hour: ", bold=True), Span("[Name]"))),
-        _section("THIS WEEK’S ACTIVITIES AT A GLANCE"),
-        Line("center", (Span("[Activities]"),)),
-        _section("PRAYERS AND CONCERNS"),
-        Line("center", (Span("[Prayer concerns]"),)),
-        _section("ITEMS FOR COLLECTION"),
-        Line("center", (Span("[Collection items]"),)),
+        *lines,
     ]

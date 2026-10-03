@@ -1,8 +1,9 @@
 """The printed bulletin as a print-ready PDF (printed bulletin spec, PR 1):
 legal paper, landscape, two 7 x 8.5 in booklet pages side by side in reading
 order (layout B, the owner's sample): side 1 is the cover and page 1, side 2
-pages 2 and 3, and so on, with the announcements page last. Nothing is
-folded or padded: an odd page count leaves the last side's right half blank.
+pages 2 and 3, and so on, with the announcements page last (left out when
+every announcement is blank, PR 2b). Nothing is folded or padded: an odd
+page count leaves the last side's right half blank.
 
 render_pdf lays the bulletin out with reportlab in one pass: each legal side
 has two frames, one per booklet page, so the text flows from the left half
@@ -164,8 +165,10 @@ def _story(ps: pb.PrintedService, width: float) -> list[Flowable]:
         story += [Spacer(1, 30), _contact(contact, width, room)]
     story.append(FrameBreak())
     story += [f for line in pb.order_of_worship(ps) for f in _flowables(line, width)]
-    story.append(FrameBreak())
-    story += [f for line in pb.announcements(ps) for f in _flowables(line, width)]
+    back = pb.announcements(ps)
+    if back:                                               # every announcement blank: no page (PR 2b)
+        story.append(FrameBreak())
+        story += [f for line in back for f in _flowables(line, width)]
     return story
 
 
