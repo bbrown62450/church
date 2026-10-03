@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship printed bulletin PR 3, **the cover picture** (spec answer 4; PR 3 planning answers of 2026-10-03, "all recommended, the printer is color"), as **two PRs, server first** (planning answer 1, as PR 2b): **PR 3a** (T1-T6: migration `0007_bulletin_images` with the owner's before and after steps, `POST /bulletin-images` and `GET /bulletin-images/{id}`, `bulletin.cover_image_id`, the picture printed in the PDF and the Word version, the 60-day removal; the builder unchanged, today's pages keep working) merges and deploys first; **PR 3b** (T7-T12: the draft v4, the picture on the Bulletin step, carry forward with the "From last week" mark, the card) merges after 3a is live and checked. After both merge, the Bulletin step starts with a **Cover picture** group: **Choose a picture** opens the phone's photos (or camera), the picture uploads and shows as the front page will trim it, **Remove** takes it off, and last week's picture carries forward like the music, marked "From last week. Check before printing." with **Keep as is**. The printed bulletin's cover shows the picture under the church's name, filling a 5.2 x 4.2 in box with its edges trimmed evenly, in color, with the reading and the date in white on a dark see-through band across its bottom (planning answers 2-4); the PDF and the Word version place the same picture. With no picture this week there is no box, and the reading and the date sit centered where the picture would be (planning answer 6). A page from before PR 3b (no bulletin, or one that does not say `cover_image_id`) still prints PR 1's "[Cover picture]" box, now centered under the church's name as the Word version's already is. The picture is stored in Postgres (`bulletin_images`, one new table with row-level security), turned upright, converted to sRGB, at most 1600 px on its long side, as a JPEG with no camera data; a picture no saved service points at goes 60 days after its upload (planning answer 9), on the church's next upload. Any member can upload (planning answer 8). No new package and no new variable; production Streamlit (branch `streamlit-frozen`) is untouched.
+**Goal:** Ship printed bulletin PR 3, **the cover picture** (spec answer 4; PR 3 planning answers of 2026-10-03, "all recommended, the printer is color"), as **two PRs, server first** (planning answer 1, as PR 2b): **PR 3a** (T1-T6: migration `0007_bulletin_images` with the owner's before and after steps, `POST /bulletin-images` and `GET /bulletin-images/{id}`, `bulletin.cover_image_id`, the picture printed in the PDF and the Word version, the 60-day removal; the builder unchanged, today's pages keep working) merges and deploys first; **PR 3b** (T7-T12: the draft v4, the picture on the Bulletin step, carry forward with the "From last week" mark, the card) merges after 3a is live and checked. After both merge, the Bulletin step starts with a **Cover picture** group: **Choose a picture** opens the phone's photos (or camera), the picture uploads and shows as the front page will trim it, **Remove** takes it off, and last week's picture carries forward like the music, marked "From last week. Check before printing." with **Keep as is**. The printed bulletin's cover shows the picture under the church's name, filling a 5.2 x 4.2 in box with its edges trimmed evenly, in color, with the reading and the date in white on a dark see-through band across its bottom (planning answers 2-4); the PDF and the Word version place the same picture. With no picture this week there is no box, and the reading and the date sit centered where the picture would be (planning answer 6). A page from before PR 3b (no bulletin, or one that does not say `cover_image_id`) still prints PR 1's "[Cover picture]" box, now centered under the church's name as the Word version's already is. The picture is stored in Postgres (`bulletin_images`, one new table with row-level security and no grant to Supabase's roles), turned upright, converted to sRGB, at most 1600 px on its long side, as a JPEG of at most 0.6 MB with no camera data (a phone's multi-picture JPEG is a JPEG); a picture no saved service points at goes 60 days after its upload (planning answer 9), on any church's next upload; and because any Google account can create a church, a church keeps at most 60 pictures, all churches' pictures together at most 150 MB, and one picture is prepared at a time (the plan review of 2026-10-03, "Plan review fixes" in Build notes). Any member can upload (planning answer 8). No new package and no new variable; production Streamlit (branch `streamlit-frozen`) is untouched.
 
-**Architecture:** Backend first, in its own PR. `0007_bulletin_images` (expand-only) creates `bulletin_images (id, church_id, content_type, bytes, width, height, created_by, created_at)` with `ix_bulletin_images_church_created` and, on Postgres, `ENABLE ROW LEVEL SECURITY` (0003_lockdown's rule for every `public` table; the first new table since then); `backend/migrations/README.md` gains "Before 0007_bulletin_images" with the owner's four steps, its SQL pinned by tests. `backend/bulletin_image.py` (new, pure, Pillow) has `prepare` (an upload checked: at most 10 MB, a JPEG or a PNG, at most 50 million pixels; a JPEG decoded at a reduced scale when it is large; turned upright, sRGB, transparency on white, at most 1600 px, re-encoded at quality 85 without EXIF) and `cover` (the picture filling the box with a centered crop, the band and the two lines drawn with the Times Bold outline reportlab ships). `service_bulletin` gains `cover_image_id` and `cover_given` (False when the bulletin did not say: a page from before PR 3b) and `CARRY_KEYS` gains "cover" (first); `printed_bulletin.cover_kind` decides "picture", "none" or "placeholder"; `printed_pdf.cover_picture` makes the one JPEG both renderers place (300 dpi in the 372 x 300 pt box). The API: `repos.bulletin_images`, `usecases.bulletin_images` (`upload` removes the church's unused pictures older than 60 days in the same transaction, then stores; `picture`), `api/routes/bulletin_images.py` (the picture is the raw request body: no multipart form, so no python-multipart, which this repo has only through Streamlit; the new `picture` rate-limit bucket; `GET` with `Cache-Control: private, max-age=86400`), `UploadSizeMiddleware` (a body over 10 MB, or without a Content-Length, is a 422 before it is read), `ServiceBulletin.cover_image_id` (optional: left out, a `PUT` keeps the saved picture and the printed bulletin keeps PR 1's box; null, no picture; an id the church does not have is saved and printed as no picture), `usecases.documents.build_printed` reads the picture with the church's name. OpenAPI regenerated (no `-Input`/`-Output` split). Frontend (PR 3b): the draft v4 (`bulletin.cover_image_id`, "cover" first in `CARRY_KEYS`; `migrate.ts`: 3 → 4), `setCover`, carry forward, Keep as is and "Save as new service" for the picture (`lib/draft/bulletin.ts`), the payload leaving a null picture out (so a draft "Saved" before 3b stays "Saved"), `serviceBody` always saying it, a POST leaving "no picture" out (as 2b-2's blank bulletin), `savedCopyFingerprint` comparing it, `lib/queries/bulletin-images.ts` (`checkPicture`, `useUploadBulletinImage`, `useBulletinImage`), the step's **Cover picture** group, and the card's lines.
+**Architecture:** Backend first, in its own PR. `0007_bulletin_images` (expand-only) creates `bulletin_images (id, church_id, content_type, bytes, width, height, created_by, created_at)` with `ix_bulletin_images_church_created` and, on Postgres, `ENABLE ROW LEVEL SECURITY` (0003_lockdown's rule for every `public` table; the first new table since then) and 0003's guarded `REVOKE ALL` from `anon` and `authenticated` for this table; `backend/migrations/README.md` gains "Before 0007_bulletin_images" with the owner's four steps (step 4's query also runs before 0007 is applied) and "Checking the cover pictures' storage", its SQL pinned by tests. `backend/bulletin_image.py` (new, pure, Pillow) has `prepare` (an upload checked: at most 10 MB, a JPEG (a phone's multi-picture JPEG, Pillow's "MPO", included) or a PNG, only those two parsers tried, at most 50 million pixels, 24 million for a PNG; prepared on one worker thread, one at a time, a 429 after 10 s of waiting; a JPEG decoded at a reduced scale when it is large, a large PNG reduced by a whole factor first; turned upright, sRGB (transparent or not), 16-bit grey kept, transparency on white, at most 1600 px, re-encoded at quality 85, then lower and smaller until at most 600 KB, without EXIF) and `cover` (the picture filling the box with a centered crop, the band and the two lines, shrunk together when long, drawn with the Times Bold outline reportlab ships). `service_bulletin` gains `cover_image_id` and `cover_given` (False when the bulletin did not say: a page from before PR 3b) and `CARRY_KEYS` gains "cover" (first); `printed_bulletin.cover_kind` decides "picture", "none" or "placeholder"; `printed_pdf.cover_picture` makes the one JPEG both renderers place (300 dpi in the 372 x 300 pt box). The API: `repos.bulletin_images`, `usecases.bulletin_images` (`upload` removes up to 20 unused pictures older than 60 days of any church in a transaction of its own, then makes room within the church's 60, checks the 150 MB budget and stores; `picture` with its ETag), `api/routes/bulletin_images.py` (the picture is the raw request body: no multipart form, so no python-multipart, which this repo has only through Streamlit; the new `picture` rate-limit bucket; `GET` with `Cache-Control: private, no-cache`, the ETag and a 304, `Vary: Authorization, X-Church-Id` and `nosniff`), the removal and a save locking the picture (`FOR UPDATE`, `FOR SHARE`), `UploadSizeMiddleware` (a body over 10 MB, or without a Content-Length, is a 422 before it is read), `ServiceBulletin.cover_image_id` (optional: left out, a `PUT` keeps the saved picture and the printed bulletin keeps PR 1's box; null, no picture; an id the church does not have is saved and printed as no picture), `usecases.documents.build_printed` reads the picture with the church's name. OpenAPI regenerated (no `-Input`/`-Output` split). Frontend (PR 3b): the draft v4 (`bulletin.cover_image_id`, "cover" first in `CARRY_KEYS`; `migrate.ts`: 3 → 4), `setCover`, carry forward, Keep as is and "Save as new service" for the picture (`lib/draft/bulletin.ts`), the payload leaving a null picture out (so a draft "Saved" before 3b stays "Saved"), `serviceBody` always saying it, a POST leaving "no picture" out (as 2b-2's blank bulletin), `savedCopyFingerprint` comparing it, `lib/queries/bulletin-images.ts` (`checkPicture`, `useUploadBulletinImage` whose own callback puts the picture in the draft even after the step is left, `useBulletinImage`), the step's **Cover picture** group (the preview's object URL made and released in one effect, the printed band drawn over the preview, a note for a small picture), and the card's lines.
 
 **Tech Stack:** Python 3.11 (`.venv`), FastAPI 0.141, Pydantic 2, SQLAlchemy 2, Alembic, Pillow 12 (installed with reportlab 5, already a runtime dependency), reportlab and python-docx (PR 1's renderers), pytest (SQLite; Postgres for `@pytest.mark.postgres`), pypdf in the tests; Next 16, React 19, TypeScript 5, zod, Base UI, TanStack Query 5, Vitest 3 with Testing Library; openapi-typescript for `schema.d.ts`.
 
@@ -12,7 +12,7 @@
 - Spec ("S"): `docs/superpowers/specs/2026-10-02-printed-bulletin-design.md`: owner answer 4 (cover picture), 10 (checks); "PR 3 planning answers (Beau, 2026-10-03)" 1-10 (binding); "Data model" (cover picture, carry forward); "API"; "The Bulletin step"; "Scope by PR".
 - The PR 2b plan `docs/superpowers/plans/2026-10-03-printed-bulletin-2b.md` (the format model: two PRs backend first, the migration's owner steps, carry forward with marks, Build notes; its "Questions for the owner" 1-17, answered "all recommended" and binding, among them 7 Keep as is, 14 two PRs, 16 the marks saved with the service, 17 Save as new service) and the PR 2a plan `docs/superpowers/plans/2026-10-02-printed-bulletin-2a.md`.
 - Foundations ("F"): `docs/superpowers/specs/2026-09-25-migration-foundations-design.md` §1.2 (church scope), §1.3 (`ServiceDraft`), §1.5 (errors), §1.8 (rate limits, plain `def`), §2.2 (layers), §2.5 (logs), §3.2 and §3.6 (row-level security), §3.4, §3.5 (migrations), §4.4 (keys), §4.5 (`apiFetch`), §4.6 (the draft: versioning, never destroy typed input), §4.8 (forms, 44 px).
-- Facts checked for this plan (branch `claude/slice-2-plan-4q33le` at `fbc9598` = `origin/main` `e4f3695` (PR #48, printed bulletin PR 2b-2) plus "Runbook: printed bulletin PR 2b-2 record (owner's phone check)" and "Spec: printed bulletin PR 3 planning answers (owner, 2026-10-03)", then this plan's commits; 2026-10-03): backend `1432 passed, 17 skipped`; Postgres-marked `17 passed, 1432 deselected` (local Postgres 16); frontend `704 passed` in 87 files; typecheck and lint clean; Alembic head `0006_services_bulletin` (6 revision files); 4 runbook owner markers. Pillow 12.3.0 is installed (reportlab requires it; FreeType, littlecms2, JPEG and zlib built in); python-multipart 0.0.32 is installed only because Streamlit requires it (it is not in `backend/requirements.txt`, which Railway installs from `/backend`), so the upload is a raw body. `ServiceBulletin` (`api/schemas.py`) has `extra="forbid"` and is the model of both the request and the response; a field with a default does not split it into `-Input` and `-Output` in OpenAPI (checked). 2b-2's `savedCopyFingerprint` reads the bulletin's fields one by one, so an extra `cover_image_id` in `ServiceOut` changes nothing for a page from before 3b; its `bulletinFromService` filters `unchecked` through its own `CARRY_KEYS`, so a stored "cover" is dropped, not a restore error. `0003_lockdown` enabled row-level security on every table that existed then; `test_0003_is_idempotent_after_the_manual_lockdown` (Postgres) expects it on every table of the models at head, so a new table must turn it on itself. The PR 1 PDF's "[Cover picture]" box is a reportlab `Flowable`, whose `hAlign` defaults to "LEFT": it sat at the left margin, 60 pt off center (seen in the 2b-2 sample's image).
+- Facts checked for this plan (branch `claude/slice-2-plan-4q33le` at `fbc9598` = `origin/main` `e4f3695` (PR #48, printed bulletin PR 2b-2) plus "Runbook: printed bulletin PR 2b-2 record (owner's phone check)" and "Spec: printed bulletin PR 3 planning answers (owner, 2026-10-03)", then this plan's commits; 2026-10-03): backend `1432 passed, 17 skipped`; Postgres-marked `17 passed, 1432 deselected` (local Postgres 16); frontend `704 passed` in 87 files; typecheck and lint clean; Alembic head `0006_services_bulletin` (6 revision files); 4 runbook owner markers. Pillow 12.3.0 is installed (reportlab requires it; FreeType, littlecms2, JPEG and zlib built in); python-multipart 0.0.32 is installed only because Streamlit requires it (it is not in `backend/requirements.txt`, which Railway installs from `/backend`), so the upload is a raw body. `ServiceBulletin` (`api/schemas.py`) has `extra="forbid"` and is the model of both the request and the response; a field with a default does not split it into `-Input` and `-Output` in OpenAPI (checked). 2b-2's `savedCopyFingerprint` reads the bulletin's fields one by one, so an extra `cover_image_id` in `ServiceOut` changes nothing for a page from before 3b; its `bulletinFromService` filters `unchecked` through its own `CARRY_KEYS`, so a stored "cover" is dropped, not a restore error. `0003_lockdown` enabled row-level security on every table that existed then; `test_0003_is_idempotent_after_the_manual_lockdown` (Postgres) expects it on every table of the models at head, so a new table must turn it on itself. Pillow 12.3 opens a JPEG with a multi-picture (MPF) segment, as iPhone HDR and Samsung portrait photos have, as format "MPO" through the JPEG opener (`Image.open(formats=("JPEG", "MPO", "PNG"))` raises `KeyError: 'MPO'`: MPO has no opener of its own). The PR 1 PDF's "[Cover picture]" box is a reportlab `Flowable`, whose `hAlign` defaults to "LEFT": it sat at the left margin, 60 pt off center (seen in the 2b-2 sample's image).
 - Every task's code was written and run by the planner in a throwaway worktree, and the plan's directives were then replayed onto a fresh worktree of the branch head (see "Build notes").
 
 ## Global Constraints
@@ -31,7 +31,7 @@
   `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
 - TDD: write the failing test first and see it fail as quoted.
 - **Backup push after every task** (standing rule): the controller runs `git push origin claude/slice-2-plan-4q33le` after each task's commit (never `--force`, never a rebase; if the push is rejected, `git pull --no-rebase origin claude/slice-2-plan-4q33le` and push again; on a network error retry after 2, 4, 8 and 16 s). A fix asked for by a review is a new commit, `Fix: <what> (Task <n> review)`. The container can restart and lose uncommitted work: commit as soon as a task's checks pass.
-- Each PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes its tests line: PR 3a `Tests: backend 1432 → 1464 passed, 17 → 19 skipped; frontend 704 in 87 files (unchanged)`; PR 3b `Tests: frontend 704 → 717 in 87 → 88 files; backend 1464 passed, 19 skipped (unchanged)`.
+- Each PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes its tests line: PR 3a `Tests: backend 1432 → 1477 passed, 17 → 22 skipped; frontend 704 in 87 files (unchanged)`; PR 3b `Tests: frontend 704 → 720 in 87 → 88 files; backend 1477 passed, 22 skipped (unchanged)`.
 - New prose for the owner has no em dashes and no flattery. New user-facing copy is exactly the list in clarification 15 and has no em dashes; existing copy keeps its own punctuation.
 - **PR 3a before PR 3b, and each tolerates the other** (clarification 18): nothing in T1-T4 changes a page, a component, the draft, a query or a request body (T5 Step 3 checks it); nothing in T7-T10 changes the server, the API files, a workflow or a package (T11 Step 3 checks it).
 - No church id, email address, token, database URL, real person's name, address, phone or email, and **no real photo** in any doc, commit, test or record. The tests make their pictures with Pillow (`backend/tests/picture_helpers.py`: plain colors and stripes) or as a few bytes (`frontend`); the invented names are the 2b plan's ("Example Church", "Sam Sample", …). A cover picture can show people: it lives only in `bulletin_images` and in the files a member downloads, never in a log line, a commit or a record (clarification 13).
@@ -46,21 +46,21 @@ As in the PR 2b plan: **Create `path`:** the block is the whole file; **Append t
 
   | After | PR | Backend (delta) | Backend | Frontend (delta) | Frontend |
   |---|---|---|---|---|---|
-  | T1 | 3a | +4, +2 skipped (`test_migrations.py` 4 and 1 Postgres only; `test_services_postgres.py` 1, Postgres only; `test_schema_check.py`, `test_api_app.py` edited) | 1436 passed, 19 skipped | 0 | 704 in 87 |
-  | T2 | 3a | +17 (`test_bulletin_image.py` 13, one test in seven cases; `test_service_bulletin.py` 1; `test_printed_bulletin.py` 1; `test_printed_render.py` 2) | 1453 passed, 19 skipped | 0 | 704 in 87 |
-  | T3 | 3a | +11 (`test_api_bulletin_images.py` 8, one test in three cases; `test_api_services.py` 1; `test_api_printed.py` 1; `test_service_bulletin.py` 1; `test_middleware.py`, `test_ratelimit.py`, `test_no_streamlit_in_core.py` edited) | 1464 passed, 19 skipped | 0 | 704 in 87 |
-  | T4-T6 | 3a | 0 (docs; verification, the merge, the record) | 1464 passed, 19 skipped | 0 | 704 in 87 |
-  | T7 | 3b | 0 | 1464 passed, 19 skipped | +8 (`bulletin.test.ts` 4, `migrate.test.ts` 1, `documents.test.ts` 1, `bulletin-images.test.ts` 2, new; `schema.test.ts`, `store.test.ts`, `mapping.test.ts`, `review-send-step.test.tsx` edited) | 712 in 88 |
-  | T8 | 3b | 0 | 1464 passed, 19 skipped | +4 (`bulletin-step.test.tsx`) | 716 in 88 |
-  | T9 | 3b | 0 | 1464 passed, 19 skipped | +1 (`review-send-step.test.tsx`; `bulletin.test.ts` edited) | 717 in 88 |
-  | T10-T12 | 3b | 0 | 1464 passed, 19 skipped | 0 | 717 in 88 |
+  | T1 | 3a | +4, +4 skipped (`test_migrations.py` 4 and 3 Postgres only; `test_services_postgres.py` 1, Postgres only; `test_schema_check.py`, `test_api_app.py` edited) | 1436 passed, 21 skipped | 0 | 704 in 87 |
+  | T2 | 3a | +27 (`test_bulletin_image.py` 23, one test in nine cases and one in two; `test_service_bulletin.py` 1; `test_printed_bulletin.py` 1; `test_printed_render.py` 2) | 1463 passed, 21 skipped | 0 | 704 in 87 |
+  | T3 | 3a | +14, +1 skipped (`test_api_bulletin_images.py` 11, one test in three cases, and 1 Postgres only; `test_api_services.py` 1; `test_api_printed.py` 1; `test_service_bulletin.py` 1; `test_middleware.py`, `test_ratelimit.py`, `test_no_streamlit_in_core.py` edited) | 1477 passed, 22 skipped | 0 | 704 in 87 |
+  | T4-T6 | 3a | 0 (docs; verification, the merge, the record) | 1477 passed, 22 skipped | 0 | 704 in 87 |
+  | T7 | 3b | 0 | 1477 passed, 22 skipped | +8 (`bulletin.test.ts` 4, `migrate.test.ts` 1, `documents.test.ts` 1, `bulletin-images.test.ts` 2, new; `schema.test.ts`, `store.test.ts`, `mapping.test.ts`, `review-send-step.test.tsx` edited) | 712 in 88 |
+  | T8 | 3b | 0 | 1477 passed, 22 skipped | +7 (`bulletin-step.test.tsx`) | 719 in 88 |
+  | T9 | 3b | 0 | 1477 passed, 22 skipped | +1 (`review-send-step.test.tsx`; `bulletin.test.ts` edited) | 720 in 88 |
+  | T10-T12 | 3b | 0 | 1477 passed, 22 skipped | 0 | 720 in 88 |
 
-- Per PR: **PR 3a** backend 1432 → 1464 passed, 17 → 19 skipped, frontend 704 in 87 (unchanged); **PR 3b** frontend 704 → 717 in 87 → 88 files, backend unchanged.
-- CI `backend-postgres` goes from `17 passed, 1432 deselected` to `19 passed, 1436 deselected` after T1, `19 passed, 1453 deselected` after T2 and `19 passed, 1464 deselected` from T3 on (PR 3b leaves it there). With a local Postgres (`TEST_DATABASE_URL`), the same numbers locally.
+- Per PR: **PR 3a** backend 1432 → 1477 passed, 17 → 22 skipped, frontend 704 in 87 (unchanged); **PR 3b** frontend 704 → 720 in 87 → 88 files, backend unchanged.
+- CI `backend-postgres` goes from `17 passed, 1432 deselected` to `21 passed, 1436 deselected` after T1, `21 passed, 1463 deselected` after T2 and `22 passed, 1477 deselected` from T3 on (PR 3b leaves it there). With a local Postgres (`TEST_DATABASE_URL`), the same numbers locally.
 
 ### Layering and code rules (carried)
 - `bulletin_image`, `service_bulletin`, `printed_bulletin`, `printed_pdf`, `printed_docx`, `usecases/bulletin_images.py`, `usecases/archive.py`, `usecases/documents.py`, `repos/bulletin_images.py` and `repos/services.py` import no FastAPI, Starlette or Streamlit (`test_no_streamlit_in_core.py` gains `bulletin_image`, `usecases.bulletin_images`, `repos.bulletin_images`, T3); the routes are plain `def` with one usecase call, no SQL and no try/except (F §2.2 rule 1); every query lives in `repos` and filters on `church_id` (F §1.2). `UploadSizeMiddleware` is pure ASGI, like the other two middlewares.
-- Logs carry ids, counts, sizes and durations, never a picture or a bulletin's text (F §2.5; clarification 13). One new log line, `bulletin_images.upload church=… image=… bytes_in=… bytes=… size=WxH removed=… ms=…`; `documents.printed` is unchanged.
+- Logs carry ids, counts, sizes and durations, never a picture or a bulletin's text (F §2.5; clarification 13). Two new log lines, `bulletin_images.upload church=… image=… bytes_in=… bytes=… size=WxH removed=… ms=…` and the warning `bulletin_images.storage_full church=… total=… budget=…`; `documents.printed` is unchanged.
 - Pages and components never call `apiFetch`: the upload and the preview use `useApi()` (F §4.5). The draft is changed only through `useDraft()` (`update` for a choice, `autoUpdate` for the carry, F §4.6).
 - Touch targets 44 px below `md` (`size="touch"` buttons); text wraps at 375 px; no raw HTML (F §4.8); the kit's `Button`, `Skeleton` and `PendingButton`. The preview is a plain `<img>` of a `blob:` URL (`next/image` cannot fetch a church-scoped picture), its lint rule turned off on that line with the reason.
 - Expand-only migration (F §3.4): one new table, its index, row-level security; no change to another table, no backfill.
@@ -92,32 +92,37 @@ As in the PR 2b plan: **Create `path`:** the block is the whole file; **Append t
 The owner's answers win over S and F; the code wins over both where they disagree. **[owner-visible]** items are put to the owner in "Questions for the owner" (each written as recommended).
 
 1. **[owner-visible] What PR 3 ships** (planning answer 1), in two PRs (clarification 18). PR 3a: migration `0007_bulletin_images`, `POST /bulletin-images`, `GET /bulletin-images/{id}`, `ServiceBulletin.cover_image_id` (and "cover" among the boxes to check), the picture printed in the PDF and the Word version when a page sends one, the 60-day removal. PR 3b: the **Cover picture** group on the Bulletin step, carry forward and Keep as is for the picture, "Save as new service" marking it, the card's lines and the draft v4. Not here: the Word working copies (`POST /documents`; clarification 17), the Bulletin settings, a route to delete one picture ("Follow-ups").
-2. **[owner-visible] The upload** (S "Data model"; planning answer 5). `POST /bulletin-images` takes the picture itself as the request body (the browser sends the file with its type); a JPEG or a PNG, at most 10 MB and 50 million pixels (more than any phone camera's 48 MP), else a 422 naming `image` with one of: "Choose a JPEG or PNG picture." (anything else, a file cut short or unreadable included), "The picture is larger than 10 MB. Choose a smaller one.", "The picture has too many pixels. Choose a smaller one.". It is stored turned upright (its EXIF orientation), its colors converted to sRGB when it carries a color profile (an iPhone photo's Display P3 would otherwise print slightly off), a transparent part laid on white, scaled down to at most 1600 px on its long side (never up), as a JPEG (quality 85) **with no camera data** (no EXIF: no location, no time, no phone model). A large JPEG is decoded at a half, a quarter or an eighth of its size when that is still at least the stored size (Pillow's draft mode), so a 12 MP phone photo takes about 0.15 s and little memory (measured: a 3.9 MB, 4032 x 3024 photo-like picture became 460 KB at 1600 x 1200). It answers 201 `{id, width, height}`. No multipart form: `python-multipart` is installed here only because Streamlit requires it, not in `backend/requirements.txt`, which Railway installs, and the raw body needs nothing new.
+2. **[owner-visible] The upload** (S "Data model"; planning answer 5). `POST /bulletin-images` takes the picture itself as the request body (the browser sends the file with its type); a JPEG (a phone's multi-picture JPEG included: an iPhone HDR or a Samsung portrait photo carries a second picture, which Pillow calls "MPO"; the first one is stored) or a PNG, at most 10 MB and 50 million pixels (more than any phone camera's 48 MP; 24 million for a PNG, which is decoded whole: a screenshot or a graphic), else a 422 naming `image` with one of: "Choose a JPEG or PNG picture." (anything else, a file cut short, unreadable or empty included), "The picture is larger than 10 MB. Choose a smaller one.", "The picture has too many pixels. Choose a smaller one.". Only the JPEG and PNG parsers are tried. It is stored turned upright (its EXIF orientation), its colors converted to sRGB when it carries a color profile, transparent or not (an iPhone photo's Display P3 would otherwise print slightly off), a 16-bit grey PNG with its tones kept, a transparent part laid on white, scaled down to at most 1600 px on its long side (never up), as a JPEG (quality 85) **with no camera data** (no EXIF: no location, no time, no phone model) of **at most 600 KB** (a busier picture is saved at a lower quality, then smaller: 75 at 1600 px, 70 at 1400, 65 at 1200, 60 at 1000, then 800 px, until it fits; measured: random noise, the worst case, 545 KB at 1200 x 1200; a phone photo stays at 1600 px, usually 0.2-0.5 MB). A large JPEG is decoded at a half, a quarter or an eighth of its size when that is still at least the stored size (Pillow's draft mode), so a 12 MP phone photo takes about 0.15 s and little memory (measured: a 3.9 MB, 4032 x 3024 photo-like picture became 460 KB at 1600 x 1200). It answers 201 `{id, width, height}`. One picture is prepared at a time in the server (clarification 20). No multipart form: `python-multipart` is installed here only because Streamlit requires it, not in `backend/requirements.txt`, which Railway installs, and the raw body needs nothing new.
 3. **[owner-visible] The cover as printed** (planning answers 2-4; S "The sample"). The box is 372 x 300 pt (5.17 x 4.17 in), as PR 1's, centered under the church's name in both files. With a picture, the server makes **one picture of the whole box** (`printed_pdf.cover_picture`, 1550 x 1250 px, 300 dpi): the stored picture scaled to fill the box and trimmed evenly at the edges (a centered crop: a portrait photo loses its top and bottom, a wide one its sides), in color, with a black band at 55 % opacity across its bottom holding the reading (18 pt) and the date (14 pt) in white Times Bold, centered, each shrunk to fit the width when it is long; the PDF and the Word version place that same picture, so they look the same (question 2). The reading is the one the cover printed before (the New Testament reading, else the first reading). In the Word version the band's text is part of the picture (to change it, change the service and download again). A picture that is no longer there (removed, or another church's id) prints as no picture.
 4. **[owner-visible] No picture this week** (planning answer 6). No box and no frame: the reading (bold, 18 pt) and the date (bold, 14 pt), black, centered in the box's place, so the contact lines stay where they were. **A page from before PR 3b** sends either no bulletin or one without `cover_image_id`; it still prints PR 1's "[Cover picture]" box with the reading and the date in it (`printed_bulletin.cover_kind` "placeholder"), so PR 3a changes nothing a member sees except that the PDF's box is now centered under the church's name (it sat at the left margin, 60 pt off center; the Word version's was centered on 2026-10-03) (question 1).
 5. **[owner-visible] Carry forward and Keep as is** (planning answer 7; the 2b plan's clarification 7). The picture is a box like the music: `CARRY_KEYS` (server and draft) gains "cover", first (the cover is the bulletin's first page and the step's first group). A new draft takes the church's latest service's picture (dated before the draft's date) into the picture's box when it was not chosen, removed or kept yet, marked "From last week. Check before printing." with **Keep as is** (named "Keep as is: cover picture"); choosing another picture, removing it or keeping it clears the mark and stops the carry for that box. "Save as new service" marks a saved service's picture to check, as its music. The mark is saved with the service (`unchecked` holds "cover"). Last week's picture is still in the database (a saved service points at it, so the 60-day removal never takes it).
-6. **[owner-visible] Who uploads and who sees** (planning answer 8). Any member of the church (the routes are `require_church`, as `/services`). A picture is served only through `GET /bulletin-images/{id}` with the church's header (another church's id is a 404, F §1.2 rule 2); row-level security on the table keeps Supabase's own web API (the `anon` and `authenticated` roles) from reading it. Every member who opens a service that points at a picture sees it. The browser keeps a fetched picture for a day (`Cache-Control: private, max-age=86400`; never a shared cache).
-7. **[owner-visible] Old pictures** (planning answer 9). A picture uploaded more than 60 days ago that no saved service of the church points at is removed **on that church's next upload** (in the upload's transaction; `usecases.bulletin_images.remove_unused`): no job to schedule, church-scoped, and never a picture a saved service points at, whatever its age. A picture chosen in a draft but not yet saved (a draft lives in one browser, so the server cannot see it) has those 60 days. A picture removed on the step, or one whose service was deleted, stays until then (question 8). The count removed is logged.
-8. **[owner-visible] The step's group** (PR 3b; S "The Bulletin step"). **Cover picture**, first on the step, with the help "A JPEG or PNG picture for the front page, with the reading and the date printed over it. Without a picture, the reading and the date print alone."; when there is one, a preview trimmed to the cover's shape (`object-cover` at 372:300, alt "This week's cover picture, as the front page trims it"); **Choose a picture** (**Choose another picture** when there is one) opens the phone's photos or camera (`accept="image/jpeg,image/png"`, no `capture`, so the phone offers both); **Remove** (for screen readers "Remove the cover picture"). While it uploads the button reads "Uploading…" and a screen reader hears "Uploading the picture…". A file that is not a JPEG or PNG, or is over 10 MB, is refused at once with the server's own words, before any upload; the server's refusal (or a network failure) is said under the buttons (`role="alert"`); the picture already chosen stays. A picture that can no longer be loaded says "The picture could not be loaded." and **Remove** still works. No shrinking in the browser (question 6).
+6. **[owner-visible] Who uploads and who sees** (planning answer 8). Any member of the church (the routes are `require_church`, as `/services`). A picture is served only through `GET /bulletin-images/{id}` with the church's header (another church's id is a 404, F §1.2 rule 2); row-level security on the table keeps Supabase's own web API (the `anon` and `authenticated` roles) from reading it. Every member who opens a service that points at a picture sees it. The browser may keep a fetched picture only for itself and asks the server again each time it is shown (`Cache-Control: private, no-cache`, `Vary: Authorization, X-Church-Id`, an `ETag`: the server answers 304 without the picture when the browser's copy is current, after checking the church), so after a sign-out on a shared device the picture is not shown from the browser's cache without the server's yes; `X-Content-Type-Options: nosniff`. The page keeps a picture's bytes in memory for the session (an id never names other bytes).
+7. **[owner-visible] Old pictures** (planning answer 9). A picture uploaded more than 60 days ago that no saved service of its church points at is removed **on any church's next upload** (at most 20 an upload, the church with the oldest such picture first, in a transaction of its own before the new picture is stored; `usecases.bulletin_images.remove_unused`): no job to schedule, and a church that stops uploading (a church made only to fill the storage) still loses its unused pictures; "unused" is still decided per church, and a picture a saved service points at is never removed, whatever its age. A picture chosen in a draft but not yet saved (a draft lives in one browser, so the server cannot see it) has those 60 days. A picture removed on the step, or one whose service was deleted, stays until then (question 8). The removal locks the pictures it looks at (`FOR UPDATE`) before it reads the saved services, and a save locks the picture it points at (`FOR SHARE`, `usecases.archive._with_known_cover`), so a save never ends up pointing at a picture removed meanwhile: whichever comes second waits (a save that waited for a removal saves no picture). The count removed is logged.
+8. **[owner-visible] The step's group** (PR 3b; S "The Bulletin step"). **Cover picture**, first on the step, with the help "A JPEG or PNG picture for the front page, with the reading and the date printed over it. Without a picture, the reading and the date print alone."; when there is one, a preview trimmed to the cover's shape (`object-cover` at 372:300, alt "This week's cover picture, as the front page trims it"); **Choose a picture** (**Choose another picture** when there is one) opens the phone's photos or camera (`accept="image/jpeg,image/png"`, no `capture`, so the phone offers both); **Remove** (for screen readers "Remove the cover picture"). Over the preview, a dark see-through strip across its bottom with the reading and the date in white, roughly as the band prints, so it shows what the band covers (question 16; hidden from screen readers, which hear the alt text). A picture under 800 px on its long side as stored (it would print at under about 150 dpi) uploads, and the step says "This picture is small and may print blurry." under the preview. While it uploads the button reads "Uploading…" and a screen reader hears "Uploading the picture…"; the member can leave the step meanwhile: the picture goes in the draft when the upload answers (the upload's own callback, written to the browser at once), unless the draft is another one by then (another service opened, or the date changed). A file that is not a JPEG or PNG, is empty, or is over 10 MB, is refused at once with the server's own words, before any upload; the server's refusal (or a network failure) is said under the buttons (`role="alert"`); the picture already chosen stays. A picture that can no longer be loaded says "The picture could not be loaded." and **Remove** still works. No shrinking in the browser (question 6). The preview's object URL is made and released in one effect keyed by the picture's bytes, so React's StrictMode (on in `next dev`) never shows a released URL.
 9. **[owner-visible] The Printed bulletin card** (PR 3b; the 2b plan's clarification 9). The note becomes "The cover picture, the music, the announcements and this week's changes to who leads come from the Bulletin step."; "Not filled in: …" gains "cover picture" (before "prelude") when there is none (question 11); "From last week, not checked yet: …" names it "cover picture", first.
-10. **The API** (S API). `ServiceBulletin.cover_image_id: UUID | null`, **optional**: left out (a page from before 3b) the server reads the bulletin as not saying (`service_bulletin.ServiceBulletin.cover_given` False): a `POST` saves no picture, a `PUT` keeps the saved one, a download prints PR 1's box; null is no picture; an id the church does not have is saved and printed as no picture (never a 404 that would block a save). A malformed id is the usual 422 naming `bulletin.cover_image_id`. `unchecked` accepts "cover" (an unknown box stays a 422, `bulletin.unchecked.0`). `ServiceOut.bulletin.cover_image_id` is always present (null when none), and `GET /services/previous-bulletin` carries it. `POST /bulletin-images` (`require_church`, the `picture` bucket: 20 an hour a member and 60 a day a church, question 9; 201 `BulletinImageOut {id, width, height}`; 401, 403, 422, 429) and `GET /bulletin-images/{image_id}` (`image/jpeg`; 404 "That picture is no longer available."). `UploadSizeMiddleware` answers the 422 for a body whose Content-Length is over 10 MB, or missing ("Send the picture with its size (Content-Length)."), before any of it is read (the route would otherwise read it all into memory first); it runs before the sign-in check, so such a request is a 422 whoever sends it, and it reads nothing. No `Idempotency-Key` on the upload: a retried upload stores a second copy, which the 60-day removal takes.
-11. **Storage** (S "Data model"; F §3.4, §3.5). `bulletin_images` in `0007_bulletin_images` (`down_revision` `0006_services_bulletin`): `id UUID` primary key, `church_id UUID NOT NULL` (`ON DELETE CASCADE`), `content_type VARCHAR NOT NULL` (always `image/jpeg`), `bytes BYTEA NOT NULL` (the picture), `width`, `height INTEGER NOT NULL`, `created_by UUID` (`ON DELETE SET NULL`), `created_at TIMESTAMPTZ NOT NULL`; `ix_bulletin_images_church_created (church_id, created_at)`; on Postgres `ALTER TABLE bulletin_images ENABLE ROW LEVEL SECURITY` (0003's rule; `test_0003_is_idempotent_after_the_manual_lockdown` checks every model table at head). A service points at a picture by the JSON key `services.bulletin.cover_image_id` (no foreign key: a column on `services` would be a second schema change for no gain at this size; the removal reads the church's stored bulletins). Its `--sql` preview has trailing spaces on the CREATE TABLE lines, so the README's copy and the test strip them (`| sed 's/ *$//'`). Tests: up from 0006 with the rows kept, down giving back the 0006 tables, the exact offline SQL, the README pin, the drift at the baseline and the head constants, row-level security on Postgres, and the owner's two queries on Postgres; the slice-1a test of the baseline's offline SQL now expects exactly one CREATE TABLE (0007's).
+10. **The API** (S API). `ServiceBulletin.cover_image_id: UUID | null`, **optional**: left out (a page from before 3b) the server reads the bulletin as not saying (`service_bulletin.ServiceBulletin.cover_given` False): a `POST` saves no picture, a `PUT` keeps the saved one, a download prints PR 1's box; null is no picture; an id the church does not have is saved and printed as no picture (never a 404 that would block a save). A malformed id is the usual 422 naming `bulletin.cover_image_id`. `unchecked` accepts "cover" (an unknown box stays a 422, `bulletin.unchecked.0`). `ServiceOut.bulletin.cover_image_id` is always present (null when none), and `GET /services/previous-bulletin` carries it. `POST /bulletin-images` (`require_church`, the `picture` bucket: 20 an hour a member and 60 a day a church, question 9; 201 `BulletinImageOut {id, width, height}`; 401, 403, 422 (also a church's 60 pictures all in saved services, and the 150 MB budget reached, clarification 20), 429 (also "Another picture is being prepared. Try again in a few seconds.")) and `GET /bulletin-images/{image_id}` (`image/jpeg`, its ETag; 304 for `If-None-Match` with it; 404 "That picture is no longer available."). The body is read whatever its Content-Type (none included); `application/json` is a 400 from the framework, and the page always sends the file's own type. `UploadSizeMiddleware` answers the 422 for a body whose Content-Length is over 10 MB, or missing ("Send the picture with its size (Content-Length)."), before any of it is read (the route would otherwise read it all into memory first); it runs before the sign-in check, so such a request is a 422 whoever sends it, and it reads nothing. An empty body passes the middleware and the framework (the body has a default), so the sign-in and the church are checked first and the usecase answers "Choose a JPEG or PNG picture.". No `Idempotency-Key` on the upload: a retried upload stores a second copy, which the 60-day removal takes.
+11. **Storage** (S "Data model"; F §3.4, §3.5). `bulletin_images` in `0007_bulletin_images` (`down_revision` `0006_services_bulletin`): `id UUID` primary key, `church_id UUID NOT NULL` (`ON DELETE CASCADE`), `content_type VARCHAR NOT NULL` (always `image/jpeg`), `bytes BYTEA NOT NULL` (the picture), `width`, `height INTEGER NOT NULL`, `created_by UUID` (`ON DELETE SET NULL`), `created_at TIMESTAMPTZ NOT NULL`; `ix_bulletin_images_church_created (church_id, created_at)`; on Postgres `ALTER TABLE bulletin_images ENABLE ROW LEVEL SECURITY` (0003's rule; `test_0003_is_idempotent_after_the_manual_lockdown` checks every model table at head) and, when both Supabase roles exist (0003's guard), `REVOKE ALL ON bulletin_images FROM anon, authenticated` in a `DO` block: 0003's `ALTER DEFAULT PRIVILEGES` already leaves them no grant, but only for the role that ran 0003 (plan review M10). A service points at a picture by the JSON key `services.bulletin.cover_image_id` (no foreign key: a column on `services` would be a second schema change for no gain at this size; the removal reads the church's stored bulletins). Its `--sql` preview has trailing spaces on the CREATE TABLE lines, so the README's copy and the test strip them (`| sed 's/ *$//'`). Tests: up from 0006 with the rows kept, down giving back the 0006 tables, the exact offline SQL, the README pin, the drift at the baseline and the head constants, row-level security and the REVOKE (even with default privileges that would grant) on Postgres, the owner's queries and the storage query on Postgres, and step 4's query run before 0007; the slice-1a test of the baseline's offline SQL now expects exactly one CREATE TABLE (0007's).
 12. **The draft v4** (F §4.6 "Versioning"). `DRAFT_VERSION` 4; `bulletin.cover_image_id` (null: none); `CARRY_KEYS` gains "cover", first; `migrations[3]` adds `cover_image_id: null` and changes nothing else. `bulletinPayload` (what the "Unsaved changes" fingerprint hashes) holds `cover_image_id` only when there is a picture, so a draft "Saved" before 3b, its bulletin filled in or not, stays "Saved" after its migration (T7's migration test); `serviceBody` (every save and download) always says it (null for none), so a `PUT` saves a Remove and a download prints "no picture" rather than PR 1's box; a `POST` leaves a null picture out (as 2b-2's blank bulletin: a POST sent before 3b whose answer was lost replays instead of saving twice; the server stores no picture either way). The 409 "is it my own save?" check (`savedCopyFingerprint`) compares the picture's id (null and missing alike). A version 5 draft is a restore error, as today.
-13. **Privacy and logging** (F §2.5). A cover picture can show people (children included) and is visible to every member of the church who opens the service (question 7). The stored picture keeps no camera data. No log line carries a picture: `bulletin_images.upload` logs the church and picture ids, the sizes in and stored, the pixel size, the count removed and the time. The tests make their pictures; the checks use a picture with no one in it, and the records never include a picture.
-14. **[owner-visible] The owner's production steps** (planning answer 10; 0006's routine), around **PR 3a**'s merge. `backend/migrations/README.md` gains "Before 0007_bulletin_images (printed bulletin PR 3a)": (1) a `db-backup` run; (2) one read-only query giving `version` (`0006_services_bulletin`), `services`, `with_bulletin` and `database_size` (`pg_size_pretty`, so later records show the pictures' share of the free plan's 500 MB; question 13); (3) the `--sql` preview, rendered by the agent without a database (20 lines: the table, its index, row-level security, the version update), pinned by `test_the_readme_shows_the_0007_preview_exactly`; (4) after the deploy, a read-only query giving `0007_bulletin_images`, `row_security` `true`, `open_grants` `0` (no grant to `anon` or `authenticated`) and `pictures` `0`, then step 2 again. Both queries run in a Postgres test (T1). T6 takes the owner through them one at a time, then through a short phone check that the builder works as before (item 30). After PR 3b: four phone steps (items 32-35) and the print test (item 36). Reverting keeps `0007` (README "Reverting PR 3b or PR 3a").
-15. **[owner-visible] Every new user-facing string** (no em dashes). The step: "Cover picture" (the group); "A JPEG or PNG picture for the front page, with the reading and the date printed over it. Without a picture, the reading and the date print alone."; "Choose a picture", "Choose another picture", "Uploading…" (the button while it uploads), "Uploading the picture…" (for screen readers); "Remove" (for screen readers "Remove the cover picture"); "This week's cover picture, as the front page trims it" (the preview's alt text); "The picture could not be loaded."; "Keep as is" (for screen readers "Keep as is: cover picture"; 2b's words); "Choose a JPEG or PNG picture.", "The picture is larger than 10 MB. Choose a smaller one." (said before an upload, and by the server); from the server also "The picture has too many pixels. Choose a smaller one.", "Send the picture with its size (Content-Length)." and "That picture is no longer available.". The card: "The cover picture, the music, the announcements and this week's changes to who leads come from the Bulletin step."; "Not filled in: …" and "From last week, not checked yet: …" gain "cover picture". In the files: none new (the reading and the date are PR 1's); "[Cover picture]" stays only for a page from before 3b.
+13. **Privacy and logging** (F §2.5). A cover picture can show people (children included) and is visible to every member of the church who opens the service (question 7). The stored picture keeps no camera data. No log line carries a picture: `bulletin_images.upload` logs the church and picture ids, the sizes in and stored, the pixel size, the count removed and the time; `bulletin_images.storage_full` the church, the total and the budget. The tests make their pictures; the checks use a picture with no one in it, and the records never include a picture.
+14. **[owner-visible] The owner's production steps** (planning answer 10; 0006's routine), around **PR 3a**'s merge. `backend/migrations/README.md` gains "Before 0007_bulletin_images (printed bulletin PR 3a)": (1) a `db-backup` run; (2) one read-only query giving `version` (`0006_services_bulletin`), `services`, `with_bulletin` and `database_size` (`pg_size_pretty`, so later records show the pictures' share of the free plan's 500 MB; question 13); (3) the `--sql` preview, rendered by the agent without a database (27 lines: the table, its index, row-level security, the guarded REVOKE, the version update), pinned by `test_the_readme_shows_the_0007_preview_exactly`; (4) after the deploy, a read-only query giving `0007_bulletin_images`, `row_security` `true`, `open_grants` `0` (no grant to `anon` or `authenticated`) and `pictures` `0`, then step 2 again; it uses `to_regclass`, so run before 0007 is applied it answers `0006_services_bulletin` with two empty values instead of an error. The README also gains "Checking the cover pictures' storage" (any time, read-only: pictures, churches, their size against the 150 MB budget, the most in one church, the database's size). The queries run in Postgres tests (T1). T6 Step 5 also sends a 9.5 MB and an 11 MB body to the live API, signed out (401, then 422), so a body limit in Railway's proxy, or a body sent without its length, shows before PR 3b. T6 takes the owner through them one at a time, then through a short phone check that the builder works as before (item 30). After PR 3b: four phone steps (items 32-35) and the print test (item 36). Reverting keeps `0007` (README "Reverting PR 3b or PR 3a").
+15. **[owner-visible] Every new user-facing string** (no em dashes). The step: "Cover picture" (the group); "A JPEG or PNG picture for the front page, with the reading and the date printed over it. Without a picture, the reading and the date print alone."; "Choose a picture", "Choose another picture", "Uploading…" (the button while it uploads), "Uploading the picture…" (for screen readers); "Remove" (for screen readers "Remove the cover picture"); "This week's cover picture, as the front page trims it" (the preview's alt text); "This picture is small and may print blurry."; "The picture could not be loaded."; "Keep as is" (for screen readers "Keep as is: cover picture"; 2b's words); "Choose a JPEG or PNG picture.", "The picture is larger than 10 MB. Choose a smaller one." (said before an upload, and by the server); from the server also "The picture has too many pixels. Choose a smaller one.", "Send the picture with its size (Content-Length).", "That picture is no longer available.", "Another picture is being prepared. Try again in a few seconds.", "Your church keeps 60 pictures, all in saved services. Remove the picture from an older service, then try again." and "The app has no room for more pictures right now. Please tell the app's administrator.". The preview's band repeats the reading and the date (no new words). The card: "The cover picture, the music, the announcements and this week's changes to who leads come from the Bulletin step."; "Not filled in: …" and "From last week, not checked yet: …" gain "cover picture". In the files: none new (the reading and the date are PR 1's); "[Cover picture]" stays only for a page from before 3b.
 16. **Docs** (T4, T10). T4 (PR 3a): `docs/manual-verification.md` gains "### Printed bulletin PR 3: the cover picture" at the end, inside "## Printed bulletin" (a `###` heading: `test_slice1_docs.py`'s pin of the last eight `##` headings does not move), with the two PRs and items 28-31 (the owner's steps around 0007, the builder as before, the agent's check of the live routes); S's "Data model" says JPEG or PNG only (no HEIC), the raw body, sRGB and no camera data, the id an unknown church picture saves as none, the carry with its mark, the removal on the next upload; "The Bulletin step" and "Scope by PR" follow planning answers 1 and 7. T10 (PR 3b): items 32-37 (the phone check, the iPhone photo of planning answer 5, Remove, carry forward, a refused file, the print test, the agent's checks). The runbook records are T6's (`### Printed bulletin PR 3a record`, riding along in PR 3b) and T12's (`### Printed bulletin PR 3b record`, its own records PR), each before `## Backups`; the 2b-2 record (`9b90d21`) rides along in PR 3a.
 17. **What does not change.** The Word working copies (`POST /documents`) print no picture (S answer 7 kept them as they are). The Bulletin settings page, its API and storage. `liturgy` keeps only the eight sections. `service_archive.py` (Streamlit's), `env.py`, the workflows, `package.json`, `requirements*.txt`, `app.py`, Streamlit.
 18. **[owner-visible] Two PRs, backend first** (planning answer 1). **PR 3a** (T1-T4) merges first, after the owner's backup, counts and SQL; it changes no page, component, draft, query or request body (T5 Step 3), so the pages already live keep working against it: a 2b-2 page sends a bulletin without `cover_image_id`, which the 3a server saves with no picture (a `POST`) or with the saved one kept (a `PUT`), prints PR 1's box for, and answers with an extra `cover_image_id: null` that 2b-2's code reads past (its 409 check compares fields one by one; its `bulletinFromService` drops an unknown box). While Railway deploys it, the old server keeps serving; if its pre-deploy `alembic upgrade head` fails (the 5 s lock timeout on `churches` or `users` for the foreign keys), nothing breaks, since no page needs the new server yet: redeploy. **PR 3b** (T7-T10) merges only after `/openapi.json` in production lists `/bulletin-images` and the owner's checks of T6 passed (T11 Step 1); it changes no server code, API file, workflow or package (T11 Step 3), so its deploy is Vercel's alone, and an old page still open meanwhile keeps working against the same server. The 2b-2 record rides along in PR 3a and the 3a record in PR 3b.
-19. **[owner-visible] Rolling back** (T12 Step R). A fix forward is preferred: 3b's server needs no change. If PR 3b must come out, only the step's picture group goes (T8's commit and T10's, reverted; the draft v4, the carry, the payload and the card stay), so every member's draft opens as it was; until 3b returns, a picture already chosen or carried from last week keeps printing and cannot be changed on the step. Checked while planning: that revert typechecks, lints and passes 713 frontend tests in 88 files. Reverting the whole of 3b would make every v4 draft a restore error (the 2b-2 reader refuses version 4, and refuses "cover" among its boxes), so it is not offered. PR 3a is reverted only after that and only if needed, keeping `0007` (README "Reverting PR 3b or PR 3a"); the pictures stay in their table, unread.
+19. **[owner-visible] Rolling back** (T12 Step R). A fix forward is preferred: 3b's server needs no change. If PR 3b must come out, only the step's picture group goes (T8's commit and T10's, reverted; the draft v4, the carry, the payload and the card stay), so every member's draft opens as it was; until 3b returns, a picture already chosen or carried from last week keeps printing and cannot be changed on the step. Checked while planning: that revert typechecks, lints and passes 713 frontend tests in 88 files. A 2b-2 tab still open after 3b deploys keeps working, with two effects (accepted, question 17): its `PUT` keeps the picture but drops "cover" from the boxes to check (2b-2's own `CARRY_KEYS` filter), so that picture's "From last week" mark is lost; and its downloads of a service with a picture print PR 1's "[Cover picture]" box (it sends no `cover_image_id`). A reload ends both. Reverting the whole of 3b would make every v4 draft a restore error (the 2b-2 reader refuses version 4, and refuses "cover" among its boxes), so it is not offered. PR 3a is reverted only after that and only if needed, keeping `0007` (README "Reverting PR 3b or PR 3a"); the pictures stay in their table, unread.
+20. **[owner-visible] Limits that keep one account from hurting every church** (the plan review of 2026-10-03; questions 9, 13, 18). Any Google account can sign in and create a church (as today), so the upload must stay safe whoever calls it. **Memory:** one picture is prepared at a time in the server, on one worker thread (`bulletin_image._WORKER`); another waits its turn up to 10 s, then is a 429 "Another picture is being prepared. Try again in a few seconds." (a phone photo takes about 0.15 s, the largest picture taken under a second). Measured with the review's worst cases (Pillow 12.3, `ru_maxrss`): the worst picture taken, a 24 MP PNG with a palette and transparency (a 3 KB file), needs about 220 MB more for under half a second (an RGBA one 193 MB, a 49 MP progressive JPEG 152 MB, a baseline one 32 MB); twenty such uploads at once leave the process at about 250 MB (173 MB for twenty 49 MP JPEGs); the review's 49 MP PNGs (767 MB each, 3 GB for four at once) are now refused from their header, with no memory. One thread matters: the C allocator keeps freed memory per thread, so twenty threads taking turns under a lock still grew to 2.2 GB. **Storage:** a stored picture is at most 600 KB; a church keeps at most 60 (`MAX_PICTURES`): past that its oldest pictures no saved service points at make room, whatever their age, and when all 60 are in saved services the upload is a 422 "Your church keeps 60 pictures, all in saved services. Remove the picture from an older service, then try again."; and when all churches' pictures together would pass 150 MB (`STORAGE_BUDGET`, against the free plan's 500 MB), every upload is a 422 "The app has no room for more pictures right now. Please tell the app's administrator." with a `bulletin_images.storage_full` warning in Railway's log. The README's "Checking the cover pictures' storage" query shows where things stand. Both numbers are constants in `usecases/bulletin_images.py`.
 
 ### Risks
 - **A lock at deploy time** (PR 3a). `CREATE TABLE` with two foreign keys takes a short `SHARE ROW EXCLUSIVE` lock on `churches` and `users`; `lock_timeout` turns a conflict into a failed deploy after 5 s with the previous release still serving (T6 Step 5 checks the deploy and `/health/ready`). No page needs the new server until PR 3b.
-- **Memory on Railway.** A 10 MB JPEG is decoded at a reduced scale, but a PNG is decoded whole: a 49 MP PNG (a small file of one color, or a crafted one) took 0.7 s and about 270 MB at its peak while planning, once its second copy was removed (`ImageOps.exif_transpose(img, in_place=True)`; 640 MB before). The 50 MP cap bounds it; two such uploads at once would hold about 540 MB. The `picture` bucket (20 an hour) limits how often. If Railway's memory is small, lower the cap for PNG (a follow-up).
-- **Upload size and time on a phone.** A phone photo is 2-5 MB (an iPhone's HEIC sent by Safari as a JPEG; a 48 MP "ProRAW" or "48 MP" setting can exceed 10 MB, which the page refuses with its message). Over a slow mobile connection 5 MB takes 5-20 s; the client waits 60 s (`POST /bulletin-images` in `timeouts.ts`). Railway's proxy has no body limit documented that is below 10 MB (not verified; the owner's phone check is the test). Question 6 asks whether to shrink the picture in the browser first.
-- **The database grows.** A stored picture is 0.2-0.5 MB (460 KB measured for a busy 12 MP photo); one a week is about 20 MB a year a church, plus pictures tried and not used for 60 days. The free plan holds 500 MB; step 2's `database_size` records the starting point, and each nightly backup grows by the same amount (the `db-backup` artifact). Question 13.
+- **Any Google account can create a church** (existing behavior since slice 1b), so an upload can come from someone who is not a church member anywhere else. That is why the limits of clarification 20 exist: memory, a church's 60 pictures and the 150 MB budget, not only the `picture` bucket (20 an hour a member and 60 a day a church binds one account in one church, not an account that makes churches).
+- **Memory on Railway.** One picture at a time on one thread: the measured worst case is about 220 MB more for under half a second (a 24 MP palette PNG with transparency), and twenty uploads at once leave the process at about 250 MB (clarification 20). The request bodies themselves are read by FastAPI before the route runs (up to 10 MB each, refused above that by `UploadSizeMiddleware` before it is read), as any other route's body is today. If Railway's memory is small, lower `MAX_PNG_PIXELS`.
+- **Upload size and time on a phone.** A phone photo is 2-5 MB (an iPhone's HEIC sent by Safari as a JPEG; a 48 MP "ProRAW" or "48 MP" setting can exceed 10 MB, which the page refuses with its message). Over a slow mobile connection 5 MB takes 5-20 s; the client waits 60 s (`POST /bulletin-images` in `timeouts.ts`); the member may leave the step meanwhile (clarification 8). Railway's proxy has no body limit documented below 10 MB; T6 Step 5 checks it before PR 3b with a 9.5 MB body (401 signed out: it passed with its length) and an 11 MB one (422). Question 6 asks whether to shrink the picture in the browser first.
+- **The database grows.** A stored picture is at most 0.6 MB (a phone photo usually 0.2-0.5 MB: 460 KB measured for a busy 12 MP photo-like picture; 545 KB for random noise, the worst case). One a week is about 25 MB a year a church at most (52 x 0.5 MB), plus pictures tried and not used, for 60 days. A church keeps at most 60 pictures (36 MB at most), and all churches together at most 150 MB; the free plan holds 500 MB. Step 2's `database_size` records the starting point, and each nightly backup grows by the same amount (the `db-backup` artifact). Questions 9 and 13. **One account making churches** can still upload about 20 pictures an hour (12 MB an hour at most), so it could fill the 150 MB budget in about half a day; then every church's uploads are refused until the 60-day removal frees room or the owner removes that church (the README's storage query shows it). The database stays far from 500 MB, so saving services keeps working.
+- **A church that uses a new picture every week** reaches 60 pictures in saved services after about 14 months; from then on each upload asks to remove the picture from an older service first (a Remove and a save on that service, then the upload works). Raising `MAX_PICTURES` is a one-number change (question 18).
+- **Room made within a church's 60** removes its oldest unused picture whatever its age, so a picture another member chose in a draft but has not saved yet can go when the church is at 60; that draft then says "The picture could not be loaded." with **Remove**.
 - **A picture removed while a draft points at it.** A draft older than 60 days whose picture was never saved, or a service deleted after its picture was carried into a draft not yet saved, prints as no picture; the step says "The picture could not be loaded." with **Remove**. If a save sends such an id, the server saves no picture, and the page's 409 check (comparing its id with the server's null) would read that save as someone else's change; it needs two rare things at once, and the conflict dialog offers both choices.
 - **The 2b-2 pages during PR 3a.** They work unchanged (clarification 18); a `PUT` from one keeps the saved picture, so a member using a stale tab cannot remove a picture there (nothing could choose one before 3b).
+- **A 2b-2 tab still open after PR 3b deploys** (accepted, question 17): its `PUT` keeps the picture but loses the picture's "From last week" mark, and its downloads print PR 1's "[Cover picture]" box for a service that has a picture (clarification 19). Reloading the page ends it.
 - **The Word version's band is part of the picture.** The reading and the date on it cannot be edited in Word; the band's look is the PDF's. A Word user who wants other words over the picture changes the service and downloads again.
 - **Privacy.** Every member who opens a service sees its picture; a picture removed from the bulletin stays in the database (and the backups) until the 60-day removal. Photos of people, children especially, are the church's policy to decide (question 7).
 - **The print test** (planning answer 10) is the first look at the colors on paper: the stored picture is sRGB and the PDF places it as it is (reportlab does no color management); the band's 55 % may need a change after the test (a one-number change, `bulletin_image.BAND_OPACITY`).
@@ -243,6 +248,19 @@ def test_schema_diff_at_baseline_lists_exactly_the_0004_to_0007_changes(tmp_path
 **In `backend/tests/test_migrations.py`, replace:**
 
 ````python
+import logging.config
+````
+
+**with:**
+
+````python
+import logging.config
+import re
+````
+
+**In `backend/tests/test_migrations.py`, replace:**
+
+````python
 def test_offline_sql_from_baseline_renders_guarded_adds_and_no_create_table():
 ````
 
@@ -305,6 +323,13 @@ PREVIEW_0007 = [
     ");",
     "CREATE INDEX ix_bulletin_images_church_created ON bulletin_images (church_id, created_at);",
     "ALTER TABLE bulletin_images ENABLE ROW LEVEL SECURITY;",
+    "DO $$",
+    "BEGIN",
+    "  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon')",
+    "     AND EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN",
+    "    REVOKE ALL ON bulletin_images FROM anon, authenticated;",
+    "  END IF;",
+    "END $$;",
     "UPDATE alembic_version SET version_num='0007_bulletin_images' "
     "WHERE alembic_version.version_num = '0006_services_bulletin';",
     "COMMIT;",
@@ -369,7 +394,7 @@ def test_0007_downgrade_drops_only_the_table(sqlite_url):
         assert conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one() == "0006_services_bulletin"
 
 
-def test_offline_sql_for_0007_is_one_table_one_index_and_row_level_security_under_the_timeouts():
+def test_offline_sql_for_0007_is_one_table_one_index_row_level_security_and_the_revoke_under_the_timeouts():
     cfg = alembic_config(url="postgresql://preview@localhost:1/preview", configure_logger=False)
     cfg.output_buffer = buffer = io.StringIO()
     command.upgrade(cfg, "0006_services_bulletin:0007_bulletin_images", sql=True)
@@ -403,6 +428,46 @@ def test_0007_turns_on_row_level_security_and_grants_supabase_s_roles_nothing(pg
                         {"grantee": grantee}).scalar_one() is False
         finally:
             admin.dispose()
+
+
+@pytest.mark.postgres
+def test_0007_revokes_supabase_s_roles_even_when_default_privileges_would_grant(pg_admin_url):
+    """Plan review M10: 0003's ALTER DEFAULT PRIVILEGES holds only for the role that ran it; 0007's own
+    REVOKE leaves anon and authenticated nothing on the new table even when defaults would grant it."""
+    with supabase_roles(pg_admin_url), throwaway_database(pg_admin_url, role_bypassrls=True) as sandbox:
+        _alembic(sandbox.role_url, "upgrade", "0006_services_bulletin")
+        owner = _pg_engine(sandbox.role_url)
+        admin = _pg_engine(sandbox.admin_db_url)
+        try:
+            with owner.begin() as conn:
+                conn.execute(text("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO anon, authenticated"))
+            _alembic(sandbox.role_url, "upgrade", "head")
+            with admin.connect() as conn:
+                for grantee in ("anon", "authenticated"):
+                    assert conn.execute(text(
+                        "SELECT has_table_privilege(:grantee, 'public.bulletin_images', 'SELECT')"),
+                        {"grantee": grantee}).scalar_one() is False
+        finally:
+            owner.dispose()
+            admin.dispose()
+
+
+@pytest.mark.postgres
+def test_the_after_deploy_check_runs_before_0007_too(pg_admin_url):
+    """Plan review M9: README step 4 run before the deploy applied 0007 answers (it does not fail):
+    0006_services_bulletin and two empty values."""
+    readme = (Path(__file__).resolve().parents[1] / "migrations" / "README.md").read_text(encoding="utf-8")
+    section = readme.split("\n## Before 0007_bulletin_images (printed bulletin PR 3a)\n", 1)[1]
+    check = re.findall(r"```sql\n(.*?)```", section, re.S)[1]
+    with throwaway_database(pg_admin_url, role_bypassrls=True) as sandbox:
+        _alembic(sandbox.role_url, "upgrade", "0006_services_bulletin")
+        engine = _pg_engine(sandbox.role_url)
+        try:
+            with engine.connect() as conn:
+                row = dict(conn.execute(text(check)).mappings().one())
+        finally:
+            engine.dispose()
+    assert row == {"version": "0006_services_bulletin", "row_security": None, "open_grants": 0, "pictures": None}
 ````
 
 **In `backend/tests/test_services_postgres.py`, replace:**
@@ -436,7 +501,8 @@ def test_0007_turns_on_row_level_security_and_grants_supabase_s_roles_nothing(pg
 
 
 def readme_0007_sql(n: int) -> str:
-    """The n-th ```sql block of README "Before 0007_bulletin_images": 0 is step 2's counts, 1 step 4's check."""
+    """The n-th ```sql block of README "Before 0007_bulletin_images": 0 is step 2's counts, 1 step 4's check,
+    2 the pictures' storage."""
     section = README.read_text(encoding="utf-8").split(
         "\n## Before 0007_bulletin_images (printed bulletin PR 3a)\n", 1)[1]
     return re.findall(r"```sql\n(.*?)```", section, re.S)[n]
@@ -456,15 +522,18 @@ def test_the_owner_s_read_only_queries_around_0007(world):
     with session_scope() as s:
         counts = dict(s.execute(text(readme_0007_sql(0))).mappings().one())
         applied = dict(s.execute(text(readme_0007_sql(1))).mappings().one())
+        storage = dict(s.execute(text(readme_0007_sql(2))).mappings().one())
     assert re.fullmatch(r"\d+ (bytes|kB|MB|GB)", counts.pop("database_size"))
     assert counts == {"version": "0007_bulletin_images", "services": 2, "with_bulletin": 1}
     assert applied == {"version": "0007_bulletin_images", "row_security": True, "open_grants": 0, "pictures": 1}
+    assert re.fullmatch(r"\d+ (bytes|kB|MB|GB)", storage.pop("database_size"))
+    assert storage == {"pictures": 1, "churches": 1, "pictures_size": "2 bytes", "most_in_one_church": 1}
 ````
 
 - [ ] **Step 2 (agent): Run them and see them fail**
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_migrations.py backend/tests/test_schema_check.py backend/tests/test_api_app.py 2>&1 | tail -1`
-**Expected:** `16 failed, 59 passed, 5 skipped in <t>s`: the head constants, the baseline drift, the 0007 tests (no such revision), the README pin and the baseline's one CREATE TABLE. With a local, throwaway Postgres also `TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres backend/tests/test_migrations.py backend/tests/test_services_postgres.py 2>&1 | tail -1` → `4 failed, 7 passed, 33 deselected in <t>s` (row-level security, the 0007 queries, and the 0005 and 0006 queries' head version).
+**Expected:** `16 failed, 59 passed, 5 skipped in <t>s`: the head constants, the baseline drift, the 0007 tests (no such revision), the README pin and the baseline's one CREATE TABLE. With a local, throwaway Postgres also `TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres backend/tests/test_migrations.py backend/tests/test_services_postgres.py 2>&1 | tail -1` → `4 failed, 7 passed, 33 deselected in <t>s` (row-level security, the REVOKE, step 4's query before 0007, the 0007 queries, and the 0005 and 0006 queries' head version).
 
 - [ ] **Step 3 (agent): The revision, the model, the README**
 
@@ -488,6 +557,11 @@ Expand-only (F §3.4): one new table, no change to any other, no backfill.
   with no policy, Supabase's anon and authenticated roles see no row, so a
   picture is only ever served through the API, church-scoped. Postgres only
   (SQLite has no row-level security).
+- REVOKE ALL on the table from anon and authenticated when both roles exist
+  (Supabase; CI's Postgres has neither), as 0003_lockdown does: 0003's
+  ALTER DEFAULT PRIVILEGES already leaves them no grant on a new table, but
+  only for the role that ran 0003, so this does not depend on it (plan
+  review M10).
 
 On Postgres env.py runs SET LOCAL lock_timeout = '5s' (and statement_timeout
 '60s') first. Creating a table takes no lock on any existing table except a
@@ -504,6 +578,16 @@ revision = "0007_bulletin_images"
 down_revision = "0006_services_bulletin"
 branch_labels = None
 depends_on = None
+
+# 0003_lockdown's REVOKE, for this table only, under the same guard (both Supabase roles exist).
+REVOKE_SQL = """\
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon')
+     AND EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+    REVOKE ALL ON bulletin_images FROM anon, authenticated;
+  END IF;
+END $$"""
 
 
 def upgrade() -> None:
@@ -524,6 +608,7 @@ def upgrade() -> None:
     op.create_index("ix_bulletin_images_church_created", "bulletin_images", ["church_id", "created_at"])
     if op.get_context().dialect.name == "postgresql":
         op.execute("ALTER TABLE bulletin_images ENABLE ROW LEVEL SECURITY")
+        op.execute(REVOKE_SQL)
 
 
 def downgrade() -> None:
@@ -606,7 +691,7 @@ class HymnUsage(Base):
 
 ````markdown
 | `0006_services_bulletin` | Printed bulletin PR 2b: `services.bulletin` (JSON), nullable with no default and no backfill: the printed bulletin's weekly fields. Before it reaches production: "Before 0006_services_bulletin" below. |
-| `0007_bulletin_images` | Printed bulletin PR 3a: the table `bulletin_images` (the cover pictures, stored as JPEG in `bytes`) with the index `ix_bulletin_images_church_created`, and on Postgres row-level security on it. No other table changes. Before it reaches production: "Before 0007_bulletin_images" below. |
+| `0007_bulletin_images` | Printed bulletin PR 3a: the table `bulletin_images` (the cover pictures, stored as JPEG in `bytes`) with the index `ix_bulletin_images_church_created`, and on Postgres row-level security on it and, when Supabase's `anon` and `authenticated` roles exist, `REVOKE ALL` on it from both. No other table changes. Before it reaches production: "Before 0007_bulletin_images" below. |
 ````
 
 **In `backend/migrations/README.md`, replace:**
@@ -653,8 +738,10 @@ SELECT (SELECT version_num FROM alembic_version) AS version,
 One row. Expected before the merge: `version` is `0006_services_bulletin`
 (anything else: stop); `services` the saved services in all churches,
 `with_bulletin` those saved with the Bulletin step's fields, and
-`database_size` the whole database today (the free plan holds 500 MB; the
-pictures add about 0.3 MB each).
+`database_size` the whole database today (the free plan holds 500 MB; a
+stored picture takes at most 0.6 MB, a phone photo usually 0.2-0.5 MB, and
+the app stops taking pictures when all churches' together reach 150 MB:
+"Checking the cover pictures' storage" below).
 
 ### Step 3: Read the SQL the upgrade will run
 
@@ -686,13 +773,22 @@ CREATE TABLE bulletin_images (
 );
 CREATE INDEX ix_bulletin_images_church_created ON bulletin_images (church_id, created_at);
 ALTER TABLE bulletin_images ENABLE ROW LEVEL SECURITY;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon')
+     AND EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+    REVOKE ALL ON bulletin_images FROM anon, authenticated;
+  END IF;
+END $$;
 UPDATE alembic_version SET version_num='0007_bulletin_images' WHERE alembic_version.version_num = '0006_services_bulletin';
 COMMIT;
 ```
 
-One new, empty table for the cover pictures, its index and row-level
-security (so Supabase's own web API shows none of its rows), in one
-transaction: no existing row is copied, changed or deleted. If another
+One new, empty table for the cover pictures, its index, row-level security
+and no grant to Supabase's `anon` and `authenticated` roles (so Supabase's
+own web API shows none of its rows; the `DO` block does that only where both
+roles exist, as `0003_lockdown` does), in one transaction: no existing row
+is copied, changed or deleted. If another
 connection holds a lock on `churches` or `users` for more than 5 s, the
 deploy fails and the previous release keeps serving; run the deploy again.
 
@@ -702,18 +798,51 @@ SQL Editor:
 
 ```sql
 -- Read-only: is 0007 applied, and closed to Supabase's web API? Changes nothing.
+-- Before 0007 is applied it still runs: 0006_services_bulletin, NULL, 0, NULL.
 SELECT (SELECT version_num FROM alembic_version) AS version,
-       (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.bulletin_images'::regclass) AS row_security,
+       (SELECT relrowsecurity FROM pg_class WHERE oid = to_regclass('public.bulletin_images')) AS row_security,
        (SELECT count(*) FROM information_schema.role_table_grants
          WHERE table_schema = 'public' AND table_name = 'bulletin_images'
            AND grantee IN ('anon', 'authenticated')) AS open_grants,
-       (SELECT count(*) FROM bulletin_images) AS pictures;
+       (SELECT (xpath('/row/n/text()', query_to_xml('SELECT count(*) AS n FROM public.bulletin_images',
+                                                     false, true, '')))[1]::text::int
+         WHERE to_regclass('public.bulletin_images') IS NOT NULL) AS pictures;
 ```
 
 Expected: `0007_bulletin_images`, `true`, `0` and `0` (no page uploads a
-picture until PR 3b). Then step 2's query again: the same `services` and
+picture until PR 3b). `0006_services_bulletin` with two empty (NULL) values
+means the deploy has not applied 0007 yet: wait a minute and run it again. Then step 2's query again: the same `services` and
 `with_bulletin` (or more, by the services saved since the deploy; never
 fewer) and about the same `database_size`.
+
+### Checking the cover pictures' storage (any time, read-only)
+
+Any Google account can create a church, so the app limits what pictures can
+take (plan review of 2026-10-03): a stored picture is at most 0.6 MB; a
+church keeps at most 60 (past that its oldest picture no saved service uses
+makes room, and when all 60 are in saved services the upload says so); and
+when all churches' pictures together reach 150 MB, every upload is refused
+with "The app has no room for more pictures right now. Please tell the
+app's administrator." and Railway's log has a
+`bulletin_images.storage_full` warning. A picture no saved service uses
+goes 60 days after its upload, on any church's next upload. To see where
+things stand (SQL Editor):
+
+```sql
+-- Read-only: the cover pictures' storage. Changes nothing.
+SELECT count(*) AS pictures,
+       count(DISTINCT church_id) AS churches,
+       pg_size_pretty(coalesce(sum(octet_length(bytes)), 0)) AS pictures_size,
+       coalesce((SELECT max(n) FROM (SELECT count(*) AS n FROM bulletin_images GROUP BY church_id) AS c), 0)
+         AS most_in_one_church,
+       pg_size_pretty(pg_database_size(current_database())) AS database_size
+  FROM bulletin_images;
+```
+
+`pictures_size` near 150 MB (or `most_in_one_church` at 60 for a church
+that is not yours) is the time to look closer: the oldest unused pictures go
+on their own after 60 days; a church made only to fill the storage can be
+removed with the agent's help (its pictures go with it).
 
 ### Reverting PR 3b or PR 3a
 
@@ -733,7 +862,7 @@ table, unread, and come back when 3a does.
 - [ ] **Step 4 (agent): Run the files, the offline SQL and the suite (and Postgres if at hand)**
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_migrations.py backend/tests/test_schema_check.py backend/tests/test_api_app.py backend/tests/test_models.py 2>&1 | tail -1` then `(cd backend && DATABASE_URL=postgresql://preview@localhost:1/preview ../.venv/bin/alembic upgrade 0006_services_bulletin:0007_bulletin_images --sql 2>/dev/null | grep -v -e '^--' -e '^$' | sed 's/ *$//')` then `.venv/bin/python -m pytest -q | tail -1`
-**Expected:** `79 passed, 5 skipped in <t>s`; the 20 lines of README step 3 exactly (`BEGIN;` … `COMMIT;`); `1436 passed, 19 skipped in <t>s`. With a local Postgres also `TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres | tail -1` → `19 passed, 1436 deselected, 1 warning in <t>s`.
+**Expected:** `79 passed, 5 skipped in <t>s`; the 27 lines of README step 3 exactly (`BEGIN;` … `COMMIT;`, the `DO` block of the REVOKE before the version update); `1436 passed, 19 skipped in <t>s`. With a local Postgres also `TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres | tail -1` → `19 passed, 1436 deselected, 1 warning in <t>s`.
 
 - [ ] **Step 5 (agent): Commit**
 
@@ -743,15 +872,17 @@ git commit -q -m "Migration 0007_bulletin_images: the cover pictures' table and 
 church_id cascading with the church, content_type, bytes, width, height,
 created_by set null, created_at), the index ix_bulletin_images_church_created
 for the 60-day removal, and on Postgres row-level security, as 0003 left
-every other public table (Supabase's anon and authenticated roles read no
-row). Expand-only: no other table changes. backend/migrations/README.md
-gains \"Before 0007_bulletin_images\": the backup, the read-only counts with
-the database's size, the SQL preview (pinned by a test, trailing spaces
-stripped) and the after-deploy check, and how to revert." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+every other public table, and 0003's guarded REVOKE for this table
+(Supabase's anon and authenticated roles read no row and hold no grant).
+Expand-only: no other table changes. backend/migrations/README.md gains
+\"Before 0007_bulletin_images\": the backup, the read-only counts with the
+database's size, the SQL preview (pinned by a test, trailing spaces
+stripped), the after-deploy check (it also answers before 0007 is applied),
+the pictures' storage check, and how to revert." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1436 passed, 19 skipped`; frontend `704 passed` in 87 files.
+Expected counts after this task: backend `1436 passed, 21 skipped`; frontend `704 passed` in 87 files.
 
 ### Task 2: The picture's module and the printed cover (planning answers 2-6; S "Data model", "What prints where"; clarifications 2-5)
 
@@ -759,7 +890,7 @@ Expected counts after this task: backend `1436 passed, 19 skipped`; frontend `70
 - Create: `backend/tests/picture_helpers.py`, `backend/tests/test_bulletin_image.py`, `backend/bulletin_image.py`
 - Modify: `backend/tests/test_service_bulletin.py`, `backend/tests/test_printed_bulletin.py`, `backend/tests/test_printed_render.py`, `backend/service_bulletin.py`, `backend/printed_bulletin.py`, `backend/printed_pdf.py`, `backend/printed_docx.py`
 
-Pure modules only; the API (and "cover" among the boxes to check, which changes the API's `unchecked`) is T3's. `WEEK` in the tests does not say `cover_image_id`, so every earlier test still prints PR 1's box.
+Pure modules only; the API (and "cover" among the boxes to check, which changes the API's `unchecked`) is T3's. `WEEK` in the tests does not say `cover_image_id`, so every earlier test still prints PR 1's box. The plan review's cases (clarifications 2 and 20) are tests here: a phone's multi-picture JPEG, a 16-bit grey PNG, a color profile with and without transparency (`picture_helpers.swapped_profile`, an invented profile with red and blue swapped, so the conversion shows), a busy picture stored in at most 600 KB, an upload that cannot start in time, four 24 MP PNGs at once in a subprocess (the peak memory of one; the test takes about 2 s), and the two lines shrinking together.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -768,9 +899,10 @@ Pure modules only; the API (and "cover" among the boxes to check, which changes 
 ````python
 """Invented test pictures for the cover picture tests (printed bulletin PR 3): made here with Pillow,
 never a real photo."""
+import struct
 from io import BytesIO
 
-from PIL import Image
+from PIL import Image, ImageCms
 
 RED, GREEN, BLUE = (220, 30, 30), (30, 160, 60), (30, 60, 220)
 
@@ -804,6 +936,17 @@ def opened(data: bytes) -> Image.Image:
 
 def near(pixel, color, tolerance=40) -> bool:
     return all(abs(a - b) <= tolerance for a, b in zip(pixel, color))
+
+
+def swapped_profile() -> bytes:
+    """An invented color profile: sRGB with its red and blue primaries swapped, so a conversion to sRGB
+    shows (a green of (30, 160, 60) becomes about (60, 160, 30))."""
+    data = bytearray(ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes())
+    count = struct.unpack(">I", data[128:132])[0]
+    at = {bytes(data[132 + 12 * i:136 + 12 * i]): 132 + 12 * i for i in range(count)}
+    red, blue = at[b"rXYZ"], at[b"bXYZ"]
+    data[red + 4:red + 12], data[blue + 4:blue + 12] = data[blue + 4:blue + 12], data[red + 4:red + 12]
+    return bytes(data)
 ````
 
 **Create `backend/tests/test_bulletin_image.py`:**
@@ -813,14 +956,19 @@ def near(pixel, color, tolerance=40) -> bool:
 answers 2-5; bulletin_image.py): an upload checked, turned upright, scaled
 and stored as JPEG; the cover's box made from it. Invented pictures only
 (tests/picture_helpers.py)."""
+import random
+import subprocess
+import sys
+import threading
 from io import BytesIO
+from pathlib import Path
 
 import pytest
-from PIL import Image, ImageCms
+from PIL import Image, ImageCms, ImageDraw
 
 import bulletin_image as bi
-from domain_errors import InvalidInput
-from tests.picture_helpers import BLUE, GREEN, RED, near, opened, picture, stripes
+from domain_errors import InvalidInput, RateLimited
+from tests.picture_helpers import BLUE, GREEN, RED, near, opened, picture, stripes, swapped_profile
 
 
 def test_a_large_photo_is_stored_as_a_jpeg_at_most_1600_px_on_its_long_side():
@@ -870,7 +1018,9 @@ def test_the_stored_picture_keeps_no_camera_data():
     (b"%PDF-1.4 not a picture", bi.NOT_A_PICTURE_MESSAGE),
     (picture()[:600], bi.NOT_A_PICTURE_MESSAGE),                              # cut short
     (b"", bi.NOT_A_PICTURE_MESSAGE),
-    (picture((8000, 7000), fmt="PNG", mode="1", color=1), bi.TOO_MANY_PIXELS_MESSAGE),
+    (picture((8000, 7000), fmt="JPEG", mode="L", color=128), bi.TOO_MANY_PIXELS_MESSAGE),               # 56 MP
+    (picture((5000, 5000), fmt="PNG", mode="1", color=1), bi.TOO_MANY_PIXELS_MESSAGE),        # a 25 MP PNG
+    (picture((11000, 10000), fmt="PNG", mode="1", color=1), bi.TOO_MANY_PIXELS_MESSAGE),      # Pillow's own guard
     (b"\xff" * (10 * 1024 * 1024 + 1), bi.TOO_LARGE_MESSAGE),
 ])
 def test_only_a_jpeg_or_png_of_at_most_10_mb_and_50_million_pixels_is_taken(data, message):
@@ -899,6 +1049,101 @@ def test_a_long_reading_is_shrunk_to_fit_the_band():
     box = opened(bi.cover(picture((1600, 1200)), [(long, 75), ("October 11, 2026", 58)], (1550, 1250)))
     edges = [box.getpixel((x, y)) for y in range(1000, 1250, 2) for x in (2, 1547)]
     assert not any(min(pixel) > 230 for pixel in edges)                                     # no letter at the edge
+
+
+# --- plan review fixes (2026-10-03): phone JPEGs, memory, stored size, odd PNGs, the band ---
+
+def test_a_phone_s_multi_picture_jpeg_is_taken_as_a_jpeg():
+    """An iPhone HDR or a Samsung portrait photo carries a second picture (Pillow reads it as "MPO")."""
+    exif = Image.Exif()
+    exif[0x0112] = 6
+    out = BytesIO()
+    Image.new("RGB", (4032, 3024), GREEN).save(out, "MPO", save_all=True, exif=exif.tobytes(),
+                                               append_images=[Image.new("RGB", (1008, 756), RED)])
+    assert Image.open(BytesIO(out.getvalue())).format == "MPO"
+    stored = bi.prepare(out.getvalue())
+    img = opened(stored.content)
+    assert (img.format, img.size) == ("JPEG", (1200, 1600))                           # upright, the first picture
+    assert near(img.getpixel((600, 800)), GREEN)
+
+
+def test_a_16_bit_grey_png_keeps_its_tones():
+    out = BytesIO()
+    Image.new("I;16", (300, 200), 32768).save(out, "PNG")                              # mid-grey, 16 bits
+    assert near(opened(bi.prepare(out.getvalue()).content).getpixel((150, 100)), (128, 128, 128), 3)
+
+
+@pytest.mark.parametrize("mode", ["RGB", "RGBA"])
+def test_a_color_profile_is_converted_to_srgb_with_or_without_transparency(mode):
+    out = BytesIO()
+    Image.new(mode, (300, 200), GREEN + (255,) * (mode == "RGBA")).save(out, "PNG", icc_profile=swapped_profile())
+    assert near(opened(bi.prepare(out.getvalue()).content).getpixel((150, 100)), (60, 160, 30), 6)
+
+
+def test_a_busy_picture_is_stored_in_at_most_600_kb():
+    """Noise is the worst case for JPEG: a lower quality, then a smaller size, until it fits."""
+    noise = Image.frombytes("RGB", (1600, 1600), random.Random(7).randbytes(1600 * 1600 * 3))
+    png = BytesIO()
+    noise.save(png, "PNG")
+    stored = bi.prepare(png.getvalue())
+    img = opened(stored.content)
+    assert len(stored.content) <= bi.MAX_STORED_BYTES == 600_000
+    assert img.format == "JPEG" and img.size == (stored.width, stored.height) and 800 <= stored.width < 1600
+    assert len(bi.prepare(stripes((4000, 3000), [RED, GREEN, BLUE])).content) < 100_000      # a plain one: as is
+
+
+def test_an_upload_waits_its_turn_then_is_told_to_try_again():
+    """One picture is prepared at a time; one that cannot start within the wait is a 429."""
+    release = threading.Event()
+    busy = bi._WORKER.submit(release.wait, 10)
+    try:
+        with pytest.raises(RateLimited) as raised:
+            bi.prepare(picture(), wait=0.05)
+        assert (raised.value.message, raised.value.retry_after_seconds) == (bi.BUSY_MESSAGE, 5)
+    finally:
+        release.set()
+        busy.result()
+    assert bi.prepare(picture()).width == 400
+
+
+MEMORY_PROBE = """
+import resource, sys
+from concurrent.futures import ThreadPoolExecutor
+import bulletin_image as bi
+data = open(sys.argv[1], "rb").read()
+bi.prepare(open(sys.argv[2], "rb").read())                                  # warm up
+before = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+with ThreadPoolExecutor(4) as pool:
+    sizes = [p.width for p in pool.map(lambda _: bi.prepare(data), range(4))]
+print(sizes, (resource.getrusage(resource.RUSAGE_SELF).ru_maxrss - before) // 1024)
+"""
+
+
+def test_four_large_pngs_at_once_take_the_memory_of_one(tmp_path):
+    """The worst PNG taken (24 million pixels, a palette with transparency, a 3 KB file) needs about 220 MB
+    to prepare; four arriving together are prepared one after another on one thread, so they need no more
+    (a subprocess, so the peak is this upload's own)."""
+    big = tmp_path / "big.png"
+    Image.new("P", (4898, 4898), 0).save(big, transparency=0)
+    small = tmp_path / "small.jpg"
+    small.write_bytes(picture())
+    backend = Path(bi.__file__).resolve().parent
+    run = subprocess.run([sys.executable, "-c", MEMORY_PROBE, str(big), str(small)], cwd=backend,
+                         capture_output=True, text=True, check=True)
+    sizes, megabytes = run.stdout.rsplit(" ", 1)
+    assert sizes == "[1600, 1600, 1600, 1600]"
+    assert int(megabytes) < 300, run.stdout
+
+
+def test_a_long_reading_and_the_date_shrink_together():
+    """A reading too long for the band is made smaller, and the date with it, so it never prints smaller
+    than the date under it."""
+    draw = ImageDraw.Draw(Image.new("RGB", (10, 10)))
+    long = "1 Corinthians 15:1-11, 12-20, 35-38, 42-50 or Psalm 23 or Psalm 100"
+    reading, date = bi.fitted_sizes(draw, [(long, 75), ("October 11, 2026", 58)], 1395)
+    assert reading < 75 and reading >= date and abs(reading / date - 75 / 58) < 0.1
+    assert draw.textlength(long, font=bi._font(reading)) <= 1395
+    assert bi.fitted_sizes(draw, [("Matthew 22:1-14", 75), ("October 11, 2026", 58)], 1395) == [75, 58]
 ````
 
 **Append to `backend/tests/test_service_bulletin.py`:**
@@ -1050,19 +1295,24 @@ PR 3 planning answers 2-6), with Pillow (installed with reportlab).
 
 - prepare(data): an upload made ready to store (POST /bulletin-images). It
   must be at most 10 MB, a JPEG or a PNG (planning answer 5: no HEIC; an
-  iPhone's Safari sends a JPEG) and at most 50 million pixels. It is turned
-  upright (its EXIF orientation), its colors converted to sRGB when it
-  carries a color profile (an iPhone's Display P3), a transparent part laid
-  on white, scaled down to at most 1600 px on its long side (never up), and
-  stored as a JPEG with no camera data (no EXIF, so no location or time).
+  iPhone's Safari sends a JPEG; a phone's multi-picture JPEG, which Pillow
+  calls "MPO", is a JPEG) and at most 50 million pixels (24 million for a
+  PNG, which is decoded whole). It is turned upright (its EXIF
+  orientation), its colors converted to sRGB when it carries a color
+  profile (an iPhone's Display P3), a transparent part laid on white,
+  scaled down to at most 1600 px on its long side (never up), and stored as
+  a JPEG with no camera data (no EXIF, so no location or time) of at most
+  MAX_STORED_BYTES (a lower quality, then a smaller size, until it fits).
   A JPEG is decoded at a reduced scale when it is much larger (draft mode),
-  so a phone photo never needs its full size in memory. Anything else is a
-  422 naming the field "image".
+  and a large PNG is reduced before anything else is done to it, so the
+  memory one upload takes stays bounded; one upload is prepared at a time in
+  the process (one worker thread), and another waits its turn up to
+  BUSY_WAIT_SECONDS, then is a 429 (BUSY_MESSAGE). Anything else is a 422 naming the field "image".
 - cover(picture, lines, size): the cover's box as both printed files show it
   (planning answers 2-4): the picture scaled to fill `size` and trimmed
   evenly at the edges (a centered crop), in color, with a dark see-through
   band across its bottom holding `lines` (the reading and the date) in
-  white, centered, each shrunk to fit the width. A JPEG; the PDF and the
+  white, centered, shrunk together to fit the width. A JPEG; the PDF and the
   Word version place the same picture, so they look the same.
 Pure: no database, FastAPI or rendering library (the band's font is the
 Times Bold outline that reportlab ships).
@@ -1070,6 +1320,9 @@ Times Bold outline that reportlab ships).
 from __future__ import annotations
 
 import os
+import warnings
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as Waited
 from collections.abc import Sequence
 from dataclasses import dataclass
 from io import BytesIO
@@ -1077,23 +1330,45 @@ from io import BytesIO
 import reportlab
 from PIL import Image, ImageCms, ImageDraw, ImageFont, ImageOps, UnidentifiedImageError
 
-from domain_errors import InvalidInput
+from domain_errors import InvalidInput, RateLimited
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024          # planning answer: at most 10 MB in
-MAX_PIXELS = 50_000_000                      # more than any phone camera's 48 MP
+MAX_PIXELS = 50_000_000                      # a JPEG: more than any phone camera's 48 MP
+MAX_PNG_PIXELS = 24_000_000                  # a PNG (a screenshot or a graphic), decoded whole
 MAX_SIDE = 1600                              # the stored picture's long side, at most
+MAX_STORED_BYTES = 600_000                   # the stored JPEG, at most (plan review C3)
 CONTENT_TYPE = "image/jpeg"                  # what is stored and served
-FORMATS = ("JPEG", "PNG")                    # planning answer 5
-JPEG_QUALITY = 85
+FORMATS = ("JPEG", "MPO", "PNG")             # planning answer 5; MPO: a phone's multi-picture JPEG
+OPENERS = ("JPEG", "PNG")                    # the only parsers tried (Pillow opens an MPO with JPEG's)
+# The stored JPEG's long side and quality, tried in turn until it is at most MAX_STORED_BYTES.
+ENCODINGS = ((1600, 85), (1600, 75), (1400, 70), (1200, 65), (1000, 60), (800, 60))
+BUSY_WAIT_SECONDS = 10.0                     # how long an upload waits for the one before it
+BUSY_RETRY_SECONDS = 5
 
 TOO_LARGE_MESSAGE = "The picture is larger than 10 MB. Choose a smaller one."
 NOT_A_PICTURE_MESSAGE = "Choose a JPEG or PNG picture."
 TOO_MANY_PIXELS_MESSAGE = "The picture has too many pixels. Choose a smaller one."
+BUSY_MESSAGE = "Another picture is being prepared. Try again in a few seconds."
 
 # The band: black at this opacity, its text white (planning answer 2).
 BAND_OPACITY = 0.55
 # Times Bold's outline, as reportlab ships it (the PDF's standard Times-Bold has no file of its own).
 FONT_FILE = os.path.join(os.path.dirname(reportlab.__file__), "fonts", "_eb_____.pfb")
+
+# EXIF orientation (a phone stores a portrait photo sideways): the turn that makes it upright.
+ORIENTATION = 0x0112
+TURNS = {2: Image.Transpose.FLIP_LEFT_RIGHT, 3: Image.Transpose.ROTATE_180, 4: Image.Transpose.FLIP_TOP_BOTTOM,
+         5: Image.Transpose.TRANSPOSE, 6: Image.Transpose.ROTATE_270, 7: Image.Transpose.TRANSVERSE,
+         8: Image.Transpose.ROTATE_90}
+
+# Pillow's own guard against a picture that claims more pixels than its file holds: it refuses one
+# past twice this as it opens it (a 422 here). The process opens no other large picture.
+Image.MAX_IMAGE_PIXELS = MAX_PIXELS
+# One upload is decoded and prepared at a time in the process (plan review C2), always on this one thread:
+# uploads arriving together queue here instead of adding up, and the memory a picture took is reused by
+# the next (the C allocator keeps freed memory per thread, so twenty threads taking turns would each keep
+# their own).
+_WORKER = ThreadPoolExecutor(max_workers=1, thread_name_prefix="bulletin-image")
 
 
 @dataclass(frozen=True)
@@ -1113,13 +1388,30 @@ def _target(width: int, height: int) -> tuple[int, int]:
     return max(1, round(width * scale)), max(1, round(height * scale))
 
 
-def _rgb(img: Image.Image) -> Image.Image:
+def _smaller(img: Image.Image) -> Image.Image:
+    """The decoded picture at most MAX_SIDE on its long side, in a mode Pillow scales well. A large one is
+    first reduced by a whole factor (box averaging into a new, small picture: no second copy at full size)."""
+    if img.mode.startswith("I;16") or img.mode == "I":
+        img = img.point(lambda v: v * (1 / 256)).convert("L")       # 16-bit grey: keep its tones (not clipped)
+    elif img.mode == "P":
+        img = img.convert("RGBA" if "transparency" in img.info else "RGB")
+    elif img.mode not in ("RGB", "RGBA", "L", "LA", "CMYK"):
+        bands = img.getbands()
+        img = img.convert("RGBA" if "A" in bands else "L" if len(bands) == 1 else "RGB")
+    factor = max(img.size) // MAX_SIDE
+    if factor >= 2:
+        img = img.reduce(factor)
+    img.thumbnail((MAX_SIDE, MAX_SIDE), Image.Resampling.LANCZOS)
+    return img
+
+
+def _rgb(img: Image.Image, icc: bytes | None) -> Image.Image:
     """RGB in sRGB: a transparent part laid on white; a color profile converted (kept as is if unreadable)."""
-    if img.mode in ("RGBA", "LA", "PA") or (img.mode == "P" and "transparency" in img.info):
-        rgba = img.convert("RGBA")
-        img = Image.alpha_composite(Image.new("RGBA", rgba.size, "white"), rgba)
-    icc = img.info.get("icc_profile")
-    if icc and img.mode in ("RGB", "RGBA", "CMYK"):
+    if "A" in img.getbands():
+        flat = Image.new("RGB", img.size, "white")
+        flat.paste(img.convert("RGB"), mask=img.getchannel("A"))
+        img = flat
+    if icc and img.mode in ("RGB", "CMYK"):
         try:
             return ImageCms.profileToProfile(img, ImageCms.ImageCmsProfile(BytesIO(icc)),
                                              ImageCms.createProfile("sRGB"), outputMode="RGB")
@@ -1128,40 +1420,78 @@ def _rgb(img: Image.Image) -> Image.Image:
     return img if img.mode == "RGB" else img.convert("RGB")
 
 
-def prepare(data: bytes) -> Prepared:
+def _encoded(picture: Image.Image) -> tuple[bytes, int, int]:
+    """The JPEG to store: the first of ENCODINGS of at most MAX_STORED_BYTES (the last one otherwise)."""
+    for side, quality in ENCODINGS:
+        img = picture
+        if max(picture.size) > side:
+            img = picture.copy()
+            img.thumbnail((side, side), Image.Resampling.LANCZOS)
+        out = BytesIO()
+        img.save(out, "JPEG", quality=quality, optimize=True)
+        if out.tell() <= MAX_STORED_BYTES:
+            break
+    return out.getvalue(), img.width, img.height
+
+
+def _prepared(data: bytes) -> Prepared:
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", Image.DecompressionBombWarning)     # the check below says it
+            img = Image.open(BytesIO(data), formats=OPENERS)
+        if img.format not in FORMATS:
+            raise _invalid(NOT_A_PICTURE_MESSAGE)
+        limit = MAX_PNG_PIXELS if img.format == "PNG" else MAX_PIXELS
+        if img.width * img.height > limit:
+            raise _invalid(TOO_MANY_PIXELS_MESSAGE)
+        icc = img.info.get("icc_profile")                           # read before anything drops `info`
+        orientation = img.getexif().get(ORIENTATION, 1)
+        if img.format != "PNG":
+            img.draft("RGB", _target(img.width, img.height))       # decode at 1/2, 1/4 or 1/8 when it can
+        img.load()
+        img = _smaller(img)                                         # the decoded original is let go here
+        img = img.transpose(TURNS[orientation]) if orientation in TURNS else img     # upright
+        picture = _rgb(img, icc)
+    except Image.DecompressionBombError:
+        raise _invalid(TOO_MANY_PIXELS_MESSAGE) from None
+    except (UnidentifiedImageError, OSError, SyntaxError, ValueError):
+        raise _invalid(NOT_A_PICTURE_MESSAGE) from None
+    content, width, height = _encoded(picture)
+    return Prepared(content, width, height)
+
+
+def prepare(data: bytes, *, wait: float = BUSY_WAIT_SECONDS) -> Prepared:
     """The upload checked and made ready to store (see the module docstring)."""
     if len(data) > MAX_UPLOAD_BYTES:
         raise _invalid(TOO_LARGE_MESSAGE)
+    if not data:
+        raise _invalid(NOT_A_PICTURE_MESSAGE)
+    job = _WORKER.submit(_prepared, data)
     try:
-        with Image.open(BytesIO(data)) as img:
-            if img.format not in FORMATS:
-                raise _invalid(NOT_A_PICTURE_MESSAGE)
-            if img.width * img.height > MAX_PIXELS:
-                raise _invalid(TOO_MANY_PIXELS_MESSAGE)
-            if img.format == "JPEG":
-                img.draft("RGB", _target(img.width, img.height))       # decode at 1/2, 1/4 or 1/8 when it can
-            img.load()
-            ImageOps.exif_transpose(img, in_place=True)                 # no second copy of a large picture
-            picture = _rgb(img)
-    except (UnidentifiedImageError, Image.DecompressionBombError, OSError, SyntaxError, ValueError):
-        raise _invalid(NOT_A_PICTURE_MESSAGE) from None
-    picture.thumbnail((MAX_SIDE, MAX_SIDE), Image.Resampling.LANCZOS)
-    out = BytesIO()
-    picture.save(out, "JPEG", quality=JPEG_QUALITY, optimize=True)
-    return Prepared(out.getvalue(), picture.width, picture.height)
+        return job.result(timeout=wait)
+    except Waited:
+        if job.cancel():                                            # still waiting its turn: not started
+            raise RateLimited(BUSY_MESSAGE, retry_after_seconds=BUSY_RETRY_SECONDS) from None
+        return job.result()                                         # started: it finishes in about a second
 
 
 def _font(size: int) -> ImageFont.FreeTypeFont:
     return ImageFont.truetype(FONT_FILE, size)
 
 
-def _fitted(draw: ImageDraw.ImageDraw, text: str, size: int, width: int) -> ImageFont.FreeTypeFont:
-    """The font at `size` pixels, or smaller until `text` fits `width`."""
-    font = _font(size)
-    while size > 8 and draw.textlength(text, font=font) > width:
-        size -= 2
-        font = _font(size)
-    return font
+def fitted_sizes(draw: ImageDraw.ImageDraw, lines: Sequence[tuple[str, int]], width: int) -> list[int]:
+    """The lines' pixel sizes, all shrunk by the same factor until every line fits `width` (so a long
+    reading is never smaller than the date under it), at least 8 px."""
+    scale = 1.0
+    for text, px in lines:
+        length = draw.textlength(text, font=_font(px))
+        if length > width:
+            scale = min(scale, width / length)
+    sizes = [max(8, int(px * scale)) for _text, px in lines]
+    while any(draw.textlength(text, font=_font(size)) > width for (text, _px), size in zip(lines, sizes)) \
+            and max(sizes) > 8:
+        sizes = [max(8, size - 1) for size in sizes]
+    return sizes
 
 
 def cover(picture: bytes, lines: Sequence[tuple[str, int]], size: tuple[int, int]) -> bytes:
@@ -1174,7 +1504,7 @@ def cover(picture: bytes, lines: Sequence[tuple[str, int]], size: tuple[int, int
     if lines:
         draw = ImageDraw.Draw(box)
         margin = round(width * 0.05)
-        fonts = [_fitted(draw, text, px, width - 2 * margin) for text, px in lines]
+        fonts = [_font(px) for px in fitted_sizes(draw, lines, width - 2 * margin)]
         gap = round(min(px for _text, px in lines) * 0.45)
         heights = [font.getbbox(text)[3] - font.getbbox(text)[1] for (text, _px), font in zip(lines, fonts)]
         pad = round(min(px for _text, px in lines) * 0.6)
@@ -1670,12 +2000,15 @@ Run: `.venv/bin/python -m pytest -q backend/tests/test_bulletin_image.py backend
 
 ```bash
 git add backend/bulletin_image.py backend/service_bulletin.py backend/printed_bulletin.py backend/printed_pdf.py backend/printed_docx.py backend/tests/picture_helpers.py backend/tests/test_bulletin_image.py backend/tests/test_service_bulletin.py backend/tests/test_printed_bulletin.py backend/tests/test_printed_render.py
-git commit -q -m "Printed bulletin PR 3a: the cover picture's module and the printed cover" -m "bulletin_image (Pillow): prepare checks an upload (a JPEG or PNG, at most
-10 MB and 50 million pixels), turns it upright, converts it to sRGB, lays a
-transparent part on white, scales it to at most 1600 px and stores it as a
-JPEG with no camera data; cover makes the cover's box: the picture filling
-it with a centered crop, in color, with the reading and the date in white on
-a dark see-through band (planning answers 2-4). service_bulletin gains
+git commit -q -m "Printed bulletin PR 3a: the cover picture's module and the printed cover" -m "bulletin_image (Pillow): prepare checks an upload (a JPEG, a phone's
+multi-picture JPEG included, or a PNG; at most 10 MB and 50 million pixels,
+24 million for a PNG), prepares one at a time on one thread (a 429 after
+10 s of waiting), turns it upright, converts it to sRGB, lays a transparent
+part on white, scales it to at most 1600 px and stores it as a JPEG of at
+most 600 KB with no camera data; cover makes the cover's box: the picture
+filling it with a centered crop, in color, with the reading and the date in
+white on a dark see-through band, shrunk together when long (planning
+answers 2-4; the plan review's memory and size limits). service_bulletin gains
 cover_image_id and cover_given (False when a page from before PR 3b did not
 say). printed_bulletin.cover_kind: the picture, the reading and the date
 alone (planning answer 6), or PR 1's box for a page from before 3b; the PDF
@@ -1684,7 +2017,7 @@ centered under the church's name." -m "Co-Authored-By: Claude Opus 5.5 <noreply@
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1453 passed, 19 skipped`; frontend `704 passed` in 87 files.
+Expected counts after this task: backend `1463 passed, 21 skipped`; frontend `704 passed` in 87 files.
 
 ### Task 3: The API: upload, show, save and print a cover picture (S API, "Data model"; F §1.2, §1.3, §1.8, §2.2, §2.5; clarifications 5-7, 10, 13, 18)
 
@@ -1692,7 +2025,7 @@ Expected counts after this task: backend `1453 passed, 19 skipped`; frontend `70
 - Create: `backend/tests/test_api_bulletin_images.py`, `backend/repos/bulletin_images.py`, `backend/usecases/bulletin_images.py`, `backend/api/routes/bulletin_images.py`
 - Modify: `backend/tests/test_no_streamlit_in_core.py`, `backend/tests/test_middleware.py`, `backend/tests/test_ratelimit.py`, `backend/tests/test_service_bulletin.py`, `backend/tests/test_api_services.py`, `backend/tests/test_api_printed.py`, `backend/service_bulletin.py`, `backend/repos/services.py`, `backend/usecases/archive.py`, `backend/usecases/documents.py`, `backend/api/schemas.py`, `backend/api/ratelimit.py`, `backend/api/middleware.py`, `backend/api/main.py`, `frontend/src/lib/api/types.ts`, `frontend/src/lib/api/openapi.json` and `frontend/src/lib/api/schema.d.ts` (regenerated)
 
-`test_api_services.py`'s `BLANK_BULLETIN` gains `"cover_image_id": None` (what a 3b page sends, and what every answer now holds); its 422 case for an unknown box moves from "cover" (now a box) to "picture". `test_route_guards.py` needs no change: both routes depend on `require_church`.
+`test_api_services.py`'s `BLANK_BULLETIN` gains `"cover_image_id": None` (what a 3b page sends, and what every answer now holds); its 422 case for an unknown box moves from "cover" (now a box) to "picture". `test_route_guards.py` needs no change: both routes depend on `require_church`. The plan review's cases: the GET's headers and its 304, the removal across churches in batches, a church's 60, the 150 MB budget, the removal reading the saved services after it locks (on SQLite, a save slipped in between), and on Postgres the two locks timing each other out (clarifications 6, 7, 20).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1772,18 +2105,21 @@ def test_the_cover_picture_is_the_first_box_to_check():
 
 ````python
 """/bulletin-images (printed bulletin spec, API; PR 3 planning answers 5, 8,
-9; PR 3a): upload a cover picture, see it, church-scoped, and the removal of
-the church's unused pictures after 60 days. Invented pictures only."""
+9; PR 3a): upload a cover picture, see it, church-scoped, the removal of
+unused pictures after 60 days, a church's 60 pictures, the storage budget,
+and a save and a removal waiting for each other (plan review C3, I4, I5).
+Invented pictures only."""
 import datetime
 import logging
 import uuid
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, text, update
+from sqlalchemy.exc import OperationalError
 
 import bulletin_image
 from api import ratelimit
-from db import session_scope
+from db import SessionLocal, session_scope
 from db.models import BulletinImage, Service
 from repos.memberships import add_membership
 from tests.api_helpers import (  # noqa: F401 (isolation_world is a fixture)
@@ -1834,8 +2170,13 @@ def test_any_member_uploads_a_picture_and_sees_it(client, church, make_user, cap
     got = client.get(f"/bulletin-images/{made['id']}", headers=church_headers(EMAIL, church))
     assert got.status_code == 200, got.text
     assert got.headers["content-type"] == "image/jpeg"
-    assert got.headers["cache-control"] == "private, max-age=86400"
+    assert (got.headers["cache-control"], got.headers["x-content-type-options"], got.headers["etag"]) == (
+        "private, no-cache", "nosniff", f'"{made["id"]}"')
+    assert got.headers["vary"].startswith("Authorization, X-Church-Id")              # CORS adds Origin
     assert opened(got.content).size == (1600, 1200)
+    again = client.get(f"/bulletin-images/{made['id']}",
+                       headers={**church_headers(EMAIL, church), "If-None-Match": got.headers["etag"]})
+    assert (again.status_code, again.content, again.headers["etag"]) == (304, b"", got.headers["etag"])
     with session_scope() as s:
         row = s.get(BulletinImage, uuid.UUID(made["id"]))
         assert (row.content_type, row.width, row.height, row.created_by) == ("image/jpeg", 1600, 1200, member)
@@ -1867,7 +2208,8 @@ def test_a_body_without_its_size_is_refused_before_it_is_read(client, church):
                                                                    "Content-Type": "image/jpeg"})
     assert r.status_code == 422, r.text
     assert r.json()["error"]["fields"] == {"image": "Send the picture with its size (Content-Length)."}
-    assert upload(client, church, b"").status_code == 422
+    empty = upload(client, church, b"")                     # an iCloud photo not downloaded yet
+    assert (empty.status_code, empty.json()["error"]["fields"]) == (422, {"image": bulletin_image.NOT_A_PICTURE_MESSAGE})
     assert stored_ids() == set()
 
 
@@ -1879,6 +2221,9 @@ def test_every_route_is_church_isolated(client, isolation_world):
     assert_church_isolated(client, "GET", f"/bulletin-images/{mine}", world=w,
                            resource_path_b=f"/bulletin-images/{theirs}")
     r = client.get(f"/bulletin-images/{uuid.uuid4()}", headers=church_headers(w.a, w.church_a))
+    assert (r.status_code, r.json()["error"]["message"]) == (404, GONE)
+    r = client.get(f"/bulletin-images/{theirs}", headers={**church_headers(w.a, w.church_a),
+                                                           "If-None-Match": f'"{theirs}"'})
     assert (r.status_code, r.json()["error"]["message"]) == (404, GONE)
     r = client.get("/bulletin-images/not-an-id", headers=church_headers(w.a, w.church_a))
     assert (r.status_code, r.json()["error"]["code"]) == (422, "invalid_request")
@@ -1892,31 +2237,134 @@ def test_the_picture_bucket_takes_20_an_hour_a_member(client, church, pastor):
     assert stored_ids() == set()
 
 
-def test_an_upload_removes_the_church_s_pictures_unused_for_60_days(client, church, pastor, make_church,
-                                                                      caplog):
-    """Planning answer 9: a picture no saved service points at goes 60 days after its upload. Kept: one a
-    saved service points at (any age), one uploaded within 60 days (a draft may point at it), another
-    church's (it is removed on that church's own uploads)."""
-    other = make_church(name="Other", owner_user_id=pastor)
-    now = datetime.datetime.now(datetime.timezone.utc)
-    ids = {}
+def add_picture(church_id, user_id, *, age_days=0, data=None) -> str:
     with session_scope() as s:
-        for name, church_id, age in (("old", church, 61), ("used", church, 400), ("recent", church, 59),
-                                     ("elsewhere", other, 61)):
-            row = BulletinImage(church_id=church_id, content_type="image/jpeg", bytes=picture(), width=400,
-                                height=300, created_by=pastor, created_at=now - datetime.timedelta(days=age))
-            s.add(row)
-            s.flush()
-            ids[name] = str(row.id)
-        s.add(Service(church_id=church, service_date_iso="2026-01-04", occasion="", hymns=[], liturgy={},
-                      scriptures=[], bulletin={"cover_image_id": ids["used"]}))
-        s.add(Service(church_id=church, service_date_iso="2026-01-11", occasion="", hymns=[], liturgy={},
-                      scriptures=[], bulletin=None))
+        row = BulletinImage(church_id=church_id, content_type="image/jpeg", bytes=data or picture(), width=400,
+                            height=300, created_by=user_id, created_at=datetime.datetime.now(datetime.timezone.utc)
+                            - datetime.timedelta(days=age_days))
+        s.add(row)
+        s.flush()
+        return str(row.id)
+
+
+def add_service(church_id, image_id, day="2026-01-04"):
+    with session_scope() as s:
+        s.add(Service(church_id=church_id, service_date_iso=day, occasion="", hymns=[], liturgy={}, scriptures=[],
+                      bulletin={"cover_image_id": image_id}))
+
+
+def test_an_upload_removes_any_church_s_pictures_unused_for_60_days(client, church, pastor, make_church, caplog,
+                                                                    monkeypatch):
+    """Planning answer 9: a picture no saved service of its church points at goes 60 days after its upload,
+    on any church's next upload (a church that stops uploading loses its own too), at most REMOVE_BATCH at a
+    time. Kept: one a saved service points at (any age), one uploaded within 60 days (a draft may point at
+    it), one another church's service points at in that church."""
+    from usecases import bulletin_images
+
+    other = make_church(name="Other", owner_user_id=pastor)
+    ids = {"old": add_picture(church, pastor, age_days=61), "used": add_picture(church, pastor, age_days=400),
+           "recent": add_picture(church, pastor, age_days=59), "elsewhere": add_picture(other, pastor, age_days=70),
+           "elsewhere_too": add_picture(other, pastor, age_days=65),
+           "used_elsewhere": add_picture(other, pastor, age_days=90)}
+    add_service(church, ids["used"])
+    add_service(other, ids["used_elsewhere"])
+    add_service(other, ids["old"], day="2026-01-11")          # another church's service: not a use of this one
+    monkeypatch.setattr(bulletin_images, "REMOVE_BATCH", 2)
     caplog.set_level(logging.INFO, logger="usecases.bulletin_images")
-    r = upload(client, church, picture())
-    assert r.status_code == 201, r.text
-    assert stored_ids() == {ids["used"], ids["recent"], ids["elsewhere"], r.json()["id"]}
+    first = upload(client, church, picture())
+    assert first.status_code == 201, first.text
+    # The church with the oldest picture first ("used", 400 days): its "old"; then the other's oldest unused,
+    # "elsewhere", and the batch of 2 is full.
+    assert stored_ids() == {ids["used"], ids["recent"], ids["elsewhere_too"], ids["used_elsewhere"],
+                            first.json()["id"]}
+    assert "removed=2" in caplog.records[-1].getMessage()
+    second = upload(client, church, picture())
+    assert stored_ids() == {ids["used"], ids["recent"], ids["used_elsewhere"], first.json()["id"],
+                            second.json()["id"]}
     assert "removed=1" in caplog.records[-1].getMessage()
+
+
+def test_a_church_keeps_at_most_its_quota_of_pictures(client, church, pastor, monkeypatch):
+    """Plan review C3: past MAX_PICTURES, the church's oldest pictures no saved service points at make room,
+    whatever their age; when every one is in a saved service, the upload is refused and nothing changes."""
+    from usecases import bulletin_images
+
+    monkeypatch.setattr(bulletin_images, "MAX_PICTURES", 3)
+    first, second, third = (add_picture(church, pastor, age_days=days) for days in (3, 2, 1))
+    add_service(church, first)
+    made = upload(client, church, picture())
+    assert made.status_code == 201, made.text
+    assert stored_ids() == {first, third, made.json()["id"]}                  # the oldest unused one went
+    add_service(church, third, day="2026-01-11")
+    add_service(church, made.json()["id"], day="2026-01-18")
+    full = upload(client, church, picture())
+    assert (full.status_code, full.json()["error"]["fields"]) == (422, {"image": bulletin_images.CHURCH_FULL_MESSAGE})
+    assert stored_ids() == {first, third, made.json()["id"]}
+    assert bulletin_images.CHURCH_FULL_MESSAGE.startswith("Your church keeps 60 pictures, all in saved services.")
+
+
+def test_uploads_stop_when_every_church_s_pictures_reach_the_storage_budget(client, church, pastor, make_church,
+                                                                            monkeypatch, caplog):
+    """Plan review C3: any Google account can make a church, so a budget for all churches together keeps the
+    database's free plan from filling; past it the upload is refused and the log says so."""
+    from usecases import bulletin_images
+
+    other = make_church(name="Other", owner_user_id=pastor)
+    add_picture(other, pastor, data=b"\xff" * 5000)
+    monkeypatch.setattr(bulletin_images, "STORAGE_BUDGET", 5000 + len(bulletin_image.prepare(picture()).content))
+    assert upload(client, church, picture()).status_code == 201
+    caplog.set_level(logging.WARNING, logger="usecases.bulletin_images")
+    r = upload(client, church, picture())
+    assert (r.status_code, r.json()["error"]["fields"]) == (422, {"image": bulletin_images.STORAGE_FULL_MESSAGE})
+    assert len(stored_ids()) == 2
+    assert caplog.records[-1].getMessage().startswith(f"bulletin_images.storage_full church={church} total=")
+
+
+def test_the_removal_reads_the_saved_services_after_it_locks_its_candidates(client, church, pastor, monkeypatch):
+    """Plan review I5: a save that points at an old picture while the removal runs keeps it. The removal
+    locks its candidates first (FOR UPDATE on Postgres) and only then reads which pictures the saved services
+    point at, so a save that got there first is seen (the Postgres test below checks the locks themselves)."""
+    from repos import bulletin_images as images_repo
+
+    old = add_picture(church, pastor, age_days=61)
+    add_service(church, None)
+    original = images_repo.ids_created_before
+
+    def a_save_in_between(church_id, cutoff=None, *, session, lock=False):
+        found = original(church_id, cutoff, session=session, lock=lock)
+        session.execute(update(Service).where(Service.church_id == church_id).values(bulletin={"cover_image_id": old}))
+        return found
+
+    monkeypatch.setattr(images_repo, "ids_created_before", a_save_in_between)
+    assert upload(client, church, picture()).status_code == 201
+    assert old in stored_ids()
+
+
+@pytest.mark.postgres
+def test_a_save_and_the_removal_wait_for_each_other(pg_db):
+    """Plan review I5, on Postgres: the removal's FOR UPDATE on a picture and a save's FOR SHARE on it
+    exclude each other, whichever comes first (the other waits; here it gives up after 200 ms)."""
+    from repos import bulletin_images as images_repo
+    from repos.churches import create_church
+    from repos.users import ensure_user
+
+    user = ensure_user("pastor@example.com", "Pastor").id
+    church_id = create_church(name="Grace", timezone="America/New_York", owner_user_id=user)
+    image = add_picture(church_id, user, age_days=61)
+    for first, second in (("remove", "save"), ("save", "remove")):
+        holder, waiter = SessionLocal(), SessionLocal()
+        try:
+            take = {"remove": lambda s: images_repo.ids_created_before(church_id, None, session=s, lock=True),
+                    "save": lambda s: images_repo.has_image(church_id, image, session=s, lock=True)}
+            assert take[first](holder)
+            waiter.execute(text("SET LOCAL lock_timeout = '200ms'"))
+            with pytest.raises(OperationalError, match="lock timeout"):
+                take[second](waiter)
+        finally:
+            waiter.rollback()
+            holder.rollback()
+            waiter.close()
+            holder.close()
 ````
 
 **In `backend/tests/test_api_services.py`, replace:**
@@ -2031,13 +2479,13 @@ def test_the_cover_picture_prints_and_a_page_from_before_3b_keeps_pr_1_s_box(cli
 - [ ] **Step 2: See them fail**
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_api_bulletin_images.py backend/tests/test_api_services.py backend/tests/test_api_printed.py backend/tests/test_no_streamlit_in_core.py backend/tests/test_service_bulletin.py backend/tests/test_middleware.py backend/tests/test_ratelimit.py 2>&1 | tail -3` then the same without `test_middleware.py`, `| tail -1`
-**Expected:** `test_middleware.py` cannot load (`UploadSizeMiddleware` does not exist yet):
+**Expected:** `test_middleware.py` cannot load (`UploadSizeMiddleware` does not exist yet; the new test file imports `usecases.bulletin_images` and `repos.bulletin_images` inside the tests that need them, so it loads):
 ```
 ERROR backend/tests/test_middleware.py
 !!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
 1 error in <t>s
 ```
-then `17 failed, 68 passed in <t>s`: the upload and preview tests (no route: 404 and 405), the saved and printed picture (`cover_image_id` is an extra field, a 422), "cover" as a box, the bucket list, and the layering test (no `usecases.bulletin_images`).
+then `17 failed, 68 passed in <t>s`: the upload and preview tests (no route: 404 and 405), the removal, the quota, the budget and the lock-order tests (no route), the saved and printed picture (`cover_image_id` is an extra field, a 422), "cover" as a box, the bucket list, and the layering test (no `usecases.bulletin_images`).
 
 - [ ] **Step 3: The repo, the usecase, the routes, the middleware, the archive and the download, the types**
 
@@ -2075,11 +2523,20 @@ CARRY_KEYS = ("cover", "prelude", "postlude", *ANNOUNCEMENT_KEYS)
 """The cover pictures, church-scoped (printed bulletin spec, "Data model";
 PR 3a; table bulletin_images, migration 0007_bulletin_images).
 
-Every query filters on church_id, so another church's picture is simply
-absent (the usecase's 404, or no picture printed). Each function runs in the
-caller's session (F §2.2 rule 3); usecases.bulletin_images, usecases.archive
-and usecases.documents own the transactions. The picture's bytes are read
-only by get_picture (a projection elsewhere, so a list never loads them).
+Every query of one church's pictures filters on church_id, so another
+church's picture is simply absent (the usecase's 404, or no picture
+printed); the two that look at every church's (churches_with_pictures_before
+and total_bytes, for the removal and the storage budget) return no picture.
+Each function runs in the caller's session (F §2.2 rule 3);
+usecases.bulletin_images, usecases.archive and usecases.documents own the
+transactions. The picture's bytes are read only by get_picture (a projection
+elsewhere, so a list never loads them).
+
+Locks (plan review I5): the removal takes its candidates `FOR UPDATE` before
+it reads which pictures the saved services point at, and a save takes the
+picture it points at `FOR SHARE` (has_image with lock=True), so a save never
+points at a picture being removed: one waits for the other. SQLite ignores
+both (one writer at a time).
 """
 import datetime
 import uuid
@@ -2087,7 +2544,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Optional
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from db.ids import as_uuid
@@ -2117,15 +2574,39 @@ def get_picture(church_id, image_id, *, session: Session) -> Optional[StoredPict
     return None if row is None else StoredPicture(row.content_type, bytes(row.bytes))
 
 
-def has_image(church_id, image_id, *, session: Session) -> bool:
-    return session.execute(select(BulletinImage.id).where(
-        BulletinImage.id == as_uuid(image_id), BulletinImage.church_id == as_uuid(church_id))).first() is not None
+def has_image(church_id, image_id, *, session: Session, lock: bool = False) -> bool:
+    """Whether the church has this picture; with lock, it is held (FOR SHARE) until the transaction ends."""
+    query = select(BulletinImage.id).where(
+        BulletinImage.id == as_uuid(image_id), BulletinImage.church_id == as_uuid(church_id))
+    return session.execute(query.with_for_update(read=True) if lock else query).first() is not None
 
 
-def ids_created_before(church_id, cutoff: datetime.datetime, *, session: Session) -> list[uuid.UUID]:
-    """The church's pictures uploaded before `cutoff` (ix_bulletin_images_church_created)."""
-    return list(session.execute(select(BulletinImage.id).where(
-        BulletinImage.church_id == as_uuid(church_id), BulletinImage.created_at < cutoff)).scalars())
+def ids_created_before(church_id, cutoff: Optional[datetime.datetime] = None, *, session: Session,
+                       lock: bool = False) -> list[uuid.UUID]:
+    """The church's pictures, oldest first, those uploaded before `cutoff` only when given
+    (ix_bulletin_images_church_created); with lock, held FOR UPDATE until the transaction ends."""
+    query = select(BulletinImage.id).where(BulletinImage.church_id == as_uuid(church_id))
+    if cutoff is not None:
+        query = query.where(BulletinImage.created_at < cutoff)
+    query = query.order_by(BulletinImage.created_at, BulletinImage.id)
+    return list(session.execute(query.with_for_update() if lock else query).scalars())
+
+
+def churches_with_pictures_before(cutoff: datetime.datetime, *, session: Session) -> list[uuid.UUID]:
+    """Every church with a picture uploaded before `cutoff`, the one with the oldest first."""
+    oldest = func.min(BulletinImage.created_at)
+    return list(session.execute(select(BulletinImage.church_id).where(BulletinImage.created_at < cutoff)
+                                .group_by(BulletinImage.church_id).order_by(oldest)).scalars())
+
+
+def count_images(church_id, *, session: Session) -> int:
+    return int(session.execute(select(func.count()).select_from(BulletinImage).where(
+        BulletinImage.church_id == as_uuid(church_id))).scalar_one())
+
+
+def total_bytes(*, session: Session) -> int:
+    """Every church's pictures together, in bytes (Postgres reads each size without the picture)."""
+    return int(session.execute(select(func.coalesce(func.sum(func.length(BulletinImage.bytes)), 0))).scalar_one())
 
 
 def delete_images(church_id, image_ids: Iterable[uuid.UUID], *, session: Session) -> int:
@@ -2167,18 +2648,30 @@ answers 5, 8, 9; PR 3a).
 
 - upload(church_id, user_id, data): POST /bulletin-images. The upload is
   checked and made ready to store first (bulletin_image.prepare: a 422 naming
-  "image" touches no table), then, in one transaction, the church's pictures
-  no saved service points at and uploaded more than RETENTION ago are
-  removed (planning answer 9; remove_unused), and the new one is stored.
-- picture(church_id, image_id): GET /bulletin-images/{id}: the church's
-  picture, or a 404 (another church's id included, F §1.2 rule 2).
-- remove_unused(session, church_id, now): the removal, church-scoped. A
-  picture younger than RETENTION is never removed, so a draft's picture not
-  saved yet (a draft lives in one browser) has 60 days; one a saved service
-  points at is never removed, whatever its age. It runs on each upload of
-  that church, so nothing has to run on a schedule: a church that stops
-  uploading keeps its last unused pictures until its next upload.
+  "image" touches no table; a 429 when another picture is being prepared).
+  Then the old unused pictures of every church are removed, at most
+  REMOVE_BATCH (planning answer 9; remove_unused), in a transaction of its
+  own. Then, in one transaction: when the church already keeps MAX_PICTURES,
+  its oldest pictures no saved service points at make room (make_room;
+  every one in use: a 422, CHURCH_FULL_MESSAGE); when every church's
+  pictures together would pass STORAGE_BUDGET, a 422 (STORAGE_FULL_MESSAGE,
+  and a warning in the log); else the new one is stored.
+- picture(church_id, image_id, if_none_match): GET /bulletin-images/{id}:
+  the church's picture with its ETag, without its bytes when the browser
+  already has them (If-None-Match), or a 404 (another church's id included,
+  F §1.2 rule 2).
+- remove_unused(session, now): the removal. A picture younger than
+  RETENTION is never removed, so a draft's picture not saved yet (a draft
+  lives in one browser) has 60 days; one a saved service of its church
+  points at is never removed, whatever its age. It runs on every upload, of
+  any church, so nothing has to run on a schedule and a church that stops
+  uploading still loses its unused pictures; each upload removes at most
+  REMOVE_BATCH, so one call stays short. It reads the stored bulletins of
+  every church that has a picture older than RETENTION (a few hundred small
+  rows at this size).
 - in_use(session, church_id): the ids the church's saved services point at.
+Each removal locks its candidates before it reads in_use, and a save locks
+the picture it points at (repos.bulletin_images, plan review I5).
 Logs carry ids, counts and sizes, never a picture (F §2.5).
 """
 from __future__ import annotations
@@ -2188,11 +2681,12 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass
+from typing import Optional
 
 import bulletin_image
 from db import session_scope
 from db.ids import as_uuid
-from domain_errors import NotFound
+from domain_errors import InvalidInput, NotFound
 from repos import bulletin_images as images_repo
 from repos import services as services_repo
 from service_bulletin import read as read_bulletin
@@ -2200,7 +2694,14 @@ from service_bulletin import read as read_bulletin
 logger = logging.getLogger(__name__)
 
 RETENTION = datetime.timedelta(days=60)
+REMOVE_BATCH = 20                     # old unused pictures removed on one upload, at most (every church)
+MAX_PICTURES = 60                     # one church's stored pictures, at most
+STORAGE_BUDGET = 150_000_000          # every church's pictures together, at most (bytes; plan review C3)
+
 GONE_MESSAGE = "That picture is no longer available."
+CHURCH_FULL_MESSAGE = (f"Your church keeps {MAX_PICTURES} pictures, all in saved services. Remove the picture "
+                       "from an older service, then try again.")
+STORAGE_FULL_MESSAGE = "The app has no room for more pictures right now. Please tell the app's administrator."
 
 
 @dataclass(frozen=True)
@@ -2210,19 +2711,52 @@ class UploadedImage:
     height: int
 
 
+@dataclass(frozen=True)
+class Picture:
+    etag: str                         # the id, quoted: a picture's id never names other bytes
+    content_type: str
+    content: Optional[bytes]          # None: the browser's copy is current (a 304)
+
+
 def in_use(session, church_id: uuid.UUID) -> set[str]:
     """The picture ids the church's saved services point at (a stored bulletin's cover_image_id)."""
     ids = (read_bulletin(raw).cover_image_id for raw in services_repo.stored_bulletins(church_id, session=session))
     return {image_id for image_id in ids if image_id}
 
 
-def remove_unused(session, church_id: uuid.UUID, now: datetime.datetime) -> int:
-    """Remove the church's pictures uploaded more than RETENTION before `now` that no saved service points at."""
-    old = images_repo.ids_created_before(church_id, now - RETENTION, session=session)
-    if not old:
-        return 0
+def _unused(session, church_id: uuid.UUID, cutoff: Optional[datetime.datetime]) -> list[uuid.UUID]:
+    """The church's pictures (uploaded before `cutoff`, when given) no saved service points at, oldest first:
+    locked first, then checked against the saved services, so a save in between is seen."""
+    candidates = images_repo.ids_created_before(church_id, cutoff, session=session, lock=True)
+    if not candidates:
+        return []
     used = in_use(session, church_id)
-    return images_repo.delete_images(church_id, [i for i in old if str(i) not in used], session=session)
+    return [i for i in candidates if str(i) not in used]
+
+
+def remove_unused(session, now: datetime.datetime, *, limit: Optional[int] = None) -> int:
+    """Remove up to `limit` (REMOVE_BATCH) pictures, of any church, uploaded more than RETENTION before `now`
+    that no saved service of their church points at; the church with the oldest such picture first."""
+    limit = REMOVE_BATCH if limit is None else limit
+    cutoff = now - RETENTION
+    removed = 0
+    for church_id in images_repo.churches_with_pictures_before(cutoff, session=session):
+        if removed >= limit:
+            break
+        gone = _unused(session, church_id, cutoff)[:limit - removed]
+        removed += images_repo.delete_images(church_id, gone, session=session)
+    return removed
+
+
+def make_room(session, church_id: uuid.UUID) -> int:
+    """Below MAX_PICTURES after this: the church's oldest unused pictures removed, whatever their age."""
+    over = images_repo.count_images(church_id, session=session) - MAX_PICTURES + 1
+    if over <= 0:
+        return 0
+    unused = _unused(session, church_id, None)
+    if len(unused) < over:
+        raise InvalidInput(CHURCH_FULL_MESSAGE, field="image")
+    return images_repo.delete_images(church_id, unused[:over], session=session)
 
 
 def upload(church_id: uuid.UUID, user_id: uuid.UUID, data: bytes) -> UploadedImage:
@@ -2230,7 +2764,14 @@ def upload(church_id: uuid.UUID, user_id: uuid.UUID, data: bytes) -> UploadedIma
     cid = as_uuid(church_id)
     prepared = bulletin_image.prepare(data)
     with session_scope() as s:
-        removed = remove_unused(s, cid, datetime.datetime.now(datetime.timezone.utc))
+        removed = remove_unused(s, datetime.datetime.now(datetime.timezone.utc))
+    with session_scope() as s:
+        removed += make_room(s, cid)
+        total = images_repo.total_bytes(session=s)
+        if total + len(prepared.content) > STORAGE_BUDGET:
+            logger.warning("bulletin_images.storage_full church=%s total=%d budget=%d", cid, total,
+                           STORAGE_BUDGET)
+            raise InvalidInput(STORAGE_FULL_MESSAGE, field="image")
         row = images_repo.insert_image(cid, user_id, content_type=bulletin_image.CONTENT_TYPE,
                                        content=prepared.content, width=prepared.width, height=prepared.height,
                                        session=s)
@@ -2241,12 +2782,23 @@ def upload(church_id: uuid.UUID, user_id: uuid.UUID, data: bytes) -> UploadedIma
     return result
 
 
-def picture(church_id: uuid.UUID, image_id: uuid.UUID) -> images_repo.StoredPicture:
+def _matches(if_none_match: Optional[str], etag: str) -> bool:
+    tags = [tag.strip().removeprefix("W/") for tag in (if_none_match or "").split(",")]
+    return etag in tags or "*" in tags
+
+
+def picture(church_id: uuid.UUID, image_id: uuid.UUID, if_none_match: Optional[str] = None) -> Picture:
+    etag = f'"{image_id}"'
     with session_scope() as s:
-        found = images_repo.get_picture(church_id, image_id, session=s)
-    if found is None:
+        if _matches(if_none_match, etag):
+            found = images_repo.has_image(church_id, image_id, session=s)
+            answer = Picture(etag, bulletin_image.CONTENT_TYPE, None) if found else None
+        else:
+            stored = images_repo.get_picture(church_id, image_id, session=s)
+            answer = None if stored is None else Picture(etag, stored.content_type, stored.content)
+    if answer is None:
         raise NotFound(GONE_MESSAGE)
-    return found
+    return answer
 ````
 
 **In `backend/usecases/archive.py`, replace:**
@@ -2264,7 +2816,9 @@ Printed bulletin PR 3a adds the week's cover picture (cover_image_id): a
 save stores it when it is one of the church's pictures and no picture
 otherwise (an id of another church, or one no longer there: never a 404,
 never a picture from elsewhere); a PUT whose bulletin does not say (a page
-from before PR 3b) keeps the saved picture.
+from before PR 3b) keeps the saved picture. The picture is held (FOR SHARE)
+until the save commits, so the 60-day removal cannot take it meanwhile
+(repos.bulletin_images, plan review I5).
 
 No FastAPI, Starlette or Streamlit here (test_no_streamlit_in_core.py).
 ````
@@ -2297,7 +2851,7 @@ def _with_known_cover(session, church_id: uuid.UUID, clean: ServiceInput) -> Ser
     """The input with a cover picture the church does not have read as no picture (PR 3a)."""
     week = clean.bulletin
     if week is None or not week.cover_image_id or images_repo.has_image(church_id, week.cover_image_id,
-                                                                        session=session):
+                                                                        session=session, lock=True):
         return clean
     return replace(clean, bulletin=replace(week, cover_image_id=None))
 
@@ -2548,17 +3102,23 @@ call (F §2.2 rule 1), with no SQL and no try/except.
   python-multipart: it is installed here only through Streamlit). 201
   {id, width, height}. 422 naming "image" for anything else
   (api.middleware.UploadSizeMiddleware refuses a body over 10 MB before it
-  is read). The `picture` bucket (F §1.8): 20 an hour a member, 60 a day a
-  church. No Idempotency-Key: a retried upload stores a second copy, which
-  the 60-day removal takes (usecases.bulletin_images).
-- GET /bulletin-images/{id}: the church's picture (image/jpeg), cached by
-  the browser for a day (private: never by a shared cache; a picture's id
-  never names other bytes). 404 for an id the church does not have.
+  is read; with no Content-Type the body is taken too, with
+  application/json it is a 400). The `picture` bucket (F §1.8): 20 an hour
+  a member, 60 a day a church; a 429 also when another picture is being
+  prepared (bulletin_image). A church keeps at most 60 pictures, and all
+  churches' pictures together at most 150 MB (a 422 past either;
+  usecases.bulletin_images). No Idempotency-Key: a retried upload stores a
+  second copy, which the 60-day removal takes.
+- GET /bulletin-images/{id}: the church's picture (image/jpeg). The browser
+  keeps it only privately and asks again each time (`private, no-cache`,
+  `Vary: Authorization, X-Church-Id`), with its ETag, the id: a 304 without
+  the bytes when it has them (plan review I4). `nosniff`. 404 for an id
+  the church does not have.
 """
 import uuid
-from typing import Annotated
+from typing import Annotated, Optional
 
-from fastapi import APIRouter, Body, Depends
+from fastapi import APIRouter, Body, Depends, Header
 from fastapi.responses import Response
 
 from api import ratelimit
@@ -2570,13 +3130,19 @@ from usecases import bulletin_images
 router = APIRouter()
 
 PICTURE_RESPONSE = {200: {"description": "The picture (a JPEG).",
-                          "content": {"image/jpeg": {"schema": {"type": "string", "format": "binary"}}}}}
+                          "content": {"image/jpeg": {"schema": {"type": "string", "format": "binary"}}}},
+                    304: {"description": "Not modified: the browser's copy (If-None-Match) is current."}}
+# Kept by the browser only, for this sign-in and church, and checked again on each use (a 304 is cheap).
+PICTURE_HEADERS = {"Cache-Control": "private, no-cache", "Vary": "Authorization, X-Church-Id",
+                   "X-Content-Type-Options": "nosniff"}
 
 
 @router.post("/bulletin-images", status_code=201, response_model=BulletinImageOut,
              responses=error_responses(401, 403, 422, 429, 503))
 def upload_image(
-    image: Annotated[bytes, Body(media_type="application/octet-stream")],
+    # An empty body is not refused by the framework, so the sign-in and the church are checked first and
+    # bulletin_image says "Choose a JPEG or PNG picture." (an iCloud photo not downloaded yet is 0 bytes).
+    image: Annotated[bytes, Body(media_type="application/octet-stream")] = b"",
     user: CurrentUser = Depends(get_current_user),
     church: ActiveChurch = Depends(require_church),
     _limit: None = Depends(ratelimit.rate_limit("picture")),
@@ -2587,10 +3153,13 @@ def upload_image(
 
 @router.get("/bulletin-images/{image_id}", response_class=Response,
             responses={**PICTURE_RESPONSE, **error_responses(401, 403, 404, 422, 503)})
-def get_image(image_id: uuid.UUID, church: ActiveChurch = Depends(require_church)) -> Response:
-    found = bulletin_images.picture(church.id, image_id)
-    return Response(content=found.content, media_type=found.content_type,
-                    headers={"Cache-Control": "private, max-age=86400"})
+def get_image(image_id: uuid.UUID, church: ActiveChurch = Depends(require_church),
+              if_none_match: Annotated[Optional[str], Header()] = None) -> Response:
+    found = bulletin_images.picture(church.id, image_id, if_none_match)
+    headers = {**PICTURE_HEADERS, "ETag": found.etag}
+    if found.content is None:
+        return Response(status_code=304, headers=headers)
+    return Response(content=found.content, media_type=found.content_type, headers=headers)
 ````
 
 **In `backend/api/main.py`, replace:**
@@ -2657,7 +3226,7 @@ export type BulletinImage = components["schemas"]["BulletinImageOut"];
 - [ ] **Step 4: Regenerate the API files; see them pass, the suite, types and lint**
 
 Run: `.venv/bin/python backend/scripts/export_openapi.py && (cd frontend && npm run gen:api >/dev/null) && git diff --stat -- frontend/src/lib/api/openapi.json frontend/src/lib/api/schema.d.ts | tail -1` then `.venv/bin/python -m pytest -q backend/tests/test_api_bulletin_images.py backend/tests/test_api_services.py backend/tests/test_api_printed.py backend/tests/test_no_streamlit_in_core.py backend/tests/test_service_bulletin.py backend/tests/test_middleware.py backend/tests/test_ratelimit.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`, the frontend suite, types and lint
-**Expected:** ` 2 files changed, 461 insertions(+), 2 deletions(-)` (the two routes, `BulletinImageOut`, `ServiceBulletin.cover_image_id` optional and "cover" in `unchecked`; no `-Input`/`-Output` schema); `118 passed in <t>s`; `1464 passed, 19 skipped in <t>s`; ` Test Files  87 passed (87)` and `      Tests  704 passed (704)` with no `×` or `FAIL` line (the pages are unchanged; `cover_image_id` is optional in the types); `typecheck 0`, `lint 0`. With a local Postgres: `19 passed, 1464 deselected, 1 warning in <t>s`.
+**Expected:** ` 2 files changed, 461 insertions(+), 2 deletions(-)` (the two routes, the GET's `If-None-Match` header and 304, `BulletinImageOut`, `ServiceBulletin.cover_image_id` optional and "cover" in `unchecked`; no `-Input`/`-Output` schema); `118 passed in <t>s`; `1464 passed, 19 skipped in <t>s`; ` Test Files  87 passed (87)` and `      Tests  704 passed (704)` with no `×` or `FAIL` line (the pages are unchanged; `cover_image_id` is optional in the types); `typecheck 0`, `lint 0`. With a local Postgres: `19 passed, 1464 deselected, 1 warning in <t>s`.
 
 - [ ] **Step 5: Commit**
 
@@ -2666,10 +3235,14 @@ git add backend/repos/bulletin_images.py backend/usecases/bulletin_images.py bac
 git commit -q -m "Printed bulletin PR 3a: upload and show a cover picture, save and print it" -m "POST /bulletin-images takes the picture as the request body (no multipart,
 so no new package), any member of the church, the picture bucket (20 an
 hour a member, 60 a day a church); UploadSizeMiddleware refuses a body over
-10 MB, or without its size, before it is read. Each upload first removes the
-church's pictures no saved service points at, uploaded more than 60 days ago
-(planning answer 9). GET /bulletin-images/{id} serves the church's picture,
-cached privately for a day. ServiceBulletin.cover_image_id is optional: left
+10 MB, or without its size, before it is read. Each upload first removes up
+to 20 pictures of any church that no saved service of that church points
+at, uploaded more than 60 days ago (planning answer 9); a church keeps at
+most 60 pictures and all churches together 150 MB (the plan review: any
+Google account can create a church). The removal and a save lock the
+picture, so a save never points at one being removed. GET
+/bulletin-images/{id} serves the church's picture, private and checked
+again on each use (an ETag and a 304). ServiceBulletin.cover_image_id is optional: left
 out (a page from before PR 3b) a PUT keeps the saved picture and the printed
 bulletin keeps PR 1's box; null is no picture; an id the church does not
 have saves and prints as none. The picture carries forward and is one of
@@ -2677,7 +3250,7 @@ the boxes to check (\"cover\"). OpenAPI and types regenerated." -m "Co-Authored-
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1464 passed, 19 skipped`; frontend `704 passed` in 87 files.
+Expected counts after this task: backend `1477 passed, 22 skipped`; frontend `704 passed` in 87 files.
 
 ### Task 4: Docs: the owner's checks for PR 3a and the spec's data model (planning answers 1, 5, 7, 9, 10; clarifications 16, 18)
 
@@ -2706,10 +3279,10 @@ it for the checks (a building, flowers); record what the page and the files
 show, never a picture, a name, an email address, a phone number, a street
 address or a church id.
 
-- [ ] (owner, before the PR 3a merge) **28.** A green `db-backup` run; the read-only counts (version `0006_services_bulletin`, saved services, those with bulletin fields, the database's size); the SQL preview read: one new table `bulletin_images`, its index and row-level security, between `BEGIN;` and `COMMIT;`, under the 5 s lock timeout.
-- [ ] (owner, after PR 3a) **29.** The after-deploy query shows `0007_bulletin_images`, `true`, `0` and `0`, and the counts are unchanged (or grew by the services saved since), the database about the same size.
+- [ ] (owner, before the PR 3a merge) **28.** A green `db-backup` run; the read-only counts (version `0006_services_bulletin`, saved services, those with bulletin fields, the database's size); the SQL preview read: one new table `bulletin_images`, its index, row-level security and no grant to Supabase's `anon` and `authenticated` roles, between `BEGIN;` and `COMMIT;`, under the 5 s lock timeout.
+- [ ] (owner, after PR 3a) **29.** The after-deploy query shows `0007_bulletin_images`, `true`, `0` and `0` (`0006_services_bulletin` with two empty values: the deploy has not applied 0007 yet, run it again in a minute), and the counts are unchanged (or grew by the services saved since), the database about the same size.
 - [ ] (owner, after PR 3a) **30.** The builder works as before: open a saved service from **Services**, tap **Save changes**, and download the printed bulletin from **5 Review & send**: the save works, and the PDF's cover still shows the "[Cover picture]" box (now centered under the church's name, as the Word version's already was) with the reading and the date in it.
-- [ ] (agent, after PR 3a) **31.** `/openapi.json` in production lists `/bulletin-images` and `/bulletin-images/{image_id}`; signed out, `POST /bulletin-images` answers 401.
+- [ ] (agent, after PR 3a) **31.** `/openapi.json` in production lists `/bulletin-images` and `/bulletin-images/{image_id}`; signed out, `POST /bulletin-images` answers 401 for a 1-byte body and for a 9.5 MB one (Railway's proxy passes a phone-sized picture with its size), and 422 naming `image` for an 11 MB one (refused before it is read).
 ````
 
 **In `docs/superpowers/specs/2026-10-02-printed-bulletin-design.md`, replace:**
@@ -2725,17 +3298,20 @@ address or a church id.
 **with:**
 
 ````markdown
-  The upload is checked (JPEG or PNG; at most 10 MB in; PR 3 planning answer 5: no HEIC, an
-  iPhone's Safari sends a JPEG), decoded with Pillow (already installed with reportlab), turned
-  upright, its colors converted to sRGB, scaled to at most 1600 px on the long side and stored as
-  JPEG with no camera data (about 150-400 KB). The picture is the request body of
+  The upload is checked (JPEG, a phone's multi-picture JPEG included, or PNG; at most 10 MB in;
+  PR 3 planning answer 5: no HEIC, an iPhone's Safari sends a JPEG), decoded with Pillow (already
+  installed with reportlab), one at a time, turned upright, its colors converted to sRGB, scaled to
+  at most 1600 px on the long side and stored as JPEG with no camera data, at most 0.6 MB (a lower
+  quality, then a smaller size, until it fits; a phone photo is usually 0.2-0.5 MB). The picture is the request body of
   `POST /bulletin-images` (no multipart form, so no new package). The service's
   `bulletin.cover_image_id` points at it (a JSON key, no foreign key; an id the church does not
   have is saved and printed as no picture); it carries forward with the music, marked to check
   (planning answer 7). A bulletin that does not say (a page from before PR 3b) keeps the saved
   picture on a save and prints PR 1's box. Images no saved service points at are removed when they
-  are more than 60 days old, on the church's next upload (planning answer 9; PR 3 plan,
-  `docs/superpowers/plans/2026-10-03-printed-bulletin-3.md`).
+  are more than 60 days old, on any church's next upload (planning answer 9). Since any Google
+  account can create a church, a church keeps at most 60 pictures (its oldest unused ones make
+  room) and all churches' pictures together at most 150 MB; past either an upload is refused with
+  a message (PR 3 plan review, `docs/superpowers/plans/2026-10-03-printed-bulletin-3.md`).
 ````
 
 **In `docs/superpowers/specs/2026-10-02-printed-bulletin-design.md`, replace:**
@@ -2748,8 +3324,8 @@ week's picture", and a preview.
 **with:**
 
 ````markdown
-and the service time. PR 3 adds the cover picture to the step: "Choose a picture", a preview,
-**Remove**, and last week's picture carried forward with "From last week. Check before printing."
+and the service time. PR 3 adds the cover picture to the step: "Choose a picture", a preview
+with the band the reading and the date print on, **Remove**, and last week's picture carried forward with "From last week. Check before printing."
 and **Keep as is** (PR 3 planning answer 7).
 ````
 
@@ -2781,18 +3357,19 @@ git commit -q -m "Docs: printed bulletin PR 3a manual checks and the spec's data
 picture\" under \"## Printed bulletin\": PR 3 ships backend first in two
 PRs; the owner's steps around migration 0007, the check that the builder
 works as before after PR 3a and the agent's check of the live routes (items
-28-31). The spec's \"Data model\" says JPEG or PNG only (planning answer 5),
-the raw body, no camera data, the carry with its mark and the removal on the
-church's next upload; \"The Bulletin step\" and \"Scope by PR\" follow
-planning answers 7 and 1." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+28-31; the after-deploy check sends a 9.5 MB and an 11 MB body). The
+spec's \"Data model\" says JPEG or PNG only (planning answer 5), the raw
+body, no camera data, at most 0.6 MB, the carry with its mark, the removal
+on any church's next upload and the limits; \"The Bulletin step\" and
+\"Scope by PR\" follow planning answers 7 and 1." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1464 passed, 19 skipped`; frontend `704 passed` in 87 files.
+Expected counts after this task: backend `1477 passed, 22 skipped`; frontend `704 passed` in 87 files.
 
 - [ ] **Step 4 (controller): Review the batch (T1-T4) and backup push**
 
-One review of PR 3a: the revision is expand-only, turns on row-level security and its `--sql` is exactly clarification 14's 20 lines; the README's queries are read-only and match the Postgres test; `ServiceBulletin.cover_image_id` is optional and a bulletin without it keeps the saved picture on a `PUT` and prints PR 1's box; an id the church does not have is never served or printed; the upload is checked before any table is touched, a body over 10 MB is refused before it is read, the stored picture has no EXIF; the removal is church-scoped, older than 60 days and never takes a picture a saved service points at; no log line carries a picture; the PDF and the Word version place the same picture; the regenerated types change no page. Fixes are `Fix: <what> (Task <n> review)` commits. Then the backup push.
+One review of PR 3a: the revision is expand-only, turns on row-level security, revokes Supabase's roles and its `--sql` is exactly clarification 14's 27 lines; the README's queries are read-only and match the Postgres tests; `ServiceBulletin.cover_image_id` is optional and a bulletin without it keeps the saved picture on a `PUT` and prints PR 1's box; an id the church does not have is never served or printed; the upload is checked before any table is touched, a body over 10 MB is refused before it is read, one picture is prepared at a time, the stored picture has no EXIF and is at most 600 KB; the removal decides "unused" per church, takes only pictures older than 60 days, at most 20 an upload, and never one a saved service points at, and it and a save lock the picture; a church's 60 and the 150 MB budget refuse with their messages; the GET is `private, no-cache` with an ETag; no log line carries a picture; the PDF and the Word version place the same picture; the regenerated types change no page. Fixes are `Fix: <what> (Task <n> review)` commits. Then the backup push.
 
 ### Task 5: Verification and the draft PR 3a (owner's yes before the PR is opened and before it is marked ready)
 
@@ -2838,7 +3415,7 @@ print('samples written')
 ")
 ```
 
-**Expected:** `1464 passed, 19 skipped in <t>s`; ` Test Files  87 passed (87)` and `      Tests  704 passed (704)` with no `×` or `FAIL` line; `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s`, the five builder routes and no `Error` (a font `Failed to fetch` only: say so and rely on CI); `samples written`. With a local, throwaway Postgres also `TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres | tail -1` → `19 passed, 1464 deselected`, and CI's alembic cycle on an empty throwaway database (`DATABASE_URL=<that url>` in `backend/`: `alembic upgrade head`, `alembic check`, `alembic downgrade base`, `alembic upgrade head`, `alembic check`): `No new upgrade operations detected.` twice. Open both sample PDFs and look at them: in `printed3a-sample.pdf` side 1's left half is "Example Church", then the picture filling the box under it, centered, in color, with "Matthew 22:1-14" and "October 18, 2026" in white on the dark band, then the contact lines; in `printed3a-nopicture.pdf` no box and no frame: "Matthew 22:1-14" and "October 18, 2026" in bold, centered in its place. The `.docx` files: the same picture (one inline picture 372 x 300 pt) and the same two centered lines (read back with python-docx). Attach the samples to the owner's message in Step 4 if the channel allows files, else describe them.
+**Expected:** `1477 passed, 22 skipped in <t>s`; ` Test Files  87 passed (87)` and `      Tests  704 passed (704)` with no `×` or `FAIL` line; `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s`, the five builder routes and no `Error` (a font `Failed to fetch` only: say so and rely on CI); `samples written`. With a local, throwaway Postgres also `TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres | tail -1` → `22 passed, 1477 deselected`, and CI's alembic cycle on an empty throwaway database (`DATABASE_URL=<that url>` in `backend/`: `alembic upgrade head`, `alembic check`, `alembic downgrade base`, `alembic upgrade head`, `alembic check`): `No new upgrade operations detected.` twice. Open both sample PDFs and look at them: in `printed3a-sample.pdf` side 1's left half is "Example Church", then the picture filling the box under it, centered, in color, with "Matthew 22:1-14" and "October 18, 2026" in white on the dark band, then the contact lines; in `printed3a-nopicture.pdf` no box and no frame: "Matthew 22:1-14" and "October 18, 2026" in bold, centered in its place. The `.docx` files: the same picture (one inline picture 372 x 300 pt) and the same two centered lines (read back with python-docx). Attach the samples to the owner's message in Step 4 if the channel allows files, else describe them.
 
 - [ ] **Step 3 (agent): The API files match, the preview, the gates, the paths, the commits**
 
@@ -2852,7 +3429,7 @@ git log --reverse --no-merges --format=%s origin/main..HEAD
 for c in $(git rev-list origin/main..HEAD); do git show -s --format=%B "$c" | grep -q '^Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>$' || echo "no trailer: $(git show -s --format='%h %s' "$c")"; done; echo "trailer check done"
 ```
 
-**Expected:** nothing from `git status` (the committed snapshot and types are current); the 20 preview lines of README step 3 exactly; `imports grep exit 1`; exactly these paths (without `M docs/ops-runbook.md` when Step 1 printed `0`):
+**Expected:** nothing from `git status` (the committed snapshot and types are current); the 27 preview lines of README step 3 exactly; `imports grep exit 1`; exactly these paths (without `M docs/ops-runbook.md` when Step 1 printed `0`):
 ```
 M	backend/api/main.py
 M	backend/api/middleware.py
@@ -2905,7 +3482,7 @@ gh pr list -R bbrown62450/church --head claude/slice-2-plan-4q33le --state open 
 
 **Expected:** `[]`. Send the owner exactly this, and wait for a clear yes:
 
-> The first half of the cover picture (printed bulletin PR 3a, the server's part) is verified on this machine: backend 1464 passed, 19 skipped (1432 and 17 before; the two new skipped ones are database checks that CI runs on Postgres); frontend unchanged at 704 tests in 87 files; typecheck, lint and the production build are clean. It adds one database change, migration 0007 (one new table for the pictures, closed to Supabase's own web API), and teaches the server to take a picture, keep it (upright, at most 1600 pixels, without the phone's location data), and print it on the cover with the reading and the date on a dark band; with no picture, the reading and the date print alone. Nothing you see changes yet, except that the PDF's "[Cover picture]" box now sits centered under the church's name, as the Word version's does. The picture upload itself comes in the second PR (3b), which I will open only after this one is live and checked. Before it merges I will ask you for the backup, the counts and a look at the SQL, one at a time. May I open the pull request as a **draft** titled "Printed bulletin PR 3a: the server takes and prints the cover picture", so the checks run? Merging stays with you.
+> The first half of the cover picture (printed bulletin PR 3a, the server's part) is verified on this machine: backend 1477 passed, 22 skipped (1432 and 17 before; the five new skipped ones are database checks that CI runs on Postgres); frontend unchanged at 704 tests in 87 files; typecheck, lint and the production build are clean. It adds one database change, migration 0007 (one new table for the pictures, closed to Supabase's own web API), and teaches the server to take a picture, keep it (upright, at most 1600 pixels and 0.6 MB, without the phone's location data; with limits so that no one account can fill the database or the server's memory), and print it on the cover with the reading and the date on a dark band; with no picture, the reading and the date print alone. Nothing you see changes yet, except that the PDF's "[Cover picture]" box now sits centered under the church's name, as the Word version's does. The picture upload itself comes in the second PR (3b), which I will open only after this one is live and checked. Before it merges I will ask you for the backup, the counts and a look at the SQL, one at a time. May I open the pull request as a **draft** titled "Printed bulletin PR 3a: the server takes and prints the cover picture", so the checks run? Merging stays with you.
 
 - [ ] **Step 5 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
 
@@ -2915,14 +3492,14 @@ cat > "<scratch>/printed3a-pr-body.md" <<'BODY'
 Printed bulletin PR 3a: the server's half of the cover picture (PR 3 planning answers of 2026-10-03; PR 3 ships backend first in two PRs, as 2b). Spec: docs/superpowers/specs/2026-10-02-printed-bulletin-design.md. Plan: docs/superpowers/plans/2026-10-03-printed-bulletin-3.md (Tasks 1-6). One migration (0007_bulletin_images); no new package or variable. The builder does not change: today's pages send no cover_image_id and keep working.
 
 - Migration 0007_bulletin_images (expand-only): the bulletin_images table, its index, row-level security on Postgres. Before the merge: a backup, read-only counts with the database's size and the SQL preview (backend/migrations/README.md, "Before 0007_bulletin_images").
-- bulletin_image (Pillow, already installed with reportlab): an upload checked (JPEG or PNG, at most 10 MB and 50 MP), turned upright, sRGB, at most 1600 px, stored as JPEG without EXIF; the cover's box with a centered crop and a dark see-through band with the reading and the date in white.
+- bulletin_image (Pillow, already installed with reportlab): an upload checked (JPEG, a phone's multi-picture JPEG included, or PNG, at most 10 MB and 50 MP, 24 MP for a PNG), prepared one at a time, turned upright, sRGB, at most 1600 px, stored as JPEG of at most 600 KB without EXIF; the cover's box with a centered crop and a dark see-through band with the reading and the date in white.
 - The printed bulletin: the picture (the same one in the PDF and the Word version), no box with the reading and the date centered when there is none, PR 1's box (now centered) for a page from before PR 3b.
-- API: POST /bulletin-images (the picture as the body; the picture bucket; a body over 10 MB refused before it is read; each upload removes the church's pictures unused for 60 days), GET /bulletin-images/{id}, ServiceBulletin.cover_image_id (optional: left out, a PUT keeps the saved picture). OpenAPI and types regenerated.
+- API: POST /bulletin-images (the picture as the body; the picture bucket; a body over 10 MB refused before it is read; each upload removes up to 20 pictures of any church unused for 60 days; a church keeps at most 60 pictures, all churches 150 MB), GET /bulletin-images/{id} (private, no-cache, an ETag), ServiceBulletin.cover_image_id (optional: left out, a PUT keeps the saved picture; a save and the removal lock the picture). OpenAPI and types regenerated.
 - docs/manual-verification.md: "### Printed bulletin PR 3: the cover picture", items 28-31; the spec's data model. docs/ops-runbook.md: the PR 2b-2 record (rides along).
 
 Next: PR 3b (the picture on the Bulletin step), opened after this one is live and checked.
 
-Tests: backend 1432 → 1464 passed, 17 → 19 skipped; frontend 704 in 87 files (unchanged)
+Tests: backend 1432 → 1477 passed, 17 → 22 skipped; frontend 704 in 87 files (unchanged)
 
 After merge (Task 6): the owner's after-deploy check (one read-only query) and a short phone check that the builder works as before, then a "Printed bulletin PR 3a record" in docs/ops-runbook.md (it rides along in PR 3b).
 
@@ -2936,7 +3513,7 @@ gh pr create -R bbrown62450/church --draft --base main --head claude/slice-2-pla
 gh pr checks <N1> -R bbrown62450/church --watch --interval 30
 ```
 
-Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1464 passed, 19 skipped`, backend-postgres `19 passed, 1464 deselected` (after its `alembic upgrade head`, `alembic check`, `downgrade base`, `upgrade head` steps, now through `0007`), frontend `704 passed` in 87 files. Then send: "PR #<N1> is green: backend 1464 passed, 19 skipped; the Postgres job ran the migration up, down and up again and passed its 19 tests; 704 frontend tests in 87 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you, after the backup, the counts and the SQL check." On the yes: `gh pr ready <N1> -R bbrown62450/church`.
+Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1477 passed, 22 skipped`, backend-postgres `22 passed, 1477 deselected` (after its `alembic upgrade head`, `alembic check`, `downgrade base`, `upgrade head` steps, now through `0007`), frontend `704 passed` in 87 files. Then send: "PR #<N1> is green: backend 1477 passed, 22 skipped; the Postgres job ran the migration up, down and up again and passed its 19 tests; 704 frontend tests in 87 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you, after the backup, the counts and the SQL check." On the yes: `gh pr ready <N1> -R bbrown62450/church`.
 
 - [ ] **Step 6: Fix any failure in its owning task**
 
@@ -2950,7 +3527,7 @@ Run the last line with `run_in_background: true`. **Expected:** the PR URL; ever
 
 For each fix: change only the owning task's files; rerun Steps 2-3; commit `Fix: <what> (Task <n>, printed bulletin PR 3a final verification)` with the trailer; after the PR exists, ask the owner before pushing it.
 
-Expected counts after this task: backend `1464 passed, 19 skipped`; frontend `704 passed` in 87 files.
+Expected counts after this task: backend `1477 passed, 22 skipped`; frontend `704 passed` in 87 files.
 
 ### Task 6: PR 3a: before the merge (backup, counts, SQL), the merge, the after-deploy check, the owner's check, the record (OWNER + agent)
 
@@ -2992,9 +3569,9 @@ git fetch origin && git status -sb | head -1
 (cd backend && DATABASE_URL=postgresql://preview@localhost:1/preview ../.venv/bin/alembic upgrade 0006_services_bulletin:0007_bulletin_images --sql 2>/dev/null | grep -v -e '^--' -e '^$' | sed 's/ *$//')
 ```
 
-**Expected:** the branch even with `origin/claude/slice-2-plan-4q33le` (the PR's code); the 20 lines of README step 3 exactly. Send them in a code block with:
+**Expected:** the branch even with `origin/claude/slice-2-plan-4q33le` (the PR's code); the 27 lines of README step 3 exactly. Send them in a code block with:
 
-> Third check: these are the lines of SQL the migration will run on the database when the PR merges, rendered from the PR's code without touching the database. In plain words: start one transaction; give up after 5 seconds if the churches or users tables are busy (the old version then keeps running and we retry); create one new, empty table to hold the cover pictures (each picture belongs to a church and goes with it; the member who uploaded it is remembered, or forgotten if their account goes); add an index to find a church's pictures by age; turn on row-level security for the table, so Supabase's own web API cannot read it (only the app can); note the new version; finish. No existing row is copied, changed or deleted. Does that look right to you?
+> Third check: these are the lines of SQL the migration will run on the database when the PR merges, rendered from the PR's code without touching the database. In plain words: start one transaction; give up after 5 seconds if the churches or users tables are busy (the old version then keeps running and we retry); create one new, empty table to hold the cover pictures (each picture belongs to a church and goes with it; the member who uploaded it is remembered, or forgotten if their account goes); add an index to find a church's pictures by age; turn on row-level security for the table and take away any access Supabase's two web roles might have to it, so Supabase's own web API cannot read it (only the app can); note the new version; finish. No existing row is copied, changed or deleted. Does that look right to you?
 
 Record the owner's answer.
 
@@ -3018,9 +3595,11 @@ About three minutes after the merge (not replayed):
 curl -s https://church-production-74ca.up.railway.app/health/ready; echo
 curl -s https://church-production-74ca.up.railway.app/openapi.json | grep -o '"/bulletin-images[^"]*"' | sort -u
 curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'Content-Type: image/jpeg' --data-binary 'x' https://church-production-74ca.up.railway.app/bulletin-images
+head -c 9500000 /dev/urandom | curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'Content-Type: image/jpeg' --data-binary @- https://church-production-74ca.up.railway.app/bulletin-images
+head -c 11000000 /dev/urandom | curl -s -w '\n%{http_code}\n' -X POST -H 'Content-Type: image/jpeg' --data-binary @- https://church-production-74ca.up.railway.app/bulletin-images
 ```
 
-**Expected:** `{"ok":true,"db":"ok"}` (in production this answers 503 `schema_behind` while the database is behind the release, so `ok` means `0007` is applied and the new release is live); `"/bulletin-images"` and `"/bulletin-images/{image_id}"`; `401` (the route exists and wants a sign-in; a body is sent so the size check passes first). If `/openapi.json` still lacks the routes, wait a minute and retry; after ten minutes, ask the owner to open Railway → the API service → Deployments and read the newest deployment's status (a failed pre-deploy on the 5 s lock timeout: the old server keeps serving and nothing is broken, since the website does not need the new server yet; redeploy on the owner's yes). Then send, with README step 4's query in a code block, and step 2's query again:
+**Expected:** `{"ok":true,"db":"ok"}` (in production this answers 503 `schema_behind` while the database is behind the release, so `ok` means `0007` is applied and the new release is live); `"/bulletin-images"` and `"/bulletin-images/{image_id}"`; `401` (the route exists and wants a sign-in; a body is sent so the size check passes first); `401` again for the 9.5 MB body (it went through Railway's proxy with its length, as a phone photo will); for the 11 MB body the 422 body naming `image` with "The picture is larger than 10 MB. Choose a smaller one." and then `422` (refused from its Content-Length before it is read). A `413` (or a 502) for either large body, or "Send the picture with its size (Content-Length)." for the 9.5 MB one, means Railway's proxy limits or re-chunks bodies: stop and tell the owner before PR 3b (uploads from phones would fail); record what was seen. If `/openapi.json` still lacks the routes, wait a minute and retry; after ten minutes, ask the owner to open Railway → the API service → Deployments and read the newest deployment's status (a failed pre-deploy on the 5 s lock timeout: the old server keeps serving and nothing is broken, since the website does not need the new server yet; redeploy on the owner's yes). Then send, with README step 4's query in a code block, and step 2's query again:
 
 > The new server is live. One more read-only check: in the SQL Editor, run the first query below; it should show 0007_bulletin_images, true, 0 and 0 (the table exists, closed to Supabase's web API, with no pictures yet: nothing can upload one until the second PR). Then run the counting query from before again; the numbers should be the same as last time (or a little higher if a service was saved meanwhile), the database about the same size. Also, if you have Railway open: the newest deployment's logs should include a line "Running upgrade 0006_services_bulletin -> 0007_bulletin_images". What do you see?
 
@@ -3065,8 +3644,8 @@ is recorded here.
 |---|---|---|
 | 1. Backup | `db-backup` run <run URL>: success, artifact `db-backup` (<bytes> bytes, encrypted) | <date> |
 | 2. Counts before (SQL Editor, read-only) | version `0006_services_bulletin`; <n> saved services, <n> with bulletin fields; database <size> | <date> |
-| 3. SQL preview | Rendered from the PR's code without a database: the 20 lines of the README (one `CREATE TABLE bulletin_images`, its index, row-level security, under the 5 s lock timeout); read by the owner: <answer> | <date> |
-| Merge and deploy | PR #<N1> merged <UTC time> (<Eastern time>), merge commit `<short sha>`. CI on `main` (run <run id>): success. `/health/ready` `{"ok":true,"db":"ok"}`; `/openapi.json` lists `/bulletin-images` and `/bulletin-images/{image_id}`; signed out: 401. <Railway log line "Running upgrade 0006_services_bulletin -> 0007_bulletin_images" seen by the owner. / Not checked.> | <date> |
+| 3. SQL preview | Rendered from the PR's code without a database: the 27 lines of the README (one `CREATE TABLE bulletin_images`, its index, row-level security, the guarded REVOKE, under the 5 s lock timeout); read by the owner: <answer> | <date> |
+| Merge and deploy | PR #<N1> merged <UTC time> (<Eastern time>), merge commit `<short sha>`. CI on `main` (run <run id>): success. `/health/ready` `{"ok":true,"db":"ok"}`; `/openapi.json` lists `/bulletin-images` and `/bulletin-images/{image_id}`; signed out: 401 (1 byte), 401 (9.5 MB), 422 (11 MB). <Railway log line "Running upgrade 0006_services_bulletin -> 0007_bulletin_images" seen by the owner. / Not checked.> | <date> |
 | 4. After the deploy (read-only) | `0007_bulletin_images`, row_security `true`, open_grants `0`, pictures `0`; counts again: <unchanged / …>; database <size> | <date> |
 | 5. The builder as before (phone: <phone and browser>) | <A saved service saved again; the printed bulletin's cover shows the [Cover picture] box, centered. / …> | <date> |
 | Follow-ups | <None. / One line per follow-up.> Next: PR 3b (the picture on the Bulletin step), then the print test of a cover with a picture | <date> |
@@ -3092,7 +3671,7 @@ git push origin claude/slice-2-plan-4q33le
 
 **Expected:** `0`; `0`; `4`; `89 passed in <t>s`; one commit; the push (a backup push of the branch, no PR). Then tell the owner: "PR 3a is live and recorded. Next I build PR 3b, the picture on the Bulletin step, and come back to you before opening it." PR 3b's tasks start now, on the same branch (now even with `main` plus this record).
 
-Expected counts after this task: backend `1464 passed, 19 skipped` on `main`; frontend `704 passed` in 87 files.
+Expected counts after this task: backend `1477 passed, 22 skipped` on `main`; frontend `704 passed` in 87 files.
 
 ## PR 3b: the cover picture on the Bulletin step (T7-T12)
 
@@ -3104,7 +3683,7 @@ Started only after T6 (PR 3a is merged, live and checked, its record committed o
 - Create: `frontend/src/lib/queries/bulletin-images.test.ts`, `frontend/src/lib/queries/bulletin-images.ts`
 - Modify: `frontend/src/test/fixtures/index.ts`, `frontend/src/lib/draft/schema.test.ts`, `frontend/src/lib/draft/migrate.test.ts`, `frontend/src/lib/draft/store.test.ts`, `frontend/src/lib/draft/mapping.test.ts`, `frontend/src/lib/draft/bulletin.test.ts`, `frontend/src/lib/documents.test.ts`, `frontend/src/components/builder/review/review-send-step.test.tsx`, `frontend/src/lib/draft/schema.ts`, `frontend/src/lib/draft/migrate.ts`, `frontend/src/lib/draft/bulletin.ts`, `frontend/src/lib/documents.ts`, `frontend/src/lib/queries/services.ts`, `frontend/src/lib/queries/keys.ts`, `frontend/src/lib/api/timeouts.ts`
 
-The tests that pin the version change with it (3 → 4; a "future" version 4 → 5). `serviceBulletin()` gains `cover_image_id: null`, as the API answers since PR 3a, so the bodies the tests compare say "no picture". The step's group is T8's and the card's lines T9's; here the step and the card show nothing new, but a carried picture already counts among the boxes to check.
+The tests that pin the version change with it (3 → 4; a "future" version 4 → 5). `serviceBulletin()` gains `cover_image_id: null`, as the API answers since PR 3a, so the bodies the tests compare say "no picture". The step's group is T8's and the card's lines T9's; here the step and the card show nothing new, but a carried picture already counts among the boxes to check. `useUploadBulletinImage(onStored)` takes the caller's callback into the mutation's own options (plan review I1), and `checkPicture` refuses an empty file.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -3514,6 +4093,7 @@ function file(type: string, size: number): File {
 describe("the cover picture before it is uploaded (printed bulletin PR 3b)", () => {
   it("takes a JPEG or PNG of at most 10 MB and says the server's words otherwise", () => {
     expect(checkPicture(file("image/jpeg", 1000))).toBeNull();
+    expect(checkPicture(file("image/jpeg", 0))).toBe(NOT_A_PICTURE); // an iCloud photo not downloaded yet
     expect(checkPicture(file("image/png", MAX_PICTURE_BYTES))).toBeNull();
     expect(checkPicture(file("image/heic", 1000))).toBe(NOT_A_PICTURE);
     expect(checkPicture(file("", 1000))).toBe(NOT_A_PICTURE);
@@ -3981,11 +4561,14 @@ import { isBlankBulletin, withoutNoPicture } from "@/lib/draft/bulletin";
  * /bulletin-images/{id}`, PR 3a).
  *
  * - `checkPicture(file)`: what the server would refuse, said before the
- *   upload starts (a JPEG or PNG, at most 10 MB), with the server's own
- *   words; null when it may go.
- * - `useUploadBulletinImage()`: the picture itself as the request body; the
- *   answer's id goes in the draft (`setCover`). Errors are the caller's to
- *   show (on the step, next to the button).
+ *   upload starts (a JPEG or PNG, not empty, at most 10 MB), with the
+ *   server's own words; null when it may go.
+ * - `useUploadBulletinImage(onStored)`: the picture itself as the request
+ *   body; `onStored` gets the answer (its id goes in the draft, `setCover`).
+ *   It is the mutation's own callback, not `mutate`'s, so it runs even when
+ *   the step is left while the picture uploads (TanStack Query drops
+ *   `mutate`'s callbacks once the component unmounts; plan review I1).
+ *   Errors are the caller's to show (on the step, next to the button).
  * - `useBulletinImage(id)`: the stored picture's bytes for the preview,
  *   fetched with the church's headers (an `<img>` cannot send them), kept
  *   for the session (an id never names other bytes).
@@ -4007,12 +4590,12 @@ export const NOT_A_PICTURE = "Choose a JPEG or PNG picture.";
 const TYPES = new Set(["image/jpeg", "image/png"]);
 
 export function checkPicture(file: File): string | null {
-  if (!TYPES.has(file.type)) return NOT_A_PICTURE;
+  if (!TYPES.has(file.type) || file.size === 0) return NOT_A_PICTURE; // 0 bytes: an iCloud photo not downloaded yet
   if (file.size > MAX_PICTURE_BYTES) return PICTURE_TOO_LARGE;
   return null;
 }
 
-export function useUploadBulletinImage() {
+export function useUploadBulletinImage(onStored: (stored: BulletinImage) => void) {
   const api = useApi();
   return useChurchMutation<BulletinImage, ApiError, File>({
     mutationFn: (file) =>
@@ -4020,6 +4603,7 @@ export function useUploadBulletinImage() {
         method: "POST",
         init: { body: file, headers: { "Content-Type": file.type } },
       }),
+    onSuccess: (stored) => onStored(stored),
   });
 }
 
@@ -4052,18 +4636,20 @@ service marks it (PR 3 planning answer 7). The payload leaves a null picture
 out (the fingerprint is unchanged), every body sent says it, a POST leaves
 \"no picture\" out, and the 409 check compares it. lib/queries/
 bulletin-images: checkPicture (the server's limits and words before an
-upload), the upload as the request body (60 s), the preview's bytes." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+upload, an empty file included), the upload as the request body (60 s)
+with its own callback, which runs even after the step is left, the
+preview's bytes." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1464 passed, 19 skipped`; frontend `712 passed` in 88 files.
+Expected counts after this task: backend `1477 passed, 22 skipped`; frontend `712 passed` in 88 files.
 
 ### Task 8: The Cover picture on the Bulletin step (S "The Bulletin step"; planning answers 5-8; F §4.8; clarifications 8, 15)
 
 **Files:**
 - Modify: `frontend/src/test/fixtures/index.ts`, `frontend/src/components/builder/bulletin/bulletin-step.test.tsx`, `frontend/src/components/builder/bulletin/bulletin-step.tsx`
 
-The step's first test lists the groups; "Cover picture" comes first. jsdom has no `URL.createObjectURL`: the new tests stub it as the Review tests do. A file the `accept` list would hide is sent with `fireEvent.change` (user-event applies `accept`).
+The step's first test lists the groups; "Cover picture" comes first. jsdom has no `URL.createObjectURL`: the new tests stub it as the Review tests do. A file the `accept` list would hide is sent with `fireEvent.change` (user-event applies `accept`). The plan review's cases (clarification 8): the step left while the picture uploads (the layout stays, the step's page is swapped out, then the upload answers), the preview under `<StrictMode>` (the URL shown is never one released, and only it is held), a small picture (jsdom loads no image: the test sets `naturalWidth` and fires `load`), and the band over the preview (the reading the files print and the date).
 
 - [ ] **Step 1: Write the failing tests (and the fixture)**
 
@@ -4110,7 +4696,8 @@ import { screen, waitFor, within } from "@testing-library/react";
 **with:**
 
 ````tsx
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { StrictMode } from "react";
 ````
 
 **In `frontend/src/components/builder/bulletin/bulletin-step.test.tsx`, replace:**
@@ -4123,6 +4710,7 @@ import BulletinStepPage from "@/app/(signed-in)/(church)/builder/bulletin/page";
 
 ````tsx
 import BulletinStepPage from "@/app/(signed-in)/(church)/builder/bulletin/page";
+import { formatServiceDate } from "@/lib/dates";
 import { setCover } from "@/lib/draft/bulletin";
 ````
 
@@ -4150,7 +4738,7 @@ import { FROM_LAST_WEEK } from "./bulletin-step";
 **with:**
 
 ````tsx
-import { FROM_LAST_WEEK, PICTURE_ALT } from "./bulletin-step";
+import { FROM_LAST_WEEK, PICTURE_ALT, PICTURE_SMALL } from "./bulletin-step";
 ````
 
 **In `frontend/src/components/builder/bulletin/bulletin-step.test.tsx`, replace:**
@@ -4191,7 +4779,8 @@ describe("the cover picture (printed bulletin PR 3b; PR 3 planning answers 5-8)"
   });
 
   it("uploads a chosen picture, shows it trimmed as the front page prints it, and Remove takes it off", async () => {
-    const { user, api } = renderStep(testDraft(), {
+    const readings = editScriptureLines(testDraft(), "Isaiah 5:1-7\nPsalm 80:7-15\nPhilippians 3:4b-14\nMatthew 21:33-46");
+    const { user, api } = renderStep(readings, {
       "POST /bulletin-images": () => ({ status: 201, body: bulletinImage() }),
       [`GET /bulletin-images/${PICTURE}`]: pictureRoute,
     });
@@ -4205,6 +4794,8 @@ describe("the cover picture (printed bulletin PR 3b; PR 3 planning answers 5-8)"
     const shown = await within(group).findByRole("img", { name: PICTURE_ALT });
     expect(shown).toHaveAttribute("src", "blob:test/1");
     expect(shown).toHaveClass("object-cover", "aspect-[372/300]");
+    // The band as it prints over the picture: the New Testament reading the files print (here the epistle) and the date.
+    expect(screen.getByTestId("cover-band")).toHaveTextContent(`Philippians 3:4b-14${formatServiceDate(readings.readings.date_iso)}`);
     const [post] = api.requests.filter((r) => r.method === "POST");
     expect(post).toMatchObject({ path: "/bulletin-images", body: file });
     expect(post.headers["content-type"]).toBe("image/jpeg");
@@ -4264,6 +4855,59 @@ describe("the cover picture (printed bulletin PR 3b; PR 3 planning answers 5-8)"
     await user.click(within(group).getByRole("button", { name: "Remove the cover picture" }));
     await waitFor(() => expect(stored().bulletin.cover_image_id).toBeNull());
   });
+  it("keeps the picture when the step is left while it uploads (plan review I1)", async () => {
+    let answer: (value: unknown) => void = () => {};
+    const view = renderStep(testDraft(), {
+      "POST /bulletin-images": () => new Promise((resolve) => (answer = resolve)),
+      [`GET /bulletin-images/${PICTURE}`]: pictureRoute,
+    });
+    await screen.findByRole("group", { name: "Cover picture" });
+    fireEvent.change(document.getElementById("bulletin-cover-file") as HTMLInputElement, { target: { files: [jpeg()] } });
+    expect(await screen.findByRole("button", { name: "Uploading…" })).toBeInTheDocument();
+    view.rerender(
+      <BuilderLayout>
+        <p>Another step</p>
+      </BuilderLayout>,
+    );
+    expect(screen.queryByRole("group", { name: "Cover picture" })).toBeNull();
+    await act(async () => answer({ status: 201, body: bulletinImage() }));
+    await waitFor(() => expect(stored().bulletin).toMatchObject({ cover_image_id: PICTURE, edited: ["cover"] }));
+  });
+
+  it("never shows a preview whose URL was released, under StrictMode (plan review I2)", async () => {
+    window.localStorage.setItem(KEY, JSON.stringify(setCover(testDraft(), PICTURE)));
+    installFakeApi({
+      "GET /church": churchProfile(),
+      "GET /lectionary/readings": lectionaryRoute(),
+      "GET /church/bulletin-settings": filledBulletinSettings(),
+      "GET /services/previous-bulletin": previousBulletin(),
+      [`GET /bulletin-images/${PICTURE}`]: pictureRoute,
+    });
+    renderWithProviders(
+      <StrictMode>
+        <BuilderLayout>
+          <BulletinStepPage />
+        </BuilderLayout>
+      </StrictMode>,
+      { me: me(), church: church(), path: "/builder/bulletin" },
+    );
+    const shown = await screen.findByRole("img", { name: PICTURE_ALT });
+    const released = vi.mocked(URL.revokeObjectURL).mock.calls.map(([url]) => url);
+    expect(released).not.toContain(shown.getAttribute("src"));
+    expect(vi.mocked(URL.createObjectURL).mock.calls.length - released.length).toBe(1); // only the one shown is held
+  });
+
+  it("says a small picture may print blurry", async () => {
+    renderStep(setCover(testDraft(), PICTURE), { [`GET /bulletin-images/${PICTURE}`]: pictureRoute });
+    const shown = await screen.findByRole("img", { name: PICTURE_ALT });
+    expect(screen.queryByText(PICTURE_SMALL)).toBeNull();
+    Object.defineProperties(shown, { naturalWidth: { value: 640, configurable: true }, naturalHeight: { value: 480, configurable: true } });
+    fireEvent.load(shown);
+    expect(await screen.findByText(PICTURE_SMALL)).toBeInTheDocument();
+    Object.defineProperties(shown, { naturalWidth: { value: 1600, configurable: true }, naturalHeight: { value: 1200, configurable: true } });
+    fireEvent.load(shown);
+    await waitFor(() => expect(screen.queryByText(PICTURE_SMALL)).toBeNull());
+  });
 });
 ````
 
@@ -4293,7 +4937,7 @@ import { useState, type ReactNode } from "react";
 **with:**
 
 ````tsx
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 
 import { PendingButton } from "@/components/app/pending-button";
 ````
@@ -4301,14 +4945,17 @@ import { PendingButton } from "@/components/app/pending-button";
 **In `frontend/src/components/builder/bulletin/bulletin-step.tsx`, replace:**
 
 ````tsx
-import { Textarea } from "@/components/ui/textarea";
+import type { BulletinSettings } from "@/lib/api/types";
+import { ELEMENTS, ROLES } from "@/lib/bulletin-settings";
 ````
 
 **with:**
 
 ````tsx
-import { Textarea } from "@/components/ui/textarea";
 import { errorToastMessage } from "@/lib/api/errors";
+import type { BulletinSettings } from "@/lib/api/types";
+import { ELEMENTS, ROLES } from "@/lib/bulletin-settings";
+import { formatServiceDate } from "@/lib/dates";
 ````
 
 **In `frontend/src/components/builder/bulletin/bulletin-step.tsx`, replace:**
@@ -4351,6 +4998,9 @@ export const COVER_HELP =
   "A JPEG or PNG picture for the front page, with the reading and the date printed over it. Without a picture, the reading and the date print alone.";
 export const PICTURE_ALT = "This week's cover picture, as the front page trims it";
 export const PICTURE_MISSING = "The picture could not be loaded.";
+export const PICTURE_SMALL = "This picture is small and may print blurry.";
+/** A stored picture shorter than this on its long side fills the 5.2 in cover box at under about 150 dpi. */
+export const SMALL_PICTURE_SIDE = 800;
 ````
 
 **In `frontend/src/components/builder/bulletin/bulletin-step.tsx`, replace:**
@@ -4369,33 +5019,57 @@ export const PICTURE_MISSING = "The picture could not be loaded.";
   );
 }
 
-/** The picture's bytes as a URL the `<img>` can show, released when they change or the preview goes. */
+/**
+ * The picture's bytes as a URL the `<img>` can show. Made and released in
+ * one effect keyed by the bytes, so StrictMode's second run (or any
+ * remount) makes a new URL instead of showing one already released (plan
+ * review I2).
+ */
 function useObjectUrl(blob: Blob | undefined): string | null {
-  const url = useMemo(() => (blob === undefined ? null : URL.createObjectURL(blob)), [blob]);
-  useEffect(() => () => {
-    if (url !== null) URL.revokeObjectURL(url);
-  }, [url]);
-  return url;
+  const [url, setUrl] = useState<{ blob: Blob; url: string } | null>(null);
+  useEffect(() => {
+    if (blob === undefined) return;
+    const made = URL.createObjectURL(blob);
+    setUrl({ blob, url: made }); // eslint-disable-line react-hooks/set-state-in-effect -- the URL is an external resource made here and released below
+    return () => URL.revokeObjectURL(made);
+  }, [blob]);
+  return url !== null && url.blob === blob ? url.url : null;
 }
 
 /**
  * The cover picture (printed bulletin PR 3b; PR 3 planning answers 2-8): the
  * week's picture, trimmed to the cover's shape as the front page prints it
- * (a centered crop), with **Choose a picture** (or **Choose another
- * picture**) and **Remove**. A file the server would refuse (not a JPEG or
- * PNG, over 10 MB) is said at once; the upload's own refusal or failure is
- * said under the buttons. Last week's picture carries in like the music,
- * with "From last week. Check before printing." and **Keep as is**.
+ * (a centered crop), with a dark band across its bottom holding the reading
+ * and the date as they print over it, and **Choose a picture** (or **Choose
+ * another picture**) and **Remove**. A file the server would refuse (not a
+ * JPEG or PNG, empty, over 10 MB) is said at once; the upload's own refusal
+ * or failure is said under the buttons; a small picture is said to print
+ * blurry. The picture uploaded goes in the draft even when the step was
+ * left meanwhile (the upload's own callback, written at once), unless the
+ * draft is another one by then. Last week's picture carries in like the
+ * music, with "From last week. Check before printing." and **Keep as is**.
  */
 function CoverPicture() {
-  const { draft, update } = useDraft();
+  const { draft, update, flush } = useDraft();
   const picture = draft.bulletin.cover_image_id;
-  const upload = useUploadBulletinImage();
+  const target = useRef<{ created: string; date: string } | null>(null);
+  const upload = useUploadBulletinImage((stored) => {
+    const chosenFor = target.current;
+    update((d) =>
+      chosenFor !== null && d.created_at === chosenFor.created && d.readings.date_iso === chosenFor.date
+        ? setCover(d, stored.id)
+        : d,
+    );
+    flush(); // the step may be gone by now (plan review I1)
+  });
   const preview = useBulletinImage(picture);
   const url = useObjectUrl(preview.data);
+  const [smallUrl, setSmallUrl] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const note = "bulletin-cover-carried";
+  const { ot, nt } = effectivePicks(draft);
+  const band = [nt ?? ot ?? "", formatServiceDate(draft.readings.date_iso)].filter((line) => line !== "");
 
   function choose(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -4404,10 +5078,8 @@ function CoverPicture() {
     const refused = checkPicture(file);
     setProblem(refused);
     if (refused) return;
-    upload.mutate(file, {
-      onSuccess: (stored) => update((d) => setCover(d, stored.id)),
-      onError: (e) => setProblem(errorToastMessage(e)),
-    });
+    target.current = { created: draft.created_at, date: draft.readings.date_iso };
+    upload.mutate(file, { onError: (e) => setProblem(errorToastMessage(e)) });
   }
 
   return (
@@ -4417,9 +5089,36 @@ function CoverPicture() {
       ) : url === null ? (
         <Skeleton role="status" aria-label="Loading the cover picture" className="aspect-[372/300] w-full max-w-sm" />
       ) : (
-        // A blob URL of the church's own picture: next/image could not fetch it, and nothing here needs optimizing.
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={url} alt={PICTURE_ALT} className="aspect-[372/300] w-full max-w-sm rounded-md border object-cover" />
+        <div className="grid gap-2">
+          <div className="relative w-full max-w-sm overflow-hidden rounded-md border">
+            {/* A blob URL of the church's own picture: next/image could not fetch it, and nothing here needs optimizing. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={url}
+              alt={PICTURE_ALT}
+              className="aspect-[372/300] w-full object-cover"
+              onLoad={(e) => {
+                const shown = e.currentTarget;
+                setSmallUrl(Math.max(shown.naturalWidth, shown.naturalHeight) < SMALL_PICTURE_SIDE ? url : null);
+              }}
+            />
+            {band.length > 0 ? (
+              // The printed band, roughly: what it covers, and the words on it (plan review M8).
+              <div
+                aria-hidden="true"
+                data-testid="cover-band"
+                className="absolute inset-x-0 bottom-0 grid justify-items-center bg-black/55 px-2 py-1.5 text-center font-serif font-bold leading-tight text-white"
+              >
+                {band.map((line, i) => (
+                  <span key={i} className={i === 0 ? "text-sm" : "text-xs"}>
+                    {line}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </div>
+          {smallUrl === url ? <p className="text-sm">{PICTURE_SMALL}</p> : null}
+        </div>
       )}
       <input
         ref={input}
@@ -4518,15 +5217,18 @@ Run: the Step 2 command three times, then the frontend suite, then types and lin
 git add frontend/src/components/builder/bulletin/bulletin-step.tsx frontend/src/components/builder/bulletin/bulletin-step.test.tsx frontend/src/test/fixtures/index.ts
 git commit -q -m "Printed bulletin PR 3b: the cover picture on the Bulletin step" -m "The Bulletin step starts with Cover picture: Choose a picture (the phone's
 photos or camera; JPEG or PNG), the upload with Uploading..., a preview
-trimmed as the front page prints it, Choose another picture and Remove. A
-file the server would refuse is said at once in its words, the server's
-refusal under the buttons; a picture that can no longer be loaded says so,
-and Remove still works. Last week's picture shows From last week. Check
+trimmed as the front page prints it with the band the reading and the date
+print on, Choose another picture and Remove. The picture goes in the draft
+even when the step is left while it uploads; the preview's URL is made and
+released in one effect (StrictMode-safe); a small picture is said to print
+blurry. A file the server would refuse is said at once in its words, the
+server's refusal under the buttons; a picture that can no longer be loaded
+says so, and Remove still works. Last week's picture shows From last week. Check
 before printing. with Keep as is (PR 3 planning answers 5-8)." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1464 passed, 19 skipped`; frontend `716 passed` in 88 files.
+Expected counts after this task: backend `1477 passed, 22 skipped`; frontend `719 passed` in 88 files.
 
 ### Task 9: The Printed bulletin card names the cover picture (PR 2 planning answer 3; planning answers 6, 7; clarifications 9, 15)
 
@@ -4720,7 +5422,7 @@ checked yet when last week's is still to check." -m "Co-Authored-By: Claude Opus
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1464 passed, 19 skipped`; frontend `717 passed` in 88 files.
+Expected counts after this task: backend `1477 passed, 22 skipped`; frontend `720 passed` in 88 files.
 
 ### Task 10: Docs: the manual check items for PR 3b (planning answers 5-7, 10; clarification 16)
 
@@ -4732,12 +5434,12 @@ Expected counts after this task: backend `1464 passed, 19 skipped`; frontend `71
 **Append to `docs/manual-verification.md`:**
 
 ````markdown
-- [ ] (owner, after PR 3b) **32.** On **4 Bulletin**, **Cover picture** comes first. Tap **Choose a picture**: the phone offers its photos (and the camera). Choose a photo taken on the phone: it uploads ("Uploading…"), and the preview shows it upright, trimmed to the cover's shape (an iPhone photo shows that Safari sent it as a JPEG, PR 3 planning answer 5). Download the printed bulletin from **5 Review & send**: the picture fills the cover's box under the church's name, in color, with the reading and the date in white on a dark see-through band across its bottom. The Word version shows the same picture.
+- [ ] (owner, after PR 3b) **32.** On **4 Bulletin**, **Cover picture** comes first. Tap **Choose a picture**: the phone offers its photos (and the camera). Choose a photo taken on the phone: it uploads ("Uploading…"), and the preview shows it upright, trimmed to the cover's shape, with a dark band across its bottom holding the reading and the date as they print (an iPhone photo shows that Safari sent it as a JPEG, PR 3 planning answer 5). Choose another picture and, while it says "Uploading…", go to **5 Review & send** and back: the new picture is there. Download the printed bulletin from **5 Review & send**: the picture fills the cover's box under the church's name, in color, with the reading and the date in white on a dark see-through band across its bottom. The Word version shows the same picture.
 - [ ] (owner, after PR 3b) **33.** Tap **Remove** and download again: the cover has no box, and the reading and the date sit centered where the picture was; the Printed bulletin card lists "cover picture" under "Not filled in".
 - [ ] (owner, after PR 3b) **34.** Choose a picture, save the service, start a **New service** for the Sunday after and open **4 Bulletin**: last week's picture is there with "From last week. Check before printing."; **Keep as is** keeps it and the note goes. Open a saved service and change its date ("Save as new service"): its picture is marked the same way.
 - [ ] **35.** A file that is not a JPEG or PNG (a PDF, a HEIC picture from a computer) or is over 10 MB says so under the buttons ("Choose a JPEG or PNG picture." or "The picture is larger than 10 MB. Choose a smaller one.") and uploads nothing; the picture already chosen stays.
 - [ ] (owner, after PR 3b) **36.** Print test (PR 3 planning answer 10): print side 1 of a bulletin with a picture on the church's color printer, on legal paper: the picture is in color, sharp, inside the margins, and the reading and the date on the band are easy to read.
-- [ ] (agent, after PR 3b) **37.** In a test church: another church's picture id answers 404; the picture's preview is fetched once and then kept; a draft from before PR 3b opens with everything it had and no picture.
+- [ ] (agent, after PR 3b) **37.** In a test church: another church's picture id answers 404; the picture's preview is fetched once in a visit, and after a reload the browser asks again and gets 304 (`Cache-Control: private, no-cache` with the ETag); a draft from before PR 3b opens with everything it had and no picture.
 ````
 
 - [ ] **Step 2: Check the docs**
@@ -4757,11 +5459,11 @@ checks." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1464 passed, 19 skipped`; frontend `717 passed` in 88 files.
+Expected counts after this task: backend `1477 passed, 22 skipped`; frontend `720 passed` in 88 files.
 
 - [ ] **Step 4 (controller): Review the batch (T7-T10) and backup push**
 
-One review of PR 3b: the draft's 3 → 4 migration keeps everything and a "Saved" draft stays Saved, its bulletin filled in or not; the picture carries only like the music (never into a saved service, a box chosen, removed or kept, or while a save's outcome is unknown), runs only through `autoUpdate`, and Save as new service marks it; every body says the picture (a PUT saves a Remove), a POST leaves "no picture" out, and the 409 check compares it; the upload sends the file as it is with its type and says the server's refusal; the preview's object URL is released; the group's buttons are 44 px and labelled, the hidden file input is not a tab stop, and focus goes back to **Choose a picture** after **Remove**; the copy is clarification 15's. Fixes are `Fix: <what> (Task <n> review)` commits. Then the backup push.
+One review of PR 3b: the draft's 3 → 4 migration keeps everything and a "Saved" draft stays Saved, its bulletin filled in or not; the picture carries only like the music (never into a saved service, a box chosen, removed or kept, or while a save's outcome is unknown), runs only through `autoUpdate`, and Save as new service marks it; every body says the picture (a PUT saves a Remove), a POST leaves "no picture" out, and the 409 check compares it; the upload sends the file as it is with its type, says the server's refusal, and puts the picture in the draft from the mutation's own callback (and only in the same draft); the preview's object URL is made and released in one effect; the group's buttons are 44 px and labelled, the hidden file input is not a tab stop, and focus goes back to **Choose a picture** after **Remove**; the copy is clarification 15's. Fixes are `Fix: <what> (Task <n> review)` commits. Then the backup push.
 
 ### Task 11: Verification and the draft PR 3b (owner's yes before the PR is opened and before it is marked ready)
 
@@ -4792,7 +5494,7 @@ for i in 1 2 3; do (cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Te
 (cd frontend && NEXT_PUBLIC_SUPABASE_URL=https://ci-placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-placeholder NEXT_PUBLIC_API_URL=http://localhost:8000 npm run build 2>&1 | grep -E "Compiled successfully|Error|/builder/bulletin")
 ```
 
-**Expected:** `1464 passed, 19 skipped in <t>s`; three times ` Test Files  88 passed (88)` and `      Tests  717 passed (717)` with no `×` or `FAIL` line (one names the failing test: Step 6); `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s`, a route line `○ /builder/bulletin`, and no `Error` (a font `Failed to fetch` only: say so and rely on CI). With a local, throwaway Postgres also `TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres | tail -1` → `19 passed, 1464 deselected`.
+**Expected:** `1477 passed, 22 skipped in <t>s`; three times ` Test Files  88 passed (88)` and `      Tests  720 passed (720)` with no `×` or `FAIL` line (one names the failing test: Step 6); `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s`, a route line `○ /builder/bulletin`, and no `Error` (a font `Failed to fetch` only: say so and rely on CI). With a local, throwaway Postgres also `TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres | tail -1` → `22 passed, 1477 deselected`.
 
 - [ ] **Step 3 (agent): The gates, the paths, the commits**
 
@@ -4840,7 +5542,7 @@ gh pr list -R bbrown62450/church --head claude/slice-2-plan-4q33le --state open 
 
 **Expected:** `[]`. Send the owner exactly this, and wait for a clear yes:
 
-> The cover picture on the Bulletin step (printed bulletin PR 3b) is verified on this machine: frontend 717 tests in 88 files (704 in 87 before), three runs in a row; backend unchanged at 1464 passed, 19 skipped; typecheck, lint and the production build are clean. It needs no database change (PR 3a made it, and it is live). The Bulletin step starts with **Cover picture**: choose a picture from your phone's photos (or take one), see it as the front page will trim it, choose another or remove it; last week's picture comes in with "From last week. Check before printing." and **Keep as is**; the Printed bulletin card lists "cover picture" when there is none. May I open the pull request as a **draft** titled "Printed bulletin PR 3b: the cover picture on the Bulletin step", so the checks run? Merging stays with you.
+> The cover picture on the Bulletin step (printed bulletin PR 3b) is verified on this machine: frontend 720 tests in 88 files (704 in 87 before), three runs in a row; backend unchanged at 1477 passed, 22 skipped; typecheck, lint and the production build are clean. It needs no database change (PR 3a made it, and it is live). The Bulletin step starts with **Cover picture**: choose a picture from your phone's photos (or take one), see it as the front page will trim it, choose another or remove it; last week's picture comes in with "From last week. Check before printing." and **Keep as is**; the Printed bulletin card lists "cover picture" when there is none. May I open the pull request as a **draft** titled "Printed bulletin PR 3b: the cover picture on the Bulletin step", so the checks run? Merging stays with you.
 
 - [ ] **Step 5 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
 
@@ -4856,7 +5558,7 @@ Printed bulletin PR 3b: the cover picture on the Bulletin step (PR 3 planning an
 - The Printed bulletin card: the cover picture in its note, in "Not filled in" and in "From last week, not checked yet".
 - docs/manual-verification.md: items 32-37 (the phone check, the print test). docs/ops-runbook.md: the PR 3a record (rides along).
 
-Tests: frontend 704 → 717 in 87 → 88 files; backend 1464 passed, 19 skipped (unchanged)
+Tests: frontend 704 → 720 in 87 → 88 files; backend 1477 passed, 22 skipped (unchanged)
 
 After merge (Task 12): a guided phone check and the print test of a cover with a picture, then a "Printed bulletin PR 3b record" in docs/ops-runbook.md.
 
@@ -4870,7 +5572,7 @@ gh pr create -R bbrown62450/church --draft --base main --head claude/slice-2-pla
 gh pr checks <N2> -R bbrown62450/church --watch --interval 30
 ```
 
-Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass`; CI's numbers: backend `1464 passed, 19 skipped`, backend-postgres `19 passed, 1464 deselected`, frontend `717 passed` in 88 files. Then send: "PR #<N2> is green: 717 frontend tests in 88 files; the backend and its Postgres job unchanged and passing; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N2> -R bbrown62450/church`.
+Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass`; CI's numbers: backend `1477 passed, 22 skipped`, backend-postgres `22 passed, 1477 deselected`, frontend `720 passed` in 88 files. Then send: "PR #<N2> is green: 717 frontend tests in 88 files; the backend and its Postgres job unchanged and passing; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N2> -R bbrown62450/church`.
 
 - [ ] **Step 6: Fix any failure in its owning task**
 
@@ -4886,7 +5588,7 @@ Run the last line with `run_in_background: true`. **Expected:** the PR URL; ever
 
 For each fix: change only the owning task's files; rerun Steps 2-3; commit `Fix: <what> (Task <n>, printed bulletin PR 3b final verification)` with the trailer; after the PR exists, ask the owner before pushing it.
 
-Expected counts after this task: backend `1464 passed, 19 skipped`; frontend `717 passed` in 88 files.
+Expected counts after this task: backend `1477 passed, 22 skipped`; frontend `720 passed` in 88 files.
 
 ### Task 12: PR 3b: the merge, the phone check, the print test, the record (OWNER + agent)
 
@@ -4912,7 +5614,7 @@ About three minutes after the merge (not replayed): `curl -s https://church-prod
 
 - [ ] **Step 3 (OWNER, then agent): Phone, step 1 of 5: choose a picture (item 32)**
 
-> On your phone, open https://worship-service-builder.vercel.app and pull down to reload it. In the Service Builder, open **4 Bulletin**: is **Cover picture** the first group? Tap **Choose a picture** and pick a photo you took with the phone (one with no people in it is best for this test). Does it upload ("Uploading…") and then show the photo upright, trimmed to the cover's shape? Then on **5 Review & send** tap **Download printed bulletin**: does the cover show the picture filling the box under the church's name, in color, with the reading and the date in white on a dark band at the bottom? Tap **Download Word version**: the same picture?
+> On your phone, open https://worship-service-builder.vercel.app and pull down to reload it. In the Service Builder, open **4 Bulletin**: is **Cover picture** the first group? Tap **Choose a picture** and pick a photo you took with the phone (one with no people in it is best for this test). Does it upload ("Uploading…") and then show the photo upright, trimmed to the cover's shape, with a dark band at the bottom holding the reading and the date? Then tap **Choose another picture**, pick another photo, and while it says "Uploading…" tap **5 Review & send** and come back: is the new photo there? Then on **5 Review & send** tap **Download printed bulletin**: does the cover show the picture filling the box under the church's name, in color, with the reading and the date in white on a dark band at the bottom? Tap **Download Word version**: the same picture?
 
 (An iPhone photo that uploads answers planning answer 5: Safari sent it as a JPEG. If the page says "Choose a JPEG or PNG picture.", record it: the phone sent HEIC, and HEIC support is a follow-up for the owner to decide.)
 
@@ -5007,9 +5709,9 @@ gh pr checks claude/slice-2-plan-4q33le -R bbrown62450/church --watch
 
 - [ ] **Step R (only if a release must come out): Prefer a fix forward; if PR 3b must come out, revert only the step's picture group; PR 3a only after it**
 
-On the owner's yes for each outward command (README "Reverting PR 3b or PR 3a"; clarification 19). **PR 3b** (the step): a branch `claude/revert-printed-3b` from `origin/main`; revert T10's commit and T8's commit (their subjects "Docs: printed bulletin PR 3b manual checks" and "Printed bulletin PR 3b: the cover picture on the Bulletin step"; with any `Fix: …` commit of T8 first) one by one, newest first: `git revert --no-edit <T10 sha> <T8 sha>` (each with the trailer added by `git commit --amend` before the next); the frontend suite (`713 passed` in 88: 717 less T8's four tests), typecheck and lint; a PR, CI, and the merge on the owner's yes; record it in the record. The draft v4, the carry, the bodies and the card stay, so every member's draft opens as it was; a picture already chosen or carried keeps printing and cannot be changed on the step until 3b returns (tell the owner so). Checked while planning: this revert, run on the planning worktree, typechecks, lints and passes `713` tests in 88 files. Reverting all of 3b is not offered: the 2b-2 reader refuses a version 4 draft (a restore error, the draft only backed up). **PR 3a**, only after the 3b revert is live and only if needed: `git revert -m 1 --no-commit <3a merge sha>`, then `git checkout <3a merge sha> -- backend/migrations/versions/0007_bulletin_images.py backend/db/models.py backend/migrations/README.md backend/tests/test_migrations.py backend/tests/test_schema_check.py backend/tests/test_api_app.py backend/tests/test_services_postgres.py`; both suites (`1436 passed, 19 skipped`: the baseline plus T1's four and its two Postgres ones; the frontend as it then is). The 3b frontend still standing then sends `cover_image_id`, which the API before 3a refuses (422): revert the rest of 3b first in that case, accepting the drafts' restore. Never `alembic downgrade` production for this: the database stays at `0007_bulletin_images`, which the older code ignores, and the pictures stay in the table, unread, until 3a returns.
+On the owner's yes for each outward command (README "Reverting PR 3b or PR 3a"; clarification 19). **PR 3b** (the step): a branch `claude/revert-printed-3b` from `origin/main`; revert T10's commit and T8's commit (their subjects "Docs: printed bulletin PR 3b manual checks" and "Printed bulletin PR 3b: the cover picture on the Bulletin step"; with any `Fix: …` commit of T8 first) one by one, newest first: `git revert --no-edit <T10 sha> <T8 sha>` (each with the trailer added by `git commit --amend` before the next); the frontend suite (`713 passed` in 88: 720 less T8's seven tests), typecheck and lint; a PR, CI, and the merge on the owner's yes; record it in the record. The draft v4, the carry, the bodies and the card stay, so every member's draft opens as it was; a picture already chosen or carried keeps printing and cannot be changed on the step until 3b returns (tell the owner so). Checked while planning: this revert, run on the planning worktree, typechecks, lints and passes `713` tests in 88 files. Reverting all of 3b is not offered: the 2b-2 reader refuses a version 4 draft (a restore error, the draft only backed up). **PR 3a**, only after the 3b revert is live and only if needed: `git revert -m 1 --no-commit <3a merge sha>`, then `git checkout <3a merge sha> -- backend/migrations/versions/0007_bulletin_images.py backend/db/models.py backend/migrations/README.md backend/tests/test_migrations.py backend/tests/test_schema_check.py backend/tests/test_api_app.py backend/tests/test_services_postgres.py`; both suites (`1436 passed, 21 skipped`: the baseline plus T1's four and its four Postgres ones; the frontend as it then is). The 3b frontend still standing then sends `cover_image_id`, which the API before 3a refuses (422): revert the rest of 3b first in that case, accepting the drafts' restore. Never `alembic downgrade` production for this: the database stays at `0007_bulletin_images`, which the older code ignores, and the pictures stay in the table, unread, until 3a returns.
 
-Expected counts after this task: backend `1464 passed, 19 skipped` on `main`; frontend `717 passed` in 88 files. The records PR adds no test.
+Expected counts after this task: backend `1477 passed, 22 skipped` on `main`; frontend `720 passed` in 88 files. The records PR adds no test.
 
 ---
 ## Build notes
@@ -5023,12 +5725,24 @@ Expected counts after this task: backend `1464 passed, 19 skipped` on `main`; fr
 - **"cover" among the boxes changes the API.** Adding it to `CARRY_KEYS` changes `ServiceBulletin.unchecked` and so `openapi.json`; it moved from T2 to T3 (the API's task), so every commit's `test_openapi_contract.py` holds.
 - **No `-Input`/`-Output` split.** `ServiceBulletin` is both a request and a response model; a field with a default would split its schema in two (renaming it in `schema.d.ts`) if Pydantic marked defaults required when serializing; it does not by default, and the regenerated `ServiceBulletin` keeps its name with `cover_image_id?: string | null`.
 - **The fingerprint of a draft saved before 3b.** With `cover_image_id: null` always in the payload, every draft saved under 2b-2 with bulletin fields would have turned "Unsaved changes" after the v4 migration; `bulletinPayload` leaves a null picture out and `serviceBody` adds it, and T7's migration test pins "Saved".
-- **A large PNG's memory.** The first `prepare` kept three copies of a decoded picture (`exif_transpose`, `convert`, the original): a 49 MP PNG peaked at 640 MB more. `ImageOps.exif_transpose(img, in_place=True)` and no `convert` of an RGB picture bring it to about 270 MB (Risks). A 3.9 MB, 4032 x 3024 photo-like JPEG takes 0.15 s (draft decoding) and stores as 460 KB; its cover picture is 550 KB.
+- **A large PNG's memory.** The first `prepare` kept three copies of a decoded picture (`exif_transpose`, `convert`, the original): a 49 MP PNG peaked at 640 MB more. The plan review then measured 767 MB for a transparent one; the review fixes below replace this. A 3.9 MB, 4032 x 3024 photo-like JPEG takes 0.15 s (draft decoding) and stores as 460 KB; its cover picture is 550 KB.
 - **The Bulletin step's carry replaces an untouched box.** A test draft with a picture set by hand but not marked chosen had it replaced by last week's (none): the step's test uses `setCover`, which marks the box chosen, as the step does.
 - **Every directive's file ends with a newline.** Three test files had their last block appended without one; the build commits were rewritten so the generated **Append** and **In … replace** blocks apply.
 - **Sample booklets** (T5 Step 2's snippet, with a picture drawn by Pillow; no photo) rendered to images with PyMuPDF (in a separate throwaway virtualenv, not the repo's): side 1's left half shows the church's name, the picture centered and in color with "Matthew 22:1-14" and "October 18, 2026" in white on the band, then the contact lines; without a picture, the two lines in bold centered in the box's place and no frame; PR 1's box (a 2b-2 page) centered. The Word files were read back with python-docx (one inline picture of 372 x 300 pt, the same bytes as the PDF's; or the two centered lines); LibreOffice is not in the planning container, so the owner's phone check is their first visual check.
 - **CI's alembic cycle by hand** on a fresh local Postgres database: `upgrade head`, `check` (`No new upgrade operations detected.`), `downgrade base`, `upgrade head`, `check`: clean; `relrowsecurity` true on `bulletin_images`.
 - **The production build** at T10's commit compiles with the five builder routes.
+
+**Plan review fixes (2026-10-03).** The adversarial review of this plan (3 Critical, 6 Important, 12 Minor) was answered by the owner's decisions, all applied to the build commits and replayed:
+- **C1, phone JPEGs.** Pillow reads a JPEG with a multi-picture segment (iPhone HDR, Samsung portrait) as "MPO"; it is now taken as a JPEG (its first picture; T2 builds a two-picture MPO with an EXIF turn). `Image.open(formats=...)` gets `("JPEG", "PNG")`, not `"MPO"`: MPO has no opener of its own in Pillow 12.3 (`KeyError: 'MPO'`), the JPEG opener returns it, and `prepare` then checks `JPEG`, `MPO` or `PNG`. Only those two parsers are tried (M1).
+- **C2, memory.** One picture at a time, on one worker thread (`bulletin_image._WORKER`, a 429 after 10 s of waiting); a PNG at most 24 MP; `Image.MAX_IMAGE_PIXELS` set to 50 M (Pillow refuses past twice that as it opens; a 422, with its warning silenced since the check says it); a large PNG reduced by a whole factor into a new small picture before anything else; transparency flattened, and the EXIF turn made, on the small picture. Measured (`ru_maxrss`, the review's files and 24 MP ones): the worst picture taken, a 24 MP palette PNG with transparency, about 216 MB more (RGBA 193, LA 193, 16-bit grey 114, RGB 121; a 49 MP progressive JPEG 152, baseline 32); the review's 49 MP PNGs are refused from their header (0 MB); twenty at once: 252 MB for the process (palette PNGs), 229 MB (RGBA), 173 MB (49 MP JPEGs). A lock alone was not enough: twenty threads taking turns under a lock grew to 2.2 GB, because glibc keeps freed memory in each thread's own arena; one worker thread (or `malloc_trim` after each, 239 MB) fixes that, and the thread needs no `ctypes`. T2 pins it: four 24 MP palette PNGs at once in a subprocess stay under 300 MB more (212 MB measured).
+- **C3, storage.** The stored JPEG is at most 600 KB (quality 85, then 75, then 70 at 1400 px, 65 at 1200, 60 at 1000, 60 at 800; random noise, the worst case, stores as 545 KB at 1200 x 1200; a busy photo-like 12 MP picture stays at 1600 px, 460 KB). A church keeps at most 60 pictures (its oldest unused ones make room, any age; all in saved services: a 422). All churches' pictures together at most 150 MB (a 422 and a `storage_full` warning; `sum(length(bytes))`, which Postgres reads without the pictures). The 60-day removal runs on any church's upload, at most 20 a time, in its own transaction before the new picture's. The README gains "Checking the cover pictures' storage". Question 9 no longer claims the bucket protects the database.
+- **I1.** The upload's callback is the mutation's own (`useUploadBulletinImage(onStored)`), so it runs after the step unmounts; it checks the draft is the same one (its `created_at` and date) and flushes the draft to storage. T8 swaps the step out of the layout mid-upload.
+- **I2.** `useObjectUrl` makes and releases the URL in one effect keyed by the bytes (the `react-hooks/set-state-in-effect` rule is turned off on that line, with the reason); T8 renders under `<StrictMode>`: the URL shown is never one released, and only one is held.
+- **I3.** T6 Step 5 sends a 9.5 MB body (401) and an 11 MB one (422) to production, signed out, before PR 3b.
+- **I4.** `GET /bulletin-images/{id}`: `Cache-Control: private, no-cache`, `ETag` (the id), 304 on `If-None-Match` (after checking the church), `Vary: Authorization, X-Church-Id` (CORS adds `Origin`), `X-Content-Type-Options: nosniff`. No cookie is used, so `Vary` does not name it.
+- **I5.** The removal takes its candidates `FOR UPDATE` and then reads the saved services; a save takes its picture `FOR SHARE` (`has_image(..., lock=True)` in `_with_known_cover`). On SQLite (which ignores both) T3 slips a save in between the lock and the read and the picture stays; on Postgres a test holds each lock and sees the other time out after 200 ms, both ways.
+- **I6.** Every owner-facing size (Goal, clarifications 2 and 20, Risks, questions 5, 9, 13, 18, the README's step 2, the spec) is restated from these measurements.
+- **Minor.** M2: a 16-bit grey PNG keeps its tones (mid-grey stores as 128, not 255). M3: the color profile is read before anything else and converted with or without transparency. M4: an empty file is refused by `checkPicture`, and an empty body reaches the usecase (the body has a default, so the sign-in is checked first) and gets the picture message. M6: `fitted_sizes` shrinks both lines by one factor. M7: under 800 px on the long side the step says "This picture is small and may print blurry.". M8: the preview has a CSS band with the reading and the date (question 16). M9: README step 4 uses `to_regclass` and counts through `query_to_xml`, and runs before 0007 (a Postgres test at 0006). M10: 0007 has 0003's guarded REVOKE for its table (a Postgres test re-opens default privileges first). M11: the 2b-2 tab after 3b, accepted (Risks, question 17). M5 and M12 are noted (clarification 10, Risks), not changed.
 
 **The rollback was run, not only written.** In a third worktree at the built head, T12 Step R's revert of the step's picture group (T10's and T8's commits) typechecked, linted and passed `713` frontend tests in 88 files. Reverting the whole of 3b would leave the 2b-2 reader, which refuses a version 4 draft.
 
@@ -5047,18 +5761,19 @@ Expected counts after this task: backend `1464 passed, 19 skipped` on `main`; fr
 | Owner answer or S item | Task(s) and tests |
 |---|---|
 | Planning answer 1: two PRs, server first | T1-T4 (PR 3a), T7-T10 (PR 3b); T5 Step 3 and T11 Step 3 (the paths: nothing of the pages in 3a, nothing of the server in 3b); T3 `test_the_cover_picture_is_saved_kept_by_an_older_page_and_carried` and `test_the_cover_picture_prints_and_a_page_from_before_3b_keeps_pr_1_s_box` (a 2b-2 page keeps working) |
-| Planning answer 2: the reading and the date in white on a dark see-through band | T2 `test_the_cover_fills_the_box_with_a_centered_crop_and_a_dark_band`, `test_a_long_reading_is_shrunk_to_fit_the_band`, `test_the_cover_picture_fills_the_box_in_both_files` |
+| Planning answer 2: the reading and the date in white on a dark see-through band | T2 `test_the_cover_fills_the_box_with_a_centered_crop_and_a_dark_band`, `test_a_long_reading_is_shrunk_to_fit_the_band`, `test_a_long_reading_and_the_date_shrink_together`, `test_the_cover_picture_fills_the_box_in_both_files`; T8 the band over the preview |
 | Planning answer 3: the picture fills the box, centered crop | T2 `test_the_cover_fills_the_box_with_a_centered_crop_and_a_dark_band`; T8 "uploads a chosen picture, shows it trimmed as the front page prints it…" (`object-cover`) |
 | Planning answer 4: color | T2 (the band's test checks the picture's colors); T12 Step 7 (the print test) |
-| Planning answer 5: JPEG and PNG only, an iPhone photo as JPEG | T2 `test_only_a_jpeg_or_png_of_at_most_10_mb_and_50_million_pixels_is_taken`, `test_a_photo_is_turned_upright`; T3 `test_only_a_jpeg_or_png_of_at_most_10_mb_is_taken`, `test_a_body_without_its_size_is_refused_before_it_is_read`; T7 "takes a JPEG or PNG of at most 10 MB…"; T8 "says a file the server would refuse…"; T12 Step 3 (the owner's iPhone) |
+| Planning answer 5: JPEG and PNG only, an iPhone photo as JPEG | T2 `test_only_a_jpeg_or_png_of_at_most_10_mb_and_50_million_pixels_is_taken`, `test_a_photo_is_turned_upright`, `test_a_phone_s_multi_picture_jpeg_is_taken_as_a_jpeg`; T3 `test_only_a_jpeg_or_png_of_at_most_10_mb_is_taken`, `test_a_body_without_its_size_is_refused_before_it_is_read`; T7 "takes a JPEG or PNG of at most 10 MB…"; T8 "says a file the server would refuse…"; T12 Step 3 (the owner's iPhone) |
 | Planning answer 6: no picture, no box, the reading and the date centered | T2 `test_no_picture_prints_the_reading_and_the_date_where_it_would_be`, `test_the_cover_holds_the_picture_the_reading_alone_or_pr_1_s_box`; T3 the printed test (null and another church's id); T9 "Not filled in: … cover picture"; T12 Step 4 |
 | Planning answer 7: last week's picture carries with the mark and Keep as is | T3 `test_the_cover_picture_is_the_first_box_to_check`, the services test (`previous-bulletin` carries it); T7 "carries last week's picture, marked to check first…", "is marked to check on Save as new service…"; T8 "carries last week's picture with its note until it is kept…"; T9 "carries last week's cover picture in, lists it to check, and prints it"; T12 Step 5 |
 | Planning answer 8: any member uploads | T3 `test_any_member_uploads_a_picture_and_sees_it`, `test_every_route_is_church_isolated` |
-| Planning answer 9: unused pictures removed after 60 days | T3 `test_an_upload_removes_the_church_s_pictures_unused_for_60_days` |
+| Planning answer 9: unused pictures removed after 60 days | T3 `test_an_upload_removes_any_church_s_pictures_unused_for_60_days`, `test_the_removal_reads_the_saved_services_after_it_locks_its_candidates`, `test_a_save_and_the_removal_wait_for_each_other` (Postgres) |
+| Plan review limits (clarification 20): memory, size, a church's 60, the budget | T2 `test_four_large_pngs_at_once_take_the_memory_of_one`, `test_an_upload_waits_its_turn_then_is_told_to_try_again`, `test_a_busy_picture_is_stored_in_at_most_600_kb`; T3 `test_a_church_keeps_at_most_its_quota_of_pictures`, `test_uploads_stop_when_every_church_s_pictures_reach_the_storage_budget`; T1 `test_the_owner_s_read_only_queries_around_0007` (the storage query) |
 | Planning answer 10: the 0006 routine, a phone check after each PR, the print test | T1 `test_offline_sql_for_0007_is_one_table_one_index_and_row_level_security_under_the_timeouts`, `test_the_readme_shows_the_0007_preview_exactly`, `test_the_owner_s_read_only_queries_around_0007`; T6 Steps 1-6; T12 Steps 3-7 |
-| S "Data model": `bulletin_images`, 0007, upright, 1600 px, JPEG, `cover_image_id`, the removal | T1 `test_0007_creates_the_bulletin_images_table_and_changes_nothing_else`, `test_0007_downgrade_drops_only_the_table`, `test_0007_turns_on_row_level_security_and_grants_supabase_s_roles_nothing`; T2 `test_a_large_photo_is_stored_as_a_jpeg_at_most_1600_px_on_its_long_side`, `test_the_stored_picture_keeps_no_camera_data`, `test_the_cover_picture_is_read_stored_and_carried`; T3 the API tests |
+| S "Data model": `bulletin_images`, 0007, upright, 1600 px, JPEG, `cover_image_id`, the removal | T1 `test_0007_creates_the_bulletin_images_table_and_changes_nothing_else`, `test_0007_downgrade_drops_only_the_table`, `test_0007_turns_on_row_level_security_and_grants_supabase_s_roles_nothing`, `test_0007_revokes_supabase_s_roles_even_when_default_privileges_would_grant`, `test_the_after_deploy_check_runs_before_0007_too`; T2 `test_a_16_bit_grey_png_keeps_its_tones`, `test_a_color_profile_is_converted_to_srgb_with_or_without_transparency`; T2 `test_a_large_photo_is_stored_as_a_jpeg_at_most_1600_px_on_its_long_side`, `test_the_stored_picture_keeps_no_camera_data`, `test_the_cover_picture_is_read_stored_and_carried`; T3 the API tests |
 | S "API": `POST /bulletin-images`, `GET /bulletin-images/{id}` | T3 `test_api_bulletin_images.py` (8 tests and cases), `test_route_guards.py` (both church-scoped), `test_openapi_contract.py` |
-| S "The Bulletin step": the picture on the step | T8 (the four tests; 44 px buttons) |
+| S "The Bulletin step": the picture on the step | T8 (the seven tests: the upload, the band and Remove, a refused file, the carry, a picture gone, the step left mid-upload, StrictMode, a small picture; 44 px buttons) |
 | F §4.6 (versioning; never destroy typed input) | T7 the v3 → v4 migration test ("stays Saved"); the carry never over a box chosen, removed or kept; T12 Step R (the rollback keeps the drafts) |
 | F §2.5 (logs without content) | T3 `test_any_member_uploads_a_picture_and_sees_it` (the log line: ids and sizes) |
 | Layering (no FastAPI or Streamlit below the API) | T3 `test_no_streamlit_in_core.py` (three modules added); T5 imports grep |
@@ -5071,7 +5786,9 @@ S items **not** in PR 3: a route to delete one picture, HEIC (planning answer 5)
 - `DELETE /bulletin-images/{id}` for a picture uploaded by mistake (today Remove takes it off the bulletin and the 60-day removal takes it from the database; question 8).
 - Shrinking the picture in the browser before the upload, if the owner's phone check finds uploads slow (question 6).
 - HEIC, if the owner's iPhone sends one (T12 Step 3): a `pillow-heif` package on the server, or a conversion in the browser.
-- A lower pixel cap for PNG if Railway's memory is small (Risks).
+- A lower pixel cap for PNG (`MAX_PNG_PIXELS`) if Railway's memory is small (Risks).
+- A higher `MAX_PICTURES` when a church nears 60 pictures in saved services (about 14 months of a new picture every week; question 18), or a smaller `STORAGE_BUDGET` if the database grows for other reasons.
+- Refusing a `POST /bulletin-images` without an `Authorization` header in `UploadSizeMiddleware`, before its body is read, and a light bucket on the GET (the review's M12; not changed now).
 - The band's opacity and sizes, if the print test asks (`bulletin_image.BAND_OPACITY`, `printed_bulletin.COVER_TEXT_POINTS`).
 - `printed_bulletin.PLACEHOLDERS` and the "[Cover picture]" box can go once no page from before PR 3b can be open (the 2b plan's follow-up, now with the cover too).
 - The database's size in each later record (question 13).
@@ -5082,18 +5799,21 @@ Your answers of 2026-10-02 (the ten answers, layout B, the PR 1 plan's twelve, t
 
 1. **What PR 3a changes for you** (clarifications 4, 18): nothing on the website; the printed bulletin from today's pages keeps its "[Cover picture]" box, which now sits centered under the church's name in the PDF (it was at the left margin; the Word version's was centered on 2026-10-03). Recommended: accept (center it now).
 2. **One picture for the PDF and the Word version** (clarification 3): the server draws the band and the two lines into the picture itself, so both files show exactly the same cover; the PDF is the print copy. The other choice is printing the reading and the date as text over the picture in the PDF only (sharper letters, but Word could not match it). In the Word version the band's words are part of the picture, so to change them you change the service and download again. Recommended: one picture for both.
-3. **The band's look** (clarification 3): black at 55 % across the bottom, the reading 18 pt and the date 14 pt in white bold Times, centered, a long reading made smaller to fit; the band about a fifth of the picture's height. Recommended: accept, and adjust after the print test if needed (one number each).
+3. **The band's look** (clarification 3): black at 55 % across the bottom, the reading 18 pt and the date 14 pt in white bold Times, centered, a long reading made smaller to fit, and the date with it, so the reading is never smaller than the date; the band about a fifth of the picture's height. Recommended: accept, and adjust after the print test if needed (one number each).
 4. **No picture** (clarification 4): no box, no frame; the reading (18 pt) and the date (14 pt), bold and black, centered in the box's place, so the address lines stay where they are. Recommended: accept.
-5. **What a picture becomes** (clarification 2): a JPEG or PNG up to 10 MB; it is turned upright, its colors made right for printing, made at most 1600 pixels on its long side (sharp at the cover's size), and kept without the phone's hidden data (location, time, phone model). Recommended: accept.
-6. **No shrinking on the phone before the upload** (Risks): a phone photo of 2-5 MB uploads as it is, in a few seconds on Wi-Fi and up to about 20 s on a slow connection; the page waits a minute. The other choice is to shrink it on the phone first (faster on a slow connection, more code in the page that the tests cannot fully check). A photo over 10 MB (a phone set to 48 MP) is refused with a message. Recommended: no shrinking now; add it if your phone check finds uploads slow.
-7. **Who sees the pictures** (clarifications 6, 13): any member of your church who opens the service sees its picture, as with the rest of a saved service; Supabase's own web access cannot read them; another church never can. Pictures of people, children especially, are for the church's own photo policy. Recommended: accept.
-8. **When old pictures go** (clarification 7): a picture uploaded more than 60 days ago that no saved service uses is removed the next time someone in your church uploads a picture (no timer to run). A picture you remove from a bulletin, or whose service you delete, stays in the database until then; a picture chosen on a phone but not yet saved is kept at least 60 days. Recommended: accept.
-9. **A limit on uploads** (clarification 10): at most 20 pictures an hour for one person and 60 a day for the church; past it the page says "Too many requests. Try again in … seconds.". It keeps a stuck button or a misuse from filling the database. Recommended: accept.
+5. **What a picture becomes** (clarification 2): a JPEG or PNG up to 10 MB (a phone photo with a second picture inside, as iPhone HDR and Samsung portrait photos have, counts as a JPEG); it is turned upright, its colors made right for printing, made at most 1600 pixels on its long side (sharp at the cover's size) and at most 0.6 MB (a very busy picture is saved a little softer or smaller to fit; a phone photo usually stays at full size, 0.2-0.5 MB), and kept without the phone's hidden data (location, time, phone model). Recommended: accept.
+6. **No shrinking on the phone before the upload** (Risks): a phone photo of 2-5 MB uploads as it is, in a few seconds on Wi-Fi and up to about 20 s on a slow connection; the page waits a minute, and you can go on to another step meanwhile (the picture still lands in this week's service). The other choice is to shrink it on the phone first (faster on a slow connection, more code in the page that the tests cannot fully check). A photo over 10 MB (a phone set to 48 MP) is refused with a message. Recommended: no shrinking now; add it if your phone check finds uploads slow.
+7. **Who sees the pictures** (clarifications 6, 13): any member of your church who opens the service sees its picture, as with the rest of a saved service; Supabase's own web access cannot read them; another church never can. The browser keeps a picture only for itself and asks the app again each time it shows it, so after someone signs out of a shared computer the picture is not shown from the browser's memory. Pictures of people, children especially, are for the church's own photo policy. Recommended: accept.
+8. **When old pictures go** (clarification 7): a picture uploaded more than 60 days ago that no saved service of its church uses is removed the next time anyone, in any church, uploads a picture (a few at a time; no timer to run), so a church that stops uploading still loses its unused pictures. A picture you remove from a bulletin, or whose service you delete, stays in the database until then; a picture chosen on a phone but not yet saved is kept at least 60 days. Recommended: accept.
+9. **A limit on uploads** (clarification 10): at most 20 pictures an hour for one person and 60 a day for a church; past it the page says "Too many requests. Try again in … seconds.". This stops a stuck button or a runaway page, but on its own it does not protect the database: anyone with a Google account can create a church of their own and upload there. The protections for that are question 18. Recommended: accept.
 10. **Last week's picture is the first box to check** (clarification 5): it carries like the music, its note and **Keep as is** under the preview, and "cover picture" comes first in "From last week, not checked yet". "Save as new service" marks it too. Recommended: accept.
 11. **The card lists a missing picture** (clarification 9): with no picture, "Not filled in: …" names "cover picture" (as it names the prelude), so a week without one is a choice, not a surprise; nothing stops a download. Recommended: list it.
-12. **The checks** (clarification 14; Tasks 6 and 12): around PR 3a, as for migration 0006, one at a time: I start the backup on your yes; you run one read-only query (now also showing the database's size); I show you the SQL (one new table, closed to Supabase's web access) and explain it; after the deploy, one more read-only query and a short phone check that the builder works as before. After PR 3b, four short phone steps (a photo from your phone, which also checks that Safari sends an iPhone photo as a JPEG; Remove; last week's picture; a file it refuses) and the print test of a cover with a picture on the color printer. Recommended: accept.
-13. **The database's size** (Risks): a picture takes about 0.2-0.5 MB, so one a week is about 20 MB a year; the free plan holds 500 MB. The counting query records the size before PR 3a, and later records note it. Recommended: accept, and look again when the size passes about 250 MB.
+12. **The checks** (clarification 14; Tasks 6 and 12): around PR 3a, as for migration 0006, one at a time: I start the backup on your yes; you run one read-only query (now also showing the database's size); I show you the SQL (one new table, closed to Supabase's web access) and explain it; after the deploy, one more read-only query (it also works if run too early, and then says so), my own check that a phone-sized picture gets through Railway to the app, and a short phone check that the builder works as before. After PR 3b, four short phone steps (a photo from your phone, which also checks that Safari sends an iPhone photo as a JPEG; Remove; last week's picture; a file it refuses) and the print test of a cover with a picture on the color printer. Recommended: accept.
+13. **The database's size** (Risks; clarification 20): a stored picture is at most 0.6 MB (a phone photo usually 0.2-0.5 MB), so a new picture every week is at most about 25 MB a year for a church; a church keeps at most 60 pictures (36 MB at most), and the app takes no more pictures once all churches' pictures together reach 150 MB of the free plan's 500 MB. The counting query records the size before PR 3a, later records note it, and a query in `backend/migrations/README.md` shows the pictures' share at any time. Recommended: accept, and look again when the pictures pass about 100 MB.
 14. **Undoing PR 3b** (clarification 19): if something goes wrong on the step, I fix it forward. If it must come out, only the picture part of the step goes, so everyone's unsaved work is kept; until it returns, a picture already chosen (or carried from last week) keeps printing and cannot be changed. Recommended: accept.
 15. **Two pull requests, the server first** (clarification 18; planning answer 1 as written): as for the Bulletin step, no page ever talks to a server that does not understand it, and you can keep using the app during both deploys. Recommended: as you decided.
+16. **The preview shows the band** (clarification 8): on the step, the preview has a dark strip across its bottom with the reading and the date, roughly as they print, so you can see what the band will cover (a face or a steeple at the bottom of a photo) before you print; it is close to the printed band, not an exact copy. A picture smaller than 800 pixels on its long side still uploads, with "This picture is small and may print blurry." under it. Recommended: accept.
+17. **An old tab after PR 3b** (clarification 19; Risks): a page opened before PR 3b went live and not reloaded keeps working; saving from it keeps the picture but drops its "From last week" note, and downloading from it prints the empty "[Cover picture]" box instead of the picture. Reloading the page fixes both. Recommended: accept (no extra code for a short overlap).
+18. **Limits that protect every church** (clarification 20; Risks): because anyone with a Google account can create a church, the server (a) prepares one picture at a time (another waits a few seconds; after 10 s the page says "Another picture is being prepared. Try again in a few seconds."), so its memory stays near a quarter of a gigabyte even when many pictures arrive at once; (b) lets a church keep at most 60 pictures: past that its oldest picture no saved service uses makes room, and when all 60 are in saved services the page says "Your church keeps 60 pictures, all in saved services. Remove the picture from an older service, then try again." (a church with a new picture every week reaches that after about 14 months; the number is easy to raise); (c) takes no more pictures from anyone once all churches' pictures reach 150 MB, saying "The app has no room for more pictures right now. Please tell the app's administrator." and noting it in Railway's log, so saving services keeps working. Someone determined could reach the 150 MB in about half a day; uploads would then stop for every church until old unused pictures go or the church made for it is removed. Recommended: accept these numbers, and raise the 60 when your church gets close.
 
 Owner steps still to come: the plan's approval; for PR 3a, the draft PR on your yes and ready on your yes (T5), the backup on your yes, the counts and the SQL check, the merge on your yes, the after-deploy query and the short phone check (T6); for PR 3b, the draft PR on your yes and ready on your yes (T11), the merge on your yes, the phone steps and the print test, and the records PR (T12).
