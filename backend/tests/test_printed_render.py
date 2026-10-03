@@ -158,3 +158,15 @@ def test_a_long_church_name_still_leaves_page_1_on_side_1(length, contact, cover
     pages = halves(content)
     assert pages[0].startswith("Saint Example") and pages[0].endswith(cover_ends)
     assert pages[1].startswith("1 THE SERVICE FOR THE LORD’S DAY")
+
+
+def test_the_word_cover_picture_box_is_centered():
+    """Owner's desktop Word check (2026-10-03): the picture box sat at the left margin, off center under the
+    centered church name. The table is centered (w:jc in tblPr, in the schema's order)."""
+    box = Document(BytesIO(printed_docx.render_docx(service()))).tables[0]
+    tbl_pr = box._tbl.tblPr
+    assert tbl_pr.find(qn("w:jc")).get(qn("w:val")) == "center"
+    order = ["tblStyle", "tblpPr", "tblOverlap", "bidiVisual", "tblStyleRowBandSize", "tblStyleColBandSize", "tblW",
+             "jc", "tblCellSpacing", "tblInd", "tblBorders", "shd", "tblLayout", "tblCellMar", "tblLook"]
+    children = [child.tag.split("}")[1] for child in tbl_pr]
+    assert children == sorted(children, key=order.index)

@@ -13,6 +13,7 @@ from __future__ import annotations
 from io import BytesIO
 
 from docx import Document
+from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
@@ -99,6 +100,7 @@ def render_docx(ps: pb.PrintedService) -> bytes:
     _add_line(doc, title)
     box = doc.add_table(rows=1, cols=1)
     box.style = "Table Grid"
+    box.alignment = WD_TABLE_ALIGNMENT.CENTER      # centered under the name (owner's desktop Word check, 2026-10-03)
     cell = box.cell(0, 0)
     cell.width = Inches(5.2)
     first = cell.paragraphs[0]
