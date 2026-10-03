@@ -42,14 +42,15 @@ function withCard(key: keyof DraftV1["liturgy"]["cards"], card: Partial<DraftV1[
 }
 
 describe("steps (S steps.ts)", () => {
-  it("lists the four steps in order, ships all four (2c, 3b, 4b and Review in 5a-3), and reads a step from its path", () => {
+  it("lists the five steps in order, ships all five (2c, 3b, 4b, Review in 5a-3, Bulletin in PR 2b), and reads a step from its path", () => {
     expect(STEPS.map((s) => [s.number, s.label, s.href, s.previous, s.next])).toEqual([
       [1, "Date & readings", "/builder/readings", null, "hymns"],
       [2, "Hymns", "/builder/hymns", "readings", "liturgy"],
-      [3, "Liturgy", "/builder/liturgy", "hymns", "review"],
-      [4, "Review & send", "/builder/review", "liturgy", null],
+      [3, "Liturgy", "/builder/liturgy", "hymns", "bulletin"],
+      [4, "Bulletin", "/builder/bulletin", "liturgy", "review"],
+      [5, "Review & send", "/builder/review", "bulletin", null],
     ]);
-    expect([...SHIPPED_STEPS]).toEqual(["readings", "hymns", "liturgy", "review"]);
+    expect([...SHIPPED_STEPS]).toEqual(["readings", "hymns", "liturgy", "bulletin", "review"]);
     expect(stepById("liturgy").label).toBe("Liturgy");
     expect(stepFromPath("/builder/hymns")).toBe("hymns");
     expect(stepFromPath("/builder/review/")).toBe("review");
@@ -62,7 +63,7 @@ describe("steps (S steps.ts)", () => {
 describe("stepStatus (F §4.7)", () => {
   it("shows Soon for unshipped steps and Not in archive for Review", () => {
     const d = testDraft();
-    expect(STEPS.map((s) => stepStatus(d, s.id).kind)).toEqual(["incomplete", "incomplete", "incomplete", "not_in_archive"]);
+    expect(STEPS.map((s) => stepStatus(d, s.id).kind)).toEqual(["incomplete", "incomplete", "incomplete", "optional", "not_in_archive"]);
     expect(stepStatus(d, "liturgy", READINGS)).toEqual({ kind: "soon" });
     expect(stepStatus(d, "readings", new Set())).toEqual({ kind: "soon" });
     expect(stepStatus(d, "review", ALL)).toEqual({ kind: "not_in_archive" });

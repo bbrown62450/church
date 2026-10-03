@@ -10,7 +10,7 @@ import { PrintedCard } from "./printed-card";
 import { SaveCard } from "./save-card";
 
 /**
- * Step 4, Review & send (slice 5a spec, UX "Review step"; owner answers 1 and
+ * Step 5, Review & send (slice 5a spec, UX "Review step"; owner answers 1 and
  * 2, 2026-10-01), top to bottom: the banner while the draft is a saved
  * service, "Still to do" (each gap a link to fix it), the Archive card (save,
  * start a new service; 5a-3), the Word documents, and the printed bulletin

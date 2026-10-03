@@ -459,7 +459,7 @@ describe("Review & send: saving (slice 5a-3)", () => {
     const card = await archiveCard();
     const progress = screen.getByRole("navigation", { name: "Steps" });
     const aside = screen.getByRole("complementary", { name: "Summary" });
-    expect(within(progress).getAllByRole("link")[3]).toHaveTextContent("4 Review & send Not in archive");
+    expect(within(progress).getAllByRole("link")[4]).toHaveTextContent("5 Review & send Not in archive");
     expect(summaryStatus(aside, "Not in archive")).toHaveTextContent("Draft saved on this device · Not in archive");
 
     await user.click(within(card).getByRole("button", { name: "Save to archive" }));
@@ -469,7 +469,7 @@ describe("Review & send: saving (slice 5a-3)", () => {
     expect(post.headers["x-church-id"]).toBe(church().id);
     expect(post.body).toMatchObject({ service_date_iso: "2026-10-04", occasion: "Harvest", include_communion: true });
     expect(within(card).getByText(`Saved to the archive · ${formatSavedAt(FIRST_SAVE)}`)).toBeInTheDocument();
-    expect(within(progress).getAllByRole("link")[3]).toHaveTextContent("4 Review & send Saved");
+    expect(within(progress).getAllByRole("link")[4]).toHaveTextContent("5 Review & send Saved");
     expect(summaryStatus(aside, `In archive (saved ${formatSavedAt(FIRST_SAVE)})`)).toHaveTextContent(
       `Draft saved on this device · In archive (saved ${formatSavedAt(FIRST_SAVE)})`,
     );
@@ -483,7 +483,7 @@ describe("Review & send: saving (slice 5a-3)", () => {
 
     await user.click(screen.getByRole("button", { name: "Probe edit" }));
     expect(within(card).getByText(`Unsaved changes · last saved ${formatSavedAt(FIRST_SAVE)}`)).toBeInTheDocument();
-    expect(within(progress).getAllByRole("link")[3]).toHaveTextContent("4 Review & send Unsaved changes");
+    expect(within(progress).getAllByRole("link")[4]).toHaveTextContent("5 Review & send Unsaved changes");
     expect(summaryStatus(aside, `In archive (saved ${formatSavedAt(FIRST_SAVE)}) · Unsaved changes`)).toHaveTextContent(
       `Draft saved on this device · In archive (saved ${formatSavedAt(FIRST_SAVE)}) · Unsaved changes`,
     );

@@ -1,6 +1,7 @@
 /**
- * The four builder steps (F §4.7; S "steps.ts"). Every step has its own
- * route and is always reachable (F D9).
+ * The five builder steps (F §4.7; S "steps.ts"). Every step has its own
+ * route and is always reachable (F D9). Printed bulletin PR 2b adds the
+ * optional Bulletin step between Liturgy and Review & send.
  *
  * `SHIPPED_STEPS` holds the steps whose content has shipped. An unshipped
  * step shows the muted status "Soon" (Review: "Not in archive"), and
@@ -8,7 +9,9 @@
  * 2026-09-28); slice 2c ships "readings", slice 3b "hymns" and slice 4b
  * "liturgy". Review's route has its real content from 5a-1 (the checklist and
  * the Word files); "review" joins the set in 5a-3, when saving gives it the
- * statuses "Saved" and "Unsaved changes" (`reviewStatus`).
+ * statuses "Saved" and "Unsaved changes" (`reviewStatus`). "bulletin" ships
+ * with its step (PR 2b): "Optional", or how many boxes from last week are
+ * still to check.
  */
 import type { StepId } from "./schema";
 
@@ -16,7 +19,7 @@ export type { StepId } from "./schema";
 
 export type Step = {
   id: StepId;
-  /** 1-4, as shown in "Step 1 of 4". */
+  /** 1-5, as shown in "Step 1 of 5". */
   number: number;
   label: string;
   /** The footer's "Next: …" name. */
@@ -29,11 +32,12 @@ export type Step = {
 export const STEPS: readonly Step[] = [
   { id: "readings", number: 1, label: "Date & readings", short: "Readings", href: "/builder/readings", previous: null, next: "hymns" },
   { id: "hymns", number: 2, label: "Hymns", short: "Hymns", href: "/builder/hymns", previous: "readings", next: "liturgy" },
-  { id: "liturgy", number: 3, label: "Liturgy", short: "Liturgy", href: "/builder/liturgy", previous: "hymns", next: "review" },
-  { id: "review", number: 4, label: "Review & send", short: "Review", href: "/builder/review", previous: "liturgy", next: null },
+  { id: "liturgy", number: 3, label: "Liturgy", short: "Liturgy", href: "/builder/liturgy", previous: "hymns", next: "bulletin" },
+  { id: "bulletin", number: 4, label: "Bulletin", short: "Bulletin", href: "/builder/bulletin", previous: "liturgy", next: "review" },
+  { id: "review", number: 5, label: "Review & send", short: "Review", href: "/builder/review", previous: "bulletin", next: null },
 ];
 
-export const SHIPPED_STEPS: ReadonlySet<StepId> = new Set<StepId>(["readings", "hymns", "liturgy", "review"]);
+export const SHIPPED_STEPS: ReadonlySet<StepId> = new Set<StepId>(["readings", "hymns", "liturgy", "bulletin", "review"]);
 
 export function stepById(id: StepId): Step {
   const step = STEPS.find((s) => s.id === id);
