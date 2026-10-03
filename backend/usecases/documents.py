@@ -21,7 +21,11 @@ does not come back prints "[Reading text unavailable]", never an error.
 PR 2a adds the church's bulletin settings (church_bulletin.read_settings of
 the settings read with the name, every text Word-safe): the contact lines,
 the people, the service time, the stars, the stand note and the Gloria Patri
-words.
+words. PR 2b adds the week's own fields as posted (the draft's bulletin):
+the music, this week's people and part leaders, the announcements, and a
+pasted reading text, which prints instead of the fetched one and is neither
+fetched nor charged; a body with no bulletin (a page from before PR 2b-2)
+prints PR 1's placeholders. The log line never carries a bulletin's text.
 """
 from __future__ import annotations
 
@@ -38,6 +42,7 @@ import printed_pdf
 import scripture_fetcher
 import service_output
 from db import session_scope
+from service_bulletin import ServiceBulletin
 from domain_errors import Forbidden
 from repos import churches
 from usecases import archive, church_bulletin, passages
@@ -124,14 +129,23 @@ def build_printed(church_id: uuid.UUID, data: archive.ServiceInput, fmt: printed
     ot, nt = service_output.resolve_doc_readings(list(clean.scriptures), clean.selected_ot_ref,
                                                  clean.selected_nt_ref)
     tid = effective_translation(translation, church["settings"])
-    refs = [ref for ref in (ot, nt) if ref]
+    week = ServiceBulletin() if clean.bulletin is None else clean.bulletin
+    pasted = ((ot, week.ot_text), (nt, week.nt_text))
+    refs = [ref for ref, text in pasted if ref and not text]           # a pasted reading is not fetched
     texts = reading_texts(refs, tid, charge) if refs else {}
+
+    def reading(ref: Optional[str], text: str) -> Optional[printed_bulletin.Reading]:
+        if ref is None:
+            return None
+        return printed_bulletin.Reading(ref, text, pasted=True) if text else printed_bulletin.Reading(
+            ref, texts.get(ref))
+
     printed = printed_bulletin.PrintedService(
         church_name=archive._xml_safe(church["name"] or "").strip(), resolved=resolved,
-        ot=None if ot is None else printed_bulletin.Reading(ot, texts.get(ot)),
-        nt=None if nt is None else printed_bulletin.Reading(nt, texts.get(nt)),
+        ot=reading(*pasted[0]), nt=reading(*pasted[1]),
         translation_label=scripture_fetcher.translation_label(tid),
-        settings=church_bulletin.read_settings(church["settings"]))
+        settings=church_bulletin.read_settings(church["settings"]),
+        bulletin=clean.bulletin)                        # None (a page from before PR 2b-2): PR 1's placeholders
     content = printed_pdf.render_pdf(printed) if fmt == "pdf" else printed_docx.render_docx(printed)
     logger.info("documents.printed church=%s format=%s bytes=%d ms=%d", church_id, fmt, len(content),
                 round((time.monotonic() - started) * 1000))

@@ -72,6 +72,13 @@ export type ArchivedHymn = components["schemas"]["ArchivedHymn"];
 export type ServiceSummary = components["schemas"]["ServiceSummary"];
 export type ServicePage = components["schemas"]["Page_ServiceSummary_"];
 export type DeletedOut = components["schemas"]["DeletedOut"];
+/**
+ * A service's printed-bulletin fields (printed bulletin PR 2b): the music, this
+ * week's people and part leaders, the announcements and the pasted reading
+ * text; and `GET /services/previous-bulletin`, what a new week carries forward.
+ */
+export type ServiceBulletin = components["schemas"]["ServiceBulletin"];
+export type PreviousBulletin = components["schemas"]["PreviousBulletinOut"];
 
 /** `POST /liturgy/review` (the service reviewer): every switched-on card with text, and the notes back. */
 export type ReviewBody = components["schemas"]["ReviewIn"];

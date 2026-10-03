@@ -119,6 +119,149 @@
         "title": "AuthorOut",
         "type": "object"
       },
+      "BulletinAnnouncements": {
+        "additionalProperties": false,
+        "properties": {
+          "activities": {
+            "maxLength": 4000,
+            "title": "Activities",
+            "type": "string"
+          },
+          "coffee_hour": {
+            "maxLength": 200,
+            "title": "Coffee Hour",
+            "type": "string"
+          },
+          "collection": {
+            "maxLength": 2000,
+            "title": "Collection",
+            "type": "string"
+          },
+          "deacon": {
+            "maxLength": 100,
+            "title": "Deacon",
+            "type": "string"
+          },
+          "other": {
+            "maxLength": 4000,
+            "title": "Other",
+            "type": "string"
+          },
+          "prayer_concerns": {
+            "maxLength": 4000,
+            "title": "Prayer Concerns",
+            "type": "string"
+          },
+          "ushers": {
+            "maxLength": 200,
+            "title": "Ushers",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ushers",
+          "deacon",
+          "coffee_hour",
+          "activities",
+          "prayer_concerns",
+          "collection",
+          "other"
+        ],
+        "title": "BulletinAnnouncements",
+        "type": "object"
+      },
+      "BulletinMusic": {
+        "additionalProperties": false,
+        "properties": {
+          "composer": {
+            "maxLength": 100,
+            "title": "Composer",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 200,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "composer"
+        ],
+        "title": "BulletinMusic",
+        "type": "object"
+      },
+      "BulletinPeople": {
+        "additionalProperties": false,
+        "description": "This week's people: null prints the standing name from the bulletin settings, \"\" no one.",
+        "properties": {
+          "liturgist": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Liturgist"
+          },
+          "organist": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Organist"
+          },
+          "worship_leader": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worship Leader"
+          }
+        },
+        "required": [
+          "worship_leader",
+          "liturgist",
+          "organist"
+        ],
+        "title": "BulletinPeople",
+        "type": "object"
+      },
+      "BulletinReadingText": {
+        "additionalProperties": false,
+        "description": "Pasted text of the first and New Testament readings (\"\" = fetch it).",
+        "properties": {
+          "nt": {
+            "maxLength": 10000,
+            "title": "Nt",
+            "type": "string"
+          },
+          "ot": {
+            "maxLength": 10000,
+            "title": "Ot",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ot",
+          "nt"
+        ],
+        "title": "BulletinReadingText",
+        "type": "object"
+      },
       "BulletinSettings": {
         "additionalProperties": false,
         "properties": {
@@ -1784,6 +1927,44 @@
         "title": "PlacementOut",
         "type": "object"
       },
+      "PreviousBulletinOut": {
+        "description": "GET /services/previous-bulletin (PR 2b, carry forward): the music and the\nannouncements of the church's latest service dated before the date (the\npeople, part leaders and pasted texts empty), or nulls and an empty\nbulletin when there is none.",
+        "properties": {
+          "bulletin": {
+            "$ref": "#/components/schemas/ServiceBulletin"
+          },
+          "service_date_iso": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Date Iso"
+          },
+          "service_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Id"
+          }
+        },
+        "required": [
+          "service_id",
+          "service_date_iso",
+          "bulletin"
+        ],
+        "title": "PreviousBulletinOut",
+        "type": "object"
+      },
       "PrintedDocumentIn": {
         "additionalProperties": false,
         "properties": {
@@ -2394,10 +2575,104 @@
         "title": "SermonText",
         "type": "object"
       },
+      "ServiceBulletin": {
+        "additionalProperties": false,
+        "description": "The printed bulletin's weekly fields (PR 2b), every field present. Texts\nare not checked for line breaks: the server reads them tolerantly\n(service_bulletin.read: a one-line field's line breaks become spaces), so a\ndownload never meets a 422 for one. `unchecked` names the boxes whose text\ncame from last week and is not checked yet.",
+        "properties": {
+          "announcements": {
+            "$ref": "#/components/schemas/BulletinAnnouncements"
+          },
+          "leaders": {
+            "additionalProperties": {
+              "maxLength": 100,
+              "type": "string"
+            },
+            "propertyNames": {
+              "enum": [
+                "prelude",
+                "welcome",
+                "call_to_worship",
+                "opening_prayer",
+                "first_hymn",
+                "prayer_of_confession",
+                "assurance",
+                "gloria_patri",
+                "prayer_for_illumination",
+                "ot_reading",
+                "nt_reading",
+                "sermon",
+                "affirmation_of_faith",
+                "second_hymn",
+                "prayers_of_the_people",
+                "offering",
+                "doxology",
+                "offertory_prayer",
+                "third_hymn",
+                "benediction",
+                "postlude"
+              ]
+            },
+            "title": "Leaders",
+            "type": "object"
+          },
+          "people": {
+            "$ref": "#/components/schemas/BulletinPeople"
+          },
+          "postlude": {
+            "$ref": "#/components/schemas/BulletinMusic"
+          },
+          "prelude": {
+            "$ref": "#/components/schemas/BulletinMusic"
+          },
+          "reading_text": {
+            "$ref": "#/components/schemas/BulletinReadingText"
+          },
+          "unchecked": {
+            "items": {
+              "enum": [
+                "prelude",
+                "postlude",
+                "ushers",
+                "deacon",
+                "coffee_hour",
+                "activities",
+                "prayer_concerns",
+                "collection",
+                "other"
+              ],
+              "type": "string"
+            },
+            "maxItems": 9,
+            "title": "Unchecked",
+            "type": "array"
+          }
+        },
+        "required": [
+          "prelude",
+          "postlude",
+          "people",
+          "leaders",
+          "announcements",
+          "reading_text",
+          "unchecked"
+        ],
+        "title": "ServiceBulletin",
+        "type": "object"
+      },
       "ServiceDraft": {
         "additionalProperties": false,
-        "description": "One service (inventory \u00a72.1 plus hymnal, F \u00a71.3). The limits are slice\n4's (GenerateLiturgyIn, liturgy_config.LIMITS); HymnRef, SlotHymns and\nSectionKey are imported unchanged. Usecases take `to_input()`.",
+        "description": "One service (inventory \u00a72.1 plus hymnal, F \u00a71.3). The limits are slice\n4's (GenerateLiturgyIn, liturgy_config.LIMITS); HymnRef, SlotHymns and\nSectionKey are imported unchanged. Usecases take `to_input()`.\n`bulletin` (printed bulletin PR 2b) is optional, so a client from before\n2b keeps working: a POST without it saves no bulletin, a PUT without it\nkeeps the saved one.",
         "properties": {
+          "bulletin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ServiceBulletin"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "custom_elements": {
             "items": {
               "$ref": "#/components/schemas/CustomElementIn"
@@ -2494,6 +2769,9 @@
       "ServiceOut": {
         "description": "A saved service as the builder opens it (GET, POST and PUT /services).",
         "properties": {
+          "bulletin": {
+            "$ref": "#/components/schemas/ServiceBulletin"
+          },
           "created_by": {
             "anyOf": [
               {
@@ -2610,6 +2888,7 @@
           "selected_nt_ref",
           "include_communion",
           "custom_elements",
+          "bulletin",
           "created_by",
           "saved_at"
         ],
@@ -5458,6 +5737,108 @@
           }
         },
         "summary": "Create Service"
+      }
+    },
+    "/services/previous-bulletin": {
+      "get": {
+        "operationId": "previous_bulletin_services_previous_bulletin_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "before",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Before",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-church-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Church-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviousBulletinOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Previous Bulletin"
       }
     },
     "/services/{service_id}": {

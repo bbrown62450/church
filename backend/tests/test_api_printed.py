@@ -187,3 +187,38 @@ def test_a_stored_control_character_still_prints_in_word(client, church, calls):
     assert r.status_code == 200, r.text
     paragraphs = [p.text for p in Document(BytesIO(r.content)).paragraphs]
     assert "Jordan Doe, Organist" in paragraphs and "(555) 010-0100" in paragraphs   # one line (build review I1)
+
+
+def test_the_week_s_fields_print_and_a_pasted_reading_is_neither_fetched_nor_charged(client, church, owner,
+                                                                                  calls, caplog):
+    """PR 2b: the music, this week's people and part leaders, the announcements and a pasted reading."""
+    with session_scope() as s:
+        s.get(Church, church).settings = {"bulletin": {"liturgist": "Sam Sample", "organist": "Jordan Doe"}}
+    bulletin = {
+        "prelude": {"title": "Morning Voluntary", "composer": "Pat Example"},
+        "postlude": {"title": "Festive Postlude", "composer": ""},
+        "people": {"worship_leader": "Rev. Guest", "liturgist": "", "organist": None},
+        "leaders": {"sermon": "Pat Example"},
+        "announcements": {"ushers": "Sam Sample", "deacon": "", "coffee_hour": "The Example family",
+                          "activities": "", "prayer_concerns": "For all who are ill.", "collection": "",
+                          "other": ""},
+        "reading_text": {"ot": "", "nt": "Pasted text of the reading."},
+        "unchecked": ["prelude"],
+    }
+    ratelimit.consume("scripture", user_id=owner, cost=59)                   # one token left: one part
+    caplog.set_level(logging.INFO, logger="usecases.documents")
+    r = post(client, church, {"format": "pdf", "service": {**SERVICE, "bulletin": bulletin}})
+    assert r.status_code == 200, r.text
+    assert calls == [("Isaiah 5:1-7", "web")]                                # the pasted one is not fetched
+    text = pdf_text(r.content)
+    for expected in ("Rev. Guest, Worship Leader Jordan Doe, Organist October 4, 2026",
+                     "PRELUDE: ‘Morning Voluntary’ Jordan Doe - Pat Example", "SERMON: “Living Water” Pat Example",
+                     "NEW TESTAMENT READING: Philippians 3:4b-14 Rev. Guest Pasted text of the reading.",
+                     "POSTLUDE: ‘Festive Postlude’ Jordan Doe", "ANNOUNCEMENTS October 4, 2026",
+                     "Ushers/Counters: Sam Sample Coffee Hour: The Example family PRAYERS AND CONCERNS "
+                     "For all who are ill."):
+        assert expected in text, expected
+    assert "Sam Sample, Liturgist" not in text and "Scripture readings are from" not in text
+    assert "The First Reading is from the World English Bible (WEB)." in text   # the fetched one only
+    (record,) = [r for r in caplog.records if r.getMessage().startswith("documents.printed")]
+    assert "ill" not in record.getMessage() and "Example" not in record.getMessage()

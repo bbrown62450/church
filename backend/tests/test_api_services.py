@@ -33,6 +33,24 @@ SERVICE = {
     "include_communion": True,
     "custom_elements": [{"label": "Anthem", "text": "Choir", "insert_after": "sermon"}],
 }
+# Printed bulletin PR 2b: the week's bulletin fields (invented).
+BLANK_BULLETIN = {
+    "prelude": {"title": "", "composer": ""}, "postlude": {"title": "", "composer": ""},
+    "people": {"worship_leader": None, "liturgist": None, "organist": None}, "leaders": {},
+    "announcements": {"ushers": "", "deacon": "", "coffee_hour": "", "activities": "", "prayer_concerns": "",
+                      "collection": "", "other": ""},
+    "reading_text": {"ot": "", "nt": ""}, "unchecked": [],
+}
+BULLETIN = {
+    **BLANK_BULLETIN,
+    "prelude": {"title": "Morning Voluntary", "composer": "Pat Example"},
+    "people": {"worship_leader": "Rev. Guest", "liturgist": "", "organist": None},
+    "leaders": {"sermon": "Rev. Guest"},
+    "announcements": {**BLANK_BULLETIN["announcements"], "ushers": "Sam Sample", "coffee_hour": "The Example family",
+                      "prayer_concerns": "For all who are ill."},
+    "reading_text": {"ot": "", "nt": "Pasted text."},
+    "unchecked": ["prelude", "coffee_hour"],
+}
 
 
 @pytest.fixture
@@ -135,6 +153,7 @@ def test_every_route_is_church_isolated(client, isolation_world):
     assert_church_isolated(client, "GET", f"/services/{mine['id']}", world=world,
                            resource_path_b=f"/services/{theirs_id}")
     assert_church_isolated(client, "POST", "/services", world=world, json=SERVICE)
+    assert_church_isolated(client, "GET", "/services/previous-bulletin?before=2026-10-11", world=world)
     # PUT: church B's id is a 404 even with its real saved_at; a@'s own service then saves.
     r = client.put(f"/services/{theirs_id}", json=SERVICE,
                    headers={**church_headers(world.a, world.church_a), "If-Match": theirs_saved})
@@ -194,6 +213,12 @@ def test_malformed_ids_and_paging_are_422(client, church, method, path):
     ({"custom_elements": [{"label": "A", "text": "", "insert_after": "bogus"}]}, "custom_elements.0.insert_after"),
     ({"service_date_iso": "2026-10-04T00:00:00"}, "service_date_iso"),
     ({"custom_elements": [{"label": " ", "text": "", "insert_after": "end"}]}, "custom_elements.0.label"),
+    ({"bulletin": {**BULLETIN, "leaders": {"anthem": "Sam Sample"}}}, "bulletin.leaders.anthem.[key]"),
+    ({"bulletin": {**BULLETIN, "announcements": {**BULLETIN["announcements"], "ushers": "x" * 201}}},
+     "bulletin.announcements.ushers"),
+    ({"bulletin": {**BULLETIN, "cover_image_id": "x"}}, "bulletin.cover_image_id"),
+    ({"bulletin": {**BULLETIN, "reading_text": {"ot": "", "nt": "x" * 10_001}}}, "bulletin.reading_text.nt"),
+    ({"bulletin": {**BULLETIN, "unchecked": ["cover"]}}, "bulletin.unchecked.0"),
 ])
 def test_a_bad_body_is_a_422_naming_the_field(client, church, change, field):
     r = call(client, "POST", "/services", church, json={**SERVICE, **change})
@@ -266,3 +291,27 @@ def test_the_same_key_in_two_churches_saves_in_each(client, church, pastor, make
     assert other.json()["id"] != first["id"]
     assert call(client, "GET", "/services", second).json()["total"] == 1
     assert call(client, "GET", f"/services/{first['id']}", second).status_code == 404
+
+
+def test_the_week_s_bulletin_is_saved_and_opened_and_an_older_client_keeps_it(client, church):
+    made = create(client, church, {**SERVICE, "bulletin": BULLETIN})
+    assert made["bulletin"] == BULLETIN
+    path = f"/services/{made['id']}"
+    assert call(client, "GET", path, church).json()["bulletin"] == BULLETIN
+    # A client from before 2b sends no bulletin: the saved one stays.
+    r = call(client, "PUT", path, church, json=SERVICE, **{"If-Match": made["saved_at"]})
+    assert (r.status_code, r.json()["bulletin"]) == (200, BULLETIN)
+    assert create(client, church)["bulletin"] == BLANK_BULLETIN               # none sent: nothing filled in
+
+
+def test_last_week_s_bulletin_carries_the_music_and_the_announcements(client, church):
+    made = create(client, church, {**SERVICE, "service_date_iso": "2026-09-27", "bulletin": BULLETIN})
+    r = call(client, "GET", "/services/previous-bulletin?before=2026-10-04", church)
+    assert r.status_code == 200, r.text
+    assert r.json() == {"service_id": made["id"], "service_date_iso": "2026-09-27", "bulletin": {
+        **BLANK_BULLETIN, "prelude": BULLETIN["prelude"], "announcements": BULLETIN["announcements"]}}
+    r = call(client, "GET", "/services/previous-bulletin?before=2026-09-27", church)
+    assert r.json() == {"service_id": None, "service_date_iso": None, "bulletin": BLANK_BULLETIN}
+    for query in ("", "?before=2026-02-30", "?before=2026-10-04T00:00:00"):
+        r = call(client, "GET", f"/services/previous-bulletin{query}", church)
+        assert (r.status_code, r.json()["error"]["code"]) == (422, "invalid_request"), query

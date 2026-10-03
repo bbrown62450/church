@@ -2,6 +2,7 @@
 Backend "usecases/archive.py", Testing `test_archive_usecase.py`; owner
 answers 4 and 6, 2026-10-01). SQLite (`tmp_db`); the row lock and the
 concurrent saves are in test_services_postgres.py."""
+import dataclasses
 import logging
 import re
 import uuid
@@ -15,6 +16,8 @@ from db.models import Church, Hymn, HymnUsage, Service
 from domain_errors import Conflict, InvalidInput, NotFound
 from hymn_usage import record_usage
 from repos.services import DATED_PREFIX
+from service_bulletin import Announcements, ServiceBulletin
+from service_bulletin import read as read_bulletin
 from service_output import CustomElement, normalize_date_iso
 from usecases import archive
 from usecases.liturgy import HymnRefData
@@ -402,3 +405,70 @@ def test_saving_logs_ids_and_counts_never_text(church, pastor, caplog):
     assert lines[0].startswith(f"archive.create church={church} service={record.id} usage_rows=1 ms=")
     assert lines[1].startswith(f"archive.delete church={church} service={record.id} usage_rows=0 ms=")
     assert not any("Communion" in line or "Old Favorite" in line for line in lines)
+
+
+# --- printed bulletin PR 2b: the week's bulletin fields --------------------------
+
+# Invented: what the Bulletin step sends for one week (a control character pasted into the prayers).
+WEEK = read_bulletin({
+    "prelude": {"title": " Morning Voluntary ", "composer": "Pat Example"},
+    "people": {"worship_leader": "Rev. Guest"}, "leaders": {"sermon": "Rev. Guest"},
+    "announcements": {"coffee_hour": "The Example family", "prayer_concerns": "For all who are ill.\x01"},
+    "reading_text": {"nt": "Pasted text."}, "unchecked": ["coffee_hour"]})
+BLANK = ServiceBulletin().to_json()
+
+
+def stored_bulletin(service_id):
+    with session_scope() as s:
+        return s.get(Service, service_id).bulletin
+
+
+def test_a_save_stores_the_week_s_bulletin_word_safe_and_never_logs_it(church, pastor, caplog):
+    with caplog.at_level(logging.INFO, logger="usecases.archive"):
+        record = archive.create_service(church, pastor, service(bulletin=WEEK))
+    raw = stored_bulletin(record.id)
+    assert raw["announcements"]["prayer_concerns"] == "For all who are ill."
+    assert raw["people"] == {"worship_leader": "Rev. Guest", "liturgist": None, "organist": None}
+    assert (raw["prelude"], raw["leaders"], raw["reading_text"]) == (
+        {"title": "Morning Voluntary", "composer": "Pat Example"}, {"sermon": "Rev. Guest"},
+        {"ot": "", "nt": "Pasted text."})
+    assert raw["unchecked"] == ["coffee_hour"]                       # the marks come back on open (fix I3)
+    assert record.bulletin == raw and archive.get_service(church, record.id).bulletin == raw
+    assert not any("ill" in r.getMessage() or "Example family" in r.getMessage() for r in caplog.records)
+
+
+def test_no_bulletin_sent_stores_none_and_a_replace_without_one_keeps_the_saved_one(church, pastor):
+    record = archive.create_service(church, pastor, service())
+    assert stored_bulletin(record.id) is None and record.bulletin == BLANK
+    again = archive.replace_service(church, record.id, service(bulletin=WEEK), if_match=record.saved_at)
+    kept = archive.replace_service(church, record.id, service(), if_match=again.saved_at)    # an older client
+    assert kept.bulletin == again.bulletin and kept.bulletin["leaders"] == {"sermon": "Rev. Guest"}
+    cleared = archive.replace_service(church, record.id, service(bulletin=ServiceBulletin()), if_match=kept.saved_at)
+    assert cleared.bulletin == BLANK and stored_bulletin(record.id) == BLANK
+
+
+def test_last_week_s_bulletin_is_the_latest_service_dated_before_the_date(church, pastor, make_church):
+    def save(church_id, day, coffee):
+        week = dataclasses.replace(WEEK, announcements=Announcements(coffee_hour=coffee))
+        return archive.create_service(church_id, pastor, service(service_date=day, bulletin=week))
+
+    save(church, date(2026, 9, 20), "Two weeks ago")
+    save(church, date(2026, 9, 27), "Last week, first save")
+    later = save(church, date(2026, 9, 27), "Last week, saved later")
+    save(church, D, "This week")                                # the date itself is not before it
+    legacy_row(church, service_date_iso="", bulletin={"announcements": {"coffee_hour": "Undated"}})
+    save(make_church(name="Other", owner_user_id=pastor), date(2026, 10, 1), "Another church")
+    found = archive.previous_bulletin(church, D)
+    assert (found.service_id, found.service_date_iso) == (later.id, "2026-09-27")
+    # Only the music and the announcements carry; the people, part leaders and pasted text start empty.
+    assert found.bulletin == ServiceBulletin(prelude=WEEK.prelude, announcements=Announcements(
+        coffee_hour="Last week, saved later")).to_json()
+    nothing = archive.previous_bulletin(church, date(2026, 9, 20))
+    assert (nothing.service_id, nothing.service_date_iso, nothing.bulletin) == (None, None, BLANK)
+
+
+def test_a_service_saved_before_2b_carries_an_empty_bulletin(church, pastor):
+    archive.create_service(church, pastor, service(service_date=date(2026, 9, 20), bulletin=WEEK))
+    legacy = legacy_row(church, service_date_iso="2026-09-27")             # bulletin NULL
+    found = archive.previous_bulletin(church, D)
+    assert (found.service_id, found.bulletin) == (legacy, BLANK)
