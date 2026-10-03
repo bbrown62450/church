@@ -69,6 +69,28 @@ app print it, first from what it knows (PR 1), then with the weekly and standing
 8. **Migration 0006** follows 0005's routine: a backup, read-only counts and the `--sql` preview
    before the merge, a check query after the deploy, one step at a time.
 
+### PR 3 planning answers (Beau, 2026-10-03, "all recommended, the printer is color"; binding)
+
+1. **Two PRs, server first** (as PR 2b): **PR 3a** brings the `bulletin_images` table (migration
+   `0007_bulletin_images`), the upload and preview routes, `bulletin.cover_image_id`, and the
+   picture printed in the PDF and the Word version; the deployed pages keep working. **PR 3b**
+   brings the upload on the Bulletin step. 3b opens only after 3a is live and checked.
+2. **Text over the picture:** the reading and the date in white on a dark see-through band across
+   the bottom of the picture.
+3. **Fit:** the picture fills the box, trimmed evenly at the edges (centered crop).
+4. **Color:** the church's printer prints in color, so the picture stays in color.
+5. **Formats:** JPEG and PNG only (no HEIC package); Safari is expected to turn an iPhone photo
+   into JPEG on upload, to be verified on the owner's phone during the PR 3b check.
+6. **No picture this week:** no box at all; the reading and the date sit centered where the
+   picture would be.
+7. **Keep last week's picture:** it carries forward like the music, marked "From last week. Check
+   before printing.", with **Keep as is**.
+8. **Who can upload:** any member who can edit the service.
+9. **Old pictures:** a picture no saved service points at is removed after 60 days.
+10. **Checks:** migration 0007 follows 0006's routine (a backup, read-only counts, the `--sql`
+    preview; after the deploy, one read-only check), a phone check after each PR, and a short print
+    test of a cover with a picture.
+
 ## The sample, read closely
 
 The sample PDF is three legal-landscape pages (1008 x 612 pt), each holding two 7 x 8.5 in pages
