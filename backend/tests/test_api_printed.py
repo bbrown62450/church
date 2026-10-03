@@ -91,7 +91,9 @@ def test_the_pdf_downloads_with_the_file_headers_and_the_readings_text(client, c
     assert "Example Church" in text and "*HYMN: #12 “Old Favorite”" in text
     assert "FIRST READING: Isaiah 5:1-7 [Reading text unavailable] NEW TESTAMENT" in text      # no names saved yet
     assert "NEW TESTAMENT READING: Philippians 3:4b-14 Text of Philippians 3:4-14 (kjv). Second verse." in text
-    assert "Scripture readings are from the King James Version (KJV)." in text
+    # Isaiah's text did not load, so only the New Testament reading is credited (build review fix M5).
+    assert "Scripture readings are from" not in text
+    assert "The New Testament Reading is from the King James Version (KJV)." in text
     assert calls == [("Isaiah 5:1-7", "kjv"), ("Philippians 3:4-14", "kjv")]
     assert "We pray." not in text
     (record,) = [r for r in caplog.records if r.getMessage().startswith("documents.printed")]
@@ -219,6 +221,7 @@ def test_the_week_s_fields_print_and_a_pasted_reading_is_neither_fetched_nor_cha
                      "For all who are ill."):
         assert expected in text, expected
     assert "Sam Sample, Liturgist" not in text and "Scripture readings are from" not in text
-    assert "The First Reading is from the World English Bible (WEB)." in text   # the fetched one only
+    # The only fetched reading (Isaiah) did not load: no credit line at all (build review fix M5).
+    assert " is from the " not in text
     (record,) = [r for r in caplog.records if r.getMessage().startswith("documents.printed")]
     assert "ill" not in record.getMessage() and "Example" not in record.getMessage()

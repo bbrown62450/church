@@ -101,8 +101,8 @@ def test_each_element_prints_as_the_sample():
     i = texts(lines).index("FIRST READING:  Psalm 80:7-15")
     assert texts(lines[i + 1:i + 3]) == ["Turn us again, God. Cause your face to shine.", "We will be saved."]
     i = texts(lines).index("NEW TESTAMENT READING:  Matthew 21:33-46")
-    assert texts(lines[i + 1:i + 3]) == ["[Reading text unavailable]",
-                                         "Scripture readings are from the World English Bible (WEB)."]
+    assert texts(lines[i + 1:i + 3]) == ["[Reading text unavailable]",              # not credited (build review M5)
+                                         "The First Reading is from the World English Bible (WEB)."]
     assert pb.APOSTLES_CREED in by_text and pb.GLORIA_PATRI in by_text and DEFAULT_BENEDICTION_FALLBACK in by_text
     assert "We pray for all." not in by_text                            # the prayers are the pastor's to pray
     assert "ANTHEM" in by_text and "Chancel Choir" in by_text and "ENDING" in by_text
@@ -227,12 +227,29 @@ def test_pasted_reading_text_prints_and_the_credit_line_names_only_fetched_text(
                                   "The First Reading is from the World English Bible (WEB).", "SERMON:  “Who Said?”"]
     assert not any(line.startswith("Scripture readings are from") for line in lines)
     ot = pb.Reading("Psalm 80:7-15", "Turn us again, God.", pasted=True)
-    lines = texts(pb.order_of_worship(service(ot=ot)))
+    loaded_nt = pb.Reading("Matthew 21:33-46", "Jesus said, What do you think?")
+    lines = texts(pb.order_of_worship(service(ot=ot, nt=loaded_nt)))
     assert "The New Testament Reading is from the World English Bible (WEB)." in lines
     lines = texts(pb.order_of_worship(service(ot=ot, nt=nt)))
     assert not any(" is from the " in line or " are from the " in line for line in lines)
     lines = texts(pb.order_of_worship(service(ot=None, nt=nt)))
     assert not any(" is from the " in line or " are from the " in line for line in lines)
+
+
+def test_a_reading_whose_text_did_not_load_is_not_credited():
+    """Build review fix M5: "[Reading text unavailable]" is not the translation's text, so the credit line
+    names only the fetched readings that loaded, and with none loaded there is no line."""
+    unavailable_ot = pb.Reading("Psalm 80:7-15", None)
+    loaded_nt = pb.Reading("Matthew 21:33-46", "Jesus said, What do you think?")
+    lines = texts(pb.order_of_worship(service(ot=unavailable_ot, nt=loaded_nt)))
+    assert "The New Testament Reading is from the World English Bible (WEB)." in lines
+    assert not any(line.startswith("Scripture readings are from") for line in lines)
+    pasted_ot = pb.Reading("Psalm 80:7-15", "Turn us again, God.", pasted=True)
+    for ot in (pasted_ot, unavailable_ot, None):                        # the fixture's NT did not load
+        lines = texts(pb.order_of_worship(service(ot=ot)))
+        assert not any(" is from the " in line or " are from the " in line for line in lines), ot
+    lines = texts(pb.order_of_worship(service(nt=loaded_nt)))
+    assert "Scripture readings are from the World English Bible (WEB)." in lines
 
 
 def test_no_bulletin_posted_prints_pr_1_s_placeholders():

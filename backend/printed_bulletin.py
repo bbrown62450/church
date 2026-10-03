@@ -20,7 +20,9 @@ python-docx here.
   reading text. A blank one prints nothing too; with every announcement
   blank there is no announcements page. A pasted reading prints no credit
   line; when the other reading is fetched, its own credit line names it
-  ("The New Testament Reading is from the ..."). A service posted with no
+  ("The New Testament Reading is from the ..."). A fetched reading whose
+  text did not load prints [Reading text unavailable] and is not credited
+  either (build review fix M5). A service posted with no
   bulletin at all (a page from before the Bulletin step, PR 2b-2) prints
   PR 1's [placeholders] for the music and the announcements (PLACEHOLDERS).
   The cover picture prints as a [bracketed placeholder] until PR 3.
@@ -375,12 +377,14 @@ ANNOUNCEMENT_SECTIONS = (("activities", "THIS WEEK’S ACTIVITIES AT A GLANCE"),
 
 
 def _credit(ps: PrintedService) -> list[Line]:
-    """The translation's credit line, for fetched text only: a pasted text is
-    the church's own (PR 2b). With both readings fetched, "Scripture readings
-    are from the {label}."; with one pasted and the other fetched, a line
-    naming the fetched one; with every reading pasted, none."""
+    """The translation's credit line, for fetched text that loaded only: a
+    pasted text is the church's own (PR 2b), and a reading whose text could
+    not be fetched prints TEXT_UNAVAILABLE, not the translation's words (build
+    review fix M5). With both readings fetched and loaded, "Scripture readings
+    are from the {label}."; with one of them, a line naming it; with none,
+    no line."""
     readings = [(name, r) for name, r in (("First Reading", ps.ot), ("New Testament Reading", ps.nt)) if r]
-    fetched = [name for name, r in readings if not r.pasted]
+    fetched = [name for name, r in readings if not r.pasted and r.text is not None]
     if not fetched or not ps.translation_label:
         return []
     if len(fetched) == len(readings):
