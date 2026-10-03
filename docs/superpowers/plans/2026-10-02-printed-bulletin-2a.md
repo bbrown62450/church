@@ -3690,6 +3690,8 @@ S items **not** in 2a (planning answer 1): the Bulletin step, the weekly fields 
 
 ## Questions for the owner
 
+**Owner's answer (Beau, 2026-10-03): "all recommended, yes start building".** Questions 1-14 below are accepted as written and are binding for the build.
+
 Your answers of 2026-10-02 (the ten answers, layout B, the PR 1 plan's twelve, and the eight PR 2 planning answers) are binding and already in the plan. These are the choices this plan makes where you did not say; each is written as recommended. Questions 11-14 come from the plan review of 2026-10-03.
 
 1. **Where the settings live until Settings arrives (6a)** (clarification 2): a page of its own, "Bulletin settings", opened from a **Bulletin settings** button on the Printed bulletin card (and, in 2b, from the Bulletin step), with **Back to Review & send**. It is not in the top menu; 6a moves it into Settings. Recommended: accept.
