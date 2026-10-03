@@ -31,7 +31,7 @@
   `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
 - TDD: write the failing test first and see it fail as quoted.
 - **Backup push after every task** (standing rule): the controller runs `git push origin claude/slice-2-plan-4q33le` after each task's commit (never `--force`, never a rebase; if the push is rejected, `git pull --no-rebase origin claude/slice-2-plan-4q33le` and push again; on a network error retry after 2, 4, 8 and 16 s). A fix asked for by a review is a new commit, `Fix: <what> (Task <n> review)`. The container can restart and lose uncommitted work: commit as soon as a task's checks pass.
-- Each PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes its tests line: PR 2b-1 `Tests: backend 1395 → 1431 passed, 16 → 17 skipped; frontend 675 in 85 files (unchanged)`; PR 2b-2 `Tests: frontend 675 → 698 in 85 → 87 files; backend 1431 passed, 17 skipped (unchanged)`.
+- Each PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes its tests line: PR 2b-1 `Tests: backend 1395 → 1432 passed, 16 → 17 skipped; frontend 675 in 85 files (unchanged)`; PR 2b-2 `Tests: frontend 675 → 698 in 85 → 87 files; backend 1432 passed, 17 skipped (unchanged)`.
 - New prose for the owner has no em dashes and no flattery. New user-facing copy is exactly the list in clarification 16 and has no em dashes; existing copy keeps its own punctuation.
 - **PR 2b-1 before PR 2b-2, and each tolerates the other** (clarification 19): nothing in T1-T4 changes a page, a component, the draft, a query or a request body (T5 Step 3 checks it); nothing in T7-T10 changes the server, the API files, a workflow or a package (T11 Step 3 checks it). PR 3 follows the same order.
 - No church id, email address, token, database URL or real person's name, address, phone or email in any doc, commit, test or record. The tests use invented details only: "Example Church", "Rev. Alex Example", "Sam Sample", "Jordan Doe", "Pat Example", "Lee Sample", "Rev. Guest", "The Example family", "Morning Voluntary", "Festive Postlude", "For all who are ill.". None of the owner's sample bulletin's content enters the repo. Prayers and concerns can name people and their health: they live only in the service's bulletin, never in a log line, a commit or the record (clarification 15).
@@ -50,15 +50,15 @@ As in the PR 2a plan: **Create `path`:** the block is the whole file; **Append t
   | T2 | 2b-1 | +14 (`test_service_bulletin.py` 9, one test in five cases; `test_printed_bulletin.py` 4; `test_printed_render.py` 1; `test_api_printed.py` edited) | 1413 passed, 17 skipped | 0 | 675 in 85 |
   | T3 | 2b-1 | +12 (`test_usecase_archive.py` 4; `test_api_services.py` 7, two tests and five new 422 cases; `test_api_printed.py` 1; `test_no_streamlit_in_core.py` edited) | 1425 passed, 17 skipped | 0 | 675 in 85 |
   | T4 | 2b-1 | 0 (no test edited: the new items sit under the existing "## Printed bulletin") | 1425 passed, 17 skipped | 0 | 675 in 85 |
-  | Build review fixes | 2b-1 | +6 (`test_service_bulletin.py` 1; `test_printed_bulletin.py` 1; `test_usecase_archive.py` 1; `test_api_services.py` 2; `test_api_printed.py` 1, two of its tests edited; see "Build review fixes (2026-10-03, PR 2b-1)") | 1431 passed, 17 skipped | 0 | 675 in 85 |
-  | T5, T6 | 2b-1 | 0 (verification, the merge, the record) | 1431 passed, 17 skipped | 0 | 675 in 85 |
-  | T7 | 2b-2 | 0 | 1431 passed, 17 skipped | +15 (`bulletin.test.ts` 9, `documents.test.ts` 3, `migrate.test.ts` 1, `status.test.ts` 1, `mapping.test.ts` 1; `schema.test.ts`, `store.test.ts`, `keys.test.ts` edited) | 690 in 86 |
-  | T8 | 2b-2 | 0 | 1431 passed, 17 skipped | +7 (`bulletin-step.test.tsx`; `builder-shell.test.tsx`, `status.test.ts`, `review-send-step.test.tsx` edited) | 697 in 87 |
-  | T9 | 2b-2 | 0 | 1431 passed, 17 skipped | +1 (`review-send-step.test.tsx`; `liturgy-step.test.tsx` edited) | 698 in 87 |
-  | T10-T12 | 2b-2 | 0 | 1431 passed, 17 skipped | 0 | 698 in 87 |
+  | Build review fixes | 2b-1 | +6 (`test_service_bulletin.py` 1; `test_printed_bulletin.py` 1; `test_usecase_archive.py` 1; `test_api_services.py` 2; `test_api_printed.py` 1, two of its tests edited; see "Build review fixes (2026-10-03, PR 2b-1)") | 1432 passed, 17 skipped | 0 | 675 in 85 |
+  | T5, T6 | 2b-1 | 0 (verification, the merge, the record) | 1432 passed, 17 skipped | 0 | 675 in 85 |
+  | T7 | 2b-2 | 0 | 1432 passed, 17 skipped | +15 (`bulletin.test.ts` 9, `documents.test.ts` 3, `migrate.test.ts` 1, `status.test.ts` 1, `mapping.test.ts` 1; `schema.test.ts`, `store.test.ts`, `keys.test.ts` edited) | 690 in 86 |
+  | T8 | 2b-2 | 0 | 1432 passed, 17 skipped | +7 (`bulletin-step.test.tsx`; `builder-shell.test.tsx`, `status.test.ts`, `review-send-step.test.tsx` edited) | 697 in 87 |
+  | T9 | 2b-2 | 0 | 1432 passed, 17 skipped | +1 (`review-send-step.test.tsx`; `liturgy-step.test.tsx` edited) | 698 in 87 |
+  | T10-T12 | 2b-2 | 0 | 1432 passed, 17 skipped | 0 | 698 in 87 |
 
-- Per PR: **PR 2b-1** backend 1395 → 1431 passed, 16 → 17 skipped, frontend 675 in 85 (unchanged); **PR 2b-2** frontend 675 → 698 in 85 → 87 files, backend unchanged.
-- CI `backend-postgres` goes from `16 passed, 1395 deselected` to `17 passed, 1399 deselected` after T1 and `17 passed, 1425 deselected` from T3 on, and `17 passed, 1431 deselected` after the build review fixes (PR 2b-2 leaves it there). With a local Postgres (`TEST_DATABASE_URL`), the same numbers locally.
+- Per PR: **PR 2b-1** backend 1395 → 1432 passed, 16 → 17 skipped, frontend 675 in 85 (unchanged); **PR 2b-2** frontend 675 → 698 in 85 → 87 files, backend unchanged.
+- CI `backend-postgres` goes from `16 passed, 1395 deselected` to `17 passed, 1399 deselected` after T1 and `17 passed, 1425 deselected` from T3 on, and `17 passed, 1432 deselected` after the build review fixes (PR 2b-2 leaves it there). With a local Postgres (`TEST_DATABASE_URL`), the same numbers locally.
 
 ### Layering and code rules (carried)
 - `service_bulletin`, `printed_bulletin`, `usecases/archive.py`, `usecases/documents.py` and `repos/services.py` import no FastAPI, Starlette or Streamlit (`test_no_streamlit_in_core.py` gains `service_bulletin`, T3); the route is a plain `def` with one usecase call, no SQL and no try/except (F §2.2 rule 1); the query lives in `repos.services` and filters on `church_id` (F §1.2).
@@ -2349,7 +2349,7 @@ export function serviceBulletin(overrides: Partial<ServiceBulletin> = {}): Servi
 (cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")
 ```
 
-**Expected:** `Wrote <repo>/frontend/src/lib/api/openapi.json`, then ` 2 files changed, 546 insertions(+), 1 deletion(-)`; `77 passed in <t>s`; `1425 passed, 17 skipped in <t>s` (as built; after the build review fixes `81 passed` and `1431 passed, 17 skipped`, the API files unchanged) (`test_openapi_contract.py` and `test_route_guards.py` pass unchanged); ` Test Files  85 passed (85)`, `      Tests  675 passed (675)`; `typecheck 0`, `lint 0`.
+**Expected:** `Wrote <repo>/frontend/src/lib/api/openapi.json`, then ` 2 files changed, 546 insertions(+), 1 deletion(-)`; `77 passed in <t>s`; `1425 passed, 17 skipped in <t>s` (as built; after the build review fixes `81 passed` and `1432 passed, 17 skipped`, the API files unchanged) (`test_openapi_contract.py` and `test_route_guards.py` pass unchanged); ` Test Files  85 passed (85)`, `      Tests  675 passed (675)`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -2368,7 +2368,7 @@ types regenerated." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1425 passed, 17 skipped`; frontend `675 passed` in 85 files (as built; `1431 passed, 17 skipped` once the build review fixes are in, Build notes).
+Expected counts after this task: backend `1425 passed, 17 skipped`; frontend `675 passed` in 85 files (as built; `1432 passed, 17 skipped` once the build review fixes are in, Build notes).
 
 ### Task 4: Docs: the owner's checks for PR 2b-1 and the spec's data model (planning answers 1, 5, 8; clarifications 17, 19)
 
@@ -2519,7 +2519,7 @@ open('<scratch>/printed2b-sample.pdf', 'wb').write(printed_pdf.render_pdf(ps)); 
 ")
 ```
 
-**Expected:** `1431 passed, 17 skipped in <t>s`; ` Test Files  85 passed (85)` and `      Tests  675 passed (675)` with no `×` or `FAIL` line; `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s`, the builder's route lines (`○ /builder/hymns`, `○ /builder/liturgy`, `○ /builder/readings`, `○ /builder/review`: no `/builder/bulletin` yet) and no `Error` (a font `Failed to fetch` only: say so and rely on CI); `sample written`. With a local, throwaway Postgres also `TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres | tail -1` → `17 passed, 1431 deselected`. Open the sample PDF and look at it: two sides; page 1's header with "Rev. Guest, Worship Leader", "PRELUDE: ‘Morning Voluntary’" with "Jordan Doe" and "- Pat Example", the NT reading "Jesus said, What do you think?" followed by "The First Reading is from the World English Bible (WEB).", "SERMON: “Who Said?”" with "Pat Example"; page 2 ending with the postlude and "*Congregation stands if able"; page 3 the announcements, each filled field, the activities on two lines (no "?"), "OTHER ANNOUNCEMENTS" last. Attach both samples to the owner's message in Step 4 if the channel allows files, else describe them.
+**Expected:** `1432 passed, 17 skipped in <t>s`; ` Test Files  85 passed (85)` and `      Tests  675 passed (675)` with no `×` or `FAIL` line; `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s`, the builder's route lines (`○ /builder/hymns`, `○ /builder/liturgy`, `○ /builder/readings`, `○ /builder/review`: no `/builder/bulletin` yet) and no `Error` (a font `Failed to fetch` only: say so and rely on CI); `sample written`. With a local, throwaway Postgres also `TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres | tail -1` → `17 passed, 1432 deselected`. Open the sample PDF and look at it: two sides; page 1's header with "Rev. Guest, Worship Leader", "PRELUDE: ‘Morning Voluntary’" with "Jordan Doe" and "- Pat Example", the NT reading "Jesus said, What do you think?" followed by "The First Reading is from the World English Bible (WEB).", "SERMON: “Who Said?”" with "Pat Example"; page 2 ending with the postlude and "*Congregation stands if able"; page 3 the announcements, each filled field, the activities on two lines (no "?"), "OTHER ANNOUNCEMENTS" last. Attach both samples to the owner's message in Step 4 if the channel allows files, else describe them.
 
 - [ ] **Step 3 (agent): The API files match, the preview, the gates, the paths, the commits**
 
@@ -2577,7 +2577,7 @@ gh pr list -R bbrown62450/church --head claude/slice-2-plan-4q33le --state open 
 
 **Expected:** `[]`. Send the owner exactly this, and wait for a clear yes:
 
-> The first half of the Bulletin step (printed bulletin PR 2b-1, the server's part) is verified on this machine: backend 1431 passed, 17 skipped (1395 and 16 before; the new skipped one is a database check that CI runs on Postgres); frontend unchanged at 675 tests in 85 files; typecheck, lint and the production build are clean. It adds one database change, migration 0006 (one new empty column), and teaches the server to save, open and print a service's bulletin fields (the music, the announcements, this week's names, pasted reading text). Nothing you see changes yet: the builder keeps its four steps, and the printed bulletin keeps its [placeholders] until the second PR (2b-2, the Bulletin step itself), which I will open only after this one is live and checked. Before it merges I will ask you for the backup, the counts and a look at the SQL, one at a time. May I open the pull request as a **draft** titled "Printed bulletin PR 2b-1: the server saves and prints the bulletin fields", so the checks run? Merging stays with you.
+> The first half of the Bulletin step (printed bulletin PR 2b-1, the server's part) is verified on this machine: backend 1432 passed, 17 skipped (1395 and 16 before; the new skipped one is a database check that CI runs on Postgres); frontend unchanged at 675 tests in 85 files; typecheck, lint and the production build are clean. It adds one database change, migration 0006 (one new empty column), and teaches the server to save, open and print a service's bulletin fields (the music, the announcements, this week's names, pasted reading text). Nothing you see changes yet: the builder keeps its four steps, and the printed bulletin keeps its [placeholders] until the second PR (2b-2, the Bulletin step itself), which I will open only after this one is live and checked. Before it merges I will ask you for the backup, the counts and a look at the SQL, one at a time. May I open the pull request as a **draft** titled "Printed bulletin PR 2b-1: the server saves and prints the bulletin fields", so the checks run? Merging stays with you.
 
 - [ ] **Step 5 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
 
@@ -2594,7 +2594,7 @@ Printed bulletin PR 2b-1: the server's half of the Bulletin step (PR 2 planning 
 
 Next: PR 2b-2 (the Bulletin step), opened after this one is live and checked. Then PR 3 (the cover picture), backend first in the same way.
 
-Tests: backend 1395 → 1431 passed, 16 → 17 skipped; frontend 675 in 85 files (unchanged)
+Tests: backend 1395 → 1432 passed, 16 → 17 skipped; frontend 675 in 85 files (unchanged)
 
 After merge (Task 6): the owner's after-deploy check (one read-only query) and a short phone check that the builder works as before, then a "Printed bulletin PR 2b-1 record" in docs/ops-runbook.md (it rides along in PR 2b-2).
 
@@ -2608,7 +2608,7 @@ gh pr create -R bbrown62450/church --draft --base main --head claude/slice-2-pla
 gh pr checks <N1> -R bbrown62450/church --watch --interval 30
 ```
 
-Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1431 passed, 17 skipped`, backend-postgres `17 passed, 1431 deselected` (after its `alembic upgrade head`, `alembic check`, `downgrade base`, `upgrade head` steps, now through `0006`), frontend `675 passed` in 85 files. Then send: "PR #<N1> is green: backend 1431 passed, 17 skipped; the Postgres job ran the migration up, down and up again and passed its 17 tests; 675 frontend tests in 85 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you, after the backup, the counts and the SQL check." On the yes: `gh pr ready <N1> -R bbrown62450/church`.
+Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1432 passed, 17 skipped`, backend-postgres `17 passed, 1432 deselected` (after its `alembic upgrade head`, `alembic check`, `downgrade base`, `upgrade head` steps, now through `0006`), frontend `675 passed` in 85 files. Then send: "PR #<N1> is green: backend 1432 passed, 17 skipped; the Postgres job ran the migration up, down and up again and passed its 17 tests; 675 frontend tests in 85 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you, after the backup, the counts and the SQL check." On the yes: `gh pr ready <N1> -R bbrown62450/church`.
 
 - [ ] **Step 6: Fix any failure in its owning task**
 
@@ -2622,7 +2622,7 @@ Run the last line with `run_in_background: true`. **Expected:** the PR URL; ever
 
 For each fix: change only the owning task's files; rerun Steps 2-3; commit `Fix: <what> (Task <n>, printed bulletin PR 2b-1 final verification)` with the trailer; after the PR exists, ask the owner before pushing it.
 
-Expected counts after this task: backend `1431 passed, 17 skipped`; frontend `675 passed` in 85 files.
+Expected counts after this task: backend `1432 passed, 17 skipped`; frontend `675 passed` in 85 files.
 
 ### Task 6: PR 2b-1: before the merge (backup, counts, SQL), the merge, the after-deploy check, the owner's check, the record (OWNER + agent)
 
@@ -2763,7 +2763,7 @@ git push origin claude/slice-2-plan-4q33le
 
 **Expected:** `0`; `0`; `4`; `89 passed in <t>s`; one commit; the push (a backup push of the branch, no PR). Then tell the owner: "PR 2b-1 is live and recorded. Next I build PR 2b-2, the Bulletin step itself, and come back to you before opening it." PR 2b-2's tasks start now, on the same branch (now even with `main` plus this record).
 
-Expected counts after this task: backend `1431 passed, 17 skipped` on `main`; frontend `675 passed` in 85 files.
+Expected counts after this task: backend `1432 passed, 17 skipped` on `main`; frontend `675 passed` in 85 files.
 
 ## PR 2b-2: the Bulletin step (T7-T12)
 
@@ -4546,7 +4546,7 @@ server stores it." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1431 passed, 17 skipped`; frontend `690 passed` in 86 files.
+Expected counts after this task: backend `1432 passed, 17 skipped`; frontend `690 passed` in 86 files.
 
 ### Task 8: The Bulletin step (S "The Bulletin step"; planning answers 4-7; F §4.7, §4.8; clarifications 2-8, 16, 20)
 
@@ -5597,7 +5597,7 @@ how many boxes are still to check." -m "Co-Authored-By: Claude Opus 5.5 <noreply
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1431 passed, 17 skipped`; frontend `697 passed` in 87 files.
+Expected counts after this task: backend `1432 passed, 17 skipped`; frontend `697 passed` in 87 files.
 
 ### Task 9: The Printed bulletin card: the week's fields (planning answers 3, 5, 6; clarifications 7, 9, 16)
 
@@ -5891,7 +5891,7 @@ opening the Bulletin step has them." -m "Co-Authored-By: Claude Opus 5.5 <norepl
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1431 passed, 17 skipped`; frontend `698 passed` in 87 files.
+Expected counts after this task: backend `1432 passed, 17 skipped`; frontend `698 passed` in 87 files.
 
 ### Task 10: Docs: the manual check items for PR 2b-2 (planning answers 3-7; clarification 17)
 
@@ -5952,7 +5952,7 @@ PR 1's item 2 says where the music and announcements come from now." -m "Co-Auth
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1431 passed, 17 skipped`; frontend `698 passed` in 87 files.
+Expected counts after this task: backend `1432 passed, 17 skipped`; frontend `698 passed` in 87 files.
 
 - [ ] **Step 4 (controller): Review the batch (T7-T10) and backup push**
 
@@ -5987,7 +5987,7 @@ for i in 1 2 3; do (cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Te
 (cd frontend && NEXT_PUBLIC_SUPABASE_URL=https://ci-placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-placeholder NEXT_PUBLIC_API_URL=http://localhost:8000 npm run build 2>&1 | grep -E "Compiled successfully|Error|/builder/bulletin")
 ```
 
-**Expected:** `1431 passed, 17 skipped in <t>s`; three times ` Test Files  87 passed (87)` and `      Tests  698 passed (698)` with no `×` or `FAIL` line (one names the failing test: Step 6); `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s`, a route line `○ /builder/bulletin`, and no `Error` (a font `Failed to fetch` only: say so and rely on CI). With a local, throwaway Postgres also `TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres | tail -1` → `17 passed, 1431 deselected`.
+**Expected:** `1432 passed, 17 skipped in <t>s`; three times ` Test Files  87 passed (87)` and `      Tests  698 passed (698)` with no `×` or `FAIL` line (one names the failing test: Step 6); `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s`, a route line `○ /builder/bulletin`, and no `Error` (a font `Failed to fetch` only: say so and rely on CI). With a local, throwaway Postgres also `TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres | tail -1` → `17 passed, 1432 deselected`.
 
 - [ ] **Step 3 (agent): The gates, the paths, the commits**
 
@@ -6044,7 +6044,7 @@ gh pr list -R bbrown62450/church --head claude/slice-2-plan-4q33le --state open 
 
 **Expected:** `[]`. Send the owner exactly this, and wait for a clear yes:
 
-> The Bulletin step (printed bulletin PR 2b-2) is verified on this machine: frontend 698 tests in 87 files (675 in 85 before), three runs in a row; backend unchanged at 1431 passed, 17 skipped; typecheck, lint and the production build are clean. It needs no database change (PR 2b-1 already made it, and it is live). It adds a fifth step, "4 Bulletin", with the prelude and postlude, who leads this week, the announcements and a box to paste a reading's text; a new service starts from last week's music and announcements, each marked "From last week. Check before printing." (the marks are saved with the service); "Save as new service" marks them the same way and starts this week's names empty; the printed bulletin prints them all and leaves out anything blank (and the announcements page when there are none). May I open the pull request as a **draft** titled "Printed bulletin PR 2b-2: the Bulletin step", so the checks run? Merging stays with you.
+> The Bulletin step (printed bulletin PR 2b-2) is verified on this machine: frontend 698 tests in 87 files (675 in 85 before), three runs in a row; backend unchanged at 1432 passed, 17 skipped; typecheck, lint and the production build are clean. It needs no database change (PR 2b-1 already made it, and it is live). It adds a fifth step, "4 Bulletin", with the prelude and postlude, who leads this week, the announcements and a box to paste a reading's text; a new service starts from last week's music and announcements, each marked "From last week. Check before printing." (the marks are saved with the service); "Save as new service" marks them the same way and starts this week's names empty; the printed bulletin prints them all and leaves out anything blank (and the announcements page when there are none). May I open the pull request as a **draft** titled "Printed bulletin PR 2b-2: the Bulletin step", so the checks run? Merging stays with you.
 
 - [ ] **Step 5 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
 
@@ -6062,7 +6062,7 @@ Printed bulletin PR 2b-2: the Bulletin step (PR 2 planning answers of 2026-10-02
 
 Later: PR 3 (the cover picture; backend first, as 2b), 6a (Settings).
 
-Tests: frontend 675 → 698 in 85 → 87 files; backend 1431 passed, 17 skipped (unchanged)
+Tests: frontend 675 → 698 in 85 → 87 files; backend 1432 passed, 17 skipped (unchanged)
 
 After merge (Task 12): a guided phone check, then a "Printed bulletin PR 2b-2 record" in docs/ops-runbook.md.
 
@@ -6076,7 +6076,7 @@ gh pr create -R bbrown62450/church --draft --base main --head claude/slice-2-pla
 gh pr checks <N2> -R bbrown62450/church --watch --interval 30
 ```
 
-Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass`; CI's numbers: backend `1431 passed, 17 skipped`, backend-postgres `17 passed, 1431 deselected`, frontend `698 passed` in 87 files. Then send: "PR #<N2> is green: 698 frontend tests in 87 files; the backend and its Postgres job unchanged and passing; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N2> -R bbrown62450/church`.
+Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass`; CI's numbers: backend `1432 passed, 17 skipped`, backend-postgres `17 passed, 1432 deselected`, frontend `698 passed` in 87 files. Then send: "PR #<N2> is green: 698 frontend tests in 87 files; the backend and its Postgres job unchanged and passing; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N2> -R bbrown62450/church`.
 
 - [ ] **Step 6: Fix any failure in its owning task**
 
@@ -6092,7 +6092,7 @@ Run the last line with `run_in_background: true`. **Expected:** the PR URL; ever
 
 For each fix: change only the owning task's files; rerun Steps 2-3; commit `Fix: <what> (Task <n>, printed bulletin PR 2b-2 final verification)` with the trailer; after the PR exists, ask the owner before pushing it.
 
-Expected counts after this task: backend `1431 passed, 17 skipped`; frontend `698 passed` in 87 files.
+Expected counts after this task: backend `1432 passed, 17 skipped`; frontend `698 passed` in 87 files.
 
 ### Task 12: PR 2b-2: the merge, the phone check, the record (OWNER + agent)
 
@@ -6217,7 +6217,7 @@ gh pr checks claude/slice-2-plan-4q33le -R bbrown62450/church --watch
 
 On the owner's yes for each outward command (README "Reverting PR 2b-2 or PR 2b-1"; clarification 20). **PR 2b-2** (the step): a branch `claude/revert-printed-2b-2` from `origin/main`; `git revert -m 1 --no-commit <2b-2 merge sha>`; then put back the draft's reader from the merge commit, so no member's draft is lost: `git checkout <2b-2 merge sha> -- frontend/src/lib/draft/schema.ts frontend/src/lib/draft/schema.test.ts frontend/src/lib/draft/migrate.ts frontend/src/lib/draft/migrate.test.ts frontend/src/lib/draft/store.test.ts 'frontend/src/app/(signed-in)/(church)/builder/page.tsx'` and `sed -i 's/^      version: 2,$/      version: 3,/' frontend/src/lib/draft/mapping.test.ts` (its one pinned version); a commit "Revert printed bulletin PR 2b-2 (PR #<N2>), keeping the draft v3" with the trailer; the frontend suite (`676 passed` in 85: the baseline and the v2 → v3 migration test), typecheck and lint; a PR, CI, and the merge on the owner's yes; record it in the record. The reverted pages read every v3 draft as it is (its bulletin kept, unused, for when the step returns), `/builder` opens Review for a draft left on the Bulletin step, and they send no `bulletin`, which the 2b-1 server takes as before (a PUT keeps the saved one; the printed bulletin prints PR 1's placeholders). Checked while planning: this revert, run on the planning worktree, typechecks, lints and passes `676` tests, and a v3 draft on the Bulletin step opens Review with its fields intact. **PR 2b-1**, only after the 2b-2 revert is live: as before, `git revert -m 1 --no-commit <2b-1 merge sha>`, then `git checkout <2b-1 merge sha> -- backend/migrations/versions/0006_services_bulletin.py backend/db/models.py backend/migrations/README.md backend/tests/test_migrations.py backend/tests/test_schema_check.py backend/tests/test_api_app.py backend/tests/test_services_postgres.py`; both suites (`1399 passed, 17 skipped`: the baseline plus T1's four and its Postgres one; the frontend as it then is). Never `alembic downgrade` production for this: the database stays at `0006_services_bulletin`, which the older code ignores, and the weekly fields saved meanwhile stay in the column, unread, until 2b returns.
 
-Expected counts after this task: backend `1431 passed, 17 skipped` on `main`; frontend `698 passed` in 87 files. The records PR adds no test.
+Expected counts after this task: backend `1432 passed, 17 skipped` on `main`; frontend `698 passed` in 87 files. The records PR adds no test.
 
 ---
 ## Build notes
@@ -6258,7 +6258,10 @@ Expected counts after this task: backend `1431 passed, 17 skipped` on `main`; fr
 - **M2: no "?" from a C1 control.** A free text (the four announcement texts and the pasted readings) deletes `\x7f-\x9f` once U+0085 is a line break; one-line fields already made them a space. Tests: the M1 unit test; `test_api_printed.py` `test_a_c1_control_character_in_a_free_text_does_not_print_as_a_question_mark`. T7's `lines` deletes `C1` too, and the same `documents.test.ts` test sends `\x9b` in the prayers.
 - **M5: the credit line names only fetched text that loaded.** `printed_bulletin._credit` counts a reading as fetched only when it is not pasted and its text came back; a reading printing "[Reading text unavailable]" is not named, and with none loaded there is no line (PR 1 printed the general line in that case too). Tests: `test_printed_bulletin.py` `test_a_reading_whose_text_did_not_load_is_not_credited`; `test_each_element_prints_as_the_sample` (its NT is unavailable: now "The First Reading is from …"), the pasted-text test (its fetched NT now loads), and in `test_api_printed.py` the KJV download (Isaiah unavailable: "The New Testament Reading is from the King James Version (KJV).") and the week's fields test (the only fetched reading unavailable: no line) were edited. The spec's "Scripture text" says so; T10's item 23 adds a sentence. T5's sample snippet is unaffected (its fetched first reading loads).
 - **Left as is:** M3 (a 422 names the client's own key) and M4 (an unfetched printed bulletin is free and slow at the limits); see "Follow-ups".
-- Counts: backend `1425` → `1431 passed, 17 skipped` (+6); Postgres-marked `17 passed, 1431 deselected` (local PG16 throwaway database, with the onboarding timing test's `1 warning`); CI's alembic cycle (`upgrade head`, `check`, `downgrade base`, `upgrade head`, `check`) clean on an empty throwaway database; the `--sql` preview still the six lines; regenerating `openapi.json` and `schema.d.ts` changed nothing (no API change); frontend unchanged at `675` in 85 files, typecheck 0, lint 0, the production build compiles with the four builder routes. T2's four files give `50 passed`, T3's `81 passed`.
+- Counts: backend `1425` → `1431 passed, 17 skipped` (+6), then `1432` with the owner's pasted line breaks (+1); Postgres-marked `17 passed, 1432 deselected` (local PG16 throwaway database, with the onboarding timing test's `1 warning`); CI's alembic cycle (`upgrade head`, `check`, `downgrade base`, `upgrade head`, `check`) clean on an empty throwaway database; the `--sql` preview still the six lines; regenerating `openapi.json` and `schema.d.ts` changed nothing (no API change); frontend unchanged at `675` in 85 files, typecheck 0, lint 0, the production build compiles with the four builder routes. T2's four files give `50 passed`, T3's `81 passed`.
+
+
+**Owner decision (Beau, 2026-10-03): pasted readings keep their line breaks (B).** A pasted reading's single line breaks now print as line breaks (a psalm verse by verse), each line's spaces collapsed; a blank line still starts a paragraph; fetched text still joins its lines. `printed_bulletin.reading_paragraphs(text, keep_lines=...)` with `keep_lines=reading.pasted`; `test_a_pasted_reading_keeps_its_line_breaks` (+1, failed before the change). Backend 1432 passed, 17 skipped. Clarification 8 and question 9 read with this.
 
 ## Spec coverage
 

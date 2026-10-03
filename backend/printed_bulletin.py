@@ -150,10 +150,15 @@ _PEOPLE_LEADER = re.compile(r"\b(Leader|People):\s*", re.IGNORECASE)
 _ASSURANCE_PEOPLE = re.compile(r"(?:^|(?<=\s))People:", re.IGNORECASE | re.MULTILINE)
 
 
-def reading_paragraphs(text: str) -> list[str]:
+def reading_paragraphs(text: str, keep_lines: bool = False) -> list[str]:
     """A passage as printed paragraphs: a blank line starts a new paragraph;
-    the verse line breaks inside one become spaces."""
-    paragraphs = [" ".join(chunk.split()) for chunk in re.split(r"\n\s*\n", text)]
+    the verse line breaks inside one become spaces, or, for pasted text
+    (keep_lines; owner, 2026-10-03), stay line breaks as typed."""
+    def join(chunk: str) -> str:
+        if not keep_lines:
+            return " ".join(chunk.split())
+        return "\n".join(" ".join(line.split()) for line in chunk.splitlines() if line.strip())
+    paragraphs = [join(chunk) for chunk in re.split(r"\n\s*\n", text)]
     return [p for p in paragraphs if p]
 
 
@@ -232,7 +237,7 @@ def _reading(s: BulletinSettings, key: str, label: str, reading: Optional[Readin
     lines = [_element(s, key, f"{label}:", Span(f"  {reading.reference}", bold=True))]
     if reading.text is None:
         return [*lines, Line("body", (Span(TEXT_UNAVAILABLE),))]
-    return [*lines, *(Line("body", (Span(p),)) for p in reading_paragraphs(reading.text))]
+    return [*lines, *(Line("body", (Span(p),)) for p in reading_paragraphs(reading.text, keep_lines=reading.pasted))]
 
 
 def _communion(s: BulletinSettings) -> list[Line]:

@@ -63,6 +63,19 @@ def test_a_reading_prints_as_paragraphs():
     assert pb.reading_paragraphs("  \n\n ") == []
 
 
+def test_a_pasted_reading_keeps_its_line_breaks():
+    """Owner, 2026-10-03 (B): pasted text keeps its lines as typed (a psalm verse by verse); a blank line
+    still starts a paragraph, and fetched text still joins its lines."""
+    text = "Turn us again.\n Cause your face\n\tto  shine.\n\n\nWe will be saved.\n"
+    assert pb.reading_paragraphs(text, keep_lines=True) == [
+        "Turn us again.\nCause your face\nto shine.", "We will be saved."]
+    ot = pb.Reading("Psalm 80:7-15", text, pasted=True)
+    lines = texts(pb.order_of_worship(service(ot=ot)))
+    assert "Turn us again.\nCause your face\nto shine." in lines
+    fetched = pb.Reading("Psalm 80:7-15", text)
+    assert "Turn us again. Cause your face to shine." in texts(pb.order_of_worship(service(ot=fetched)))
+
+
 def test_the_order_of_worship_follows_the_outline_with_the_sample_s_parts():
     lines = pb.order_of_worship(service())
     elements = [line.spans[0].text for line in lines if line.style in ("element", "section")]
