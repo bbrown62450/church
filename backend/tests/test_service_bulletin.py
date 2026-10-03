@@ -74,3 +74,19 @@ def test_every_line_break_in_a_free_text_is_a_newline_and_a_pasted_reading_keeps
     assert b.announcements.coffee_hour == "The Example family"
     assert b.ot_text == "Verse one.\n\nVerse two.\n\nVerse three.\nAmen."
     assert b.nt_text == "x" * 10_000
+
+
+def test_a_control_character_goes_before_the_other_rules_so_the_text_reads_back_the_same():
+    """Build review fixes M1 and M2: what a Word file cannot hold is deleted before the blank lines are
+    collapsed (else deleting it later leaves extra blank lines, so the stored text and GET disagree), and a
+    free text loses its C1 controls (the PDF prints them as "?") once U+0085 is a line break."""
+    raw = {"announcements": {"activities": "Line one\x02\x85\x9bLine two\x7f", "ushers": "Sam\x01Sample ￾",
+                             "other": "Ends with a stray \udc80"},
+           "reading_text": {"ot": "Verse one.\n\n\x01\n\nVerse two.", "nt": "One.\r\x01\nTwo.\x90"}}
+    b = sb.read(raw)
+    assert b.ot_text == "Verse one.\n\nVerse two."
+    assert b.nt_text == "One.\nTwo."
+    assert b.announcements.activities == "Line one\nLine two"
+    assert b.announcements.ushers == "Sam Sample"                          # one line: a control is a space
+    assert b.announcements.other == "Ends with a stray"
+    assert sb.read(b.to_json()) == b                                       # read again, nothing changes

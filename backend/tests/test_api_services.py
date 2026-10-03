@@ -304,6 +304,19 @@ def test_the_week_s_bulletin_is_saved_and_opened_and_an_older_client_keeps_it(cl
     assert create(client, church)["bulletin"] == BLANK_BULLETIN               # none sent: nothing filled in
 
 
+def test_a_pasted_control_character_is_stored_as_the_api_answers_it(client, church):
+    """Build review fix M1: text pasted from a PDF can hold control characters between blank lines; the
+    stored bulletin is what POST and GET answer, so the page's "is this my own save?" check matches."""
+    pasted = {**BULLETIN, "reading_text": {"ot": "Verse one.\n\n\x01\n\nVerse two.", "nt": ""},
+              "announcements": {**BULLETIN["announcements"], "activities": "Line one\x02\x85\x9bLine two"}}
+    made = create(client, church, {**SERVICE, "bulletin": pasted})
+    with session_scope() as s:
+        stored = s.get(Service, uuid.UUID(made["id"])).bulletin
+    assert made["bulletin"]["reading_text"]["ot"] == "Verse one.\n\nVerse two."
+    assert made["bulletin"]["announcements"]["activities"] == "Line one\nLine two"           # fix M2
+    assert stored == made["bulletin"] == call(client, "GET", f"/services/{made['id']}", church).json()["bulletin"]
+
+
 def test_last_week_s_bulletin_carries_the_music_and_the_announcements(client, church):
     made = create(client, church, {**SERVICE, "service_date_iso": "2026-09-27", "bulletin": BULLETIN})
     r = call(client, "GET", "/services/previous-bulletin?before=2026-10-04", church)

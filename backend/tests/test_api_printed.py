@@ -121,6 +121,23 @@ def test_a_translation_not_offered_here_prints_in_the_church_s(client, church, c
         assert "American Standard Version (ASV)" in pdf_text(r.content)
 
 
+def test_a_c1_control_character_in_a_free_text_does_not_print_as_a_question_mark(client, church, calls):
+    """Build review fix M2: U+0085 is a line break, and the other C1 controls (outside cp1252, so the PDF
+    printed them as "?") are deleted."""
+    bulletin = {
+        "prelude": {"title": "", "composer": ""}, "postlude": {"title": "", "composer": ""},
+        "people": {"worship_leader": None, "liturgist": None, "organist": None}, "leaders": {},
+        "announcements": {"ushers": "", "deacon": "", "coffee_hour": "", "activities": "Line one\x02\x85\x9bLine two",
+                          "prayer_concerns": "", "collection": "", "other": ""},
+        "reading_text": {"ot": "", "nt": "Pasted\x81 text."}, "unchecked": [],
+    }
+    r = post(client, church, {"format": "pdf", "service": {**SERVICE, "bulletin": bulletin}})
+    assert r.status_code == 200, r.text
+    text = pdf_text(r.content)
+    assert "Line one Line two" in text and "Pasted text." in text
+    assert "?" not in text
+
+
 def test_no_readings_fetch_nothing(client, church, calls):
     r = post(client, church, {"format": "pdf", "service": {**SERVICE, "scriptures": []}})
     assert r.status_code == 200, r.text

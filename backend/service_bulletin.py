@@ -21,8 +21,12 @@ stored in services.bulletin (migration 0006_services_bulletin).
   space. The free texts (activities, prayers and concerns, collection items,
   other announcements, the pasted readings) keep their lines, every line
   break as "\n" (a Windows or old-Mac ending, a vertical tab, a form feed,
-  U+0085, U+2028 and U+2029 included, which the PDF would print as "?"), and
-  a pasted reading's runs of blank lines become one paragraph break.
+  U+0085, U+2028 and U+2029 included, which the PDF would print as "?"),
+  the other control characters are deleted (the C1 ones print as "?";
+  build review fix M2), and a pasted reading's runs of blank lines become
+  one paragraph break. What a Word file cannot hold (usecases.archive's
+  _XML_BAD) is deleted first, so a saved bulletin is stored exactly as GET
+  answers it (build review fix M1).
   `unchecked` keeps the known boxes, once each, in the step's order.
 - to_json: the stored shape (what GET /services/{id} answers as `bulletin`).
 - carried(): what a new week starts from (PR 2 planning answer 5): the music
@@ -57,6 +61,13 @@ _NOT_ONE_LINE_RUN = re.compile(f" *[{NOT_ONE_LINE}][{NOT_ONE_LINE} ]*")
 _LINE_BREAK = re.compile(r"\r\n?|[\x0b\x0c\x85\u2028\u2029]")
 # A run of blank lines (spaces allowed) in a pasted reading: one paragraph break.
 _BLANK_LINES = re.compile(r"\n(?:[ \t]*\n)+")
+# What a Word file cannot hold (usecases.archive._XML_BAD: the C0 controls other than tab, line feed,
+# carriage return, vertical tab and form feed; U+FFFE, U+FFFF; lone surrogates). read() deletes it, so the
+# Word-safe clean that runs after it changes nothing and the stored text is what GET answers (build review M1).
+_WORD_BAD = re.compile("[\x00-\x08\x0e-\x1f\ufffe\uffff\ud800-\udfff]")
+# The C1 controls, deleted from a free text once U+0085 is a line break: the PDF prints them as "?" (build
+# review M2). A one-line text makes them a space (NOT_ONE_LINE).
+_C1 = re.compile("[\x7f-\x9f]")
 
 
 @dataclass(frozen=True)
@@ -132,9 +143,9 @@ def _text(value: object, limit: int, *, one_line: bool, paragraphs: bool = False
     if not isinstance(value, str):
         return ""
     if one_line:
-        value = _NOT_ONE_LINE_RUN.sub(" ", value)
+        value = _WORD_BAD.sub("", _NOT_ONE_LINE_RUN.sub(" ", value))
     else:
-        value = _LINE_BREAK.sub("\n", value)
+        value = _C1.sub("", _LINE_BREAK.sub("\n", _WORD_BAD.sub("", value)))
         if paragraphs:
             value = _BLANK_LINES.sub("\n\n", value)
     return value.strip()[:limit].strip()
