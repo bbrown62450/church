@@ -304,6 +304,27 @@ def test_the_week_s_bulletin_is_saved_and_opened_and_an_older_client_keeps_it(cl
     assert create(client, church)["bulletin"] == BLANK_BULLETIN               # none sent: nothing filled in
 
 
+def test_an_older_client_changing_a_reading_blanks_that_reading_s_pasted_text(client, church):
+    """Build review fix I1: the pasted text is stored by position (first reading, New Testament reading), so
+    a PUT without a bulletin that changes a reading drops that reading's pasted text; the other reading's
+    text and the rest of the bulletin stay."""
+    both = {**BULLETIN, "reading_text": {"ot": "Pasted first reading.", "nt": "Pasted text."}}
+    made = create(client, church, {**SERVICE, "bulletin": both})
+    path = f"/services/{made['id']}"
+    r = call(client, "PUT", path, church, json={**SERVICE, "scriptures": ["Isaiah 5:1-7", "John 3:16-21"]},
+             **{"If-Match": made["saved_at"]})
+    assert r.status_code == 200, r.text
+    assert r.json()["bulletin"] == {**both, "reading_text": {"ot": "Pasted first reading.", "nt": ""}}
+    assert call(client, "GET", path, church).json()["bulletin"] == r.json()["bulletin"]
+    # A pick that moves the first reading to the Psalm blanks the first reading's text too.
+    r = call(client, "PUT", path, church, json={**SERVICE, "scriptures": ["Isaiah 5:1-7", "Psalm 80:7-15",
+                                                                          "John 3:16-21"],
+                                                "selected_ot_ref": "Psalm 80:7-15"},
+             **{"If-Match": r.json()["saved_at"]})
+    assert r.status_code == 200, r.text
+    assert r.json()["bulletin"] == {**both, "reading_text": {"ot": "", "nt": ""}}
+
+
 def test_a_pasted_control_character_is_stored_as_the_api_answers_it(client, church):
     """Build review fix M1: text pasted from a PDF can hold control characters between blank lines; the
     stored bulletin is what POST and GET answer, so the page's "is this my own save?" check matches."""

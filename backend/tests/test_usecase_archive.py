@@ -447,6 +447,27 @@ def test_no_bulletin_sent_stores_none_and_a_replace_without_one_keeps_the_saved_
     assert cleared.bulletin == BLANK and stored_bulletin(record.id) == BLANK
 
 
+def test_a_replace_without_a_bulletin_blanks_the_pasted_text_of_a_changed_reading(church, pastor):
+    """Build review fix I1: compared as the files print the readings (resolve_doc_readings)."""
+    week = dataclasses.replace(WEEK, ot_text="Pasted first reading.")
+    readings = ("Isaiah 5:1-7", "Philippians 3:4b-14")
+    record = archive.create_service(church, pastor, service(scriptures=readings, bulletin=week))
+    assert record.bulletin["reading_text"] == {"ot": "Pasted first reading.", "nt": "Pasted text."}
+    same = archive.replace_service(church, record.id, service(scriptures=(" Isaiah 5:1-7 ", *readings[1:]),
+                                                              occasion="Changed"), if_match=record.saved_at)
+    assert same.bulletin == record.bulletin                     # the same readings: everything kept
+    nt_changed = archive.replace_service(church, record.id, service(scriptures=("Isaiah 5:1-7", "John 3:16-21")),
+                                         if_match=same.saved_at)
+    assert nt_changed.bulletin == {**record.bulletin, "reading_text": {"ot": "Pasted first reading.", "nt": ""}}
+    assert stored_bulletin(record.id) == nt_changed.bulletin
+    with_one = archive.replace_service(church, record.id, service(scriptures=("Isaiah 5:1-7",),
+                                                                  bulletin=dataclasses.replace(week, nt_text="")),
+                                       if_match=nt_changed.saved_at)
+    none_left = archive.replace_service(church, record.id, service(scriptures=()), if_match=with_one.saved_at)
+    assert none_left.bulletin["reading_text"] == {"ot": "", "nt": ""}      # a reading gone: its text goes too
+    assert none_left.bulletin["leaders"] == {"sermon": "Rev. Guest"}
+
+
 def test_last_week_s_bulletin_is_the_latest_service_dated_before_the_date(church, pastor, make_church):
     def save(church_id, day, coffee):
         week = dataclasses.replace(WEEK, announcements=Announcements(coffee_hour=coffee))
