@@ -46,6 +46,29 @@ app print it, first from what it knows (PR 1), then with the weekly and standing
 - **The PR 1 plan's Questions 1-12:** "all recommended", with question 3 (the PDF's layout)
   answered as layout B.
 
+### PR 2 planning answers (Beau, 2026-10-02, "all recommended"; binding)
+
+1. **PR 2 splits in two.** **PR 2a, Bulletin settings:** the panel and `GET`/`PUT
+   /church/bulletin-settings` for the church details, the standing worship leader, liturgist and
+   organist, the service time, the stand note, the starred elements and the Gloria Patri words,
+   printed at once; no migration, no draft change. **PR 2b, the Bulletin step:** prelude and
+   postlude, the announcements, pasted reading text, carry forward, the draft v3 and migration
+   `0006_services_bulletin`. Order: 2a, 2b, then PR 3 (cover picture).
+2. **Admins only** change the Bulletin settings; every member's printed bulletin uses them.
+3. **A blank field prints nothing** (no line, no [placeholder]); the Printed bulletin card lists
+   what is still empty ("Not filled in: ...") so it is caught before printing. In 2a this covers
+   the standing settings; 2b adds the weekly fields.
+4. **Announcements:** ushers and counters, deacon of the week, coffee hour, activities, prayers
+   and concerns, collection items, plus one **"Other announcements"** box.
+5. **Carry forward with a check:** every announcement carries forward (answer 3), and each
+   carried-over box shows "From last week. Check before printing." until it is edited.
+6. **The Bulletin step is optional:** it never blocks Review, the Word copies or the printed
+   bulletin.
+7. **Who leads:** the step shows the three people at the top (from settings, changeable for this
+   week); changing one part's leader sits behind "Change who leads a part".
+8. **Migration 0006** follows 0005's routine: a backup, read-only counts and the `--sql` preview
+   before the merge, a check query after the deploy, one step at a time.
+
 ## The sample, read closely
 
 The sample PDF is three legal-landscape pages (1008 x 612 pt), each holding two 7 x 8.5 in pages
@@ -176,7 +199,9 @@ prints "[Sermon title]". The communion liturgy prints after the second hymn when
   `"bulletin"`: `{address_lines: [str], phone, email, website, facebook, service_time,
   worship_leader, liturgist, organist, stand_note, starred: [element key], gloria_patri_words,
   leaders: {element key: "worship_leader" | "liturgist" | "organist"}}`. No migration; read
-  tolerantly (a missing or malformed value is the placeholder). Admins edit them in the Bulletin
+  tolerantly (a missing or malformed value reads as its default: the sample's stars, leaders'
+  roles, stand note and Gloria Patri words, and blank for every detail and name; a blank value
+  prints nothing, PR 2 planning answer 3). Admins edit them in the Bulletin
   settings panel (`PUT /church/bulletin-settings`, admin only, as 6a will be); 6a later moves the
   panel into Settings without changing the storage.
 - **Weekly fields** live in the draft and in the saved service: `bulletin: {prelude: {title,

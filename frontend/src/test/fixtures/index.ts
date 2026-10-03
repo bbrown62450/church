@@ -3,6 +3,7 @@
  * `overrides` replace top-level fields (pass a whole `user` to change it).
  */
 import type {
+  BulletinSettings,
   ChurchProfile,
   GenerateLiturgyBody,
   Hymn,
@@ -526,4 +527,61 @@ export function serviceSummary(overrides: Partial<ServiceSummary> = {}): Service
 /** A page of `GET /services`. */
 export function servicePage(items: ServiceSummary[], overrides: Partial<ServicePage> = {}): ServicePage {
   return { items, total: items.length, limit: 20, offset: 0, ...overrides };
+}
+
+/** The Gloria Patri's traditional words (`bulletin_settings.GLORIA_PATRI`). */
+export const GLORIA_PATRI =
+  "Glory be to the Father, and to the Son, and to the Holy Ghost; as it was in the beginning, is now, and ever shall be, world without end. Amen, amen.";
+
+/**
+ * `GET /church/bulletin-settings` (printed bulletin PR 2a) for a church that
+ * never saved them: the server's defaults, unless overridden.
+ */
+export function bulletinSettings(overrides: Partial<BulletinSettings> = {}): BulletinSettings {
+  return {
+    address_lines: [],
+    phone: "",
+    email: "",
+    website: "",
+    facebook: "",
+    service_time: "",
+    worship_leader: "",
+    liturgist: "",
+    organist: "",
+    stand_note: "Congregation stands if able",
+    gloria_patri_words: GLORIA_PATRI,
+    starred: ["first_hymn", "gloria_patri", "affirmation_of_faith", "second_hymn", "doxology", "third_hymn", "benediction"],
+    leaders: {
+      prelude: "organist",
+      welcome: "liturgist",
+      call_to_worship: "liturgist",
+      opening_prayer: "liturgist",
+      prayer_of_confession: "liturgist",
+      assurance: "liturgist",
+      prayer_for_illumination: "liturgist",
+      ot_reading: "liturgist",
+      nt_reading: "worship_leader",
+      sermon: "worship_leader",
+      prayers_of_the_people: "worship_leader",
+      offertory_prayer: "worship_leader",
+      postlude: "organist",
+    },
+    ...overrides,
+  };
+}
+
+/** Every standing field filled in (invented details). */
+export function filledBulletinSettings(overrides: Partial<BulletinSettings> = {}): BulletinSettings {
+  return bulletinSettings({
+    address_lines: ["100 Example Street", "Springfield, ST 00000"],
+    phone: "(555) 010-0100",
+    email: "office@example.com",
+    website: "example.com",
+    facebook: "Example Church",
+    service_time: "10:30 a.m.",
+    worship_leader: "Rev. Alex Example",
+    liturgist: "Sam Sample",
+    organist: "Jordan Doe",
+    ...overrides,
+  });
 }

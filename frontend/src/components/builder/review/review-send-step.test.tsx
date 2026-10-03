@@ -26,9 +26,11 @@ import { editCardText, setCardEnabled } from "@/lib/liturgy/cards";
 import { REVOKE_AFTER_MS } from "@/lib/download";
 import { fakeError, installFakeApi, type FakeHandler, type RecordedRequest } from "@/test/fake-api";
 import {
+  bulletinSettings,
   church,
   churchProfile,
   DRAFT_NOW,
+  filledBulletinSettings,
   gg2013,
   hymnId,
   hymnals,
@@ -47,7 +49,7 @@ import { renderWithProviders } from "@/test/render";
 
 import { CONFLICT_TITLE, RELOAD_REPLACES } from "./conflict-dialog";
 import { FIX_READINGS, NEEDS_DATE, SAME_AS_BULLETIN, SAVE_HINT } from "./documents-card";
-import { PLACEHOLDERS_NOTE, PRINTED_SUMMARY } from "./printed-card";
+import { PLACEHOLDERS_NOTE, PRINTED_SUMMARY, SETTINGS_NOTE } from "./printed-card";
 import { CONFLICT_MESSAGE, LOADED_LATEST, SAVE_FIX_READINGS, SAVE_NEEDS_DATE } from "./save-card";
 import { SAVED_AFTER_DELETE_MESSAGE, SAVED_MESSAGE } from "@/lib/queries/services";
 import { DEFAULT_BENEDICTION_FALLBACK } from "@/lib/liturgy/defaults";
@@ -76,6 +78,7 @@ function renderReview(draft: DraftV1 = testDraft(), routes: Record<string, FakeH
     "GET /hymnals": hymnals(),
     "GET /hymns": hymnListRoute(),
     "GET /liturgy/config": liturgyConfig(),
+    "GET /church/bulletin-settings": bulletinSettings(),
     ...routes,
   });
   const view = renderWithProviders(
@@ -371,6 +374,33 @@ describe("Review & send: the printed bulletin (printed bulletin PR 1)", () => {
     await user.click(within(card).getByRole("button", { name: "Download printed bulletin" }));
     expect(await screen.findByText(HYMN_GONE)).toBeInTheDocument();
     expect(clicks).toEqual([]);
+  });
+
+  it("lists the bulletin settings still blank and links to them (printed bulletin PR 2a)", async () => {
+    const blank = renderReview();
+    let card = await screen.findByRole("region", { name: "Printed bulletin" });
+    expect(within(card).getByText(SETTINGS_NOTE)).toBeInTheDocument();
+    expect(
+      await within(card).findByText(
+        "Not filled in: address, phone, email, website, Facebook name, service time, worship leader, liturgist, organist.",
+      ),
+    ).toBeInTheDocument();
+    const download = within(card).getByRole("button", { name: "Download printed bulletin" });
+    // The list comes before the downloads (read before printing); the button after them.
+    const missing = within(card).getByText(/^Not filled in:/);
+    expect(missing.compareDocumentPosition(download) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const link = within(card).getByRole("link", { name: "Bulletin settings" });
+    expect(download.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(link).toHaveAttribute("href", "/bulletin-settings");
+    expect(link).toHaveClass("h-11");
+    blank.unmount();
+    window.localStorage.clear();
+
+    const filled = renderReview(testDraft(), { "GET /church/bulletin-settings": filledBulletinSettings({ organist: "" }) });
+    card = await screen.findByRole("region", { name: "Printed bulletin" });
+    expect(await within(card).findByText("Not filled in: organist.")).toBeInTheDocument();
+    expect(within(card).getByRole("button", { name: "Download printed bulletin" })).toBeEnabled();
+    filled.unmount();
   });
 });
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { type Church, pickActiveChurch, roleLabel } from "./church";
+import { type Church, isAdmin, pickActiveChurch, roleLabel } from "./church";
 
 const churches: Church[] = [
   { id: "a", name: "Alpha", role: "owner" },
@@ -40,5 +40,11 @@ describe("pickActiveChurch", () => {
 describe("roleLabel", () => {
   it("names each role for people", () => {
     expect((["owner", "admin", "member"] as const).map(roleLabel)).toEqual(["Owner", "Admin", "Member"]);
+  });
+});
+
+describe("isAdmin", () => {
+  it("lets owners and admins edit the church's settings (printed bulletin PR 2a)", () => {
+    expect((["owner", "admin", "member"] as const).map(isAdmin)).toEqual([true, true, false]);
   });
 });

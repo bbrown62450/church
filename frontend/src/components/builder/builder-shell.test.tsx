@@ -23,6 +23,7 @@ import { pickFromHymn, setSlot } from "@/lib/hymns/picks";
 import { addCustomElement, editCardText } from "@/lib/liturgy/cards";
 import { installFakeApi, type FakeHandler, type RecordedRequest } from "@/test/fake-api";
 import {
+  bulletinSettings,
   church,
   churchProfile,
   DRAFT_NOW,
@@ -75,6 +76,7 @@ function renderBuilder(page: ReactElement, path: string, lookup = lectionaryRout
     "GET /hymnals": hymnals(),
     "GET /hymns": hymnListRoute(),
     "GET /liturgy/config": liturgyConfig(),
+    "GET /church/bulletin-settings": bulletinSettings(),
     ...routes,
   });
   return renderWithProviders(<BuilderLayout>{page}</BuilderLayout>, { me: me(), church: church(), path });

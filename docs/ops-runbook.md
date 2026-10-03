@@ -551,6 +551,29 @@ address or church id is recorded here.
 | 5. Delete and layout | The copy was deleted after the confirm and the original stayed; Services and Review & send fit the phone with easy targets | 2026-10-02 |
 | Follow-ups | 5a is complete. Next: the printed bulletin (`docs/superpowers/specs/2026-10-02-printed-bulletin-idea.md`), Voices of the Church, 6a (Settings, including persona editing), then Hear it from the pews (`docs/superpowers/specs/2026-10-02-pew-voices-idea.md`). Still open: the screen-reader copy for "Revise the other prayers", first-line matching research (Hymnary.org), the NUL-character 500 outside `/documents`, and the two slice 1 test churches (kept for now, owner) | 2026-10-02 |
 
+### Printed bulletin PR 1 record
+
+Printed bulletin PR 1 (the booklet from what the app knows: `POST
+/documents/printed` with a PDF in layout B, legal landscape with two booklet
+pages per side in reading order, and a Word version on small pages; the
+Printed bulletin card on Review & send) merged as PR #45, the first of three
+printed bulletin PRs. No migration (production stays at
+`0005_services_extras`). The owner's check was a four-step guided check on a
+phone (`docs/manual-verification.md`, "Printed bulletin"); the print test at
+the church comes later. No token, email address or church id is recorded
+here.
+
+| Step | Result | Date |
+|---|---|---|
+| Merge | PR #45 merged 20:50 UTC (16:50 Eastern), merge commit `d79f301` | 2026-10-02 |
+| 1. PDF | "Download printed bulletin" gave the PDF in about 5 seconds; wide pages, two booklet pages each, in reading order, cover and "THE SERVICE FOR THE LORD'S DAY" first, announcements last | 2026-10-02 |
+| 2. Content | Readings printed in full in NRSVue with the credit line; hymn lines in the `*HYMN: #409 "..."` form; people lines bold; names, music and announcements as [placeholders] | 2026-10-02 |
+| 3. Word version | "Download Word version" opened in reading order on small pages (phone) | 2026-10-02 |
+| 4. Layout | No sideways scroll on Review & send; with the date cleared both buttons were off | 2026-10-02 |
+| Desktop Word | The owner opened a printed bulletin Word file (the PR 2a sample) in desktop Word: it opened without a warning and the cover fit on one page; the cover's picture box sat left of center (fixed in PR 2a) | 2026-10-03 |
+| Pending | The print test on legal paper at the church (item 6: page order, nothing upside down, page numbers, nothing cut off). Results to be added here | |
+| Follow-ups | Next: printed bulletin PR 2 (the Bulletin step, settings, announcements, `0006_services_bulletin`), PR 3 (the cover picture, `0007_bulletin_images`), Voices of the Church, 6a, Hear it from the pews. Minor bulletin items: "LORD" in small caps, cover overflow for long church names, Word heading keep-with-next, the placeholder for a multi-part reading | 2026-10-02 |
+
 ## Backups
 
 - **Workflow:** `.github/workflows/backup.yml` (`db-backup`). Daily at 08:37 UTC,

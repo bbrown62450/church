@@ -18,6 +18,10 @@ deployment offers it, else the church's: readings.ts effectiveTranslation).
 The fetch charges `charge(parts)` first (the route's `scripture` bucket, one
 token per upstream part, as POST /scripture/passages); a reading whose text
 does not come back prints "[Reading text unavailable]", never an error.
+PR 2a adds the church's bulletin settings (church_bulletin.read_settings of
+the settings read with the name, every text Word-safe): the contact lines,
+the people, the service time, the stars, the stand note and the Gloria Patri
+words.
 """
 from __future__ import annotations
 
@@ -36,7 +40,7 @@ import service_output
 from db import session_scope
 from domain_errors import Forbidden
 from repos import churches
-from usecases import archive, passages
+from usecases import archive, church_bulletin, passages
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +130,8 @@ def build_printed(church_id: uuid.UUID, data: archive.ServiceInput, fmt: printed
         church_name=archive._xml_safe(church["name"] or "").strip(), resolved=resolved,
         ot=None if ot is None else printed_bulletin.Reading(ot, texts.get(ot)),
         nt=None if nt is None else printed_bulletin.Reading(nt, texts.get(nt)),
-        translation_label=scripture_fetcher.translation_label(tid))
+        translation_label=scripture_fetcher.translation_label(tid),
+        settings=church_bulletin.read_settings(church["settings"]))
     content = printed_pdf.render_pdf(printed) if fmt == "pdf" else printed_docx.render_docx(printed)
     logger.info("documents.printed church=%s format=%s bytes=%d ms=%d", church_id, fmt, len(content),
                 round((time.monotonic() - started) * 1000))

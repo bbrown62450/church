@@ -238,3 +238,10 @@ def get_church_translation(church_id) -> str | None:
 
 def set_church_translation(church_id, translation_id: str) -> None:
     _merge_settings(church_id, {"bible_translation": translation_id})
+
+
+def set_bulletin_settings(church_id, value: dict) -> None:
+    """Store the church's bulletin settings (printed bulletin spec, PR 2a) as
+    settings["bulletin"], whole, under the row lock: every other settings key
+    (the translation, the hymnal, the rubric, the prompts) stays as stored."""
+    _merge_settings(church_id, {"bulletin": value})

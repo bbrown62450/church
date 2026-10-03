@@ -89,8 +89,8 @@ def test_the_pdf_downloads_with_the_file_headers_and_the_readings_text(client, c
     assert r.headers["cache-control"] == "no-store"
     text = pdf_text(r.content)
     assert "Example Church" in text and "*HYMN: #12 “Old Favorite”" in text
-    assert "FIRST READING: Isaiah 5:1-7 [Liturgist] [Reading text unavailable] NEW TESTAMENT" in text
-    assert "NEW TESTAMENT READING: Philippians 3:4b-14 [Worship leader] Text of Philippians 3:4-14 (kjv). Second verse." in text
+    assert "FIRST READING: Isaiah 5:1-7 [Reading text unavailable] NEW TESTAMENT" in text      # no names saved yet
+    assert "NEW TESTAMENT READING: Philippians 3:4b-14 Text of Philippians 3:4-14 (kjv). Second verse." in text
     assert "Scripture readings are from the King James Version (KJV)." in text
     assert calls == [("Isaiah 5:1-7", "kjv"), ("Philippians 3:4-14", "kjv")]
     assert "We pray." not in text
@@ -153,3 +153,36 @@ def test_a_bad_body_is_a_422_naming_the_field(client, church, calls, change, fie
     assert r.status_code == 422, r.text
     assert field in r.json()["error"]["fields"], r.text
     assert calls == []
+
+
+def test_the_church_s_bulletin_settings_print_for_every_member(client, church, make_user, calls):
+    """PR 2a: the details an admin saved print on everyone's bulletin; a blank one prints nothing."""
+    with session_scope() as s:
+        s.get(Church, church).settings = {"bulletin": {
+            "address_lines": ["100 Example Street"], "phone": "", "facebook": "Example Church",
+            "service_time": "10:30 a.m.", "worship_leader": "Rev. Alex Example", "liturgist": "Sam Sample",
+            "organist": "", "starred": ["sermon"], "leaders": {"sermon": "worship_leader", "nt_reading": "liturgist"},
+            "stand_note": "Please stand if able", "gloria_patri_words": "Glory be."}}
+    member = make_user(email="member@example.com")
+    add_membership(member, church, "member")
+    r = post(client, church, {"format": "pdf", "service": SERVICE}, email="member@example.com")
+    assert r.status_code == 200, r.text
+    text = pdf_text(r.content)
+    assert "October 4, 2026 100 Example Street FB: Example Church 1 THE SERVICE FOR THE LORD’S DAY Example Church " \
+           "Rev. Alex Example, Worship Leader Sam Sample, Liturgist October 4, 2026 10:30 a.m." in text
+    assert "NEW TESTAMENT READING: Philippians 3:4b-14 Sam Sample" in text
+    assert "*SERMON: “Living Water” Rev. Alex Example" in text and "*HYMN" not in text
+    assert "Glory be." in text and text.count("*Please stand if able") == 1
+    for gone in ("Organist", "[Organist]", "[Liturgist]", "[Worship leader]", "[Service time]", "[Phone]", "[Email]"):
+        assert gone not in text, gone
+    assert "‘[Prelude title]’" in text and "Coffee Hour: [Name]" in text           # the weekly fields: PR 2b
+
+
+def test_a_stored_control_character_still_prints_in_word(client, church, calls):
+    """PR 2a: settings written by another path are made Word-safe when printed, as the PUT makes them."""
+    with session_scope() as s:
+        s.get(Church, church).settings = {"bulletin": {"organist": "Jordan\x01 Doe", "phone": "(555)\x0b010-0100"}}
+    r = post(client, church, {"format": "docx", "service": SERVICE})
+    assert r.status_code == 200, r.text
+    paragraphs = [p.text for p in Document(BytesIO(r.content)).paragraphs]
+    assert "Jordan Doe, Organist" in paragraphs and "(555) 010-0100" in paragraphs   # one line (build review I1)
