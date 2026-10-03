@@ -188,9 +188,9 @@ describe("Save as new service after a save whose outcome is unknown (2b-2 build 
     expect(reviewStatus(back)).toBe("saved");
     const put = serviceBody(back).bulletin; // what Save changes sends
     expect(put).toEqual(before);
-    expect(put.people.worship_leader).toBe("Rev. Guest");
-    expect(put.leaders).toEqual({ sermon: "Rev. Guest" });
-    expect(put.reading_text.nt).toBe("Pasted Matthew text");
+    expect(put?.people.worship_leader).toBe("Rev. Guest");
+    expect(put?.leaders).toEqual({ sermon: "Rev. Guest" });
+    expect(put?.reading_text.nt).toBe("Pasted Matthew text");
   });
 
   it("markSaved keeps the set-aside fields after a save over the same service and drops them after a new one", () => {
