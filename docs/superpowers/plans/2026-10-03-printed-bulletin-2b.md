@@ -1419,7 +1419,7 @@ def read(raw: object) -> ServiceBulletin:
 
 - [ ] **Step 4: See them pass, and the suite**
 
-Run: `.venv/bin/python -m pytest -q backend/tests/test_service_bulletin.py backend/tests/test_printed_bulletin.py backend/tests/test_printed_render.py backend/tests/test_api_printed.py 2>&1 | tail -1` then `grep -rn "Prelude title\]\|\[Names\]\|\[Collection items\]" backend --include=*.py; echo "placeholders grep exit $?"` then `.venv/bin/python -m pytest -q | tail -1`
+Run: `.venv/bin/python -m pytest -q backend/tests/test_service_bulletin.py backend/tests/test_printed_bulletin.py backend/tests/test_printed_render.py backend/tests/test_api_printed.py 2>&1 | tail -1` then `grep -rn "Prelude title\]\|\[Names\]\|\[Collection items\]" backend --include=*.py --exclude-dir=tests; echo "placeholders grep exit $?"` then `.venv/bin/python -m pytest -q | tail -1`
 **Expected:** `44 passed in <t>s`; `placeholders grep exit 1`; `1411 passed, 17 skipped in <t>s`.
 
 - [ ] **Step 5: Commit**
@@ -1848,12 +1848,14 @@ class ServiceDraft(BaseModel):
 **In `backend/api/schemas.py`, replace:**
 
 ````python
+    saved_at: str
     created_by: Optional[AuthorOut]
 ````
 
 **with:**
 
 ````python
+    saved_at: str
     created_by: Optional[AuthorOut]
 
 
