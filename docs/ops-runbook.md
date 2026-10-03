@@ -574,6 +574,27 @@ here.
 | Pending | The print test on legal paper at the church (item 6: page order, nothing upside down, page numbers, nothing cut off). Results to be added here | |
 | Follow-ups | Next: printed bulletin PR 2 (the Bulletin step, settings, announcements, `0006_services_bulletin`), PR 3 (the cover picture, `0007_bulletin_images`), Voices of the Church, 6a, Hear it from the pews. Minor bulletin items: "LORD" in small caps, cover overflow for long church names, Word heading keep-with-next, the placeholder for a multi-part reading | 2026-10-02 |
 
+### Printed bulletin PR 2a record
+
+Printed bulletin PR 2a (the church's standing bulletin settings: `GET` and
+`PUT /church/bulletin-settings` storing `churches.settings["bulletin"]`, the
+Bulletin settings page, and the printed bulletin using the settings, with a
+blank field left off) merged as PR #46. No migration (production stays at
+`0005_services_extras`). The owner's check was a five-step guided check on a
+phone (`docs/manual-verification.md`, "Printed bulletin PR 2a: bulletin
+settings"). No token, email address, phone number, street address or church
+id is recorded here.
+
+| Step | Result | Date |
+|---|---|---|
+| Merge | PR #46 merged 13:48 UTC (09:48 Eastern), merge commit `1b0b7a3` | 2026-10-03 |
+| 1. Card | The Printed bulletin card showed the settings sentence and "Not filled in" above the downloads; the Bulletin settings button opened the page | 2026-10-03 |
+| 2. Save and print | Saved settings showed "Bulletin settings saved" and stayed after a reload; "Not filled in" then listed only the fields left blank on purpose; the PDF cover printed the saved contact lines with no empty lines for the blank ones; page 1's header named the three people, the date line ended with the service time, and the leaders' names printed on the right | 2026-10-03 |
+| 3. Word version | The Word version matched the PDF (cover, header, time, leaders) | 2026-10-03 |
+| 4. Each part | Changing one part's leader and one part's Stands switch changed the next download to match | 2026-10-03 |
+| 5. Layout and leave guard | No sideways scroll on Bulletin settings at phone width, targets easy to tap; changing a field and tapping Back asked "Discard unsaved changes?" first | 2026-10-03 |
+| Follow-ups | Next: printed bulletin PR 2b (the Bulletin step, the weekly fields, announcements, carry forward, pasted reading text, `0006_services_bulletin`), PR 3 (the cover picture), Voices of the Church, 6a, Hear it from the pews. Still pending: the PR 1 print test at the church. Noted in the 2a plan: the header links and church switcher do not ask before leaving unsaved settings until 6a; the older crash if `churches.settings` is ever not an object | 2026-10-03 |
+
 ## Backups
 
 - **Workflow:** `.github/workflows/backup.yml` (`db-backup`). Daily at 08:37 UTC,
