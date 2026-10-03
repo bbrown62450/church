@@ -2222,7 +2222,7 @@ export function serviceBulletin(overrides: Partial<ServiceBulletin> = {}): Servi
 (cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")
 ```
 
-**Expected:** ` 2 files changed, 523 insertions(+), 1 deletion(-)`; `75 passed in <t>s`; `1421 passed, 17 skipped in <t>s` (`test_openapi_contract.py` and `test_route_guards.py` pass unchanged); ` Test Files  85 passed (85)`, `      Tests  675 passed (675)`; `typecheck 0`, `lint 0`.
+**Expected:** `Wrote <repo>/frontend/src/lib/api/openapi.json`, then ` 2 files changed, 523 insertions(+), 1 deletion(-)`; `75 passed in <t>s`; `1421 passed, 17 skipped in <t>s` (`test_openapi_contract.py` and `test_route_guards.py` pass unchanged); ` Test Files  85 passed (85)`, `      Tests  675 passed (675)`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -2475,13 +2475,14 @@ import { setAnnouncement, setPastedText } from "./bulletin";
 **In `frontend/src/lib/draft/mapping.test.ts`, replace:**
 
 ````ts
+    expect(d).toMatchObject({
       version: 2,
 ````
 
 **with:**
 
 ````ts
-
+    expect(d).toMatchObject({
 ````
 
 **In `frontend/src/lib/draft/mapping.test.ts`, replace:**
@@ -2848,6 +2849,7 @@ Run: `(cd frontend && npx vitest run src/lib/draft/bulletin.test.ts src/lib/draf
  FAIL  |unit| src/lib/draft/bulletin.test.ts [ src/lib/draft/bulletin.test.ts ]
  FAIL  |unit| src/lib/draft/mapping.test.ts [ src/lib/draft/mapping.test.ts ]
  FAIL  |unit| src/lib/draft/status.test.ts [ src/lib/draft/status.test.ts ]
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
       Tests  8 failed | 23 passed (31)
 ```
 
@@ -4222,6 +4224,7 @@ Run: `(cd frontend && npx vitest run src/components/builder/bulletin src/compone
    × Review & send: saving (slice 5a-3) > saves a new service with the draft's key, saves changes with If-Match, and every status follows <t>ms
  FAIL  |dom| src/components/builder/builder-shell.test.tsx [ src/components/builder/builder-shell.test.tsx ]
  FAIL  |dom| src/components/builder/bulletin/bulletin-step.test.tsx [ src/components/builder/bulletin/bulletin-step.test.tsx ]
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
       Tests  3 failed | 34 passed (37)
 ```
 
@@ -4868,6 +4871,7 @@ Run: `(cd frontend && npx vitest run src/components/builder/review/review-send-s
    × Review & send: the printed bulletin (printed bulletin PR 1) > shows the card after the Word documents with what it prints and both files <t>ms
    × Review & send: the printed bulletin (printed bulletin PR 1) > lists the bulletin settings still blank and links to them (printed bulletin PR 2a) <t>ms
    × Review & send: the printed bulletin (printed bulletin PR 1) > carries last week's music and announcements in, lists what to check, and prints them (printed bulletin PR 2b) <t>ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
       Tests  3 failed | 75 passed (78)
 ```
 
