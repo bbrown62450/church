@@ -6,6 +6,8 @@
  *
  * - `useServices()`: the list, 20 a page, newest service date first (the
  *   server's order), "Show more" reading the next offset.
+ * - `usePreviousBulletin(date, enabled)`: last week's bulletin, for carry
+ *   forward (printed bulletin PR 2b).
  * - `useSaveService(church)`: Save. "Save changes" PUTs with `If-Match` (the
  *   `saved_at` the draft holds); a 404 without `details.field` (the service
  *   was deleted) POSTs instead and says so. A 409 reads the archive's copy:
@@ -31,13 +33,13 @@
  *   edited resets the draft (F §4.6 rule 2), keeping the translation as New
  *   service does. A 404 refreshes the list.
  */
-import { useInfiniteQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { ApiError } from "@/lib/api/client";
 import { errorToastMessage, isNoChurchAccess } from "@/lib/api/errors";
-import type { DeletedOut, ServiceOut, ServicePage } from "@/lib/api/types";
+import type { DeletedOut, PreviousBulletin, ServiceOut, ServicePage } from "@/lib/api/types";
 import { useChurch } from "@/lib/church-context";
 import { savedCopyFingerprint, serviceBody } from "@/lib/documents";
 import { useDraft } from "@/lib/draft/context";
@@ -91,6 +93,22 @@ export function useServices() {
       const next = last.offset + last.items.length;
       return last.items.length > 0 && next < last.total ? next : undefined;
     },
+  });
+}
+
+/**
+ * `GET /services/previous-bulletin?before=` (printed bulletin PR 2b): what a
+ * new week's bulletin carries forward from the latest service dated before
+ * `dateIso`. Fetched only while carrying is due (`enabled`); under the
+ * services key, so a save or a delete refreshes it.
+ */
+export function usePreviousBulletin(dateIso: string, enabled: boolean) {
+  const api = useApi();
+  const church = useChurch();
+  return useQuery<PreviousBulletin, ApiError>({
+    queryKey: keys.previousBulletin(church.id, dateIso),
+    queryFn: ({ signal }) => api.church<PreviousBulletin>(`/services/previous-bulletin?before=${dateIso}`, { signal }),
+    enabled,
   });
 }
 

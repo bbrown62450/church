@@ -9,7 +9,7 @@
  */
 import { isValidDateIso } from "@/lib/dates";
 
-import { DRAFT_VERSION, draftV1Schema, type DraftV1 } from "./schema";
+import { DRAFT_VERSION, draftV1Schema, freshBulletin, type DraftV1 } from "./schema";
 
 export type StoredDraft = Record<string, unknown>;
 /** Upgrades a version-v draft to version v + 1 (it need not set `version`). */
@@ -22,6 +22,10 @@ export type Migration = (draft: StoredDraft) => StoredDraft;
  * draft's own date (null when that is not a real date); `save_key_fingerprint`
  * starts null. No version 1 draft has `editing` set: nothing could save before
  * 5a-3.
+ *
+ * 2 → 3 (printed bulletin PR 2b): `bulletin` starts empty (`freshBulletin`),
+ * so an in-progress draft keeps everything else; last week's bulletin carries
+ * in later like a new draft's, unless the draft is a saved service.
  */
 export const migrations: Readonly<Record<number, Migration>> = {
   1: (draft) => {
@@ -30,6 +34,7 @@ export const migrations: Readonly<Record<number, Migration>> = {
     const editing = isRecord(draft.editing) ? { ...draft.editing, date_iso: date } : null;
     return { ...draft, editing, save_key_fingerprint: null };
   },
+  2: (draft) => ({ ...draft, bulletin: freshBulletin() }),
 };
 
 export class DraftRestoreError extends Error {

@@ -3,16 +3,16 @@ import { describe, expect, it } from "vitest";
 import { nextSunday, todayIn } from "@/lib/dates";
 import { CHURCH_IDS, churchProfile, DRAFT_NOW, testDraft, USER_ID } from "@/test/fixtures";
 
-import { churchZone, corruptDraftKey, draftKey, draftV1Schema, DRAFT_VERSION, freshDraft, SECTION_KEYS } from "./schema";
+import { churchZone, corruptDraftKey, draftKey, draftV1Schema, DRAFT_VERSION, freshBulletin, freshDraft, SECTION_KEYS } from "./schema";
 import { DEFAULT_BENEDICTION_FALLBACK } from "@/lib/liturgy/defaults";
 
 describe("draft schema and freshDraft (F §4.6)", () => {
   it("a fresh draft is dated next Sunday with every field empty and the F §4.6 defaults", () => {
     const d = testDraft();
-    expect(DRAFT_VERSION).toBe(2);
+    expect(DRAFT_VERSION).toBe(3);
     expect(draftV1Schema.parse(d)).toEqual(d);
     expect(d).toMatchObject({
-      version: 2,
+      version: 3,
       user_id: USER_ID,
       church_id: churchProfile().id,
       created_at: "2026-09-29T16:00:00.000Z",
@@ -39,7 +39,20 @@ describe("draft schema and freshDraft (F §4.6)", () => {
         alternatives: null,
       },
       liturgy: { sermon_title: "", include_communion: true, communion_origin: "default", custom_elements: [] },
+      bulletin: {
+        prelude: { title: "", composer: "" },
+        postlude: { title: "", composer: "" },
+        people: { worship_leader: null, liturgist: null, organist: null },
+        leaders: {},
+        announcements: { ushers: "", deacon: "", coffee_hour: "", activities: "", prayer_concerns: "", collection: "", other: "" },
+        pasted: {},
+        carried: [],
+        edited: [],
+        carried_for: null,
+        set_aside: null,
+      },
     });
+    expect(d.bulletin).toEqual(freshBulletin());
     expect(d.save_key).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     expect(testDraft().save_key).not.toBe(d.save_key);
     for (const key of SECTION_KEYS) {
@@ -79,7 +92,11 @@ describe("draft schema and freshDraft (F §4.6)", () => {
       { ...d, readings: { ...d.readings, date_iso: "2026-02-30" } },
       { ...d, readings: { ...d.readings, occasion: `${long}x` } },
       { ...d, last_step: "summary" },
-      { ...d, version: 3 },
+      { ...d, version: 4 },
+      { ...d, bulletin: undefined }, // version 3 needs the bulletin (PR 2b)
+      { ...d, bulletin: { ...d.bulletin, carried: ["sermon"] } },
+      { ...d, bulletin: { ...d.bulletin, carried_for: "2026-02-30" } },
+      { ...d, bulletin: { ...d.bulletin, edited: ["hymns"] } },
       { ...d, editing: { service_id: "s1", saved_at: "2026-10-01T14:42:00+00:00" } }, // version 2 needs editing.date_iso
       { ...d, editing: { service_id: "s1", saved_at: "2026-10-01T14:42:00+00:00", date_iso: "2026-02-30" } },
       { ...d, readings: { ...d.readings, fields_origin: "typed" } },

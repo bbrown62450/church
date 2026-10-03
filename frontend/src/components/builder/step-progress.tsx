@@ -16,6 +16,10 @@ export function statusText(status: StepStatus): string {
       return `${status.done} of ${status.total}`;
     case "soon":
       return "Soon";
+    case "optional":
+      return "Optional";
+    case "to_check":
+      return `${status.count} to check`;
     case "not_in_archive":
       return "Not in archive";
     case "saved":
@@ -44,7 +48,7 @@ export function StepProgress({ current, shipped = SHIPPED_STEPS }: { current: St
         {STEPS.map((s) => {
           const status = stepStatus(draft, s.id, shipped);
           const isCurrent = s.id === current;
-          const muted = status.kind === "soon" || status.kind === "not_in_archive";
+          const muted = status.kind === "soon" || status.kind === "not_in_archive" || status.kind === "optional";
           return (
             <li key={s.id}>
               <Link

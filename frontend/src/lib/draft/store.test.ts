@@ -90,7 +90,7 @@ describe("DraftStore load (F §4.6 Versioning)", () => {
   });
 
   it("backs up a draft it cannot restore, starts fresh and reports it once", () => {
-    for (const raw of ["{not json", JSON.stringify({ ...testDraft(), version: 3 }), JSON.stringify({ version: 1 })]) {
+    for (const raw of ["{not json", JSON.stringify({ ...testDraft(), version: 4 }), JSON.stringify({ version: 1 })]) {
       const { storage, data } = memoryStorage({ [KEY]: raw });
       const { store, notices } = makeStore(storage);
       store.start();
@@ -103,7 +103,7 @@ describe("DraftStore load (F §4.6 Versioning)", () => {
     }
 
     // The backup cannot be written (quota): the unrestorable draft stays in the main key until the user edits.
-    const raw = JSON.stringify({ ...testDraft(), version: 3 });
+    const raw = JSON.stringify({ ...testDraft(), version: 4 });
     const { storage, data } = memoryStorage({ [KEY]: raw, [corruptDraftKey(USER_ID, GRACE.id)]: "older backup" });
     storage.failKeys.add(corruptDraftKey(USER_ID, GRACE.id));
     const { store, notices } = makeStore(storage);
@@ -362,7 +362,7 @@ describe("DraftStore changes (S store.ts)", () => {
     store.syncFromStorage();
     expect(store.getSnapshot().draft).toBe(mine);
     store.flush();
-    expect(stored(data)).toMatchObject({ version: 2, readings: { occasion: "Mine" } });
+    expect(stored(data)).toMatchObject({ version: 3, readings: { occasion: "Mine" } });
     expect(notices).toEqual([]);
   });
 
@@ -378,7 +378,7 @@ describe("DraftStore changes (S store.ts)", () => {
     const services = makeStore(storage);
     expect(services.store.getSnapshot().draft.readings.occasion).toBe("");
     builder.flush(); // ...then the builder unmounts and flushes,
-    expect(stored(data)).toMatchObject({ version: 2, readings: { occasion: "Mine" } });
+    expect(stored(data)).toMatchObject({ version: 3, readings: { occasion: "Mine" } });
     services.store.syncFromStorage({ quiet: true }); // and Services reads it back once mounted.
     expect(services.store.getSnapshot().draft).toMatchObject({ readings: { occasion: "Mine" }, updated_at: mine.updated_at });
     expect(services.notices).toEqual([]);

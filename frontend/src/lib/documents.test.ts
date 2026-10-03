@@ -7,7 +7,8 @@ import { describe, expect, it } from "vitest";
 import { editScriptureLines, setPick, setTranslation } from "@/lib/draft/readings";
 import { pickFromHymn, setSlot } from "@/lib/hymns/picks";
 import { addCustomElement, editCardText, setCardEnabled, setCommunion, setSermonTitle } from "@/lib/liturgy/cards";
-import { gg2013, savedService, testDraft } from "@/test/fixtures";
+import { setAnnouncement, setPerson } from "@/lib/draft/bulletin";
+import { gg2013, savedService, serviceBulletin, testDraft } from "@/test/fixtures";
 
 import { documentRequest, printedRequest, savedCopyFingerprint, wordSafe } from "./documents";
 import { DEFAULT_BENEDICTION_FALLBACK } from "@/lib/liturgy/defaults";
@@ -50,6 +51,7 @@ describe("documentRequest (slice 5a)", () => {
           { label: "Anthem", text: "Choir", insert_after: "sermon" },
           { label: "Old place", text: "", insert_after: "end" },
         ],
+        bulletin: serviceBulletin(), // always sent (printed bulletin PR 2b), here with nothing filled in
       },
     });
     expect(documentRequest(d, "bulletin").variant).toBe("bulletin");
@@ -109,6 +111,45 @@ describe("printedRequest (printed bulletin PR 1)", () => {
     // An id the server would refuse (over 20 characters) goes as null: the church's translation.
     const odd = { ...d, readings: { ...d.readings, translation: "x".repeat(21) } };
     expect(printedRequest(odd, "pdf").translation).toBeNull();
+  });
+});
+
+describe("the bulletin fields in the body (printed bulletin PR 2b)", () => {
+  it("are always sent, trimmed and cut to the server's limits", () => {
+    let d = setAnnouncement(testDraft(), "prayer_concerns", ` ${"p".repeat(4005)}`);
+    d = setPerson(setAnnouncement(d, "ushers", "Sam Sample "), "organist", "o".repeat(105));
+    const { bulletin } = documentRequest(d, "bulletin").service;
+    expect(bulletin?.announcements.ushers).toBe("Sam Sample");
+    expect(bulletin?.announcements.prayer_concerns).toHaveLength(4000);
+    expect(bulletin?.people).toEqual({ worship_leader: null, liturgist: null, organist: "o".repeat(100) });
+    expect(bulletin?.unchecked).toEqual([]);
+    expect(printedRequest(d, "pdf").service.bulletin).toEqual(bulletin);
+  });
+
+  it("count in savedCopyFingerprint: another device's announcements are someone else's change", () => {
+    const theirs = savedService({ bulletin: serviceBulletin({ announcements: { ...serviceBulletin().announcements, deacon: "Alex Example" } }) });
+    const sent = { ...theirs, bulletin: { ...theirs.bulletin, announcements: { ...theirs.bulletin.announcements, deacon: " Alex Example\r\n" } } };
+    expect(savedCopyFingerprint(sent)).toBe(savedCopyFingerprint(theirs));
+    expect(savedCopyFingerprint({ ...theirs, bulletin: serviceBulletin() })).not.toBe(savedCopyFingerprint(theirs));
+  });
+
+  it("read the body as the server stores it, so my own save is never someone else's change (plan review fix M3)", () => {
+    const stored = serviceBulletin({
+      prelude: { title: "Toccata in F", composer: "Pat Example" },
+      announcements: { ...serviceBulletin().announcements, coffee_hour: "The Example family", prayer_concerns: "For Sam\nFor Lee\nFor all" },
+      reading_text: { ot: "Verse one.\n\nVerse two.", nt: "" },
+      unchecked: ["prelude", "coffee_hour"],
+    });
+    const sent = serviceBulletin({
+      prelude: { title: "Toccata\tin F ", composer: "Pat\u2028Example" },
+      announcements: { ...serviceBulletin().announcements, coffee_hour: "The Example\r\nfamily", prayer_concerns: "For Sam\u2028For Lee\x85\x9bFor all" },
+      reading_text: { ot: "Verse one.\r\n\r\n \n\x01\n\u2029Verse two.", nt: "" },
+      unchecked: ["coffee_hour", "prelude"],
+    });
+    const theirs = savedService({ bulletin: stored });
+    expect(savedCopyFingerprint({ ...theirs, bulletin: sent })).toBe(savedCopyFingerprint(theirs));
+    const changed = { ...stored, announcements: { ...stored.announcements, prayer_concerns: "For Sam For Lee For all" } };
+    expect(savedCopyFingerprint({ ...theirs, bulletin: changed })).not.toBe(savedCopyFingerprint(theirs));
   });
 });
 
