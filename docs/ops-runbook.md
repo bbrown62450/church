@@ -570,7 +570,8 @@ here.
 | 2. Content | Readings printed in full in NRSVue with the credit line; hymn lines in the `*HYMN: #409 "..."` form; people lines bold; names, music and announcements as [placeholders] | 2026-10-02 |
 | 3. Word version | "Download Word version" opened in reading order on small pages (phone) | 2026-10-02 |
 | 4. Layout | No sideways scroll on Review & send; with the date cleared both buttons were off | 2026-10-02 |
-| Pending | The print test on legal paper at the church (item 6: page order, nothing upside down, page numbers, nothing cut off) and opening the Word version in desktop Word without a warning. Results to be added here | |
+| Desktop Word | The owner opened a printed bulletin Word file (the PR 2a sample) in desktop Word: it opened without a warning and the cover fit on one page; the cover's picture box sat left of center (fixed in PR 2a) | 2026-10-03 |
+| Pending | The print test on legal paper at the church (item 6: page order, nothing upside down, page numbers, nothing cut off). Results to be added here | |
 | Follow-ups | Next: printed bulletin PR 2 (the Bulletin step, settings, announcements, `0006_services_bulletin`), PR 3 (the cover picture, `0007_bulletin_images`), Voices of the Church, 6a, Hear it from the pews. Minor bulletin items: "LORD" in small caps, cover overflow for long church names, Word heading keep-with-next, the placeholder for a multi-part reading | 2026-10-02 |
 
 ## Backups
