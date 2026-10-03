@@ -123,3 +123,31 @@ def test_every_field_is_required(client, church):
 def test_only_members_of_the_church(client, isolation_world):
     assert_church_isolated(client, "GET", PATH, world=isolation_world)
     assert_church_isolated(client, "PUT", PATH, world=isolation_world, json=BODY)
+
+
+@pytest.mark.parametrize("bulletin", [
+    {"phone": "(555)\x0b010-0100", "organist": "Jo\r\nDoe", "email": "x\x7fy", "website": "a\tb",
+     "liturgist": "Sam Sample", "address_lines": ["1 Main\nSt"]},
+])
+def test_a_stored_control_character_reads_as_a_space_and_put_takes_it_back(client, church, bulletin):
+    """Build review I1: GET always answers something PUT accepts, whatever another path stored."""
+    with session_scope() as s:
+        s.get(Church, church).settings = {"bulletin": bulletin}
+    r = get(client, church)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert (body["phone"], body["organist"], body["email"], body["website"], body["liturgist"]) == (
+        "(555) 010-0100", "Jo Doe", "x y", "a b", "Sam Sample")
+    assert body["address_lines"] == ["1 Main St"]
+    assert put(client, church, body).status_code == 200
+
+
+@pytest.mark.parametrize("char", [" ", " ", "\x85"])
+def test_a_unicode_line_break_is_not_one_line(client, church, char):
+    """Build review M5: U+2028, U+2029 and U+0085 are line breaks too (Word prints them as one)."""
+    for change, field in (({"organist": f"Jo{char}Doe"}, "organist"),
+                          ({"address_lines": [f"100 Example{char}Street"]}, "address_lines.0")):
+        r = put(client, church, {**BODY, **change})
+        assert r.status_code == 422, r.text
+        assert field in r.json()["error"]["fields"], r.text
+    assert "bulletin" not in stored(church)

@@ -125,7 +125,7 @@
           "address_lines": {
             "items": {
               "maxLength": 60,
-              "pattern": "^[^\\x00-\\x1f\\x7f]*$",
+              "pattern": "^[^\\x00-\\x1f\\x7f-\\x9f\\u2028\\u2029]*$",
               "type": "string"
             },
             "maxItems": 3,
@@ -134,13 +134,13 @@
           },
           "email": {
             "maxLength": 100,
-            "pattern": "^[^\\x00-\\x1f\\x7f]*$",
+            "pattern": "^[^\\x00-\\x1f\\x7f-\\x9f\\u2028\\u2029]*$",
             "title": "Email",
             "type": "string"
           },
           "facebook": {
             "maxLength": 60,
-            "pattern": "^[^\\x00-\\x1f\\x7f]*$",
+            "pattern": "^[^\\x00-\\x1f\\x7f-\\x9f\\u2028\\u2029]*$",
             "title": "Facebook",
             "type": "string"
           },
@@ -188,31 +188,31 @@
           },
           "liturgist": {
             "maxLength": 100,
-            "pattern": "^[^\\x00-\\x1f\\x7f]*$",
+            "pattern": "^[^\\x00-\\x1f\\x7f-\\x9f\\u2028\\u2029]*$",
             "title": "Liturgist",
             "type": "string"
           },
           "organist": {
             "maxLength": 100,
-            "pattern": "^[^\\x00-\\x1f\\x7f]*$",
+            "pattern": "^[^\\x00-\\x1f\\x7f-\\x9f\\u2028\\u2029]*$",
             "title": "Organist",
             "type": "string"
           },
           "phone": {
             "maxLength": 40,
-            "pattern": "^[^\\x00-\\x1f\\x7f]*$",
+            "pattern": "^[^\\x00-\\x1f\\x7f-\\x9f\\u2028\\u2029]*$",
             "title": "Phone",
             "type": "string"
           },
           "service_time": {
             "maxLength": 40,
-            "pattern": "^[^\\x00-\\x1f\\x7f]*$",
+            "pattern": "^[^\\x00-\\x1f\\x7f-\\x9f\\u2028\\u2029]*$",
             "title": "Service Time",
             "type": "string"
           },
           "stand_note": {
             "maxLength": 200,
-            "pattern": "^[^\\x00-\\x1f\\x7f]*$",
+            "pattern": "^[^\\x00-\\x1f\\x7f-\\x9f\\u2028\\u2029]*$",
             "title": "Stand Note",
             "type": "string"
           },
@@ -249,13 +249,13 @@
           },
           "website": {
             "maxLength": 100,
-            "pattern": "^[^\\x00-\\x1f\\x7f]*$",
+            "pattern": "^[^\\x00-\\x1f\\x7f-\\x9f\\u2028\\u2029]*$",
             "title": "Website",
             "type": "string"
           },
           "worship_leader": {
             "maxLength": 100,
-            "pattern": "^[^\\x00-\\x1f\\x7f]*$",
+            "pattern": "^[^\\x00-\\x1f\\x7f-\\x9f\\u2028\\u2029]*$",
             "title": "Worship Leader",
             "type": "string"
           }

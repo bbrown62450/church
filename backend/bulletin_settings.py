@@ -8,8 +8,10 @@ churches.settings["bulletin"] (no column, no migration).
   Gloria Patri words.
 - read(settings): the stored value read tolerantly. A missing settings object,
   a missing "bulletin" key or a field of the wrong type is that field's
-  default; unknown element keys and roles are dropped, and a text longer than
-  its limit is cut to it (so GET always answers within PUT's limits). The defaults are PR 1's
+  default; unknown element keys and roles are dropped; every text but the
+  Gloria Patri words is made one line (each run of control characters, C1
+  controls or U+2028/U+2029 becomes one space); and a text longer than its
+  limit is cut to it (so GET always answers something PUT accepts). The defaults are PR 1's
   (the owner's sample): no contact lines, no names and no time (a blank field
   prints nothing, PR 2 planning answer 3), the sample's stars and leader roles,
   "Congregation stands if able" and the traditional Gloria Patri.
@@ -21,6 +23,7 @@ Pure: no database, FastAPI or rendering here.
 """
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Literal
@@ -54,6 +57,11 @@ DEFAULT_STARRED = frozenset({"first_hymn", "gloria_patri", "affirmation_of_faith
 DEFAULT_STAND_NOTE = "Congregation stands if able"
 GLORIA_PATRI = ("Glory be to the Father, and to the Son, and to the Holy Ghost; as it was in the "
                 "beginning, is now, and ever shall be, world without end. Amen, amen.")
+
+# What one printed line cannot hold: a control character (C0, DEL, C1, which includes U+0085 NEXT LINE) or
+# U+2028/U+2029 (Word prints them as a line break). PUT's one-line check refuses them (api/routes/bulletin_settings).
+NOT_ONE_LINE = r"\x00-\x1f\x7f-\x9f\u2028\u2029"
+_NOT_ONE_LINE_RUN = re.compile(f" *[{NOT_ONE_LINE}][{NOT_ONE_LINE} ]*")
 
 _LIMIT = {"worship_leader": "person", "liturgist": "person", "organist": "person"}
 _TEXT_FIELDS = ("phone", "email", "website", "facebook", "service_time", "worship_leader", "liturgist", "organist",
@@ -91,6 +99,12 @@ class BulletinSettings:
         }
 
 
+def _one_line(value: str, limit: int) -> str:
+    """value as one printed line: each run of characters NOT_ONE_LINE names (and the spaces around it) becomes
+    one space, then trimmed and cut to `limit`."""
+    return _NOT_ONE_LINE_RUN.sub(" ", value).strip()[:limit].strip()
+
+
 def read(settings: object) -> BulletinSettings:
     """churches.settings["bulletin"], read tolerantly (see the module docstring)."""
     stored = settings.get("bulletin") if isinstance(settings, Mapping) else None
@@ -99,13 +113,19 @@ def read(settings: object) -> BulletinSettings:
     values: dict = {}
     for name in _TEXT_FIELDS:
         value = stored.get(name)
-        if isinstance(value, str):
-            value = value.strip().lstrip("*").strip() if name == "stand_note" else value.strip()   # the star is printed
-            values[name] = value[:MAX_LENGTH[_LIMIT.get(name, name)]]
+        if not isinstance(value, str):
+            continue
+        limit = MAX_LENGTH[_LIMIT.get(name, name)]
+        if name == "gloria_patri_words":                    # the one text that may take more than one line
+            values[name] = value.strip()[:limit]
+        elif name == "stand_note":                          # the star is printed
+            values[name] = _one_line(_one_line(value, len(value)).lstrip("*"), limit)
+        else:
+            values[name] = _one_line(value, limit)
     lines = stored.get("address_lines")
     if isinstance(lines, list):
-        values["address_lines"] = tuple(line.strip()[:MAX_LENGTH["address_line"]] for line in lines
-                                        if isinstance(line, str) and line.strip())[:MAX_ADDRESS_LINES]
+        cleaned = (_one_line(line, MAX_LENGTH["address_line"]) for line in lines if isinstance(line, str))
+        values["address_lines"] = tuple(line for line in cleaned if line)[:MAX_ADDRESS_LINES]
     starred = stored.get("starred")
     if isinstance(starred, list):
         values["starred"] = frozenset(key for key in starred if key in ELEMENT_KEYS)

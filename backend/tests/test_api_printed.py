@@ -185,4 +185,4 @@ def test_a_stored_control_character_still_prints_in_word(client, church, calls):
     r = post(client, church, {"format": "docx", "service": SERVICE})
     assert r.status_code == 200, r.text
     paragraphs = [p.text for p in Document(BytesIO(r.content)).paragraphs]
-    assert "Jordan Doe, Organist" in paragraphs and "(555)\n010-0100" in paragraphs
+    assert "Jordan Doe, Organist" in paragraphs and "(555) 010-0100" in paragraphs   # one line (build review I1)

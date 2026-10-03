@@ -49,3 +49,20 @@ def test_a_field_of_the_wrong_type_is_its_default_and_a_long_text_is_cut():
                               "gloria_patri_words": ""}})
     assert s == bs.BulletinSettings(organist="x" * 100, gloria_patri_words="")
     assert s.leader("prelude") == "x" * 100 and s.leader("sermon") == ""
+
+
+def test_every_text_but_the_gloria_patri_words_reads_as_one_line():
+    """Build review I1: a control character, a C1 control or U+2028/U+2029 stored by any other path reads as a
+    space, so GET always answers something PUT accepts; the Gloria Patri words keep their lines."""
+    s = bs.read({"bulletin": {
+        "phone": "(555)\n010-0100", "email": "x\x7fy", "website": "a \t b", "facebook": "\tExample\r\n",
+        "service_time": "10:30 a.m.", "worship_leader": "Alex Example", "liturgist": "Sam\x85Sample",
+        "organist": "Jo\r\nDoe", "stand_note": "\n* Please\x0bstand", "gloria_patri_words": "Glory be.\nAmen.",
+        "address_lines": ["1 Main\nSt", "\x0b\t", "Springfield"],
+    }})
+    assert (s.phone, s.email, s.website, s.facebook) == ("(555) 010-0100", "x y", "a b", "Example")
+    assert (s.service_time, s.worship_leader, s.liturgist, s.organist) == (
+        "10:30 a.m.", "Alex Example", "Sam Sample", "Jo Doe")
+    assert s.stand_note == "Please stand"
+    assert s.address_lines == ("1 Main St", "Springfield")
+    assert s.gloria_patri_words == "Glory be.\nAmen."

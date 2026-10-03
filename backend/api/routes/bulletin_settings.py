@@ -7,7 +7,7 @@ defaults. PUT: admins and owners only (require_admin; a member's PUT is the
 role 403 "Only church admins can do this."), the whole object every time
 (extra="forbid", every field required), each text trimmed and within its
 limit, every text but the Gloria Patri words on one line (no line break, tab
-or other control character: a 422 naming the field), the starred elements and the leaders from bulletin_settings'
+or other control character, no U+2028/U+2029: a 422 naming the field), the starred elements and the leaders from bulletin_settings'
 ELEMENT_KEYS and ROLES. It answers what is stored. No Idempotency-Key (a PUT
 of the same body stores the same value) and no If-Match: the later of two
 saves wins (plan clarification 6). Plain `def`, no SQL, no try/except
@@ -29,8 +29,9 @@ ElementKey = Literal[bs.ELEMENT_KEYS]
 Role = Literal[bs.ROLES]
 
 
-# One printed line: no control character (a line break or a tab would break the cover or the header).
-ONE_LINE = r"^[^\x00-\x1f\x7f]*$"
+# One printed line: no control character (a line break or a tab would break the cover or the header), no C1
+# control (U+0085 NEXT LINE among them) and no U+2028/U+2029 (Word prints them as a line break).
+ONE_LINE = f"^[^{bs.NOT_ONE_LINE}]*$"
 
 
 def _text(field: str):
