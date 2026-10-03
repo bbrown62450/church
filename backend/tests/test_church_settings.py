@@ -11,6 +11,7 @@ from repos.churches import (
     get_church_prompts, set_church_prompts,
     get_church_translation, set_church_translation,
     get_church_rubric, get_church_rubric_overrides, update_church_rubric,
+    set_bulletin_settings,
 )
 from service_rubric import default_rubric
 
@@ -134,7 +135,8 @@ def test_settings_writes_lock_the_church_row(tmp_db, make_user):
     and a rubric PATCH) are serialized, so neither overwrites the other."""
     cid = create_church(name="L2", timezone="UTC", owner_user_id=make_user(email="l2@x.org"))
     for write in (lambda: set_church_translation(cid, "esv"),
-                  lambda: set_church_prompts(cid, {"benediction": "Go in peace."})):
+                  lambda: set_church_prompts(cid, {"benediction": "Go in peace."}),
+                  lambda: set_bulletin_settings(cid, {"phone": "(555) 010-0100"})):
         with _record_church_row_access() as (reads, writes):
             write()
         assert len(writes) == 1

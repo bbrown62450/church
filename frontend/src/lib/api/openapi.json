@@ -119,6 +119,165 @@
         "title": "AuthorOut",
         "type": "object"
       },
+      "BulletinSettings": {
+        "additionalProperties": false,
+        "properties": {
+          "address_lines": {
+            "items": {
+              "maxLength": 60,
+              "pattern": "^[^\\x00-\\x1f\\x7f]*$",
+              "type": "string"
+            },
+            "maxItems": 3,
+            "title": "Address Lines",
+            "type": "array"
+          },
+          "email": {
+            "maxLength": 100,
+            "pattern": "^[^\\x00-\\x1f\\x7f]*$",
+            "title": "Email",
+            "type": "string"
+          },
+          "facebook": {
+            "maxLength": 60,
+            "pattern": "^[^\\x00-\\x1f\\x7f]*$",
+            "title": "Facebook",
+            "type": "string"
+          },
+          "gloria_patri_words": {
+            "maxLength": 1000,
+            "title": "Gloria Patri Words",
+            "type": "string"
+          },
+          "leaders": {
+            "additionalProperties": {
+              "enum": [
+                "worship_leader",
+                "liturgist",
+                "organist"
+              ],
+              "type": "string"
+            },
+            "propertyNames": {
+              "enum": [
+                "prelude",
+                "welcome",
+                "call_to_worship",
+                "opening_prayer",
+                "first_hymn",
+                "prayer_of_confession",
+                "assurance",
+                "gloria_patri",
+                "prayer_for_illumination",
+                "ot_reading",
+                "nt_reading",
+                "sermon",
+                "affirmation_of_faith",
+                "second_hymn",
+                "prayers_of_the_people",
+                "offering",
+                "doxology",
+                "offertory_prayer",
+                "third_hymn",
+                "benediction",
+                "postlude"
+              ]
+            },
+            "title": "Leaders",
+            "type": "object"
+          },
+          "liturgist": {
+            "maxLength": 100,
+            "pattern": "^[^\\x00-\\x1f\\x7f]*$",
+            "title": "Liturgist",
+            "type": "string"
+          },
+          "organist": {
+            "maxLength": 100,
+            "pattern": "^[^\\x00-\\x1f\\x7f]*$",
+            "title": "Organist",
+            "type": "string"
+          },
+          "phone": {
+            "maxLength": 40,
+            "pattern": "^[^\\x00-\\x1f\\x7f]*$",
+            "title": "Phone",
+            "type": "string"
+          },
+          "service_time": {
+            "maxLength": 40,
+            "pattern": "^[^\\x00-\\x1f\\x7f]*$",
+            "title": "Service Time",
+            "type": "string"
+          },
+          "stand_note": {
+            "maxLength": 200,
+            "pattern": "^[^\\x00-\\x1f\\x7f]*$",
+            "title": "Stand Note",
+            "type": "string"
+          },
+          "starred": {
+            "items": {
+              "enum": [
+                "prelude",
+                "welcome",
+                "call_to_worship",
+                "opening_prayer",
+                "first_hymn",
+                "prayer_of_confession",
+                "assurance",
+                "gloria_patri",
+                "prayer_for_illumination",
+                "ot_reading",
+                "nt_reading",
+                "sermon",
+                "affirmation_of_faith",
+                "second_hymn",
+                "prayers_of_the_people",
+                "offering",
+                "doxology",
+                "offertory_prayer",
+                "third_hymn",
+                "benediction",
+                "postlude"
+              ],
+              "type": "string"
+            },
+            "maxItems": 21,
+            "title": "Starred",
+            "type": "array"
+          },
+          "website": {
+            "maxLength": 100,
+            "pattern": "^[^\\x00-\\x1f\\x7f]*$",
+            "title": "Website",
+            "type": "string"
+          },
+          "worship_leader": {
+            "maxLength": 100,
+            "pattern": "^[^\\x00-\\x1f\\x7f]*$",
+            "title": "Worship Leader",
+            "type": "string"
+          }
+        },
+        "required": [
+          "address_lines",
+          "phone",
+          "email",
+          "website",
+          "facebook",
+          "service_time",
+          "worship_leader",
+          "liturgist",
+          "organist",
+          "stand_note",
+          "starred",
+          "gloria_patri_words",
+          "leaders"
+        ],
+        "title": "BulletinSettings",
+        "type": "object"
+      },
       "CardNotesOut": {
         "properties": {
           "notes": {
@@ -2932,6 +3091,198 @@
           }
         },
         "summary": "Church"
+      }
+    },
+    "/church/bulletin-settings": {
+      "get": {
+        "operationId": "read_bulletin_settings_church_bulletin_settings_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-church-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Church-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulletinSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Read Bulletin Settings"
+      },
+      "put": {
+        "operationId": "save_bulletin_settings_church_bulletin_settings_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-church-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Church-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulletinSettings"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulletinSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Save Bulletin Settings"
       }
     },
     "/churches": {

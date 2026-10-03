@@ -21,6 +21,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/church/bulletin-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Bulletin Settings */
+        get: operations["read_bulletin_settings_church_bulletin_settings_get"];
+        /** Save Bulletin Settings */
+        put: operations["save_bulletin_settings_church_bulletin_settings_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/churches": {
         parameters: {
             query?: never;
@@ -488,6 +506,37 @@ export interface components {
             id: string;
             /** Name */
             name: string;
+        };
+        /** BulletinSettings */
+        BulletinSettings: {
+            /** Address Lines */
+            address_lines: string[];
+            /** Email */
+            email: string;
+            /** Facebook */
+            facebook: string;
+            /** Gloria Patri Words */
+            gloria_patri_words: string;
+            /** Leaders */
+            leaders: {
+                [key: string]: "worship_leader" | "liturgist" | "organist";
+            };
+            /** Liturgist */
+            liturgist: string;
+            /** Organist */
+            organist: string;
+            /** Phone */
+            phone: string;
+            /** Service Time */
+            service_time: string;
+            /** Stand Note */
+            stand_note: string;
+            /** Starred */
+            starred: ("prelude" | "welcome" | "call_to_worship" | "opening_prayer" | "first_hymn" | "prayer_of_confession" | "assurance" | "gloria_patri" | "prayer_for_illumination" | "ot_reading" | "nt_reading" | "sermon" | "affirmation_of_faith" | "second_hymn" | "prayers_of_the_people" | "offering" | "doxology" | "offertory_prayer" | "third_hymn" | "benediction" | "postlude")[];
+            /** Website */
+            website: string;
+            /** Worship Leader */
+            worship_leader: string;
         };
         /** CardNotesOut */
         CardNotesOut: {
@@ -1504,6 +1553,128 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ChurchProfileOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    read_bulletin_settings_church_bulletin_settings_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-church-id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulletinSettings"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    save_bulletin_settings_church_bulletin_settings_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-church-id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulletinSettings"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulletinSettings"];
                 };
             };
             /** @description Unauthorized */
