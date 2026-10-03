@@ -1,6 +1,7 @@
 """The printed bulletin's two files (printed bulletin spec, PR 1): the
 print-ready PDF (printed_pdf) and the Word file (printed_docx), read back
 with pypdf and python-docx."""
+import dataclasses
 import datetime
 from io import BytesIO
 
@@ -9,10 +10,12 @@ from docx.oxml.ns import qn
 from docx.shared import Inches
 from pypdf import PdfReader
 
+import bulletin_settings as bs
 import printed_bulletin as pb
 import printed_docx
 import printed_pdf
 from service_output import ResolvedHymn, ResolvedService
+from tests.test_printed_bulletin import SETTINGS
 
 VERSE = "And he answered, I will not; but afterward he repented and went. "
 
@@ -27,7 +30,7 @@ def service(verses: int = 20) -> pb.PrintedService:
                  "benediction": "Go in peace. - A Friend"},
         sermon_title="Who Said?")
     return pb.PrintedService("Example Church", resolved, pb.Reading("Psalm 25:1-9", "In you, Lord, I put my trust."),
-                             pb.Reading("Matthew 21:23-32", VERSE * verses), "World English Bible (WEB)")
+                             pb.Reading("Matthew 21:23-32", VERSE * verses), "World English Bible (WEB)", SETTINGS)
 
 
 def sides(content: bytes) -> list[str]:
@@ -56,11 +59,11 @@ def test_the_pdf_is_legal_landscape_sides_with_two_pages_each_in_reading_order()
     assert [(float(p.mediabox.width), float(p.mediabox.height)) for p in reader.pages] == [(1008.0, 612.0)] * 2
     pages = halves(content)
     # Side 1: the cover (no number), then page 1; side 2: pages 2 and 3 (the announcements, last).
-    assert pages[0].startswith("Example Church [Cover picture] Matthew 21:23-32 September 27, 2026 [Street address]")
-    assert pages[0].endswith("FB: [Facebook name]")
-    assert pages[1].startswith("1 THE SERVICE FOR THE LORD’S DAY Example Church [Worship leader], Worship Leader")
+    assert pages[0].startswith("Example Church [Cover picture] Matthew 21:23-32 September 27, 2026 100 Example Street")
+    assert pages[0].endswith("FB: Example Church")
+    assert pages[1].startswith("1 THE SERVICE FOR THE LORD’S DAY Example Church Rev. Alex Example, Worship Leader")
     # The long reading starts under its heading on page 1 and runs on to page 2 (no gap before it).
-    assert f"NEW TESTAMENT READING: Matthew 21:23-32 [Worship leader] {VERSE.strip()}" in pages[1]
+    assert f"NEW TESTAMENT READING: Matthew 21:23-32 Rev. Alex Example {VERSE.strip()}" in pages[1]
     assert pages[2].startswith("2 And he answered") and pages[2].endswith("*Congregation stands if able")
     assert pages[3].startswith("3 ANNOUNCEMENTS September 27, 2026") and pages[3].endswith("[Collection items]")
 
@@ -68,12 +71,12 @@ def test_the_pdf_is_legal_landscape_sides_with_two_pages_each_in_reading_order()
 def test_the_pdf_prints_the_service_and_its_readings():
     text = " ".join(sides(printed_pdf.render_pdf(service())))
     for expected in ("*HYMN: #409 “God Is Here!”", "*HYMN: #265 “Jesus Shall Reign Where’er the Sun”",
-                     "CALL TO WORSHIP [Liturgist]", "Leader: Lift up your hearts.",
+                     "CALL TO WORSHIP Sam Sample", "Leader: Lift up your hearts.",
                      "People: We come, ready to listen and learn.", "FIRST READING: Psalm 25:1-9",
-                     "In you, Lord, I put my trust.", "NEW TESTAMENT READING: Matthew 21:23-32 [Worship leader]",
+                     "In you, Lord, I put my trust.", "NEW TESTAMENT READING: Matthew 21:23-32 Rev. Alex Example",
                      "Scripture readings are from the World English Bible (WEB).", "SERMON: “Who Said?”",
                      "I believe in God, the Father almighty", "*Congregation stands if able",
-                     "POSTLUDE: ‘[Postlude title]’ [Organist]", "Go in peace. - A Friend"):
+                     "POSTLUDE: ‘[Postlude title]’ Jordan Doe", "Go in peace. - A Friend"):
         assert expected in text, expected
 
 
@@ -104,10 +107,10 @@ def test_the_word_file_is_the_same_booklet_in_reading_order():
     assert doc.tables[0].cell(0, 0).paragraphs[1].text == "Matthew 21:23-32"
     starts = [p.text for p in doc.paragraphs if p.paragraph_format.page_break_before]
     assert starts == ["THE SERVICE FOR THE LORD’S DAY", "ANNOUNCEMENTS"]
-    for expected in ("*HYMN:  #409  “God Is Here!”", "CALL TO WORSHIP\t[Liturgist]",
-                     "People: We come, ready to listen and learn.", "FIRST READING:  Psalm 25:1-9\t[Liturgist]",
+    for expected in ("*HYMN:  #409  “God Is Here!”", "CALL TO WORSHIP\tSam Sample",
+                     "People: We come, ready to listen and learn.", "FIRST READING:  Psalm 25:1-9\tSam Sample",
                      "Scripture readings are from the World English Bible (WEB).", "*Congregation stands if able",
-                     "FB: [Facebook name]", "Coffee Hour: [Name]"):
+                     "FB: Example Church", "Coffee Hour: [Name]"):
         assert expected in paragraphs, expected
     people = next(p for p in doc.paragraphs if p.text.startswith("People: We come"))
     assert all(run.bold for run in people.runs)
@@ -117,3 +120,21 @@ def test_the_word_file_is_the_same_booklet_in_reading_order():
     children = [child.tag.split("}")[1] for child in section._sectPr]
     assert children == ["footerReference", "pgSz", "pgMar", "pgNumType", "cols", "titlePg", "docGrid"]
     assert section._sectPr.find(qn("w:pgNumType")).get(qn("w:start")) == "0"
+
+
+def test_the_longest_details_still_fit_the_cover():
+    """PR 2a: at every limit, with a church name of two lines, the contact lines shrink to fit the cover, so
+    the order of worship still starts on page 1 (side 1 stays the cover and page 1)."""
+    def longest(field: str, word: str) -> str:
+        return (word * bs.MAX_LENGTH[field])[:bs.MAX_LENGTH[field]].strip()
+
+    settings = bs.BulletinSettings(
+        address_lines=tuple(longest("address_line", f"{n}00 Example Street ") for n in (1, 2, 3)),
+        phone=longest("phone", "(555) 010-0100 "), email=longest("email", "office.")[:-12] + "@example.com",
+        website=longest("website", "example.com/"), facebook=longest("facebook", "Example Church "),
+        **{role: longest("person", "Alex Example ") for role in bs.ROLES})
+    ps = dataclasses.replace(service(), church_name="The First Presbyterian Church of Springfield", settings=settings)
+    pages = halves(printed_pdf.render_pdf(ps))
+    assert pages[0].startswith("The First Presbyterian Church of Springfield [Cover picture]")
+    assert pages[0].endswith(f"FB: {settings.facebook}")
+    assert pages[1].startswith("1 THE SERVICE FOR THE LORD’S DAY The First Presbyterian Church of Springfield")

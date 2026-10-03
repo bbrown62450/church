@@ -89,8 +89,8 @@ def test_the_pdf_downloads_with_the_file_headers_and_the_readings_text(client, c
     assert r.headers["cache-control"] == "no-store"
     text = pdf_text(r.content)
     assert "Example Church" in text and "*HYMN: #12 “Old Favorite”" in text
-    assert "FIRST READING: Isaiah 5:1-7 [Liturgist] [Reading text unavailable] NEW TESTAMENT" in text
-    assert "NEW TESTAMENT READING: Philippians 3:4b-14 [Worship leader] Text of Philippians 3:4-14 (kjv). Second verse." in text
+    assert "FIRST READING: Isaiah 5:1-7 [Reading text unavailable] NEW TESTAMENT" in text      # no names saved yet
+    assert "NEW TESTAMENT READING: Philippians 3:4b-14 Text of Philippians 3:4-14 (kjv). Second verse." in text
     assert "Scripture readings are from the King James Version (KJV)." in text
     assert calls == [("Isaiah 5:1-7", "kjv"), ("Philippians 3:4-14", "kjv")]
     assert "We pray." not in text

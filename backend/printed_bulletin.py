@@ -10,9 +10,12 @@ python-docx here.
   liturgy_config.OUTLINE (the Word copies' order) with the parts the owner's
   sample bulletin adds (Prelude, Welcome and Announcements, the sung
   responses, the Offering, the Postlude) and its four section headings.
-- Anything the app does not know yet (the church's address, the people who
-  lead, the music, the announcements) prints as a [bracketed placeholder];
-  PR 2 fills them from the Bulletin step and the bulletin settings.
+- The standing details (the church's contact lines, the people who lead and
+  what each leads, the service time, the stars, the stand note and the Gloria
+  Patri words) come from the church's bulletin settings (PR 2a,
+  bulletin_settings); a blank one prints nothing (PR 2 planning answer 3).
+  The weekly fields (the music, the announcements, the cover picture) print
+  as [bracketed placeholders] until PR 2b's Bulletin step and PR 3 fill them.
 - printed_date, printed_filename, PDF_MIME.
 """
 from __future__ import annotations
@@ -23,6 +26,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Literal, Optional
 
+from bulletin_settings import GLORIA_PATRI, BulletinSettings
 from liturgy_config import ASSURANCE_RESPONSE, COMMUNION_BLOCKS
 from service_output import MONTHS, ResolvedHymn, ResolvedService, safe_date, service_date_display
 
@@ -33,32 +37,15 @@ Format = Literal["pdf", "docx"]
 PAGE_WIDTH = 504.0          # points
 PAGE_HEIGHT = 612.0
 
-# PR 1's placeholders: what PR 2's settings and Bulletin step fill in.
-WORSHIP_LEADER = "[Worship leader]"
-LITURGIST = "[Liturgist]"
-ORGANIST = "[Organist]"
-SERVICE_TIME = "[Service time]"
-CONTACT_LINES = ("[Street address]", "[City, State ZIP]", "[Phone]", "[Email]", "[Website]",
-                 "FB: [Facebook name]")
+# The weekly fields' placeholders, until PR 2b's Bulletin step and PR 3 fill them.
 PRELUDE = ("[Prelude title]", "[Composer]")
 POSTLUDE = ("[Postlude title]", "[Composer]")
 COVER_PICTURE = "[Cover picture]"
 TEXT_UNAVAILABLE = "[Reading text unavailable]"
 
-# Who leads each element until PR 2's settings say (the owner's sample).
-LEADERS: dict[str, str] = {
-    "prelude": ORGANIST, "welcome": LITURGIST, "call_to_worship": LITURGIST, "opening_prayer": LITURGIST,
-    "prayer_of_confession": LITURGIST, "assurance": LITURGIST, "prayer_for_illumination": LITURGIST,
-    "ot_reading": LITURGIST, "nt_reading": WORSHIP_LEADER, "sermon": WORSHIP_LEADER,
-    "prayers_of_the_people": WORSHIP_LEADER, "offertory_prayer": WORSHIP_LEADER, "postlude": ORGANIST,
-}
-# The elements printed with the star of STAND_NOTE (the owner's sample).
-STARRED = frozenset({"first_hymn", "gloria_patri", "affirmation_of_faith", "second_hymn", "doxology",
-                     "third_hymn", "benediction"})
-STAND_NOTE = "*Congregation stands if able"
+# The header's people, as "{name}, Worship Leader" (bulletin_settings.ROLES order).
+ROLE_TITLES = {"worship_leader": "Worship Leader", "liturgist": "Liturgist", "organist": "Organist"}
 
-GLORIA_PATRI = ("Glory be to the Father, and to the Son, and to the Holy Ghost; as it was in the "
-                "beginning, is now, and ever shall be, world without end. Amen, amen.")
 APOSTLES_CREED = (
     "I believe in God, the Father almighty, Maker of heaven and earth, and in Jesus Christ his only "
     "Son, our Lord; who was conceived by the Holy Ghost, born of the Virgin Mary, suffered under "
@@ -105,6 +92,7 @@ class PrintedService:
     ot: Optional[Reading] = None
     nt: Optional[Reading] = None
     translation_label: str = ""
+    settings: BulletinSettings = BulletinSettings()      # the church's standing settings (PR 2a)
 
 
 def printed_date(d: datetime.date) -> str:
@@ -162,61 +150,59 @@ def _assurance(text: str) -> list[Line]:
     return [*lines, Line("bold", (Span(ASSURANCE_RESPONSE, bold=True),))]
 
 
-def _star(key: str) -> str:
-    return "*" if key in STARRED else ""
-
-
-def _element(key: str, label: str, *value: Span) -> Line:
-    """An element's heading: the label in capitals and bold, then its value,
-    and the leader right-aligned."""
-    return Line("element", (Span(f"{_star(key)}{label.upper()}", bold=True), *value), right=LEADERS.get(key, ""))
+def _element(s: BulletinSettings, key: str, label: str, *value: Span) -> Line:
+    """An element's heading: the label in capitals and bold (with the stand
+    star when the settings star it), then its value, and the leader's name
+    right-aligned (none when the element has no role or the role no name)."""
+    star = "*" if key in s.starred else ""
+    return Line("element", (Span(f"{star}{label.upper()}", bold=True), *value), right=s.leader(key))
 
 
 def _quoted(text: str) -> Span:
     return Span(f"“{text}”", bold=True, italic=True)
 
 
-def _hymn(key: str, hymn: Optional[ResolvedHymn]) -> list[Line]:
+def _hymn(s: BulletinSettings, key: str, hymn: Optional[ResolvedHymn]) -> list[Line]:
     """*HYMN: #409 "God Is Here!"; an empty slot prints nothing (as the Word copies)."""
     if hymn is None or not hymn.title.strip():
         return []
     number = [] if hymn.number is None else [Span(f"#{hymn.number}  ", bold=True)]
-    return [_element(key, "Hymn:", Span("  "), *number, _quoted(hymn.title))]
+    return [_element(s, key, "Hymn:", Span("  "), *number, _quoted(hymn.title))]
 
 
-def _text_element(key: str, label: str, text: str, style: Style = "body") -> list[Line]:
+def _text_element(s: BulletinSettings, key: str, label: str, text: str, style: Style = "body") -> list[Line]:
     if not text:
         return []
-    return [_element(key, label), Line(style, (Span(text, bold=style == "bold"),))]
+    return [_element(s, key, label), Line(style, (Span(text, bold=style == "bold"),))]
 
 
-def _custom(anchor: str, resolved: ResolvedService) -> list[Line]:
+def _custom(s: BulletinSettings, anchor: str, resolved: ResolvedService) -> list[Line]:
     lines = []
     for element in resolved.custom_elements:
         if element.insert_after == anchor and element.label:
-            lines.append(_element("", element.label))
+            lines.append(_element(s, "", element.label))
             if element.text:
                 lines.append(Line("body", (Span(element.text),)))
     return lines
 
 
-def _reading(key: str, label: str, reading: Optional[Reading]) -> list[Line]:
+def _reading(s: BulletinSettings, key: str, label: str, reading: Optional[Reading]) -> list[Line]:
     if reading is None:
         return []
-    lines = [_element(key, f"{label}:", Span(f"  {reading.reference}", bold=True))]
+    lines = [_element(s, key, f"{label}:", Span(f"  {reading.reference}", bold=True))]
     if reading.text is None:
         return [*lines, Line("body", (Span(TEXT_UNAVAILABLE),))]
     return [*lines, *(Line("body", (Span(p),)) for p in reading_paragraphs(reading.text))]
 
 
-def _communion() -> list[Line]:
+def _communion(s: BulletinSettings) -> list[Line]:
     """liturgy_config.COMMUNION_BLOCKS, as the Word copies print them."""
     lines = []
     for block in COMMUNION_BLOCKS:
         if block.style == "heading1":
             lines.append(Line("section", (Span(block.text, bold=True, italic=True),)))
         elif block.style == "heading2":
-            lines.append(_element("", block.text))
+            lines.append(_element(s, "", block.text))
         elif block.style == "response":
             lines.append(Line("bold", (Span(block.text, bold=True),)))
         elif block.style == "text":
@@ -228,80 +214,101 @@ def _section(title: str) -> Line:
     return Line("section", (Span(title, bold=True, italic=True),))
 
 
-def _music(key: str, label: str, piece: tuple[str, str]) -> list[Line]:
+def _music(s: BulletinSettings, key: str, label: str, piece: tuple[str, str]) -> list[Line]:
     title, composer = piece
-    return [_element(key, f"{label}:", Span("  "), Span(f"‘{title}’", bold=True, italic=True)),
+    return [_element(s, key, f"{label}:", Span("  "), Span(f"‘{title}’", bold=True, italic=True)),
             Line("indent", (Span(f"- {composer}"),))]
+
+
+def _header(ps: PrintedService) -> list[Line]:
+    """"THE SERVICE FOR THE LORD'S DAY", the church, each person with a name
+    ("{name}, Worship Leader"), and the date with the service time across."""
+    s = ps.settings
+    people = [Line("header", (Span(f"{getattr(s, role)}, {title}", bold=True),))
+              for role, title in ROLE_TITLES.items() if getattr(s, role)]
+    return [
+        Line("header", (Span("THE SERVICE FOR THE LORD’S DAY", bold=True),)),
+        Line("header", (Span(ps.church_name, bold=True),)),
+        *people,
+        Line("element", (Span(printed_date(ps.resolved.service_date), bold=True),), right=s.service_time),
+    ]
 
 
 def order_of_worship(ps: PrintedService) -> list[Line]:
     """The inside pages: the service header, then the elements in OUTLINE
     order with the sample's additions, each custom element after its anchor."""
     r = ps.resolved
+    s = ps.settings
     lit: Mapping[str, str] = r.liturgy
     hymns = r.hymns
     sermon = r.sermon_title.strip() or "[Sermon title]"
     lines: list[Line] = [
-        Line("header", (Span("THE SERVICE FOR THE LORD’S DAY", bold=True),)),
-        Line("header", (Span(ps.church_name, bold=True),)),
-        Line("header", (Span(f"{WORSHIP_LEADER}, Worship Leader", bold=True),)),
-        Line("header", (Span(f"{LITURGIST}, Liturgist", bold=True),)),
-        Line("header", (Span(f"{ORGANIST}, Organist", bold=True),)),
-        Line("element", (Span(printed_date(r.service_date), bold=True),), right=SERVICE_TIME),
+        *_header(ps),
         _section("GATHERING FOR WORSHIP"),
-        *_music("prelude", "Prelude", PRELUDE),
-        _element("welcome", "Welcome and Announcements"),
+        *_music(s, "prelude", "Prelude", PRELUDE),
+        _element(s, "welcome", "Welcome and Announcements"),
     ]
     if lit.get("call_to_worship"):
-        lines += [_element("call_to_worship", "Call to Worship"), *_leader_people(lit["call_to_worship"])]
-    lines += _custom("call_to_worship", r)
-    lines += _text_element("opening_prayer", "Opening Prayer", lit.get("opening_prayer", ""))
-    lines += _custom("opening_prayer", r)
-    lines += _hymn("first_hymn", hymns.get("opening"))
-    lines += _custom("first_hymn", r)
-    lines += _text_element("prayer_of_confession", "Prayer of Confession", lit.get("prayer_of_confession", ""), "bold")
-    lines += _custom("prayer_of_confession", r)
+        lines += [_element(s, "call_to_worship", "Call to Worship"), *_leader_people(lit["call_to_worship"])]
+    lines += _custom(s, "call_to_worship", r)
+    lines += _text_element(s, "opening_prayer", "Opening Prayer", lit.get("opening_prayer", ""))
+    lines += _custom(s, "opening_prayer", r)
+    lines += _hymn(s, "first_hymn", hymns.get("opening"))
+    lines += _custom(s, "first_hymn", r)
+    lines += _text_element(s, "prayer_of_confession", "Prayer of Confession", lit.get("prayer_of_confession", ""),
+                           "bold")
+    lines += _custom(s, "prayer_of_confession", r)
     if lit.get("assurance"):
-        lines += [_element("assurance", "Assurance of Pardon"), *_assurance(lit["assurance"])]
-    lines += _custom("assurance", r)
-    lines += [_element("gloria_patri", "Sung Response:", Span("  "), _quoted("Gloria Patri")),
-              Line("bold", (Span(GLORIA_PATRI, bold=True, italic=True),))]
-    lines += _text_element("prayer_for_illumination", "Prayer for Illumination", lit.get("prayer_for_illumination", ""))
-    lines += _custom("prayer_for_illumination", r)
+        lines += [_element(s, "assurance", "Assurance of Pardon"), *_assurance(lit["assurance"])]
+    lines += _custom(s, "assurance", r)
+    lines.append(_element(s, "gloria_patri", "Sung Response:", Span("  "), _quoted("Gloria Patri")))
+    if s.gloria_patri_words:
+        lines.append(Line("bold", (Span(s.gloria_patri_words, bold=True, italic=True),)))
+    lines += _text_element(s, "prayer_for_illumination", "Prayer for Illumination",
+                           lit.get("prayer_for_illumination", ""))
+    lines += _custom(s, "prayer_for_illumination", r)
     lines.append(_section("RECEIVING THE WORD"))
-    lines += _reading("ot_reading", "First Reading", ps.ot)
-    lines += _custom("ot_reading", r)
-    lines += _reading("nt_reading", "New Testament Reading", ps.nt)
+    lines += _reading(s, "ot_reading", "First Reading", ps.ot)
+    lines += _custom(s, "ot_reading", r)
+    lines += _reading(s, "nt_reading", "New Testament Reading", ps.nt)
     if (ps.ot or ps.nt) and ps.translation_label:
         lines.append(Line("credit", (Span(f"Scripture readings are from the {ps.translation_label}.", italic=True),)))
-    lines += _custom("nt_reading", r)
-    lines.append(_element("sermon", "Sermon:", Span("  "), _quoted(sermon)))
-    lines += _custom("sermon", r)
-    lines += [_element("affirmation_of_faith", "Affirmation of Faith:", Span("  "),
+    lines += _custom(s, "nt_reading", r)
+    lines.append(_element(s, "sermon", "Sermon:", Span("  "), _quoted(sermon)))
+    lines += _custom(s, "sermon", r)
+    lines += [_element(s, "affirmation_of_faith", "Affirmation of Faith:", Span("  "),
                        Span("“The Apostles’ Creed”", bold=True)),
               Line("bold", (Span(APOSTLES_CREED, bold=True),))]
-    lines += _custom("affirmation_of_faith", r)
-    lines += _hymn("second_hymn", hymns.get("response"))
-    lines += _custom("second_hymn", r)
+    lines += _custom(s, "affirmation_of_faith", r)
+    lines += _hymn(s, "second_hymn", hymns.get("response"))
+    lines += _custom(s, "second_hymn", r)
     if r.include_communion:
-        lines += _communion()
-    lines += _custom("communion", r)
-    lines.append(_element("prayers_of_the_people", "Prayers of the People/The Lord’s Prayer"))
-    lines += _custom("prayers_of_the_people", r)
+        lines += _communion(s)
+    lines += _custom(s, "communion", r)
+    lines.append(_element(s, "prayers_of_the_people", "Prayers of the People/The Lord’s Prayer"))
+    lines += _custom(s, "prayers_of_the_people", r)
     lines += [_section("RESPONDING TO THE WORD"),
-              _element("offering", "Offering Our Gifts"),
-              _element("doxology", "Sung Response:", Span("  "), _quoted("Doxology"))]
-    lines += _text_element("offertory_prayer", "Offertory Prayer", lit.get("offertory_prayer", ""))
-    lines += _custom("offertory_prayer", r)
+              _element(s, "offering", "Offering Our Gifts"),
+              _element(s, "doxology", "Sung Response:", Span("  "), _quoted("Doxology"))]
+    lines += _text_element(s, "offertory_prayer", "Offertory Prayer", lit.get("offertory_prayer", ""))
+    lines += _custom(s, "offertory_prayer", r)
     lines.append(_section("SENDING OUT TO SERVE"))
-    lines += _hymn("third_hymn", hymns.get("closing"))
-    lines += _custom("third_hymn", r)
-    lines += _custom("benediction", r)
-    lines += _text_element("benediction", "Benediction", lit.get("benediction", ""))
-    lines += _music("postlude", "Postlude", POSTLUDE)
-    lines += _custom("end", r)
-    lines.append(Line("note", (Span(STAND_NOTE),)))
+    lines += _hymn(s, "third_hymn", hymns.get("closing"))
+    lines += _custom(s, "third_hymn", r)
+    lines += _custom(s, "benediction", r)
+    lines += _text_element(s, "benediction", "Benediction", lit.get("benediction", ""))
+    lines += _music(s, "postlude", "Postlude", POSTLUDE)
+    lines += _custom(s, "end", r)
+    if s.stand_note and any(line.style == "element" and line.text.startswith("*") for line in lines):
+        lines.append(Line("note", (Span(f"*{s.stand_note}"),)))       # only under a star that printed
     return lines
+
+
+def contact_lines(s: BulletinSettings) -> list[str]:
+    """The cover's contact lines from the settings, the blank ones left out:
+    the address lines, the phone, the email, the website, "FB: {name}"."""
+    facebook = [f"FB: {s.facebook}"] if s.facebook else []
+    return [*s.address_lines, *(text for text in (s.phone, s.email, s.website) if text), *facebook]
 
 
 def cover(ps: PrintedService) -> list[Line]:
@@ -313,7 +320,7 @@ def cover(ps: PrintedService) -> list[Line]:
         Line("box", (Span(COVER_PICTURE),)),
         Line("box", (Span(reading.reference if reading else ""),)),
         Line("box", (Span(printed_date(ps.resolved.service_date)),)),
-        *(Line("contact", (Span(text),)) for text in CONTACT_LINES),
+        *(Line("contact", (Span(text),)) for text in contact_lines(ps.settings)),
     ]
 
 

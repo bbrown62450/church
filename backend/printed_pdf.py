@@ -20,8 +20,8 @@ from xml.sax.saxutils import escape
 from reportlab.lib.colors import Color
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 from reportlab.lib.styles import ParagraphStyle
-from reportlab.platypus import (BaseDocTemplate, CondPageBreak, Flowable, Frame, FrameBreak, PageTemplate, Paragraph,
-                                Spacer, Table, TableStyle)
+from reportlab.platypus import (BaseDocTemplate, CondPageBreak, Flowable, Frame, FrameBreak, KeepInFrame, PageTemplate,
+                                Paragraph, Spacer, Table, TableStyle)
 
 import printed_bulletin as pb
 
@@ -143,14 +143,25 @@ class _CoverPicture(Flowable):
                 c.drawCentredString(self.width / 2, y, to_pdf_text(text))
 
 
+def _contact(lines: list[pb.Line], width: float, height: float) -> Flowable:
+    """The cover's contact lines, shrunk to fit what the title and the picture
+    leave of the cover page (PR 2a), so the order of worship always starts on
+    page 1. Lines of typical length fit at full size."""
+    paragraphs = [Paragraph(_markup(line), STYLES["contact"]) for line in lines]
+    return KeepInFrame(width, height, paragraphs, mode="shrink")
+
+
 def _story(ps: pb.PrintedService, width: float) -> list[Flowable]:
     cover = pb.cover(ps)
     title, label, reference, date, *contact = cover
+    heading = Paragraph(_markup(title), STYLES["title"])
+    picture = 300 + 30                                     # the picture's box and the space under it
+    room = pb.PAGE_HEIGHT - 2 * MARGIN - heading.wrap(width, pb.PAGE_HEIGHT)[1] - STYLES["title"].spaceAfter - picture
     story: list[Flowable] = [
-        Paragraph(_markup(title), STYLES["title"]),
+        heading,
         _CoverPicture(width - 60, 300, label.text, reference.text, date.text),
         Spacer(1, 30),
-        *(Paragraph(_markup(line), STYLES["contact"]) for line in contact),
+        _contact(contact, width, max(room, 30.0)),
         FrameBreak(),
     ]
     story += [f for line in pb.order_of_worship(ps) for f in _flowables(line, width)]
