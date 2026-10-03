@@ -266,9 +266,10 @@ ELEMENT_KEYS = (
     "benediction", "postlude",
 )
 
-# The longest value each field takes (PUT /church/bulletin-settings refuses longer).
+# The longest value each field takes (PUT /church/bulletin-settings refuses longer). The cover's
+# limits keep its contact lines short enough for the cover page (printed_pdf also shrinks them to fit).
 MAX_ADDRESS_LINES = 3
-MAX_LENGTH = {"address_line": 100, "phone": 40, "email": 254, "website": 200, "facebook": 100,
+MAX_LENGTH = {"address_line": 60, "phone": 40, "email": 100, "website": 100, "facebook": 60,
               "service_time": 40, "person": 100, "stand_note": 200, "gloria_patri_words": 1000}
 
 # The owner's sample (PR 1's defaults).
@@ -1181,10 +1182,11 @@ def test_an_admin_saves_them_whole_and_the_other_settings_stay(client, church):
 def test_what_is_saved_is_trimmed_and_in_order(client, church):
     r = put(client, church, {**BODY, "phone": "  (555) 010-0100 ", "address_lines": [" 100 Example Street ", " "],
                              "stand_note": "*Please stand if able", "starred": ["doxology", "first_hymn", "doxology"],
-                             "organist": "Jordan\x00 Doe", "leaders": {"postlude": "organist", "sermon": "worship_leader"}})
+                             "gloria_patri_words": "Glory\x00 be.\r\nAmen.",
+                             "leaders": {"postlude": "organist", "sermon": "worship_leader"}})
     assert r.status_code == 200, r.text
     assert r.json() == {**BODY, "address_lines": ["100 Example Street"], "stand_note": "Please stand if able",
-                        "organist": "Jordan Doe"}
+                        "gloria_patri_words": "Glory be.\nAmen."}
     assert list(stored(church)["bulletin"]["leaders"]) == ["sermon", "postlude"]
 
 
@@ -1205,6 +1207,8 @@ def test_a_stored_value_of_the_wrong_shape_reads_as_the_defaults(client, church)
 
 @pytest.mark.parametrize("change, field", [
     ({"phone": "1" * 41}, "phone"),
+    ({"phone": "(555)\n010-0100"}, "phone"),
+    ({"address_lines": ["100 Example\tStreet"]}, "address_lines.0"),
     ({"address_lines": ["a", "b", "c", "d"]}, "address_lines"),
     ({"starred": ["anthem"]}, "starred.0"),
     ({"leaders": {"sermon": "pastor"}}, "leaders.sermon"),
@@ -1301,14 +1305,16 @@ def set_bulletin_settings(church_id, value: dict) -> None:
 /church/bulletin-settings.
 
 get_bulletin_settings reads churches.settings["bulletin"] tolerantly
-(bulletin_settings.read). save_bulletin_settings stores the validated body
+(read_settings: bulletin_settings.read of the stored texts made Word-safe,
+which build_printed uses too, so a value written by any other path never
+breaks the Word version). save_bulletin_settings stores the validated body
 whole as settings["bulletin"] in one locked read-modify-write
 (repos.churches.set_bulletin_settings), so the church's other settings are
 never touched; two admins saving at once both succeed and the later save is
-what stays (plan clarification 6). It stores the body as read() cleans it and
-answers what is stored. Every text goes through archive._xml_safe first (as the
-service's texts do), so the Word version can always hold it. A church missing or soft-deleted is require_church's
-403. No FastAPI, Starlette or Streamlit here (usecases/__init__.py).
+what stays (plan clarification 6). It stores the body as read_settings
+cleans it and answers what is stored. Every text goes through
+archive._xml_safe first (as the service's texts do), so the Word version can
+always hold it. A church missing or soft-deleted is require_church's 403. No FastAPI, Starlette or Streamlit here (usecases/__init__.py).
 """
 import uuid
 from collections.abc import Mapping
@@ -1329,17 +1335,24 @@ def _safe(value: object) -> object:
     return value
 
 
+def read_settings(settings: object) -> bulletin_settings.BulletinSettings:
+    """A church's stored settings JSON as the bulletin settings, every text Word-safe."""
+    stored = settings.get("bulletin") if isinstance(settings, Mapping) else None
+    if not isinstance(stored, Mapping):
+        return bulletin_settings.read(None)
+    return bulletin_settings.read({"bulletin": {name: _safe(value) for name, value in stored.items()}})
+
+
 def get_bulletin_settings(church_id: uuid.UUID) -> bulletin_settings.BulletinSettings:
     church = churches.get_church(church_id)
     if church is None:
         raise Forbidden(NO_ACCESS_MESSAGE, details={"reason": "no_church_access"})
-    return bulletin_settings.read(church["settings"])
+    return read_settings(church["settings"])
 
 
 def save_bulletin_settings(church_id: uuid.UUID, body: Mapping) -> bulletin_settings.BulletinSettings:
     """`body` is PUT's validated body (every field, within its limits)."""
-    safe = {name: _safe(value) for name, value in body.items()}
-    churches.set_bulletin_settings(church_id, bulletin_settings.read({"bulletin": safe}).to_json())
+    churches.set_bulletin_settings(church_id, read_settings({"bulletin": body}).to_json())
     return get_bulletin_settings(church_id)
 ````
 
@@ -1354,7 +1367,8 @@ GET: any member (require_church); a church that never saved them reads the
 defaults. PUT: admins and owners only (require_admin; a member's PUT is the
 role 403 "Only church admins can do this."), the whole object every time
 (extra="forbid", every field required), each text trimmed and within its
-limit, the starred elements and the leaders from bulletin_settings'
+limit, every text but the Gloria Patri words on one line (no line break, tab
+or other control character: a 422 naming the field), the starred elements and the leaders from bulletin_settings'
 ELEMENT_KEYS and ROLES. It answers what is stored. No Idempotency-Key (a PUT
 of the same body stores the same value) and no If-Match: the later of two
 saves wins (plan clarification 6). Plain `def`, no SQL, no try/except
@@ -1376,8 +1390,13 @@ ElementKey = Literal[bs.ELEMENT_KEYS]
 Role = Literal[bs.ROLES]
 
 
+# One printed line: no control character (a line break or a tab would break the cover or the header).
+ONE_LINE = r"^[^\x00-\x1f\x7f]*$"
+
+
 def _text(field: str):
-    return Annotated[str, StringConstraints(strip_whitespace=True, max_length=bs.MAX_LENGTH[field])]
+    pattern = None if field == "gloria_patri_words" else ONE_LINE
+    return Annotated[str, StringConstraints(strip_whitespace=True, max_length=bs.MAX_LENGTH[field], pattern=pattern)]
 
 
 class BulletinSettings(BaseModel):
@@ -1657,9 +1676,12 @@ import { bulletinSettings, filledBulletinSettings } from "@/test/fixtures";
 import {
   addressError,
   ELEMENTS,
+  formErrors,
   formFromSettings,
+  isDirty,
   notFilledIn,
   notFilledInLine,
+  rebaseForm,
   settingsFromForm,
 } from "./bulletin-settings";
 
@@ -1676,10 +1698,39 @@ describe("bulletin settings (printed bulletin PR 2a)", () => {
     expect(ELEMENTS).toHaveLength(21);
   });
 
-  it("allows up to three address lines of up to 100 characters", () => {
+  it("allows up to three address lines of up to 60 characters, and names the field a 422 names", () => {
     expect(addressError("a\nb\n\nc")).toBeNull();
-    expect(addressError("a\nb\nc\nd")).toBe("Use up to 3 lines of up to 100 characters each.");
-    expect(addressError("x".repeat(101))).toBe("Use up to 3 lines of up to 100 characters each.");
+    expect(addressError("x".repeat(60))).toBeNull();
+    expect(addressError("a\nb\nc\nd")).toBe("Use up to 3 lines of up to 60 characters each.");
+    expect(addressError("x".repeat(61))).toBe("Use up to 3 lines of up to 60 characters each.");
+    expect(formErrors({ "address_lines.0": "Not a valid value.", phone: "Too long (max 40 characters).", starred: "x" })).toEqual({
+      address: "Not a valid value.",
+      phone: "Too long (max 40 characters).",
+    });
+  });
+
+  it("rebases the form on newer data: what was not edited takes the new value, what was edited stays", () => {
+    const baseline = formFromSettings(bulletinSettings());
+    const current = {
+      ...baseline,
+      phone: "(555) 010-0100",
+      starred: baseline.starred.filter((key) => key !== "doxology"),
+      leaders: { ...baseline.leaders, sermon: "organist" as const },
+    };
+    expect(isDirty(baseline, baseline)).toBe(false);
+    expect(isDirty(baseline, current)).toBe(true);
+    const next = formFromSettings(
+      filledBulletinSettings({ phone: "(555) 999-0000", starred: ["prelude", "doxology"], leaders: { prelude: "liturgist" } }),
+    );
+    const rebased = rebaseForm(baseline, current, next);
+    expect(rebased).toEqual({
+      ...next,
+      phone: "(555) 010-0100",
+      starred: ["prelude"],
+      leaders: { prelude: "liturgist", sermon: "organist" },
+    });
+    expect(isDirty(next, rebased)).toBe(true);
+    expect(rebaseForm(baseline, baseline, next)).toEqual(next);
   });
 
   it("lists the blank standing fields in the page's order", () => {
@@ -1761,7 +1812,10 @@ export function readStoredChurchId
  * the parts of the order of worship they name, the form the Bulletin
  * settings page edits, and what the Printed bulletin card lists as not
  * filled in (PR 2 planning answer 3: a blank field prints nothing, so the
- * card says which are blank before anyone prints).
+ * card says which are blank before anyone prints). The form follows 6a's
+ * rule for settings forms: newer server data rebases it (a field not edited
+ * takes the new value, an edited one keeps the edit), and the page warns
+ * before leaving with unsaved edits.
  *
  * The limits mirror `backend/bulletin_settings.py` (`MAX_LENGTH`,
  * `MAX_ADDRESS_LINES`); the server checks them again.
@@ -1805,11 +1859,11 @@ export const ELEMENTS: readonly { key: ElementKey; label: string }[] = [
 
 export const MAX_ADDRESS_LINES = 3;
 export const MAX_LENGTH: Record<TextField | "address_line", number> = {
-  address_line: 100,
+  address_line: 60,
   phone: 40,
-  email: 254,
-  website: 200,
-  facebook: 100,
+  email: 100,
+  website: 100,
+  facebook: 60,
   service_time: 40,
   worship_leader: 100,
   liturgist: 100,
@@ -1820,6 +1874,21 @@ export const MAX_LENGTH: Record<TextField | "address_line", number> = {
 
 /** The page's form: the settings with the address as one text, a line each. */
 export type BulletinForm = Omit<BulletinSettings, "address_lines"> & { address: string };
+/** The form's text fields: the address and every other text. */
+export type FormField = "address" | TextField;
+const FORM_FIELDS: readonly FormField[] = [
+  "address",
+  "phone",
+  "email",
+  "website",
+  "facebook",
+  "service_time",
+  "worship_leader",
+  "liturgist",
+  "organist",
+  "stand_note",
+  "gloria_patri_words",
+];
 
 export function formFromSettings(s: BulletinSettings): BulletinForm {
   const { address_lines, ...rest } = s;
@@ -1834,7 +1903,7 @@ export function addressLines(address: string): string[] {
     .filter((line) => line !== "");
 }
 
-/** The address's problem, or null: at most 3 lines of at most 100 characters. */
+/** The address's problem, or null: at most 3 lines of at most 60 characters. */
 export function addressError(address: string): string | null {
   const lines = addressLines(address);
   if (lines.length > MAX_ADDRESS_LINES || lines.some((line) => line.length > MAX_LENGTH.address_line)) {
@@ -1853,6 +1922,53 @@ export function settingsFromForm(f: BulletinForm): BulletinSettings {
     starred: order.filter((key) => starred.includes(key)),
     leaders: Object.fromEntries(order.filter((key) => leaders[key]).map((key) => [key, leaders[key]])),
   };
+}
+
+/**
+ * 6a's rebase rule (one value per text, per part's leader and per part's star):
+ * each value still equal to `baseline` (not edited) takes `next`'s; each edited
+ * one keeps `current`'s. Used when newer server data arrives while the form is
+ * open, and after a save (with the form as sent as the baseline, so what was
+ * typed while saving is kept).
+ */
+export function rebaseForm(baseline: BulletinForm, current: BulletinForm, next: BulletinForm): BulletinForm {
+  const out: BulletinForm = { ...next };
+  for (const field of FORM_FIELDS) {
+    if (current[field] !== baseline[field]) out[field] = current[field];
+  }
+  const starred = (f: BulletinForm, key: ElementKey) => f.starred.includes(key);
+  out.starred = ELEMENTS.map((e) => e.key).filter((key) =>
+    starred(current, key) !== starred(baseline, key) ? starred(current, key) : starred(next, key),
+  );
+  const leaders: BulletinForm["leaders"] = {};
+  for (const { key } of ELEMENTS) {
+    const role = current.leaders[key] !== baseline.leaders[key] ? current.leaders[key] : next.leaders[key];
+    if (role) leaders[key] = role;
+  }
+  out.leaders = leaders;
+  return out;
+}
+
+/** Whether the form has edits not yet saved (anything that differs from `baseline`). */
+export function isDirty(baseline: BulletinForm, current: BulletinForm): boolean {
+  return (
+    FORM_FIELDS.some((field) => current[field] !== baseline[field]) ||
+    ELEMENTS.some(
+      ({ key }) =>
+        current.leaders[key] !== baseline.leaders[key] || current.starred.includes(key) !== baseline.starred.includes(key),
+    )
+  );
+}
+
+/** A 422's `fields` ("phone", "address_lines.0", …) by the form field each names. */
+export function formErrors(fields: Record<string, string>): Partial<Record<FormField, string>> {
+  const errors: Partial<Record<FormField, string>> = {};
+  for (const [name, message] of Object.entries(fields)) {
+    const head = name.split(".")[0];
+    const field = head === "address_lines" ? "address" : (FORM_FIELDS.find((f) => f === head) ?? null);
+    if (field && !errors[field]) errors[field] = message;
+  }
+  return errors;
 }
 
 /** What a blank field is called in "Not filled in: …", in the page's order. */
@@ -1892,7 +2008,9 @@ export function notFilledInLine(missing: readonly string[]): string {
  *
  * - `useBulletinSettings()`: `GET /church/bulletin-settings` under
  *   ["church", id, "bulletin-settings"]; any member. The Printed bulletin
- *   card reads it for "Not filled in: …"; the Bulletin settings page shows it.
+ *   card reads it for "Not filled in: …"; the Bulletin settings page shows it,
+ *   with `{ fresh: true }`: fetched again on opening the page even when cached,
+ *   so the form never starts from an older value.
  * - `useSaveBulletinSettings()`: `PUT` the whole object (admins). Success
  *   caches the answer (what is stored) and toasts "Bulletin settings saved";
  *   a failure toasts the server's message (a member's role 403 included),
@@ -1912,12 +2030,16 @@ import { keys } from "./keys";
 export const SETTINGS_SAVED = "Bulletin settings saved";
 const PATH = "/church/bulletin-settings";
 
-export function useBulletinSettings(): UseQueryResult<BulletinSettings, ApiError> {
+export function useBulletinSettings({ fresh = false }: { fresh?: boolean } = {}): UseQueryResult<
+  BulletinSettings,
+  ApiError
+> {
   const api = useApi();
   const church = useChurch();
   return useQuery<BulletinSettings, ApiError>({
     queryKey: keys.bulletinSettings(church.id),
     queryFn: ({ signal }) => api.church<BulletinSettings>(PATH, { signal }),
+    refetchOnMount: fresh ? "always" : true,
   });
 }
 
@@ -1969,40 +2091,51 @@ Expected counts after this task: backend `1381 passed, 16 skipped`; frontend `66
 ````tsx
 /**
  * The Bulletin settings page (printed bulletin spec, PR 2a; PR 2 planning
- * answers 1-3): admins edit and save the whole form, members read it. The
- * page renders as the route does, with a Toaster.
+ * answers 1-3): admins edit and save the whole form, members read a summary.
+ * The page renders as the route does, with a Toaster.
  */
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { toast } from "sonner";
 import { afterEach, describe, expect, it } from "vitest";
 
 import BulletinSettingsRoute from "@/app/(signed-in)/(church)/bulletin-settings/page";
 import { Toaster } from "@/components/ui/sonner";
-import type { Church } from "@/lib/api/types";
+import type { BulletinSettings, Church } from "@/lib/api/types";
+import { makeQueryClient } from "@/lib/queries/client";
 import { SETTINGS_SAVED } from "@/lib/queries/bulletin-settings";
+import { keys } from "@/lib/queries/keys";
 import { fakeError, installFakeApi, type FakeHandler, type RecordedRequest } from "@/test/fake-api";
 import { bulletinSettings, church, filledBulletinSettings, me } from "@/test/fixtures";
+import { testRouter } from "@/test/mocks";
 import { renderWithProviders } from "@/test/render";
 
-import { ADMINS_ONLY } from "./bulletin-settings-page";
+import { ADMINS_ONLY, DISCARD_TITLE } from "./bulletin-settings-page";
 
 const PATH = "/church/bulletin-settings";
 
-function renderPage(role: Church["role"] = "admin", routes: Record<string, FakeHandler> = {}) {
+function renderPage(role: Church["role"] = "admin", routes: Record<string, FakeHandler> = {}, cached?: BulletinSettings) {
   const api = installFakeApi({ [`GET ${PATH}`]: filledBulletinSettings(), ...routes });
   const active = church({ role });
+  const queryClient = makeQueryClient({ queries: { retry: false } });
+  if (cached) queryClient.setQueryData(keys.bulletinSettings(active.id), cached);
   const view = renderWithProviders(
     <>
       <BulletinSettingsRoute />
       <Toaster />
     </>,
-    { me: me({ churches: [active] }), church: active, path: "/bulletin-settings" },
+    { me: me({ churches: [active] }), church: active, path: "/bulletin-settings", queryClient },
   );
   return { ...view, api };
 }
 
 function puts(api: { requests: RecordedRequest[] }) {
   return api.requests.filter((r) => r.method === "PUT" && r.path === PATH);
+}
+
+function leaveWarned(): boolean {
+  const event = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(event);
+  return event.defaultPrevented;
 }
 
 afterEach(() => {
@@ -2014,6 +2147,7 @@ describe("Bulletin settings (printed bulletin PR 2a)", () => {
     const { api, user } = renderPage("admin", { [`PUT ${PATH}`]: (r: RecordedRequest) => r.body });
     const phone = await screen.findByLabelText("Phone");
     expect(phone).toHaveValue("(555) 010-0100");
+    expect(phone).toHaveAttribute("inputmode", "tel");
     expect(screen.getByLabelText("Address")).toHaveValue("100 Example Street\nSpringfield, ST 00000");
     expect(screen.queryByText(ADMINS_ONLY)).toBeNull();
     await user.clear(phone);
@@ -2037,38 +2171,122 @@ describe("Bulletin settings (printed bulletin PR 2a)", () => {
     expect(puts(api)[0].body).toEqual(expected);
     // The starred parts (toEqual checked their order) and the leaders in the printed order.
     expect(Object.keys((puts(api)[0].body as typeof expected).leaders)).toEqual(Object.keys(expected.leaders));
+    expect(leaveWarned()).toBe(false); // saved: nothing to lose
   });
 
-  it("shows a member the settings read-only, with no Save", async () => {
-    renderPage("member");
-    const phone = await screen.findByLabelText("Phone");
-    expect(screen.getByText(ADMINS_ONLY)).toBeInTheDocument();
-    expect(phone).toHaveAttribute("readonly");
-    expect(screen.getByLabelText("Gloria Patri words")).toHaveAttribute("readonly");
-    expect(screen.getByRole("switch", { name: "Sermon: congregation stands" })).toHaveAttribute("aria-disabled", "true");
+  it("shows a member the settings as plain text, with no fields and no Save", async () => {
+    renderPage("member", { [`GET ${PATH}`]: filledBulletinSettings({ email: "" }) });
+    expect(await screen.findByText(ADMINS_ONLY)).toBeInTheDocument();
+    const main = screen.getByRole("main");
+    expect(within(main).getByText("(555) 010-0100")).toBeInTheDocument();
+    expect(within(main).getByText("Not filled in")).toBeInTheDocument(); // the email
+    expect(within(main).getByText("Sermon:").parentElement).toHaveTextContent("Sermon: Worship leader");
+    expect(within(main).getByText("Opening hymn:").parentElement).toHaveTextContent(
+      "Opening hymn: No one, congregation stands",
+    );
+    expect(within(main).queryAllByRole("textbox")).toEqual([]);
+    expect(within(main).queryAllByRole("switch")).toEqual([]);
     expect(screen.queryByRole("button", { name: "Save settings" })).toBeNull();
   });
 
-  it("keeps the address to three lines before saving, and shows the server's message when a save fails", async () => {
+  it("checks the address before saving, and shows a field the server refuses as an error under it", async () => {
     const { api, user } = renderPage("admin", {
-      [`PUT ${PATH}`]: fakeError(403, "forbidden", "Only church admins can do this."),
+      [`PUT ${PATH}`]: fakeError(422, "invalid_request", "The request was not valid.", {
+        fields: { phone: "Not a valid value." },
+      }),
     });
     const address = await screen.findByLabelText("Address");
     await user.type(address, "\nLine three\nLine four");
     await user.click(screen.getByRole("button", { name: "Save settings" }));
-    expect(screen.getByText("Use up to 3 lines of up to 100 characters each.")).toBeInTheDocument();
+    const problem = screen.getByRole("alert");
+    expect(problem).toHaveTextContent("Use up to 3 lines of up to 60 characters each.");
+    expect(problem).toHaveClass("text-destructive");
     expect(address).toHaveAttribute("aria-invalid", "true");
+    expect(address).toHaveAccessibleDescription(
+      "Up to 3 lines, as printed on the cover. Use up to 3 lines of up to 60 characters each.",
+    );
     expect(address).toHaveFocus();
     expect(puts(api)).toEqual([]);
     await user.clear(address);
     await user.click(screen.getByRole("button", { name: "Save settings" }));
-    expect(await screen.findByText("Only church admins can do this.")).toBeInTheDocument();
-    await waitFor(() => expect(puts(api)).toHaveLength(1));
+    expect(await screen.findByText("The request was not valid.")).toBeInTheDocument();
+    const phone = screen.getByLabelText("Phone");
+    await waitFor(() => expect(phone).toHaveAttribute("aria-invalid", "true"));
+    expect(phone).toHaveAccessibleDescription("Not a valid value.");
+    expect(phone).toHaveFocus();
+    expect(address).not.toHaveAttribute("aria-invalid");
     expect((puts(api)[0].body as { address_lines: string[] }).address_lines).toEqual([]);
     expect(within(screen.getByRole("main")).getByRole("link", { name: "Back to Review & send" })).toHaveAttribute(
       "href",
       "/builder/review",
     );
+  });
+
+  it("opens on the settings fetched now, and newer data updates only the fields not edited", async () => {
+    const { api, user, queryClient } = renderPage(
+      "admin",
+      { [`PUT ${PATH}`]: (r: RecordedRequest) => r.body },
+      bulletinSettings(), // an older copy in the cache
+    );
+    const phone = await screen.findByLabelText("Phone");
+    expect(phone).toHaveValue("(555) 010-0100"); // not the cached blank
+    await user.clear(phone);
+    await user.type(phone, "(555) 010-0199");
+    await user.click(screen.getByRole("switch", { name: "Prelude: congregation stands" }));
+    // Meanwhile another admin saved a new organist, phone and stars.
+    api.set(
+      `GET ${PATH}`,
+      filledBulletinSettings({ organist: "Pat Example", phone: "(555) 010-0155", starred: ["doxology"] }),
+    );
+    await act(() => queryClient.refetchQueries({ queryKey: keys.bulletinSettings(church().id) }));
+    await waitFor(() => expect(screen.getByLabelText("Organist")).toHaveValue("Pat Example"));
+    expect(phone).toHaveValue("(555) 010-0199");
+    expect(screen.getByRole("switch", { name: "Prelude: congregation stands" })).toBeChecked();
+    expect(screen.getByRole("switch", { name: "Doxology: congregation stands" })).toBeChecked();
+    expect(screen.getByRole("switch", { name: "Sermon: congregation stands" })).not.toBeChecked();
+    await user.click(screen.getByRole("button", { name: "Save settings" }));
+    await waitFor(() => expect(puts(api)).toHaveLength(1));
+    expect(puts(api)[0].body).toMatchObject({ organist: "Pat Example", phone: "(555) 010-0199", starred: ["prelude", "doxology"] });
+  });
+
+  it("keeps what is typed while saving, and shows what was stored everywhere else", async () => {
+    let answer: (body: unknown) => void = () => {};
+    const { api, user } = renderPage("admin", {
+      [`PUT ${PATH}`]: () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    });
+    const standNote = await screen.findByLabelText("Stand note");
+    await user.clear(standNote);
+    await user.type(standNote, "*Please stand if able");
+    await user.click(screen.getByRole("button", { name: "Save settings" }));
+    await waitFor(() => expect(puts(api)).toHaveLength(1));
+    await user.type(screen.getByLabelText("Organist"), " Jr.");
+    answer(filledBulletinSettings({ stand_note: "Please stand if able" })); // the server drops the star
+    expect(await screen.findByText(SETTINGS_SAVED)).toBeInTheDocument();
+    expect(standNote).toHaveValue("Please stand if able");
+    expect(screen.getByLabelText("Organist")).toHaveValue("Jordan Doe Jr.");
+    expect(leaveWarned()).toBe(true); // the organist is not saved yet
+  });
+
+  it("asks before leaving with unsaved edits", async () => {
+    const { user } = renderPage("admin");
+    const organist = await screen.findByLabelText("Organist");
+    const back = within(screen.getByRole("main")).getByRole("link", { name: "Back to Review & send" });
+    expect(leaveWarned()).toBe(false);
+    await user.type(organist, " Jr.");
+    expect(leaveWarned()).toBe(true);
+    await user.click(back);
+    let dialog = await screen.findByRole("alertdialog", { name: DISCARD_TITLE });
+    await user.click(within(dialog).getByRole("button", { name: "Keep editing" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(organist).toHaveValue("Jordan Doe Jr.");
+    expect(testRouter.push).not.toHaveBeenCalled();
+    await user.click(back);
+    dialog = await screen.findByRole("alertdialog", { name: DISCARD_TITLE });
+    await user.click(within(dialog).getByRole("button", { name: "Discard changes" }));
+    expect(testRouter.push).toHaveBeenCalledWith("/builder/review");
   });
 });
 ````
@@ -2090,8 +2308,18 @@ Run: `(cd frontend && npx vitest run src/components/bulletin-settings 2>&1 | gre
 "use client";
 
 import Link from "next/link";
-import { useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ComponentProps,
+  type FormEvent,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 
+import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { ErrorState } from "@/components/app/error-state";
 import { PageHeader } from "@/components/app/page-header";
 import { PendingButton } from "@/components/app/pending-button";
@@ -2103,16 +2331,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { ApiError } from "@/lib/api/client";
 import type { BulletinSettings } from "@/lib/api/types";
 import {
   addressError,
   ELEMENTS,
+  formErrors,
   formFromSettings,
+  isDirty,
   MAX_LENGTH,
+  rebaseForm,
   ROLES,
   settingsFromForm,
   type BulletinForm,
   type ElementKey,
+  type FormField,
   type Role,
   type TextField,
 } from "@/lib/bulletin-settings";
@@ -2121,7 +2354,11 @@ import { useChurch } from "@/lib/church-context";
 import { useBulletinSettings, useSaveBulletinSettings } from "@/lib/queries/bulletin-settings";
 
 export const PAGE_DESCRIPTION = "What every printed bulletin uses. A field left blank is left off the bulletin.";
-export const ADMINS_ONLY = "Only admins can change the bulletin settings. You can read them below.";
+export const ADMINS_ONLY = "Only admins can edit the bulletin settings. You can read them below.";
+export const DISCARD_TITLE = "Discard unsaved changes?";
+const DISCARD_BODY = "Your changes on this page haven't been saved.";
+const NOT_FILLED_IN = "Not filled in";
+const BACK_HREF = "/builder/review";
 const NO_ONE: string = "none"; // "No one" leads this part: a real choice, not a placeholder (F §4.9 item 3)
 const LEADER_ITEMS: Record<string, string> = {
   [NO_ONE]: "No one",
@@ -2136,6 +2373,9 @@ const CHURCH_FIELDS: readonly TextSpec[] = [
   { field: "website", label: "Website" },
   { field: "facebook", label: "Facebook name", help: "Printed as FB: and the name." },
 ];
+const SERVICE_FIELDS: readonly TextSpec[] = [
+  { field: "service_time", label: "Service time", help: "Printed across from the date, for example 10:30 a.m." },
+];
 const PEOPLE_FIELDS: readonly TextSpec[] = [
   { field: "worship_leader", label: "Worship leader" },
   { field: "liturgist", label: "Liturgist" },
@@ -2145,6 +2385,17 @@ const WORDS_FIELDS: readonly TextSpec[] = [
   { field: "stand_note", label: "Stand note", help: "Printed at the end of the service, after a star." },
   { field: "gloria_patri_words", label: "Gloria Patri words", long: true },
 ];
+
+/**
+ * The phone, email and website keyboards (no `type="email"` or `type="url"`:
+ * the browser would refuse a website typed as "example.com"). The browser's
+ * own autofill is off: these are the church's details, not the user's.
+ */
+const INPUT_PROPS: Partial<Record<TextField, ComponentProps<"input">>> = {
+  phone: { type: "tel", inputMode: "tel", autoComplete: "off" },
+  email: { inputMode: "email", autoComplete: "off", autoCapitalize: "none", spellCheck: false },
+  website: { inputMode: "url", autoComplete: "off", autoCapitalize: "none", spellCheck: false },
+};
 
 function PageSkeleton() {
   return (
@@ -2160,29 +2411,77 @@ function PageSkeleton() {
  * `/bulletin-settings` (printed bulletin spec, PR 2a; PR 2 planning answers
  * 1-3): the church's standing bulletin settings, which every member's
  * printed bulletin uses. Admins and owners edit and save the whole form;
- * members read it, with a note that only admins can change it. Until 6a
- * folds it into Settings, the Printed bulletin card on Review & send links here.
+ * members read a plain summary, with a note that only admins can edit it.
+ * Until 6a folds it into Settings, the Printed bulletin card on Review & send
+ * links here.
+ *
+ * The settings are fetched again on opening the page (even when cached), and
+ * the form shows only once that fetch is back, so it never starts from an
+ * older value. 6a's rules for settings forms: newer server data rebases the
+ * form (`rebaseForm`), and leaving with unsaved edits asks first (the
+ * browser's warning on a reload or close, "Discard unsaved changes?" on
+ * **Back to Review & send**).
  */
 export function BulletinSettingsPage() {
-  const settings = useBulletinSettings();
+  const church = useChurch();
+  const canEdit = isAdmin(church.role);
+  const settings = useBulletinSettings({ fresh: true });
+  const router = useRouter();
+  const [ready, setReady] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+  // Shown once the fetch made on opening the page is back; then kept, so a failed background refetch keeps the form.
+  if (!ready && settings.isFetchedAfterMount && settings.isSuccess) setReady(true);
+
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
+
+  function onBack(event: MouseEvent<HTMLAnchorElement>) {
+    if (!dirty) return;
+    event.preventDefault();
+    setLeaving(true);
+  }
+
   return (
     <main className="mx-auto grid w-full max-w-2xl content-start gap-4 px-4 py-4">
       <PageHeader
         title="Bulletin settings"
         description={PAGE_DESCRIPTION}
         actions={
-          <Link href="/builder/review" className={buttonVariants({ variant: "outline", size: "touch" })}>
+          <Link href={BACK_HREF} onClick={onBack} className={buttonVariants({ variant: "outline", size: "touch" })}>
             Back to Review &amp; send
           </Link>
         }
       />
-      {settings.data ? (
-        <SettingsForm initial={settings.data} />
+      {ready && settings.data ? (
+        canEdit ? (
+          <SettingsForm settings={settings.data} onDirtyChange={setDirty} />
+        ) : (
+          <SettingsSummary settings={settings.data} />
+        )
       ) : settings.isError ? (
         <ErrorState error={settings.error} onRetry={() => void settings.refetch()} retrying={settings.isFetching} />
       ) : (
         <PageSkeleton />
       )}
+      <ConfirmDialog
+        open={leaving}
+        onOpenChange={setLeaving}
+        title={DISCARD_TITLE}
+        description={DISCARD_BODY}
+        confirmLabel="Discard changes"
+        cancelLabel="Keep editing"
+        destructive
+        onConfirm={() => {
+          setLeaving(false);
+          setDirty(false);
+          router.push(BACK_HREF);
+        }}
+      />
     </main>
   );
 }
@@ -2196,67 +2495,111 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function SettingsForm({ initial }: { initial: BulletinSettings }) {
-  const church = useChurch();
-  const canEdit = isAdmin(church.role);
-  const save = useSaveBulletinSettings();
-  const [form, setForm] = useState<BulletinForm>(() => formFromSettings(initial));
-  const [addressProblem, setAddressProblem] = useState<string | null>(null);
-  const addressRef = useRef<HTMLTextAreaElement>(null);
+function FieldError({ id, message }: { id: string; message?: string }) {
+  return message ? (
+    <p id={id} role="alert" className="text-sm text-destructive">
+      {message}
+    </p>
+  ) : null;
+}
 
-  const set = (patch: Partial<BulletinForm>) => setForm((f) => ({ ...f, ...patch }));
+type FormState = { source: BulletinSettings; baseline: BulletinForm; form: BulletinForm };
+
+function SettingsForm({
+  settings,
+  onDirtyChange,
+}: {
+  settings: BulletinSettings;
+  onDirtyChange: (dirty: boolean) => void;
+}) {
+  const save = useSaveBulletinSettings();
+  const [state, setState] = useState<FormState>(() => {
+    const form = formFromSettings(settings);
+    return { source: settings, baseline: form, form };
+  });
+  const [errors, setErrors] = useState<Partial<Record<FormField, string>>>({});
+  const addressRef = useRef<HTMLTextAreaElement>(null);
+  const { form, baseline } = state;
+  const dirty = isDirty(baseline, form);
+
+  // Newer server data (a refetch, or this page's own save in the cache): rebase (6a).
+  if (settings !== state.source) {
+    const next = formFromSettings(settings);
+    setState({ source: settings, baseline: next, form: rebaseForm(baseline, form, next) });
+  }
+
+  useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
+
+  const update = (field: FormField | null, change: (f: BulletinForm) => BulletinForm) => {
+    setState((s) => ({ ...s, form: change(s.form) }));
+    if (field && errors[field]) setErrors((e) => ({ ...e, [field]: undefined }));
+  };
   const setLeader = (key: ElementKey, role: Role | null) =>
-    setForm((f) => {
+    update(null, (f) => {
       const leaders = { ...f.leaders };
       if (role === null) delete leaders[key];
       else leaders[key] = role;
       return { ...f, leaders };
     });
   const setStarred = (key: ElementKey, on: boolean) =>
-    setForm((f) => ({ ...f, starred: on ? [...f.starred, key] : f.starred.filter((k) => k !== key) }));
+    update(null, (f) => ({ ...f, starred: on ? [...f.starred, key] : f.starred.filter((k) => k !== key) }));
 
   function onSubmit(event: FormEvent) {
     event.preventDefault();
-    if (!canEdit || save.isPending) return;
+    if (save.isPending) return;
     const problem = addressError(form.address);
-    setAddressProblem(problem);
+    setErrors(problem ? { address: problem } : {});
     if (problem) {
       addressRef.current?.focus();
       return;
     }
-    save.mutate(settingsFromForm(form), { onSuccess: (saved) => setForm(formFromSettings(saved)) });
+    const sent = form;
+    save.mutate(settingsFromForm(sent), {
+      // What was typed while saving stays; everything else shows what was stored.
+      onSuccess: (saved) =>
+        setState((s) => {
+          const next = formFromSettings(saved);
+          return { ...s, baseline: next, form: rebaseForm(sent, s.form, next) };
+        }),
+      onError: (e) => {
+        if (!(e instanceof ApiError) || e.status !== 422 || !e.fields) return;
+        const found = formErrors(e.fields);
+        setErrors(found);
+        const first = (Object.keys(found) as FormField[])[0];
+        if (first) document.getElementById(`bulletin-${first}`)?.focus();
+      },
+    });
   }
+
+  const describedBy = (...ids: (string | false | undefined)[]) => ids.filter(Boolean).join(" ") || undefined;
 
   const text = ({ field, label, help, long }: TextSpec) => {
     const id = `bulletin-${field}`;
+    const error = errors[field];
     const props = {
       id,
       value: form[field],
       maxLength: MAX_LENGTH[field],
-      readOnly: !canEdit,
-      "aria-describedby": help ? `${id}-help` : undefined,
-      onChange: (e: { target: { value: string } }) => set({ [field]: e.target.value }),
+      "aria-invalid": error ? true : undefined,
+      "aria-describedby": describedBy(help && `${id}-help`, error && `${id}-error`),
+      onChange: (e: { target: { value: string } }) => update(field, (f) => ({ ...f, [field]: e.target.value })),
     };
     return (
       <div key={field} className="grid gap-1.5">
         <Label htmlFor={id}>{label}</Label>
-        {long ? <Textarea {...props} /> : <Input {...props} className="h-11" />}
+        {long ? <Textarea {...props} /> : <Input {...INPUT_PROPS[field]} {...props} className="h-11" />}
         {help ? (
           <p id={`${id}-help`} className="text-sm text-muted-foreground">
             {help}
           </p>
         ) : null}
+        <FieldError id={`${id}-error`} message={error} />
       </div>
     );
   };
 
   return (
     <form onSubmit={onSubmit} className="grid gap-4" aria-label="Bulletin settings">
-      {canEdit ? null : (
-        <Alert role="status">
-          <AlertDescription>{ADMINS_ONLY}</AlertDescription>
-        </Alert>
-      )}
       <Section title="Church details">
         <div className="grid gap-1.5">
           <Label htmlFor="bulletin-address">Address</Label>
@@ -2264,23 +2607,19 @@ function SettingsForm({ initial }: { initial: BulletinSettings }) {
             id="bulletin-address"
             ref={addressRef}
             value={form.address}
-            readOnly={!canEdit}
-            aria-invalid={addressProblem ? true : undefined}
-            aria-describedby="bulletin-address-help"
-            onChange={(e) => set({ address: e.target.value })}
+            aria-invalid={errors.address ? true : undefined}
+            aria-describedby={describedBy("bulletin-address-help", errors.address && "bulletin-address-error")}
+            onChange={(e) => update("address", (f) => ({ ...f, address: e.target.value }))}
           />
           <p id="bulletin-address-help" className="text-sm text-muted-foreground">
-            {addressProblem ?? "Up to 3 lines, as printed on the cover."}
+            Up to 3 lines, as printed on the cover.
           </p>
+          <FieldError id="bulletin-address-error" message={errors.address} />
         </div>
         {CHURCH_FIELDS.map(text)}
       </Section>
-      <Section title="Service">
-        {text({ field: "service_time", label: "Service time", help: "Printed across from the date, for example 10:30 a.m." })}
-      </Section>
-      <Section title="Who leads">
-        {PEOPLE_FIELDS.map(text)}
-      </Section>
+      <Section title="Service">{SERVICE_FIELDS.map(text)}</Section>
+      <Section title="Who leads">{PEOPLE_FIELDS.map(text)}</Section>
       <Section title="Each part">
         <p className="text-sm text-muted-foreground">
           Who leads each part, and the parts the congregation stands for (printed with a star).
@@ -2288,13 +2627,10 @@ function SettingsForm({ initial }: { initial: BulletinSettings }) {
         <ul className="grid gap-3">
           {ELEMENTS.map(({ key, label }) => (
             <li key={key} className="grid gap-2 border-t pt-3 first:border-t-0 first:pt-0 sm:grid-cols-[1fr_auto_auto] sm:items-center">
-              <span id={`part-${key}`} className="text-sm font-medium">
-                {label}
-              </span>
+              <span className="text-sm font-medium">{label}</span>
               <Select
                 value={form.leaders[key] ?? NO_ONE}
                 items={LEADER_ITEMS}
-                disabled={!canEdit}
                 onValueChange={(value) => {
                   if (typeof value === "string") setLeader(key, value === NO_ONE ? null : (value as Role));
                 }}
@@ -2313,7 +2649,6 @@ function SettingsForm({ initial }: { initial: BulletinSettings }) {
               <label className="flex h-11 items-center gap-3 text-sm">
                 <Switch
                   checked={form.starred.includes(key)}
-                  disabled={!canEdit}
                   onCheckedChange={(checked) => setStarred(key, checked)}
                   aria-label={`${label}: congregation stands`}
                   className="after:-inset-y-3.5"
@@ -2325,12 +2660,70 @@ function SettingsForm({ initial }: { initial: BulletinSettings }) {
         </ul>
       </Section>
       <Section title="Printed words">{WORDS_FIELDS.map(text)}</Section>
-      {canEdit ? (
-        <PendingButton type="submit" size="touch" className="w-full sm:w-fit" pending={save.isPending}>
-          Save settings
-        </PendingButton>
-      ) : null}
+      <PendingButton type="submit" size="touch" className="w-full sm:w-fit" pending={save.isPending}>
+        Save settings
+      </PendingButton>
     </form>
+  );
+}
+
+function SummarySection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="grid gap-3 rounded-lg border p-4">
+      <h2 className="text-base font-medium">{title}</h2>
+      {children}
+    </section>
+  );
+}
+
+function SummaryItem({ label, value }: { label: string; value: string | readonly string[] }) {
+  const lines = typeof value === "string" ? [value].filter((v) => v.trim() !== "") : value;
+  return (
+    <div className="grid gap-0.5">
+      <dt className="text-sm font-medium">{label}</dt>
+      <dd className="text-sm whitespace-pre-line break-words">
+        {lines.length > 0 ? lines.join("\n") : <span className="text-muted-foreground">{NOT_FILLED_IN}</span>}
+      </dd>
+    </div>
+  );
+}
+
+/** What a member sees: the settings as plain text (6a's read-only view), no controls. */
+function SettingsSummary({ settings }: { settings: BulletinSettings }) {
+  const items = (specs: readonly TextSpec[]) =>
+    specs.map(({ field, label }) => <SummaryItem key={field} label={label} value={settings[field]} />);
+  const leader = (key: ElementKey) => ROLES.find((r) => r.key === settings.leaders[key])?.label ?? "No one";
+  return (
+    <div className="grid gap-4">
+      <Alert role="status">
+        <AlertDescription>{ADMINS_ONLY}</AlertDescription>
+      </Alert>
+      <SummarySection title="Church details">
+        <dl className="grid gap-3">
+          <SummaryItem label="Address" value={settings.address_lines} />
+          {items(CHURCH_FIELDS)}
+        </dl>
+      </SummarySection>
+      <SummarySection title="Service">
+        <dl className="grid gap-3">{items(SERVICE_FIELDS)}</dl>
+      </SummarySection>
+      <SummarySection title="Who leads">
+        <dl className="grid gap-3">{items(PEOPLE_FIELDS)}</dl>
+      </SummarySection>
+      <SummarySection title="Each part">
+        <ul className="grid gap-1 text-sm">
+          {ELEMENTS.map(({ key, label }) => (
+            <li key={key}>
+              <span className="font-medium">{label}:</span> {leader(key)}
+              {settings.starred.includes(key) ? ", congregation stands" : ""}
+            </li>
+          ))}
+        </ul>
+      </SummarySection>
+      <SummarySection title="Printed words">
+        <dl className="grid gap-3">{items(WORDS_FIELDS)}</dl>
+      </SummarySection>
+    </div>
   );
 }
 ````
