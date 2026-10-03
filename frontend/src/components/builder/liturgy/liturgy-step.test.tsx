@@ -32,6 +32,7 @@ import {
   lectionaryRoute,
   liturgyConfig,
   me,
+  previousBulletin,
   sectionFailure,
   sectionResult,
   testDraft,
@@ -65,6 +66,7 @@ function renderStep(draft: DraftV1 = testDraft(), routes: Record<string, FakeHan
     "GET /lectionary/readings": lectionaryRoute(),
     "GET /liturgy/config": liturgyConfig(),
     "GET /church/bulletin-settings": bulletinSettings(),
+    "GET /services/previous-bulletin": previousBulletin(),
     ...routes,
   });
   const view = renderWithProviders(

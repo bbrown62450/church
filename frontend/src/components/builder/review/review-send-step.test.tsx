@@ -38,8 +38,10 @@ import {
   lectionaryRoute,
   liturgyConfig,
   me,
+  previousBulletin,
   savedService,
   SERVICE_ID,
+  serviceBulletin,
   testDraft,
   translations,
   USER_ID,
@@ -49,7 +51,7 @@ import { renderWithProviders } from "@/test/render";
 
 import { CONFLICT_TITLE, RELOAD_REPLACES } from "./conflict-dialog";
 import { FIX_READINGS, NEEDS_DATE, SAME_AS_BULLETIN, SAVE_HINT } from "./documents-card";
-import { PLACEHOLDERS_NOTE, PRINTED_SUMMARY, SETTINGS_NOTE } from "./printed-card";
+import { PRINTED_SUMMARY, SETTINGS_NOTE, WEEKLY_NOTE } from "./printed-card";
 import { CONFLICT_MESSAGE, LOADED_LATEST, SAVE_FIX_READINGS, SAVE_NEEDS_DATE } from "./save-card";
 import { SAVED_AFTER_DELETE_MESSAGE, SAVED_MESSAGE } from "@/lib/queries/services";
 import { DEFAULT_BENEDICTION_FALLBACK } from "@/lib/liturgy/defaults";
@@ -79,6 +81,7 @@ function renderReview(draft: DraftV1 = testDraft(), routes: Record<string, FakeH
     "GET /hymns": hymnListRoute(),
     "GET /liturgy/config": liturgyConfig(),
     "GET /church/bulletin-settings": bulletinSettings(),
+    "GET /services/previous-bulletin": previousBulletin(),
     ...routes,
   });
   const view = renderWithProviders(
@@ -323,7 +326,8 @@ describe("Review & send: the printed bulletin (printed bulletin PR 1)", () => {
     renderReview();
     const card = await screen.findByRole("region", { name: "Printed bulletin" });
     expect(within(card).getByText(PRINTED_SUMMARY)).toBeInTheDocument();
-    expect(within(card).getByText(PLACEHOLDERS_NOTE)).toBeInTheDocument();
+    expect(within(card).getByText(WEEKLY_NOTE)).toBeInTheDocument();
+    expect(within(card).queryByText(/\[placeholders\]/)).toBeNull(); // PR 1's note is gone (PR 2b)
     const printed = within(card).getByRole("button", { name: "Download printed bulletin" });
     const word = within(card).getByRole("button", { name: "Download Word version" });
     expect(printed).toHaveAccessibleDescription(
@@ -382,7 +386,7 @@ describe("Review & send: the printed bulletin (printed bulletin PR 1)", () => {
     expect(within(card).getByText(SETTINGS_NOTE)).toBeInTheDocument();
     expect(
       await within(card).findByText(
-        "Not filled in: address, phone, email, website, Facebook name, service time, worship leader, liturgist, organist.",
+        "Not filled in: address, phone, email, website, Facebook name, service time, worship leader, liturgist, organist, prelude, postlude, announcements.",
       ),
     ).toBeInTheDocument();
     const download = within(card).getByRole("button", { name: "Download printed bulletin" });
@@ -398,9 +402,35 @@ describe("Review & send: the printed bulletin (printed bulletin PR 1)", () => {
 
     const filled = renderReview(testDraft(), { "GET /church/bulletin-settings": filledBulletinSettings({ organist: "" }) });
     card = await screen.findByRole("region", { name: "Printed bulletin" });
-    expect(await within(card).findByText("Not filled in: organist.")).toBeInTheDocument();
+    expect(await within(card).findByText("Not filled in: organist, prelude, postlude, announcements.")).toBeInTheDocument();
     expect(within(card).getByRole("button", { name: "Download printed bulletin" })).toBeEnabled();
     filled.unmount();
+  });
+
+  it("carries last week's music and announcements in, lists what to check, and prints them (printed bulletin PR 2b)", async () => {
+    const lastWeek = previousBulletin({
+      service_id: "s-last",
+      service_date_iso: "2026-09-27",
+      bulletin: serviceBulletin({
+        prelude: { title: "Morning Voluntary", composer: "Pat Example" },
+        announcements: { ...serviceBulletin().announcements, ushers: "Sam Sample", coffee_hour: "The Example family" },
+      }),
+    });
+    const { api, user } = renderReview(testDraft(), {
+      "GET /church/bulletin-settings": filledBulletinSettings(),
+      "GET /services/previous-bulletin": lastWeek,
+      "POST /documents/printed": pdf(),
+    });
+    const card = await screen.findByRole("region", { name: "Printed bulletin" });
+    expect(await within(card).findByText("From last week, not checked yet: prelude, ushers and counters, coffee hour.")).toBeInTheDocument();
+    expect(within(card).getByText("Not filled in: postlude.")).toBeInTheDocument();
+    await user.click(within(card).getByRole("button", { name: "Download printed bulletin" }));
+    await waitFor(() => expect(printedRequests(api)).toHaveLength(1));
+    expect(printedRequests(api)[0].body).toMatchObject({
+      service: { bulletin: { prelude: { title: "Morning Voluntary" }, announcements: { coffee_hour: "The Example family" } } },
+    });
+    const progress = screen.getByRole("navigation", { name: "Steps" });
+    expect(within(progress).getAllByRole("link")[3]).toHaveTextContent("4 Bulletin 3 to check");
   });
 });
 
