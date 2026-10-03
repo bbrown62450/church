@@ -199,7 +199,10 @@ export function markSaved(d: DraftV1, service: ServiceOut, fp: string): DraftV1 
     editing: { service_id: service.id, saved_at: service.saved_at, date_iso: service.service_date_iso },
     saved_fingerprint: fp,
     liturgy: { ...d.liturgy, cards, communion_origin },
-    // Saved: what "Save as new service" set aside belongs to the other service (PR 2b-2).
-    bulletin: { ...d.bulletin, set_aside: null },
+    // Saved as a different service (a POST): what "Save as new service" set
+    // aside belongs to the other one (PR 2b-2). Saved over the same service
+    // (a PUT), it is kept, so it returns on the saved date rather than being
+    // lost (2b-2 build review C1).
+    bulletin: service.id === d.editing?.service_id ? d.bulletin : { ...d.bulletin, set_aside: null },
   };
 }

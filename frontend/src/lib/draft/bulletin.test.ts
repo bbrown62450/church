@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import type { PreviousBulletin } from "@/lib/api/types";
-import { filledBulletinSettings, savedService, serviceBulletin, testDraft } from "@/test/fixtures";
+import { serviceBody } from "@/lib/documents";
+import { churchProfile, filledBulletinSettings, savedService, serviceBulletin, testDraft, USER_ID } from "@/test/fixtures";
 
 import {
   applyCarry,
@@ -20,9 +21,12 @@ import {
   setPerson,
   shouldCarry,
 } from "./bulletin";
-import { markSaved } from "./mapping";
+import { fingerprint } from "./fingerprint";
+import { draftToServicePayload, markSaved, serviceToDraft } from "./mapping";
 import { editScriptureLines, setDate, setPick } from "./readings";
+import { keyForPost } from "./save-key";
 import type { DraftV1 } from "./schema";
+import { reviewStatus, saveMode } from "./status";
 
 /** Last week's service (invented): the music and three announcements. */
 function lastWeek(overrides: Partial<PreviousBulletin> = {}): PreviousBulletin {
@@ -144,7 +148,7 @@ describe("Save as new service (plan review fix I4)", () => {
     expect(followSaveMode(savedCopy)).toBe(savedCopy);
   });
 
-  it("puts back what it set aside on the saved date, keeping anything typed meanwhile, and waits for an unknown save", () => {
+  it("puts back what it set aside on the saved date, keeping anything typed meanwhile, and sets nothing aside during an unknown save", () => {
     let copy = followSaveMode(setDate(opened(), "2026-10-11", "user"));
     copy = setAnnouncement(setPerson(copy, "organist", "Jordan Doe"), "coffee_hour", "The Sample family");
     const back = followSaveMode(setDate(copy, "2026-10-04", "user"));
@@ -158,6 +162,57 @@ describe("Save as new service (plan review fix I4)", () => {
     });
     const pending = { ...setDate(opened(), "2026-10-11", "user"), save_key_fingerprint: "fp" };
     expect(followSaveMode(pending)).toBe(pending);
+  });
+});
+
+describe("Save as new service after a save whose outcome is unknown (2b-2 build review C1, M5)", () => {
+  const saved = savedService({
+    bulletin: serviceBulletin({
+      people: { worship_leader: "Rev. Guest", liturgist: null, organist: null },
+      leaders: { sermon: "Rev. Guest" },
+      reading_text: { ot: "", nt: "Pasted Matthew text" },
+      announcements: { ...serviceBulletin().announcements, prayer_concerns: "For Sam." },
+    }),
+  });
+  const open = () => serviceToDraft(saved, { church: churchProfile(), user: { id: USER_ID } });
+
+  it("puts back the set-aside fields on the saved date while the POST's key is pending, so Save changes keeps them", () => {
+    let d = open();
+    const before = serviceBody(d).bulletin;
+    d = followSaveMode(setDate(d, "2026-10-11", "user")); // Review: Save as new service
+    expect(d.bulletin.set_aside).not.toBeNull();
+    d = keyForPost(d, fingerprint(draftToServicePayload(d))); // the POST's answer was lost
+    const back = followSaveMode(setDate(d, "2026-10-04", "user")); // back to the saved date
+    expect(back.bulletin.set_aside).toBeNull();
+    expect(saveMode(back)).toBe("update");
+    expect(reviewStatus(back)).toBe("saved");
+    const put = serviceBody(back).bulletin; // what Save changes sends
+    expect(put).toEqual(before);
+    expect(put.people.worship_leader).toBe("Rev. Guest");
+    expect(put.leaders).toEqual({ sermon: "Rev. Guest" });
+    expect(put.reading_text.nt).toBe("Pasted Matthew text");
+  });
+
+  it("markSaved keeps the set-aside fields after a save over the same service and drops them after a new one", () => {
+    let d = followSaveMode(setDate(open(), "2026-10-11", "user"));
+    d = setDate(d, "2026-10-04", "user"); // set aside, then saved over the same service before Review ran again
+    const put = markSaved(d, saved, fingerprint(draftToServicePayload(d)));
+    expect(put.bulletin.set_aside).toEqual(d.bulletin.set_aside);
+    const restored = followSaveMode(put);
+    expect(restored.bulletin.people.worship_leader).toBe("Rev. Guest");
+    expect(restored.bulletin.pasted).toEqual({ "Matthew 21:33-46": "Pasted Matthew text" });
+    const copy = followSaveMode(setDate(open(), "2026-10-11", "user"));
+    const posted = markSaved(copy, savedService({ id: "s-new", service_date_iso: "2026-10-11" }), "fp");
+    expect(posted.bulletin.set_aside).toBeNull();
+  });
+
+  it("an undated saved service does not enter copy mode on open", () => {
+    const d = serviceToDraft(savedService({ service_date_iso: null, service_date: "" }), {
+      church: churchProfile(),
+      user: { id: USER_ID },
+    });
+    expect(d.editing?.date_iso).toBeNull();
+    expect(followSaveMode(d)).toBe(d);
   });
 });
 

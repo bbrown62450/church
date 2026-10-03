@@ -23,7 +23,7 @@
  *   week: every filled music and announcement box is marked "From last
  *   week", and this week's people, the part leaders and the pasted texts
  *   start empty (set aside, and put back if the date goes back to the
- *   saved one).
+ *   saved one, even while a save's outcome is unknown).
  * - `bulletinPayload`: the draft's bulletin as `ServiceDraft.bulletin`, the
  *   texts trimmed, the pasted texts of the readings the files print, and
  *   the boxes still to check (`unchecked`, so the marks are saved with the
@@ -173,15 +173,28 @@ const NO_ONE_CHANGED: DraftBulletin["people"] = { worship_leader: null, liturgis
  * filled music and announcement box is marked "From last week. Check before
  * printing.". Back on the saved date, what was set aside returns: a name or
  * text typed meanwhile wins, and a saved mark returns only on a box not
- * edited or kept meanwhile. Nothing happens while a save's outcome is
- * unknown (`save_key_fingerprint`); the draft unchanged when nothing is due.
+ * edited or kept meanwhile. Nothing is set aside while a save's outcome
+ * is unknown (`save_key_fingerprint`: it would change the body of the POST
+ * that may be retried), but what was set aside always returns on the saved
+ * date, a pending key included: the next save there is a PUT of the saved
+ * service, which uses no key, and without them it would blank the saved
+ * people, leaders and texts (2b-2 build review C1). An undated saved
+ * service (from before dates were kept) is never set aside: its date was
+ * not changed, only filled in (2b-2 build review M5). The draft unchanged
+ * when nothing is due.
  */
 export function followSaveMode(d: DraftV1): DraftV1 {
   const editing = d.editing;
   const date = d.readings.date_iso;
   const b = d.bulletin;
-  if (editing === null || d.save_key_fingerprint !== null) return d;
-  if (date !== editing.date_iso && isValidDateIso(date) && b.set_aside === null) {
+  if (editing === null) return d;
+  if (
+    d.save_key_fingerprint === null &&
+    editing.date_iso !== null &&
+    date !== editing.date_iso &&
+    isValidDateIso(date) &&
+    b.set_aside === null
+  ) {
     return withBulletin(d, {
       ...b,
       people: NO_ONE_CHANGED,
