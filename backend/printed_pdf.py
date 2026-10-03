@@ -157,13 +157,12 @@ def _story(ps: pb.PrintedService, width: float) -> list[Flowable]:
     heading = Paragraph(_markup(title), STYLES["title"])
     picture = 300 + 30                                     # the picture's box and the space under it
     room = pb.PAGE_HEIGHT - 2 * MARGIN - heading.wrap(width, pb.PAGE_HEIGHT)[1] - STYLES["title"].spaceAfter - picture
-    story: list[Flowable] = [
-        heading,
-        _CoverPicture(width - 60, 300, label.text, reference.text, date.text),
-        Spacer(1, 30),
-        _contact(contact, width, max(room, 30.0)),
-        FrameBreak(),
-    ]
+    story: list[Flowable] = [heading, _CoverPicture(width - 60, 300, label.text, reference.text, date.text)]
+    # No contact lines (or no room left for them under a very long church name): nothing kept for them, so the
+    # order of worship still starts on page 1 (build review M1).
+    if contact and room > 0:
+        story += [Spacer(1, 30), _contact(contact, width, room)]
+    story.append(FrameBreak())
     story += [f for line in pb.order_of_worship(ps) for f in _flowables(line, width)]
     story.append(FrameBreak())
     story += [f for line in pb.announcements(ps) for f in _flowables(line, width)]

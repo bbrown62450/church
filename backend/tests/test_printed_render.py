@@ -5,6 +5,7 @@ import dataclasses
 import datetime
 from io import BytesIO
 
+import pytest
 from docx import Document
 from docx.oxml.ns import qn
 from docx.shared import Inches
@@ -138,3 +139,22 @@ def test_the_longest_details_still_fit_the_cover():
     assert pages[0].startswith("The First Presbyterian Church of Springfield [Cover picture]")
     assert pages[0].endswith(f"FB: {settings.facebook}")
     assert pages[1].startswith("1 THE SERVICE FOR THE LORD’S DAY The First Presbyterian Church of Springfield")
+
+
+
+@pytest.mark.parametrize("length, contact, cover_ends", [
+    (145, True, "FB: Example Church"),
+    (150, False, "[Cover picture] Matthew 21:23-32 September 27, 2026"),
+    (150, True, "[Cover picture] Matthew 21:23-32 September 27, 2026"),
+])
+def test_a_long_church_name_still_leaves_page_1_on_side_1(length, contact, cover_ends):
+    """Build review M1: under a church name of 5 title lines (about 145 characters) the contact lines shrink
+    into the room left. A name of 6 lines (150; names may have 200) leaves no room under the picture: nothing
+    is kept for contact lines (none, or no room for them), so the order of worship still starts on side 1."""
+    name = ("Saint Example " * 12)[:length].strip()
+    settings = SETTINGS if contact else bs.BulletinSettings()
+    content = printed_pdf.render_pdf(dataclasses.replace(service(), church_name=name, settings=settings))
+    assert len(PdfReader(BytesIO(content)).pages) == 2
+    pages = halves(content)
+    assert pages[0].startswith("Saint Example") and pages[0].endswith(cover_ends)
+    assert pages[1].startswith("1 THE SERVICE FOR THE LORD’S DAY")
