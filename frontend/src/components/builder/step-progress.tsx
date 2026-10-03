@@ -16,6 +16,10 @@ export function statusText(status: StepStatus): string {
       return `${status.done} of ${status.total}`;
     case "soon":
       return "Soon";
+    case "optional":
+      return "Optional";
+    case "to_check":
+      return `${status.count} to check`;
     case "not_in_archive":
       return "Not in archive";
     case "saved":
@@ -26,9 +30,11 @@ export function statusText(status: StepStatus): string {
 }
 
 /**
- * The four steps (F §4.7 "StepProgress"; S "Builder shell"): every step is a
- * link (F D9). Below `lg` a line "Step 1 of 4 · Date & readings" sits above
- * four segments; from `lg` each step shows its number, label and status. The
+ * The five steps (F §4.7 "StepProgress"; S "Builder shell"; the Bulletin
+ * step from printed bulletin PR 2b): every step is a link (F D9). Below `lg`
+ * a line "Step 1 of 5 · Date & readings" sits above five segments (each
+ * 44 px tall, about 60 px wide at 375 px); from `lg` each step shows its
+ * number, label and status. The
  * labels and statuses are in the DOM at every width (screen-reader text below
  * `lg`), so each link's name is "{n} {label} {status}".
  */
@@ -40,11 +46,11 @@ export function StepProgress({ current, shipped = SHIPPED_STEPS }: { current: St
       <p className="text-sm font-medium lg:hidden" aria-hidden="true">
         Step {step.number} of {STEPS.length} · {step.label}
       </p>
-      <ol className="grid grid-cols-4 gap-1.5 lg:gap-3">
+      <ol className="grid grid-cols-5 gap-1.5 lg:gap-3">
         {STEPS.map((s) => {
           const status = stepStatus(draft, s.id, shipped);
           const isCurrent = s.id === current;
-          const muted = status.kind === "soon" || status.kind === "not_in_archive";
+          const muted = status.kind === "soon" || status.kind === "not_in_archive" || status.kind === "optional";
           return (
             <li key={s.id}>
               <Link

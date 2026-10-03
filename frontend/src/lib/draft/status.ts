@@ -8,6 +8,7 @@ import { DEFAULT_ENABLED, SECTION_LABELS } from "@/lib/liturgy/sections";
 import { liturgyCounts } from "@/lib/liturgy/summary";
 import { cleanLines } from "@/lib/scripture-refs";
 
+import { bulletinStatus } from "./bulletin";
 import { fingerprint } from "./fingerprint";
 import { draftToServicePayload } from "./mapping";
 import { SECTION_KEYS, SLOTS, type DraftV1, type Slot, type StepId } from "./schema";
@@ -21,6 +22,10 @@ export type StepStatus =
   | { kind: "incomplete"; done: number; total: number }
   /** A step whose content has not shipped: the muted "Soon". */
   | { kind: "soon" }
+  /** The Bulletin step (printed bulletin PR 2b): never required, the muted "Optional"... */
+  | { kind: "optional" }
+  /** ...or how many boxes still hold last week's text, unchecked: "2 to check". */
+  | { kind: "to_check"; count: number }
   /** Review: "Not in archive", "Saved" (with the ✓ of a complete step) or "Unsaved changes". */
   | { kind: ReviewStatus };
 
@@ -76,6 +81,7 @@ export function stepStatus(
 ): StepStatus {
   if (step === "review") return { kind: shipped.has("review") ? reviewStatus(draft) : "not_in_archive" };
   if (!shipped.has(step)) return { kind: "soon" };
+  if (step === "bulletin") return bulletinStatus(draft);
   if (step === "readings") {
     const r = draft.readings;
     const scripturesOk = cleanLines(r.scriptures).length > 0 && scriptureProblems(r.scriptures).length === 0;
@@ -105,11 +111,15 @@ export function stepStatus(
  * a card switched away from its default, communion the user set, the sermon
  * title and custom elements; a Benediction still following the church
  * default (origin "default") and text that prints nothing (blank after
- * trimming) do not (owner answer 1, 2026-09-30, slice 4b).
+ * trimming) do not (owner answer 1, 2026-09-30, slice 4b). On the Bulletin
+ * step (printed bulletin PR 2b) a box typed, edited or kept counts, and so
+ * does a person, a part's leader or a pasted text; last week's text carried
+ * in and not touched does not (it comes back on its own).
  */
 export function isPristine(draft: DraftV1): boolean {
   const r = draft.readings;
   const l = draft.liturgy;
+  const b = draft.bulletin;
   return (
     r.date_origin !== "user" &&
     r.translation === null &&
@@ -126,6 +136,10 @@ export function isPristine(draft: DraftV1): boolean {
     l.communion_origin === "default" &&
     l.sermon_title.trim() === "" &&
     l.custom_elements.length === 0 &&
+    b.edited.length === 0 &&
+    Object.values(b.people).every((name) => name === null) &&
+    Object.keys(b.leaders).length === 0 &&
+    Object.keys(b.pasted).length === 0 &&
     draft.editing === null
   );
 }

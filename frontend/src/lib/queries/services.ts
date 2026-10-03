@@ -6,6 +6,8 @@
  *
  * - `useServices()`: the list, 20 a page, newest service date first (the
  *   server's order), "Show more" reading the next offset.
+ * - `usePreviousBulletin(date, enabled)`: last week's bulletin, for carry
+ *   forward (printed bulletin PR 2b).
  * - `useSaveService(church)`: Save. "Save changes" PUTs with `If-Match` (the
  *   `saved_at` the draft holds); a 404 without `details.field` (the service
  *   was deleted) POSTs instead and says so. A 409 reads the archive's copy:
@@ -31,15 +33,16 @@
  *   edited resets the draft (F §4.6 rule 2), keeping the translation as New
  *   service does. A 404 refreshes the list.
  */
-import { useInfiniteQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { ApiError } from "@/lib/api/client";
 import { errorToastMessage, isNoChurchAccess } from "@/lib/api/errors";
-import type { DeletedOut, ServiceOut, ServicePage } from "@/lib/api/types";
+import type { DeletedOut, PreviousBulletin, ServiceOut, ServicePage } from "@/lib/api/types";
 import { useChurch } from "@/lib/church-context";
 import { savedCopyFingerprint, serviceBody } from "@/lib/documents";
+import { isBlankBulletin } from "@/lib/draft/bulletin";
 import { useDraft } from "@/lib/draft/context";
 import { fingerprint } from "@/lib/draft/fingerprint";
 import { draftToServicePayload, markSaved, serviceToDraft } from "@/lib/draft/mapping";
@@ -94,6 +97,27 @@ export function useServices() {
   });
 }
 
+/**
+ * `GET /services/previous-bulletin?before=` (printed bulletin PR 2b): what a
+ * new week's bulletin carries forward from the latest service dated before
+ * `dateIso`. Fetched only while carrying is due (`enabled`); under the
+ * services key, so a save or a delete refreshes it. Never fresh
+ * (`staleTime` 0): each mount and each date fetches it again, since a
+ * cached answer may predate a fix saved to last week's service here or on
+ * another device; `useBulletinCarry` applies only an answer fetched after
+ * it mounted (2b-2 build review I1).
+ */
+export function usePreviousBulletin(dateIso: string, enabled: boolean) {
+  const api = useApi();
+  const church = useChurch();
+  return useQuery<PreviousBulletin, ApiError>({
+    queryKey: keys.previousBulletin(church.id, dateIso),
+    queryFn: ({ signal }) => api.church<PreviousBulletin>(`/services/previous-bulletin?before=${dateIso}`, { signal }),
+    enabled,
+    staleTime: 0,
+  });
+}
+
 /** Save's mutation key, so a page with its own draft provider can tell when a save settles. */
 export const SAVE_SERVICE_KEY = ["saveService"] as const;
 
@@ -127,11 +151,19 @@ export function useSaveService(church: DraftChurch) {
       const draft = peek();
       const fp = fingerprint(draftToServicePayload(draft));
       const body = serviceBody(draft);
+      // A POST leaves a blank bulletin out (the server stores none, which
+      // reads as blank), as the save-key fingerprint does: the retry of a
+      // POST sent before PR 2b-2, whose answer was lost, then carries the
+      // same body and replays instead of saving a second copy (2b-2 build
+      // review M1). A PUT always sends it, so clearing every field clears
+      // the saved ones.
+      const { bulletin, ...withoutBulletin } = body;
+      const postBody = bulletin == null || isBlankBulletin(bulletin) ? withoutBulletin : body;
 
       async function post(retried: boolean): Promise<ServiceOut> {
         autoUpdate((d) => keyForPost(d, fp));
         try {
-          const out = await api.church<ServiceOut>("/services", { method: "POST", json: body, idempotencyKey: peek().save_key });
+          const out = await api.church<ServiceOut>("/services", { method: "POST", json: postBody, idempotencyKey: peek().save_key });
           autoUpdate((d) => settlePost(d, "success"));
           return out;
         } catch (e) {

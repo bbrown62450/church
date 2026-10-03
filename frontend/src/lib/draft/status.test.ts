@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { lectionary, testDraft } from "@/test/fixtures";
+import { lectionary, serviceBulletin, testDraft } from "@/test/fixtures";
 
 import { fingerprint } from "./fingerprint";
 import { draftToServicePayload } from "./mapping";
@@ -16,11 +16,19 @@ import {
 import type { DraftV1, HymnPick, StepId } from "./schema";
 import { isDirty, isPristine, reviewStatus, saveMode, stepStatus, stillNeeded, withoutTranslation } from "./status";
 import { SHIPPED_STEPS, STEPS, stepById, stepFromPath } from "./steps";
+import { applyCarry, keepCarried, setAnnouncement, setPartLeader, setPastedText, setPerson } from "./bulletin";
 import { DEFAULT_BENEDICTION_FALLBACK } from "@/lib/liturgy/defaults";
 
 const READINGS: ReadonlySet<StepId> = new Set<StepId>(["readings"]);
 const ALL: ReadonlySet<StepId> = new Set<StepId>(["readings", "hymns", "liturgy", "review"]);
 const HYMN: HymnPick = { hymn_id: "h1", title: "Amazing Grace", number: 649, hymnal: "GG2013" };
+
+/** A new draft with last week's coffee hour carried in (printed bulletin PR 2b). */
+function carriedDraft(): DraftV1 {
+  const announcements = { ...serviceBulletin().announcements, coffee_hour: "The Example family" };
+  const previous = { service_id: "s0", service_date_iso: "2026-09-27", bulletin: serviceBulletin({ announcements }) };
+  return applyCarry(testDraft(), previous, "2026-10-04");
+}
 
 function withLiturgy(patch: Partial<DraftV1["liturgy"]>): DraftV1 {
   return testDraft((d) => ({ ...d, liturgy: { ...d.liturgy, ...patch } }));
@@ -34,14 +42,15 @@ function withCard(key: keyof DraftV1["liturgy"]["cards"], card: Partial<DraftV1[
 }
 
 describe("steps (S steps.ts)", () => {
-  it("lists the four steps in order, ships all four (2c, 3b, 4b and Review in 5a-3), and reads a step from its path", () => {
+  it("lists the five steps in order, ships all five (2c, 3b, 4b, Review in 5a-3, Bulletin in PR 2b), and reads a step from its path", () => {
     expect(STEPS.map((s) => [s.number, s.label, s.href, s.previous, s.next])).toEqual([
       [1, "Date & readings", "/builder/readings", null, "hymns"],
       [2, "Hymns", "/builder/hymns", "readings", "liturgy"],
-      [3, "Liturgy", "/builder/liturgy", "hymns", "review"],
-      [4, "Review & send", "/builder/review", "liturgy", null],
+      [3, "Liturgy", "/builder/liturgy", "hymns", "bulletin"],
+      [4, "Bulletin", "/builder/bulletin", "liturgy", "review"],
+      [5, "Review & send", "/builder/review", "bulletin", null],
     ]);
-    expect([...SHIPPED_STEPS]).toEqual(["readings", "hymns", "liturgy", "review"]);
+    expect([...SHIPPED_STEPS]).toEqual(["readings", "hymns", "liturgy", "bulletin", "review"]);
     expect(stepById("liturgy").label).toBe("Liturgy");
     expect(stepFromPath("/builder/hymns")).toBe("hymns");
     expect(stepFromPath("/builder/review/")).toBe("review");
@@ -54,7 +63,7 @@ describe("steps (S steps.ts)", () => {
 describe("stepStatus (F §4.7)", () => {
   it("shows Soon for unshipped steps and Not in archive for Review", () => {
     const d = testDraft();
-    expect(STEPS.map((s) => stepStatus(d, s.id).kind)).toEqual(["incomplete", "incomplete", "incomplete", "not_in_archive"]);
+    expect(STEPS.map((s) => stepStatus(d, s.id).kind)).toEqual(["incomplete", "incomplete", "incomplete", "optional", "not_in_archive"]);
     expect(stepStatus(d, "liturgy", READINGS)).toEqual({ kind: "soon" });
     expect(stepStatus(d, "readings", new Set())).toEqual({ kind: "soon" });
     expect(stepStatus(d, "review", ALL)).toEqual({ kind: "not_in_archive" });
@@ -128,8 +137,26 @@ describe("isPristine (S status.ts)", () => {
         chooseReadingSet(applyReadingSet(testDraft(), lectionary("2026-10-04"), 0), lectionary("2026-10-04"), 1),
       ],
       ["a translation", setTranslation(testDraft(), "kjv", "web")],
+      // Printed bulletin PR 2b: anything typed on the Bulletin step.
+      ["an announcement", setAnnouncement(testDraft(), "coffee_hour", "The Example family")],
+      ["last week's kept", keepCarried(carriedDraft(), "coffee_hour")],
+      ["a person this week", setPerson(testDraft(), "organist", "")],
+      ["a part's leader", setPartLeader(testDraft(), "sermon", "Rev. Guest")],
+      ["pasted text", setPastedText(testDraft(), "Psalm 23", "The Lord is my shepherd.")],
     ];
     for (const [name, d] of cases) expect(isPristine(d), name).toBe(false);
+    // Last week's text carried in and not touched comes back on its own: nothing to lose.
+    expect(isPristine(carriedDraft())).toBe(true);
+  });
+});
+
+describe("the Bulletin step's status (printed bulletin PR 2b)", () => {
+  it("is Soon until it ships, then Optional, or how many boxes from last week are still to check", () => {
+    expect(stepStatus(testDraft(), "bulletin", ALL)).toEqual({ kind: "soon" });
+    const shipped = new Set<StepId>([...ALL, "bulletin"]);
+    expect(stepStatus(testDraft(), "bulletin", shipped)).toEqual({ kind: "optional" });
+    expect(stepStatus(carriedDraft(), "bulletin", shipped)).toEqual({ kind: "to_check", count: 1 });
+    expect(stillNeeded(carriedDraft(), shipped)).toEqual(stillNeeded(testDraft(), shipped)); // never "Still to do"
   });
 });
 

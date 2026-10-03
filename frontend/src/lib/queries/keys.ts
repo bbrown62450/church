@@ -22,6 +22,8 @@ export const keys = {
   hymnalSources: (id: string) => ["church", id, "hymnal-sources"] as const,
   services: (id: string, params: object) => ["church", id, "services", params] as const,
   service: (id: string, serviceId: string) => ["church", id, "service", serviceId] as const,
+  /** Under the services prefix, so a save or a delete (which refresh it) changes what carries forward (PR 2b). */
+  previousBulletin: (id: string, dateIso: string) => ["church", id, "services", "previous-bulletin", dateIso] as const,
   contacts: (id: string) => ["church", id, "contacts"] as const,
   members: (id: string) => ["church", id, "members"] as const,
   invites: (id: string) => ["church", id, "invites"] as const,

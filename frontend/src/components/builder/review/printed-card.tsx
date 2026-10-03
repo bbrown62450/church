@@ -5,9 +5,11 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { PendingButton } from "@/components/app/pending-button";
+import { useBulletinCarry } from "@/components/builder/bulletin/use-bulletin-carry";
 import { useStillWorking } from "@/components/builder/liturgy/use-still-working";
 import { buttonVariants } from "@/components/ui/button";
-import { notFilledIn, notFilledInLine } from "@/lib/bulletin-settings";
+import { notFilledInLine } from "@/lib/bulletin-settings";
+import { notChecked, notCheckedLine, printedNotFilledIn } from "@/lib/draft/bulletin";
 import { useDraft } from "@/lib/draft/context";
 import { hasReadingsError, hasServiceDate, reviewStatus } from "@/lib/draft/status";
 import type { PrintedFormat } from "@/lib/download";
@@ -37,18 +39,28 @@ export const PRINTED_SUMMARY =
   "The booklet: the cover, the order of worship with the readings in full, and the announcements.";
 export const SETTINGS_NOTE =
   "The church's details, the people who lead and the service time come from the bulletin settings.";
-export const PLACEHOLDERS_NOTE = "For now, the music and the announcements print as [placeholders].";
+export const WEEKLY_NOTE = "The music, the announcements and this week's changes to who leads come from the Bulletin step.";
 
 /**
- * The bulletin settings' blank fields (PR 2 planning answer 3: a blank field
+ * What the printed bulletin leaves out (PR 2 planning answer 3: a blank field
  * prints nothing, so the card says which are blank), above the downloads so
- * it is read before printing. Nothing while the settings load or if they
- * fail: the downloads never wait for them.
+ * it is read before printing: the blank standing settings (with this week's
+ * people), then the prelude, the postlude and the announcements (PR 2b). The
+ * settings' part is left out while they load or if they fail: the downloads
+ * never wait for them. Then the boxes still holding last week's text,
+ * unchecked.
  */
-function NotFilledInLine() {
+function NotFilledInLines() {
+  const { draft } = useDraft();
   const settings = useBulletinSettings();
-  const missing = settings.data ? notFilledIn(settings.data) : [];
-  return missing.length > 0 ? <p className="text-sm">{notFilledInLine(missing)}</p> : null;
+  const missing = printedNotFilledIn(settings.data, draft);
+  const unchecked = notChecked(draft);
+  return (
+    <>
+      {missing.length > 0 ? <p className="text-sm">{notFilledInLine(missing)}</p> : null}
+      {unchecked.length > 0 ? <p className="text-sm">{notCheckedLine(unchecked)}</p> : null}
+    </>
+  );
 }
 
 function FileRow({ file, disabled, onDownloaded }: { file: PrintedFile; disabled: boolean; onDownloaded: () => void }) {
@@ -87,14 +99,19 @@ function FileRow({ file, disabled, onDownloaded }: { file: PrintedFile; disabled
  * legal sheet in reading order, layout B) and as a Word file to change, each built on the server from the draft at the tap,
  * with the readings in full in the translation step 1 shows. Pending labels,
  * errors, the date and readings gates and the save tip work as on the Word
- * documents card. PR 1 prints what the app does not know yet as
- * [placeholders], and the card says so. PR 2a: the standing details come
+ * documents card. PR 2a: the standing details come
  * from the church's bulletin settings; the card lists the blank ones above
  * the downloads and links to the Bulletin settings page below them (any
- * member; admins edit there).
+ * member; admins edit there). PR 2b: the week's own fields come from the
+ * Bulletin step and replace PR 1's last [placeholders] (the cover picture's
+ * stays until PR 3); the card lists the blank ones and the boxes from last
+ * week not checked yet, and carries last week's in here too
+ * (`useBulletinCarry`), so a bulletin printed without opening the Bulletin
+ * step has them.
  */
 export function PrintedCard() {
   const { draft } = useDraft();
+  useBulletinCarry();
   const [downloaded, setDownloaded] = useState(false);
   const dated = hasServiceDate(draft);
   const readingsError = hasReadingsError(draft);
@@ -105,9 +122,9 @@ export function PrintedCard() {
           Printed bulletin
         </h2>
         <p className="text-sm text-muted-foreground">{PRINTED_SUMMARY}</p>
-        <p className="text-sm text-muted-foreground">{PLACEHOLDERS_NOTE}</p>
         <p className="text-sm text-muted-foreground">{SETTINGS_NOTE}</p>
-        <NotFilledInLine />
+        <p className="text-sm text-muted-foreground">{WEEKLY_NOTE}</p>
+        <NotFilledInLines />
         {dated ? null : <p className="text-sm text-muted-foreground">{NEEDS_DATE}</p>}
         {readingsError ? <p className="text-sm text-muted-foreground">{FIX_READINGS}</p> : null}
       </div>

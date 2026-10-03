@@ -17,6 +17,7 @@ import BuilderLayout from "@/app/(signed-in)/(church)/builder/layout";
 import ReviewStepPage from "@/app/(signed-in)/(church)/builder/review/page";
 import { Toaster } from "@/components/ui/sonner";
 import { formatSavedAt } from "@/lib/dates";
+import { emptyServiceBulletin, setAnnouncement } from "@/lib/draft/bulletin";
 import { useDraft } from "@/lib/draft/context";
 import { serviceToDraft } from "@/lib/draft/mapping";
 import { draftKey, type DraftV1 } from "@/lib/draft/schema";
@@ -38,8 +39,10 @@ import {
   lectionaryRoute,
   liturgyConfig,
   me,
+  previousBulletin,
   savedService,
   SERVICE_ID,
+  serviceBulletin,
   testDraft,
   translations,
   USER_ID,
@@ -49,7 +52,7 @@ import { renderWithProviders } from "@/test/render";
 
 import { CONFLICT_TITLE, RELOAD_REPLACES } from "./conflict-dialog";
 import { FIX_READINGS, NEEDS_DATE, SAME_AS_BULLETIN, SAVE_HINT } from "./documents-card";
-import { PLACEHOLDERS_NOTE, PRINTED_SUMMARY, SETTINGS_NOTE } from "./printed-card";
+import { PRINTED_SUMMARY, SETTINGS_NOTE, WEEKLY_NOTE } from "./printed-card";
 import { CONFLICT_MESSAGE, LOADED_LATEST, SAVE_FIX_READINGS, SAVE_NEEDS_DATE } from "./save-card";
 import { SAVED_AFTER_DELETE_MESSAGE, SAVED_MESSAGE } from "@/lib/queries/services";
 import { DEFAULT_BENEDICTION_FALLBACK } from "@/lib/liturgy/defaults";
@@ -79,6 +82,7 @@ function renderReview(draft: DraftV1 = testDraft(), routes: Record<string, FakeH
     "GET /hymns": hymnListRoute(),
     "GET /liturgy/config": liturgyConfig(),
     "GET /church/bulletin-settings": bulletinSettings(),
+    "GET /services/previous-bulletin": previousBulletin(),
     ...routes,
   });
   const view = renderWithProviders(
@@ -323,7 +327,8 @@ describe("Review & send: the printed bulletin (printed bulletin PR 1)", () => {
     renderReview();
     const card = await screen.findByRole("region", { name: "Printed bulletin" });
     expect(within(card).getByText(PRINTED_SUMMARY)).toBeInTheDocument();
-    expect(within(card).getByText(PLACEHOLDERS_NOTE)).toBeInTheDocument();
+    expect(within(card).getByText(WEEKLY_NOTE)).toBeInTheDocument();
+    expect(within(card).queryByText(/\[placeholders\]/)).toBeNull(); // PR 1's note is gone (PR 2b)
     const printed = within(card).getByRole("button", { name: "Download printed bulletin" });
     const word = within(card).getByRole("button", { name: "Download Word version" });
     expect(printed).toHaveAccessibleDescription(
@@ -382,7 +387,7 @@ describe("Review & send: the printed bulletin (printed bulletin PR 1)", () => {
     expect(within(card).getByText(SETTINGS_NOTE)).toBeInTheDocument();
     expect(
       await within(card).findByText(
-        "Not filled in: address, phone, email, website, Facebook name, service time, worship leader, liturgist, organist.",
+        "Not filled in: address, phone, email, website, Facebook name, service time, worship leader, liturgist, organist, prelude, postlude, announcements.",
       ),
     ).toBeInTheDocument();
     const download = within(card).getByRole("button", { name: "Download printed bulletin" });
@@ -398,9 +403,35 @@ describe("Review & send: the printed bulletin (printed bulletin PR 1)", () => {
 
     const filled = renderReview(testDraft(), { "GET /church/bulletin-settings": filledBulletinSettings({ organist: "" }) });
     card = await screen.findByRole("region", { name: "Printed bulletin" });
-    expect(await within(card).findByText("Not filled in: organist.")).toBeInTheDocument();
+    expect(await within(card).findByText("Not filled in: organist, prelude, postlude, announcements.")).toBeInTheDocument();
     expect(within(card).getByRole("button", { name: "Download printed bulletin" })).toBeEnabled();
     filled.unmount();
+  });
+
+  it("carries last week's music and announcements in, lists what to check, and prints them (printed bulletin PR 2b)", async () => {
+    const lastWeek = previousBulletin({
+      service_id: "s-last",
+      service_date_iso: "2026-09-27",
+      bulletin: serviceBulletin({
+        prelude: { title: "Morning Voluntary", composer: "Pat Example" },
+        announcements: { ...serviceBulletin().announcements, ushers: "Sam Sample", coffee_hour: "The Example family" },
+      }),
+    });
+    const { api, user } = renderReview(testDraft(), {
+      "GET /church/bulletin-settings": filledBulletinSettings(),
+      "GET /services/previous-bulletin": lastWeek,
+      "POST /documents/printed": pdf(),
+    });
+    const card = await screen.findByRole("region", { name: "Printed bulletin" });
+    expect(await within(card).findByText("From last week, not checked yet: prelude, ushers and counters, coffee hour.")).toBeInTheDocument();
+    expect(within(card).getByText("Not filled in: postlude.")).toBeInTheDocument();
+    await user.click(within(card).getByRole("button", { name: "Download printed bulletin" }));
+    await waitFor(() => expect(printedRequests(api)).toHaveLength(1));
+    expect(printedRequests(api)[0].body).toMatchObject({
+      service: { bulletin: { prelude: { title: "Morning Voluntary" }, announcements: { coffee_hour: "The Example family" } } },
+    });
+    const progress = screen.getByRole("navigation", { name: "Steps" });
+    expect(within(progress).getAllByRole("link")[3]).toHaveTextContent("4 Bulletin 3 to check");
   });
 });
 
@@ -459,7 +490,7 @@ describe("Review & send: saving (slice 5a-3)", () => {
     const card = await archiveCard();
     const progress = screen.getByRole("navigation", { name: "Steps" });
     const aside = screen.getByRole("complementary", { name: "Summary" });
-    expect(within(progress).getAllByRole("link")[3]).toHaveTextContent("4 Review & send Not in archive");
+    expect(within(progress).getAllByRole("link")[4]).toHaveTextContent("5 Review & send Not in archive");
     expect(summaryStatus(aside, "Not in archive")).toHaveTextContent("Draft saved on this device · Not in archive");
 
     await user.click(within(card).getByRole("button", { name: "Save to archive" }));
@@ -469,7 +500,7 @@ describe("Review & send: saving (slice 5a-3)", () => {
     expect(post.headers["x-church-id"]).toBe(church().id);
     expect(post.body).toMatchObject({ service_date_iso: "2026-10-04", occasion: "Harvest", include_communion: true });
     expect(within(card).getByText(`Saved to the archive · ${formatSavedAt(FIRST_SAVE)}`)).toBeInTheDocument();
-    expect(within(progress).getAllByRole("link")[3]).toHaveTextContent("4 Review & send Saved");
+    expect(within(progress).getAllByRole("link")[4]).toHaveTextContent("5 Review & send Saved");
     expect(summaryStatus(aside, `In archive (saved ${formatSavedAt(FIRST_SAVE)})`)).toHaveTextContent(
       `Draft saved on this device · In archive (saved ${formatSavedAt(FIRST_SAVE)})`,
     );
@@ -483,7 +514,7 @@ describe("Review & send: saving (slice 5a-3)", () => {
 
     await user.click(screen.getByRole("button", { name: "Probe edit" }));
     expect(within(card).getByText(`Unsaved changes · last saved ${formatSavedAt(FIRST_SAVE)}`)).toBeInTheDocument();
-    expect(within(progress).getAllByRole("link")[3]).toHaveTextContent("4 Review & send Unsaved changes");
+    expect(within(progress).getAllByRole("link")[4]).toHaveTextContent("5 Review & send Unsaved changes");
     expect(summaryStatus(aside, `In archive (saved ${formatSavedAt(FIRST_SAVE)}) · Unsaved changes`)).toHaveTextContent(
       `Draft saved on this device · In archive (saved ${formatSavedAt(FIRST_SAVE)}) · Unsaved changes`,
     );
@@ -660,6 +691,40 @@ describe("Review & send: saving (slice 5a-3)", () => {
     expect(await screen.findByText(SAVED_MESSAGE)).toBeInTheDocument();
     const [first, second] = serviceRequests(api, "POST");
     expect(second.headers["idempotency-key"]).not.toBe(first.headers["idempotency-key"]);
+  });
+
+  it("leaves a blank bulletin out of a POST and always sends it in a PUT (2b-2 build review M1)", async () => {
+    // A POST whose answer was lost before 2b-2 sent no bulletin: its retry now keeps the same body, so no duplicate.
+    const { api, user } = renderReview(
+      editOccasion(testDraft(), "Harvest"),
+      {
+        "POST /services": () => ({ status: 201, body: savedService({ occasion: "Harvest", saved_at: FIRST_SAVE }) }),
+        [`PUT /services/${SERVICE_ID}`]: () => savedService({ occasion: "Harvest Home", saved_at: SECOND_SAVE }),
+      },
+      <Probe edit={(draft) => editOccasion(draft, "Harvest Home")} />,
+    );
+    const card = await archiveCard();
+    await user.click(within(card).getByRole("button", { name: "Save to archive" }));
+    expect(await screen.findByText(SAVED_MESSAGE)).toBeInTheDocument();
+    const [post] = serviceRequests(api, "POST");
+    expect(post.body).toMatchObject({ occasion: "Harvest" });
+    expect(post.body).not.toHaveProperty("bulletin");
+    await user.click(screen.getByRole("button", { name: "Probe edit" }));
+    await user.click(within(card).getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(within(card).getByText(`Saved to the archive · ${formatSavedAt(SECOND_SAVE)}`)).toBeInTheDocument());
+    const [put] = serviceRequests(api, "PUT");
+    expect(put.body).toHaveProperty("bulletin", emptyServiceBulletin()); // clearing every field clears the saved ones
+  });
+
+  it("sends a filled-in bulletin in a POST (2b-2 build review M1)", async () => {
+    const { api, user } = renderReview(setAnnouncement(editOccasion(testDraft(), "Harvest"), "coffee_hour", "The Sample family"), {
+      "POST /services": () => ({ status: 201, body: savedService({ occasion: "Harvest", saved_at: FIRST_SAVE }) }),
+    });
+    const card = await archiveCard();
+    await user.click(within(card).getByRole("button", { name: "Save to archive" }));
+    expect(await screen.findByText(SAVED_MESSAGE)).toBeInTheDocument();
+    const [post] = serviceRequests(api, "POST");
+    expect(post.body).toMatchObject({ bulletin: { announcements: { coffee_hour: "The Sample family" } } });
   });
 
   it("keeps the key for an identical retry after an unknown outcome, replaces it after an edit, and retries a mismatch once", async () => {

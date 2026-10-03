@@ -595,6 +595,28 @@ id is recorded here.
 | 5. Layout and leave guard | No sideways scroll on Bulletin settings at phone width, targets easy to tap; changing a field and tapping Back asked "Discard unsaved changes?" first | 2026-10-03 |
 | Follow-ups | Next: printed bulletin PR 2b (the Bulletin step, the weekly fields, announcements, carry forward, pasted reading text, `0006_services_bulletin`), PR 3 (the cover picture), Voices of the Church, 6a, Hear it from the pews. Still pending: the PR 1 print test at the church. Noted in the 2a plan: the header links and church switcher do not ask before leaving unsaved settings until 6a; the older crash if `churches.settings` is ever not an object | 2026-10-03 |
 
+### Printed bulletin PR 2b-1 record
+
+Printed bulletin PR 2b-1 (the server's half of the Bulletin step: migration
+`0006_services_bulletin` adding `services.bulletin`, saving and opening a
+service's bulletin fields, `GET /services/previous-bulletin` for carry
+forward, and the printed bulletin printing the week's fields) merged as
+PR #47, the first of the two PR 2b pull requests (backend first, owner
+answer 14). Nothing on screen changed. The owner's steps followed
+`backend/migrations/README.md`, "Before 0006_services_bulletin", one at a
+time. No token, email address, phone number, street address, church id or
+database URL is recorded here.
+
+| Step | Result | Date |
+|---|---|---|
+| 1. Backup | db-backup run 37146052398 on `main`, green, artifact `db-backup` | 2026-10-03 |
+| 2. Counts before | `0005_services_extras`, 28 services, 1 church | 2026-10-03 |
+| 3. SQL preview | The six lines as pinned in the README (one transaction, `lock_timeout` 5 s, `ADD COLUMN bulletin JSON`, the version update), shown and explained to the owner | 2026-10-03 |
+| Merge | PR #47 merged 18:59 UTC (14:59 Eastern), merge commit `629a417`; the new release answered `/services/previous-bulletin` (401 without sign-in) by 19:00 UTC | 2026-10-03 |
+| 4. After the deploy | `0006_services_bulletin`, new column 1, services with a bulletin 0; counts again 28 services, 1 church (unchanged) | 2026-10-03 |
+| 5. Phone check | A saved service opened, saved its changes, and its printed bulletin looked as before (music and announcements still [placeholders]) | 2026-10-03 |
+| Follow-ups | Next: PR 2b-2 (the Bulletin step), then PR 3 (the cover picture, backend first), Voices of the Church, 6a, Hear it from the pews. Still pending: the PR 1 print test at the church. Left as is from the 2b-1 code review: a 422 echoes the client's own key names; a printed bulletin at the largest allowed sizes takes about 4 s | 2026-10-03 |
+
 ## Backups
 
 - **Workflow:** `.github/workflows/backup.yml` (`db-backup`). Daily at 08:37 UTC,

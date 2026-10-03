@@ -17,6 +17,7 @@ import type {
   LiturgyConfig,
   LiturgySection,
   OutlineItem,
+  PreviousBulletin,
   ReviewBody,
   ReviewNote,
   ReviewResult,
@@ -523,6 +524,11 @@ export function serviceBulletin(overrides: Partial<ServiceBulletin> = {}): Servi
     unchecked: [],
     ...overrides,
   };
+}
+
+/** `GET /services/previous-bulletin` (printed bulletin PR 2b): no service before the date, unless overridden. */
+export function previousBulletin(overrides: Partial<PreviousBulletin> = {}): PreviousBulletin {
+  return { service_id: null, service_date_iso: null, bulletin: serviceBulletin(), ...overrides };
 }
 
 /** One row of `GET /services` (`ServiceSummary`): `savedService()`'s, unless overridden. */

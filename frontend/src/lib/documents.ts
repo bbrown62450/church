@@ -10,12 +10,15 @@
  * title prints), each text cut to its limit (`liturgy_config.LIMITS`), custom
  * elements without a label left out (the Word file never printed them; a
  * label is blank as the server reads it, `wordSafe`) and each place read as
- * `normalizePlacement` does on the Liturgy step.
+ * `normalizePlacement` does on the Liturgy step, and the Bulletin step's
+ * fields (printed bulletin PR 2b) always, each text cut to its limit.
  */
 import type { components } from "@/lib/api/schema";
+import type { ServiceBulletin } from "@/lib/api/types";
+import { emptyServiceBulletin, MAX_LENGTH as BULLETIN_MAX } from "@/lib/draft/bulletin";
 import { fingerprint } from "@/lib/draft/fingerprint";
 import { draftToServicePayload } from "@/lib/draft/mapping";
-import { SLOTS, type DraftV1, type Slot } from "@/lib/draft/schema";
+import { CARRY_KEYS, SLOTS, type DraftV1, type Slot } from "@/lib/draft/schema";
 import type { DocumentVariant, PrintedFormat } from "@/lib/download";
 import { clipChars, MAX_REF_LENGTH } from "@/lib/hymns/match-request";
 import { normalizePlacement } from "@/lib/liturgy/cards";
@@ -46,6 +49,44 @@ export function wordSafe(text: string): string {
     .replace(/[\x00-\x08\x0e-\x1f\ufffe\uffff]|[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g, "");
 }
 
+/** The bulletin fields within the server's limits (`service_bulletin.MAX_LENGTH`). */
+function clipBulletin(b: ServiceBulletin): ServiceBulletin {
+  const person = (name: string | null) => (name === null ? null : clipChars(name, BULLETIN_MAX.person));
+  return {
+    prelude: { title: clipChars(b.prelude.title, BULLETIN_MAX.title), composer: clipChars(b.prelude.composer, BULLETIN_MAX.composer) },
+    postlude: { title: clipChars(b.postlude.title, BULLETIN_MAX.title), composer: clipChars(b.postlude.composer, BULLETIN_MAX.composer) },
+    people: { worship_leader: person(b.people.worship_leader), liturgist: person(b.people.liturgist), organist: person(b.people.organist) },
+    leaders: Object.fromEntries(Object.entries(b.leaders).map(([key, name]) => [key, clipChars(name, BULLETIN_MAX.person)])),
+    announcements: {
+      ushers: clipChars(b.announcements.ushers, BULLETIN_MAX.ushers),
+      deacon: clipChars(b.announcements.deacon, BULLETIN_MAX.deacon),
+      coffee_hour: clipChars(b.announcements.coffee_hour, BULLETIN_MAX.coffee_hour),
+      activities: clipChars(b.announcements.activities, BULLETIN_MAX.activities),
+      prayer_concerns: clipChars(b.announcements.prayer_concerns, BULLETIN_MAX.prayer_concerns),
+      collection: clipChars(b.announcements.collection, BULLETIN_MAX.collection),
+      other: clipChars(b.announcements.other, BULLETIN_MAX.other),
+    },
+    reading_text: { ot: clipChars(b.reading_text.ot, BULLETIN_MAX.reading_text), nt: clipChars(b.reading_text.nt, BULLETIN_MAX.reading_text) },
+    unchecked: [...b.unchecked],
+  };
+}
+
+/** `service_bulletin.read`'s one-line fields: each run of control characters (and the spaces around it) is one space. */
+const NOT_ONE_LINE_RUN = / *[\x00-\x1f\x7f-\x9f\u2028\u2029][\x00-\x1f\x7f-\x9f\u2028\u2029 ]*/g;
+/** `service_bulletin.read`'s free texts: every line break is "\n" (U+2028 and U+2029 would print as "?"). */
+const LINE_BREAK = /\r\n?|[\v\f\x85\u2028\u2029]/g;
+/** `service_bulletin.read`'s pasted readings: a run of blank lines is one paragraph break. */
+const BLANK_LINES = /\n(?:[ \t]*\n)+/g;
+
+/** What a Word file cannot hold (`wordSafe`'s last rule): `service_bulletin.read` deletes it first (2b-1 build review M1). */
+const WORD_BAD = /[\x00-\x08\x0e-\x1f\ufffe\uffff]|[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g;
+/** `service_bulletin.read`'s free texts: the C1 controls go once U+0085 is a line break (2b-1 build review M2). */
+const C1 = /[\x7f-\x9f]/g;
+
+const oneLine = (text: string) => text.replace(NOT_ONE_LINE_RUN, " ").replace(WORD_BAD, "");
+const lines = (text: string) => text.replace(WORD_BAD, "").replace(LINE_BREAK, "\n").replace(C1, "");
+const paragraphs = (text: string) => lines(text).replace(BLANK_LINES, "\n\n");
+
 /** Blank as the server reads a label: nothing left after `wordSafe` and trimming. */
 function isBlankLabel(label: string): boolean {
   return wordSafe(label).trim() === "";
@@ -55,7 +96,9 @@ function isBlankLabel(label: string): boolean {
  * The service as `POST /documents` and `POST`/`PUT /services` send it (slice
  * 5a-3: the Save card sends the same body as the downloads, so a save never
  * meets a 422 for a length either, a stored custom element longer than
- * today's limits included).
+ * today's limits included). The bulletin is always sent (printed bulletin
+ * PR 2b), so a save that clears every bulletin field clears the saved ones;
+ * only a client from before 2b sends none (and a PUT then keeps them).
  */
 export function serviceBody(draft: DraftV1): DocumentBody["service"] {
   const payload = draftToServicePayload(draft);
@@ -77,6 +120,7 @@ export function serviceBody(draft: DraftV1): DocumentBody["service"] {
         text: clipChars(element.text, MAX_CUSTOM_TEXT),
         insert_after: normalizePlacement(element.insert_after) as Placement,
       })),
+    bulletin: clipBulletin(payload.bulletin ?? emptyServiceBulletin()),
   };
 }
 
@@ -93,6 +137,8 @@ export type SavedCopy = {
   selected_nt_ref: string;
   include_communion: boolean;
   custom_elements?: { label: string; text: string; insert_after: string }[];
+  /** Printed bulletin PR 2b; missing reads as nothing filled in. */
+  bulletin?: ServiceBulletin | null;
 };
 
 /** The server's `hymn_search.normalize_title`: NFKC, whitespace collapsed, trimmed, case-folded. */
@@ -109,7 +155,9 @@ function titleKey(title: string): string {
  * hymn sent without an id when the church has it). Save's "is the 409 my own
  * earlier save?" compares the body it sends with the archive's copy through
  * it, so a hymn resolved by title or a text the body already cut to its
- * limit never looks like someone else's change (5a-3 build review M2).
+ * limit never looks like someone else's change (5a-3 build review M2). The
+ * bulletin fields count too (printed bulletin PR 2b): another device's
+ * change to the announcements is someone else's change.
  * `withHymnal` false leaves the hymnal out: a body with none takes the
  * church's.
  */
@@ -138,7 +186,35 @@ export function savedCopyFingerprint(s: SavedCopy, { withHymnal = true }: { with
       text: clean(element.text),
       insert_after: normalizePlacement(element.insert_after),
     })),
+    bulletin: savedBulletin(s.bulletin ?? emptyServiceBulletin(), clean),
   });
+}
+
+/**
+ * A bulletin as the archive keeps it (`service_bulletin.read`, then Word-safe
+ * and trimmed): what Word cannot hold deleted first, a one-line field's
+ * control characters one space, a free text's line breaks "\n" and its
+ * other controls deleted, a pasted reading's blank lines one paragraph
+ * break, blank part leaders left out, the unchecked boxes in order (plan
+ * review fix M3: a tab pasted into a title is not someone else's change;
+ * 2b-1 build review M1, M2: a control character between blank lines or a C1
+ * control is not either).
+ */
+function savedBulletin(b: ServiceBulletin, clean: (text: string) => string) {
+  const line = (text: string) => clean(oneLine(text));
+  const music = (m: ServiceBulletin["prelude"]) => ({ title: line(m.title), composer: line(m.composer) });
+  const free = new Set<string>(["activities", "prayer_concerns", "collection", "other"]);
+  return {
+    prelude: music(b.prelude),
+    postlude: music(b.postlude),
+    people: Object.fromEntries(Object.entries(b.people).map(([role, name]) => [role, name === null ? null : line(name)])),
+    leaders: Object.fromEntries(Object.entries(b.leaders).map(([key, name]) => [key, line(name)]).filter(([, name]) => name !== "")),
+    announcements: Object.fromEntries(
+      Object.entries(b.announcements).map(([key, text]) => [key, free.has(key) ? clean(lines(text)) : line(text)]),
+    ),
+    reading_text: { ot: clean(paragraphs(b.reading_text.ot)), nt: clean(paragraphs(b.reading_text.nt)) },
+    unchecked: CARRY_KEYS.filter((key) => (b.unchecked ?? []).includes(key)),
+  };
 }
 
 export function documentRequest(draft: DraftV1, variant: DocumentVariant): DocumentBody {

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { churchProfile, hymnId, lectionary, savedService, SERVICE_ID, testDraft, USER_ID } from "@/test/fixtures";
+import { churchProfile, hymnId, lectionary, savedService, SERVICE_ID, serviceBulletin, testDraft, USER_ID } from "@/test/fixtures";
 
+import { keepCarried, setAnnouncement, setPastedText } from "./bulletin";
 import { fingerprint } from "./fingerprint";
 import { draftToServicePayload, markSaved, serviceToDraft } from "./mapping";
 import { applyReadingSet, editScriptureLines, setPick, showAvailableBanner } from "./readings";
@@ -95,12 +96,12 @@ describe("serviceToDraft and markSaved (slice 5a-3; F §4.6 Loading an archived 
   it("opens a saved service as a new draft that is already Saved, on Review, for that date", () => {
     const d = opened();
     expect(d).toMatchObject({
-      version: 2,
       user_id: USER_ID,
       church_id: churchProfile().id,
       created_at: OPEN_AT.toISOString(),
       last_step: "review",
       save_key_fingerprint: null,
+      version: 3,
       editing: { service_id: SERVICE_ID, saved_at: "2026-10-01T14:42:00.123456+00:00", date_iso: "2026-10-04" },
       readings: {
         date_iso: "2026-10-04",
@@ -161,6 +162,25 @@ describe("serviceToDraft and markSaved (slice 5a-3; F §4.6 Loading an archived 
     expect(d.liturgy.cards.benediction).toEqual({ enabled: false, text: "", origin: "empty" }); // no church default added
     expect(d.liturgy.custom_elements[0]).toMatchObject({ label: "Old place", insert_after: "end" });
     expect(isDirty(d)).toBe(false);
+  });
+
+  it("opens a saved service's bulletin fields Saved, and an edit to them is an unsaved change (PR 2b)", () => {
+    const bulletin = serviceBulletin({
+      prelude: { title: "Morning Voluntary", composer: "Pat Example" },
+      people: { worship_leader: "Rev. Guest", liturgist: null, organist: "" },
+      leaders: { sermon: "Rev. Guest" },
+      reading_text: { ot: "", nt: "Pasted text." },
+      unchecked: ["prelude"],
+    });
+    const d = opened(savedService({ bulletin }));
+    expect(draftToServicePayload(d).bulletin).toEqual(bulletin);
+    expect(reviewStatus(d)).toBe("saved");
+    expect(d.bulletin.carried).toEqual(["prelude"]); // still to check, on any device (plan review fix I3)
+    expect(reviewStatus(keepCarried(d, "prelude"))).toBe("unsaved_changes");
+    expect(reviewStatus(setAnnouncement(d, "coffee_hour", "The Example family"))).toBe("unsaved_changes");
+    expect(reviewStatus(setPastedText(d, "Matthew 21:33-46", ""))).toBe("unsaved_changes");
+    // Nothing filled in: no bulletin in the payload, so a draft saved before PR 2b keeps its fingerprint.
+    expect("bulletin" in draftToServicePayload(opened())).toBe(false);
   });
 
   it("markSaved records the save and keeps a default Benediction and communion as saved (owner answer 4)", () => {

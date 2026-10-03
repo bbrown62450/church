@@ -30,6 +30,7 @@ describe("keys", () => {
       keys.rubric(id),
       keys.prayerLibrary(id),
       keys.bulletinSettings(id),
+      keys.previousBulletin(id, "2026-10-11"),
     ];
     expect(churchKeys.map((key) => key.slice(0, 2))).toEqual(churchKeys.map(() => ["church", id]));
     expect(churchKeys.map((key) => key.slice(2))).toEqual([
@@ -48,6 +49,7 @@ describe("keys", () => {
       ["rubric"],
       ["prayer-library"],
       ["bulletin-settings"],
+      ["services", "previous-bulletin", "2026-10-11"], // under the services prefix: a save refreshes it (PR 2b)
     ]);
   });
 });

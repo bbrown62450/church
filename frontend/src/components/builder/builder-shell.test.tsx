@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import BuilderLayout from "@/app/(signed-in)/(church)/builder/layout";
 import BuilderIndexPage from "@/app/(signed-in)/(church)/builder/page";
+import BulletinStepPage from "@/app/(signed-in)/(church)/builder/bulletin/page";
 import HymnsStepPage from "@/app/(signed-in)/(church)/builder/hymns/page";
 import LiturgyStepPage from "@/app/(signed-in)/(church)/builder/liturgy/page";
 import ReadingsStepPage from "@/app/(signed-in)/(church)/builder/readings/page";
@@ -34,6 +35,7 @@ import {
   lectionaryRoute,
   liturgyConfig,
   me,
+  previousBulletin,
   sectionResult,
   testDraft,
   translations,
@@ -77,6 +79,7 @@ function renderBuilder(page: ReactElement, path: string, lookup = lectionaryRout
     "GET /hymns": hymnListRoute(),
     "GET /liturgy/config": liturgyConfig(),
     "GET /church/bulletin-settings": bulletinSettings(),
+    "GET /services/previous-bulletin": previousBulletin(),
     ...routes,
   });
   return renderWithProviders(<BuilderLayout>{page}</BuilderLayout>, { me: me(), church: church(), path });
@@ -97,25 +100,28 @@ describe("builder shell (F §4.7)", () => {
     const cases: [string, ReactElement, number, string, string[]][] = [
       ["/builder/readings", <ReadingsStepPage key="r" />, 1, "Date & readings", ["Next: Hymns"]],
       ["/builder/hymns", <HymnsStepPage key="h" />, 2, "Hymns", ["Back", "Next: Liturgy"]],
-      ["/builder/liturgy", <LiturgyStepPage key="l" />, 3, "Liturgy", ["Back", "Next: Review"]],
-      ["/builder/review", <ReviewStepPage key="v" />, 4, "Review & send", ["Back"]],
+      ["/builder/liturgy", <LiturgyStepPage key="l" />, 3, "Liturgy", ["Back", "Next: Bulletin"]],
+      ["/builder/bulletin", <BulletinStepPage key="b" />, 4, "Bulletin", ["Back", "Next: Review"]],
+      ["/builder/review", <ReviewStepPage key="v" />, 5, "Review & send", ["Back"]],
     ];
     for (const [path, page, number, label, footer] of cases) {
       const { unmount } = renderBuilder(page, path);
       expect(await screen.findByRole("heading", { level: 1, name: "Service Builder" })).toBeInTheDocument();
-      expect(screen.getByText(`Step ${number} of 4 · ${label}`)).toBeInTheDocument();
+      expect(screen.getByText(`Step ${number} of 5 · ${label}`)).toBeInTheDocument();
 
       const steps = within(screen.getByRole("navigation", { name: "Steps" })).getAllByRole("link");
       expect(steps.map((link) => link.textContent)).toEqual([
         "1 Date & readings 1 of 3", // shipped in 2c: a date, no occasion, no readings
         "2 Hymns 0 of 3", // shipped in 3b: no hymn chosen
         "3 Liturgy 1 of 7", // shipped in 4b: the Benediction follows the church default
-        "4 Review & send Not in archive",
+        "4 Bulletin Optional", // shipped in printed bulletin PR 2b
+        "5 Review & send Not in archive",
       ]);
       expect(steps.map((link) => link.getAttribute("href"))).toEqual([
         "/builder/readings",
         "/builder/hymns",
         "/builder/liturgy",
+        "/builder/bulletin",
         "/builder/review",
       ]);
       expect(steps.filter((link) => link.getAttribute("aria-current") === "step")).toEqual([steps[number - 1]]);
@@ -133,6 +139,9 @@ describe("builder shell (F §4.7)", () => {
         // Liturgy is the real step from slice 4b.
         expect(await within(card).findByRole("textbox", { name: "Sermon title" })).toBeInTheDocument();
         expect(within(card).queryByRole("heading", { name: "Available soon" })).toBeNull();
+      } else if (number === 4) {
+        // Bulletin is the real step from printed bulletin PR 2b.
+        expect(within(card).getByRole("textbox", { name: "Prelude title" })).toBeInTheDocument();
       } else {
         // Review & send is the real step from slice 5a-1: Still to do, the Archive card (5a-3), the Word documents.
         expect(within(card).getByRole("heading", { name: "Word documents" })).toBeInTheDocument();
@@ -144,7 +153,7 @@ describe("builder shell (F §4.7)", () => {
       const links = within(screen.getByRole("navigation", { name: "Step navigation" })).getAllByRole("link");
       expect(links.map((link) => link.textContent)).toEqual(footer);
       // Review lists what the shipped steps still need; the other steps do not.
-      if (number === 4) {
+      if (number === 5) {
         const needed = screen.getByRole("region", { name: "Still to do" });
         expect(within(needed).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
           "No occasion — Add one",

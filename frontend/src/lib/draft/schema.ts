@@ -1,10 +1,12 @@
 /**
- * The per-church unsaved draft, version 2 (F §4.6; S "Draft store").
+ * The per-church unsaved draft, version 3 (F §4.6; S "Draft store").
  *
  * This is F §4.6's draft shape. Version 2 (slice 5a-3) added the two fields
  * slice 5a brings with its own version bump: `editing.date_iso` (the saved
  * service's date; null for an undated saved service) and
- * `save_key_fingerprint` (`save-key.ts`). The names `DraftV1` and
+ * `save_key_fingerprint` (`save-key.ts`). Version 3 (printed bulletin PR 2b)
+ * adds `bulletin`, the Bulletin step's weekly fields (`bulletin.ts`), and the
+ * step id "bulletin". The names `DraftV1` and
  * `draftV1Schema` stay, so no importer changes. Strings are
  * bounded generously (20 000) so a stored draft is never rejected for
  * length; the UI limits live in the components. `readings.scriptures` holds
@@ -16,9 +18,9 @@ import { isFirstSundayOfMonth, isValidDateIso, nextSunday, todayIn } from "@/lib
 import { DEFAULT_BENEDICTION_FALLBACK } from "@/lib/liturgy/defaults";
 import { DEFAULT_ENABLED } from "@/lib/liturgy/sections";
 
-export const DRAFT_VERSION = 2;
+export const DRAFT_VERSION = 3;
 
-export const STEP_IDS = ["readings", "hymns", "liturgy", "review"] as const;
+export const STEP_IDS = ["readings", "hymns", "liturgy", "bulletin", "review"] as const;
 export type StepId = (typeof STEP_IDS)[number];
 
 export const SLOTS = ["opening", "response", "closing"] as const;
@@ -61,6 +63,47 @@ const card = z.object({
 });
 export type LiturgyCard = z.infer<typeof card>;
 
+/** The three people the Bulletin step can change for one week (`bulletin_settings.ROLES`). */
+export const PEOPLE = ["worship_leader", "liturgist", "organist"] as const;
+export type Person = (typeof PEOPLE)[number];
+/** The announcements (PR 2 planning answer 4), in the printed order. */
+export const ANNOUNCEMENT_KEYS = ["ushers", "deacon", "coffee_hour", "activities", "prayer_concerns", "collection", "other"] as const;
+export type AnnouncementKey = (typeof ANNOUNCEMENT_KEYS)[number];
+/** The boxes that carry forward from last week (PR 2 planning answer 5): the music and each announcement. */
+export const CARRY_KEYS = ["prelude", "postlude", ...ANNOUNCEMENT_KEYS] as const;
+export type CarryKey = (typeof CARRY_KEYS)[number];
+
+const music = z.object({ title: text, composer: text });
+const carryKeys = z.array(z.enum(CARRY_KEYS));
+/** This week's name for each person; null follows the bulletin settings, "" is no one this week. */
+const people = z.object(Object.fromEntries(PEOPLE.map((key) => [key, text.nullable()])) as Record<Person, z.ZodNullable<typeof text>>);
+const bulletin = z.object({
+  prelude: music,
+  postlude: music,
+  people,
+  /** A part's leader this week, by element key (`bulletin_settings.ELEMENT_KEYS`). */
+  leaders: z.record(text, text),
+  announcements: z.object(Object.fromEntries(ANNOUNCEMENT_KEYS.map((key) => [key, text])) as Record<AnnouncementKey, typeof text>),
+  /** Pasted reading text by the reading's reference, so a changed reading starts with an empty box. */
+  pasted: z.record(text, text),
+  /** The boxes still holding last week's text, not edited or kept since (saved with the service as `unchecked`). */
+  carried: carryKeys,
+  /** The boxes typed in, edited or kept: last week's never carries into them again (a box at a time). */
+  edited: carryKeys,
+  /** The date last week's bulletin was looked up for; null: not yet. */
+  carried_for: dateIso.nullable(),
+  /**
+   * A saved service on another date ("Save as new service"): its people,
+   * part leaders, pasted texts and marks, set aside while the date differs
+   * from the saved one and put back if it is the saved date again; null
+   * otherwise (`bulletin.ts` `followSaveMode`).
+   */
+  set_aside: z
+    .object({ people, leaders: z.record(text, text), pasted: z.record(text, text), carried: carryKeys, edited: carryKeys })
+    .nullable(),
+});
+export type DraftBulletin = z.infer<typeof bulletin>;
+
 export const draftV1Schema = z.object({
   version: z.literal(DRAFT_VERSION),
   user_id: text,
@@ -98,6 +141,7 @@ export const draftV1Schema = z.object({
     ),
     custom_elements: z.array(z.object({ id: text, label: text, text, insert_after: text })),
   }),
+  bulletin,
 });
 
 export type DraftV1 = z.infer<typeof draftV1Schema>;
@@ -121,7 +165,9 @@ export function churchZone(church: DraftChurch): string | undefined {
  * Prayers of the People, the benediction card `default`-origin with the
  * church's default benediction (DEFAULT_BENEDICTION_FALLBACK, the full
  * Halverson text, when the profile has none; slice 4b), communion on for a
- * first Sunday, a new save key with no pending fingerprint, on step 1.
+ * first Sunday, an empty Bulletin step (PR 2b; last week's carries in when
+ * the Bulletin step or Review shows it), a new save key with no pending
+ * fingerprint, on step 1.
  */
 export function freshDraft({
   church,
@@ -177,6 +223,23 @@ export function freshDraft({
       cards,
       custom_elements: [],
     },
+    bulletin: freshBulletin(),
+  };
+}
+
+/** An empty Bulletin step: nothing filled in, the settings' people, no carry looked up yet. */
+export function freshBulletin(): DraftBulletin {
+  return {
+    prelude: { title: "", composer: "" },
+    postlude: { title: "", composer: "" },
+    people: { worship_leader: null, liturgist: null, organist: null },
+    leaders: {},
+    announcements: { ushers: "", deacon: "", coffee_hour: "", activities: "", prayer_concerns: "", collection: "", other: "" },
+    pasted: {},
+    carried: [],
+    edited: [],
+    carried_for: null,
+    set_aside: null,
   };
 }
 

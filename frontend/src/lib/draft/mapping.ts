@@ -12,12 +12,18 @@
  * - `serviceToDraft(service, …)`: a saved service as a new draft, already
  *   "Saved" (its fingerprint stored), on Review, with a new `created_at`.
  * - `markSaved(draft, service, fp)`: the draft after a save (owner answer 4).
+ *
+ * Printed bulletin PR 2b: the payload holds the Bulletin step's fields as
+ * `bulletin` (`bulletinPayload`) only when something is filled in, so a
+ * draft saved before PR 2b keeps its fingerprint and stays "Saved" after the
+ * draft v3 migration; the bodies sent always carry it (`serviceBody`).
  */
-import type { ArchivedHymn, ServiceOut } from "@/lib/api/types";
+import type { ArchivedHymn, ServiceBulletin, ServiceOut } from "@/lib/api/types";
 import { isValidDateIso } from "@/lib/dates";
 import { normalizePlacement } from "@/lib/liturgy/cards";
 import { cleanLines } from "@/lib/scripture-refs";
 
+import { bulletinFromService, bulletinPayload, emptyServiceBulletin, isBlankBulletin } from "./bulletin";
 import { fingerprint } from "./fingerprint";
 import { effectivePicks } from "./readings";
 import {
@@ -48,6 +54,8 @@ export type ServiceDraftPayload = {
   include_communion: boolean;
   custom_elements: { label: string; text: string; insert_after: string }[];
   hymnal: string | null;
+  /** The Bulletin step's fields (printed bulletin PR 2b); left out when nothing is filled in. */
+  bulletin?: ServiceBulletin;
 };
 
 function hymnRef(pick: HymnPick | null): HymnRefPayload | null {
@@ -60,10 +68,12 @@ function hymnRef(pick: HymnPick | null): HymnRefPayload | null {
  * picks; the slot hymns; `hymnal` as the draft holds it (null = the church's
  * effective hymnal, filled in by the server); the switched-on cards with
  * text, trimmed; the sermon title trimmed; communion; the custom elements
- * with a label, trimmed, without their ids.
+ * with a label, trimmed, without their ids; the bulletin fields when any is
+ * filled in (PR 2b).
  */
 export function draftToServicePayload(draft: DraftV1): ServiceDraftPayload {
   const picks = effectivePicks(draft);
+  const bulletin = bulletinPayload(draft);
   const liturgy: Partial<Record<SectionKey, string>> = {};
   for (const key of SECTION_KEYS) {
     const card = draft.liturgy.cards[key];
@@ -87,6 +97,7 @@ export function draftToServicePayload(draft: DraftV1): ServiceDraftPayload {
       .filter((element) => element.label.trim() !== "")
       .map(({ label, text, insert_after }) => ({ label: label.trim(), text: text.trim(), insert_after })),
     hymnal: draft.hymns.hymnal,
+    ...(isBlankBulletin(bulletin) ? {} : { bulletin }),
   };
 }
 
@@ -106,7 +117,8 @@ function pickFromArchived(hymn: ArchivedHymn | null): HymnPick | null {
  * (origin "archive") and the others off and empty (no church Benediction
  * added); the sermon title; communion as saved (origin "archive"); the custom
  * elements with new ids and their places read as the Liturgy step reads
- * them. `editing` names the service, its `saved_at` and its date; the
+ * them; the bulletin fields as saved, with nothing to check and no carry
+ * (PR 2b). `editing` names the service, its `saved_at` and its date; the
  * fingerprint of this draft is stored, so it opens "Saved"; a new save key;
  * a new `created_at` (the reviewer's notes and any AI run belong to the
  * draft it replaces); on Review.
@@ -160,6 +172,8 @@ export function serviceToDraft(
         insert_after: normalizePlacement(element.insert_after),
       })),
     },
+    // A server from before PR 2b-1 (only if it were reverted) sends none.
+    bulletin: bulletinFromService(service.bulletin ?? emptyServiceBulletin(), service),
   };
   return { ...draft, saved_fingerprint: fingerprint(draftToServicePayload(draft)) };
 }
@@ -185,5 +199,10 @@ export function markSaved(d: DraftV1, service: ServiceOut, fp: string): DraftV1 
     editing: { service_id: service.id, saved_at: service.saved_at, date_iso: service.service_date_iso },
     saved_fingerprint: fp,
     liturgy: { ...d.liturgy, cards, communion_origin },
+    // Saved as a different service (a POST): what "Save as new service" set
+    // aside belongs to the other one (PR 2b-2). Saved over the same service
+    // (a PUT), it is kept, so it returns on the saved date rather than being
+    // lost (2b-2 build review C1).
+    bulletin: service.id === d.editing?.service_id ? d.bulletin : { ...d.bulletin, set_aside: null },
   };
 }
