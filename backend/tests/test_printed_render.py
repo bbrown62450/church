@@ -1,6 +1,7 @@
 """The printed bulletin's two files (printed bulletin spec, PR 1): the
 print-ready PDF (printed_pdf) and the Word file (printed_docx), read back
-with pypdf and python-docx."""
+with pypdf and python-docx. PR 2b: the week's music and announcements, and
+no announcements page when every announcement is blank."""
 import dataclasses
 import datetime
 from io import BytesIO
@@ -16,7 +17,8 @@ import printed_bulletin as pb
 import printed_docx
 import printed_pdf
 from service_output import ResolvedHymn, ResolvedService
-from tests.test_printed_bulletin import SETTINGS
+import service_bulletin as sb
+from tests.test_printed_bulletin import SETTINGS, WEEK
 
 VERSE = "And he answered, I will not; but afterward he repented and went. "
 
@@ -31,7 +33,8 @@ def service(verses: int = 20) -> pb.PrintedService:
                  "benediction": "Go in peace. - A Friend"},
         sermon_title="Who Said?")
     return pb.PrintedService("Example Church", resolved, pb.Reading("Psalm 25:1-9", "In you, Lord, I put my trust."),
-                             pb.Reading("Matthew 21:23-32", VERSE * verses), "World English Bible (WEB)", SETTINGS)
+                             pb.Reading("Matthew 21:23-32", VERSE * verses), "World English Bible (WEB)", SETTINGS,
+                             WEEK)
 
 
 def sides(content: bytes) -> list[str]:
@@ -66,7 +69,8 @@ def test_the_pdf_is_legal_landscape_sides_with_two_pages_each_in_reading_order()
     # The long reading starts under its heading on page 1 and runs on to page 2 (no gap before it).
     assert f"NEW TESTAMENT READING: Matthew 21:23-32 Rev. Alex Example {VERSE.strip()}" in pages[1]
     assert pages[2].startswith("2 And he answered") and pages[2].endswith("*Congregation stands if able")
-    assert pages[3].startswith("3 ANNOUNCEMENTS September 27, 2026") and pages[3].endswith("[Collection items]")
+    assert pages[3].startswith("3 ANNOUNCEMENTS September 27, 2026 Ushers/Counters: Sam Sample, Jordan Doe")
+    assert pages[3].endswith("OTHER ANNOUNCEMENTS The office is closed on Monday.")
 
 
 def test_the_pdf_prints_the_service_and_its_readings():
@@ -77,7 +81,8 @@ def test_the_pdf_prints_the_service_and_its_readings():
                      "In you, Lord, I put my trust.", "NEW TESTAMENT READING: Matthew 21:23-32 Rev. Alex Example",
                      "Scripture readings are from the World English Bible (WEB).", "SERMON: “Who Said?”",
                      "I believe in God, the Father almighty", "*Congregation stands if able",
-                     "POSTLUDE: ‘[Postlude title]’ Jordan Doe", "Go in peace. - A Friend"):
+                     "POSTLUDE: ‘Festive Postlude’ Jordan Doe", "- Lee Sample", "Go in peace. - A Friend",
+                     "Tuesday: Bible study at 10 a.m. Wednesday: Choir at 7 p.m."):
         assert expected in text, expected
 
 
@@ -111,7 +116,8 @@ def test_the_word_file_is_the_same_booklet_in_reading_order():
     for expected in ("*HYMN:  #409  “God Is Here!”", "CALL TO WORSHIP\tSam Sample",
                      "People: We come, ready to listen and learn.", "FIRST READING:  Psalm 25:1-9\tSam Sample",
                      "Scripture readings are from the World English Bible (WEB).", "*Congregation stands if able",
-                     "FB: Example Church", "Coffee Hour: [Name]"):
+                     "FB: Example Church", "Coffee Hour: The Example family",
+                     "Tuesday: Bible study at 10 a.m.\nWednesday: Choir at 7 p.m."):
         assert expected in paragraphs, expected
     people = next(p for p in doc.paragraphs if p.text.startswith("People: We come"))
     assert all(run.bold for run in people.runs)
@@ -170,3 +176,17 @@ def test_the_word_cover_picture_box_is_centered():
              "jc", "tblCellSpacing", "tblInd", "tblBorders", "shd", "tblLayout", "tblCellMar", "tblLook"]
     children = [child.tag.split("}")[1] for child in tbl_pr]
     assert children == sorted(children, key=order.index)
+
+
+def test_with_every_announcement_blank_the_announcements_page_is_left_out():
+    """PR 2b: a blank announcement prints nothing, and with none at all there is no announcements page; the
+    order of worship's last page is the last page (an odd count leaves the last right half blank)."""
+    ps = dataclasses.replace(service(), bulletin=sb.ServiceBulletin(prelude=WEEK.prelude))
+    pages = halves(printed_pdf.render_pdf(ps))
+    assert len(pages) == 4 and pages[3] == ""
+    assert pages[2].startswith("2 And he answered") and pages[2].endswith("*Congregation stands if able")
+    assert "ANNOUNCEMENTS September" not in " ".join(pages)
+    doc = Document(BytesIO(printed_docx.render_docx(ps)))
+    assert [p.text for p in doc.paragraphs if p.paragraph_format.page_break_before] == [
+        "THE SERVICE FOR THE LORD’S DAY"]
+    assert doc.paragraphs[-1].text == "*Congregation stands if able"

@@ -1,10 +1,12 @@
 """The printed bulletin's content (printed bulletin spec, PR 1;
-printed_bulletin.py), with the church's bulletin settings (PR 2a)."""
+printed_bulletin.py), with the church's bulletin settings (PR 2a) and the
+week's own fields from the Bulletin step (PR 2b)."""
 import dataclasses
 import datetime
 
 import bulletin_settings as bs
 import printed_bulletin as pb
+import service_bulletin as sb
 from liturgy_config import ASSURANCE_RESPONSE, DEFAULT_BENEDICTION_FALLBACK
 from service_output import CustomElement, ResolvedHymn, ResolvedService
 
@@ -14,6 +16,14 @@ SETTINGS = bs.BulletinSettings(
     address_lines=("100 Example Street", "Springfield, ST 00000"), phone="(555) 010-0100",
     email="office@example.com", website="example.com", facebook="Example Church", service_time="10:30 a.m.",
     worship_leader="Rev. Alex Example", liturgist="Sam Sample", organist="Jordan Doe")
+# Invented details: a week with the music and every announcement filled in (PR 2b).
+WEEK = sb.ServiceBulletin(
+    prelude=sb.Music("Morning Voluntary", "Pat Example"), postlude=sb.Music("Festive Postlude", "Lee Sample"),
+    announcements=sb.Announcements(
+        ushers="Sam Sample, Jordan Doe", deacon="Alex Example", coffee_hour="The Example family",
+        activities="Tuesday: Bible study at 10 a.m.\nWednesday: Choir at 7 p.m.",
+        prayer_concerns="For all who are ill.", collection="Canned goods for the food pantry.",
+        other="The office is closed on Monday."))
 
 
 def service(**changes) -> pb.PrintedService:
@@ -31,7 +41,7 @@ def service(**changes) -> pb.PrintedService:
     base = dict(church_name="Example Church", resolved=resolved,
                 ot=pb.Reading("Psalm 80:7-15", "Turn us again, God.\nCause your face to shine.\n\nWe will be saved."),
                 nt=pb.Reading("Matthew 21:33-46", None), translation_label="World English Bible (WEB)",
-                settings=SETTINGS)
+                settings=SETTINGS, bulletin=WEEK)
     base.update(changes)
     return pb.PrintedService(**base)
 
@@ -76,7 +86,11 @@ def test_each_element_prints_as_the_sample():
     assert "*HYMN:  “Ride On”" in by_text                      # no number, no "#None"
     assert by_text["CALL TO WORSHIP"].right == "Sam Sample"
     assert by_text["NEW TESTAMENT READING:  Matthew 21:33-46"].right == "Rev. Alex Example"
-    assert by_text["PRELUDE:  ‘[Prelude title]’"].right == "Jordan Doe"
+    assert by_text["PRELUDE:  ‘Morning Voluntary’"].right == "Jordan Doe"
+    i = texts(lines).index("PRELUDE:  ‘Morning Voluntary’")
+    assert lines[i + 1] == pb.Line("indent", (pb.Span("- Pat Example"),))
+    i = texts(lines).index("POSTLUDE:  ‘Festive Postlude’")
+    assert (lines[i].right, lines[i + 1].text) == ("Jordan Doe", "- Lee Sample")
     assert by_text["SERMON:  “Who Said?”"].right == "Rev. Alex Example"
     leader, people = by_text["Leader: Lift up your hearts."], by_text["People: We lift them up."]
     assert (leader.style, [s.bold for s in leader.spans]) == ("hanging", [False, False])
@@ -120,9 +134,11 @@ def test_the_cover_and_the_back_page():
         "Springfield, ST 00000", "(555) 010-0100", "office@example.com", "example.com", "FB: Example Church"]
     assert texts(pb.cover(service(nt=None)))[2] == "Psalm 80:7-15"
     assert texts(pb.announcements(service())) == [
-        "ANNOUNCEMENTS", "October 4, 2026", "Ushers/Counters: [Names]", "Deacon of the Week: [Name]",
-        "Coffee Hour: [Name]", "THIS WEEK’S ACTIVITIES AT A GLANCE", "[Activities]", "PRAYERS AND CONCERNS",
-        "[Prayer concerns]", "ITEMS FOR COLLECTION", "[Collection items]"]
+        "ANNOUNCEMENTS", "October 4, 2026", "Ushers/Counters: Sam Sample, Jordan Doe",
+        "Deacon of the Week: Alex Example", "Coffee Hour: The Example family",
+        "THIS WEEK’S ACTIVITIES AT A GLANCE", "Tuesday: Bible study at 10 a.m.\nWednesday: Choir at 7 p.m.",
+        "PRAYERS AND CONCERNS", "For all who are ill.", "ITEMS FOR COLLECTION", "Canned goods for the food pantry.",
+        "OTHER ANNOUNCEMENTS", "The office is closed on Monday."]
 
 
 def test_a_blank_setting_prints_nothing():
@@ -150,7 +166,7 @@ def test_the_settings_choose_the_stars_the_leaders_and_the_words():
                                    stand_note="Please stand if able", gloria_patri_words="Glory be.")
     lines = pb.order_of_worship(service(settings=settings))
     by_text = {line.text: line for line in lines}
-    assert by_text["*PRELUDE:  ‘[Prelude title]’"].right == ""               # starred; no role now
+    assert by_text["*PRELUDE:  ‘Morning Voluntary’"].right == ""             # starred; no role now
     assert by_text["*SERMON:  “Who Said?”"].right == "Jordan Doe"
     assert by_text["WELCOME AND ANNOUNCEMENTS"].right == ""                 # a role with no name
     assert "HYMN:  #409  “God Is Here!”" in by_text and "Glory be." in by_text
@@ -166,3 +182,69 @@ def test_a_custom_element_marked_by_hand_does_not_bring_the_stand_note():
     assert "*ANTHEM" in lines and "*Congregation stands if able" not in lines
     starred = service(resolved=marked.resolved, settings=bs.BulletinSettings(starred=frozenset({"sermon"})))
     assert texts(pb.order_of_worship(starred))[-1] == "*Congregation stands if able"
+
+
+def test_a_blank_weekly_field_prints_nothing():
+    """PR 2 planning answer 3: no line and no [placeholder] for a blank weekly field."""
+    half = sb.ServiceBulletin(prelude=sb.Music("", "Pat Example"), postlude=sb.Music("Festive Postlude", ""),
+                              announcements=sb.Announcements(coffee_hour="The Example family",
+                                                             prayer_concerns="For all who are ill."))
+    lines = texts(pb.order_of_worship(service(bulletin=half)))
+    i = lines.index("PRELUDE:")
+    assert lines[i + 1] == "- Pat Example"
+    i = lines.index("POSTLUDE:  ‘Festive Postlude’")
+    assert lines[i + 1] == "ENDING"                                      # no composer line
+    assert texts(pb.announcements(service(bulletin=half))) == [
+        "ANNOUNCEMENTS", "October 4, 2026", "Coffee Hour: The Example family", "PRAYERS AND CONCERNS",
+        "For all who are ill."]
+    empty = texts(pb.order_of_worship(service(bulletin=sb.ServiceBulletin())))
+    assert not any(line.startswith(("PRELUDE", "POSTLUDE", "- ")) for line in empty)
+    assert not any("[" in line for line in empty if line != "SERMON:  “[Sermon title]”" and "unavailable" not in line)
+    assert pb.announcements(service(bulletin=sb.ServiceBulletin())) == []   # the page is left out
+
+
+def test_this_week_s_people_and_part_leaders_print_over_the_settings():
+    week = dataclasses.replace(WEEK, people={"worship_leader": "Rev. Guest", "liturgist": "", "organist": None},
+                               leaders={"sermon": "Pat Example", "offering": "Lee Sample"})
+    lines = pb.order_of_worship(service(bulletin=week))
+    by_text = {line.text: line for line in lines}
+    assert texts(lines[:4]) == ["THE SERVICE FOR THE LORD’S DAY", "Example Church", "Rev. Guest, Worship Leader",
+                                "Jordan Doe, Organist"]                    # this week: no liturgist
+    assert by_text["NEW TESTAMENT READING:  Matthew 21:33-46"].right == "Rev. Guest"
+    assert by_text["CALL TO WORSHIP"].right == ""
+    assert by_text["SERMON:  “Who Said?”"].right == "Pat Example"
+    assert by_text["OFFERING OUR GIFTS"].right == "Lee Sample"            # a part with no standing role
+    assert by_text["PRELUDE:  ‘Morning Voluntary’"].right == "Jordan Doe"
+
+
+def test_pasted_reading_text_prints_and_the_credit_line_names_only_fetched_text():
+    """A pasted text prints with no credit line; when the other reading is fetched, the line names it (plan
+    review fix M9); with every reading pasted, there is none."""
+    nt = pb.Reading("Matthew 21:33-46", "Jesus said, What do you think?", pasted=True)
+    lines = texts(pb.order_of_worship(service(nt=nt)))
+    i = lines.index("NEW TESTAMENT READING:  Matthew 21:33-46")
+    assert lines[i + 1:i + 4] == ["Jesus said, What do you think?",
+                                  "The First Reading is from the World English Bible (WEB).", "SERMON:  “Who Said?”"]
+    assert not any(line.startswith("Scripture readings are from") for line in lines)
+    ot = pb.Reading("Psalm 80:7-15", "Turn us again, God.", pasted=True)
+    lines = texts(pb.order_of_worship(service(ot=ot)))
+    assert "The New Testament Reading is from the World English Bible (WEB)." in lines
+    lines = texts(pb.order_of_worship(service(ot=ot, nt=nt)))
+    assert not any(" is from the " in line or " are from the " in line for line in lines)
+    lines = texts(pb.order_of_worship(service(ot=None, nt=nt)))
+    assert not any(" is from the " in line or " are from the " in line for line in lines)
+
+
+def test_no_bulletin_posted_prints_pr_1_s_placeholders():
+    """A page from before the Bulletin step (PR 2b-2) posts no bulletin: the music and the announcements
+    print as PR 1 printed them, so PR 2b-1 changes nothing that page shows."""
+    lines = texts(pb.order_of_worship(service(bulletin=None)))
+    i = lines.index("PRELUDE:  ‘[Prelude title]’")
+    assert lines[i + 1] == "- [Composer]"
+    i = lines.index("POSTLUDE:  ‘[Postlude title]’")
+    assert lines[i + 1] == "- [Composer]"
+    assert lines[2:4] == ["Rev. Alex Example, Worship Leader", "Sam Sample, Liturgist"]
+    assert texts(pb.announcements(service(bulletin=None))) == [
+        "ANNOUNCEMENTS", "October 4, 2026", "Ushers/Counters: [Names]", "Deacon of the Week: [Name]",
+        "Coffee Hour: [Name]", "THIS WEEK’S ACTIVITIES AT A GLANCE", "[Activities]", "PRAYERS AND CONCERNS",
+        "[Prayer concerns]", "ITEMS FOR COLLECTION", "[Collection items]"]

@@ -175,7 +175,8 @@ def test_the_church_s_bulletin_settings_print_for_every_member(client, church, m
     assert "Glory be." in text and text.count("*Please stand if able") == 1
     for gone in ("Organist", "[Organist]", "[Liturgist]", "[Worship leader]", "[Service time]", "[Phone]", "[Email]"):
         assert gone not in text, gone
-    assert "‘[Prelude title]’" in text and "Coffee Hour: [Name]" in text           # the weekly fields: PR 2b
+    # No bulletin was posted (a page from before the Bulletin step): PR 1's weekly placeholders (PR 2b-1).
+    assert "‘[Prelude title]’" in text and "Coffee Hour: [Name]" in text
 
 
 def test_a_stored_control_character_still_prints_in_word(client, church, calls):
