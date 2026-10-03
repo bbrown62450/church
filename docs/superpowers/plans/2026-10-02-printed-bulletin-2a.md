@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship the first half of printed bulletin PR 2 (PR 2 planning answer 1, 2026-10-02): **the church's standing bulletin settings, printed at once.** After it merges, the **Printed bulletin** card on step 4 of the Service Builder (`/builder/review`) says where the standing details come from, lists the ones still blank ("Not filled in: phone, organist."), and has a **Bulletin settings** button that opens a new page, `/bulletin-settings`. There an owner or admin fills in the church's address (up to three lines), phone, email, website and Facebook name, the service time, the standing worship leader, liturgist and organist, who leads each part of the service and which parts the congregation stands for, the stand note and the Gloria Patri words, and taps **Save settings**; a member sees the same page read-only. Every member's printed bulletin (the PDF and the Word version) then prints them: the contact lines on the cover, the three people in the header ("Rev. Alex Example, Worship Leader"), the service time across from the date, each part's leader's name on the right, the stars, the stand note and the Gloria Patri words. A blank field prints nothing (no line, no [placeholder]; answer 3). The weekly fields (the prelude and postlude, the announcements, the cover picture) keep PR 1's [placeholders] until PR 2b and PR 3. The settings live in `churches.settings["bulletin"]`: **no migration** (Alembic head stays `0005_services_extras`), no draft change, no new package or variable; production Streamlit (branch `streamlit-frozen`) is untouched.
+**Goal:** Ship the first half of printed bulletin PR 2 (PR 2 planning answer 1, 2026-10-02): **the church's standing bulletin settings, printed at once.** After it merges, the **Printed bulletin** card on step 4 of the Service Builder (`/builder/review`) says where the standing details come from, lists the ones still blank above the download buttons ("Not filled in: phone, organist."), and has a **Bulletin settings** button that opens a new page, `/bulletin-settings`. There an owner or admin fills in the church's address (up to three lines), phone, email, website and Facebook name, the service time, the standing worship leader, liturgist and organist, who leads each part of the service and which parts the congregation stands for, the stand note and the Gloria Patri words, and taps **Save settings**; a member sees the same settings as a plain read-only summary. Every member's printed bulletin (the PDF and the Word version) then prints them: the contact lines on the cover, the three people in the header ("Rev. Alex Example, Worship Leader"), the service time across from the date, each part's leader's name on the right, the stars, the stand note and the Gloria Patri words. A blank field prints nothing (no line, no [placeholder]; answer 3). The weekly fields (the prelude and postlude, the announcements, the cover picture) keep PR 1's [placeholders] until PR 2b and PR 3. The settings live in `churches.settings["bulletin"]`: **no migration** (Alembic head stays `0005_services_extras`), no draft change, no new package or variable; production Streamlit (branch `streamlit-frozen`) is untouched.
 
-**Architecture:** Backend first. `backend/bulletin_settings.py` (new, pure) defines `BulletinSettings` (the fields, the 21 element keys, the three roles, the limits and the defaults, which are PR 1's: the sample's stars and leader roles, "Congregation stands if able", the traditional Gloria Patri, everything else blank), `read(settings)` (the stored value read tolerantly, field by field) and `to_json()` (the stored and answered shape). `printed_bulletin.PrintedService` gains `settings: BulletinSettings`, and the order of worship, the header and the cover read the stars, the leaders, the names, the time, the contact lines and the words from it instead of PR 1's constants. `GET /church/bulletin-settings` (`require_church`, any member) and `PUT /church/bulletin-settings` (`require_admin`) live in `api/routes/bulletin_settings.py` over `usecases/church_bulletin.py`; the PUT stores the cleaned body whole as `settings["bulletin"]` through `repos.churches.set_bulletin_settings`, a locked read-modify-write (`SELECT … FOR UPDATE` in `_merge_settings`) that keeps every other settings key. `usecases.documents.build_printed` passes `bulletin_settings.read(church["settings"])` (the settings are already read with the church's name). Frontend: `lib/bulletin-settings.ts` (the parts' labels, the form mapping, "Not filled in"), `lib/queries/bulletin-settings.ts` (`useBulletinSettings`, `useSaveBulletinSettings`), the page `components/bulletin-settings/bulletin-settings-page.tsx` at `app/(signed-in)/(church)/bulletin-settings/page.tsx`, and the card's new lines.
+**Architecture:** Backend first. `backend/bulletin_settings.py` (new, pure) defines `BulletinSettings` (the fields, the 21 element keys, the three roles, the limits and the defaults, which are PR 1's: the sample's stars and leader roles, "Congregation stands if able", the traditional Gloria Patri, everything else blank), `read(settings)` (the stored value read tolerantly, field by field) and `to_json()` (the stored and answered shape). `printed_bulletin.PrintedService` gains `settings: BulletinSettings`, and the order of worship, the header and the cover read the stars, the leaders, the names, the time, the contact lines and the words from it instead of PR 1's constants. `GET /church/bulletin-settings` (`require_church`, any member) and `PUT /church/bulletin-settings` (`require_admin`) live in `api/routes/bulletin_settings.py` over `usecases/church_bulletin.py`; the PUT stores the cleaned body whole as `settings["bulletin"]` through `repos.churches.set_bulletin_settings`, a locked read-modify-write (`SELECT … FOR UPDATE` in `_merge_settings`) that keeps every other settings key. `usecases.documents.build_printed` passes `church_bulletin.read_settings(church["settings"])` (the settings are already read with the church's name; every stored text is made Word-safe on the way). `printed_pdf` shrinks the cover's contact lines to the room left on the cover (`KeepInFrame`), so the order of worship always starts on page 1. Frontend: `lib/bulletin-settings.ts` (the parts' labels, the form mapping, "Not filled in"), `lib/queries/bulletin-settings.ts` (`useBulletinSettings`, `useSaveBulletinSettings`), the page `components/bulletin-settings/bulletin-settings-page.tsx` at `app/(signed-in)/(church)/bulletin-settings/page.tsx` (fetched again on opening; 6a's rebase and leave-guard rules for settings forms; a read-only summary for members), and the card's new lines.
 
-**Tech Stack:** Python 3.11 (`.venv`), FastAPI 0.141, Pydantic 2, SQLAlchemy, reportlab 5 and python-docx (PR 1's renderers, unchanged), pytest; Next 16, React 19, TypeScript 5, Base UI (Select, Switch), TanStack Query 5, sonner, Vitest 3 with Testing Library.
+**Tech Stack:** Python 3.11 (`.venv`), FastAPI 0.141, Pydantic 2, SQLAlchemy, reportlab 5 and python-docx (PR 1's renderers; the PDF cover gains a `KeepInFrame`), pytest; Next 16, React 19, TypeScript 5, Base UI (Select, Switch), TanStack Query 5, sonner, Vitest 3 with Testing Library.
 
 **Source documents:**
 - Spec ("S"): `docs/superpowers/specs/2026-10-02-printed-bulletin-design.md`: owner answers 2, 8, 9; "PR 2 planning answers" 1-3 and 7 (binding); "What prints where"; "Data model" (standing settings in `churches.settings["bulletin"]`); "The Bulletin step and the settings panel"; "Scope by PR".
@@ -32,7 +32,7 @@
   `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
 - TDD: write the failing test first and see it fail as quoted.
 - **Backup push after every task** (standing rule): the controller runs `git push origin claude/slice-2-plan-4q33le` after each task's commit (never `--force`, never a rebase; if the push is rejected, `git pull --no-rebase origin claude/slice-2-plan-4q33le` and push again; on a network error retry after 2, 4, 8 and 16 s). A fix asked for by a review is a new commit, `Fix: <what> (Task <n> review)`. The container can restart and lose uncommitted work: commit as soon as a task's checks pass.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1357 → 1381 passed, 16 → 16 skipped; frontend 660 → 668 in 83 → 85 files`.
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1357 → 1385 passed, 16 → 16 skipped; frontend 660 → 672 in 83 → 85 files`.
 - New prose for the owner has no em dashes and no flattery. New user-facing copy is exactly the list in clarification 15 and has no em dashes; existing copy keeps its own punctuation.
 - No church id, email address, token, database URL or real person's name, address, phone or email in any doc, commit, test or record. The tests use invented details only: "Example Church", "100 Example Street", "Springfield, ST 00000", "(555) 010-0100", `office@example.com`, `example.com`, "Rev. Alex Example", "Sam Sample", "Jordan Doe". None of the owner's sample bulletin's content enters the repo.
 - Ask the owner before any push to a PR, PR creation, marking ready, merging, or any production or settings action. Owner steps go one at a time, in plain words.
@@ -47,14 +47,14 @@ As in the PR 1 plan: **Create `path`:** the block is the whole file; **Append to
   | After | Backend (delta) | Backend | Frontend (delta) | Frontend |
   |---|---|---|---|---|
   | T1 | +8 (`test_bulletin_settings.py`, one test in six cases) | 1365 passed, 16 skipped | 0 | 660 in 83 |
-  | T2 | +2 (`test_printed_bulletin.py`; `test_printed_render.py`, `test_api_printed.py` edited) | 1367 passed, 16 skipped | 0 | 660 in 83 |
-  | T3 | +14 (`test_api_bulletin_settings.py` 13, one test in six cases; `test_api_printed.py` 1; `test_no_streamlit_in_core.py` edited) | 1381 passed, 16 skipped | 0 | 660 in 83 |
-  | T4 | 0 | 1381 passed, 16 skipped | +4 (`bulletin-settings.test.ts` 3, `church.test.ts` 1; `keys.test.ts` edited) | 664 in 84 |
-  | T5 | 0 | 1381 passed, 16 skipped | +3 (`bulletin-settings-page.test.tsx`) | 667 in 85 |
-  | T6 | 0 | 1381 passed, 16 skipped | +1 (`review-send-step.test.tsx`; `builder-shell.test.tsx`, `liturgy-step.test.tsx` edited) | 668 in 85 |
-  | T7 | 0 (no test edited: the new items sit under the existing "## Printed bulletin") | 1381 passed, 16 skipped | 0 | 668 in 85 |
+  | T2 | +3 (`test_printed_bulletin.py` 2; `test_printed_render.py` 1; `test_api_printed.py` edited) | 1368 passed, 16 skipped | 0 | 660 in 83 |
+  | T3 | +17 (`test_api_bulletin_settings.py` 15, one test in eight cases; `test_api_printed.py` 2; `test_no_streamlit_in_core.py`, `test_church_settings.py` edited) | 1385 passed, 16 skipped | 0 | 660 in 83 |
+  | T4 | 0 | 1385 passed, 16 skipped | +5 (`bulletin-settings.test.ts` 4, `church.test.ts` 1; `keys.test.ts` edited) | 665 in 84 |
+  | T5 | 0 | 1385 passed, 16 skipped | +6 (`bulletin-settings-page.test.tsx`) | 671 in 85 |
+  | T6 | 0 | 1385 passed, 16 skipped | +1 (`review-send-step.test.tsx`; `builder-shell.test.tsx`, `liturgy-step.test.tsx` edited) | 672 in 85 |
+  | T7 | 0 (no test edited: the new items sit under the existing "## Printed bulletin") | 1385 passed, 16 skipped | 0 | 672 in 85 |
 
-- CI `backend-postgres` goes from `16 passed, 1357 deselected` to `16 passed, 1381 deselected` (no new Postgres test; clarification 6 and "Risks").
+- CI `backend-postgres` goes from `16 passed, 1357 deselected` to `16 passed, 1385 deselected` (no new Postgres test; clarification 6 and "Risks").
 
 ### Layering and code rules (carried)
 - `bulletin_settings`, `printed_bulletin` and `usecases/church_bulletin.py` import no FastAPI, Starlette or Streamlit (`test_no_streamlit_in_core.py` gains `bulletin_settings` and `usecases.church_bulletin`, T3); the routes are plain `def` with no SQL and no try/except (F §2.2 rule 1); the write goes through `repos.churches` (no SQL in the usecase).
@@ -88,37 +88,46 @@ The owner's answers win over S and F; the code wins over both where they disagre
 
 1. **[owner-visible] What 2a ships** (planning answer 1). The standing settings (`bulletin_settings`), `GET`/`PUT /church/bulletin-settings`, the settings printed in the PDF and the Word version, the **Bulletin settings** page, and the Printed bulletin card's new lines. Not here: the Bulletin step, any weekly field, the draft's `bulletin`, `services.bulletin`, a migration, carry forward, pasted reading text, the cover picture. The Word documents card (the pastor's and bulletin copies) does not change and does not use the settings.
 2. **[owner-visible] Where the panel lives until 6a** (S "The Bulletin step and the settings panel"; answer 8). A page of its own, `/bulletin-settings`, inside the church layout (the header, the church switcher and the nav stay), reached from the **Bulletin settings** button on the Printed bulletin card; the page has **Back to Review & send**. It is not in the main nav: 6a adds "Settings" and moves this page there without changing the storage. In 2b the Bulletin step links to it too (S). A page rather than a dialog: 21 parts with a leader and a star each, two long texts and eleven fields do not fit a dialog on a phone, and a page keeps its address for the Back button.
-3. **[owner-visible] Who sees what** (planning answer 2; 6a's pattern). Any member can open the page and read every field. Owners and admins (`owner`, `admin`) edit and see **Save settings**; a member sees "Only admins can change the bulletin settings. You can read them below." above the fields, read-only text fields, switched-off selects and switches, and no Save. The server enforces it (`require_admin`; a member's `PUT` is the role 403 "Only church admins can do this.", which the page would toast if it ever happened). The card's button shows for everyone.
+3. **[owner-visible] Who sees what** (planning answer 2; 6a's pattern). Any member can open the page and read every field. Owners and admins (`owner`, `admin`) edit and see **Save settings**; a member sees "Only admins can edit the bulletin settings. You can read them below." (6a's verb) above a plain read-only summary: each field's value as text ("Not filled in" for a blank one), and each part as a line such as "Sermon: Worship leader" or "Opening hymn: No one, congregation stands"; no fields, selects, switches or Save (plan review: 21 greyed-out rows read badly on a phone). The server enforces it (`require_admin`; a member's `PUT` is the role 403 "Only church admins can do this.", which the page would toast if it ever happened). The card's button shows for everyone.
 4. **[owner-visible] The fields and how each prints** (answer 2; S "What prints where", "Data model"):
-   - **Address** (up to 3 lines, each up to 100 characters): one cover line each, under the picture's box, in order. The form is one text box, a line per line; blank lines are dropped.
-   - **Phone** (40), **Email** (254), **Website** (200): one cover line each, as typed. Nothing checks their form (they are printed, never used to send).
-   - **Facebook name** (100): the cover line "FB: {name}", as the sample.
+   - **Address** (up to 3 lines, each up to 60 characters): one cover line each, under the picture's box, in order. The form is one text box, a line per line; blank lines are dropped.
+   - **Phone** (40), **Email** (100), **Website** (100): one cover line each, as typed. Nothing checks their form (they are printed, never used to send). On a phone the fields bring up the phone, email and web keyboards (`inputMode`; not `type="email"` or `type="url"`, which would make the browser refuse a website typed as "example.com"), with the browser's autofill off (they are the church's details, not the user's).
+   - **Facebook name** (60): the cover line "FB: {name}", as the sample.
+   - **The cover's limits** (plan review): 60, 100, 100 and 60 keep the contact lines short enough for the cover page; even at every limit, with a church name of two lines, the PDF shrinks the contact lines to fit (clarification 12), so the order of worship always starts on page 1.
+   - **One line each:** every text but the Gloria Patri words prints on one line, so `PUT` refuses a line break, a tab or any other control character in it (a 422 naming the field); the address's lines are split by the form before sending.
    - **Service time** (40, free text such as "10:30 a.m."): right-aligned on the date line under the header, as the sample.
    - **Worship leader**, **Liturgist**, **Organist** (100 each): the header lines "{name}, Worship Leader", "{name}, Liturgist", "{name}, Organist", in that order; and the name on the right of each part that role leads.
    - **Each part** (the 21 parts the printed order of worship can show, clarification 13): who leads it (No one, Worship leader, Liturgist or Organist) and whether the congregation stands for it (the star before its label).
-   - **Stand note** (200): printed at the end of the service after a star, "*{note}". The star is not typed: a typed leading "*" is dropped when saved.
+   - **Stand note** (200): printed at the end of the service after a star, "*{note}", and only when at least one part printed this week carries the star (plan review: no orphan note when nothing is starred, or when every starred part is left out this week). The star is not typed: a typed leading "*" is dropped when saved.
    - **Gloria Patri words** (1000): printed in bold italics under "SUNG RESPONSE: “Gloria Patri”".
-5. **[owner-visible] A blank field prints nothing, and the defaults** (planning answer 3). A blank address, phone, email, website, Facebook name, service time or person prints nothing at all: no line, no "FB:", no "{blank}, Organist", no name on the right. A blank stand note leaves the closing note out; blank Gloria Patri words leave the words out (the "SUNG RESPONSE: “Gloria Patri”" line stays: it is part of the order of worship). Before anyone saves, the settings read as the defaults: every detail, person and the time **blank**, so they print nothing from the day this merges (PR 1's "[Street address]", "[Worship leader]", "[Service time]" and the like are gone) and the card lists them; the parts' leaders and stars, the stand note "Congregation stands if able" and the traditional Gloria Patri words start at PR 1's values (the owner's sample), so a church that never opens the page keeps today's stars, roles and words. **Spec note:** S "Data model" says "a missing or malformed value is the placeholder"; that was written before planning answer 3, which is later and binding, so a missing value is the default above and never a [placeholder].
-6. **Storage and concurrency** (S "Data model"; F §1.7). The settings are one object under `churches.settings["bulletin"]`, in the shape `GET` answers (clarification 7). `PUT` stores the whole object (it is the whole form) through `repos.churches.set_bulletin_settings`, which calls `_merge_settings(church_id, {"bulletin": value})`: one transaction that locks the church row (`SELECT … FOR UPDATE`), reads the settings JSON from the locked row, replaces only the `"bulletin"` key and writes it back, so `bible_translation`, `default_hymnal`, `default_benediction`, `rubric`, `liturgy_prompts` and anything else stored there are never touched, and a concurrent translation or rubric write waits rather than being lost. **[owner-visible] Two admins saving the bulletin settings at once: the later save wins** (no `If-Match`). Why: one small admin-only form edited a few times a year; the settings JSON has no version column to compare (adding one is a migration, which answer 1 rules out), and a stamp kept inside the JSON would need a conflict dialog for a case that is very unlikely in a church with one or two admins; the page shows what is stored after each save, and 6a's settings pages use the same rule with a client-side rebase. The role is checked by `require_admin` before the write, not again under the lock, exactly as `PATCH /rubric` does today; 6a moves both writes under `lock_and_read_actor`. SQLite ignores `FOR UPDATE` (F §1.7's known gap); nothing here needs a Postgres-only test, because the write is `_merge_settings`, already used in production.
-7. **The API.** `GET /church/bulletin-settings` (`require_church`; any member) answers `BulletinSettings`: `{address_lines: string[] (≤ 3, each ≤ 100), phone, email, website, facebook, service_time, worship_leader, liturgist, organist, stand_note, gloria_patri_words: string (limits in clarification 4), starred: ElementKey[], leaders: {ElementKey: "worship_leader" | "liturgist" | "organist"}}`. `PUT` (`require_admin`) takes the same object, `extra="forbid"`, **every field required** (it replaces the whole object), each text trimmed and within its limit, `starred` and `leaders` limited to the 21 keys and the 3 roles; a bad body is the usual 422 `invalid_request` with `fields` (for example `phone`, `address_lines`, `starred.0`, `leaders.sermon`, `leaders.anthem.[key]`, `extra`) and stores nothing. Before storing, every text goes through `archive._xml_safe` (as a service's texts do, so the Word version can always hold it) and then `bulletin_settings.read`, which trims, drops blank address lines, drops a leading "*" from the stand note, removes duplicate stars, and orders `starred` and `leaders` as the printed order; `PUT` answers what is then stored (a re-read). No `Idempotency-Key` (the same body stores the same value) and no rate-limit bucket (F §1.6, §1.8: a small local write). `GET` reads tolerantly: a missing settings object, a missing key, a value of the wrong type or an unknown key or role falls back field by field to the default (clarification 5), and a text longer than its limit is cut to it, so `GET` always answers something `PUT` would accept. A church gone between the guard and the read is the guard's 403 (`no_church_access`). OpenAPI gains the two operations and `BulletinSettings`.
+5. **[owner-visible] A blank field prints nothing, and the defaults** (planning answer 3). A blank address, phone, email, website, Facebook name, service time or person prints nothing at all: no line, no "FB:", no "{blank}, Organist", no name on the right. A blank stand note leaves the closing note out; blank Gloria Patri words leave the words out (the "SUNG RESPONSE: “Gloria Patri”" line stays: it is part of the order of worship). Before anyone saves, the settings read as the defaults: every detail, person and the time **blank**, so they print nothing from the day this merges (PR 1's "[Street address]", "[Worship leader]", "[Service time]" and the like are gone) and the card lists them; the parts' leaders and stars, the stand note "Congregation stands if able" and the traditional Gloria Patri words start at PR 1's values (the owner's sample), so a church that never opens the page keeps today's stars, roles and words. **Spec note:** S "Data model" said "a missing or malformed value is the placeholder"; that was written before planning answer 3, which is later and binding, so a missing value is the default above and never a [placeholder]. T7 amends that sentence in S.
+6. **Storage and concurrency** (S "Data model"; F §1.7). The settings are one object under `churches.settings["bulletin"]`, in the shape `GET` answers (clarification 7). `PUT` stores the whole object (it is the whole form) through `repos.churches.set_bulletin_settings`, which calls `_merge_settings(church_id, {"bulletin": value})`: one transaction that locks the church row (`SELECT … FOR UPDATE`), reads the settings JSON from the locked row, replaces only the `"bulletin"` key and writes it back, so `bible_translation`, `default_hymnal`, `default_benediction`, `rubric`, `liturgy_prompts` and anything else stored there are never touched, and a concurrent translation or rubric write waits rather than being lost. **[owner-visible] Two admins saving the bulletin settings at once: the later save wins** (no `If-Match`). Why: one small admin-only form edited a few times a year; the settings JSON has no version column to compare (adding one is a migration, which answer 1 rules out), and a stamp kept inside the JSON would need a conflict dialog for a case that is very unlikely in a church with one or two admins; the page shows what is stored after each save, and it follows 6a's client-side rule (clarification 10): it opens on a fresh fetch, and newer server data updates every field the admin has not edited, so a save never sends back an older value the admin did not touch. The role is checked by `require_admin` before the write, not again under the lock, exactly as `PATCH /rubric` does today; 6a moves both writes under `lock_and_read_actor`. SQLite ignores `FOR UPDATE` (F §1.7's known gap); nothing here needs a Postgres-only test, because the write is `_merge_settings`, already used in production.
+7. **The API.** `GET /church/bulletin-settings` (`require_church`; any member) answers `BulletinSettings`: `{address_lines: string[] (≤ 3, each ≤ 100), phone, email, website, facebook, service_time, worship_leader, liturgist, organist, stand_note, gloria_patri_words: string (limits in clarification 4), starred: ElementKey[], leaders: {ElementKey: "worship_leader" | "liturgist" | "organist"}}`. `PUT` (`require_admin`) takes the same object, `extra="forbid"`, **every field required** (it replaces the whole object), each text trimmed and within its limit, every text but `gloria_patri_words` free of control characters (one printed line: no line break or tab), `starred` and `leaders` limited to the 21 keys and the 3 roles; a bad body is the usual 422 `invalid_request` with `fields` (for example `phone`, `address_lines`, `address_lines.0`, `starred.0`, `leaders.sermon`, `leaders.anthem.[key]`, `extra`) and stores nothing. Before storing, every text goes through `archive._xml_safe` (as a service's texts do, so the Word version can always hold it) and then `bulletin_settings.read` (together `church_bulletin.read_settings`, which `GET` and the printed bulletin use too, so a value written by any other path is made Word-safe as well), which trims, drops blank address lines, drops a leading "*" from the stand note, removes duplicate stars, and orders `starred` and `leaders` as the printed order; `PUT` answers what is then stored (a re-read). No `Idempotency-Key` (the same body stores the same value) and no rate-limit bucket (F §1.6, §1.8: a small local write). `GET` reads tolerantly: a missing settings object, a missing key, a value of the wrong type or an unknown key or role falls back field by field to the default (clarification 5), and a text longer than its limit is cut to it, so `GET` always answers something `PUT` would accept. A church gone between the guard and the read is the guard's 403 (`no_church_access`). OpenAPI gains the two operations and `BulletinSettings`.
 8. **[owner-visible] The weekly fields keep PR 1's placeholders until 2b.** The prelude and postlude ("PRELUDE: ‘[Prelude title]’" with "- [Composer]", and the postlude's), the cover picture's box ("[Cover picture]"), the announcements page ("Ushers/Counters: [Names]" and the rest), "[Sermon title]" for a blank sermon title and "[Reading text unavailable]" all print as in PR 1. Planning answer 3 makes a blank weekly field print nothing too, but only together with the Bulletin step that fills them (2b): removing the music and the announcements now would leave a bulletin with no prelude line and an announcements page of bare headings and no way to fill them. The prelude's and postlude's leader is now the organist's name from the settings (or nothing). The card says "For now, the music and the announcements print as [placeholders]."
-9. **[owner-visible] The Printed bulletin card** (planning answer 3). Its heading, summary, two downloads and their lines, gates, toasts and save tip are unchanged. The PR 1 line "For now, the church's details, the people who lead, the music and the announcements print as [placeholders]." becomes "For now, the music and the announcements print as [placeholders]."; under the downloads (and the save tip) a new block: "The church's details, the people who lead and the service time come from the bulletin settings.", then, when any is blank, "Not filled in: {list}." (for example "Not filled in: phone, organist."), then a **Bulletin settings** button (outlined, full width on a phone, 44 px) to `/bulletin-settings`. The list names, in the page's order, each blank one of: address, phone, email, website, Facebook name, service time, worship leader, liturgist, organist, stand note, Gloria Patri words. Nothing about the settings ever turns a download off: while they load or if they fail, the block shows only the sentence and the button.
-10. **[owner-visible] The page** (F §4.8). `PageHeader` "Bulletin settings" with "What every printed bulletin uses. A field left blank is left off the bulletin." and **Back to Review & send** (outlined, 44 px). Then (members) the read-only note, and five groups, each a fieldset with its legend: **Church details** (Address with "Up to 3 lines, as printed on the cover.", Phone, Email, Website, Facebook name with "Printed as FB: and the name."); **Service** (Service time with "Printed across from the date, for example 10:30 a.m."); **Who leads** (Worship leader, Liturgist, Organist); **Each part** ("Who leads each part, and the parts the congregation stands for (printed with a star)." then, per part, its name, a select named "{part}: led by" with No one, Worship leader, Liturgist, Organist, and a switch "Stands" named "{part}: congregation stands"); **Printed words** (Stand note with "Printed at the end of the service, after a star.", Gloria Patri words). Then **Save settings** (filled, full width on a phone, "Saving…" while pending). A load shows skeletons; a failed load the usual error with **Retry**. Each text field has its limit as `maxLength`; the address is checked on Save ("Use up to 3 lines of up to 100 characters each." under it, the field marked invalid and focused, nothing sent). Success toasts "Bulletin settings saved" (the result is not otherwise visible) and the form shows what was stored; a failure toasts the server's message (none after a 401 or a lost church). The form keeps its own state from the first load: a background refetch never overwrites what is being typed.
+9. **[owner-visible] The Printed bulletin card** (planning answer 3). Its heading, summary, two downloads and their lines, gates, toasts and save tip are unchanged. The PR 1 line "For now, the church's details, the people who lead, the music and the announcements print as [placeholders]." becomes "For now, the music and the announcements print as [placeholders]."; under it, still above the download buttons (plan review: on a phone the list must be read before **Download printed bulletin** is tapped), "The church's details, the people who lead and the service time come from the bulletin settings.", then, when any is blank, "Not filled in: {list}." (for example "Not filled in: phone, organist."); under the downloads (and the save tip) a **Bulletin settings** button (outlined, full width on a phone, 44 px) to `/bulletin-settings`. The list names, in the page's order, each blank one of: address, phone, email, website, Facebook name, service time, worship leader, liturgist, organist, stand note, Gloria Patri words. Nothing about the settings ever turns a download off: while they load or if they fail, the card shows the sentence and the button, and no list.
+10. **[owner-visible] The page** (F §4.8; 6a's rules for settings forms). `PageHeader` "Bulletin settings" with "What every printed bulletin uses. A field left blank is left off the bulletin." and **Back to Review & send** (outlined, 44 px). For admins, five groups, each a fieldset with its legend: **Church details** (Address with "Up to 3 lines, as printed on the cover.", Phone, Email, Website, Facebook name with "Printed as FB: and the name."); **Service** (Service time with "Printed across from the date, for example 10:30 a.m."); **Who leads** (Worship leader, Liturgist, Organist); **Each part** ("Who leads each part, and the parts the congregation stands for (printed with a star)." then, per part, its name, a select named "{part}: led by" with No one, Worship leader, Liturgist, Organist, and a switch "Stands" named "{part}: congregation stands"); **Printed words** (Stand note with "Printed at the end of the service, after a star.", Gloria Patri words). Then **Save settings** (filled, full width on a phone, "Saving…" while pending). Members see the summary of clarification 3 under the same five headings. A load shows skeletons; a failed load the usual error with **Retry**. Each text field has its limit as `maxLength`.
+    - **Fresh on opening** (plan review): the page fetches the settings again when it opens (`useBulletinSettings({ fresh: true })`: `refetchOnMount: "always"`), even when the card cached them minutes ago, and shows the form only once that fetch is back (skeletons until then), so the form never starts from an older value. Once shown, a failed background refetch keeps the form.
+    - **Rebase** (6a's rule, `rebaseForm`): the form keeps a baseline (the last server value) and the current edits. When newer server data arrives (a refetch on window focus, or this page's own save), each value the admin has not touched (a text, a part's leader, a part's star; current equals the baseline) takes the new server value, each touched one keeps the edit, and the baseline becomes the new value. After a save, the fields as sent take what was stored (trimmed, the stand note's star dropped); a field changed while "Saving…" showed keeps what was typed.
+    - **Leave guard** (6a's rule; the app has no app-wide guard yet): while the form has unsaved edits, closing or reloading the tab shows the browser's own warning (`beforeunload`), and **Back to Review & send** asks "Discard unsaved changes?" ("Your changes on this page haven't been saved."; **Discard changes**, **Keep editing**). The header links, the nav and the church switcher do not ask yet: 6a's `useLeaveGuard` adds that for every settings page.
+    - **Errors** (the app's field-error pattern, announced): the address is checked on Save ("Use up to 3 lines of up to 60 characters each." under it, in the error colour, `role="alert"`, the field `aria-invalid`, described by it, and focused; nothing sent). A 422 that names fields (`fields`, for example a line break pasted into the phone) shows the server's short message ("Not a valid value.", "Too long (max 40 characters).") the same way under each named field and focuses the first; the toast shows the server's message as for any failed save. Editing a field clears its error.
+    - Success toasts "Bulletin settings saved" (the result is not otherwise visible) and the form shows what was stored; a failure toasts the server's message (none after a 401 or a lost church).
 11. **The leader select's "No one"** is a real choice (the part prints no leader), not a placeholder item, so F §4.9 item 3's "never add a sentinel item" does not apply; it maps to the part being absent from `leaders`.
-12. **Reading the settings to print.** `build_printed` already reads `churches.get_church` (the name and the settings) in its one short session; it passes `bulletin_settings.read(church["settings"])` to `PrintedService`, so a download costs no extra query. The Word version (`printed_docx`) and the PDF (`printed_pdf`) need no change: they render `printed_bulletin`'s lines, and an empty cover contact list or a date line with no time already renders (a line with no `right` prints without the leader's column). A character the PDF's standard fonts cannot print shows as "?" (PR 1's `to_pdf_text`), as for any text.
+12. **Reading the settings to print, and the cover's fit.** `build_printed` already reads `churches.get_church` (the name and the settings) in its one short session; it passes `church_bulletin.read_settings(church["settings"])` to `PrintedService` (`bulletin_settings.read` of the stored texts made Word-safe with `archive._xml_safe`: a value written by any other path, the frozen Streamlit merge, ops SQL or a later writer, can never make the Word version fail), so a download costs no extra query. The Word version (`printed_docx`) needs no change: it renders `printed_bulletin`'s lines, and an empty cover contact list or a date line with no time already renders (a line with no `right` prints without the leader's column). **The PDF's cover** (`printed_pdf._story`) is a fixed stack in a 540 pt page: the title, the picture's 300 pt box and 30 pt of space leave about 158 pt for the contact lines (about 106 pt under a church name of two lines), which typical details fit (six short lines take 90 pt) but the longest values the limits allow do not; so the contact lines go in a `KeepInFrame(..., mode="shrink")` sized to the room left, and shrink only when they would not fit (T2's `test_the_longest_details_still_fit_the_cover`: every field at its limit and a church name of two lines still give side 1 = cover | page 1). **The Word cover** cannot shrink the same way; its picture box is shorter (about 150 pt), so at every limit its cover needs about 380 of its 540 pt and stays one page. That is an estimate: python-docx has no layout engine and LibreOffice Writer is not installed here, so no test can check Word's page breaks; the owner's phone check opens the Word version (T9 Step 3). A character the PDF's standard fonts cannot print shows as "?" (PR 1's `to_pdf_text`), as for any text.
 13. **The parts and their names.** The 21 keys are PR 1's element keys, in the printed order: `prelude`, `welcome`, `call_to_worship`, `opening_prayer`, `first_hymn`, `prayer_of_confession`, `assurance`, `gloria_patri`, `prayer_for_illumination`, `ot_reading`, `nt_reading`, `sermon`, `affirmation_of_faith`, `second_hymn`, `prayers_of_the_people`, `offering`, `doxology`, `offertory_prayer`, `third_hymn`, `benediction`, `postlude`. The page names them Prelude, Welcome and Announcements, Call to Worship, Opening Prayer, Opening hymn, Prayer of Confession, Assurance of Pardon, Gloria Patri, Prayer for Illumination, First Reading, New Testament Reading, Sermon, Affirmation of Faith, Response hymn, Prayers of the People, Offering, Doxology, Offertory Prayer, Closing hymn, Benediction, Postlude (the hymns as the Hymns step names its slots). A custom element and the communion liturgy's headings have no key: no star, no leader (as in PR 1).
 14. **Isolation and access.** Both routes are church-scoped (`test_route_guards.py` passes unchanged: `require_admin` depends on `require_church`); a non-member and a member of another church get the `no_church_access` 403 for both (T3's isolation test).
-15. **[owner-visible] Every new user-facing string** (no em dashes). On the card: "The church's details, the people who lead and the service time come from the bulletin settings."; "For now, the music and the announcements print as [placeholders]." (replacing PR 1's line); "Not filled in: {list}." with the labels "address", "phone", "email", "website", "Facebook name", "service time", "worship leader", "liturgist", "organist", "stand note", "Gloria Patri words"; "Bulletin settings" (the button). On the page: "Bulletin settings" (the heading); "What every printed bulletin uses. A field left blank is left off the bulletin."; "Back to Review & send"; "Only admins can change the bulletin settings. You can read them below."; the legends "Church details", "Service", "Who leads", "Each part", "Printed words"; the labels "Address", "Phone", "Email", "Website", "Facebook name", "Service time", "Worship leader", "Liturgist", "Organist", "Stand note", "Gloria Patri words"; the help lines "Up to 3 lines, as printed on the cover.", "Printed as FB: and the name.", "Printed across from the date, for example 10:30 a.m.", "Printed at the end of the service, after a star.", "Who leads each part, and the parts the congregation stands for (printed with a star)."; the 21 part names (clarification 13); "No one", "Worship leader", "Liturgist", "Organist" (the select); "Stands"; for screen readers "{part}: led by" and "{part}: congregation stands"; "Use up to 3 lines of up to 100 characters each."; "Save settings"; "Bulletin settings saved" (toast). Reused as they are: "Saving…", the skeleton's "Loading", the error state and its "Retry", the existing error toasts. In the files: the header lines "{name}, Worship Leader", "{name}, Liturgist", "{name}, Organist"; "FB: {name}"; "*{stand note}"; the default stand note "Congregation stands if able" (PR 1's text without the star, which is printed). From the server: "Only church admins can do this." (`require_admin`'s, unchanged).
-16. **Docs.** T7 appends "### Printed bulletin PR 2a: bulletin settings" with items 7-14 at the end of `docs/manual-verification.md`, inside the existing "## Printed bulletin" section (PR 1's text says "PR 2 and PR 3 add their own items here"). A `###` heading, so `test_slice1_docs.py`'s pin of the last eight `##` headings does not move and no test changes. The runbook record is T9's (`### Printed bulletin PR 2a record` before `## Backups`, as PR 1's).
+15. **[owner-visible] Every new user-facing string** (no em dashes). On the card: "The church's details, the people who lead and the service time come from the bulletin settings."; "For now, the music and the announcements print as [placeholders]." (replacing PR 1's line); "Not filled in: {list}." with the labels "address", "phone", "email", "website", "Facebook name", "service time", "worship leader", "liturgist", "organist", "stand note", "Gloria Patri words"; "Bulletin settings" (the button). On the page: "Bulletin settings" (the heading); "What every printed bulletin uses. A field left blank is left off the bulletin."; "Back to Review & send"; "Only admins can edit the bulletin settings. You can read them below."; the legends and headings "Church details", "Service", "Who leads", "Each part", "Printed words"; the labels "Address", "Phone", "Email", "Website", "Facebook name", "Service time", "Worship leader", "Liturgist", "Organist", "Stand note", "Gloria Patri words"; the help lines "Up to 3 lines, as printed on the cover.", "Printed as FB: and the name.", "Printed across from the date, for example 10:30 a.m.", "Printed at the end of the service, after a star.", "Who leads each part, and the parts the congregation stands for (printed with a star)."; the 21 part names (clarification 13); "No one", "Worship leader", "Liturgist", "Organist" (the select); "Stands"; for screen readers "{part}: led by" and "{part}: congregation stands"; "Use up to 3 lines of up to 60 characters each."; "Save settings"; "Bulletin settings saved" (toast); in the member's summary "Not filled in" (a blank field) and "{part}: {who leads}" with ", congregation stands" for a starred part; the leave guard's "Discard unsaved changes?", "Your changes on this page haven't been saved.", "Discard changes" and "Keep editing" (6a's words). Reused as they are: "Saving…", the skeleton's "Loading", the error state and its "Retry", the existing error toasts, the server's 422 field messages ("Not a valid value.", "Too long (max {n} characters)."). In the files: the header lines "{name}, Worship Leader", "{name}, Liturgist", "{name}, Organist"; "FB: {name}"; "*{stand note}"; the default stand note "Congregation stands if able" (PR 1's text without the star, which is printed). From the server: "Only church admins can do this." (`require_admin`'s, unchanged).
+16. **Docs.** T7 appends "### Printed bulletin PR 2a: bulletin settings" with items 7-15 at the end of `docs/manual-verification.md`, inside the existing "## Printed bulletin" section (PR 1's text says "PR 2 and PR 3 add their own items here"). A `###` heading, so `test_slice1_docs.py`'s pin of the last eight `##` headings does not move and no test changes. T7 also amends PR 1's item 2 (it said the names print as [placeholders]) and S's "Data model" sentence (clarification 5). The runbook record is T9's (`### Printed bulletin PR 2a record` before `## Backups`, as PR 1's).
 
 ### Risks
 - **The bulletin loses PR 1's [placeholders] for the standing details the moment this merges** (clarification 5). Until an admin saves the settings, the cover has no contact lines and the header no people. That is answer 3's intent, and the card says what is not filled in; T9's first phone step fills them in.
 - **Two admins saving at once:** the later save wins (clarification 6). Very unlikely; the loser sees their save toast and, on reload, the other admin's values.
 - **A demoted admin's save in flight** passes `require_admin` and writes milliseconds later; the role is not re-read under the lock (as `PATCH /rubric`). 6a closes both with `lock_and_read_actor`.
-- **SQLite ignores `FOR UPDATE`.** The unit tests cannot show the lock; the write is the existing `_merge_settings`, which `backend-postgres` already exercises through the translation and prompt writes in production use. No new Postgres test.
+- **SQLite ignores `FOR UPDATE`.** The unit tests cannot show the lock itself; the write is the existing `_merge_settings`, which `backend-postgres` already exercises through the translation and prompt writes in production use, and T3 adds `set_bulletin_settings` to `test_church_settings.py::test_settings_writes_lock_the_church_row`, which checks (compiled for Postgres) that each settings write loads the church row `FOR UPDATE` (a guard if the function is ever rewritten without `_merge_settings`). No new Postgres test.
 - **Characters outside Windows-1252** in a name or an address print as "?" in the PDF (PR 1's fonts); the Word version prints them. The phone check looks at the cover and header.
-- **Long values:** a 100-character address line or name wraps on the cover or in the header; a long name on a part's line takes the 120 pt leader column and wraps there (PR 1's layout). The limits keep it to a few lines.
+- **Long values:** the cover's limits (address lines 60, email and website 100, Facebook name 60) keep the contact lines short, and the PDF shrinks them when even those would overflow the cover (clarification 12; T2's render test at every limit), so the order of worship always starts on page 1. The Word cover is not shrunk; by estimate it fits at every limit, and no test can check Word's page breaks (clarification 12). A name may be 100 characters: in the header it wraps, and on a part it takes the 120 pt leader column (about 21 characters a line in Times 11), so a very long name makes tall leader cells on each part it leads and can add a page; accepted (real names are short, and the limit caps it).
 - **Frozen Streamlit** never reads or writes `"bulletin"`; its settings writes go through the same locked merge (F §1.7 amendment), which keeps this key.
+- **The leave guard is partial until 6a:** unsaved edits are guarded on a reload or close of the tab and on **Back to Review & send**, not on the header links, the nav or the church switcher (no app-wide guard exists yet; 6a's `useLeaveGuard` adds it). Leaving that way loses the edits without a question.
+- **The stored settings JSON is assumed to be an object:** `_merge_settings` raises `TypeError` (a 500) if `churches.settings` were ever not an object. Pre-existing and shared with the translation and prompts writes, so not 2a's to fix; listed under "Follow-ups".
 
 ## File Structure
 
@@ -127,24 +136,25 @@ The owner's answers win over S and F; the code wins over both where they disagre
 | Path | What | Task |
 |---|---|---|
 | `backend/bulletin_settings.py` (+ `backend/tests/test_bulletin_settings.py`) | `BulletinSettings` (`leader`, `to_json`), `read`, `ELEMENT_KEYS`, `ROLES`, `MAX_LENGTH`, `MAX_ADDRESS_LINES`, the defaults, `GLORIA_PATRI` (moved from `printed_bulletin`) | T1 |
-| `backend/usecases/church_bulletin.py`, `backend/api/routes/bulletin_settings.py` (+ `backend/tests/test_api_bulletin_settings.py`) | `get_bulletin_settings`, `save_bulletin_settings`; the `BulletinSettings` model, `GET` and `PUT /church/bulletin-settings` | T3 |
-| `frontend/src/lib/bulletin-settings.ts` (+ `.test.ts`), `frontend/src/lib/queries/bulletin-settings.ts` | `ELEMENTS`, `ROLES`, `MAX_LENGTH`, the form mapping, `addressError`, `notFilledIn`, `notFilledInLine`; `useBulletinSettings`, `useSaveBulletinSettings` | T4 |
-| `frontend/src/components/bulletin-settings/bulletin-settings-page.tsx` (+ `.test.tsx`), `frontend/src/app/(signed-in)/(church)/bulletin-settings/page.tsx` | the page and its route | T5 |
+| `backend/usecases/church_bulletin.py`, `backend/api/routes/bulletin_settings.py` (+ `backend/tests/test_api_bulletin_settings.py`) | `read_settings`, `get_bulletin_settings`, `save_bulletin_settings`; the `BulletinSettings` model (one-line texts), `GET` and `PUT /church/bulletin-settings` | T3 |
+| `frontend/src/lib/bulletin-settings.ts` (+ `.test.ts`), `frontend/src/lib/queries/bulletin-settings.ts` | `ELEMENTS`, `ROLES`, `MAX_LENGTH`, the form mapping, `addressError`, `rebaseForm`, `isDirty`, `formErrors`, `notFilledIn`, `notFilledInLine`; `useBulletinSettings` (with `{ fresh: true }` for the page), `useSaveBulletinSettings` | T4 |
+| `frontend/src/components/bulletin-settings/bulletin-settings-page.tsx` (+ `.test.tsx`), `frontend/src/app/(signed-in)/(church)/bulletin-settings/page.tsx` | the page (the admin's form with the fresh fetch, the rebase, the leave guard and the field errors; the member's summary) and its route | T5 |
 
 **Modified**
 
 | Path | Change | Task |
 |---|---|---|
-| `backend/printed_bulletin.py` | `PrintedService.settings`; stars, leaders, header, time, contact lines, stand note and Gloria Patri words from it; PR 1's standing placeholders and constants removed | T2 |
-| `backend/tests/test_printed_bulletin.py`, `backend/tests/test_printed_render.py`, `backend/tests/test_api_printed.py` | the filled-in `SETTINGS`; names for placeholders; two new tests; (T3) the stored settings print | T2, T3 |
-| `backend/repos/churches.py`, `backend/api/main.py`, `backend/usecases/documents.py`, `backend/tests/test_no_streamlit_in_core.py` | `set_bulletin_settings`; the router; the settings passed to `PrintedService`; two modules | T3 |
+| `backend/printed_bulletin.py` | `PrintedService.settings`; stars, leaders, header, time, contact lines, stand note (only under a printed star) and Gloria Patri words from it; PR 1's standing placeholders and constants removed | T2 |
+| `backend/printed_pdf.py` | the cover's contact lines shrink to the room left on the cover (`KeepInFrame`) | T2 |
+| `backend/tests/test_printed_bulletin.py`, `backend/tests/test_printed_render.py`, `backend/tests/test_api_printed.py` | the filled-in `SETTINGS`; names for placeholders; two new content tests and one render test at every limit; (T3) the stored settings print, and a stored control character still prints in Word | T2, T3 |
+| `backend/repos/churches.py`, `backend/api/main.py`, `backend/usecases/documents.py`, `backend/tests/test_no_streamlit_in_core.py`, `backend/tests/test_church_settings.py` | `set_bulletin_settings`; the router; the settings (Word-safe) passed to `PrintedService`; two modules; the new write in the row-lock test | T3 |
 | `frontend/src/lib/api/openapi.json`, `frontend/src/lib/api/schema.d.ts` | regenerated | T3 |
 | `frontend/src/lib/api/types.ts`, `frontend/src/lib/queries/keys.ts` (+ `keys.test.ts`), `frontend/src/lib/church.ts` (+ `church.test.ts`), `frontend/src/test/fixtures/index.ts` | `BulletinSettings`; `keys.bulletinSettings`; `isAdmin`; `bulletinSettings()`, `filledBulletinSettings()`, `GLORIA_PATRI` | T4 |
-| `frontend/src/components/builder/review/printed-card.tsx` (+ `review-send-step.test.tsx`), `frontend/src/components/builder/builder-shell.test.tsx`, `frontend/src/components/builder/liturgy/liturgy-step.test.tsx` | the settings block and the new placeholder line; the fake route in the three tests that render Review | T6 |
-| `docs/manual-verification.md` | "### Printed bulletin PR 2a: bulletin settings" | T7 |
+| `frontend/src/components/builder/review/printed-card.tsx` (+ `review-send-step.test.tsx`), `frontend/src/components/builder/builder-shell.test.tsx`, `frontend/src/components/builder/liturgy/liturgy-step.test.tsx` | the settings sentence and "Not filled in" above the downloads, the button below them, and the new placeholder line; the fake route in the three tests that render Review | T6 |
+| `docs/manual-verification.md`, `docs/superpowers/specs/2026-10-02-printed-bulletin-design.md` | "### Printed bulletin PR 2a: bulletin settings", PR 1's item 2 amended; S's "Data model" sentence (clarification 5) | T7 |
 | `docs/ops-runbook.md` | "### Printed bulletin PR 2a record" (the records PR, after the merge) | T9 |
 
-**Counts in the PR:** 35 paths: 12 created (this plan and the eleven new code and test files above), 23 modified (the 20 code, test and API paths above, `docs/manual-verification.md`, the spec (its PR 2 planning answers, `f2bddda`) and `docs/ops-runbook.md` (the PR 1 record `350f9a5`), which ride along until merged). **Untouched:** migrations, `db/models.py`, `api/schemas.py`, `api/deps.py`, `printed_pdf.py`, `printed_docx.py`, `service_output.py`, the draft schema, `documents-card.tsx`, `app-nav.tsx`, `app.py`, Streamlit.
+**Counts in the PR:** 37 paths: 12 created (this plan and the eleven new code and test files above), 25 modified (the 22 code, test and API paths above, `docs/manual-verification.md`, the spec (its PR 2 planning answers, `f2bddda`, and T7's sentence) and `docs/ops-runbook.md` (the PR 1 record `350f9a5`), which ride along until merged). **Untouched:** migrations, `db/models.py`, `api/schemas.py`, `api/deps.py`, `printed_docx.py`, `service_output.py`, the draft schema, `documents-card.tsx`, `app-nav.tsx`, `app.py`, Streamlit.
 
 **Task order and review batch:** T1 → T7, each one commit and a backup push; then one review of the whole batch with its fixes as `Fix: …` commits; T8 verifies and opens the draft PR on the owner's yes; T9 merges on the owner's yes, runs the phone check and writes the record.
 
@@ -364,12 +374,12 @@ Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 
 Expected counts after this task: backend `1365 passed, 16 skipped`; frontend `660 passed` in 83 files.
 
-### Task 2: The booklet prints the settings: `printed_bulletin` (planning answer 3; S "What prints where"; clarifications 4, 5, 8, 12)
+### Task 2: The booklet prints the settings: `printed_bulletin`, and the cover fits (planning answer 3; S "What prints where"; clarifications 4, 5, 8, 12)
 
 **Files:**
-- Modify: `backend/tests/test_printed_bulletin.py`, `backend/tests/test_printed_render.py`, `backend/tests/test_api_printed.py`, `backend/printed_bulletin.py`
+- Modify: `backend/tests/test_printed_bulletin.py`, `backend/tests/test_printed_render.py`, `backend/tests/test_api_printed.py`, `backend/printed_bulletin.py`, `backend/printed_pdf.py`
 
-The PR 1 tests now pass `SETTINGS` (invented names and details) and expect them where PR 1 expected `[Worship leader]` and the other standing placeholders; `test_api_printed.py`'s first test, whose church saved nothing, expects no names at all. `test_printed_render.py` imports `SETTINGS` from `test_printed_bulletin.py` (only the constant, so no test is collected twice).
+The PR 1 tests now pass `SETTINGS` (invented names and details) and expect them where PR 1 expected `[Worship leader]` and the other standing placeholders; `test_api_printed.py`'s first test, whose church saved nothing, expects no names at all. `test_printed_render.py` imports `SETTINGS` from `test_printed_bulletin.py` (only the constant, so no test is collected twice). The stand note prints only under a printed star; a render test puts every field at its limit under a church name of two lines and checks that the order of worship still starts on page 1.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -696,9 +706,9 @@ def test_the_longest_details_still_fit_the_cover():
 Run: `.venv/bin/python -m pytest -q backend/tests/test_printed_bulletin.py backend/tests/test_printed_render.py backend/tests/test_api_printed.py 2>&1 | tail -3`
 **Expected** (`PrintedService` has no `settings` yet, and PR 1 still prints the placeholders):
 ```
-FAILED backend/tests/test_printed_render.py::test_the_word_file_is_the_same_booklet_in_reading_order
+FAILED backend/tests/test_printed_render.py::test_the_longest_details_still_fit_the_cover
 FAILED backend/tests/test_api_printed.py::test_the_pdf_downloads_with_the_file_headers_and_the_readings_text
-11 failed, 13 passed in <t>s
+12 failed, 13 passed in <t>s
 ```
 
 - [ ] **Step 3: Print the settings**
@@ -1192,27 +1202,29 @@ def _story(ps: pb.PrintedService, width: float) -> list[Flowable]:
 - [ ] **Step 4: See them pass, and the suite**
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_printed_bulletin.py backend/tests/test_printed_render.py backend/tests/test_api_printed.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1` then `grep -nwE "WORSHIP_LEADER|LITURGIST|ORGANIST|SERVICE_TIME|CONTACT_LINES|STAND_NOTE|STARRED|LEADERS" backend/*.py backend/usecases/*.py; echo "constants grep exit $?"`
-**Expected:** `24 passed in <t>s`; `1367 passed, 16 skipped in <t>s`; `constants grep exit 1` (PR 1's constants are gone; `-w` matches whole words only, so `bulletin_settings`'s own `DEFAULT_LEADERS`, `DEFAULT_STARRED` and `DEFAULT_STAND_NOTE` do not match).
+**Expected:** `25 passed in <t>s`; `1368 passed, 16 skipped in <t>s`; `constants grep exit 1` (PR 1's constants are gone; `-w` matches whole words only, so `bulletin_settings`'s own `DEFAULT_LEADERS`, `DEFAULT_STARRED` and `DEFAULT_STAND_NOTE` do not match).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/printed_bulletin.py backend/tests/test_printed_bulletin.py backend/tests/test_printed_render.py backend/tests/test_api_printed.py
+git add backend/printed_bulletin.py backend/printed_pdf.py backend/tests/test_printed_bulletin.py backend/tests/test_printed_render.py backend/tests/test_api_printed.py
 git commit -q -m "Printed bulletin PR 2a: the booklet prints the standing settings" -m "PrintedService carries the church's bulletin settings: the cover's
 contact lines, the header's people, the service time, each part's leader
-and star, the stand note and the Gloria Patri words come from them, and a
-blank one prints nothing. The weekly fields keep PR 1's placeholders
-until PR 2b." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+and star, the stand note (under a printed star only) and the Gloria Patri
+words come from them, and a blank one prints nothing. The PDF shrinks the
+cover's contact lines when they would not fit, so the order of worship
+always starts on page 1. The weekly fields keep PR 1's placeholders until
+PR 2b." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1367 passed, 16 skipped`; frontend `660 passed` in 83 files.
+Expected counts after this task: backend `1368 passed, 16 skipped`; frontend `660 passed` in 83 files.
 
 ### Task 3: `GET` and `PUT /church/bulletin-settings`, and the download reads them (planning answers 1-3; S API, "Data model"; F §1.7; clarifications 3, 6, 7, 12, 14)
 
 **Files:**
 - Create: `backend/tests/test_api_bulletin_settings.py`, `backend/usecases/church_bulletin.py`, `backend/api/routes/bulletin_settings.py`
-- Modify: `backend/tests/test_api_printed.py`, `backend/tests/test_no_streamlit_in_core.py`, `backend/repos/churches.py`, `backend/api/main.py`, `backend/usecases/documents.py`, `frontend/src/lib/api/openapi.json`, `frontend/src/lib/api/schema.d.ts` (regenerated)
+- Modify: `backend/tests/test_api_printed.py`, `backend/tests/test_no_streamlit_in_core.py`, `backend/tests/test_church_settings.py`, `backend/repos/churches.py`, `backend/api/main.py`, `backend/usecases/documents.py`, `frontend/src/lib/api/openapi.json`, `frontend/src/lib/api/schema.d.ts` (regenerated)
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1426,13 +1438,18 @@ def test_a_stored_control_character_still_prints_in_word(client, church, calls):
 
 - [ ] **Step 2: See them fail**
 
-Run: `.venv/bin/python -m pytest -q backend/tests/test_api_bulletin_settings.py backend/tests/test_api_printed.py backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -4`
-**Expected** (the route does not exist yet: every request is a 404, a member's PUT included; the printed bulletin does not read the settings; `usecases.church_bulletin` cannot be imported):
+Run: `.venv/bin/python -m pytest -q backend/tests/test_api_bulletin_settings.py backend/tests/test_api_printed.py backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -4` then `.venv/bin/python -m pytest -q backend/tests/test_church_settings.py 2>&1 | tail -3`
+**Expected** (the route does not exist yet: every request is a 404, a member's PUT included; the printed bulletin does not read the settings; `usecases.church_bulletin` cannot be imported; `set_bulletin_settings` does not exist, so `test_church_settings.py` cannot be collected: `ImportError` above its lines):
 ```
-FAILED backend/tests/test_api_bulletin_settings.py::test_only_members_of_the_church
 FAILED backend/tests/test_api_printed.py::test_the_church_s_bulletin_settings_print_for_every_member
+FAILED backend/tests/test_api_printed.py::test_a_stored_control_character_still_prints_in_word
 FAILED backend/tests/test_no_streamlit_in_core.py::test_usecases_package_imports_no_fastapi_or_streamlit
-15 failed, 12 passed in <t>s
+18 failed, 12 passed in <t>s
+```
+```
+ERROR backend/tests/test_church_settings.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in <t>s
 ```
 
 - [ ] **Step 3: The repo function, the usecase, the route, and the download**
@@ -1653,22 +1670,23 @@ from usecases import archive, church_bulletin, passages
 
 - [ ] **Step 4: Regenerate the API files; see them pass, and the suite**
 
-Run: `.venv/bin/python backend/scripts/export_openapi.py && (cd frontend && npm run gen:api >/dev/null) && git diff --stat -- frontend/src/lib/api` then `grep -c '"/church/bulletin-settings"' frontend/src/lib/api/openapi.json` then `.venv/bin/python -m pytest -q backend/tests/test_api_bulletin_settings.py backend/tests/test_api_printed.py backend/tests/test_no_streamlit_in_core.py backend/tests/test_openapi_contract.py backend/tests/test_route_guards.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?")`
-**Expected:** `Wrote …/frontend/src/lib/api/openapi.json`, then ` frontend/src/lib/api/openapi.json | 341 +++…`, ` frontend/src/lib/api/schema.d.ts  | 171 +++…`, ` 2 files changed, 512 insertions(+)`; `1`; `35 passed in <t>s`; `1381 passed, 16 skipped in <t>s`; `typecheck 0`.
+Run: `.venv/bin/python backend/scripts/export_openapi.py && (cd frontend && npm run gen:api >/dev/null) && git diff --stat -- frontend/src/lib/api` then `grep -c '"/church/bulletin-settings"' frontend/src/lib/api/openapi.json` then `.venv/bin/python -m pytest -q backend/tests/test_api_bulletin_settings.py backend/tests/test_api_printed.py backend/tests/test_no_streamlit_in_core.py backend/tests/test_church_settings.py backend/tests/test_openapi_contract.py backend/tests/test_route_guards.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?")`
+**Expected:** `Wrote …/frontend/src/lib/api/openapi.json`, then ` frontend/src/lib/api/openapi.json | 351 +++…`, ` frontend/src/lib/api/schema.d.ts  | 171 +++…`, ` 2 files changed, 522 insertions(+)`; `1`; `48 passed in <t>s`; `1385 passed, 16 skipped in <t>s`; `typecheck 0`.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/usecases/church_bulletin.py backend/api/routes/bulletin_settings.py backend/repos/churches.py backend/api/main.py backend/usecases/documents.py backend/tests/test_api_bulletin_settings.py backend/tests/test_api_printed.py backend/tests/test_no_streamlit_in_core.py frontend/src/lib/api/openapi.json frontend/src/lib/api/schema.d.ts
+git add backend/usecases/church_bulletin.py backend/api/routes/bulletin_settings.py backend/repos/churches.py backend/api/main.py backend/usecases/documents.py backend/tests/test_api_bulletin_settings.py backend/tests/test_api_printed.py backend/tests/test_no_streamlit_in_core.py backend/tests/test_church_settings.py frontend/src/lib/api/openapi.json frontend/src/lib/api/schema.d.ts
 git commit -q -m "Printed bulletin PR 2a: GET and PUT /church/bulletin-settings" -m "Any member reads the church's bulletin settings; owners and admins
 save them whole as churches.settings[\"bulletin\"] in one locked
 read-modify-write that keeps every other settings key (the later of two
-saves wins). The printed bulletin reads them with the church's name, so
+saves wins). Every text but the Gloria Patri words is one line. The
+printed bulletin reads them with the church's name, made Word-safe, so
 every member's bulletin prints them." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1381 passed, 16 skipped`; frontend `660 passed` in 83 files.
+Expected counts after this task: backend `1385 passed, 16 skipped`; frontend `660 passed` in 83 files.
 
 ### Task 4: The settings on the client: types, keys, queries, the form mapping and "Not filled in" (F §4.4, §4.5; clarifications 3, 9, 13)
 
@@ -1911,7 +1929,7 @@ Run: `(cd frontend && npx vitest run src/lib/bulletin-settings.test.ts src/lib/q
 **Expected** (`bulletin-settings.ts` does not exist; `keys.bulletinSettings` and `isAdmin` are not functions yet):
 ```
    × keys > starts every church-scoped key with ['church', id] <t>ms
-   × roleLabel > lets owners and admins change the church's settings (printed bulletin PR 2a) <t>ms
+   × isAdmin > lets owners and admins edit the church's settings (printed bulletin PR 2a) <t>ms
  FAIL  |unit| src/lib/bulletin-settings.test.ts [ src/lib/bulletin-settings.test.ts ]
 ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
       Tests  2 failed | 7 passed (9)
@@ -2217,7 +2235,7 @@ export function useSaveBulletinSettings() {
 - [ ] **Step 4: See them pass, the suite, types and lint**
 
 Run: `(cd frontend && npx vitest run src/lib/bulletin-settings.test.ts src/lib/queries/keys.test.ts src/lib/church.test.ts 2>&1 | grep -E "^ +× |\[ src/|Tests ")` then the suite, then typecheck and lint.
-**Expected:** `      Tests  12 passed (12)`; ` Test Files  84 passed (84)` and `      Tests  664 passed (664)`; `typecheck 0`, `lint 0`.
+**Expected:** `      Tests  13 passed (13)`; ` Test Files  84 passed (84)` and `      Tests  665 passed (665)`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -2226,11 +2244,12 @@ git add frontend/src/lib/bulletin-settings.ts frontend/src/lib/bulletin-settings
 git commit -q -m "Printed bulletin PR 2a: the settings on the client" -m "The BulletinSettings type and its query key, useBulletinSettings and
 useSaveBulletinSettings, isAdmin, and lib/bulletin-settings: the parts'
 names in the printed order, the page's form (the address as one text),
-the address check and the \"Not filled in\" list." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+6a's rebase rule for it, the address check, a 422's fields by form field
+and the \"Not filled in\" list." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1381 passed, 16 skipped`; frontend `664 passed` in 84 files.
+Expected counts after this task: backend `1385 passed, 16 skipped`; frontend `665 passed` in 84 files.
 
 ### Task 5: The Bulletin settings page (answer 8; planning answer 2; F §4.1, §4.8, §4.9; clarifications 2, 3, 10, 11, 15)
 
@@ -2897,7 +2916,7 @@ export default function BulletinSettingsRoute() {
 - [ ] **Step 4: See them pass (three runs), the suite, types and lint**
 
 Run: `for i in 1 2 3; do (cd frontend && npx vitest run src/components/bulletin-settings 2>&1 | grep -E "^ +× |\[ src/|Tests "); done` then the suite, then typecheck and lint, then `grep -rn "dangerouslySetInnerHTML" frontend/src --include=*.tsx; echo "raw html grep exit $?"`.
-**Expected:** three times `      Tests  3 passed (3)`; ` Test Files  85 passed (85)` and `      Tests  667 passed (667)`; `typecheck 0`, `lint 0`; `raw html grep exit 1`.
+**Expected:** three times `      Tests  6 passed (6)`; ` Test Files  85 passed (85)` and `      Tests  671 passed (671)`; `typecheck 0`, `lint 0`; `raw html grep exit 1`.
 
 - [ ] **Step 5: Commit**
 
@@ -2906,11 +2925,13 @@ git add frontend/src/components/bulletin-settings/bulletin-settings-page.tsx fro
 git commit -q -m "Printed bulletin PR 2a: the Bulletin settings page" -m "/bulletin-settings: the church's details, the service time, the three
 people, who leads each part and which parts the congregation stands for,
 the stand note and the Gloria Patri words. Owners and admins save the
-whole form; members read it with a note that only admins can change it." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+whole form (fetched fresh on opening, newer data rebased into the fields
+not edited, a warning before leaving with unsaved edits); members read a
+plain summary with a note that only admins can edit it." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1381 passed, 16 skipped`; frontend `667 passed` in 85 files.
+Expected counts after this task: backend `1385 passed, 16 skipped`; frontend `671 passed` in 85 files.
 
 ### Task 6: The Printed bulletin card: "Not filled in" and the link (planning answer 3; clarifications 8, 9, 15)
 
@@ -3229,25 +3250,25 @@ function NotFilledInLine() {
 - [ ] **Step 4: See them pass (three runs), the suite, types and lint**
 
 Run: `for i in 1 2 3; do (cd frontend && npx vitest run src/components/builder/review/review-send-step.test.tsx src/components/builder/builder-shell.test.tsx src/components/builder/liturgy/liturgy-step.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests "); done` then the suite, then typecheck and lint.
-**Expected:** three times `      Tests  77 passed (77)`; ` Test Files  85 passed (85)` and `      Tests  668 passed (668)`; `typecheck 0`, `lint 0`.
+**Expected:** three times `      Tests  77 passed (77)`; ` Test Files  85 passed (85)` and `      Tests  672 passed (672)`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add frontend/src/components/builder/review/printed-card.tsx frontend/src/components/builder/review/review-send-step.test.tsx frontend/src/components/builder/builder-shell.test.tsx frontend/src/components/builder/liturgy/liturgy-step.test.tsx
 git commit -q -m "Printed bulletin PR 2a: the card lists what is not filled in" -m "The Printed bulletin card says the standing details come from the
-bulletin settings, lists the blank ones (\"Not filled in: ...\") and
-links to the Bulletin settings page; only the music and the
-announcements still print as placeholders." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+bulletin settings, lists the blank ones above the downloads (\"Not
+filled in: ...\") and links to the Bulletin settings page below them;
+only the music and the announcements still print as placeholders." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1381 passed, 16 skipped`; frontend `668 passed` in 85 files.
+Expected counts after this task: backend `1385 passed, 16 skipped`; frontend `672 passed` in 85 files.
 
 ### Task 7: Docs: the manual check items (planning answers 1-3; clarification 16)
 
 **Files:**
-- Modify: `docs/manual-verification.md`
+- Modify: `docs/manual-verification.md`, `docs/superpowers/specs/2026-10-02-printed-bulletin-design.md`
 
 - [ ] **Step 1: Amend PR 1's item 2 and the spec's "Data model", append the items**
 
@@ -3306,22 +3327,24 @@ or a church id.
 
 - [ ] **Step 2: Check the docs**
 
-Run: `.venv/bin/python -m pytest -q backend/tests/test_slice1_docs.py backend/tests/test_docs.py backend/tests/test_ops_workflows.py 2>&1 | tail -1` then `grep -n '\[owner' docs/ops-runbook.md | grep -v 'An entry marked' | wc -l` then `git diff -U0 docs/manual-verification.md | grep '^+' | grep -c '—'` then `git diff --stat`
-**Expected:** `89 passed in <t>s`; `4`; `0`; ` docs/manual-verification.md | 16 ++++++++++++++++`, ` 1 file changed, 16 insertions(+)`.
+Run: `.venv/bin/python -m pytest -q backend/tests/test_slice1_docs.py backend/tests/test_docs.py backend/tests/test_ops_workflows.py 2>&1 | tail -1` then `grep -n '\[owner' docs/ops-runbook.md | grep -v 'An entry marked' | wc -l` then `git diff -U0 docs/manual-verification.md docs/superpowers/specs/2026-10-02-printed-bulletin-design.md | grep '^+' | grep -c '—'` then `git diff --stat`
+**Expected:** `89 passed in <t>s`; `4`; `0`; ` docs/manual-verification.md                          | 20 +++++++++++++++++++-`, ` .../specs/2026-10-02-printed-bulletin-design.md      |  4 +++-`, ` 2 files changed, 22 insertions(+), 2 deletions(-)`.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add docs/manual-verification.md
+git add docs/manual-verification.md docs/superpowers/specs/2026-10-02-printed-bulletin-design.md
 git commit -q -m "Docs: printed bulletin PR 2a manual checks" -m "docs/manual-verification.md gains \"### Printed bulletin PR 2a: bulletin
 settings\" under \"## Printed bulletin\": the owner's phone check after
-PR 2a (the card, the page, the PDF with the settings, a change, the
-page at 375 px) and the agent's checks (a blank field, a member, the
-church's other settings kept)." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+PR 2a (the card, the page, the PDF and the Word version with the
+settings, a change, the page at 375 px) and the agent's checks (a blank
+field, a member, the church's other settings kept, the leave guard).
+PR 1's item 2 and the spec's \"Data model\" sentence no longer say a
+missing value prints a placeholder." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1381 passed, 16 skipped`; frontend `668 passed` in 85 files.
+Expected counts after this task: backend `1385 passed, 16 skipped`; frontend `672 passed` in 85 files.
 
 ### Task 8: Verification and the draft PR (owner's yes before the PR is opened and before it is marked ready)
 
@@ -3359,7 +3382,7 @@ open('<scratch>/printed2a-sample.pdf', 'wb').write(printed_pdf.render_pdf(ps)); 
 ")
 ```
 
-**Expected:** `1381 passed, 16 skipped in <t>s`; three times ` Test Files  85 passed (85)` and `      Tests  668 passed (668)` with no `×` or `FAIL` line (one names the failing test: Step 6); `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s`, a route line for `/bulletin-settings`, and no `Error` (a font `Failed to fetch` only: say so and rely on CI); `sample written`. Open the sample PDF and look at it: the cover with the two address lines, the phone, the email, the website and "FB: Example Church"; page 1's header with the three people and "10:30 a.m." across from the date; "Sam Sample" on the right of the Call to Worship and "Rev. Alex Example" on the Sermon; the prelude still "‘[Prelude title]’" with "Jordan Doe". Attach both samples to the owner's message in Step 4 if the channel allows files, else describe them.
+**Expected:** `1385 passed, 16 skipped in <t>s`; three times ` Test Files  85 passed (85)` and `      Tests  672 passed (672)` with no `×` or `FAIL` line (one names the failing test: Step 6); `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s`, a route line for `/bulletin-settings`, and no `Error` (a font `Failed to fetch` only: say so and rely on CI); `sample written`. Open the sample PDF and look at it: the cover with the two address lines, the phone, the email, the website and "FB: Example Church"; page 1's header with the three people and "10:30 a.m." across from the date; "Sam Sample" on the right of the Call to Worship and "Rev. Alex Example" on the Sermon; the prelude still "‘[Prelude title]’" with "Jordan Doe". Attach both samples to the owner's message in Step 4 if the channel allows files, else describe them.
 
 - [ ] **Step 3 (agent): The API files match, the gates, the paths, the commits**
 
@@ -3379,10 +3402,12 @@ M	backend/api/main.py
 A	backend/api/routes/bulletin_settings.py
 A	backend/bulletin_settings.py
 M	backend/printed_bulletin.py
+M	backend/printed_pdf.py
 M	backend/repos/churches.py
 A	backend/tests/test_api_bulletin_settings.py
 M	backend/tests/test_api_printed.py
 A	backend/tests/test_bulletin_settings.py
+M	backend/tests/test_church_settings.py
 M	backend/tests/test_no_streamlit_in_core.py
 M	backend/tests/test_printed_bulletin.py
 M	backend/tests/test_printed_render.py
@@ -3421,7 +3446,7 @@ gh pr list -R bbrown62450/church --head claude/slice-2-plan-4q33le --state open 
 
 **Expected:** `[]`. Send the owner exactly this, and wait for a clear yes:
 
-> The bulletin settings (printed bulletin PR 2a) are verified on this machine: backend 1381 passed, 16 skipped (1357 before); frontend 668 tests in 85 files (660 before), three runs in a row; typecheck, lint and the production build are clean. It adds two API routes (`GET` and `PUT /church/bulletin-settings`), no database change and no new package. On step 4 the Printed bulletin card now lists what is not filled in and has a "Bulletin settings" button; that page holds your church's address, phone, email, website and Facebook name, the service time, the worship leader, liturgist and organist, who leads each part and which parts the congregation stands for, the stand note and the Gloria Patri words. Admins change them; everyone's printed bulletin uses them, and a blank one prints nothing. The prelude, postlude and announcements stay as [placeholders] until the Bulletin step (PR 2b). May I open the pull request as a **draft** titled "Printed bulletin PR 2a: bulletin settings", so the checks run? Merging stays with you.
+> The bulletin settings (printed bulletin PR 2a) are verified on this machine: backend 1385 passed, 16 skipped (1357 before); frontend 672 tests in 85 files (660 before), three runs in a row; typecheck, lint and the production build are clean. It adds two API routes (`GET` and `PUT /church/bulletin-settings`), no database change and no new package. On step 4 the Printed bulletin card now lists what is not filled in and has a "Bulletin settings" button; that page holds your church's address, phone, email, website and Facebook name, the service time, the worship leader, liturgist and organist, who leads each part and which parts the congregation stands for, the stand note and the Gloria Patri words. Admins edit them (other members see them as a plain list); everyone's printed bulletin uses them, and a blank one prints nothing. The prelude, postlude and announcements stay as [placeholders] until the Bulletin step (PR 2b). May I open the pull request as a **draft** titled "Printed bulletin PR 2a: bulletin settings", so the checks run? Merging stays with you.
 
 - [ ] **Step 5 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
 
@@ -3438,7 +3463,7 @@ Printed bulletin PR 2a: the church's standing bulletin settings, printed at once
 
 Later: PR 2b (the Bulletin step, the weekly fields, services.bulletin with migration 0006_services_bulletin), PR 3 (the cover picture), 6a (the panel moves into Settings).
 
-Tests: backend 1357 → 1381 passed, 16 → 16 skipped; frontend 660 → 668 in 83 → 85 files
+Tests: backend 1357 → 1385 passed, 16 → 16 skipped; frontend 660 → 672 in 83 → 85 files
 
 After merge (Task 9): a short check on the owner's phone, then a "Printed bulletin PR 2a record" in docs/ops-runbook.md.
 
@@ -3452,7 +3477,7 @@ gh pr create -R bbrown62450/church --draft --base main --head claude/slice-2-pla
 gh pr checks <N> -R bbrown62450/church --watch --interval 30
 ```
 
-Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1381 passed, 16 skipped`, backend-postgres `16 passed, 1381 deselected`, frontend `668 passed` in 85 files. Then send: "PR #<N> is green: backend 1381 passed, 16 skipped; 668 frontend tests in 85 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R bbrown62450/church`.
+Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1385 passed, 16 skipped`, backend-postgres `16 passed, 1385 deselected`, frontend `672 passed` in 85 files. Then send: "PR #<N> is green: backend 1385 passed, 16 skipped; 672 frontend tests in 85 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R bbrown62450/church`.
 
 - [ ] **Step 6: Fix any failure in its owning task**
 
@@ -3460,7 +3485,7 @@ Run the last line with `run_in_background: true`. **Expected:** the PR URL; ever
 |---|---|
 | `test_bulletin_settings.py` | T1 |
 | `test_printed_bulletin.py`, `test_printed_render.py` | T2 |
-| `test_api_bulletin_settings.py`, `test_api_printed.py`, `test_no_streamlit_in_core.py`, `test_openapi_contract.py`, `test_route_guards.py` | T3 (`test_api_printed.py`'s first test: T2) |
+| `test_api_bulletin_settings.py`, `test_api_printed.py`, `test_no_streamlit_in_core.py`, `test_church_settings.py`, `test_openapi_contract.py`, `test_route_guards.py` | T3 (`test_api_printed.py`'s first test: T2) |
 | `bulletin-settings.test.ts`, `keys.test.ts`, `church.test.ts` | T4 |
 | `bulletin-settings-page.test.tsx` | T5 |
 | `review-send-step.test.tsx`, `builder-shell.test.tsx`, `liturgy-step.test.tsx` | T6 |
@@ -3470,7 +3495,7 @@ Run the last line with `run_in_background: true`. **Expected:** the PR URL; ever
 
 For each fix: change only the owning task's files; rerun Steps 2-3; commit `Fix: <what> (Task <n>, printed bulletin PR 2a final verification)` with the trailer; after the PR exists, ask the owner before pushing it.
 
-Expected counts after this task: backend `1381 passed, 16 skipped`; frontend `668 passed` in 85 files.
+Expected counts after this task: backend `1385 passed, 16 skipped`; frontend `672 passed` in 85 files.
 
 ### Task 9: Merge, the owner's phone check (four steps), the record (OWNER + agent)
 
@@ -3493,13 +3518,13 @@ RUN=$(gh run list -R bbrown62450/church --workflow ci.yml --branch main --commit
 
 - [ ] **Step 2 (OWNER, then agent): Phone, step 1 of 4: the card and the page (manual-verification items 7 and 8)**
 
-> On your phone, open https://worship-service-builder.vercel.app and pull down to reload it. Open your service on **4 Review & send**. In the **Printed bulletin** card, under the two download buttons, is there a line "Not filled in: address, phone, email, website, Facebook name, service time, worship leader, liturgist, organist." and a **Bulletin settings** button? Tap it. Fill in your church's address (one line per line, as on your bulletin), phone, email, website, Facebook name, the service time (as you print it, for example "10:30 a.m."), and the worship leader, liturgist and organist. Leave **Each part** and **Printed words** as they are for now. Tap **Save settings**: does "Bulletin settings saved" show? Pull down to reload: is everything still there? Then tap **Back to Review & send**: is the "Not filled in" line gone?
+> On your phone, open https://worship-service-builder.vercel.app and pull down to reload it. Open your service on **4 Review & send**. In the **Printed bulletin** card, above the two download buttons, is there a line "Not filled in: address, phone, email, website, Facebook name, service time, worship leader, liturgist, organist.", and under the buttons a **Bulletin settings** button? Tap it. Fill in your church's address (one line per line, as on your bulletin), phone, email, website, Facebook name, the service time (as you print it, for example "10:30 a.m."), and the worship leader, liturgist and organist. Leave **Each part** and **Printed words** as they are for now. Tap **Save settings**: does "Bulletin settings saved" show? Pull down to reload: is everything still there? Then tap **Back to Review & send**: is the "Not filled in" line gone?
 
 Record each answer (not the values typed). **If Save fails**, record the message and stop: it is a follow-up for the owner to decide; the downloads are unaffected.
 
 - [ ] **Step 3 (OWNER, then agent): Phone, step 2 of 4: the printed bulletin (item 9)**
 
-> Tap **Download printed bulletin** and open the PDF. Is your address, phone, email, website and "FB: …" on the cover under the picture's box? Does page 1 name your worship leader, liturgist and organist under the church's name, with the service time on the right of the date line? Are the names on the right of the parts as on your bulletin (the liturgist from the Welcome through the First Reading, the worship leader from the New Testament Reading through the Offertory Prayer, the organist on the Prelude and Postlude)? The prelude, postlude and announcements still show [placeholders] until the next PR; is anything else missing or wrong compared with your bulletin?
+> Tap **Download printed bulletin** and open the PDF. Is your address, phone, email, website and "FB: …" on the cover under the picture's box? Does page 1 name your worship leader, liturgist and organist under the church's name, with the service time on the right of the date line? Are the names on the right of the parts as on your bulletin (the liturgist from the Welcome through the First Reading, the worship leader from the New Testament Reading through the Offertory Prayer, the organist on the Prelude and Postlude)? The prelude, postlude and announcements still show [placeholders] until the next PR; is anything else missing or wrong compared with your bulletin? Then tap **Download Word version** and open it: does its cover and first page show the same details and names?
 
 Record the answers and any difference the owner names (each a follow-up for the record, 2b's list or the owner to decide).
 
@@ -3552,14 +3577,14 @@ address, church id or member's name is recorded here.
 |---|---|---|
 | Merge and deploy | PR #<N> merged <UTC time> (<Eastern time>), merge commit `<short sha>`. CI on `main` (run <run id>): success | <date> |
 | 1. The card and the page (phone: <phone and browser>) | <"Not filled in" listed the nine fields; the Bulletin settings page opened; Save settings showed "Bulletin settings saved"; the values were still there after a reload; the line was gone on Review. / …> | <date> |
-| 2. The printed bulletin | <The cover's contact lines, the header's three people and the service time, and the parts' leaders as the sample; music and announcements still [placeholders]. / Differences: …> | <date> |
+| 2. The printed bulletin | <The cover's contact lines, the header's three people and the service time, and the parts' leaders as the sample; music and announcements still [placeholders]; the Word version the same. / Differences: …> | <date> |
 | 3. A change | <Changed <what>; the bulletin followed. / …> | <date> |
 | 4. The page on the phone | <No sideways scroll; easy to tap. / …> | <date> |
 | Agent checks | <Items 11 and 14 in a test church: <results>. / Not run: <why>.> Item 12 (a member): <result / not run> | <date> |
 | Follow-ups | <None. / One line per follow-up.> Next: printed bulletin PR 2b (the Bulletin step: prelude and postlude, announcements, pasted reading text, carry forward, migration `0006_services_bulletin`), then PR 3 (the cover picture), 6a (the panel moves into Settings). Still open from PR 1: the print test at the church | <date> |
 ```
 
-Replace every `<…>` from the results file, keeping one alternative where a cell offers two. Then (not replayed):
+Replace every `<…>` from the results file, keeping one alternative where a cell offers two. Read the record once by eye: the second grep below catches an email address and a "(555)"-style phone, not a street address or a phone number written another way, so check that no street address, phone number, church id or member's name is in it. Then (not replayed):
 
 ```bash
 sed -n '/^### Printed bulletin PR 2a record$/,/^## Backups$/p' docs/ops-runbook.md | grep -c '<'
@@ -3598,7 +3623,7 @@ gh pr checks claude/slice-2-plan-4q33le -R bbrown62450/church --watch
 
 Code only (no schema to undo). On the owner's yes for each outward command: a branch `claude/revert-printed-2a` from `origin/main`, `git revert -m 1 --no-commit <merge sha>`, a commit "Revert printed bulletin PR 2a (PR #<N>)" with the trailer, both suites (`1357 passed, 16 skipped`; `660 passed` in 83), a PR, CI, and the merge on the owner's yes; record it in the record. The printed bulletin then prints PR 1's [placeholders] again. The saved `"bulletin"` key stays in each church's settings, unread and harmless (nothing else reads it), and is used again when the PR comes back; remove it only on the owner's word.
 
-Expected counts after this task: backend `1381 passed, 16 skipped` on `main`; frontend `668 passed` in 85 files. The records PR adds no test.
+Expected counts after this task: backend `1385 passed, 16 skipped` on `main`; frontend `672 passed` in 85 files. The records PR adds no test.
 
 ---
 ## Build notes
