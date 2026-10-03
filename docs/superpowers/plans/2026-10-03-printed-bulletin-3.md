@@ -100,11 +100,11 @@ The owner's answers win over S and F; the code wins over both where they disagre
 7. **[owner-visible] Old pictures** (planning answer 9). A picture uploaded more than 60 days ago that no saved service of the church points at is removed **on that church's next upload** (in the upload's transaction; `usecases.bulletin_images.remove_unused`): no job to schedule, church-scoped, and never a picture a saved service points at, whatever its age. A picture chosen in a draft but not yet saved (a draft lives in one browser, so the server cannot see it) has those 60 days. A picture removed on the step, or one whose service was deleted, stays until then (question 8). The count removed is logged.
 8. **[owner-visible] The step's group** (PR 3b; S "The Bulletin step"). **Cover picture**, first on the step, with the help "A JPEG or PNG picture for the front page, with the reading and the date printed over it. Without a picture, the reading and the date print alone."; when there is one, a preview trimmed to the cover's shape (`object-cover` at 372:300, alt "This week's cover picture, as the front page trims it"); **Choose a picture** (**Choose another picture** when there is one) opens the phone's photos or camera (`accept="image/jpeg,image/png"`, no `capture`, so the phone offers both); **Remove** (for screen readers "Remove the cover picture"). While it uploads the button reads "Uploading…" and a screen reader hears "Uploading the picture…". A file that is not a JPEG or PNG, or is over 10 MB, is refused at once with the server's own words, before any upload; the server's refusal (or a network failure) is said under the buttons (`role="alert"`); the picture already chosen stays. A picture that can no longer be loaded says "The picture could not be loaded." and **Remove** still works. No shrinking in the browser (question 6).
 9. **[owner-visible] The Printed bulletin card** (PR 3b; the 2b plan's clarification 9). The note becomes "The cover picture, the music, the announcements and this week's changes to who leads come from the Bulletin step."; "Not filled in: …" gains "cover picture" (before "prelude") when there is none (question 11); "From last week, not checked yet: …" names it "cover picture", first.
-10. **The API** (S API). `ServiceBulletin.cover_image_id: UUID | null`, **optional**: left out (a page from before 3b) the server reads the bulletin as not saying (`service_bulletin.ServiceBulletin.cover_given` False): a `POST` saves no picture, a `PUT` keeps the saved one, a download prints PR 1's box; null is no picture; an id the church does not have is saved and printed as no picture (never a 404 that would block a save). A malformed id is the usual 422 naming `bulletin.cover_image_id`. `unchecked` accepts "cover" (an unknown box stays a 422, `bulletin.unchecked.0`). `ServiceOut.bulletin.cover_image_id` is always present (null when none), and `GET /services/previous-bulletin` carries it. `POST /bulletin-images` (`require_church`, the `picture` bucket: 20 an hour a member and 60 a day a church, question 9; 201 `BulletinImageOut {id, width, height}`; 401, 403, 422, 429) and `GET /bulletin-images/{image_id}` (`image/jpeg`; 404 "That picture is no longer available."). `UploadSizeMiddleware` answers the 422 for a body whose Content-Length is over 10 MB, or missing ("Send the picture with its size (Content-Length)."), before any of it is read (the route would otherwise read it all into memory first). No `Idempotency-Key` on the upload: a retried upload stores a second copy, which the 60-day removal takes.
+10. **The API** (S API). `ServiceBulletin.cover_image_id: UUID | null`, **optional**: left out (a page from before 3b) the server reads the bulletin as not saying (`service_bulletin.ServiceBulletin.cover_given` False): a `POST` saves no picture, a `PUT` keeps the saved one, a download prints PR 1's box; null is no picture; an id the church does not have is saved and printed as no picture (never a 404 that would block a save). A malformed id is the usual 422 naming `bulletin.cover_image_id`. `unchecked` accepts "cover" (an unknown box stays a 422, `bulletin.unchecked.0`). `ServiceOut.bulletin.cover_image_id` is always present (null when none), and `GET /services/previous-bulletin` carries it. `POST /bulletin-images` (`require_church`, the `picture` bucket: 20 an hour a member and 60 a day a church, question 9; 201 `BulletinImageOut {id, width, height}`; 401, 403, 422, 429) and `GET /bulletin-images/{image_id}` (`image/jpeg`; 404 "That picture is no longer available."). `UploadSizeMiddleware` answers the 422 for a body whose Content-Length is over 10 MB, or missing ("Send the picture with its size (Content-Length)."), before any of it is read (the route would otherwise read it all into memory first); it runs before the sign-in check, so such a request is a 422 whoever sends it, and it reads nothing. No `Idempotency-Key` on the upload: a retried upload stores a second copy, which the 60-day removal takes.
 11. **Storage** (S "Data model"; F §3.4, §3.5). `bulletin_images` in `0007_bulletin_images` (`down_revision` `0006_services_bulletin`): `id UUID` primary key, `church_id UUID NOT NULL` (`ON DELETE CASCADE`), `content_type VARCHAR NOT NULL` (always `image/jpeg`), `bytes BYTEA NOT NULL` (the picture), `width`, `height INTEGER NOT NULL`, `created_by UUID` (`ON DELETE SET NULL`), `created_at TIMESTAMPTZ NOT NULL`; `ix_bulletin_images_church_created (church_id, created_at)`; on Postgres `ALTER TABLE bulletin_images ENABLE ROW LEVEL SECURITY` (0003's rule; `test_0003_is_idempotent_after_the_manual_lockdown` checks every model table at head). A service points at a picture by the JSON key `services.bulletin.cover_image_id` (no foreign key: a column on `services` would be a second schema change for no gain at this size; the removal reads the church's stored bulletins). Its `--sql` preview has trailing spaces on the CREATE TABLE lines, so the README's copy and the test strip them (`| sed 's/ *$//'`). Tests: up from 0006 with the rows kept, down giving back the 0006 tables, the exact offline SQL, the README pin, the drift at the baseline and the head constants, row-level security on Postgres, and the owner's two queries on Postgres; the slice-1a test of the baseline's offline SQL now expects exactly one CREATE TABLE (0007's).
 12. **The draft v4** (F §4.6 "Versioning"). `DRAFT_VERSION` 4; `bulletin.cover_image_id` (null: none); `CARRY_KEYS` gains "cover", first; `migrations[3]` adds `cover_image_id: null` and changes nothing else. `bulletinPayload` (what the "Unsaved changes" fingerprint hashes) holds `cover_image_id` only when there is a picture, so a draft "Saved" before 3b, its bulletin filled in or not, stays "Saved" after its migration (T7's migration test); `serviceBody` (every save and download) always says it (null for none), so a `PUT` saves a Remove and a download prints "no picture" rather than PR 1's box; a `POST` leaves a null picture out (as 2b-2's blank bulletin: a POST sent before 3b whose answer was lost replays instead of saving twice; the server stores no picture either way). The 409 "is it my own save?" check (`savedCopyFingerprint`) compares the picture's id (null and missing alike). A version 5 draft is a restore error, as today.
 13. **Privacy and logging** (F §2.5). A cover picture can show people (children included) and is visible to every member of the church who opens the service (question 7). The stored picture keeps no camera data. No log line carries a picture: `bulletin_images.upload` logs the church and picture ids, the sizes in and stored, the pixel size, the count removed and the time. The tests make their pictures; the checks use a picture with no one in it, and the records never include a picture.
-14. **[owner-visible] The owner's production steps** (planning answer 10; 0006's routine), around **PR 3a**'s merge. `backend/migrations/README.md` gains "Before 0007_bulletin_images (printed bulletin PR 3a)": (1) a `db-backup` run; (2) one read-only query giving `version` (`0006_services_bulletin`), `services`, `with_bulletin` and `database_size` (`pg_size_pretty`, so later records show the pictures' share of the free plan's 500 MB; question 13); (3) the `--sql` preview, rendered by the agent without a database (21 lines: the table, its index, row-level security, the version update), pinned by `test_the_readme_shows_the_0007_preview_exactly`; (4) after the deploy, a read-only query giving `0007_bulletin_images`, `row_security` `true`, `open_grants` `0` (no grant to `anon` or `authenticated`) and `pictures` `0`, then step 2 again. Both queries run in a Postgres test (T1). T6 takes the owner through them one at a time, then through a short phone check that the builder works as before (item 30). After PR 3b: four phone steps (items 32-35) and the print test (item 36). Reverting keeps `0007` (README "Reverting PR 3b or PR 3a").
+14. **[owner-visible] The owner's production steps** (planning answer 10; 0006's routine), around **PR 3a**'s merge. `backend/migrations/README.md` gains "Before 0007_bulletin_images (printed bulletin PR 3a)": (1) a `db-backup` run; (2) one read-only query giving `version` (`0006_services_bulletin`), `services`, `with_bulletin` and `database_size` (`pg_size_pretty`, so later records show the pictures' share of the free plan's 500 MB; question 13); (3) the `--sql` preview, rendered by the agent without a database (20 lines: the table, its index, row-level security, the version update), pinned by `test_the_readme_shows_the_0007_preview_exactly`; (4) after the deploy, a read-only query giving `0007_bulletin_images`, `row_security` `true`, `open_grants` `0` (no grant to `anon` or `authenticated`) and `pictures` `0`, then step 2 again. Both queries run in a Postgres test (T1). T6 takes the owner through them one at a time, then through a short phone check that the builder works as before (item 30). After PR 3b: four phone steps (items 32-35) and the print test (item 36). Reverting keeps `0007` (README "Reverting PR 3b or PR 3a").
 15. **[owner-visible] Every new user-facing string** (no em dashes). The step: "Cover picture" (the group); "A JPEG or PNG picture for the front page, with the reading and the date printed over it. Without a picture, the reading and the date print alone."; "Choose a picture", "Choose another picture", "Uploading…" (the button while it uploads), "Uploading the picture…" (for screen readers); "Remove" (for screen readers "Remove the cover picture"); "This week's cover picture, as the front page trims it" (the preview's alt text); "The picture could not be loaded."; "Keep as is" (for screen readers "Keep as is: cover picture"; 2b's words); "Choose a JPEG or PNG picture.", "The picture is larger than 10 MB. Choose a smaller one." (said before an upload, and by the server); from the server also "The picture has too many pixels. Choose a smaller one.", "Send the picture with its size (Content-Length)." and "That picture is no longer available.". The card: "The cover picture, the music, the announcements and this week's changes to who leads come from the Bulletin step."; "Not filled in: …" and "From last week, not checked yet: …" gain "cover picture". In the files: none new (the reading and the date are PR 1's); "[Cover picture]" stays only for a page from before 3b.
 16. **Docs** (T4, T10). T4 (PR 3a): `docs/manual-verification.md` gains "### Printed bulletin PR 3: the cover picture" at the end, inside "## Printed bulletin" (a `###` heading: `test_slice1_docs.py`'s pin of the last eight `##` headings does not move), with the two PRs and items 28-31 (the owner's steps around 0007, the builder as before, the agent's check of the live routes); S's "Data model" says JPEG or PNG only (no HEIC), the raw body, sRGB and no camera data, the id an unknown church picture saves as none, the carry with its mark, the removal on the next upload; "The Bulletin step" and "Scope by PR" follow planning answers 1 and 7. T10 (PR 3b): items 32-37 (the phone check, the iPhone photo of planning answer 5, Remove, carry forward, a refused file, the print test, the agent's checks). The runbook records are T6's (`### Printed bulletin PR 3a record`, riding along in PR 3b) and T12's (`### Printed bulletin PR 3b record`, its own records PR), each before `## Backups`; the 2b-2 record (`9b90d21`) rides along in PR 3a.
 17. **What does not change.** The Word working copies (`POST /documents`) print no picture (S answer 7 kept them as they are). The Bulletin settings page, its API and storage. `liturgy` keeps only the eight sections. `service_archive.py` (Streamlit's), `env.py`, the workflows, `package.json`, `requirements*.txt`, `app.py`, Streamlit.
@@ -464,7 +464,7 @@ def test_the_owner_s_read_only_queries_around_0007(world):
 - [ ] **Step 2 (agent): Run them and see them fail**
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_migrations.py backend/tests/test_schema_check.py backend/tests/test_api_app.py 2>&1 | tail -1`
-**Expected:** (replay: T1-fail): the head constants, the baseline drift, the 0007 tests (no such revision), the README pin and the baseline's one CREATE TABLE. With a local, throwaway Postgres also `TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres backend/tests/test_migrations.py backend/tests/test_services_postgres.py 2>&1 | tail -1` → (replay: T1-failpg) (row-level security, the 0007 queries, and the 0005 and 0006 queries' head version).
+**Expected:** `16 failed, 59 passed, 5 skipped in <t>s`: the head constants, the baseline drift, the 0007 tests (no such revision), the README pin and the baseline's one CREATE TABLE. With a local, throwaway Postgres also `TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres backend/tests/test_migrations.py backend/tests/test_services_postgres.py 2>&1 | tail -1` → `4 failed, 7 passed, 33 deselected in <t>s` (row-level security, the 0007 queries, and the 0005 and 0006 queries' head version).
 
 - [ ] **Step 3 (agent): The revision, the model, the README**
 
@@ -733,7 +733,7 @@ table, unread, and come back when 3a does.
 - [ ] **Step 4 (agent): Run the files, the offline SQL and the suite (and Postgres if at hand)**
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_migrations.py backend/tests/test_schema_check.py backend/tests/test_api_app.py backend/tests/test_models.py 2>&1 | tail -1` then `(cd backend && DATABASE_URL=postgresql://preview@localhost:1/preview ../.venv/bin/alembic upgrade 0006_services_bulletin:0007_bulletin_images --sql 2>/dev/null | grep -v -e '^--' -e '^$' | sed 's/ *$//')` then `.venv/bin/python -m pytest -q | tail -1`
-**Expected:** (replay: T1-pass); the 21 lines of README step 3 exactly (`BEGIN;` … `COMMIT;`); (replay: T1-suite). With a local Postgres also `TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres | tail -1` → (replay: T1-pg).
+**Expected:** `79 passed, 5 skipped in <t>s`; the 20 lines of README step 3 exactly (`BEGIN;` … `COMMIT;`); `1436 passed, 19 skipped in <t>s`. With a local Postgres also `TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres | tail -1` → `19 passed, 1436 deselected, 1 warning in <t>s`.
 
 - [ ] **Step 5 (agent): Commit**
 
@@ -1034,9 +1034,11 @@ def test_no_picture_prints_the_reading_and_the_date_where_it_would_be():
 Run: `.venv/bin/python -m pytest -q backend/tests/test_bulletin_image.py backend/tests/test_service_bulletin.py backend/tests/test_printed_bulletin.py backend/tests/test_printed_render.py 2>&1 | tail -3` then `.venv/bin/python -m pytest -q backend/tests/test_service_bulletin.py backend/tests/test_printed_bulletin.py 2>&1 | tail -1`
 **Expected** (`bulletin_image` does not exist yet: `ModuleNotFoundError` above these lines):
 ```
-(replay: T2-fail)
+ERROR backend/tests/test_printed_render.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 2 errors during collection !!!!!!!!!!!!!!!!!!!!
+2 errors in <t>s
 ```
-then (replay: T2-fail2) (`cover_image_id` and `cover_kind` do not exist yet).
+then `2 failed, 26 passed in <t>s` (`cover_image_id` and `cover_kind` do not exist yet).
 
 - [ ] **Step 3: `bulletin_image`, the week's picture and the three covers**
 
@@ -1662,7 +1664,7 @@ def render_docx(ps: pb.PrintedService) -> bytes:
 - [ ] **Step 4: See them pass, and the suite**
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_bulletin_image.py backend/tests/test_service_bulletin.py backend/tests/test_printed_bulletin.py backend/tests/test_printed_render.py backend/tests/test_api_printed.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`
-**Expected:** (replay: T2-pass); (replay: T2-suite). With a local Postgres: (replay: T2-pg).
+**Expected:** `68 passed in <t>s`; `1453 passed, 19 skipped in <t>s`. With a local Postgres: `19 passed, 1453 deselected, 1 warning in <t>s`.
 
 - [ ] **Step 5: Commit**
 
@@ -2031,9 +2033,11 @@ def test_the_cover_picture_prints_and_a_page_from_before_3b_keeps_pr_1_s_box(cli
 Run: `.venv/bin/python -m pytest -q backend/tests/test_api_bulletin_images.py backend/tests/test_api_services.py backend/tests/test_api_printed.py backend/tests/test_no_streamlit_in_core.py backend/tests/test_service_bulletin.py backend/tests/test_middleware.py backend/tests/test_ratelimit.py 2>&1 | tail -3` then the same without `test_middleware.py`, `| tail -1`
 **Expected:** `test_middleware.py` cannot load (`UploadSizeMiddleware` does not exist yet):
 ```
-(replay: T3-fail)
+ERROR backend/tests/test_middleware.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in <t>s
 ```
-then (replay: T3-fail2): the upload and preview tests (no route: 404 and 405), the saved and printed picture (`cover_image_id` is an extra field, a 422), "cover" as a box, the bucket list, and the layering test (no `usecases.bulletin_images`).
+then `17 failed, 68 passed in <t>s`: the upload and preview tests (no route: 404 and 405), the saved and printed picture (`cover_image_id` is an extra field, a 422), "cover" as a box, the bucket list, and the layering test (no `usecases.bulletin_images`).
 
 - [ ] **Step 3: The repo, the usecase, the routes, the middleware, the archive and the download, the types**
 
@@ -2653,7 +2657,7 @@ export type BulletinImage = components["schemas"]["BulletinImageOut"];
 - [ ] **Step 4: Regenerate the API files; see them pass, the suite, types and lint**
 
 Run: `.venv/bin/python backend/scripts/export_openapi.py && (cd frontend && npm run gen:api >/dev/null) && git diff --stat -- frontend/src/lib/api/openapi.json frontend/src/lib/api/schema.d.ts | tail -1` then `.venv/bin/python -m pytest -q backend/tests/test_api_bulletin_images.py backend/tests/test_api_services.py backend/tests/test_api_printed.py backend/tests/test_no_streamlit_in_core.py backend/tests/test_service_bulletin.py backend/tests/test_middleware.py backend/tests/test_ratelimit.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`, the frontend suite, types and lint
-**Expected:** (replay: T3-regen) (the two routes, `BulletinImageOut`, `ServiceBulletin.cover_image_id` optional and "cover" in `unchecked`; no `-Input`/`-Output` schema); (replay: T3-pass); (replay: T3-suite); (replay: T3-fe) with no `×` or `FAIL` line (the pages are unchanged; `cover_image_id` is optional in the types); `typecheck 0`, `lint 0`. With a local Postgres: (replay: T3-pg).
+**Expected:** ` 2 files changed, 461 insertions(+), 2 deletions(-)` (the two routes, `BulletinImageOut`, `ServiceBulletin.cover_image_id` optional and "cover" in `unchecked`; no `-Input`/`-Output` schema); `118 passed in <t>s`; `1464 passed, 19 skipped in <t>s`; ` Test Files  87 passed (87)` and `      Tests  704 passed (704)` with no `×` or `FAIL` line (the pages are unchanged; `cover_image_id` is optional in the types); `typecheck 0`, `lint 0`. With a local Postgres: `19 passed, 1464 deselected, 1 warning in <t>s`.
 
 - [ ] **Step 5: Commit**
 
@@ -2767,7 +2771,7 @@ and **Keep as is** (PR 3 planning answer 7).
 - [ ] **Step 2: Check the docs**
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_slice1_docs.py backend/tests/test_docs.py backend/tests/test_ops_workflows.py 2>&1 | tail -1` then `grep -n '^## ' docs/manual-verification.md | tail -1` then `grep -n '\[owner' docs/ops-runbook.md | grep -v 'An entry marked' | wc -l` then `git diff -U0 docs/manual-verification.md docs/superpowers/specs/2026-10-02-printed-bulletin-design.md | grep '^+' | grep -c '—'` then `git diff --stat | tail -1`
-**Expected:** (replay: T4-docs) (`test_slice1_docs.py` pins the last eight `##` headings, ending `## Printed bulletin`: the new heading is a `###`, so the pin holds); `282:## Printed bulletin`; `4`; `0`; (replay: T4-stat).
+**Expected:** `89 passed in <t>s` (`test_slice1_docs.py` pins the last eight `##` headings, ending `## Printed bulletin`: the new heading is a `###`, so the pin holds); `282:## Printed bulletin`; `4`; `0`; ` 2 files changed, 38 insertions(+), 7 deletions(-)`.
 
 - [ ] **Step 3: Commit**
 
@@ -2788,7 +2792,7 @@ Expected counts after this task: backend `1464 passed, 19 skipped`; frontend `70
 
 - [ ] **Step 4 (controller): Review the batch (T1-T4) and backup push**
 
-One review of PR 3a: the revision is expand-only, turns on row-level security and its `--sql` is exactly clarification 14's 21 lines; the README's queries are read-only and match the Postgres test; `ServiceBulletin.cover_image_id` is optional and a bulletin without it keeps the saved picture on a `PUT` and prints PR 1's box; an id the church does not have is never served or printed; the upload is checked before any table is touched, a body over 10 MB is refused before it is read, the stored picture has no EXIF; the removal is church-scoped, older than 60 days and never takes a picture a saved service points at; no log line carries a picture; the PDF and the Word version place the same picture; the regenerated types change no page. Fixes are `Fix: <what> (Task <n> review)` commits. Then the backup push.
+One review of PR 3a: the revision is expand-only, turns on row-level security and its `--sql` is exactly clarification 14's 20 lines; the README's queries are read-only and match the Postgres test; `ServiceBulletin.cover_image_id` is optional and a bulletin without it keeps the saved picture on a `PUT` and prints PR 1's box; an id the church does not have is never served or printed; the upload is checked before any table is touched, a body over 10 MB is refused before it is read, the stored picture has no EXIF; the removal is church-scoped, older than 60 days and never takes a picture a saved service points at; no log line carries a picture; the PDF and the Word version place the same picture; the regenerated types change no page. Fixes are `Fix: <what> (Task <n> review)` commits. Then the backup push.
 
 ### Task 5: Verification and the draft PR 3a (owner's yes before the PR is opened and before it is marked ready)
 
@@ -2848,9 +2852,48 @@ git log --reverse --no-merges --format=%s origin/main..HEAD
 for c in $(git rev-list origin/main..HEAD); do git show -s --format=%B "$c" | grep -q '^Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>$' || echo "no trailer: $(git show -s --format='%h %s' "$c")"; done; echo "trailer check done"
 ```
 
-**Expected:** nothing from `git status` (the committed snapshot and types are current); the 21 preview lines of README step 3 exactly; `imports grep exit 1`; exactly these paths (without `M docs/ops-runbook.md` when Step 1 printed `0`):
+**Expected:** nothing from `git status` (the committed snapshot and types are current); the 20 preview lines of README step 3 exactly; `imports grep exit 1`; exactly these paths (without `M docs/ops-runbook.md` when Step 1 printed `0`):
 ```
-(filled in by the replay)
+M	backend/api/main.py
+M	backend/api/middleware.py
+M	backend/api/ratelimit.py
+A	backend/api/routes/bulletin_images.py
+M	backend/api/schemas.py
+A	backend/bulletin_image.py
+M	backend/db/models.py
+M	backend/migrations/README.md
+A	backend/migrations/versions/0007_bulletin_images.py
+M	backend/printed_bulletin.py
+M	backend/printed_docx.py
+M	backend/printed_pdf.py
+A	backend/repos/bulletin_images.py
+M	backend/repos/services.py
+M	backend/service_bulletin.py
+A	backend/tests/picture_helpers.py
+M	backend/tests/test_api_app.py
+A	backend/tests/test_api_bulletin_images.py
+M	backend/tests/test_api_printed.py
+M	backend/tests/test_api_services.py
+A	backend/tests/test_bulletin_image.py
+M	backend/tests/test_middleware.py
+M	backend/tests/test_migrations.py
+M	backend/tests/test_no_streamlit_in_core.py
+M	backend/tests/test_printed_bulletin.py
+M	backend/tests/test_printed_render.py
+M	backend/tests/test_ratelimit.py
+M	backend/tests/test_schema_check.py
+M	backend/tests/test_service_bulletin.py
+M	backend/tests/test_services_postgres.py
+M	backend/usecases/archive.py
+A	backend/usecases/bulletin_images.py
+M	backend/usecases/documents.py
+M	docs/manual-verification.md
+M	docs/ops-runbook.md
+A	docs/superpowers/plans/2026-10-03-printed-bulletin-3.md
+M	docs/superpowers/specs/2026-10-02-printed-bulletin-design.md
+M	frontend/src/lib/api/openapi.json
+M	frontend/src/lib/api/schema.d.ts
+M	frontend/src/lib/api/types.ts
 ```
 `0` (no page, component, draft, query or body code: the builder is unchanged); the subjects oldest first: `Runbook: printed bulletin PR 2b-2 record (owner's phone check)` (when it rides along), `Spec: printed bulletin PR 3 planning answers (owner, 2026-10-03)`, the plan commits (`WIP plan: printed bulletin PR 3 …`, `Plan: printed bulletin PR 3 (the cover picture)` and any later plan commit), then T1-T4's four subjects as written above, then any `Fix: …` lines; only `trailer check done`.
 
@@ -2949,7 +2992,7 @@ git fetch origin && git status -sb | head -1
 (cd backend && DATABASE_URL=postgresql://preview@localhost:1/preview ../.venv/bin/alembic upgrade 0006_services_bulletin:0007_bulletin_images --sql 2>/dev/null | grep -v -e '^--' -e '^$' | sed 's/ *$//')
 ```
 
-**Expected:** the branch even with `origin/claude/slice-2-plan-4q33le` (the PR's code); the 21 lines of README step 3 exactly. Send them in a code block with:
+**Expected:** the branch even with `origin/claude/slice-2-plan-4q33le` (the PR's code); the 20 lines of README step 3 exactly. Send them in a code block with:
 
 > Third check: these are the lines of SQL the migration will run on the database when the PR merges, rendered from the PR's code without touching the database. In plain words: start one transaction; give up after 5 seconds if the churches or users tables are busy (the old version then keeps running and we retry); create one new, empty table to hold the cover pictures (each picture belongs to a church and goes with it; the member who uploaded it is remembered, or forgotten if their account goes); add an index to find a church's pictures by age; turn on row-level security for the table, so Supabase's own web API cannot read it (only the app can); note the new version; finish. No existing row is copied, changed or deleted. Does that look right to you?
 
@@ -3022,7 +3065,7 @@ is recorded here.
 |---|---|---|
 | 1. Backup | `db-backup` run <run URL>: success, artifact `db-backup` (<bytes> bytes, encrypted) | <date> |
 | 2. Counts before (SQL Editor, read-only) | version `0006_services_bulletin`; <n> saved services, <n> with bulletin fields; database <size> | <date> |
-| 3. SQL preview | Rendered from the PR's code without a database: the 21 lines of the README (one `CREATE TABLE bulletin_images`, its index, row-level security, under the 5 s lock timeout); read by the owner: <answer> | <date> |
+| 3. SQL preview | Rendered from the PR's code without a database: the 20 lines of the README (one `CREATE TABLE bulletin_images`, its index, row-level security, under the 5 s lock timeout); read by the owner: <answer> | <date> |
 | Merge and deploy | PR #<N1> merged <UTC time> (<Eastern time>), merge commit `<short sha>`. CI on `main` (run <run id>): success. `/health/ready` `{"ok":true,"db":"ok"}`; `/openapi.json` lists `/bulletin-images` and `/bulletin-images/{image_id}`; signed out: 401. <Railway log line "Running upgrade 0006_services_bulletin -> 0007_bulletin_images" seen by the owner. / Not checked.> | <date> |
 | 4. After the deploy (read-only) | `0007_bulletin_images`, row_security `true`, open_grants `0`, pictures `0`; counts again: <unchanged / …>; database <size> | <date> |
 | 5. The builder as before (phone: <phone and browser>) | <A saved service saved again; the printed bulletin's cover shows the [Cover picture] box, centered. / …> | <date> |
@@ -3515,7 +3558,26 @@ describe("the cover picture before it is uploaded (printed bulletin PR 3b)", () 
 Run: `(cd frontend && npx vitest run src/lib/draft/bulletin.test.ts src/lib/draft/schema.test.ts src/lib/draft/migrate.test.ts src/lib/draft/store.test.ts src/lib/draft/mapping.test.ts src/lib/documents.test.ts src/lib/queries/bulletin-images.test.ts src/components/builder/review/review-send-step.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
 **Expected** (`bulletin-images.ts` does not exist yet, so its test file cannot load; the other new names import as undefined):
 ```
-(replay: T7-fail)
+   × draft schema and freshDraft (F §4.6) > a fresh draft is dated next Sunday with every field empty and the F §4.6 defaults <t>ms
+   × draft schema and freshDraft (F §4.6) > accepts an empty date and generous strings, and rejects impossible values <t>ms
+   × DraftStore changes (S store.ts) > never adopts a draft an older version of the app wrote, however new, and writes over it (slice 5a-3: an old tab) <t>ms
+   × DraftStore changes (S store.ts) > puts its draft back over an old tab's with nothing to write, and a store loaded from the old tab's takes it (build review M3) <t>ms
+   × draft migrate and parseStoredDraft (F §4.6 Versioning) > round-trips a stored draft <t>ms
+   × draft migrate and parseStoredDraft (F §4.6 Versioning) > migrates a version 1 draft: editing gains the draft's date, and save_key_fingerprint starts null (slice 5a-3) <t>ms
+   × draft migrate and parseStoredDraft (F §4.6 Versioning) > migrates a version 2 draft: an empty bulletin, nothing else changed, and a saved draft stays Saved (PR 2b) <t>ms
+   × draft migrate and parseStoredDraft (F §4.6 Versioning) > migrates a version 3 draft: no cover picture, nothing else changed, and a saved draft with bulletin fields stays Saved (PR 3b) <t>ms
+   × carry forward (PR 2 planning answer 5) > carries again for a new date into every box not edited or kept, a box at a time (plan review fix M1) <t>ms
+   × the cover picture (printed bulletin PR 3b; PR 3 planning answers 6, 7) > is chosen or removed on the step, which checks its box for good <t>ms
+   × the cover picture (printed bulletin PR 3b; PR 3 planning answers 6, 7) > carries last week's picture, marked to check first; Keep as is or a choice checks it; a touched box never carries <t>ms
+   × the cover picture (printed bulletin PR 3b; PR 3 planning answers 6, 7) > is marked to check on Save as new service, and opens with its saved mark <t>ms
+   × the cover picture (printed bulletin PR 3b; PR 3 planning answers 6, 7) > is left out of the payload when there is none, so a draft saved before PR 3b stays Saved; a POST leaves no picture out <t>ms
+   × serviceToDraft and markSaved (slice 5a-3; F §4.6 Loading an archived service) > opens a saved service as a new draft that is already Saved, on Review, for that date <t>ms
+   × documentRequest (slice 5a) > sends the service as the Word file prints it: slot hymns, enabled cards with text, picks, communion, custom elements <t>ms
+   × the cover picture in the body (printed bulletin PR 3b) > always says which picture, or none, and the 409 check compares it <t>ms
+   × Review & send: saving (slice 5a-3) > leaves a blank bulletin out of a POST and always sends it in a PUT (2b-2 build review M1) <t>ms
+ FAIL  |unit| src/lib/queries/bulletin-images.test.ts [ src/lib/queries/bulletin-images.test.ts ]
+⎯⎯⎯⎯⎯⎯ Failed Tests 17 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  17 failed | 72 passed (89)
 ```
 
 - [ ] **Step 3: The draft v4, the picture in the draft and the bodies, the upload and the preview**
@@ -3976,7 +4038,7 @@ export function useBulletinImage(imageId: string | null) {
 - [ ] **Step 4: See them pass, the suite, types and lint**
 
 Run: the Step 2 command, then the frontend suite, then types and lint.
-**Expected:** (replay: T7-pass) with no `×` line; (replay: T7-suite); `typecheck 0`, `lint 0`.
+**Expected:** `      Tests  91 passed (91)` with no `×` line; ` Test Files  88 passed (88)` and `      Tests  712 passed (712)`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -4210,7 +4272,13 @@ describe("the cover picture (printed bulletin PR 3b; PR 3 planning answers 5-8)"
 Run: `(cd frontend && npx vitest run src/components/builder/bulletin 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
 **Expected** (no Cover picture group yet):
 ```
-(replay: T8-fail)
+   × the Bulletin step (printed bulletin PR 2b) > shows the music, who leads, the announcements and the reading text, all optional, and stores what is typed <t>ms
+   × the cover picture (printed bulletin PR 3b; PR 3 planning answers 5-8) > uploads a chosen picture, shows it trimmed as the front page prints it, and Remove takes it off <t>ms
+   × the cover picture (printed bulletin PR 3b; PR 3 planning answers 5-8) > says a file the server would refuse before uploading it, and the server's own refusal after <t>ms
+   × the cover picture (printed bulletin PR 3b; PR 3 planning answers 5-8) > carries last week's picture with its note until it is kept, and says when a picture cannot be loaded <t>ms
+   × the cover picture (printed bulletin PR 3b; PR 3 planning answers 5-8) > says when the picture can no longer be loaded, and Remove still works <t>ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  5 failed | 7 passed (12)
 ```
 
 - [ ] **Step 3: The group**
@@ -4442,7 +4510,7 @@ function CoverPicture() {
 - [ ] **Step 4: See them pass (three runs), the suite, types and lint**
 
 Run: the Step 2 command three times, then the frontend suite, then types and lint.
-**Expected:** (replay: T8-pass) three times; (replay: T8-suite); `typecheck 0`, `lint 0`.
+**Expected:** `      Tests  12 passed (12)` three times; ` Test Files  88 passed (88)` and `      Tests  716 passed (716)`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -4560,7 +4628,12 @@ Expected counts after this task: backend `1464 passed, 19 skipped`; frontend `71
 Run: `(cd frontend && npx vitest run src/components/builder/review/review-send-step.test.tsx src/components/builder/builder-shell.test.tsx src/components/builder/liturgy/liturgy-step.test.tsx src/lib/draft/bulletin.test.ts 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
 **Expected:**
 ```
-(replay: T9-fail)
+   × printedNotFilledIn (PR 2 planning answer 3) > lists the blank standing fields, this week's people as changed, then the cover picture, prelude, postlude and announcements <t>ms
+   × Review & send: the printed bulletin (printed bulletin PR 1) > lists the bulletin settings still blank and links to them (printed bulletin PR 2a) <t>ms
+   × Review & send: the printed bulletin (printed bulletin PR 1) > carries last week's music and announcements in, lists what to check, and prints them (printed bulletin PR 2b) <t>ms
+   × Review & send: the printed bulletin (printed bulletin PR 1) > carries last week's cover picture in, lists it to check, and prints it (printed bulletin PR 3b) <t>ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  4 failed | 93 passed (97)
 ```
 
 - [ ] **Step 3: The card's note and "cover picture" in its lines**
@@ -4634,7 +4707,7 @@ export const WEEKLY_NOTE =
 - [ ] **Step 4: See them pass (three runs), the suite, types and lint**
 
 Run: the Step 2 command three times, then the frontend suite, then types and lint.
-**Expected:** (replay: T9-pass) three times; (replay: T9-suite); `typecheck 0`, `lint 0`.
+**Expected:** `      Tests  97 passed (97)` three times; ` Test Files  88 passed (88)` and `      Tests  717 passed (717)`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -4670,7 +4743,7 @@ Expected counts after this task: backend `1464 passed, 19 skipped`; frontend `71
 - [ ] **Step 2: Check the docs**
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_slice1_docs.py backend/tests/test_docs.py backend/tests/test_ops_workflows.py 2>&1 | tail -1` then `grep -n '^## ' docs/manual-verification.md | tail -1` then `git diff -U0 docs/manual-verification.md | grep '^+' | grep -c '—'` then `git diff --stat | tail -1`
-**Expected:** (replay: T10-docs); `282:## Printed bulletin`; `0`; (replay: T10-stat).
+**Expected:** `89 passed in <t>s`; `282:## Printed bulletin`; `0`; ` 1 file changed, 6 insertions(+)`.
 
 - [ ] **Step 3: Commit**
 
@@ -4734,7 +4807,28 @@ for c in $(git rev-list origin/main..HEAD); do git show -s --format=%B "$c" | gr
 
 **Expected:** nothing from `git status`; `raw html grep exit 1`; exactly these paths (and `M docs/superpowers/plans/2026-10-03-printed-bulletin-3.md` if a plan commit came after the 3a merge):
 ```
-(filled in by the replay)
+M	docs/manual-verification.md
+M	docs/ops-runbook.md
+M	frontend/src/components/builder/bulletin/bulletin-step.test.tsx
+M	frontend/src/components/builder/bulletin/bulletin-step.tsx
+M	frontend/src/components/builder/review/printed-card.tsx
+M	frontend/src/components/builder/review/review-send-step.test.tsx
+M	frontend/src/lib/api/timeouts.ts
+M	frontend/src/lib/documents.test.ts
+M	frontend/src/lib/documents.ts
+M	frontend/src/lib/draft/bulletin.test.ts
+M	frontend/src/lib/draft/bulletin.ts
+M	frontend/src/lib/draft/mapping.test.ts
+M	frontend/src/lib/draft/migrate.test.ts
+M	frontend/src/lib/draft/migrate.ts
+M	frontend/src/lib/draft/schema.test.ts
+M	frontend/src/lib/draft/schema.ts
+M	frontend/src/lib/draft/store.test.ts
+A	frontend/src/lib/queries/bulletin-images.test.ts
+A	frontend/src/lib/queries/bulletin-images.ts
+M	frontend/src/lib/queries/keys.ts
+M	frontend/src/lib/queries/services.ts
+M	frontend/src/test/fixtures/index.ts
 ```
 `0` (no server, API, type, workflow or package change: PR 3b is the frontend and the docs); the subjects oldest first: `Runbook: printed bulletin PR 3a record (backup, counts, SQL preview, merge, migration 0007)`, any later plan commit, then T7-T10's four subjects as written above, then any `Fix: …` lines; only `trailer check done`.
 
@@ -4938,7 +5032,15 @@ Expected counts after this task: backend `1464 passed, 19 skipped` on `main`; fr
 
 **The rollback was run, not only written.** In a third worktree at the built head, T12 Step R's revert of the step's picture group (T10's and T8's commits) typechecked, linted and passed `713` frontend tests in 88 files. Reverting the whole of 3b would leave the 2b-2 reader, which refuses a version 4 draft.
 
-**Replay of the finished plan:** (to be filled after the replay)
+**Replay of the finished plan (2026-10-03).** The directives of T1-T4 and T7-T10 were applied in order (by a script that parses the plan's **Create**, **Append** and **In … replace** blocks step by step) onto a fresh detached worktree of the branch head (`e67330c`: `fbc9598` and the plan's commits), with the repo's `.venv`, a hard-linked copy of `frontend/node_modules` and a fresh database on the local Postgres 16 (`TEST_DATABASE_URL`). Each step's commands were run as written and each task committed with its own commit block (T5, T6, T11 and T12 are verification and owner steps; their local commands were run as described below):
+- Baselines before T1: backend `1432 passed, 17 skipped`; Postgres-marked `17 passed, 1432 deselected`; frontend `704 passed` in 87 files.
+- All 168 directives applied (T1 10 + 6, T2 7 + 24, T3 10 + 26, T4 4, T7 26 + 28, T8 8 + 8, T9 5 + 5, T10 1); every Replace anchor occurred exactly once. After T10, `backend`, `frontend/src` and `docs` (but the plans) equaled the build worktree's (`git diff`: empty), and `git status` was clean after every commit.
+- Every "see it fail" output is quoted from this replay (times as `<t>`): T1 `16 failed, 59 passed, 5 skipped` (Postgres `4 failed, 7 passed, 33 deselected`); T2 the two collection errors, then `2 failed, 26 passed`; T3 the collection error, then `17 failed, 68 passed`; T7 seventeen failures and one file that cannot load (`17 failed | 72 passed (89)`); T8 `5 failed | 7 passed (12)`; T9 `4 failed | 93 passed (97)`.
+- Every count matched the table: backend 1436, 1453, 1464 (19 skipped from T1); Postgres-marked `19 passed, 1436 deselected`, `… 1453 …`, `… 1464 deselected` (each with the onboarding timing test's `1 warning`, as on `main`); T1's files `79 passed, 5 skipped` and the 20 preview lines; T2's `68 passed`; T3's `118 passed`, the OpenAPI export and `gen:api` `2 files changed, 461 insertions(+), 2 deletions(-)`, frontend still `704` in 87, typecheck 0, lint 0; T4 `89 passed`, `282:## Printed bulletin`, `4`, `0`, `2 files changed, 38 insertions(+), 7 deletions(-)`; frontend 712, 716, 717 in 88; T7's files `91 passed`, T8's `12 passed` and T9's `97 passed` three times each, no flaky run; typecheck 0 and lint 0 after every frontend task; T10 `89 passed`, `282:## Printed bulletin`, `0`, `1 file changed, 6 insertions(+)`.
+- T5 Steps 2-3 at T4's commit (PR 3a as it would be opened, with `e4f3695`, today's `origin/main`, as the base): `1464 passed, 19 skipped`; Postgres `19 passed, 1464 deselected`; frontend `704` in 87; typecheck 0, lint 0; the production build `✓ Compiled successfully` with the five builder routes; `samples written` (looked at: the picture filling the box under the church's name, centered, in color, with "Matthew 22:1-14" and "October 18, 2026" in white on the band; without one, the two lines in bold centered and no box; the Word files with one inline picture of 372 x 300 pt, or the two lines); CI's alembic cycle on a fresh database clean (`No new upgrade operations detected.` twice); regenerating `openapi.json` and `schema.d.ts` changed nothing; the 20 preview lines; `imports grep exit 1`; the 40 paths exactly (with `M docs/ops-runbook.md`); `0` paths among the untouched server files and the frontend's pages, components, draft, queries and bodies; every commit has the trailer.
+- T11 Steps 2-3 at T10's commit, with T4's commit standing in for `main` after the 3a merge: `1464 passed, 19 skipped`; Postgres `19 passed, 1464 deselected`; frontend three times `717` in 88; typecheck 0, lint 0; the build with `○ /builder/bulletin`; the API files unchanged; `raw html grep exit 1`; the 21 paths of the list but the 3a record (not written in a replay); `0` server, API, type, workflow or package paths; T7-T10's four subjects. No em dash in any added line outside the plans; one new log line (`bulletin_images.upload`).
+- T12 Step R's revert of the step's picture group (T10's and T8's commits), run on the replay worktree: typecheck 0, lint 0, `713 passed` in 88 files.
+- Not run while planning: the pushes, the PRs and CI, the backup, the owner's queries on production, the merges, Railway's and Vercel's deploys, the phone checks, the print test and the records (T6, T11 Step 1's production check, T12).
 
 ## Spec coverage
 
