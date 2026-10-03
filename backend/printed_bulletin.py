@@ -23,7 +23,7 @@ from __future__ import annotations
 import datetime
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal, Optional
 
 from bulletin_settings import GLORIA_PATRI, BulletinSettings
@@ -73,6 +73,7 @@ class Line:
     style: Style
     spans: tuple[Span, ...]
     right: str = ""
+    starred: bool = field(default=False, compare=False)   # a heading the settings star (the stand note's rule)
 
     @property
     def text(self) -> str:
@@ -154,8 +155,9 @@ def _element(s: BulletinSettings, key: str, label: str, *value: Span) -> Line:
     """An element's heading: the label in capitals and bold (with the stand
     star when the settings star it), then its value, and the leader's name
     right-aligned (none when the element has no role or the role no name)."""
-    star = "*" if key in s.starred else ""
-    return Line("element", (Span(f"{star}{label.upper()}", bold=True), *value), right=s.leader(key))
+    starred = key in s.starred
+    return Line("element", (Span(f"{'*' if starred else ''}{label.upper()}", bold=True), *value),
+                right=s.leader(key), starred=starred)
 
 
 def _quoted(text: str) -> Span:
@@ -299,8 +301,9 @@ def order_of_worship(ps: PrintedService) -> list[Line]:
     lines += _text_element(s, "benediction", "Benediction", lit.get("benediction", ""))
     lines += _music(s, "postlude", "Postlude", POSTLUDE)
     lines += _custom(s, "end", r)
-    if s.stand_note and any(line.style == "element" and line.text.startswith("*") for line in lines):
-        lines.append(Line("note", (Span(f"*{s.stand_note}"),)))       # only under a star that printed
+    # Only under a starred element that printed; a custom element's own "*" does not count (build review M2).
+    if s.stand_note and any(line.starred for line in lines):
+        lines.append(Line("note", (Span(f"*{s.stand_note}"),)))
     return lines
 
 

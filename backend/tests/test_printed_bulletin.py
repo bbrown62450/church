@@ -1,5 +1,6 @@
 """The printed bulletin's content (printed bulletin spec, PR 1;
 printed_bulletin.py), with the church's bulletin settings (PR 2a)."""
+import dataclasses
 import datetime
 
 import bulletin_settings as bs
@@ -154,3 +155,14 @@ def test_the_settings_choose_the_stars_the_leaders_and_the_words():
     assert by_text["WELCOME AND ANNOUNCEMENTS"].right == ""                 # a role with no name
     assert "HYMN:  #409  “God Is Here!”" in by_text and "Glory be." in by_text
     assert lines[-1] == pb.Line("note", (pb.Span("*Please stand if able"),))
+
+
+def test_a_custom_element_marked_by_hand_does_not_bring_the_stand_note():
+    """Build review M2: the stand note follows only an element the settings star, not a custom element whose
+    label starts with "*" (a church marking standing by hand)."""
+    marked = service(resolved=dataclasses.replace(service().resolved, custom_elements=(
+        CustomElement("*Anthem", "Chancel Choir", "sermon"),)), settings=bs.BulletinSettings(starred=frozenset()))
+    lines = texts(pb.order_of_worship(marked))
+    assert "*ANTHEM" in lines and "*Congregation stands if able" not in lines
+    starred = service(resolved=marked.resolved, settings=bs.BulletinSettings(starred=frozenset({"sermon"})))
+    assert texts(pb.order_of_worship(starred))[-1] == "*Congregation stands if able"
