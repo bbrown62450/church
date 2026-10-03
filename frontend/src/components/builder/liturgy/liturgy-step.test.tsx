@@ -22,6 +22,7 @@ import { authEvents } from "@/lib/queries/auth-events";
 import { keys } from "@/lib/queries/keys";
 import { fakeError, installFakeApi, type FakeHandler, type FakeResponse, type RecordedRequest } from "@/test/fake-api";
 import {
+  bulletinSettings,
   church,
   CHURCH_IDS,
   churchProfile,
@@ -63,6 +64,7 @@ function renderStep(draft: DraftV1 = testDraft(), routes: Record<string, FakeHan
     "GET /church": churchProfile(),
     "GET /lectionary/readings": lectionaryRoute(),
     "GET /liturgy/config": liturgyConfig(),
+    "GET /church/bulletin-settings": bulletinSettings(),
     ...routes,
   });
   const view = renderWithProviders(

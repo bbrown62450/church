@@ -1,13 +1,17 @@
 "use client";
 
 import { DownloadIcon } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 
 import { PendingButton } from "@/components/app/pending-button";
 import { useStillWorking } from "@/components/builder/liturgy/use-still-working";
+import { buttonVariants } from "@/components/ui/button";
+import { notFilledIn, notFilledInLine } from "@/lib/bulletin-settings";
 import { useDraft } from "@/lib/draft/context";
 import { hasReadingsError, hasServiceDate, reviewStatus } from "@/lib/draft/status";
 import type { PrintedFormat } from "@/lib/download";
+import { useBulletinSettings } from "@/lib/queries/bulletin-settings";
 import { useDownloadPrinted } from "@/lib/queries/documents";
 
 import { FIX_READINGS, NEEDS_DATE, SAVE_HINT } from "./documents-card";
@@ -31,8 +35,21 @@ const FILES: readonly PrintedFile[] = [
 
 export const PRINTED_SUMMARY =
   "The booklet: the cover, the order of worship with the readings in full, and the announcements.";
-export const PLACEHOLDERS_NOTE =
-  "For now, the church's details, the people who lead, the music and the announcements print as [placeholders].";
+export const SETTINGS_NOTE =
+  "The church's details, the people who lead and the service time come from the bulletin settings.";
+export const PLACEHOLDERS_NOTE = "For now, the music and the announcements print as [placeholders].";
+
+/**
+ * The bulletin settings' blank fields (PR 2 planning answer 3: a blank field
+ * prints nothing, so the card says which are blank), above the downloads so
+ * it is read before printing. Nothing while the settings load or if they
+ * fail: the downloads never wait for them.
+ */
+function NotFilledInLine() {
+  const settings = useBulletinSettings();
+  const missing = settings.data ? notFilledIn(settings.data) : [];
+  return missing.length > 0 ? <p className="text-sm">{notFilledInLine(missing)}</p> : null;
+}
 
 function FileRow({ file, disabled, onDownloaded }: { file: PrintedFile; disabled: boolean; onDownloaded: () => void }) {
   const download = useDownloadPrinted(file.format);
@@ -71,7 +88,10 @@ function FileRow({ file, disabled, onDownloaded }: { file: PrintedFile; disabled
  * with the readings in full in the translation step 1 shows. Pending labels,
  * errors, the date and readings gates and the save tip work as on the Word
  * documents card. PR 1 prints what the app does not know yet as
- * [placeholders], and the card says so.
+ * [placeholders], and the card says so. PR 2a: the standing details come
+ * from the church's bulletin settings; the card lists the blank ones above
+ * the downloads and links to the Bulletin settings page below them (any
+ * member; admins edit there).
  */
 export function PrintedCard() {
   const { draft } = useDraft();
@@ -86,6 +106,8 @@ export function PrintedCard() {
         </h2>
         <p className="text-sm text-muted-foreground">{PRINTED_SUMMARY}</p>
         <p className="text-sm text-muted-foreground">{PLACEHOLDERS_NOTE}</p>
+        <p className="text-sm text-muted-foreground">{SETTINGS_NOTE}</p>
+        <NotFilledInLine />
         {dated ? null : <p className="text-sm text-muted-foreground">{NEEDS_DATE}</p>}
         {readingsError ? <p className="text-sm text-muted-foreground">{FIX_READINGS}</p> : null}
       </div>
@@ -95,6 +117,9 @@ export function PrintedCard() {
         ))}
       </ul>
       {downloaded && reviewStatus(draft) !== "saved" ? <p className="text-sm text-muted-foreground">{SAVE_HINT}</p> : null}
+      <Link href="/bulletin-settings" className={buttonVariants({ variant: "outline", size: "touch", className: "w-full sm:w-fit" })}>
+        Bulletin settings
+      </Link>
     </section>
   );
 }
