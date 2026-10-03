@@ -42,6 +42,7 @@ import { errorToastMessage, isNoChurchAccess } from "@/lib/api/errors";
 import type { DeletedOut, PreviousBulletin, ServiceOut, ServicePage } from "@/lib/api/types";
 import { useChurch } from "@/lib/church-context";
 import { savedCopyFingerprint, serviceBody } from "@/lib/documents";
+import { isBlankBulletin } from "@/lib/draft/bulletin";
 import { useDraft } from "@/lib/draft/context";
 import { fingerprint } from "@/lib/draft/fingerprint";
 import { draftToServicePayload, markSaved, serviceToDraft } from "@/lib/draft/mapping";
@@ -150,11 +151,19 @@ export function useSaveService(church: DraftChurch) {
       const draft = peek();
       const fp = fingerprint(draftToServicePayload(draft));
       const body = serviceBody(draft);
+      // A POST leaves a blank bulletin out (the server stores none, which
+      // reads as blank), as the save-key fingerprint does: the retry of a
+      // POST sent before PR 2b-2, whose answer was lost, then carries the
+      // same body and replays instead of saving a second copy (2b-2 build
+      // review M1). A PUT always sends it, so clearing every field clears
+      // the saved ones.
+      const { bulletin, ...withoutBulletin } = body;
+      const postBody = bulletin == null || isBlankBulletin(bulletin) ? withoutBulletin : body;
 
       async function post(retried: boolean): Promise<ServiceOut> {
         autoUpdate((d) => keyForPost(d, fp));
         try {
-          const out = await api.church<ServiceOut>("/services", { method: "POST", json: body, idempotencyKey: peek().save_key });
+          const out = await api.church<ServiceOut>("/services", { method: "POST", json: postBody, idempotencyKey: peek().save_key });
           autoUpdate((d) => settlePost(d, "success"));
           return out;
         } catch (e) {

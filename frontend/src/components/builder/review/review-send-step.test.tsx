@@ -17,6 +17,7 @@ import BuilderLayout from "@/app/(signed-in)/(church)/builder/layout";
 import ReviewStepPage from "@/app/(signed-in)/(church)/builder/review/page";
 import { Toaster } from "@/components/ui/sonner";
 import { formatSavedAt } from "@/lib/dates";
+import { emptyServiceBulletin, setAnnouncement } from "@/lib/draft/bulletin";
 import { useDraft } from "@/lib/draft/context";
 import { serviceToDraft } from "@/lib/draft/mapping";
 import { draftKey, type DraftV1 } from "@/lib/draft/schema";
@@ -690,6 +691,40 @@ describe("Review & send: saving (slice 5a-3)", () => {
     expect(await screen.findByText(SAVED_MESSAGE)).toBeInTheDocument();
     const [first, second] = serviceRequests(api, "POST");
     expect(second.headers["idempotency-key"]).not.toBe(first.headers["idempotency-key"]);
+  });
+
+  it("leaves a blank bulletin out of a POST and always sends it in a PUT (2b-2 build review M1)", async () => {
+    // A POST whose answer was lost before 2b-2 sent no bulletin: its retry now keeps the same body, so no duplicate.
+    const { api, user } = renderReview(
+      editOccasion(testDraft(), "Harvest"),
+      {
+        "POST /services": () => ({ status: 201, body: savedService({ occasion: "Harvest", saved_at: FIRST_SAVE }) }),
+        [`PUT /services/${SERVICE_ID}`]: () => savedService({ occasion: "Harvest Home", saved_at: SECOND_SAVE }),
+      },
+      <Probe edit={(draft) => editOccasion(draft, "Harvest Home")} />,
+    );
+    const card = await archiveCard();
+    await user.click(within(card).getByRole("button", { name: "Save to archive" }));
+    expect(await screen.findByText(SAVED_MESSAGE)).toBeInTheDocument();
+    const [post] = serviceRequests(api, "POST");
+    expect(post.body).toMatchObject({ occasion: "Harvest" });
+    expect(post.body).not.toHaveProperty("bulletin");
+    await user.click(screen.getByRole("button", { name: "Probe edit" }));
+    await user.click(within(card).getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(within(card).getByText(`Saved to the archive · ${formatSavedAt(SECOND_SAVE)}`)).toBeInTheDocument());
+    const [put] = serviceRequests(api, "PUT");
+    expect(put.body).toHaveProperty("bulletin", emptyServiceBulletin()); // clearing every field clears the saved ones
+  });
+
+  it("sends a filled-in bulletin in a POST (2b-2 build review M1)", async () => {
+    const { api, user } = renderReview(setAnnouncement(editOccasion(testDraft(), "Harvest"), "coffee_hour", "The Sample family"), {
+      "POST /services": () => ({ status: 201, body: savedService({ occasion: "Harvest", saved_at: FIRST_SAVE }) }),
+    });
+    const card = await archiveCard();
+    await user.click(within(card).getByRole("button", { name: "Save to archive" }));
+    expect(await screen.findByText(SAVED_MESSAGE)).toBeInTheDocument();
+    const [post] = serviceRequests(api, "POST");
+    expect(post.body).toMatchObject({ bulletin: { announcements: { coffee_hour: "The Sample family" } } });
   });
 
   it("keeps the key for an identical retry after an unknown outcome, replaces it after an edit, and retries a mismatch once", async () => {
