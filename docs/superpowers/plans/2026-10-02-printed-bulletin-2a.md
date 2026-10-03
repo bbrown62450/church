@@ -491,6 +491,9 @@ def test_a_blank_setting_prints_nothing():
     assert bare[i + 1] == "PRAYER FOR ILLUMINATION"                         # no words under it
     assert not any(line.startswith("*") for line in bare)                   # no stars, no stand note
     assert bare[-1] == "ENDING"
+    unstarred = texts(pb.order_of_worship(service(ot=None, settings=bs.BulletinSettings(
+        starred=frozenset({"ot_reading"})))))                               # starred, but not printed this week
+    assert unstarred[-1] == "ENDING" and not any(line.startswith("*") for line in unstarred)
 
 
 def test_the_settings_choose_the_stars_the_leaders_and_the_words():
@@ -619,6 +622,59 @@ from tests.test_printed_bulletin import SETTINGS
 
 ````python
                      "FB: Example Church", "Coffee Hour: [Name]"):
+````
+
+**In `backend/tests/test_printed_render.py`, replace:**
+
+````python
+import datetime
+from io import BytesIO
+````
+
+**with:**
+
+````python
+import dataclasses
+import datetime
+from io import BytesIO
+````
+
+**In `backend/tests/test_printed_render.py`, replace:**
+
+````python
+import printed_bulletin as pb
+import printed_docx
+````
+
+**with:**
+
+````python
+import bulletin_settings as bs
+import printed_bulletin as pb
+import printed_docx
+````
+
+**Append to `backend/tests/test_printed_render.py`:**
+
+````python
+
+
+def test_the_longest_details_still_fit_the_cover():
+    """PR 2a: at every limit, with a church name of two lines, the contact lines shrink to fit the cover, so
+    the order of worship still starts on page 1 (side 1 stays the cover and page 1)."""
+    def longest(field: str, word: str) -> str:
+        return (word * bs.MAX_LENGTH[field])[:bs.MAX_LENGTH[field]].strip()
+
+    settings = bs.BulletinSettings(
+        address_lines=tuple(longest("address_line", f"{n}00 Example Street ") for n in (1, 2, 3)),
+        phone=longest("phone", "(555) 010-0100 "), email=longest("email", "office.")[:-12] + "@example.com",
+        website=longest("website", "example.com/"), facebook=longest("facebook", "Example Church "),
+        **{role: longest("person", "Alex Example ") for role in bs.ROLES})
+    ps = dataclasses.replace(service(), church_name="The First Presbyterian Church of Springfield", settings=settings)
+    pages = halves(printed_pdf.render_pdf(ps))
+    assert pages[0].startswith("The First Presbyterian Church of Springfield [Cover picture]")
+    assert pages[0].endswith(f"FB: {settings.facebook}")
+    assert pages[1].startswith("1 THE SERVICE FOR THE LORD’S DAY The First Presbyterian Church of Springfield")
 ````
 
 **In `backend/tests/test_api_printed.py`, replace:**
@@ -1049,8 +1105,8 @@ def order_of_worship(ps: PrintedService) -> list[Line]:
     lines += _text_element(s, "benediction", "Benediction", lit.get("benediction", ""))
     lines += _music(s, "postlude", "Postlude", POSTLUDE)
     lines += _custom(s, "end", r)
-    if s.stand_note:
-        lines.append(Line("note", (Span(f"*{s.stand_note}"),)))
+    if s.stand_note and any(line.style == "element" and line.text.startswith("*") for line in lines):
+        lines.append(Line("note", (Span(f"*{s.stand_note}"),)))       # only under a star that printed
     return lines
 
 
@@ -1074,6 +1130,63 @@ def cover(ps: PrintedService) -> list[Line]:
     ]
 
 
+````
+
+The PDF's cover shrinks its contact lines to the room the title and the picture's box leave (reportlab's `KeepInFrame`, mode `"shrink"`), so even at every limit the order of worship starts on page 1; lines of typical length print at full size.
+
+**In `backend/printed_pdf.py`, replace:**
+
+````python
+from reportlab.platypus import (BaseDocTemplate, CondPageBreak, Flowable, Frame, FrameBreak, PageTemplate, Paragraph,
+                                Spacer, Table, TableStyle)
+````
+
+**with:**
+
+````python
+from reportlab.platypus import (BaseDocTemplate, CondPageBreak, Flowable, Frame, FrameBreak, KeepInFrame, PageTemplate,
+                                Paragraph, Spacer, Table, TableStyle)
+````
+
+**In `backend/printed_pdf.py`, replace:**
+
+````python
+def _story(ps: pb.PrintedService, width: float) -> list[Flowable]:
+    cover = pb.cover(ps)
+    title, label, reference, date, *contact = cover
+    story: list[Flowable] = [
+        Paragraph(_markup(title), STYLES["title"]),
+        _CoverPicture(width - 60, 300, label.text, reference.text, date.text),
+        Spacer(1, 30),
+        *(Paragraph(_markup(line), STYLES["contact"]) for line in contact),
+        FrameBreak(),
+    ]
+````
+
+**with:**
+
+````python
+def _contact(lines: list[pb.Line], width: float, height: float) -> Flowable:
+    """The cover's contact lines, shrunk to fit what the title and the picture
+    leave of the cover page (PR 2a), so the order of worship always starts on
+    page 1. Lines of typical length fit at full size."""
+    paragraphs = [Paragraph(_markup(line), STYLES["contact"]) for line in lines]
+    return KeepInFrame(width, height, paragraphs, mode="shrink")
+
+
+def _story(ps: pb.PrintedService, width: float) -> list[Flowable]:
+    cover = pb.cover(ps)
+    title, label, reference, date, *contact = cover
+    heading = Paragraph(_markup(title), STYLES["title"])
+    picture = 300 + 30                                     # the picture's box and the space under it
+    room = pb.PAGE_HEIGHT - 2 * MARGIN - heading.wrap(width, pb.PAGE_HEIGHT)[1] - STYLES["title"].spaceAfter - picture
+    story: list[Flowable] = [
+        heading,
+        _CoverPicture(width - 60, 300, label.text, reference.text, date.text),
+        Spacer(1, 30),
+        _contact(contact, width, max(room, 30.0)),
+        FrameBreak(),
+    ]
 ````
 
 - [ ] **Step 4: See them pass, and the suite**
@@ -1259,6 +1372,44 @@ def test_the_church_s_bulletin_settings_print_for_every_member(client, church, m
     for gone in ("Organist", "[Organist]", "[Liturgist]", "[Worship leader]", "[Service time]", "[Phone]", "[Email]"):
         assert gone not in text, gone
     assert "‘[Prelude title]’" in text and "Coffee Hour: [Name]" in text           # the weekly fields: PR 2b
+
+
+def test_a_stored_control_character_still_prints_in_word(client, church, calls):
+    """PR 2a: settings written by another path are made Word-safe when printed, as the PUT makes them."""
+    with session_scope() as s:
+        s.get(Church, church).settings = {"bulletin": {"organist": "Jordan\x01 Doe", "phone": "(555)\x0b010-0100"}}
+    r = post(client, church, {"format": "docx", "service": SERVICE})
+    assert r.status_code == 200, r.text
+    paragraphs = [p.text for p in Document(BytesIO(r.content)).paragraphs]
+    assert "Jordan Doe, Organist" in paragraphs and "(555)\n010-0100" in paragraphs
+````
+
+**In `backend/tests/test_church_settings.py`, replace:**
+
+````python
+    get_church_rubric, get_church_rubric_overrides, update_church_rubric,
+)
+````
+
+**with:**
+
+````python
+    get_church_rubric, get_church_rubric_overrides, update_church_rubric,
+    set_bulletin_settings,
+)
+````
+
+**In `backend/tests/test_church_settings.py`, replace:**
+
+````python
+                  lambda: set_church_prompts(cid, {"benediction": "Go in peace."})):
+````
+
+**with:**
+
+````python
+                  lambda: set_church_prompts(cid, {"benediction": "Go in peace."}),
+                  lambda: set_bulletin_settings(cid, {"phone": "(555) 010-0100"})):
 ````
 
 **In `backend/tests/test_no_streamlit_in_core.py`, replace:**
@@ -1467,22 +1618,22 @@ does not come back prints "[Reading text unavailable]", never an error.
 
 ````python
 does not come back prints "[Reading text unavailable]", never an error.
-PR 2a adds the church's bulletin settings (bulletin_settings.read of the
-settings read with the name): the contact lines, the people, the service
-time, the stars, the stand note and the Gloria Patri words.
+PR 2a adds the church's bulletin settings (church_bulletin.read_settings of
+the settings read with the name, every text Word-safe): the contact lines,
+the people, the service time, the stars, the stand note and the Gloria Patri
+words.
 ````
 
 **In `backend/usecases/documents.py`, replace:**
 
 ````python
-import printed_bulletin
+from usecases import archive, passages
 ````
 
 **with:**
 
 ````python
-import bulletin_settings
-import printed_bulletin
+from usecases import archive, church_bulletin, passages
 ````
 
 **In `backend/usecases/documents.py`, replace:**
@@ -1496,7 +1647,7 @@ import printed_bulletin
 
 ````python
         translation_label=scripture_fetcher.translation_label(tid),
-        settings=bulletin_settings.read(church["settings"]))
+        settings=church_bulletin.read_settings(church["settings"]))
     content = printed_pdf
 ````
 
@@ -1659,8 +1810,10 @@ import { type Church, isAdmin, pickActiveChurch, roleLabel } from "./church";
 ````ts
     expect((["owner", "admin", "member"] as const).map(roleLabel)).toEqual(["Owner", "Admin", "Member"]);
   });
+});
 
-  it("lets owners and admins change the church's settings (printed bulletin PR 2a)", () => {
+describe("isAdmin", () => {
+  it("lets owners and admins edit the church's settings (printed bulletin PR 2a)", () => {
     expect((["owner", "admin", "member"] as const).map(isAdmin)).toEqual([true, true, false]);
   });
 });
@@ -1796,7 +1949,7 @@ export function readStoredChurchId
 **with:**
 
 ````ts
-/** Owners and admins: who may change the church's settings (the server's `require_admin`). */
+/** Owners and admins: who may edit the church's settings (the server's `require_admin`). */
 export function isAdmin(role: Church["role"]): boolean {
   return role === "owner" || role === "admin";
 }
@@ -2846,7 +2999,12 @@ import { PLACEHOLDERS_NOTE, PRINTED_SUMMARY, SETTINGS_NOTE } from "./printed-car
         "Not filled in: address, phone, email, website, Facebook name, service time, worship leader, liturgist, organist.",
       ),
     ).toBeInTheDocument();
+    const download = within(card).getByRole("button", { name: "Download printed bulletin" });
+    // The list comes before the downloads (read before printing); the button after them.
+    const missing = within(card).getByText(/^Not filled in:/);
+    expect(missing.compareDocumentPosition(download) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const link = within(card).getByRole("link", { name: "Bulletin settings" });
+    expect(download.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(link).toHaveAttribute("href", "/bulletin-settings");
     expect(link).toHaveClass("h-11");
     blank.unmount();
@@ -3009,22 +3167,14 @@ export const PLACEHOLDERS_NOTE = "For now, the music and the announcements print
 
 /**
  * The bulletin settings' blank fields (PR 2 planning answer 3: a blank field
- * prints nothing, so the card says which are blank), and the link to the
- * settings page. Nothing while the settings load or if they fail: the
- * downloads never wait for them.
+ * prints nothing, so the card says which are blank), above the downloads so
+ * it is read before printing. Nothing while the settings load or if they
+ * fail: the downloads never wait for them.
  */
-function SettingsLine() {
+function NotFilledInLine() {
   const settings = useBulletinSettings();
   const missing = settings.data ? notFilledIn(settings.data) : [];
-  return (
-    <div className="grid gap-1">
-      <p className="text-sm text-muted-foreground">{SETTINGS_NOTE}</p>
-      {missing.length > 0 ? <p className="text-sm">{notFilledInLine(missing)}</p> : null}
-      <Link href="/bulletin-settings" className={buttonVariants({ variant: "outline", size: "touch", className: "w-full sm:w-fit" })}>
-        Bulletin settings
-      </Link>
-    </div>
-  );
+  return missing.length > 0 ? <p className="text-sm">{notFilledInLine(missing)}</p> : null;
 }
 ````
 
@@ -3039,8 +3189,24 @@ function SettingsLine() {
 
 ````tsx
       {downloaded && reviewStatus(draft) !== "saved" ? <p className="text-sm text-muted-foreground">{SAVE_HINT}</p> : null}
-      <SettingsLine />
+      <Link href="/bulletin-settings" className={buttonVariants({ variant: "outline", size: "touch", className: "w-full sm:w-fit" })}>
+        Bulletin settings
+      </Link>
     </section>
+````
+
+**In `frontend/src/components/builder/review/printed-card.tsx`, replace:**
+
+````tsx
+        <p className="text-sm text-muted-foreground">{PLACEHOLDERS_NOTE}</p>
+````
+
+**with:**
+
+````tsx
+        <p className="text-sm text-muted-foreground">{PLACEHOLDERS_NOTE}</p>
+        <p className="text-sm text-muted-foreground">{SETTINGS_NOTE}</p>
+        <NotFilledInLine />
 ````
 
 **In `frontend/src/components/builder/review/printed-card.tsx`, replace:**
@@ -3055,8 +3221,9 @@ function SettingsLine() {
 ````tsx
  * documents card. PR 1 prints what the app does not know yet as
  * [placeholders], and the card says so. PR 2a: the standing details come
- * from the church's bulletin settings; the card lists the blank ones and
- * links to the Bulletin settings page (any member; admins edit there).
+ * from the church's bulletin settings; the card lists the blank ones above
+ * the downloads and links to the Bulletin settings page below them (any
+ * member; admins edit there).
 ````
 
 - [ ] **Step 4: See them pass (three runs), the suite, types and lint**
@@ -3082,7 +3249,37 @@ Expected counts after this task: backend `1381 passed, 16 skipped`; frontend `66
 **Files:**
 - Modify: `docs/manual-verification.md`
 
-- [ ] **Step 1: Append the items**
+- [ ] **Step 1: Amend PR 1's item 2 and the spec's "Data model", append the items**
+
+PR 1's item 2 said the names print as [placeholders], which is no longer so; the spec's "Data model" said a missing value is the placeholder, which planning answer 3 replaced (clarification 5).
+
+**In `docs/manual-verification.md`, replace:**
+
+````markdown
+the people lines are bold; the names, music and announcements show as [placeholders].
+````
+
+**with:**
+
+````markdown
+the people lines are bold; the music and announcements show as [placeholders] (after PR 2a the church's details and the names come from **Bulletin settings**; a blank one prints nothing).
+````
+
+**In `docs/superpowers/specs/2026-10-02-printed-bulletin-design.md`, replace:**
+
+````markdown
+  leaders: {element key: "worship_leader" | "liturgist" | "organist"}}`. No migration; read
+  tolerantly (a missing or malformed value is the placeholder). Admins edit them in the Bulletin
+````
+
+**with:**
+
+````markdown
+  leaders: {element key: "worship_leader" | "liturgist" | "organist"}}`. No migration; read
+  tolerantly (a missing or malformed value reads as its default: the sample's stars, leaders'
+  roles, stand note and Gloria Patri words, and blank for every detail and name; a blank value
+  prints nothing, PR 2 planning answer 3). Admins edit them in the Bulletin
+````
 
 **Append to `docs/manual-verification.md`:**
 
@@ -3093,16 +3290,18 @@ Expected counts after this task: backend `1381 passed, 16 skipped`; frontend `66
 After the PR 2a merge the owner's guided check (one step at a time on the
 phone) covers the items marked "(owner, after PR 2a)"; the results go into
 `docs/ops-runbook.md` → "Printed bulletin PR 2a record". Record what the page
-and the file show, never an email address, a phone number or a church id.
+and the file show, never an email address, a phone number, a street address
+or a church id.
 
-- [ ] (owner, after PR 2a) **7.** As an owner or admin, open **4 Review & send**. The **Printed bulletin** card says "The church's details, the people who lead and the service time come from the bulletin settings.", lists "Not filled in: …" (before anything is saved: address, phone, email, website, Facebook name, service time, worship leader, liturgist, organist) and has a **Bulletin settings** button. Tap it: the **Bulletin settings** page opens.
+- [ ] (owner, after PR 2a) **7.** As an owner or admin, open **4 Review & send**. The **Printed bulletin** card says "The church's details, the people who lead and the service time come from the bulletin settings." and, above the download buttons, lists "Not filled in: …" (before anything is saved: address, phone, email, website, Facebook name, service time, worship leader, liturgist, organist); under the downloads is a **Bulletin settings** button. Tap it: the **Bulletin settings** page opens.
 - [ ] (owner, after PR 2a) **8.** Fill in the address (two lines), the phone, email, website and Facebook name, the service time and the three people, and tap **Save settings**: "Bulletin settings saved". Reload the page: everything is still there. Back on **Review & send** the "Not filled in" line is gone.
-- [ ] (owner, after PR 2a) **9.** Tap **Download printed bulletin**: the cover shows the address lines, the phone, the email, the website and "FB: …"; page 1's header names the three people ("…, Worship Leader", "…, Liturgist", "…, Organist"), the date line ends with the service time, and each part shows its leader's name on the right, as in the sample. The prelude, the postlude and the announcements still show [placeholders] (the Bulletin step comes in PR 2b).
+- [ ] (owner, after PR 2a) **9.** Tap **Download printed bulletin**: the cover shows the address lines, the phone, the email, the website and "FB: …"; page 1's header names the three people ("…, Worship Leader", "…, Liturgist", "…, Organist"), the date line ends with the service time, and each part shows its leader's name on the right, as in the sample. The prelude, the postlude and the announcements still show [placeholders] (the Bulletin step comes in PR 2b). Tap **Download Word version**: its cover and page 1 show the same details and names.
 - [ ] (owner, after PR 2a) **10.** On **Bulletin settings**, under **Each part**, change who leads one part (for example the Sermon) and switch **Stands** for one part; change the stand note or the Gloria Patri words; save and download again: the bulletin follows each change.
 - [ ] **11.** Clear the phone and save: the cover leaves the phone out (no empty line and no [placeholder]), and the card lists "Not filled in: phone."
-- [ ] **12.** Signed in as a plain member of the same church: **Bulletin settings** shows the settings with "Only admins can change the bulletin settings. You can read them below." and no **Save settings**; the member's printed bulletin shows the same details.
+- [ ] **12.** Signed in as a plain member of the same church: **Bulletin settings** shows "Only admins can edit the bulletin settings. You can read them below." and the settings as plain text (no fields, switches or **Save settings**), each part with who leads it and whether the congregation stands; the member's printed bulletin shows the same details.
 - [ ] (owner, after PR 2a) **13.** At 375 px: no sideways scroll on **Bulletin settings**; every field, each part's leader and **Stands**, **Save settings** and **Back to Review & send** are easy to tap (44 px).
 - [ ] **14.** After saving the settings, step 1's default translation and the Hymns step's hymnal are unchanged (saving keeps the church's other settings).
+- [ ] **15.** On **Bulletin settings**, change a field without saving and tap **Back to Review & send**: "Discard unsaved changes?" asks first; **Keep editing** stays with the change, **Discard changes** goes back. Reloading the tab with a change unsaved shows the browser's own warning.
 ````
 
 - [ ] **Step 2: Check the docs**
