@@ -175,7 +175,9 @@ prints "[Sermon title]". The communion liturgy prints after the second hymn when
   church's stored default when offered, else WEB: the same rule as step 1's `effectiveTranslation`.
 - Credit line after the readings: "Scripture readings are from the {translation label}." (for
   example "the World English Bible (WEB)"). The public-domain translations need no notice; ESV text
-  carries its own "(ESV)" from the ESV API, as Crossway's bulletin terms ask.
+  carries its own "(ESV)" from the ESV API, as Crossway's bulletin terms ask. From PR 2b it names
+  only the fetched readings whose text came back: one of them, "The {First Reading | New Testament
+  Reading} is from the {label}."; none (pasted, or "[Reading text unavailable]"), no line.
 - A reading whose text does not come back prints "[Reading text unavailable]" (PR 1), never an
   error. PR 2 adds a "Paste the text" box per reading for a licensed translation the app cannot
   fetch; pasted text wins over fetched text.
@@ -211,7 +213,9 @@ prints "[Sermon title]". The communion liturgy prints after the second hymn when
   reading_text: {ot, nt}, unchecked: [box]}` (`unchecked`: the boxes still holding last week's
   text, not checked yet, so the marks come back when the service is opened again), and PR 3 adds
   `cover_image_id` (PR 2b plan, `docs/superpowers/plans/2026-10-03-printed-bulletin-2b.md`). The draft gains the field with a version bump (v2 to v3, migrating with an
-  empty `bulletin`); `ServiceDraft.bulletin` is optional; `services` gains one nullable JSON column
+  empty `bulletin`); `ServiceDraft.bulletin` is optional (a save without it keeps the saved one,
+  with the pasted text of a reading that changed emptied, since `reading_text` is stored by
+  position); `services` gains one nullable JSON column
   `bulletin` in migration `0006_services_bulletin` (PR 2; a backup, read-only counts and the `--sql`
   preview first, as 0005). A new column rather than a key inside `liturgy`: `liturgy` holds only the
   eight sections and every reader filters it to them.
