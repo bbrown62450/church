@@ -128,13 +128,18 @@ export function BulletinSettingsPage() {
 
   useEffect(() => {
     if (!dirty) return;
-    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = ""; // older Chrome and Edge, and some webviews, ask only when this is set
+    };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
 
   function onBack(event: MouseEvent<HTMLAnchorElement>) {
-    if (!dirty) return;
+    // A modified or other-button click opens a new tab or window, as a link does; this page stays as it is.
+    const modified = event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0;
+    if (!dirty || modified) return;
     event.preventDefault();
     setLeaving(true);
   }

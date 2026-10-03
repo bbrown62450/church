@@ -47,6 +47,33 @@ function leaveWarned(): boolean {
   return event.defaultPrevented;
 }
 
+/** What the page set `returnValue` to on a reload or close (undefined: not set). */
+function leaveReturnValue(): unknown {
+  const event = new Event("beforeunload", { cancelable: true });
+  let set: unknown = undefined;
+  Object.defineProperty(event, "returnValue", { configurable: true, get: () => set, set: (v) => (set = v) });
+  window.dispatchEvent(event);
+  return set;
+}
+
+/** Clicks `link` as `init` says; true when the page let the link do what a link does (not prevented). */
+function clickFollowsLink(link: HTMLElement, init: MouseEventInit): boolean {
+  let followed = false;
+  const after = (event: Event) => {
+    followed = !event.defaultPrevented;
+    event.preventDefault(); // jsdom cannot navigate
+  };
+  window.addEventListener("click", after);
+  try {
+    act(() => {
+      link.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, ...init }));
+    });
+  } finally {
+    window.removeEventListener("click", after);
+  }
+  return followed;
+}
+
 afterEach(() => {
   toast.dismiss();
 });
@@ -196,5 +223,44 @@ describe("Bulletin settings (printed bulletin PR 2a)", () => {
     dialog = await screen.findByRole("alertdialog", { name: DISCARD_TITLE });
     await user.click(within(dialog).getByRole("button", { name: "Discard changes" }));
     expect(testRouter.push).toHaveBeenCalledWith("/builder/review");
+  });
+
+  it("sets returnValue too on a reload with unsaved edits (browsers that ask only then)", async () => {
+    const { user } = renderPage("admin");
+    const organist = await screen.findByLabelText("Organist");
+    expect(leaveReturnValue()).toBeUndefined();
+    await user.type(organist, " Jr.");
+    expect(leaveReturnValue()).toBe("");
+  });
+
+  it("lets a modified or middle click on Back open the link as usual, with no discard dialog", async () => {
+    const { user } = renderPage("admin");
+    const organist = await screen.findByLabelText("Organist");
+    const back = within(screen.getByRole("main")).getByRole("link", { name: "Back to Review & send" });
+    await user.type(organist, " Jr.");
+    for (const init of [{ ctrlKey: true }, { metaKey: true }, { shiftKey: true }, { altKey: true }, { button: 1 }]) {
+      expect(clickFollowsLink(back, init)).toBe(true);
+      expect(screen.queryByRole("alertdialog")).toBeNull();
+    }
+    expect(testRouter.push).not.toHaveBeenCalled();
+    expect(organist).toHaveValue("Jordan Doe Jr.");
+    expect(clickFollowsLink(back, {})).toBe(false); // a plain click still asks first
+    expect(await screen.findByRole("alertdialog", { name: DISCARD_TITLE })).toBeInTheDocument();
+  });
+
+  it("keeps what was saved when a read that started before the save answers after it", async () => {
+    const { api, user, queryClient } = renderPage("admin", { [`PUT ${PATH}`]: (r: RecordedRequest) => r.body });
+    const organist = await screen.findByLabelText("Organist");
+    let answerGet: (body: unknown) => void = () => {};
+    api.set(`GET ${PATH}`, () => new Promise((resolve) => (answerGet = resolve)));
+    void queryClient.refetchQueries({ queryKey: keys.bulletinSettings(church().id) }); // a window-focus refetch
+    await user.clear(organist);
+    await user.type(organist, "Pat New");
+    await user.click(screen.getByRole("button", { name: "Save settings" }));
+    expect(await screen.findByText(SETTINGS_SAVED)).toBeInTheDocument();
+    await act(async () => answerGet(filledBulletinSettings())); // read before the PUT was stored
+    await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+    expect(organist).toHaveValue("Pat New");
+    expect(queryClient.getQueryData<BulletinSettings>(keys.bulletinSettings(church().id))?.organist).toBe("Pat New");
   });
 });

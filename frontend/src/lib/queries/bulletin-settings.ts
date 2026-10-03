@@ -7,7 +7,8 @@
  *   with `{ fresh: true }`: fetched again on opening the page even when cached,
  *   so the form never starts from an older value.
  * - `useSaveBulletinSettings()`: `PUT` the whole object (admins). Success
- *   caches the answer (what is stored) and toasts "Bulletin settings saved";
+ *   cancels a read in flight (it may predate the save), caches the answer
+ *   (what is stored) and toasts "Bulletin settings saved";
  *   a failure toasts the server's message (a member's role 403 included),
  *   except a 401 or a lost church, which the app already reports.
  */
@@ -44,7 +45,9 @@ export function useSaveBulletinSettings() {
   const queryClient = useQueryClient();
   return useChurchMutation<BulletinSettings, ApiError, BulletinSettings>({
     mutationFn: (body) => api.church<BulletinSettings>(PATH, { method: "PUT", json: body }),
-    onSuccess: (saved) => {
+    onSuccess: async (saved) => {
+      // A read already in flight may predate the save; its answer must not replace what is now stored.
+      await queryClient.cancelQueries({ queryKey: keys.bulletinSettings(church.id) });
       queryClient.setQueryData(keys.bulletinSettings(church.id), saved);
       toast.success(SETTINGS_SAVED);
     },
