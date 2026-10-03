@@ -199,7 +199,9 @@ prints "[Sermon title]". The communion liturgy prints after the second hymn when
   `"bulletin"`: `{address_lines: [str], phone, email, website, facebook, service_time,
   worship_leader, liturgist, organist, stand_note, starred: [element key], gloria_patri_words,
   leaders: {element key: "worship_leader" | "liturgist" | "organist"}}`. No migration; read
-  tolerantly (a missing or malformed value is the placeholder). Admins edit them in the Bulletin
+  tolerantly (a missing or malformed value reads as its default: the sample's stars, leaders'
+  roles, stand note and Gloria Patri words, and blank for every detail and name; a blank value
+  prints nothing, PR 2 planning answer 3). Admins edit them in the Bulletin
   settings panel (`PUT /church/bulletin-settings`, admin only, as 6a will be); 6a later moves the
   panel into Settings without changing the storage.
 - **Weekly fields** live in the draft and in the saved service: `bulletin: {prelude: {title,

@@ -292,8 +292,26 @@ record". PR 2 and PR 3 add their own items here. Record what the page, the
 file and the paper show, never an email address or a church id.
 
 - [ ] (owner, after PR 1) **1.** Build a service with readings, hymns and liturgy and open **4 Review & send**. Under **Printed bulletin**, tap **Download printed bulletin**: "Preparing…", then the share or preview sheet with `printed_bulletin_October_04_2026.pdf` (for that date). The PDF's pages are wide (legal, landscape), two booklet pages each, in reading order: the first has the cover (church name, the picture's box with the reading and the date) on the left and page 1, "THE SERVICE FOR THE LORD'S DAY", on the right; the announcements are the last page.
-- [ ] (owner, after PR 1) **2.** In that PDF the readings are printed in full in the translation chosen on step 1, followed by "Scripture readings are from the …"; hymns read like `*HYMN: #409 "God Is Here!"`; the people lines are bold; the names, music and announcements show as [placeholders].
+- [ ] (owner, after PR 1) **2.** In that PDF the readings are printed in full in the translation chosen on step 1, followed by "Scripture readings are from the …"; hymns read like `*HYMN: #409 "God Is Here!"`; the people lines are bold; the music and announcements show as [placeholders] (after PR 2a the church's details and the names come from **Bulletin settings**; a blank one prints nothing).
 - [ ] (owner, after PR 1) **3.** Tap **Download Word version**: `printed_bulletin_October_04_2026.docx` opens in reading order (cover, the service, the announcements), on small pages.
 - [ ] **4.** On step 1 choose another translation (for example KJV), then download again: the readings and the credit line change to it.
 - [ ] (owner, after PR 1) **5.** At 375 px: no sideways scroll on **Review & send**; the two new buttons are full width and at least 44 px tall. Clear the service date: both are off with "Choose a service date on step 1 to download."
 - [ ] (owner, print test) **6.** At the church, print the PDF on legal paper (one side or both, as the church usually does). Each sheet holds two pages side by side, not folded: the cover and page 1, then pages 2 and 3, and so on, with the announcements last. Check that the pages read 1, 2, 3 … in order, nothing is upside down, the page numbers are there, and no text is cut off at the edges or between the two pages.
+
+### Printed bulletin PR 2a: bulletin settings
+
+After the PR 2a merge the owner's guided check (one step at a time on the
+phone) covers the items marked "(owner, after PR 2a)"; the results go into
+`docs/ops-runbook.md` → "Printed bulletin PR 2a record". Record what the page
+and the file show, never an email address, a phone number, a street address
+or a church id.
+
+- [ ] (owner, after PR 2a) **7.** As an owner or admin, open **4 Review & send**. The **Printed bulletin** card says "The church's details, the people who lead and the service time come from the bulletin settings." and, above the download buttons, lists "Not filled in: …" (before anything is saved: address, phone, email, website, Facebook name, service time, worship leader, liturgist, organist); under the downloads is a **Bulletin settings** button. Tap it: the **Bulletin settings** page opens.
+- [ ] (owner, after PR 2a) **8.** Fill in the address (two lines), the phone, email, website and Facebook name, the service time and the three people, and tap **Save settings**: "Bulletin settings saved". Reload the page: everything is still there. Back on **Review & send** the "Not filled in" line is gone.
+- [ ] (owner, after PR 2a) **9.** Tap **Download printed bulletin**: the cover shows the address lines, the phone, the email, the website and "FB: …"; page 1's header names the three people ("…, Worship Leader", "…, Liturgist", "…, Organist"), the date line ends with the service time, and each part shows its leader's name on the right, as in the sample. The prelude, the postlude and the announcements still show [placeholders] (the Bulletin step comes in PR 2b). Tap **Download Word version**: its cover and page 1 show the same details and names.
+- [ ] (owner, after PR 2a) **10.** On **Bulletin settings**, under **Each part**, change who leads one part (for example the Sermon) and switch **Stands** for one part; change the stand note or the Gloria Patri words; save and download again: the bulletin follows each change.
+- [ ] **11.** Clear the phone and save: the cover leaves the phone out (no empty line and no [placeholder]), and the card lists "Not filled in: phone."
+- [ ] **12.** Signed in as a plain member of the same church: **Bulletin settings** shows "Only admins can edit the bulletin settings. You can read them below." and the settings as plain text (no fields, switches or **Save settings**), each part with who leads it and whether the congregation stands; the member's printed bulletin shows the same details.
+- [ ] (owner, after PR 2a) **13.** At 375 px: no sideways scroll on **Bulletin settings**; every field, each part's leader and **Stands**, **Save settings** and **Back to Review & send** are easy to tap (44 px).
+- [ ] **14.** After saving the settings, step 1's default translation and the Hymns step's hymnal are unchanged (saving keeps the church's other settings).
+- [ ] **15.** On **Bulletin settings**, change a field without saving and tap **Back to Review & send**: "Discard unsaved changes?" asks first; **Keep editing** stays with the change, **Discard changes** goes back. Reloading the tab with a change unsaved shows the browser's own warning.
