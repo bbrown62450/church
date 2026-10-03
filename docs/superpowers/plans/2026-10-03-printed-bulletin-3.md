@@ -4038,7 +4038,7 @@ export function useBulletinImage(imageId: string | null) {
 - [ ] **Step 4: See them pass, the suite, types and lint**
 
 Run: the Step 2 command, then the frontend suite, then types and lint.
-**Expected:** `      Tests  91 passed (91)` with no `×` line; ` Test Files  88 passed (88)` and `      Tests  712 passed (712)`; `typecheck 0`, `lint 0`.
+**Expected:** `      Tests  91 passed (91)` with no `×` line (89 and the two tests of the file that could not load); ` Test Files  88 passed (88)` and `      Tests  712 passed (712)`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5: Commit**
 
