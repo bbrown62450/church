@@ -168,6 +168,30 @@ def test_the_owner_s_read_only_queries_count_as_the_api_reads(world):
     with session_scope() as s:
         counts = dict(s.execute(text(readme_sql(0))).mappings().one())
         applied = dict(s.execute(text(readme_sql(1))).mappings().one())
-    # The 5a-2 save has 3 slots; the other five are old-style; "", NULL and "Sept 13" are undated.
-    assert counts == {"version": "0005_services_extras", "services": 6, "undated": 3, "old_style_hymn_lists": 5}
-    assert applied == {"version": "0005_services_extras", "new_columns": 2, "new_index": 1}
+    # The 5a-2 save has 3 slots; the other five are old-style; "", NULL and "Sept 13" are undated. The
+    # test database is at head (0006_services_bulletin since printed bulletin PR 2b).
+    assert counts == {"version": "0006_services_bulletin", "services": 6, "undated": 3, "old_style_hymn_lists": 5}
+    assert applied == {"version": "0006_services_bulletin", "new_columns": 2, "new_index": 1}
+
+
+def readme_0006_sql(n: int) -> str:
+    """The n-th ```sql block of README "Before 0006_services_bulletin": 0 is step 2's counts, 1 step 4's check."""
+    section = README.read_text(encoding="utf-8").split(
+        "\n## Before 0006_services_bulletin (printed bulletin PR 2b-1)\n", 1)[1]
+    return re.findall(r"```sql\n(.*?)```", section, re.S)[n]
+
+
+@pytest.mark.postgres
+def test_the_owner_s_read_only_queries_around_0006(world):
+    user, church = world
+    other = create_church(name="Other", timezone="America/New_York", owner_user_id=user)
+    with session_scope() as s:
+        for church_id, bulletin in ((church, None), (church, {"announcements": {"coffee_hour": "Sam Sample"}}),
+                                    (other, None)):
+            s.add(Service(church_id=church_id, service_date_iso="2026-09-27", occasion="", hymns=[], liturgy={},
+                          scriptures=[], bulletin=bulletin))
+    with session_scope() as s:
+        counts = dict(s.execute(text(readme_0006_sql(0))).mappings().one())
+        applied = dict(s.execute(text(readme_0006_sql(1))).mappings().one())
+    assert counts == {"version": "0006_services_bulletin", "services": 3, "churches": 2}
+    assert applied == {"version": "0006_services_bulletin", "new_column": 1, "with_bulletin": 1}

@@ -177,6 +177,11 @@ class Service(Base):
     # them as no custom elements ([]) and no hymnal (null).
     custom_elements = Column(JSON, nullable=True)   # [{label, text, insert_after}]
     hymnal = Column(String, nullable=True)          # the hymnal the hymns came from
+    # Revision 0006_services_bulletin (printed bulletin PR 2b): the printed
+    # bulletin's weekly fields (service_bulletin.py). NULL: never filled in
+    # (every service saved before PR 2b), read as an empty bulletin. A Python
+    # None is stored as SQL NULL, never as the JSON value null.
+    bulletin = Column(JSON(none_as_null=True), nullable=True)
 
     __table_args__ = (
         Index("ix_services_church_saved_at", "church_id", "saved_at"),

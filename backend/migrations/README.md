@@ -26,7 +26,7 @@ fails its deploy health check.
   `SET LOCAL statement_timeout = '60s'`, and all pending revisions run in one
   transaction, so any failure rolls every one of them back.
 - Revisions live in `migrations/versions/`, one file per revision, named
-  `NNNN_short_slug.py`. Head is `0005_services_extras`.
+  `NNNN_short_slug.py`. Head is `0006_services_bulletin`.
 
 | Revision | What it does |
 |---|---|
@@ -35,6 +35,7 @@ fails its deploy health check.
 | `0003_lockdown` | Postgres only: row-level security on every `public` table (after the precondition below), and the REVOKEs from `anon` and `authenticated`. Idempotent after the ops lockdown of 2026-09-25. |
 | `0004_invites_reusable` | `invites.reusable` (NOT NULL, default false; existing code-only invites become reusable) and `invites.accepted_by` with the FK `fk_invites_accepted_by_users` (`ON DELETE SET NULL`). |
 | `0005_services_extras` | Slice 5a-2: `services.custom_elements` (JSON) and `services.hymnal` (VARCHAR), both nullable with no default and no backfill, and the index `ix_services_church_date` on `services (church_id, service_date_iso)`. Before it reaches production: "Before 0005_services_extras" below. |
+| `0006_services_bulletin` | Printed bulletin PR 2b: `services.bulletin` (JSON), nullable with no default and no backfill: the printed bulletin's weekly fields. Before it reaches production: "Before 0006_services_bulletin" below. |
 
 ## Rules for a new revision
 
@@ -527,3 +528,95 @@ columns and the index in `backend/db/models.py` from the merge commit in the
 same PR, so Railway's `alembic upgrade head` still finds the database at
 head and `alembic check` stays clean. Never `alembic downgrade` production
 for this.
+
+## Before 0006_services_bulletin (printed bulletin PR 2b-1)
+
+Railway's Pre-deploy Command (`alembic upgrade head`) applies
+`0006_services_bulletin` when the printed bulletin PR 2b-1 (the server's
+half of PR 2b; the Bulletin step, PR 2b-2, merges after it is live) merges.
+First, as
+the owner decided on 2026-10-02 (PR 2 planning answer 8, the same routine as
+0005): a backup, read-only counts of the saved services, and a look at the
+SQL; after the deploy, one read-only check. One step at a time. Nothing here
+changes data. The agent guides the owner and records the results in
+`docs/ops-runbook.md` → "Printed bulletin PR 2b-1 record", never with an email
+address, a church id or a database URL.
+
+### Step 1: Backup
+
+Actions → db-backup → Run workflow (branch `main`), or
+`gh workflow run db-backup --ref main`. It must finish green with an
+artifact `db-backup`. Record the run URL.
+
+### Step 2: Count the saved services (read-only)
+
+Supabase → the project → SQL Editor → New query. Paste this and Run:
+
+```sql
+-- Read-only: what the archive holds before 0006. Changes nothing.
+SELECT (SELECT version_num FROM alembic_version) AS version,
+       count(*) AS services,
+       count(DISTINCT church_id) AS churches
+FROM services;
+```
+
+One row. Expected before the merge: `version` is `0005_services_extras`
+(anything else: stop); `services` is the number of saved services in all
+churches and `churches` the number of churches that saved at least one.
+
+### Step 3: Read the SQL the upgrade will run
+
+The agent renders it from the PR's code without connecting to any database
+(from `backend/`):
+
+```bash
+DATABASE_URL=postgresql://preview@localhost:1/preview ../.venv/bin/alembic upgrade 0005_services_extras:0006_services_bulletin --sql 2>/dev/null | grep -v -e '^--' -e '^$'
+```
+
+Expected, exactly (`backend/tests/test_migrations.py` pins it):
+
+```
+BEGIN;
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '60s';
+ALTER TABLE services ADD COLUMN bulletin JSON;
+UPDATE alembic_version SET version_num='0006_services_bulletin' WHERE alembic_version.version_num = '0005_services_extras';
+COMMIT;
+```
+
+One new empty column, in one transaction: no row is copied, changed or
+deleted. If another connection holds a lock on `services` for more than
+5 s, the deploy fails and the previous release keeps serving; run the
+deploy again.
+
+### Step 4: After the deploy (read-only)
+
+SQL Editor:
+
+```sql
+-- Read-only: is 0006 applied? Changes nothing.
+SELECT (SELECT version_num FROM alembic_version) AS version,
+       (SELECT count(*) FROM information_schema.columns
+         WHERE table_schema = 'public' AND table_name = 'services'
+           AND column_name = 'bulletin') AS new_column,
+       (SELECT count(*) FROM services WHERE bulletin IS NOT NULL) AS with_bulletin;
+```
+
+Expected: `0006_services_bulletin`, `1`, and `with_bulletin` `0` (no page
+sends a bulletin until PR 2b-2's Bulletin step; from then on every save
+stores one). Then step 2's query again: the same `services` and
+`churches` (or more, by the services saved since the deploy; never fewer).
+
+### Reverting PR 2b-2 or PR 2b-1
+
+PR 2b-2 (the Bulletin step) changes no schema: revert it first, as the
+plan's Step R says. Revert PR 2b-1 only after PR 2b-2 is reverted and live
+(the Bulletin step sends `bulletin`, which the API before 2b-1 refuses).
+For PR 2b-1 the schema stays at `0006_services_bulletin`: the column is nullable and the
+code before 2b-1 ignores it. Revert the merge commit, then restore
+`backend/migrations/versions/0006_services_bulletin.py` and the `Service`
+column in `backend/db/models.py` from the merge commit in the same PR, so
+Railway's `alembic upgrade head` still finds the database at head and
+`alembic check` stays clean. Never `alembic downgrade` production for this:
+the weekly fields saved since the merge stay in the column, unread, and come
+back when 2b-1 does.
