@@ -10,9 +10,10 @@
  * (`GET /services/previous-bulletin?before=<date>`) and carries its music and
  * announcements into the untouched boxes through `autoUpdate` (stamped 1 ms
  * after the draft it changes, so it never outranks typing in another tab),
- * checking again inside the recipe against the latest draft. A failed
- * lookup stays reported (`failed`) until a retry succeeds, typing in a box
- * included. It also applies "Save as new service" (`followSaveMode`): a
+ * checking again inside the recipe against the latest draft. It applies
+ * only an answer fetched after it mounted, never a cached one (2b-2 build
+ * review I1). A failed lookup stays reported (`failed`) until a retry
+ * succeeds, typing in a box included. It also applies "Save as new service" (`followSaveMode`): a
  * saved service on another date has its boxes marked to check and this
  * week's people, leaders and texts emptied. Only the visible tab changes the
  * draft, as the lectionary fill (`usePageVisible`).
@@ -30,7 +31,10 @@ export function useBulletinCarry(): { failed: boolean; retry: () => void } {
   const due = shouldCarry(draft);
   const query = usePreviousBulletin(date, due);
   const visible = usePageVisible();
-  const data = query.data;
+  // Only an answer fetched since this mount, and not being fetched again: a
+  // cached one may be from before last week's service was saved again
+  // (2b-2 build review I1).
+  const data = query.isFetchedAfterMount && !query.isFetching ? query.data : undefined;
   const copyDue = followSaveMode(draft) !== draft;
 
   useEffect(() => {

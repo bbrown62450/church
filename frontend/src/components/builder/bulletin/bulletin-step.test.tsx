@@ -5,6 +5,7 @@
  * Sunday, October 4, 2026. Last week's bulletin (`GET
  * /services/previous-bulletin`) is empty unless a test says otherwise.
  */
+import type { QueryClient } from "@tanstack/react-query";
 import { screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -12,6 +13,8 @@ import BuilderLayout from "@/app/(signed-in)/(church)/builder/layout";
 import BulletinStepPage from "@/app/(signed-in)/(church)/builder/bulletin/page";
 import { editScriptureLines } from "@/lib/draft/readings";
 import { draftKey, type DraftV1 } from "@/lib/draft/schema";
+import { makeQueryClient } from "@/lib/queries/client";
+import { keys } from "@/lib/queries/keys";
 import { fakeError, installFakeApi, type FakeHandler } from "@/test/fake-api";
 import {
   church,
@@ -45,7 +48,11 @@ function stored(): DraftV1 {
   return JSON.parse(window.localStorage.getItem(KEY) ?? "null") as DraftV1;
 }
 
-function renderStep(draft: DraftV1 = testDraft(), routes: Record<string, FakeHandler> = {}) {
+function renderStep(
+  draft: DraftV1 = testDraft(),
+  routes: Record<string, FakeHandler> = {},
+  queryClient: QueryClient = makeQueryClient({ queries: { retry: false } }),
+) {
   window.localStorage.setItem(KEY, JSON.stringify(draft));
   const api = installFakeApi({
     "GET /church": churchProfile(),
@@ -58,7 +65,7 @@ function renderStep(draft: DraftV1 = testDraft(), routes: Record<string, FakeHan
     <BuilderLayout>
       <BulletinStepPage />
     </BuilderLayout>,
-    { me: me(), church: church(), path: "/builder/bulletin" },
+    { me: me(), church: church(), path: "/builder/bulletin", queryClient },
   );
   return { ...view, api };
 }
@@ -145,6 +152,27 @@ describe("the Bulletin step (printed bulletin PR 2b)", () => {
     await waitFor(() => expect(screen.getByRole("textbox", { name: "Coffee hour" })).toHaveValue("The Example family"));
     expect(screen.getByRole("textbox", { name: "Other announcements" })).toHaveValue("Typed first.");
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("never carries a cached answer from before it opened: a fix saved to last week's service carries (2b-2 build review I1)", async () => {
+    const old = previousBulletin({
+      ...LAST_WEEK,
+      bulletin: { ...LAST_WEEK.bulletin, announcements: { ...LAST_WEEK.bulletin.announcements, coffee_hour: "Old coffee hour" } },
+    });
+    for (const invalidated of [true, false]) {
+      // Cached on an earlier visit; then last week's service was saved again (here, or within 30 s on another device).
+      const queryClient = makeQueryClient({ queries: { retry: false } });
+      queryClient.setQueryData(keys.previousBulletin(church().id, "2026-10-04"), old);
+      if (invalidated) await queryClient.invalidateQueries({ queryKey: ["church", church().id, "services"] });
+      const view = renderStep(testDraft(), { "GET /services/previous-bulletin": LAST_WEEK }, queryClient);
+      const coffee = await screen.findByRole("textbox", { name: "Coffee hour" });
+      await waitFor(() => expect(stored().bulletin.carried_for).toBe("2026-10-04"));
+      expect(coffee).toHaveValue("The Example family");
+      expect(stored().bulletin.announcements.coffee_hour).toBe("The Example family");
+      expect(carryRequests(view.api)).toHaveLength(1);
+      view.unmount();
+      window.localStorage.clear();
+    }
   });
 
   it("shows the three people from the bulletin settings, changeable for this week, and a part's leader behind a button", async () => {

@@ -100,7 +100,11 @@ export function useServices() {
  * `GET /services/previous-bulletin?before=` (printed bulletin PR 2b): what a
  * new week's bulletin carries forward from the latest service dated before
  * `dateIso`. Fetched only while carrying is due (`enabled`); under the
- * services key, so a save or a delete refreshes it.
+ * services key, so a save or a delete refreshes it. Never fresh
+ * (`staleTime` 0): each mount and each date fetches it again, since a
+ * cached answer may predate a fix saved to last week's service here or on
+ * another device; `useBulletinCarry` applies only an answer fetched after
+ * it mounted (2b-2 build review I1).
  */
 export function usePreviousBulletin(dateIso: string, enabled: boolean) {
   const api = useApi();
@@ -109,6 +113,7 @@ export function usePreviousBulletin(dateIso: string, enabled: boolean) {
     queryKey: keys.previousBulletin(church.id, dateIso),
     queryFn: ({ signal }) => api.church<PreviousBulletin>(`/services/previous-bulletin?before=${dateIso}`, { signal }),
     enabled,
+    staleTime: 0,
   });
 }
 
