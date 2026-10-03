@@ -31,7 +31,7 @@
   `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
 - TDD: write the failing test first and see it fail as quoted.
 - **Backup push after every task** (standing rule): the controller runs `git push origin claude/slice-2-plan-4q33le` after each task's commit (never `--force`, never a rebase; if the push is rejected, `git pull --no-rebase origin claude/slice-2-plan-4q33le` and push again; on a network error retry after 2, 4, 8 and 16 s). A fix asked for by a review is a new commit, `Fix: <what> (Task <n> review)`. The container can restart and lose uncommitted work: commit as soon as a task's checks pass.
-- Each PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes its tests line: PR 2b-1 `Tests: backend 1395 → 1432 passed, 16 → 17 skipped; frontend 675 in 85 files (unchanged)`; PR 2b-2 `Tests: frontend 675 → 698 in 85 → 87 files; backend 1432 passed, 17 skipped (unchanged)`.
+- Each PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes its tests line: PR 2b-1 `Tests: backend 1395 → 1432 passed, 16 → 17 skipped; frontend 675 in 85 files (unchanged)`; PR 2b-2 `Tests: frontend 675 → 704 in 85 → 87 files; backend 1432 passed, 17 skipped (unchanged)`.
 - New prose for the owner has no em dashes and no flattery. New user-facing copy is exactly the list in clarification 16 and has no em dashes; existing copy keeps its own punctuation.
 - **PR 2b-1 before PR 2b-2, and each tolerates the other** (clarification 19): nothing in T1-T4 changes a page, a component, the draft, a query or a request body (T5 Step 3 checks it); nothing in T7-T10 changes the server, the API files, a workflow or a package (T11 Step 3 checks it). PR 3 follows the same order.
 - No church id, email address, token, database URL or real person's name, address, phone or email in any doc, commit, test or record. The tests use invented details only: "Example Church", "Rev. Alex Example", "Sam Sample", "Jordan Doe", "Pat Example", "Lee Sample", "Rev. Guest", "The Example family", "Morning Voluntary", "Festive Postlude", "For all who are ill.". None of the owner's sample bulletin's content enters the repo. Prayers and concerns can name people and their health: they live only in the service's bulletin, never in a log line, a commit or the record (clarification 15).
@@ -55,9 +55,10 @@ As in the PR 2a plan: **Create `path`:** the block is the whole file; **Append t
   | T7 | 2b-2 | 0 | 1432 passed, 17 skipped | +15 (`bulletin.test.ts` 9, `documents.test.ts` 3, `migrate.test.ts` 1, `status.test.ts` 1, `mapping.test.ts` 1; `schema.test.ts`, `store.test.ts`, `keys.test.ts` edited) | 690 in 86 |
   | T8 | 2b-2 | 0 | 1432 passed, 17 skipped | +7 (`bulletin-step.test.tsx`; `builder-shell.test.tsx`, `status.test.ts`, `review-send-step.test.tsx` edited) | 697 in 87 |
   | T9 | 2b-2 | 0 | 1432 passed, 17 skipped | +1 (`review-send-step.test.tsx`; `liturgy-step.test.tsx` edited) | 698 in 87 |
-  | T10-T12 | 2b-2 | 0 | 1432 passed, 17 skipped | 0 | 698 in 87 |
+  | Build review fixes | 2b-2 | 0 | 1432 passed, 17 skipped | +6 (`bulletin.test.ts` 3; `bulletin-step.test.tsx` 1, three of its tests edited; `review-send-step.test.tsx` 2; see "Build review fixes (2026-10-03, PR 2b-2)") | 704 in 87 |
+  | T10-T12 | 2b-2 | 0 | 1432 passed, 17 skipped | 0 | 704 in 87 |
 
-- Per PR: **PR 2b-1** backend 1395 → 1432 passed, 16 → 17 skipped, frontend 675 in 85 (unchanged); **PR 2b-2** frontend 675 → 698 in 85 → 87 files, backend unchanged.
+- Per PR: **PR 2b-1** backend 1395 → 1432 passed, 16 → 17 skipped, frontend 675 in 85 (unchanged); **PR 2b-2** frontend 675 → 704 in 85 → 87 files (698 as built, +6 with the build review fixes), backend unchanged.
 - CI `backend-postgres` goes from `16 passed, 1395 deselected` to `17 passed, 1399 deselected` after T1 and `17 passed, 1425 deselected` from T3 on, and `17 passed, 1432 deselected` after the build review fixes (PR 2b-2 leaves it there). With a local Postgres (`TEST_DATABASE_URL`), the same numbers locally.
 
 ### Layering and code rules (carried)
@@ -101,7 +102,7 @@ The owner's answers win over S and F; the code wins over both where they disagre
    - **From what:** the church's latest service whose date is before the draft's date (the latest date, then the latest save; an undated service never counts; another church's never). Its music and announcements carry; this week's people, the part leaders and the pasted texts never do (S). A service saved before 2b has no bulletin and so carries nothing (the latest service decides, even when an older one had announcements; question 6). The cover picture id is PR 3's.
    - **When:** only for a draft that is **not a saved service** (`editing` null: a new draft, or one started before 2b-2), with a real date and **no save whose outcome is unknown** (`save_key_fingerprint` null: a carry would change the body, so the next Save would rotate the save key and could save the service twice; plan review fix I2), when the **Bulletin step** or **Review & send** shows it (the two places that show or print the bulletin; `useBulletinCarry`), once per date (`carried_for`). If the date then changes (step 1, or the pristine draft's roll-forward to the next Sunday), it carries again for the new date into every box not edited (replacing what it carried, blank where the new source has nothing). **Opening a saved service never carries.**
    - **"Edited", a box at a time** (`bulletin.edited`, plan review fix M1): a music or announcement box typed in, changed in any way (cleared included) or kept with **Keep as is**. Last week's never carries into that box again for this draft; the boxes not touched still carry (typing in one box while the lookup is slow, or after it failed, does not stop the others). The people, the part leaders and the pasted texts do not count (they never carry).
-   - **The check:** each box that received last week's text shows "From last week. Check before printing." (its field described by it) with **Keep as is** (named "Keep {box} as is" for screen readers), until that box is edited or kept (`bulletin.carried`). Keep as is is this plan's addition to answer 5, so a box that is right as it is need not be retyped (question 7). The step bar says "{n} to check"; the Printed bulletin card says "From last week, not checked yet: …" (clarification 9). **The marks are saved with the service** (`bulletin.unchecked`, plan review fix I3), so opening it from Services, on any device, shows the same boxes still to check (question 16). Nothing ever stops a download over it (planning answer 6).
+   - **The check:** each box that received last week's text shows "From last week. Check before printing." (its field described by it) with **Keep as is** (named "Keep as is: {box}" for screen readers, its visible words first; "Keep {box} as is" before 2b-2 build review M3), until that box is edited or kept (`bulletin.carried`). Keep as is is this plan's addition to answer 5, so a box that is right as it is need not be retyped (question 7). The step bar says "{n} to check"; the Printed bulletin card says "From last week, not checked yet: …" (clarification 9). **The marks are saved with the service** (`bulletin.unchecked`, plan review fix I3), so opening it from Services, on any device, shows the same boxes still to check (question 16). Nothing ever stops a download over it (planning answer 6).
    - **"Save as new service"** (plan review fix I4; question 17): a saved service whose date on step 1 now differs from its saved date is treated as a new week when the Bulletin step or Review shows it (`followSaveMode`): every filled music and announcement box is marked "From last week. Check before printing.", and this week's people, the part leaders and the pasted texts start empty (the people follow the settings). What it empties is set aside in the draft (`bulletin.set_aside`) and comes back if the date goes back to the saved one (a name or text typed meanwhile wins; a saved mark returns only on a box not touched meanwhile), so nothing typed is lost. Nothing happens while a save's outcome is unknown. Once saved as the new service, the set-aside copy is dropped.
    - **How:** `GET /services/previous-bulletin?before=<draft date>` (any member, church-scoped), fetched only while carrying is due, applied through `autoUpdate` with the check repeated in the recipe against the latest draft (F §4.6: never over typed input; only the visible tab carries, as the lectionary fill). A failed lookup shows "Last week's announcements could not be loaded." with **Try again** on the step (`role="alert"`), and it **stays** (typing in a box included) until a retry succeeds or every box is edited; Review shows nothing for it and prints without.
 8. **[owner-visible] Pasted reading text** (answer 5; S "Scripture text"). Under **Reading text**, one box per reading the files print (the first reading and the New Testament reading, as `effectivePicks` resolves them), labelled "First Reading: {reference}" and "New Testament Reading: {reference}"; with no readings chosen, "Choose the readings on step 1 to paste their text.". The text is kept with its reading's reference, so choosing another reading shows an empty box (and choosing the first again brings the text back); only the texts of the two readings printed are sent. A pasted text prints instead of the fetched one, as paragraphs (a blank line starts a new one; a run of blank lines is one paragraph break, and every line break pasted from another app, U+2028 and U+2029 included, is a line break), **is not fetched** (no `scripture` token is charged for it), and gets **no credit line** of its own (the pasted text is the church's own translation; the help line says to include the translation's notice if it asks for one). The credit line follows what was fetched (plan review fix M9; question 9): both readings fetched, "Scripture readings are from the {label}." as today; one pasted and the other fetched, "The {First Reading | New Testament Reading} is from the {label}." for the fetched one (for example "The New Testament Reading is from the World English Bible (WEB)."); every printed reading pasted, no line. A fetched reading whose text did not come back prints "[Reading text unavailable]" and is not named either (2b-1 build review M5): with no fetched text at all, no line. A pasted text is at most 10 000 characters (question 13).
@@ -123,7 +124,8 @@ The owner's answers win over S and F; the code wins over both where they disagre
 - **The deploy windows** (clarification 19). PR 2b-1: Vercel redeploys pages that are byte for byte today's (the regenerated types change no code that runs), and Railway's old and new servers both take what those pages send. PR 2b-2: Railway redeploys the same server; an old page left open meanwhile keeps working (it sends no `bulletin`). A rollback runs in the same order reversed (clarification 20).
 - **Carry happens in the browser, on the Bulletin step and Review.** A download tapped in the first moment on Review, before last week's answer arrives, prints without it (the card then shows the carried lines; download again). A draft never shown on either step never carries (it cannot print without Review). While a save's outcome is unknown nothing carries; the next answered save (or a retry of the same body) lets it.
 - **The latest service decides** (clarification 7): if last week's service was saved before PR 2b-2 (or with nothing filled in), nothing carries, even if an older service had announcements.
-- **"Save as new service" changes the draft when the step or Review shows it** (clarification 7): a member who changes a saved service's date only to look sees this week's names emptied; changing the date back brings them back (set aside in the draft, not lost).
+- **"Save as new service" changes the draft when the step or Review shows it** (clarification 7): a member who changes a saved service's date only to look sees this week's names emptied; changing the date back brings them back (set aside in the draft, not lost), even after a "Save as new service" whose answer was lost (2b-2 build review C1).
+- **An edit made before the date change is set aside too** (2b-2 build review M4, left as designed): someone who opens last week's service, types this week's organist or pastes a reading on the Bulletin step and only then changes the date on step 1 sees the organist go back to the usual name, the pasted text go, and every filled box (the ones just typed included) say "From last week". Nothing is lost: it all returns if the date goes back to the saved one. The habit that avoids it is the one the manual check teaches: change the date first, then fill in the week. If the owner finds it confusing in use, a later change could set aside only what was saved.
 - **Prayers and concerns are visible to every member who opens the service** (as every saved field is). Named in clarification 15 and question 11.
 - **SQLite and JSON:** the archive tests run on SQLite, where `bulletin` is TEXT holding JSON; the Postgres tests (T1) cover the real `json` type with the owner's queries, and CI runs the alembic cycle on Postgres 17.
 - **Long free text** flows: a long prayer list makes the announcements page run on to another page (the PDF flows; the booklet keeps reading order). The limits (4000 characters a box, a pasted reading 10 000 with its blank lines collapsed) keep a week to a few pages; the plan review measured the worst cases (three 4000-character boxes of short lines: 77 sides in 3 s; two 20 000-character pastes of blank lines, before the new limit and collapse: 164 sides, Word in 4 s): nothing errors and nothing escapes the frame.
@@ -137,7 +139,7 @@ The owner's answers win over S and F; the code wins over both where they disagre
 | `backend/migrations/versions/0006_services_bulletin.py` | `services.bulletin` | T1 (2b-1) |
 | `backend/service_bulletin.py` (+ `backend/tests/test_service_bulletin.py`) | `ServiceBulletin`, `Music`, `Announcements`, `read`, `MAX_LENGTH`, `ANNOUNCEMENT_KEYS`, `CARRY_KEYS` | T2 (2b-1) |
 | `frontend/src/lib/draft/bulletin.ts` (+ `.test.ts`) | the edits, carry forward, Save as new service, the payload, `bulletinFromService`, "Not filled in", "not checked yet", the step status | T7 (2b-2) |
-| `frontend/src/app/(signed-in)/(church)/builder/bulletin/page.tsx`, `frontend/src/components/builder/bulletin/bulletin-step.tsx` (+ `.test.tsx`), `frontend/src/components/builder/bulletin/use-bulletin-carry.ts` | the step's route, the step, the carry hook | T8 (2b-2) |
+| `frontend/src/app/(signed-in)/(church)/builder/bulletin/page.tsx`, `frontend/src/components/builder/bulletin/bulletin-step.tsx` (+ `.test.tsx`), `frontend/src/components/builder/bulletin/use-bulletin-carry.ts`, `frontend/src/components/builder/bulletin/use-kept-alert.ts` (2b-2 build review M2) | the step's route, the step, the carry hook, Try again's alert kept while it retries | T8 (2b-2) |
 
 **Modified**
 
@@ -4546,7 +4548,7 @@ server stores it." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1432 passed, 17 skipped`; frontend `690 passed` in 86 files.
+Expected counts after this task: backend `1432 passed, 17 skipped`; frontend `690 passed` in 86 files (as built; `704 passed` in 87 once the 2b-2 build review fixes are in, Build notes).
 
 ### Task 8: The Bulletin step (S "The Bulletin step"; planning answers 4-7; F §4.7, §4.8; clarifications 2-8, 16, 20)
 
@@ -5597,7 +5599,7 @@ how many boxes are still to check." -m "Co-Authored-By: Claude Opus 5.5 <noreply
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1432 passed, 17 skipped`; frontend `697 passed` in 87 files.
+Expected counts after this task: backend `1432 passed, 17 skipped`; frontend `697 passed` in 87 files (as built; `704 passed` in 87 once the 2b-2 build review fixes are in, Build notes).
 
 ### Task 9: The Printed bulletin card: the week's fields (planning answers 3, 5, 6; clarifications 7, 9, 16)
 
@@ -5891,7 +5893,7 @@ opening the Bulletin step has them." -m "Co-Authored-By: Claude Opus 5.5 <norepl
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1432 passed, 17 skipped`; frontend `698 passed` in 87 files.
+Expected counts after this task: backend `1432 passed, 17 skipped`; frontend `698 passed` in 87 files (as built; `704 passed` once the 2b-2 build review fixes are in, Build notes).
 
 ### Task 10: Docs: the manual check items for PR 2b-2 (planning answers 3-7; clarification 17)
 
@@ -5952,7 +5954,7 @@ PR 1's item 2 says where the music and announcements come from now." -m "Co-Auth
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1432 passed, 17 skipped`; frontend `698 passed` in 87 files.
+Expected counts after this task: backend `1432 passed, 17 skipped`; frontend `698 passed` in 87 files (as built; `704 passed` once the 2b-2 build review fixes are in, Build notes).
 
 - [ ] **Step 4 (controller): Review the batch (T7-T10) and backup push**
 
@@ -5987,7 +5989,7 @@ for i in 1 2 3; do (cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Te
 (cd frontend && NEXT_PUBLIC_SUPABASE_URL=https://ci-placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-placeholder NEXT_PUBLIC_API_URL=http://localhost:8000 npm run build 2>&1 | grep -E "Compiled successfully|Error|/builder/bulletin")
 ```
 
-**Expected:** `1432 passed, 17 skipped in <t>s`; three times ` Test Files  87 passed (87)` and `      Tests  698 passed (698)` with no `×` or `FAIL` line (one names the failing test: Step 6); `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s`, a route line `○ /builder/bulletin`, and no `Error` (a font `Failed to fetch` only: say so and rely on CI). With a local, throwaway Postgres also `TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres | tail -1` → `17 passed, 1432 deselected`.
+**Expected:** `1432 passed, 17 skipped in <t>s`; three times ` Test Files  87 passed (87)` and `      Tests  704 passed (704)` with no `×` or `FAIL` line (one names the failing test: Step 6); `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s`, a route line `○ /builder/bulletin`, and no `Error` (a font `Failed to fetch` only: say so and rely on CI). With a local, throwaway Postgres also `TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres | tail -1` → `17 passed, 1432 deselected`.
 
 - [ ] **Step 3 (agent): The gates, the paths, the commits**
 
@@ -6010,6 +6012,7 @@ M	frontend/src/components/builder/builder-shell.test.tsx
 A	frontend/src/components/builder/bulletin/bulletin-step.test.tsx
 A	frontend/src/components/builder/bulletin/bulletin-step.tsx
 A	frontend/src/components/builder/bulletin/use-bulletin-carry.ts
+A	frontend/src/components/builder/bulletin/use-kept-alert.ts
 M	frontend/src/components/builder/liturgy/liturgy-step.test.tsx
 M	frontend/src/components/builder/review/printed-card.tsx
 M	frontend/src/components/builder/review/review-send-step.test.tsx
@@ -6034,7 +6037,7 @@ M	frontend/src/lib/queries/keys.ts
 M	frontend/src/lib/queries/services.ts
 M	frontend/src/test/fixtures/index.ts
 ```
-`0` (no server, API, workflow or package change: PR 2b-2 is the frontend and the docs); the subjects oldest first: `Runbook: printed bulletin PR 2b-1 record (backup, counts, SQL preview, merge, migration 0006)`, any later plan commit, then T7-T10's four subjects as written above, then any `Fix: …` lines; only `trailer check done`.
+`0` (no server, API, workflow or package change: PR 2b-2 is the frontend and the docs); the subjects oldest first: `Runbook: printed bulletin PR 2b-1 record (backup, counts, SQL preview, merge, migration 0006)`, any later plan commit, then T7-T10's four subjects as written above, then the 2b-2 build review fixes' commits (`Printed bulletin PR 2b-2 review fix…`, a plan commit), then any `Fix: …` lines; only `trailer check done`.
 
 - [ ] **Step 4 (agent → OWNER): Ask to open the draft PR 2b-2**
 
@@ -6044,7 +6047,7 @@ gh pr list -R bbrown62450/church --head claude/slice-2-plan-4q33le --state open 
 
 **Expected:** `[]`. Send the owner exactly this, and wait for a clear yes:
 
-> The Bulletin step (printed bulletin PR 2b-2) is verified on this machine: frontend 698 tests in 87 files (675 in 85 before), three runs in a row; backend unchanged at 1432 passed, 17 skipped; typecheck, lint and the production build are clean. It needs no database change (PR 2b-1 already made it, and it is live). It adds a fifth step, "4 Bulletin", with the prelude and postlude, who leads this week, the announcements and a box to paste a reading's text; a new service starts from last week's music and announcements, each marked "From last week. Check before printing." (the marks are saved with the service); "Save as new service" marks them the same way and starts this week's names empty; the printed bulletin prints them all and leaves out anything blank (and the announcements page when there are none). May I open the pull request as a **draft** titled "Printed bulletin PR 2b-2: the Bulletin step", so the checks run? Merging stays with you.
+> The Bulletin step (printed bulletin PR 2b-2) is verified on this machine: frontend 704 tests in 87 files (675 in 85 before), three runs in a row; backend unchanged at 1432 passed, 17 skipped; typecheck, lint and the production build are clean. It needs no database change (PR 2b-1 already made it, and it is live). It adds a fifth step, "4 Bulletin", with the prelude and postlude, who leads this week, the announcements and a box to paste a reading's text; a new service starts from last week's music and announcements, each marked "From last week. Check before printing." (the marks are saved with the service); "Save as new service" marks them the same way and starts this week's names empty; the printed bulletin prints them all and leaves out anything blank (and the announcements page when there are none). May I open the pull request as a **draft** titled "Printed bulletin PR 2b-2: the Bulletin step", so the checks run? Merging stays with you.
 
 - [ ] **Step 5 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
 
@@ -6062,7 +6065,7 @@ Printed bulletin PR 2b-2: the Bulletin step (PR 2 planning answers of 2026-10-02
 
 Later: PR 3 (the cover picture; backend first, as 2b), 6a (Settings).
 
-Tests: frontend 675 → 698 in 85 → 87 files; backend 1432 passed, 17 skipped (unchanged)
+Tests: frontend 675 → 704 in 85 → 87 files; backend 1432 passed, 17 skipped (unchanged)
 
 After merge (Task 12): a guided phone check, then a "Printed bulletin PR 2b-2 record" in docs/ops-runbook.md.
 
@@ -6076,7 +6079,7 @@ gh pr create -R bbrown62450/church --draft --base main --head claude/slice-2-pla
 gh pr checks <N2> -R bbrown62450/church --watch --interval 30
 ```
 
-Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass`; CI's numbers: backend `1432 passed, 17 skipped`, backend-postgres `17 passed, 1432 deselected`, frontend `698 passed` in 87 files. Then send: "PR #<N2> is green: 698 frontend tests in 87 files; the backend and its Postgres job unchanged and passing; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N2> -R bbrown62450/church`.
+Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass`; CI's numbers: backend `1432 passed, 17 skipped`, backend-postgres `17 passed, 1432 deselected`, frontend `704 passed` in 87 files. Then send: "PR #<N2> is green: 704 frontend tests in 87 files; the backend and its Postgres job unchanged and passing; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N2> -R bbrown62450/church`.
 
 - [ ] **Step 6: Fix any failure in its owning task**
 
@@ -6092,7 +6095,7 @@ Run the last line with `run_in_background: true`. **Expected:** the PR URL; ever
 
 For each fix: change only the owning task's files; rerun Steps 2-3; commit `Fix: <what> (Task <n>, printed bulletin PR 2b-2 final verification)` with the trailer; after the PR exists, ask the owner before pushing it.
 
-Expected counts after this task: backend `1432 passed, 17 skipped`; frontend `698 passed` in 87 files.
+Expected counts after this task: backend `1432 passed, 17 skipped`; frontend `704 passed` in 87 files.
 
 ### Task 12: PR 2b-2: the merge, the phone check, the record (OWNER + agent)
 
@@ -6217,7 +6220,7 @@ gh pr checks claude/slice-2-plan-4q33le -R bbrown62450/church --watch
 
 On the owner's yes for each outward command (README "Reverting PR 2b-2 or PR 2b-1"; clarification 20). **PR 2b-2** (the step): a branch `claude/revert-printed-2b-2` from `origin/main`; `git revert -m 1 --no-commit <2b-2 merge sha>`; then put back the draft's reader from the merge commit, so no member's draft is lost: `git checkout <2b-2 merge sha> -- frontend/src/lib/draft/schema.ts frontend/src/lib/draft/schema.test.ts frontend/src/lib/draft/migrate.ts frontend/src/lib/draft/migrate.test.ts frontend/src/lib/draft/store.test.ts 'frontend/src/app/(signed-in)/(church)/builder/page.tsx'` and `sed -i 's/^      version: 2,$/      version: 3,/' frontend/src/lib/draft/mapping.test.ts` (its one pinned version); a commit "Revert printed bulletin PR 2b-2 (PR #<N2>), keeping the draft v3" with the trailer; the frontend suite (`676 passed` in 85: the baseline and the v2 → v3 migration test), typecheck and lint; a PR, CI, and the merge on the owner's yes; record it in the record. The reverted pages read every v3 draft as it is (its bulletin kept, unused, for when the step returns), `/builder` opens Review for a draft left on the Bulletin step, and they send no `bulletin`, which the 2b-1 server takes as before (a PUT keeps the saved one; the printed bulletin prints PR 1's placeholders). Checked while planning: this revert, run on the planning worktree, typechecks, lints and passes `676` tests, and a v3 draft on the Bulletin step opens Review with its fields intact. **PR 2b-1**, only after the 2b-2 revert is live: as before, `git revert -m 1 --no-commit <2b-1 merge sha>`, then `git checkout <2b-1 merge sha> -- backend/migrations/versions/0006_services_bulletin.py backend/db/models.py backend/migrations/README.md backend/tests/test_migrations.py backend/tests/test_schema_check.py backend/tests/test_api_app.py backend/tests/test_services_postgres.py`; both suites (`1399 passed, 17 skipped`: the baseline plus T1's four and its Postgres one; the frontend as it then is). Never `alembic downgrade` production for this: the database stays at `0006_services_bulletin`, which the older code ignores, and the weekly fields saved meanwhile stay in the column, unread, until 2b returns.
 
-Expected counts after this task: backend `1432 passed, 17 skipped` on `main`; frontend `698 passed` in 87 files. The records PR adds no test.
+Expected counts after this task: backend `1432 passed, 17 skipped` on `main`; frontend `704 passed` in 87 files. The records PR adds no test.
 
 ---
 ## Build notes
@@ -6262,6 +6265,16 @@ Expected counts after this task: backend `1432 passed, 17 skipped` on `main`; fr
 
 
 **Owner decision (Beau, 2026-10-03): pasted readings keep their line breaks (B).** A pasted reading's single line breaks now print as line breaks (a psalm verse by verse), each line's spaces collapsed; a blank line still starts a paragraph; fetched text still joins its lines. `printed_bulletin.reading_paragraphs(text, keep_lines=...)` with `keep_lines=reading.pasted`; `test_a_pasted_reading_keeps_its_line_breaks` (+1, failed before the change). Backend 1432 passed, 17 skipped. Clarification 8 and question 9 read with this.
+
+**Build review fixes (2026-10-03, PR 2b-2).** A code review of the built PR 2b-2 (`9016d1e..916fffc`, against this plan) found one critical, one important and five minor findings. Six were fixed on the branch, each with a test that failed before the fix; the code on the branch, not T7-T10's blocks, is now the reference for these lines:
+- **C1: a failed "Save as new service" could blank the saved service.** `followSaveMode` returned early while a save key was pending, so after a POST whose answer was lost, changing the date back to the saved one did not put back the set-aside people, part leaders and pasted texts, and "Save changes" then PUT them blank over the original service; `markSaved` dropped the set-aside copy too. Now only setting aside waits for the key (it would change the body of the POST that may be retried); putting back runs on the saved date whatever the key, since the next save there is a PUT, which uses no key. `markSaved` keeps `set_aside` after a save over the same service and clears it only when the save created a different one (a POST, or a PUT that fell back to one). Tests: `bulletin.test.ts` "puts back the set-aside fields on the saved date while the POST's key is pending, so Save changes keeps them" (the reviewer's scenario: the PUT body equals the opened service's, the status "Saved") and "markSaved keeps the set-aside fields after a save over the same service and drops them after a new one".
+- **I1: carry forward could apply a stale cached answer.** A save or delete only invalidated `previous-bulletin`, and React Query returns the cached data on the first render, so a fix just saved to last week's service (here, or within the cache time on another device) was not carried: the old text was applied and the fresh answer ignored. `usePreviousBulletin` now has `staleTime` 0 (each mount and each date fetches again), and `useBulletinCarry` applies only an answer fetched after it mounted and not being fetched again (`isFetchedAfterMount && !isFetching`). Chosen over removing the cache entries on save and delete, which would not cover a save on another device. Test: `bulletin-step.test.tsx` "never carries a cached answer from before it opened: a fix saved to last week's service carries" (a cached old answer, invalidated and fresh: the new one carries, one request).
+- **M1: a POST leaves a blank bulletin out.** As the save-key fingerprint does, so a POST from a v2 page whose answer was lost, retried after a reload onto 2b-2 within the idempotency window, sends the same body and replays rather than meeting `idempotency_mismatch` and saving a second copy. The server stores NULL, which reads as blank. A PUT always sends the bulletin (clearing every field clears the saved ones), and the 409 own-save comparison reads the PUT body, unchanged. Tests: `review-send-step.test.tsx` "leaves a blank bulletin out of a POST and always sends it in a PUT" and "sends a filled-in bulletin in a POST".
+- **M2: focus is kept.** `useKeptAlert` (`use-kept-alert.ts`) keeps a failed load's alert on screen while its Try again runs (a refetch with no data goes back to pending, which unmounted the alert with the focused button); a retry that fails again keeps the alert and the focus, and one that succeeds moves focus to the step's heading (last week's, the `h2` now has `tabIndex={-1}`) or the first name (the bulletin settings). Keep as is moves focus to its box's field and Undo the change to its name. Tests: three `bulletin-step.test.tsx` tests edited (both Try agains, Keep as is, Undo the change).
+- **M3: label in name.** Keep as is is named "Keep as is: {box}" (for example "Keep as is: this week's activities"), its visible words first (WCAG 2.5.3); the visible copy is unchanged. "Undo the change to {name}" already began with its visible words and is unchanged. The carry test finds the button by the new name.
+- **M5: an undated saved service does not enter copy mode on open.** `followSaveMode` sets aside only when the saved date is real and the date changed from it; an undated service from before dates were kept is given next Sunday's date on open, which is not a change. Test: `bulletin.test.ts` "an undated saved service does not enter copy mode on open".
+- **Left as designed:** M4 (an edit made before the date change is set aside too); see Risks.
+- Counts: frontend `698` → `704 passed` in 87 files (+6), three runs in a row; typecheck 0, lint 0; the production build (a real `node_modules`) with `○ /builder/bulletin`; backend unchanged at `1432 passed, 17 skipped`. T11 Step 3's path list adds `use-kept-alert.ts`.
 
 ## Spec coverage
 
