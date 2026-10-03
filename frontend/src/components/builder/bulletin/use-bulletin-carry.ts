@@ -25,7 +25,7 @@ import { applyCarry, followSaveMode, shouldCarry } from "@/lib/draft/bulletin";
 import { useDraft } from "@/lib/draft/context";
 import { usePreviousBulletin } from "@/lib/queries/services";
 
-export function useBulletinCarry(): { failed: boolean; retry: () => void } {
+export function useBulletinCarry(): { failed: boolean; fetching: boolean; retry: () => void } {
   const { draft, autoUpdate } = useDraft();
   const date = draft.readings.date_iso;
   const due = shouldCarry(draft);
@@ -46,5 +46,5 @@ export function useBulletinCarry(): { failed: boolean; retry: () => void } {
     if (copyDue && visible) autoUpdate(followSaveMode);
   }, [copyDue, visible, autoUpdate]);
 
-  return { failed: due && query.isError, retry: () => void query.refetch() };
+  return { failed: due && query.isError, fetching: due && query.isFetching, retry: () => void query.refetch() };
 }

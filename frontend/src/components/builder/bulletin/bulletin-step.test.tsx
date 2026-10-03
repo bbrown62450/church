@@ -121,7 +121,11 @@ describe("the Bulletin step (printed bulletin PR 2b)", () => {
 
     await user.clear(coffee);
     await user.type(coffee, "The Sample family");
-    await user.click(within(step).getByRole("button", { name: "Keep ushers and counters as is" }));
+    const keep = within(step).getByRole("button", { name: "Keep as is: ushers and counters" }); // its visible words first (M3)
+    expect(keep).toHaveTextContent("Keep as is");
+    await user.click(keep);
+    // The button goes; focus stays on the box it kept (2b-2 build review M2).
+    expect(within(step).getByRole("textbox", { name: "Ushers and counters" })).toHaveFocus();
     expect(within(step).getAllByText(FROM_LAST_WEEK)).toHaveLength(1); // the prelude's, still to check
     await waitFor(() => expect(stored().bulletin.carried).toEqual(["prelude"]));
     expect(stored().bulletin.announcements).toMatchObject({ ushers: "Sam Sample", coffee_hour: "The Sample family" });
@@ -139,7 +143,7 @@ describe("the Bulletin step (printed bulletin PR 2b)", () => {
     first.unmount();
 
     let fail = true;
-    const { user } = renderStep(testDraft(), {
+    const { user, api } = renderStep(testDraft(), {
       "GET /services/previous-bulletin": () => (fail ? fakeError(503, "unavailable", "Try again later.") : LAST_WEEK),
     });
     const alert = await screen.findByRole("alert");
@@ -147,11 +151,19 @@ describe("the Bulletin step (printed bulletin PR 2b)", () => {
     // Typing in one box keeps the message and Try again; the other boxes still carry (plan review fix M1).
     await user.type(screen.getByRole("textbox", { name: "Other announcements" }), "Typed first.");
     expect(screen.getByRole("alert")).toBe(alert);
+    // A retry that fails again keeps the alert and focus on Try again (2b-2 build review M2).
+    const again = within(alert).getByRole("button", { name: "Try again" });
+    const requests = carryRequests(api).length;
+    await user.click(again);
+    await waitFor(() => expect(carryRequests(api).length).toBeGreaterThan(requests));
+    await waitFor(() => expect(screen.getByRole("alert")).toBe(alert));
+    expect(again).toHaveFocus();
     fail = false;
-    await user.click(within(alert).getByRole("button", { name: "Try again" }));
+    await user.click(again);
     await waitFor(() => expect(screen.getByRole("textbox", { name: "Coffee hour" })).toHaveValue("The Example family"));
     expect(screen.getByRole("textbox", { name: "Other announcements" })).toHaveValue("Typed first.");
     expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByRole("heading", { name: "Bulletin" })).toHaveFocus(); // not the page
   });
 
   it("never carries a cached answer from before it opened: a fix saved to last week's service carries (2b-2 build review I1)", async () => {
@@ -187,6 +199,7 @@ describe("the Bulletin step (printed bulletin PR 2b)", () => {
     await waitFor(() => expect(stored().bulletin.people.organist).toBe("Lee Sample"));
     await user.click(within(group).getByRole("button", { name: "Undo the change to Organist" }));
     expect(organist).toHaveValue("Jordan Doe");
+    expect(organist).toHaveFocus(); // the button went with the change (2b-2 build review M2)
     await waitFor(() => expect(stored().bulletin.people.organist).toBeNull());
 
     // A guest this week: the parts still say who usually leads them (plan review fix M6).
@@ -216,9 +229,14 @@ describe("the Bulletin step (printed bulletin PR 2b)", () => {
     const alert = await within(group).findByRole("alert");
     expect(alert).toHaveTextContent("Bulletin settings could not be loaded.");
     expect(within(group).queryByRole("textbox")).toBeNull();
+    const again = within(alert).getByRole("button", { name: "Try again" });
+    await user.click(again); // fails again: the alert and focus stay (2b-2 build review M2)
+    await waitFor(() => expect(within(group).getByRole("alert")).toBe(alert));
+    expect(again).toHaveFocus();
     fail = false;
-    await user.click(within(alert).getByRole("button", { name: "Try again" }));
+    await user.click(again);
     expect(await within(group).findByRole("textbox", { name: "Organist" })).toHaveValue("Jordan Doe");
+    expect(within(group).getByRole("textbox", { name: "Worship leader" })).toHaveFocus();
   });
 
   it("marks a saved service's music and announcements to check on another date, and starts this week's people empty", async () => {

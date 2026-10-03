@@ -26,6 +26,7 @@ import type { AnnouncementKey, CarryKey, DraftV1, Person } from "@/lib/draft/sch
 import { useBulletinSettings } from "@/lib/queries/bulletin-settings";
 
 import { useBulletinCarry } from "./use-bulletin-carry";
+import { useKeptAlert } from "./use-kept-alert";
 
 export const BULLETIN_INTRO =
   "Optional. What this week's printed bulletin adds to the service. A box left blank is left off the bulletin.";
@@ -48,16 +49,25 @@ const ANNOUNCEMENTS: readonly { key: AnnouncementKey; label: string; long: boole
   { key: "other", label: "Other announcements", long: true },
 ];
 
-/** "From last week. Check before printing." under a box still holding last week's text, with "Keep as is". */
-function CarriedNote({ id, carryKey, name }: { id: string; carryKey: CarryKey; name: string }) {
+/**
+ * "From last week. Check before printing." under a box still holding last
+ * week's text, with "Keep as is" (named "Keep as is: {box}", its visible
+ * words first, 2b-2 build review M3). Keep as is removes itself, so focus
+ * moves to the box's field (`fieldId`, build review M2).
+ */
+function CarriedNote({ id, carryKey, name, fieldId }: { id: string; carryKey: CarryKey; name: string; fieldId: string }) {
   const { draft, update } = useDraft();
   if (!draft.bulletin.carried.includes(carryKey)) return null;
+  function keep() {
+    update((d) => keepCarried(d, carryKey));
+    document.getElementById(fieldId)?.focus();
+  }
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
       <p id={id} className="text-sm text-muted-foreground">
         {FROM_LAST_WEEK}
       </p>
-      <Button type="button" variant="outline" size="touch" aria-label={`Keep ${name} as is`} onClick={() => update((d) => keepCarried(d, carryKey))}>
+      <Button type="button" variant="outline" size="touch" aria-label={`Keep as is: ${name}`} onClick={keep}>
         Keep as is
       </Button>
     </div>
@@ -126,7 +136,7 @@ function Music({ piece, name }: { piece: Piece; name: string }) {
         describedBy={describedBy}
         onChange={(v) => update((d) => setMusic(d, piece, "composer", v))}
       />
-      <CarriedNote id={note} carryKey={piece} name={name.toLowerCase()} />
+      <CarriedNote id={note} carryKey={piece} name={name.toLowerCase()} fieldId={`bulletin-${piece}-title`} />
     </div>
   );
 }
@@ -141,7 +151,14 @@ function WhoLeads() {
   const settingsQuery = useBulletinSettings();
   const settings = settingsQuery.data;
   const [partsOpen, setPartsOpen] = useState(() => Object.keys(draft.bulletin.leaders).length > 0);
-  if (settings === undefined && settingsQuery.isPending) {
+  // Kept while Try again runs; then focus goes to the first name (2b-2 build review M2).
+  const failure = useKeptAlert(
+    settings === undefined && settingsQuery.isError,
+    settingsQuery.isFetching,
+    settingsQuery.refetch,
+    `bulletin-person-${ROLES[0].key}`,
+  );
+  if (settings === undefined && !failure.shown) {
     return (
       <Group id="bulletin-who" title="Who leads" help={WHO_LEADS_HELP}>
         <div role="status" aria-label="Loading who leads" className="grid gap-3">
@@ -158,7 +175,7 @@ function WhoLeads() {
       <Group id="bulletin-who" title="Who leads" help={WHO_LEADS_HELP}>
         <div role="alert" className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <p className="text-sm">{SETTINGS_FAILED}</p>
-          <Button type="button" variant="outline" size="touch" onClick={() => void settingsQuery.refetch()}>
+          <Button type="button" variant="outline" size="touch" onClick={failure.retry}>
             Try again
           </Button>
         </div>
@@ -189,7 +206,11 @@ function WhoLeads() {
                   variant="outline"
                   size="touch"
                   aria-label={`Undo the change to ${label}`}
-                  onClick={() => update((d) => setPerson(d, key, null))}
+                  onClick={() => {
+                    update((d) => setPerson(d, key, null));
+                    // The button goes with the change: focus stays on the name (2b-2 build review M2).
+                    document.getElementById(`bulletin-person-${key}`)?.focus();
+                  }}
                 >
                   Undo the change
                 </Button>
@@ -255,7 +276,7 @@ function Announcements() {
               describedBy={draft.bulletin.carried.includes(key) ? note : undefined}
               onChange={(v) => update((d) => setAnnouncement(d, key, v))}
             />
-            <CarriedNote id={note} carryKey={key} name={label.toLowerCase()} />
+            <CarriedNote id={note} carryKey={key} name={label.toLowerCase()} fieldId={`bulletin-${key}`} />
           </div>
         );
       })}
@@ -302,18 +323,20 @@ function ReadingTexts() {
  */
 export function BulletinStep() {
   const carry = useBulletinCarry();
+  // Kept while Try again runs; then focus goes to the step's heading (2b-2 build review M2).
+  const failure = useKeptAlert(carry.failed, carry.fetching, carry.retry, "bulletin-step-title");
   return (
     <section aria-labelledby="bulletin-step-title" className="grid gap-6">
       <div className="grid gap-1">
-        <h2 id="bulletin-step-title" className="text-lg font-semibold">
+        <h2 id="bulletin-step-title" tabIndex={-1} className="text-lg font-semibold">
           Bulletin
         </h2>
         <p className="text-sm text-muted-foreground">{BULLETIN_INTRO}</p>
       </div>
-      {carry.failed ? (
+      {failure.shown ? (
         <div role="alert" className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <p className="text-sm">{CARRY_FAILED}</p>
-          <Button type="button" variant="outline" size="touch" onClick={carry.retry}>
+          <Button type="button" variant="outline" size="touch" onClick={failure.retry}>
             Try again
           </Button>
         </div>
