@@ -2,32 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status:** work in progress (planning 2026-10-03). Sections below are filled in as the planning proceeds.
+**Status:** work in progress (planning 2026-10-03). Built so far in the scratch worktree: T1 (migration `0006_services_bulletin`, the owner's steps in the migrations README) and T2 (`service_bulletin`, the weekly fields printed). Still to write here: T3-T9, Build notes, Questions.
 
-## Global Constraints
+## Design decisions taken so far (to be expanded into clarifications)
 
-(pending)
-
-## Owner decisions
-
-(pending)
-
-## Spec clarifications
-
-(pending)
-
-## File Structure
-
-(pending)
-
-## Tasks
-
-(pending)
-
-## Build notes
-
-(pending)
-
-## Questions for the owner
-
-(pending)
+- **Storage.** `services.bulletin JSON NULL` (migration `0006_services_bulletin`, expand-only, batch mode as 0004/0005; the model column is `JSON(none_as_null=True)` so a Python `None` is SQL NULL, never the JSON value `null`, which `IS NOT NULL` would count). README "Before 0006_services_bulletin": backup, read-only counts (`version`, `services`, `churches`), the 6-line `--sql` preview (pinned by a test), the after-deploy query (`version`, `new_column`, `with_bulletin`), the revert that keeps 0006. The 0005 Postgres test's expected version moves to the head.
+- **Shape** (`service_bulletin.ServiceBulletin`): `prelude`/`postlude` `{title (200), composer (100)}`; `people {worship_leader, liturgist, organist}` each `null` (the standing name) or a name for this week (`""` = no one); `leaders {element key: name}` (a part's leader this week); `announcements {ushers (200), deacon (100), coffee_hour (200), activities (4000), prayer_concerns (4000), collection (2000), other (4000)}`; `reading_text {ot, nt}` (20 000 each). One-line texts have line breaks and control characters made one space; free texts keep their lines.
+- **Printing.** A blank weekly field prints nothing: a piece with no title and no composer leaves the PRELUDE/POSTLUDE line out; a blank announcement leaves its line or its section out; with every announcement blank the announcements page is left out (PDF and Word). "Other announcements" prints last under "OTHER ANNOUNCEMENTS". This week's people and part leaders print over the settings (`printed_bulletin.WeekSettings`). A pasted reading prints instead of the fetched one, is not fetched, and leaves the credit line out.
+- **Carry forward.** Only a draft that is not a saved service, when the Bulletin step or Review & send shows it, for the draft's date, while no carried box has been edited; source: the church's most recent saved service dated before the draft's date (then the latest save); music and announcements only.
