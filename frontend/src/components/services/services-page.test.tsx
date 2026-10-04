@@ -16,7 +16,7 @@ import { useSaveService } from "@/lib/queries/services";
 import { formatSavedAt } from "@/lib/dates";
 import { serviceToDraft } from "@/lib/draft/mapping";
 import { editOccasion } from "@/lib/draft/readings";
-import { draftKey, type DraftV1 } from "@/lib/draft/schema";
+import { draftKey, freshDraft, type DraftV1 } from "@/lib/draft/schema";
 import { fakeError, installFakeApi, type FakeHandler, type RecordedRequest } from "@/test/fake-api";
 import {
   church,
@@ -297,6 +297,32 @@ describe("Services (slice 5a-3)", () => {
     await view.user.click(open);
     await waitFor(() => expect(testRouter.push).toHaveBeenCalledWith("/builder/review"));
     expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
+  it("a save that lands after New service never writes the draft it saved over the new one (PR 3b build review C1)", async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    window.localStorage.setItem(KEY, JSON.stringify(editOccasion(testDraft(), "Harvest")));
+    installFakeApi({
+      "GET /church": churchProfile(),
+      "GET /services": servicePage([serviceSummary()]),
+      "POST /services": async () => {
+        await held;
+        return { status: 201, body: savedService({ occasion: "Harvest", saved_at: "2026-10-02T15:00:00+00:00" }) };
+      },
+    });
+    const view = renderWithProviders(<SaveThenLeave page="builder" />, { me: me(), church: church(), path: "/builder/review" });
+    await view.user.click(screen.getByRole("button", { name: "Probe save" }));
+    view.rerender(<p>Elsewhere</p>); // the builder unmounts with the save in flight
+    // Another page in this tab starts a new service, and the member types in it.
+    vi.setSystemTime(new Date(DRAFT_NOW.getTime() + 30_000));
+    const newer = editOccasion(freshDraft({ church: churchProfile(), user: { id: USER_ID }, now: new Date() }), "New week typing");
+    window.localStorage.setItem(KEY, JSON.stringify(newer));
+
+    vi.setSystemTime(new Date(DRAFT_NOW.getTime() + 60_000)); // the answer comes a minute later
+    release();
+    await waitFor(() => expect(view.queryClient.isMutating()).toBe(0));
+    expect(stored()).toEqual(newer);
   });
 
   it("names an untitled, undated service, and a delete that finds it gone says so", async () => {

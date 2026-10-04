@@ -459,4 +459,34 @@ describe("DraftStore changes (S store.ts)", () => {
     expect(store.getSnapshot().draft.readings.occasion).toBe("Written just before my flush");
     expect(notices).toEqual(["adopted", "adopted", "adopted"]);
   });
+
+  it("a store left behind takes a newer draft quietly before a late answer changes it, so it never writes its old copy back (PR 3b build review C1)", () => {
+    const { storage, data } = memoryStorage();
+    const t = clock();
+    // Builder A, draft X; an upload starts for X, then the member leaves the builder.
+    const { store: a, notices } = makeStore(storage, t.now);
+    a.start();
+    a.update((d) => editOccasion(d, "Old week"));
+    const target = { created: a.getSnapshot().draft.created_at, date: a.getSnapshot().draft.readings.date_iso };
+    t.advance(1000);
+    a.flush();
+    // Services: New service (written at once); builder C mounts and the member types.
+    const { store: b } = makeStore(storage, t.now);
+    b.start();
+    t.advance(1000);
+    b.replace(freshDraft({ church: GRACE, user: { id: USER_ID }, now: t.now() }));
+    const { store: c } = makeStore(storage, t.now);
+    c.start();
+    t.advance(5000);
+    c.update((d) => editOccasion(d, "New week typing"));
+    vi.advanceTimersByTime(WRITE_DELAY_MS);
+    // The upload answers on A: sync, then the picture only for the same draft and date, then the write.
+    t.advance(3000);
+    a.syncFromStorage({ quiet: true });
+    a.update((d) => (d.created_at === target.created && d.readings.date_iso === target.date ? { ...d, readings: { ...d.readings, occasion: "Picture added" } } : d));
+    a.flush();
+    expect(stored(data).readings.occasion).toBe("New week typing");
+    expect(a.getSnapshot().draft.readings.occasion).toBe("New week typing");
+    expect(notices).toEqual([]); // from this tab: no "Updated from another tab."
+  });
 });

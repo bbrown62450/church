@@ -157,11 +157,16 @@ function useObjectUrl(blob: Blob | undefined): string | null {
  * music, with "From last week. Check before printing." and **Keep as is**.
  */
 function CoverPicture() {
-  const { draft, update, flush } = useDraft();
+  const { draft, update, flush, sync } = useDraft();
   const picture = draft.bulletin.cover_image_id;
   const target = useRef<{ created: string; date: string } | null>(null);
   const upload = useUploadBulletinImage((stored) => {
     const chosenFor = target.current;
+    // The builder may be gone and another page may have written a newer draft
+    // meanwhile (New service, another service opened): take it first, so the
+    // check below sees the draft now stored and this store never writes the
+    // copy it had over it (PR 3b build review C1).
+    sync();
     update((d) =>
       chosenFor !== null && d.created_at === chosenFor.created && d.readings.date_iso === chosenFor.date
         ? setCover(d, stored.id)

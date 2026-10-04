@@ -142,13 +142,13 @@ export function resyncAfterSave(queryClient: QueryClient): (sync: () => void) =>
 }
 
 export type SaveVariables = { asNew?: boolean };
-type Saved = { service: ServiceOut; fp: string; fellBack: boolean; sentCover: string | null; fpWithoutCover: string };
+type Saved = { service: ServiceOut; fp: string; fellBack: boolean; sentCover: string | null; fpWithoutCover: string; created: string };
 
 export function useSaveService(church: DraftChurch) {
   const api = useApi();
   const queryClient = useQueryClient();
   const router = useRouter();
-  const { peek, update, autoUpdate, flush } = useDraft();
+  const { peek, update, autoUpdate, flush, sync } = useDraft();
   return useChurchMutation<Saved, ApiError, SaveVariables>({
     mutationKey: SAVE_SERVICE_KEY,
     mutationFn: async ({ asNew = false }) => {
@@ -160,7 +160,8 @@ export function useSaveService(church: DraftChurch) {
       // (PR 3a build review M2): the draft then drops it and says so.
       const sentCover = draft.bulletin.cover_image_id;
       const fpWithoutCover = fingerprint(draftToServicePayload({ ...draft, bulletin: { ...draft.bulletin, cover_image_id: null } }));
-      const sent = { fp, sentCover, fpWithoutCover };
+      // The draft saved, by its identity: the answer marks only that draft Saved (PR 3b build review C1).
+      const sent = { fp, sentCover, fpWithoutCover, created: draft.created_at };
       // A POST leaves a blank bulletin out (the server stores none, which
       // reads as blank), as the save-key fingerprint does: the retry of a
       // POST sent before PR 2b-2, whose answer was lost, then carries the
@@ -225,9 +226,16 @@ export function useSaveService(church: DraftChurch) {
       }
       return { service: await post(false), ...sent, fellBack: false };
     },
-    onSuccess: ({ service, fp, fellBack, sentCover, fpWithoutCover }) => {
+    onSuccess: ({ service, fp, fellBack, sentCover, fpWithoutCover, created }) => {
       const coverGone = sentCover !== null && (service.bulletin?.cover_image_id ?? null) === null;
+      // The builder may have unmounted meanwhile, and another page in this tab
+      // may have written a newer draft (New service, another service opened):
+      // take it first, so this store marks the draft now stored, and never
+      // writes the copy it had when the builder was left over it (PR 3b build
+      // review C1). Another draft by then is left as it is.
+      sync();
       update((d) => {
+        if (d.created_at !== created) return d;
         if (!coverGone) return markSaved(d, service, fp);
         const saved = markSaved(d, service, fpWithoutCover);
         // Chosen again while the save was in flight: that picture stays (Unsaved changes).

@@ -14,8 +14,8 @@ import BuilderLayout from "@/app/(signed-in)/(church)/builder/layout";
 import BulletinStepPage from "@/app/(signed-in)/(church)/builder/bulletin/page";
 import { formatServiceDate } from "@/lib/dates";
 import { setCover } from "@/lib/draft/bulletin";
-import { editScriptureLines } from "@/lib/draft/readings";
-import { draftKey, type DraftV1 } from "@/lib/draft/schema";
+import { editOccasion, editScriptureLines } from "@/lib/draft/readings";
+import { draftKey, freshDraft, type DraftV1 } from "@/lib/draft/schema";
 import { makeQueryClient } from "@/lib/queries/client";
 import { keys } from "@/lib/queries/keys";
 import { fakeError, installFakeApi, type FakeHandler } from "@/test/fake-api";
@@ -381,6 +381,25 @@ describe("the cover picture (printed bulletin PR 3b; PR 3 planning answers 5-8)"
     expect(screen.queryByRole("group", { name: "Cover picture" })).toBeNull();
     await act(async () => answer({ status: 201, body: bulletinImage() }));
     await waitFor(() => expect(stored().bulletin).toMatchObject({ cover_image_id: PICTURE, edited: ["cover"] }));
+  });
+
+  it("never writes the draft it had over a newer one when the upload lands after the builder was left (PR 3b build review C1)", async () => {
+    let answer: (value: unknown) => void = () => {};
+    const view = renderStep(editOccasion(testDraft(), "Old week"), {
+      "POST /bulletin-images": () => new Promise((resolve) => (answer = resolve)),
+    });
+    await screen.findByRole("group", { name: "Cover picture" });
+    fireEvent.change(document.getElementById("bulletin-cover-file") as HTMLInputElement, { target: { files: [jpeg()] } });
+    expect(await screen.findByRole("button", { name: "Uploading…" })).toBeInTheDocument();
+    view.rerender(<p>Services</p>); // the builder unmounts (its provider flushes)
+    // Services: New service, then typing in it (another provider in this tab wrote it).
+    vi.setSystemTime(new Date(DRAFT_NOW.getTime() + 5_000));
+    const newer = editOccasion(freshDraft({ church: churchProfile(), user: { id: USER_ID }, now: new Date() }), "New week typing");
+    window.localStorage.setItem(KEY, JSON.stringify(newer));
+    vi.setSystemTime(new Date(DRAFT_NOW.getTime() + 10_000));
+    await act(async () => answer({ status: 201, body: bulletinImage() }));
+    await act(async () => {});
+    expect(stored()).toEqual(newer);
   });
 
   it("never shows a preview whose URL was released, under StrictMode (plan review I2)", async () => {
