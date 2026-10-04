@@ -346,3 +346,24 @@ street address or a church id.
 - [ ] **25.** Open a saved service from **Services**: its bulletin fields are as saved, only the boxes it was saved with unchecked say "From last week", nothing from another week comes in, and Review says "Saved".
 - [ ] **26.** Open a saved service, change its date on step 1 to another Sunday and open **4 Bulletin** ("Save as new service"): its music and announcements each say "From last week. Check before printing.", **Who leads** shows the usual names, no part has a leader of its own and the reading boxes are empty. Change the date back: the names, part leaders and texts come back.
 - [ ] **27.** A draft started before PR 2b-2 opens with everything it had, and its Bulletin step fills with last week's music and announcements once last week's service has them (a service saved before PR 2b-2 has none).
+
+### Printed bulletin PR 3: the cover picture
+
+PR 3 ships as two PRs, backend first, as PR 2b did: **PR 3a** (migration
+`0007_bulletin_images`; the server takes, shows and prints a cover picture;
+the builder itself does not change) and, once 3a is live and checked,
+**PR 3b** (the picture on the Bulletin step). Before the PR 3a merge the
+owner runs the steps of `backend/migrations/README.md` → "Before
+0007_bulletin_images" (items 28 and 29); after each merge, the owner's
+guided check (one step at a time on the phone) covers the items marked
+"(owner, after PR 3a)" or "(owner, after PR 3b)", and the print test item
+36. The results go into `docs/ops-runbook.md` → "Printed bulletin PR 3a
+record" and "Printed bulletin PR 3b record". Use a picture with no one in
+it for the checks (a building, flowers); record what the page and the files
+show, never a picture, a name, an email address, a phone number, a street
+address or a church id.
+
+- [ ] (owner, before the PR 3a merge) **28.** A green `db-backup` run; the read-only counts (version `0006_services_bulletin`, saved services, those with bulletin fields, the database's size); the SQL preview read: one new table `bulletin_images`, its index, row-level security and no grant to Supabase's `anon` and `authenticated` roles, between `BEGIN;` and `COMMIT;`, under the 5 s lock timeout.
+- [ ] (owner, after PR 3a) **29.** The after-deploy query shows `0007_bulletin_images`, `true`, `0` and `0` (`0006_services_bulletin` with two empty values: the deploy has not applied 0007 yet, run it again in a minute), and the counts are unchanged (or grew by the services saved since), the database about the same size.
+- [ ] (owner, after PR 3a) **30.** The builder works as before: open a saved service from **Services**, tap **Save changes**, and download the printed bulletin from **5 Review & send**: the save works, and the PDF's cover still shows the "[Cover picture]" box (now centered under the church's name, as the Word version's already was) with the reading and the date in it.
+- [ ] (agent, after PR 3a) **31.** `/openapi.json` in production lists `/bulletin-images` and `/bulletin-images/{image_id}`; signed out, `POST /bulletin-images` answers 401 for a 1-byte body and for a 9.5 MB one (Railway's proxy passes a phone-sized picture with its size), and 422 naming `image` for an 11 MB one (refused before it is read).

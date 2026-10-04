@@ -252,11 +252,20 @@ prints "[Sermon title]". The communion liturgy prints after the second hymn when
   marked to check, and this week's people, the part leaders and the pasted texts start empty.
 - **Cover picture** (PR 3): stored in Postgres, in a new table `bulletin_images (id, church_id,
   content_type, bytes, width, height, created_by, created_at)` (migration `0007_bulletin_images`).
-  The upload is checked (JPEG, PNG or HEIC from a phone; at most 10 MB in), decoded with Pillow
-  (already installed with reportlab), turned upright, scaled to at most 1600 px on the long side
-  and stored as JPEG (about 150-400 KB). The service's `bulletin.cover_image_id` points at it;
-  "Keep last week's" carries the id forward. Images no service points at are removed when they are
-  more than 60 days old.
+  The upload is checked (JPEG, a phone's multi-picture JPEG included, or PNG; at most 10 MB in;
+  PR 3 planning answer 5: no HEIC, an iPhone's Safari sends a JPEG), decoded with Pillow (already
+  installed with reportlab), one at a time, turned upright, its colors converted to sRGB, scaled to
+  at most 1600 px on the long side and stored as JPEG with no camera data, at most 0.6 MB (a lower
+  quality, then a smaller size, until it fits; a phone photo is usually 0.2-0.5 MB). The picture is the request body of
+  `POST /bulletin-images` (no multipart form, so no new package). The service's
+  `bulletin.cover_image_id` points at it (a JSON key, no foreign key; an id the church does not
+  have is saved and printed as no picture); it carries forward with the music, marked to check
+  (planning answer 7). A bulletin that does not say (a page from before PR 3b) keeps the saved
+  picture on a save and prints PR 1's box. Images no saved service points at are removed when they
+  are more than 60 days old, on any church's next upload (planning answer 9). Since any Google
+  account can create a church, a church keeps at most 160 pictures (its oldest unused ones make
+  room) and all churches' pictures together at most 150 MB; past either an upload is refused with
+  a message (PR 3 plan review, `docs/superpowers/plans/2026-10-03-printed-bulletin-3.md`).
 
   | Option | For | Against |
   |---|---|---|
@@ -270,8 +279,9 @@ changeable for this week), the announcements form (ushers/counters, deacon of th
 and free-text boxes for this week's activities, prayers and concerns, and collection items), and
 per reading a "Paste the text" box. A link opens the Bulletin settings panel (admins), with the
 church details, the standing people, the stand note and starred elements, the Gloria Patri words
-and the service time. PR 3 adds the cover picture to the step: "Upload a picture", "Keep last
-week's picture", and a preview.
+and the service time. PR 3 adds the cover picture to the step: "Choose a picture", a preview
+with the band the reading and the date print on, **Remove**, and last week's picture carried forward with "From last week. Check before printing."
+and **Keep as is** (PR 3 planning answer 7).
 
 ### Review & send (PR 1)
 A **Printed bulletin** card after the Word documents card: what it prints, a note that PR 1 prints
@@ -299,6 +309,9 @@ tip after a download. The Word documents card does not change.
 - **PR 3:** the cover picture (table `bulletin_images`, migration `0007_bulletin_images`, upload,
   preview, keep last week's, printed in the PDF and the Word file under the church name with the
   reference and date over it). Then a guided phone check and a second short print test (the picture).
+  As PR 2b, two PRs, backend first (PR 3 planning answer 1): 3a (the migration, the upload and
+  preview routes, `cover_image_id`, the printing; a page from before 3b keeps working and prints
+  PR 1's box) is merged and live before 3b (the picture on the Bulletin step).
 
 ## Testing
 
