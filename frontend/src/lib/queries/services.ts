@@ -21,7 +21,9 @@
  *   automatic retry with a new key after `idempotency_mismatch`. Success
  *   records the save in the draft (`markSaved`), caches the service, and
  *   refreshes the list and the hymns (a save rebuilds that date's hymn use,
- *   so `recently_used` changes).
+ *   so `recently_used` changes). A cover picture sent that the saved service
+ *   answers as none (it was removed meanwhile) leaves the draft too, which
+ *   stays Saved, and the member is told (PR 3a build review M2).
  *   A replayed POST answer (the same key and body within 15 minutes) is the
  *   first answer; if that service was changed or deleted since, the next
  *   "Save changes" meets the 409 or the 404 above, which already handle it.
@@ -58,6 +60,8 @@ import { keys } from "./keys";
 export const SERVICES_PAGE_SIZE = 20;
 export const SAVED_MESSAGE = "Service saved";
 export const SAVED_AFTER_DELETE_MESSAGE = "The archived copy was deleted, so this was saved as a new service.";
+/** A save whose cover picture was gone answers with none (PR 3a build review M2). */
+export const COVER_GONE_MESSAGE = "That picture is no longer available, so this service was saved without one.";
 
 /** A 401 or a lost church: the app's own handling already says it. */
 function handledElsewhere(e: ApiError): boolean {
@@ -138,7 +142,7 @@ export function resyncAfterSave(queryClient: QueryClient): (sync: () => void) =>
 }
 
 export type SaveVariables = { asNew?: boolean };
-type Saved = { service: ServiceOut; fp: string; fellBack: boolean };
+type Saved = { service: ServiceOut; fp: string; fellBack: boolean; sentCover: string | null; fpWithoutCover: string };
 
 export function useSaveService(church: DraftChurch) {
   const api = useApi();
@@ -151,6 +155,12 @@ export function useSaveService(church: DraftChurch) {
       const draft = peek();
       const fp = fingerprint(draftToServicePayload(draft));
       const body = serviceBody(draft);
+      // A picture removed since it was chosen (made room for, or after 60
+      // days) is saved as none and answered 200 with a null cover_image_id
+      // (PR 3a build review M2): the draft then drops it and says so.
+      const sentCover = draft.bulletin.cover_image_id;
+      const fpWithoutCover = fingerprint(draftToServicePayload({ ...draft, bulletin: { ...draft.bulletin, cover_image_id: null } }));
+      const sent = { fp, sentCover, fpWithoutCover };
       // A POST leaves a blank bulletin out (the server stores none, which
       // reads as blank), as the save-key fingerprint does: the retry of a
       // POST sent before PR 2b-2, whose answer was lost, then carries the
@@ -200,27 +210,34 @@ export function useSaveService(church: DraftChurch) {
             json: body,
             ifMatch: editing.saved_at,
           });
-          return { service, fp, fellBack: false };
+          return { service, ...sent, fellBack: false };
         } catch (e) {
           // A 409 that answers this device's own earlier save (its answer was lost): already saved.
           if (isConflict(e)) {
             const theirs = await sameAsSent(editing.service_id);
-            if (theirs !== null) return { service: theirs, fp, fellBack: false };
+            if (theirs !== null) return { service: theirs, ...sent, fellBack: false };
             throw e;
           }
           // The saved copy was deleted (a 404 with no field): save this one as a new service.
           if (!(e instanceof ApiError) || e.status !== 404 || e.details?.field !== undefined) throw e;
-          return { service: await post(false), fp, fellBack: true };
+          return { service: await post(false), ...sent, fellBack: true };
         }
       }
-      return { service: await post(false), fp, fellBack: false };
+      return { service: await post(false), ...sent, fellBack: false };
     },
-    onSuccess: ({ service, fp, fellBack }) => {
-      update((d) => markSaved(d, service, fp));
+    onSuccess: ({ service, fp, fellBack, sentCover, fpWithoutCover }) => {
+      const coverGone = sentCover !== null && (service.bulletin?.cover_image_id ?? null) === null;
+      update((d) => {
+        if (!coverGone) return markSaved(d, service, fp);
+        const saved = markSaved(d, service, fpWithoutCover);
+        // Chosen again while the save was in flight: that picture stays (Unsaved changes).
+        return d.bulletin.cover_image_id === sentCover ? { ...saved, bulletin: { ...saved.bulletin, cover_image_id: null } } : saved;
+      });
       queryClient.setQueryData(keys.service(church.id, service.id), service);
       void queryClient.invalidateQueries({ queryKey: servicesKey(church.id) });
       void queryClient.invalidateQueries({ queryKey: hymnsKey(church.id) });
       toast.success(fellBack ? SAVED_AFTER_DELETE_MESSAGE : SAVED_MESSAGE);
+      if (coverGone) toast.warning(COVER_GONE_MESSAGE);
     },
     // Written now, not 400 ms later: the builder may have unmounted while the
     // save was in flight, and the Services page re-reads the stored draft as

@@ -17,7 +17,7 @@ import BuilderLayout from "@/app/(signed-in)/(church)/builder/layout";
 import ReviewStepPage from "@/app/(signed-in)/(church)/builder/review/page";
 import { Toaster } from "@/components/ui/sonner";
 import { formatSavedAt } from "@/lib/dates";
-import { emptyServiceBulletin, setAnnouncement } from "@/lib/draft/bulletin";
+import { emptyServiceBulletin, setAnnouncement, setCover } from "@/lib/draft/bulletin";
 import { useDraft } from "@/lib/draft/context";
 import { serviceToDraft } from "@/lib/draft/mapping";
 import { draftKey, type DraftV1 } from "@/lib/draft/schema";
@@ -54,7 +54,7 @@ import { CONFLICT_TITLE, RELOAD_REPLACES } from "./conflict-dialog";
 import { FIX_READINGS, NEEDS_DATE, SAME_AS_BULLETIN, SAVE_HINT } from "./documents-card";
 import { PRINTED_SUMMARY, SETTINGS_NOTE, WEEKLY_NOTE } from "./printed-card";
 import { CONFLICT_MESSAGE, LOADED_LATEST, SAVE_FIX_READINGS, SAVE_NEEDS_DATE } from "./save-card";
-import { SAVED_AFTER_DELETE_MESSAGE, SAVED_MESSAGE } from "@/lib/queries/services";
+import { COVER_GONE_MESSAGE, SAVED_AFTER_DELETE_MESSAGE, SAVED_MESSAGE } from "@/lib/queries/services";
 import { DEFAULT_BENEDICTION_FALLBACK } from "@/lib/liturgy/defaults";
 
 const KEY = draftKey(USER_ID, church().id);
@@ -744,6 +744,37 @@ describe("Review & send: saving (slice 5a-3)", () => {
     const [post] = serviceRequests(api, "POST");
     expect(post.body).toMatchObject({ bulletin: { announcements: { coffee_hour: "The Sample family" } } });
     expect((post.body as { bulletin: object }).bulletin).not.toHaveProperty("cover_image_id"); // no picture (PR 3b)
+  });
+
+  it("says when the cover picture sent was gone, so the service was saved without one, and drops it from the draft (PR 3a build review M2)", async () => {
+    const warning = vi.spyOn(toast, "warning");
+    const picture = "0b4c2b0e-1111-4222-8333-444455556666";
+    const kept = "0b4c2b0e-7777-4888-9999-aaaabbbbcccc";
+    let putPicture: string | null = null;
+    const { api, user } = renderReview(
+      setCover(editOccasion(testDraft(), "Harvest"), picture),
+      {
+        // The picture was removed meanwhile: the server saves none and answers 200.
+        "POST /services": () => ({ status: 201, body: savedService({ occasion: "Harvest", saved_at: FIRST_SAVE }) }),
+        [`PUT /services/${SERVICE_ID}`]: () =>
+          savedService({ occasion: "Harvest", saved_at: SECOND_SAVE, bulletin: serviceBulletin({ cover_image_id: putPicture }) }),
+      },
+      <Probe edit={(draft) => setCover(draft, kept)} />,
+    );
+    const card = await archiveCard();
+    await user.click(within(card).getByRole("button", { name: "Save to archive" }));
+    expect(await screen.findByText(COVER_GONE_MESSAGE)).toBeInTheDocument();
+    expect((serviceRequests(api, "POST")[0].body as { bulletin: object }).bulletin).toHaveProperty("cover_image_id", picture);
+    await waitFor(() => expect(stored().bulletin.cover_image_id).toBeNull());
+    expect(within(card).getByText(`Saved to the archive · ${formatSavedAt(FIRST_SAVE)}`)).toBeInTheDocument();
+
+    // A picture the saved service keeps says nothing more.
+    putPicture = kept;
+    await user.click(screen.getByRole("button", { name: "Probe edit" }));
+    await user.click(within(card).getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(within(card).getByText(`Saved to the archive · ${formatSavedAt(SECOND_SAVE)}`)).toBeInTheDocument());
+    expect(stored().bulletin.cover_image_id).toBe(kept);
+    expect(warning).toHaveBeenCalledTimes(1);
   });
 
   it("keeps the key for an identical retry after an unknown outcome, replaces it after an edit, and retries a mismatch once", async () => {
