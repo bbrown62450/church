@@ -6,17 +6,21 @@
  * /services/previous-bulletin`) is empty unless a test says otherwise.
  */
 import type { QueryClient } from "@tanstack/react-query";
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import BuilderLayout from "@/app/(signed-in)/(church)/builder/layout";
 import BulletinStepPage from "@/app/(signed-in)/(church)/builder/bulletin/page";
+import { formatServiceDate } from "@/lib/dates";
+import { setCover } from "@/lib/draft/bulletin";
 import { editScriptureLines } from "@/lib/draft/readings";
 import { draftKey, type DraftV1 } from "@/lib/draft/schema";
 import { makeQueryClient } from "@/lib/queries/client";
 import { keys } from "@/lib/queries/keys";
 import { fakeError, installFakeApi, type FakeHandler } from "@/test/fake-api";
 import {
+  bulletinImage,
   church,
   churchProfile,
   DRAFT_NOW,
@@ -30,7 +34,7 @@ import {
 } from "@/test/fixtures";
 import { renderWithProviders } from "@/test/render";
 
-import { FROM_LAST_WEEK } from "./bulletin-step";
+import { FROM_LAST_WEEK, PICTURE_ALT, PICTURE_SMALL } from "./bulletin-step";
 
 const KEY = draftKey(USER_ID, church().id);
 
@@ -90,6 +94,7 @@ describe("the Bulletin step (printed bulletin PR 2b)", () => {
     const step = await screen.findByRole("region", { name: "Bulletin" });
     expect(within(step).getByText(/^Optional\. What this week's printed bulletin adds/)).toBeInTheDocument();
     expect(within(step).getAllByRole("group").map((g) => g.querySelector("legend")?.textContent)).toEqual([
+      "Cover picture",
       "Music",
       "Who leads",
       "Announcements",
@@ -268,5 +273,148 @@ describe("the Bulletin step (printed bulletin PR 2b)", () => {
     expect(within(group).getByRole("textbox", { name: "First Reading: Isaiah 5:1-7" })).toHaveValue("");
     await user.type(nt, "Pasted text.");
     await waitFor(() => expect(stored().bulletin.pasted).toEqual({ "Philippians 3:4b-14": "Pasted text." }));
+  });
+});
+
+
+describe("the cover picture (printed bulletin PR 3b; PR 3 planning answers 5-8)", () => {
+  const PICTURE = bulletinImage().id;
+  const jpeg = () => new File([new Uint8Array([0xff, 0xd8, 0xff])], "church.jpg", { type: "image/jpeg" });
+  const pictureRoute = () => new Response(new Blob([new Uint8Array([0xff, 0xd8])], { type: "image/jpeg" }), { headers: { "Content-Type": "image/jpeg" } });
+
+  beforeEach(() => {
+    let n = 0;
+    Object.assign(URL, { createObjectURL: vi.fn(() => `blob:test/${(n += 1)}`), revokeObjectURL: vi.fn() }); // jsdom has neither
+  });
+
+  it("uploads a chosen picture, shows it trimmed as the front page prints it, and Remove takes it off", async () => {
+    const readings = editScriptureLines(testDraft(), "Isaiah 5:1-7\nPsalm 80:7-15\nPhilippians 3:4b-14\nMatthew 21:33-46");
+    const { user, api } = renderStep(readings, {
+      "POST /bulletin-images": () => ({ status: 201, body: bulletinImage() }),
+      [`GET /bulletin-images/${PICTURE}`]: pictureRoute,
+    });
+    const group = await screen.findByRole("group", { name: "Cover picture" });
+    expect(within(group).getByText(/^A JPEG or PNG picture for the front page/)).toBeInTheDocument();
+    const choose = within(group).getByRole("button", { name: "Choose a picture" });
+    expect(choose).toHaveClass("h-11"); // 44 px on a phone
+    expect(within(group).queryByRole("button", { name: "Remove the cover picture" })).toBeNull();
+    const file = jpeg();
+    await user.upload(document.getElementById("bulletin-cover-file") as HTMLInputElement, file);
+    const shown = await within(group).findByRole("img", { name: PICTURE_ALT });
+    expect(shown).toHaveAttribute("src", "blob:test/1");
+    expect(shown).toHaveClass("object-cover", "aspect-[372/300]");
+    // The band as it prints over the picture: the New Testament reading the files print (here the epistle) and the date.
+    expect(screen.getByTestId("cover-band")).toHaveTextContent(`Philippians 3:4b-14${formatServiceDate(readings.readings.date_iso)}`);
+    const [post] = api.requests.filter((r) => r.method === "POST");
+    expect(post).toMatchObject({ path: "/bulletin-images", body: file });
+    expect(post.headers["content-type"]).toBe("image/jpeg");
+    await waitFor(() => expect(stored().bulletin).toMatchObject({ cover_image_id: PICTURE, edited: ["cover"] }));
+    expect(within(group).getByRole("button", { name: "Choose another picture" })).toBeInTheDocument();
+
+    await user.click(within(group).getByRole("button", { name: "Remove the cover picture" }));
+    await waitFor(() => expect(stored().bulletin.cover_image_id).toBeNull());
+    expect(within(group).queryByRole("img")).toBeNull();
+    expect(within(group).getByRole("button", { name: "Choose a picture" })).toHaveFocus();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:test/1");
+  });
+
+  it("says a file the server would refuse before uploading it, and the server's own refusal after", async () => {
+    const { api } = renderStep(testDraft(), {
+      "POST /bulletin-images": () =>
+        fakeError(422, "invalid_request", "The picture has too many pixels. Choose a smaller one.", {
+          fields: { image: "The picture has too many pixels. Choose a smaller one." },
+        }),
+    });
+    const group = await screen.findByRole("group", { name: "Cover picture" });
+    const input = document.getElementById("bulletin-cover-file") as HTMLInputElement;
+    expect(input).toHaveAttribute("accept", "image/jpeg,image/png");
+    fireEvent.change(input, { target: { files: [new File(["x"], "photo.heic", { type: "image/heic" })] } });
+    expect(await within(group).findByRole("alert")).toHaveTextContent("Choose a JPEG or PNG picture.");
+    expect(api.requests.filter((r) => r.method === "POST")).toEqual([]);
+    fireEvent.change(input, { target: { files: [jpeg()] } });
+    await waitFor(() =>
+      expect(within(group).getByRole("alert")).toHaveTextContent("The picture has too many pixels. Choose a smaller one."),
+    );
+    expect(stored().bulletin.cover_image_id).toBeNull();
+  });
+
+  it("carries last week's picture with its note until it is kept, and says when a picture cannot be loaded", async () => {
+    const lastWeek = previousBulletin({ service_id: "s-last", service_date_iso: "2026-09-27", bulletin: serviceBulletin({ cover_image_id: PICTURE }) });
+    const { user } = renderStep(testDraft(), {
+      "GET /services/previous-bulletin": lastWeek,
+      [`GET /bulletin-images/${PICTURE}`]: pictureRoute,
+    });
+    const group = await screen.findByRole("group", { name: "Cover picture" });
+    expect(await within(group).findByRole("img", { name: PICTURE_ALT })).toBeInTheDocument();
+    expect(within(group).getByText(FROM_LAST_WEEK)).toBeInTheDocument();
+    expect(within(group).getByRole("button", { name: "Choose another picture" })).toHaveAccessibleDescription(FROM_LAST_WEEK);
+    await user.click(within(group).getByRole("button", { name: "Keep as is: cover picture" }));
+    expect(within(group).queryByText(FROM_LAST_WEEK)).toBeNull();
+    expect(within(group).getByRole("button", { name: "Choose another picture" })).toHaveFocus();
+    await waitFor(() => expect(stored().bulletin).toMatchObject({ cover_image_id: PICTURE, carried: [], edited: ["cover"] }));
+  });
+
+  it("says when the picture can no longer be loaded, and Remove still works", async () => {
+    const gone = setCover(testDraft(), PICTURE); // chosen on an earlier visit
+    const { user } = renderStep(gone, {
+      [`GET /bulletin-images/${PICTURE}`]: () => fakeError(404, "not_found", "That picture is no longer available."),
+    });
+    const group = await screen.findByRole("group", { name: "Cover picture" });
+    expect(await within(group).findByText("The picture could not be loaded.")).toBeInTheDocument();
+    await user.click(within(group).getByRole("button", { name: "Remove the cover picture" }));
+    await waitFor(() => expect(stored().bulletin.cover_image_id).toBeNull());
+  });
+  it("keeps the picture when the step is left while it uploads (plan review I1)", async () => {
+    let answer: (value: unknown) => void = () => {};
+    const view = renderStep(testDraft(), {
+      "POST /bulletin-images": () => new Promise((resolve) => (answer = resolve)),
+      [`GET /bulletin-images/${PICTURE}`]: pictureRoute,
+    });
+    await screen.findByRole("group", { name: "Cover picture" });
+    fireEvent.change(document.getElementById("bulletin-cover-file") as HTMLInputElement, { target: { files: [jpeg()] } });
+    expect(await screen.findByRole("button", { name: "Uploading…" })).toBeInTheDocument();
+    view.rerender(
+      <BuilderLayout>
+        <p>Another step</p>
+      </BuilderLayout>,
+    );
+    expect(screen.queryByRole("group", { name: "Cover picture" })).toBeNull();
+    await act(async () => answer({ status: 201, body: bulletinImage() }));
+    await waitFor(() => expect(stored().bulletin).toMatchObject({ cover_image_id: PICTURE, edited: ["cover"] }));
+  });
+
+  it("never shows a preview whose URL was released, under StrictMode (plan review I2)", async () => {
+    window.localStorage.setItem(KEY, JSON.stringify(setCover(testDraft(), PICTURE)));
+    installFakeApi({
+      "GET /church": churchProfile(),
+      "GET /lectionary/readings": lectionaryRoute(),
+      "GET /church/bulletin-settings": filledBulletinSettings(),
+      "GET /services/previous-bulletin": previousBulletin(),
+      [`GET /bulletin-images/${PICTURE}`]: pictureRoute,
+    });
+    renderWithProviders(
+      <StrictMode>
+        <BuilderLayout>
+          <BulletinStepPage />
+        </BuilderLayout>
+      </StrictMode>,
+      { me: me(), church: church(), path: "/builder/bulletin" },
+    );
+    const shown = await screen.findByRole("img", { name: PICTURE_ALT });
+    const released = vi.mocked(URL.revokeObjectURL).mock.calls.map(([url]) => url);
+    expect(released).not.toContain(shown.getAttribute("src"));
+    expect(vi.mocked(URL.createObjectURL).mock.calls.length - released.length).toBe(1); // only the one shown is held
+  });
+
+  it("says a small picture may print blurry", async () => {
+    renderStep(setCover(testDraft(), PICTURE), { [`GET /bulletin-images/${PICTURE}`]: pictureRoute });
+    const shown = await screen.findByRole("img", { name: PICTURE_ALT });
+    expect(screen.queryByText(PICTURE_SMALL)).toBeNull();
+    Object.defineProperties(shown, { naturalWidth: { value: 640, configurable: true }, naturalHeight: { value: 480, configurable: true } });
+    fireEvent.load(shown);
+    expect(await screen.findByText(PICTURE_SMALL)).toBeInTheDocument();
+    Object.defineProperties(shown, { naturalWidth: { value: 1600, configurable: true }, naturalHeight: { value: 1200, configurable: true } });
+    fireEvent.load(shown);
+    await waitFor(() => expect(screen.queryByText(PICTURE_SMALL)).toBeNull());
   });
 });

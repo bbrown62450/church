@@ -3,6 +3,7 @@
  * `overrides` replace top-level fields (pass a whole `user` to change it).
  */
 import type {
+  BulletinImage,
   BulletinSettings,
   ChurchProfile,
   GenerateLiturgyBody,
@@ -530,6 +531,11 @@ export function serviceBulletin(overrides: Partial<ServiceBulletin> = {}): Servi
 /** `GET /services/previous-bulletin` (printed bulletin PR 2b): no service before the date, unless overridden. */
 export function previousBulletin(overrides: Partial<PreviousBulletin> = {}): PreviousBulletin {
   return { service_id: null, service_date_iso: null, bulletin: serviceBulletin(), ...overrides };
+}
+
+/** An uploaded cover picture (`POST /bulletin-images`, printed bulletin PR 3a), unless overridden. */
+export function bulletinImage(overrides: Partial<BulletinImage> = {}): BulletinImage {
+  return { id: "0b4c2b0e-1111-4222-8333-444455556666", width: 1600, height: 1200, ...overrides };
 }
 
 /** One row of `GET /services` (`ServiceSummary`): `savedService()`'s, unless overridden. */

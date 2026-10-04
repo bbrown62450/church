@@ -1,19 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 
+import { PendingButton } from "@/components/app/pending-button";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { errorToastMessage } from "@/lib/api/errors";
 import type { BulletinSettings } from "@/lib/api/types";
 import { ELEMENTS, ROLES } from "@/lib/bulletin-settings";
+import { formatServiceDate } from "@/lib/dates";
 import {
   keepCarried,
   MAX_LENGTH,
   setAnnouncement,
+  setCover,
   setMusic,
   setPartLeader,
   setPastedText,
@@ -23,6 +27,7 @@ import {
 import { useDraft } from "@/lib/draft/context";
 import { effectivePicks } from "@/lib/draft/readings";
 import type { AnnouncementKey, CarryKey, DraftV1, Person } from "@/lib/draft/schema";
+import { checkPicture, useBulletinImage, useUploadBulletinImage } from "@/lib/queries/bulletin-images";
 import { useBulletinSettings } from "@/lib/queries/bulletin-settings";
 
 import { useBulletinCarry } from "./use-bulletin-carry";
@@ -38,6 +43,13 @@ export const PARTS_HELP = "A name here prints on that part this week only. Leave
 export const READINGS_HELP =
   "Paste a reading's text to print it instead of the text the app fetches, for a translation the app cannot fetch. Include the translation's notice if it asks for one.";
 export const NO_READINGS = "Choose the readings on step 1 to paste their text.";
+export const COVER_HELP =
+  "A JPEG or PNG picture for the front page, with the reading and the date printed over it. Without a picture, the reading and the date print alone.";
+export const PICTURE_ALT = "This week's cover picture, as the front page trims it";
+export const PICTURE_MISSING = "The picture could not be loaded.";
+export const PICTURE_SMALL = "This picture is small and may print blurry.";
+/** A stored picture shorter than this on its long side fills the 5.2 in cover box at under about 150 dpi. */
+export const SMALL_PICTURE_SIDE = 800;
 
 const ANNOUNCEMENTS: readonly { key: AnnouncementKey; label: string; long: boolean }[] = [
   { key: "ushers", label: "Ushers and counters", long: false },
@@ -111,6 +123,160 @@ function TextField({
       <Label htmlFor={id}>{label}</Label>
       {long ? <Textarea {...shared} rows={3} /> : <Input {...shared} className="h-11" />}
     </div>
+  );
+}
+
+/**
+ * The picture's bytes as a URL the `<img>` can show. Made and released in
+ * one effect keyed by the bytes, so StrictMode's second run (or any
+ * remount) makes a new URL instead of showing one already released (plan
+ * review I2).
+ */
+function useObjectUrl(blob: Blob | undefined): string | null {
+  const [url, setUrl] = useState<{ blob: Blob; url: string } | null>(null);
+  useEffect(() => {
+    if (blob === undefined) return;
+    const made = URL.createObjectURL(blob);
+    setUrl({ blob, url: made }); // eslint-disable-line react-hooks/set-state-in-effect -- the URL is an external resource made here and released below
+    return () => URL.revokeObjectURL(made);
+  }, [blob]);
+  return url !== null && url.blob === blob ? url.url : null;
+}
+
+/**
+ * The cover picture (printed bulletin PR 3b; PR 3 planning answers 2-8): the
+ * week's picture, trimmed to the cover's shape as the front page prints it
+ * (a centered crop), with a dark band across its bottom holding the reading
+ * and the date as they print over it, and **Choose a picture** (or **Choose
+ * another picture**) and **Remove**. A file the server would refuse (not a
+ * JPEG or PNG, empty, over 10 MB) is said at once; the upload's own refusal
+ * or failure is said under the buttons; a small picture is said to print
+ * blurry. The picture uploaded goes in the draft even when the step was
+ * left meanwhile (the upload's own callback, written at once), unless the
+ * draft is another one by then. Last week's picture carries in like the
+ * music, with "From last week. Check before printing." and **Keep as is**.
+ */
+function CoverPicture() {
+  const { draft, update, flush } = useDraft();
+  const picture = draft.bulletin.cover_image_id;
+  const target = useRef<{ created: string; date: string } | null>(null);
+  const upload = useUploadBulletinImage((stored) => {
+    const chosenFor = target.current;
+    update((d) =>
+      chosenFor !== null && d.created_at === chosenFor.created && d.readings.date_iso === chosenFor.date
+        ? setCover(d, stored.id)
+        : d,
+    );
+    flush(); // the step may be gone by now (plan review I1)
+  });
+  const preview = useBulletinImage(picture);
+  const url = useObjectUrl(preview.data);
+  const [smallUrl, setSmallUrl] = useState<string | null>(null);
+  const input = useRef<HTMLInputElement>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  const note = "bulletin-cover-carried";
+  const { ot, nt } = effectivePicks(draft);
+  const band = [nt ?? ot ?? "", formatServiceDate(draft.readings.date_iso)].filter((line) => line !== "");
+
+  function choose(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = ""; // the same file can be chosen again
+    if (!file) return;
+    const refused = checkPicture(file);
+    setProblem(refused);
+    if (refused) return;
+    target.current = { created: draft.created_at, date: draft.readings.date_iso };
+    upload.mutate(file, { onError: (e) => setProblem(errorToastMessage(e)) });
+  }
+
+  return (
+    <Group id="bulletin-cover" title="Cover picture" help={COVER_HELP}>
+      {picture === null ? null : preview.isError ? (
+        <p className="text-sm">{PICTURE_MISSING}</p>
+      ) : url === null ? (
+        <Skeleton role="status" aria-label="Loading the cover picture" className="aspect-[372/300] w-full max-w-sm" />
+      ) : (
+        <div className="grid gap-2">
+          <div className="relative w-full max-w-sm overflow-hidden rounded-md border">
+            {/* A blob URL of the church's own picture: next/image could not fetch it, and nothing here needs optimizing. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={url}
+              alt={PICTURE_ALT}
+              className="aspect-[372/300] w-full object-cover"
+              onLoad={(e) => {
+                const shown = e.currentTarget;
+                setSmallUrl(Math.max(shown.naturalWidth, shown.naturalHeight) < SMALL_PICTURE_SIDE ? url : null);
+              }}
+            />
+            {band.length > 0 ? (
+              // The printed band, roughly: what it covers, and the words on it (plan review M8).
+              <div
+                aria-hidden="true"
+                data-testid="cover-band"
+                className="absolute inset-x-0 bottom-0 grid justify-items-center bg-black/55 px-2 py-1.5 text-center font-serif font-bold leading-tight text-white"
+              >
+                {band.map((line, i) => (
+                  <span key={i} className={i === 0 ? "text-sm" : "text-xs"}>
+                    {line}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </div>
+          {smallUrl === url ? <p className="text-sm">{PICTURE_SMALL}</p> : null}
+        </div>
+      )}
+      <input
+        ref={input}
+        id="bulletin-cover-file"
+        type="file"
+        accept="image/jpeg,image/png"
+        className="sr-only"
+        tabIndex={-1}
+        aria-hidden="true"
+        onChange={choose}
+      />
+      <div className="flex flex-wrap gap-3">
+        <PendingButton
+          id="bulletin-cover-choose"
+          type="button"
+          variant="outline"
+          size="touch"
+          pending={upload.isPending}
+          pendingLabel="Uploading…"
+          aria-describedby={draft.bulletin.carried.includes("cover") ? note : undefined}
+          onClick={() => input.current?.click()}
+        >
+          {picture === null ? "Choose a picture" : "Choose another picture"}
+        </PendingButton>
+        {picture === null ? null : (
+          <Button
+            type="button"
+            variant="outline"
+            size="touch"
+            aria-label="Remove the cover picture"
+            disabled={upload.isPending}
+            onClick={() => {
+              setProblem(null);
+              update((d) => setCover(d, null));
+              document.getElementById("bulletin-cover-choose")?.focus();
+            }}
+          >
+            Remove
+          </Button>
+        )}
+      </div>
+      <p role="status" className="sr-only">
+        {upload.isPending ? "Uploading the picture…" : ""}
+      </p>
+      {problem ? (
+        <p role="alert" className="text-sm">
+          {problem}
+        </p>
+      ) : null}
+      <CarriedNote id={note} carryKey="cover" name="cover picture" fieldId="bulletin-cover-choose" />
+    </Group>
   );
 }
 
@@ -313,10 +479,10 @@ function ReadingTexts() {
  * Step 4, Bulletin (printed bulletin PR 2b; spec "The Bulletin step"; PR 2
  * planning answers 4-7): what the week's printed bulletin adds to the
  * service, all optional (it never blocks Review, the Word copies or the
- * printed bulletin). The prelude and postlude; who leads (the bulletin
+ * printed bulletin). The cover picture (PR 3b); the prelude and postlude; who leads (the bulletin
  * settings' three people, changeable for this week, and each part's leader
  * behind "Change who leads a part"); the announcements; and per reading a
- * box for its pasted text. Last week's music and announcements carry in
+ * box for its pasted text. Last week's picture, music and announcements carry in
  * (`useBulletinCarry`), each such box marked "From last week. Check before
  * printing." until it is edited or kept. It reads and writes only the
  * draft; the Bulletin settings button opens the standing settings.
@@ -341,6 +507,7 @@ export function BulletinStep() {
           </Button>
         </div>
       ) : null}
+      <CoverPicture />
       <Group id="bulletin-music" title="Music">
         <Music piece="prelude" name="Prelude" />
         <Music piece="postlude" name="Postlude" />
