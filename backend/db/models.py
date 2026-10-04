@@ -22,6 +22,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -188,6 +189,32 @@ class Service(Base):
         # One church's services, for the archive list and the hymn-use rebuild (5a-2):
         # its church_id prefix; the list sorts on an expression of the date.
         Index("ix_services_church_date", "church_id", "service_date_iso"),
+    )
+
+
+class BulletinImage(Base):
+    """A cover picture for the printed bulletin (revision 0007_bulletin_images;
+    printed bulletin PR 3a): the upload turned upright, scaled to at most
+    1600 px on its long side and stored as JPEG (bulletin_image.py). A
+    service's bulletin points at it by id (services.bulletin's
+    "cover_image_id", no foreign key); one no saved service points at is
+    removed 60 days after its upload (usecases.bulletin_images)."""
+    __tablename__ = "bulletin_images"
+
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    church_id = Column(
+        Uuid, ForeignKey("churches.id", ondelete="CASCADE"), nullable=False
+    )
+    content_type = Column(String, nullable=False)    # always "image/jpeg" (what is stored)
+    bytes = Column(LargeBinary, nullable=False)      # the picture itself
+    width = Column(Integer, nullable=False)          # in pixels, as stored
+    height = Column(Integer, nullable=False)
+    created_by = Column(Uuid, ForeignKey("users.id", ondelete="SET NULL"))
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_utcnow)
+
+    __table_args__ = (
+        # One church's pictures by age: the 60-day removal (usecases.bulletin_images).
+        Index("ix_bulletin_images_church_created", "church_id", "created_at"),
     )
 
 

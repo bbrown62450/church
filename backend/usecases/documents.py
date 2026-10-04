@@ -26,6 +26,9 @@ the music, this week's people and part leaders, the announcements, and a
 pasted reading text, which prints instead of the fetched one and is neither
 fetched nor charged; a body with no bulletin (a page from before PR 2b-2)
 prints PR 1's placeholders. The log line never carries a bulletin's text.
+PR 3a adds the week's cover picture: the church's picture the bulletin
+points at, read with the name (none when it is not the church's or no
+longer there: the reading and the date print alone).
 """
 from __future__ import annotations
 
@@ -44,6 +47,7 @@ import service_output
 from db import session_scope
 from service_bulletin import ServiceBulletin
 from domain_errors import Forbidden
+from repos import bulletin_images as images_repo
 from repos import churches
 from usecases import archive, church_bulletin, passages
 
@@ -121,6 +125,8 @@ def build_printed(church_id: uuid.UUID, data: archive.ServiceInput, fmt: printed
         if church is None:
             raise Forbidden(NO_ACCESS_MESSAGE, details={"reason": "no_church_access"})
         hymns = archive.resolve_hymn_refs(s, church_id, clean.hymns)
+        cover_id = clean.bulletin.cover_image_id if clean.bulletin is not None else None
+        stored = images_repo.get_picture(church_id, cover_id, session=s) if cover_id else None
     resolved = service_output.ResolvedService(
         service_date=clean.service_date, occasion=clean.occasion, scriptures=clean.scriptures, hymns=hymns,
         liturgy=clean.liturgy, sermon_title=clean.sermon_title, selected_ot_ref=clean.selected_ot_ref,
@@ -145,7 +151,8 @@ def build_printed(church_id: uuid.UUID, data: archive.ServiceInput, fmt: printed
         ot=reading(*pasted[0]), nt=reading(*pasted[1]),
         translation_label=scripture_fetcher.translation_label(tid),
         settings=church_bulletin.read_settings(church["settings"]),
-        bulletin=clean.bulletin)                        # None (a page from before PR 2b-2): PR 1's placeholders
+        bulletin=clean.bulletin,                        # None (a page from before PR 2b-2): PR 1's placeholders
+        cover_picture=None if stored is None else stored.content)
     content = printed_pdf.render_pdf(printed) if fmt == "pdf" else printed_docx.render_docx(printed)
     logger.info("documents.printed church=%s format=%s bytes=%d ms=%d", church_id, fmt, len(content),
                 round((time.monotonic() - started) * 1000))

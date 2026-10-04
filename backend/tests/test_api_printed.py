@@ -242,3 +242,38 @@ def test_the_week_s_fields_print_and_a_pasted_reading_is_neither_fetched_nor_cha
     assert " is from the " not in text
     (record,) = [r for r in caplog.records if r.getMessage().startswith("documents.printed")]
     assert "ill" not in record.getMessage() and "Example" not in record.getMessage()
+
+
+
+def test_the_cover_picture_prints_and_a_page_from_before_3b_keeps_pr_1_s_box(client, church, owner, make_church,
+                                                                             calls):
+    """PR 3a: the church's picture fills the cover's box (the reading and the date on its band); null (no
+    picture this week) or a picture the church does not have prints the reading and the date alone; a
+    bulletin that does not say (a page from before PR 3b) keeps PR 1's [Cover picture] box."""
+    from tests.picture_helpers import picture
+
+    def picture_id(church_id):
+        r = client.post("/bulletin-images", content=picture((1600, 1200)),
+                        headers={**church_headers(EMAIL, church_id), "Content-Type": "image/jpeg"})
+        assert r.status_code == 201, r.text
+        return r.json()["id"]
+
+    mine, theirs = picture_id(church), picture_id(make_church(name="Other", owner_user_id=owner))
+    blank = {"prelude": {"title": "", "composer": ""}, "postlude": {"title": "", "composer": ""},
+             "people": {"worship_leader": None, "liturgist": None, "organist": None}, "leaders": {},
+             "announcements": {key: "" for key in ("ushers", "deacon", "coffee_hour", "activities",
+                                                   "prayer_concerns", "collection", "other")},
+             "reading_text": {"ot": "", "nt": ""}, "unchecked": []}
+    for cover, images, starts in ((mine, 1, "Example Church 1 THE SERVICE"),
+                                  (None, 0, "Example Church Philippians 3:4b-14 October 4, 2026 1 THE SERVICE"),
+                                  (theirs, 0, "Example Church Philippians 3:4b-14 October 4, 2026 1 THE SERVICE"),
+                                  ("left out", 0, "Example Church [Cover picture] Philippians 3:4b-14")):
+        bulletin = blank if cover == "left out" else {**blank, "cover_image_id": cover}
+        r = post(client, church, {"format": "pdf", "service": {**SERVICE, "bulletin": bulletin}})
+        assert r.status_code == 200, r.text
+        first = PdfReader(BytesIO(r.content)).pages[0]
+        assert len(first.images) == images, cover
+        assert pdf_text(r.content).startswith(starts), cover
+    r = post(client, church, {"format": "docx", "service": {**SERVICE, "bulletin": {**blank, "cover_image_id": mine}}})
+    assert r.status_code == 200, r.text
+    assert len(Document(BytesIO(r.content)).inline_shapes) == 1

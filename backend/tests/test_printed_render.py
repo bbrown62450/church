@@ -9,15 +9,17 @@ from io import BytesIO
 import pytest
 from docx import Document
 from docx.oxml.ns import qn
-from docx.shared import Inches
+from docx.shared import Inches, Pt
 from pypdf import PdfReader
 
+import bulletin_image
 import bulletin_settings as bs
 import printed_bulletin as pb
 import printed_docx
 import printed_pdf
 from service_output import ResolvedHymn, ResolvedService
 import service_bulletin as sb
+from tests import picture_helpers
 from tests.test_printed_bulletin import SETTINGS, WEEK
 
 VERSE = "And he answered, I will not; but afterward he repented and went. "
@@ -190,3 +192,39 @@ def test_with_every_announcement_blank_the_announcements_page_is_left_out():
     assert [p.text for p in doc.paragraphs if p.paragraph_format.page_break_before] == [
         "THE SERVICE FOR THE LORD’S DAY"]
     assert doc.paragraphs[-1].text == "*Congregation stands if able"
+
+
+def chosen(picture: bytes | None = None, **cover) -> pb.PrintedService:
+    week = dataclasses.replace(WEEK, cover_given=True, **cover)
+    return dataclasses.replace(service(), bulletin=week, cover_picture=picture)
+
+
+def test_the_cover_picture_fills_the_box_in_both_files():
+    """PR 3 planning answers 2-4: the same picture in the PDF and the Word version, 372 x 300 pt under the
+    church's name, the reading and the date on its band (inside the picture, so not text)."""
+    ps = chosen(bulletin_image.prepare(picture_helpers.stripes((1600, 1200), [picture_helpers.GREEN])).content,
+                cover_image_id="0b4c2b0e-1111-4222-8333-444455556666")
+    content = printed_pdf.render_pdf(ps)
+    (image,) = PdfReader(BytesIO(content)).pages[0].images
+    assert image.image.size == (1550, 1250)
+    assert halves(content)[0].startswith("Example Church 100 Example Street")
+    doc = Document(BytesIO(printed_docx.render_docx(ps)))
+    (shape,) = doc.inline_shapes
+    assert (shape.width, shape.height) == (Pt(372), Pt(300))
+    assert doc.tables == [] and "[Cover picture]" not in [p.text for p in doc.paragraphs]
+    word_picture = doc.part.related_parts[shape._inline.graphic.graphicData.pic.blipFill.blip.embed].blob
+    assert word_picture == printed_pdf.cover_picture(ps)                   # the PDF's picture, byte for byte
+
+
+def test_no_picture_prints_the_reading_and_the_date_where_it_would_be():
+    """PR 3 planning answer 6: no box at all; the reading and the date centered in its place."""
+    ps = chosen()
+    content = printed_pdf.render_pdf(ps)
+    assert len(PdfReader(BytesIO(content)).pages[0].images) == 0
+    assert halves(content)[0].startswith("Example Church Matthew 21:23-32 September 27, 2026 100 Example Street")
+    doc = Document(BytesIO(printed_docx.render_docx(ps)))
+    assert doc.tables == [] and len(doc.inline_shapes) == 0
+    reading, date = doc.paragraphs[1:3]
+    assert (reading.text, date.text) == ("Matthew 21:23-32", "September 27, 2026")
+    assert reading.runs[0].bold and reading.runs[0].font.size == Pt(18) and date.runs[0].font.size == Pt(14)
+    assert reading.paragraph_format.space_before == date.paragraph_format.space_after > Pt(100)

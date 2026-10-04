@@ -120,6 +120,16 @@ def delete_service(row: Service, *, session: Session) -> None:
     session.flush()
 
 
+def stored_cover_ids(church_id, *, session: Session) -> list[object]:
+    """The `cover_image_id` of every stored bulletin of the church's services, as stored (NULL left out): for
+    the cover pictures still in use (usecases.bulletin_images; printed bulletin PR 3a). Only that key is read
+    (`bulletin ->> 'cover_image_id'` on Postgres, JSON_EXTRACT on SQLite), never the whole bulletin (PR 3a
+    build review M1)."""
+    key = Service.bulletin["cover_image_id"].as_string()
+    return list(session.execute(select(key).where(Service.church_id == as_uuid(church_id), key.is_not(None)))
+                .scalars())
+
+
 def previous_service(church_id, before_iso: str, *, session: Session) -> Optional[Service]:
     """The church's service with the latest real date before `before_iso`
     (YYYY-MM-DD), then the latest save, then the highest id (LIST_ORDER), or

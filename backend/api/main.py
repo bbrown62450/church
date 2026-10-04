@@ -9,9 +9,9 @@ from fastapi.middleware.gzip import GZipMiddleware
 
 from api.errors import install_error_handlers
 from api.logging_config import configure_logging
-from api.middleware import RequestIdMiddleware, UnhandledErrorMiddleware
-from api.routes import (bulletin_settings, churches, documents, health, hymnals, hymns, invites, lectionary,
-                        liturgy, liturgy_review, me, reference, rubric, scripture, services)
+from api.middleware import RequestIdMiddleware, UnhandledErrorMiddleware, UploadSizeMiddleware
+from api.routes import (bulletin_images, bulletin_settings, churches, documents, health, hymnals, hymns, invites,
+                        lectionary, liturgy, liturgy_review, me, reference, rubric, scripture, services)
 from api.settings import get_settings
 from api.startup import check_app_env, describe_database, enforce_production_guards
 from db import get_engine
@@ -45,9 +45,11 @@ def create_app() -> FastAPI:
     # No trailing-slash redirects: a cross-origin 307 drops Authorization (F §1.1).
     app = FastAPI(title="Worship Service Builder API", lifespan=lifespan, redirect_slashes=False)
     # The last middleware added is the outermost: CORS → RequestId → UnhandledError
-    # → GZip (F §2.5), so CORS decorates the 500s that UnhandledError produces, and
-    # GZip (slice 3; GET /hymns?limit=2000 is ~200 KB of JSON) is innermost.
+    # → UploadSize → GZip (F §2.5), so CORS decorates the 500s that UnhandledError
+    # produces and UploadSize's 422 (printed bulletin PR 3a), and GZip (slice 3;
+    # GET /hymns?limit=2000 is ~200 KB of JSON) is innermost.
     app.add_middleware(GZipMiddleware, minimum_size=1024)
+    app.add_middleware(UploadSizeMiddleware)
     app.add_middleware(UnhandledErrorMiddleware)
     app.add_middleware(RequestIdMiddleware)
     app.add_middleware(
@@ -75,6 +77,7 @@ def create_app() -> FastAPI:
     app.include_router(liturgy_review.router)
     app.include_router(documents.router)
     app.include_router(services.router)
+    app.include_router(bulletin_images.router)
     return app
 
 

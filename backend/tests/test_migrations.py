@@ -1,6 +1,7 @@
 """Alembic migrations: env.py, the revisions, offline SQL (F §3.1-§3.3; slice 1 spec)."""
 import io
 import logging.config
+import re
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -311,7 +312,7 @@ def test_a_stamped_database_missing_the_hymnal_index_gets_it(sqlite_url):
     assert _models_diff(sqlite_url) == []
 
 
-def test_offline_sql_from_baseline_renders_guarded_adds_and_no_create_table():
+def test_offline_sql_from_baseline_renders_guarded_adds_and_only_0007_s_create_table():
     # Runbook step 5: `alembic upgrade 0001_baseline:head --sql`. Offline mode
     # never connects (port 1 on localhost would refuse anyway).
     cfg = alembic_config(url="postgresql://u:p@localhost:1/x", configure_logger=False)
@@ -319,7 +320,8 @@ def test_offline_sql_from_baseline_renders_guarded_adds_and_no_create_table():
     command.upgrade(cfg, "0001_baseline:head", sql=True)
     sql = buffer.getvalue()
 
-    assert "CREATE TABLE" not in sql
+    # No table of the baseline is created again; the one CREATE TABLE is 0007's new table (printed bulletin PR 3a).
+    assert sql.count("CREATE TABLE") == 1 and "CREATE TABLE bulletin_images (" in sql
     assert "CREATE INDEX IF NOT EXISTS ix_hymns_church_hymnal ON hymns (church_id, hymnal);" in sql
     for table in RECONCILE_TABLES:
         for column in RECONCILE_COLUMNS:
@@ -846,3 +848,174 @@ def test_the_readme_shows_the_0006_preview_exactly():
     step = section.split("\n### Step 3: Read the SQL the upgrade will run\n", 1)[1].split("\n### ", 1)[0]
     block = "BEGIN;" + step.split("\n```\nBEGIN;", 1)[1].split("\n```", 1)[0]   # the bare fence
     assert block.splitlines() == PREVIEW_0006
+
+
+# --- Printed bulletin PR 3a: 0007_bulletin_images (F §3.4, §3.5; printed bulletin spec "Data model") ---
+
+# What `alembic upgrade 0006_services_bulletin:0007_bulletin_images --sql` prints on
+# Postgres, comments, blank lines and trailing spaces left out: the preview the owner
+# reads before the merge (PR 3 planning answer 10; backend/migrations/README.md).
+PREVIEW_0007 = [
+    "BEGIN;",
+    "SET LOCAL lock_timeout = '5s';",
+    "SET LOCAL statement_timeout = '60s';",
+    "CREATE TABLE bulletin_images (",
+    "    id UUID NOT NULL,",
+    "    church_id UUID NOT NULL,",
+    "    content_type VARCHAR NOT NULL,",
+    "    bytes BYTEA NOT NULL,",
+    "    width INTEGER NOT NULL,",
+    "    height INTEGER NOT NULL,",
+    "    created_by UUID,",
+    "    created_at TIMESTAMP WITH TIME ZONE NOT NULL,",
+    "    PRIMARY KEY (id),",
+    "    FOREIGN KEY(church_id) REFERENCES churches (id) ON DELETE CASCADE,",
+    "    FOREIGN KEY(created_by) REFERENCES users (id) ON DELETE SET NULL",
+    ");",
+    "CREATE INDEX ix_bulletin_images_church_created ON bulletin_images (church_id, created_at);",
+    "ALTER TABLE bulletin_images ENABLE ROW LEVEL SECURITY;",
+    "DO $$",
+    "BEGIN",
+    "  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon')",
+    "     AND EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN",
+    "    REVOKE ALL ON bulletin_images FROM anon, authenticated;",
+    "  END IF;",
+    "END $$;",
+    "UPDATE alembic_version SET version_num='0007_bulletin_images' "
+    "WHERE alembic_version.version_num = '0006_services_bulletin';",
+    "COMMIT;",
+]
+
+
+def _bulletin_images_shape(conn) -> dict:
+    insp = sa.inspect(conn)
+    return {
+        "columns": [(c["name"], str(c["type"]), c["nullable"]) for c in insp.get_columns("bulletin_images")],
+        "pk": insp.get_pk_constraint("bulletin_images")["constrained_columns"],
+        "fks": sorted((tuple(fk["constrained_columns"]), fk["referred_table"], fk["options"].get("ondelete"))
+                      for fk in insp.get_foreign_keys("bulletin_images")),
+        "indexes": sorted((i["name"], tuple(i["column_names"]), bool(i["unique"]))
+                          for i in insp.get_indexes("bulletin_images")),
+    }
+
+
+def test_0007_creates_the_bulletin_images_table_and_changes_nothing_else(sqlite_url):
+    _alembic(sqlite_url, "upgrade", "0006_services_bulletin")
+    engine = sa.create_engine(sqlite_url, poolclass=NullPool)
+    try:
+        with engine.begin() as conn:
+            user_id, church_id = _seed_owner_and_church(conn)
+            kept = _insert_legacy_service(conn, church_id, user_id)
+            services_before = _services_shape(conn)
+            tables_before = set(sa.inspect(conn).get_table_names())
+        _alembic(sqlite_url, "upgrade", "0007_bulletin_images")
+        with engine.begin() as conn:
+            tables = set(sa.inspect(conn).get_table_names())
+            shape = _bulletin_images_shape(conn)
+            services_after = _services_shape(conn)
+            conn.execute(sa.text(
+                "INSERT INTO bulletin_images (id, church_id, content_type, bytes, width, height, created_by, "
+                "created_at) VALUES (:id, :church, 'image/jpeg', :data, 1600, 1200, :user, :at)"),
+                {"id": uuid.uuid4().hex, "church": church_id.hex, "data": b"\xff\xd8", "user": user_id.hex,
+                 "at": T9_NOW.isoformat()})
+            services = conn.execute(sa.text("SELECT id FROM services")).scalars().all()
+    finally:
+        engine.dispose()
+    assert tables == tables_before | {"bulletin_images"}
+    assert shape == {
+        "columns": [("id", "CHAR(32)", False), ("church_id", "CHAR(32)", False), ("content_type", "VARCHAR", False),
+                    ("bytes", "BLOB", False), ("width", "INTEGER", False), ("height", "INTEGER", False),
+                    ("created_by", "CHAR(32)", True), ("created_at", "DATETIME", False)],
+        "pk": ["id"],
+        "fks": [(("church_id",), "churches", "CASCADE"), (("created_by",), "users", "SET NULL")],
+        "indexes": [("ix_bulletin_images_church_created", ("church_id", "created_at"), False)],
+    }
+    assert services_after == services_before
+    assert [uuid.UUID(str(s)) for s in services] == [kept]
+
+
+def test_0007_downgrade_drops_only_the_table(sqlite_url):
+    _alembic(sqlite_url, "upgrade", "0006_services_bulletin")
+    before = _tables_snapshot(sqlite_url)
+    _alembic(sqlite_url, "upgrade", "head")
+    assert set(_tables_snapshot(sqlite_url)) == set(before) | {"bulletin_images"}
+    _alembic(sqlite_url, "downgrade", "0006_services_bulletin")
+    assert _tables_snapshot(sqlite_url) == before
+    with _connection(sqlite_url) as conn:
+        assert conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one() == "0006_services_bulletin"
+
+
+def test_offline_sql_for_0007_is_one_table_one_index_row_level_security_and_the_revoke_under_the_timeouts():
+    cfg = alembic_config(url="postgresql://preview@localhost:1/preview", configure_logger=False)
+    cfg.output_buffer = buffer = io.StringIO()
+    command.upgrade(cfg, "0006_services_bulletin:0007_bulletin_images", sql=True)
+    lines = [line.rstrip() for line in buffer.getvalue().splitlines() if line.strip() and not line.startswith("--")]
+    assert lines == PREVIEW_0007
+
+
+def test_the_readme_shows_the_0007_preview_exactly():
+    """The owner reads backend/migrations/README.md → "Before 0007_bulletin_images",
+    step 3, against the agent's rendering; both must be PREVIEW_0007."""
+    readme = (Path(__file__).resolve().parents[1] / "migrations" / "README.md").read_text(encoding="utf-8")
+    section = readme.split("\n## Before 0007_bulletin_images (printed bulletin PR 3a)\n", 1)[1]
+    step = section.split("\n### Step 3: Read the SQL the upgrade will run\n", 1)[1].split("\n### ", 1)[0]
+    block = "BEGIN;" + step.split("\n```\nBEGIN;", 1)[1].split("\n```", 1)[0]   # the bare fence
+    assert block.splitlines() == PREVIEW_0007
+
+
+@pytest.mark.postgres
+def test_0007_turns_on_row_level_security_and_grants_supabase_s_roles_nothing(pg_admin_url):
+    """The pictures are served only through the API: with RLS on and no policy, anon and authenticated
+    (Supabase's REST roles) read no row, and 0003's default privileges leave them no grant either."""
+    with supabase_roles(pg_admin_url), throwaway_database(pg_admin_url, role_bypassrls=True) as sandbox:
+        _alembic(sandbox.role_url, "upgrade", "head")
+        admin = _pg_engine(sandbox.admin_db_url)
+        try:
+            assert _rls_flags(admin)["bulletin_images"] is True
+            with admin.connect() as conn:
+                for grantee in ("anon", "authenticated"):
+                    assert conn.execute(text(
+                        "SELECT has_table_privilege(:grantee, 'public.bulletin_images', 'SELECT')"),
+                        {"grantee": grantee}).scalar_one() is False
+        finally:
+            admin.dispose()
+
+
+@pytest.mark.postgres
+def test_0007_revokes_supabase_s_roles_even_when_default_privileges_would_grant(pg_admin_url):
+    """Plan review M10: 0003's ALTER DEFAULT PRIVILEGES holds only for the role that ran it; 0007's own
+    REVOKE leaves anon and authenticated nothing on the new table even when defaults would grant it."""
+    with supabase_roles(pg_admin_url), throwaway_database(pg_admin_url, role_bypassrls=True) as sandbox:
+        _alembic(sandbox.role_url, "upgrade", "0006_services_bulletin")
+        owner = _pg_engine(sandbox.role_url)
+        admin = _pg_engine(sandbox.admin_db_url)
+        try:
+            with owner.begin() as conn:
+                conn.execute(text("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO anon, authenticated"))
+            _alembic(sandbox.role_url, "upgrade", "head")
+            with admin.connect() as conn:
+                for grantee in ("anon", "authenticated"):
+                    assert conn.execute(text(
+                        "SELECT has_table_privilege(:grantee, 'public.bulletin_images', 'SELECT')"),
+                        {"grantee": grantee}).scalar_one() is False
+        finally:
+            owner.dispose()
+            admin.dispose()
+
+
+@pytest.mark.postgres
+def test_the_after_deploy_check_runs_before_0007_too(pg_admin_url):
+    """Plan review M9: README step 4 run before the deploy applied 0007 answers (it does not fail):
+    0006_services_bulletin and two empty values."""
+    readme = (Path(__file__).resolve().parents[1] / "migrations" / "README.md").read_text(encoding="utf-8")
+    section = readme.split("\n## Before 0007_bulletin_images (printed bulletin PR 3a)\n", 1)[1]
+    check = re.findall(r"```sql\n(.*?)```", section, re.S)[1]
+    with throwaway_database(pg_admin_url, role_bypassrls=True) as sandbox:
+        _alembic(sandbox.role_url, "upgrade", "0006_services_bulletin")
+        engine = _pg_engine(sandbox.role_url)
+        try:
+            with engine.connect() as conn:
+                row = dict(conn.execute(text(check)).mappings().one())
+        finally:
+            engine.dispose()
+    assert row == {"version": "0006_services_bulletin", "row_security": None, "open_grants": 0, "pictures": None}

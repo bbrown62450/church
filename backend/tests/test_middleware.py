@@ -14,7 +14,7 @@ from api.deps import get_verifier
 from api.errors import error_body
 from api.logging_config import LOG_FORMAT, configure_logging
 from api.main import create_app
-from api.middleware import RequestIdMiddleware, UnhandledErrorMiddleware
+from api.middleware import RequestIdMiddleware, UnhandledErrorMiddleware, UploadSizeMiddleware
 
 HEX32 = re.compile(r"[0-9a-f]{32}")
 
@@ -152,12 +152,13 @@ def test_an_error_after_the_response_started_is_reraised_without_a_second_start(
     assert [m["type"] for m in sent] == ["http.response.start"]
 
 
-def test_middleware_order_is_cors_then_request_id_then_unhandled_error_then_gzip():
+def test_middleware_order_is_cors_then_request_id_then_unhandled_error_then_upload_size_then_gzip():
     # Starlette makes the last middleware added the outermost; user_middleware
-    # lists them outermost first (F §2.5; slice 3 added GZip innermost).
+    # lists them outermost first (F §2.5; slice 3 added GZip innermost; printed
+    # bulletin PR 3a UploadSize inside UnhandledError, so its 422 has CORS headers).
     app = create_app()
     assert [m.cls for m in app.user_middleware] == [
-        CORSMiddleware, RequestIdMiddleware, UnhandledErrorMiddleware, GZipMiddleware,
+        CORSMiddleware, RequestIdMiddleware, UnhandledErrorMiddleware, UploadSizeMiddleware, GZipMiddleware,
     ]
 
 

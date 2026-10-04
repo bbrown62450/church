@@ -41,6 +41,7 @@ def test_buckets_match_f_1_8():
         "church_create": (Rule("user", 3, 60),),
         "ai": (Rule("user", 40, 600), Rule("church", 400, 86_400)),
         "email": (Rule("user", 10, 3_600),),
+        "picture": (Rule("user", 20, 3_600), Rule("church", 60, 86_400)),     # printed bulletin PR 3a
     }
     assert MESSAGE == "Too many requests. Try again in {n} seconds."
 

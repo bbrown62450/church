@@ -169,9 +169,9 @@ def test_the_owner_s_read_only_queries_count_as_the_api_reads(world):
         counts = dict(s.execute(text(readme_sql(0))).mappings().one())
         applied = dict(s.execute(text(readme_sql(1))).mappings().one())
     # The 5a-2 save has 3 slots; the other five are old-style; "", NULL and "Sept 13" are undated. The
-    # test database is at head (0006_services_bulletin since printed bulletin PR 2b).
-    assert counts == {"version": "0006_services_bulletin", "services": 6, "undated": 3, "old_style_hymn_lists": 5}
-    assert applied == {"version": "0006_services_bulletin", "new_columns": 2, "new_index": 1}
+    # test database is at head (0007_bulletin_images since printed bulletin PR 3a).
+    assert counts == {"version": "0007_bulletin_images", "services": 6, "undated": 3, "old_style_hymn_lists": 5}
+    assert applied == {"version": "0007_bulletin_images", "new_columns": 2, "new_index": 1}
 
 
 def readme_0006_sql(n: int) -> str:
@@ -193,5 +193,35 @@ def test_the_owner_s_read_only_queries_around_0006(world):
     with session_scope() as s:
         counts = dict(s.execute(text(readme_0006_sql(0))).mappings().one())
         applied = dict(s.execute(text(readme_0006_sql(1))).mappings().one())
-    assert counts == {"version": "0006_services_bulletin", "services": 3, "churches": 2}
-    assert applied == {"version": "0006_services_bulletin", "new_column": 1, "with_bulletin": 1}
+    assert counts == {"version": "0007_bulletin_images", "services": 3, "churches": 2}
+    assert applied == {"version": "0007_bulletin_images", "new_column": 1, "with_bulletin": 1}
+
+
+def readme_0007_sql(n: int) -> str:
+    """The n-th ```sql block of README "Before 0007_bulletin_images": 0 is step 2's counts, 1 step 4's check,
+    2 the pictures' storage."""
+    section = README.read_text(encoding="utf-8").split(
+        "\n## Before 0007_bulletin_images (printed bulletin PR 3a)\n", 1)[1]
+    return re.findall(r"```sql\n(.*?)```", section, re.S)[n]
+
+
+@pytest.mark.postgres
+def test_the_owner_s_read_only_queries_around_0007(world):
+    from db.models import BulletinImage
+
+    user, church = world
+    with session_scope() as s:
+        for bulletin in (None, {"announcements": {"coffee_hour": "Sam Sample"}}):
+            s.add(Service(church_id=church, service_date_iso="2026-09-27", occasion="", hymns=[], liturgy={},
+                          scriptures=[], bulletin=bulletin))
+        s.add(BulletinImage(church_id=church, content_type="image/jpeg", bytes=b"\xff\xd8", width=1, height=1,
+                            created_by=user))
+    with session_scope() as s:
+        counts = dict(s.execute(text(readme_0007_sql(0))).mappings().one())
+        applied = dict(s.execute(text(readme_0007_sql(1))).mappings().one())
+        storage = dict(s.execute(text(readme_0007_sql(2))).mappings().one())
+    assert re.fullmatch(r"\d+ (bytes|kB|MB|GB)", counts.pop("database_size"))
+    assert counts == {"version": "0007_bulletin_images", "services": 2, "with_bulletin": 1}
+    assert applied == {"version": "0007_bulletin_images", "row_security": True, "open_grants": 0, "pictures": 1}
+    assert re.fullmatch(r"\d+ (bytes|kB|MB|GB)", storage.pop("database_size"))
+    assert storage == {"pictures": 1, "churches": 1, "pictures_size": "2 bytes", "most_in_one_church": 1}

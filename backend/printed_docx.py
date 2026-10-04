@@ -5,7 +5,9 @@ The same pages as printed_pdf in reading order, one 7 x 8.5 in page each
 order of worship and the announcements (left out when every announcement is
 blank, PR 2b), each starting a page, numbered from the first inside page.
 A free text's line breaks stay line breaks (python-docx turns "\n" into
-one). An element's leader sits at a right tab stop. To print
+one). The cover's box (PR 3a) is the PDF's: the same picture
+(printed_pdf.cover_picture), the reading and the date alone, or PR 1's
+[Cover picture] box. An element's leader sits at a right tab stop. To print
 it as the PDF prints, two pages to a legal sheet, use the printer's "2 pages
 per sheet" setting; the PDF is already arranged that way.
 Pure: no database or FastAPI.
@@ -22,6 +24,7 @@ from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 
 import printed_bulletin as pb
+import printed_pdf
 
 FONT = "Times New Roman"
 TEXT_WIDTH = Inches(6)                   # 7 in less two 0.5 in margins
@@ -85,21 +88,27 @@ def _page_number_footer(section) -> None:
     section._sectPr.insert_element_before(start, *_AFTER_PG_NUM_TYPE)
 
 
-def render_docx(ps: pb.PrintedService) -> bytes:
-    doc = Document()
-    normal = doc.styles["Normal"]
-    normal.font.name = FONT
-    normal.font.size = Pt(11)
-    normal.paragraph_format.space_after = Pt(0)
-    section = doc.sections[0]
-    section.page_width, section.page_height = Inches(7), Inches(8.5)
-    for side in ("left_margin", "right_margin", "top_margin", "bottom_margin"):
-        setattr(section, side, Inches(0.5))
-    section.footer_distance = Inches(0.25)
-    _page_number_footer(section)
-
-    title, label, reference, date, *contact = pb.cover(ps)
-    _add_line(doc, title)
+def _cover_box(doc, ps: pb.PrintedService, label: pb.Line, reference: pb.Line, date: pb.Line) -> None:
+    """The cover's box for its kind (printed_bulletin.cover_kind), as the PDF's."""
+    kind = pb.cover_kind(ps)
+    width, height = pb.COVER_BOX
+    if kind == "picture":
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p.add_run().add_picture(BytesIO(printed_pdf.cover_picture(ps)), width=Pt(width), height=Pt(height))
+        return
+    if kind == "none":                     # no box: the reading and the date centered where the picture would be
+        lines = [(line.text, size) for line, size in zip((reference, date), pb.COVER_TEXT_POINTS) if line.text]
+        paragraphs = []
+        for text, size in lines:
+            p = doc.add_paragraph()
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            run = p.add_run(text)
+            run.bold, run.font.size = True, Pt(size)
+            paragraphs.append(p)
+        room = Pt((height - sum(size * 1.2 for _text, size in lines)) / 2)
+        paragraphs[0].paragraph_format.space_before = paragraphs[-1].paragraph_format.space_after = room
+        return
     box = doc.add_table(rows=1, cols=1)
     box.style = "Table Grid"
     box.alignment = WD_TABLE_ALIGNMENT.CENTER      # centered under the name (owner's desktop Word check, 2026-10-03)
@@ -116,6 +125,24 @@ def render_docx(ps: pb.PrintedService) -> bytes:
         p = cell.add_paragraph(line.text)
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     cell.add_paragraph()
+
+
+def render_docx(ps: pb.PrintedService) -> bytes:
+    doc = Document()
+    normal = doc.styles["Normal"]
+    normal.font.name = FONT
+    normal.font.size = Pt(11)
+    normal.paragraph_format.space_after = Pt(0)
+    section = doc.sections[0]
+    section.page_width, section.page_height = Inches(7), Inches(8.5)
+    for side in ("left_margin", "right_margin", "top_margin", "bottom_margin"):
+        setattr(section, side, Inches(0.5))
+    section.footer_distance = Inches(0.25)
+    _page_number_footer(section)
+
+    title, label, reference, date, *contact = pb.cover(ps)
+    _add_line(doc, title)
+    _cover_box(doc, ps, label, reference, date)
     doc.add_paragraph()
     for line in contact:
         _add_line(doc, line)

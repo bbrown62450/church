@@ -26,7 +26,7 @@ fails its deploy health check.
   `SET LOCAL statement_timeout = '60s'`, and all pending revisions run in one
   transaction, so any failure rolls every one of them back.
 - Revisions live in `migrations/versions/`, one file per revision, named
-  `NNNN_short_slug.py`. Head is `0006_services_bulletin`.
+  `NNNN_short_slug.py`. Head is `0007_bulletin_images`.
 
 | Revision | What it does |
 |---|---|
@@ -36,6 +36,7 @@ fails its deploy health check.
 | `0004_invites_reusable` | `invites.reusable` (NOT NULL, default false; existing code-only invites become reusable) and `invites.accepted_by` with the FK `fk_invites_accepted_by_users` (`ON DELETE SET NULL`). |
 | `0005_services_extras` | Slice 5a-2: `services.custom_elements` (JSON) and `services.hymnal` (VARCHAR), both nullable with no default and no backfill, and the index `ix_services_church_date` on `services (church_id, service_date_iso)`. Before it reaches production: "Before 0005_services_extras" below. |
 | `0006_services_bulletin` | Printed bulletin PR 2b: `services.bulletin` (JSON), nullable with no default and no backfill: the printed bulletin's weekly fields. Before it reaches production: "Before 0006_services_bulletin" below. |
+| `0007_bulletin_images` | Printed bulletin PR 3a: the table `bulletin_images` (the cover pictures, stored as JPEG in `bytes`) with the index `ix_bulletin_images_church_created`, and on Postgres row-level security on it and, when Supabase's `anon` and `authenticated` roles exist, `REVOKE ALL` on it from both. No other table changes. Before it reaches production: "Before 0007_bulletin_images" below. |
 
 ## Rules for a new revision
 
@@ -620,3 +621,156 @@ Railway's `alembic upgrade head` still finds the database at head and
 `alembic check` stays clean. Never `alembic downgrade` production for this:
 the weekly fields saved since the merge stay in the column, unread, and come
 back when 2b-1 does.
+
+## Before 0007_bulletin_images (printed bulletin PR 3a)
+
+Railway's Pre-deploy Command (`alembic upgrade head`) applies
+`0007_bulletin_images` when printed bulletin PR 3a (the server's half of
+PR 3, the cover picture; the upload on the Bulletin step, PR 3b, merges
+after it is live) merges. First, as the owner decided on 2026-10-03 (PR 3
+planning answer 10, the same routine as 0006): a backup, read-only counts,
+and a look at the SQL; after the deploy, one read-only check. One step at a
+time. Nothing here changes data. The agent guides the owner and records the
+results in `docs/ops-runbook.md` → "Printed bulletin PR 3a record", never
+with an email address, a church id or a database URL.
+
+### Step 1: Backup
+
+Actions → db-backup → Run workflow (branch `main`), or
+`gh workflow run db-backup --ref main`. It must finish green with an
+artifact `db-backup`. Record the run URL and the artifact's size.
+
+### Step 2: Count the saved services and the database's size (read-only)
+
+Supabase → the project → SQL Editor → New query. Paste this and Run:
+
+```sql
+-- Read-only: the database before 0007. Changes nothing.
+SELECT (SELECT version_num FROM alembic_version) AS version,
+       (SELECT count(*) FROM services) AS services,
+       (SELECT count(*) FROM services WHERE bulletin IS NOT NULL) AS with_bulletin,
+       pg_size_pretty(pg_database_size(current_database())) AS database_size;
+```
+
+One row. Expected before the merge: `version` is `0006_services_bulletin`
+(anything else: stop); `services` the saved services in all churches,
+`with_bulletin` those saved with the Bulletin step's fields, and
+`database_size` the whole database today (the free plan holds 500 MB; a
+stored picture takes at most 0.6 MB, a phone photo usually 0.2-0.5 MB, and
+the app stops taking pictures when all churches' together reach 150 MB:
+"Checking the cover pictures' storage" below).
+
+### Step 3: Read the SQL the upgrade will run
+
+The agent renders it from the PR's code without connecting to any database
+(from `backend/`):
+
+```bash
+DATABASE_URL=postgresql://preview@localhost:1/preview ../.venv/bin/alembic upgrade 0006_services_bulletin:0007_bulletin_images --sql 2>/dev/null | grep -v -e '^--' -e '^$' | sed 's/ *$//'
+```
+
+Expected, exactly (`backend/tests/test_migrations.py` pins it):
+
+```
+BEGIN;
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '60s';
+CREATE TABLE bulletin_images (
+    id UUID NOT NULL,
+    church_id UUID NOT NULL,
+    content_type VARCHAR NOT NULL,
+    bytes BYTEA NOT NULL,
+    width INTEGER NOT NULL,
+    height INTEGER NOT NULL,
+    created_by UUID,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    PRIMARY KEY (id),
+    FOREIGN KEY(church_id) REFERENCES churches (id) ON DELETE CASCADE,
+    FOREIGN KEY(created_by) REFERENCES users (id) ON DELETE SET NULL
+);
+CREATE INDEX ix_bulletin_images_church_created ON bulletin_images (church_id, created_at);
+ALTER TABLE bulletin_images ENABLE ROW LEVEL SECURITY;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon')
+     AND EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+    REVOKE ALL ON bulletin_images FROM anon, authenticated;
+  END IF;
+END $$;
+UPDATE alembic_version SET version_num='0007_bulletin_images' WHERE alembic_version.version_num = '0006_services_bulletin';
+COMMIT;
+```
+
+One new, empty table for the cover pictures, its index, row-level security
+and no grant to Supabase's `anon` and `authenticated` roles (so Supabase's
+own web API shows none of its rows; the `DO` block does that only where both
+roles exist, as `0003_lockdown` does), in one transaction: no existing row
+is copied, changed or deleted. If another
+connection holds a lock on `churches` or `users` for more than 5 s, the
+deploy fails and the previous release keeps serving; run the deploy again.
+
+### Step 4: After the deploy (read-only)
+
+SQL Editor:
+
+```sql
+-- Read-only: is 0007 applied, and closed to Supabase's web API? Changes nothing.
+-- Before 0007 is applied it still runs: 0006_services_bulletin, NULL, 0, NULL.
+SELECT (SELECT version_num FROM alembic_version) AS version,
+       (SELECT relrowsecurity FROM pg_class WHERE oid = to_regclass('public.bulletin_images')) AS row_security,
+       (SELECT count(*) FROM information_schema.role_table_grants
+         WHERE table_schema = 'public' AND table_name = 'bulletin_images'
+           AND grantee IN ('anon', 'authenticated')) AS open_grants,
+       (SELECT (xpath('/row/n/text()', query_to_xml('SELECT count(*) AS n FROM public.bulletin_images',
+                                                     false, true, '')))[1]::text::int
+         WHERE to_regclass('public.bulletin_images') IS NOT NULL) AS pictures;
+```
+
+Expected: `0007_bulletin_images`, `true`, `0` and `0` (no page uploads a
+picture until PR 3b). `0006_services_bulletin` with two empty (NULL) values
+means the deploy has not applied 0007 yet: wait a minute and run it again. Then step 2's query again: the same `services` and
+`with_bulletin` (or more, by the services saved since the deploy; never
+fewer) and about the same `database_size`.
+
+### Checking the cover pictures' storage (any time, read-only)
+
+Any Google account can create a church, so the app limits what pictures can
+take (plan review of 2026-10-03): a stored picture is at most 0.6 MB; a
+church keeps at most 160 (past that its oldest picture no saved service uses
+makes room, and when all 160 are in saved services the upload says so); and
+when all churches' pictures together reach 150 MB, every upload is refused
+with "The app has no room for more pictures right now. Please tell the
+app's administrator." and Railway's log has a
+`bulletin_images.storage_full` warning. A picture no saved service uses
+goes 60 days after its upload, on any church's next upload. To see where
+things stand (SQL Editor):
+
+```sql
+-- Read-only: the cover pictures' storage. Changes nothing.
+SELECT count(*) AS pictures,
+       count(DISTINCT church_id) AS churches,
+       pg_size_pretty(coalesce(sum(octet_length(bytes)), 0)) AS pictures_size,
+       coalesce((SELECT max(n) FROM (SELECT count(*) AS n FROM bulletin_images GROUP BY church_id) AS c), 0)
+         AS most_in_one_church,
+       pg_size_pretty(pg_database_size(current_database())) AS database_size
+  FROM bulletin_images;
+```
+
+`pictures_size` near 150 MB (or `most_in_one_church` at 160 for a church
+that is not yours) is the time to look closer: the oldest unused pictures go
+on their own after 60 days; a church made only to fill the storage can be
+removed with the agent's help (its pictures go with it).
+
+### Reverting PR 3b or PR 3a
+
+PR 3b (the upload on the Bulletin step) changes no schema: revert it first,
+as the plan's Step R says. Revert PR 3a only after PR 3b is reverted and
+live (PR 3b's pages send `cover_image_id` and upload pictures, which the API
+before 3a refuses). For PR 3a the schema stays at `0007_bulletin_images`:
+the table is new and the code before 3a ignores it. Revert the merge
+commit, then restore `backend/migrations/versions/0007_bulletin_images.py`
+and the `BulletinImage` model in `backend/db/models.py` from the merge
+commit in the same PR, so Railway's `alembic upgrade head` still finds the
+database at head and `alembic check` stays clean. Never `alembic downgrade`
+production for this: the pictures uploaded since the merge stay in the
+table, unread, and come back when 3a does.
