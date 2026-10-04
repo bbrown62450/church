@@ -163,7 +163,8 @@ function useObjectUrl(blob: Blob | undefined): string | null {
  * another picture**) and **Remove**. A file the server would refuse (not a
  * JPEG or PNG, empty, over 10 MB) is said at once; the upload's own refusal
  * or failure is said under the buttons; a small picture is said to print
- * blurry. The picture uploaded goes in the draft even when the step was
+ * blurry; a picture that could not be loaded offers **Try again** beside
+ * **Remove**. The picture uploaded goes in the draft even when the step was
  * left meanwhile (the upload's own callback, written at once), unless the
  * draft is another one by then or has another date (a toast says so), or a
  * later choice or Remove came after it. While an upload is in flight, from
@@ -222,6 +223,9 @@ function CoverPicture() {
     },
   });
   const preview = useBulletinImage(picture);
+  // Try again beside Remove: a dropped connection is not a missing picture (PR 3b build review M6).
+  // Kept while it runs; once the picture shows, focus goes to Choose another picture.
+  const failure = useKeptAlert(picture !== null && preview.isError, preview.isFetching, preview.refetch, "bulletin-cover-choose");
   const url = useObjectUrl(preview.data);
   const [smallUrl, setSmallUrl] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -242,7 +246,7 @@ function CoverPicture() {
 
   return (
     <Group id="bulletin-cover" title="Cover picture" help={COVER_HELP}>
-      {picture === null ? null : preview.isError ? (
+      {picture === null ? null : failure.shown ? (
         <p className="text-sm">{PICTURE_MISSING}</p>
       ) : url === null ? (
         <Skeleton role="status" aria-label="Loading the cover picture" className="aspect-[372/300] w-full max-w-sm" />
@@ -318,6 +322,11 @@ function CoverPicture() {
             Remove
           </Button>
         )}
+        {picture !== null && failure.shown ? (
+          <Button type="button" variant="outline" size="touch" aria-label="Try again: cover picture" onClick={failure.retry}>
+            Try again
+          </Button>
+        ) : null}
       </div>
       <p role="status" className="sr-only">
         {uploading ? "Uploading the picture…" : ""}

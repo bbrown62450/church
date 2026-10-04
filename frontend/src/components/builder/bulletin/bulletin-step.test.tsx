@@ -377,6 +377,25 @@ describe("the cover picture (printed bulletin PR 3b; PR 3 planning answers 5-8)"
     await user.click(within(group).getByRole("button", { name: "Remove the cover picture" }));
     await waitFor(() => expect(stored().bulletin.cover_image_id).toBeNull());
   });
+  it("offers Try again beside Remove when the picture could not be loaded, and focus goes on to Choose once it shows (PR 3b build review M6)", async () => {
+    let loads = 0;
+    const { user } = renderStep(setCover(testDraft(), PICTURE), {
+      [`GET /bulletin-images/${PICTURE}`]: () => {
+        if ((loads += 1) === 1) throw new TypeError("Failed to fetch"); // a dropped connection
+        return pictureRoute();
+      },
+    });
+    const group = await screen.findByRole("group", { name: "Cover picture" });
+    expect(await within(group).findByText("The picture could not be loaded.")).toBeInTheDocument();
+    const retry = within(group).getByRole("button", { name: "Try again: cover picture" });
+    expect(within(group).getByRole("button", { name: "Remove the cover picture" })).toBeEnabled();
+    await user.click(retry);
+    expect(await within(group).findByRole("img", { name: PICTURE_ALT })).toBeInTheDocument();
+    expect(loads).toBe(2);
+    expect(within(group).queryByRole("button", { name: "Try again: cover picture" })).toBeNull();
+    await waitFor(() => expect(within(group).getByRole("button", { name: "Choose another picture" })).toHaveFocus());
+  });
+
   it("keeps the picture when the step is left while it uploads (plan review I1)", async () => {
     let answer: (value: unknown) => void = () => {};
     const view = renderStep(testDraft(), {
