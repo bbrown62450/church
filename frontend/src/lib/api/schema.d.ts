@@ -4,6 +4,40 @@
  */
 
 export interface paths {
+    "/bulletin-images": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload Image */
+        post: operations["upload_image_bulletin_images_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/bulletin-images/{image_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Image */
+        get: operations["get_image_bulletin_images__image_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/church": {
         parameters: {
             query?: never;
@@ -540,6 +574,22 @@ export interface components {
             prayer_concerns: string;
             /** Ushers */
             ushers: string;
+        };
+        /**
+         * BulletinImageOut
+         * @description An uploaded cover picture as stored (a JPEG at most 1600 px on its long
+         *     side): put its id in the bulletin's cover_image_id.
+         */
+        BulletinImageOut: {
+            /** Height */
+            height: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Width */
+            width: number;
         };
         /** BulletinMusic */
         BulletinMusic: {
@@ -1403,6 +1453,8 @@ export interface components {
          */
         ServiceBulletin: {
             announcements: components["schemas"]["BulletinAnnouncements"];
+            /** Cover Image Id */
+            cover_image_id?: string | null;
             /** Leaders */
             leaders: {
                 [key: string]: string;
@@ -1412,7 +1464,7 @@ export interface components {
             prelude: components["schemas"]["BulletinMusic"];
             reading_text: components["schemas"]["BulletinReadingText"];
             /** Unchecked */
-            unchecked: ("prelude" | "postlude" | "ushers" | "deacon" | "coffee_hour" | "activities" | "prayer_concerns" | "collection" | "other")[];
+            unchecked: ("cover" | "prelude" | "postlude" | "ushers" | "deacon" | "coffee_hour" | "activities" | "prayer_concerns" | "collection" | "other")[];
         };
         /**
          * ServiceDraft
@@ -1637,6 +1689,156 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    upload_image_bulletin_images_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-church-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulletinImageOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_image_bulletin_images__image_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "if-none-match"?: string | null;
+                "x-church-id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                image_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The picture (a JPEG). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                };
+            };
+            /** @description Not modified: the browser's copy (If-None-Match) is current. */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     church_church_get: {
         parameters: {
             query?: never;

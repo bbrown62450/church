@@ -111,3 +111,9 @@ def test_the_cover_picture_is_read_stored_and_carried():
     for bad in ("later", 7, "", ["x"]):
         assert (sb.read({"cover_image_id": bad}).cover_image_id, sb.read({"cover_image_id": bad}).cover_given) == (
             None, True)
+
+
+def test_the_cover_picture_is_the_first_box_to_check():
+    """PR 3a: "cover" is one of the boxes still holding last week's choice, first in the step's order."""
+    assert sb.CARRY_KEYS[0] == "cover"
+    assert sb.read({"unchecked": ["prelude", "cover", "cover"]}).unchecked == ("cover", "prelude")

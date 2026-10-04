@@ -120,6 +120,13 @@ def delete_service(row: Service, *, session: Session) -> None:
     session.flush()
 
 
+def stored_bulletins(church_id, *, session: Session) -> list[object]:
+    """Every stored bulletin of the church's services (NULL left out), as read from the JSON column: for the
+    cover pictures still in use (usecases.bulletin_images; printed bulletin PR 3a)."""
+    return list(session.execute(select(Service.bulletin).where(
+        Service.church_id == as_uuid(church_id), Service.bulletin.is_not(None))).scalars())
+
+
 def previous_service(church_id, before_iso: str, *, session: Session) -> Optional[Service]:
     """The church's service with the latest real date before `before_iso`
     (YYYY-MM-DD), then the latest save, then the highest id (LIST_ORDER), or

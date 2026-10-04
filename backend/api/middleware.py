@@ -11,6 +11,10 @@ UnhandledErrorMiddleware turns an unexpected exception into the uniform 500
 body from inside CORSMiddleware and RequestIdMiddleware, so the browser gets a
 readable 500 with CORS headers and X-Request-Id instead of a network error.
 
+UploadSizeMiddleware (printed bulletin PR 3a) refuses a cover picture over
+10 MB from its Content-Length, before the body is read into memory (the
+route would read it all first), and one sent without a length.
+
 Pure ASGI, not BaseHTTPMiddleware: nothing here buffers or re-wraps a response.
 """
 import logging
@@ -102,3 +106,34 @@ class UnhandledErrorMiddleware:
 
             response = JSONResponse(error_body("internal_error", "Something went wrong."), status_code=500)
             await response(scope, receive, send)
+
+
+class UploadSizeMiddleware:
+    """POST /bulletin-images: a 422 naming "image" when the body's
+    Content-Length is over bulletin_image.MAX_UPLOAD_BYTES or missing (a
+    chunked body), before any of it is read. Every other request passes."""
+
+    PATH = "/bulletin-images"
+    NO_LENGTH_MESSAGE = "Send the picture with its size (Content-Length)."
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or scope["method"] != "POST" or scope["path"] != self.PATH:
+            await self.app(scope, receive, send)
+            return
+        from api.errors import error_body           # deferred, as UnhandledErrorMiddleware
+        from bulletin_image import MAX_UPLOAD_BYTES, TOO_LARGE_MESSAGE
+
+        lengths = [value for name, value in scope.get("headers", []) if name == b"content-length"]
+        message = None
+        if len(lengths) != 1 or not lengths[0].isdigit():
+            message = self.NO_LENGTH_MESSAGE
+        elif int(lengths[0]) > MAX_UPLOAD_BYTES:
+            message = TOO_LARGE_MESSAGE
+        if message is None:
+            await self.app(scope, receive, send)
+            return
+        response = JSONResponse(error_body("invalid_request", message, fields={"image": message}), status_code=422)
+        await response(scope, receive, send)

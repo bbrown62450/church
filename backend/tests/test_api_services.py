@@ -39,7 +39,7 @@ BLANK_BULLETIN = {
     "people": {"worship_leader": None, "liturgist": None, "organist": None}, "leaders": {},
     "announcements": {"ushers": "", "deacon": "", "coffee_hour": "", "activities": "", "prayer_concerns": "",
                       "collection": "", "other": ""},
-    "reading_text": {"ot": "", "nt": ""}, "unchecked": [],
+    "reading_text": {"ot": "", "nt": ""}, "unchecked": [], "cover_image_id": None,
 }
 BULLETIN = {
     **BLANK_BULLETIN,
@@ -218,7 +218,7 @@ def test_malformed_ids_and_paging_are_422(client, church, method, path):
      "bulletin.announcements.ushers"),
     ({"bulletin": {**BULLETIN, "cover_image_id": "x"}}, "bulletin.cover_image_id"),
     ({"bulletin": {**BULLETIN, "reading_text": {"ot": "", "nt": "x" * 10_001}}}, "bulletin.reading_text.nt"),
-    ({"bulletin": {**BULLETIN, "unchecked": ["cover"]}}, "bulletin.unchecked.0"),
+    ({"bulletin": {**BULLETIN, "unchecked": ["picture"]}}, "bulletin.unchecked.0"),
 ])
 def test_a_bad_body_is_a_422_naming_the_field(client, church, change, field):
     r = call(client, "POST", "/services", church, json={**SERVICE, **change})
@@ -349,3 +349,36 @@ def test_last_week_s_bulletin_carries_the_music_and_the_announcements(client, ch
     for query in ("", "?before=2026-02-30", "?before=2026-10-04T00:00:00"):
         r = call(client, "GET", f"/services/previous-bulletin{query}", church)
         assert (r.status_code, r.json()["error"]["code"]) == (422, "invalid_request"), query
+
+
+
+def upload_picture(client, church_id, email=EMAIL) -> str:
+    from tests.picture_helpers import picture
+    r = client.post("/bulletin-images", content=picture(),
+                    headers={**church_headers(email, church_id), "Content-Type": "image/jpeg"})
+    assert r.status_code == 201, r.text
+    return r.json()["id"]
+
+
+def test_the_cover_picture_is_saved_kept_by_an_older_page_and_carried(client, church, pastor, make_church):
+    """PR 3a: the bulletin's cover_image_id is saved and opened; a bulletin without it (a page from before
+    PR 3b) keeps the saved picture on a PUT; null clears it; an id the church does not have saves as none;
+    the picture carries forward with the music."""
+    mine = upload_picture(client, church)
+    theirs = upload_picture(client, make_church(name="Other", owner_user_id=pastor))
+    made = create(client, church, {**SERVICE, "service_date_iso": "2026-09-27",
+                                   "bulletin": {**BULLETIN, "cover_image_id": mine, "unchecked": ["cover"]}})
+    assert (made["bulletin"]["cover_image_id"], made["bulletin"]["unchecked"]) == (mine, ["cover"])
+    path = f"/services/{made['id']}"
+    older = {key: value for key, value in BULLETIN.items() if key != "cover_image_id"}   # a page from before 3b
+    r = call(client, "PUT", path, church, json={**SERVICE, "service_date_iso": "2026-09-27", "bulletin": older},
+             **{"If-Match": made["saved_at"]})
+    assert (r.status_code, r.json()["bulletin"]["cover_image_id"]) == (200, mine)
+    carried = call(client, "GET", "/services/previous-bulletin?before=2026-10-04", church).json()
+    assert carried["bulletin"]["cover_image_id"] == mine
+    for sent, saved in ((None, None), (theirs, None), (str(uuid.uuid4()), None), (mine, mine)):
+        r = call(client, "PUT", path, church, json={**SERVICE, "bulletin": {**BULLETIN, "cover_image_id": sent}},
+                 **{"If-Match": r.json()["saved_at"]})
+        assert (r.status_code, r.json()["bulletin"]["cover_image_id"]) == (200, saved), sent
+        assert call(client, "GET", path, church).json()["bulletin"]["cover_image_id"] == saved
+    assert create(client, church, {**SERVICE, "bulletin": older})["bulletin"]["cover_image_id"] is None

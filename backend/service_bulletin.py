@@ -16,7 +16,8 @@ stored in services.bulletin (migration 0006_services_bulletin).
   picture this week) and `cover_given` (False when the bulletin did not say,
   as a page from before PR 3b sends it: a PUT then keeps the saved picture
   and the printed bulletin keeps PR 1's [Cover picture] box). The picture
-  carries forward with the music.
+  carries forward with the music and is one of the boxes to check ("cover",
+  the first: the cover comes first on the Bulletin step).
 - read(raw): a stored or posted value read tolerantly: anything that is not
   an object, a missing key or a value of the wrong type is blank (a person
   None; a cover_image_id that is not an id, None); an unknown element key
@@ -56,8 +57,9 @@ from bulletin_settings import ELEMENT_KEYS, NOT_ONE_LINE, ROLES
 
 ANNOUNCEMENT_KEYS = ("ushers", "deacon", "coffee_hour", "activities", "prayer_concerns", "collection", "other")
 ONE_LINE_ANNOUNCEMENTS = ("ushers", "deacon", "coffee_hour")
-# The boxes that carry forward to the next week (PR 2 planning answer 5), in the Bulletin step's order.
-CARRY_KEYS = ("prelude", "postlude", *ANNOUNCEMENT_KEYS)
+# The boxes that carry forward to the next week (PR 2 planning answer 5; the cover picture, PR 3 planning
+# answer 7), in the Bulletin step's order.
+CARRY_KEYS = ("cover", "prelude", "postlude", *ANNOUNCEMENT_KEYS)
 
 # The longest value each text takes; ServiceDraft refuses longer (422), and read() cuts a stored one.
 MAX_LENGTH = {"title": 200, "composer": 100, "person": 100, "ushers": 200, "deacon": 100, "coffee_hour": 200,

@@ -346,6 +346,9 @@ class ServiceBulletin(BaseModel):
     reading_text: BulletinReadingText
     # The boxes still holding last week's text, not checked yet (saved, so the marks come back on open).
     unchecked: list[Literal[service_bulletin.CARRY_KEYS]] = Field(max_length=len(service_bulletin.CARRY_KEYS))
+    # The week's cover picture (PR 3a; POST /bulletin-images): null, no picture this week. Left out (a page
+    # from before PR 3b): a PUT keeps the saved picture and the printed bulletin keeps PR 1's box.
+    cover_image_id: Optional[uuid.UUID] = None
 
 
 class ServiceDraft(BaseModel):
@@ -390,7 +393,8 @@ class ServiceDraft(BaseModel):
             selected_ot_ref=self.selected_ot_ref, selected_nt_ref=self.selected_nt_ref,
             include_communion=self.include_communion,
             custom_elements=tuple(CustomElement(e.label, e.text, e.insert_after) for e in self.custom_elements),
-            bulletin=None if self.bulletin is None else service_bulletin.read(self.bulletin.model_dump()))
+            bulletin=None if self.bulletin is None else service_bulletin.read(self.bulletin.model_dump(
+                exclude=None if "cover_image_id" in self.bulletin.model_fields_set else {"cover_image_id"})))
 
 
 # --- slice 5a-2: the archive (5a spec, "Schemas"; GET/POST/PUT/DELETE /services) ---
@@ -470,3 +474,14 @@ class PreviousBulletinOut(BaseModel):
     service_id: Optional[uuid.UUID]
     service_date_iso: Optional[str]
     bulletin: ServiceBulletin
+
+
+# --- printed bulletin PR 3a: the cover pictures (POST /bulletin-images) ---
+
+class BulletinImageOut(BaseModel):
+    """An uploaded cover picture as stored (a JPEG at most 1600 px on its long
+    side): put its id in the bulletin's cover_image_id."""
+
+    id: uuid.UUID
+    width: int
+    height: int

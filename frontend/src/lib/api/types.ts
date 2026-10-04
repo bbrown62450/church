@@ -79,6 +79,8 @@ export type DeletedOut = components["schemas"]["DeletedOut"];
  */
 export type ServiceBulletin = components["schemas"]["ServiceBulletin"];
 export type PreviousBulletin = components["schemas"]["PreviousBulletinOut"];
+/** `POST /bulletin-images` (printed bulletin PR 3a): an uploaded cover picture as stored; its id goes in `cover_image_id`. */
+export type BulletinImage = components["schemas"]["BulletinImageOut"];
 
 /** `POST /liturgy/review` (the service reviewer): every switched-on card with text, and the notes back. */
 export type ReviewBody = components["schemas"]["ReviewIn"];

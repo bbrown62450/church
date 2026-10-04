@@ -44,6 +44,14 @@ reading); opening reads them tolerantly (NULL is an empty
 bulletin). previous_bulletin gives what a new week carries forward. Nothing
 logs a bulletin's text (prayer concerns can name people).
 
+Printed bulletin PR 3a adds the week's cover picture (cover_image_id): a
+save stores it when it is one of the church's pictures and no picture
+otherwise (an id of another church, or one no longer there: never a 404,
+never a picture from elsewhere); a PUT whose bulletin does not say (a page
+from before PR 3b) keeps the saved picture. The picture is held (FOR SHARE)
+until the save commits, so the 60-day removal cannot take it meanwhile
+(repos.bulletin_images, plan review I5).
+
 No FastAPI, Starlette or Streamlit here (test_no_streamlit_in_core.py).
 """
 from __future__ import annotations
@@ -63,6 +71,7 @@ from domain_errors import Conflict, InvalidInput, NotFound
 from hymn_search import normalize_title
 from hymn_usage import rebuild_usage_for_date
 from liturgy_config import SECTION_ORDER, normalize_placement
+from repos import bulletin_images as images_repo
 from repos import hymns as hymn_repo
 from repos import services as services_repo
 from service_bulletin import ServiceBulletin
@@ -390,12 +399,22 @@ def _log(action: str, church_id: uuid.UUID, service_id: uuid.UUID, usage_rows: i
                 round((time.monotonic() - started) * 1000))
 
 
+def _with_known_cover(session, church_id: uuid.UUID, clean: ServiceInput) -> ServiceInput:
+    """The input with a cover picture the church does not have read as no picture (PR 3a)."""
+    week = clean.bulletin
+    if week is None or not week.cover_image_id or images_repo.has_image(church_id, week.cover_image_id,
+                                                                        session=session, lock=True):
+        return clean
+    return replace(clean, bulletin=replace(week, cover_image_id=None))
+
+
 def create_service(church_id: uuid.UUID, user_id: uuid.UUID, data: ServiceInput) -> ServiceRecord:
     """POST /services: save a new service and rebuild its date's hymn use, in one transaction."""
     started = time.monotonic()
     cid, uid = as_uuid(church_id), as_uuid(user_id)
     clean = clean_input(data)
     with session_scope() as s:
+        clean = _with_known_cover(s, cid, clean)
         hymns = resolve_hymn_refs(s, cid, clean.hymns)
         row = services_repo.insert_service(cid, uid, _fields(cid, clean, hymns, s), session=s)
         usage_rows = rebuild_usage_for_date(cid, row.service_date_iso, session=s)
@@ -441,6 +460,11 @@ def replace_service(church_id: uuid.UUID, service_id: uuid.UUID, data: ServiceIn
         clean = clean_input(data)
         if clean.bulletin is None and row.bulletin is not None:
             clean = replace(clean, bulletin=_kept_bulletin(row, clean))
+        elif clean.bulletin is not None and not clean.bulletin.cover_given:     # a page from before PR 3b
+            saved = read_bulletin(row.bulletin)
+            clean = replace(clean, bulletin=replace(clean.bulletin, cover_image_id=saved.cover_image_id,
+                                                    cover_given=saved.cover_given))
+        clean = _with_known_cover(s, cid, clean)
         hymns = resolve_hymn_refs(s, cid, clean.hymns)
         old_date = normalize_date_iso(row.service_date_iso)
         services_repo.update_service(row, _fields(cid, clean, hymns, s), session=s)
