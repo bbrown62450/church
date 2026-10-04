@@ -756,7 +756,7 @@ SELECT count(*) AS pictures,
   FROM bulletin_images;
 ```
 
-`pictures_size` near 150 MB (or `most_in_one_church` at 60 for a church
+`pictures_size` near 150 MB (or `most_in_one_church` at 160 for a church
 that is not yours) is the time to look closer: the oldest unused pictures go
 on their own after 60 days; a church made only to fill the storage can be
 removed with the agent's help (its pictures go with it).
