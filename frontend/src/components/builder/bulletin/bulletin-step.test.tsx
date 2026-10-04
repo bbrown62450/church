@@ -340,7 +340,7 @@ describe("the cover picture (printed bulletin PR 3b; PR 3 planning answers 5-8)"
     });
     const group = await screen.findByRole("group", { name: "Cover picture" });
     const input = document.getElementById("bulletin-cover-file") as HTMLInputElement;
-    expect(input).toHaveAttribute("accept", "image/jpeg,image/png");
+    expect(input).toHaveAttribute("accept", "image/jpeg,image/png,.jpg,.jpeg,.png");
     fireEvent.change(input, { target: { files: [new File(["x"], "photo.heic", { type: "image/heic" })] } });
     expect(await within(group).findByRole("alert")).toHaveTextContent("Choose a JPEG or PNG picture.");
     expect(api.requests.filter((r) => r.method === "POST")).toEqual([]);
@@ -349,6 +349,19 @@ describe("the cover picture (printed bulletin PR 3b; PR 3 planning answers 5-8)"
       expect(within(group).getByRole("alert")).toHaveTextContent("The picture has too many pixels. Choose a smaller one."),
     );
     expect(stored().bulletin.cover_image_id).toBeNull();
+  });
+
+  it("uploads a JPEG whose type the phone left blank, as bytes the server reads (PR 3b build review M7)", async () => {
+    const { api } = renderStep(testDraft(), {
+      "POST /bulletin-images": () => ({ status: 201, body: bulletinImage() }),
+      [`GET /bulletin-images/${PICTURE}`]: pictureRoute,
+    });
+    await screen.findByRole("group", { name: "Cover picture" });
+    const blank = new File([new Uint8Array([0xff, 0xd8, 0xff])], "IMG_0001.JPG", { type: "" });
+    fireEvent.change(document.getElementById("bulletin-cover-file") as HTMLInputElement, { target: { files: [blank] } });
+    await waitFor(() => expect(stored().bulletin.cover_image_id).toBe(PICTURE));
+    const [post] = api.requests.filter((r) => r.method === "POST");
+    expect(post.headers["content-type"]).toBe("application/octet-stream");
   });
 
   it("carries last week's picture with its note until it is kept, and says when a picture cannot be loaded", async () => {

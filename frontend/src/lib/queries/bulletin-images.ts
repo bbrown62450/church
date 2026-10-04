@@ -6,7 +6,8 @@
  *
  * - `checkPicture(file)`: what the server would refuse, said before the
  *   upload starts (a JPEG or PNG, not empty, at most 10 MB), with the
- *   server's own words; null when it may go.
+ *   server's own words; null when it may go. A blank or loose type goes by
+ *   the file's name (build review M7).
  * - `useUploadBulletinImage({ onStored, onFailed })`: the picture itself as
  *   the request body, with the choice it answers (`PictureUpload`);
  *   `onStored` gets the answer (its id goes in the draft, `setCover`) and
@@ -39,9 +40,18 @@ export const MAX_PICTURE_BYTES = 10 * 1024 * 1024;
 export const PICTURE_TOO_LARGE = "The picture is larger than 10 MB. Choose a smaller one.";
 export const NOT_A_PICTURE = "Choose a JPEG or PNG picture.";
 const TYPES = new Set(["image/jpeg", "image/png"]);
+/** Types some phone pickers give a JPEG (blank from a cloud provider or a file manager; old names): the name decides. */
+const LOOSE_TYPES = new Set(["", "image/jpg", "image/pjpeg"]);
+const PICTURE_NAME = /\.(jpe?g|png)$/i;
 
+/**
+ * A JPEG or PNG by its type; with a blank or loose type, by its name
+ * (.jpg, .jpeg, .png), and the server, which reads the bytes, has the last
+ * word (PR 3b build review M7). A clearly other type (HEIC, GIF) is refused.
+ */
 export function checkPicture(file: File): string | null {
-  if (!TYPES.has(file.type) || file.size === 0) return NOT_A_PICTURE; // 0 bytes: an iCloud photo not downloaded yet
+  const picture = TYPES.has(file.type) || (LOOSE_TYPES.has(file.type) && PICTURE_NAME.test(file.name));
+  if (!picture || file.size === 0) return NOT_A_PICTURE; // 0 bytes: an iCloud photo not downloaded yet
   if (file.size > MAX_PICTURE_BYTES) return PICTURE_TOO_LARGE;
   return null;
 }
@@ -84,7 +94,8 @@ export function useUploadBulletinImage({
     mutationFn: ({ file }) =>
       api.church<BulletinImage>("/bulletin-images", {
         method: "POST",
-        init: { body: file, headers: { "Content-Type": file.type } },
+        // A blank type is sent as bytes; the server reads what they are.
+        init: { body: file, headers: { "Content-Type": file.type || "application/octet-stream" } },
       }),
     onSuccess: (stored, upload) => onStored(stored, upload),
     onError: (error, upload) => onFailed(error, upload),

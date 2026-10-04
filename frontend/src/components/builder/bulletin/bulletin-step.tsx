@@ -286,7 +286,7 @@ function CoverPicture() {
         ref={input}
         id="bulletin-cover-file"
         type="file"
-        accept="image/jpeg,image/png"
+        accept="image/jpeg,image/png,.jpg,.jpeg,.png"
         className="sr-only"
         tabIndex={-1}
         aria-hidden="true"
