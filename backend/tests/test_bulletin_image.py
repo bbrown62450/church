@@ -221,7 +221,7 @@ def test_a_picture_that_takes_too_long_stops_and_frees_the_worker(monkeypatch):
     """Build review C1: a started picture has PREPARE_SECONDS of the worker; the decode stops at its next
     read of the file, and the upload is told why (a 429 the page shows)."""
     monkeypatch.setattr(bi, "MAX_SCANS", 100_000)
-    slow = repeated_scan(picture((2000, 1500), progressive=True), 5000)                    # about 10 s whole
+    slow = repeated_scan(picture((2000, 1500), progressive=True), 5000)                    # about 7 s whole
     started = time.monotonic()
     with pytest.raises(RateLimited) as raised:
         bi.prepare(slow, seconds=0.3)

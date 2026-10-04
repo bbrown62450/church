@@ -254,8 +254,10 @@ prints "[Sermon title]". The communion liturgy prints after the second hymn when
   content_type, bytes, width, height, created_by, created_at)` (migration `0007_bulletin_images`).
   The upload is checked (JPEG, a phone's multi-picture JPEG included, or PNG; at most 10 MB in;
   PR 3 planning answer 5: no HEIC, an iPhone's Safari sends a JPEG), decoded with Pillow (already
-  installed with reportlab), one at a time, turned upright, its colors converted to sRGB, scaled to
-  at most 1600 px on the long side and stored as JPEG with no camera data, at most 0.6 MB (a lower
+  installed with reportlab), one at a time and within 20 s (a JPEG of more than 64 scans, or a
+  progressive JPEG or a PNG of more than 24 million pixels, is refused before it is decoded), turned
+  upright, its colors converted to sRGB, scaled to at most 1600 px on the long side and stored as
+  JPEG with no camera data or other metadata (no EXIF, XMP or comment), at most 0.6 MB (a lower
   quality, then a smaller size, until it fits; a phone photo is usually 0.2-0.5 MB). The picture is the request body of
   `POST /bulletin-images` (no multipart form, so no new package). The service's
   `bulletin.cover_image_id` points at it (a JSON key, no foreign key; an id the church does not

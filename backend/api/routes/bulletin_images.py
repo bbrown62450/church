@@ -12,7 +12,8 @@ call (F §2.2 rule 1), with no SQL and no try/except.
   is read; with no Content-Type the body is taken too, with
   application/json it is a 400). The `picture` bucket (F §1.8): 20 an hour
   a member, 60 a day a church; a 429 also when another picture is being
-  prepared (bulletin_image). A church keeps at most 160 pictures, and all
+  prepared, or when this one takes too long (bulletin_image: 20 s in all;
+  a JPEG of more than 64 scans is a 422 before it is decoded). A church keeps at most 160 pictures, and all
   churches' pictures together at most 150 MB (a 422 past either;
   usecases.bulletin_images). No Idempotency-Key: a retried upload stores a
   second copy, which the 60-day removal takes.
