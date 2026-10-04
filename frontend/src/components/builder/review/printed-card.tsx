@@ -39,13 +39,15 @@ export const PRINTED_SUMMARY =
   "The booklet: the cover, the order of worship with the readings in full, and the announcements.";
 export const SETTINGS_NOTE =
   "The church's details, the people who lead and the service time come from the bulletin settings.";
-export const WEEKLY_NOTE = "The music, the announcements and this week's changes to who leads come from the Bulletin step.";
+export const WEEKLY_NOTE =
+  "The cover picture, the music, the announcements and this week's changes to who leads come from the Bulletin step.";
 
 /**
  * What the printed bulletin leaves out (PR 2 planning answer 3: a blank field
  * prints nothing, so the card says which are blank), above the downloads so
  * it is read before printing: the blank standing settings (with this week's
- * people), then the prelude, the postlude and the announcements (PR 2b). The
+ * people), then the cover picture (PR 3b), the prelude, the postlude and the
+ * announcements (PR 2b). The
  * settings' part is left out while they load or if they fail: the downloads
  * never wait for them. Then the boxes still holding last week's text,
  * unchecked.
@@ -103,8 +105,8 @@ function FileRow({ file, disabled, onDownloaded }: { file: PrintedFile; disabled
  * from the church's bulletin settings; the card lists the blank ones above
  * the downloads and links to the Bulletin settings page below them (any
  * member; admins edit there). PR 2b: the week's own fields come from the
- * Bulletin step and replace PR 1's last [placeholders] (the cover picture's
- * stays until PR 3); the card lists the blank ones and the boxes from last
+ * Bulletin step and replace PR 1's last [placeholders]; PR 3b adds the cover
+ * picture (none prints the reading and the date alone); the card lists the blank ones and the boxes from last
  * week not checked yet, and carries last week's in here too
  * (`useBulletinCarry`), so a bulletin printed without opening the Bulletin
  * step has them.

@@ -340,7 +340,8 @@ export function notCheckedLine(labels: readonly string[]): string {
  * What the printed bulletin leaves out this week (PR 2 planning answer 3), in
  * the card's "Not filled in" order: the standing fields from the settings,
  * the three people as this week has them (when the settings are loaded), then
- * the prelude, the postlude and the announcements (all of them blank).
+ * the cover picture (PR 3b: none this week prints the reading and the date
+ * alone), the prelude, the postlude and the announcements (all of them blank).
  */
 export function printedNotFilledIn(settings: BulletinSettings | undefined, d: DraftV1): string[] {
   const p = bulletinPayload(d);
@@ -349,6 +350,7 @@ export function printedNotFilledIn(settings: BulletinSettings | undefined, d: Dr
       ? []
       : notFilledIn({ ...settings, ...Object.fromEntries(PEOPLE.map((r) => [r, p.people[r] ?? settings[r]])) });
   const weekly = [
+    ...(filled(p, "cover") ? [] : ["cover picture"]),
     ...(filled(p, "prelude") ? [] : ["prelude"]),
     ...(filled(p, "postlude") ? [] : ["postlude"]),
     ...(ANNOUNCEMENT_KEYS.some((key) => filled(p, key)) ? [] : ["announcements"]),

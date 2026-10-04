@@ -387,7 +387,7 @@ describe("Review & send: the printed bulletin (printed bulletin PR 1)", () => {
     expect(within(card).getByText(SETTINGS_NOTE)).toBeInTheDocument();
     expect(
       await within(card).findByText(
-        "Not filled in: address, phone, email, website, Facebook name, service time, worship leader, liturgist, organist, prelude, postlude, announcements.",
+        "Not filled in: address, phone, email, website, Facebook name, service time, worship leader, liturgist, organist, cover picture, prelude, postlude, announcements.",
       ),
     ).toBeInTheDocument();
     const download = within(card).getByRole("button", { name: "Download printed bulletin" });
@@ -403,7 +403,7 @@ describe("Review & send: the printed bulletin (printed bulletin PR 1)", () => {
 
     const filled = renderReview(testDraft(), { "GET /church/bulletin-settings": filledBulletinSettings({ organist: "" }) });
     card = await screen.findByRole("region", { name: "Printed bulletin" });
-    expect(await within(card).findByText("Not filled in: organist, prelude, postlude, announcements.")).toBeInTheDocument();
+    expect(await within(card).findByText("Not filled in: organist, cover picture, prelude, postlude, announcements.")).toBeInTheDocument();
     expect(within(card).getByRole("button", { name: "Download printed bulletin" })).toBeEnabled();
     filled.unmount();
   });
@@ -424,7 +424,7 @@ describe("Review & send: the printed bulletin (printed bulletin PR 1)", () => {
     });
     const card = await screen.findByRole("region", { name: "Printed bulletin" });
     expect(await within(card).findByText("From last week, not checked yet: prelude, ushers and counters, coffee hour.")).toBeInTheDocument();
-    expect(within(card).getByText("Not filled in: postlude.")).toBeInTheDocument();
+    expect(within(card).getByText("Not filled in: cover picture, postlude.")).toBeInTheDocument();
     await user.click(within(card).getByRole("button", { name: "Download printed bulletin" }));
     await waitFor(() => expect(printedRequests(api)).toHaveLength(1));
     expect(printedRequests(api)[0].body).toMatchObject({
@@ -432,6 +432,23 @@ describe("Review & send: the printed bulletin (printed bulletin PR 1)", () => {
     });
     const progress = screen.getByRole("navigation", { name: "Steps" });
     expect(within(progress).getAllByRole("link")[3]).toHaveTextContent("4 Bulletin 3 to check");
+  });
+
+  it("carries last week's cover picture in, lists it to check, and prints it (printed bulletin PR 3b)", async () => {
+    const picture = "0b4c2b0e-1111-4222-8333-444455556666";
+    const lastWeek = previousBulletin({ service_id: "s-last", service_date_iso: "2026-09-27", bulletin: serviceBulletin({ cover_image_id: picture }) });
+    const { api, user } = renderReview(testDraft(), {
+      "GET /church/bulletin-settings": filledBulletinSettings(),
+      "GET /services/previous-bulletin": lastWeek,
+      "POST /documents/printed": pdf(),
+    });
+    const card = await screen.findByRole("region", { name: "Printed bulletin" });
+    expect(within(card).getByText(WEEKLY_NOTE)).toHaveTextContent(/^The cover picture, the music/);
+    expect(await within(card).findByText("From last week, not checked yet: cover picture.")).toBeInTheDocument();
+    expect(within(card).getByText("Not filled in: prelude, postlude, announcements.")).toBeInTheDocument();
+    await user.click(within(card).getByRole("button", { name: "Download printed bulletin" }));
+    await waitFor(() => expect(printedRequests(api)).toHaveLength(1));
+    expect(printedRequests(api)[0].body).toMatchObject({ service: { bulletin: { cover_image_id: picture, unchecked: ["cover"] } } });
   });
 });
 

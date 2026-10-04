@@ -272,12 +272,13 @@ describe("editing the Bulletin step", () => {
 });
 
 describe("printedNotFilledIn (PR 2 planning answer 3)", () => {
-  it("lists the blank standing fields, this week's people as changed, then the prelude, postlude and announcements", () => {
+  it("lists the blank standing fields, this week's people as changed, then the cover picture, prelude, postlude and announcements", () => {
     const settings = filledBulletinSettings({ phone: "", organist: "" });
-    expect(printedNotFilledIn(settings, testDraft())).toEqual(["phone", "organist", "prelude", "postlude", "announcements"]);
+    expect(printedNotFilledIn(settings, testDraft())).toEqual(["phone", "organist", "cover picture", "prelude", "postlude", "announcements"]);
     let d = setPerson(setPerson(testDraft(), "organist", "Jordan Doe"), "liturgist", "");
     d = setMusic(setAnnouncement(d, "deacon", "Alex Example"), "prelude", "title", "Morning Voluntary");
-    expect(printedNotFilledIn(settings, d)).toEqual(["phone", "liturgist", "postlude"]);
+    expect(printedNotFilledIn(settings, d)).toEqual(["phone", "liturgist", "cover picture", "postlude"]);
+    d = setCover(d, "0b4c2b0e-1111-4222-8333-444455556666");
     expect(printedNotFilledIn(undefined, d)).toEqual(["postlude"]); // settings still loading
   });
 });
