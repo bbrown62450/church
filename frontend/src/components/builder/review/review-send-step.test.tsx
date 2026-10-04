@@ -713,7 +713,8 @@ describe("Review & send: saving (slice 5a-3)", () => {
     await user.click(within(card).getByRole("button", { name: "Save changes" }));
     await waitFor(() => expect(within(card).getByText(`Saved to the archive · ${formatSavedAt(SECOND_SAVE)}`)).toBeInTheDocument());
     const [put] = serviceRequests(api, "PUT");
-    expect(put.body).toHaveProperty("bulletin", emptyServiceBulletin()); // clearing every field clears the saved ones
+    // Clearing every field clears the saved ones, the picture included (PR 3b: null says "no picture").
+    expect(put.body).toHaveProperty("bulletin", { ...emptyServiceBulletin(), cover_image_id: null });
   });
 
   it("sends a filled-in bulletin in a POST (2b-2 build review M1)", async () => {
@@ -725,6 +726,7 @@ describe("Review & send: saving (slice 5a-3)", () => {
     expect(await screen.findByText(SAVED_MESSAGE)).toBeInTheDocument();
     const [post] = serviceRequests(api, "POST");
     expect(post.body).toMatchObject({ bulletin: { announcements: { coffee_hour: "The Sample family" } } });
+    expect((post.body as { bulletin: object }).bulletin).not.toHaveProperty("cover_image_id"); // no picture (PR 3b)
   });
 
   it("keeps the key for an identical retry after an unknown outcome, replaces it after an edit, and retries a mismatch once", async () => {

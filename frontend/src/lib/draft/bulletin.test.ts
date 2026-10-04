@@ -9,17 +9,21 @@ import {
   bulletinFromService,
   bulletinPayload,
   bulletinStatus,
+  emptyServiceBulletin,
   followSaveMode,
+  isBlankBulletin,
   keepCarried,
   notChecked,
   notCheckedLine,
   printedNotFilledIn,
   setAnnouncement,
+  setCover,
   setMusic,
   setPartLeader,
   setPastedText,
   setPerson,
   shouldCarry,
+  withoutNoPicture,
 } from "./bulletin";
 import { fingerprint } from "./fingerprint";
 import { draftToServicePayload, markSaved, serviceToDraft } from "./mapping";
@@ -98,7 +102,8 @@ describe("carry forward (PR 2 planning answer 5)", () => {
         testDraft(),
       ),
     );
-    expect(shouldCarry(all)).toBe(false);
+    expect(shouldCarry(all)).toBe(true); // the cover picture still carries (PR 3b)
+    expect(shouldCarry(setCover(all, null))).toBe(false);
     // The people, a part's leader and pasted text never stop it: they never carry.
     expect(shouldCarry(setPerson(setPartLeader(testDraft(), "sermon", "Rev. Guest"), "organist", ""))).toBe(true);
   });
@@ -274,5 +279,54 @@ describe("printedNotFilledIn (PR 2 planning answer 3)", () => {
     d = setMusic(setAnnouncement(d, "deacon", "Alex Example"), "prelude", "title", "Morning Voluntary");
     expect(printedNotFilledIn(settings, d)).toEqual(["phone", "liturgist", "postlude"]);
     expect(printedNotFilledIn(undefined, d)).toEqual(["postlude"]); // settings still loading
+  });
+});
+
+
+describe("the cover picture (printed bulletin PR 3b; PR 3 planning answers 6, 7)", () => {
+  const PICTURE = "0b4c2b0e-1111-4222-8333-444455556666";
+
+  it("is chosen or removed on the step, which checks its box for good", () => {
+    const d = setCover(testDraft(), PICTURE);
+    expect(d.bulletin).toMatchObject({ cover_image_id: PICTURE, edited: ["cover"], carried: [] });
+    expect(setCover(d, null).bulletin).toMatchObject({ cover_image_id: null, edited: ["cover"] });
+    expect(bulletinPayload(d).cover_image_id).toBe(PICTURE);
+  });
+
+  it("carries last week's picture, marked to check first; Keep as is or a choice checks it; a touched box never carries", () => {
+    const week = lastWeek({ bulletin: { ...lastWeek().bulletin, cover_image_id: PICTURE } });
+    const c = applyCarry(testDraft(), week, "2026-10-04");
+    expect(c.bulletin).toMatchObject({ cover_image_id: PICTURE, carried: ["cover", "prelude", "ushers", "coffee_hour", "prayer_concerns"] });
+    expect(notChecked(c)[0]).toBe("cover picture");
+    expect(bulletinPayload(c).unchecked[0]).toBe("cover");
+    expect(keepCarried(c, "cover").bulletin).toMatchObject({ cover_image_id: PICTURE, edited: ["cover"] });
+    const removed = setCover(c, null);
+    expect(removed.bulletin.carried).not.toContain("cover");
+    const later = applyCarry(setDate(removed, "2026-10-11", "user"), week, "2026-10-11");
+    expect(later.bulletin.cover_image_id).toBeNull(); // removed: last week's never comes back into it
+    expect(applyCarry(testDraft(), lastWeek(), "2026-10-04").bulletin.cover_image_id).toBeNull(); // none last week
+  });
+
+  it("is marked to check on Save as new service, and opens with its saved mark", () => {
+    const saved = serviceBulletin({ cover_image_id: PICTURE, unchecked: ["cover"] });
+    const opened: DraftV1 = {
+      ...testDraft(),
+      editing: { service_id: "s-last", saved_at: "2026-09-27T12:00:00+00:00", date_iso: "2026-10-04" },
+      bulletin: bulletinFromService(saved, savedService()),
+    };
+    expect(opened.bulletin).toMatchObject({ cover_image_id: PICTURE, carried: ["cover"] });
+    const kept = keepCarried(opened, "cover");
+    const copy = followSaveMode(setDate(kept, "2026-10-11", "user"));
+    expect(copy.bulletin).toMatchObject({ cover_image_id: PICTURE, carried: ["cover"] });
+    expect(bulletinFromService(serviceBulletin(), savedService()).cover_image_id).toBeNull();
+  });
+
+  it("is left out of the payload when there is none, so a draft saved before PR 3b stays Saved; a POST leaves no picture out", () => {
+    expect(bulletinPayload(testDraft())).not.toHaveProperty("cover_image_id");
+    expect(isBlankBulletin({ ...emptyServiceBulletin(), cover_image_id: null })).toBe(true);
+    expect(isBlankBulletin({ ...emptyServiceBulletin(), cover_image_id: PICTURE })).toBe(false);
+    expect(withoutNoPicture({ ...emptyServiceBulletin(), cover_image_id: null })).toEqual(emptyServiceBulletin());
+    expect(withoutNoPicture({ ...emptyServiceBulletin(), cover_image_id: PICTURE })).toHaveProperty("cover_image_id", PICTURE);
+    expect("bulletin" in draftToServicePayload(testDraft())).toBe(false);
   });
 });

@@ -1,12 +1,14 @@
 /**
- * The per-church unsaved draft, version 3 (F §4.6; S "Draft store").
+ * The per-church unsaved draft, version 4 (F §4.6; S "Draft store").
  *
  * This is F §4.6's draft shape. Version 2 (slice 5a-3) added the two fields
  * slice 5a brings with its own version bump: `editing.date_iso` (the saved
  * service's date; null for an undated saved service) and
  * `save_key_fingerprint` (`save-key.ts`). Version 3 (printed bulletin PR 2b)
  * adds `bulletin`, the Bulletin step's weekly fields (`bulletin.ts`), and the
- * step id "bulletin". The names `DraftV1` and
+ * step id "bulletin". Version 4 (printed bulletin PR 3b) adds the week's
+ * cover picture, `bulletin.cover_image_id`, and its box to check ("cover",
+ * first in `CARRY_KEYS`). The names `DraftV1` and
  * `draftV1Schema` stay, so no importer changes. Strings are
  * bounded generously (20 000) so a stored draft is never rejected for
  * length; the UI limits live in the components. `readings.scriptures` holds
@@ -18,7 +20,7 @@ import { isFirstSundayOfMonth, isValidDateIso, nextSunday, todayIn } from "@/lib
 import { DEFAULT_BENEDICTION_FALLBACK } from "@/lib/liturgy/defaults";
 import { DEFAULT_ENABLED } from "@/lib/liturgy/sections";
 
-export const DRAFT_VERSION = 3;
+export const DRAFT_VERSION = 4;
 
 export const STEP_IDS = ["readings", "hymns", "liturgy", "bulletin", "review"] as const;
 export type StepId = (typeof STEP_IDS)[number];
@@ -69,8 +71,11 @@ export type Person = (typeof PEOPLE)[number];
 /** The announcements (PR 2 planning answer 4), in the printed order. */
 export const ANNOUNCEMENT_KEYS = ["ushers", "deacon", "coffee_hour", "activities", "prayer_concerns", "collection", "other"] as const;
 export type AnnouncementKey = (typeof ANNOUNCEMENT_KEYS)[number];
-/** The boxes that carry forward from last week (PR 2 planning answer 5): the music and each announcement. */
-export const CARRY_KEYS = ["prelude", "postlude", ...ANNOUNCEMENT_KEYS] as const;
+/**
+ * The boxes that carry forward from last week (PR 2 planning answer 5; PR 3
+ * planning answer 7): the cover picture, the music and each announcement.
+ */
+export const CARRY_KEYS = ["cover", "prelude", "postlude", ...ANNOUNCEMENT_KEYS] as const;
 export type CarryKey = (typeof CARRY_KEYS)[number];
 
 const music = z.object({ title: text, composer: text });
@@ -78,6 +83,8 @@ const carryKeys = z.array(z.enum(CARRY_KEYS));
 /** This week's name for each person; null follows the bulletin settings, "" is no one this week. */
 const people = z.object(Object.fromEntries(PEOPLE.map((key) => [key, text.nullable()])) as Record<Person, z.ZodNullable<typeof text>>);
 const bulletin = z.object({
+  /** The week's cover picture (`POST /bulletin-images`), or null for none (printed bulletin PR 3b). */
+  cover_image_id: text.nullable(),
   prelude: music,
   postlude: music,
   people,
@@ -230,6 +237,7 @@ export function freshDraft({
 /** An empty Bulletin step: nothing filled in, the settings' people, no carry looked up yet. */
 export function freshBulletin(): DraftBulletin {
   return {
+    cover_image_id: null,
     prelude: { title: "", composer: "" },
     postlude: { title: "", composer: "" },
     people: { worship_leader: null, liturgist: null, organist: null },

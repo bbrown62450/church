@@ -512,7 +512,7 @@ export function savedService(overrides: Partial<ServiceOut> = {}): ServiceOut {
   };
 }
 
-/** A service's bulletin fields (printed bulletin PR 2b) with nothing filled in, unless overridden. */
+/** A service's bulletin fields (printed bulletin PR 2b) with nothing filled in (no picture, as the API answers since PR 3a), unless overridden. */
 export function serviceBulletin(overrides: Partial<ServiceBulletin> = {}): ServiceBulletin {
   return {
     prelude: { title: "", composer: "" },
@@ -522,6 +522,7 @@ export function serviceBulletin(overrides: Partial<ServiceBulletin> = {}): Servi
     announcements: { ushers: "", deacon: "", coffee_hour: "", activities: "", prayer_concerns: "", collection: "", other: "" },
     reading_text: { ot: "", nt: "" },
     unchecked: [],
+    cover_image_id: null,
     ...overrides,
   };
 }

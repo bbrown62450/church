@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { CHURCH_IDS, churchProfile, testDraft, USER_ID } from "@/test/fixtures";
 
+import { setAnnouncement } from "./bulletin";
 import { DraftRestoreError, migrate, migrations, parseStoredDraft, type Migration } from "./migrate";
 import { fingerprint } from "./fingerprint";
 import { draftToServicePayload } from "./mapping";
@@ -13,7 +14,7 @@ const OWNER = { userId: USER_ID, churchId: churchProfile().id };
 describe("draft migrate and parseStoredDraft (F §4.6 Versioning)", () => {
   it("round-trips a stored draft", () => {
     const d = testDraft();
-    expect(Object.keys(migrations)).toEqual(["1", "2"]);
+    expect(Object.keys(migrations)).toEqual(["1", "2", "3"]);
     expect(parseStoredDraft(JSON.stringify(d), OWNER)).toEqual(d);
   });
 
@@ -23,7 +24,7 @@ describe("draft migrate and parseStoredDraft (F §4.6 Versioning)", () => {
     const editing = { service_id: "s1", saved_at: "2026-10-01T14:42:00+00:00" };
     expect(parseStoredDraft(JSON.stringify(v1), OWNER)).toEqual({ ...testDraft(), save_key: v1.save_key });
     expect(parseStoredDraft(JSON.stringify({ ...v1, editing }), OWNER)).toMatchObject({
-      version: 3,
+      version: 4,
       save_key_fingerprint: null,
       editing: { ...editing, date_iso: "2026-10-04" },
     });
@@ -40,7 +41,21 @@ describe("draft migrate and parseStoredDraft (F §4.6 Versioning)", () => {
     const editing = { service_id: "s1", saved_at: "2026-10-01T14:42:00+00:00", date_iso: "2026-10-04" };
     const saved = { ...v2, editing, saved_fingerprint: fingerprint(payload), last_step: "review" };
     const migrated = parseStoredDraft(JSON.stringify(saved), OWNER);
-    expect(migrated).toEqual({ ...testDraft(), ...saved, version: 3, bulletin: freshBulletin() });
+    expect(migrated).toEqual({ ...testDraft(), ...saved, version: 4, bulletin: freshBulletin() });
+    expect(reviewStatus(migrated)).toBe("saved");
+  });
+
+  it("migrates a version 3 draft: no cover picture, nothing else changed, and a saved draft with bulletin fields stays Saved (PR 3b)", () => {
+    const filled = setAnnouncement(testDraft(), "coffee_hour", "The Example family");
+    const { cover_image_id, ...bulletin } = { ...filled.bulletin, carried: ["coffee_hour" as const] };
+    expect(cover_image_id).toBeNull();
+    // 2b-2's payload had no cover_image_id; today's leaves out a null one, so the fingerprint is the same.
+    const payload = draftToServicePayload({ ...filled, bulletin: { ...bulletin, cover_image_id: null } });
+    expect(payload.bulletin).not.toHaveProperty("cover_image_id");
+    const editing = { service_id: "s1", saved_at: "2026-10-01T14:42:00+00:00", date_iso: "2026-10-04" };
+    const v3 = { ...filled, version: 3, bulletin, editing, saved_fingerprint: fingerprint(payload), last_step: "review" };
+    const migrated = parseStoredDraft(JSON.stringify(v3), OWNER);
+    expect(migrated).toEqual({ ...v3, version: 4, bulletin: { ...bulletin, cover_image_id: null } });
     expect(reviewStatus(migrated)).toBe("saved");
   });
 
@@ -52,7 +67,7 @@ describe("draft migrate and parseStoredDraft (F §4.6 Versioning)", () => {
       ["null", "null"],
       ["no version", JSON.stringify({ ...d, version: undefined })],
       ["version 0", JSON.stringify({ ...d, version: 0 })],
-      ["a future version", JSON.stringify({ ...d, version: 4 })],
+      ["a future version", JSON.stringify({ ...d, version: 5 })],
       ["schema-invalid", JSON.stringify({ ...d, readings: { ...d.readings, scriptures: "Psalm 23" } })],
       ["another user", JSON.stringify({ ...d, user_id: "someone-else" })],
       ["another church", JSON.stringify({ ...d, church_id: CHURCH_IDS.hope })],

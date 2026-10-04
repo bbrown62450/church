@@ -31,4 +31,6 @@ export const keys = {
   rubric: (id: string) => ["church", id, "rubric"] as const,
   prayerLibrary: (id: string) => ["church", id, "prayer-library"] as const,
   bulletinSettings: (id: string) => ["church", id, "bulletin-settings"] as const,
+  /** A cover picture's bytes (printed bulletin PR 3b): an id never names other bytes, so it is never stale. */
+  bulletinImage: (id: string, imageId: string) => ["church", id, "bulletin-image", imageId] as const,
 };

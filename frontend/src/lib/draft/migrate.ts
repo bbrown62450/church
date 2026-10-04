@@ -26,6 +26,10 @@ export type Migration = (draft: StoredDraft) => StoredDraft;
  * 2 → 3 (printed bulletin PR 2b): `bulletin` starts empty (`freshBulletin`),
  * so an in-progress draft keeps everything else; last week's bulletin carries
  * in later like a new draft's, unless the draft is a saved service.
+ *
+ * 3 → 4 (printed bulletin PR 3b): the bulletin gains `cover_image_id`, null
+ * (no picture); nothing else changes, so a saved draft stays "Saved" (the
+ * payload leaves out a null picture).
  */
 export const migrations: Readonly<Record<number, Migration>> = {
   1: (draft) => {
@@ -35,6 +39,7 @@ export const migrations: Readonly<Record<number, Migration>> = {
     return { ...draft, editing, save_key_fingerprint: null };
   },
   2: (draft) => ({ ...draft, bulletin: freshBulletin() }),
+  3: (draft) => ({ ...draft, bulletin: isRecord(draft.bulletin) ? { ...draft.bulletin, cover_image_id: null } : draft.bulletin }),
 };
 
 export class DraftRestoreError extends Error {
