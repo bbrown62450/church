@@ -90,3 +90,24 @@ def test_a_control_character_goes_before_the_other_rules_so_the_text_reads_back_
     assert b.announcements.ushers == "Sam Sample"                          # one line: a control is a space
     assert b.announcements.other == "Ends with a stray"
     assert sb.read(b.to_json()) == b                                       # read again, nothing changes
+
+
+def test_the_cover_picture_is_read_stored_and_carried():
+    """PR 3a: cover_image_id is a picture's id or None (no picture this week); a bulletin that does not say
+    (a page from before PR 3b) is cover_given False and stores no key. It carries forward with the music."""
+    picture_id = "0B4C2B0E-1111-4222-8333-444455556666"
+    week = sb.read({"cover_image_id": picture_id, "prelude": {"title": "Morning Voluntary"},
+                    "people": {"organist": "Sam Sample"}})
+    assert (week.cover_image_id, week.cover_given) == (picture_id.lower(), True)
+    assert week.to_json()["cover_image_id"] == picture_id.lower()
+    assert sb.read(week.to_json()) == week
+    assert week.carried() == sb.ServiceBulletin(prelude=sb.Music("Morning Voluntary", ""),
+                                                cover_image_id=picture_id.lower(), cover_given=True)
+    assert week.map_texts(str.upper).cover_image_id == picture_id.lower()
+    none = sb.read({"cover_image_id": None})
+    assert (none.cover_image_id, none.cover_given, none.to_json()["cover_image_id"]) == (None, True, None)
+    for unsaid in ({}, {"prelude": {"title": "x"}}):
+        assert (sb.read(unsaid).cover_given, "cover_image_id" in sb.read(unsaid).to_json()) == (False, False)
+    for bad in ("later", 7, "", ["x"]):
+        assert (sb.read({"cover_image_id": bad}).cover_image_id, sb.read({"cover_image_id": bad}).cover_given) == (
+            None, True)

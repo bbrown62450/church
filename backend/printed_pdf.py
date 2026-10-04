@@ -5,6 +5,11 @@ pages 2 and 3, and so on, with the announcements page last (left out when
 every announcement is blank, PR 2b). Nothing is folded or padded: an odd
 page count leaves the last side's right half blank.
 
+The cover's box (PR 3a; printed_bulletin.cover_kind) is centered under the
+church's name: the week's picture as cover_picture makes it (the same JPEG
+the Word version places), or the reading and the date alone, or PR 1's
+[Cover picture] box for a page from before PR 3b.
+
 render_pdf lays the bulletin out with reportlab in one pass: each legal side
 has two frames, one per booklet page, so the text flows from the left half
 to the right half and on to the next side (cover, order of worship,
@@ -21,9 +26,10 @@ from xml.sax.saxutils import escape
 from reportlab.lib.colors import Color
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 from reportlab.lib.styles import ParagraphStyle
-from reportlab.platypus import (BaseDocTemplate, CondPageBreak, Flowable, Frame, FrameBreak, KeepInFrame, PageTemplate,
-                                Paragraph, Spacer, Table, TableStyle)
+from reportlab.platypus import (BaseDocTemplate, CondPageBreak, Flowable, Frame, FrameBreak, Image, KeepInFrame,
+                                PageTemplate, Paragraph, Spacer, Table, TableStyle)
 
+import bulletin_image
 import printed_bulletin as pb
 
 SHEET_WIDTH = 2 * pb.PAGE_WIDTH        # legal, landscape: 14 x 8.5 in
@@ -38,6 +44,8 @@ RIGHT_COLUMN = 120.0                   # the leader's column on an element line
 KEEP = {"section": 60.0, "element": 47.0}
 
 _GRAY = Color(0.45, 0.45, 0.45)
+# The cover picture's resolution: print quality.
+DPI = 300
 
 
 def to_pdf_text(text: str) -> str:
@@ -144,6 +152,55 @@ class _CoverPicture(Flowable):
                 c.drawCentredString(self.width / 2, y, to_pdf_text(text))
 
 
+class _CoverText(Flowable):
+    """No picture this week (PR 3 planning answer 6): no box, the reading and
+    the date centered where the picture would be."""
+
+    def __init__(self, width: float, height: float, reference: str, date: str):
+        super().__init__()
+        self.width, self.height = width, height
+        self.reference, self.date = reference, date
+
+    def wrap(self, availWidth, availHeight):
+        return self.width, self.height
+
+    def draw(self):
+        c = self.canv
+        (big, small), middle = pb.COVER_TEXT_POINTS, self.height / 2
+        for text, size, y in ((self.reference, big, middle + 3), (self.date, small, middle - small - 3)):
+            if text:
+                c.setFont("Times-Bold", size)
+                c.drawCentredString(self.width / 2, y, to_pdf_text(text))
+
+
+def _pixels(points: float) -> int:
+    return round(points / 72 * DPI)
+
+
+def cover_picture(ps: pb.PrintedService) -> bytes:
+    """The cover's box as one JPEG (cover_kind "picture"): the week's picture
+    filling COVER_BOX, its edges trimmed evenly, with the reading and the date
+    in white on a dark see-through band (bulletin_image.cover; PR 3 planning
+    answers 2-4). printed_docx places the same picture."""
+    _title, _label, reference, date, *_contact = pb.cover(ps)
+    lines = [(to_pdf_text(line.text), _pixels(size)) for line, size in zip((reference, date), pb.COVER_TEXT_POINTS)]
+    return bulletin_image.cover(ps.cover_picture, lines, (_pixels(pb.COVER_BOX[0]), _pixels(pb.COVER_BOX[1])))
+
+
+def _cover_box(ps: pb.PrintedService, label: str, reference: str, date: str) -> Flowable:
+    """The cover's box for its kind (printed_bulletin.cover_kind), centered under the church's name."""
+    width, height = pb.COVER_BOX
+    kind = pb.cover_kind(ps)
+    if kind == "picture":
+        box: Flowable = Image(BytesIO(cover_picture(ps)), width=width, height=height)
+    elif kind == "none":
+        box = _CoverText(width, height, reference, date)
+    else:
+        box = _CoverPicture(width, height, label, reference, date)
+    box.hAlign = "CENTER"
+    return box
+
+
 def _contact(lines: list[pb.Line], width: float, height: float) -> Flowable:
     """The cover's contact lines, shrunk to fit what the title and the picture
     leave of the cover page (PR 2a), so the order of worship always starts on
@@ -156,9 +213,9 @@ def _story(ps: pb.PrintedService, width: float) -> list[Flowable]:
     cover = pb.cover(ps)
     title, label, reference, date, *contact = cover
     heading = Paragraph(_markup(title), STYLES["title"])
-    picture = 300 + 30                                     # the picture's box and the space under it
+    picture = pb.COVER_BOX[1] + 30                         # the picture's box and the space under it
     room = pb.PAGE_HEIGHT - 2 * MARGIN - heading.wrap(width, pb.PAGE_HEIGHT)[1] - STYLES["title"].spaceAfter - picture
-    story: list[Flowable] = [heading, _CoverPicture(width - 60, 300, label.text, reference.text, date.text)]
+    story: list[Flowable] = [heading, _cover_box(ps, label.text, reference.text, date.text)]
     # No contact lines (or no room left for them under a very long church name): nothing kept for them, so the
     # order of worship still starts on page 1 (build review M1).
     if contact and room > 0:

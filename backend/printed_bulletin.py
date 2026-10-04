@@ -25,7 +25,11 @@ python-docx here.
   either (build review fix M5). A service posted with no
   bulletin at all (a page from before the Bulletin step, PR 2b-2) prints
   PR 1's [placeholders] for the music and the announcements (PLACEHOLDERS).
-  The cover picture prints as a [bracketed placeholder] until PR 3.
+- The cover picture (PR 3a; cover_kind): the week's picture with the reading
+  and the date over it; with no picture this week, the reading and the date
+  alone where the picture would be (PR 3 planning answer 6); and PR 1's
+  [Cover picture] box when no bulletin was posted or it did not say (a page
+  from before PR 3b), so those pages print as before.
 - printed_date, printed_filename, PDF_MIME.
 """
 from __future__ import annotations
@@ -53,8 +57,13 @@ PLACEHOLDERS = ServiceBulletin(
     prelude=Music("[Prelude title]", "[Composer]"), postlude=Music("[Postlude title]", "[Composer]"),
     announcements=Announcements(ushers="[Names]", deacon="[Name]", coffee_hour="[Name]", activities="[Activities]",
                                 prayer_concerns="[Prayer concerns]", collection="[Collection items]"))
-# The cover picture's place, until PR 3 prints the picture.
+# The cover picture's place on a page from before PR 3b (cover_kind "placeholder").
 COVER_PICTURE = "[Cover picture]"
+# The cover's box: the picture's place, 372 x 300 pt (5.17 x 4.17 in), centered under the church's name.
+COVER_BOX = (372.0, 300.0)
+# The reading's and the date's size on the cover (points), on the picture's band or alone in the box.
+COVER_TEXT_POINTS = (18.0, 14.0)
+CoverKind = Literal["placeholder", "picture", "none"]
 TEXT_UNAVAILABLE = "[Reading text unavailable]"
 
 # The header's people, as "{name}, Worship Leader" (bulletin_settings.ROLES order).
@@ -110,6 +119,7 @@ class PrintedService:
     translation_label: str = ""
     settings: BulletinSettings = BulletinSettings()      # the church's standing settings (PR 2a)
     bulletin: Optional[ServiceBulletin] = None           # the week's own fields (PR 2b); None: none posted
+    cover_picture: Optional[bytes] = None                # the week's cover picture as stored (PR 3a), if any
 
 
 def week(ps: PrintedService) -> ServiceBulletin:
@@ -360,13 +370,24 @@ def contact_lines(s: BulletinSettings) -> list[str]:
     return [*s.address_lines, *(text for text in (s.phone, s.email, s.website) if text), *facebook]
 
 
+def cover_kind(ps: PrintedService) -> CoverKind:
+    """What the cover's box holds: "picture" (the week's picture, with the
+    reading and the date on a band over it), "none" (no picture this week, or
+    one no longer there: the reading and the date alone), or "placeholder"
+    (no bulletin posted, or one that did not say: PR 1's box)."""
+    if ps.bulletin is None or not ps.bulletin.cover_given:
+        return "placeholder"
+    return "picture" if ps.bulletin.cover_image_id and ps.cover_picture else "none"
+
+
 def cover(ps: PrintedService) -> list[Line]:
-    """The front page: the church's name, the picture's place with the
-    sermon reading and the date over it, and the church's contact lines."""
+    """The front page: the church's name, the picture's place (its label
+    only for the placeholder) with the sermon reading and the date over it,
+    and the church's contact lines."""
     reading = ps.nt or ps.ot
     return [
         Line("title", (Span(ps.church_name, bold=True),)),
-        Line("box", (Span(COVER_PICTURE),)),
+        Line("box", (Span(COVER_PICTURE if cover_kind(ps) == "placeholder" else ""),)),
         Line("box", (Span(reading.reference if reading else ""),)),
         Line("box", (Span(printed_date(ps.resolved.service_date)),)),
         *(Line("contact", (Span(text),)) for text in contact_lines(ps.settings)),

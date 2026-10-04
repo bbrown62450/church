@@ -11,10 +11,16 @@ stored in services.bulletin (migration 0006_services_bulletin).
   the pasted text of the two readings (pasted wins over fetched); and the
   boxes whose text came from last week and are not checked yet
   (`unchecked`, so "From last week. Check before printing." comes back when
-  the service is opened again; plan review fix I3).
+  the service is opened again; plan review fix I3). PR 3a adds the week's
+  cover picture: `cover_image_id` (a bulletin_images id, or None for no
+  picture this week) and `cover_given` (False when the bulletin did not say,
+  as a page from before PR 3b sends it: a PUT then keeps the saved picture
+  and the printed bulletin keeps PR 1's [Cover picture] box). The picture
+  carries forward with the music.
 - read(raw): a stored or posted value read tolerantly: anything that is not
   an object, a missing key or a value of the wrong type is blank (a person
-  None); an unknown element key and a blank part leader are dropped; every
+  None; a cover_image_id that is not an id, None); an unknown element key
+  and a blank part leader are dropped; every
   text is trimmed and cut to its limit, and every one-line text (the music,
   the people, the part leaders, the ushers, the deacon and the coffee hour)
   has each run of line breaks, tabs or other control characters made one
@@ -28,10 +34,11 @@ stored in services.bulletin (migration 0006_services_bulletin).
   _XML_BAD) is deleted first, so a saved bulletin is stored exactly as GET
   answers it (build review fix M1).
   `unchecked` keeps the known boxes, once each, in the step's order.
-- to_json: the stored shape (what GET /services/{id} answers as `bulletin`).
-- carried(): what a new week starts from (PR 2 planning answer 5): the music
-  and the announcements; the people, the part leaders, the pasted texts and
-  `unchecked` start empty.
+- to_json: the stored shape (what GET /services/{id} answers as `bulletin`);
+  "cover_image_id" only when the bulletin said (cover_given).
+- carried(): what a new week starts from (PR 2 planning answer 5; PR 3
+  planning answer 7): the music, the announcements and the cover picture;
+  the people, the part leaders, the pasted texts and `unchecked` start empty.
 - map_texts(fn): the same bulletin with fn applied to every text
   (usecases.archive makes them Word-safe with it).
 Pure: no database, FastAPI or rendering here. Prayer concerns can hold names
@@ -40,6 +47,7 @@ and health news: nothing here logs, and no caller logs a bulletin's text.
 from __future__ import annotations
 
 import re
+import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, fields
 from typing import Optional
@@ -104,13 +112,18 @@ class ServiceBulletin:
     nt_text: str = ""               # pasted text of the New Testament reading
     # The boxes (CARRY_KEYS) holding last week's text, not checked yet; saved so the marks come back on open.
     unchecked: tuple[str, ...] = ()
+    # The week's cover picture (PR 3): a bulletin_images id, None for no picture this week.
+    cover_image_id: Optional[str] = None
+    # False: the bulletin did not say (a page from before PR 3b; cover_image_id is then None).
+    cover_given: bool = False
 
     def is_blank(self) -> bool:
         return self == ServiceBulletin()
 
     def carried(self) -> ServiceBulletin:
-        """What the next week starts from: the music and the announcements."""
-        return ServiceBulletin(prelude=self.prelude, postlude=self.postlude, announcements=self.announcements)
+        """What the next week starts from: the music, the announcements and the cover picture."""
+        return ServiceBulletin(prelude=self.prelude, postlude=self.postlude, announcements=self.announcements,
+                               cover_image_id=self.cover_image_id, cover_given=self.cover_given)
 
     def map_texts(self, fn: Callable[[str], str]) -> ServiceBulletin:
         """Every text through fn; a person left to the settings (None) stays None."""
@@ -121,7 +134,8 @@ class ServiceBulletin:
             leaders={key: fn(name) for key, name in self.leaders.items()},
             announcements=Announcements(**{f.name: fn(getattr(self.announcements, f.name))
                                            for f in fields(Announcements)}),
-            ot_text=fn(self.ot_text), nt_text=fn(self.nt_text), unchecked=self.unchecked)
+            ot_text=fn(self.ot_text), nt_text=fn(self.nt_text), unchecked=self.unchecked,
+            cover_image_id=self.cover_image_id, cover_given=self.cover_given)
 
     def to_json(self) -> dict:
         return {
@@ -132,6 +146,7 @@ class ServiceBulletin:
             "announcements": {key: getattr(self.announcements, key) for key in ANNOUNCEMENT_KEYS},
             "reading_text": {"ot": self.ot_text, "nt": self.nt_text},
             "unchecked": list(self.unchecked),
+            **({"cover_image_id": self.cover_image_id} if self.cover_given else {}),
         }
 
 
@@ -154,6 +169,16 @@ def _text(value: object, limit: int, *, one_line: bool, paragraphs: bool = False
 def _unchecked(value: object) -> tuple[str, ...]:
     keys = {key for key in value if isinstance(key, str)} if isinstance(value, list) else set()
     return tuple(key for key in CARRY_KEYS if key in keys)
+
+
+def _image_id(value: object) -> Optional[str]:
+    """A bulletin_images id as stored (lower-case, with hyphens), or None."""
+    if isinstance(value, uuid.UUID):
+        return str(value)
+    try:
+        return str(uuid.UUID(value)) if isinstance(value, str) else None
+    except ValueError:
+        return None
 
 
 def _music(value: object) -> Music:
@@ -182,4 +207,6 @@ def read(raw: object) -> ServiceBulletin:
         ot_text=_text(reading_text.get("ot"), MAX_LENGTH["reading_text"], one_line=False, paragraphs=True),
         nt_text=_text(reading_text.get("nt"), MAX_LENGTH["reading_text"], one_line=False, paragraphs=True),
         unchecked=_unchecked(stored.get("unchecked")),
+        cover_image_id=_image_id(stored.get("cover_image_id")),
+        cover_given="cover_image_id" in stored,
     )

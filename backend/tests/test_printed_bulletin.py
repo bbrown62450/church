@@ -278,3 +278,22 @@ def test_no_bulletin_posted_prints_pr_1_s_placeholders():
         "ANNOUNCEMENTS", "October 4, 2026", "Ushers/Counters: [Names]", "Deacon of the Week: [Name]",
         "Coffee Hour: [Name]", "THIS WEEK’S ACTIVITIES AT A GLANCE", "[Activities]", "PRAYERS AND CONCERNS",
         "[Prayer concerns]", "ITEMS FOR COLLECTION", "[Collection items]"]
+
+
+def test_the_cover_holds_the_picture_the_reading_alone_or_pr_1_s_box():
+    """PR 3a (printed_bulletin.cover_kind): the week's picture; no picture this week, or one no longer there:
+    the reading and the date alone (PR 3 planning answer 6); no bulletin, or one that did not say (a page
+    from before PR 3b): PR 1's [Cover picture] box, as before."""
+    picture_id = "0b4c2b0e-1111-4222-8333-444455556666"
+    chosen = dataclasses.replace(WEEK, cover_image_id=picture_id, cover_given=True)
+    cases = [
+        (service(bulletin=None), "placeholder"),
+        (service(), "placeholder"),                                        # WEEK does not say
+        (service(bulletin=chosen, cover_picture=b"\xff\xd8"), "picture"),
+        (service(bulletin=chosen), "none"),                                # the picture is no longer there
+        (service(bulletin=dataclasses.replace(WEEK, cover_given=True)), "none"),
+    ]
+    for ps, kind in cases:
+        assert pb.cover_kind(ps) == kind
+        label = "[Cover picture]" if kind == "placeholder" else ""
+        assert texts(pb.cover(ps))[:4] == ["Example Church", label, "Matthew 21:33-46", "October 4, 2026"]
