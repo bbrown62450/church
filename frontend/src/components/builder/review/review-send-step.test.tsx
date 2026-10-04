@@ -777,6 +777,27 @@ describe("Review & send: saving (slice 5a-3)", () => {
     expect(warning).toHaveBeenCalledTimes(1);
   });
 
+  it("drops the cover's From last week mark with a picture that came back as none, and stays Saved (PR 3b build review M1)", async () => {
+    const picture = "0b4c2b0e-1111-4222-8333-444455556666";
+    const lastWeek = previousBulletin({ service_id: "s-last", service_date_iso: "2026-09-27", bulletin: serviceBulletin({ cover_image_id: picture }) });
+    const { api, user } = renderReview(editOccasion(testDraft(), "Harvest"), {
+      "GET /church/bulletin-settings": filledBulletinSettings(),
+      "GET /services/previous-bulletin": lastWeek,
+      // The carried picture was removed meanwhile: the server saves none and answers 201.
+      "POST /services": () => ({ status: 201, body: savedService({ occasion: "Harvest", saved_at: FIRST_SAVE }) }),
+    });
+    const bulletinCard = await screen.findByRole("region", { name: "Printed bulletin" });
+    expect(await within(bulletinCard).findByText("From last week, not checked yet: cover picture.")).toBeInTheDocument();
+    const card = await archiveCard();
+    await user.click(within(card).getByRole("button", { name: "Save to archive" }));
+    expect(await screen.findByText(COVER_GONE_MESSAGE)).toBeInTheDocument();
+    expect((serviceRequests(api, "POST")[0].body as { bulletin: object }).bulletin).toMatchObject({ cover_image_id: picture, unchecked: ["cover"] });
+    await waitFor(() => expect(stored().bulletin).toMatchObject({ cover_image_id: null, carried: [] }));
+    expect(within(bulletinCard).queryByText(/^From last week, not checked yet/)).toBeNull();
+    expect(within(bulletinCard).getByText(/^Not filled in: .*cover picture/)).toBeInTheDocument();
+    expect(within(card).getByText(`Saved to the archive · ${formatSavedAt(FIRST_SAVE)}`)).toBeInTheDocument();
+  });
+
   it("keeps the key for an identical retry after an unknown outcome, replaces it after an edit, and retries a mismatch once", async () => {
     const errorToast = vi.spyOn(toast, "error");
     let posts = 0;

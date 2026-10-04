@@ -49,7 +49,7 @@ import { useDraft } from "@/lib/draft/context";
 import { fingerprint } from "@/lib/draft/fingerprint";
 import { draftToServicePayload, markSaved, serviceToDraft } from "@/lib/draft/mapping";
 import { keyForPost, settlePost } from "@/lib/draft/save-key";
-import { freshDraft, type DraftChurch } from "@/lib/draft/schema";
+import { freshDraft, type DraftBulletin, type DraftChurch } from "@/lib/draft/schema";
 import { saveMode } from "@/lib/draft/status";
 import { settleOutcome } from "@/lib/idempotency";
 import { useMeContext } from "@/lib/me-context";
@@ -141,6 +141,15 @@ export function resyncAfterSave(queryClient: QueryClient): (sync: () => void) =>
     });
 }
 
+/**
+ * The bulletin with no picture and no "From last week" mark on the cover: a
+ * picture that came back as none (PR 3a build review M2) leaves no empty box
+ * to check (PR 3b build review M1).
+ */
+function withoutCover(b: DraftBulletin): DraftBulletin {
+  return { ...b, cover_image_id: null, carried: b.carried.filter((key) => key !== "cover") };
+}
+
 export type SaveVariables = { asNew?: boolean };
 type Saved = { service: ServiceOut; fp: string; fellBack: boolean; sentCover: string | null; fpWithoutCover: string; created: string };
 
@@ -159,7 +168,8 @@ export function useSaveService(church: DraftChurch) {
       // days) is saved as none and answered 200 with a null cover_image_id
       // (PR 3a build review M2): the draft then drops it and says so.
       const sentCover = draft.bulletin.cover_image_id;
-      const fpWithoutCover = fingerprint(draftToServicePayload({ ...draft, bulletin: { ...draft.bulletin, cover_image_id: null } }));
+      // Without the picture, its "From last week" mark goes too (PR 3b build review M1).
+      const fpWithoutCover = fingerprint(draftToServicePayload({ ...draft, bulletin: withoutCover(draft.bulletin) }));
       // The draft saved, by its identity: the answer marks only that draft Saved (PR 3b build review C1).
       const sent = { fp, sentCover, fpWithoutCover, created: draft.created_at };
       // A POST leaves a blank bulletin out (the server stores none, which
@@ -239,7 +249,7 @@ export function useSaveService(church: DraftChurch) {
         if (!coverGone) return markSaved(d, service, fp);
         const saved = markSaved(d, service, fpWithoutCover);
         // Chosen again while the save was in flight: that picture stays (Unsaved changes).
-        return d.bulletin.cover_image_id === sentCover ? { ...saved, bulletin: { ...saved.bulletin, cover_image_id: null } } : saved;
+        return d.bulletin.cover_image_id === sentCover ? { ...saved, bulletin: withoutCover(saved.bulletin) } : saved;
       });
       queryClient.setQueryData(keys.service(church.id, service.id), service);
       void queryClient.invalidateQueries({ queryKey: servicesKey(church.id) });
