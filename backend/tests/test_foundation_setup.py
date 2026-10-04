@@ -176,3 +176,14 @@ def test_railway_toml_runs_migrations_and_checks_readiness():
         "preDeployCommand": ["alembic upgrade head"],
         "healthcheckPath": "/health/ready",
     }}
+
+
+# --- printed bulletin PR 3a build review M5: Pillow's limits were measured on 12.3 ---
+
+def test_backend_requirements_pin_pillow_to_the_measured_minor():
+    from importlib.metadata import version
+
+    lines = {line.strip() for line in (ROOT / "backend" / "requirements.txt").read_text().splitlines()}
+    assert "pillow>=12.3,<13" in lines
+    major, minor = (int(part) for part in version("pillow").split(".")[:2])
+    assert major == 12 and minor >= 3                                    # what this machine and CI install
