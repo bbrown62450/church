@@ -25,7 +25,9 @@ const ENDPOINT_TIMEOUTS: Record<string, number> = {
   // The printed bulletin (printed bulletin spec): the readings' text within the passages' 20 s deadline, then the file.
   "POST /documents/printed": 30_000,
   // The cover picture (printed bulletin PR 3b): up to 10 MB up from a phone, then a second or two on the server.
-  "POST /bulletin-images": 60_000,
+  // 10 MB at about 1 Mbps up takes 80 s; a timed-out upload the server finished still counts toward the
+  // church's pictures, so the wait is generous (build review M8).
+  "POST /bulletin-images": 120_000,
 };
 
 export function timeoutFor(method: string, path: string): number {
