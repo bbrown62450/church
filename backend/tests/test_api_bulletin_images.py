@@ -222,14 +222,14 @@ def test_the_removal_reads_the_saved_services_after_it_locks_its_candidates(clie
 
     old = add_picture(church, pastor, age_days=61)
     add_service(church, None)
-    original = images_repo.ids_created_before
+    original = images_repo.lock_images
 
-    def a_save_in_between(church_id, cutoff=None, *, session, lock=False):
-        found = original(church_id, cutoff, session=session, lock=lock)
+    def a_save_in_between(church_id, image_ids, *, session):
+        found = original(church_id, image_ids, session=session)
         session.execute(update(Service).where(Service.church_id == church_id).values(bulletin={"cover_image_id": old}))
         return found
 
-    monkeypatch.setattr(images_repo, "ids_created_before", a_save_in_between)
+    monkeypatch.setattr(images_repo, "lock_images", a_save_in_between)
     assert upload(client, church, picture()).status_code == 201
     assert old in stored_ids()
 
@@ -248,7 +248,7 @@ def test_a_save_and_the_removal_wait_for_each_other(pg_db):
     for first, second in (("remove", "save"), ("save", "remove")):
         holder, waiter = SessionLocal(), SessionLocal()
         try:
-            take = {"remove": lambda s: images_repo.ids_created_before(church_id, None, session=s, lock=True),
+            take = {"remove": lambda s: images_repo.lock_images(church_id, [image], session=s),
                     "save": lambda s: images_repo.has_image(church_id, image, session=s, lock=True)}
             assert take[first](holder)
             waiter.execute(text("SET LOCAL lock_timeout = '200ms'"))
@@ -259,3 +259,105 @@ def test_a_save_and_the_removal_wait_for_each_other(pg_db):
             holder.rollback()
             waiter.close()
             holder.close()
+
+
+# --- build review fixes (2026-10-04, PR 3a) ---
+
+def test_the_removal_reads_only_the_cover_picture_s_id_of_each_saved_service(client, church, pastor, tmp_db):
+    """Build review M1: on every upload the removal looked at every saved bulletin of every church with an old
+    picture, whole (pasted readings included), and read each through service_bulletin; now it reads only
+    the `cover_image_id` key, and an id stored in another spelling is still seen as in use."""
+    from sqlalchemy import event
+
+    used = add_picture(church, pastor, age_days=61)
+    with session_scope() as s:
+        s.add(Service(church_id=church, service_date_iso="2026-01-04", occasion="", hymns=[], liturgy={},
+                      scriptures=[], bulletin={"cover_image_id": used.upper(), "reading_text": {"nt": "x" * 9000}}))
+    add_service(church, None, day="2026-01-11")
+    statements = []
+
+    def seen(conn, cursor, statement, *args):
+        statements.append(statement)
+
+    event.listen(tmp_db, "before_cursor_execute", seen)
+    try:
+        assert upload(client, church, picture()).status_code == 201
+    finally:
+        event.remove(tmp_db, "before_cursor_execute", seen)
+    assert used in stored_ids()
+    reads = [sql for sql in statements if "FROM services" in sql]
+    selected = [sql.split("FROM services")[0] for sql in reads]
+    assert reads and all(columns.startswith("SELECT CAST(JSON_EXTRACT(services.bulletin, ?)")
+                         and columns.count("services.bulletin") == 1 for columns in selected), reads
+
+
+def test_nothing_is_decoded_when_the_budget_or_the_church_is_already_full(client, church, pastor, monkeypatch,
+                                                                         caplog):
+    """Build review M4: the budget and a church full of pictures in saved services are refused before the
+    picture is decoded, so they never take the one worker; the stored count is checked again after."""
+    from usecases import bulletin_images
+
+    monkeypatch.setattr(bulletin_image, "prepare", lambda data: pytest.fail("decoded"))
+    add_picture(church, pastor, data=b"\xff" * 5000)
+    monkeypatch.setattr(bulletin_images, "STORAGE_BUDGET", 5000)
+    caplog.set_level(logging.WARNING, logger="usecases.bulletin_images")
+    r = upload(client, church, picture())
+    assert (r.status_code, r.json()["error"]["fields"]) == (422, {"image": bulletin_images.STORAGE_FULL_MESSAGE})
+    assert caplog.records[-1].getMessage().startswith(f"bulletin_images.storage_full church={church} total=5000")
+    monkeypatch.setattr(bulletin_images, "STORAGE_BUDGET", 150_000_000)
+    monkeypatch.setattr(bulletin_images, "MAX_PICTURES", 2)
+    full = [*stored_ids(), add_picture(church, pastor)]
+    for day, image in zip(("2026-01-04", "2026-01-11"), full):
+        add_service(church, image, day=day)
+    r = upload(client, church, picture())
+    assert (r.status_code, r.json()["error"]["fields"]) == (422, {"image": bulletin_images.CHURCH_FULL_MESSAGE})
+
+
+def test_one_upload_at_a_time_counts_makes_room_checks_the_budget_and_stores(client, church, monkeypatch):
+    """Build review M3: two uploads of a church at 159 both counted 159 and stored, and two anywhere both
+    passed the budget; the storing transaction now takes images_repo.lock_uploads before it counts (an
+    advisory lock on Postgres, below; SQLite has one writer at a time)."""
+    from repos import bulletin_images as images_repo
+
+    calls = []
+    for name in ("lock_uploads", "count_images", "total_bytes", "insert_image"):
+        original = getattr(images_repo, name)
+        monkeypatch.setattr(images_repo, name,
+                            lambda *args, _name=name, _original=original, **kwargs:
+                            calls.append(_name) or _original(*args, **kwargs))
+    assert upload(client, church, picture()).status_code == 201
+    assert calls[calls.index("lock_uploads"):] == ["lock_uploads", "count_images", "total_bytes", "insert_image"]
+
+
+@pytest.mark.postgres
+def test_the_removal_never_locks_a_picture_in_use_and_uploads_take_turns(pg_db):
+    """Build review M1 and M3, on Postgres: a save holding its old picture (FOR SHARE) no longer makes every
+    upload's removal wait, since only pictures about to go are locked; and the storing step is one upload
+    at a time (the second waits; here it gives up after 200 ms)."""
+    from repos import bulletin_images as images_repo
+    from repos.churches import create_church
+    from repos.users import ensure_user
+    from usecases import bulletin_images
+
+    user = ensure_user("pastor@example.com", "Pastor").id
+    church_id = create_church(name="Grace", timezone="America/New_York", owner_user_id=user)
+    used = add_picture(church_id, user, age_days=90)
+    add_picture(church_id, user, age_days=61)                                                # unused: it goes
+    add_service(church_id, used)
+    holder, waiter = SessionLocal(), SessionLocal()
+    try:
+        assert images_repo.has_image(church_id, used, session=holder, lock=True)             # a save, under way
+        waiter.execute(text("SET LOCAL lock_timeout = '200ms'"))
+        assert bulletin_images.remove_unused(waiter, datetime.datetime.now(datetime.timezone.utc)) == 1
+        waiter.commit()
+        assert stored_ids() == {used}
+        holder.rollback()
+        images_repo.lock_uploads(session=holder)
+        waiter.execute(text("SET LOCAL lock_timeout = '200ms'"))
+        with pytest.raises(OperationalError, match="lock timeout"):
+            images_repo.lock_uploads(session=waiter)
+    finally:
+        waiter.rollback()
+        holder.rollback()
+        waiter.close()
+        holder.close()

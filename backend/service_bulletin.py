@@ -173,7 +173,7 @@ def _unchecked(value: object) -> tuple[str, ...]:
     return tuple(key for key in CARRY_KEYS if key in keys)
 
 
-def _image_id(value: object) -> Optional[str]:
+def image_id(value: object) -> Optional[str]:
     """A bulletin_images id as stored (lower-case, with hyphens), or None."""
     if isinstance(value, uuid.UUID):
         return str(value)
@@ -209,6 +209,6 @@ def read(raw: object) -> ServiceBulletin:
         ot_text=_text(reading_text.get("ot"), MAX_LENGTH["reading_text"], one_line=False, paragraphs=True),
         nt_text=_text(reading_text.get("nt"), MAX_LENGTH["reading_text"], one_line=False, paragraphs=True),
         unchecked=_unchecked(stored.get("unchecked")),
-        cover_image_id=_image_id(stored.get("cover_image_id")),
+        cover_image_id=image_id(stored.get("cover_image_id")),
         cover_given="cover_image_id" in stored,
     )

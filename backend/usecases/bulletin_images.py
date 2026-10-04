@@ -1,16 +1,21 @@
 """The cover pictures (printed bulletin spec, "Data model"; PR 3 planning
 answers 5, 8, 9; PR 3a).
 
-- upload(church_id, user_id, data): POST /bulletin-images. The upload is
-  checked and made ready to store first (bulletin_image.prepare: a 422 naming
-  "image" touches no table; a 429 when another picture is being prepared).
-  Then the old unused pictures of every church are removed, at most
-  REMOVE_BATCH (planning answer 9; remove_unused), in a transaction of its
-  own. Then, in one transaction: when the church already keeps MAX_PICTURES,
-  its oldest pictures no saved service points at make room (make_room;
-  every one in use: a 422, CHURCH_FULL_MESSAGE); when every church's
-  pictures together would pass STORAGE_BUDGET, a 422 (STORAGE_FULL_MESSAGE,
-  and a warning in the log); else the new one is stored.
+- upload(church_id, user_id, data): POST /bulletin-images. First the old
+  unused pictures of every church are removed, at most REMOVE_BATCH
+  (planning answer 9; remove_unused), in a transaction of its own. Then the
+  refusals that need no picture are checked, read-only, before the picture
+  is decoded (room_left; PR 3a build review M4): every church's pictures at
+  STORAGE_BUDGET already, or the church at MAX_PICTURES with every one in a
+  saved service. Then the upload is checked and made ready to store
+  (bulletin_image.prepare: a 422 naming "image"; a 429 when another picture
+  is being prepared or it takes too long). Then, in one transaction, one
+  upload at a time (images_repo.lock_uploads; build review M3): when the
+  church already keeps MAX_PICTURES, its oldest pictures no saved service
+  points at make room (make_room; every one in use: a 422,
+  CHURCH_FULL_MESSAGE); when every church's pictures together would pass
+  STORAGE_BUDGET, a 422 (STORAGE_FULL_MESSAGE, and a warning in the log);
+  else the new one is stored.
 - picture(church_id, image_id, if_none_match): GET /bulletin-images/{id}:
   the church's picture with its ETag, without its bytes when the browser
   already has them (If-None-Match), or a 404 (another church's id included,
@@ -21,12 +26,14 @@ answers 5, 8, 9; PR 3a).
   points at is never removed, whatever its age. It runs on every upload, of
   any church, so nothing has to run on a schedule and a church that stops
   uploading still loses its unused pictures; each upload removes at most
-  REMOVE_BATCH, so one call stays short. It reads the stored bulletins of
-  every church that has a picture older than RETENTION (a few hundred small
-  rows at this size).
+  REMOVE_BATCH, so one call stays short. It reads the cover picture's id of
+  the saved services of every church that has a picture older than
+  RETENTION (that one key, not the bulletins; build review M1).
 - in_use(session, church_id): the ids the church's saved services point at.
-Each removal locks its candidates before it reads in_use, and a save locks
-the picture it points at (repos.bulletin_images, plan review I5).
+Each removal locks the pictures it found unused, then reads in_use again and
+keeps any a save pointed at meanwhile; a save locks the picture it points at
+(repos.bulletin_images, plan review I5). A picture in use is never locked by
+the removal (build review M1).
 Logs carry ids, counts and sizes, never a picture (F §2.5).
 """
 from __future__ import annotations
@@ -44,7 +51,7 @@ from db.ids import as_uuid
 from domain_errors import InvalidInput, NotFound
 from repos import bulletin_images as images_repo
 from repos import services as services_repo
-from service_bulletin import read as read_bulletin
+from service_bulletin import image_id
 
 logger = logging.getLogger(__name__)
 
@@ -74,19 +81,32 @@ class Picture:
 
 
 def in_use(session, church_id: uuid.UUID) -> set[str]:
-    """The picture ids the church's saved services point at (a stored bulletin's cover_image_id)."""
-    ids = (read_bulletin(raw).cover_image_id for raw in services_repo.stored_bulletins(church_id, session=session))
-    return {image_id for image_id in ids if image_id}
+    """The picture ids the church's saved services point at (a stored bulletin's cover_image_id, read as
+    service_bulletin reads it)."""
+    ids = (image_id(raw) for raw in services_repo.stored_cover_ids(church_id, session=session))
+    return {found for found in ids if found}
 
 
-def _unused(session, church_id: uuid.UUID, cutoff: Optional[datetime.datetime]) -> list[uuid.UUID]:
-    """The church's pictures (uploaded before `cutoff`, when given) no saved service points at, oldest first:
-    locked first, then checked against the saved services, so a save in between is seen."""
-    candidates = images_repo.ids_created_before(church_id, cutoff, session=session, lock=True)
+def _unused_now(session, church_id: uuid.UUID, cutoff: Optional[datetime.datetime]) -> list[uuid.UUID]:
+    """The church's pictures (uploaded before `cutoff`, when given) no saved service points at, oldest first.
+    No lock: a save may point at one meanwhile."""
+    candidates = images_repo.ids_created_before(church_id, cutoff, session=session)
     if not candidates:
         return []
     used = in_use(session, church_id)
     return [i for i in candidates if str(i) not in used]
+
+
+def _unused(session, church_id: uuid.UUID, cutoff: Optional[datetime.datetime],
+            limit: Optional[int] = None) -> list[uuid.UUID]:
+    """The same, up to `limit`, each locked (FOR UPDATE) and then checked again against the saved services, so
+    a save that got there first is seen and one that comes later waits; a picture in use is not locked."""
+    unused = _unused_now(session, church_id, cutoff)[:limit]
+    if not unused:
+        return []
+    locked = images_repo.lock_images(church_id, unused, session=session)
+    used = in_use(session, church_id)
+    return [i for i in locked if str(i) not in used]
 
 
 def remove_unused(session, now: datetime.datetime, *, limit: Optional[int] = None) -> int:
@@ -98,7 +118,7 @@ def remove_unused(session, now: datetime.datetime, *, limit: Optional[int] = Non
     for church_id in images_repo.churches_with_pictures_before(cutoff, session=session):
         if removed >= limit:
             break
-        gone = _unused(session, church_id, cutoff)[:limit - removed]
+        gone = _unused(session, church_id, cutoff, limit - removed)
         removed += images_repo.delete_images(church_id, gone, session=session)
     return removed
 
@@ -114,19 +134,37 @@ def make_room(session, church_id: uuid.UUID) -> int:
     return images_repo.delete_images(church_id, unused[:over], session=session)
 
 
+def _storage_full(church_id: uuid.UUID, total: int) -> InvalidInput:
+    logger.warning("bulletin_images.storage_full church=%s total=%d budget=%d", church_id, total, STORAGE_BUDGET)
+    return InvalidInput(STORAGE_FULL_MESSAGE, field="image")
+
+
+def room_left(session, church_id: uuid.UUID) -> None:
+    """The refusals that need no picture, read-only, before the picture is decoded (build review M4): every
+    church's pictures at the budget already, or the church at MAX_PICTURES with none unused. The transaction
+    that stores the picture checks both again under its lock."""
+    total = images_repo.total_bytes(session=session)
+    if total >= STORAGE_BUDGET:
+        raise _storage_full(church_id, total)
+    if images_repo.count_images(church_id, session=session) >= MAX_PICTURES \
+            and not _unused_now(session, church_id, None):
+        raise InvalidInput(CHURCH_FULL_MESSAGE, field="image")
+
+
 def upload(church_id: uuid.UUID, user_id: uuid.UUID, data: bytes) -> UploadedImage:
     started = time.monotonic()
     cid = as_uuid(church_id)
-    prepared = bulletin_image.prepare(data)
     with session_scope() as s:
         removed = remove_unused(s, datetime.datetime.now(datetime.timezone.utc))
     with session_scope() as s:
+        room_left(s, cid)
+    prepared = bulletin_image.prepare(data)
+    with session_scope() as s:
+        images_repo.lock_uploads(session=s)
         removed += make_room(s, cid)
         total = images_repo.total_bytes(session=s)
         if total + len(prepared.content) > STORAGE_BUDGET:
-            logger.warning("bulletin_images.storage_full church=%s total=%d budget=%d", cid, total,
-                           STORAGE_BUDGET)
-            raise InvalidInput(STORAGE_FULL_MESSAGE, field="image")
+            raise _storage_full(cid, total)
         row = images_repo.insert_image(cid, user_id, content_type=bulletin_image.CONTENT_TYPE,
                                        content=prepared.content, width=prepared.width, height=prepared.height,
                                        session=s)

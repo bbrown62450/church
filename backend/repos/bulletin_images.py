@@ -10,11 +10,15 @@ usecases.bulletin_images, usecases.archive and usecases.documents own the
 transactions. The picture's bytes are read only by get_picture (a projection
 elsewhere, so a list never loads them).
 
-Locks (plan review I5): the removal takes its candidates `FOR UPDATE` before
-it reads which pictures the saved services point at, and a save takes the
-picture it points at `FOR SHARE` (has_image with lock=True), so a save never
-points at a picture being removed: one waits for the other. SQLite ignores
-both (one writer at a time).
+Locks (plan review I5; PR 3a build review M1, M3): the removal takes the
+pictures it is about to remove `FOR UPDATE` (lock_images) and then reads again
+which pictures the saved services point at, and a save takes the picture it
+points at `FOR SHARE` (has_image with lock=True), so a save never points at a
+picture being removed: one waits for the other. A picture in use is never
+locked by the removal. lock_uploads (a transaction-level advisory lock on
+Postgres) makes one upload at a time count the church's pictures, make room,
+check the storage budget and store. SQLite ignores all three (one writer at
+a time).
 """
 import datetime
 import uuid
@@ -22,7 +26,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Optional
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.orm import Session
 
 from db.ids import as_uuid
@@ -59,15 +63,32 @@ def has_image(church_id, image_id, *, session: Session, lock: bool = False) -> b
     return session.execute(query.with_for_update(read=True) if lock else query).first() is not None
 
 
-def ids_created_before(church_id, cutoff: Optional[datetime.datetime] = None, *, session: Session,
-                       lock: bool = False) -> list[uuid.UUID]:
+def ids_created_before(church_id, cutoff: Optional[datetime.datetime] = None, *,
+                       session: Session) -> list[uuid.UUID]:
     """The church's pictures, oldest first, those uploaded before `cutoff` only when given
-    (ix_bulletin_images_church_created); with lock, held FOR UPDATE until the transaction ends."""
+    (ix_bulletin_images_church_created). No lock."""
     query = select(BulletinImage.id).where(BulletinImage.church_id == as_uuid(church_id))
     if cutoff is not None:
         query = query.where(BulletinImage.created_at < cutoff)
-    query = query.order_by(BulletinImage.created_at, BulletinImage.id)
-    return list(session.execute(query.with_for_update() if lock else query).scalars())
+    return list(session.execute(query.order_by(BulletinImage.created_at, BulletinImage.id)).scalars())
+
+
+def lock_images(church_id, image_ids: Iterable[uuid.UUID], *, session: Session) -> list[uuid.UUID]:
+    """These pictures of the church that are still there, oldest first, held FOR UPDATE until the
+    transaction ends (a save's FOR SHARE on one waits, and this waits for one)."""
+    ids = [as_uuid(i) for i in image_ids]
+    if not ids:
+        return []
+    return list(session.execute(select(BulletinImage.id).where(
+        BulletinImage.church_id == as_uuid(church_id), BulletinImage.id.in_(ids))
+        .order_by(BulletinImage.created_at, BulletinImage.id).with_for_update()).scalars())
+
+
+def lock_uploads(*, session: Session) -> None:
+    """One upload at a time, every church, until the transaction ends: its count, room-making, budget check
+    and insert (a transaction-level advisory lock on Postgres; SQLite has one writer at a time)."""
+    if session.get_bind().dialect.name == "postgresql":
+        session.execute(text("SELECT pg_advisory_xact_lock(hashtext('bulletin_images.upload'))"))
 
 
 def churches_with_pictures_before(cutoff: datetime.datetime, *, session: Session) -> list[uuid.UUID]:
