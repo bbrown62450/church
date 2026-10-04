@@ -48,3 +48,13 @@ def swapped_profile() -> bytes:
     red, blue = at[b"rXYZ"], at[b"bXYZ"]
     data[red + 4:red + 12], data[blue + 4:blue + 12] = data[blue + 4:blue + 12], data[red + 4:red + 12]
     return bytes(data)
+
+
+def repeated_scan(data: bytes, times: int) -> bytes:
+    """A progressive JPEG with its last scan (and the Huffman table before it) repeated `times` more times:
+    libjpeg decodes every repeat over the whole picture (the build review's C1)."""
+    end = data.rindex(b"\xff\xd9")
+    scan = data.rindex(b"\xff\xda", 0, end)
+    table = data.rfind(b"\xff\xc4", 0, scan)
+    start = table if table > data.rfind(b"\xff\xda", 0, scan) else scan
+    return data[:end] + data[start:end] * times + data[end:]

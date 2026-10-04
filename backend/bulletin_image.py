@@ -5,17 +5,25 @@ PR 3 planning answers 2-6), with Pillow (installed with reportlab).
   must be at most 10 MB, a JPEG or a PNG (planning answer 5: no HEIC; an
   iPhone's Safari sends a JPEG; a phone's multi-picture JPEG, which Pillow
   calls "MPO", is a JPEG) and at most 50 million pixels (24 million for a
-  PNG, which is decoded whole). It is turned upright (its EXIF
+  PNG, which is decoded whole, and for a progressive JPEG, which keeps every
+  coefficient in memory whatever the scale it is decoded at; a JPEG of more
+  than MAX_SCANS scans is refused before it is decoded, since each scan is a
+  pass over the whole picture). It is turned upright (its EXIF
   orientation), its colors converted to sRGB when it carries a color
   profile (an iPhone's Display P3), a transparent part laid on white,
   scaled down to at most 1600 px on its long side (never up), and stored as
-  a JPEG with no camera data (no EXIF, so no location or time) of at most
+  a JPEG with no camera data (no EXIF, XMP, comment or other metadata, so
+  no location, time or name) of at most
   MAX_STORED_BYTES (a lower quality, then a smaller size, until it fits).
   A JPEG is decoded at a reduced scale when it is much larger (draft mode),
   and a large PNG is reduced before anything else is done to it, so the
   memory one upload takes stays bounded; one upload is prepared at a time in
   the process (one worker thread), and another waits its turn up to
-  BUSY_WAIT_SECONDS, then is a 429 (BUSY_MESSAGE). Anything else is a 422 naming the field "image".
+  BUSY_WAIT_SECONDS, then is a 429 (BUSY_MESSAGE). A started picture has
+  PREPARE_SECONDS of the worker (checked between the file's reads while it is
+  decoded, and between the steps), and the request waits TOTAL_WAIT_SECONDS
+  in all: past either, a 429 (TOO_SLOW_MESSAGE). Anything else is a 422
+  naming the field "image".
 - cover(picture, lines, size): the cover's box as both printed files show it
   (planning answers 2-4): the picture scaled to fill `size` and trimmed
   evenly at the edges (a centered crop), in color, with a dark see-through
@@ -27,7 +35,9 @@ Times Bold outline that reportlab ships).
 """
 from __future__ import annotations
 
+import functools
 import os
+import time
 import warnings
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as Waited
@@ -43,6 +53,13 @@ from domain_errors import InvalidInput, RateLimited
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024          # planning answer: at most 10 MB in
 MAX_PIXELS = 50_000_000                      # a JPEG: more than any phone camera's 48 MP
 MAX_PNG_PIXELS = 24_000_000                  # a PNG (a screenshot or a graphic), decoded whole
+# A progressive JPEG: libjpeg keeps every DCT coefficient (2 bytes a pixel a component) whatever the scale it
+# decodes at, so it takes as much memory as a PNG of its size (build review I1: 300-400 MB at 50 MP).
+MAX_PROGRESSIVE_PIXELS = MAX_PNG_PIXELS
+# A JPEG's scans (SOS markers), at most: each is a pass over every block of the picture (build review C1: a
+# file of a few hundred KB repeating one scan a thousand times took 30 s). Pillow's progressive JPEG has 10
+# (6 grey, 18 CMYK), a phone's baseline JPEG 1 (2 with its EXIF thumbnail), a two-picture MPO about 20.
+MAX_SCANS = 64
 MAX_SIDE = 1600                              # the stored picture's long side, at most
 MAX_STORED_BYTES = 600_000                   # the stored JPEG, at most (plan review C3)
 CONTENT_TYPE = "image/jpeg"                  # what is stored and served
@@ -52,11 +69,15 @@ OPENERS = ("JPEG", "PNG")                    # the only parsers tried (Pillow op
 ENCODINGS = ((1600, 85), (1600, 75), (1400, 70), (1200, 65), (1000, 60), (800, 60))
 BUSY_WAIT_SECONDS = 10.0                     # how long an upload waits for the one before it
 BUSY_RETRY_SECONDS = 5
+PREPARE_SECONDS = 10.0                       # a started picture's time on the worker, at most
+TOTAL_WAIT_SECONDS = 20.0                    # an upload's whole wait for its picture, at most
+READ_BLOCK = 4096                            # the decoder reads the file in blocks this size (the time check)
 
 TOO_LARGE_MESSAGE = "The picture is larger than 10 MB. Choose a smaller one."
 NOT_A_PICTURE_MESSAGE = "Choose a JPEG or PNG picture."
 TOO_MANY_PIXELS_MESSAGE = "The picture has too many pixels. Choose a smaller one."
 BUSY_MESSAGE = "Another picture is being prepared. Try again in a few seconds."
+TOO_SLOW_MESSAGE = "The picture took too long to prepare. Choose a smaller one."
 
 # The band: black at this opacity, its text white (planning answer 2).
 BAND_OPACITY = 0.55
@@ -88,6 +109,32 @@ class Prepared:
 
 def _invalid(message: str) -> InvalidInput:
     return InvalidInput(message, field="image")
+
+
+class _TooSlow(Exception):
+    """The picture's time on the worker is up (PREPARE_SECONDS)."""
+
+
+def _too_slow() -> RateLimited:
+    return RateLimited(TOO_SLOW_MESSAGE, retry_after_seconds=BUSY_RETRY_SECONDS)
+
+
+class _Timed(BytesIO):
+    """The upload's bytes, read by the decoder block by block; a read past the deadline stops the decode
+    (libjpeg cannot be interrupted, but it asks for the next block between scans)."""
+
+    def __init__(self, data: bytes, deadline: float):
+        super().__init__(data)
+        self.deadline = deadline
+
+    def read(self, size: int | None = -1) -> bytes:
+        _check(self.deadline)
+        return super().read(size)
+
+
+def _check(deadline: float) -> None:
+    if time.monotonic() > deadline:
+        raise _TooSlow
 
 
 def _target(width: int, height: int) -> tuple[int, int]:
@@ -135,6 +182,7 @@ def _encoded(picture: Image.Image) -> tuple[bytes, int, int]:
         if max(picture.size) > side:
             img = picture.copy()
             img.thumbnail((side, side), Image.Resampling.LANCZOS)
+        img.info.clear()                                            # no comment, EXIF, XMP or profile written
         out = BytesIO()
         img.save(out, "JPEG", quality=quality, optimize=True)
         if out.tell() <= MAX_STORED_BYTES:
@@ -142,24 +190,36 @@ def _encoded(picture: Image.Image) -> tuple[bytes, int, int]:
     return out.getvalue(), img.width, img.height
 
 
-def _prepared(data: bytes) -> Prepared:
+def _limit(img: Image.Image) -> int:
+    """The most pixels taken for this picture: a PNG and a progressive JPEG are decoded whole."""
+    if img.format == "PNG":
+        return MAX_PNG_PIXELS
+    return MAX_PROGRESSIVE_PIXELS if img.info.get("progressive") or img.info.get("progression") else MAX_PIXELS
+
+
+def _prepared(data: bytes, seconds: float = PREPARE_SECONDS) -> Prepared:
+    deadline = time.monotonic() + seconds
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", Image.DecompressionBombWarning)     # the check below says it
-            img = Image.open(BytesIO(data), formats=OPENERS)
+            img = Image.open(_Timed(data, deadline), formats=OPENERS)
         if img.format not in FORMATS:
             raise _invalid(NOT_A_PICTURE_MESSAGE)
-        limit = MAX_PNG_PIXELS if img.format == "PNG" else MAX_PIXELS
-        if img.width * img.height > limit:
+        if img.width * img.height > _limit(img):
             raise _invalid(TOO_MANY_PIXELS_MESSAGE)
         icc = img.info.get("icc_profile")                           # read before anything drops `info`
         orientation = img.getexif().get(ORIENTATION, 1)
         if img.format != "PNG":
             img.draft("RGB", _target(img.width, img.height))       # decode at 1/2, 1/4 or 1/8 when it can
+        img.decodermaxblock = READ_BLOCK
         img.load()
+        _check(deadline)
         img = _smaller(img)                                         # the decoded original is let go here
         img = img.transpose(TURNS[orientation]) if orientation in TURNS else img     # upright
         picture = _rgb(img, icc)
+        _check(deadline)
+    except _TooSlow:
+        raise _too_slow() from None
     except Image.DecompressionBombError:
         raise _invalid(TOO_MANY_PIXELS_MESSAGE) from None
     except (UnidentifiedImageError, OSError, SyntaxError, ValueError):
@@ -168,22 +228,37 @@ def _prepared(data: bytes) -> Prepared:
     return Prepared(content, width, height)
 
 
-def prepare(data: bytes, *, wait: float = BUSY_WAIT_SECONDS) -> Prepared:
+def _scans(data: bytes) -> int:
+    """A JPEG's scans: its SOS markers (in the compressed data a 0xFF byte is always followed by 0x00 or a
+    restart marker, so FF DA is a marker wherever it is; an EXIF thumbnail's scan counts too)."""
+    return data.count(b"\xff\xda")
+
+
+def prepare(data: bytes, *, wait: float = BUSY_WAIT_SECONDS, seconds: float = PREPARE_SECONDS,
+            total: float = TOTAL_WAIT_SECONDS) -> Prepared:
     """The upload checked and made ready to store (see the module docstring)."""
     if len(data) > MAX_UPLOAD_BYTES:
         raise _invalid(TOO_LARGE_MESSAGE)
     if not data:
         raise _invalid(NOT_A_PICTURE_MESSAGE)
-    job = _WORKER.submit(_prepared, data)
+    if data[:2] == b"\xff\xd8" and _scans(data) > MAX_SCANS:
+        raise _invalid(NOT_A_PICTURE_MESSAGE)
+    started = time.monotonic()
+    job = _WORKER.submit(_prepared, data, seconds)
     try:
         return job.result(timeout=wait)
     except Waited:
         if job.cancel():                                            # still waiting its turn: not started
             raise RateLimited(BUSY_MESSAGE, retry_after_seconds=BUSY_RETRY_SECONDS) from None
-        return job.result()                                         # started: it finishes in about a second
+    try:
+        return job.result(timeout=max(0.0, total - (time.monotonic() - started)))   # started: its own time
+    except Waited:
+        raise _too_slow() from None
 
 
+@functools.lru_cache(maxsize=32)
 def _font(size: int) -> ImageFont.FreeTypeFont:
+    """The band's font at this pixel size (loaded once a size: fitted_sizes asks for each line and step)."""
     return ImageFont.truetype(FONT_FILE, size)
 
 
@@ -228,6 +303,7 @@ def cover(picture: bytes, lines: Sequence[tuple[str, int]], size: tuple[int, int
                       fill=(255, 255, 255, 255))
             y += h + gap
         box = box.convert("RGB")
+    box.info.clear()                                                # the stored picture's metadata stays out
     out = BytesIO()
     box.save(out, "JPEG", quality=90, optimize=True)
     return out.getvalue()

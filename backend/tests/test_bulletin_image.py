@@ -6,6 +6,7 @@ import random
 import subprocess
 import sys
 import threading
+import time
 from io import BytesIO
 from pathlib import Path
 
@@ -14,7 +15,8 @@ from PIL import Image, ImageCms, ImageDraw
 
 import bulletin_image as bi
 from domain_errors import InvalidInput, RateLimited
-from tests.picture_helpers import BLUE, GREEN, RED, near, opened, picture, stripes, swapped_profile
+from tests.picture_helpers import (BLUE, GREEN, RED, near, opened, picture, repeated_scan, stripes,
+                                  swapped_profile)
 
 
 def test_a_large_photo_is_stored_as_a_jpeg_at_most_1600_px_on_its_long_side():
@@ -190,3 +192,94 @@ def test_a_long_reading_and_the_date_shrink_together():
     assert reading < 75 and reading >= date and abs(reading / date - 75 / 58) < 0.1
     assert draw.textlength(long, font=bi._font(reading)) <= 1395
     assert bi.fitted_sizes(draw, [("Matthew 22:1-14", 75), ("October 11, 2026", 58)], 1395) == [75, 58]
+
+
+# --- build review fixes (2026-10-04, PR 3a) ---
+
+def _markers(data: bytes) -> list[int]:
+    """A JPEG's segment markers up to its first scan (APP1 is EXIF or XMP, COM a comment)."""
+    found, at = [], 2
+    while data[at + 1] != 0xDA:
+        found.append(data[at + 1])
+        at += 2 + int.from_bytes(data[at + 2:at + 4], "big")
+    return found
+
+
+def test_a_jpeg_with_too_many_scans_is_refused_before_it_is_decoded(monkeypatch):
+    """Build review C1: each scan is a pass over the whole picture, so a small file repeating one scan
+    thousands of times held the one worker for minutes. Pillow's progressive JPEG has 10 scans."""
+    progressive = picture((2000, 1500), progressive=True)
+    assert progressive.count(b"\xff\xda") == 10
+    assert bi.prepare(repeated_scan(progressive, bi.MAX_SCANS - 10)).width == 1600          # 64 scans: taken
+    monkeypatch.setattr(bi, "_prepared", lambda *args: pytest.fail("decoded"))
+    with pytest.raises(InvalidInput) as raised:
+        bi.prepare(repeated_scan(progressive, bi.MAX_SCANS - 9))                             # 65: refused
+    assert (raised.value.message, raised.value.field) == (bi.NOT_A_PICTURE_MESSAGE, "image")
+
+
+def test_a_picture_that_takes_too_long_stops_and_frees_the_worker(monkeypatch):
+    """Build review C1: a started picture has PREPARE_SECONDS of the worker; the decode stops at its next
+    read of the file, and the upload is told why (a 429 the page shows)."""
+    monkeypatch.setattr(bi, "MAX_SCANS", 100_000)
+    slow = repeated_scan(picture((2000, 1500), progressive=True), 5000)                    # about 10 s whole
+    started = time.monotonic()
+    with pytest.raises(RateLimited) as raised:
+        bi.prepare(slow, seconds=0.3)
+    assert time.monotonic() - started < 3
+    assert (raised.value.message, raised.value.retry_after_seconds) == (bi.TOO_SLOW_MESSAGE, 5)
+    with pytest.raises(RateLimited):
+        bi.prepare(picture(), seconds=-1)                                                    # checked between steps
+    assert bi.prepare(picture()).width == 400                                                # the worker is free
+
+
+def test_an_upload_waits_for_its_started_picture_no_longer_than_the_total(monkeypatch):
+    """Build review C1: the request is never held longer than TOTAL_WAIT_SECONDS, even by a decode that
+    cannot be stopped."""
+    release = threading.Event()
+    monkeypatch.setattr(bi, "_prepared", lambda data, seconds: release.wait(10))
+    try:
+        started = time.monotonic()
+        with pytest.raises(RateLimited) as raised:
+            bi.prepare(picture(), wait=0.05, total=0.3)
+        assert raised.value.message == bi.TOO_SLOW_MESSAGE and time.monotonic() - started < 2
+    finally:
+        release.set()
+    assert bi.TOTAL_WAIT_SECONDS == 20
+
+
+def test_a_progressive_jpeg_takes_at_most_24_million_pixels_as_a_png():
+    """Build review I1: libjpeg keeps every coefficient of a progressive JPEG in memory whatever the scale it
+    decodes at (300-400 MB at 50 MP), so it has the PNG's cap; a baseline JPEG (a phone's) keeps 50 MP."""
+    size = (7000, 3500)                                                                     # 24.5 MP
+    with pytest.raises(InvalidInput) as raised:
+        bi.prepare(picture(size, mode="L", color=128, progressive=True))
+    assert raised.value.message == bi.TOO_MANY_PIXELS_MESSAGE
+    assert bi.prepare(picture(size, mode="L", color=128)).width == 1600
+    assert bi.prepare(picture((4800, 4800), mode="L", color=128, progressive=True)).width == 1600    # 23 MP
+
+
+def test_no_metadata_reaches_the_stored_picture_or_the_printed_cover():
+    """Build review I2: a JPEG comment (a name or an address) was copied into the stored picture and the
+    printed cover; now no comment, EXIF or XMP is written, at any size."""
+    xmp = b'<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF/></x:xmpmeta>'
+    exif = Image.Exif()
+    exif[0x0110] = "Example Phone"
+    for size in ((800, 600), (4000, 3000)):
+        upload = picture(size, comment=b"Taken by Sam Sample", exif=exif.tobytes(), xmp=xmp)
+        assert {0xFE, 0xE1} <= set(_markers(upload))
+        stored = bi.prepare(upload).content
+        assert opened(stored).info.keys() <= {"jfif", "jfif_version", "jfif_unit", "jfif_density", "dpi"}
+        assert not {0xFE, 0xE1, 0xE2} & set(_markers(stored)) and b"Sam Sample" not in stored
+        printed = bi.cover(upload, [("Matthew 22:1-14", 75)], (1550, 1250))
+        assert not {0xFE, 0xE1, 0xE2} & set(_markers(printed)) and b"Sam Sample" not in printed
+
+
+def test_the_band_s_font_is_loaded_once_a_size():
+    """Build review M6: fitted_sizes asks for the font once a line a step."""
+    lines = [("1 Corinthians 15:1-11, 12-20, 35-38 or Psalm 23", 75), ("October 11, 2026", 58)]
+    bi._font.cache_clear()
+    bi.cover(picture((1600, 1200)), lines, (1550, 1250))
+    first = bi._font.cache_info()
+    bi.cover(picture((1600, 1200)), lines, (1550, 1250))
+    again = bi._font.cache_info()
+    assert first.hits > 0 and again.misses == first.misses and again.hits > first.hits
