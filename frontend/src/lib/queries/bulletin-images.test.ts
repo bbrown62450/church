@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { checkPicture, MAX_PICTURE_BYTES, NOT_A_PICTURE, PICTURE_TOO_LARGE } from "./bulletin-images";
+import { checkPicture, isLatestChoice, MAX_PICTURE_BYTES, newChoice, NOT_A_PICTURE, PICTURE_TOO_LARGE, uploadKey } from "./bulletin-images";
 import { keys } from "./keys";
 
 function file(type: string, size: number): File {
@@ -20,5 +20,16 @@ describe("the cover picture before it is uploaded (printed bulletin PR 3b)", () 
   it("keeps a picture's bytes under the church's key", () => {
     expect(keys.bulletinImage("c1", "p1")).toEqual(["church", "c1", "bulletin-image", "p1"]);
     expect(keys.bulletinImage("c1", "p1").slice(0, 2)).toEqual(keys.church("c1"));
+  });
+
+  it("keeps the latest choice per draft, so only its upload applies, and one key per church for the uploads (PR 3b build review I1)", () => {
+    const a = newChoice("c1:draft-x");
+    const other = newChoice("c1:draft-y");
+    expect(isLatestChoice("c1:draft-x", a)).toBe(true);
+    const b = newChoice("c1:draft-x"); // a later Choose, or Remove
+    expect(isLatestChoice("c1:draft-x", a)).toBe(false);
+    expect(isLatestChoice("c1:draft-x", b)).toBe(true);
+    expect(isLatestChoice("c1:draft-y", other)).toBe(true); // another draft's choice stands
+    expect(uploadKey("c1")).toEqual(["bulletinImageUpload", "c1"]);
   });
 });

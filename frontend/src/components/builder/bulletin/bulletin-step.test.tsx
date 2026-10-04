@@ -8,13 +8,15 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { StrictMode } from "react";
+import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import BuilderLayout from "@/app/(signed-in)/(church)/builder/layout";
 import BulletinStepPage from "@/app/(signed-in)/(church)/builder/bulletin/page";
 import { formatServiceDate } from "@/lib/dates";
 import { setCover } from "@/lib/draft/bulletin";
-import { editOccasion, editScriptureLines } from "@/lib/draft/readings";
+import { useDraft } from "@/lib/draft/context";
+import { editOccasion, editScriptureLines, setDate } from "@/lib/draft/readings";
 import { draftKey, freshDraft, type DraftV1 } from "@/lib/draft/schema";
 import { makeQueryClient } from "@/lib/queries/client";
 import { keys } from "@/lib/queries/keys";
@@ -34,7 +36,7 @@ import {
 } from "@/test/fixtures";
 import { renderWithProviders } from "@/test/render";
 
-import { FROM_LAST_WEEK, PICTURE_ALT, PICTURE_SMALL } from "./bulletin-step";
+import { FROM_LAST_WEEK, PICTURE_ALT, PICTURE_OTHER_SERVICE, PICTURE_OTHER_WEEK, PICTURE_SMALL } from "./bulletin-step";
 
 const KEY = draftKey(USER_ID, church().id);
 
@@ -72,6 +74,16 @@ function renderStep(
     { me: me(), church: church(), path: "/builder/bulletin", queryClient },
   );
   return { ...view, api };
+}
+
+/** Changes the draft's date as step 1 would. */
+function DateProbe() {
+  const { update } = useDraft();
+  return (
+    <button type="button" onClick={() => update((d) => setDate(d, "2026-10-11"))}>
+      Probe date
+    </button>
+  );
 }
 
 function carryRequests(api: { requests: { path: string }[] }) {
@@ -279,6 +291,7 @@ describe("the Bulletin step (printed bulletin PR 2b)", () => {
 
 describe("the cover picture (printed bulletin PR 3b; PR 3 planning answers 5-8)", () => {
   const PICTURE = bulletinImage().id;
+  const OTHER_PICTURE = "0b4c2b0e-7777-4888-9999-aaaabbbbcccc";
   const jpeg = () => new File([new Uint8Array([0xff, 0xd8, 0xff])], "church.jpg", { type: "image/jpeg" });
   const pictureRoute = () => new Response(new Blob([new Uint8Array([0xff, 0xd8])], { type: "image/jpeg" }), { headers: { "Content-Type": "image/jpeg" } });
 
@@ -384,6 +397,7 @@ describe("the cover picture (printed bulletin PR 3b; PR 3 planning answers 5-8)"
   });
 
   it("never writes the draft it had over a newer one when the upload lands after the builder was left (PR 3b build review C1)", async () => {
+    const info = vi.spyOn(toast, "info");
     let answer: (value: unknown) => void = () => {};
     const view = renderStep(editOccasion(testDraft(), "Old week"), {
       "POST /bulletin-images": () => new Promise((resolve) => (answer = resolve)),
@@ -400,6 +414,99 @@ describe("the cover picture (printed bulletin PR 3b; PR 3 planning answers 5-8)"
     await act(async () => answer({ status: 201, body: bulletinImage() }));
     await act(async () => {});
     expect(stored()).toEqual(newer);
+    expect(info).toHaveBeenCalledWith(PICTURE_OTHER_SERVICE, expect.anything()); // build review M5
+  });
+
+  it("still says Uploading… when the step is left and opened again, with Choose and Remove waiting (PR 3b build review I1)", async () => {
+    let answer: (value: unknown) => void = () => {};
+    const view = renderStep(setCover(testDraft(), PICTURE), {
+      "POST /bulletin-images": () => new Promise((resolve) => (answer = resolve)),
+      [`GET /bulletin-images/${PICTURE}`]: pictureRoute,
+      [`GET /bulletin-images/${OTHER_PICTURE}`]: pictureRoute,
+    });
+    await screen.findByRole("img", { name: PICTURE_ALT });
+    fireEvent.change(document.getElementById("bulletin-cover-file") as HTMLInputElement, { target: { files: [jpeg()] } });
+    expect(await screen.findByRole("button", { name: "Uploading…" })).toBeInTheDocument();
+    view.rerender(
+      <BuilderLayout>
+        <p>Another step</p>
+      </BuilderLayout>,
+    );
+    view.rerender(
+      <BuilderLayout>
+        <BulletinStepPage />
+      </BuilderLayout>,
+    );
+    const group = await screen.findByRole("group", { name: "Cover picture" });
+    expect(within(group).getByRole("button", { name: "Uploading…" })).toHaveAttribute("aria-disabled", "true");
+    expect(within(group).getByRole("button", { name: "Remove the cover picture" })).toBeDisabled();
+    expect(within(group).getByRole("status", { name: "" })).toHaveTextContent("Uploading the picture…");
+
+    await act(async () => answer({ status: 201, body: bulletinImage({ id: OTHER_PICTURE }) }));
+    await waitFor(() => expect(stored().bulletin.cover_image_id).toBe(OTHER_PICTURE));
+    expect(within(group).getByRole("button", { name: "Choose another picture" })).toBeEnabled();
+    expect(within(group).getByRole("button", { name: "Remove the cover picture" })).toBeEnabled();
+  });
+
+  it("applies only the latest choice: an earlier upload that answers last never replaces it (PR 3b build review I1)", async () => {
+    const answers: ((value: unknown) => void)[] = [];
+    renderStep(testDraft(), {
+      "POST /bulletin-images": () => new Promise((resolve) => answers.push(resolve)),
+      [`GET /bulletin-images/${PICTURE}`]: pictureRoute,
+      [`GET /bulletin-images/${OTHER_PICTURE}`]: pictureRoute,
+    });
+    await screen.findByRole("group", { name: "Cover picture" });
+    const input = document.getElementById("bulletin-cover-file") as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [jpeg()] } }); // A
+    await waitFor(() => expect(answers).toHaveLength(1));
+    fireEvent.change(input, { target: { files: [jpeg()] } }); // B, chosen later
+    await waitFor(() => expect(answers).toHaveLength(2));
+    await act(async () => answers[1]({ status: 201, body: bulletinImage({ id: OTHER_PICTURE }) }));
+    await waitFor(() => expect(stored().bulletin.cover_image_id).toBe(OTHER_PICTURE));
+    await act(async () => answers[0]({ status: 201, body: bulletinImage() }));
+    await act(async () => {});
+    expect(stored().bulletin.cover_image_id).toBe(OTHER_PICTURE);
+    expect(await screen.findByRole("button", { name: "Choose another picture" })).toBeEnabled();
+  });
+
+  it("says so when an upload answers after the date changed, and leaves the picture out (PR 3b build review M5)", async () => {
+    const info = vi.spyOn(toast, "info");
+    let answer: (value: unknown) => void = () => {};
+    const view = renderStep(testDraft(), {
+      "POST /bulletin-images": () => new Promise((resolve) => (answer = resolve)),
+    });
+    await screen.findByRole("group", { name: "Cover picture" });
+    fireEvent.change(document.getElementById("bulletin-cover-file") as HTMLInputElement, { target: { files: [jpeg()] } });
+    expect(await screen.findByRole("button", { name: "Uploading…" })).toBeInTheDocument();
+    view.rerender(
+      <BuilderLayout>
+        <DateProbe />
+      </BuilderLayout>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Probe date" }));
+    await waitFor(() => expect(stored().readings.date_iso).toBe("2026-10-11"));
+    await act(async () => answer({ status: 201, body: bulletinImage() }));
+    await waitFor(() => expect(info).toHaveBeenCalledWith(PICTURE_OTHER_WEEK, expect.anything()));
+    expect(stored().bulletin.cover_image_id).toBeNull();
+  });
+
+  it("says an upload's failure in a toast when the step was left meanwhile (PR 3b build review M5)", async () => {
+    const error = vi.spyOn(toast, "error");
+    let answer: (value: unknown) => void = () => {};
+    const view = renderStep(testDraft(), {
+      "POST /bulletin-images": () => new Promise((resolve) => (answer = resolve)),
+    });
+    await screen.findByRole("group", { name: "Cover picture" });
+    fireEvent.change(document.getElementById("bulletin-cover-file") as HTMLInputElement, { target: { files: [jpeg()] } });
+    expect(await screen.findByRole("button", { name: "Uploading…" })).toBeInTheDocument();
+    view.rerender(
+      <BuilderLayout>
+        <p>Another step</p>
+      </BuilderLayout>,
+    );
+    await act(async () => answer(fakeError(422, "invalid_request", "The picture has too many pixels. Choose a smaller one.")));
+    await waitFor(() => expect(error).toHaveBeenCalledWith("The picture has too many pixels. Choose a smaller one."));
+    expect(stored().bulletin.cover_image_id).toBeNull();
   });
 
   it("never shows a preview whose URL was released, under StrictMode (plan review I2)", async () => {

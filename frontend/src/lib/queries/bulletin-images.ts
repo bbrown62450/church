@@ -7,17 +7,24 @@
  * - `checkPicture(file)`: what the server would refuse, said before the
  *   upload starts (a JPEG or PNG, not empty, at most 10 MB), with the
  *   server's own words; null when it may go.
- * - `useUploadBulletinImage(onStored)`: the picture itself as the request
- *   body; `onStored` gets the answer (its id goes in the draft, `setCover`).
- *   It is the mutation's own callback, not `mutate`'s, so it runs even when
- *   the step is left while the picture uploads (TanStack Query drops
- *   `mutate`'s callbacks once the component unmounts; plan review I1).
- *   Errors are the caller's to show (on the step, next to the button).
+ * - `useUploadBulletinImage({ onStored, onFailed })`: the picture itself as
+ *   the request body, with the choice it answers (`PictureUpload`);
+ *   `onStored` gets the answer (its id goes in the draft, `setCover`) and
+ *   `onFailed` the error. They are the mutation's own callbacks, not
+ *   `mutate`'s, so they run even when the step is left while the picture
+ *   uploads (TanStack Query drops `mutate`'s callbacks once the component
+ *   unmounts; plan review I1).
+ * - `useUploadingPicture()`: true while an upload for the active church is in
+ *   flight, read from the mutation cache by the upload's key, so a step left
+ *   and opened again still says "Uploading…" (PR 3b build review I1).
+ * - `newChoice(draft)` and `isLatestChoice(draft, token)`: the member's
+ *   latest choice for a draft (Choose, or Remove), kept for the tab's life,
+ *   so only the upload of the latest choice is ever applied (build review I1).
  * - `useBulletinImage(id)`: the stored picture's bytes for the preview,
  *   fetched with the church's headers (an `<img>` cannot send them), kept
  *   for the session (an id never names other bytes).
  */
-import { useQuery } from "@tanstack/react-query";
+import { useIsMutating, useQuery } from "@tanstack/react-query";
 
 import type { ApiError } from "@/lib/api/client";
 import type { BulletinImage } from "@/lib/api/types";
@@ -39,16 +46,54 @@ export function checkPicture(file: File): string | null {
   return null;
 }
 
-export function useUploadBulletinImage(onStored: (stored: BulletinImage) => void) {
+/** The upload's mutation key: one church's uploads, whichever step started them. */
+export function uploadKey(churchId: string) {
+  return ["bulletinImageUpload", churchId] as const;
+}
+
+/** What an upload answers: the draft it was chosen for (its id, `created_at` and date) and the choice's token. */
+export type PictureChoice = { church: string; draft: string; created: string; date: string; token: number };
+export type PictureUpload = { file: File; choice: PictureChoice };
+
+// Kept outside any component, so a step left and opened again (a remount) still knows the latest choice.
+const latestChoices = new Map<string, number>();
+let lastToken = 0;
+
+/** A new choice for `draft` (Choose, or Remove): an upload of an earlier choice is no longer applied. */
+export function newChoice(draft: string): number {
+  lastToken += 1;
+  latestChoices.set(draft, lastToken);
+  return lastToken;
+}
+
+export function isLatestChoice(draft: string, token: number): boolean {
+  return latestChoices.get(draft) === token;
+}
+
+export function useUploadBulletinImage({
+  onStored,
+  onFailed,
+}: {
+  onStored: (stored: BulletinImage, upload: PictureUpload) => void;
+  onFailed: (error: ApiError, upload: PictureUpload) => void;
+}) {
   const api = useApi();
-  return useChurchMutation<BulletinImage, ApiError, File>({
-    mutationFn: (file) =>
+  const church = useChurch();
+  return useChurchMutation<BulletinImage, ApiError, PictureUpload>({
+    mutationKey: uploadKey(church.id),
+    mutationFn: ({ file }) =>
       api.church<BulletinImage>("/bulletin-images", {
         method: "POST",
         init: { body: file, headers: { "Content-Type": file.type } },
       }),
-    onSuccess: (stored) => onStored(stored),
+    onSuccess: (stored, upload) => onStored(stored, upload),
+    onError: (error, upload) => onFailed(error, upload),
   });
+}
+
+export function useUploadingPicture(): boolean {
+  const church = useChurch();
+  return useIsMutating({ mutationKey: uploadKey(church.id) }) > 0;
 }
 
 export function useBulletinImage(imageId: string | null) {

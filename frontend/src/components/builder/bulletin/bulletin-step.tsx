@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
+import { toast } from "sonner";
 
 import { PendingButton } from "@/components/app/pending-button";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -9,8 +10,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { errorToastMessage } from "@/lib/api/errors";
+import { errorToastMessage, isNoChurchAccess } from "@/lib/api/errors";
 import type { BulletinSettings } from "@/lib/api/types";
+import { useChurch } from "@/lib/church-context";
 import { ELEMENTS, ROLES } from "@/lib/bulletin-settings";
 import { formatServiceDate } from "@/lib/dates";
 import {
@@ -27,7 +29,14 @@ import {
 import { useDraft } from "@/lib/draft/context";
 import { effectivePicks } from "@/lib/draft/readings";
 import type { AnnouncementKey, CarryKey, DraftV1, Person } from "@/lib/draft/schema";
-import { checkPicture, useBulletinImage, useUploadBulletinImage } from "@/lib/queries/bulletin-images";
+import {
+  checkPicture,
+  isLatestChoice,
+  newChoice,
+  useBulletinImage,
+  useUploadBulletinImage,
+  useUploadingPicture,
+} from "@/lib/queries/bulletin-images";
 import { useBulletinSettings } from "@/lib/queries/bulletin-settings";
 
 import { useBulletinCarry } from "./use-bulletin-carry";
@@ -48,6 +57,9 @@ export const COVER_HELP =
 export const PICTURE_ALT = "This week's cover picture, as the front page trims it";
 export const PICTURE_MISSING = "The picture could not be loaded.";
 export const PICTURE_SMALL = "This picture is small and may print blurry.";
+/** An upload that answered for a draft no longer open, or for another date (PR 3b build review M5). */
+export const PICTURE_OTHER_SERVICE = "The picture was for another service, so it was not added.";
+export const PICTURE_OTHER_WEEK = "The picture was for another week, so it was not added.";
 /** A stored picture shorter than this on its long side fills the 5.2 in cover box at under about 150 dpi. */
 export const SMALL_PICTURE_SIDE = 800;
 
@@ -153,32 +165,66 @@ function useObjectUrl(blob: Blob | undefined): string | null {
  * or failure is said under the buttons; a small picture is said to print
  * blurry. The picture uploaded goes in the draft even when the step was
  * left meanwhile (the upload's own callback, written at once), unless the
- * draft is another one by then. Last week's picture carries in like the
+ * draft is another one by then or has another date (a toast says so), or a
+ * later choice or Remove came after it. While an upload is in flight, from
+ * this visit to the step or an earlier one, the button says "Uploading…"
+ * and Choose and Remove wait. A failure after the step was left is a toast.
+ * Last week's picture carries in like the
  * music, with "From last week. Check before printing." and **Keep as is**.
  */
+/**
+ * Where an upload's failure is said while a Bulletin step shows, by church:
+ * under the buttons. With no step showing (the step was left meanwhile), a
+ * toast says it (PR 3b build review M5).
+ */
+const shownProblems = new Map<string, (message: string) => void>();
+
 function CoverPicture() {
-  const { draft, update, flush, sync } = useDraft();
+  const { draft, update, flush, sync, peek } = useDraft();
+  const church = useChurch();
   const picture = draft.bulletin.cover_image_id;
-  const target = useRef<{ created: string; date: string } | null>(null);
-  const upload = useUploadBulletinImage((stored) => {
-    const chosenFor = target.current;
-    // The builder may be gone and another page may have written a newer draft
-    // meanwhile (New service, another service opened): take it first, so the
-    // check below sees the draft now stored and this store never writes the
-    // copy it had over it (PR 3b build review C1).
-    sync();
-    update((d) =>
-      chosenFor !== null && d.created_at === chosenFor.created && d.readings.date_iso === chosenFor.date
-        ? setCover(d, stored.id)
-        : d,
-    );
-    flush(); // the step may be gone by now (plan review I1)
+  const draftId = `${church.id}:${draft.created_at}`;
+  const [problem, setProblem] = useState<string | null>(null);
+  useEffect(() => {
+    shownProblems.set(church.id, setProblem);
+    return () => {
+      if (shownProblems.get(church.id) === setProblem) shownProblems.delete(church.id);
+    };
+  }, [church.id]);
+  // In flight even when another visit to the step started it (PR 3b build review I1).
+  const uploading = useUploadingPicture();
+  const upload = useUploadBulletinImage({
+    onStored: (stored, { choice }) => {
+      if (!isLatestChoice(choice.draft, choice.token)) return; // a later choice, or Remove, wins (build review I1)
+      // The builder may be gone and another page may have written a newer draft
+      // meanwhile (New service, another service opened): take it first, so the
+      // check below sees the draft now stored and this store never writes the
+      // copy it had over it (PR 3b build review C1).
+      sync();
+      const now = peek();
+      if (now.created_at !== choice.created) {
+        toast.info(PICTURE_OTHER_SERVICE, { id: "bulletin-cover-dropped" });
+        return;
+      }
+      if (now.readings.date_iso !== choice.date) {
+        toast.info(PICTURE_OTHER_WEEK, { id: "bulletin-cover-dropped" });
+        return;
+      }
+      update((d) => (d.created_at === choice.created && d.readings.date_iso === choice.date ? setCover(d, stored.id) : d));
+      flush(); // the step may be gone by now (plan review I1)
+    },
+    onFailed: (e, { choice }) => {
+      if (!isLatestChoice(choice.draft, choice.token)) return;
+      const show = shownProblems.get(choice.church);
+      if (show) show(errorToastMessage(e));
+      // The step was left: said where the member is now (build review M5); a sign-out or a lost church says itself.
+      else if (e.status !== 401 && !isNoChurchAccess(e)) toast.error(errorToastMessage(e));
+    },
   });
   const preview = useBulletinImage(picture);
   const url = useObjectUrl(preview.data);
   const [smallUrl, setSmallUrl] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
-  const [problem, setProblem] = useState<string | null>(null);
   const note = "bulletin-cover-carried";
   const { ot, nt } = effectivePicks(draft);
   const band = [nt ?? ot ?? "", formatServiceDate(draft.readings.date_iso)].filter((line) => line !== "");
@@ -190,8 +236,8 @@ function CoverPicture() {
     const refused = checkPicture(file);
     setProblem(refused);
     if (refused) return;
-    target.current = { created: draft.created_at, date: draft.readings.date_iso };
-    upload.mutate(file, { onError: (e) => setProblem(errorToastMessage(e)) });
+    const choice = { church: church.id, draft: draftId, created: draft.created_at, date: draft.readings.date_iso, token: newChoice(draftId) };
+    upload.mutate({ file, choice });
   }
 
   return (
@@ -248,7 +294,7 @@ function CoverPicture() {
           type="button"
           variant="outline"
           size="touch"
-          pending={upload.isPending}
+          pending={uploading}
           pendingLabel="Uploading…"
           aria-describedby={draft.bulletin.carried.includes("cover") ? note : undefined}
           onClick={() => input.current?.click()}
@@ -261,8 +307,9 @@ function CoverPicture() {
             variant="outline"
             size="touch"
             aria-label="Remove the cover picture"
-            disabled={upload.isPending}
+            disabled={uploading}
             onClick={() => {
+              newChoice(draftId);
               setProblem(null);
               update((d) => setCover(d, null));
               document.getElementById("bulletin-cover-choose")?.focus();
@@ -273,7 +320,7 @@ function CoverPicture() {
         )}
       </div>
       <p role="status" className="sr-only">
-        {upload.isPending ? "Uploading the picture…" : ""}
+        {uploading ? "Uploading the picture…" : ""}
       </p>
       {problem ? (
         <p role="alert" className="text-sm">
