@@ -638,6 +638,7 @@ recorded here.
 | 2. Music and announcements | The prelude and postlude printed with their composers and the organist's name; the announcements page showed only what was filled in | 2026-10-03 |
 | 3. Who leads | A change for this week and a Sermon leader printed in page 1's header and beside the Sermon; Bulletin settings kept the usual names | 2026-10-03 |
 | 4. Carry forward | A new service a week after the saved one carried its music and announcements with "From last week"; the marks stayed after saving and opening it from Services | 2026-10-03 |
+| Correction | Before PR 3a's merge (2026-10-04) a read-only query showed no service saved after 2026-10-02 20:45 UTC and none with a bulletin, and the count still 28: the saves in steps 2-4 and in the PR 2b-1 phone check did not reach the database (what the phone showed came from the browser's draft). The same day a fresh **Save changes** on the phone stored the service with its bulletin (`saved_at` 2026-10-04 21:05 UTC, `has_bulletin` true), so saving works. Saving a new service and the marks after reopening from Services are to be checked again in PR 3b's phone check | 2026-10-04 |
 | Follow-ups | PR 2b is complete. Next: PR 3 (the cover picture, backend first), Voices of the Church, 6a (Settings, including persona editing), Hear it from the pews. Still pending: the PR 1 print test at the church. Noted in the 2b plan: an edit on the Bulletin step made before changing an opened service's date is set aside with the rest (it returns if the date goes back) | 2026-10-03 |
 
 ## Backups
