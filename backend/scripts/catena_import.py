@@ -14,11 +14,12 @@ Commands (from the repo root; `--cache` is any directory outside the repo):
         download the eight volumes' OCR (about 100 MB) into DIR
     .venv/bin/python backend/scripts/catena_import.py draft --cache DIR GOSPEL
         write DIR/draft-<gospel>.json: every section with its cleaned OCR text (unchecked)
-    .venv/bin/python backend/scripts/catena_import.py index --cache DIR GOSPEL [--checked FILE ...]
+    .venv/bin/python backend/scripts/catena_import.py index --cache DIR GOSPEL [--checked FILE ...] [--replace ID ...]
         rewrite backend/data/catena/<gospel>.json: the draft's sections as unchecked entries
         with no text, keeping each checked section exactly as it is in the file and adding each
         checked FILE (one section, as the file holds it); a drafted section that shares a verse
-        with a checked one gives way to it
+        with a checked one gives way to it. Two checked sections may share only a verse the Catena
+        splits; a re-check that changed a section's verses names the old one with --replace ID
     .venv/bin/python backend/scripts/catena_import.py show --cache DIR "REFERENCE"
         print the drafts of the sections overlapping REFERENCE ("Matthew 22:15-22") and the
         addresses of their page images, for checking
@@ -671,6 +672,21 @@ def merged_index(gospel: str, draft: dict, existing: Optional[dict]) -> dict:
     return {"format": catena.FORMAT, "gospel": gospel, "sections": merged}
 
 
+def split_verse(a: dict, b: dict) -> bool:
+    """Two sections that share only the verse the Catena splits between them: the last verse of the
+    first is the first of the second ("matthew-2-7-9", "matthew-2-9-9")."""
+    first, second = sorted((a, b), key=lambda s: (s["start"], s["end"]))
+    return first["end"] == second["start"]
+
+
+def overlapping_checked(sections: list[dict]) -> list[tuple[str, str]]:
+    """Pairs of checked sections that share more than a split verse: a re-check that moved a
+    section's verses (a new id) beside the old checked section it should replace."""
+    checked = [s for s in sections if s.get("status") == "checked"]
+    return [(a["id"], b["id"]) for i, a in enumerate(checked) for b in checked[i + 1:]
+            if a["start"] <= b["end"] and b["start"] <= a["end"] and not split_verse(a, b)]
+
+
 def write_json(path: Path, data: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
@@ -702,6 +718,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--cache", type=Path, required=True)
     parser.add_argument("--checked", type=Path, action="append", default=[],
                         help="index: a checked section (JSON) to put in the file in place of its draft")
+    parser.add_argument("--replace", action="append", default=[], metavar="ID",
+                        help="index: a checked section of the file that a --checked file replaces (new verses)")
     parser.add_argument("--out", type=Path, help="checkout: the directory to write the sections to check")
     args = parser.parse_intermixed_args(argv)
     cache: Path = args.cache
@@ -727,11 +745,18 @@ def main(argv: Optional[list[str]] = None) -> int:
     if args.command == "index":
         path = catena.data_path(gospel)
         existing = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {"sections": []}
+        unknown = set(args.replace) - {s["id"] for s in existing["sections"] if s.get("status") == "checked"}
+        if unknown:
+            parser.error(f"--replace names no checked section of the file: {', '.join(sorted(unknown))}")
+        existing["sections"] = [s for s in existing["sections"] if s["id"] not in args.replace]
         for checked in args.checked:
             section = json.loads(checked.read_text(encoding="utf-8"))
             existing["sections"] = [s for s in existing["sections"] if s["id"] != section["id"]] + [section]
         merged = merged_index(gospel, draft, existing)
         catena.parse(merged, gospel)                     # a checked section that breaks the format stops here
+        for a, b in overlapping_checked(merged["sections"]):
+            raise catena.CatenaDataError(f"{gospel}: the checked sections {a} and {b} share verses; pass "
+                                         f"--replace with the one the other replaces")
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(data_text(merged), encoding="utf-8")
         done = sum(1 for s in merged["sections"] if s["status"] == "checked")

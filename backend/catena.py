@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
+from datetime import date
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
@@ -217,6 +218,17 @@ def _pair(value, where: str, what: str) -> tuple[int, int]:
     return value[0], value[1]
 
 
+def _is_date(value) -> bool:
+    """"2026-10-05", a day that exists (never "2026-99-99" or checkout's "YYYY-MM-DD")."""
+    if not isinstance(value, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+        return False
+    try:
+        date.fromisoformat(value)
+    except ValueError:
+        return False
+    return True
+
+
 def parse(data: dict, gospel: str) -> tuple[Section, ...]:
     """A data file's sections, checked against the format (CatenaDataError on any break)."""
     if data.get("format") != FORMAT or data.get("gospel") != gospel:
@@ -255,10 +267,11 @@ def parse(data: dict, gospel: str) -> tuple[Section, ...]:
         errata: tuple[str, ...] = ()
         if status == "checked":
             checked = raw["checked"]
-            if (not isinstance(checked, dict) or set(checked) != {"on", "by"}
-                    or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(checked["on"]))
-                    or not isinstance(checked["by"], str) or not checked["by"].strip() or "@" in checked["by"]):
-                raise CatenaDataError(f"{where}: checked is on (YYYY-MM-DD) and by (a role, no email address)")
+            if (not isinstance(checked, dict) or set(checked) != {"on", "by"} or not _is_date(checked["on"])
+                    or not isinstance(checked["by"], str) or not checked["by"].strip()
+                    or re.search(r"[@<>]", checked["by"])):
+                raise CatenaDataError(f"{where}: checked is on (a real date, YYYY-MM-DD) and by (a role, no "
+                                      "email address, never checkout's \"<who>\" placeholder)")
             comments = tuple(_comment(c, where) for c in raw["comments"])
             if not any(c.is_quotation for c in comments):
                 raise CatenaDataError(f"{where}: a checked section with no comments")

@@ -388,3 +388,58 @@ def test_a_page_signature_is_not_text():
     ))))
     (section,) = tool.sections(catena.volume("mt3"), pages)
     assert [line.text for line in section.lines if "D" in line.text] == []
+
+
+def index_with(tmp_path, monkeypatch, existing, *checked_files, extra=()):
+    """`index` over DRAFT, with `existing` as the data file and each of `checked_files` (a section)
+    passed as --checked."""
+    monkeypatch.setattr(catena, "DATA_DIR", tmp_path / "data")
+    (tmp_path / "data").mkdir(exist_ok=True)
+    (tmp_path / "data" / "matthew.json").write_text(json.dumps({"format": 1, "gospel": "Matthew",
+                                                                "sections": existing}), encoding="utf-8")
+    cache = tmp_path / "cache"
+    cache.mkdir(exist_ok=True)
+    (cache / "draft-matthew.json").write_text(json.dumps(DRAFT), encoding="utf-8")
+    args = ["index", "Matthew", "--cache", str(cache), *extra]
+    for n, section in enumerate(checked_files):
+        path = tmp_path / f"checked-{n}.json"
+        path.write_text(json.dumps(section), encoding="utf-8")
+        args += ["--checked", str(path)]
+    return tool.main(args)
+
+
+@pytest.mark.parametrize("checked, why", [
+    ({"on": "2026-10-05", "by": "<who>, word by word against the page images"}, "the checker's placeholder"),
+    ({"on": "2026-10-05", "by": "<who>"}, "the placeholder alone"),
+    ({"on": "2026-99-99", "by": "the pastor, word by word against the page images"}, "an impossible date"),
+    ({"on": "2026-02-30", "by": "the pastor, word by word against the page images"}, "February 30"),
+], ids=["placeholder by", "placeholder alone", "month 99", "february 30"])
+def test_index_refuses_a_placeholder_checker_and_an_impossible_date(tmp_path, monkeypatch, checked, why):
+    with pytest.raises(catena.CatenaDataError, match="checked is on"):
+        index_with(tmp_path, monkeypatch, [], dict(CHECKED, checked=checked))
+    assert json.loads((tmp_path / "data" / "matthew.json").read_text())["sections"] == [], why
+
+
+def test_index_refuses_two_checked_sections_on_the_same_verses_until_the_old_one_is_replaced(
+        tmp_path, monkeypatch, capsys):
+    # A re-check that corrects a section's verses gives it a new id; the old checked section must
+    # not stay beside it (Voices V1 build review M5).
+    old = dict(CHECKED, id="matthew-22-15-21", end=[22, 21])
+    with pytest.raises(catena.CatenaDataError, match="matthew-22-15-21 and matthew-22-15-22 share verses"):
+        index_with(tmp_path, monkeypatch, [old], CHECKED)
+    assert [s["id"] for s in json.loads((tmp_path / "data" / "matthew.json").read_text())["sections"]] == [
+        "matthew-22-15-21"]
+    assert index_with(tmp_path, monkeypatch, [old], CHECKED, extra=["--replace", "matthew-22-15-21"]) == 0
+    assert capsys.readouterr().out.startswith("Matthew: 2 sections, 1 checked -> ")
+    assert [s["id"] for s in json.loads((tmp_path / "data" / "matthew.json").read_text())["sections"]] == [
+        "matthew-22-1-14", "matthew-22-15-22"]
+
+
+def test_index_keeps_two_checked_sections_that_share_only_a_verse_the_catena_splits(tmp_path, monkeypatch):
+    # The Catena splits a verse between two sections (matthew-2-7-9, matthew-2-9-9; john-1-14-14 and
+    # john-1-14-14-2): the last verse of one is the first of the next.
+    first = dict(CHECKED, id="matthew-22-15-18", end=[22, 18])
+    second = dict(CHECKED, id="matthew-22-18-22", start=[22, 18])
+    assert index_with(tmp_path, monkeypatch, [first], second) == 0
+    assert [s["id"] for s in json.loads((tmp_path / "data" / "matthew.json").read_text())["sections"]] == [
+        "matthew-22-1-14", "matthew-22-15-18", "matthew-22-18-22"]

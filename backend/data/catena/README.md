@@ -61,7 +61,10 @@ between them in each volume; `test_catena_data.py` checks both).
 6. Set `"checked": {"on": "<YYYY-MM-DD>", "by": "<who>, word by word against the page images"}`
    (a role, never an email address), then
    `.venv/bin/python backend/scripts/catena_import.py index --cache ~/catena-cache Matthew --checked ~/catena-check/<id>.json`
-   (it refuses a file that breaks the format, the placeholder date included).
+   (it refuses a file that breaks the format: checkout's placeholder date or `<who>`, a date that
+   does not exist, or a checked section sharing more than a split verse with another checked
+   section). A re-check that changes a section's verses gives it a new id: name the old section
+   with `--replace <old id>` so it does not stay beside the new one.
 7. A second reader checks the section again, against the page images and not the first reader's
    notes, before it is merged; record both in the commit message.
 8. Add the section's id and the hash of its text to `CHECKED`, and its count of the fathers'
