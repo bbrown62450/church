@@ -641,6 +641,30 @@ recorded here.
 | Correction | Before PR 3a's merge (2026-10-04) a read-only query showed no service saved after 2026-10-02 20:45 UTC and none with a bulletin, and the count still 28: the saves in steps 2-4 and in the PR 2b-1 phone check did not reach the database (what the phone showed came from the browser's draft). The same day a fresh **Save changes** on the phone stored the service with its bulletin (`saved_at` 2026-10-04 21:05 UTC, `has_bulletin` true), so saving works. Saving a new service and the marks after reopening from Services are to be checked again in PR 3b's phone check | 2026-10-04 |
 | Follow-ups | PR 2b is complete. Next: PR 3 (the cover picture, backend first), Voices of the Church, 6a (Settings, including persona editing), Hear it from the pews. Still pending: the PR 1 print test at the church. Noted in the 2b plan: an edit on the Bulletin step made before changing an opened service's date is set aside with the rest (it returns if the date goes back) | 2026-10-03 |
 
+### Printed bulletin PR 3a record
+
+Printed bulletin PR 3a (the server's half of the cover picture: migration
+`0007_bulletin_images`, `POST /bulletin-images` and `GET /bulletin-images/{id}`,
+`bulletin.cover_image_id`, the picture printed in the PDF and the Word
+version, the 60-day removal, a church's 160 pictures and the 150 MB budget)
+merged as PR #49, the first of the two PR 3 pull requests (backend first).
+Nothing on screen changed but the centered "[Cover picture]" box. The owner's
+steps followed `backend/migrations/README.md`, "Before 0007_bulletin_images",
+one at a time. No token, email address, phone number, street address,
+church id or database URL is recorded here.
+
+| Step | Result | Date |
+|---|---|---|
+| 1. Backup | db-backup run 37234354054 on `main`, green, artifact `db-backup` | 2026-10-04 |
+| 2. Counts before | `0006_services_bulletin`, 28 services, 0 with a bulletin, database 14 MB | 2026-10-04 |
+| Save check | The 0 with a bulletin led to a read-only look at the latest saves: none after 2026-10-02 20:45 UTC, so the PR 2b-1 and 2b-2 phone checks' saves had not reached the database (see the correction in the PR 2b-2 record); a fresh **Save changes** stored a service with its bulletin (21:05 UTC); Bulletin settings had reached the database | 2026-10-04 |
+| 3. SQL preview | The 27 lines as pinned in the README (one transaction, `lock_timeout` 5 s, `CREATE TABLE bulletin_images`, its index, row-level security, the guarded `REVOKE`, the version update), explained to the owner | 2026-10-04 |
+| Merge | PR #49 merged 21:10 UTC (17:10 Eastern), merge commit `f86f1bc`; the new release answered `POST /bulletin-images` by 21:12 UTC | 2026-10-04 |
+| Railway body check | Signed out: a 9.5 MB body reached the app (401 "Please sign in."), an 11 MB body was refused (422 "The picture is larger than 10 MB. Choose a smaller one.") | 2026-10-04 |
+| 4. After the deploy | `0007_bulletin_images`, row security true, open grants 0, pictures 0; counts again 28 services, 1 with a bulletin, database 14 MB | 2026-10-04 |
+| 5. Phone check | A saved service saved its changes and its printed bulletin showed the "[Cover picture]" box centered under the church's name | 2026-10-04 |
+| Follow-ups | Next: PR 3b (the picture on the Bulletin step), whose phone check also re-checks saving a new service and the "From last week" marks after reopening; then the print test of a cover with a picture. Still pending: the PR 1 print test at the church | 2026-10-04 |
+
 ## Backups
 
 - **Workflow:** `.github/workflows/backup.yml` (`db-backup`). Daily at 08:37 UTC,

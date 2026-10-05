@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { editScriptureLines, setPick, setTranslation } from "@/lib/draft/readings";
 import { pickFromHymn, setSlot } from "@/lib/hymns/picks";
 import { addCustomElement, editCardText, setCardEnabled, setCommunion, setSermonTitle } from "@/lib/liturgy/cards";
-import { setAnnouncement, setPerson } from "@/lib/draft/bulletin";
+import { setAnnouncement, setCover, setPerson } from "@/lib/draft/bulletin";
 import { gg2013, savedService, serviceBulletin, testDraft } from "@/test/fixtures";
 
 import { documentRequest, printedRequest, savedCopyFingerprint, wordSafe } from "./documents";
@@ -171,5 +171,23 @@ describe("savedCopyFingerprint (5a-3 build review M2)", () => {
     expect(savedCopyFingerprint({ ...theirs, hymns: { ...theirs.hymns, response: theirs.hymns.opening } })).not.toBe(
       savedCopyFingerprint(theirs),
     );
+  });
+});
+
+
+describe("the cover picture in the body (printed bulletin PR 3b)", () => {
+  const PICTURE = "0b4c2b0e-1111-4222-8333-444455556666";
+
+  it("always says which picture, or none, and the 409 check compares it", () => {
+    expect(documentRequest(testDraft(), "bulletin").service.bulletin?.cover_image_id).toBeNull();
+    const d = setCover(testDraft(), PICTURE);
+    expect(printedRequest(d, "pdf").service.bulletin?.cover_image_id).toBe(PICTURE);
+    const theirs = savedService({ bulletin: serviceBulletin({ cover_image_id: PICTURE }) });
+    expect(savedCopyFingerprint({ ...theirs, bulletin: serviceBulletin({ cover_image_id: "another" }) })).not.toBe(
+      savedCopyFingerprint(theirs),
+    );
+    const { cover_image_id: noPicture, ...older } = serviceBulletin(); // a copy read before PR 3a: no key
+    expect(noPicture).toBeNull();
+    expect(savedCopyFingerprint({ ...theirs, bulletin: older })).toBe(savedCopyFingerprint({ ...theirs, bulletin: serviceBulletin() }));
   });
 });

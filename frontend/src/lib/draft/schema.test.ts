@@ -9,10 +9,10 @@ import { DEFAULT_BENEDICTION_FALLBACK } from "@/lib/liturgy/defaults";
 describe("draft schema and freshDraft (F §4.6)", () => {
   it("a fresh draft is dated next Sunday with every field empty and the F §4.6 defaults", () => {
     const d = testDraft();
-    expect(DRAFT_VERSION).toBe(3);
+    expect(DRAFT_VERSION).toBe(4);
     expect(draftV1Schema.parse(d)).toEqual(d);
     expect(d).toMatchObject({
-      version: 3,
+      version: 4,
       user_id: USER_ID,
       church_id: churchProfile().id,
       created_at: "2026-09-29T16:00:00.000Z",
@@ -40,6 +40,7 @@ describe("draft schema and freshDraft (F §4.6)", () => {
       },
       liturgy: { sermon_title: "", include_communion: true, communion_origin: "default", custom_elements: [] },
       bulletin: {
+        cover_image_id: null,
         prelude: { title: "", composer: "" },
         postlude: { title: "", composer: "" },
         people: { worship_leader: null, liturgist: null, organist: null },
@@ -92,8 +93,10 @@ describe("draft schema and freshDraft (F §4.6)", () => {
       { ...d, readings: { ...d.readings, date_iso: "2026-02-30" } },
       { ...d, readings: { ...d.readings, occasion: `${long}x` } },
       { ...d, last_step: "summary" },
-      { ...d, version: 4 },
+      { ...d, version: 5 },
       { ...d, bulletin: undefined }, // version 3 needs the bulletin (PR 2b)
+      { ...d, bulletin: { ...d.bulletin, cover_image_id: undefined } }, // version 4 needs the picture's id or null (PR 3b)
+      { ...d, bulletin: { ...d.bulletin, carried: ["picture"] } },
       { ...d, bulletin: { ...d.bulletin, carried: ["sermon"] } },
       { ...d, bulletin: { ...d.bulletin, carried_for: "2026-02-30" } },
       { ...d, bulletin: { ...d.bulletin, edited: ["hymns"] } },

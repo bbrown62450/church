@@ -101,7 +101,7 @@ describe("serviceToDraft and markSaved (slice 5a-3; F §4.6 Loading an archived 
       created_at: OPEN_AT.toISOString(),
       last_step: "review",
       save_key_fingerprint: null,
-      version: 3,
+      version: 4,
       editing: { service_id: SERVICE_ID, saved_at: "2026-10-01T14:42:00.123456+00:00", date_iso: "2026-10-04" },
       readings: {
         date_iso: "2026-10-04",
@@ -173,7 +173,9 @@ describe("serviceToDraft and markSaved (slice 5a-3; F §4.6 Loading an archived 
       unchecked: ["prelude"],
     });
     const d = opened(savedService({ bulletin }));
-    expect(draftToServicePayload(d).bulletin).toEqual(bulletin);
+    const { cover_image_id: noPicture, ...payload } = bulletin;
+    expect(noPicture).toBeNull();
+    expect(draftToServicePayload(d).bulletin).toEqual(payload); // no picture: left out of the payload (PR 3b)
     expect(reviewStatus(d)).toBe("saved");
     expect(d.bulletin.carried).toEqual(["prelude"]); // still to check, on any device (plan review fix I3)
     expect(reviewStatus(keepCarried(d, "prelude"))).toBe("unsaved_changes");

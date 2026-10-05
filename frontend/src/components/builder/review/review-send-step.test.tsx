@@ -17,7 +17,7 @@ import BuilderLayout from "@/app/(signed-in)/(church)/builder/layout";
 import ReviewStepPage from "@/app/(signed-in)/(church)/builder/review/page";
 import { Toaster } from "@/components/ui/sonner";
 import { formatSavedAt } from "@/lib/dates";
-import { emptyServiceBulletin, setAnnouncement } from "@/lib/draft/bulletin";
+import { emptyServiceBulletin, setAnnouncement, setCover } from "@/lib/draft/bulletin";
 import { useDraft } from "@/lib/draft/context";
 import { serviceToDraft } from "@/lib/draft/mapping";
 import { draftKey, type DraftV1 } from "@/lib/draft/schema";
@@ -54,7 +54,7 @@ import { CONFLICT_TITLE, RELOAD_REPLACES } from "./conflict-dialog";
 import { FIX_READINGS, NEEDS_DATE, SAME_AS_BULLETIN, SAVE_HINT } from "./documents-card";
 import { PRINTED_SUMMARY, SETTINGS_NOTE, WEEKLY_NOTE } from "./printed-card";
 import { CONFLICT_MESSAGE, LOADED_LATEST, SAVE_FIX_READINGS, SAVE_NEEDS_DATE } from "./save-card";
-import { SAVED_AFTER_DELETE_MESSAGE, SAVED_MESSAGE } from "@/lib/queries/services";
+import { COVER_GONE_MESSAGE, SAVED_AFTER_DELETE_MESSAGE, SAVED_MESSAGE } from "@/lib/queries/services";
 import { DEFAULT_BENEDICTION_FALLBACK } from "@/lib/liturgy/defaults";
 
 const KEY = draftKey(USER_ID, church().id);
@@ -387,7 +387,7 @@ describe("Review & send: the printed bulletin (printed bulletin PR 1)", () => {
     expect(within(card).getByText(SETTINGS_NOTE)).toBeInTheDocument();
     expect(
       await within(card).findByText(
-        "Not filled in: address, phone, email, website, Facebook name, service time, worship leader, liturgist, organist, prelude, postlude, announcements.",
+        "Not filled in: address, phone, email, website, Facebook name, service time, worship leader, liturgist, organist, cover picture, prelude, postlude, announcements.",
       ),
     ).toBeInTheDocument();
     const download = within(card).getByRole("button", { name: "Download printed bulletin" });
@@ -403,7 +403,7 @@ describe("Review & send: the printed bulletin (printed bulletin PR 1)", () => {
 
     const filled = renderReview(testDraft(), { "GET /church/bulletin-settings": filledBulletinSettings({ organist: "" }) });
     card = await screen.findByRole("region", { name: "Printed bulletin" });
-    expect(await within(card).findByText("Not filled in: organist, prelude, postlude, announcements.")).toBeInTheDocument();
+    expect(await within(card).findByText("Not filled in: organist, cover picture, prelude, postlude, announcements.")).toBeInTheDocument();
     expect(within(card).getByRole("button", { name: "Download printed bulletin" })).toBeEnabled();
     filled.unmount();
   });
@@ -424,7 +424,7 @@ describe("Review & send: the printed bulletin (printed bulletin PR 1)", () => {
     });
     const card = await screen.findByRole("region", { name: "Printed bulletin" });
     expect(await within(card).findByText("From last week, not checked yet: prelude, ushers and counters, coffee hour.")).toBeInTheDocument();
-    expect(within(card).getByText("Not filled in: postlude.")).toBeInTheDocument();
+    expect(within(card).getByText("Not filled in: cover picture, postlude.")).toBeInTheDocument();
     await user.click(within(card).getByRole("button", { name: "Download printed bulletin" }));
     await waitFor(() => expect(printedRequests(api)).toHaveLength(1));
     expect(printedRequests(api)[0].body).toMatchObject({
@@ -432,6 +432,23 @@ describe("Review & send: the printed bulletin (printed bulletin PR 1)", () => {
     });
     const progress = screen.getByRole("navigation", { name: "Steps" });
     expect(within(progress).getAllByRole("link")[3]).toHaveTextContent("4 Bulletin 3 to check");
+  });
+
+  it("carries last week's cover picture in, lists it to check, and prints it (printed bulletin PR 3b)", async () => {
+    const picture = "0b4c2b0e-1111-4222-8333-444455556666";
+    const lastWeek = previousBulletin({ service_id: "s-last", service_date_iso: "2026-09-27", bulletin: serviceBulletin({ cover_image_id: picture }) });
+    const { api, user } = renderReview(testDraft(), {
+      "GET /church/bulletin-settings": filledBulletinSettings(),
+      "GET /services/previous-bulletin": lastWeek,
+      "POST /documents/printed": pdf(),
+    });
+    const card = await screen.findByRole("region", { name: "Printed bulletin" });
+    expect(within(card).getByText(WEEKLY_NOTE)).toHaveTextContent(/^The cover picture, the music/);
+    expect(await within(card).findByText("From last week, not checked yet: cover picture.")).toBeInTheDocument();
+    expect(within(card).getByText("Not filled in: prelude, postlude, announcements.")).toBeInTheDocument();
+    await user.click(within(card).getByRole("button", { name: "Download printed bulletin" }));
+    await waitFor(() => expect(printedRequests(api)).toHaveLength(1));
+    expect(printedRequests(api)[0].body).toMatchObject({ service: { bulletin: { cover_image_id: picture, unchecked: ["cover"] } } });
   });
 });
 
@@ -713,7 +730,8 @@ describe("Review & send: saving (slice 5a-3)", () => {
     await user.click(within(card).getByRole("button", { name: "Save changes" }));
     await waitFor(() => expect(within(card).getByText(`Saved to the archive · ${formatSavedAt(SECOND_SAVE)}`)).toBeInTheDocument());
     const [put] = serviceRequests(api, "PUT");
-    expect(put.body).toHaveProperty("bulletin", emptyServiceBulletin()); // clearing every field clears the saved ones
+    // Clearing every field clears the saved ones, the picture included (PR 3b: null says "no picture").
+    expect(put.body).toHaveProperty("bulletin", { ...emptyServiceBulletin(), cover_image_id: null });
   });
 
   it("sends a filled-in bulletin in a POST (2b-2 build review M1)", async () => {
@@ -725,6 +743,59 @@ describe("Review & send: saving (slice 5a-3)", () => {
     expect(await screen.findByText(SAVED_MESSAGE)).toBeInTheDocument();
     const [post] = serviceRequests(api, "POST");
     expect(post.body).toMatchObject({ bulletin: { announcements: { coffee_hour: "The Sample family" } } });
+    expect((post.body as { bulletin: object }).bulletin).not.toHaveProperty("cover_image_id"); // no picture (PR 3b)
+  });
+
+  it("says when the cover picture sent was gone, so the service was saved without one, and drops it from the draft (PR 3a build review M2)", async () => {
+    const warning = vi.spyOn(toast, "warning");
+    const picture = "0b4c2b0e-1111-4222-8333-444455556666";
+    const kept = "0b4c2b0e-7777-4888-9999-aaaabbbbcccc";
+    let putPicture: string | null = null;
+    const { api, user } = renderReview(
+      setCover(editOccasion(testDraft(), "Harvest"), picture),
+      {
+        // The picture was removed meanwhile: the server saves none and answers 200.
+        "POST /services": () => ({ status: 201, body: savedService({ occasion: "Harvest", saved_at: FIRST_SAVE }) }),
+        [`PUT /services/${SERVICE_ID}`]: () =>
+          savedService({ occasion: "Harvest", saved_at: SECOND_SAVE, bulletin: serviceBulletin({ cover_image_id: putPicture }) }),
+      },
+      <Probe edit={(draft) => setCover(draft, kept)} />,
+    );
+    const card = await archiveCard();
+    await user.click(within(card).getByRole("button", { name: "Save to archive" }));
+    expect(await screen.findByText(COVER_GONE_MESSAGE)).toBeInTheDocument();
+    expect((serviceRequests(api, "POST")[0].body as { bulletin: object }).bulletin).toHaveProperty("cover_image_id", picture);
+    await waitFor(() => expect(stored().bulletin.cover_image_id).toBeNull());
+    expect(within(card).getByText(`Saved to the archive · ${formatSavedAt(FIRST_SAVE)}`)).toBeInTheDocument();
+
+    // A picture the saved service keeps says nothing more.
+    putPicture = kept;
+    await user.click(screen.getByRole("button", { name: "Probe edit" }));
+    await user.click(within(card).getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(within(card).getByText(`Saved to the archive · ${formatSavedAt(SECOND_SAVE)}`)).toBeInTheDocument());
+    expect(stored().bulletin.cover_image_id).toBe(kept);
+    expect(warning).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops the cover's From last week mark with a picture that came back as none, and stays Saved (PR 3b build review M1)", async () => {
+    const picture = "0b4c2b0e-1111-4222-8333-444455556666";
+    const lastWeek = previousBulletin({ service_id: "s-last", service_date_iso: "2026-09-27", bulletin: serviceBulletin({ cover_image_id: picture }) });
+    const { api, user } = renderReview(editOccasion(testDraft(), "Harvest"), {
+      "GET /church/bulletin-settings": filledBulletinSettings(),
+      "GET /services/previous-bulletin": lastWeek,
+      // The carried picture was removed meanwhile: the server saves none and answers 201.
+      "POST /services": () => ({ status: 201, body: savedService({ occasion: "Harvest", saved_at: FIRST_SAVE }) }),
+    });
+    const bulletinCard = await screen.findByRole("region", { name: "Printed bulletin" });
+    expect(await within(bulletinCard).findByText("From last week, not checked yet: cover picture.")).toBeInTheDocument();
+    const card = await archiveCard();
+    await user.click(within(card).getByRole("button", { name: "Save to archive" }));
+    expect(await screen.findByText(COVER_GONE_MESSAGE)).toBeInTheDocument();
+    expect((serviceRequests(api, "POST")[0].body as { bulletin: object }).bulletin).toMatchObject({ cover_image_id: picture, unchecked: ["cover"] });
+    await waitFor(() => expect(stored().bulletin).toMatchObject({ cover_image_id: null, carried: [] }));
+    expect(within(bulletinCard).queryByText(/^From last week, not checked yet/)).toBeNull();
+    expect(within(bulletinCard).getByText(/^Not filled in: .*cover picture/)).toBeInTheDocument();
+    expect(within(card).getByText(`Saved to the archive · ${formatSavedAt(FIRST_SAVE)}`)).toBeInTheDocument();
   });
 
   it("keeps the key for an identical retry after an unknown outcome, replaces it after an edit, and retries a mismatch once", async () => {

@@ -316,6 +316,11 @@ describe("apiFetchBlob (slice 5a; F §1.9, §4.5)", () => {
     await expect(pending).rejects.toMatchObject({ code: "aborted" });
   });
 
+  it("waits 120 s for a cover picture's upload: 10 MB up a slow phone connection (PR 3b build review M8)", () => {
+    expect(timeoutFor("POST", "/bulletin-images")).toBe(120_000);
+    expect(timeoutFor("GET", "/bulletin-images/p1")).toBe(20_000);
+  });
+
   it("times out after 30 s on POST /documents", async () => {
     expect(timeoutFor("POST", "/documents")).toBe(30_000);
     vi.useFakeTimers();

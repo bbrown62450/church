@@ -2,7 +2,8 @@
  * The Bulletin step's weekly fields in the draft (printed bulletin PR 2b;
  * spec "Data model", "The Bulletin step"): the prelude and postlude, this
  * week's people and part leaders, the announcements and the pasted reading
- * text. Pure.
+ * text; and the cover picture (PR 3b: `setCover`; it carries forward, is
+ * marked and kept like the music, and counts in "Save as new service"). Pure.
  *
  * - Edits (`setMusic`, `setAnnouncement`, `setPerson`, `setPartLeader`,
  *   `setPastedText`, `keepCarried`). A box holding last week's text shows
@@ -27,7 +28,9 @@
  * - `bulletinPayload`: the draft's bulletin as `ServiceDraft.bulletin`, the
  *   texts trimmed, the pasted texts of the readings the files print, and
  *   the boxes still to check (`unchecked`, so the marks are saved with the
- *   service, plan review fix I3).
+ *   service, plan review fix I3). The cover picture's id only when there is
+ *   one, so a draft saved before PR 3b keeps its fingerprint; the bodies
+ *   sent say "no picture" (null) themselves (`serviceBody`).
  * - `bulletinFromService`: a saved service's bulletin as the draft's, its
  *   unchecked boxes marked again.
  * - What the Printed bulletin card and the step bar say: `printedNotFilledIn`,
@@ -85,6 +88,13 @@ export function setMusic(d: DraftV1, piece: Piece, field: "title" | "composer", 
   return withBulletin(d, { ...b, [piece]: { ...b[piece], [field]: value }, ...touched(b, piece) });
 }
 
+/** The week's cover picture (an uploaded picture's id), or null for none ("Remove"). */
+export function setCover(d: DraftV1, id: string | null): DraftV1 {
+  const b = d.bulletin;
+  if (b.cover_image_id === id) return withBulletin(d, { ...b, ...touched(b, "cover") });
+  return withBulletin(d, { ...b, cover_image_id: id, ...touched(b, "cover") });
+}
+
 export function setAnnouncement(d: DraftV1, key: AnnouncementKey, value: string): DraftV1 {
   const b = d.bulletin;
   if (b.announcements[key] === value) return d;
@@ -124,7 +134,8 @@ export function setPastedText(d: DraftV1, reference: string, value: string): Dra
   return withBulletin(d, { ...b, pasted });
 }
 
-function filled(b: Pick<DraftBulletin, Piece | "announcements">, key: CarryKey): boolean {
+function filled(b: Pick<DraftBulletin, Piece | "announcements"> & { cover_image_id?: string | null }, key: CarryKey): boolean {
+  if (key === "cover") return (b.cover_image_id ?? null) !== null;
   if (key === "prelude" || key === "postlude") return b[key].title.trim() !== "" || b[key].composer.trim() !== "";
   return b.announcements[key].trim() !== "";
 }
@@ -143,7 +154,7 @@ export function shouldCarry(d: DraftV1): boolean {
 }
 
 /**
- * Last week's music and announcements in every box not yet edited or kept,
+ * Last week's cover picture, music and announcements in every box not yet edited or kept,
  * each filled one marked "From last week", for `forDate`; the draft
  * unchanged when carrying is no longer due or the date moved meanwhile.
  */
@@ -154,6 +165,7 @@ export function applyCarry(d: DraftV1, previous: PreviousBulletin, forDate: stri
   const open = (key: CarryKey) => !b.edited.includes(key);
   const next: DraftBulletin = {
     ...b,
+    cover_image_id: open("cover") ? (p.cover_image_id ?? null) : b.cover_image_id,
     prelude: open("prelude") ? { ...p.prelude } : b.prelude,
     postlude: open("postlude") ? { ...p.postlude } : b.postlude,
     announcements: Object.fromEntries(
@@ -170,8 +182,8 @@ const NO_ONE_CHANGED: DraftBulletin["people"] = { worship_leader: null, liturgis
  * "Save as new service" (plan review fix I4): a saved service whose date
  * now differs from its saved date is a new week. Its people, part leaders,
  * pasted texts and marks are set aside, this week's start empty, and every
- * filled music and announcement box is marked "From last week. Check before
- * printing.". Back on the saved date, what was set aside returns: a name or
+ * filled box (the cover picture, the music and the announcements) is marked
+ * "From last week. Check before printing.". Back on the saved date, what was set aside returns: a name or
  * text typed meanwhile wins, and a saved mark returns only on a box not
  * edited or kept meanwhile. Nothing is set aside while a save's outcome
  * is unknown (`save_key_fingerprint`: it would change the body of the POST
@@ -220,7 +232,7 @@ export function followSaveMode(d: DraftV1): DraftV1 {
   return d;
 }
 
-/** `ServiceDraft.bulletin` with nothing filled in. */
+/** `ServiceDraft.bulletin` with nothing filled in (no picture: no `cover_image_id`, as `bulletinPayload` leaves it out). */
 export function emptyServiceBulletin(): ServiceBulletin {
   return {
     prelude: { title: "", composer: "" },
@@ -256,12 +268,19 @@ export function bulletinPayload(d: DraftV1): ServiceBulletin {
     ) as ServiceBulletin["announcements"],
     reading_text: { ot: pasted(picks.ot), nt: pasted(picks.nt) },
     unchecked: CARRY_KEYS.filter((key) => b.carried.includes(key)),
+    ...(b.cover_image_id === null ? {} : { cover_image_id: b.cover_image_id }),
   };
 }
 
-/** Nothing filled in: what a service saved without a bulletin reads as. */
+/** The bulletin without a null `cover_image_id` ("no picture" said out loud): what a POST sends. */
+export function withoutNoPicture(p: ServiceBulletin): ServiceBulletin {
+  const { cover_image_id = null, ...rest } = p;
+  return cover_image_id === null ? rest : p;
+}
+
+/** Nothing filled in (no picture either): what a service saved without a bulletin reads as. */
 export function isBlankBulletin(p: ServiceBulletin): boolean {
-  return JSON.stringify(p) === JSON.stringify(emptyServiceBulletin());
+  return JSON.stringify(withoutNoPicture(p)) === JSON.stringify(emptyServiceBulletin());
 }
 
 /**
@@ -279,6 +298,7 @@ export function bulletinFromService(
   if (picks.ot !== null && saved.reading_text.ot !== "") pasted[picks.ot] = saved.reading_text.ot;
   if (picks.nt !== null && saved.reading_text.nt !== "") pasted[picks.nt] = saved.reading_text.nt;
   return {
+    cover_image_id: saved.cover_image_id ?? null,
     prelude: { ...saved.prelude },
     postlude: { ...saved.postlude },
     people: { ...saved.people },
@@ -294,6 +314,7 @@ export function bulletinFromService(
 
 /** What "From last week, not checked yet: …" calls each box. */
 const CARRY_LABELS: Record<CarryKey, string> = {
+  cover: "cover picture",
   prelude: "prelude",
   postlude: "postlude",
   ushers: "ushers and counters",
@@ -319,7 +340,8 @@ export function notCheckedLine(labels: readonly string[]): string {
  * What the printed bulletin leaves out this week (PR 2 planning answer 3), in
  * the card's "Not filled in" order: the standing fields from the settings,
  * the three people as this week has them (when the settings are loaded), then
- * the prelude, the postlude and the announcements (all of them blank).
+ * the cover picture (PR 3b: none this week prints the reading and the date
+ * alone), the prelude, the postlude and the announcements (all of them blank).
  */
 export function printedNotFilledIn(settings: BulletinSettings | undefined, d: DraftV1): string[] {
   const p = bulletinPayload(d);
@@ -328,6 +350,7 @@ export function printedNotFilledIn(settings: BulletinSettings | undefined, d: Dr
       ? []
       : notFilledIn({ ...settings, ...Object.fromEntries(PEOPLE.map((r) => [r, p.people[r] ?? settings[r]])) });
   const weekly = [
+    ...(filled(p, "cover") ? [] : ["cover picture"]),
     ...(filled(p, "prelude") ? [] : ["prelude"]),
     ...(filled(p, "postlude") ? [] : ["postlude"]),
     ...(ANNOUNCEMENT_KEYS.some((key) => filled(p, key)) ? [] : ["announcements"]),

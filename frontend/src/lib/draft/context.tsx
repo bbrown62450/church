@@ -34,6 +34,14 @@ export type DraftApi = {
   peek: () => DraftV1;
   /** Writes a scheduled change now: Save, whose answer can come after the builder unmounted (5a-3 build review M1). */
   flush: () => void;
+  /**
+   * Takes a newer draft another provider in this tab wrote, quietly (PR 3b
+   * build review C1). An answer that lands after its builder unmounted (the
+   * cover picture's upload, Save) calls it before changing the draft, so it
+   * changes the draft now stored, never the copy the builder had when it was
+   * left, and never writes that copy over a newer one.
+   */
+  sync: () => void;
   persistence: Persistence;
   /** The church's current default Benediction (its own, else the fallback), as the store applies it. */
   defaultBenediction: string;
@@ -79,6 +87,7 @@ export function DraftProvider({
   const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   // Built once, so callbacks that read the draft through it (the generation provider's) keep their identity across edits.
   const [peek] = useState(() => () => store.getSnapshot().draft);
+  const [sync] = useState(() => () => store.syncFromStorage({ quiet: true }));
 
   // The profile refetched with another default (6a's Settings): untouched Benediction cards follow it.
   useEffect(() => {
@@ -119,9 +128,10 @@ export function DraftProvider({
       setLastStep: store.setLastStep,
       peek,
       flush: store.flush,
+      sync,
       defaultBenediction,
     }),
-    [snapshot, store, peek, defaultBenediction],
+    [snapshot, store, peek, sync, defaultBenediction],
   );
   return <DraftContext value={value}>{children}</DraftContext>;
 }

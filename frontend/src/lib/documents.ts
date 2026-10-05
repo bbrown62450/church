@@ -11,7 +11,9 @@
  * elements without a label left out (the Word file never printed them; a
  * label is blank as the server reads it, `wordSafe`) and each place read as
  * `normalizePlacement` does on the Liturgy step, and the Bulletin step's
- * fields (printed bulletin PR 2b) always, each text cut to its limit.
+ * fields (printed bulletin PR 2b) always, each text cut to its limit, with
+ * the cover picture's id or null (PR 3b: a body that says nothing would keep
+ * the saved picture and print PR 1's box).
  */
 import type { components } from "@/lib/api/schema";
 import type { ServiceBulletin } from "@/lib/api/types";
@@ -68,6 +70,7 @@ function clipBulletin(b: ServiceBulletin): ServiceBulletin {
     },
     reading_text: { ot: clipChars(b.reading_text.ot, BULLETIN_MAX.reading_text), nt: clipChars(b.reading_text.nt, BULLETIN_MAX.reading_text) },
     unchecked: [...b.unchecked],
+    cover_image_id: b.cover_image_id ?? null,
   };
 }
 
@@ -214,6 +217,7 @@ function savedBulletin(b: ServiceBulletin, clean: (text: string) => string) {
     ),
     reading_text: { ot: clean(paragraphs(b.reading_text.ot)), nt: clean(paragraphs(b.reading_text.nt)) },
     unchecked: CARRY_KEYS.filter((key) => (b.unchecked ?? []).includes(key)),
+    cover_image_id: b.cover_image_id ?? null,
   };
 }
 
