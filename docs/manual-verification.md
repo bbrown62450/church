@@ -373,3 +373,21 @@ address or a church id.
 - [ ] **35.** A file that is not a JPEG or PNG (a PDF, a HEIC picture from a computer) or is over 10 MB says so under the buttons ("Choose a JPEG or PNG picture." or "The picture is larger than 10 MB. Choose a smaller one.") and uploads nothing; the picture already chosen stays.
 - [ ] (owner, after PR 3b) **36.** Print test (PR 3 planning answer 10): print side 1 of a bulletin with a picture on the church's color printer, on legal paper: the picture is in color, sharp, inside the margins, and the reading and the date on the band are easy to read.
 - [ ] (agent, after PR 3b) **37.** In a test church: another church's picture id answers 404; the picture's preview is fetched once in a visit, and after a reload the browser asks again and gets 304 (`Cache-Control: private, no-cache` with the ETag); a draft from before PR 3b opens with everything it had and no picture.
+
+## Voices of the Church
+
+Run on the production URL https://worship-service-builder.vercel.app, on an
+iPhone with Safari at 375 px and on desktop Chrome. These are the Voices of
+the Church spec's checks for V1 (the Catena Aurea on step 1). After the V1
+merge the owner's guided check (one step at a time on the phone) covers the
+items marked "(owner, after V1)"; its result goes into `docs/ops-runbook.md`
+→ "Voices of the Church V1 record". V2 adds its own items here. Record what
+the page shows, never an email address or a church id.
+
+- [ ] (owner, after V1) **1.** Start a service for Sunday, October 18, 2026 and open **1 Date & readings**. Under the Matthew 22:15-22 row: "From the Gospel for this Sunday: Matthew 22:15-22" and a closed **Voices of the Church** button reading "19 quotations on these verses".
+- [ ] (owner, after V1) **2.** Tap **Voices of the Church**: the section "Matthew 22:15-22", the link "Printed pages 748-752, Vol. I, St. Matthew, Part III (1842)", then 19 quotations, each with the father's name (Pseudo-Chrysostom, The Gloss with "Gloss. ord.", Jerome, Chrysostom with "Chrys. Hom. lxx.", ...), the Gospel's words in italics, and the credit to the Oxford edition last. Tap the pages link: archive.org opens page 748 of the scan in a new tab; read one quotation against the page.
+- [ ] (owner, after V1) **3.** Under **Bulletin readings**, choose Matthew 22:15-22 as the New Testament reading: the "From the Gospel for this Sunday" line goes and the panel stays under the row. Choose the automatic reading again: the line comes back.
+- [ ] (owner, after V1) **4.** Change the date to Sunday, October 25: "From the Gospel for this Sunday: Matthew 22:34-46" and "36 quotations on these verses" (two sections); open it: after Hilary on verse 40, "Aquinas, linking the comments" over "It follows, *On these two commandments hang all the Law and the Prophets.*" in muted text, with no father's name. Change it to Sunday, November 8: the button reads "Not yet transcribed for this passage.", and opened, the section's verses and pages with the same words.
+- [ ] (owner, after V1) **5.** At 375 px: no sideways scroll on **1 Date & readings** with the panel open; the button and the pages link are easy to tap; a long quotation (Pseudo-Chrysostom on 22:37 on October 25) reads comfortably.
+- [ ] (agent, after V1) **6.** `GET /voices?reference=Matthew%2022:15-22` signed out answers 401; signed in it answers 19 quotations with `Cache-Control: private, max-age=3600`, whatever `X-Church-Id` says; `reference=Isaiah%2045:1-7` answers 422 naming `reference`.
+- [ ] **7.** Typed scripture lines with no Gospel on a date whose lectionary has none (for example a weekday): no panel and no request to `/voices`. Type "John 3:16-21" as a new line: one request to `/voices`, when typing stops, and no "couldn't be loaded" on the way.
