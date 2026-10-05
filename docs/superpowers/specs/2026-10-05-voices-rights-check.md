@@ -1,5 +1,8 @@
 # Voices of the Church: rights check for the Catena Aurea (1841-45 Oxford translation)
 
+> **Dropped by the owner, 2026-10-05:** "let's just drop it as a feature. too much work." Every Sunday's Gospel section would need checking against the scanned pages (about an hour of agent time each, about 50 Sundays a year), and no clean, clearly licensed plain text exists for all four Gospels (see the rights check). PR #51 was closed without merging and its code reverted on the branch; this document stays as the record. The five checked sections (Matthew 22:15-22, 22:34-40, 22:41-46, 23:1-4, 23:5-12) are in the V1 plan's data directives if the feature is ever revisited.
+
+
 Status: research only. No text has entered the app. Checked 2026-10-05 from the
 session with curl through the session proxy. Raw pages are saved in the session
 scratchpad (`scratchpad/voices/`), not in the repo.

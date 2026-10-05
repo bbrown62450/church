@@ -1,6 +1,5 @@
 """FastAPI entry point. Run from backend/: uvicorn api.main:app --reload"""
 import logging
-import time
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
@@ -8,12 +7,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
-import catena
 from api.errors import install_error_handlers
 from api.logging_config import configure_logging
 from api.middleware import RequestIdMiddleware, UnhandledErrorMiddleware, UploadSizeMiddleware
 from api.routes import (bulletin_images, bulletin_settings, churches, documents, health, hymnals, hymns, invites,
-                        lectionary, liturgy, liturgy_review, me, reference, rubric, scripture, services, voices)
+                        lectionary, liturgy, liturgy_review, me, reference, rubric, scripture, services)
 from api.settings import get_settings
 from api.startup import check_app_env, describe_database, enforce_production_guards
 from db import get_engine
@@ -30,12 +28,6 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     settings = get_settings()
     check_app_env(settings.app_env)
-    # The Catena's four data files (Voices V1), read and checked now: a broken file raises here, so
-    # the deploy never starts (its /health/ready check fails) instead of every GET /voices failing.
-    started = time.perf_counter()
-    sections = catena.load_all()
-    logger.info("Catena: %d sections, %d checked, in %.2f s", len(sections),
-                sum(1 for s in sections if s.checked), time.perf_counter() - started)
     engine = get_engine()                                   # creating the engine opens no connection
     logger.info("Database: %s", describe_database(engine.url))
     enforce_production_guards(settings, engine)             # before anything touches the database
@@ -86,7 +78,6 @@ def create_app() -> FastAPI:
     app.include_router(documents.router)
     app.include_router(services.router)
     app.include_router(bulletin_images.router)
-    app.include_router(voices.router)
     return app
 
 

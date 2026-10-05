@@ -32,9 +32,6 @@ import type {
   ServiceSummary,
   SuggestedHymn,
   Translations,
-  VoiceComment,
-  VoiceSection,
-  Voices,
 } from "@/lib/api/types";
 import type { Church, Me } from "@/lib/church";
 import { freshDraft, type DraftV1 } from "@/lib/draft/schema";
@@ -616,87 +613,4 @@ export function filledBulletinSettings(overrides: Partial<BulletinSettings> = {}
     organist: "Jordan Doe",
     ...overrides,
   });
-}
-
-// --- Voices of the Church V1 -------------------------------------------------------
-
-/** One comment as `GET /voices` sends it: Chrysostom's first on Matthew 22:15-22, as printed. */
-export function voiceComment(overrides: Partial<VoiceComment> = {}): VoiceComment {
-  return {
-    label: "Chrys.",
-    father: "Chrysostom",
-    work: "Chrys. Hom. lxx.",
-    text: "They send their disciples and Herod's soldiers together, that whatever opinion He might give might be found fault with.",
-    notes: [],
-    printed_label: null,
-    ...overrides,
-  };
-}
-
-/** A checked section of the Catena (Matthew 22:15-22, pages 748-752 of the 1842 printing). */
-export function voiceSection(overrides: Partial<VoiceSection> = {}): VoiceSection {
-  return {
-    id: "matthew-22-15-22",
-    reference: "Matthew 22:15-22",
-    pages: "748-752",
-    volume: "Vol. I, St. Matthew, Part III (1842)",
-    scan_url: "https://archive.org/details/catenaurecommpt301thomuoft/page/n19/mode/1up",
-    status: "checked",
-    comments: [
-      voiceComment({ label: "Jerome;", father: "Jerome", work: null, text: "This is the first excellence of the answerer, that He discerns the thoughts of His examiners, and calls them not disciples but tempters." }),
-      voiceComment(),
-      voiceComment({
-        label: "Origen;",
-        father: "Origen",
-        work: null,
-        text: "They then who without any moderation inculcate the law of God, are the Pharisees, who forbad to give tribute to Cæsar, *forbidding to marry, and commanding to abstain from meats, which God hath created.*\n\nOr the prince of this world, that is, the Devil, is called Cæsar.",
-        notes: ["1 Tim. 4, 3."],
-      }),
-      voiceComment({ label: "Gloss.", father: "the Gloss", work: "Gloss. ord.", text: "Who as unknown to Him, were more likely to ensnare Him." }),
-    ],
-    ...overrides,
-  };
-}
-
-/** A section no one has checked yet: no text. */
-export function uncheckedVoiceSection(overrides: Partial<VoiceSection> = {}): VoiceSection {
-  return voiceSection({
-    id: "matthew-22-23-33",
-    reference: "Matthew 22:23-33",
-    pages: "752-760",
-    scan_url: "https://archive.org/details/catenaurecommpt301thomuoft/page/n23/mode/1up",
-    status: "unchecked",
-    comments: [],
-    ...overrides,
-  });
-}
-
-/** The Catena's own words linking two comments (Matthew 22:39-40, after Hilary): no father's. */
-export function linkingComment(overrides: Partial<VoiceComment> = {}): VoiceComment {
-  return voiceComment({
-    label: null,
-    father: null,
-    work: null,
-    text: "It follows, *On these two commandments hang all the Law and the Prophets.*",
-    ...overrides,
-  });
-}
-
-/** `GET /voices?reference=...`: one checked section (4 quotations) unless overridden. */
-export function voices(reference = "Matthew 22:15-22", overrides: Partial<Voices> = {}): Voices {
-  const sections = overrides.sections ?? [voiceSection()];
-  return {
-    reference,
-    gospel: "Matthew",
-    quotation_count: sections.reduce((n, s) => n + s.comments.filter((c) => c.father !== null).length, 0),
-    credit:
-      "From the Catena Aurea of Thomas Aquinas, vol. I, St. Matthew, translated by Mark Pattison, edited by John Henry Newman (Oxford: John Henry Parker, 1841-42). Scanned from the University of Toronto's copy at archive.org.",
-    sections,
-    ...overrides,
-  };
-}
-
-/** A `GET /voices` handler answering `answer(reference)` for the reference asked. */
-export function voicesRoute(answer: (reference: string) => Voices = (reference) => voices(reference)) {
-  return (req: { path: string }) => answer(new URL(req.path, "http://localhost").searchParams.get("reference") ?? "");
 }

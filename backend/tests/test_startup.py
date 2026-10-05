@@ -1,14 +1,11 @@
-"""Startup: database target log, APP_ENV and the production guards (ops slice, F §2.6 items 1-2);
-the Catena's data files read and checked (Voices V1 build review M6)."""
+"""Startup: database target log, APP_ENV and the production guards (ops slice, F §2.6 items 1-2)."""
 import logging
-import shutil
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.engine import make_url
 
 import api.main
-import catena
 from api import settings as settings_mod
 from api.startup import check_app_env, describe_database
 from db.engine import _make_engine
@@ -124,33 +121,3 @@ def test_development_on_sqlite_starts_without_errors(api_env, tmp_db, caplog):
     with caplog.at_level(logging.INFO):
         _start(api.main.create_app())
     assert [r for r in caplog.records if r.levelno >= logging.ERROR] == []
-
-
-@pytest.fixture
-def fresh_catena():
-    """catena.load keeps each Gospel once read: start each test with none read, and leave none of
-    a test's files behind."""
-    catena.load.cache_clear()
-    yield
-    catena.load.cache_clear()
-
-
-def test_startup_reads_and_checks_the_four_catena_files(api_env, tmp_db, caplog, fresh_catena):
-    # Voices V1 build review M6: a broken data file fails the start (and so Railway's health
-    # check on the deploy), not every GET /voices after it.
-    with caplog.at_level(logging.INFO):
-        _start(api.main.create_app())
-    assert catena.load.cache_info().currsize == 4
-    (line,) = [r.getMessage() for r in caplog.records if r.getMessage().startswith("Catena: ")]
-    assert line.startswith("Catena: 816 sections, 5 checked, in ")
-
-
-def test_a_broken_catena_file_refuses_to_start(api_env, tmp_db, monkeypatch, tmp_path, fresh_catena):
-    for gospel in catena.GOSPELS:
-        shutil.copy(catena.data_path(gospel), tmp_path / catena.data_path(gospel).name)
-    broken = tmp_path / "john.json"
-    broken.write_text(broken.read_text(encoding="utf-8").replace('"volume": "jn2"', '"volume": "mk"', 1),
-                      encoding="utf-8")
-    monkeypatch.setattr(catena, "DATA_DIR", tmp_path)
-    with pytest.raises(catena.CatenaDataError, match="volume mk is not John"):
-        _start(api.main.create_app())

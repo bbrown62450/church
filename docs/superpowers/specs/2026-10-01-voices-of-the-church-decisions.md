@@ -1,5 +1,8 @@
 # Voices of the Church: owner decisions (pre-spec)
 
+> **Dropped by the owner, 2026-10-05:** "let's just drop it as a feature. too much work." Every Sunday's Gospel section would need checking against the scanned pages (about an hour of agent time each, about 50 Sundays a year), and no clean, clearly licensed plain text exists for all four Gospels (see the rights check). PR #51 was closed without merging and its code reverted on the branch; this document stays as the record. The five checked sections (Matthew 22:15-22, 22:34-40, 22:41-46, 23:1-4, 23:5-12) are in the V1 plan's data directives if the feature is ever revisited.
+
+
 Status: decisions only, not a spec. The spec and plan come after slice 5a.
 
 Source of the idea: the owner asked (2026-10-01) how The Faith Received

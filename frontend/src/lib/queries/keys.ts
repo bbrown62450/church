@@ -8,8 +8,6 @@ export const keys = {
   me: () => ["me"] as const,
   translations: () => ["ref", "translations"] as const,
   liturgyConfig: () => ["ref", "liturgy-config"] as const,
-  /** Voices of the Church V1: the Catena on a Gospel passage (user-scoped reference data). */
-  voices: (reference: string) => ["ref", "voices", reference] as const,
   lectionary: (dateIso: string) => ["lectionary", dateIso] as const,
   passage: (translation: string, ref: string) => ["passage", translation, ref] as const,
   gmailConnection: () => ["gmail-connection"] as const,

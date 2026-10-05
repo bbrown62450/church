@@ -1,5 +1,8 @@
 # Voices of the Church: Design (V1 and V2)
 
+> **Dropped by the owner, 2026-10-05:** "let's just drop it as a feature. too much work." Every Sunday's Gospel section would need checking against the scanned pages (about an hour of agent time each, about 50 Sundays a year), and no clean, clearly licensed plain text exists for all four Gospels (see the rights check). PR #51 was closed without merging and its code reverted on the branch; this document stays as the record. The five checked sections (Matthew 22:15-22, 22:34-40, 22:41-46, 23:1-4, 23:5-12) are in the V1 plan's data directives if the feature is ever revisited.
+
+
 Date: 2026-10-05
 Status: design for review. V1 has its plan (`docs/superpowers/plans/2026-10-05-voices-v1.md`, whose
 "Questions for the owner" 1-7 put this design's owner-visible choices, each with a recommendation);

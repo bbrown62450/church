@@ -5,8 +5,6 @@ import { buttonVariants } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { MAX_LINE } from "@/lib/draft/status";
-import type { ReactNode } from "react";
-
 import { classify, splitAlternatives, type Classification, type Testament } from "@/lib/scripture-refs";
 import { cn } from "@/lib/utils";
 
@@ -37,21 +35,18 @@ function TestamentBadge({ testament }: { testament: Classification }) {
  * One reading (S UX item 6): the reference, a badge per " or " alternative,
  * and "Show text" / "Hide text", named with the reference for screen readers
  * ("Show text: Mark 1:1-8"). The text loads only while the row is open. A
- * line over 200 characters cannot be opened and is never sent. `children`
- * (the Gospel's Voices of the Church panel, Voices V1) go under the text.
+ * line over 200 characters cannot be opened and is never sent.
  */
 export function ReadingRow({
   reference,
   translation,
   open,
   onOpenChange,
-  children,
 }: {
   reference: string;
   translation: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  children?: ReactNode;
 }) {
   const tooLong = reference.length > MAX_LINE;
   const action = open && !tooLong ? "Hide text" : "Show text";
@@ -80,7 +75,6 @@ export function ReadingRow({
           <PassageText reference={reference} translation={translation} />
         </CollapsibleContent>
       </Collapsible>
-      {children}
     </li>
   );
 }

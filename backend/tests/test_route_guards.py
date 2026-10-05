@@ -17,7 +17,7 @@ fastapi.routing.iter_route_contexts, and reads `ctx.dependant`, which, unlike
 Every slice that adds a user-scoped route adds it to USER_SCOPED in the same PR
 (1b: POST /churches, POST /invites/preview, POST /invites/accept;
 2a: GET /lectionary/readings, POST /scripture/passages, GET /translations;
-4a: GET /liturgy/config; Voices V1: GET /voices).
+4a: GET /liturgy/config).
 """
 from collections.abc import Callable
 from typing import Any
@@ -45,7 +45,6 @@ USER_SCOPED = {
     ("GET", "/lectionary/readings"),
     ("POST", "/scripture/passages"),
     ("GET", "/liturgy/config"),
-    ("GET", "/voices"),
 }
 CHURCH_SCOPED_TODAY = {("GET", "/church"), ("GET", "/rubric"), ("PATCH", "/rubric")}
 
