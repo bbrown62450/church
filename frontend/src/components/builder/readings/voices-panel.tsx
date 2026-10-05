@@ -135,8 +135,9 @@ export function VoicesPanel({
   onOpenChange: (open: boolean) => void;
 }) {
   const query = useVoices(passage.reference);
-  // A line the server cannot read as a Gospel passage gets no panel: asking again would not help.
-  if (query.error?.status === 422) return null;
+  // A line the server cannot read as a Gospel passage (its 422, kept as `null` for the session)
+  // gets no panel: asking again would not help.
+  if (query.data === null) return null;
   // Try again after a failure fetches with no data: that is loading too.
   const loading = query.isPending || (query.isFetching && !query.data);
   const summary = loading ? LOADING : query.data ? countLine(query.data.quotation_count) : FAILED;
