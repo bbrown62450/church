@@ -95,3 +95,8 @@ export type ReviseResult = components["schemas"]["ReviseOut"];
 
 /** `GET`/`PUT /church/bulletin-settings` (printed bulletin PR 2a): the church's standing bulletin settings. */
 export type BulletinSettings = components["schemas"]["BulletinSettings"];
+
+/** `GET /voices` (Voices of the Church V1): the Catena Aurea's sections on a Gospel passage, as printed. */
+export type Voices = components["schemas"]["VoicesOut"];
+export type VoiceSection = components["schemas"]["VoiceSectionOut"];
+export type VoiceComment = components["schemas"]["VoiceCommentOut"];

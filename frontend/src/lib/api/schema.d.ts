@@ -514,6 +514,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/voices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Voices */
+        get: operations["read_voices_voices_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1679,6 +1696,72 @@ export interface components {
             name?: string | null;
             /** Picture */
             picture?: string | null;
+        };
+        /**
+         * VoiceCommentOut
+         * @description One father's comment, as printed: `label` in small capitals ("Jerome;"), `work` the margin
+         *     reference beside it or null, `text` with *...* for italics and a blank line between printed
+         *     paragraphs, `notes` the other margin notes (Scripture references). `father` and `label` are
+         *     null for the Catena's own words linking the comments (no father's; never credited to one).
+         *     `printed_label` is the label as printed when the volume's errata correct it ("JEROME").
+         */
+        VoiceCommentOut: {
+            /** Father */
+            father: string | null;
+            /** Label */
+            label: string | null;
+            /** Notes */
+            notes: string[];
+            /** Printed Label */
+            printed_label: string | null;
+            /** Text */
+            text: string;
+            /** Work */
+            work: string | null;
+        };
+        /**
+         * VoiceSectionOut
+         * @description One section of the Catena (the verses printed together, then the comments). An unchecked
+         *     section has no comments: the page says "Not yet transcribed for this passage.".
+         */
+        VoiceSectionOut: {
+            /** Comments */
+            comments: components["schemas"]["VoiceCommentOut"][];
+            /** Id */
+            id: string;
+            /** Pages */
+            pages: string;
+            /** Reference */
+            reference: string;
+            /** Scan Url */
+            scan_url: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "checked" | "unchecked";
+            /** Volume */
+            volume: string;
+        };
+        /**
+         * VoicesOut
+         * @description GET /voices: the sections sharing a verse with the reference's passages in its first
+         *     Gospel, in order; `quotation_count` counts the fathers' checked comments; `credit` names the source.
+         */
+        VoicesOut: {
+            /** Credit */
+            credit: string;
+            /**
+             * Gospel
+             * @enum {string}
+             */
+            gospel: "Matthew" | "Mark" | "Luke" | "John";
+            /** Quotation Count */
+            quotation_count: number;
+            /** Reference */
+            reference: string;
+            /** Sections */
+            sections: components["schemas"]["VoiceSectionOut"][];
         };
     };
     responses: never;
@@ -3714,6 +3797,57 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TranslationsOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    read_voices_voices_get: {
+        parameters: {
+            query: {
+                reference: string;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VoicesOut"];
                 };
             };
             /** @description Unauthorized */
