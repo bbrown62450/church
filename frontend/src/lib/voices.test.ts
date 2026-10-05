@@ -1,4 +1,6 @@
 /** Which Gospel passage the Voices of the Church panel shows (Voices V1 spec "Which Gospel passage"). */
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
 import { applyReadingSet, editScriptureLines, effectivePicks, setDate, setPick } from "@/lib/draft/readings";
@@ -31,6 +33,25 @@ describe("gospelOf", () => {
     expect(gospelOf("Matthew 26:14-27:66 or Matthew 27:11-54")).toBe("Matthew");
     expect(gospelOf("John 3")).toBe("John");
     for (const typing of ["John", "John ", "John 3:", "John 3:16-", "John 3:16,"]) expect(gospelOf(typing)).toBeNull();
+  });
+});
+
+/** The cases backend/tests/test_catena.py runs against the server's reading (Voices V1 build review M3). */
+const SHARED = JSON.parse(
+  readFileSync(new URL("../../../backend/tests/fixtures/shared/voices_references.json", import.meta.url), "utf-8"),
+) as { both: { ref: string; gospel: string }[]; neither: string[]; client_waits: string[] };
+
+describe("gospelOf against shared/voices_references.json", () => {
+  it("asks for every reference the server reads as a Gospel passage, ranges with ';' and spaced dashes included", () => {
+    expect(SHARED.both.length).toBeGreaterThan(30);
+    expect(Object.fromEntries(SHARED.both.map((c) => [c.ref, gospelOf(c.ref)]))).toEqual(
+      Object.fromEntries(SHARED.both.map((c) => [c.ref, c.gospel])),
+    );
+  });
+
+  it("never asks for a reference the server refuses, nor for a whole book or a part still being typed", () => {
+    const waits = [...SHARED.neither, ...SHARED.client_waits];
+    expect(Object.fromEntries(waits.map((ref) => [ref, gospelOf(ref)]))).toEqual(Object.fromEntries(waits.map((ref) => [ref, null])));
   });
 });
 

@@ -4,6 +4,8 @@ spec "The data", "The API").
 The format checks run on small invented files; the shipped files are test_catena_data.py's.
 """
 import copy
+import json
+from pathlib import Path
 
 import pytest
 
@@ -173,3 +175,18 @@ def test_the_scan_addresses():
     volume = catena.volume("mt3")
     assert catena.page_image_url(volume, 19) == "https://archive.org/download/catenaurecommpt301thomuoft/page/n19.jpg"
     assert catena.page_view_url(volume, 19) == "https://archive.org/details/catenaurecommpt301thomuoft/page/n19/mode/1up"
+
+
+SHARED = json.loads((Path(__file__).parent / "fixtures" / "shared" / "voices_references.json").read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize("case", SHARED["both"], ids=lambda case: case["ref"])
+def test_the_server_reads_every_reference_the_panel_asks_for(case):
+    # shared/voices_references.json (Voices V1 build review M3): frontend/src/lib/voices.test.ts
+    # runs the same cases against gospelOf.
+    assert catena.gospel_of(case["ref"]) == case["gospel"]
+
+
+def test_the_server_refuses_what_the_panel_never_asks_and_reads_what_it_waits_on():
+    assert {ref: catena.gospel_of(ref) for ref in SHARED["neither"]} == {ref: None for ref in SHARED["neither"]}
+    assert all(catena.gospel_of(ref) is not None for ref in SHARED["client_waits"])
