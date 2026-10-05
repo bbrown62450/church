@@ -283,7 +283,8 @@ correcting the draft to the page. The checklist is `backend/data/catena/README.m
 
 V1's checks (Matthew 22:15-22, 22:34-40, 22:41-46, 23:1-4, 23:5-12) are recorded in the plan: the
 page images used, what the first reading corrected, and a second, independent reading of all 92
-quotations (it found one more slip, a comma the margin left in Matthew 23:3). The first took about
+quotations after the plan review found a comma the margin had left in Matthew 23:3 (the second
+reading found nothing more). The first took about
 3-6 minutes a printed page.
 
 ## The API **[proposed]**
@@ -448,7 +449,7 @@ with the rest of `backend/` (about 40 KB), but nothing there runs or imports it.
 - **The margin references are the hardest part.** The OCR mixes them into the line or loses their
   second line; every section checked so far needed margin corrections.
 - **A checker's mistake.** The check is by eye. The checklist, a second reader's full pass (V1's
-  found one comma the first had missed) and the owner's phone check reduce it.
+  followed the review's find of a comma the first had missed) and the owner's phone check reduce it.
 - **archive.org's addresses** (the page images and the viewer) could change; the panel's link is
   a convenience, and the text does not depend on it.
 - **Matthew Part II** is a different library's copy whose OCR is poorer (no small capitals, more
