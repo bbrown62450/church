@@ -151,8 +151,22 @@ def test_the_credit_names_the_edition_the_translator_and_the_copies_scanned():
         "From the Catena Aurea of Thomas Aquinas, vol. IV, St. John, translator not named in the volume, "
         "edited by John Henry Newman (Oxford: John Henry Parker, 1845). Scanned from the University of "
         "Toronto's copy at archive.org.")
-    assert "Saint Mary's College of California's" in catena.credit("Matthew")
     assert "Whiston" not in "".join(catena.credit(g) for g in catena.GOSPELS)
+
+
+def test_the_credit_for_matthew_11_to_21_names_saint_marys_copy_with_no_article():
+    # The wording the owner approved (Q2, clarification 8): "Saint Mary's College of California's
+    # copy", never "the Saint Mary's ..." (Voices V1 build review M1).
+    (part_two,) = [s for s in catena.load("Matthew") if s.start == (11, 1)]
+    assert catena.credit("Matthew", (part_two,)) == (
+        "From the Catena Aurea of Thomas Aquinas, vol. I, St. Matthew, translated by Mark Pattison, "
+        "edited by John Henry Newman (Oxford: John Henry Parker, 1841-42). Scanned from Saint Mary's "
+        "College of California's copy at archive.org.")
+    last_of_part_two = [s for s in catena.load("Matthew") if s.volume.key == "mt2"][-1]
+    first_of_part_three = [s for s in catena.load("Matthew") if s.volume.key == "mt3"][0]
+    assert catena.credit("Matthew", (last_of_part_two, first_of_part_three)).endswith(
+        "Scanned from Saint Mary's College of California's and the University of Toronto's copies at archive.org.")
+    assert "the Saint Mary's" not in "".join(catena.credit(g) for g in catena.GOSPELS)
 
 
 def test_the_scan_addresses():

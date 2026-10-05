@@ -55,26 +55,26 @@ class Volume:
     title: str               # as the title page names the volume
     year: int                # the title page's year
     translator: Optional[str]  # as the volume names its translator; None when it names none
-    holder: str              # whose copy was scanned
+    holder: str              # whose copy was scanned, with its article as the credit says it
 
 
 VOLUMES: tuple[Volume, ...] = (
     Volume("mt1", "Matthew", "catenaaureacomme00thomuoft", "Vol. I, St. Matthew, Part I", 1841,
-           "Mark Pattison", "University of Toronto"),
+           "Mark Pattison", "the University of Toronto"),
     Volume("mt2", "Matthew", "a6788682p201thomuoft", "Vol. I, St. Matthew, Part II", 1841,
            "Mark Pattison", "Saint Mary's College of California"),
     Volume("mt3", "Matthew", "catenaurecommpt301thomuoft", "Vol. I, St. Matthew, Part III", 1842,
-           "Mark Pattison", "University of Toronto"),
+           "Mark Pattison", "the University of Toronto"),
     Volume("mk", "Mark", "catenaaureacomme02thomuoft", "Vol. II, St. Mark", 1842,
-           "John Dobree Dalgairns", "University of Toronto"),
+           "John Dobree Dalgairns", "the University of Toronto"),
     Volume("lk1", "Luke", "catenaaureacomme03thomuoft", "Vol. III, St. Luke, Part I", 1843,
-           "Thomas Dudley Ryder", "University of Toronto"),
+           "Thomas Dudley Ryder", "the University of Toronto"),
     Volume("lk2", "Luke", "p2catenaaureacom03thomuoft", "Vol. III, St. Luke, Part II", 1843,
-           "Thomas Dudley Ryder", "University of Toronto"),
+           "Thomas Dudley Ryder", "the University of Toronto"),
     Volume("jn1", "John", "catenaaureacomme04thomuoft", "Vol. IV, St. John, Part I", 1845,
-           None, "University of Toronto"),
+           None, "the University of Toronto"),
     Volume("jn2", "John", "p2catenaaureacom04thomuoft", "Vol. IV, St. John, Part II", 1845,
-           None, "University of Toronto"),
+           None, "the University of Toronto"),
 )
 
 # The father each printed label names, for display and (V2) the "after {Name}" credit.
@@ -299,7 +299,8 @@ def credit(gospel: str, shown: tuple[Section, ...] = ()) -> str:
     """"From the Catena Aurea of Thomas Aquinas, vol. I, St. Matthew, translated by Mark Pattison,
     edited by John Henry Newman (Oxford: John Henry Parker, 1841-42). Scanned from the University
     of Toronto's copy at archive.org." The copies are those of the sections shown (else the
-    Gospel's)."""
+    Gospel's): "Scanned from Saint Mary's College of California's copy" for Matthew 11-21, with no
+    article (owner's answer Q2, clarification 8)."""
     volumes = [v for v in VOLUMES if v.gospel == gospel]
     years = sorted({v.year for v in volumes})
     span = str(years[0]) if len(years) == 1 else f"{years[0]}-{str(years[-1])[2:]}"
@@ -308,4 +309,4 @@ def credit(gospel: str, shown: tuple[Section, ...] = ()) -> str:
     holders = list(dict.fromkeys(s.volume.holder for s in shown)) or list(dict.fromkeys(v.holder for v in volumes))
     copies = " and ".join(f"{h}'s" for h in holders) + (" copy" if len(holders) == 1 else " copies")
     return (f"From the Catena Aurea of Thomas Aquinas, {_GOSPEL_VOLUME[gospel]}, {translated}, edited by "
-            f"John Henry Newman (Oxford: John Henry Parker, {span}). Scanned from the {copies} at archive.org.")
+            f"John Henry Newman (Oxford: John Henry Parker, {span}). Scanned from {copies} at archive.org.")
