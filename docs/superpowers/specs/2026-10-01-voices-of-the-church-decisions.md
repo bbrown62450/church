@@ -65,3 +65,22 @@ archive.org has scans of the 1841 Oxford printing (for example
 9. **Test case:** Sunday, October 18, 2026 (the owner is preaching): the
    Twenty-First Sunday after Pentecost, Gospel Matthew 22:15-22 (Vanderbilt RCL,
    checked through the app's lectionary module on 2026-10-05).
+
+## Source decision (Beau, 2026-10-05; binding)
+
+After the rights check (`2026-10-05-voices-rights-check.md`, verdict YELLOW:
+the 1841-45 Oxford translation is public domain in the US, but CCEL has only
+Matthew and Mark, under terms that ask permission to republish, and no clean,
+clearly licensed copy of Luke and John exists):
+
+1. **Source (A):** the archive.org scans of the 1841-45 Oxford printing (John
+   Henry Parker) for all four Gospels; not CCEL. The text is the printed wording,
+   cleaned up automatically, then each section checked against the scanned page
+   images before the app shows it, starting with the coming Sundays' Gospels
+   (first Matthew 22:15-22 for 2026-10-18). A section not yet checked shows "Not
+   yet transcribed for this passage." instead of uncorrected text.
+2. **Grouping:** the panel groups quotations by the Catena's sections (for
+   example Matthew 22:15-22 as one section), not by verse; planning answer 3
+   reads "grouped by section". A section shows when it overlaps the verses read.
+3. The 2026-10-05 planning note that CCEL hosts all four parts was wrong (it has
+   catena1 and catena2 only).
