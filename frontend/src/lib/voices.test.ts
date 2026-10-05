@@ -1,7 +1,7 @@
 /** Which Gospel passage the Voices of the Church panel shows (Voices V1 spec "Which Gospel passage"). */
 import { describe, expect, it } from "vitest";
 
-import { applyReadingSet, editScriptureLines, setDate, setPick } from "@/lib/draft/readings";
+import { applyReadingSet, editScriptureLines, effectivePicks, setDate, setPick } from "@/lib/draft/readings";
 import { lectionary, noReadings, testDraft } from "@/test/fixtures";
 
 import { gospelOf, voicesPassage } from "./voices";
@@ -75,5 +75,59 @@ describe("voicesPassage", () => {
     expect(voicesPassage(d, noReadings(DATE))).toBeNull();
     const noGospel = lectionary(DATE, { reading_sets: [{ name: "A feast", source: "vanderbilt", scriptures: ["Acts 2:1-21", "Psalm 104"] }] });
     expect(voicesPassage(d, noGospel)).toBeNull();
+  });
+});
+
+describe("a canticle from Luke in the psalm slot is sung, never the Gospel (Voices V1 build review I1)", () => {
+  // Advent 4, Year B (Sunday, December 20, 2026), as the RCL prints it: the psalm cell is the
+  // Magnificat or Psalm 89, before the second reading and the Gospel.
+  const ADVENT_4 = "2026-12-20";
+  const MAGNIFICAT = "Luke 1:46b-55 or Psalm 89:1-4, 19-26";
+  const advent4 = lectionary(ADVENT_4, {
+    reading_sets: [
+      {
+        name: "Fourth Sunday of Advent",
+        source: "vanderbilt",
+        scriptures: ["2 Samuel 7:1-11, 16", MAGNIFICAT, "Romans 16:25-27", "Luke 1:26-38"],
+      },
+    ],
+  });
+  const GOSPEL = { reference: "Luke 1:26-38", line: "Luke 1:26-38", fromLectionary: true };
+  const applied = () => testDraft((x) => applyReadingSet(setDate(x, ADVENT_4), advent4, 0));
+
+  it("with no picks the bulletin's automatic reading is the Magnificat, and the panel follows the set's Gospel", () => {
+    const d = applied();
+    expect(effectivePicks(d).nt).toBe(MAGNIFICAT);
+    expect(voicesPassage(d, advent4)).toEqual(GOSPEL);
+    // Before the lookup answers, the lines filled from the set already mark the canticle: nothing yet.
+    expect(voicesPassage(d, undefined)).toBeNull();
+  });
+
+  it("with 2 Samuel and Romans picked, the lectionary's Gospel is the set's last Gospel line, not the canticle", () => {
+    const d = setPick(setPick(applied(), "ot", "2 Samuel 7:1-11, 16"), "nt", "Romans 16:25-27");
+    expect(voicesPassage(d, advent4)).toEqual(GOSPEL);
+  });
+
+  it("a canticle picked by hand is still not the Gospel", () => {
+    expect(voicesPassage(setPick(applied(), "nt", MAGNIFICAT), advent4)).toEqual(GOSPEL);
+  });
+
+  it("the Benedictus and the Nunc dimittis likewise", () => {
+    for (const canticle of ["Luke 1:68-79", "Luke 2:29-32"]) {
+      const set = lectionary(ADVENT_4, {
+        reading_sets: [{ name: "A Sunday", source: "vanderbilt", scriptures: ["Malachi 3:1-4", canticle, "Philippians 1:3-11", "Luke 3:1-6"] }],
+      });
+      const d = testDraft((x) => applyReadingSet(setDate(x, ADVENT_4), set, 0));
+      expect(voicesPassage(d, set)).toEqual({ reference: "Luke 3:1-6", line: "Luke 3:1-6", fromLectionary: true });
+    }
+  });
+
+  it("a Gospel line the pastor chose that is not the set's canticle still wins", () => {
+    const d = testDraft((x) => editScriptureLines(setDate(x, ADVENT_4), "2 Samuel 7:1-11, 16\nLuke 1:39-45 (46-55)"));
+    expect(voicesPassage(d, advent4)).toEqual({
+      reference: "Luke 1:39-45 (46-55)",
+      line: "Luke 1:39-45 (46-55)",
+      fromLectionary: false,
+    });
   });
 });

@@ -936,6 +936,28 @@ describe("Voices of the Church (Voices V1)", () => {
     expect(screen.queryByText("The fathers' comments couldn't be loaded.")).toBeNull();
   });
 
+  it("on Advent 4, Year B, follows the set's Gospel, not the Magnificat the bulletin reads automatically", async () => {
+    // December 20, 2026 (Voices V1 build review I1): the psalm slot is a canticle from Luke.
+    const advent4 = lectionary("2026-12-20", {
+      reading_sets: [
+        {
+          name: "Fourth Sunday of Advent",
+          source: "vanderbilt",
+          scriptures: ["2 Samuel 7:1-11, 16", "Luke 1:46b-55 or Psalm 89:1-4, 19-26", "Romans 16:25-27", "Luke 1:26-38"],
+        },
+      ],
+    });
+    const seed = applyReadingSet(setDate(testDraft(), "2026-12-20"), advent4, 0);
+    const { api } = renderStep({ lookup: lectionaryRoute((date) => (date === "2026-12-20" ? advent4 : noReadings(date))) }, seed);
+    const gospel = await findRow("Luke 1:26-38");
+    expect(await gospel.findByText("From the Gospel for this Sunday: Luke 1:26-38")).toBeInTheDocument();
+    await waitFor(() => expect(voicesButton(gospel)).toHaveAccessibleName(/4 quotations/));
+    expect(row("Luke 1:46b-55 or Psalm 89:1-4, 19-26").queryByRole("button", { name: /^Voices of the Church/ })).toBeNull();
+    expect(api.requests.filter((r) => r.path.startsWith("/voices")).map((r) => r.path)).toEqual([
+      "/voices?reference=Luke%201%3A26-38",
+    ]);
+  });
+
   it("shows no panel when neither a reading nor the lectionary has a Gospel", async () => {
     const { api } = renderStep({ lookup: lectionaryRoute(noReadings) }, typedLines(["Isaiah 9:2-7", "Psalm 96"]));
     await findRow("Psalm 96");
