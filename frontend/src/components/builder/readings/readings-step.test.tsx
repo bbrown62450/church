@@ -27,6 +27,7 @@ import {
   testDraft,
   translations,
   USER_ID,
+  voicesRoute,
 } from "@/test/fixtures";
 import { renderWithProviders } from "@/test/render";
 
@@ -62,6 +63,7 @@ function renderStep(
     "GET /church": churchProfile(),
     "GET /lectionary/readings": lookup,
     "GET /translations": list,
+    "GET /voices": voicesRoute(),
   };
   if (passages !== undefined) handlers["POST /scripture/passages"] = passages;
   const api = installFakeApi(handlers);
@@ -886,5 +888,59 @@ describe("bulletin readings (S UX item 7)", () => {
     const nt = await screen.findByRole("combobox", { name: "New Testament reading" });
     expect(nt).toHaveTextContent("None — choose one");
     expect(screen.getByRole("combobox", { name: "Old Testament reading" })).toHaveTextContent("Automatic: Isaiah 9:2-7");
+  });
+});
+
+// --- Voices of the Church (Voices V1 spec "The panel", "Which Gospel passage") -----------
+
+function voicesButton(within_: ReturnType<typeof within>) {
+  return within_.getByRole("button", { name: /^Voices of the Church/ });
+}
+
+describe("Voices of the Church (Voices V1)", () => {
+  it("sits under the Gospel's row, labeled as the Sunday's Gospel until a bulletin reading is the Gospel", async () => {
+    const { user, api } = renderStep({ lookup: lectionaryRoute(lectionary) }, applyReadingSet(testDraft(), lectionary("2026-10-04"), 0));
+    const matthew = await findRow("Matthew 21:33-46");
+    expect(await matthew.findByText("From the Gospel for this Sunday: Matthew 21:33-46")).toBeInTheDocument();
+    await waitFor(() => expect(voicesButton(matthew)).toHaveAccessibleName("Voices of the Church 4 quotations on these verses"));
+    expect(voicesButton(matthew)).toHaveAttribute("aria-expanded", "false");
+    expect(row("Isaiah 5:1-7").queryByRole("button", { name: /^Voices of the Church/ })).toBeNull();
+    expect(api.requests.filter((r) => r.path.startsWith("/voices")).map((r) => r.path)).toEqual([
+      "/voices?reference=Matthew%2021%3A33-46",
+    ]);
+
+    await user.click(screen.getByRole("combobox", { name: "New Testament reading" }));
+    await user.click(await screen.findByRole("option", { name: "Matthew 21:33-46" }));
+    await waitFor(() => expect(screen.queryByText(/^From the Gospel for this Sunday/)).toBeNull());
+    expect(voicesButton(row("Matthew 21:33-46"))).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /^Voices of the Church/ })).toHaveLength(1);
+  });
+
+  it("follows the lectionary's Gospel after the list when it is not among the lines", async () => {
+    renderStep({ lookup: lectionaryRoute(lectionary) }, typedLines(["Isaiah 9:2-7", "Psalm 96"]));
+    expect(await screen.findByText("From the Gospel for this Sunday: Matthew 21:33-46")).toBeInTheDocument();
+    const list = within(screen.getByRole("region", { name: "Readings" }));
+    await waitFor(() => expect(voicesButton(list)).toHaveAccessibleName(/4 quotations/));
+    expect(list.getAllByRole("listitem").some((li) => within(li).queryByRole("button", { name: /^Voices of the Church/ }))).toBe(false);
+  });
+
+  it("asks once, when typing stops, for a Gospel line typed in, and never for a line half typed", async () => {
+    const { user, api } = renderStep({ lookup: lectionaryRoute(noReadings) }, typedLines(["Isaiah 9:2-7"]));
+    await findRow("Isaiah 9:2-7");
+    await user.type(screen.getByLabelText("Scripture readings"), "{End}\nJohn 3:16-21");
+    const list = within(screen.getByRole("region", { name: "Readings" }));
+    await waitFor(() => expect(voicesButton(list)).toHaveAccessibleName(/4 quotations/));
+    expect(api.requests.filter((r) => r.path.startsWith("/voices")).map((r) => r.path)).toEqual([
+      "/voices?reference=John%203%3A16-21",
+    ]);
+    expect(screen.queryByText("The fathers' comments couldn't be loaded.")).toBeNull();
+  });
+
+  it("shows no panel when neither a reading nor the lectionary has a Gospel", async () => {
+    const { api } = renderStep({ lookup: lectionaryRoute(noReadings) }, typedLines(["Isaiah 9:2-7", "Psalm 96"]));
+    await findRow("Psalm 96");
+    await waitFor(() => expect(api.requests.some((r) => r.path.startsWith("/lectionary/"))).toBe(true));
+    expect(screen.queryByRole("button", { name: /^Voices of the Church/ })).toBeNull();
+    expect(api.requests.filter((r) => r.path.startsWith("/voices"))).toEqual([]);
   });
 });

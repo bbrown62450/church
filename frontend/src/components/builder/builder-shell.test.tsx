@@ -40,6 +40,7 @@ import {
   testDraft,
   translations,
   USER_ID,
+  voicesRoute,
 } from "@/test/fixtures";
 import { testRouter } from "@/test/mocks";
 import { renderWithProviders } from "@/test/render";
@@ -80,6 +81,7 @@ function renderBuilder(page: ReactElement, path: string, lookup = lectionaryRout
     "GET /liturgy/config": liturgyConfig(),
     "GET /church/bulletin-settings": bulletinSettings(),
     "GET /services/previous-bulletin": previousBulletin(),
+    "GET /voices": voicesRoute(),
     ...routes,
   });
   return renderWithProviders(<BuilderLayout>{page}</BuilderLayout>, { me: me(), church: church(), path });

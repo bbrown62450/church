@@ -36,7 +36,7 @@ export function ReadingsStep() {
       <LectionaryStatus focusOccasion={() => occasionRef.current?.focus()} />
       <OccasionField lect={lect} inputRef={occasionRef} />
       <ScriptureLinesField />
-      <ReadingsList church={profile} />
+      <ReadingsList church={profile} lect={lect} />
       <BulletinReadingsPicker />
     </section>
   );
