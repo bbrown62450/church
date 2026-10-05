@@ -80,6 +80,10 @@ def test_another_gospel_with_nothing_checked_yet(client):
 @pytest.mark.parametrize("params, field, message", [
     ({"reference": "Isaiah 45:1-7"}, "reference", "Choose a passage from Matthew, Mark, Luke or John."),
     ({"reference": "Psalm 96"}, "reference", "Choose a passage from Matthew, Mark, Luke or John."),
+    # Verses outside the Gospel (Voices V1 build review M2): a 422, never an empty 200.
+    ({"reference": "Matthew 29:1"}, "reference", "Matthew has 28 chapters. Check the chapter and verse."),
+    ({"reference": "Matthew 22:99"}, "reference", "Matthew 22 has 46 verses. Check the chapter and verse."),
+    ({"reference": "John 0:1"}, "reference", "Choose a passage from Matthew, Mark, Luke or John."),
     ({"reference": "x" * 201}, "reference", "Too long (max 200 characters)."),
     ({}, "reference", "Required."),
 ])
