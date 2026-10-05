@@ -2,8 +2,6 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status:** WIP (tasks written; the replay and its expected outputs follow).
-
 **Goal:** Ship the first of slice 6a's three PRs (owner's 6a planning answers of 2026-10-05, answer 2): **the Settings area and its Church page.** After it merges, the menu at the top of every church page has a third item, **Settings**, after **Builder** and **Services**. It opens `/settings`, which goes to `/settings/church`: a "Settings" heading ("You're the owner of Example Church."), a short section nav (**Church**, and **Bulletin**, the existing Bulletin settings page until 6a-3 moves it in), and the **Church profile**. There an owner or admin changes the church's name, its time zone (the existing time zone picker, with "Use this device's time zone"), the default Bible translation, the default hymnal and the default Benediction, and taps **Save profile**; only the fields that changed are sent (`PATCH /church`), and the builder follows at once with no reload (the passages' translation, the hymnal it opens, the Benediction card that follows the church's default). A member sees the same profile as plain text with "Only admins can edit the church profile.". Leaving the page with unsaved changes asks first ("Discard unsaved changes?"), through one shared guard that the Bulletin settings page now uses too. The Benediction card's hint "Admins can change it in Settings." links to the new page. No migration (Alembic head stays `0007_bulletin_images`), no new package or variable, no draft change.
 
 **Architecture:** Backend first. `repos.churches._lock_live_church` becomes the public `lock_church` (the one church-row lock, 6a spec "Assumed interfaces"); a new `usecases/members.py` holds `lock_and_read_actor(s, church_id, actor_id)` (the 6b spec's shared helper: lock the church row, re-read the caller's role under the lock), and a new `usecases/church_admin.py` holds `require_admin_role`, the pure `clean_profile_patch` and `update_profile`, which runs the whole write in one session: lock and re-read, role check, validate, then `repos.churches.update_profile` (name, time zone and a settings merge in one read-modify-write of the locked row; every other settings key stays). `PATCH /church` (`require_admin`; `ChurchPatchIn`, every field optional, `extra="forbid"`) sits beside `GET /church` in `api/routes/me.py` and answers the same `ChurchProfileOut`. The Benediction's key-presence rule (`""` = no default) is already `liturgy_config.resolve_default_benediction`'s, so it is only tested through the new write. Frontend: `lib/settings/profile.ts` (the form, the diff, 6a's `rebaseForm`, the select items), `useUpdateChurch` in `lib/queries/church.ts` (caches the answer as the profile, refreshes `/me` and, when the hymnal changed, `/hymnals`), `components/app/leave-guard.tsx` (the Bulletin settings page's guard, moved and widened to every in-app link), the Settings shell (`settings/layout.tsx`, `settings/page.tsx`, `components/settings/sections.ts` and `settings-nav.tsx`, the **Settings** menu item), the Church page (`components/settings/church-settings-page.tsx`, with `TimezoneCombobox` gaining a `warning` and an out-of-list value), and the Benediction hint's link in `section-card.tsx`.
@@ -145,7 +143,7 @@ The owner's answers win over S and F; the code wins over both where they disagre
 | `docs/manual-verification.md`, `backend/tests/test_slice1_docs.py` | "## Slice 6a"; the pin of the last nine headings | T8 |
 | `docs/ops-runbook.md` | "### Slice 6a-1 record" (the records PR, after the merge) | T10 |
 
-**Counts in the PR:** @@PATHCOUNT@@
+**Counts in the PR:** 40 paths: 19 created (this plan, the fifteen new code and test files above, and the Voices V1 plan, design and rights check, which ride along), 21 modified (the sixteen code, test and API paths above, `docs/manual-verification.md`, and the 6a spec (its two amendments of 2026-10-05), the Voices decisions, the pews idea and `docs/ops-runbook.md` (the Voices notes), which ride along until merged). **Untouched:** migrations, `db/models.py`, `api/deps.py`, `api/schemas.py`, `liturgy_config.py`, `scripture_fetcher.py`, `api/routes/rubric.py`, `api/routes/bulletin_settings.py`, the draft schema, `church-switcher.tsx`, `app.py`, Streamlit.
 
 **Task order and review batch:** T1 → T8, each one commit and a backup push; then one review of the whole batch with its fixes as `Fix: …` commits; T9 verifies and opens the draft PR on the owner's yes; T10 merges on the owner's yes, runs the phone check and writes the record.
 
@@ -243,7 +241,14 @@ def test_require_admin_role():
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_church_admin.py 2>&1 | tail -3` then `.venv/bin/python -m pytest -q backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -1`
 **Expected** (`usecases.members` does not exist yet: `ModuleNotFoundError` above these lines; then the import check names the missing module):
-@@EXP T1 s2@@
+```
+ERROR backend/tests/test_church_admin.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in <t>s
+```
+```
+1 failed, 2 passed in <t>s
+```
 
 - [ ] **Step 3: Rename the lock, add `lock_and_read_actor` and `require_admin_role`**
 
@@ -365,7 +370,7 @@ def require_admin_role(role: str) -> None:
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_church_admin.py backend/tests/test_church_settings.py backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -1` then `grep -rn "_lock_live_church" backend --include=*.py; echo "old name grep exit $?"` then `.venv/bin/python -m pytest -q | tail -1`
 **Expected:**
-@@EXP T1 s4@@
+`16 passed in <t>s`; `old name grep exit 1`; `1490 passed, 23 skipped in <t>s`.
 
 - [ ] **Step 5: Commit**
 
@@ -593,7 +598,11 @@ def test_an_unavailable_stored_translation_survives_a_name_change(client, make_u
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_church_admin.py backend/tests/test_api_church_profile.py 2>&1 | tail -3`
 **Expected** (`clean_profile_patch` and `update_profile` do not exist yet, and `PATCH /church` is a 405):
-@@EXP T2 s2@@
+```
+FAILED backend/tests/test_api_church_profile.py::test_a_church_id_in_the_body_is_refused_and_isolation
+FAILED backend/tests/test_api_church_profile.py::test_an_unavailable_stored_translation_survives_a_name_change
+28 failed, 12 passed in <t>s
+```
 
 - [ ] **Step 3: Write the repo write, the usecase and the route**
 
@@ -770,7 +779,7 @@ def update_church(payload: ChurchPatchIn, active: ActiveChurch = Depends(require
 
 Run: `.venv/bin/python backend/scripts/export_openapi.py >/dev/null && (cd frontend && npm run gen:api >/dev/null) && git diff --stat -- frontend/src/lib/api | tail -1` then `.venv/bin/python -m pytest -q backend/tests/test_church_admin.py backend/tests/test_api_church_profile.py backend/tests/test_openapi_contract.py backend/tests/test_route_guards.py backend/tests/test_church_settings.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`
 **Expected:**
-@@EXP T2 s4@@
+` 2 files changed, 256 insertions(+), 1 deletion(-)`; `58 passed in <t>s`; `1518 passed, 23 skipped in <t>s`; `typecheck 0`, `lint 0` (the new `ChurchPatchIn` type is not used until T3).
 
 - [ ] **Step 5: Commit**
 
@@ -862,7 +871,10 @@ describe("the Church page's form (slice 6a-1)", () => {
 
 Run: `(cd frontend && npx vitest run src/lib/settings/profile.test.ts 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
 **Expected** (`profile.ts` does not exist yet):
-@@EXP T3 s2@@
+```
+ FAIL  |unit| src/lib/settings/profile.test.ts [ src/lib/settings/profile.test.ts ]
+      Tests  no tests
+```
 
 - [ ] **Step 3: Write the form's rules and the mutation**
 
@@ -1039,7 +1051,7 @@ export function useUpdateChurch() {
 
 Run: `(cd frontend && npx vitest run src/lib/settings/profile.test.ts 2>&1 | grep -E "^ +× |\[ src/|Tests ")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`
 **Expected:**
-@@EXP T3 s4@@
+`      Tests  4 passed (4)`; ` Test Files  89 passed (89)` and `      Tests  738 passed (738)`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -1127,7 +1139,10 @@ describe("LeaveGuard (slice 6a-1)", () => {
 
 Run: `(cd frontend && npx vitest run src/components/app/leave-guard.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
 **Expected** (`leave-guard.tsx` does not exist yet):
-@@EXP T4 s2@@
+```
+ FAIL  |dom| src/components/app/leave-guard.test.tsx [ src/components/app/leave-guard.test.tsx ]
+      Tests  no tests
+```
 
 - [ ] **Step 3: Write the guard; the Bulletin settings page uses it**
 
@@ -1349,7 +1364,7 @@ export { DISCARD_TITLE } from "@/components/app/leave-guard";
 
 Run: `(cd frontend && npx vitest run src/components/app/leave-guard.test.tsx src/components/bulletin-settings/bulletin-settings-page.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")` (three times) then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`
 **Expected:**
-@@EXP T4 s4@@
+three times `      Tests  10 passed (10)` (the guard's 1 and the Bulletin settings page's 9, unchanged); ` Test Files  90 passed (90)` and `      Tests  739 passed (739)`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -1478,7 +1493,11 @@ describe("the Settings area (slice 6a-1)", () => {
 
 Run: `(cd frontend && npx vitest run src/components/settings/settings-layout.test.tsx src/components/app/app-header.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
 **Expected** (the layout does not exist yet; the menu has no Settings item):
-@@EXP T5 s2@@
+```
+   × AppHeader > shows the Builder, Services and Settings nav items on church pages, current under /builder, and no nav without churches (F §4.2) <t>ms
+ FAIL  |dom| src/components/settings/settings-layout.test.tsx [ src/components/settings/settings-layout.test.tsx ]
+      Tests  1 failed | 5 passed (6)
+```
 
 - [ ] **Step 3: Write the Settings area and the menu item**
 
@@ -1617,7 +1636,7 @@ export const NAV_ITEMS = [
 
 Run: `(cd frontend && npx vitest run src/components/settings/settings-layout.test.tsx src/components/app/app-header.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`
 **Expected:**
-@@EXP T5 s4@@
+`      Tests  8 passed (8)`; ` Test Files  91 passed (91)` and `      Tests  741 passed (741)`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -1871,7 +1890,11 @@ describe("Settings → Church (slice 6a-1)", () => {
 
 Run: `(cd frontend && npx vitest run src/components/settings/church-settings-page.test.tsx src/components/app/timezone-combobox.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
 **Expected** (the page does not exist yet; the combobox has no `warning` and drops a value it does not list):
-@@EXP T6 s2@@
+```
+   × TimezoneCombobox > shows a value that is not in the list as chosen, with the warning under the field (6a-1) <t>ms
+ FAIL  |dom| src/components/settings/church-settings-page.test.tsx [ src/components/settings/church-settings-page.test.tsx ]
+      Tests  1 failed | 6 passed (7)
+```
 
 - [ ] **Step 3: Write the page, its route, and the combobox's warning**
 
@@ -2298,7 +2321,7 @@ export default function ChurchSettingsRoute() {
 
 Run: `(cd frontend && npx vitest run src/components/settings src/components/app/timezone-combobox.test.tsx src/components/onboarding/create-church-form.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")` (three times) then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`
 **Expected:**
-@@EXP T6 s4@@
+three times `      Tests  28 passed (28)` (the page's 9, the Settings layout's 2, the combobox's 7, the create form's 10); ` Test Files  92 passed (92)` and `      Tests  751 passed (751)`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -2354,7 +2377,10 @@ Expected counts after this task: backend `1518 passed, 23 skipped`; frontend `75
 
 Run: `(cd frontend && npx vitest run src/components/builder/liturgy/liturgy-step.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
 **Expected:**
-@@EXP T7 s2@@
+```
+   × the Liturgy step (S User experience) > shows the church's default benediction and follows it until edited; Use church default follows it again <t>ms
+      Tests  1 failed | 43 passed (44)
+```
 
 - [ ] **Step 3: Link the hint**
 
@@ -2423,7 +2449,7 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
 
 Run: `(cd frontend && npx vitest run src/components/builder/liturgy 2>&1 | grep -E "^ +× |\[ src/|Tests ")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`
 **Expected:**
-@@EXP T7 s4@@
+`      Tests  73 passed (73)`; ` Test Files  92 passed (92)` and `      Tests  751 passed (751)`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -2495,7 +2521,7 @@ record". Record what the page shows, never an email address or a church id.
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_slice1_docs.py backend/tests/test_docs.py backend/tests/test_ops_workflows.py 2>&1 | tail -1` then `grep -n '\[owner' docs/ops-runbook.md | grep -v 'An entry marked' | wc -l` then `git diff -U0 docs/manual-verification.md | grep '^+' | grep -c '—'` then `git diff --stat | tail -1`
 **Expected:**
-@@EXP T8 s2@@
+`89 passed in <t>s`; `4`; `0`; ` 2 files changed, 25 insertions(+), 4 deletions(-)`.
 
 - [ ] **Step 3: Commit**
 
@@ -2512,5 +2538,346 @@ Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 
 Expected counts after this task: backend `1518 passed, 23 skipped`; frontend `751 passed` in 92 files.
 
-@@T9T10@@
+### Task 9: Verification and the draft PR (owner's yes before the PR is opened and before it is marked ready)
 
+Below, `<scratch>` is the session's scratchpad path and `<N>` the PR number; write both out literally. Every `gh` command uses `-R bbrown62450/church`. Never a bare `git push` or `--force`.
+
+**Files:** none changed. A failure is fixed in its owning task's files (Step 6).
+
+- [ ] **Step 1 (agent): Up to date with `origin/main`**
+
+```bash
+git status --short
+git fetch origin
+git rev-list --count HEAD..origin/main
+git rev-list --count origin/claude/slice-2-plan-4q33le..HEAD
+ls backend/migrations/versions | grep -c '^0'
+```
+
+**Expected:** nothing (or `?? .claude/`); `0`; `0`; `7`. If `main` moved: `git merge origin/main -m "Merge origin/main into claude/slice-2-plan-4q33le (Task 9)"` with the trailer as a second `-m`; on a conflict, `git merge --abort` and tell the owner.
+
+- [ ] **Step 2 (agent): Both suites, the frontend three times, types, lint, the build**
+
+```bash
+.venv/bin/python -m pytest -q | tail -1
+for i in 1 2 3; do (cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests "); done
+(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")
+(cd frontend && NEXT_PUBLIC_SUPABASE_URL=https://ci-placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-placeholder NEXT_PUBLIC_API_URL=http://localhost:8000 npm run build 2>&1 | grep -E "Compiled successfully|Error|/settings")
+```
+
+**Expected:** `1518 passed, 23 skipped in <t>s`; three times ` Test Files  92 passed (92)` and `      Tests  751 passed (751)` with no `×` or `FAIL` line (one names the failing test: Step 6); `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s` and the route lines `├ ○ /bulletin-settings`, `├ ○ /settings` and `├ ○ /settings/church` and no `Error` (a font `Failed to fetch` only: say so and rely on CI).
+
+- [ ] **Step 3 (agent): The API files match, the gates, the paths, the commits**
+
+```bash
+.venv/bin/python backend/scripts/export_openapi.py >/dev/null && (cd frontend && npm run gen:api >/dev/null) && git status --short -- frontend backend
+grep -nE "^(import|from) (fastapi|starlette|streamlit)" backend/usecases/members.py backend/usecases/church_admin.py; echo "imports grep exit $?"
+grep -rn "dangerouslySetInnerHTML" frontend/src --include=*.tsx; echo "raw html grep exit $?"
+git diff --name-status origin/main...HEAD | LC_ALL=C sort -k2
+git diff --name-only origin/main...HEAD -- backend/migrations backend/db .github frontend/package.json frontend/package-lock.json backend/requirements.txt requirements-dev.txt app.py streamlit_views streamlit_tests | wc -l
+git log --reverse --no-merges --format=%s origin/main..HEAD
+for c in $(git rev-list origin/main..HEAD); do git show -s --format=%B "$c" | grep -q '^Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>$' || echo "no trailer: $(git show -s --format='%h %s' "$c")"; done; echo "trailer check done"
+```
+
+**Expected:** nothing from `git status` (the committed snapshot and types are current); `imports grep exit 1`; `raw html grep exit 1`; exactly these paths (the Voices V1 docs, the runbook's Voices note and the two 6a spec amendments ride along until merged; the Voices code was reverted on the branch, so it is not in the diff):
+```
+M	backend/api/routes/me.py
+M	backend/repos/churches.py
+M	backend/tests/test_api_church_profile.py
+A	backend/tests/test_church_admin.py
+M	backend/tests/test_no_streamlit_in_core.py
+M	backend/tests/test_slice1_docs.py
+A	backend/usecases/church_admin.py
+A	backend/usecases/members.py
+M	docs/manual-verification.md
+M	docs/ops-runbook.md
+A	docs/superpowers/plans/2026-10-05-slice-6a1-settings-church.md
+A	docs/superpowers/plans/2026-10-05-voices-v1.md
+M	docs/superpowers/specs/2026-09-25-slice-6a-settings-church-design.md
+M	docs/superpowers/specs/2026-10-01-voices-of-the-church-decisions.md
+M	docs/superpowers/specs/2026-10-02-pew-voices-idea.md
+A	docs/superpowers/specs/2026-10-05-voices-of-the-church-design.md
+A	docs/superpowers/specs/2026-10-05-voices-rights-check.md
+A	frontend/src/app/(signed-in)/(church)/settings/church/page.tsx
+A	frontend/src/app/(signed-in)/(church)/settings/layout.tsx
+A	frontend/src/app/(signed-in)/(church)/settings/page.tsx
+M	frontend/src/components/app/app-header.test.tsx
+M	frontend/src/components/app/app-nav.tsx
+A	frontend/src/components/app/leave-guard.test.tsx
+A	frontend/src/components/app/leave-guard.tsx
+M	frontend/src/components/app/timezone-combobox.test.tsx
+M	frontend/src/components/app/timezone-combobox.tsx
+M	frontend/src/components/builder/liturgy/liturgy-step.test.tsx
+M	frontend/src/components/builder/liturgy/section-card.tsx
+M	frontend/src/components/bulletin-settings/bulletin-settings-page.tsx
+A	frontend/src/components/settings/church-settings-page.test.tsx
+A	frontend/src/components/settings/church-settings-page.tsx
+A	frontend/src/components/settings/sections.ts
+A	frontend/src/components/settings/settings-layout.test.tsx
+A	frontend/src/components/settings/settings-nav.tsx
+M	frontend/src/lib/api/openapi.json
+M	frontend/src/lib/api/schema.d.ts
+M	frontend/src/lib/api/types.ts
+M	frontend/src/lib/queries/church.ts
+A	frontend/src/lib/settings/profile.test.ts
+A	frontend/src/lib/settings/profile.ts
+```
+`0`; the subjects oldest first: the branch's commits since `875aefc` (the Voices V1 plan, build and revert, ending `Drop Voices of the Church (owner, 2026-10-05): revert its code, keep its record`), `Spec 6a: owner's planning answers (2026-10-05: three PRs, no Contacts or email, personas move to the pews feature, admins only delete hymns)`, `Spec 6a: the owner wants the full emailing after all (5b and Contacts return after 6a-1)`, the plan commits (`WIP plan: …` and `Plan: slice 6a-1 (the Settings area and the Church page)` and any later plan commit), then T1-T8's eight subjects as written above, then any `Fix: …` lines; only `trailer check done`.
+
+- [ ] **Step 4 (agent → OWNER): Ask to open the draft PR**
+
+```bash
+gh pr list -R bbrown62450/church --head claude/slice-2-plan-4q33le --state open --json number,url
+```
+
+**Expected:** `[]`. Send the owner exactly this, and wait for a clear yes:
+
+> Settings and the Church page (slice 6a-1) are verified on this machine: backend 1518 passed, 23 skipped (1487 before); frontend 751 tests in 92 files (734 before), three runs in a row; typecheck, lint and the production build are clean. It adds one API route (`PATCH /church`), no database change and no new package. The menu at the top gets **Settings**: it opens on **Church**, where you (and any admin) change the church's name, time zone, default Bible translation, default hymnal and default Benediction; other members see them as text. The builder follows a change with no reload, leaving with unsaved changes asks first, and the Benediction card's "Settings." links there. The Settings menu also lists **Bulletin** (your Bulletin settings page, unchanged until 6a-3 moves it in). The pull request also carries the Voices of the Church documents and the two 6a spec notes from today (the Voices code itself was removed). May I open the pull request as a **draft** titled "Slice 6a-1: the Settings area and the Church page", so the checks run? Merging stays with you.
+
+- [ ] **Step 5 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
+
+(not replayed)
+```bash
+cat > "<scratch>/6a1-pr-body.md" <<'BODY'
+Slice 6a-1: the Settings area and the Church page (the first of 6a's three PRs; owner's 6a planning answers of 2026-10-05). Spec: docs/superpowers/specs/2026-09-25-slice-6a-settings-church-design.md. Plan: docs/superpowers/plans/2026-10-05-slice-6a1-settings-church.md. No database change, no new package or variable, no draft change.
+
+- PATCH /church (owners and admins): name, time zone (exact IANA name), default translation, default hymnal, default Benediction; only the fields sent, all or nothing, in one transaction that locks the church row and re-reads the caller's role under it (usecases/members.lock_and_read_actor, the helper 6b shares; repos.churches.lock_church). Every other settings key stays.
+- Settings: a Settings item in the top menu; /settings opens Church; the section nav lists Church and Bulletin (the existing Bulletin settings page, until 6a-3 moves it in).
+- The Church page: admins edit and save only what changed (a stale stored translation or hymnal kept, an unrecognized time zone shown with a warning, newer server data rebases the form); members read it as text. The builder follows at once (the profile cache, /me, /hymnals).
+- One leave guard (LeaveGuard) for the Church and Bulletin settings pages: any in-app link asks "Discard unsaved changes?" while there are unsaved edits.
+- The Benediction card's hint links "Settings." to Settings → Church.
+- docs/manual-verification.md: "## Slice 6a".
+- Rides along: the Voices of the Church V1 documents (its code was reverted on this branch) and the 6a spec's two amendments of 2026-10-05.
+
+Later: 6a-2 (Hymns), 6a-3 (Liturgy prompts, Prayers, Rubric, Bulletin settings moved in), 5b (Account, Contacts, email), 6b (People).
+
+Tests: backend 1487 → 1518 passed, 23 → 23 skipped; frontend 734 → 751 in 88 → 92 files
+
+After merge (Task 10): a short check on the owner's phone, then a "Slice 6a-1 record" in docs/ops-runbook.md.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS
+BODY
+gh pr create -R bbrown62450/church --draft --base main --head claude/slice-2-plan-4q33le \
+  --title "Slice 6a-1: the Settings area and the Church page" \
+  --body-file "<scratch>/6a1-pr-body.md"
+gh pr checks <N> -R bbrown62450/church --watch --interval 30
+```
+
+Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1518 passed, 23 skipped`, backend-postgres `23 passed, 1518 deselected`, frontend `751 passed` in 92 files. Then send: "PR #<N> is green: backend 1518 passed, 23 skipped; 751 frontend tests in 92 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R bbrown62450/church`.
+
+- [ ] **Step 6: Fix any failure in its owning task**
+
+| Failing check or test | Owning task |
+|---|---|
+| `test_church_admin.py` (its first three tests), `test_church_settings.py`, `test_no_streamlit_in_core.py` | T1 |
+| `test_church_admin.py` (the rest), `test_api_church_profile.py`, `test_openapi_contract.py`, `test_route_guards.py` | T2 |
+| `profile.test.ts` | T3 |
+| `leave-guard.test.tsx`, `bulletin-settings-page.test.tsx` | T4 |
+| `settings-layout.test.tsx`, `app-header.test.tsx` | T5 |
+| `church-settings-page.test.tsx`, `timezone-combobox.test.tsx`, `create-church-form.test.tsx` | T6 |
+| `liturgy-step.test.tsx`, `review-step.test.tsx` | T7 |
+| `test_slice1_docs.py`, `test_docs.py` | T8 |
+| a flaky run | its task: wait with `findBy`/`waitFor`, never sleep |
+| anything else | report to the owner before changing anything |
+
+For each fix: change only the owning task's files; rerun Steps 2-3; commit `Fix: <what> (Task <n>, slice 6a-1 final verification)` with the trailer; after the PR exists, ask the owner before pushing it.
+
+Expected counts after this task: backend `1518 passed, 23 skipped`; frontend `751 passed` in 92 files.
+
+### Task 10: Merge, the owner's phone check (four steps), the record (OWNER + agent)
+
+No schema change, so Railway's deploy has nothing to migrate (production stays at `0007_bulletin_images`); Railway serves `PATCH /church`, Vercel the Settings area. The owner's check is **one step at a time** (send one, wait for the report or "next"), on the phone, on the production URL, in the owner's own church, signed in as its owner. Every change the check makes to the church's profile is put back in the same step. The agent writes each result into `<scratch>/6a1-t10-results.md` (not committed). Record what the page showed, never a token, an email address, a church id or a person's name.
+
+**Files:** Modify (the records PR, Step 8): `docs/ops-runbook.md`: insert `### Slice 6a-1 record` right before `## Backups` (after the last record above it, today the "Printed bulletin PR 3b record" table, whose last row starts `| Roadmap change |`). A `###` heading, because `test_ops_workflows.py` pins the `##` list.
+
+- [ ] **Step 1 (agent → OWNER): Ask to merge, then merge**
+
+Check first (not replayed): `gh pr view <N> -R bbrown62450/church --json state,isDraft,mergeable,mergeStateStatus --jq '"\(.state) draft=\(.isDraft) \(.mergeable) \(.mergeStateStatus)"'` → `OPEN draft=false MERGEABLE CLEAN`. Send: "PR #<N> (slice 6a-1: Settings and the Church page) is ready, green and up to date with main. There is no database change, and nothing changes for your church until someone saves its profile. May I merge it with a merge commit?" On a clear yes:
+
+(not replayed)
+```bash
+gh pr merge <N> --merge -R bbrown62450/church
+gh pr view <N> -R bbrown62450/church --json state,mergeCommit,mergedAt --jq '"\(.state) \(.mergeCommit.oid) \(.mergedAt)"'
+RUN=$(gh run list -R bbrown62450/church --workflow ci.yml --branch main --commit "$(gh pr view <N> -R bbrown62450/church --json mergeCommit --jq .mergeCommit.oid)" --limit 1 --json databaseId --jq '.[0].databaseId'); gh run watch "$RUN" -R bbrown62450/church --exit-status --interval 30 >/dev/null; echo "ci exit $?"
+```
+
+**Expected:** `MERGED <merge sha> <UTC time>`; `ci exit 0` (run it in the background). Record both. Wait about three minutes for Railway and Vercel before Step 2; a failed deploy keeps the old version running (Step R).
+
+- [ ] **Step 2 (OWNER, then agent): Phone, step 1 of 4: finding Settings (manual-verification item 1)**
+
+> On your phone, open https://worship-service-builder.vercel.app and pull down to reload it. Is there a **Settings** item in the menu at the top, after **Builder** and **Services**? Tap it: does it open **Settings** with "You're the owner of …" and two sections, **Church** and **Bulletin**, with **Church profile** showing your church's name, time zone, default Bible translation, default hymnal and default Benediction? Tap **Bulletin**: does your Bulletin settings page open?
+
+- [ ] **Step 3 (OWNER, then agent): Phone, step 2 of 4: the translation (item 2)**
+
+> Back on **Settings** → **Church**, note your default Bible translation, choose another one (for example King James Version) and tap **Save profile**: does "Profile saved." show? Open **Builder**, step 1, on a service where you have not picked a translation for that service: are the passages now in the translation you chose, without reloading? Then go back to **Settings** → **Church**, put your usual translation back and save.
+
+- [ ] **Step 4 (OWNER, then agent): Phone, step 3 of 4: the Benediction (item 3)**
+
+> On **Settings** → **Church**, copy your default Benediction somewhere safe (or note that it is the standard Halverson text), change it to something short such as "Go in peace." and save. In the builder, start a **New service** (or open the liturgy step of a service whose Benediction you have not typed yourself): does the Benediction card show "Go in peace."? Under it, tap **Settings.** in "Admins can change it in Settings.": does **Settings** → **Church** open? Put your Benediction back as it was and save.
+
+If the owner's Benediction was the standard text, putting it back means pasting the full Halverson text (the field showed it); a blank field would mean "no default". Record only whether it was restored.
+
+- [ ] **Step 5 (OWNER, then agent): Phone, step 4 of 4: unsaved changes and the phone screen (item 4)**
+
+> On **Settings** → **Church**, add a letter to the church's name but do not save, then tap **Builder** at the top: does "Discard unsaved changes?" ask first? Tap **Keep editing**: is your change still there? Tap **Builder** again and **Discard changes**: does the builder open, and is the name unchanged when you go back to **Settings**? Is the Settings page easy to use on the phone: no sideways scrolling, and the fields, the section links and **Save profile** easy to tap?
+
+- [ ] **Step 6 (agent): The agent's own checks (items 5-8)**
+
+On the production URL, in a test church the agent may change (one of the two slice 1 test churches the owner kept, never the owner's own church), signed in as its owner if the session has a test account, else skipped and recorded as "not run": item 5 (rename, the switcher follows; rename back), item 6 (the device's time zone), item 8 (after a profile save, the Bulletin settings, the rubric and the prompts are as they were). Item 7 needs a plain member's sign-in; record "not run" unless the owner offers one.
+
+- [ ] **Step 7 (agent): Fill the results**
+
+Write each step's result, with the date, into `<scratch>/6a1-t10-results.md`. A problem the owner reports is a follow-up for the record (and for the owner to decide), not a change made now.
+
+- [ ] **Step 8 (agent): Write the record**
+
+(not replayed)
+```bash
+git fetch origin
+git switch claude/slice-2-plan-4q33le
+git merge --ff-only origin/main
+grep -n '^## Backups$' docs/ops-runbook.md
+grep -n '^### ' docs/ops-runbook.md | awk -F: '$1 < '"$(grep -n '^## Backups$' docs/ops-runbook.md | cut -d: -f1)" | tail -1
+```
+
+**Expected:** `Fast-forward` (or `Already up to date.`); one `## Backups` line; the last `###` heading above it (today `### Printed bulletin PR 3b record`). Insert, right before `## Backups` (one blank line on each side):
+
+```markdown
+### Slice 6a-1 record
+
+Slice 6a-1 (the Settings area and the Church page: a Settings item in the
+top menu, `/settings` opening on Church, `PATCH /church` for the name,
+time zone, default translation, default hymnal and default Benediction,
+written under the church-row lock with the caller's role re-read; one leave
+guard for the Church and Bulletin settings pages; the Benediction hint's
+link) merged as PR #<N>, the first of slice 6a's three PRs (owner's 6a
+planning answers of 2026-10-05). No database change and no new package;
+production stays at `0007_bulletin_images`. The owner's check was four
+steps on a phone, covering the "(owner, after 6a-1)" items of
+`docs/manual-verification.md` → "Slice 6a"; every profile change made for
+the check was put back. No token, email address, church id or person's
+name is recorded here.
+
+| Step | Result | Date |
+|---|---|---|
+| Merge and deploy | PR #<N> merged <UTC time> (<Eastern time>), merge commit `<short sha>`. CI on `main` (run <run id>): success | <date> |
+| 1. Finding Settings (phone: <phone and browser>) | <Settings in the menu; Church and Bulletin listed; the profile shown; Bulletin opened Bulletin settings. / …> | <date> |
+| 2. The translation | <"Profile saved."; the builder's passages followed with no reload; put back. / …> | <date> |
+| 3. The Benediction | <A new service's Benediction card showed the new default; the hint's Settings. opened Church; put back. / …> | <date> |
+| 4. Unsaved changes and the phone | <"Discard unsaved changes?" asked; Keep editing kept the change; Discard changes left it unsaved; no sideways scroll, easy to tap. / …> | <date> |
+| Agent checks | <Items 5, 6 and 8 in a test church: <results>. / Not run: <why>.> Item 7 (a member): <result / not run> | <date> |
+| Follow-ups | <None. / One line per follow-up.> Next: slice 5b's planning round (Gmail, emailing, contacts; owner, 2026-10-05), 6a-2 (Hymns) and 6a-3 (Liturgy prompts, Prayers, Rubric, Bulletin settings moved in), in the order the owner picks | <date> |
+```
+
+Replace every `<…>` from the results file, keeping one alternative where a cell offers two. Read the record once by eye. Then (not replayed):
+
+```bash
+sed -n '/^### Slice 6a-1 record$/,/^## Backups$/p' docs/ops-runbook.md | grep -c '<'
+sed -n '/^### Slice 6a-1 record$/,/^## Backups$/p' docs/ops-runbook.md | grep -Eic '@|bearer|eyJ|postgres(ql)?://|[0-9a-f]{8}-[0-9a-f]{4}-'
+grep -n '\[owner' docs/ops-runbook.md | grep -v 'An entry marked' | wc -l
+.venv/bin/python -m pytest -q backend/tests/test_ops_workflows.py backend/tests/test_slice1_docs.py backend/tests/test_docs.py 2>&1 | tail -1
+git add docs/ops-runbook.md
+git commit -q -m "Runbook: slice 6a-1 record (merged; owner's phone check)" -m "Records slice 6a-1 (PR #<N>): the merge and CI on main and the
+owner's four-step phone check (finding Settings, the translation and
+the Benediction followed by the builder, the leave guard and the phone
+screen). No token, email, church id or person's name is recorded." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
+```
+
+**Expected:** `0`; `0`; `4`; `89 passed in <t>s`; one commit.
+
+- [ ] **Step 9 (agent, on the owner's yes): Push, open and merge the records PR**
+
+Ask: "The slice 6a-1 record is written (docs/ops-runbook.md only). May I push it and open its PR?" On the yes (not replayed):
+
+```bash
+git push origin claude/slice-2-plan-4q33le
+gh pr create -R bbrown62450/church --base main --head claude/slice-2-plan-4q33le \
+  --title "Runbook: slice 6a-1 record" \
+  --body "Records slice 6a-1 (PR #<N>) in docs/ops-runbook.md → Slice 6a-1 record: the merge and the owner's four-step phone check. No token, email, church id or person's name is recorded. Docs only.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
+gh pr checks claude/slice-2-plan-4q33le -R bbrown62450/church --watch
+```
+
+**Expected:** the PR URL; every check passes. Then ask: "The records PR is green. May I merge it with a merge commit?" On the yes: `gh pr merge claude/slice-2-plan-4q33le --merge -R bbrown62450/church`. Report: "Slice 6a-1 is live and recorded; <n> follow-ups. Next: the order you pick for 5b's planning, 6a-2 and 6a-3."
+
+- [ ] **Step R (only if the release must come out): Revert**
+
+Code only (no schema to undo). On the owner's yes for each outward command: a branch `claude/revert-6a1` from `origin/main`, `git revert -m 1 --no-commit <merge sha>`, a commit "Revert slice 6a-1 (PR #<N>)" with the trailer, both suites (`1487 passed, 23 skipped`; `734 passed` in 88), a PR, CI, and the merge on the owner's yes; record it in the record. Anything saved through the Church page stays in the church's row (name, time zone, `bible_translation`, `default_hymnal`, `default_benediction`), which the builder already reads, so nothing needs undoing in the data.
+
+Expected counts after this task: backend `1518 passed, 23 skipped` on `main`; frontend `751 passed` in 92 files. The records PR adds no test.
+
+---
+## Build notes
+
+**How this plan was written (2026-10-05).** Each task's code was built and run in a throwaway worktree of `426931b` (the branch head `3d5daad` plus the plan's skeleton commit; the repo's `.venv`; a hard-linked copy of `frontend/node_modules`, since Turbopack's production build refuses a `node_modules` symlink that points outside the project), one commit per task; the directives were then generated from those commits (`gen.py`: a new file as **Create**, an addition at the end of a file as **Append**, every other change as **In … replace** with just enough context to occur once in the file as it stands at that point, changes three or fewer lines apart in one block). No package, variable or migration was added. While building:
+- **What S assumed and what exists.** No `lock_church`, `lock_and_read_actor`, `usecases/members.py`, `usecases/church_admin.py`, Settings layout or `sections.ts` existed (5b and 6b were never built), so T1 creates the lock helpers with the 6b spec's names and T5 the shell. `resolve_default_benediction` already keeps `""` (S's key-presence rule, slice 4 and the 2026-10-02 amendment), so the Benediction needs no backend change beyond the write; `test_one_bad_field_writes_nothing` and `test_only_the_fields_sent_are_written_and_other_settings_stay` cover it through `PATCH`. `handleAuthErrors` already ignores a role 403, so no `forbiddenIsRole` meta was added (clarification 16).
+- **The leave guard moved, not copied.** The Bulletin settings page's `beforeunload` effect, its Back-link `onClick` and its dialog became `LeaveGuard`; the page's nine tests pass unchanged (the document-level capture listener stops a plain click before Next's `Link` runs, and a modified or middle click still reaches the link). The `ConfirmDialog` copy is the 2a page's.
+- **The Benediction link includes the full stop.** With only the word "Settings" as the link, jsdom's accessible-description computation gave "… in Settings ." (a space before the full stop) and `review-step.test.tsx`'s pin of the description failed; the link "Settings." keeps the description exactly the hint.
+- **The hymnal field waits for `GET /hymnals`** before it decides between a select and "{code} (your only hymnal)", so a stale stored code never flashes as "your only hymnal" while the hymnals load.
+- **The device-zone shortcut** is offered only for a zone the browser lists (a runner or a browser in `UTC`, which ICU does not list, gets no button rather than a 422).
+
+**Replay of the finished plan (2026-10-05).** The directives of T1-T8 were applied in order (by `replay.py`, which parses each step's **Create**, **Append** and **In … replace** blocks and runs every command on its "Run:" lines, three times where it says so, then the task's commit block) onto a fresh detached worktree of the WIP plan commit `af63cbb` (the branch head `3d5daad` plus the plan's commits), with the repo's `.venv` (a symlink) and a hard-linked copy of `frontend/node_modules`:
+- All 52 directives applied (T1 2 + 5, T2 3 + 5, T3 1 + 4, T4 1 + 7, T5 4 + 5, T6 2 + 6, T7 2 + 3, T8 2); every Replace anchor occurred exactly once. After T8, `backend`, `frontend/src` and `docs` equaled the build worktree's (`diff -r`, apart from this plan file: empty).
+- Baselines before T1: backend `1487 passed, 23 skipped`; frontend `734 passed` in 88 files.
+- Every "see it fail" output is quoted from this replay (times as `<t>`): T1 the collection error and the import check's `1 failed, 2 passed`; T2 `28 failed, 12 passed` (every new test; the 12 are T1's 3 and the profile's 9); T3 and T4 the new file not loading; T5 and T6 one `×` and the new file not loading; T7 the one edited test.
+- Every count matched the table: backend 1490, 1518 (23 skipped throughout); frontend 738 in 89, 739 in 90, 741 in 91, 751 in 92, 751 in 92; the three-times runs (T4 `10 passed`, T6 `28 passed`) the same each time, no flaky run; typecheck 0 and lint 0 after T2-T7. The OpenAPI export and `gen:api` gave ` 2 files changed, 256 insertions(+), 1 deletion(-)`; T8 `89 passed`, `4`, `0`, ` 2 files changed, 25 insertions(+), 4 deletions(-)`.
+- T9 Steps 2-3 on the replay worktree after T8: the production build `✓ Compiled successfully` with `○ /bulletin-settings`, `○ /settings` and `○ /settings/church` and no `Error`; the OpenAPI export and `gen:api` changed nothing after T2's commit; the imports and raw HTML greps exit 1; the 40 paths of Step 3 exactly; no migration, `backend/db`, workflow, package or Streamlit path; no em dash in any added line under `backend` or `frontend/src`.
+- Not run while planning: the pushes, the PR and CI (`backend-postgres` included: no new Postgres test), the merge, Railway's and Vercel's deploys and the owner's phone check (T10).
+
+## Spec coverage
+
+| Owner answer or S item | Task(s) and tests |
+|---|---|
+| Answer 2: 6a-1 is the Settings shell and Church | T5 (the shell), T6 (Church); clarification 1 |
+| Answer 4: admins change the church, everyone reads | T2 `test_a_member_cannot_change_the_profile`, `test_a_demoted_admin_or_a_removed_member_writes_nothing`; T6 "shows a member the profile as plain text, with the note and no Save" |
+| Amendment "later the same day": the shell is the layout 5b adds Account and Contacts to | T5 `SETTINGS_SECTIONS` (one list); clarification 3 |
+| S "Settings nav": `/settings` → Church, the nav | T5 "shows the heading, who you are in the church, and the sections with the current one marked", "shows a member the same sections, and /settings opens Church" |
+| Reaching Settings from the app | T5 `app-header.test.tsx` (the Settings item, current under `/settings`) |
+| S UX §1: the fields, help, stale values, no hymnals, one hymnal | T6 "lets an admin change only the name…", "keeps a stale stored translation or hymnal selectable…", "shows a stored time zone it does not recognize…"; T3 `translationItems`, `hymnalItems` |
+| S "Every page": only changed fields, rebase on refetch, reset after save | T3 "starts at the stored values…", "rebases on newer data…"; T6 "rebases on newer data: another admin's rename shows…" |
+| S "Leave guard" | T4 `leave-guard.test.tsx`; T6 "asks before leaving with unsaved edits, through the Settings nav"; `bulletin-settings-page.test.tsx` (unchanged) |
+| S API `PATCH /church`: messages, fields, order, nothing written on a failure, `extra="forbid"` | T2 `test_a_bad_field_is_named_and_the_first_in_order_wins` (11 cases), `test_a_bad_field_is_a_422_naming_it_and_nothing_is_written` (6 cases), `test_a_church_id_in_the_body_is_refused_and_isolation`, `test_an_empty_or_all_null_patch_changes_nothing` |
+| S Semantics: one transaction, settings merged, unknown keys kept, stale stored translation survives | T2 `test_only_the_fields_sent_are_written_and_other_settings_stay`, `test_an_unavailable_stored_translation_survives_a_name_change`, `test_the_profile_is_read_and_written_under_one_row_lock` |
+| S Locking: `lock_church`, `lock_and_read_actor`, `require_admin_role` | T1 `test_the_role_is_read_under_the_church_row_lock`, `test_a_church_or_a_membership_gone_is_no_church_access`, `test_require_admin_role`; T2 `test_a_demoted_admin_or_a_removed_member_writes_nothing` |
+| The Benediction's key-presence rule (`""` = no default) | T2 `test_the_fields_sent_are_cleaned_and_nothing_else`, `test_only_the_fields_sent_are_written_and_other_settings_stay`; existing `test_default_benediction_is_the_church_s_or_halverson` |
+| Timezone IANA check on edit | T2 (the four "Unknown timezone." cases); T6 (the warning, the device's zone); T6 `timezone-combobox.test.tsx` |
+| The builder sees translation, hymnal and Benediction changes without a reload | T6 (the profile cached, `["me"]` and `["church", id, "hymnals"]` invalidated); existing `liturgy-step.test.tsx` "shows the church's default benediction and follows it…" (a profile change moves an untouched card); clarification 11 |
+| A role 403 does not take the church fallback | T6 "toasts a role 403, refetches the profile and does not report the church as lost" |
+| Hand-off from 4: the Benediction hint links to Settings | T7 `liturgy-step.test.tsx`; `review-step.test.tsx` (description unchanged) |
+| Isolation and guards | T2 `assert_church_isolated`; `test_route_guards.py` unchanged and passing |
+| Layering | T1 `test_no_streamlit_in_core.py` (two modules added); T9 imports grep |
+| OpenAPI and types regenerated | T2 Step 4; T9 Step 3; `test_openapi_contract.py` |
+| A guided phone check after the PR | T10 Steps 2-5; `docs/manual-verification.md` "## Slice 6a" (T8) |
+
+S items **not** in 6a-1: Hymns, hymnals, hymn facts (6a-2); Liturgy prompts, Prayers, Rubric (with `PATCH /rubric` under the lock and its `defaults`), Bulletin settings moved under `/settings` (6a-3); the ESV key move ("Questions for the owner" 9); Contacts, Account and the email hand-offs (5b, after its own planning round); the Postgres race test (6a-3, with `PUT /church/liturgy-prompts`).
+
+## Follow-ups (not in 6a-1)
+
+- 6a-3: move `PATCH /rubric` and `PUT /church/bulletin-settings` under `lock_and_read_actor` and `require_admin_role`; rename `_merge_settings` to `merge_settings(…, session=None)` when the prompts and prayers writes need it; add S's Postgres race test with `PUT /church/liturgy-prompts`; point the "Bulletin" entry of `SETTINGS_SECTIONS` under `/settings`.
+- 6a-2: the no-hymnals line on the Church page can link to Hymns once that page exists.
+- The church switcher does not ask before discarding unsaved settings edits (clarification 8); a `confirmLeave()` hook in the switcher is the fix if the owner wants it.
+- The ESV key still read by `scripture_fetcher` from the environment (slice 2's recorded deviation), if the owner wants it moved later.
+- Carried from 2a: `_merge_settings` raises `TypeError` (a 500) if `churches.settings` is ever not an object; `repos.churches.update_profile` has the same shape (`{**(church.settings or {}), …}`).
+
+## Questions for the owner
+
+Your 6a planning answers of 2026-10-05 (the seven, and the reversal of answer 7 the same day) are binding and already in the plan. These are the choices this plan makes where you did not say; each is written as recommended.
+
+1. **Where Settings is** (clarification 2): a third item, **Settings**, in the menu at the top, after **Builder** and **Services** (on a phone, the row under the header has three parts). Recommended: accept.
+2. **What the Settings area lists until the other pages come** (clarification 3): **Church** and **Bulletin**; **Bulletin** opens your existing Bulletin settings page as it is today (with its **Back to Review & send**), until 6a-3 moves it inside Settings. Hymns comes with 6a-2, Liturgy prompts, Prayers and Rubric with 6a-3, and Account and Contacts with 5b. (The other choice: list only **Church** for now.) Recommended: accept.
+3. **The Settings heading** (clarification 3): "Settings", with "You're the owner of {your church}." (or "an admin of", "a member of") under it, then the page's own title, "Church profile". Recommended: accept.
+4. **Members read the profile as plain text** (clarification 5): a member sees "Only admins can edit the church profile." and the name, time zone, translation, hymnal and Benediction as text, with no boxes and no Save button, as on Bulletin settings. (The other choice, in the spec: the same boxes, greyed out.) Recommended: accept.
+5. **The Church page's wording** (clarifications 4, 14): the labels "Church name", "Time zone", "Default Bible translation", "Default hymnal", "Default Benediction", their help lines, **Save profile** and "Profile saved."; "Use this device's time zone (…)" under the time zone; "Timezone not recognized. Choose one from the list." for a stored zone the app does not know; "{ID} (not available on this server)" and "{code} (no longer in your hymnals)" for a stored translation or hymnal that is no longer offered, kept as chosen; "{code} (your only hymnal)" with one hymnal. Recommended: accept.
+6. **No "Halverson" note** (clarification 4): the spec's note under the Benediction ("The bulletin will print the word Halverson") is left out, because since 2026-10-02 the word prints the full Halverson text. A blank Benediction means no default (the AI writes it). Recommended: accept.
+7. **No hymns yet** (clarification 4): a church with no hymns sees "Your church has no hymns yet, so there is no default hymnal." in place of the hymnal field (the spec's line pointed to the Hymns page, which comes in 6a-2). Recommended: accept.
+8. **The warning before leaving unsaved changes** (clarification 8): on the Church page and on Bulletin settings, any link in the app (the menu at the top, the Settings sections, a page's own links) asks "Discard unsaved changes?" first, and closing or reloading the tab shows the browser's own warning. Bulletin settings gains the menu links (today only its Back link asks). Not covered: the browser's Back button, Log out, and switching church in the church menu (the spec wanted the church switch covered; it is left out to keep this PR small, and switching church with unsaved changes loses them without asking). Recommended: accept.
+9. **The ESV key stays where it is** (clarification 16): the spec planned a behind-the-scenes move of the ESV key's setting with 6a; nothing you see depends on it, and the new page checks translations exactly as the rest of the app does today, so it is left out of 6a-1. Recommended: accept (drop it, or leave it for the clean-up at the end of the migration).
+10. **Two admins saving the profile at once** (clarification 12): a field only one of them changed keeps that change; the same field changed by both keeps the later save, with no "someone else changed this" warning. While the page is open, a newer save from elsewhere updates every field you have not changed. Recommended: accept.
+
+Owner steps still to come: the plan's approval; the draft PR on your yes and ready on your yes (T9); the merge on your yes, then four phone checks one at a time, and the records PR (T10).
