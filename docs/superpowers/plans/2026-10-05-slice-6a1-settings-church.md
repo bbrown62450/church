@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship the first of slice 6a's three PRs (owner's 6a planning answers of 2026-10-05, answer 2): **the Settings area and its Church page.** After it merges, the menu at the top of every church page has a third item, **Settings**, after **Builder** and **Services**. It opens `/settings`, which goes to `/settings/church`: a "Settings" heading ("You're the owner of Example Church."), a short section nav (**Church**, and **Bulletin**, the existing Bulletin settings page until 6a-3 moves it in), and the **Church profile**. There an owner or admin changes the church's name, its time zone (the existing time zone picker, with "Use this device's time zone"), the default Bible translation, the default hymnal and the default Benediction, and taps **Save profile**; only the fields that changed are sent (`PATCH /church`), and the builder follows at once with no reload (the passages' translation, the hymnal it opens, the Benediction card that follows the church's default). A member sees the same profile as plain text with "Only admins can edit the church profile.". Leaving the page with unsaved changes asks first ("Discard unsaved changes?"), through one shared guard that the Bulletin settings page now uses too. The Benediction card's hint "Admins can change it in Settings." links to the new page. No migration (Alembic head stays `0007_bulletin_images`), no new package or variable, no draft change.
+**Goal:** Ship the first of slice 6a's three PRs (owner's 6a planning answers of 2026-10-05, answer 2): **the Settings area and its Church page.** After it merges, the menu at the top of every church page has a third item, **Settings**, after **Builder** and **Services**. It opens `/settings`, which goes to `/settings/church`: a "Settings" heading ("You're the owner of Example Church."), a short section nav (**Church**, and **Bulletin**, the existing Bulletin settings page until 6a-3 moves it in), and the **Church profile**. There an owner or admin changes the church's name, its time zone (the existing time zone picker, with "Use this device's time zone"), the default Bible translation, the default hymnal and the default Benediction, and taps **Save profile**; only the fields that changed are sent (`PATCH /church`), and the builder follows at once with no reload (the passages' translation, the hymnal it opens, the Benediction card that follows the church's default). A member sees the same profile as plain text with "Only admins can edit the church profile.". Leaving the page with unsaved changes asks first ("Discard unsaved changes?"), through one shared guard that the Bulletin settings page now uses too (the church menu's "Join or create a church…" asks as well). The Benediction card's hint "Admins can change it in Settings." links to the new page. No migration (Alembic head stays `0007_bulletin_images`), no new package or variable, no draft change.
 
-**Architecture:** Backend first. `repos.churches._lock_live_church` becomes the public `lock_church` (the one church-row lock, 6a spec "Assumed interfaces"); a new `usecases/members.py` holds `lock_and_read_actor(s, church_id, actor_id)` (the 6b spec's shared helper: lock the church row, re-read the caller's role under the lock), and a new `usecases/church_admin.py` holds `require_admin_role`, the pure `clean_profile_patch` and `update_profile`, which runs the whole write in one session: lock and re-read, role check, validate, then `repos.churches.update_profile` (name, time zone and a settings merge in one read-modify-write of the locked row; every other settings key stays). `PATCH /church` (`require_admin`; `ChurchPatchIn`, every field optional, `extra="forbid"`) sits beside `GET /church` in `api/routes/me.py` and answers the same `ChurchProfileOut`. The Benediction's key-presence rule (`""` = no default) is already `liturgy_config.resolve_default_benediction`'s, so it is only tested through the new write. Frontend: `lib/settings/profile.ts` (the form, the diff, 6a's `rebaseForm`, the select items), `useUpdateChurch` in `lib/queries/church.ts` (caches the answer as the profile, refreshes `/me` and, when the hymnal changed, `/hymnals`), `components/app/leave-guard.tsx` (the Bulletin settings page's guard, moved and widened to every in-app link), the Settings shell (`settings/layout.tsx`, `settings/page.tsx`, `components/settings/sections.ts` and `settings-nav.tsx`, the **Settings** menu item), the Church page (`components/settings/church-settings-page.tsx`, with `TimezoneCombobox` gaining a `warning` and an out-of-list value), and the Benediction hint's link in `section-card.tsx`.
+**Architecture:** Backend first. `repos.churches._lock_live_church` becomes the public `lock_church` (the one church-row lock, 6a spec "Assumed interfaces"); a new `usecases/members.py` holds `lock_and_read_actor(s, church_id, actor_id)` (the 6b spec's shared helper: lock the church row, re-read the caller's role under the lock), and a new `usecases/church_admin.py` holds `require_admin_role`, the pure `clean_profile_patch` and `update_profile`, which runs the whole write in one session: lock and re-read, role check, validate, then `repos.churches.update_profile` (name, time zone and a settings merge in one read-modify-write of the locked row; every other settings key stays). `PATCH /church` (`require_admin`; `ChurchPatchIn`, every field optional, `extra="forbid"`) sits beside `GET /church` in `api/routes/me.py` and answers the same `ChurchProfileOut`. The Benediction's key-presence rule (`""` = no default) is already `liturgy_config.resolve_default_benediction`'s, so it is only tested through the new write. Frontend: `lib/settings/profile.ts` (the form, the diff, 6a's `rebaseForm`, the select items), `useUpdateChurch` in `lib/queries/church.ts` (caches the answer as the profile, refreshes `/me` and, when the hymnal changed, `/hymnals`), `components/app/leave-guard.tsx` (the Bulletin settings page's guard, moved and widened to every in-app link, with `confirmLeave` for the church menu's "Join or create a church…"), the Settings shell (`settings/layout.tsx`, `settings/page.tsx`, `components/settings/sections.ts` and `settings-nav.tsx`, the **Settings** menu item), the Church page (`components/settings/church-settings-page.tsx`, with `TimezoneCombobox` gaining a `warning` and an out-of-list value), and the Benediction hint's link in `section-card.tsx`.
 
 **Tech Stack:** Python 3.11 (`.venv`), FastAPI 0.141, Pydantic 2, SQLAlchemy, pytest; Next 16, React 19, TypeScript 5, Base UI (Select, Combobox, AlertDialog), TanStack Query 5, sonner, Vitest 3 with Testing Library.
 
@@ -25,14 +25,14 @@
 - Backend: one or more files `.venv/bin/python -m pytest -q <paths> 2>&1 | tail -3`; the suite `.venv/bin/python -m pytest -q | tail -1`. Frontend: one or more files `(cd frontend && npx vitest run <paths> 2>&1 | grep -E "^ +× |\[ src/|Tests ")` (a file that cannot load shows as `FAIL … [ src/… ]`; the `×` lines may come in another order than quoted); the suite `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")`; then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`.
 - The API changes (T2), so T2 regenerates the snapshot and the types in the same commit: `.venv/bin/python backend/scripts/export_openapi.py` then `(cd frontend && npm run gen:api)`. Never edit `openapi.json` or `schema.d.ts` by hand.
 - No new package, no new variable, no migration.
-- Branch `claude/slice-2-plan-4q33le`, at `3d5daad` plus this plan's commits (`WIP plan: slice 6a-1 …`, `Plan: slice 6a-1 (the Settings area and the Church page)`, and any later plan commit), then T1-T8. Stage files by name (paths with parentheses in single quotes); `.claude/` stays untracked.
+- Branch `claude/slice-2-plan-4q33le`, at `3d5daad` plus this plan's commits (`WIP plan: slice 6a-1 …`, `Plan: slice 6a-1 (the Settings area and the Church page)`, and any later plan commit) and the runbook fix `Runbook: persona editing is no longer part of 6a (6a-1 plan review M11)`, then T1-T8. Stage files by name (paths with parentheses in single quotes); `.claude/` stays untracked.
 - `main` is protected (`backend`, `backend-postgres`, `frontend`, up to date). Merge only with `gh pr merge <N> --merge -R bbrown62450/church`, only on the owner's explicit yes.
 - Every commit message has a subject, a body and, as its last paragraph (a separate `-m`), these two lines:
   `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`
   `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
 - TDD: write the failing test first and see it fail as quoted.
 - **Backup push after every task** (standing rule): the controller runs `git push origin claude/slice-2-plan-4q33le` after each task's commit (never `--force`, never a rebase; if the push is rejected, `git pull --no-rebase origin claude/slice-2-plan-4q33le` and push again; on a network error retry after 2, 4, 8 and 16 s). A fix asked for by a review is a new commit, `Fix: <what> (Task <n> review)`. The container can restart and lose uncommitted work: commit as soon as a task's checks pass.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1487 → 1518 passed, 23 → 23 skipped; frontend 734 → 751 in 88 → 92 files`.
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1487 → 1523 passed, 23 → 24 skipped; frontend 734 → 756 in 88 → 92 files`.
 - New prose for the owner has no em dashes and no flattery. New user-facing copy is exactly the list in clarification 14 and has no em dashes; existing copy keeps its own punctuation.
 - No church id, email address, token, database URL or real person's name in any doc, commit, test or record. The tests use the fixtures' "Grace" and "Example Church" and `@example.com` addresses only.
 - Ask the owner before any push to a PR, PR creation, marking ready, merging, or any production or settings action. Owner steps go one at a time, in plain words.
@@ -47,15 +47,15 @@ As in the 2a plan: **Create `path`:** the block is the whole file; **Append to `
   | After | Backend (delta) | Backend | Frontend (delta) | Frontend |
   |---|---|---|---|---|
   | T1 | +3 (`test_church_admin.py`; `test_no_streamlit_in_core.py` edited) | 1490 passed, 23 skipped | 0 | 734 in 88 |
-  | T2 | +28 (`test_church_admin.py` 17, one test in eleven cases; `test_api_church_profile.py` 11, one test in six cases) | 1518 passed, 23 skipped | 0 | 734 in 88 |
-  | T3 | 0 | 1518 passed, 23 skipped | +4 (`profile.test.ts`) | 738 in 89 |
-  | T4 | 0 | 1518 passed, 23 skipped | +1 (`leave-guard.test.tsx`; `bulletin-settings-page.test.tsx` unchanged and passing) | 739 in 90 |
-  | T5 | 0 | 1518 passed, 23 skipped | +2 (`settings-layout.test.tsx`; `app-header.test.tsx` edited) | 741 in 91 |
-  | T6 | 0 | 1518 passed, 23 skipped | +10 (`church-settings-page.test.tsx` 9, `timezone-combobox.test.tsx` 1) | 751 in 92 |
-  | T7 | 0 | 1518 passed, 23 skipped | 0 (`liturgy-step.test.tsx` edited) | 751 in 92 |
-  | T8 | 0 (`test_slice1_docs.py` edited) | 1518 passed, 23 skipped | 0 | 751 in 92 |
+  | T2 | +33 passed, +1 skipped (`test_church_admin.py` 19, one test in thirteen cases; `test_api_church_profile.py` 14, one test in seven cases; `test_church_admin_postgres.py` 1, skipped without `TEST_DATABASE_URL`) | 1523 passed, 24 skipped | 0 | 734 in 88 |
+  | T3 | 0 | 1523 passed, 24 skipped | +4 (`profile.test.ts`) | 738 in 89 |
+  | T4 | 0 | 1523 passed, 24 skipped | +3 (`leave-guard.test.tsx`; `bulletin-settings-page.test.tsx` and `app-header.test.tsx` unchanged and passing) | 741 in 90 |
+  | T5 | 0 | 1523 passed, 24 skipped | +2 (`settings-layout.test.tsx`; `app-header.test.tsx` edited) | 743 in 91 |
+  | T6 | 0 | 1523 passed, 24 skipped | +13 (`church-settings-page.test.tsx` 12, `timezone-combobox.test.tsx` 1) | 756 in 92 |
+  | T7 | 0 | 1523 passed, 24 skipped | 0 (`liturgy-step.test.tsx` edited) | 756 in 92 |
+  | T8 | 0 (`test_slice1_docs.py` edited) | 1523 passed, 24 skipped | 0 | 756 in 92 |
 
-- CI `backend-postgres` goes from `23 passed, 1487 deselected` to `23 passed, 1518 deselected` (no new Postgres test; clarification 12).
+- CI `backend-postgres` goes from `23 passed, 1487 deselected` to `24 passed, 1523 deselected` (T2's `test_church_admin_postgres.py`; clarification 12). Locally, without `TEST_DATABASE_URL`, that test is one of the 24 skipped.
 
 ### Layering and code rules (carried)
 - `usecases/members.py` and `usecases/church_admin.py` import no FastAPI, Starlette or Streamlit (`test_no_streamlit_in_core.py` gains both, T1); the route is a plain `def` with no SQL and no try/except (F §2.2 rule 1); the write goes through `repos.churches` (no SQL in the usecase).
@@ -81,22 +81,22 @@ The owner's answers win over S and F; the code wins over both where they disagre
 2. **[owner-visible] Reaching Settings** (S "a way to reach Settings"; F §4.2). `AppNav`'s `NAV_ITEMS` gains **Settings** (`/settings`) after Builder and Services: a link in the header row from `md`, the third segment of the row under the header on a phone (each segment about 110 px at 375 px; 44 px tall). It is marked current on every `/settings/…` page. The account menu is unchanged.
 3. **[owner-visible] The Settings area** (S "Settings nav"; answers 1, 5). `app/(signed-in)/(church)/settings/layout.tsx` renders, inside the church layout, a `PageHeader` "Settings" with "You're the owner of {church}." / "You're an admin of {church}." / "You're a member of {church}." (S's caption, reworded without its em dash), then the section nav (`components/settings/settings-nav.tsx`, `aria-label="Settings sections"`, from `SETTINGS_SECTIONS` in `components/settings/sections.ts`) and the section's page: on a phone the nav is a row of links above the page, from `md` a column beside it (the page `max-w-3xl`). Each link is 44 px tall below `md`, with `aria-current="page"` on the current one. After 6a-1 the list is **Church** (`/settings/church`) and **Bulletin** (`/bulletin-settings`: the existing page, unchanged, still with its **Back to Review & send**, until 6a-3 moves it under `/settings`); 6a-2 adds Hymns, 6a-3 Liturgy prompts, Prayers and Rubric, 5b Account and Contacts. `/settings` goes to `SETTINGS_SECTIONS[0].href` (`router.replace`, as the home page goes to `/builder`). Every role sees every section; each page says what a member may do.
 4. **[owner-visible] The Church page for admins** (S UX §1). Under the heading "Church profile" (an `h2`; the area's `h1` is "Settings"):
-   - **Church name**: a text field (200 characters).
+   - **Church name**: a text field (200 characters). The server refuses a name with a line break or any other control character (clarification 9).
    - **Time zone**: the existing `TimezoneCombobox` with its help line. A stored zone the list does not have (`timezone_valid: false`, or one this browser lacks) shows as chosen (the combobox adds it as an item) and, while it is the stored one and not recognized, "Timezone not recognized. Choose one from the list." under the field. Under it, a text button "Use this device's time zone ({zone})" when the device's zone is in the list and differs from the field's.
-   - **Default Bible translation**: a Select of `GET /translations`' items; help "Used for passage text in the builder. Anyone can switch it for a single service.". A stored translation this server does not offer (for example `esv` without a key) shows as "ESV (not available on this server)" and stays selected.
-   - **Default hymnal**: a Select of the church's hymnals (`GET /hymnals`); help "The hymnal the builder opens with. You can switch hymnals for a single service.". A stored default the church no longer has shows as "{code} (no longer in your hymnals)" and stays selected. With exactly one hymnal, plain text "{code} (your only hymnal)". With none, "Your church has no hymns yet, so there is no default hymnal." (S's line pointed at the Hymns page, which comes in 6a-2).
-   - **Default Benediction**: a text box (4 rows, grows, 4 000 characters); help "Pre-fills the Benediction card in each new service. Leave it blank to let the AI write the benediction.". S's "Halverson" note is dropped (S amendment 2026-10-02: the word now prints the full text).
+   - **Default Bible translation**: a Select of `GET /translations`' items; help "Used for passage text in the builder, in every service that has not switched to another translation (saved services too, when reopened). Anyone can switch it for a single service." (clarification 11). A stored translation this server does not offer (for example `esv` without a key) shows as "ESV (not available on this server)" and stays selected. While `GET /translations` loads, or when it fails, the items come from the profile itself (the translation in effect, and a stored one that differs from it, which is then one the server does not offer), so a stored translation is never labelled as another one.
+   - **Default hymnal**: a Select of the church's hymnals (`GET /hymnals`); help "The hymnal the builder opens with, in every unsaved service that has not switched to another hymnal. You can switch hymnals for a single service." (clarification 11). A stored default the church no longer has shows as "{code} (no longer in your hymnals)" and stays selected. With exactly one hymnal (counted from `GET /hymnals`' items, never from the select's items), plain text "{code} (your only hymnal)". With none, "Your church has no hymns yet, so there is no default hymnal." (S's line pointed at the Hymns page, which comes in 6a-2), also when a stored default is left over from hymns since removed.
+   - **Default Benediction**: a text box (4 rows, grows, 4 000 characters); help "Pre-fills the Benediction card in each new service, and in unsaved services whose card still shows the default. Leave it blank to let the AI write the benediction." (S's line said only "each new service"; `DraftProvider.setLiturgyDefaults` also moves every unsaved card whose origin is "default", on every member's device at its next profile read). S's "Halverson" note is dropped (S amendment 2026-10-02: the word now prints the full text).
    - **Save profile** (filled, full width on a phone, 44 px, "Saving…" while pending), disabled until something would be sent. Success toasts "Profile saved.".
-5. **[owner-visible] Members read a plain summary** (answer 4). A member sees "Only admins can edit the church profile." (S's banner) above the five values as text (the time zone as listed, the translation's label, the hymnal or the no-hymnals line, the Benediction or "None. The AI writes the benediction."), with no fields and no Save: the Bulletin settings page's pattern (2a clarification 3), not S's disabled fields.
+5. **[owner-visible] Members read a plain summary** (answer 4). A member sees "Only admins can edit the church profile." (S's banner) above the five values as text (the time zone as listed, the translation's label, the hymnal the builder uses, as "{effective} (the builder uses this; {stored} is no longer in your hymnals)" when a stored default is gone, or the no-hymnals line, the Benediction or "None. The AI writes the benediction."), with no fields and no Save: the Bulletin settings page's pattern (2a clarification 3), not S's disabled fields.
 6. **Only what changed is sent; the rebase** (S "Every page"). The form keeps a baseline (`profileFormFrom(profile)`: the stored translation and hymnal when set, else the ones in effect; `""` for the hymnal when there is none) and the edits. `diffProfile` sends each field whose cleaned value (trimmed; the Benediction's line ends as `\n`) differs from the baseline's, never a `""` hymnal; so a null stored translation or hymnal is never written by a save that does not change it, and a stale one survives. Newer server data (a refetch on focus, another tab's save) rebases the form with the generic `rebaseForm` (an untouched field takes the new value, an edited one keeps the edit). After a save, the fields as sent take what was stored and a field typed while "Saving…" showed keeps the typing (the 2a page's rule).
 7. **Errors.** A 422 that names fields shows each message under its field in the error colour (`role="alert"` for the fields the page draws; the combobox draws its own), marks the field `aria-invalid` and focuses the first; the toast shows the server's message as for any failed save. Editing a field clears its error. A role 403 (an admin demoted meanwhile) toasts "Only church admins can do this." and refetches the profile, so the page turns into the member's summary; a 401 or a lost church toasts nothing more (the app handles them). A failed profile read shows the usual `ErrorState` with **Retry**; the first load shows skeletons.
-8. **[owner-visible] The leave guard** (S "Leave guard"; the 2a page's guard). `components/app/leave-guard.tsx` exports `<LeaveGuard when={dirty} />`: while `when`, closing or reloading the tab shows the browser's own warning (`beforeunload`, with `returnValue = ""`), and a capture-phase click listener on `document` stops a plain click (button 0, no modifier key) on any same-origin link to another page (no `target`, no `download`) and asks "Discard unsaved changes?" ("Your changes on this page haven't been saved."; **Discard changes** goes on with `router.push`, **Keep editing** stays). So the top menu, the Settings nav and a page's own links are all covered. The Church page and the Bulletin settings page both use it (the latter's own `beforeunload` and Back-link code go; its nine tests pass unchanged). Not covered, as S accepts for Back/Forward and Log out: the browser's Back and Forward, Log out, and the church switcher (S wanted a `confirmLeave()` hook in the switcher; left out to keep 6a-1 small, "Questions for the owner" 8).
-9. **`PATCH /church`** (S API, Semantics, Models). `ChurchPatchIn` (`extra="forbid"`; `name` ≤ 200, `timezone` ≤ 64, `bible_translation` ≤ 20, `default_hymnal` ≤ 20, `default_benediction` ≤ 4000; each optional, and omitted or null means unchanged), `require_admin`, in `api/routes/me.py` beside `GET /church` (S: "the route module serving GET /church"). It answers `ChurchProfileOut` built as `GET /church` builds it, with the stored name and the role re-read under the lock. The usecase checks the fields sent in the order name, timezone, bible_translation, default_hymnal and raises the first failure with S's message and field: "Church name is required.", "Timezone is required.", "Unknown timezone." (`is_valid_timezone`, so `PATCH` and `timezone_valid` agree), "Unknown or unavailable translation." (against `scripture_fetcher.available_translations()` at write time), "Choose one of your church's hymnals." (against the church's hymnal codes read under the lock). The Benediction is stored with `\r\n` as `\n` and trimmed; `""` is stored and then read back as `""` (no default; S amendment 2026-10-02's key-presence rule, already `resolve_default_benediction`'s). Nothing is written unless every field sent is valid; an empty or all-null body writes nothing and answers the profile. A smuggled `church_id` is a 422 (`extra="forbid"`). No `Idempotency-Key`, no rate-limit bucket (F §1.6, §1.8).
+8. **[owner-visible] The leave guard** (S "Leave guard"; the 2a page's guard). `components/app/leave-guard.tsx` exports `<LeaveGuard when={dirty} />`: while `when`, closing or reloading the tab shows the browser's own warning (`beforeunload`, with `returnValue = ""`), and a capture-phase click listener on `document` stops a plain click (button 0, no modifier key) on any same-origin `http:` or `https:` link to another page (no `target`, no `download`; a `blob:` or `data:` link shares the page's origin but is a file, so it goes on) and asks "Discard unsaved changes?" ("Your changes on this page haven't been saved."; **Keep editing** stays; **Discard changes** clicks the link again with the guard standing aside, so the link's own handler navigates as it would have, Next's `<Link replace>` replacing, and a plain `<a>` with no handler goes on with `router.push`). So the top menu, the Settings nav and a page's own links are all covered. The church menu's **Join or create a church…** is a menu item, not a link: `church-switcher.tsx` wraps its `router.push("/welcome")` in the guard's `confirmLeave(leave)`, which runs `leave` at once, or only after **Discard changes** while a guard has unsaved edits (S's leave-guard list names this item). The Church page and the Bulletin settings page both use the guard (the latter's own `beforeunload` and Back-link code go; its nine tests pass unchanged). Not covered, as S accepts for Back/Forward and Log out: the browser's Back and Forward, Log out, and choosing another church in the church menu (S wanted the church switch covered too; left out to keep 6a-1 small, "Questions for the owner" 8).
+9. **`PATCH /church`** (S API, Semantics, Models). `ChurchPatchIn` (`extra="forbid"`; `name` ≤ 200, `timezone` ≤ 64, `bible_translation` ≤ 20, `default_hymnal` ≤ 20, `default_benediction` ≤ 4000; each optional, and omitted or null means unchanged), `require_admin`, in `api/routes/me.py` beside `GET /church` (S: "the route module serving GET /church"). It answers `ChurchProfileOut` built as `GET /church` builds it, with the stored name and the role re-read under the lock. The usecase checks the fields sent in the order name, timezone, bible_translation, default_hymnal and raises the first failure with S's message and field: "Church name is required.", then "Church name can't contain line breaks or control characters." (new in 6a-1: any character of `bulletin_settings.NOT_ONE_LINE`, the C0 and C1 controls, DEL and U+2028/U+2029, as the bulletin settings' one-line fields; the name prints on one line in the bulletin's header and title, and a NUL would be a 500 on Postgres, which refuses it in text), "Timezone is required.", "Unknown timezone." (`is_valid_timezone`, so `PATCH` and `timezone_valid` agree), "Unknown or unavailable translation." (against `scripture_fetcher.available_translations()` at write time), "Choose one of your church's hymnals." (against the church's hymnal codes read under the lock). The Benediction is stored with `\r\n` as `\n` and trimmed; `""` is stored and then read back as `""` (no default; S amendment 2026-10-02's key-presence rule, already `resolve_default_benediction`'s). Nothing is written unless every field sent is valid; an empty or all-null body writes nothing and answers the profile. A smuggled `church_id` is a 422 (`extra="forbid"`). No `Idempotency-Key`, no rate-limit bucket (F §1.6, §1.8).
 10. **The lock and the role re-read** (S "Locking"; the 6b spec). `repos.churches._lock_live_church` is renamed `lock_church` (same body; its two callers updated), so there is one lock helper. `usecases/members.py` (new; 6b adds its functions here) holds `lock_and_read_actor(s, church_id, actor_id) -> str`: `lock_church` (None → `Forbidden("You don't have access to this church.", details={"reason": "no_church_access"})`), then the caller's membership re-read in the same session (gone → the same 403), returning the role. `usecases/church_admin.py` (new) holds `require_admin_role(role)` (`Forbidden("Only church admins can do this.")`, no `details`), `clean_profile_patch` (pure) and `update_profile`. `repos.churches.update_profile(church_id, *, name, timezone, settings_patch, session)` sets the columns and merges the patch into the settings of the row it locks. In 6a-1 only `PATCH /church` takes this path; `PATCH /rubric` and `PUT /church/bulletin-settings` move under it with their pages in 6a-3 (clarification 16).
-11. **The builder sees a change at once** (S Queries; F §4.4). `useUpdateChurch` (`lib/queries/church.ts`): on success it cancels a profile read in flight, puts the answer in `["church", id, "profile"]` (the church layout's `ChurchProvider`, the readings step's translation, the hymns step's profile and the draft's Benediction default all read it), invalidates `["me"]` (the switcher's name) and, when `default_hymnal` was sent, `["church", id, "hymnals"]` (the hymns step opens on `GET /hymnals`' `effective_hymnal`). Translation and Benediction need nothing more: a draft whose translation is null follows the profile (slice 2), and only Benediction cards whose origin is "default" follow it (slice 4, `DraftProvider.setLiturgyDefaults`).
-12. **Concurrency.** The write is one transaction holding `SELECT … FOR UPDATE` on the church row, and the settings are merged from the locked row, so a concurrent translation, rubric, prompts or bulletin settings write waits rather than being lost. SQLite ignores `FOR UPDATE`; T2's `test_the_profile_is_read_and_written_under_one_row_lock` checks (compiled for Postgres) that every read of the church row in the write asks for the lock, in the writing session. S's Postgres race test pairs `PATCH /church` with `PUT /church/liturgy-prompts`, which 6a-3 adds; it moves there. **[owner-visible] Two admins saving the profile at once:** a field only one of them changed keeps that change (only changed fields are sent, and the rebase never sends an untouched field); the same field changed by both keeps the later save (no `If-Match`, as S Risk 6 and the 2a page).
+11. **The builder sees a change at once** (S Queries; F §4.4). `useUpdateChurch` (`lib/queries/church.ts`): on success it cancels a profile read in flight, puts the answer in `["church", id, "profile"]` (the church layout's `ChurchProvider`, the readings step's translation, the hymns step's profile and the draft's Benediction default all read it), invalidates `["me"]` (the switcher's name) and, when `default_hymnal` was sent, `["church", id, "hymnals"]` (the hymns step opens on `GET /hymnals`' `effective_hymnal`). Translation and Benediction need nothing more: a draft whose translation is null follows the profile (slice 2), and only Benediction cards whose origin is "default" follow it (slice 4, `DraftProvider.setLiturgyDefaults`). **[owner-visible] What a change reaches** (existing behaviour that 6a-1 makes reachable; no code change): the draft stores no pick when a service's translation or hymnal is set to the one in effect (`setTranslation` in `lib/draft/readings.ts`, `setHymnal` in `lib/hymns/picks.ts`), so a service where someone picked by hand the translation or hymnal that was then the default follows a later change of the default too; and a saved service reopens with the church's translation (`serviceToDraft`; its hymnal and its Benediction are the saved ones). Storing an explicit pick would be a draft-schema change, not for 6a-1. The translation and hymnal help lines say so (clarification 4), the phone check expects it (T10 Step 3), and "Questions for the owner" 11 puts it to the owner.
+12. **Concurrency.** The write is one transaction holding `SELECT … FOR UPDATE` on the church row, and the settings are merged from the locked row, so a concurrent translation, rubric, prompts or bulletin settings write waits rather than being lost. SQLite ignores `FOR UPDATE`; T2's `test_the_profile_is_read_and_written_under_one_row_lock` checks (compiled for Postgres) that every read of the church row in the write asks for the lock, in the writing session. On real Postgres, T2's `test_church_admin_postgres.py` (`@pytest.mark.postgres`, run by CI's `backend-postgres`) holds a profile save inside the lock and checks that the two locked settings writers that exist today, `set_bulletin_settings` and `update_church_rubric`, wait for it and that every key survives (`Session.get(..., with_for_update=True)` does not refresh an object already loaded, so only Postgres proves the merge reads the row after the lock). S's pairing with `PUT /church/liturgy-prompts` can join it when 6a-3 adds that route. **[owner-visible] Two admins saving the profile at once:** a field only one of them changed keeps that change (only changed fields are sent, and the rebase never sends an untouched field); the same field changed by both keeps the later save (no `If-Match`, as S Risk 6 and the 2a page).
 13. **The Benediction hint's link** (S "Hand-off from 4"). The hint comes from `GET /liturgy/config` ("Your church's default benediction. Admins can change it in Settings."); `SectionCard` renders its last "Settings" and what follows it ("Settings.") as a link to `/settings/church`, for every role, only on a Benediction card that follows the church's default. The link includes the full stop so the card's accessible description reads the hint unchanged (S: the word only; a test of the description pins this).
-14. **[owner-visible] Every new user-facing string** (no em dashes). Top menu: "Settings". Settings area: "Settings"; "You're the owner of {church}.", "You're an admin of {church}.", "You're a member of {church}."; the nav "Church", "Bulletin" (screen readers: "Settings sections"). Church page: "Church profile"; "Church name"; "Time zone" and its help (existing); "Timezone not recognized. Choose one from the list."; "Use this device's time zone ({zone})"; "Default Bible translation" with "Used for passage text in the builder. Anyone can switch it for a single service." and "{ID} (not available on this server)"; "Default hymnal" with "The hymnal the builder opens with. You can switch hymnals for a single service.", "{code} (no longer in your hymnals)", "{code} (your only hymnal)", "Your church has no hymns yet, so there is no default hymnal."; "Default Benediction" with "Pre-fills the Benediction card in each new service. Leave it blank to let the AI write the benediction."; "Save profile"; "Profile saved." (toast); "Only admins can edit the church profile."; "None. The AI writes the benediction.". Leave guard (2a's words, now shared): "Discard unsaved changes?", "Your changes on this page haven't been saved.", "Discard changes", "Keep editing". From the server (S's): "Church name is required.", "Timezone is required.", "Unknown timezone.", "Unknown or unavailable translation.", "Choose one of your church's hymnals.", "Only church admins can do this.", "Too long (max {n} characters).". Reused: "Saving…", "Retry", the skeleton's "Loading", the error toasts.
+14. **[owner-visible] Every new user-facing string** (no em dashes). Top menu: "Settings". Settings area: "Settings"; "You're the owner of {church}.", "You're an admin of {church}.", "You're a member of {church}."; the nav "Church", "Bulletin" (screen readers: "Settings sections"). Church page: "Church profile"; "Church name"; "Time zone" and its help (existing); "Timezone not recognized. Choose one from the list."; "Use this device's time zone ({zone})"; "Default Bible translation" with "Used for passage text in the builder, in every service that has not switched to another translation (saved services too, when reopened). Anyone can switch it for a single service." and "{ID} (not available on this server)"; "Default hymnal" with "The hymnal the builder opens with, in every unsaved service that has not switched to another hymnal. You can switch hymnals for a single service.", "{code} (no longer in your hymnals)", "{code} (your only hymnal)", "Your church has no hymns yet, so there is no default hymnal."; "Default Benediction" with "Pre-fills the Benediction card in each new service, and in unsaved services whose card still shows the default. Leave it blank to let the AI write the benediction."; "Save profile"; "Profile saved." (toast); "Only admins can edit the church profile."; "{effective} (the builder uses this; {stored} is no longer in your hymnals)" (a member's summary); "None. The AI writes the benediction.". Leave guard (2a's words, now shared): "Discard unsaved changes?", "Your changes on this page haven't been saved.", "Discard changes", "Keep editing". From the server (S's, and one new): "Church name is required.", "Church name can't contain line breaks or control characters." (new), "Timezone is required.", "Unknown timezone.", "Unknown or unavailable translation.", "Choose one of your church's hymnals.", "Only church admins can do this.", "Too long (max {n} characters).". Reused: "Saving…", "Retry", the skeleton's "Loading", the error toasts.
 15. **Docs.** T8 appends "## Slice 6a" to `docs/manual-verification.md` with items 1-8 (owner items 1-4 after the merge) and moves `test_slice1_docs.py`'s pin from the last eight `##` headings to the last nine (the new heading last). The runbook record is T10's (`### Slice 6a-1 record` before `## Backups`).
 16. **Deviations from S** (each the lean choice for 6a-1; none changes a later PR's contract):
     - `lock_and_read_actor` is created in `usecases/members.py` with the 6b spec's signature (S: "if 6a lands first"); `_lock_live_church` is renamed `lock_church` as S says; `_merge_settings` is **not** renamed `merge_settings` and gains no `session` parameter yet: the profile write has its own locked read-modify-write (`repos.churches.update_profile`), and 6a-3 renames it when the prompts and prayers writes need a session.
@@ -104,15 +104,20 @@ The owner's answers win over S and F; the code wins over both where they disagre
     - S's `ProfilePatch`/`CleanProfile` dataclasses are a `dict` of the fields sent and a `(columns, settings_patch)` pair; `update_profile(church_id, actor_id, changes)` returns `{"name", "role"}` and the route completes the answer with `get_church_profile`.
     - The ESV key move (S "Hand-off from 2": `ESV_API_KEY` into `api/settings.py`, `scripture_fetcher` taking `esv_key`, deleting `streamlit_tests/test_settings_prompts_translation.py`) is **not** in 6a-1: `PATCH /church` validates against the same `available_translations()` that `GET /church` and `GET /translations` use, so they agree ("Questions for the owner" 9).
     - No `meta: { forbiddenIsRole: true }`: `handleAuthErrors` already leaves a role 403 alone; `useUpdateChurch`'s own `onError` toasts it and refetches the profile.
-    - Members get a plain summary instead of disabled fields (clarification 5); the Halverson note is dropped (S amendment 2026-10-02); the no-hymnals line does not link to Hymns (6a-2 can add the link); the leave guard is a component, not `useLeaveGuard` plus a `confirmLeave` registry, and does not cover the church switcher (clarification 8).
-    - S's Postgres race test moves to 6a-3 (clarification 12).
+    - Members get a plain summary instead of disabled fields (clarification 5); the Halverson note is dropped (S amendment 2026-10-02); the no-hymnals line does not link to Hymns (6a-2 can add the link); the leave guard is a component with one small `confirmLeave(leave)` for the church menu's "Join or create a church…", not `useLeaveGuard` plus a registry, and does not cover choosing another church (clarification 8).
+    - S's Postgres race test pairs the profile with the bulletin settings and rubric writers that exist today, not with `PUT /church/liturgy-prompts` (6a-3 adds that route; clarification 12).
+    - The Benediction hint's link is "Settings." with its full stop, where S links the word only, so the card's accessible description still reads the hint exactly (`review-step.test.tsx` pins it; clarification 13).
+    - The church name's line-break and control-character check and its message are new (S had only "required"; clarification 9).
+    - The Benediction's help line says it also reaches unsaved services that still follow the default, and the translation and hymnal help lines say what a change reaches (S's lines did not; clarifications 4 and 11).
     - S's Settings caption is reworded without its em dash (clarification 3); the nav is "Church" and "Bulletin" (S's list without the pages of later PRs).
 
 ### Risks
 - **A demoted admin's save** of the rubric or the bulletin settings still passes `require_admin` and writes milliseconds later (no re-read under the lock) until 6a-3; the profile is covered from this PR.
 - **SQLite ignores `FOR UPDATE`.** The tests cannot show the lock itself; T2's test checks the write asks for it, and the write's shape (one session, the settings merged from the locked row) is the one `_merge_settings` and `update_church_rubric` already use in production.
 - **Browser and server time zone lists can differ** (S Risk 4): a zone the browser offers but Python's tzdata lacks is a 422 "Unknown timezone." under the field. The device shortcut is offered only for a zone the browser lists.
-- **The church switcher** does not ask before discarding unsaved Church or Bulletin settings edits (clarification 8). Switching church remounts the page, so the edits are lost without a question, as with the browser's Back button.
+- **Choosing another church** in the church menu does not ask before discarding unsaved Church or Bulletin settings edits (clarification 8; "Join or create a church…" does ask). Switching church remounts the page, so the edits are lost without a question, as with the browser's Back button.
+- **The PATCH answer mixes two moments** (no change; plan review M10): its name and role come from the locked write, the other fields from `get_church_profile` read after the commit, so under a concurrent write the answer can carry another writer's translation or Benediction with this write's name. It is harmless: the next refetch corrects it.
+- **A change of the default reaches services people may think they chose** (clarification 11; "Questions for the owner" 11): accepted as existing behaviour, said in the help lines.
 - **The Settings nav's "Bulletin"** opens a page outside the Settings area (no Settings nav there, its own Back link) until 6a-3 moves it; the top menu's Settings item is not marked current on it.
 - **The `default_hymnal` select** offers only the church's hymnals; picking one of several is checked by the server against the hymnals read under the lock, so a hymnal removed in the same instant is a 422 under the field.
 
@@ -122,9 +127,9 @@ The owner's answers win over S and F; the code wins over both where they disagre
 
 | Path | What | Task |
 |---|---|---|
-| `backend/usecases/members.py`, `backend/usecases/church_admin.py` (+ `backend/tests/test_church_admin.py`) | `lock_and_read_actor`; `require_admin_role`, then (T2) `clean_profile_patch`, `update_profile` | T1, T2 |
+| `backend/usecases/members.py`, `backend/usecases/church_admin.py` (+ `backend/tests/test_church_admin.py`, and in T2 `backend/tests/test_church_admin_postgres.py`) | `lock_and_read_actor`; `require_admin_role`, then (T2) `clean_profile_patch`, `update_profile` and the Postgres race test | T1, T2 |
 | `frontend/src/lib/settings/profile.ts` (+ `.test.ts`) | `ProfileForm`, `profileFormFrom`, `diffProfile`, `hasChanges`, `rebaseForm`, `translationItems`, `hymnalItems` | T3 |
-| `frontend/src/components/app/leave-guard.tsx` (+ `.test.tsx`) | `LeaveGuard`, `DISCARD_TITLE` | T4 |
+| `frontend/src/components/app/leave-guard.tsx` (+ `.test.tsx`) | `LeaveGuard`, `confirmLeave`, `DISCARD_TITLE` | T4 |
 | `frontend/src/components/settings/sections.ts`, `frontend/src/components/settings/settings-nav.tsx` (+ `settings-layout.test.tsx`), `frontend/src/app/(signed-in)/(church)/settings/layout.tsx`, `frontend/src/app/(signed-in)/(church)/settings/page.tsx` | the Settings area | T5 |
 | `frontend/src/components/settings/church-settings-page.tsx` (+ `.test.tsx`), `frontend/src/app/(signed-in)/(church)/settings/church/page.tsx` | the Church page and its route | T6 |
 
@@ -137,13 +142,14 @@ The owner's answers win over S and F; the code wins over both where they disagre
 | `backend/api/routes/me.py`, `backend/tests/test_api_church_profile.py`, `frontend/src/lib/api/openapi.json`, `frontend/src/lib/api/schema.d.ts` | `ChurchPatchIn` and `PATCH /church`; its API tests; regenerated | T2 |
 | `frontend/src/lib/api/types.ts`, `frontend/src/lib/queries/church.ts` | `ChurchPatch`; `useUpdateChurch`, `PROFILE_SAVED` | T3 |
 | `frontend/src/components/bulletin-settings/bulletin-settings-page.tsx` | uses `LeaveGuard` (its own guard removed) | T4 |
+| `frontend/src/components/app/church-switcher.tsx` | "Join or create a church…" goes through `confirmLeave` | T4 |
 | `frontend/src/components/app/app-nav.tsx`, `frontend/src/components/app/app-header.test.tsx` | the **Settings** item | T5 |
 | `frontend/src/components/app/timezone-combobox.tsx`, `frontend/src/components/app/timezone-combobox.test.tsx` | `warning`; an out-of-list value as an item | T6 |
 | `frontend/src/components/builder/liturgy/section-card.tsx`, `frontend/src/components/builder/liturgy/liturgy-step.test.tsx` | the hint's link | T7 |
 | `docs/manual-verification.md`, `backend/tests/test_slice1_docs.py` | "## Slice 6a"; the pin of the last nine headings | T8 |
 | `docs/ops-runbook.md` | "### Slice 6a-1 record" (the records PR, after the merge) | T10 |
 
-**Counts in the PR:** 40 paths: 19 created (this plan, the fifteen new code and test files above, and the Voices V1 plan, design and rights check, which ride along), 21 modified (the sixteen code, test and API paths above, `docs/manual-verification.md`, and the 6a spec (its two amendments of 2026-10-05), the Voices decisions, the pews idea and `docs/ops-runbook.md` (the Voices notes), which ride along until merged). **Untouched:** migrations, `db/models.py`, `api/deps.py`, `api/schemas.py`, `liturgy_config.py`, `scripture_fetcher.py`, `api/routes/rubric.py`, `api/routes/bulletin_settings.py`, the draft schema, `church-switcher.tsx`, `app.py`, Streamlit.
+**Counts in the PR:** 42 paths: 20 created (this plan, the sixteen new code and test files above, and the Voices V1 plan, design and rights check, which ride along), 22 modified (the seventeen code, test and API paths above, `docs/manual-verification.md`, and the 6a spec (its two amendments of 2026-10-05), the Voices decisions, the pews idea and `docs/ops-runbook.md` (the Voices notes), which ride along until merged). **Untouched:** migrations, `db/models.py`, `api/deps.py`, `api/schemas.py`, `liturgy_config.py`, `scripture_fetcher.py`, `api/routes/rubric.py`, `api/routes/bulletin_settings.py`, `bulletin_settings.py` (T2 imports its `NOT_ONE_LINE`), the draft schema, `app.py`, Streamlit.
 
 **Task order and review batch:** T1 → T8, each one commit and a backup push; then one review of the whole batch with its fixes as `Fix: …` commits; T9 verifies and opens the draft PR on the owner's yes; T10 merges on the owner's yes, runs the phone check and writes the record.
 
@@ -390,9 +396,12 @@ Expected counts after this task: backend `1490 passed, 23 skipped`; frontend `73
 ### Task 2: `PATCH /church` (S API, Semantics, Models; clarifications 9, 10, 12)
 
 **Files:**
+- Create: `backend/tests/test_church_admin_postgres.py`
 - Modify: `backend/tests/test_church_admin.py`, `backend/tests/test_api_church_profile.py`, `backend/repos/churches.py`, `backend/usecases/church_admin.py`, `backend/api/routes/me.py`, `frontend/src/lib/api/openapi.json`, `frontend/src/lib/api/schema.d.ts` (regenerated)
 
 - [ ] **Step 1: Write the failing tests**
+
+`test_only_the_fields_sent_are_written_and_other_settings_stay` and `test_a_profile_save_keeps_every_other_setting` seed every key the app keeps in `churches.settings` (`bible_translation`, `default_hymnal`, `default_benediction`, `bulletin`, `rubric`, `liturgy_prompts`, `prayer_library`) plus one it does not know, save the translation, the Benediction and the hymnal, and compare the whole dict, so a write that replaced the settings instead of merging them fails. The ESV case runs where it is enforced: `PATCH` reads `scripture_fetcher.available_translations()`, which reads `ESV_API_KEY` at call time, so the test sets and unsets that variable. `test_church_admin_postgres.py` is skipped without `TEST_DATABASE_URL`.
 
 **In `backend/tests/test_church_admin.py`, replace:**
 
@@ -428,6 +437,8 @@ TRANSLATIONS = ("web", "kjv", "asv")
 
 @pytest.mark.parametrize("changes, field, message", [
     ({"name": "   "}, "name", "Church name is required."),
+    ({"name": "Gr\x00ace"}, "name", "Church name can't contain line breaks or control characters."),
+    ({"name": "Grace\nChurch"}, "name", "Church name can't contain line breaks or control characters."),
     ({"timezone": ""}, "timezone", "Timezone is required."),
     ({"timezone": "Mars/Olympus"}, "timezone", "Unknown timezone."),
     ({"timezone": "America/New York"}, "timezone", "Unknown timezone."),
@@ -463,15 +474,33 @@ def _church(world) -> dict:
     return churches.get_church(world["church"])
 
 
+# Every key the app keeps in churches.settings, plus one it does not know: a profile save changes only its own.
+EVERY_SETTING = {
+    "bible_translation": "esv",
+    "default_hymnal": "HL1955",
+    "default_benediction": "Halverson",
+    "bulletin": {"phone": "555-0100", "starred": ["call_to_worship"]},
+    "rubric": {"prefer_familiar": False},
+    "liturgy_prompts": {"benediction": "Go."},
+    "prayer_library": {"confession": ["Merciful God, we confess."]},
+    "foo": 1,
+}
+
+
 def test_only_the_fields_sent_are_written_and_other_settings_stay(world, monkeypatch):
     monkeypatch.delenv("ESV_API_KEY", raising=False)
-    churches.update_church(world["church"], settings={"bible_translation": "esv", "foo": 1,
-                                                      "liturgy_prompts": {"benediction": "Go."}})
+    add_hymn(world["church"], hymnal="GG2013", number=1, title="Holy, Holy, Holy")
+    churches.update_church(world["church"], settings=EVERY_SETTING)
     stored = church_admin.update_profile(world["church"], world["admin"], {"name": "Example Church Two"})
     assert stored == {"name": "Example Church Two", "role": "admin"}
     church = _church(world)
     assert (church["name"], church["timezone"]) == ("Example Church Two", "America/New_York")
-    assert church["settings"] == {"bible_translation": "esv", "foo": 1, "liturgy_prompts": {"benediction": "Go."}}
+    assert church["settings"] == EVERY_SETTING
+
+    church_admin.update_profile(world["church"], world["owner"], {
+        "bible_translation": "kjv", "default_benediction": "Go in peace.", "default_hymnal": "GG2013"})
+    assert _church(world)["settings"] == {**EVERY_SETTING, "bible_translation": "kjv",
+                                          "default_benediction": "Go in peace.", "default_hymnal": "GG2013"}
 
     church_admin.update_profile(world["church"], world["owner"], {"default_benediction": ""})
     assert _church(world)["settings"]["default_benediction"] == ""
@@ -517,6 +546,19 @@ def test_the_profile_is_read_and_written_under_one_row_lock(world):
         church_admin.update_profile(world["church"], world["owner"], {"name": "Renamed", "bible_translation": "kjv"})
     assert len(writes) == 1
     assert reads and all(session is writes[0] and locked for session, locked in reads)
+````
+
+**In `backend/tests/test_api_church_profile.py`, replace:**
+
+````python
+from repos import churches
+````
+
+**with:**
+
+````python
+from repos import churches
+from repos.hymns import add_hymn
 ````
 
 **Append to `backend/tests/test_api_church_profile.py`:**
@@ -565,6 +607,7 @@ def test_a_member_cannot_change_the_profile(client, make_user, make_church):
 
 @pytest.mark.parametrize("body, field, message", [
     ({"name": "  "}, "name", "Church name is required."),
+    ({"name": "Gr\x00ace"}, "name", "Church name can't contain line breaks or control characters."),
     ({"timezone": "Mars/Olympus"}, "timezone", "Unknown timezone."),
     ({"bible_translation": "klingon"}, "bible_translation", "Unknown or unavailable translation."),
     ({"default_hymnal": "PH1990"}, "default_hymnal", "Choose one of your church's hymnals."),
@@ -592,6 +635,98 @@ def test_an_unavailable_stored_translation_survives_a_name_change(client, make_u
     churches.set_church_translation(cid, "esv")
     r = _patch(client, cid, {"name": "Renamed"})
     assert (r.status_code, r.json()["bible_translation"], r.json()["effective_translation"]) == (200, "esv", "web")
+
+
+def test_the_esv_is_accepted_only_where_its_key_is_set(client, make_user, make_church, monkeypatch):
+    cid = make_church(name="Grace", owner_user_id=make_user(email=EMAIL))
+    monkeypatch.delenv("ESV_API_KEY", raising=False)
+    r = _patch(client, cid, {"bible_translation": "esv"})
+    assert (r.status_code, r.json()["error"]["fields"]) == (
+        422, {"bible_translation": "Unknown or unavailable translation."})
+    assert _profile(client, cid)["bible_translation"] is None
+
+    monkeypatch.setenv("ESV_API_KEY", "test-key")            # scripture_fetcher reads it at call time
+    r = _patch(client, cid, {"bible_translation": "esv"})
+    assert r.status_code == 200, r.text
+    assert (r.json()["bible_translation"], r.json()["effective_translation"]) == ("esv", "esv")
+
+
+def test_a_profile_save_keeps_every_other_setting(client, make_user, make_church, no_esv_key):
+    cid = make_church(name="Grace", owner_user_id=make_user(email=EMAIL))
+    add_hymn(cid, hymnal="GG2013", number=1, title="Holy, Holy, Holy")
+    every = {"bible_translation": "esv", "default_hymnal": "HL1955", "default_benediction": "Halverson",
+             "bulletin": {"phone": "555-0100"}, "rubric": {"prefer_familiar": False},
+             "liturgy_prompts": {"benediction": "Go."}, "prayer_library": {"confession": ["Merciful God."]},
+             "foo": 1}
+    churches.update_church(cid, settings=every)
+    r = _patch(client, cid, {"bible_translation": "kjv", "default_benediction": "", "default_hymnal": "GG2013"})
+    assert r.status_code == 200, r.text
+    assert churches.get_church(cid)["settings"] == {**every, "bible_translation": "kjv",
+                                                    "default_benediction": "", "default_hymnal": "GG2013"}
+````
+
+**Create `backend/tests/test_church_admin_postgres.py`:**
+
+````python
+"""PATCH /church's write on real Postgres (6a spec, "Semantics" → Locking;
+slice 6a-1): while a profile save holds the church-row lock, the other
+locked settings writers (the bulletin settings, the rubric) wait for it, and
+when it commits every key survives.
+
+Skipped without TEST_DATABASE_URL; CI's backend-postgres job runs it. SQLite
+ignores FOR UPDATE, so test_church_admin.py can only check that the lock is
+asked for; this is the proof that the profile's merge reads the row after the
+lock. Forcing the race: clean_profile_patch, which update_profile calls
+through the module attribute after taking the lock, waits until the test lets
+it go. A save that never gets there makes the test fail after 10 s instead
+of passing vacuously.
+"""
+import threading
+from concurrent.futures import ThreadPoolExecutor
+
+import pytest
+
+from repos import churches
+from repos.churches import create_church
+from repos.users import ensure_user
+from usecases import church_admin
+
+pytestmark = pytest.mark.postgres
+
+
+@pytest.fixture
+def world(pg_db):
+    owner = ensure_user("owner@example.com", "Owner").id
+    return owner, create_church(name="Grace", timezone="America/New_York", owner_user_id=owner)
+
+
+def test_other_settings_writers_wait_for_a_profile_save_and_every_key_survives(world, monkeypatch):
+    owner, church_id = world
+    inside, release = threading.Event(), threading.Event()
+    clean = church_admin.clean_profile_patch
+
+    def held(*args, **kwargs):
+        inside.set()                   # update_profile holds the church-row lock here
+        assert release.wait(10), "the test never released the profile save"
+        return clean(*args, **kwargs)
+
+    monkeypatch.setattr(church_admin, "clean_profile_patch", held)
+    with ThreadPoolExecutor(3) as pool:
+        profile = pool.submit(church_admin.update_profile, church_id, owner, {"default_benediction": "Go in peace."})
+        assert inside.wait(10), "the profile save never took the lock"
+        bulletin = pool.submit(churches.set_bulletin_settings, church_id, {"phone": "555-0100"})
+        rubric = pool.submit(churches.update_church_rubric, church_id, {"prefer_familiar": False})
+        done = threading.Event()
+        done.wait(1)                   # time for either writer to finish if nothing held it
+        assert not bulletin.done() and not rubric.done(), "the other settings writers did not wait for the lock"
+        release.set()
+        profile.result(10)
+        bulletin.result(10)
+        rubric.result(10)
+    settings = churches.get_church(church_id)["settings"]
+    assert settings["default_benediction"] == "Go in peace."
+    assert settings["bulletin"] == {"phone": "555-0100"}
+    assert settings["rubric"] == {"prefer_familiar": False}
 ````
 
 - [ ] **Step 2: See them fail**
@@ -599,9 +734,9 @@ def test_an_unavailable_stored_translation_survives_a_name_change(client, make_u
 Run: `.venv/bin/python -m pytest -q backend/tests/test_church_admin.py backend/tests/test_api_church_profile.py 2>&1 | tail -3`
 **Expected** (`clean_profile_patch` and `update_profile` do not exist yet, and `PATCH /church` is a 405):
 ```
-FAILED backend/tests/test_api_church_profile.py::test_a_church_id_in_the_body_is_refused_and_isolation
-FAILED backend/tests/test_api_church_profile.py::test_an_unavailable_stored_translation_survives_a_name_change
-28 failed, 12 passed in <t>s
+FAILED backend/tests/test_api_church_profile.py::test_the_esv_is_accepted_only_where_its_key_is_set
+FAILED backend/tests/test_api_church_profile.py::test_a_profile_save_keeps_every_other_setting
+33 failed, 12 passed in <t>s
 ```
 
 - [ ] **Step 3: Write the repo write, the usecase and the route**
@@ -641,22 +776,34 @@ def _update_profile(session, church_id, name, timezone, settings_patch) -> bool:
 ````python
 from domain_errors import Forbidden
 from tenancy import is_admin
+
+# require_admin's message (api/deps.py): one wording for the role 403.
+ADMINS_ONLY_MESSAGE = "Only church admins can do this."
 ````
 
 **with:**
 
 ````python
+import re
 import uuid
 from collections.abc import Collection, Mapping
 
 import scripture_fetcher
 from db import session_scope
+from bulletin_settings import NOT_ONE_LINE
 from domain_errors import Forbidden, InvalidInput
 from repos import churches
 from repos import hymns as hymn_repo
 from tenancy import is_admin
 from timezones import is_valid_timezone
 from usecases.members import lock_and_read_actor
+
+# require_admin's message (api/deps.py): one wording for the role 403.
+ADMINS_ONLY_MESSAGE = "Only church admins can do this."
+
+# The church's name prints on one line (the bulletin's header and title): no control character (NUL, which
+# Postgres refuses in text, among them), no C1 control and no U+2028/U+2029, as the bulletin settings' lines.
+_NOT_ONE_LINE = re.compile(f"[{NOT_ONE_LINE}]")
 ````
 
 **Append to `backend/usecases/church_admin.py`:**
@@ -671,7 +818,8 @@ def clean_profile_patch(changes: Mapping[str, str], *, translations: Collection[
     `changes` holds only the fields sent (a null is not sent). The checks run
     in the order name, timezone, bible_translation, default_hymnal, and the
     first failure raises InvalidInput naming its field. The name and the time
-    zone are trimmed; the time zone must be exactly an IANA name
+    zone are trimmed; the name must hold no control character or line
+    separator (bulletin_settings.NOT_ONE_LINE: it prints on one line); the time zone must be exactly an IANA name
     (timezones.is_valid_timezone, as POST /churches and GET /church's
     timezone_valid); the translation must be one of `translations` (offered on
     this deployment now) and the hymnal one of `church_hymnals`; the
@@ -684,6 +832,8 @@ def clean_profile_patch(changes: Mapping[str, str], *, translations: Collection[
         columns["name"] = changes["name"].strip()
         if not columns["name"]:
             raise InvalidInput("Church name is required.", field="name")
+        if _NOT_ONE_LINE.search(columns["name"]):
+            raise InvalidInput("Church name can't contain line breaks or control characters.", field="name")
     if "timezone" in changes:
         columns["timezone"] = changes["timezone"].strip()
         if not columns["timezone"]:
@@ -779,23 +929,27 @@ def update_church(payload: ChurchPatchIn, active: ActiveChurch = Depends(require
 
 Run: `.venv/bin/python backend/scripts/export_openapi.py >/dev/null && (cd frontend && npm run gen:api >/dev/null) && git diff --stat -- frontend/src/lib/api | tail -1` then `.venv/bin/python -m pytest -q backend/tests/test_church_admin.py backend/tests/test_api_church_profile.py backend/tests/test_openapi_contract.py backend/tests/test_route_guards.py backend/tests/test_church_settings.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`
 **Expected:**
-` 2 files changed, 256 insertions(+), 1 deletion(-)`; `58 passed in <t>s`; `1518 passed, 23 skipped in <t>s`; `typecheck 0`, `lint 0` (the new `ChurchPatchIn` type is not used until T3).
+` 2 files changed, 256 insertions(+), 1 deletion(-)`; `63 passed in <t>s`; `1523 passed, 24 skipped in <t>s`; `typecheck 0`, `lint 0` (the new `ChurchPatchIn` type is not used until T3).
+
+With a local throwaway Postgres (never a real database), `TEST_DATABASE_URL=postgresql://postgres@localhost:<port>/postgres .venv/bin/python -m pytest -q -m postgres 2>&1 | tail -1` gives `24 passed, 1523 deselected, 1 warning in <t>s` (the new race test among them); without one, CI's `backend-postgres` runs it.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/repos/churches.py backend/usecases/church_admin.py backend/api/routes/me.py backend/tests/test_church_admin.py backend/tests/test_api_church_profile.py frontend/src/lib/api/openapi.json frontend/src/lib/api/schema.d.ts
+git add backend/repos/churches.py backend/usecases/church_admin.py backend/api/routes/me.py backend/tests/test_church_admin.py backend/tests/test_api_church_profile.py backend/tests/test_church_admin_postgres.py frontend/src/lib/api/openapi.json frontend/src/lib/api/schema.d.ts
 git commit -q -m "Slice 6a-1: PATCH /church" -m "Owners and admins change the church's name, time zone, default
 translation, default hymnal and default Benediction: only the fields
 sent, checked in S's order with S's messages, all or nothing, in one
 transaction that locks the church row and re-reads the caller's role
 under it. The settings are merged from the locked row, so every other
-key stays; a blank Benediction is stored as \"no default\". The answer
-is GET /church's profile. OpenAPI and the types regenerated." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+key stays (a Postgres test holds a save in the lock and checks the
+bulletin settings and rubric writers wait); a blank Benediction is stored
+as \"no default\"; a name with a control character is refused. The
+answer is GET /church's profile. OpenAPI and the types regenerated." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1518 passed, 23 skipped`; frontend `734 passed` in 88 files.
+Expected counts after this task: backend `1523 passed, 24 skipped`; frontend `734 passed` in 88 files.
 
 ## The app (T3-T7)
 
@@ -1066,17 +1220,17 @@ and, when the hymnal changed, /hymnals." -m "Co-Authored-By: Claude Opus 5.5 <no
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1518 passed, 23 skipped`; frontend `738 passed` in 89 files.
+Expected counts after this task: backend `1523 passed, 24 skipped`; frontend `738 passed` in 89 files.
 
 ### Task 4: One leave guard for settings pages (S "Leave guard"; clarification 8)
 
 **Files:**
 - Create: `frontend/src/components/app/leave-guard.test.tsx`, `frontend/src/components/app/leave-guard.tsx`
-- Modify: `frontend/src/components/bulletin-settings/bulletin-settings-page.tsx`
+- Modify: `frontend/src/components/bulletin-settings/bulletin-settings-page.tsx`, `frontend/src/components/app/church-switcher.tsx`
 
 - [ ] **Step 1: Write the failing test**
 
-The Bulletin settings page's own guard tests (`bulletin-settings-page.test.tsx`: the dialog on **Back to Review & send**, the reload warning, a modified click) stay as they are and must keep passing once the page uses the shared guard.
+The Bulletin settings page's own guard tests (`bulletin-settings-page.test.tsx`: the dialog on **Back to Review & send**, the reload warning, a modified click) stay as they are and must keep passing once the page uses the shared guard; so must `app-header.test.tsx`'s "Join or create a church…" test (no unsaved edits there, so it goes on at once). The new tests cover a `blob:` link (it goes on), a link with its own handler (after **Discard changes** its handler runs, so a replace stays a replace) and "Join or create a church…" with and without unsaved edits.
 
 **Create `frontend/src/components/app/leave-guard.test.tsx`:**
 
@@ -1086,9 +1240,10 @@ The Bulletin settings page's own guard tests (`bulletin-settings-page.test.tsx`:
  * page's guard, shared): any in-app link to another page asks first while
  * there are unsaved edits; other links, and every link without edits, go on.
  */
-import { act, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { act, screen, waitFor, within } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
+import { ChurchSwitcher } from "@/components/app/church-switcher";
 import { testRouter } from "@/test/mocks";
 import { renderWithProviders } from "@/test/render";
 
@@ -1103,6 +1258,16 @@ function Links({ dirty }: { dirty: boolean }) {
         New tab
       </a>
       <a href="https://example.com/help">Help</a>
+      <a href={`blob:${window.location.origin}/picture-1`}>Picture</a>
+      <a
+        href="/builder"
+        onClick={(event) => {
+          event.preventDefault(); // as Next's <Link replace> does
+          testRouter.replace("/builder");
+        }}
+      >
+        Builder
+      </a>
       <LeaveGuard when={dirty} />
     </>
   );
@@ -1124,13 +1289,54 @@ describe("LeaveGuard (slice 6a-1)", () => {
     expect(followed(screen.getByRole("link", { name: "Services" }))).toBe(true);
 
     rerender(<Links dirty />);
-    for (const name of ["Top of this page", "New tab", "Help"]) {
+    for (const name of ["Top of this page", "New tab", "Help", "Picture"]) {
       expect(followed(screen.getByRole("link", { name }))).toBe(true);
     }
     await user.click(screen.getByRole("link", { name: "Services" }));
     const dialog = await screen.findByRole("alertdialog", { name: DISCARD_TITLE });
     await user.click(within(dialog).getByRole("button", { name: "Discard changes" }));
     expect(testRouter.push).toHaveBeenCalledWith("/services?tab=saved");
+  });
+
+  it("after Discard changes, the link's own handler navigates, so a replace stays a replace", async () => {
+    const { user } = renderWithProviders(<Links dirty />, { path: "/settings/church" });
+    await user.click(screen.getByRole("link", { name: "Builder" }));
+    expect(testRouter.replace).not.toHaveBeenCalled();
+    const dialog = await screen.findByRole("alertdialog", { name: DISCARD_TITLE });
+    await user.click(within(dialog).getByRole("button", { name: "Discard changes" }));
+    expect(testRouter.replace).toHaveBeenCalledWith("/builder");
+    expect(testRouter.push).not.toHaveBeenCalled();
+  });
+
+  it("asks before the church menu's Join or create a church… while dirty, and not otherwise", async () => {
+    const church = { id: "c-1", name: "Grace", role: "admin" } as const;
+    const menu = (dirty: boolean) => (
+      <>
+        <ChurchSwitcher churches={[church]} activeId="c-1" onSelect={vi.fn()} />
+        <LeaveGuard when={dirty} />
+      </>
+    );
+    const { user, rerender } = renderWithProviders(menu(true), { path: "/settings/church" });
+    const join = async () => {
+      await user.click(screen.getByRole("button", { name: "Active church: Grace" }));
+      await user.click(await screen.findByRole("menuitem", { name: "Join or create a church…" }));
+    };
+
+    await join();
+    let dialog = await screen.findByRole("alertdialog", { name: DISCARD_TITLE });
+    await user.click(within(dialog).getByRole("button", { name: "Keep editing" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(testRouter.push).not.toHaveBeenCalled();
+    await join();
+    dialog = await screen.findByRole("alertdialog", { name: DISCARD_TITLE });
+    await user.click(within(dialog).getByRole("button", { name: "Discard changes" }));
+    expect(testRouter.push).toHaveBeenCalledWith("/welcome");
+
+    testRouter.push.mockClear();
+    rerender(menu(false));
+    await join();
+    expect(testRouter.push).toHaveBeenCalledWith("/welcome");
+    expect(screen.queryByRole("alertdialog")).toBeNull();
   });
 });
 ````
@@ -1152,24 +1358,41 @@ Run: `(cd frontend && npx vitest run src/components/app/leave-guard.test.tsx 2>&
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 
 export const DISCARD_TITLE = "Discard unsaved changes?";
 const DISCARD_BODY = "Your changes on this page haven't been saved.";
 
-/** The in-app path a click on `target` would open, or null when the click should go ahead as usual. */
-function guardedHref(event: MouseEvent): string | null {
+type Leave = () => void;
+
+/** The mounted guard while it has unsaved edits to protect (one settings page at a time), else null. */
+let activeGuard: ((leave: Leave) => void) | null = null;
+
+/**
+ * For a way out of the page that is not a link (the church menu's "Join or
+ * create a church…"): while a `LeaveGuard` has unsaved edits, `leave` runs
+ * only after "Discard changes"; otherwise it runs at once.
+ */
+export function confirmLeave(leave: Leave): void {
+  if (activeGuard !== null) activeGuard(leave);
+  else leave();
+}
+
+/** The link a click would follow to another in-app page, or null when the click should go ahead as usual. */
+function guardedLink(event: MouseEvent): { link: HTMLAnchorElement; href: string } | null {
   if (event.defaultPrevented || event.button !== 0) return null;
   if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return null; // a new tab or window
   const link = event.target instanceof Element ? event.target.closest("a[href]") : null;
   if (!(link instanceof HTMLAnchorElement) || link.hasAttribute("download")) return null;
   if (link.target !== "" && link.target !== "_self") return null;
   const url = new URL(link.href, window.location.href);
+  // A blob: or data: URL can share the page's origin, but it is a file, not a page of the app.
+  if (url.protocol !== "http:" && url.protocol !== "https:") return null;
   if (url.origin !== window.location.origin) return null;
   if (url.pathname === window.location.pathname && url.search === window.location.search) return null;
-  return `${url.pathname}${url.search}${url.hash}`;
+  return { link, href: `${url.pathname}${url.search}${url.hash}` };
 }
 
 /**
@@ -1180,40 +1403,70 @@ function guardedHref(event: MouseEvent): string | null {
  * - a plain click on any in-app link to another page (the settings nav, the
  *   header's nav, a page's own links) asks "Discard unsaved changes?" first:
  *   **Discard changes** goes on, **Keep editing** stays with the edits.
- * A modified or middle click opens the link as usual. The browser's Back and
- * Forward buttons, Log out and the church switcher are not covered.
+ * A modified or middle click opens the link as usual. After **Discard
+ * changes** the link is clicked again with the guard standing aside, so its
+ * own handler navigates as it would have (a `<Link replace>` replaces); a link
+ * with no handler of its own goes on with `router.push`. "Join or create a
+ * church…" asks through `confirmLeave`. The browser's Back and Forward
+ * buttons, Log out and choosing another church in the church menu are not
+ * covered.
  */
 export function LeaveGuard({ when }: { when: boolean }) {
   const router = useRouter();
-  const [leavingTo, setLeavingTo] = useState<string | null>(null);
+  const [leave, setLeave] = useState<Leave | null>(null);
+  const standAside = useRef(false);
 
   useEffect(() => {
     if (!when) return;
+    const ask = (next: Leave) => setLeave(() => next);
+    activeGuard = ask;
     const warn = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = ""; // older Chrome and Edge, and some webviews, ask only when this is set
     };
     // Capture, on the document: runs before the link's own handler (Next's Link), which it stops.
     const intercept = (event: MouseEvent) => {
-      const href = guardedHref(event);
-      if (href === null) return;
+      if (standAside.current) return;
+      const found = guardedLink(event);
+      if (found === null) return;
       event.preventDefault();
       event.stopPropagation();
-      setLeavingTo(href);
+      ask(() => follow(found.link, found.href));
+    };
+    // The link again, its own handler included; when nothing handled it (a plain <a>), router.push.
+    const follow = (link: HTMLAnchorElement, href: string) => {
+      if (!link.isConnected) {
+        router.push(href);
+        return;
+      }
+      const fallback = (event: MouseEvent) => {
+        if (event.defaultPrevented) return;
+        event.preventDefault();
+        router.push(href);
+      };
+      document.addEventListener("click", fallback, { once: true });
+      standAside.current = true;
+      try {
+        link.click();
+      } finally {
+        standAside.current = false;
+        document.removeEventListener("click", fallback);
+      }
     };
     window.addEventListener("beforeunload", warn);
     document.addEventListener("click", intercept, true);
     return () => {
+      if (activeGuard === ask) activeGuard = null;
       window.removeEventListener("beforeunload", warn);
       document.removeEventListener("click", intercept, true);
     };
-  }, [when]);
+  }, [when, router]);
 
   return (
     <ConfirmDialog
-      open={leavingTo !== null}
+      open={leave !== null}
       onOpenChange={(open) => {
-        if (!open) setLeavingTo(null);
+        if (!open) setLeave(null);
       }}
       title={DISCARD_TITLE}
       description={DISCARD_BODY}
@@ -1221,8 +1474,8 @@ export function LeaveGuard({ when }: { when: boolean }) {
       cancelLabel="Keep editing"
       destructive
       onConfirm={() => {
-        if (leavingTo !== null) router.push(leavingTo);
-        setLeavingTo(null);
+        setLeave(null);
+        leave?.();
       }}
     />
   );
@@ -1360,25 +1613,68 @@ export { DISCARD_TITLE } from "@/components/app/leave-guard";
       <LeaveGuard when={dirty} />
 ````
 
+**In `frontend/src/components/app/church-switcher.tsx`, replace:**
+
+````tsx
+
+import { buttonVariants } from "@/components/ui/button";
+````
+
+**with:**
+
+````tsx
+
+import { confirmLeave } from "@/components/app/leave-guard";
+import { buttonVariants } from "@/components/ui/button";
+````
+
+**In `frontend/src/components/app/church-switcher.tsx`, replace:**
+
+````tsx
+ * (1b clarification 31). A user with one church sees the same menu.
+````
+
+**with:**
+
+````tsx
+ * (1b clarification 31), asking first while a settings page has unsaved
+ * edits (`confirmLeave`, slice 6a-1). A user with one church sees the same menu.
+````
+
+**In `frontend/src/components/app/church-switcher.tsx`, replace:**
+
+````tsx
+        <DropdownMenuItem onClick={() => router.push("/welcome")}>Join or create a church…</DropdownMenuItem>
+````
+
+**with:**
+
+````tsx
+        <DropdownMenuItem onClick={() => confirmLeave(() => router.push("/welcome"))}>Join or create a church…</DropdownMenuItem>
+````
+
 - [ ] **Step 4: See them pass (three times), and the suite**
 
 Run: `(cd frontend && npx vitest run src/components/app/leave-guard.test.tsx src/components/bulletin-settings/bulletin-settings-page.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")` (three times) then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`
 **Expected:**
-three times `      Tests  10 passed (10)` (the guard's 1 and the Bulletin settings page's 9, unchanged); ` Test Files  90 passed (90)` and `      Tests  739 passed (739)`; `typecheck 0`, `lint 0`.
+three times `      Tests  12 passed (12)` (the guard's 3 and the Bulletin settings page's 9, unchanged); ` Test Files  90 passed (90)` and `      Tests  741 passed (741)`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/src/components/app/leave-guard.tsx frontend/src/components/app/leave-guard.test.tsx frontend/src/components/bulletin-settings/bulletin-settings-page.tsx
+git add frontend/src/components/app/leave-guard.tsx frontend/src/components/app/leave-guard.test.tsx frontend/src/components/bulletin-settings/bulletin-settings-page.tsx frontend/src/components/app/church-switcher.tsx
 git commit -q -m "Slice 6a-1: one leave guard for settings pages" -m "LeaveGuard: while a settings form has unsaved edits, a reload or close
 shows the browser's warning and a plain click on any in-app link to
-another page asks \"Discard unsaved changes?\" first. The Bulletin
-settings page's own guard (its Back link only) moves into it, so that
-page now also asks on the menu links; its tests are unchanged." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+another page asks \"Discard unsaved changes?\" first; after Discard
+changes the link's own handler navigates (a replace stays a replace), and
+a blob: link is left alone. The church menu's \"Join or create a
+church…\" asks too (confirmLeave). The Bulletin settings page's own guard
+(its Back link only) moves into it, so that page now also asks on the
+menu links; its tests are unchanged." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1518 passed, 23 skipped`; frontend `739 passed` in 90 files.
+Expected counts after this task: backend `1523 passed, 24 skipped`; frontend `741 passed` in 90 files.
 
 ### Task 5: The Settings area and its menu item (S "Settings nav"; F §4.2; clarifications 2, 3)
 
@@ -1636,7 +1932,7 @@ export const NAV_ITEMS = [
 
 Run: `(cd frontend && npx vitest run src/components/settings/settings-layout.test.tsx src/components/app/app-header.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`
 **Expected:**
-`      Tests  8 passed (8)`; ` Test Files  91 passed (91)` and `      Tests  741 passed (741)`; `typecheck 0`, `lint 0`.
+`      Tests  8 passed (8)`; ` Test Files  91 passed (91)` and `      Tests  743 passed (743)`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -1649,7 +1945,7 @@ SETTINGS_SECTIONS, which 6a-2, 6a-3 and 5b add to." -m "Co-Authored-By: Claude O
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1518 passed, 23 skipped`; frontend `741 passed` in 91 files.
+Expected counts after this task: backend `1523 passed, 24 skipped`; frontend `743 passed` in 91 files.
 
 ### Task 6: The Church page (S UX §1; clarifications 4-7, 11, 14)
 
@@ -1659,7 +1955,7 @@ Expected counts after this task: backend `1518 passed, 23 skipped`; frontend `74
 
 - [ ] **Step 1: Write the failing tests**
 
-The page's tests render it inside the Settings layout (T5), as the route is. The browser lists three zones and reports `America/Chicago` (as `create-church-form.test.tsx` does), never the runner's own zone.
+The page's tests render it inside the Settings layout (T5), as the route is. Three of them cover a stored default hymnal with no hymns left (the no-hymns line, never "your only hymnal"), a stored translation while `GET /translations` fails (never labelled as another one) and a member's summary with a stored hymnal that is gone (the hymnal the builder uses, the stored one noted). The browser lists three zones and reports `America/Chicago` (as `create-church-form.test.tsx` does), never the runner's own zone.
 
 **Create `frontend/src/components/settings/church-settings-page.test.tsx`:**
 
@@ -1686,7 +1982,7 @@ import { church, churchProfile, hymnals, me, translations } from "@/test/fixture
 import { testRouter } from "@/test/mocks";
 import { renderWithProviders } from "@/test/render";
 
-import { ADMINS_ONLY, TIMEZONE_NOT_RECOGNIZED } from "./church-settings-page";
+import { ADMINS_ONLY, BENEDICTION_HELP, HYMNAL_HELP, TIMEZONE_NOT_RECOGNIZED, TRANSLATION_HELP } from "./church-settings-page";
 
 const ZONES = ["America/Chicago", "America/New_York", "Europe/London"];
 const REAL_OPTIONS = new Intl.DateTimeFormat().resolvedOptions();
@@ -1733,7 +2029,8 @@ describe("Settings → Church (slice 6a-1)", () => {
     const name = await screen.findByLabelText("Church name");
     const save = screen.getByRole("button", { name: "Save profile" });
     expect(save).toBeDisabled();
-    expect(screen.getByText("Used for passage text in the builder. Anyone can switch it for a single service.")).toBeInTheDocument();
+    expect(screen.getByText(TRANSLATION_HELP)).toBeInTheDocument();
+    expect(screen.getByText(BENEDICTION_HELP)).toBeInTheDocument();
     expect(await screen.findByText("GG2013 (your only hymnal)")).toBeInTheDocument();
     await user.clear(name);
     await user.type(name, " Example Church ");
@@ -1756,6 +2053,12 @@ describe("Settings → Church (slice 6a-1)", () => {
     expect(screen.getByText("None. The AI writes the benediction.")).toBeInTheDocument();
     expect(screen.queryAllByRole("textbox")).toEqual([]);
     expect(screen.queryByRole("button", { name: "Save profile" })).toBeNull();
+  });
+
+  it("shows a member the hymnal the builder uses, noting a stored one the church no longer has", async () => {
+    renderPage("member", { default_hymnal: "HL1955", effective_hymnal: "GG2013" });
+    expect(await screen.findByText("GG2013 (the builder uses this; HL1955 is no longer in your hymnals)")).toBeInTheDocument();
+    expect(screen.queryByText("HL1955")).toBeNull();
   });
 
   it("shows a field the server refuses under it and focuses it", async () => {
@@ -1792,6 +2095,7 @@ describe("Settings → Church (slice 6a-1)", () => {
     await waitFor(() => expect(translation).toHaveTextContent("ESV (not available on this server)"));
     const hymnal = screen.getByRole("combobox", { name: "Default hymnal" });
     await waitFor(() => expect(hymnal).toHaveTextContent("HL1955 (no longer in your hymnals)"));
+    expect(screen.getByText(HYMNAL_HELP)).toBeInTheDocument();
     await user.click(hymnal);
     await user.click(await screen.findByRole("option", { name: "PH1990" }));
     await user.click(screen.getByRole("button", { name: "Save profile" }));
@@ -1803,6 +2107,24 @@ describe("Settings → Church (slice 6a-1)", () => {
     renderPage("admin", { default_hymnal: null, effective_hymnal: null }, { "GET /hymnals": hymnals({ items: [], effective_hymnal: null }) });
     expect(await screen.findByText("Your church has no hymns yet, so there is no default hymnal.")).toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "Default hymnal" })).toBeNull();
+  });
+
+  it("says there are no hymns when a stored default hymnal is left but the church has none (never \"your only hymnal\")", async () => {
+    const { api } = renderPage(
+      "admin",
+      { default_hymnal: "GG2013", effective_hymnal: null },
+      { "GET /hymnals": hymnals({ items: [], effective_hymnal: null, default_hymnal: "GG2013" }) },
+    );
+    await waitFor(() => expect(api.requests.some((r) => r.path === "/hymnals")).toBe(true));
+    expect(await screen.findByText("Your church has no hymns yet, so there is no default hymnal.")).toBeInTheDocument();
+    expect(screen.queryByText(/your only hymnal/)).toBeNull();
+  });
+
+  it("never labels a stored translation as another one when the translation list cannot be read", async () => {
+    renderPage("admin", { bible_translation: "esv" }, { "GET /translations": fakeError(500, "internal_error", "Something went wrong.") });
+    const translation = await screen.findByRole("combobox", { name: "Default Bible translation" });
+    await waitFor(() => expect(translation).toHaveTextContent("ESV (not available on this server)"));
+    expect(translation).not.toHaveTextContent("World English Bible");
   });
 
   it("rebases on newer data: another admin's rename shows, and the edited Benediction is kept and sent alone", async () => {
@@ -2008,10 +2330,14 @@ import { browserTimezone, listTimezones, timezoneLabel } from "@/lib/timezones";
 
 export const ADMINS_ONLY = "Only admins can edit the church profile.";
 export const TIMEZONE_NOT_RECOGNIZED = "Timezone not recognized. Choose one from the list.";
-const TRANSLATION_HELP = "Used for passage text in the builder. Anyone can switch it for a single service.";
-const HYMNAL_HELP = "The hymnal the builder opens with. You can switch hymnals for a single service.";
-const BENEDICTION_HELP =
-  "Pre-fills the Benediction card in each new service. Leave it blank to let the AI write the benediction.";
+// A change reaches every service that follows the church's choice (a service whose own pick equals it follows too:
+// the draft stores no pick then), and a saved service reopens with the church's translation (6a-1 owner question 11).
+export const TRANSLATION_HELP =
+  "Used for passage text in the builder, in every service that has not switched to another translation (saved services too, when reopened). Anyone can switch it for a single service.";
+export const HYMNAL_HELP =
+  "The hymnal the builder opens with, in every unsaved service that has not switched to another hymnal. You can switch hymnals for a single service.";
+export const BENEDICTION_HELP =
+  "Pre-fills the Benediction card in each new service, and in unsaved services whose card still shows the default. Leave it blank to let the AI write the benediction.";
 const NO_HYMNALS = "Your church has no hymns yet, so there is no default hymnal.";
 const NO_BENEDICTION = "None. The AI writes the benediction.";
 
@@ -2124,15 +2450,23 @@ function ProfileFormView({ profile }: { profile: ChurchProfile }) {
       </FieldNote>
     ) : null;
 
+  // Until GET /translations answers (or when it fails), the profile's own facts: the translation in effect, and a
+  // stored one that differs from it is one this server does not offer.
   const translationChoices = translations.data
     ? translationItems(translations.data, profile.bible_translation)
-    : { [form.bible_translation]: profile.effective_translation_label };
+    : {
+        [profile.effective_translation]: profile.effective_translation_label,
+        ...translationItems(undefined, profile.bible_translation === profile.effective_translation ? null : profile.bible_translation),
+      };
   const hymnalChoices = hymnals.data
     ? hymnalItems(hymnals.data, profile.default_hymnal)
     : form.default_hymnal
       ? { [form.default_hymnal]: form.default_hymnal }
       : {};
-  const hymnalCodes = Object.keys(hymnalChoices);
+  // From the church's hymnals (GET /hymnals), never from the choices: a stale stored default is not "your only hymnal".
+  const churchHymnals = hymnals.data?.items.map((h) => h.code) ?? null;
+  const noHymnals = churchHymnals !== null ? churchHymnals.length === 0 : form.default_hymnal === "";
+  const onlyHymnal = churchHymnals !== null && churchHymnals.length === 1 && churchHymnals[0] === form.default_hymnal;
 
   return (
     <form onSubmit={onSubmit} className="grid gap-5" aria-label="Church profile">
@@ -2200,12 +2534,12 @@ function ProfileFormView({ profile }: { profile: ChurchProfile }) {
       </div>
 
       <div className="grid gap-1.5">
-        {hymnalCodes.length === 0 ? (
+        {noHymnals ? (
           <>
             <p className="text-sm font-medium">Default hymnal</p>
             <p className="text-sm text-muted-foreground">{NO_HYMNALS}</p>
           </>
-        ) : hymnals.data && hymnalCodes.length === 1 && hymnalCodes[0] === form.default_hymnal ? (
+        ) : onlyHymnal ? (
           <>
             <p className="text-sm font-medium">Default hymnal</p>
             <p className="text-sm">{`${form.default_hymnal} (your only hymnal)`}</p>
@@ -2278,9 +2612,18 @@ function SummaryItem({ label, children }: { label: string; children: ReactNode }
   );
 }
 
+/** The hymnal the builder opens with, noting a stored default the church no longer has. */
+function summaryHymnal(profile: ChurchProfile): string | null {
+  const { default_hymnal: stored, effective_hymnal: effective } = profile;
+  if (effective === null) return null;
+  return stored !== null && stored !== effective
+    ? `${effective} (the builder uses this; ${stored} is no longer in your hymnals)`
+    : effective;
+}
+
 /** What a member sees: the profile as plain text, no controls (as on Bulletin settings). */
 function ProfileSummary({ profile }: { profile: ChurchProfile }) {
-  const hymnal = profile.default_hymnal ?? profile.effective_hymnal;
+  const hymnal = summaryHymnal(profile);
   return (
     <div className="grid gap-4">
       <Alert role="status">
@@ -2321,7 +2664,7 @@ export default function ChurchSettingsRoute() {
 
 Run: `(cd frontend && npx vitest run src/components/settings src/components/app/timezone-combobox.test.tsx src/components/onboarding/create-church-form.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")` (three times) then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`
 **Expected:**
-three times `      Tests  28 passed (28)` (the page's 9, the Settings layout's 2, the combobox's 7, the create form's 10); ` Test Files  92 passed (92)` and `      Tests  751 passed (751)`; `typecheck 0`, `lint 0`.
+three times `      Tests  31 passed (31)` (the page's 12, the Settings layout's 2, the combobox's 7, the create form's 10); ` Test Files  92 passed (92)` and `      Tests  756 passed (756)`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -2333,11 +2676,12 @@ save only what changed; members read them as text. A stale stored
 translation or hymnal stays selectable, a stored time zone that is not
 recognized shows with a warning, newer server data rebases the form, a
 422 shows under its field, and leaving with unsaved edits asks first.
+The help lines say what a change of each default reaches.
 TimezoneCombobox gains a warning and shows a value it does not list." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1518 passed, 23 skipped`; frontend `751 passed` in 92 files.
+Expected counts after this task: backend `1523 passed, 24 skipped`; frontend `756 passed` in 92 files.
 
 ### Task 7: The Benediction hint links to Settings (S "Hand-off from 4"; clarification 13)
 
@@ -2449,7 +2793,7 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
 
 Run: `(cd frontend && npx vitest run src/components/builder/liturgy 2>&1 | grep -E "^ +× |\[ src/|Tests ")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`
 **Expected:**
-`      Tests  73 passed (73)`; ` Test Files  92 passed (92)` and `      Tests  751 passed (751)`; `typecheck 0`, `lint 0`.
+`      Tests  73 passed (73)`; ` Test Files  92 passed (92)` and `      Tests  756 passed (756)`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -2460,7 +2804,7 @@ closing \"Settings.\" links to Settings → Church, for every role." -m "Co-Auth
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1518 passed, 23 skipped`; frontend `751 passed` in 92 files.
+Expected counts after this task: backend `1523 passed, 24 skipped`; frontend `756 passed` in 92 files.
 
 ## Docs, verification, the PR, the merge (T8-T10)
 
@@ -2508,8 +2852,8 @@ after 6a-1)"; the results go into `docs/ops-runbook.md` → "Slice 6a-1
 record". Record what the page shows, never an email address or a church id.
 
 - [ ] (owner, after 6a-1) **1.** The menu at the top has **Settings** after **Services**. Tap it: **Settings** opens on **Church** ("You're the owner of {church}."), with the sections **Church** and **Bulletin**; **Bulletin** opens the Bulletin settings page.
-- [ ] (owner, after 6a-1) **2.** On **Church**, the church's name, time zone, default Bible translation, default hymnal (with one hymnal: "{code} (your only hymnal)") and default Benediction show as saved. Change the default Bible translation and tap **Save profile**: "Profile saved.". Open **Builder** step 1 of a service that has not chosen its own translation: the passages are in the new translation with no reload. Change it back.
-- [ ] (owner, after 6a-1) **3.** Change the default Benediction and save. Start a **New service** and open the liturgy step: the Benediction card shows the new text, and its hint's **Settings.** opens **Settings** → **Church**. A Benediction card you typed yourself is unchanged. Put the Benediction back as it was.
+- [ ] (owner, after 6a-1) **2.** On **Church**, the church's name, time zone, default Bible translation, default hymnal (with one hymnal: "{code} (your only hymnal)") and default Benediction show as saved. Change the default Bible translation and tap **Save profile**: "Profile saved.". Open **Builder** step 1 of a service that has not chosen its own translation: the passages are in the new translation with no reload. Expected, not a bug (6a-1 owner question 11): a service whose translation was picked by hand as the one that was then the default follows the new default too, and so does a saved service when it is reopened. Change it back.
+- [ ] (owner, after 6a-1) **3.** Change the default Benediction and save. Start a **New service** (if it asks to clear the current draft, tap **Cancel** and open the liturgy step of the current service instead, when you have not typed its Benediction yourself) and open the liturgy step: the Benediction card shows the new text, and its hint's **Settings.** opens **Settings** → **Church**. A Benediction card you typed yourself is unchanged. Put the Benediction back as it was (if it was the standard Halverson text, type **Halverson**: the word stands for the full text).
 - [ ] (owner, after 6a-1) **4.** On **Church**, change the name without saving and tap **Builder** at the top: "Discard unsaved changes?" asks first; **Keep editing** stays with the change, **Discard changes** goes to the builder. At 375 px: no sideways scroll on **Settings**; the fields, the section links and **Save profile** are easy to tap.
 - [ ] **5.** Rename the church and save: the church switcher shows the new name with no reload. Rename it back.
 - [ ] **6.** The time zone list offers "Use this device's time zone (…)" when the device's zone differs from the church's; tapping it and saving stores it (`GET /church` answers it with `timezone_valid` true).
@@ -2536,7 +2880,7 @@ member, the other settings kept). test_slice1_docs.py pins the last nine
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1518 passed, 23 skipped`; frontend `751 passed` in 92 files.
+Expected counts after this task: backend `1523 passed, 24 skipped`; frontend `756 passed` in 92 files.
 
 ### Task 9: Verification and the draft PR (owner's yes before the PR is opened and before it is marked ready)
 
@@ -2565,7 +2909,7 @@ for i in 1 2 3; do (cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Te
 (cd frontend && NEXT_PUBLIC_SUPABASE_URL=https://ci-placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-placeholder NEXT_PUBLIC_API_URL=http://localhost:8000 npm run build 2>&1 | grep -E "Compiled successfully|Error|/settings")
 ```
 
-**Expected:** `1518 passed, 23 skipped in <t>s`; three times ` Test Files  92 passed (92)` and `      Tests  751 passed (751)` with no `×` or `FAIL` line (one names the failing test: Step 6); `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s` and the route lines `├ ○ /bulletin-settings`, `├ ○ /settings` and `├ ○ /settings/church` and no `Error` (a font `Failed to fetch` only: say so and rely on CI).
+**Expected:** `1523 passed, 24 skipped in <t>s`; three times ` Test Files  92 passed (92)` and `      Tests  756 passed (756)` with no `×` or `FAIL` line (one names the failing test: Step 6); `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s` and the route lines `├ ○ /bulletin-settings`, `├ ○ /settings` and `├ ○ /settings/church` and no `Error` (a font `Failed to fetch` only: say so and rely on CI).
 
 - [ ] **Step 3 (agent): The API files match, the gates, the paths, the commits**
 
@@ -2579,12 +2923,13 @@ git log --reverse --no-merges --format=%s origin/main..HEAD
 for c in $(git rev-list origin/main..HEAD); do git show -s --format=%B "$c" | grep -q '^Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>$' || echo "no trailer: $(git show -s --format='%h %s' "$c")"; done; echo "trailer check done"
 ```
 
-**Expected:** nothing from `git status` (the committed snapshot and types are current); `imports grep exit 1`; `raw html grep exit 1`; exactly these paths (the Voices V1 docs, the runbook's Voices note and the two 6a spec amendments ride along until merged; the Voices code was reverted on the branch, so it is not in the diff):
+**Expected:** nothing from `git status` (the committed snapshot and types are current); `imports grep exit 1`; `raw html grep exit 1`; exactly these 42 paths (the Voices V1 docs, the runbook's Voices note and its persona-editing fix, and the two 6a spec amendments ride along until merged; the Voices code was reverted on the branch, so it is not in the diff):
 ```
 M	backend/api/routes/me.py
 M	backend/repos/churches.py
 M	backend/tests/test_api_church_profile.py
 A	backend/tests/test_church_admin.py
+A	backend/tests/test_church_admin_postgres.py
 M	backend/tests/test_no_streamlit_in_core.py
 M	backend/tests/test_slice1_docs.py
 A	backend/usecases/church_admin.py
@@ -2603,6 +2948,7 @@ A	frontend/src/app/(signed-in)/(church)/settings/layout.tsx
 A	frontend/src/app/(signed-in)/(church)/settings/page.tsx
 M	frontend/src/components/app/app-header.test.tsx
 M	frontend/src/components/app/app-nav.tsx
+M	frontend/src/components/app/church-switcher.tsx
 A	frontend/src/components/app/leave-guard.test.tsx
 A	frontend/src/components/app/leave-guard.tsx
 M	frontend/src/components/app/timezone-combobox.test.tsx
@@ -2622,7 +2968,7 @@ M	frontend/src/lib/queries/church.ts
 A	frontend/src/lib/settings/profile.test.ts
 A	frontend/src/lib/settings/profile.ts
 ```
-`0`; the subjects oldest first: the branch's commits since `875aefc` (the Voices V1 plan, build and revert, ending `Drop Voices of the Church (owner, 2026-10-05): revert its code, keep its record`), `Spec 6a: owner's planning answers (2026-10-05: three PRs, no Contacts or email, personas move to the pews feature, admins only delete hymns)`, `Spec 6a: the owner wants the full emailing after all (5b and Contacts return after 6a-1)`, the plan commits (`WIP plan: …` and `Plan: slice 6a-1 (the Settings area and the Church page)` and any later plan commit), then T1-T8's eight subjects as written above, then any `Fix: …` lines; only `trailer check done`.
+`0`; the subjects oldest first: the branch's commits since `875aefc` (the Voices V1 plan, build and revert, ending `Drop Voices of the Church (owner, 2026-10-05): revert its code, keep its record`), `Spec 6a: owner's planning answers (2026-10-05: three PRs, no Contacts or email, personas move to the pews feature, admins only delete hymns)`, `Spec 6a: the owner wants the full emailing after all (5b and Contacts return after 6a-1)`, the plan commits (`WIP plan: …` and `Plan: slice 6a-1 (the Settings area and the Church page)`), `Runbook: persona editing is no longer part of 6a (6a-1 plan review M11)`, any later plan commit (`Plan: slice 6a-1 review fixes …`), then T1-T8's eight subjects as written above, then any `Fix: …` lines; only `trailer check done`.
 
 - [ ] **Step 4 (agent → OWNER): Ask to open the draft PR**
 
@@ -2632,7 +2978,7 @@ gh pr list -R bbrown62450/church --head claude/slice-2-plan-4q33le --state open 
 
 **Expected:** `[]`. Send the owner exactly this, and wait for a clear yes:
 
-> Settings and the Church page (slice 6a-1) are verified on this machine: backend 1518 passed, 23 skipped (1487 before); frontend 751 tests in 92 files (734 before), three runs in a row; typecheck, lint and the production build are clean. It adds one API route (`PATCH /church`), no database change and no new package. The menu at the top gets **Settings**: it opens on **Church**, where you (and any admin) change the church's name, time zone, default Bible translation, default hymnal and default Benediction; other members see them as text. The builder follows a change with no reload, leaving with unsaved changes asks first, and the Benediction card's "Settings." links there. The Settings menu also lists **Bulletin** (your Bulletin settings page, unchanged until 6a-3 moves it in). The pull request also carries the Voices of the Church documents and the two 6a spec notes from today (the Voices code itself was removed). May I open the pull request as a **draft** titled "Slice 6a-1: the Settings area and the Church page", so the checks run? Merging stays with you.
+> Settings and the Church page (slice 6a-1) are verified on this machine: backend 1523 passed, 24 skipped (1487 before); frontend 756 tests in 92 files (734 before), three runs in a row; typecheck, lint and the production build are clean. It adds one API route (`PATCH /church`), no database change and no new package. The menu at the top gets **Settings**: it opens on **Church**, where you (and any admin) change the church's name, time zone, default Bible translation, default hymnal and default Benediction; other members see them as text. The builder follows a change with no reload, leaving with unsaved changes asks first (also "Join or create a church…" in the church menu), and the Benediction card's "Settings." links there. The Settings menu also lists **Bulletin** (your Bulletin settings page, unchanged until 6a-3 moves it in). The pull request also carries the Voices of the Church documents and the two 6a spec notes from today (the Voices code itself was removed). May I open the pull request as a **draft** titled "Slice 6a-1: the Settings area and the Church page", so the checks run? Merging stays with you.
 
 - [ ] **Step 5 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
 
@@ -2644,14 +2990,14 @@ Slice 6a-1: the Settings area and the Church page (the first of 6a's three PRs; 
 - PATCH /church (owners and admins): name, time zone (exact IANA name), default translation, default hymnal, default Benediction; only the fields sent, all or nothing, in one transaction that locks the church row and re-reads the caller's role under it (usecases/members.lock_and_read_actor, the helper 6b shares; repos.churches.lock_church). Every other settings key stays.
 - Settings: a Settings item in the top menu; /settings opens Church; the section nav lists Church and Bulletin (the existing Bulletin settings page, until 6a-3 moves it in).
 - The Church page: admins edit and save only what changed (a stale stored translation or hymnal kept, an unrecognized time zone shown with a warning, newer server data rebases the form); members read it as text. The builder follows at once (the profile cache, /me, /hymnals).
-- One leave guard (LeaveGuard) for the Church and Bulletin settings pages: any in-app link asks "Discard unsaved changes?" while there are unsaved edits.
+- One leave guard (LeaveGuard) for the Church and Bulletin settings pages: any in-app link, and the church menu's "Join or create a church…", asks "Discard unsaved changes?" while there are unsaved edits.
 - The Benediction card's hint links "Settings." to Settings → Church.
 - docs/manual-verification.md: "## Slice 6a".
 - Rides along: the Voices of the Church V1 documents (its code was reverted on this branch) and the 6a spec's two amendments of 2026-10-05.
 
 Later: 6a-2 (Hymns), 6a-3 (Liturgy prompts, Prayers, Rubric, Bulletin settings moved in), 5b (Account, Contacts, email), 6b (People).
 
-Tests: backend 1487 → 1518 passed, 23 → 23 skipped; frontend 734 → 751 in 88 → 92 files
+Tests: backend 1487 → 1523 passed, 23 → 24 skipped; frontend 734 → 756 in 88 → 92 files
 
 After merge (Task 10): a short check on the owner's phone, then a "Slice 6a-1 record" in docs/ops-runbook.md.
 
@@ -2665,17 +3011,17 @@ gh pr create -R bbrown62450/church --draft --base main --head claude/slice-2-pla
 gh pr checks <N> -R bbrown62450/church --watch --interval 30
 ```
 
-Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1518 passed, 23 skipped`, backend-postgres `23 passed, 1518 deselected`, frontend `751 passed` in 92 files. Then send: "PR #<N> is green: backend 1518 passed, 23 skipped; 751 frontend tests in 92 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R bbrown62450/church`.
+Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1523 passed, 24 skipped`, backend-postgres `24 passed, 1523 deselected`, frontend `756 passed` in 92 files. Then send: "PR #<N> is green: backend 1523 passed, 24 skipped; 751 frontend tests in 92 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R bbrown62450/church`.
 
 - [ ] **Step 6: Fix any failure in its owning task**
 
 | Failing check or test | Owning task |
 |---|---|
 | `test_church_admin.py` (its first three tests), `test_church_settings.py`, `test_no_streamlit_in_core.py` | T1 |
-| `test_church_admin.py` (the rest), `test_api_church_profile.py`, `test_openapi_contract.py`, `test_route_guards.py` | T2 |
+| `test_church_admin.py` (the rest), `test_api_church_profile.py`, `test_church_admin_postgres.py` (CI `backend-postgres`), `test_openapi_contract.py`, `test_route_guards.py` | T2 |
 | `profile.test.ts` | T3 |
-| `leave-guard.test.tsx`, `bulletin-settings-page.test.tsx` | T4 |
-| `settings-layout.test.tsx`, `app-header.test.tsx` | T5 |
+| `leave-guard.test.tsx`, `bulletin-settings-page.test.tsx`, `app-header.test.tsx` (its "Join or create a church…" test) | T4 |
+| `settings-layout.test.tsx`, `app-header.test.tsx` (its nav test) | T5 |
 | `church-settings-page.test.tsx`, `timezone-combobox.test.tsx`, `create-church-form.test.tsx` | T6 |
 | `liturgy-step.test.tsx`, `review-step.test.tsx` | T7 |
 | `test_slice1_docs.py`, `test_docs.py` | T8 |
@@ -2684,7 +3030,7 @@ Run the last line with `run_in_background: true`. **Expected:** the PR URL; ever
 
 For each fix: change only the owning task's files; rerun Steps 2-3; commit `Fix: <what> (Task <n>, slice 6a-1 final verification)` with the trailer; after the PR exists, ask the owner before pushing it.
 
-Expected counts after this task: backend `1518 passed, 23 skipped`; frontend `751 passed` in 92 files.
+Expected counts after this task: backend `1523 passed, 24 skipped`; frontend `756 passed` in 92 files.
 
 ### Task 10: Merge, the owner's phone check (four steps), the record (OWNER + agent)
 
@@ -2711,13 +3057,13 @@ RUN=$(gh run list -R bbrown62450/church --workflow ci.yml --branch main --commit
 
 - [ ] **Step 3 (OWNER, then agent): Phone, step 2 of 4: the translation (item 2)**
 
-> Back on **Settings** → **Church**, note your default Bible translation, choose another one (for example King James Version) and tap **Save profile**: does "Profile saved." show? Open **Builder**, step 1, on a service where you have not picked a translation for that service: are the passages now in the translation you chose, without reloading? Then go back to **Settings** → **Church**, put your usual translation back and save.
+> Back on **Settings** → **Church**, note your default Bible translation, choose another one (for example King James Version) and tap **Save profile**: does "Profile saved." show? Open **Builder**, step 1, on a service where you have not picked a translation for that service: are the passages now in the translation you chose, without reloading? (A service where you once picked your usual translation by hand changes too, and so does a saved service when you reopen it: that is expected, not a fault.) Then go back to **Settings** → **Church**, put your usual translation back and save.
 
 - [ ] **Step 4 (OWNER, then agent): Phone, step 3 of 4: the Benediction (item 3)**
 
-> On **Settings** → **Church**, copy your default Benediction somewhere safe (or note that it is the standard Halverson text), change it to something short such as "Go in peace." and save. In the builder, start a **New service** (or open the liturgy step of a service whose Benediction you have not typed yourself): does the Benediction card show "Go in peace."? Under it, tap **Settings.** in "Admins can change it in Settings.": does **Settings** → **Church** open? Put your Benediction back as it was and save.
+> On **Settings** → **Church**, look at your default Benediction: is it the standard Halverson text ("You go nowhere by accident…")? If not, copy it somewhere safe. Change it to something short such as "Go in peace." and save. In the builder, start a **New service**; if it asks "Start a new service? This clears the current draft on this device.", tap **Cancel** and open the liturgy step of your current service instead (when you have not typed its Benediction yourself). Does the Benediction card show "Go in peace."? Under it, tap **Settings.** in "Admins can change it in Settings.": does **Settings** → **Church** open? Put your Benediction back and save: if it was the standard text, type just the word **Halverson** (it stands for the full text); otherwise paste your copy.
 
-If the owner's Benediction was the standard text, putting it back means pasting the full Halverson text (the field showed it); a blank field would mean "no default". Record only whether it was restored.
+The word "Halverson" restores exactly the standard text (`resolve_default_benediction`), so there is no long text to paste on a phone; a blank field would mean "no default". Record only whether it was restored.
 
 - [ ] **Step 5 (OWNER, then agent): Phone, step 4 of 4: unsaved changes and the phone screen (item 4)**
 
@@ -2810,7 +3156,7 @@ gh pr checks claude/slice-2-plan-4q33le -R bbrown62450/church --watch
 
 Code only (no schema to undo). On the owner's yes for each outward command: a branch `claude/revert-6a1` from `origin/main`, `git revert -m 1 --no-commit <merge sha>`, a commit "Revert slice 6a-1 (PR #<N>)" with the trailer, both suites (`1487 passed, 23 skipped`; `734 passed` in 88), a PR, CI, and the merge on the owner's yes; record it in the record. Anything saved through the Church page stays in the church's row (name, time zone, `bible_translation`, `default_hymnal`, `default_benediction`), which the builder already reads, so nothing needs undoing in the data.
 
-Expected counts after this task: backend `1518 passed, 23 skipped` on `main`; frontend `751 passed` in 92 files. The records PR adds no test.
+Expected counts after this task: backend `1523 passed, 24 skipped` on `main`; frontend `756 passed` in 92 files. The records PR adds no test.
 
 ---
 ## Build notes
@@ -2819,14 +3165,14 @@ Expected counts after this task: backend `1518 passed, 23 skipped` on `main`; fr
 - **What S assumed and what exists.** No `lock_church`, `lock_and_read_actor`, `usecases/members.py`, `usecases/church_admin.py`, Settings layout or `sections.ts` existed (5b and 6b were never built), so T1 creates the lock helpers with the 6b spec's names and T5 the shell. `resolve_default_benediction` already keeps `""` (S's key-presence rule, slice 4 and the 2026-10-02 amendment), so the Benediction needs no backend change beyond the write; `test_one_bad_field_writes_nothing` and `test_only_the_fields_sent_are_written_and_other_settings_stay` cover it through `PATCH`. `handleAuthErrors` already ignores a role 403, so no `forbiddenIsRole` meta was added (clarification 16).
 - **The leave guard moved, not copied.** The Bulletin settings page's `beforeunload` effect, its Back-link `onClick` and its dialog became `LeaveGuard`; the page's nine tests pass unchanged (the document-level capture listener stops a plain click before Next's `Link` runs, and a modified or middle click still reaches the link). The `ConfirmDialog` copy is the 2a page's.
 - **The Benediction link includes the full stop.** With only the word "Settings" as the link, jsdom's accessible-description computation gave "… in Settings ." (a space before the full stop) and `review-step.test.tsx`'s pin of the description failed; the link "Settings." keeps the description exactly the hint.
-- **The hymnal field waits for `GET /hymnals`** before it decides between a select and "{code} (your only hymnal)", so a stale stored code never flashes as "your only hymnal" while the hymnals load.
+- **The hymnal field counts `GET /hymnals`' items** before it shows "{code} (your only hymnal)" (and waits for them), so a stale stored code never shows as "your only hymnal", neither while the hymnals load nor when the church has none left (plan review M1).
 - **The device-zone shortcut** is offered only for a zone the browser lists (a runner or a browser in `UTC`, which ICU does not list, gets no button rather than a 422).
 
 **Replay of the finished plan (2026-10-05).** The directives of T1-T8 were applied in order (by `replay.py`, which parses each step's **Create**, **Append** and **In … replace** blocks and runs every command on its "Run:" lines, three times where it says so, then the task's commit block) onto a fresh detached worktree of the WIP plan commit `af63cbb` (the branch head `3d5daad` plus the plan's commits), with the repo's `.venv` (a symlink) and a hard-linked copy of `frontend/node_modules`:
 - All 52 directives applied (T1 2 + 5, T2 3 + 5, T3 1 + 4, T4 1 + 7, T5 4 + 5, T6 2 + 6, T7 2 + 3, T8 2); every Replace anchor occurred exactly once. After T8, `backend`, `frontend/src` and `docs` equaled the build worktree's (`diff -r`, apart from this plan file: empty).
 - Baselines before T1: backend `1487 passed, 23 skipped`; frontend `734 passed` in 88 files.
 - Every "see it fail" output is quoted from this replay (times as `<t>`): T1 the collection error and the import check's `1 failed, 2 passed`; T2 `28 failed, 12 passed` (every new test; the 12 are T1's 3 and the profile's 9); T3 and T4 the new file not loading; T5 and T6 one `×` and the new file not loading; T7 the one edited test.
-- Every count matched the table: backend 1490, 1518 (23 skipped throughout); frontend 738 in 89, 739 in 90, 741 in 91, 751 in 92, 751 in 92; the three-times runs (T4 `10 passed`, T6 `28 passed`) the same each time, no flaky run; typecheck 0 and lint 0 after T2-T7. The OpenAPI export and `gen:api` gave ` 2 files changed, 256 insertions(+), 1 deletion(-)`; T8 `89 passed`, `4`, `0`, ` 2 files changed, 25 insertions(+), 4 deletions(-)`.
+- Every count matched the table: backend 1490, 1518 (23 skipped throughout); frontend 738 in 89, 741 in 90, 743 in 91, 756 in 92, 756 in 92; the three-times runs (T4 `10 passed`, T6 `28 passed`) the same each time, no flaky run; typecheck 0 and lint 0 after T2-T7. The OpenAPI export and `gen:api` gave ` 2 files changed, 256 insertions(+), 1 deletion(-)`; T8 `89 passed`, `4`, `0`, ` 2 files changed, 25 insertions(+), 4 deletions(-)`.
 - T9 Steps 2-3 on the replay worktree after T8: the production build `✓ Compiled successfully` with `○ /bulletin-settings`, `○ /settings` and `○ /settings/church` and no `Error`; the OpenAPI export and `gen:api` changed nothing after T2's commit; the imports and raw HTML greps exit 1; the 40 paths of Step 3 exactly; no migration, `backend/db`, workflow, package or Streamlit path; no em dash in any added line under `backend` or `frontend/src`.
 - Not run while planning: the pushes, the PR and CI (`backend-postgres` included: no new Postgres test), the merge, Railway's and Vercel's deploys and the owner's phone check (T10).
 
@@ -2839,11 +3185,12 @@ Expected counts after this task: backend `1518 passed, 23 skipped` on `main`; fr
 | Amendment "later the same day": the shell is the layout 5b adds Account and Contacts to | T5 `SETTINGS_SECTIONS` (one list); clarification 3 |
 | S "Settings nav": `/settings` → Church, the nav | T5 "shows the heading, who you are in the church, and the sections with the current one marked", "shows a member the same sections, and /settings opens Church" |
 | Reaching Settings from the app | T5 `app-header.test.tsx` (the Settings item, current under `/settings`) |
-| S UX §1: the fields, help, stale values, no hymnals, one hymnal | T6 "lets an admin change only the name…", "keeps a stale stored translation or hymnal selectable…", "shows a stored time zone it does not recognize…"; T3 `translationItems`, `hymnalItems` |
+| S UX §1: the fields, help, stale values, no hymnals, one hymnal | T6 "lets an admin change only the name…", "keeps a stale stored translation or hymnal selectable…", "says there are no hymns when a stored default hymnal is left…", "never labels a stored translation as another one…", "shows a stored time zone it does not recognize…", "shows a member the hymnal the builder uses…"; T3 `translationItems`, `hymnalItems` |
 | S "Every page": only changed fields, rebase on refetch, reset after save | T3 "starts at the stored values…", "rebases on newer data…"; T6 "rebases on newer data: another admin's rename shows…" |
-| S "Leave guard" | T4 `leave-guard.test.tsx`; T6 "asks before leaving with unsaved edits, through the Settings nav"; `bulletin-settings-page.test.tsx` (unchanged) |
-| S API `PATCH /church`: messages, fields, order, nothing written on a failure, `extra="forbid"` | T2 `test_a_bad_field_is_named_and_the_first_in_order_wins` (11 cases), `test_a_bad_field_is_a_422_naming_it_and_nothing_is_written` (6 cases), `test_a_church_id_in_the_body_is_refused_and_isolation`, `test_an_empty_or_all_null_patch_changes_nothing` |
-| S Semantics: one transaction, settings merged, unknown keys kept, stale stored translation survives | T2 `test_only_the_fields_sent_are_written_and_other_settings_stay`, `test_an_unavailable_stored_translation_survives_a_name_change`, `test_the_profile_is_read_and_written_under_one_row_lock` |
+| S "Leave guard" (links, and the switcher's "Join or create a church…") | T4 `leave-guard.test.tsx` ("asks before an in-app link…" with a `blob:` link going on, "after Discard changes, the link's own handler navigates…", "asks before the church menu's Join or create a church…"); T6 "asks before leaving with unsaved edits, through the Settings nav"; `bulletin-settings-page.test.tsx` and `app-header.test.tsx` (unchanged) |
+| S API `PATCH /church`: messages, fields, order, nothing written on a failure, `extra="forbid"` | T2 `test_a_bad_field_is_named_and_the_first_in_order_wins` (13 cases, a NUL and a line break in the name among them), `test_a_bad_field_is_a_422_naming_it_and_nothing_is_written` (7 cases), `test_the_esv_is_accepted_only_where_its_key_is_set`, `test_a_church_id_in_the_body_is_refused_and_isolation`, `test_an_empty_or_all_null_patch_changes_nothing` |
+| S Semantics: one transaction, settings merged, unknown keys kept, stale stored translation survives | T2 `test_only_the_fields_sent_are_written_and_other_settings_stay` and `test_a_profile_save_keeps_every_other_setting` (every settings key seeded, the whole dict compared), `test_an_unavailable_stored_translation_survives_a_name_change`, `test_the_profile_is_read_and_written_under_one_row_lock` |
+| S Locking on real Postgres (the race test) | T2 `test_church_admin_postgres.py` `test_other_settings_writers_wait_for_a_profile_save_and_every_key_survives` (CI `backend-postgres`) |
 | S Locking: `lock_church`, `lock_and_read_actor`, `require_admin_role` | T1 `test_the_role_is_read_under_the_church_row_lock`, `test_a_church_or_a_membership_gone_is_no_church_access`, `test_require_admin_role`; T2 `test_a_demoted_admin_or_a_removed_member_writes_nothing` |
 | The Benediction's key-presence rule (`""` = no default) | T2 `test_the_fields_sent_are_cleaned_and_nothing_else`, `test_only_the_fields_sent_are_written_and_other_settings_stay`; existing `test_default_benediction_is_the_church_s_or_halverson` |
 | Timezone IANA check on edit | T2 (the four "Unknown timezone." cases); T6 (the warning, the device's zone); T6 `timezone-combobox.test.tsx` |
@@ -2855,13 +3202,16 @@ Expected counts after this task: backend `1518 passed, 23 skipped` on `main`; fr
 | OpenAPI and types regenerated | T2 Step 4; T9 Step 3; `test_openapi_contract.py` |
 | A guided phone check after the PR | T10 Steps 2-5; `docs/manual-verification.md` "## Slice 6a" (T8) |
 
-S items **not** in 6a-1: Hymns, hymnals, hymn facts (6a-2); Liturgy prompts, Prayers, Rubric (with `PATCH /rubric` under the lock and its `defaults`), Bulletin settings moved under `/settings` (6a-3); the ESV key move ("Questions for the owner" 9); Contacts, Account and the email hand-offs (5b, after its own planning round); the Postgres race test (6a-3, with `PUT /church/liturgy-prompts`).
+S items **not** in 6a-1: Hymns, hymnals, hymn facts (6a-2); Liturgy prompts, Prayers, Rubric (with `PATCH /rubric` under the lock and its `defaults`), Bulletin settings moved under `/settings` (6a-3); the ESV key move ("Questions for the owner" 9); Contacts, Account and the email hand-offs (5b, after its own planning round); the race test's pairing with `PUT /church/liturgy-prompts` (6a-3 adds that route).
 
 ## Follow-ups (not in 6a-1)
 
-- 6a-3: move `PATCH /rubric` and `PUT /church/bulletin-settings` under `lock_and_read_actor` and `require_admin_role`; rename `_merge_settings` to `merge_settings(…, session=None)` when the prompts and prayers writes need it; add S's Postgres race test with `PUT /church/liturgy-prompts`; point the "Bulletin" entry of `SETTINGS_SECTIONS` under `/settings`.
+- 6a-3: move `PATCH /rubric` and `PUT /church/bulletin-settings` under `lock_and_read_actor` and `require_admin_role`; rename `_merge_settings` to `merge_settings(…, session=None)` when the prompts and prayers writes need it; add `PUT /church/liturgy-prompts` to `test_church_admin_postgres.py`'s race; point the "Bulletin" entry of `SETTINGS_SECTIONS` under `/settings`.
+- 6a-3 or 5b, whichever comes first: on a phone the Settings nav is a wrapping row of 44 px links; it fits today's two, but S's final list of nine would wrap to about three rows at 375 px, so switch the phone row to a horizontal scroller or a Select then (`SETTINGS_SECTIONS` stays one constant; no rework of the layout's place; plan review M12).
 - 6a-2: the no-hymnals line on the Church page can link to Hymns once that page exists.
-- The church switcher does not ask before discarding unsaved settings edits (clarification 8); a `confirmLeave()` hook in the switcher is the fix if the owner wants it.
+- Choosing another church in the church menu does not ask before discarding unsaved settings edits (clarification 8); `confirmLeave` (already used by "Join or create a church…") is the fix if the owner wants it.
+- If the owner does not accept "Questions for the owner" 11: store an explicit translation or hymnal pick (and a saved service's translation) instead of null, a draft-schema change.
+- `POST /churches` has the same gap the church name had (a control character, NUL included, is accepted, and a NUL is a 500 on Postgres); the onboarding form can take `church_admin`'s check.
 - The ESV key still read by `scripture_fetcher` from the environment (slice 2's recorded deviation), if the owner wants it moved later.
 - Carried from 2a: `_merge_settings` raises `TypeError` (a 500) if `churches.settings` is ever not an object; `repos.churches.update_profile` has the same shape (`{**(church.settings or {}), …}`).
 
@@ -2873,11 +3223,12 @@ Your 6a planning answers of 2026-10-05 (the seven, and the reversal of answer 7 
 2. **What the Settings area lists until the other pages come** (clarification 3): **Church** and **Bulletin**; **Bulletin** opens your existing Bulletin settings page as it is today (with its **Back to Review & send**), until 6a-3 moves it inside Settings. Hymns comes with 6a-2, Liturgy prompts, Prayers and Rubric with 6a-3, and Account and Contacts with 5b. (The other choice: list only **Church** for now.) Recommended: accept.
 3. **The Settings heading** (clarification 3): "Settings", with "You're the owner of {your church}." (or "an admin of", "a member of") under it, then the page's own title, "Church profile". Recommended: accept.
 4. **Members read the profile as plain text** (clarification 5): a member sees "Only admins can edit the church profile." and the name, time zone, translation, hymnal and Benediction as text, with no boxes and no Save button, as on Bulletin settings. (The other choice, in the spec: the same boxes, greyed out.) Recommended: accept.
-5. **The Church page's wording** (clarifications 4, 14): the labels "Church name", "Time zone", "Default Bible translation", "Default hymnal", "Default Benediction", their help lines, **Save profile** and "Profile saved."; "Use this device's time zone (…)" under the time zone; "Timezone not recognized. Choose one from the list." for a stored zone the app does not know; "{ID} (not available on this server)" and "{code} (no longer in your hymnals)" for a stored translation or hymnal that is no longer offered, kept as chosen; "{code} (your only hymnal)" with one hymnal. Recommended: accept.
+5. **The Church page's wording** (clarifications 4, 5, 9, 14): the labels "Church name", "Time zone", "Default Bible translation", "Default hymnal", "Default Benediction", **Save profile** and "Profile saved."; the help lines "Used for passage text in the builder, in every service that has not switched to another translation (saved services too, when reopened). Anyone can switch it for a single service.", "The hymnal the builder opens with, in every unsaved service that has not switched to another hymnal. You can switch hymnals for a single service." and "Pre-fills the Benediction card in each new service, and in unsaved services whose card still shows the default. Leave it blank to let the AI write the benediction." (the spec's Benediction line said only "in each new service", but a change also refills the card of every unsaved service that still shows the default, on every member's device; the other choice is the spec's shorter line); "Use this device's time zone (…)" under the time zone; "Timezone not recognized. Choose one from the list." for a stored zone the app does not know; "{ID} (not available on this server)" and "{code} (no longer in your hymnals)" for a stored translation or hymnal that is no longer offered, kept as chosen; "{code} (your only hymnal)" with one hymnal; for a member, "{hymnal} (the builder uses this; {code} is no longer in your hymnals)" when the saved default hymnal is gone; and "Church name can't contain line breaks or control characters." when a name has one (only an odd paste can do this; the other choice is to turn such characters quietly into a space). Recommended: accept.
 6. **No "Halverson" note** (clarification 4): the spec's note under the Benediction ("The bulletin will print the word Halverson") is left out, because since 2026-10-02 the word prints the full Halverson text. A blank Benediction means no default (the AI writes it). Recommended: accept.
 7. **No hymns yet** (clarification 4): a church with no hymns sees "Your church has no hymns yet, so there is no default hymnal." in place of the hymnal field (the spec's line pointed to the Hymns page, which comes in 6a-2). Recommended: accept.
-8. **The warning before leaving unsaved changes** (clarification 8): on the Church page and on Bulletin settings, any link in the app (the menu at the top, the Settings sections, a page's own links) asks "Discard unsaved changes?" first, and closing or reloading the tab shows the browser's own warning. Bulletin settings gains the menu links (today only its Back link asks). Not covered: the browser's Back button, Log out, and switching church in the church menu (the spec wanted the church switch covered; it is left out to keep this PR small, and switching church with unsaved changes loses them without asking). Recommended: accept.
+8. **The warning before leaving unsaved changes** (clarification 8): on the Church page and on Bulletin settings, any link in the app (the menu at the top, the Settings sections, a page's own links) and **Join or create a church…** in the church menu ask "Discard unsaved changes?" first, and closing or reloading the tab shows the browser's own warning. Bulletin settings gains the menu links (today only its Back link asks). Not covered: the browser's Back button, Log out, and choosing another church in the church menu (the spec wanted that covered too; it is left out to keep this PR small, and choosing another church with unsaved changes loses them without asking). Recommended: accept.
 9. **The ESV key stays where it is** (clarification 16): the spec planned a behind-the-scenes move of the ESV key's setting with 6a; nothing you see depends on it, and the new page checks translations exactly as the rest of the app does today, so it is left out of 6a-1. Recommended: accept (drop it, or leave it for the clean-up at the end of the migration).
 10. **Two admins saving the profile at once** (clarification 12): a field only one of them changed keeps that change; the same field changed by both keeps the later save, with no "someone else changed this" warning. While the page is open, a newer save from elsewhere updates every field you have not changed. Recommended: accept.
+11. **What a change of the default translation or hymnal reaches** (clarification 11): this is how the builder already works; the Church page only makes it reachable. Changing the default Bible translation changes the passages of every service that uses the church's translation. That includes a service where someone picked that same translation by hand while it was the default (the builder keeps no record of such a pick), and a saved service when you reopen it, for example to print it again. Changing the default hymnal does the same for services not yet saved (a saved service keeps its hymnal). The Benediction is not affected this way: a saved service keeps its own. The help lines under both fields say so briefly, and the phone check expects it. Recommended: accept for now (if not, a later change can make the builder remember a hand-picked translation or hymnal, and the translation a service was saved with).
 
 Owner steps still to come: the plan's approval; the draft PR on your yes and ready on your yes (T9); the merge on your yes, then four phone checks one at a time, and the records PR (T10).
