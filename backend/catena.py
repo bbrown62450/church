@@ -7,7 +7,8 @@ against the page images also holds its comments, exactly as printed. A section n
 has no text in the file, so uncorrected OCR can never be shown (backend/scripts/catena_import.py
 makes the drafts; the plan's "Checking a section" says how a section is checked).
 
-Pure: no I/O but reading the data files (once each, lazily), no FastAPI.
+Pure: no I/O but reading the data files (once each: all four at the app's startup, load_all),
+no FastAPI.
 """
 from __future__ import annotations
 
@@ -290,6 +291,12 @@ def parse(data: dict, gospel: str) -> tuple[Section, ...]:
 def load(gospel: str) -> tuple[Section, ...]:
     """A Gospel's sections, read from its data file on first use and kept (the file ships with the app)."""
     return parse(json.loads(data_path(gospel).read_text(encoding="utf-8")), gospel)
+
+
+def load_all() -> tuple[Section, ...]:
+    """Every Gospel's sections, each file read and checked against the format (CatenaDataError on
+    any break). The app calls it at startup, so a broken file fails the deploy, not the page."""
+    return tuple(section for gospel in GOSPELS for section in load(gospel))
 
 
 def sections_for(reference: str) -> tuple[Section, ...]:
