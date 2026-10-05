@@ -665,6 +665,26 @@ church id or database URL is recorded here.
 | 5. Phone check | A saved service saved its changes and its printed bulletin showed the "[Cover picture]" box centered under the church's name | 2026-10-04 |
 | Follow-ups | Next: PR 3b (the picture on the Bulletin step), whose phone check also re-checks saving a new service and the "From last week" marks after reopening; then the print test of a cover with a picture. Still pending: the PR 1 print test at the church | 2026-10-04 |
 
+### Printed bulletin PR 3b record
+
+Printed bulletin PR 3b (the cover picture on the Bulletin step: Choose a
+picture, the preview with the band, Remove, carry forward of last week's
+picture with Keep as is, the card's lines, draft version 4) merged as PR #50,
+the second of the two PR 3 pull requests. Frontend only: no backend change
+and no migration (production stays at `0007_bulletin_images`). The owner's
+check was a guided check on a phone (`docs/manual-verification.md`,
+"Printed bulletin PR 3: the cover picture"). No token, email address, phone
+number, street address, church id or picture is recorded here.
+
+| Step | Result | Date |
+|---|---|---|
+| Merge | PR #50 merged 12:58 UTC (08:58 Eastern), merge commit `875aefc` | 2026-10-05 |
+| 1. Upload | A photo taken on the owner's iPhone uploaded (so Safari sent it as a JPEG, PR 3 planning answer 5); the preview and the printed cover showed it as planned | 2026-10-05 |
+| 2. Remove | After Remove the cover had no box, and the card listed "cover picture" under "Not filled in" | 2026-10-05 |
+| 3. Save and carry | A read-only query showed the service the owner was editing saved with its bulletin and its picture (2026-10-11 service, 13:05 UTC). Saving a new service for the following Sunday and reopening it from Services was skipped by the owner, so a new service's first save is still not confirmed in the database (see the PR 2b-2 record's correction) | 2026-10-05 |
+| 4. Refused file | A file that is not a JPEG or PNG gave "Choose a JPEG or PNG picture." | 2026-10-05 |
+| Follow-ups | Printed bulletin PRs 1-3 are complete. Still pending: the PR 1 print test at the church (legal paper, page order) and the PR 3 print test of a cover with a picture on the color printer; a new service's first save to be confirmed the next time one is saved (it should appear in Services after a reload). Next: Voices of the Church, 6a (Settings, including persona editing), Hear it from the pews | 2026-10-05 |
+
 ## Backups
 
 - **Workflow:** `.github/workflows/backup.yml` (`db-backup`). Daily at 08:37 UTC,
