@@ -2,10 +2,14 @@
 
 Every file loads and passes the format checks, holds every section the import tool found, and
 holds text only for the sections checked against the page images (the V1 plan's check record).
-A newly checked section changes CHECKED here in the same commit.
+Each checked section's text is pinned by a hash (Voices V1 build review I2), so a later `index`
+run, a find-and-replace or an editor's auto-format cannot change one character of it unnoticed.
+A newly checked (or re-checked) section changes CHECKED here, its hash included, in the same commit.
 """
+import hashlib
 import json
 import re
+import shutil
 from pathlib import Path
 
 import pytest
@@ -14,11 +18,18 @@ import catena
 import vanderbilt_lectionary
 
 SECTIONS = {"Matthew": 277, "Mark": 104, "Luke": 245, "John": 190}
+# Each checked section's id and the sha256 of its text (text_hash: its comments and errata).
 CHECKED = {
-    "Matthew": ["matthew-22-15-22", "matthew-22-34-40", "matthew-22-41-46", "matthew-23-1-4", "matthew-23-5-12"],
-    "Mark": [],
-    "Luke": [],
-    "John": [],
+    "Matthew": {
+        "matthew-22-15-22": "aaef04e79b53ddf4bbef8329843784e8db40003f9a86e5e3c54942c4299c0250",
+        "matthew-22-34-40": "ffd0027e5bdcd69dcd03587ec727c2dd317e2174d8f8e4f850cc00db2d293b8e",
+        "matthew-22-41-46": "47851e05f919dbd860cd589909c1c86a9dfa2aa05097651612b4ea87b6d0d030",
+        "matthew-23-1-4": "0689776e0ffeda49518517156b608066565b433260a8dc45efdf68dc096d4f3a",
+        "matthew-23-5-12": "67a352121425973b5f737f86ea0af69e87e505eb9a9d58bafbbb498c8486dfef",
+    },
+    "Mark": {},
+    "Luke": {},
+    "John": {},
 }
 # The quotations of each checked section (the V1 plan's check record).
 QUOTATIONS = {"matthew-22-15-22": 19, "matthew-22-34-40": 23, "matthew-22-41-46": 13, "matthew-23-1-4": 11,
@@ -29,7 +40,7 @@ QUOTATIONS = {"matthew-22-15-22": 19, "matthew-22-34-40": 23, "matthew-22-41-46"
 def test_every_file_loads_with_every_section_and_text_only_where_checked(gospel):
     sections = catena.load(gospel)
     assert len(sections) == SECTIONS[gospel]
-    assert [s.id for s in sections if s.checked] == CHECKED[gospel]
+    assert [s.id for s in sections if s.checked] == list(CHECKED[gospel])
     assert {s.id: s.quotations for s in sections if s.checked} == {i: QUOTATIONS[i] for i in CHECKED[gospel]}
     assert not any(s.comments for s in sections if not s.checked)
     assert {s.volume.gospel for s in sections} == {gospel}
@@ -69,6 +80,42 @@ def test_the_file_is_one_section_a_line_and_one_checked_comment_a_line(gospel):
     assert all(set(s) <= keys for s in raw["sections"])            # never a draft's footnotes or warnings
     checked_comments = sum(len(s.get("comments", [])) for s in raw["sections"])
     assert len(lines) == 2 + len(raw["sections"]) + checked_comments + len(CHECKED[gospel])
+
+
+def text_hash(section: dict) -> str:
+    """The sha256 of a checked section's text as the file holds it: its comments (every key of each,
+    in order) and its errata, serialized one canonical way (sorted keys, no spaces, UTF-8)."""
+    text = {"comments": section["comments"], "errata": section.get("errata", [])}
+    canonical = json.dumps(text, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def changed_since_checked(gospel: str) -> list[str]:
+    """The checked sections whose text no longer has the hash pinned in CHECKED."""
+    raw = json.loads(catena.data_path(gospel).read_text(encoding="utf-8"))
+    return [s["id"] for s in raw["sections"]
+            if s["status"] == "checked" and CHECKED[gospel].get(s["id"]) != text_hash(s)]
+
+
+@pytest.mark.parametrize("gospel", catena.GOSPELS)
+def test_each_checked_sections_text_is_exactly_the_text_that_was_checked(gospel):
+    assert changed_since_checked(gospel) == []
+
+
+def test_one_letter_changed_in_a_checked_comment_fails_its_pin(tmp_path, monkeypatch):
+    # The review's case: "Christ" becoming "Chryst" in one comment of Matthew 22:41-46 passed every
+    # other data test.
+    for gospel in catena.GOSPELS:
+        shutil.copy(catena.data_path(gospel), tmp_path / catena.data_path(gospel).name)
+    path = tmp_path / "matthew.json"
+    lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+    start = next(i for i, line in enumerate(lines) if line.startswith('{"id": "matthew-22-41-46"'))
+    at = next(i for i in range(start + 1, len(lines)) if "Christ" in lines[i])
+    lines[at] = lines[at].replace("Christ", "Chryst", 1)
+    path.write_text("".join(lines), encoding="utf-8")
+    monkeypatch.setattr(catena, "DATA_DIR", tmp_path)
+    assert changed_since_checked("Matthew") == ["matthew-22-41-46"]
+    assert [changed_since_checked(g) for g in ("Mark", "Luke", "John")] == [[], [], []]
 
 
 def test_matthew_22_15_22_is_the_printed_text_of_pages_748_to_752():

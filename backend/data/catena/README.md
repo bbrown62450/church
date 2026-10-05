@@ -64,8 +64,13 @@ between them in each volume; `test_catena_data.py` checks both).
    (it refuses a file that breaks the format, the placeholder date included).
 7. A second reader checks the section again, against the page images and not the first reader's
    notes, before it is merged; record both in the commit message.
-8. Add the section's id to `CHECKED` and its count of the fathers' comments (not the linking
-   words) to `QUOTATIONS` in `backend/tests/test_catena_data.py`, run
+8. Add the section's id and the hash of its text to `CHECKED`, and its count of the fathers'
+   comments (not the linking words) to `QUOTATIONS`, in `backend/tests/test_catena_data.py`, in the
+   same commit as the check. The hash is `text_hash` in that file (the sha256 of the section's
+   comments and errata); `test_each_checked_sections_text_is_exactly_the_text_that_was_checked`
+   fails with the section's id until it is pinned, and again whenever one character of a checked
+   section changes, so a correction to checked text is re-checked and re-pinned on purpose, in a
+   commit that says so. Then run
    `.venv/bin/python -m pytest -q backend/tests/test_catena.py backend/tests/test_catena_data.py backend/tests/test_catena_import.py backend/tests/test_api_voices.py`,
    and commit with the page image addresses in the message.
 
