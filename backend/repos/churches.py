@@ -150,10 +150,12 @@ def update_church(church_id, *, name=None, timezone=None, settings=None) -> None
             church.settings = settings
 
 
-def _lock_live_church(session, church_id) -> Optional[Church]:
+def lock_church(session, church_id) -> Optional[Church]:
     """Load the church row with SELECT ... FOR UPDATE (Postgres; SQLite ignores
     it), so a concurrent settings write waits for this transaction instead of
-    overwriting it. None if the church is missing or soft-deleted."""
+    overwriting it. None if the church is missing or soft-deleted. The one
+    church-row lock (6a spec, "Assumed interfaces"): every church write takes
+    it, directly or through usecases.members.lock_and_read_actor."""
     church = session.get(Church, church_id, with_for_update=True)
     if church is None or church.deleted_at is not None:
         return None
@@ -164,7 +166,7 @@ def _merge_settings(church_id, patch: dict) -> None:
     """Shallow-merge `patch` into the church's settings JSON under a row lock
     (reassigns a new dict so SQLAlchemy detects the change)."""
     with session_scope() as session:
-        church = _lock_live_church(session, church_id)
+        church = lock_church(session, church_id)
         if church is None:
             return
         church.settings = {**(church.settings or {}), **patch}
@@ -219,7 +221,7 @@ def update_church_rubric(church_id, patch: dict) -> dict:
     """
     cleaned = validate_patch(patch)
     with session_scope() as session:
-        church = _lock_live_church(session, church_id)
+        church = lock_church(session, church_id)
         settings = dict(church.settings or {}) if church is not None else {}
         stored = settings.get("rubric")
         overrides = apply_patch(stored if isinstance(stored, dict) else {}, cleaned)
