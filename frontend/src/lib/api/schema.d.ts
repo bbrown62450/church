@@ -52,7 +52,13 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Update Church
+         * @description Owners and admins change the church's profile: only the fields sent,
+         *     in one locked transaction (usecases.church_admin.update_profile). Answers
+         *     the profile as GET /church does, with the role re-read under the lock.
+         */
+        patch: operations["update_church_church_patch"];
         trace?: never;
     };
     "/church/bulletin-settings": {
@@ -675,6 +681,23 @@ export interface components {
              * @enum {string}
              */
             role: "owner" | "admin" | "member";
+        };
+        /**
+         * ChurchPatchIn
+         * @description PATCH /church (6a spec, Models): every field optional; omitted or null
+         *     leaves it unchanged. "" for default_benediction means no default.
+         */
+        ChurchPatchIn: {
+            /** Bible Translation */
+            bible_translation?: string | null;
+            /** Default Benediction */
+            default_benediction?: string | null;
+            /** Default Hymnal */
+            default_hymnal?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Timezone */
+            timezone?: string | null;
         };
         /**
          * ChurchProfileOut
@@ -1850,6 +1873,69 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChurchProfileOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    update_church_church_patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-church-id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChurchPatchIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
