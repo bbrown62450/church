@@ -199,7 +199,7 @@ function ProfileFormView({ profile }: { profile: ChurchProfile }) {
           <Button
             type="button"
             variant="link"
-            className="h-11 justify-self-start px-0 md:h-8"
+            className="h-auto min-h-11 justify-self-start px-0 text-left whitespace-normal md:min-h-8"
             onClick={() => update("timezone", deviceZone)}
           >
             {`Use this device's time zone (${timezoneLabel(deviceZone)})`}

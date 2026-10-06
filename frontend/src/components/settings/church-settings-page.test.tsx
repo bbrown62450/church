@@ -116,7 +116,11 @@ describe("Settings → Church (slice 6a-1)", () => {
     const zone = await screen.findByLabelText("Time zone");
     expect(zone).toHaveValue("Eastern");
     expect(screen.getByText(TIMEZONE_NOT_RECOGNIZED)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Use this device's time zone (America/Chicago)" }));
+    const useDevice = screen.getByRole("button", { name: "Use this device's time zone (America/Chicago)" });
+    // A long zone id wraps on a phone instead of overflowing (review m2): the button's nowrap and fixed height are lifted.
+    expect(useDevice).toHaveClass("whitespace-normal", "h-auto", "min-h-11", "text-left");
+    expect(useDevice).not.toHaveClass("whitespace-nowrap");
+    await user.click(useDevice);
     expect(zone).toHaveValue("America/Chicago");
     expect(screen.queryByText(TIMEZONE_NOT_RECOGNIZED)).toBeNull();
   });
