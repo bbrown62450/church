@@ -1328,7 +1328,7 @@ def revoke_token(token: str) -> bool:
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_google_oauth.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`
 **Expected:**
-`49 passed in <t>s`; `1700 passed, 26 skipped in <t>s`.
+`50 passed in <t>s`; `1700 passed, 26 skipped in <t>s`.
 
 - [ ] **Step 5: Commit**
 
@@ -1664,7 +1664,7 @@ GOOGLE_OAUTH_REDIRECT_URI=http://localhost:3000/gmail/callback
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_startup.py backend/tests/test_google_oauth.py backend/tests/test_docs.py backend/tests/test_foundation_setup.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`
 **Expected:**
-`94 passed in <t>s`; `1710 passed, 26 skipped in <t>s`.
+`95 passed in <t>s`; `1710 passed, 26 skipped in <t>s`.
 
 - [ ] **Step 5: Commit**
 
@@ -2406,7 +2406,7 @@ from api.routes import (bulletin_images, bulletin_settings, churches, contacts, 
 
 Run: `.venv/bin/python backend/scripts/export_openapi.py >/dev/null && (cd frontend && npm run gen:api >/dev/null) && git diff --stat -- frontend/src/lib/api | tail -1` then `.venv/bin/python -m pytest -q backend/tests/test_api_gmail.py backend/tests/test_usecase_email.py backend/tests/test_openapi_contract.py backend/tests/test_route_guards.py backend/tests/test_ratelimit.py backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`
 **Expected:**
-` 2 files changed, @@T6DIFF@@ insertions(+)`; `@@T6N@@ passed in <t>s`; `1739 passed, 26 skipped in <t>s`; `typecheck 0`, `lint 0` (the new types are not used until T7).
+` 2 files changed, 675 insertions(+)`; `54 passed in <t>s`; `1739 passed, 26 skipped in <t>s`; `typecheck 0`, `lint 0` (the new types are not used until T7).
 
 - [ ] **Step 5: Commit**
 
@@ -4775,7 +4775,7 @@ def send_bulletin_email(church_id: uuid.UUID, user_id: uuid.UUID, data: archive.
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_usecase_email.py backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`
 **Expected:**
-`48 passed in <t>s`; `1786 passed, 26 skipped in <t>s`.
+`50 passed in <t>s`; `1786 passed, 26 skipped in <t>s`.
 
 - [ ] **Step 5: Commit**
 
@@ -5205,7 +5205,7 @@ from api.routes import (bulletin_emails, bulletin_images, bulletin_settings, chu
 
 Run: `.venv/bin/python backend/scripts/export_openapi.py >/dev/null && (cd frontend && npm run gen:api >/dev/null) && git diff --stat -- frontend/src/lib/api | tail -1` then `.venv/bin/python -m pytest -q backend/tests/test_api_bulletin_emails.py backend/tests/test_usecase_email.py backend/tests/test_openapi_contract.py backend/tests/test_route_guards.py backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`
 **Expected:**
-` 2 files changed, 409 insertions(+)`; `75 passed in <t>s`; `1805 passed, 26 skipped in <t>s`; `typecheck 0`, `lint 0` (the new types are used in T15).
+` 2 files changed, 409 insertions(+)`; `77 passed in <t>s`; `1805 passed, 26 skipped in <t>s`; `typecheck 0`, `lint 0` (the new types are used in T15).
 
 - [ ] **Step 5: Commit**
 
@@ -5733,7 +5733,7 @@ export function parseReopen(raw: string | null, churchId: string): ReopenEmail |
 
 Run: `(cd frontend && npx vitest run src/lib/email.test.ts src/lib/idempotency.test.ts src/lib/draft/prune.test.ts 2>&1 | grep -E "^ +× |\[ src/|Tests ")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`
 **Expected:**
-`      Tests  19 passed (19)`; ` Test Files  99 passed (99)` and `      Tests  810 passed (810)`; `typecheck 0`, `lint 0`.
+`      Tests  20 passed (20)`; ` Test Files  99 passed (99)` and `      Tests  810 passed (810)`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -6353,11 +6353,12 @@ describe("Review → Email the bulletin: back from Google (slice 5b-2, flow B)",
 Run: `(cd frontend && npx vitest run src/components/builder/review src/components/settings/contacts-settings-page.test.tsx src/components/settings/account-settings-page.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
 **Expected** (the card does not exist yet; the caption and the Account sentence are 5b-2a's):
 ```
+   × Settings → Account (slice 5b-2) > shows the connected address, and Disconnect shows the Connect button with no toast <t>ms
    × Settings → Contacts (slice 5b-1) > shows a member the list as text, with the note, a flag on a bad address, and no controls <t>ms
    × Review & send: the Word documents (slice 5a-1) > shows Still to do, the Archive card and both copies with what they hold, in that order, with no placeholder <t>ms
  FAIL  |dom| src/components/builder/review/email-card.test.tsx [ src/components/builder/review/email-card.test.tsx ]
-⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
-      Tests  2 failed | 42 passed (44)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  3 failed | 47 passed (50)
 ```
 
 - [ ] **Step 3: Write the send, the dialog and the card, put the card on Review, and set the caption**
@@ -7137,7 +7138,7 @@ export function NotFilledInLines() {
 
 Run: `(cd frontend && npx vitest run src/components/builder/review 2>&1 | grep -E "^ +× |\[ src/|Tests ")` (three times) then `(cd frontend && npx vitest run src/components/builder/builder-shell.test.tsx src/components/builder/liturgy/liturgy-step.test.tsx src/components/settings 2>&1 | grep -E "^ +× |\[ src/|Tests ")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`
 **Expected:**
-three times `      Tests  44 passed (44)`, with no `×`; `      Tests  93 passed (93)`; ` Test Files  100 passed (100)` and `      Tests  828 passed (828)`; `typecheck 0`, `lint 0`.
+three times `      Tests  46 passed (46)`, with no `×`; `      Tests  93 passed (93)`; ` Test Files  100 passed (100)` and `      Tests  828 passed (828)`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -7567,10 +7568,11 @@ Expected counts after this task: backend 1805 passed, 26 skipped on `main`; fron
 - **Three existing test files render Review** (`review-send-step`, `builder-shell`'s step routes, `liturgy-step`'s walk to Review) and needed the `GET /gmail-connection` route once the card existed; the first build forgot two of them and the full suite caught it (4 failures).
 - **The Contacts caption** first changed in T9 (Account); it moved to T16, so that with two PRs it never says emailing is on Review before it is.
 - **Mutation checks** (each change made by hand in the build worktree, the named tests run, the change undone): a send `ReadTimeout` counted as "not sent" → `3 failed, 110 passed` (`test_google_oauth.py`, `test_usecase_email.py`, `test_api_bulletin_emails.py`); the route without `store_error` → `2 failed, 17 passed`; `delete_connection` ignoring `only_if_token` → `2 failed, 92 passed`; `charge()` before the recipients → `22 failed, 42 passed`; a database session held during the refresh → `1 failed, 44 passed` (the pool test); the scope check skipped → `3 failed, 102 passed`; the state not compared with the caller → `2 failed, 54 passed`; the sender left in Bcc → `1 failed, 56 passed`; `connectGmailOnce` not remembering a state → `1 failed, 10 passed` (the StrictMode test); **Send again anyway** without `rotate()` → `1 failed, 15 passed`; `detectSessionInUrl` left out → `1 failed`; the reopen request taken for any church → `2 failed, 21 passed`; a flagged contact tickable → `1 failed, 15 passed`; the recipient count without de-duplication → `2 failed, 21 passed`.
+- **The plan review fixes** (see "Plan review fixes") were built the same way: each change made as a fixup of its task's commit in a build worktree of the first replay's commits, the commits re-stacked, and the directives of T3, T6, T7, T9, T13, T15 and T16 generated again from them (those of the other tasks came out identical, a check on the generator). Mutation checks for them: `ACCOUNT_REFUSED` not classified → `3 failed, 125 passed` (`test_google_oauth.py`, `test_usecase_email.py`, `test_api_bulletin_emails.py`, `test_api_gmail.py`); no size guard → `1 failed, 127 passed`; no `gmail_connect` limit → `1 failed, 127 passed`; the flow B reopen not waiting for the carry → `1 failed, 17 passed` (`email-card.test.tsx`); the dialog's fields scrolling by themselves on a phone (the old full-screen layout's classes) → `1 failed, 17 passed`; plain Send left on after an uncertain send → `2 failed, 16 passed`.
 - **The production build** compiled with `○ /gmail/callback`, `○ /settings`, `○ /settings/account`, `○ /settings/church` and `○ /settings/contacts`.
 
-**Replay of the finished plan (2026-10-06).** The directives of T1-T17 were applied in order (by a replay script that parses each step's **Create**, **Replace the whole of**, **Delete**, **Append** and **In … replace** blocks and runs every command on its "Run:" lines, three times where it says so, then the task's commit block) onto a fresh detached worktree of the branch at `56971b9` (outside the repo directory, removed afterwards), with the repo's `.venv` (a symlink) and a hard-linked copy of `frontend/node_modules`:
-- All directives applied, every Replace anchor exactly once (T1 1 + 2, T2 5 + 1, T3 4 + 4, T4 3 + 12, T5 2 + 1, T6 3 + 5, T7 4 + 9, T8 1 + 2, T9 6 + 4, T10 1, T11 5 + 3, T12 3 + 5, T13 2 + 3, T14 1 + 3, T15 3 + 8, T16 9 + 7, T17 1).
+**Replay of the finished plan (2026-10-06; run again after the plan review fixes).** The directives of T1-T17 were applied in order (by a replay script that parses each step's **Create**, **Replace the whole of**, **Delete**, **Append** and **In … replace** blocks and runs every command on its "Run:" lines, three times where it says so, then the task's commit block) onto a fresh detached worktree of the branch at `56971b9` and, after the plan review fixes, again onto one at `79c6f69` (the branch with the fixes' plan commits; each outside the repo directory, removed afterwards), with the repo's `.venv` (a symlink) and a hard-linked copy of `frontend/node_modules`:
+- All directives applied, every Replace anchor exactly once (in the second replay: T1 1 + 2, T2 5 + 1, T3 4 + 4, T4 3 + 12, T5 2 + 1, T6 4 + 7, T7 4 + 9, T8 1 + 2, T9 6 + 4, T10 1, T11 5 + 3, T12 3 + 5, T13 2 + 3, T14 1 + 3, T15 3 + 8, T16 10 + 9, T17 1).
 - Baselines before T1: backend `1669 passed, 26 skipped`; frontend `780 passed` in 94 files.
 - Every "see it fail" output is quoted from this replay (times as `<t>`). Every count matched the table; T8's and T16's three runs passed each time, no flaky run; typecheck 0 and lint 0 after T6, T7, T8, T9, T14, T15 and T16; T10 and T17 `89 passed`, `4`, `0`. After T17: T18 Step 3's gates (`imports grep exit 1`, `raw html grep exit 1`, `0` em dashes, the 73 paths quoted, `0` untouched-area paths, `trailer check done`) and the production build as above.
 - Not run while planning: the pushes, the PRs and CI, the merges, Railway's and Vercel's deploys, Google Cloud Console, a real Gmail send and the owner's phone check (T19).
