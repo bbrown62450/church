@@ -104,3 +104,36 @@ def test_httpx_request_logs_silenced(caplog):
     leaked = [record for record in caplog.records
               if record.name.split(".")[0] in ("httpx", "httpcore")]
     assert leaked == []
+
+
+# --- slice 5b-2: post(), for Google's token, revoke and Gmail send endpoints ----------------------
+
+def test_post_sends_a_form_or_json_with_its_own_timeout_and_the_user_agent():
+    seen = _install(lambda request: httpx.Response(200, json={"ok": True}))
+    r = http.post("https://oauth2.example.test/token", data={"grant_type": "refresh_token", "code": "c"},
+                  timeout=httpx.Timeout(15.0, connect=5.0))
+    assert r.json() == {"ok": True}
+    http.post("https://gmail.example.test/send", json={"raw": "abc"}, headers={"Authorization": "Bearer t"},
+              timeout=httpx.Timeout(30.0, connect=5.0))
+    assert [request.method for request in seen] == ["POST", "POST"]
+    assert seen[0].headers["Content-Type"] == "application/x-www-form-urlencoded"
+    assert seen[0].content == b"grant_type=refresh_token&code=c"
+    assert seen[1].headers["Content-Type"] == "application/json"
+    assert seen[1].headers["Authorization"] == "Bearer t"
+    assert seen[1].headers["User-Agent"] == "WorshipServiceBuilder/1.0"
+    assert [request.extensions["timeout"] for request in seen] == [
+        {"connect": 5.0, "read": 15.0, "write": 15.0, "pool": 15.0},
+        {"connect": 5.0, "read": 30.0, "write": 30.0, "pool": 30.0},
+    ]
+    with pytest.raises(TypeError):
+        http.post("https://oauth2.example.test/token", data={})          # timeout is required
+
+
+def test_post_never_follows_a_redirect_and_refuses_plain_http():
+    seen = _install(lambda request: httpx.Response(307, headers={"Location": "https://elsewhere.example.test/"}))
+    r = http.post("https://oauth2.example.test/token", data={"a": "b"}, timeout=httpx.Timeout(5.0))
+    assert r.status_code == 307                                          # returned, not replayed elsewhere
+    assert [str(request.url) for request in seen] == ["https://oauth2.example.test/token"]
+    with pytest.raises(httpx.UnsupportedProtocol):
+        http.post("http://oauth2.example.test/token", data={"a": "b"}, timeout=httpx.Timeout(5.0))
+    assert len(seen) == 1
