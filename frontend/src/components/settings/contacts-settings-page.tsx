@@ -137,17 +137,23 @@ export function ContactsSettingsPage() {
       {admin ? <ContactAddForm nameRef={nameRef} /> : null}
       {admin && editing ? (
         <ContactEditDialog
+          key={editing.id}
           contact={editing}
-          onClose={(gone) => {
-            editGone.current = gone === true;
-            setEditing(null);
+          onClose={(id, gone = false) => {
+            // a late answer closes the dialog only while it still shows that contact
+            setEditing((current) => {
+              if (current?.id !== id) return current;
+              editGone.current = gone;
+              return null;
+            });
           }}
         />
       ) : null}
       <ConfirmDialog
         open={deleting !== null}
         onOpenChange={(open) => {
-          if (!open) setDeleting(null);
+          // while the delete runs the confirmation stays open (Cancel, Escape and a tap outside are ignored)
+          if (!open && !remove.isPending) setDeleting(null);
         }}
         title={`Delete ${deleteLabel}?`}
         description={DELETE_BODY}
@@ -157,14 +163,16 @@ export function ContactsSettingsPage() {
         finalFocus={() => (deleted.current ? nameRef.current : true)}
         onConfirm={() => {
           if (deleting === null) return;
-          remove.mutate(deleting.id, {
+          const id = deleting.id;
+          remove.mutate(id, {
             onSuccess: () => {
               deleted.current = true;
             },
             onError: (e) => {
               if (e.status === 404) deleted.current = true; // deleted elsewhere: gone all the same
             },
-            onSettled: () => setDeleting(null),
+            // closes the confirmation only while it still asks about this contact
+            onSettled: () => setDeleting((current) => (current?.id === id ? null : current)),
           });
         }}
       />
@@ -307,7 +315,7 @@ function ContactAddForm({ nameRef }: { nameRef: RefObject<HTMLInputElement | nul
 }
 
 /** **Edit** on a row: Name and Email, **Save changes**; only the fields that change are sent. */
-function ContactEditDialog({ contact, onClose }: { contact: Contact; onClose(gone?: boolean): void }) {
+function ContactEditDialog({ contact, onClose }: { contact: Contact; onClose(id: string, gone?: boolean): void }) {
   const save = useUpdateContact();
   const [baseline] = useState(() => contactFormFrom(contact));
   const [form, setForm] = useState<ContactForm>(baseline);
@@ -330,16 +338,16 @@ function ContactEditDialog({ contact, onClose }: { contact: Contact; onClose(gon
     }
     const patch = contactPatch(baseline, form);
     if (Object.keys(patch).length === 0) {
-      onClose();
+      onClose(contact.id);
       return;
     }
     save.mutate(
       { id: contact.id, patch },
       {
-        onSuccess: () => onClose(),
+        onSuccess: () => onClose(contact.id),
         onError: (e) => {
           if (e.status === 403 || e.status === 404) {
-            onClose(e.status === 404); // toasted, and the role or the list refetched, by the mutation
+            onClose(contact.id, e.status === 404); // toasted, and the role or the list refetched, by the mutation
             return;
           }
           const found = contactFieldErrors(e);
@@ -355,7 +363,8 @@ function ContactEditDialog({ contact, onClose }: { contact: Contact; onClose(gon
     <Dialog
       open
       onOpenChange={(open) => {
-        if (!open) onClose();
+        // while a save runs the dialog stays open (Escape and a tap outside are ignored; Cancel is disabled)
+        if (!open && !save.isPending) onClose(contact.id);
       }}
     >
       <DialogContent
@@ -370,7 +379,12 @@ function ContactEditDialog({ contact, onClose }: { contact: Contact; onClose(gon
           <ContactField id="contact-edit-name" label="Name (optional)" field="name" value={form.name} error={errors.name} inputRef={nameRef} onChange={(v) => update("name", v)} />
           <ContactField id="contact-edit-email" label="Email" field="email" value={form.email} error={errors.email} inputRef={emailRef} onChange={(v) => update("email", v)} />
           <DialogFooter className="max-md:rounded-b-none max-md:pb-[calc(1rem+env(safe-area-inset-bottom))]">
-            <DialogClose render={<Button type="button" variant="outline" size="touch" className="md:h-8" />}>Cancel</DialogClose>
+            <DialogClose
+              disabled={save.isPending}
+              render={<Button type="button" variant="outline" size="touch" className="md:h-8" />}
+            >
+              Cancel
+            </DialogClose>
             <PendingButton type="submit" size="touch" className="md:h-8" pending={save.isPending}>
               Save changes
             </PendingButton>

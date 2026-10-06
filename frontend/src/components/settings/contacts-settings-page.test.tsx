@@ -225,6 +225,55 @@ describe("Settings → Contacts (slice 5b-1)", () => {
     await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Name (optional)")));
   });
 
+  it("keeps the delete confirmation open while the delete runs, so a late answer closes only its own", async () => {
+    const server = contactsServer();
+    const office = server.list().items[1];
+    let release = () => {};
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const { user } = renderPage("admin", {
+      "GET /contacts": server.list,
+      [`DELETE /contacts/${office.id}`]: async () => {
+        await held;
+        return server.remove(office.id);
+      },
+    });
+    await user.click(await screen.findByRole("button", { name: "Delete office@example.org" }));
+    const confirm = await screen.findByRole("alertdialog", { name: "Delete office@example.org?" });
+    await user.click(within(confirm).getByRole("button", { name: "Delete contact" }));
+    await waitFor(() => expect(within(confirm).getByRole("button", { name: /Saving/ })).toHaveAttribute("aria-busy", "true"));
+    await user.keyboard("{Escape}");
+    await user.click(within(confirm).getByRole("button", { name: "Cancel" }));
+    expect(screen.getByRole("alertdialog", { name: "Delete office@example.org?" })).toBeInTheDocument();
+    release();
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    await waitFor(() => expect(screen.queryByText("office@example.org")).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Name (optional)")));
+  });
+
+  it("keeps the edit dialog open while a save runs: Escape is ignored and Cancel is disabled", async () => {
+    const server = contactsServer();
+    const mary = contact();
+    let release = () => {};
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const { user } = renderPage("admin", {
+      "GET /contacts": server.list,
+      [`PATCH /contacts/${mary.id}`]: async (r: RecordedRequest) => {
+        await held;
+        return server.save({ ...mary, ...(r.body as Partial<Contact>) });
+      },
+    });
+    await user.click(await screen.findByRole("button", { name: "Edit Mary Jones" }));
+    const dialog = await screen.findByRole("dialog", { name: "Edit contact" });
+    await user.type(within(dialog).getByLabelText("Name (optional)"), " Smith");
+    await user.click(within(dialog).getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(within(dialog).getByRole("button", { name: "Cancel" })).toBeDisabled());
+    await user.keyboard("{Escape}");
+    expect(screen.getByRole("dialog", { name: "Edit contact" })).toBeInTheDocument();
+    release();
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(rows()[0]).toHaveTextContent("Mary Jones Smithmary@example.org");
+  });
+
   it("toasts a refusal that names no field of the form, and leaves the fields as typed", async () => {
     const { user } = renderPage("admin", {
       "POST /contacts": fakeError(422, "invalid_request", "The request was not valid.", {
