@@ -219,7 +219,7 @@ _NOT_SENT = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout, httpx.
 class GoogleErrorKind(str, Enum):
     INVALID_GRANT = "invalid_grant"                 # the code or the refresh token is no longer valid
     CLIENT_MISCONFIGURED = "client_misconfigured"   # our client id, secret or redirect URI
-    INCOMPLETE_RESPONSE = "incomplete_response"     # no access token, or an unreadable answer
+    INCOMPLETE_RESPONSE = "incomplete_response"     # no access token, an unreadable answer, or another token 400/401
     SCOPE_MISSING = "scope_missing"                 # consent given without "send email on your behalf"
     NO_EMAIL = "no_email"                           # userinfo had no address
     EMAIL_MISMATCH = "email_mismatch"               # a Google account other than the signed-in one
@@ -299,6 +299,9 @@ def _failure(resp: httpx.Response, phase: str) -> GoogleOAuthError:
         if client:
             return GoogleOAuthError(GoogleErrorKind.CLIENT_MISCONFIGURED, status=status,
                                     google_error=sorted(client)[0])
+        # Google answered and refused the request (invalid_request, invalid_scope, or a 400 or 401
+        # with no readable error): not "couldn't reach Google" but "try connecting again" (build review M4).
+        return GoogleOAuthError(GoogleErrorKind.INCOMPLETE_RESPONSE, status=status, google_error=named)
     if phase == "userinfo" and status < 500:
         return GoogleOAuthError(GoogleErrorKind.NO_EMAIL, status=status, google_error=named)
     return GoogleOAuthError(GoogleErrorKind.UPSTREAM, status=status, google_error=named)

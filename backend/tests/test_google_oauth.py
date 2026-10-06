@@ -237,7 +237,9 @@ def test_exchange_code_without_a_refresh_token_or_a_scope_field(tmp_db):
     (google_error(400, "invalid_grant"), Kind.INVALID_GRANT),
     (google_error(401, "invalid_client"), Kind.CLIENT_MISCONFIGURED),
     (google_error(400, "redirect_uri_mismatch"), Kind.CLIENT_MISCONFIGURED),
-    (google_error(400, "invalid_request"), Kind.UPSTREAM),
+    (google_error(400, "invalid_request"), Kind.INCOMPLETE_RESPONSE),        # build review M4: not "couldn't reach"
+    (google_error(400, "invalid_scope"), Kind.INCOMPLETE_RESPONSE),
+    (httpx.Response(401, text="no json"), Kind.INCOMPLETE_RESPONSE),
     (httpx.Response(500, text="oops"), Kind.UPSTREAM),
     (httpx.ReadTimeout("slow"), Kind.TIMEOUT),
     (httpx.ConnectError("down"), Kind.UPSTREAM),
@@ -315,6 +317,7 @@ def test_refresh_access_token(tmp_db):
                                                "refresh_token": REFRESH_TOKEN, "grant_type": "refresh_token"}
     for answer, kind in ((google_error(400, "invalid_grant"), Kind.INVALID_GRANT),
                          (google_error(401, "unauthorized_client"), Kind.CLIENT_MISCONFIGURED),
+                         (google_error(400, "invalid_request"), Kind.INCOMPLETE_RESPONSE),
                          (httpx.Response(502), Kind.UPSTREAM),
                          (httpx.Response(200, json={}), Kind.INCOMPLETE_RESPONSE),
                          (httpx.ReadTimeout("slow"), Kind.TIMEOUT),

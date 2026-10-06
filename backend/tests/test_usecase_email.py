@@ -114,6 +114,18 @@ def test_each_connect_failure_has_its_message_and_stores_nothing(owner, setup, e
     assert _rows() == []
 
 
+@pytest.mark.parametrize("error", ["invalid_request", "invalid_scope"])
+def test_another_token_endpoint_refusal_asks_to_connect_again_and_logs_googles_code(owner, caplog, error):
+    """Build review M4: Google answered, so not "Couldn't reach Google"; the log names Google's error code."""
+    FakeGoogle().install().exchange = google_error(400, error)
+    caplog.set_level(logging.INFO, logger="usecases.email")
+    assert _error(lambda: _finish(owner)) == (
+        UpstreamError, "upstream_error", "Google returned an incomplete response. Try connecting again.")
+    assert f"outcome=incomplete_response google_error={error}" in caplog.text
+    assert "SECRET-GOOGLE-TEXT" not in caplog.text
+    assert _rows() == []
+
+
 def test_a_blank_code_or_no_config_fails_before_google(owner):
     google = FakeGoogle().install()
     assert _error(lambda: _finish(owner, code="  ")) == (

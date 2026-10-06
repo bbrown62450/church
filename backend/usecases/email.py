@@ -115,7 +115,9 @@ def finish_gmail_connect(user_id: uuid.UUID, user_email: str, code: str, state: 
     try:
         grant = google_oauth.exchange_code(config, code, expected_email=user_email)   # no session open
     except GoogleOAuthError as error:
-        logger.info("gmail.connect user_id=%s outcome=%s", user_id, error.kind.value)
+        # Google's error code (for example "invalid_request") only, never its text (F §2.5).
+        logger.info("gmail.connect user_id=%s outcome=%s google_error=%s", user_id, error.kind.value,
+                    error.google_error)
         raise _connect_error(error, user_email) from None
     with session_scope() as s:
         if grant.refresh_token:
