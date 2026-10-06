@@ -97,3 +97,14 @@ export type ReviseResult = components["schemas"]["ReviseOut"];
 
 /** `GET`/`PUT /church/bulletin-settings` (printed bulletin PR 2a): the church's standing bulletin settings. */
 export type BulletinSettings = components["schemas"]["BulletinSettings"];
+
+/**
+ * `/contacts` (slice 5b-1): one contact (`name` null when it has none;
+ * `email_valid` false for a saved address the send-time check refuses), the
+ * list, the body of `POST /contacts` and of `PATCH /contacts/{id}` (only the
+ * fields that change).
+ */
+export type Contact = components["schemas"]["ContactOut"];
+export type ContactList = components["schemas"]["ContactList"];
+export type ContactBody = components["schemas"]["ContactIn"];
+export type ContactPatch = components["schemas"]["ContactPatchIn"];

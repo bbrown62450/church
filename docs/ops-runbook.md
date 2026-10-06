@@ -686,6 +686,30 @@ number, street address, church id or picture is recorded here.
 | Follow-ups | Printed bulletin PRs 1-3 are complete. Still pending: the PR 1 print test at the church (legal paper, page order) and the PR 3 print test of a cover with a picture on the color printer; a new service's first save to be confirmed the next time one is saved (it should appear in Services after a reload). Next: Voices of the Church, 6a (Settings), Hear it from the pews | 2026-10-05 |
 | Roadmap change | Voices of the Church dropped by the owner ("too much work": each Sunday's Gospel section needed checking against the scanned pages, and no clean, clearly licensed plain text exists); PR #51 closed without merging, its code reverted on the branch, its decisions, rights check, spec and plan kept and marked dropped. Next: 6a (Settings; persona editing moved to Hear it from the pews, owner's 6a planning answer 3 of 2026-10-05), then Hear it from the pews | 2026-10-05 |
 
+### Slice 6a-1 record
+
+Slice 6a-1 (the Settings area and the Church page: a Settings item in the
+top menu, `/settings` opening on Church, `PATCH /church` for the name,
+time zone, default translation, default hymnal and default Benediction,
+written under the church-row lock with the caller's role re-read; one leave
+guard for the Church and Bulletin settings pages; the Benediction hint's
+link) merged as PR #52, the first of slice 6a's three PRs (owner's 6a
+planning answers of 2026-10-05). No database change and no new package;
+production stays at `0007_bulletin_images`. The owner's check was four
+steps on a phone, covering the "(owner, after 6a-1)" items of
+`docs/manual-verification.md` → "Slice 6a". No token, email address,
+church id or person's name is recorded here.
+
+| Step | Result | Date |
+|---|---|---|
+| Merge and deploy | PR #52 merged 13:45 UTC (09:45 Eastern), merge commit `0018d1c`. CI on `main`: backend, backend-postgres and frontend success | 2026-10-06 |
+| 1. Finding Settings (phone) | The owner reported it looked right: Settings in the menu, Church and Bulletin listed, the profile shown, Bulletin opened Bulletin settings | 2026-10-06 |
+| 2. The translation | The owner reported it looked right: the default changed, the builder's passages followed, and the usual translation was put back | 2026-10-06 |
+| 3. The Benediction | The owner moved on with "next" without reporting details; that the Benediction was put back to the standard text is not confirmed here | 2026-10-06 |
+| 4. Unsaved changes and the phone | The owner moved on with "next" without reporting details; the Keep editing focus and the time-zone button at phone width are not confirmed here | 2026-10-06 |
+| Agent checks | Not run: this session has no sign-in for a test church (items 5, 6 and 8). Item 7 (a member): not run | 2026-10-06 |
+| Follow-ups | Confirm the default Benediction reads the standard text on Settings → Church. Next: slice 5b's planning round (Gmail, emailing the bulletin, Contacts; owner, 2026-10-05), then 6a-2 (Hymns), 6a-3 (Liturgy prompts, Prayers, Rubric, Bulletin settings moved in), 6b (People) and Hear it from the pews | 2026-10-06 |
+
 ## Backups
 
 - **Workflow:** `.github/workflows/backup.yml` (`db-backup`). Daily at 08:37 UTC,

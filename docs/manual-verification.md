@@ -394,3 +394,22 @@ record". Record what the page shows, never an email address or a church id.
 - [ ] **6.** The time zone list offers "Use this device's time zone (…)" when the device's zone differs from the church's; tapping it and saving stores it (`GET /church` answers it with `timezone_valid` true).
 - [ ] **7.** Signed in as a plain member of the same church: **Settings** → **Church** shows "Only admins can edit the church profile." and the profile as plain text, with no fields and no **Save profile**; the Benediction hint's **Settings.** opens the same page.
 - [ ] **8.** Saving the profile keeps the church's other settings: the Bulletin settings, the rubric and the liturgy prompts are as they were.
+
+## Slice 5b
+
+Run on the production URL https://worship-service-builder.vercel.app, on an
+iPhone with Safari at 375 px and on desktop Chrome. These are the checks for
+5b-1 (the Contacts page in Settings), as the owner's 5b planning answers of
+2026-10-06 split 5b into two PRs; 5b-2 (the Gmail connection and emailing the
+bulletin) adds its own items here. After the 5b-1 merge the owner's guided
+check (one step at a time on the phone) covers the items marked "(owner,
+after 5b-1)"; the results go into `docs/ops-runbook.md` → "Slice 5b-1
+record". Record what the page shows (how many contacts, how many flagged),
+never an email address, a person's name or a church id.
+
+- [ ] (owner, after 5b-1) **1.** **Settings** lists **Church**, **Bulletin** and **Contacts**. Tap **Contacts**: the church's saved contacts are listed (a name in bold with its address under it, an address alone when there is no name). Under any address the app could not email, "This address doesn't look valid. Edit it." shows. Note how many contacts there are, how many are flagged, and whether any address is listed twice (even with different capital letters or spaces).
+- [ ] (owner, after 5b-1) **2.** Fix each flagged contact with its pencil button (**Edit contact**, **Save changes**): the note goes away. If the box holds more than one address, keep one here, then add each other one with **Add a contact**. Delete one of any address listed twice. Then, every time: add a contact named "Test" with the address test@example.com, rename it "Test 2", try adding TEST@example.com again ("That email is already in your contacts."), then delete it with its bin button ("Delete Test 2?", **Delete contact**).
+- [ ] (owner, after 5b-1) **3.** Type a name in the add form without adding it and tap **Church** in the Settings sections: "Discard unsaved changes?" asks first. At 375 px: no sideways scroll; the section links, the pencil and bin buttons and **Add contact** are easy to tap. In **Edit contact** with the iPhone keyboard open, **Save changes** can be reached and the box being typed in is not covered.
+- [ ] **4.** Signed in as a plain member of the same church: **Settings** → **Contacts** shows "Only admins can add or change contacts." and the list with no buttons and no add form.
+- [ ] **5.** Two tabs as an admin: delete a contact in one, then edit it in the other: "Contact not found." and the row goes away.
+- [ ] **6.** Add a contact as `Someone@Example.ORG`: it is saved and listed as `Someone@example.org` (the domain lower-cased, the rest as typed).

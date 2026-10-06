@@ -10,8 +10,8 @@ from fastapi.middleware.gzip import GZipMiddleware
 from api.errors import install_error_handlers
 from api.logging_config import configure_logging
 from api.middleware import RequestIdMiddleware, UnhandledErrorMiddleware, UploadSizeMiddleware
-from api.routes import (bulletin_images, bulletin_settings, churches, documents, health, hymnals, hymns, invites,
-                        lectionary, liturgy, liturgy_review, me, reference, rubric, scripture, services)
+from api.routes import (bulletin_images, bulletin_settings, churches, contacts, documents, health, hymnals, hymns,
+                        invites, lectionary, liturgy, liturgy_review, me, reference, rubric, scripture, services)
 from api.settings import get_settings
 from api.startup import check_app_env, describe_database, enforce_production_guards
 from db import get_engine
@@ -78,6 +78,7 @@ def create_app() -> FastAPI:
     app.include_router(documents.router)
     app.include_router(services.router)
     app.include_router(bulletin_images.router)
+    app.include_router(contacts.router)
     return app
 
 
