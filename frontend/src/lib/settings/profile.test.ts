@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { churchProfile, hymnals, translations } from "@/test/fixtures";
 
-import { diffProfile, hasChanges, hymnalItems, profileFormFrom, rebaseForm, translationItems } from "./profile";
+import { diffProfile, hasChanges, hymnalItems, profileFormFrom, rebaseForm, rebaseProfile, translationItems } from "./profile";
 
 describe("the Church page's form (slice 6a-1)", () => {
   it("starts at the stored values, or the ones in effect, and sends only what changed, cleaned", () => {
@@ -37,6 +37,25 @@ describe("the Church page's form (slice 6a-1)", () => {
     const rebased = rebaseForm(base, edited, next);
     expect(rebased).toEqual({ ...next, default_benediction: "Go in peace." });
     expect(diffProfile(next, rebased)).toEqual({ default_benediction: "Go in peace." });
+  });
+
+  it("rebases a field whose edit cleans away (a trailing line break) onto newer data, so a later save cannot revert it", () => {
+    // Review m1: Save and the leave guard compare cleaned values, so the rebase must too.
+    const base = { ...profileFormFrom(churchProfile()), default_benediction: "Go in peace." };
+    const form = { ...base, default_benediction: "Go in peace.\n", name: "Grace " };
+    expect(hasChanges(base, form)).toBe(false);
+    const next = { ...base, default_benediction: "The Lord bless you and keep you." };
+    const rebased = rebaseProfile(base, form, next);
+    expect(rebased.default_benediction).toBe("The Lord bless you and keep you.");
+    expect(hasChanges(next, rebased)).toBe(false);
+    expect(diffProfile(next, rebased)).toEqual({});
+    // A real edit still keeps the edit.
+    expect(rebaseProfile(base, { ...base, default_benediction: "Go now." }, next).default_benediction).toBe("Go now.");
+    // A stored "\r\n" the textarea reports as "\n" is not an edit either.
+    const crlf = { ...base, default_benediction: "Go.\r\nAmen." };
+    expect(rebaseProfile(crlf, { ...crlf, default_benediction: "Go.\nAmen." }, next).default_benediction).toBe(
+      "The Lord bless you and keep you.",
+    );
   });
 
   it("lists a stored translation or hymnal that is no longer offered, and nothing more", () => {

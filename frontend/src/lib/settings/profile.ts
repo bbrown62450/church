@@ -56,15 +56,30 @@ export function hasChanges(baseline: ProfileForm, current: ProfileForm): boolean
 
 /**
  * 6a's rebase rule for a settings form: newer server data (`next`) replaces
- * each field the user has not edited (still equal to `oldBaseline`), and each
- * edited field keeps the edit.
+ * each field the user has not edited (still equal to `oldBaseline` by
+ * `same`, exact equality unless given), and each edited field keeps the edit.
  */
-export function rebaseForm<T extends Record<string, string>>(oldBaseline: T, current: T, next: T): T {
+export function rebaseForm<T extends Record<string, string>>(
+  oldBaseline: T,
+  current: T,
+  next: T,
+  same: (key: keyof T, a: string, b: string) => boolean = (_key, a, b) => a === b,
+): T {
   const out = { ...next };
   for (const key of Object.keys(next) as (keyof T)[]) {
-    if (current[key] !== oldBaseline[key]) out[key] = current[key];
+    if (!same(key, current[key], oldBaseline[key])) out[key] = current[key];
   }
   return out;
+}
+
+/**
+ * The Church form's rebase: a field counts as edited only when its cleaned
+ * value differs (the comparison Save and the leave guard use), so an edit
+ * that cleans away (a trailing space or line break) takes newer server data
+ * instead of holding a stale value a later save would send.
+ */
+export function rebaseProfile(oldBaseline: ProfileForm, current: ProfileForm, next: ProfileForm): ProfileForm {
+  return rebaseForm(oldBaseline, current, next, (key, a, b) => cleaned(key, a) === cleaned(key, b));
 }
 
 /** The translation select's items: the server's, plus a stored one no longer offered here, kept selectable. */

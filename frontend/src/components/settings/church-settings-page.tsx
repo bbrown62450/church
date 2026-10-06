@@ -25,7 +25,7 @@ import {
   hasChanges,
   hymnalItems,
   profileFormFrom,
-  rebaseForm,
+  rebaseProfile,
   translationItems,
   type ProfileForm,
 } from "@/lib/settings/profile";
@@ -114,7 +114,7 @@ function ProfileFormView({ profile }: { profile: ChurchProfile }) {
   // Newer server data (a refetch, or this page's own save in the cache): rebase (6a).
   if (profile !== state.source) {
     const next = profileFormFrom(profile);
-    setState({ source: profile, baseline: next, form: rebaseForm(baseline, form, next) });
+    setState({ source: profile, baseline: next, form: rebaseProfile(baseline, form, next) });
   }
 
   const update = (field: Field, value: string) => {
@@ -131,7 +131,7 @@ function ProfileFormView({ profile }: { profile: ChurchProfile }) {
       onSuccess: (saved) =>
         setState((s) => {
           const next = profileFormFrom(saved);
-          return { source: saved, baseline: next, form: rebaseForm(sent, s.form, next) };
+          return { source: saved, baseline: next, form: rebaseProfile(sent, s.form, next) };
         }),
       onError: (e) => {
         if (!(e instanceof ApiError) || e.status !== 422 || !e.fields) return;
