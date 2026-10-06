@@ -283,7 +283,7 @@ A client component in `(signed-in)`, outside `(church)` (Gmail is user-scoped). 
 |---|---|---|
 | `error=access_denied` | Toast "Gmail connection was cancelled." | `router.replace(returnTo)` immediately |
 | another `error=` value | "Google couldn't connect your Gmail." (the error value is never echoed) | `Try again` (restarts flow A/B with the same `returnTo`), `Go back` |
-| `code` and `state` | "Connecting your Gmail…" spinner; after 8 s "Still working — this can take up to a minute." Then `POST /gmail-connection` (client timeout 40 s). | — |
+| `code` and `state` | "Connecting your Gmail…" spinner; after 8 s "Still working — this can take up to a minute." Then `POST /gmail-connection` (client timeout 75 s; 40 s before the 5b-2a build review). | — |
 | → 200 | Toast "Gmail connected" | `queryClient.setQueryData(["gmail-connection"], response)` (the POST returns `GmailConnectionOut`), clear `wsb:gmailReturnTo`, `router.replace(returnTo)` |
 | → error | The server message (from the table in §API) | `Try again`, `Go back`; for `gmail_not_configured` only `Go back` |
 | neither (for example a signed-out landing lost the query, inv §0 item 1) | "Gmail connection didn't finish. Try connecting again." | `Try again`, `Go back` |
@@ -720,7 +720,7 @@ Known gap, accepted until slice 7: the frozen Streamlit still disconnects on any
 |---|---|---|
 | `useGmailConnection()` | `api.user` GET `/gmail-connection` | `["gmail-connection"]` |
 | `useStartGmailConnect()` | `api.user` POST `/gmail-connection/auth-url` | mutation; on success runs `startGmailRedirect(auth_url, returnTo)` |
-| `connectGmailOnce(api, {code, state})` (`lib/gmail.ts`, not a hook) | `api.user` POST `/gmail-connection`, `timeoutMs: 40_000` | one shared promise per state (flow C); the page then calls `setQueryData(["gmail-connection"], response)` |
+| `connectGmailOnce(api, {code, state})` (`lib/gmail.ts`, not a hook) | `api.user` POST `/gmail-connection`, `timeoutMs: 75_000` (40 s before the 5b-2a build review) | one shared promise per state (flow C); the page then calls `setQueryData(["gmail-connection"], response)` |
 | `useDisconnectGmail()` | `api.user` DELETE `/gmail-connection` | invalidates `["gmail-connection"]` |
 | `useContacts()` | `api.church` GET `/contacts` | `["church", id, "contacts"]` (6a invalidates it) |
 | `useSendBulletinEmail()` | `api.church` POST `/bulletin-emails`, `timeoutMs: 60_000`, `idempotencyKey` | no invalidation on success; see error table |
