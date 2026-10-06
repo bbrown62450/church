@@ -16,6 +16,7 @@ function Links({ dirty }: { dirty: boolean }) {
   return (
     <>
       <a href="/services?tab=saved">Services</a>
+      <a href="/settings">Settings</a>
       <a href="#top">Top of this page</a>
       <a href="/services" target="_blank" rel="noreferrer">
         New tab
@@ -90,6 +91,8 @@ describe("LeaveGuard (slice 6a-1)", () => {
     await user.click(within(dialog).getByRole("button", { name: "Keep editing" }));
     await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
     expect(testRouter.push).not.toHaveBeenCalled();
+    // The menu item that asked has closed: focus goes back to the menu's trigger, not the page (review m6).
+    await waitFor(() => expect(screen.getByRole("button", { name: "Active church: Grace" })).toHaveFocus());
     await join();
     dialog = await screen.findByRole("alertdialog", { name: DISCARD_TITLE });
     await user.click(within(dialog).getByRole("button", { name: "Discard changes" }));
@@ -100,5 +103,50 @@ describe("LeaveGuard (slice 6a-1)", () => {
     await join();
     expect(testRouter.push).toHaveBeenCalledWith("/welcome");
     expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
+  it("takes down the browser's own warning once Discard changes is chosen (review m4)", async () => {
+    const unload = () => {
+      const event = new Event("beforeunload", { cancelable: true });
+      window.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    const { user } = renderWithProviders(<Links dirty />, { path: "/settings/church" });
+    expect(unload()).toBe(true);
+    await user.click(screen.getByRole("link", { name: "Services" }));
+    let dialog = await screen.findByRole("alertdialog", { name: DISCARD_TITLE });
+    await user.click(within(dialog).getByRole("button", { name: "Keep editing" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(unload()).toBe(true);
+    await user.click(screen.getByRole("link", { name: "Services" }));
+    dialog = await screen.findByRole("alertdialog", { name: DISCARD_TITLE });
+    let warnedDuringLeave: boolean | null = null;
+    testRouter.push.mockImplementationOnce(() => {
+      warnedDuringLeave = unload(); // a navigation that falls back to a full page load fires beforeunload now
+    });
+    await user.click(within(dialog).getByRole("button", { name: "Discard changes" }));
+    expect(testRouter.push).toHaveBeenCalledWith("/services?tab=saved");
+    expect(warnedDuringLeave).toBe(false);
+  });
+
+  it("does nothing for a link to the Settings home from a page under /settings (review m5)", () => {
+    const before = window.location.pathname;
+    window.history.pushState(null, "", "/settings/church"); // the guard reads the address bar
+    try {
+      const { rerender } = renderWithProviders(<Links dirty />, { path: "/settings/church" });
+      const settings = screen.getByRole("link", { name: "Settings" });
+      const event = new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 });
+      act(() => {
+        settings.dispatchEvent(event);
+      });
+      expect(event.defaultPrevented).toBe(true);
+      expect(screen.queryByRole("alertdialog")).toBeNull();
+      expect(testRouter.push).not.toHaveBeenCalled();
+      // Without edits the link is not the guard's business.
+      rerender(<Links dirty={false} />);
+      expect(followed(settings)).toBe(true);
+    } finally {
+      window.history.pushState(null, "", before);
+    }
   });
 });

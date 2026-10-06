@@ -9,22 +9,34 @@ export const DISCARD_TITLE = "Discard unsaved changes?";
 const DISCARD_BODY = "Your changes on this page haven't been saved.";
 
 type Leave = () => void;
+/** Where focus goes after **Keep editing**, when the control that asked may be gone (a menu item). */
+type ReturnFocus = () => HTMLElement | null;
 
 /** The mounted guard while it has unsaved edits to protect (one settings page at a time), else null. */
-let activeGuard: ((leave: Leave) => void) | null = null;
+let activeGuard: ((leave: Leave, returnFocus?: ReturnFocus) => void) | null = null;
+
+/** The Settings area's home: it only opens a section, so from inside the area a link to it goes nowhere new. */
+const SETTINGS_HOME = "/settings";
 
 /**
  * For a way out of the page that is not a link (the church menu's "Join or
  * create a church…"): while a `LeaveGuard` has unsaved edits, `leave` runs
- * only after "Discard changes"; otherwise it runs at once.
+ * only after "Discard changes"; otherwise it runs at once. `returnFocus`
+ * names where focus goes after **Keep editing** (the church menu's trigger,
+ * since the menu item that asked has closed).
  */
-export function confirmLeave(leave: Leave): void {
-  if (activeGuard !== null) activeGuard(leave);
+export function confirmLeave(leave: Leave, returnFocus?: ReturnFocus): void {
+  if (activeGuard !== null) activeGuard(leave, returnFocus);
   else leave();
 }
 
-/** The link a click would follow to another in-app page, or null when the click should go ahead as usual. */
-function guardedLink(event: MouseEvent): { link: HTMLAnchorElement; href: string } | null {
+/**
+ * The link a click would follow to another in-app page, "stay" for a link to
+ * the Settings area's home from inside the area (it would reopen this page's
+ * section empty, so it does nothing), or null when the click should go ahead
+ * as usual.
+ */
+function guardedLink(event: MouseEvent): { link: HTMLAnchorElement; href: string } | "stay" | null {
   if (event.defaultPrevented || event.button !== 0) return null;
   if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return null; // a new tab or window
   const link = event.target instanceof Element ? event.target.closest("a[href]") : null;
@@ -35,6 +47,7 @@ function guardedLink(event: MouseEvent): { link: HTMLAnchorElement; href: string
   if (url.protocol !== "http:" && url.protocol !== "https:") return null;
   if (url.origin !== window.location.origin) return null;
   if (url.pathname === window.location.pathname && url.search === window.location.search) return null;
+  if (url.pathname === SETTINGS_HOME && window.location.pathname.startsWith(`${SETTINGS_HOME}/`)) return "stay";
   return { link, href: `${url.pathname}${url.search}${url.hash}` };
 }
 
@@ -50,7 +63,11 @@ function guardedLink(event: MouseEvent): { link: HTMLAnchorElement; href: string
  * changes** the link is clicked again with the guard standing aside, so its
  * own handler navigates as it would have (a `<Link replace>` replaces); a link
  * with no handler of its own goes on with `router.push`. "Join or create a
- * church…" asks through `confirmLeave`. The browser's Back and Forward
+ * church…" asks through `confirmLeave`. **Discard changes** also takes down
+ * the browser's own warning first, so a navigation that falls back to a full
+ * page load does not ask a second time. The header's **Settings** item, from
+ * a page under /settings, does nothing (the page is already in Settings).
+ * The browser's Back and Forward
  * buttons, Log out and choosing another church in the church menu are not
  * covered.
  */
@@ -58,15 +75,21 @@ export function LeaveGuard({ when }: { when: boolean }) {
   const router = useRouter();
   const [leave, setLeave] = useState<Leave | null>(null);
   const standAside = useRef(false);
+  const returnFocus = useRef<ReturnFocus | null>(null);
+  const detachWarning = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (!when) return;
-    const ask = (next: Leave) => setLeave(() => next);
+    const ask = (next: Leave, focus?: ReturnFocus) => {
+      returnFocus.current = focus ?? null;
+      setLeave(() => next);
+    };
     activeGuard = ask;
     const warn = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = ""; // older Chrome and Edge, and some webviews, ask only when this is set
     };
+    detachWarning.current = () => window.removeEventListener("beforeunload", warn);
     // Capture, on the document: runs before the link's own handler (Next's Link), which it stops.
     const intercept = (event: MouseEvent) => {
       if (standAside.current) return;
@@ -74,7 +97,7 @@ export function LeaveGuard({ when }: { when: boolean }) {
       if (found === null) return;
       event.preventDefault();
       event.stopPropagation();
-      ask(() => follow(found.link, found.href));
+      if (found !== "stay") ask(() => follow(found.link, found.href));
     };
     // The link again, its own handler included; when nothing handled it (a plain <a>), router.push.
     const follow = (link: HTMLAnchorElement, href: string) => {
@@ -100,6 +123,7 @@ export function LeaveGuard({ when }: { when: boolean }) {
     document.addEventListener("click", intercept, true);
     return () => {
       if (activeGuard === ask) activeGuard = null;
+      detachWarning.current = null;
       window.removeEventListener("beforeunload", warn);
       document.removeEventListener("click", intercept, true);
     };
@@ -116,8 +140,14 @@ export function LeaveGuard({ when }: { when: boolean }) {
       confirmLabel="Discard changes"
       cancelLabel="Keep editing"
       destructive
+      finalFocus={() => {
+        const target = returnFocus.current?.() ?? null;
+        return target?.isConnected ? target : true;
+      }}
       onConfirm={() => {
         setLeave(null);
+        // The user chose to leave: no second, browser-drawn prompt if this navigation becomes a full page load.
+        detachWarning.current?.();
         leave?.();
       }}
     />
