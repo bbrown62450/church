@@ -6,6 +6,8 @@ import type {
   BulletinImage,
   BulletinSettings,
   ChurchProfile,
+  Contact,
+  ContactList,
   GenerateLiturgyBody,
   Hymn,
   HymnMatch,
@@ -613,4 +615,25 @@ export function filledBulletinSettings(overrides: Partial<BulletinSettings> = {}
     organist: "Jordan Doe",
     ...overrides,
   });
+}
+
+// --- slice 5b-1: contacts -------------------------------------------------------------------------
+
+/** One of Grace's contacts (`ContactOut`): Mary Jones at an example address, which passes the check. */
+export function contact(overrides: Partial<Contact> = {}): Contact {
+  return {
+    id: "6c0b5e1a-1d2b-4c3d-8e4f-5a6b7c8d9e01",
+    name: "Mary Jones",
+    email: "mary@example.org",
+    email_valid: true,
+    ...overrides,
+  };
+}
+
+/** `GET /contacts`: Mary Jones, then the church office, which has no name. */
+export function contactList(items: Contact[] = [
+  contact(),
+  contact({ id: "6c0b5e1a-1d2b-4c3d-8e4f-5a6b7c8d9e02", name: null, email: "office@example.org" }),
+]): ContactList {
+  return { items };
 }
