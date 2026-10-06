@@ -21,6 +21,8 @@ export type CreateChurchBody = Required<components["schemas"]["CreateChurchIn"]>
 
 /** `GET /church` (slice 2a): `ChurchOut` plus the profile fields. `/me`'s church items stay `Church`. */
 export type ChurchProfile = components["schemas"]["ChurchProfileOut"];
+/** `PATCH /church` (slice 6a-1): only the fields that change; omitted (or null) leaves one as stored. */
+export type ChurchPatch = components["schemas"]["ChurchPatchIn"];
 /** `GET /lectionary/readings?date=` (slice 2a): the reading sets for exactly that date. */
 export type Lectionary = components["schemas"]["LectionaryOut"];
 export type ReadingSet = components["schemas"]["ReadingSetOut"];
