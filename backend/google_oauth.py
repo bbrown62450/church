@@ -27,7 +27,7 @@ from __future__ import annotations
 import base64
 import secrets
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Optional
@@ -66,7 +66,7 @@ class GoogleOAuthConfig:
     stored refresh token keeps working) and this deployment's redirect URI."""
 
     client_id: str
-    client_secret: str
+    client_secret: str = field(repr=False)
     redirect_uri: str
 
     @property
