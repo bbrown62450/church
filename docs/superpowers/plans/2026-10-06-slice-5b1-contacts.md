@@ -83,7 +83,7 @@ The owner's answers win over B, S and F; the code wins over all of them where th
 3. **[owner-visible] The Contacts page, for everyone** (S UX §4). Inside the Settings layout (its `h1` "Settings" and the nav): the heading "Contacts" (an `h2`, as Church's "Church profile") and under it "People you can email the bulletin to. Emailing it from the Review step comes in a later update." (S's caption said "…to from the Review step.", which is not true until 5b-2; 5b-2 sets S's line back; owner question 4). A member also sees "Only admins can add or change contacts." (S's banner). The list (`aria-label="Contacts"`, one row per contact, in the server's order): the name in bold with the address under it in muted text, or the address alone (normal text) when there is no name; addresses break anywhere on a phone. Under an address the send-time rule refuses (`email_valid: false`), in amber text: "This address doesn't look valid. Edit it." for owners and admins, "This address doesn't look valid. An admin can fix it." for members. With no contacts, S's empty states: "No contacts yet" with "Add the people who receive the bulletin, like your church secretary." (admins) or "Ask an admin to add bulletin recipients." (members). The first load shows two skeleton rows; a failed read the usual `ErrorState` with **Retry**.
 4. **[owner-visible] Owners and admins** (S UX §4). Each row has two icon buttons, 44 px below `md` (32 px from `md`): a pencil, "Edit {name or address}" to screen readers, and a bin, "Delete {name or address}".
    - **Edit** opens a dialog (a bottom sheet below `md`, as "Add custom element" is): title "Edit contact", the contact's name or address under it, "Name (optional)" and "Email" filled in, **Cancel** and **Save changes** ("Saving…" while pending). Only the fields that changed (trimmed) are sent; nothing changed closes it with no request. Success closes it and the row shows the answer; a 422 or 409 shows under its field in the dialog. Cancel, Escape or a tap outside closes it and discards the edits (clarification 6).
-   - **Delete** opens S's `ConfirmDialog`: "Delete {name or address}?", "They won't be offered as a bulletin recipient anymore.", **Delete contact** (red) and **Cancel**. On success the row goes; focus moves to the add form's Name field (the row and its button are gone).
+   - **Delete** opens S's `ConfirmDialog`: "Delete {name or address}?", "They won't be offered as a bulletin recipient anymore.", **Delete contact** (red) and **Cancel**. On success the row goes. When the confirmation closes, focus moves to the add form's Name field (after a delete the row and its button are gone).
    - **Add a contact** (an `h3`) below the list, in a bordered box: "Name (optional)", "Email" (`inputMode="email"`, no auto-capitalize, no autocorrect, no spellcheck, `autocomplete="off"`), **Add contact** (full width on a phone, 44 px, "Saving…" while pending). A blank Email says "Email is required." under it at once, with no request. On success the new row appears at the end, the fields clear and focus returns to Name; no toast (S; F §4.8). Owner question 7.
 5. **Errors.** A 422 that names `name` or `email`, and a 409 (the address is taken; the body has no `fields`, so the page puts it under Email), show under the field in the error colour (`role="alert"`), mark it `aria-invalid` and focus it; they are not toasted. Editing a field clears its error. A role 403 (an admin demoted meanwhile) toasts "Only church admins can do this." and refetches the church profile, which carries the role, so the page turns into the member's view; a 404 (a contact deleted in another tab) toasts "Contact not found." and refetches the list; a 401 or a lost church toasts nothing more (the app handles them); anything else toasts the server's message.
 6. **[owner-visible] The leave guard.** 6a-1's `LeaveGuard` protects the add form while either field holds something (trimmed): a reload or close shows the browser's warning, any in-app link (the Settings sections, the top menu) and "Join or create a church…" ask "Discard unsaved changes?" first. The edit dialog is modal (no link can be reached behind it) and its Cancel discards, so it has no guard of its own. Owner question 8.
@@ -263,10 +263,12 @@ def test_a_blank_address_is_refused(raw):
 Run: `.venv/bin/python -m pytest -q backend/tests/test_email_addresses.py 2>&1 | tail -3` then `.venv/bin/python -m pytest -q backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -1`
 **Expected** (`email_addresses` does not exist yet: `ModuleNotFoundError` above these lines; then the import check names the missing module):
 ```
-@@T1fail@@
+ERROR backend/tests/test_email_addresses.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in <t>s
 ```
 ```
-@@T1fail2@@
+1 failed, 2 passed in <t>s
 ```
 
 - [ ] **Step 3: Write the rule**
@@ -459,7 +461,9 @@ def test_the_writes_join_the_callers_session(tmp_db, make_user, make_church):
 Run: `.venv/bin/python -m pytest -q backend/tests/test_email_contacts.py 2>&1 | tail -3`
 **Expected** (`email_exists`, `get_contact` and `update_contact` do not exist yet: an `ImportError` above these lines):
 ```
-@@T2fail@@
+ERROR backend/tests/test_email_contacts.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in <t>s
 ```
 
 - [ ] **Step 3: Rewrite the repo's functions**
@@ -867,10 +871,12 @@ def test_each_write_reads_the_church_row_under_its_lock(world):
 Run: `.venv/bin/python -m pytest -q backend/tests/test_usecase_contacts.py 2>&1 | tail -3` then `.venv/bin/python -m pytest -q backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -1`
 **Expected** (`usecases.contacts` does not exist yet):
 ```
-@@T3fail@@
+ERROR backend/tests/test_usecase_contacts.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in <t>s
 ```
 ```
-@@T3fail2@@
+1 failed, 2 passed in <t>s
 ```
 
 - [ ] **Step 3: Write the usecases**
@@ -1204,7 +1210,9 @@ def test_contacts_are_isolated_between_churches(client, isolation_world):
 Run: `.venv/bin/python -m pytest -q backend/tests/test_api_contacts.py 2>&1 | tail -3`
 **Expected** (no `/contacts` route yet: every request is a 404):
 ```
-@@T4fail@@
+FAILED backend/tests/test_api_contacts.py::test_unknown_fields_and_malformed_ids_are_422
+FAILED backend/tests/test_api_contacts.py::test_contacts_are_isolated_between_churches
+13 failed in <t>s
 ```
 
 - [ ] **Step 3: Write the routes and mount them**
@@ -1579,7 +1587,8 @@ describe("the Contacts page's forms (slice 5b-1)", () => {
 Run: `(cd frontend && npx vitest run src/lib/settings/contacts.test.ts 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
 **Expected** (`contacts.ts` does not exist yet):
 ```
-@@T6fail@@
+ FAIL  |unit| src/lib/settings/contacts.test.ts [ src/lib/settings/contacts.test.ts ]
+      Tests  no tests
 ```
 
 - [ ] **Step 3: Write the types, the rules and the queries**
@@ -2003,7 +2012,8 @@ describe("Settings → Contacts (slice 5b-1)", () => {
 Run: `(cd frontend && npx vitest run src/components/settings/contacts-settings-page.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
 **Expected** (the route and the page do not exist yet):
 ```
-@@T7fail@@
+ FAIL  |dom| src/components/settings/contacts-settings-page.test.tsx [ src/components/settings/contacts-settings-page.test.tsx ]
+      Tests  no tests
 ```
 
 - [ ] **Step 3: Write the page and its route**
@@ -2459,7 +2469,10 @@ Expected counts after this task: backend `1598 passed, 26 skipped`; frontend `77
 Run: `(cd frontend && npx vitest run src/components/settings/settings-layout.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
 **Expected:**
 ```
-@@T8fail@@
+   × the Settings area (slice 6a-1) > shows the heading, who you are in the church, and the sections with the current one marked <t>ms
+   × the Settings area (slice 6a-1) > marks Contacts current on its page (slice 5b-1) <t>ms
+   × the Settings area (slice 6a-1) > shows a member the same sections, and /settings opens Church <t>ms
+      Tests  3 failed (3)
 ```
 
 - [ ] **Step 3: Add the entry**
@@ -2494,7 +2507,7 @@ Run: `(cd frontend && npx vitest run src/components/settings/settings-layout.tes
 
 Run: `(cd frontend && npx vitest run src/components/settings src/components/app/app-header.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`
 **Expected:**
-`      Tests  @@T8n@@ passed (@@T8n@@)`; ` Test Files  94 passed (94)` and `      Tests  775 passed (775)`; `typecheck 0`, `lint 0`.
+`      Tests  32 passed (32)`; ` Test Files  94 passed (94)` and `      Tests  775 passed (775)`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -2861,7 +2874,12 @@ Expected counts after this task: backend `1598 passed, 26 skipped` on `main`; fr
 - **The lock on Postgres.** On a throwaway PG 16 cluster (initialised under `/var/lib/postgresql`, port 5437, never a real database): `test_contacts_postgres.py` `2 passed`; all Postgres-marked tests `26 passed, 1598 deselected, 1 warning`. With `lock_church`'s `with_for_update=True` removed, both fail: "the second add did not wait for the church-row lock" and `round 0: assert [201, 201] == [201, 409]`.
 - **The production build** compiled with `○ /settings`, `○ /settings/church` and `○ /settings/contacts`.
 
-@@REPLAY@@
+**Replay of the finished plan (2026-10-06).** The directives of T1-T9 were applied in order (by `replay.py`, which parses each step's **Create**, **Append** and **In … replace** blocks and runs every command on its "Run:" lines, three times where it says so, then the task's commit block) onto a fresh detached worktree of `62c9cc5`, with the repo's `.venv` (a symlink) and a hard-linked copy of `frontend/node_modules`:
+- All 30 directives applied (T1 3 + 1, T2 2 + 1, T3 2 + 1, T4 1 + 3, T5 1, T6 3 + 3, T7 1 + 2, T8 2 + 2, T9 2); every Replace anchor occurred exactly once. After T9, `backend`, `frontend/src` and `docs/manual-verification.md` equaled the build worktree's (`diff -r`).
+- Baselines before T1: backend `1529 passed, 24 skipped`; frontend `759 passed` in 92 files.
+- Every "see it fail" output is quoted from this replay (times as `<t>`): T1 and T3 the collection error and the import check's `1 failed, 2 passed`; T2 the collection error; T4 `13 failed`; T6 and T7 the new file not loading; T8 three `×`.
+- Every count matched the table: backend 1562, 1567, 1585, 1598 passed with 24 skipped, then 26 skipped from T5; frontend 763 in 93, 774 in 94, 775 in 94; T7's three runs `25 passed` each time, no flaky run; T4 Step 4 ` 2 files changed, 921 insertions(+)` and `42 passed`; T8 Step 4 `32 passed`; typecheck 0 and lint 0 after T4, T6, T7 and T8; T9 `89 passed`, `4`, `0`, ` 2 files changed, 22 insertions(+), 3 deletions(-)`.
+- Not run while planning: the pushes, the PR and CI, the merge, Railway's and Vercel's deploys and the owner's phone check (T11).
 
 ## Spec coverage
 
@@ -2914,7 +2932,7 @@ Owner steps still to come: the plan's approval; the draft PR on your yes and rea
 
 ## Self-review
 
-- **Coverage.** Every binding constraint has a home: the nav order and its reason (clarification 2, owner question 1); no migration, with the unique-index trade-off (clarification 12, owner question 3); no em dash in new copy (clarification 15; T9 Step 2 and T10 Step 3 grep the added lines; the 5b spec's "No saved contacts yet — …" and S's caption are not used); no ids, real addresses, keys or phone numbers in the docs (only `@example.org` / `@example.com` addresses; the record's own grep, T11 Step 7); the frozen Streamlit files untouched and `get_contacts_for_display` kept (T2; T10 Step 3's path check counts `app.py`, `streamlit_views` and `streamlit_tests` as 0); the read-only check of existing contacts as option (b), with (a) offered (clarification 13, owner question 2); 6a-1's patterns reused as they are (`lock_and_read_actor`, `require_admin_role`, `LeaveGuard`, `ConfirmDialog`, the generated types, the Settings shell); the second-to-last task opens a draft PR only on the owner's yes, the last merges only on a yes, runs a three-step phone check one step at a time and inserts "### Slice 5b-1 record" before "## Backups", after "### Slice 6a-1 record".
+- **Coverage.** Every binding constraint has a home: the nav order and its reason (clarification 2, owner question 1); no migration, with the unique-index trade-off (clarification 12, owner question 3); no em dash in new copy (clarification 15; T9 Step 2 and T10 Step 3 grep the added lines; S's caption is not used as written, and the 5b spec's dialog lines with their dashes belong to 5b-2); no ids, real addresses, keys or phone numbers in the docs (only `@example.org` / `@example.com` addresses; the record's own grep, T11 Step 7); the frozen Streamlit files untouched and `get_contacts_for_display` kept (T2; T10 Step 3's path check counts `app.py`, `streamlit_views` and `streamlit_tests` as 0); the read-only check of existing contacts as option (b), with (a) offered (clarification 13, owner question 2); 6a-1's patterns reused as they are (`lock_and_read_actor`, `require_admin_role`, `LeaveGuard`, `ConfirmDialog`, the generated types, the Settings shell); the second-to-last task opens a draft PR only on the owner's yes, the last merges only on a yes, runs a three-step phone check one step at a time and inserts "### Slice 5b-1 record" before "## Backups", after "### Slice 6a-1 record".
 - **Placeholders.** None in T1-T9's code, tests, commands or expected outputs; every expected output is quoted from the replay. The `<…>` left are T10 and T11's runtime values (`<N>`, `<scratch>`, times, the owner's answers), as in the 6a-1 plan.
 - **Consistency.** Names agree across tasks: `normalize_address`/`InvalidAddress` (T1) are used by `usecases.contacts` (T3); `get_contact`, `update_contact`, `email_exists` (T2) by T3; `list_contacts`, `add_contact`, `update_contact`, `delete_contact` (T3) by the routes (T4); `ContactOut.email_valid` (T4) by `Contact` (T6) and the page (T7); `keys.contacts` (existing) by the queries (T6). The counts in the table, each task's "Expected" and the PR line (`1529 → 1598`, `24 → 26`, `759 → 775`, `92 → 94`) agree.
 - **Not verified while planning:** the pushes, the PR and CI, the merge, Railway's and Vercel's deploys, the owner's phone check, and the page at 375 px in a real browser (the classes give 44 px targets and `break-all` addresses; jsdom does not lay out). What the owner's contacts look like is unknown until T11 Step 2.
