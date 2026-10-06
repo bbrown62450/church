@@ -96,6 +96,10 @@ def _connect_error(error: GoogleOAuthError, user_email: str) -> DomainError:
     return UpstreamError(GOOGLE_UNREACHABLE, code="upstream_error")
 
 
+def _same_address(connection: Optional[google_oauth.GmailConnection], google_email: str) -> bool:
+    return connection is not None and connection.google_email.strip().lower() == google_email.strip().lower()
+
+
 def finish_gmail_connect(user_id: uuid.UUID, user_email: str, code: str, state: str,
                          config: GoogleOAuthConfig) -> GmailStatus:
     """POST /gmail-connection: the order of the 5b spec's error table; nothing
@@ -116,7 +120,9 @@ def finish_gmail_connect(user_id: uuid.UUID, user_email: str, code: str, state: 
     with session_scope() as s:
         if grant.refresh_token:
             google_oauth.save_user_token(user_id, grant.google_email, grant.refresh_token, session=s)
-        elif google_oauth.get_connection(user_id, session=s) is None:
+        elif not _same_address(google_oauth.get_connection(user_id, session=s), grant.google_email):
+            # No refresh token: only a stored connection for this same Google address can stand
+            # in for it (build review M1); another address's token is not this grant's.
             logger.info("gmail.connect user_id=%s outcome=no_refresh_token", user_id)
             raise Rejected(NO_REFRESH_TOKEN, code="gmail_connect_failed")
     logger.info("gmail.connect user_id=%s outcome=connected", user_id)

@@ -133,6 +133,23 @@ def test_no_refresh_token_keeps_an_existing_connection_and_refuses_a_new_one(own
     assert _rows() == [(owner, OWNER, "refresh-kept")]
 
 
+def test_no_refresh_token_keeps_an_existing_connection_only_for_the_same_google_address(owner, caplog):
+    """Build review M1: a stored connection for another Google address is not this
+    grant's, so with no refresh token the connect is refused (the row is left as it was)."""
+    google = FakeGoogle().install()
+    google.exchange = httpx.Response(200, json={"access_token": "a"})
+    google_oauth.save_user_token(owner, "old.account@example.com", "refresh-old")
+    caplog.set_level(logging.INFO, logger="usecases.email")
+    assert _error(lambda: _finish(owner)) == (
+        Rejected, "gmail_connect_failed", "Google did not return a refresh token. Remove this app's access at "
+                                          "https://myaccount.google.com/permissions and connect again.")
+    assert _rows() == [(owner, "old.account@example.com", "refresh-old")]
+    assert "outcome=no_refresh_token" in caplog.text
+    google_oauth.save_user_token(owner, "Owner@Example.COM", "refresh-kept")       # the same address, ignoring case
+    assert _finish(owner).connected is True
+    assert _rows() == [(owner, "Owner@Example.COM", "refresh-kept")]
+
+
 def test_disconnect_deletes_then_revokes_and_a_failed_revoke_still_disconnects(owner, caplog):
     google = FakeGoogle().install()
     google_oauth.save_user_token(owner, OWNER, REFRESH_TOKEN)
