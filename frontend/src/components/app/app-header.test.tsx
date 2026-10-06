@@ -151,7 +151,7 @@ describe("AppHeader", () => {
     expect(onSignOut).toHaveBeenCalledTimes(1);
   });
 
-  it("shows the Builder and Services nav items on church pages, current under /builder, and no nav without churches (F §4.2)", () => {
+  it("shows the Builder, Services and Settings nav items on church pages, current under /builder, and no nav without churches (F §4.2)", () => {
     setTestPath("/builder/hymns");
     const { unmount } = render(
       <AppHeader user={pat} churches={[graceAdmin]} active={graceAdmin} onSelectChurch={vi.fn()} onSignOut={vi.fn()} />,
@@ -161,6 +161,7 @@ describe("AppHeader", () => {
     expect(links.map((link) => [link.textContent, link.getAttribute("href")])).toEqual([
       ["Builder", "/builder"],
       ["Services", "/services"],
+      ["Settings", "/settings"],
     ]);
     expect(links[1]).not.toHaveAttribute("aria-current");
     expect(links[0]).toHaveAttribute("aria-current", "page");
@@ -173,6 +174,13 @@ describe("AppHeader", () => {
     );
     expect(screen.getByRole("link", { name: "Builder" })).not.toHaveAttribute("aria-current");
     unmountWelcome();
+
+    setTestPath("/settings/church");
+    const { unmount: unmountSettings } = render(
+      <AppHeader user={pat} churches={[graceAdmin]} active={graceAdmin} onSelectChurch={vi.fn()} onSignOut={vi.fn()} />,
+    );
+    expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("aria-current", "page");
+    unmountSettings();
 
     render(<AppHeader user={pat} onSignOut={vi.fn()} />);
     expect(screen.queryByRole("navigation", { name: "Main" })).toBeNull();

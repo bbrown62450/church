@@ -150,10 +150,12 @@ def update_church(church_id, *, name=None, timezone=None, settings=None) -> None
             church.settings = settings
 
 
-def _lock_live_church(session, church_id) -> Optional[Church]:
+def lock_church(session, church_id) -> Optional[Church]:
     """Load the church row with SELECT ... FOR UPDATE (Postgres; SQLite ignores
     it), so a concurrent settings write waits for this transaction instead of
-    overwriting it. None if the church is missing or soft-deleted."""
+    overwriting it. None if the church is missing or soft-deleted. The one
+    church-row lock (6a spec, "Assumed interfaces"): every church write takes
+    it, directly or through usecases.members.lock_and_read_actor."""
     church = session.get(Church, church_id, with_for_update=True)
     if church is None or church.deleted_at is not None:
         return None
@@ -164,7 +166,7 @@ def _merge_settings(church_id, patch: dict) -> None:
     """Shallow-merge `patch` into the church's settings JSON under a row lock
     (reassigns a new dict so SQLAlchemy detects the change)."""
     with session_scope() as session:
-        church = _lock_live_church(session, church_id)
+        church = lock_church(session, church_id)
         if church is None:
             return
         church.settings = {**(church.settings or {}), **patch}
@@ -219,7 +221,7 @@ def update_church_rubric(church_id, patch: dict) -> dict:
     """
     cleaned = validate_patch(patch)
     with session_scope() as session:
-        church = _lock_live_church(session, church_id)
+        church = lock_church(session, church_id)
         settings = dict(church.settings or {}) if church is not None else {}
         stored = settings.get("rubric")
         overrides = apply_patch(stored if isinstance(stored, dict) else {}, cleaned)
@@ -245,3 +247,28 @@ def set_bulletin_settings(church_id, value: dict) -> None:
     settings["bulletin"], whole, under the row lock: every other settings key
     (the translation, the hymnal, the rubric, the prompts) stays as stored."""
     _merge_settings(church_id, {"bulletin": value})
+
+
+def update_profile(church_id, *, name=None, timezone=None, settings_patch=None,
+                   session: Optional[Session] = None) -> bool:
+    """PATCH /church (6a spec): set the name and the time zone when given and
+    merge `settings_patch` into the settings JSON, in one read-modify-write of
+    the row lock_church locks, so every other settings key stays as stored.
+    False, with nothing written, when the church is missing or soft-deleted."""
+    if session is not None:
+        return _update_profile(session, church_id, name, timezone, settings_patch)
+    with session_scope() as own:
+        return _update_profile(own, church_id, name, timezone, settings_patch)
+
+
+def _update_profile(session, church_id, name, timezone, settings_patch) -> bool:
+    church = lock_church(session, church_id)
+    if church is None:
+        return False
+    if name is not None:
+        church.name = name
+    if timezone is not None:
+        church.timezone = timezone
+    if settings_patch:
+        church.settings = {**(church.settings or {}), **settings_patch}
+    return True

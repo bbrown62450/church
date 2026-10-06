@@ -2,7 +2,9 @@
 
 import { ChevronsUpDownIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useRef } from "react";
 
+import { confirmLeave } from "@/components/app/leave-guard";
 import { buttonVariants } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -28,15 +30,19 @@ type Props = {
  * The header's church menu (S Flow C, F §4.1, §4.9 item 4): a radio list keyed
  * and selected by id, each row showing the role so same-name churches differ,
  * then a separator and "Join or create a church…", which pushes `/welcome`
- * (1b clarification 31). A user with one church sees the same menu.
+ * (1b clarification 31), asking first while a settings page has unsaved
+ * edits (`confirmLeave`, slice 6a-1; **Keep editing** returns focus to the
+ * menu's trigger). A user with one church sees the same menu.
  */
 export function ChurchSwitcher({ churches, activeId, onSelect }: Props) {
   const router = useRouter();
   const active = churches.find((c) => c.id === activeId) ?? null;
+  const trigger = useRef<HTMLButtonElement>(null);
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
+        ref={trigger}
         aria-label={active ? `Active church: ${active.name}` : "Choose a church"}
         className={cn(
           buttonVariants({ variant: "ghost", size: "touch" }),
@@ -62,7 +68,7 @@ export function ChurchSwitcher({ churches, activeId, onSelect }: Props) {
           </DropdownMenuRadioGroup>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => router.push("/welcome")}>Join or create a church…</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => confirmLeave(() => router.push("/welcome"), () => trigger.current)}>Join or create a church…</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

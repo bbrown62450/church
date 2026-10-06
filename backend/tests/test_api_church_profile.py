@@ -11,6 +11,7 @@ import pytest
 from api.main import create_app
 from liturgy_config import DEFAULT_BENEDICTION_FALLBACK as HALVERSON
 from repos import churches
+from repos.hymns import add_hymn
 from repos.memberships import add_membership
 from tests.api_helpers import (  # noqa: F401 (isolation_world is a fixture)
     NO_CHURCH_ACCESS,
@@ -166,3 +167,112 @@ def test_default_benediction_is_the_church_s_or_halverson(client, make_user, mak
                              ("", ""), (5, HALVERSON), ("Halverson", HALVERSON), (" halverson ", HALVERSON)):
         churches.update_church(cid, settings={"default_benediction": stored})
         assert _profile(client, cid)["default_benediction"] == expected, stored
+
+
+# --- PATCH /church (slice 6a-1) ------------------------------------------------------------------------
+
+def _patch(client, church_id, body, email=EMAIL):
+    return client.patch("/church", headers=church_headers(email, church_id), json=body)
+
+
+def test_an_admin_changes_the_profile_and_get_answers_the_same(client, make_user, make_church, no_esv_key):
+    cid = make_church(name="Grace", owner_user_id=make_user(email=EMAIL))
+    add_membership(make_user(email="admin@example.com"), cid, "admin")
+    r = _patch(client, cid, {"name": " Example Church ", "timezone": "America/Chicago",
+                             "bible_translation": "kjv", "default_benediction": "Go in peace."},
+               email="admin@example.com")
+    assert r.status_code == 200, r.text
+    assert r.json() == {**_profile(client, cid, email="admin@example.com"), "role": "admin"}
+    assert {k: r.json()[k] for k in ("name", "timezone", "bible_translation", "default_benediction")} == {
+        "name": "Example Church", "timezone": "America/Chicago", "bible_translation": "kjv",
+        "default_benediction": "Go in peace."}
+
+
+def test_an_empty_or_all_null_patch_changes_nothing(client, make_user, make_church):
+    cid = make_church(name="Grace", owner_user_id=make_user(email=EMAIL))
+    before = _profile(client, cid)
+    for body in ({}, {"name": None, "timezone": None, "default_benediction": None}):
+        r = _patch(client, cid, body)
+        assert (r.status_code, r.json()) == (200, before), body
+
+
+def test_a_member_cannot_change_the_profile(client, make_user, make_church):
+    cid = make_church(name="Grace", owner_user_id=make_user(email=EMAIL))
+    add_membership(make_user(email="member@example.com"), cid, "member")
+    for body in ({"name": "Renamed"}, {"bible_translation": "kjv"}):
+        r = _patch(client, cid, body, email="member@example.com")
+        assert r.status_code == 403, r.text
+        error = dict(r.json()["error"])
+        error.pop("request_id")
+        assert error == {"code": "forbidden", "message": "Only church admins can do this."}
+    assert _profile(client, cid)["name"] == "Grace"
+
+
+@pytest.mark.parametrize("body, field, message", [
+    ({"name": "  "}, "name", "Church name is required."),
+    ({"name": "Gr\x00ace"}, "name", "Church name can't contain line breaks or control characters."),
+    ({"name": "Gr\uffffce"}, "name", "Church name can't contain line breaks or control characters."),
+    ({"timezone": "Mars/Olympus"}, "timezone", "Unknown timezone."),
+    ({"bible_translation": "klingon"}, "bible_translation", "Unknown or unavailable translation."),
+    ({"default_hymnal": "PH1990"}, "default_hymnal", "Choose one of your church's hymnals."),
+    ({"name": "x" * 201}, "name", "Too long (max 200 characters)."),
+    ({"default_benediction": "x" * 4001}, "default_benediction", "Too long (max 4000 characters)."),
+])
+def test_a_bad_field_is_a_422_naming_it_and_nothing_is_written(client, make_user, make_church, body, field, message):
+    cid = make_church(name="Grace", owner_user_id=make_user(email=EMAIL))
+    r = _patch(client, cid, {"default_benediction": "Go.", **body})
+    assert r.status_code == 422, r.text
+    assert (r.json()["error"]["code"], r.json()["error"]["fields"]) == ("invalid_request", {field: message})
+    assert _profile(client, cid)["default_benediction"] == HALVERSON
+
+
+def test_the_benediction_is_stored_as_it_prints(client, make_user, make_church):
+    """6a-1 code review m3: NUL, U+FFFF and the like are taken out before storing, so GET answers what prints."""
+    cid = make_church(name="Grace", owner_user_id=make_user(email=EMAIL))
+    r = _patch(client, cid, {"default_benediction": "Go\x00 in peace.\uffff\x0bAmen."})
+    assert r.status_code == 200, r.text
+    assert r.json()["default_benediction"] == "Go in peace.\nAmen."
+    assert _profile(client, cid)["default_benediction"] == "Go in peace.\nAmen."
+
+
+def test_a_church_id_in_the_body_is_refused_and_isolation(client, isolation_world):
+    world = isolation_world
+    r = _patch(client, world.church_a, {"name": "Taken", "church_id": str(world.church_b)}, email=world.a)
+    assert (r.status_code, r.json()["error"]["code"]) == (422, "invalid_request")
+    assert_church_isolated(client, "PATCH", "/church", world=world, json={"name": "Church A"})
+    assert churches.get_church(world.church_b)["name"] == "Church B"
+
+
+def test_an_unavailable_stored_translation_survives_a_name_change(client, make_user, make_church, no_esv_key):
+    cid = make_church(name="Grace", owner_user_id=make_user(email=EMAIL))
+    churches.set_church_translation(cid, "esv")
+    r = _patch(client, cid, {"name": "Renamed"})
+    assert (r.status_code, r.json()["bible_translation"], r.json()["effective_translation"]) == (200, "esv", "web")
+
+
+def test_the_esv_is_accepted_only_where_its_key_is_set(client, make_user, make_church, monkeypatch):
+    cid = make_church(name="Grace", owner_user_id=make_user(email=EMAIL))
+    monkeypatch.delenv("ESV_API_KEY", raising=False)
+    r = _patch(client, cid, {"bible_translation": "esv"})
+    assert (r.status_code, r.json()["error"]["fields"]) == (
+        422, {"bible_translation": "Unknown or unavailable translation."})
+    assert _profile(client, cid)["bible_translation"] is None
+
+    monkeypatch.setenv("ESV_API_KEY", "test-key")            # scripture_fetcher reads it at call time
+    r = _patch(client, cid, {"bible_translation": "esv"})
+    assert r.status_code == 200, r.text
+    assert (r.json()["bible_translation"], r.json()["effective_translation"]) == ("esv", "esv")
+
+
+def test_a_profile_save_keeps_every_other_setting(client, make_user, make_church, no_esv_key):
+    cid = make_church(name="Grace", owner_user_id=make_user(email=EMAIL))
+    add_hymn(cid, hymnal="GG2013", number=1, title="Holy, Holy, Holy")
+    every = {"bible_translation": "esv", "default_hymnal": "HL1955", "default_benediction": "Halverson",
+             "bulletin": {"phone": "555-0100"}, "rubric": {"prefer_familiar": False},
+             "liturgy_prompts": {"benediction": "Go."}, "prayer_library": {"confession": ["Merciful God."]},
+             "foo": 1}
+    churches.update_church(cid, settings=every)
+    r = _patch(client, cid, {"bible_translation": "kjv", "default_benediction": "", "default_hymnal": "GG2013"})
+    assert r.status_code == 200, r.text
+    assert churches.get_church(cid)["settings"] == {**every, "bible_translation": "kjv",
+                                                    "default_benediction": "", "default_hymnal": "GG2013"}

@@ -136,4 +136,19 @@ describe("TimezoneCombobox", () => {
     await user.type(input, "E");
     expect(onChange).toHaveBeenLastCalledWith("E");
   });
+
+  it("shows a value that is not in the list as chosen, with the warning under the field (6a-1)", async () => {
+    stubZones(ZONES);
+    const user = userEvent.setup();
+    render(<TimezoneCombobox value="Eastern" onChange={() => {}} warning="Timezone not recognized. Choose one from the list." />);
+
+    const input = screen.getByRole("combobox", { name: "Time zone" });
+    expect(input).toHaveValue("Eastern");
+    expect(input).not.toHaveAttribute("aria-invalid");
+    expect(input).toHaveAccessibleDescription(
+      "Sets the default service date (the next Sunday in this time zone). Timezone not recognized. Choose one from the list.",
+    );
+    await user.click(input);
+    expect(await screen.findByRole("option", { name: "Eastern", selected: true })).toBeInTheDocument();
+  });
 });
