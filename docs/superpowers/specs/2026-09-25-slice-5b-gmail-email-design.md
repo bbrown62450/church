@@ -4,6 +4,14 @@
 
 **Inputs:** foundations spec `2026-09-25-migration-foundations-design.md` (cited as "F§n"), migration inventory `2026-09-25-streamlit-migration-inventory.md` (cited as "inv §n"), owner decisions 1-9.
 
+- **Amendment 2026-10-06: owner's 5b planning answers ("all recommended"; binding; they supersede this spec where they differ).** Since this spec was written, Streamlit was retired, slices 5a, 6a-1 and the printed bulletin (PRs #45-#50) shipped, and 6a-1 built the Settings shell (`/settings` → `/settings/church`; nav Church, Bulletin) that this spec planned to build.
+  1. **Attachments.** The email dialog offers checkboxes **"Bulletin copy (Word)"** (5a's bulletin `.docx`, checked by default) and **"Printed bulletin (PDF)"** (the printed bulletin's PDF, built server-side from the posted draft and the church's bulletin settings, as `POST /documents/printed` builds it). At least one must be checked. The last choice is remembered per user and church in the browser.
+  2. **Two PRs.** **5b-1**: the Contacts page in Settings (`/settings/contacts`, from the 6a spec's "Contacts" section and API rows: everyone reads, admins add, edit and delete) with `GET /contacts` and `email_addresses.normalize_address`; no Google setup. **5b-2**: the Gmail connection (`/settings/account`, `/gmail/callback`, the `/gmail-connection` routes) and the "Email the bulletin" card and dialog with `POST /bulletin-emails`.
+  3. **Google client.** Railway reuses the Google OAuth client Streamlit used (same client id and secret), so an existing `gmail_tokens` row keeps working; the owner adds the new redirect URI in Google Cloud Console. The 5b-2 ops steps include checking the consent screen's publishing status (in "Testing", Google expires refresh tokens after 7 days and the reconnect path handles it; "In production" shows an unverified-app warning).
+  4. **Streamlit is treated as unused.** Drop the coexistence work: no `google_oauth_legacy.py` or F§6.1 contingency, no Streamlit smoke test, no switchover banner, no parity gate, no `LegacySettingsNote`, no "current app" wording (`MALFORMED_CONTACT_HINT` reads "An admin can fix it in Settings → Contacts." from the start). Revoking on disconnect is fine. Plaintext token storage stays as is (encryption remains slice 7's).
+  5. **Wording.** The subject is **"Worship service for October 4, 2026"** (no zero padding). Every em dash in this spec's user-facing copy is replaced (commas, periods or parentheses). Kept as designed: recipients in BCC with the sender in To, the editable prefilled message, at most 50 people per send, last send's contacts preselected, any member may send.
+  6. **Existing contacts are kept.** The 5b-1 plan includes a read-only query the owner runs once to list saved contacts whose address would fail `normalize_address`, so they can be fixed on the new Contacts page.
+
 ---
 
 ## Goal
