@@ -32,7 +32,7 @@
   `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
 - TDD: write the failing test first and see it fail as quoted.
 - **Backup push after every task** (standing rule): the controller runs `git push origin claude/slice-2-plan-4q33le` after each task's commit (never `--force`, never a rebase; if the push is rejected, `git pull --no-rebase origin claude/slice-2-plan-4q33le` and push again; on a network error retry after 2, 4, 8 and 16 s). A fix asked for by a review is a new commit, `Fix: <what> (Task <n> review)`. The container can restart and lose uncommitted work: commit as soon as a task's checks pass.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1669 → @@BEND@@ passed, 26 skipped; frontend 780 → 825 in 94 → 100 files` (two PRs: the lines of T18's table).
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1669 → 1801 passed, 26 skipped; frontend 780 → 825 in 94 → 100 files` (two PRs: the lines of T18's table).
 - New prose for the owner has no em dashes and no flattery. New user-facing copy is exactly the list in clarification 21 and has no em dashes (B's lines are taken without theirs); existing copy keeps its own punctuation.
 - No church id, real email address, token, key, street address, phone number, database URL or real person's name in any doc, commit, test or record. Tests use the fixtures' "Grace", "Pat Pastor" and `@example.org` / `@example.com` addresses only. **The agent never asks for, reads, prints or handles the Google client secret or id** (T19's owner steps copy them inside Google Cloud Console and Railway only).
 - Ask the owner before any push to a PR, PR creation, marking ready, merging, or any production or settings action. Owner steps go one at a time, in plain words.
@@ -49,7 +49,27 @@ As in the 5b-1 plan: **Create `path`:** the block is the whole file; **Append to
 - Starting baselines: backend **1669 passed, 26 skipped**; frontend **780 passed in 94 files**, typecheck and lint clean; Alembic head **`0007_bulletin_images`** (7 revision files; no new revision); runbook owner markers `grep -n '\[owner' docs/ops-runbook.md | grep -v 'An entry marked' | wc -l` = **4**. If any differs, stop and ask.
 - Planned cumulative counts (observed while planning and again in the replay). A backend delta is the number of new collected tests less the removed ones (a parametrized test counts each case); a frontend delta the number of new `it(` (an `it.each` row counts once).
 
-@@COUNTS@@
+  | After | Backend (delta) | Backend | Frontend (delta) | Frontend |
+  |---|---|---|---|---|
+  | T1 | +2 (`test_http_client.py`, 7 → 9) | 1671 passed, 26 skipped | 0 | 780 in 94 |
+  | T2 | −8 (`test_google_oauth.py` 13 new; the three old files' 21 deleted) | 1663 passed, 26 skipped | 0 | 780 in 94 |
+  | T3 | +36 (`test_google_oauth.py`, 13 → 49: 11 + 4 + 14 parametrized cases and 7 tests) | 1699 passed, 26 skipped | 0 | 780 in 94 |
+  | T4 | +10 (`test_startup.py`: 7 + 2 parametrized cases and 1 test) | 1709 passed, 26 skipped | 0 | 780 in 94 |
+  | T5 | +17 (`test_usecase_email.py`: 8 parametrized cases and 9 tests) | 1726 passed, 26 skipped | 0 | 780 in 94 |
+  | T6 | +11 (`test_api_gmail.py`: 5 parametrized cases and 6 tests) | 1737 passed, 26 skipped | 0 | 780 in 94 |
+  | T7 | 0 | 1737 passed, 26 skipped | +7 (`gmail.test.ts` 5, `client.test.ts` 1, `urls.test.ts` 1 `it.each` row) | 787 in 96 |
+  | T8 | 0 | 1737 passed, 26 skipped | +6 (`gmail-callback.test.tsx`) | 793 in 97 |
+  | T9 | 0 | 1737 passed, 26 skipped | +7 (`account-settings-page.test.tsx` 6; `settings-layout.test.tsx` one test became two `it.each` rows) | 800 in 98 |
+  | T10 | 0 | 1737 passed, 26 skipped | 0 | 800 in 98 |
+  | T11 | +13 (`test_bulletin_email.py` 12: 6 + 4 parametrized cases and 2 tests; `test_email_addresses.py` 1) | 1750 passed, 26 skipped | 0 | 800 in 98 |
+  | T12 | +4 (`test_idempotency.py` 3, `test_email_contacts.py` 1) | 1754 passed, 26 skipped | 0 | 800 in 98 |
+  | T13 | +28 (`test_usecase_email.py`, 17 → 45: 5 + 11 parametrized cases and 12 tests) | 1782 passed, 26 skipped | 0 | 800 in 98 |
+  | T14 | +19 (`test_api_bulletin_emails.py`: 2 + 4 parametrized cases and 13 tests) | 1801 passed, 26 skipped | 0 | 800 in 98 |
+  | T15 | 0 | 1801 passed, 26 skipped | +9 (`email.test.ts` 7, `idempotency.test.ts` 1, `prune.test.ts` 1) | 809 in 99 |
+  | T16 | 0 | 1801 passed, 26 skipped | +16 (`email-card.test.tsx`) | 825 in 100 |
+  | T17 | 0 | 1801 passed, 26 skipped | 0 | 825 in 100 |
+
+  Two PRs: 5b-2a (after T10) is backend `1737 passed, 26 skipped` and frontend `800 passed` in 98 files; 5b-2b (after T17) as the last row.
 
 - CI `backend-postgres` is unchanged (`26 passed`; no new Postgres test: the Gmail rows are per user and the send takes no lock).
 
@@ -152,7 +172,7 @@ The owner's answers win over B, S and F; the code wins over all of them where th
 
 **Deleted** (T2): `backend/tests/test_oauth_state.py`, `backend/tests/test_gmail_exchange.py`, `backend/tests/test_gmail_token_store.py` (every assertion about kept code ported to `test_google_oauth.py`).
 
-**Counts in the PR:** @@PATHCOUNT@@ **Untouched:** migrations, `db/models.py`, `domain_errors.py` (every Gmail code is registered since slice 1), `api/ratelimit.py` (the `email` bucket exists), `api/errors.py`, `usecases/documents.py`, `usecases/contacts.py`, `lib/queries/keys.ts`, `lib/api/errors.ts`, `proxy.ts`, the draft schema, `app.py`, `streamlit_views`, `streamlit_tests`.
+**Counts in the PR:** 70 paths (one PR): 28 created (this plan and the 27 new code, test and fixture files above), 39 modified (the code, test, doc and API paths above, plus `docs/ops-runbook.md`, whose 5b-1 record rides along until its records PR is merged), 3 deleted. **Untouched:** migrations, `db/models.py`, `domain_errors.py` (every Gmail code is registered since slice 1), `api/ratelimit.py` (the `email` bucket exists), `api/errors.py`, `usecases/documents.py`, `usecases/contacts.py`, `lib/queries/keys.ts`, `lib/api/errors.ts`, `proxy.ts`, the draft schema, `app.py`, `streamlit_views`, `streamlit_tests`.
 
 **Task order and review batch:** T1 → T17 (two PRs: T1 → T10, then T11 → T17), each one commit and a backup push; then one review of the batch with its fixes as `Fix: …` commits; T18 verifies and opens the draft PR on the owner's yes; T19 runs the owner's Google and Railway setup (before the first merge only), merges on the owner's yes, runs the phone check and writes the record.
 
@@ -213,7 +233,9 @@ def test_post_never_follows_a_redirect_and_refuses_plain_http():
 Run: `.venv/bin/python -m pytest -q backend/tests/test_http_client.py 2>&1 | tail -3`
 **Expected** (`http.post` does not exist yet):
 ```
-@@T1_FAIL@@
+FAILED backend/tests/test_http_client.py::test_post_sends_a_form_or_json_with_its_own_timeout_and_the_user_agent
+FAILED backend/tests/test_http_client.py::test_post_never_follows_a_redirect_and_refuses_plain_http
+2 failed, 7 passed in <t>s
 ```
 
 - [ ] **Step 3: Add `post()`**
@@ -274,7 +296,7 @@ def set_http_for_tests(client: httpx.Client | None) -> None:
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_http_client.py backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`
 **Expected:**
-@@T1_PASS@@
+`12 passed in <t>s`; `1671 passed, 26 skipped in <t>s`.
 
 - [ ] **Step 5: Commit**
 
@@ -288,7 +310,7 @@ sent or not at all. Google's token, revoke and Gmail send endpoints use it
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: @@T1_COUNTS@@
+Expected counts after this task: backend `1671 passed, 26 skipped`; frontend `780 passed` in 94 files.
 
 ### Task 2: `google_oauth`: the config, the consent URL, the states and the token store (B "Modules", "google_oauth.py after the refactor"; clarifications 2 and 5)
 
@@ -480,7 +502,9 @@ def test_the_streamlit_functions_are_gone():
 Run: `.venv/bin/python -m pytest -q backend/tests/test_google_oauth.py 2>&1 | tail -3`
 **Expected** (`GoogleOAuthConfig` does not exist yet: an `AttributeError` at import, above these lines):
 ```
-@@T2_FAIL@@
+ERROR backend/tests/test_google_oauth.py - AttributeError: module 'google_oau...
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in <t>s
 ```
 
 - [ ] **Step 3: Rewrite the module's first half**
@@ -684,7 +708,7 @@ def delete_connection(user_id: uuid.UUID, *, only_if_token: Optional[str] = None
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_google_oauth.py backend/tests/test_no_streamlit_in_core.py streamlit_tests 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`
 **Expected:**
-@@T2_PASS@@
+`51 passed in <t>s` (the 13 new tests, the import check's 3 and the 35 `streamlit_tests`, which never touched Gmail); `1663 passed, 26 skipped in <t>s`.
 
 - [ ] **Step 5: Commit**
 
@@ -704,7 +728,7 @@ Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 
 `git add` stages the three deletions made with `git rm` in Step 1 as well (they are already staged).
 
-Expected counts after this task: @@T2_COUNTS@@
+Expected counts after this task: backend `1663 passed, 26 skipped`; frontend `780 passed` in 94 files.
 
 ### Task 3: `google_oauth`: the Google calls (B "Rules"; clarifications 4 and 5)
 
@@ -991,9 +1015,11 @@ def test_revoke_token_is_best_effort():
 - [ ] **Step 2: See them fail**
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_google_oauth.py 2>&1 | tail -3`
-**Expected** (`exchange_code` and the rest do not exist yet):
+**Expected** (`GoogleErrorKind`, `exchange_code` and the rest do not exist yet: the module-level `Kind = google_oauth.GoogleErrorKind` is an `AttributeError` at collection):
 ```
-@@T3_FAIL@@
+ERROR backend/tests/test_google_oauth.py - AttributeError: module 'google_oau...
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in <t>s
 ```
 
 - [ ] **Step 3: Add the calls**
@@ -1277,7 +1303,7 @@ def revoke_token(token: str) -> bool:
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_google_oauth.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`
 **Expected:**
-@@T3_PASS@@
+`49 passed in <t>s`; `1699 passed, 26 skipped in <t>s`.
 
 - [ ] **Step 5: Commit**
 
@@ -1294,7 +1320,7 @@ MockTransport stand-in." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: @@T3_COUNTS@@
+Expected counts after this task: backend `1699 passed, 26 skipped`; frontend `780 passed` in 94 files.
 
 ### Task 4: The Google settings and the startup lines (B "Configuration and startup checks"; clarification 3)
 
@@ -1400,7 +1426,9 @@ def test_startup_logs_the_gmail_configuration(api_env, tmp_db, caplog, secret, l
 Run: `.venv/bin/python -m pytest -q backend/tests/test_startup.py 2>&1 | tail -3`
 **Expected** (`gmail_config_problems` does not exist yet: an `ImportError` above these lines):
 ```
-@@T4_FAIL@@
+ERROR backend/tests/test_startup.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in <t>s
 ```
 
 - [ ] **Step 3: Read the variables, check them at startup**
@@ -1609,7 +1637,7 @@ GOOGLE_OAUTH_REDIRECT_URI=http://localhost:3000/gmail/callback
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_startup.py backend/tests/test_google_oauth.py backend/tests/test_docs.py backend/tests/test_foundation_setup.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`
 **Expected:**
-@@T4_PASS@@
+`94 passed in <t>s`; `1709 passed, 26 skipped in <t>s`.
 
 - [ ] **Step 5: Commit**
 
@@ -1625,7 +1653,7 @@ never logs a value. .env.example describes the three." -m "Co-Authored-By: Claud
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: @@T4_COUNTS@@
+Expected counts after this task: backend `1709 passed, 26 skipped`; frontend `780 passed` in 94 files.
 
 ### Task 5: The Gmail connection usecases (B "usecases/email.py", "Errors: POST /gmail-connection"; clarification 6)
 
@@ -1823,7 +1851,9 @@ def test_the_logs_never_carry_a_code_state_token_or_address(owner, caplog):
 Run: `.venv/bin/python -m pytest -q backend/tests/test_usecase_email.py 2>&1 | tail -3`
 **Expected** (`usecases.email` does not exist yet):
 ```
-@@T5_FAIL@@
+ERROR backend/tests/test_usecase_email.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in <t>s
 ```
 
 - [ ] **Step 3: Write the usecases**
@@ -1970,7 +2000,7 @@ def disconnect_gmail(user_id: uuid.UUID, config: GoogleOAuthConfig) -> GmailStat
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_usecase_email.py backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`
 **Expected:**
-@@T5_PASS@@
+`20 passed in <t>s`; `1726 passed, 26 skipped in <t>s`.
 
 - [ ] **Step 5: Commit**
 
@@ -1986,7 +2016,7 @@ shown, its error code is logged only for our own misconfiguration." -m "Co-Autho
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: @@T5_COUNTS@@
+Expected counts after this task: backend `1726 passed, 26 skipped`; frontend `780 passed` in 94 files.
 
 ### Task 6: `/gmail-connection` (B API, Schemas; clarification 7)
 
@@ -2154,7 +2184,9 @@ def test_every_gmail_route_needs_a_signed_in_user(client):
 Run: `.venv/bin/python -m pytest -q backend/tests/test_api_gmail.py backend/tests/test_route_guards.py 2>&1 | tail -3`
 **Expected** (`api.deps.get_google_config` does not exist yet: an `ImportError` above these lines):
 ```
-@@T6_FAIL@@
+ERROR backend/tests/test_api_gmail.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in <t>s
 ```
 
 - [ ] **Step 3: Write the routes, the dependency, and mount them**
@@ -2292,7 +2324,7 @@ from api.routes import (bulletin_images, bulletin_settings, churches, contacts, 
 
 Run: `.venv/bin/python backend/scripts/export_openapi.py >/dev/null && (cd frontend && npm run gen:api >/dev/null) && git diff --stat -- frontend/src/lib/api | tail -1` then `.venv/bin/python -m pytest -q backend/tests/test_api_gmail.py backend/tests/test_usecase_email.py backend/tests/test_openapi_contract.py backend/tests/test_route_guards.py backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`
 **Expected:**
-@@T6_PASS@@
+` 2 files changed, 656 insertions(+)`; `39 passed in <t>s`; `1737 passed, 26 skipped in <t>s`; `typecheck 0`, `lint 0` (the new types are not used until T7).
 
 - [ ] **Step 5: Commit**
 
@@ -2307,7 +2339,7 @@ tests override it. OpenAPI and the types regenerated." -m "Co-Authored-By: Claud
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: @@T6_COUNTS@@
+Expected counts after this task: backend `1737 passed, 26 skipped`; frontend `780 passed` in 94 files.
 
 ### Task 7: The trip to Google in the browser: helpers, queries, the Supabase client (B flows A-C, "Pure modules", "Query hooks"; clarification 8)
 
@@ -2430,7 +2462,11 @@ describe("the browser's Supabase client (slice 5b-2)", () => {
 Run: `(cd frontend && npx vitest run src/lib/gmail.test.ts src/lib/urls.test.ts src/lib/supabase/client.test.ts 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
 **Expected** (`gmail.ts` does not exist yet; `/gmail/callback` is refused; the option is missing):
 ```
-@@T7_FAIL@@
+   × safeInternalPath > accepts /gmail/callback <t>ms
+   × the browser's Supabase client (slice 5b-2) > never reads a sign-in from the address bar, so /gmail/callback?code= stays the Gmail page's <t>ms
+ FAIL  |unit| src/lib/gmail.test.ts [ src/lib/gmail.test.ts ]
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  2 failed | 21 passed (23)
 ```
 
 - [ ] **Step 3: Write the types, the helpers, the queries and the two changes**
@@ -2720,7 +2756,7 @@ export function useDisconnectGmail() {
 
 Run: `(cd frontend && npx vitest run src/lib/gmail.test.ts src/lib/urls.test.ts src/lib/supabase/client.test.ts 2>&1 | grep -E "^ +× |\[ src/|Tests ")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`
 **Expected:**
-@@T7_PASS@@
+`      Tests  28 passed (28)`; ` Test Files  96 passed (96)` and `      Tests  787 passed (787)`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -2737,7 +2773,7 @@ Supabase browser client no longer reads sign-ins from the address bar, so
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: @@T7_COUNTS@@
+Expected counts after this task: backend `1737 passed, 26 skipped`; frontend `787 passed` in 96 files.
 
 ### Task 8: `/gmail/callback` (B flow C; clarification 9)
 
@@ -2893,7 +2929,8 @@ describe("/gmail/callback (slice 5b-2)", () => {
 Run: `(cd frontend && npx vitest run src/components/gmail 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
 **Expected** (the page does not exist yet):
 ```
-@@T8_FAIL@@
+ FAIL  |dom| src/components/gmail/gmail-callback.test.tsx [ src/components/gmail/gmail-callback.test.tsx ]
+      Tests  no tests
 ```
 
 - [ ] **Step 3: Write the page**
@@ -3068,7 +3105,7 @@ export default function GmailCallbackPage() {
 
 Run: `(cd frontend && npx vitest run src/components/gmail 2>&1 | grep -E "^ +× |\[ src/|Tests ")` (three times) then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`
 **Expected:**
-@@T8_PASS@@
+three times `      Tests  6 passed (6)`, with no `×`; ` Test Files  97 passed (97)` and `      Tests  793 passed (793)`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -3084,7 +3121,7 @@ and Go back (only Go back when Gmail is not set up here)." -m "Co-Authored-By: C
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: @@T8_COUNTS@@
+Expected counts after this task: backend `1737 passed, 26 skipped`; frontend `793 passed` in 97 files.
 
 ### Task 9: Settings → Account (B "/settings/account"; S "Settings nav"; clarification 10)
 
@@ -3310,7 +3347,12 @@ describe("Settings → Account (slice 5b-2)", () => {
 Run: `(cd frontend && npx vitest run src/components/settings/account-settings-page.test.tsx src/components/settings/settings-layout.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
 **Expected** (the page does not exist yet; the nav has three sections):
 ```
-@@T9_FAIL@@
+   × the Settings area (slice 6a-1) > shows the heading, who you are in the church, and the sections with the current one marked <t>ms
+   × the Settings area (slice 6a-1) > marks the section current on its page (slices 5b-1, 5b-2): /settings/account <t>ms
+   × the Settings area (slice 6a-1) > shows a member the same sections, and /settings opens Church <t>ms
+ FAIL  |dom| src/components/settings/account-settings-page.test.tsx [ src/components/settings/account-settings-page.test.tsx ]
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  3 failed | 1 passed (4)
 ```
 
 - [ ] **Step 3: Write the page, its route and the nav entry**
@@ -3505,7 +3547,7 @@ export default function AccountSettingsRoute() {
 
 Run: `(cd frontend && npx vitest run src/components/settings src/components/app/app-header.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`
 **Expected:**
-@@T9_PASS@@
+`      Tests  44 passed (44)`; ` Test Files  98 passed (98)` and `      Tests  800 passed (800)`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -3520,7 +3562,7 @@ gmailDisconnected()." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: @@T9_COUNTS@@
+Expected counts after this task: backend `1737 passed, 26 skipped`; frontend `800 passed` in 98 files.
 
 ### Task 10: Docs: the connection's manual checks (clarification 23)
 
@@ -3553,7 +3595,7 @@ address bar or a church id.
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_slice1_docs.py backend/tests/test_docs.py backend/tests/test_ops_workflows.py 2>&1 | tail -1` then `grep -n '\[owner' docs/ops-runbook.md | grep -v 'An entry marked' | wc -l` then `git diff -U0 docs/manual-verification.md | grep '^+' | grep -c '—'` then `git diff --stat | tail -1`
 **Expected:**
-@@T10_PASS@@
+`89 passed in <t>s`; `4`; `0`; ` 1 file changed, 13 insertions(+)`.
 
 - [ ] **Step 3: Commit**
 
@@ -3567,7 +3609,7 @@ connecting from Settings → Account, a cancel at Google and a reload of
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: @@T10_COUNTS@@
+Expected counts after this task: backend `1737 passed, 26 skipped`; frontend `800 passed` in 98 files.
 
 
 ## Group B: emailing the bulletin (T11-T17)
@@ -3711,7 +3753,12 @@ def test_dedupe_keeps_the_first_of_each_address_ignoring_case():
 Run: `.venv/bin/python -m pytest -q backend/tests/test_bulletin_email.py 2>&1 | tail -3` then `.venv/bin/python -m pytest -q backend/tests/test_email_addresses.py 2>&1 | tail -3`
 **Expected** (`bulletin_email` and `dedupe_addresses` do not exist yet):
 ```
-@@T11_FAIL@@
+ERROR backend/tests/test_bulletin_email.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in <t>s
+ERROR backend/tests/test_email_addresses.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in <t>s
 ```
 
 - [ ] **Step 3: Write the module and the de-duplication**
@@ -3834,7 +3881,7 @@ def compose_bulletin_email(*, sender: str, recipients: Sequence[str], service_da
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_bulletin_email.py backend/tests/test_email_addresses.py backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`
 **Expected:**
-@@T11_PASS@@
+`118 passed in <t>s`; `1750 passed, 26 skipped in <t>s`.
 
 - [ ] **Step 5: Commit**
 
@@ -3850,7 +3897,7 @@ address, ignoring case." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: @@T11_COUNTS@@
+Expected counts after this task: backend `1750 passed, 26 skipped`; frontend `800 passed` in 98 files.
 
 ### Task 12: Idempotency keeps an uncertain send; the contacts a send names (B §Errors "Stored", "Modules" `email_contacts.py`; clarifications 13 and 14)
 
@@ -3943,7 +3990,9 @@ def test_get_contacts_by_ids_returns_the_churchs_contacts_in_the_order_asked(tmp
 Run: `.venv/bin/python -m pytest -q backend/tests/test_idempotency.py backend/tests/test_email_contacts.py 2>&1 | tail -3`
 **Expected** (`run_idempotent` takes no `store_error` yet; `get_contacts_by_ids` does not exist):
 ```
-@@T12_FAIL@@
+FAILED backend/tests/test_idempotency.py::test_store_error_never_keeps_a_rate_limit
+FAILED backend/tests/test_email_contacts.py::test_get_contacts_by_ids_returns_the_churchs_contacts_in_the_order_asked
+4 failed, 26 passed in <t>s
 ```
 
 - [ ] **Step 3: Add `store_error` and `get_contacts_by_ids`**
@@ -4036,7 +4085,7 @@ def get_contacts_for_display(church_id) -> List[Dict[str, str]]:
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_idempotency.py backend/tests/test_email_contacts.py streamlit_tests 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`
 **Expected:**
-@@T12_PASS@@
+`65 passed in <t>s` (the two files' 30 and the 35 `streamlit_tests`); `1754 passed, 26 skipped in <t>s`.
 
 - [ ] **Step 5: Commit**
 
@@ -4050,7 +4099,7 @@ order asked, each once; another church's id is simply missing." -m "Co-Authored-
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: @@T12_COUNTS@@
+Expected counts after this task: backend `1754 passed, 26 skipped`; frontend `800 passed` in 98 files.
 
 ### Task 13: `send_bulletin_email` (B "usecases/email.py", §Errors, Testing "test_usecase_email.py"; clarifications 12, 14 and 15)
 
@@ -4371,7 +4420,9 @@ def test_the_logs_carry_no_address_subject_message_or_token(world, caplog):
 Run: `.venv/bin/python -m pytest -q backend/tests/test_usecase_email.py 2>&1 | tail -3`
 **Expected** (`email.EXPIRED` and the rest do not exist yet: an `AttributeError` at collection, above these lines):
 ```
-@@T13_FAIL@@
+ERROR backend/tests/test_usecase_email.py - AttributeError: module 'usecases....
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in <t>s
 ```
 
 - [ ] **Step 3: Write the send**
@@ -4591,7 +4642,7 @@ def send_bulletin_email(church_id: uuid.UUID, user_id: uuid.UUID, data: archive.
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_usecase_email.py backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`
 **Expected:**
-@@T13_PASS@@
+`48 passed in <t>s`; `1782 passed, 26 skipped in <t>s`.
 
 - [ ] **Step 5: Commit**
 
@@ -4609,7 +4660,7 @@ line holds counts only." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: @@T13_COUNTS@@
+Expected counts after this task: backend `1782 passed, 26 skipped`; frontend `800 passed` in 98 files.
 
 ### Task 14: `POST /bulletin-emails` (B API, Routes, Testing "test_api_bulletin_emails.py"; clarifications 12 and 16)
 
@@ -4889,9 +4940,11 @@ def test_signed_out_is_401(client):
 - [ ] **Step 2: See them fail**
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_api_bulletin_emails.py 2>&1 | tail -3`
-**Expected** (no route yet: every request is a 404, the 401 test among them):
+**Expected** (no route yet: every request is a 404, the signed-out one among them; all 19 fail):
 ```
-@@T14_FAIL@@
+FAILED backend/tests/test_api_bulletin_emails.py::test_gmail_errors_never_carry_googles_text[not-configured]
+FAILED backend/tests/test_api_bulletin_emails.py::test_signed_out_is_401 - As...
+19 failed in <t>s
 ```
 
 - [ ] **Step 3: Write the route and mount it**
@@ -5017,7 +5070,7 @@ from api.routes import (bulletin_emails, bulletin_images, bulletin_settings, chu
 
 Run: `.venv/bin/python backend/scripts/export_openapi.py >/dev/null && (cd frontend && npm run gen:api >/dev/null) && git diff --stat -- frontend/src/lib/api | tail -1` then `.venv/bin/python -m pytest -q backend/tests/test_api_bulletin_emails.py backend/tests/test_usecase_email.py backend/tests/test_openapi_contract.py backend/tests/test_route_guards.py backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`
 **Expected:**
-@@T14_PASS@@
+` 2 files changed, 409 insertions(+)`; `75 passed in <t>s`; `1801 passed, 26 skipped in <t>s`; `typecheck 0`, `lint 0` (the new types are used in T15).
 
 - [ ] **Step 5: Commit**
 
@@ -5034,7 +5087,7 @@ the types regenerated." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.c
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: @@T14_COUNTS@@
+Expected counts after this task: backend `1801 passed, 26 skipped`; frontend `800 passed` in 98 files.
 
 ### Task 15: The email dialog's rules (B "Pure modules" `lib/email.ts`, `lib/idempotency.ts`, "Storage keys"; clarifications 12 and 17)
 
@@ -5216,7 +5269,11 @@ describe("the bulletin email (slice 5b-2)", () => {
 Run: `(cd frontend && npx vitest run src/lib/email.test.ts src/lib/idempotency.test.ts src/lib/draft/prune.test.ts 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
 **Expected** (`email.ts` does not exist yet; no `rotate`; the choices are not pruned):
 ```
-@@T15_FAIL@@
+   × pruneDrafts (F §4.6 items 3 and 4) > removes the email dialog's remembered choices for churches the user left (slice 5b-2) <t>ms
+   × createKeyTracker > rotate drops the kept key, so the same body is sent as a new request (slice 5b-2: Send again anyway) <t>ms
+ FAIL  |unit| src/lib/email.test.ts [ src/lib/email.test.ts ]
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  2 failed | 10 passed (12)
 ```
 
 - [ ] **Step 3: Write the rules, `rotate`, the pruning and the timeout**
@@ -5494,7 +5551,7 @@ export function parseReopen(raw: string | null, churchId: string): ReopenEmail |
 
 Run: `(cd frontend && npx vitest run src/lib/email.test.ts src/lib/idempotency.test.ts src/lib/draft/prune.test.ts 2>&1 | grep -E "^ +× |\[ src/|Tests ")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`
 **Expected:**
-@@T15_PASS@@
+`      Tests  19 passed (19)`; ` Test Files  99 passed (99)` and `      Tests  809 passed (809)`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -5510,7 +5567,7 @@ churches left; POST /bulletin-emails waits 90 s." -m "Co-Authored-By: Claude Opu
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: @@T15_COUNTS@@
+Expected counts after this task: backend `1801 passed, 26 skipped`; frontend `809 passed` in 99 files.
 
 ### Task 16: The Email the bulletin card and dialog (B "Review step", "Email dialog", "Send outcomes", flows B and D; clarifications 14 and 17-20)
 
@@ -6048,7 +6105,11 @@ describe("Review → Email the bulletin: back from Google (slice 5b-2, flow B)",
 Run: `(cd frontend && npx vitest run src/components/builder/review src/components/settings/contacts-settings-page.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
 **Expected** (the card does not exist yet; the caption is 5b-1's):
 ```
-@@T16_FAIL@@
+   × Settings → Contacts (slice 5b-1) > shows a member the list as text, with the note, a flag on a bad address, and no controls <t>ms
+   × Review & send: the Word documents (slice 5a-1) > shows Still to do, the Archive card and both copies with what they hold, in that order, with no placeholder <t>ms
+ FAIL  |dom| src/components/builder/review/email-card.test.tsx [ src/components/builder/review/email-card.test.tsx ]
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  2 failed | 42 passed (44)
 ```
 
 - [ ] **Step 3: Write the send, the dialog and the card, put the card on Review, and set the caption**
@@ -6750,7 +6811,7 @@ export const CONTACTS_INTRO = "People you can email the bulletin to from the Rev
 
 Run: `(cd frontend && npx vitest run src/components/builder/review 2>&1 | grep -E "^ +× |\[ src/|Tests ")` (three times) then `(cd frontend && npx vitest run src/components/builder/builder-shell.test.tsx src/components/builder/liturgy/liturgy-step.test.tsx src/components/settings 2>&1 | grep -E "^ +× |\[ src/|Tests ")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`
 **Expected:**
-@@T16_PASS@@
+three times `      Tests  44 passed (44)`, with no `×`; `      Tests  93 passed (93)`; ` Test Files  100 passed (100)` and `      Tests  825 passed (825)`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -6767,7 +6828,7 @@ form. The Contacts caption now says emailing is on the Review step." -m "Co-Auth
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: @@T16_COUNTS@@
+Expected counts after this task: backend `1801 passed, 26 skipped`; frontend `825 passed` in 100 files.
 
 ### Task 17: Docs: the email's manual checks (clarification 23)
 
@@ -6793,7 +6854,7 @@ Items 11-16, after T10's.
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_slice1_docs.py backend/tests/test_docs.py backend/tests/test_ops_workflows.py 2>&1 | tail -1` then `grep -n '\[owner' docs/ops-runbook.md | grep -v 'An entry marked' | wc -l` then `git diff -U0 docs/manual-verification.md | grep '^+' | grep -c '—'` then `git diff --stat | tail -1`
 **Expected:**
-@@T17_PASS@@
+`89 passed in <t>s`; `4`; `0`; ` 1 file changed, 6 insertions(+)`.
 
 - [ ] **Step 3: Commit**
 
@@ -6807,7 +6868,7 @@ contact, and a church switch with the dialog open." -m "Co-Authored-By: Claude O
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: @@T17_COUNTS@@
+Expected counts after this task: backend `1801 passed, 26 skipped`; frontend `825 passed` in 100 files.
 
 
 ## Verification, the PR, the owner's setup, the merge (T18-T19)
@@ -6839,7 +6900,7 @@ for i in 1 2 3; do (cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Te
 (cd frontend && NEXT_PUBLIC_SUPABASE_URL=https://ci-placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-placeholder NEXT_PUBLIC_API_URL=http://localhost:8000 npm run build 2>&1 | grep -E "Compiled successfully|Error|/settings|/gmail")
 ```
 
-**Expected** (one PR, or 5b-2b): @@T18_STEP2@@ (5b-2a: @@T18_STEP2_A@@) with no `×` or `FAIL` line (one names the failing test: Step 6); `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s` and the route lines `├ ○ /gmail/callback`, `├ ○ /settings`, `├ ○ /settings/account`, `├ ○ /settings/church` and `├ ○ /settings/contacts` and no `Error` (a font `Failed to fetch` only: say so and rely on CI).
+**Expected** (one PR, or 5b-2b): `1801 passed, 26 skipped in <t>s`; three times ` Test Files  100 passed (100)` and `      Tests  825 passed (825)` (5b-2a: `1737 passed, 26 skipped in <t>s`; three times ` Test Files  98 passed (98)` and `      Tests  800 passed (800)`) with no `×` or `FAIL` line (one names the failing test: Step 6); `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s` and the route lines `├ ○ /gmail/callback`, `├ ○ /settings`, `├ ○ /settings/account`, `├ ○ /settings/church` and `├ ○ /settings/contacts` and no `Error` (a font `Failed to fetch` only: say so and rely on CI).
 
 - [ ] **Step 3 (agent): The API files match, the gates, the paths, the commits**
 
@@ -6856,7 +6917,76 @@ for c in $(git rev-list origin/main..HEAD); do git show -s --format=%B "$c" | gr
 
 **Expected:** nothing from `git status` (the committed snapshot and types are current); `imports grep exit 1`; `raw html grep exit 1`; `0` (no em dash in an added line of code or tests); exactly these paths (one PR; `docs/ops-runbook.md` is there only while the 5b-1 records PR is not merged):
 ```
-@@PATHS@@
+M	backend/.env.example
+M	backend/api/deps.py
+M	backend/api/idempotency.py
+M	backend/api/main.py
+A	backend/api/routes/bulletin_emails.py
+A	backend/api/routes/gmail.py
+M	backend/api/settings.py
+M	backend/api/startup.py
+A	backend/bulletin_email.py
+M	backend/email_addresses.py
+M	backend/email_contacts.py
+M	backend/google_oauth.py
+M	backend/integrations/http.py
+A	backend/tests/fake_google.py
+A	backend/tests/fixtures/shared/bulletin_email.json
+A	backend/tests/test_api_bulletin_emails.py
+A	backend/tests/test_api_gmail.py
+A	backend/tests/test_bulletin_email.py
+M	backend/tests/test_email_addresses.py
+M	backend/tests/test_email_contacts.py
+D	backend/tests/test_gmail_exchange.py
+D	backend/tests/test_gmail_token_store.py
+A	backend/tests/test_google_oauth.py
+M	backend/tests/test_http_client.py
+M	backend/tests/test_idempotency.py
+M	backend/tests/test_no_streamlit_in_core.py
+D	backend/tests/test_oauth_state.py
+M	backend/tests/test_route_guards.py
+M	backend/tests/test_startup.py
+A	backend/tests/test_usecase_email.py
+A	backend/usecases/email.py
+M	docs/manual-verification.md
+M	docs/ops-runbook.md
+A	docs/superpowers/plans/2026-10-06-slice-5b2-gmail-email.md
+A	frontend/src/app/(signed-in)/(church)/settings/account/page.tsx
+A	frontend/src/app/(signed-in)/gmail/callback/page.tsx
+M	frontend/src/components/builder/builder-shell.test.tsx
+M	frontend/src/components/builder/liturgy/liturgy-step.test.tsx
+A	frontend/src/components/builder/review/email-card.test.tsx
+A	frontend/src/components/builder/review/email-card.tsx
+A	frontend/src/components/builder/review/email-dialog.tsx
+M	frontend/src/components/builder/review/review-send-step.test.tsx
+M	frontend/src/components/builder/review/review-send-step.tsx
+A	frontend/src/components/gmail/gmail-callback.test.tsx
+A	frontend/src/components/gmail/gmail-callback.tsx
+A	frontend/src/components/settings/account-settings-page.test.tsx
+A	frontend/src/components/settings/account-settings-page.tsx
+M	frontend/src/components/settings/contacts-settings-page.test.tsx
+M	frontend/src/components/settings/contacts-settings-page.tsx
+M	frontend/src/components/settings/sections.ts
+M	frontend/src/components/settings/settings-layout.test.tsx
+M	frontend/src/lib/api/openapi.json
+M	frontend/src/lib/api/schema.d.ts
+M	frontend/src/lib/api/timeouts.ts
+M	frontend/src/lib/api/types.ts
+M	frontend/src/lib/draft/prune.test.ts
+M	frontend/src/lib/draft/prune.ts
+A	frontend/src/lib/email.test.ts
+A	frontend/src/lib/email.ts
+A	frontend/src/lib/gmail.test.ts
+A	frontend/src/lib/gmail.ts
+M	frontend/src/lib/idempotency.test.ts
+M	frontend/src/lib/idempotency.ts
+A	frontend/src/lib/queries/email.ts
+A	frontend/src/lib/queries/gmail.ts
+A	frontend/src/lib/supabase/client.test.ts
+M	frontend/src/lib/supabase/client.ts
+M	frontend/src/lib/urls.test.ts
+M	frontend/src/lib/urls.ts
+M	frontend/src/test/fixtures/index.ts
 ```
 (5b-2a: the lines of T1-T10's files and the plan; 5b-2b: the lines of T11-T17's files, `api/main.py` and the two API files again; T18's Step 3 for 5b-2b also lists any plan commit since 5b-2a.) Then `0`; the subjects oldest first: the plan commits (`WIP plan: …` and `Plan: slice 5b-2 (…)`) and any later plan commit, then the task subjects as written above (T1-T17; or T1-T10, or T11-T17), then any `Fix: …` lines; only `trailer check done`.
 
@@ -6868,9 +6998,9 @@ gh pr list -R bbrown62450/church --head claude/slice-2-plan-4q33le --state open 
 
 **Expected:** `[]`. Send the owner exactly this (one PR), and wait for a clear yes:
 
-> Slice 5b-2 is verified on this machine: backend @@BEND@@ passed, 26 skipped (1669 before); frontend 825 tests in 100 files (780 before), three runs in a row; typecheck, lint and the production build are clean. It adds Settings → Account, where each person connects their own Gmail, and an **Email the bulletin** card on Review: you pick contacts or type addresses, choose the Word copy, the printed PDF or both, and it is sent from your own Gmail (several people go in Bcc). There is no database change and no new package. Before it can be merged you will add one address in Google Cloud Console and three settings in Railway; I will walk you through that one step at a time and never need to see the secret. May I open the pull request as a **draft** titled "Slice 5b-2: the Gmail connection and emailing the bulletin", so the checks run? Merging stays with you.
+> Slice 5b-2 is verified on this machine: backend 1801 passed, 26 skipped (1669 before); frontend 825 tests in 100 files (780 before), three runs in a row; typecheck, lint and the production build are clean. It adds Settings → Account, where each person connects their own Gmail, and an **Email the bulletin** card on Review: you pick contacts or type addresses, choose the Word copy, the printed PDF or both, and it is sent from your own Gmail (several people go in Bcc). There is no database change and no new package. Before it can be merged you will add one address in Google Cloud Console and three settings in Railway; I will walk you through that one step at a time and never need to see the secret. May I open the pull request as a **draft** titled "Slice 5b-2: the Gmail connection and emailing the bulletin", so the checks run? Merging stays with you.
 
-(5b-2a: "Slice 5b-2a is verified … backend @@BEND_A@@ passed, 26 skipped (1669 before); frontend 800 tests in 98 files (780 before) … It adds Settings → Account, where each person connects their own Gmail; emailing comes in 5b-2b. … May I open the pull request as a **draft** titled "Slice 5b-2a: the Gmail connection" …". 5b-2b: "Slice 5b-2b is verified … backend @@BEND@@ passed, 26 skipped (@@BEND_A@@ before); frontend 825 tests in 100 files (800 before) … It adds the **Email the bulletin** card on Review … No Google or Railway step this time. May I open the pull request as a **draft** titled "Slice 5b-2b: emailing the bulletin" …".)
+(5b-2a: "Slice 5b-2a is verified … backend 1737 passed, 26 skipped (1669 before); frontend 800 tests in 98 files (780 before) … It adds Settings → Account, where each person connects their own Gmail; emailing comes in 5b-2b. … May I open the pull request as a **draft** titled "Slice 5b-2a: the Gmail connection" …". 5b-2b: "Slice 5b-2b is verified … backend 1801 passed, 26 skipped (1737 before); frontend 825 tests in 100 files (800 before) … It adds the **Email the bulletin** card on Review … No Google or Railway step this time. May I open the pull request as a **draft** titled "Slice 5b-2b: emailing the bulletin" …".)
 
 - [ ] **Step 5 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
 
@@ -6888,7 +7018,7 @@ Slice 5b-2: the Gmail connection and emailing the bulletin (the second of 5b's t
 
 Before merge: the owner adds the /gmail/callback redirect URIs in Google Cloud Console and sets the three GOOGLE_* variables in Railway (Task 19). After merge: a short phone check, then a "Slice 5b-2 record" in docs/ops-runbook.md.
 
-Tests: backend 1669 → @@BEND@@ passed, 26 skipped; frontend 780 → 825 in 94 → 100 files
+Tests: backend 1669 → 1801 passed, 26 skipped; frontend 780 → 825 in 94 → 100 files
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 
@@ -6900,7 +7030,7 @@ gh pr create -R bbrown62450/church --draft --base main --head claude/slice-2-pla
 gh pr checks <N> -R bbrown62450/church --watch --interval 30
 ```
 
-Run the last line with `run_in_background: true`. (Two PRs: the same body cut to its half, the title of Step 4, and the tests line `backend 1669 → @@BEND_A@@ passed …; frontend 780 → 800 in 94 → 98 files` for 5b-2a, `backend @@BEND_A@@ → @@BEND@@ …; frontend 800 → 825 in 98 → 100 files` for 5b-2b.) **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers as Step 2's, and backend-postgres `26 passed`. Then send: "PR #<N> is green: backend … passed, 26 skipped; … frontend tests in … files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you, after the Google and Railway steps." On the yes: `gh pr ready <N> -R bbrown62450/church`.
+Run the last line with `run_in_background: true`. (Two PRs: the same body cut to its half, the title of Step 4, and the tests line `backend 1669 → 1737 passed …; frontend 780 → 800 in 94 → 98 files` for 5b-2a, `backend 1737 → 1801 …; frontend 800 → 825 in 98 → 100 files` for 5b-2b.) **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers as Step 2's, and backend-postgres `26 passed`. Then send: "PR #<N> is green: backend … passed, 26 skipped; … frontend tests in … files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you, after the Google and Railway steps." On the yes: `gh pr ready <N> -R bbrown62450/church`.
 
 - [ ] **Step 6: Fix any failure in its owning task**
 
@@ -7088,14 +7218,30 @@ gh pr checks claude/slice-2-plan-4q33le -R bbrown62450/church --watch
 
 Code only (no schema to undo). On the owner's yes for each outward command: a branch `claude/revert-5b2` from `origin/main`, `git revert -m 1 --no-commit <merge sha>`, a commit "Revert slice 5b-2 (PR #<N>)" with the trailer, both suites (`1669 passed, 26 skipped`; `780 passed` in 94, or 5b-2a's counts when reverting 5b-2b only), a PR, CI, and the merge on the owner's yes; record it in the record. Connections made through the new page stay in `gmail_tokens` and keep working for the frozen app (same client); the Railway variables can stay (nothing reads them after the revert).
 
-Expected counts after this task: backend @@BEND@@ passed, 26 skipped on `main`; frontend 825 passed in 100 files. The records PR adds no test.
+Expected counts after this task: backend 1801 passed, 26 skipped on `main`; frontend 825 passed in 100 files. The records PR adds no test.
 
 ---
 
 
 ## Build notes
 
-@@BUILDNOTES@@
+**How this plan was written (2026-10-06).** Each task's code was built and run in a throwaway worktree of `4d4527f` (the branch head `eb5b2da` plus the plan's skeleton commit; the repo's `.venv`; a hard-linked copy of `frontend/node_modules`, since Turbopack refuses a `node_modules` symlink that points outside the project), one commit per task; the directives were then generated from those commits (a new file as **Create**, T2's rewrite as **Replace the whole of**, a removed file as **Delete**, an addition at the end of a file as **Append**, every other change as **In … replace** with just enough context to occur once in the file as it stands at that point). No package, variable name or migration was added. While building:
+- **What the spec assumed and what exists.** B was written before 5a, 6a-1, the printed bulletin and 5b-1. Already there: the Settings shell, the header's Settings link, the `email` bucket, every Gmail error code (backend and frontend), `keys.gmailConnection`, `normalize_address`, the contacts API with `email_valid`, the key tracker. Missing although B assumed them: `run_idempotent`'s `store_error`, `integrations/http.post`, `email-slot.tsx` (5a never built a placeholder), `service_output`'s email additions. B's Streamlit coexistence work is dropped (answer 4).
+- **Who imports `google_oauth`.** Only the frozen `app.py` (no test imports it; `streamlit_tests` reach `streamlit_views`, not `app.py`) and the three old test files; `test_no_streamlit_in_core.py` and `test_route_guards.py` constrain the new modules and routes, not the old ones. So the Streamlit functions could go (clarification 2).
+- **The OpenAPI snapshot** refused FastAPI's `HTTPValidationError`: a Gmail route without 422 in its `responses` (every route has header parameters) failed `test_openapi_contract.py`'s second test until 422 was listed (clarification 7).
+- **`describeError` turns every 5xx into "Something went wrong."**, which would have hidden B's Google and Gmail sentences on the callback page and in toasts; `gmailErrorMessage` keeps them for `gmail_send_failed`, `gmail_not_configured`, `upstream_error` and `upstream_timeout`.
+- **The card's reopen decision** first lived in an effect that set state, which the React lint (`react-hooks/set-state-in-effect`) refuses; it is now read once in a `useState` initializer and decided during render, and only the removal of the session key is an effect.
+- **Opening the dialog in tests** must wait for "Sends from …": while the status loads, the card shows a disabled **Email bulletin…**, and a click on it does nothing.
+- **Three existing test files render Review** (`review-send-step`, `builder-shell`'s step routes, `liturgy-step`'s walk to Review) and needed the `GET /gmail-connection` route once the card existed; the first build forgot two of them and the full suite caught it (4 failures).
+- **The Contacts caption** first changed in T9 (Account); it moved to T16, so that with two PRs it never says emailing is on Review before it is.
+- **Mutation checks** (each change made by hand in the build worktree, the named tests run, the change undone): a send `ReadTimeout` counted as "not sent" → `3 failed, 110 passed` (`test_google_oauth.py`, `test_usecase_email.py`, `test_api_bulletin_emails.py`); the route without `store_error` → `2 failed, 17 passed`; `delete_connection` ignoring `only_if_token` → `2 failed, 92 passed`; `charge()` before the recipients → `22 failed, 42 passed`; a database session held during the refresh → `1 failed, 44 passed` (the pool test); the scope check skipped → `3 failed, 102 passed`; the state not compared with the caller → `2 failed, 54 passed`; the sender left in Bcc → `1 failed, 56 passed`; `connectGmailOnce` not remembering a state → `1 failed, 10 passed` (the StrictMode test); **Send again anyway** without `rotate()` → `1 failed, 15 passed`; `detectSessionInUrl` left out → `1 failed`; the reopen request taken for any church → `2 failed, 21 passed`; a flagged contact tickable → `1 failed, 15 passed`; the recipient count without de-duplication → `2 failed, 21 passed`.
+- **The production build** compiled with `○ /gmail/callback`, `○ /settings`, `○ /settings/account`, `○ /settings/church` and `○ /settings/contacts`.
+
+**Replay of the finished plan (2026-10-06).** The directives of T1-T17 were applied in order (by a replay script that parses each step's **Create**, **Replace the whole of**, **Delete**, **Append** and **In … replace** blocks and runs every command on its "Run:" lines, three times where it says so, then the task's commit block) onto a fresh detached worktree of the branch at `56971b9` (outside the repo directory, removed afterwards), with the repo's `.venv` (a symlink) and a hard-linked copy of `frontend/node_modules`:
+- All directives applied, every Replace anchor exactly once (T1 1 + 2, T2 5 + 1, T3 4 + 4, T4 3 + 12, T5 2 + 1, T6 3 + 5, T7 4 + 9, T8 1 + 2, T9 6 + 4, T10 1, T11 5 + 3, T12 3 + 5, T13 2 + 3, T14 1 + 3, T15 3 + 8, T16 9 + 7, T17 1).
+- Baselines before T1: backend `1669 passed, 26 skipped`; frontend `780 passed` in 94 files.
+- Every "see it fail" output is quoted from this replay (times as `<t>`). Every count matched the table; T8's and T16's three runs passed each time, no flaky run; typecheck 0 and lint 0 after T6, T7, T8, T9, T14, T15 and T16; T10 and T17 `89 passed`, `4`, `0`. After T17: T18 Step 3's gates (`imports grep exit 1`, `raw html grep exit 1`, `0` em dashes, the 70 paths quoted, `0` untouched-area paths, `trailer check done`) and the production build as above.
+- Not run while planning: the pushes, the PRs and CI, the merges, Railway's and Vercel's deploys, Google Cloud Console, a real Gmail send and the owner's phone check (T19).
 
 ## Spec coverage
 
