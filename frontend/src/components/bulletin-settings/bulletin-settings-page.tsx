@@ -1,19 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import {
-  useEffect,
-  useRef,
-  useState,
-  type ComponentProps,
-  type FormEvent,
-  type MouseEvent,
-  type ReactNode,
-} from "react";
+import { useEffect, useRef, useState, type ComponentProps, type FormEvent, type ReactNode } from "react";
 
-import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { ErrorState } from "@/components/app/error-state";
+import { LeaveGuard } from "@/components/app/leave-guard";
 import { PageHeader } from "@/components/app/page-header";
 import { PendingButton } from "@/components/app/pending-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -48,8 +39,7 @@ import { useBulletinSettings, useSaveBulletinSettings } from "@/lib/queries/bull
 
 export const PAGE_DESCRIPTION = "What every printed bulletin uses. A field left blank is left off the bulletin.";
 export const ADMINS_ONLY = "Only admins can edit the bulletin settings. You can read them below.";
-export const DISCARD_TITLE = "Discard unsaved changes?";
-const DISCARD_BODY = "Your changes on this page haven't been saved.";
+export { DISCARD_TITLE } from "@/components/app/leave-guard";
 const NOT_FILLED_IN = "Not filled in";
 const BACK_HREF = "/builder/review";
 const NO_ONE: string = "none"; // "No one" leads this part: a real choice, not a placeholder (F §4.9 item 3)
@@ -111,38 +101,18 @@ function PageSkeleton() {
  * The settings are fetched again on opening the page (even when cached), and
  * the form shows only once that fetch is back, so it never starts from an
  * older value. 6a's rules for settings forms: newer server data rebases the
- * form (`rebaseForm`), and leaving with unsaved edits asks first (the
- * browser's warning on a reload or close, "Discard unsaved changes?" on
- * **Back to Review & send**).
+ * form (`rebaseForm`), and leaving with unsaved edits asks first
+ * (`LeaveGuard`: the browser's warning on a reload or close, "Discard
+ * unsaved changes?" on **Back to Review & send** and any other in-app link).
  */
 export function BulletinSettingsPage() {
   const church = useChurch();
   const canEdit = isAdmin(church.role);
   const settings = useBulletinSettings({ fresh: true });
-  const router = useRouter();
   const [ready, setReady] = useState(false);
   const [dirty, setDirty] = useState(false);
-  const [leaving, setLeaving] = useState(false);
   // Shown once the fetch made on opening the page is back; then kept, so a failed background refetch keeps the form.
   if (!ready && settings.isFetchedAfterMount && settings.isSuccess) setReady(true);
-
-  useEffect(() => {
-    if (!dirty) return;
-    const warn = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = ""; // older Chrome and Edge, and some webviews, ask only when this is set
-    };
-    window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
-  }, [dirty]);
-
-  function onBack(event: MouseEvent<HTMLAnchorElement>) {
-    // A modified or other-button click opens a new tab or window, as a link does; this page stays as it is.
-    const modified = event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0;
-    if (!dirty || modified) return;
-    event.preventDefault();
-    setLeaving(true);
-  }
 
   return (
     <main className="mx-auto grid w-full max-w-2xl content-start gap-4 px-4 py-4">
@@ -150,7 +120,7 @@ export function BulletinSettingsPage() {
         title="Bulletin settings"
         description={PAGE_DESCRIPTION}
         actions={
-          <Link href={BACK_HREF} onClick={onBack} className={buttonVariants({ variant: "outline", size: "touch" })}>
+          <Link href={BACK_HREF} className={buttonVariants({ variant: "outline", size: "touch" })}>
             Back to Review &amp; send
           </Link>
         }
@@ -166,20 +136,7 @@ export function BulletinSettingsPage() {
       ) : (
         <PageSkeleton />
       )}
-      <ConfirmDialog
-        open={leaving}
-        onOpenChange={setLeaving}
-        title={DISCARD_TITLE}
-        description={DISCARD_BODY}
-        confirmLabel="Discard changes"
-        cancelLabel="Keep editing"
-        destructive
-        onConfirm={() => {
-          setLeaving(false);
-          setDirty(false);
-          router.push(BACK_HREF);
-        }}
-      />
+      <LeaveGuard when={dirty} />
     </main>
   );
 }

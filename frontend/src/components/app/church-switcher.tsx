@@ -3,6 +3,7 @@
 import { ChevronsUpDownIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 
+import { confirmLeave } from "@/components/app/leave-guard";
 import { buttonVariants } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -28,7 +29,8 @@ type Props = {
  * The header's church menu (S Flow C, F §4.1, §4.9 item 4): a radio list keyed
  * and selected by id, each row showing the role so same-name churches differ,
  * then a separator and "Join or create a church…", which pushes `/welcome`
- * (1b clarification 31). A user with one church sees the same menu.
+ * (1b clarification 31), asking first while a settings page has unsaved
+ * edits (`confirmLeave`, slice 6a-1). A user with one church sees the same menu.
  */
 export function ChurchSwitcher({ churches, activeId, onSelect }: Props) {
   const router = useRouter();
@@ -62,7 +64,7 @@ export function ChurchSwitcher({ churches, activeId, onSelect }: Props) {
           </DropdownMenuRadioGroup>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => router.push("/welcome")}>Join or create a church…</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => confirmLeave(() => router.push("/welcome"))}>Join or create a church…</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
