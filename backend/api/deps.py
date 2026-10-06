@@ -17,6 +17,7 @@ from api.security import (
     jwks_key_resolver,
 )
 from api.settings import get_settings
+from google_oauth import GoogleOAuthConfig
 from repos.users import ensure_user
 from tenancy import is_admin, validate_active_church
 
@@ -114,3 +115,9 @@ def require_admin(church: ActiveChurch = Depends(require_church)) -> ActiveChurc
     if not is_admin(church.role):
         raise forbidden("Only church admins can do this.")
     return church
+
+
+def get_google_config() -> GoogleOAuthConfig:
+    """The Google OAuth client for the Gmail routes (slice 5b-2), from the
+    GOOGLE_* variables; tests override this dependency."""
+    return get_settings().google_oauth

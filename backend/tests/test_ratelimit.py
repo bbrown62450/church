@@ -42,6 +42,7 @@ def test_buckets_match_f_1_8():
         "ai": (Rule("user", 40, 600), Rule("church", 400, 86_400)),
         "email": (Rule("user", 10, 3_600),),
         "picture": (Rule("user", 20, 3_600), Rule("church", 60, 86_400)),     # printed bulletin PR 3a
+        "gmail_connect": (Rule("user", 10, 600),),                            # slice 5b-2
     }
     assert MESSAGE == "Too many requests. Try again in {n} seconds."
 
