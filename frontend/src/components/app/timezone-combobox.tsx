@@ -29,6 +29,8 @@ export type TimezoneComboboxProps = {
   error?: string | null;
   /** The `<input>`'s id in both modes (default: generated), for the label and for focusing. */
   id?: string;
+  /** A note under the field that is not an error (6a's church profile: a stored zone not recognized). */
+  warning?: string | null;
 };
 
 /**
@@ -46,16 +48,23 @@ function matchesZone(zone: string, query: string): boolean {
  * the Combobox pattern, reused by 6a's church profile. Items are
  * `Intl.supportedValuesOf("timeZone")`; at most 50 matches render, with "Type to search"
  * while more match. Without `Intl.supportedValuesOf` it is a plain text input and the
- * server validates the id.
+ * server validates the id. A `value` that is not in the list (a zone stored
+ * before the check, or one this browser lacks) is added as an item, so it
+ * shows as chosen (F §4.9 item 3).
  */
-export function TimezoneCombobox({ value, onChange, error, id }: TimezoneComboboxProps) {
+export function TimezoneCombobox({ value, onChange, error, id, warning }: TimezoneComboboxProps) {
   const generatedId = useId();
   const inputId = id ?? generatedId;
   const helperId = `${inputId}-helper`;
   const errorId = `${inputId}-error`;
-  const describedBy = error ? `${helperId} ${errorId}` : helperId;
+  const warningId = `${inputId}-warning`;
+  const describedBy = [helperId, warning ? warningId : null, error ? errorId : null].filter(Boolean).join(" ");
 
-  const [zones] = useState(listTimezones);
+  const [listed] = useState(listTimezones);
+  const zones = useMemo(
+    () => (listed && value !== "" && !listed.includes(value) ? [value, ...listed] : listed),
+    [listed, value],
+  );
   // What the user has typed since the list opened ("" = nothing yet, so every zone matches).
   const [query, setQuery] = useState("");
   const matchCount = useMemo(
@@ -115,6 +124,11 @@ export function TimezoneCombobox({ value, onChange, error, id }: TimezoneCombobo
       <p id={helperId} className="text-sm text-muted-foreground">
         {TIMEZONE_HELPER}
       </p>
+      {warning ? (
+        <p id={warningId} className="text-sm text-amber-700 dark:text-amber-400">
+          {warning}
+        </p>
+      ) : null}
       {error ? (
         <p id={errorId} className="text-sm text-destructive">
           {error}
