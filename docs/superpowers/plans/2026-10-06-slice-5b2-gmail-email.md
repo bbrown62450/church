@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship the second half of slice 5b (owner's 5b planning answers of 2026-10-06, answer 2): **each member connects their own Gmail and emails the bulletin from the Review step.** Settings gains a fourth section, **Account** (after Church, Bulletin and Contacts): who is signed in, **Log out**, and a **Gmail** card to connect (Google's consent screen in the same tab, back through the new page `/gmail/callback`), see "Connected as …" and disconnect. Review & send gains an **Email the bulletin** card after the printed bulletin: "Sends from {address}." and **Email bulletin…**, which opens a dialog with the church's contacts (a contact whose saved address the send-time rule refuses is shown but cannot be chosen), other addresses, the subject "Worship service for October 4, 2026", two attachment boxes, **Bulletin copy (Word)** (ticked at first) and **Printed bulletin (PDF)** (at least one; the choice is remembered on the device), and an editable prefilled message. One recipient goes in To; two or more go in Bcc with the sender in To; at most 50. The server builds both files from the posted draft, as the downloads do, and sends through the Gmail API. A double tap, a lost connection or a retry never sends twice; when Gmail may have sent without confirming, the dialog says to check the Sent folder and offers **Send again anyway**. The Contacts page's caption becomes "People you can email the bulletin to from the Review step." The owner sets up Google and Railway before the merge (the last task). No migration, no new package.
+**Goal:** Ship the second half of slice 5b (owner's 5b planning answers of 2026-10-06, answer 2): **each member connects their own Gmail and emails the bulletin from the Review step.** Settings gains a fourth section, **Account** (after Church, Bulletin and Contacts): who is signed in, **Log out**, and a **Gmail** card to connect (Google's consent screen in the same tab, back through the new page `/gmail/callback`), see "Connected as …" and disconnect. Review & send gains an **Email the bulletin** card after the printed bulletin: "Sends from {address}." and **Email bulletin…**, which opens a dialog with the church's contacts (a contact whose saved address the send-time rule refuses is shown but cannot be chosen), other addresses, the subject "Worship service for October 4, 2026", two attachment boxes, **Bulletin copy (Word)** (ticked at first) and **Printed bulletin (PDF)** (at least one; the choice is remembered on the device), and an editable prefilled message. One recipient goes in To; two or more go in Bcc with the sender in To; at most 50. The server builds both files from the posted draft, as the downloads do, and sends through the Gmail API. A double tap or a retry never sends twice; when Gmail may have sent without confirming (or the connection was lost), the dialog says to check the Sent folder, turns plain **Send** off (still off after leaving Review or a reload in that tab) and offers only **Send again anyway**. The Contacts page's caption becomes "People you can email the bulletin to from the Review step." The owner sets up Google and Railway before the merge (the last task). No migration, no new package.
 
 **Architecture:** Backend first. `integrations/http.py` gains `post()` (no redirects). `google_oauth.py` is rewritten for the API: `GoogleOAuthConfig` (from Railway's `GOOGLE_*` through `api/settings.py`), the consent URL with a login hint, the single-use states (expired ones purged), the token store (`get_connection`, `save_user_token`, `delete_connection(only_if_token=…)`) and the Google calls (`exchange_code`, which stores nothing, `refresh_access_token`, `send_raw_message`, `revoke_token`), each failure one `GoogleErrorKind`; the Streamlit-only functions go. `usecases/email.py` holds the connection (status, start, finish, disconnect) and `send_bulletin_email`; `api/routes/gmail.py` the four user-scoped `/gmail-connection` routes; `api/routes/bulletin_emails.py` `POST /bulletin-emails`, idempotent with a required key and the new `store_error` hook that keeps an uncertain send's answer. `bulletin_email.py` (pure) writes the subject, the default message, the To/Bcc plan and the MIME message; `email_addresses.dedupe_addresses` joins `normalize_address`; `email_contacts.get_contacts_by_ids` reads the chosen contacts. Frontend: `lib/gmail.ts` and `lib/queries/gmail.ts` (the trip to Google), the callback page, Settings → Account, `lib/email.ts` (the dialog's pure rules and remembered choices), `lib/queries/email.ts`, and `components/builder/review/email-card.tsx` with `email-dialog.tsx`. The Supabase browser client stops reading sign-ins from the address bar.
 
@@ -32,7 +32,7 @@
   `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
 - TDD: write the failing test first and see it fail as quoted.
 - **Backup push after every task** (standing rule): the controller runs `git push origin claude/slice-2-plan-4q33le` after each task's commit (never `--force`, never a rebase; if the push is rejected, `git pull --no-rebase origin claude/slice-2-plan-4q33le` and push again; on a network error retry after 2, 4, 8 and 16 s). A fix asked for by a review is a new commit, `Fix: <what> (Task <n> review)`. The container can restart and lose uncommitted work: commit as soon as a task's checks pass.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1669 → 1801 passed, 26 skipped; frontend 780 → 825 in 94 → 100 files` (two PRs: the lines of T18's table).
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1669 → 1805 passed, 26 skipped; frontend 780 → 828 in 94 → 100 files` (two PRs: the lines of T18's table).
 - New prose for the owner has no em dashes and no flattery. New user-facing copy is exactly the list in clarification 21 and has no em dashes (B's lines are taken without theirs); existing copy keeps its own punctuation.
 - No church id, real email address, token, key, street address, phone number, database URL or real person's name in any doc, commit, test or record. Tests use the fixtures' "Grace", "Pat Pastor" and `@example.org` / `@example.com` addresses only. **The agent never asks for, reads, prints or handles the Google client secret or id** (T19's owner steps copy them inside Google Cloud Console and Railway only).
 - Ask the owner before any push to a PR, PR creation, marking ready, merging, or any production or settings action. Owner steps go one at a time, in plain words.
@@ -53,23 +53,23 @@ As in the 5b-1 plan: **Create `path`:** the block is the whole file; **Append to
   |---|---|---|---|---|
   | T1 | +2 (`test_http_client.py`, 7 → 9) | 1671 passed, 26 skipped | 0 | 780 in 94 |
   | T2 | −8 (`test_google_oauth.py` 13 new; the three old files' 21 deleted) | 1663 passed, 26 skipped | 0 | 780 in 94 |
-  | T3 | +36 (`test_google_oauth.py`, 13 → 49: 11 + 4 + 14 parametrized cases and 7 tests) | 1699 passed, 26 skipped | 0 | 780 in 94 |
-  | T4 | +10 (`test_startup.py`: 7 + 2 parametrized cases and 1 test) | 1709 passed, 26 skipped | 0 | 780 in 94 |
-  | T5 | +17 (`test_usecase_email.py`: 8 parametrized cases and 9 tests) | 1726 passed, 26 skipped | 0 | 780 in 94 |
-  | T6 | +11 (`test_api_gmail.py`: 5 parametrized cases and 6 tests) | 1737 passed, 26 skipped | 0 | 780 in 94 |
-  | T7 | 0 | 1737 passed, 26 skipped | +7 (`gmail.test.ts` 5, `client.test.ts` 1, `urls.test.ts` 1 `it.each` row) | 787 in 96 |
-  | T8 | 0 | 1737 passed, 26 skipped | +6 (`gmail-callback.test.tsx`) | 793 in 97 |
-  | T9 | 0 | 1737 passed, 26 skipped | +7 (`account-settings-page.test.tsx` 6; `settings-layout.test.tsx` one test became two `it.each` rows) | 800 in 98 |
-  | T10 | 0 | 1737 passed, 26 skipped | 0 | 800 in 98 |
-  | T11 | +13 (`test_bulletin_email.py` 12: 6 + 4 parametrized cases and 2 tests; `test_email_addresses.py` 1) | 1750 passed, 26 skipped | 0 | 800 in 98 |
-  | T12 | +4 (`test_idempotency.py` 3, `test_email_contacts.py` 1) | 1754 passed, 26 skipped | 0 | 800 in 98 |
-  | T13 | +28 (`test_usecase_email.py`, 17 → 45: 5 + 11 parametrized cases and 12 tests) | 1782 passed, 26 skipped | 0 | 800 in 98 |
-  | T14 | +19 (`test_api_bulletin_emails.py`: 2 + 4 parametrized cases and 13 tests) | 1801 passed, 26 skipped | 0 | 800 in 98 |
-  | T15 | 0 | 1801 passed, 26 skipped | +9 (`email.test.ts` 7, `idempotency.test.ts` 1, `prune.test.ts` 1) | 809 in 99 |
-  | T16 | 0 | 1801 passed, 26 skipped | +16 (`email-card.test.tsx`) | 825 in 100 |
-  | T17 | 0 | 1801 passed, 26 skipped | 0 | 825 in 100 |
+  | T3 | +37 (`test_google_oauth.py`, 13 → 50: 11 + 4 + 15 parametrized cases and 7 tests) | 1700 passed, 26 skipped | 0 | 780 in 94 |
+  | T4 | +10 (`test_startup.py`: 7 + 2 parametrized cases and 1 test) | 1710 passed, 26 skipped | 0 | 780 in 94 |
+  | T5 | +17 (`test_usecase_email.py`: 8 parametrized cases and 9 tests) | 1727 passed, 26 skipped | 0 | 780 in 94 |
+  | T6 | +12 (`test_api_gmail.py`: 5 parametrized cases and 7 tests) | 1739 passed, 26 skipped | 0 | 780 in 94 |
+  | T7 | 0 | 1739 passed, 26 skipped | +7 (`gmail.test.ts` 5, `client.test.ts` 1, `urls.test.ts` 1 `it.each` row) | 787 in 96 |
+  | T8 | 0 | 1739 passed, 26 skipped | +6 (`gmail-callback.test.tsx`) | 793 in 97 |
+  | T9 | 0 | 1739 passed, 26 skipped | +7 (`account-settings-page.test.tsx` 6; `settings-layout.test.tsx` one test became two `it.each` rows) | 800 in 98 |
+  | T10 | 0 | 1739 passed, 26 skipped | 0 | 800 in 98 |
+  | T11 | +13 (`test_bulletin_email.py` 12: 6 + 4 parametrized cases and 2 tests; `test_email_addresses.py` 1) | 1752 passed, 26 skipped | 0 | 800 in 98 |
+  | T12 | +4 (`test_idempotency.py` 3, `test_email_contacts.py` 1) | 1756 passed, 26 skipped | 0 | 800 in 98 |
+  | T13 | +30 (`test_usecase_email.py`, 17 → 47: 5 + 11 parametrized cases and 14 tests) | 1786 passed, 26 skipped | 0 | 800 in 98 |
+  | T14 | +19 (`test_api_bulletin_emails.py`: 2 + 4 parametrized cases and 13 tests) | 1805 passed, 26 skipped | 0 | 800 in 98 |
+  | T15 | 0 | 1805 passed, 26 skipped | +10 (`email.test.ts` 8, `idempotency.test.ts` 1, `prune.test.ts` 1) | 810 in 99 |
+  | T16 | 0 | 1805 passed, 26 skipped | +18 (`email-card.test.tsx`) | 828 in 100 |
+  | T17 | 0 | 1805 passed, 26 skipped | 0 | 828 in 100 |
 
-  Two PRs: 5b-2a (after T10) is backend `1737 passed, 26 skipped` and frontend `800 passed` in 98 files; 5b-2b (after T17) as the last row.
+  Two PRs: 5b-2a (after T10) is backend `1739 passed, 26 skipped` and frontend `800 passed` in 98 files; 5b-2b (after T17) as the last row.
 
 - CI `backend-postgres` is unchanged (`26 passed`; no new Postgres test: the Gmail rows are per user and the send takes no lock).
 
@@ -98,23 +98,23 @@ The owner's answers win over B, S and F; the code wins over all of them where th
 2. **Streamlit's Gmail code goes** (answer 4; B "Modules" `google_oauth.py`, normal case). `google_oauth.py` loses `should_handle_gmail_callback`, `send_email`, `disconnect`, `is_configured`, `is_connected`, `_fetch_email`, `_access_token_for`, `_user_email`, `_client_id`/`_client_secret`/`_redirect_uri` (`os.getenv`), `_TIMEOUT`, `_google_error` and the `requests` import; `build_auth_url` and `exchange_code` take B's new signatures. Who used them: only the frozen `app.py` (never imported by a test; it runs only from `streamlit-frozen`, which is untouched) and the three old test files, which T2 deletes after porting every assertion about kept code into `test_google_oauth.py` (scopes, the states' single use and expiry, one row per user). On `main`, `app.py` would now fail if someone ran it; nothing does, and slice 7 deletes it. B's `is_connected` (listed as kept) is dropped too: its only caller was `app.py`; `get_connection(...) is not None` is the new test. No `google_oauth_legacy.py`. `test_no_streamlit_in_core.py` gains `google_oauth` (T2), `usecases.email` (T5) and `bulletin_email` (T11).
 3. **The Google client's settings** (B "Configuration and startup checks"; answer 3). `api/settings.py` reads `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `GOOGLE_OAUTH_REDIRECT_URI` (trimmed) into `Settings` and its `google_oauth` property; the secret is left out of both dataclasses' `repr`, so it can never reach a log or an error by printing a settings object. `api.deps.get_google_config()` gives the routes the config (tests override it). The lifespan logs one line: `Gmail: configured` or `Gmail: not configured` (INFO), or a WARNING for each problem: some but not all three set ("Gmail sending is disabled until … set."), a redirect URI whose path is not `/gmail/callback` (a copied Streamlit root), whose site is not in `CORS_ORIGINS`, or that is not https in production. B asked for warnings only; the INFO line is added so the owner's check (T19) has a line to look for, as `AI: configured` does. It never refuses to start and never logs a value. `backend/.env.example` describes the three and gives the local redirect.
 4. **HTTP for Google** (B "Rules"; F §2.7). `integrations/http.py` has only `get()`; it gains `post()` with a required per-call timeout that never follows a redirect (a token exchange or an email send is answered where it was sent or not at all). B's functions take an injected `http` client; here, as for every other upstream since slice 2, the tests swap the module's client with `set_http_for_tests` (the autouse fixture restores it), so the functions take none. The fake Google (`backend/tests/fake_google.py`) is an `httpx.MockTransport` that answers the token, userinfo, send and revoke endpoints and records each request; no test reaches the network (conftest's guard). respx is installed but not needed; no new dev dependency.
-5. **`google_oauth` after the refactor** (B's signatures, with these readings). `exchange_code(config, code, *, expected_email)` exchanges the code (15 s), checks the granted scopes (no `scope` or a blank one means as requested, RFC 6749 §5.1; a non-string is `INCOMPLETE_RESPONSE`; one without `gmail.send` is `SCOPE_MISSING`), reads the Google address (15 s; a 4xx or no address is `NO_EMAIL`, a 5xx `UPSTREAM`), compares it ignoring case and returns a `GmailGrant` with Google's spelling; it stores nothing and opens no session. `get_connection` is None for no row or a NULL or blank address. `delete_connection(user_id, *, only_if_token=None)` deletes only a row still holding that token and returns the removed token. `create_state` purges every expired state first (another user's live state stays). `send_raw_message(access_token, raw)` posts the base64url message to Gmail's JSON endpoint (30 s): a failure before the request was written (`ConnectError`, `ConnectTimeout`, `PoolTimeout`) is `UPSTREAM`; a Gmail 5xx, or no answer after it was written, is `SEND_UNCONFIRMED` (with or without the status); a 403 naming the scope is `INSUFFICIENT_SCOPE`; a 429 or a 403 rate or daily limit is `SEND_LIMIT`; any other 4xx `SEND_REJECTED`. `revoke_token` (5 s) returns True or False and never raises (B: None), so the usecase can log a failed revoke. Message size: the Word copy is tens of KB and the printed PDF about a megabyte at most (a cover picture is stored at 600 KB at most), well within the JSON endpoint's limit, so B's endpoint is kept. Nothing in the module logs.
+5. **`google_oauth` after the refactor** (B's signatures, with these readings). `exchange_code(config, code, *, expected_email)` exchanges the code (15 s), checks the granted scopes (no `scope` or a blank one means as requested, RFC 6749 §5.1; a non-string is `INCOMPLETE_RESPONSE`; one without `gmail.send` is `SCOPE_MISSING`), reads the Google address (15 s; a 4xx or no address is `NO_EMAIL`, a 5xx `UPSTREAM`), compares it ignoring case and returns a `GmailGrant` with Google's spelling; it stores nothing and opens no session. `get_connection` is None for no row or a NULL or blank address. `delete_connection(user_id, *, only_if_token=None)` deletes only a row still holding that token and returns the removed token. `create_state` purges every expired state first (another user's live state stays). `send_raw_message(access_token, raw)` posts the base64url message to Gmail's JSON endpoint (30 s): a failure before the request was written (`ConnectError`, `ConnectTimeout`, `PoolTimeout`) is `UPSTREAM`; a Gmail 5xx, or no answer after it was written, is `SEND_UNCONFIRMED` (with or without the status); a 403 naming the scope is `INSUFFICIENT_SCOPE`; a 429 or a 403 rate or daily limit is `SEND_LIMIT`; a 401 (one not about the scope) or a 400 `failedPrecondition` (an account Gmail will not send from, such as a Google account without Gmail or one whose Workspace admin turned Gmail off) is `ACCOUNT_REFUSED`; any other 4xx `SEND_REJECTED`. Each error keeps Google's reason name (for example `failedPrecondition`, never its text) for the caller's log. `revoke_token` (5 s) returns True or False and never raises (B: None), so the usecase can log a failed revoke. **Timeouts** are httpx's and apply per phase, not to the whole call: 5 s to connect, then 15 s (token, userinfo, refresh), 30 s (send) or 5 s (revoke) for each wait on a write, a read or the pool. A slow but steady answer can therefore take longer than the number; the browser's 40 s and 90 s (clarifications 8 and 17) are the overall limits, and a send the browser stops waiting for is shown as possibly sent. Message size: the Word copy is tens of KB and the printed PDF about a megabyte at most (a cover picture is stored at 600 KB at most), so B's JSON endpoint is kept; `send_bulletin_email` refuses a message over 3.5 MB (`MAX_RAW_BYTES`; about 4.7 MB once base64url-encoded, under the 5 MB that Google's upload guide gives a simple request: https://developers.google.com/workspace/gmail/api/guides/uploads) before the email limit is charged (clarification 15). The media upload endpoint (`https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=media`, `Content-Type: message/rfc822`) would take more and is a follow-up if bulletins ever grow. Nothing in the module logs.
 6. **The connection usecases** (B "usecases/email.py"; T5). `gmail_status`, `start_gmail_connect` (503 when not configured; a new state; the signed-in address as `login_hint`), `finish_gmail_connect` (B's order: not configured, then the state is used up in its own transaction and must be the caller's, then a blank code, then the exchange with no session open, then the store: a refresh token is saved; none, with a connection already stored, keeps it; none and no connection is the refresh-token message) and `disconnect_gmail` (delete, then revoke outside the transaction; a failed revoke is a WARNING and still a success). The messages are B's with no em dash; Google's error code (never its text) is logged at ERROR for our own misconfiguration (`invalid_client`, `unauthorized_client`, `redirect_uri_mismatch`).
-7. **`/gmail-connection`** (B API, Schemas). `GET`, `POST /auth-url`, `POST`, `DELETE`, each `get_current_user` plus `get_google_config`, never `require_church` (`X-Church-Id` is ignored); all four join `USER_SCOPED` in `test_route_guards.py`. `GmailConnectionOut {configured, connected, google_email}`, `GmailAuthUrlOut {auth_url}`, `GmailConnectIn {code ≤ 2048, state ≤ 256}` (`extra="forbid"`). Every route documents 401, 422 and 503 (and `POST` 400, 502, 504): a route without 422 in its responses would put FastAPI's `HTTPValidationError` in the snapshot, which `test_openapi_contract.py` forbids.
-8. **The browser's side of connecting** (B flows A-C, "Pure modules" `lib/gmail.ts`). `lib/gmail.ts`: `startGmailRedirect` (refuses any URL but `https://accounts.google.com/…`, stores `wsb:gmailReturnTo` and, from Review, `wsb:reopenEmailDialog` in sessionStorage, then leaves in the same tab through `browser.assign`, an object the tests replace since jsdom cannot navigate), `readReturnTo` (through `safeInternalPath`, else `/settings/account`), `parseCallbackParams`, `connectGmailOnce` (one POST per state) and `gmailErrorMessage`, which keeps the server's sentence for a Gmail or Google 502, 503 or 504 (`describeError` turns every 5xx into "Something went wrong.", which would hide "Couldn't reach Google…"). `lib/queries/gmail.ts`: `useGmailConnection`, `useStartGmailConnect` (a non-Google URL toasts "Something went wrong."), `useDisconnectGmail` (puts its answer in the cache, so no refetch and no toast). `POST /gmail-connection` gets a 40 s client timeout. `src/lib/supabase/client.ts` passes `auth: { detectSessionInUrl: false }`, so the browser client never mistakes `/gmail/callback?code=…` or `?error=…` for a Supabase sign-in (sign-in itself is exchanged on the server in `/auth/callback`). `safeInternalPath` accepts exactly `/gmail/callback` as well as its five roots, so a signed-out landing returns there after sign-in (`proxy.ts` already sends `/login?next=<path>`; unchanged).
+7. **`/gmail-connection`** (B API, Schemas). `GET`, `POST /auth-url`, `POST`, `DELETE`, each `get_current_user` plus `get_google_config`, never `require_church` (`X-Church-Id` is ignored); all four join `USER_SCOPED` in `test_route_guards.py`. `POST /auth-url` stores a new state on every call, so it is rate-limited: a new per-user bucket `gmail_connect` (10 in 10 minutes; `api/ratelimit.py` and its pin in `test_ratelimit.py`), not the `email` bucket, so connecting never spends sends; the 11th is the usual 429 "Too many requests. Try again in {n} seconds." and stores no state. `GmailConnectionOut {configured, connected, google_email}`, `GmailAuthUrlOut {auth_url}`, `GmailConnectIn {code ≤ 2048, state ≤ 256}` (`extra="forbid"`). Every route documents 401, 422 and 503 (and `POST` 400, 502, 504; `POST /auth-url` 429): a route without 422 in its responses would put FastAPI's `HTTPValidationError` in the snapshot, which `test_openapi_contract.py` forbids.
+8. **The browser's side of connecting** (B flows A-C, "Pure modules" `lib/gmail.ts`). `lib/gmail.ts`: `startGmailRedirect` (refuses any URL but `https://accounts.google.com/…`, stores `wsb:gmailReturnTo` and, from Review, `wsb:reopenEmailDialog` in sessionStorage, then leaves in the same tab through `browser.assign`, an object the tests replace since jsdom cannot navigate), `readReturnTo` (through `safeInternalPath`, else `/settings/account`), `parseCallbackParams`, `connectGmailOnce` (one POST per state) and `gmailErrorMessage`, which keeps the server's sentence for a Gmail or Google 502, 503 or 504 (`describeError` turns every 5xx into "Something went wrong.", which would hide "Couldn't reach Google…"). `lib/queries/gmail.ts`: `useGmailConnection`, `useStartGmailConnect` (a non-Google URL toasts "Something went wrong."), `useDisconnectGmail` (puts its answer in the cache, so no refetch and no toast). `POST /gmail-connection` gets a 40 s client timeout, the overall limit (Google's timeouts are per phase, clarification 5); a connect it stops waiting for shows an error and connecting again starts afresh. `src/lib/supabase/client.ts` passes `auth: { detectSessionInUrl: false }`, so the browser client never mistakes `/gmail/callback?code=…` or `?error=…` for a Supabase sign-in (sign-in itself is exchanged on the server in `/auth/callback`). `safeInternalPath` accepts exactly `/gmail/callback` as well as its five roots. Why: `proxy.ts` (unchanged) sends a signed-out request to `/login?next=<path>` and keeps only the path, dropping Google's `?code=…&state=…`, so after sign-in the page cannot finish the connect; returning to `/gmail/callback` shows "Gmail connection didn't finish. Try connecting again." with **Try again**, where without the entry the login would land on the Builder with no word about Gmail. Nothing is connected on that path either way.
 9. **[owner-visible] `/gmail/callback`** (B flow C). In `(signed-in)`, outside the church shell. It reads Google's answer once (a ref, so StrictMode's second effect reuses it), removes it from the address bar and history, and shows "Connecting your Gmail…" (with "Still working. This can take up to a minute." after 8 s) while `POST /gmail-connection` runs, once per state; then the toast "Gmail connected", the status put in the cache and back to where the connect started. `?error=access_denied`: the toast "Gmail connection was cancelled." and back. Another `?error=`: "Google couldn't connect your Gmail." (the value is never shown). Nothing in the address bar (a lost query, a reload after success): "Gmail connection didn't finish. Try connecting again.". A failed POST: the server's message. Each failure has **Try again** (a new consent URL, the same way back) and **Go back**; Gmail not set up here has only **Go back**. It starts in the connecting view, so the "didn't finish" card never flashes during a connect (B's "reading" state is the same card).
-10. **[owner-visible] Settings → Account** (B "/settings/account"; S's final order). `SETTINGS_SECTIONS` becomes Church, Bulletin, Contacts, **Account**: S puts Account after Contacts and People, so appending keeps it where it will stay when 6b adds People between them. `/settings` still opens Church. The page: "Account" (an `h2`), a box with the avatar (only an https picture; else the initial), the name, the email, "Signed in with Google." and **Log out** (the shared sign-out; the account menu keeps its own), and the **Gmail** box: two skeleton lines while loading; "Couldn't check your Gmail connection." with **Retry**; "Per-user Gmail sending isn't configured on this deployment." (no button); "Connect your Gmail to email bulletins from your own account. The app can only send email for you; it can't read your mail." with **Connect Gmail** ("Opening Google…"); "Connected as **{address}**." and "Works in all your churches." with **Disconnect** ("Disconnecting…"; no confirmation, no toast). Everyone sees the same page. No `LegacySettingsNote` (answer 4). The header's **Settings** link exists since 6a-1, so `AppNav` and the account menu do not change. The section nav stays a wrapping row on a phone: four short labels fit one row at 375 px (T19 checks).
+10. **[owner-visible] Settings → Account** (B "/settings/account"; S's final order). `SETTINGS_SECTIONS` becomes Church, Bulletin, Contacts, **Account**: S puts Account after Contacts and People, so appending keeps it where it will stay when 6b adds People between them. `/settings` still opens Church. The page: "Account" (an `h2`), a box with the avatar (only an https picture; else the initial), the name, the email, "Signed in with Google." and **Log out** (the shared sign-out; the account menu keeps its own), and the **Gmail** box: two skeleton lines while loading; "Couldn't check your Gmail connection." with **Retry**; "Per-user Gmail sending isn't configured on this deployment." (no button); "Connect the Gmail account you sign in with. The app gets permission only to send email for you; it can't read your mail." with **Connect Gmail** ("Opening Google…") in 5b-2a, which T16 (5b-2b) changes to "Connect your Gmail to email bulletins from your own account. The app can only send email for you; it can't read your mail." (clarification 20, so the page never promises emailing before Review has it); "Connected as **{address}**." and "Works in all your churches." with **Disconnect** ("Disconnecting…"; no confirmation, no toast). Everyone sees the same page. No `LegacySettingsNote` (answer 4). The header's **Settings** link exists since 6a-1, so `AppNav` and the account menu do not change. The section nav stays a wrapping row on a phone: four short labels fit one row at 375 px (T19 checks).
 11. **The message itself** (B "service_output.py additions", amended). A new pure module `backend/bulletin_email.py`, not `service_output.py`: the subject uses the printed bulletin's date form (`printed_bulletin.printed_date`, "October 4, 2026", answer 5), and `printed_bulletin` already imports `service_output`, so `service_output` cannot import it back. `bulletin_email_subject`, `default_bulletin_message` ("Hi! Here's the worship bulletin for this Sunday."; another day: "Hi! Here's the worship bulletin for Wednesday, February 10."), `plan_bulletin_addressing` and `compose_bulletin_email` (one plain-text body, then each attachment with its MIME type). The apostrophe is straight, like the app's other copy (B had a curly one, Streamlit's; owner question 2). The shared fixture `backend/tests/fixtures/shared/bulletin_email.json` (six dates: three Sundays, a Thursday, a Wednesday, a Friday) pins the subject and the message for the backend and `lib/email.ts`. `email_addresses.dedupe_addresses` keeps the first spelling of each address, ignoring case.
 12. **[owner-visible] The two attachments** (answer 1). `BulletinEmailIn.attachments`: a required list of `"docx"` (the bulletin copy, `build_document(…, "bulletin")`, `worship_October_04_2026.docx`) and/or `"pdf"` (the printed bulletin, `build_printed(…, "pdf", translation)`, `printed_bulletin_October_04_2026.pdf`); an empty list is a 422 "Choose at least one attachment." on `attachments`. `BulletinEmailIn.translation` is the draft's, as `POST /documents/printed` takes it; the PDF's readings are fetched as for the download and charge the `scripture` bucket the same way (one token per upstream part). The dialog shows both boxes with the file names under them; **Bulletin copy (Word)** is ticked the first time; the boxes are remembered on the device for this user and church (`wsb:emailPrefs:{userId}:{churchId}`, `{version: 1, contact_ids, attachments}`) as soon as one is ticked or unticked (owner question 4); the contacts are remembered after a successful send (B). The (signed-in) layout's draft pruning also removes this key for churches the user has left.
 13. **Idempotency keeps an uncertain send** (B §Errors "Stored"; F §1.6). B assumed slice 1 would add `run_idempotent(..., store_error=...)`; it did not. T12 adds it: a 5xx `DomainError` for which `store_error` returns True is stored and replayed like a 4xx; `RateLimited` is never stored; the default is unchanged for every other route. The route passes `store_error` that keeps an answer with `details.send_uncertain`.
 14. **The contacts a send names** (B "Modules" `email_contacts.py`). `email_contacts.get_contacts_by_ids(church_id, ids, *, session=None)`: the church's contacts among the ids, in the order asked, each once (5b-1 already added the session, the order and `as_uuid`). The send runs every stored address through `normalize_address` again (a Streamlit-era " Office@Example.ORG " is sent as "Office@example.org"); one it refuses is a 422 on `contact_ids`: "The saved contact “{name, or the address when there is none}” has an invalid email address. An admin can fix it in Settings → Contacts." (`MALFORMED_CONTACT_HINT`, answer 4). In the dialog such a contact (`email_valid: false`, 5b-1) is listed, cannot be ticked, and says "This address doesn't look valid. An admin can fix it in Settings → Contacts." (5b-1's follow-up).
-15. **`send_bulletin_email`** (B "usecases/email.py", §Errors; T13). The order is B's: (5) one read session for the recipients (a contact the church does not have is a 404 with `details.field = "contact_ids"`; a refused saved address or other address is a 422 naming it, the other address cut to 60 characters; none or more than 50 after de-duplication is a 422 on `recipients`) and then the attachments (new: none is a 422 on `attachments`) and the connection read; (6) not configured is a 503, no connection (or a NULL address) the 409; (7) the files (5a's `InvalidInput` and `NotFound` pass through; no hymn use is recorded); (8) `charge()`, the `email` bucket, the only 429 here, right before Google; (9-10) the refresh and the send with no session open. A refused grant (`invalid_grant` on refresh, a missing scope on send) deletes the connection only if it still holds the token that failed; a connection made again meanwhile is kept ("Your Gmail connection changed while sending. Nothing was sent. Try again."). The send's uncertain outcomes carry `details.send_uncertain: true` (502 for a Gmail 5xx, 504 for no answer); every other `gmail_send_failed` carries `{disconnected, send_uncertain: false}`. The log line after a send: `bulletin_email.sent church_id=… user_id=… recipients=n bcc=… attachments=docx,pdf bytes=… ms=…`.
+15. **`send_bulletin_email`** (B "usecases/email.py", §Errors; T13). The order is B's: (5) one read session for the recipients (a contact the church does not have is a 404 with `details.field = "contact_ids"`; a refused saved address or other address is a 422 naming it, the other address cut to 60 characters; none or more than 50 after de-duplication is a 422 on `recipients`) and then the attachments (new: none is a 422 on `attachments`) and the connection read; (6) not configured is a 503, no connection (or a NULL address) the 409; (7) the files (5a's `InvalidInput` and `NotFound` pass through; no hymn use is recorded), then the message, which must be 3.5 MB at most (`MAX_RAW_BYTES`, clarification 5; else a 422 on `attachments`, "The attachments are too large to email. Try sending only the bulletin copy.", with nothing charged or sent); (8) `charge()`, the `email` bucket, the only 429 here, right before Google; (9-10) the refresh and the send with no session open. A refused grant (`invalid_grant` on refresh, a missing scope on send) deletes the connection only if it still holds the token that failed; a connection made again meanwhile is kept ("Your Gmail connection changed while sending. Nothing was sent. Try again."). The send's uncertain outcomes carry `details.send_uncertain: true` (502 for a Gmail 5xx, 504 for no answer); every other `gmail_send_failed` carries `{disconnected, send_uncertain: false}`. Gmail refusing the account itself (`ACCOUNT_REFUSED`) is its own 502, "Gmail won't send from this Google account. Nothing was sent. Check that you can send email in Gmail with it, then try again.", not "Check the email addresses"; the connection is kept, and the failure's log line names Google's reason (`bulletin_email.send … outcome=account_refused status=400 google_error=failedPrecondition`). The log line after a send: `bulletin_email.sent church_id=… user_id=… recipients=n bcc=… attachments=docx,pdf bytes=… ms=…`.
 16. **`POST /bulletin-emails`** (B API, Routes). `require_church` (any member, owner decision 5), then the user, then `idempotency_key(required=True)`, then the config; FastAPI checks the body after them, so a request with no key and a bad body is the key's 422 (T14 checks the order). `run_idempotent` gets `church_id` (F §1.6's church-scope amendment) and `store_error`. `BulletinEmailIn {service, contact_ids ≤ 200, additional_emails ≤ 200 × 320, message ≤ 5000 | null, attachments ≤ 2, translation ≤ 20 | null}` (`extra="forbid"`); `BulletinEmailOut {sent: true, recipient_count}`. The `email` bucket's 429 is never stored, so the same key works after `Retry-After`.
-17. **The dialog's rules** (B "Pure modules" `lib/email.ts`, `lib/idempotency.ts`). `lib/email.ts`: `bulletinEmailSubject`, `defaultBulletinMessage` (the shared fixture), `parseAddressList` (commas, semicolons, new lines; `Name <a@b.org>` read as the address), `countRecipients` (each address once, ignoring case and spaces), `fieldTarget` (`additional_emails*` under Other addresses, `message` under Message, `attachments` under Attachments, `recipients` and `contact_ids*` under To, anything else at the top), the remembered choices, `bulletinEmailBody` (the downloads' `serviceBody(draft)` and the draft's translation, as `printedRequest`) and the reopen request (`parseReopen`, only for the active church). B's `createSendKeyTracker` is the existing `createKeyTracker` plus a new `rotate()`: a 2xx or a 4xx drops the key; a 5xx, a 429 or a lost connection keeps it; only **Send again anyway** rotates it. `POST /bulletin-emails` gets a 90 s client timeout (B: 60 s; the PDF's readings can take up to 20 s before Google's 15 s and 30 s).
-18. **[owner-visible] The card and the dialog** (B "Review step", "Email dialog", "Send outcomes", flows B and D). There is no `email-slot.tsx` placeholder in the code (5a never built one); the card is the last on Review, after the printed bulletin. Card: "Email the bulletin", "Send the bulletin and a short message from your own Gmail."; while loading a skeleton line and a disabled **Email bulletin…**; "Couldn't check your Gmail connection." with **Retry**; "Emailing isn't set up on this deployment."; "Connect your Gmail to email the bulletin from your own account." with **Connect Gmail** (back to Review, and the dialog then opens); connected: "Sends from {address}." and **Email bulletin…**, turned off with "Choose a service date on step 1 to email the bulletin." or "Fix the readings on step 1 to email the bulletin." as the downloads are (B: the date only; a readings error would break the PDF's readings too; owner question 3); nothing else turns it off. Dialog (full screen below `md`, centred from `md`, the footer kept in reach of the iPhone keyboard): "Email the bulletin"; From; To (one row per contact, 44 px, the name and the address under it, the address alone when there is none; three skeleton rows; "Couldn't load your contacts." with **Retry**, other addresses still work; "No saved contacts yet. Type addresses below." with **Manage contacts** for owners and admins); Other addresses ("name@example.com", "Separate addresses with commas."); "Recipients won't see each other's addresses (sent as BCC)." from two people; Subject; Attachments; Message (4 rows, at most 5000 characters); "Not finished yet: {n} item(s) under Still to do." and "Not saved to the archive yet. The attachments use the service as it is on screen now." when they apply (B had "Still missing: …", which would repeat Still to do's sentences); **Cancel** and **Send to {n} person/people** ("Send" turned off with "Choose at least one recipient."; "You can email at most 50 people at once."; "Choose at least one attachment."; "Sending…", then "Still working…" after 8 s, as the downloads say). A send closes it with the toast "Email sent to {n} person/people.", remembers the contacts, and resets Other addresses and the message. Failures show in the dialog, never as a toast, where B's table puts them: under the field and focused for a 422; under To for a contact gone (the contacts are refetched); at the top with **Go to Hymns** for a hymn gone, **Connect Gmail** for "Connect your Gmail first, then try again." and **Reconnect Gmail** for a dropped grant (both keep the form for the way back; the status is refetched), **Send again anyway** for an uncertain send, Send turned off for Gmail not set up; a lost connection says "We lost the connection before Gmail confirmed, so the email may already have been sent. Check your Gmail Sent folder before sending again." and keeps the key; a 429 and anything else the server's sentence. While a send runs the dialog cannot be closed. Back from Google (flow B), the card reads `wsb:reopenEmailDialog` when it mounts, decides once the status has settled (reopening the dialog with what was in it only when connected and for this church) and forgets it either way.
+17. **The dialog's rules** (B "Pure modules" `lib/email.ts`, `lib/idempotency.ts`). `lib/email.ts`: `bulletinEmailSubject`, `defaultBulletinMessage` (the shared fixture), `parseAddressList` (commas, semicolons, new lines; `Name <a@b.org>` read as the address), `countRecipients` (each address once, ignoring case and spaces), `fieldTarget` (`additional_emails*` under Other addresses, `message` under Message, `attachments` under Attachments, `recipients` and `contact_ids*` under To, anything else at the top), the remembered choices, `bulletinEmailBody` (the downloads' `serviceBody(draft)` and the draft's translation, as `printedRequest`) and the reopen request (`parseReopen`, only for the active church). B's `createSendKeyTracker` is the existing `createKeyTracker` plus a new `rotate()`: a 2xx or a 4xx drops the key; a 5xx, a 429 or a lost connection keeps it; only **Send again anyway** rotates it. `POST /bulletin-emails` gets a 90 s client timeout (B: 60 s): the PDF's readings have a 20 s deadline, but Google's 15 s and 30 s are per phase (clarification 5), so the server has no overall deadline and 90 s is the overall limit; a send still unanswered then is the lost-connection case of clarification 18 (possibly sent, plain Send off). The uncertain send is remembered in sessionStorage (`wsb:emailUncertain:{userId}:{churchId}`, `{version: 1, message}`; `readUncertainSend`, `writeUncertainSend`, `clearUncertainSend`).
+18. **[owner-visible] The card and the dialog** (B "Review step", "Email dialog", "Send outcomes", flows B and D). There is no `email-slot.tsx` placeholder in the code (5a never built one); the card is the last on Review, after the printed bulletin. Card: "Email the bulletin", "Send the bulletin and a short message from your own Gmail."; while loading a skeleton line and a disabled **Email bulletin…**; "Couldn't check your Gmail connection." with **Retry**; "Emailing isn't set up on this deployment."; "Connect your Gmail to email the bulletin from your own account." with **Connect Gmail** (back to Review, and the dialog then opens); connected: "Sends from {address}." and **Email bulletin…**, turned off with "Choose a service date on step 1 to email the bulletin." or "Fix the readings on step 1 to email the bulletin." as the downloads are (B: the date only; a readings error would break the PDF's readings too; owner question 3); nothing else turns it off. Dialog (below `md` a bottom sheet, the same pattern as 5b-1's approved contact editor: `max-md:bottom-0 … max-md:max-h-[85dvh] max-md:overflow-y-auto`, so the whole sheet scrolls with **Cancel** and **Send** inside it and the iPhone keyboard never leaves Send out of reach; centred from `md`, the fields scrolling above the buttons): "Email the bulletin"; From; To (one row per contact, 44 px, the name and the address under it, the address alone when there is none; three skeleton rows; "Couldn't load your contacts." with **Retry**, other addresses still work; "No saved contacts yet. Type addresses below." with **Manage contacts** for owners and admins); Other addresses ("name@example.com", "Separate addresses with commas."); "Recipients won't see each other's addresses (sent as BCC)." from two people; Subject; Attachments (while **Printed bulletin (PDF)** is ticked, the printed card's own notes under them: "Not filled in: …" and "From last week, not checked yet: …"); Message (4 rows, at most 5000 characters); "Not finished yet: {n} item(s) under Still to do." and "Not saved to the archive yet. The attachments use the service as it is on screen now." when they apply (B had "Still missing: …", which would repeat Still to do's sentences); **Cancel** and **Send to {n} person/people** ("Send" turned off with "Choose at least one recipient."; "You can email at most 50 people at once."; "Choose at least one attachment."; "Sending…", then "Still working…" after 8 s, as the downloads say). A send closes it with the toast "Email sent to {n} person/people.", remembers the contacts, and resets Other addresses and the message. Failures show in the dialog, never as a toast, where B's table puts them: under the field and focused for a 422; under To for a contact gone (the contacts are refetched); at the top with **Go to Hymns** for a hymn gone, **Connect Gmail** for "Connect your Gmail first, then try again." and **Reconnect Gmail** for a dropped grant (both keep the form for the way back; the status is refetched), **Send again anyway** for an uncertain send, Send turned off for Gmail not set up; a lost connection says "We lost the connection before Gmail confirmed, so the email may already have been sent. Check your Gmail Sent folder before sending again."; a 429 and anything else the server's sentence. After an uncertain send or a lost connection, plain **Send** stays off and the message stays at the top with **Send again anyway** as the only way to send (with a new key), also after closing the dialog, leaving Review or a reload in that tab (sessionStorage, per user and church); a definite answer to **Send again anyway** clears it. While a send runs the dialog cannot be closed. Back from Google (flow B), the card reads `wsb:reopenEmailDialog` when it mounts, decides once the status has settled (reopening the dialog with what was in it only when connected and for this church, and then only once the printed card's `useBulletinCarry` has carried last week's bulletin in or its lookup failed, so a PDF sent at once has it) and forgets it either way.
 19. **The contacts load when the dialog opens** (B: prefetched when Review mounts). Review then makes no contacts request unless the dialog is opened, and the existing Review tests need only the status route.
-20. **[owner-visible] The Contacts caption** returns to S's "People you can email the bulletin to from the Review step." in T16, with the dialog (5b-1 clarification 3 and its follow-up), so it is never true before emailing is.
-21. **[owner-visible] Every new user-facing string** (no em dashes). Settings: "Account"; "Signed in with Google."; "Log out"; "Gmail"; "Couldn't check your Gmail connection."; "Per-user Gmail sending isn't configured on this deployment."; "Connect your Gmail to email bulletins from your own account. The app can only send email for you; it can't read your mail."; "Connect Gmail"; "Opening Google…"; "Connected as {address}."; "Works in all your churches."; "Disconnect"; "Disconnecting…". Callback: "Gmail"; "Connecting your Gmail…"; "Still working. This can take up to a minute."; "Gmail connected"; "Gmail connection was cancelled."; "Google couldn't connect your Gmail."; "Gmail connection didn't finish. Try connecting again."; "Try again"; "Go back"; "Something went wrong.". Card: "Email the bulletin"; "Send the bulletin and a short message from your own Gmail."; "Emailing isn't set up on this deployment."; "Connect your Gmail to email the bulletin from your own account."; "Sends from {address}."; "Email bulletin…"; "Choose a service date on step 1 to email the bulletin."; "Fix the readings on step 1 to email the bulletin.". Dialog: "From"; "To"; "This address doesn't look valid. An admin can fix it in Settings → Contacts."; "No saved contacts yet. Type addresses below."; "Manage contacts"; "Couldn't load your contacts."; "Other addresses"; "name@example.com"; "Separate addresses with commas."; "Recipients won't see each other's addresses (sent as BCC)."; "Subject"; "Attachments"; "Bulletin copy (Word)"; "Printed bulletin (PDF)"; "Message"; "Not finished yet: {n} item(s) under Still to do."; "Not saved to the archive yet. The attachments use the service as it is on screen now."; "Send"; "Send to {n} person/people"; "Sending…"; "Still working…"; "Choose at least one recipient."; "You can email at most 50 people at once."; "Choose at least one attachment."; "Go to Hymns"; "Reconnect Gmail"; "Send again anyway"; "We lost the connection before Gmail confirmed, so the email may already have been sent. Check your Gmail Sent folder before sending again."; "Email sent to {n} person/people.". The email: "Worship service for {Month D, YYYY}"; "Hi! Here's the worship bulletin for this Sunday."; "Hi! Here's the worship bulletin for {Weekday}, {Month D}.". From the server (B's, without dashes; three new): "Per-user Gmail sending isn't configured on this deployment."; "Gmail sending isn't set up correctly on this deployment."; "This Gmail connection request expired or was already used. Try connecting again."; "That Google approval has expired or was already used. Try connecting again."; "Google returned an incomplete response. Try connecting again."; "Google didn't give permission to send email. Try again and allow “Send email on your behalf”."; "Could not read your email address from Google."; "That Google account doesn't match your signed-in email ({email}). Connect the Gmail account you're logged in with."; "Google did not return a refresh token. Remove this app's access at https://myaccount.google.com/permissions and connect again."; "Couldn't reach Google. Try connecting again in a minute."; "Google took too long to respond. Try connecting again."; "One of the selected contacts no longer exists. Refresh the list and try again."; "The saved contact “{name}” has an invalid email address. An admin can fix it in Settings → Contacts."; "“{value}” isn't a valid email address."; "Please select at least one recipient or enter an email address."; "You can email at most 50 people at once."; "Choose at least one attachment." (new); "Connect your Gmail first, then try again."; "Your Gmail connection has expired or was removed. Reconnect Gmail and try again."; "Your Gmail connection no longer allows sending. Reconnect Gmail and try again."; "Your Gmail connection changed while sending. Nothing was sent. Try again."; "Couldn't reach Gmail. Nothing was sent. Try again in a minute."; "Google took too long to respond. Nothing was sent. Try again."; "Gmail's sending limit has been reached. Nothing was sent. Try again later."; "Gmail couldn't send this message. Nothing was sent. Check the email addresses and try again."; "Gmail reported a problem, so the email may already have been sent. Check your Gmail Sent folder before sending again."; "Gmail didn't confirm the email, so it may already have been sent. Check your Gmail Sent folder before sending again.". Reused: "Retry", "Cancel", "Loading", "Too many requests. Try again in {n} seconds.", "A chosen hymn is no longer in your hymnal. Choose it again on the Hymns step.", "Give each custom element a label.", the Contacts caption of clarification 20.
+20. **[owner-visible] The Contacts caption** returns to S's "People you can email the bulletin to from the Review step." in T16, with the dialog (5b-1 clarification 3 and its follow-up), so it is never true before emailing is. For the same reason the Account page's Gmail sentence is "Connect the Gmail account you sign in with. …" in 5b-2a and becomes "Connect your Gmail to email bulletins from your own account. …" in T16 (clarification 10).
+21. **[owner-visible] Every new user-facing string** (no em dashes). Settings: "Account"; "Signed in with Google."; "Log out"; "Gmail"; "Couldn't check your Gmail connection."; "Per-user Gmail sending isn't configured on this deployment."; "Connect the Gmail account you sign in with. The app gets permission only to send email for you; it can't read your mail." (5b-2a); "Connect your Gmail to email bulletins from your own account. The app can only send email for you; it can't read your mail." (5b-2b); "Connect Gmail"; "Opening Google…"; "Connected as {address}."; "Works in all your churches."; "Disconnect"; "Disconnecting…". Callback: "Gmail"; "Connecting your Gmail…"; "Still working. This can take up to a minute."; "Gmail connected"; "Gmail connection was cancelled."; "Google couldn't connect your Gmail."; "Gmail connection didn't finish. Try connecting again."; "Try again"; "Go back"; "Something went wrong.". Card: "Email the bulletin"; "Send the bulletin and a short message from your own Gmail."; "Emailing isn't set up on this deployment."; "Connect your Gmail to email the bulletin from your own account."; "Sends from {address}."; "Email bulletin…"; "Choose a service date on step 1 to email the bulletin."; "Fix the readings on step 1 to email the bulletin.". Dialog: "From"; "To"; "This address doesn't look valid. An admin can fix it in Settings → Contacts."; "No saved contacts yet. Type addresses below."; "Manage contacts"; "Couldn't load your contacts."; "Other addresses"; "name@example.com"; "Separate addresses with commas."; "Recipients won't see each other's addresses (sent as BCC)."; "Subject"; "Attachments"; "Bulletin copy (Word)"; "Printed bulletin (PDF)"; "Message"; "Not finished yet: {n} item(s) under Still to do."; "Not saved to the archive yet. The attachments use the service as it is on screen now."; "Send"; "Send to {n} person/people"; "Sending…"; "Still working…"; "Choose at least one recipient."; "You can email at most 50 people at once."; "Choose at least one attachment."; "Go to Hymns"; "Reconnect Gmail"; "Send again anyway"; "We lost the connection before Gmail confirmed, so the email may already have been sent. Check your Gmail Sent folder before sending again."; "Email sent to {n} person/people.". The email: "Worship service for {Month D, YYYY}"; "Hi! Here's the worship bulletin for this Sunday."; "Hi! Here's the worship bulletin for {Weekday}, {Month D}.". From the server (B's, without dashes; five new): "Per-user Gmail sending isn't configured on this deployment."; "Gmail sending isn't set up correctly on this deployment."; "This Gmail connection request expired or was already used. Try connecting again."; "That Google approval has expired or was already used. Try connecting again."; "Google returned an incomplete response. Try connecting again."; "Google didn't give permission to send email. Try again and allow “Send email on your behalf”."; "Could not read your email address from Google."; "That Google account doesn't match your signed-in email ({email}). Connect the Gmail account you're logged in with."; "Google did not return a refresh token. Remove this app's access at https://myaccount.google.com/permissions and connect again."; "Couldn't reach Google. Try connecting again in a minute."; "Google took too long to respond. Try connecting again."; "One of the selected contacts no longer exists. Refresh the list and try again."; "The saved contact “{name}” has an invalid email address. An admin can fix it in Settings → Contacts."; "“{value}” isn't a valid email address."; "Please select at least one recipient or enter an email address."; "You can email at most 50 people at once."; "Choose at least one attachment." (new); "Connect your Gmail first, then try again."; "Your Gmail connection has expired or was removed. Reconnect Gmail and try again."; "Your Gmail connection no longer allows sending. Reconnect Gmail and try again."; "Your Gmail connection changed while sending. Nothing was sent. Try again."; "Couldn't reach Gmail. Nothing was sent. Try again in a minute."; "Google took too long to respond. Nothing was sent. Try again."; "Gmail's sending limit has been reached. Nothing was sent. Try again later."; "Gmail couldn't send this message. Nothing was sent. Check the email addresses and try again."; "Gmail won't send from this Google account. Nothing was sent. Check that you can send email in Gmail with it, then try again." (new); "The attachments are too large to email. Try sending only the bulletin copy." (new); "Gmail reported a problem, so the email may already have been sent. Check your Gmail Sent folder before sending again."; "Gmail didn't confirm the email, so it may already have been sent. Check your Gmail Sent folder before sending again.". Reused: "Retry", "Cancel", "Loading", "Too many requests. Try again in {n} seconds.", the printed card's "Not filled in: …" and "From last week, not checked yet: …", "A chosen hymn is no longer in your hymnal. Choose it again on the Hymns step.", "Give each custom element a label.", the Contacts caption of clarification 20.
 22. **No database change.** `gmail_tokens` and `oauth_states` exist since `0001_baseline` with the columns B assumes; nothing is added. Alembic head stays `0007_bulletin_images`.
 23. **Docs.** T10 and T17 append items 7-10 and 11-16 to `docs/manual-verification.md` → "## Slice 5b" (no new `##` heading, so `test_slice1_docs.py`'s pin does not move). T19 inserts `### Slice 5b-2 record` before `## Backups`, after `### Slice 5b-1 record`, and in the same commit brings the runbook's Railway variables row for `GOOGLE_*` and its "Google OAuth client" paragraph up to date (the new redirect URIs, what reads the variables now).
 24. **Deviations from B** (each the lean choice; none changes an owner answer):
@@ -123,12 +123,14 @@ The owner's answers win over B, S and F; the code wins over all of them where th
     - The startup check also logs one INFO line (clarification 3).
     - `attachments` and `translation` join `BulletinEmailIn`; "Choose at least one attachment." is new (clarification 12).
     - `store_error` is added here, not in slice 1 (clarification 13).
+    - `POST /gmail-connection/auth-url` is rate-limited (`gmail_connect`); Gmail refusing the account has its own message; a message over 3.5 MB is refused before Google (clarifications 5, 7, 15).
+    - After an uncertain send only **Send again anyway** sends, remembered in the tab; B let a plain Send replay the key (clarification 18).
     - The card's button also waits for readings without errors; the dialog's "not finished" note counts the Still to do items; the contacts load when the dialog opens; the client timeout is 90 s (clarifications 17-19).
     - No parity gate, Streamlit smoke test, banner, legacy note, `check_contact_addresses.py` or `google_oauth_legacy.py` (answer 4).
 
 ### Risks
 - **Google may refuse the new redirect URI** until `worship-service-builder.vercel.app` is an authorized domain on the consent screen, and `vercel.app` is a public suffix, so Google may ask to verify ownership of the subdomain (Search Console: a file or meta tag served by the Next app). Found in T19's first owner step, before the merge; the fallback is a custom domain the owner controls (a new plan). With two PRs, nothing of group B is built on top until it works.
-- **The consent screen in "Testing"** makes Google expire refresh tokens after 7 days: the owner would reconnect weekly (the first send after expiry says "Your Gmail connection has expired or was removed. Reconnect Gmail and try again." and **Reconnect Gmail** keeps the dialog's form). "In production" without verification shows a one-time "Google hasn't verified this app" screen at connect. Owner question 5.
+- **The consent screen's publishing status** (owner question 5; T19 Step 2). `gmail.send` is a Sensitive scope (https://developers.google.com/workspace/gmail/api/auth/scopes). Confirmed: in **Testing** only the accounts listed as test users (at most 100) can connect, anyone else gets Google's "Access blocked" page, and every refresh token expires 7 days after consent (https://support.google.com/cloud/answer/15549945), so each sender reconnects weekly (the first send after expiry says "Your Gmail connection has expired or was removed. Reconnect Gmail and try again." and **Reconnect Gmail** keeps the dialog's form); **In production** without verification the app works but shows the "Google hasn't verified this app" warning and is capped at 100 new users in total (https://support.google.com/cloud/answer/7454865). Not confirmed: that the warning shows only once (with `prompt=consent` it probably shows on every connect and reconnect); that tokens issued in Testing stop expiring after the switch (so each sender reconnects once after it); and how Google treats an unverified app whose policy expects verification before a user-facing launch. A Google Workspace admin may also block unverified apps for that organization's accounts.
 - **Gmail honours Bcc in a raw message** and strips it from delivered copies (documented); T19's phone check verifies it with the owner's own addresses only.
 - **An uncertain send** is replayed for 15 minutes in this process only (F §1.6's in-memory store): a Railway restart between a send and its retry, or **Send again anyway** without checking the Sent folder, can send a second copy.
 - **The `scripture` bucket is charged for the PDF's readings before the `email` bucket is checked**, so an 11th email in the hour still spends a few scripture tokens (out of 60 per 5 minutes).
@@ -714,8 +716,8 @@ Run: `.venv/bin/python -m pytest -q backend/tests/test_google_oauth.py backend/t
 
 ```bash
 git add backend/google_oauth.py backend/tests/test_google_oauth.py backend/tests/test_no_streamlit_in_core.py
-git commit -q -m "Slice 5b-2: google_oauth's config, consent URL, states and token store" -m "GoogleOAuthConfig carries the client id, secret (out of repr) and
-redirect URI; build_auth_url adds the signed-in account as login_hint;
+git commit -q -m "Slice 5b-2: google_oauth's config, consent URL, states and token store" -m "GoogleOAuthConfig carries the client id, secret and redirect URI;
+build_auth_url adds the signed-in account as login_hint;
 create_state purges expired states; the store gains get_connection (none
 for a row without an address), save_user_token and delete_connection
 (only_if_token keeps a connection made again meanwhile), each with an
@@ -1325,7 +1327,7 @@ def revoke_token(token: str) -> bool:
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_google_oauth.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`
 **Expected:**
-`49 passed in <t>s`; `1699 passed, 26 skipped in <t>s`.
+`49 passed in <t>s`; `1700 passed, 26 skipped in <t>s`.
 
 - [ ] **Step 5: Commit**
 
@@ -1336,13 +1338,15 @@ case) and stores nothing; refresh_access_token and send_raw_message go
 through integrations.http with 15 s and 30 s; revoke_token is best
 effort. Every failure is one GoogleErrorKind: a send that failed before
 its request was written is UPSTREAM (nothing sent), a Gmail 5xx or no
-answer after it was written is SEND_UNCONFIRMED (it may have gone out).
-Google's own text never leaves the module. tests/fake_google.py is the
+answer after it was written is SEND_UNCONFIRMED (it may have gone out);
+a 401 or a failedPrecondition is ACCOUNT_REFUSED. The timeouts are per
+phase. Google's own text never leaves the module; its reason name is
+kept for the caller's log. tests/fake_google.py is the
 MockTransport stand-in." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1699 passed, 26 skipped`; frontend `780 passed` in 94 files.
+Expected counts after this task: backend `1700 passed, 26 skipped`; frontend `780 passed` in 94 files.
 
 ### Task 4: The Google settings and the startup lines (B "Configuration and startup checks"; clarification 3)
 
@@ -1659,7 +1663,7 @@ GOOGLE_OAUTH_REDIRECT_URI=http://localhost:3000/gmail/callback
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_startup.py backend/tests/test_google_oauth.py backend/tests/test_docs.py backend/tests/test_foundation_setup.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`
 **Expected:**
-`94 passed in <t>s`; `1709 passed, 26 skipped in <t>s`.
+`94 passed in <t>s`; `1710 passed, 26 skipped in <t>s`.
 
 - [ ] **Step 5: Commit**
 
@@ -1675,7 +1679,7 @@ never logs a value. .env.example describes the three." -m "Co-Authored-By: Claud
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1709 passed, 26 skipped`; frontend `780 passed` in 94 files.
+Expected counts after this task: backend `1710 passed, 26 skipped`; frontend `780 passed` in 94 files.
 
 ### Task 5: The Gmail connection usecases (B "usecases/email.py", "Errors: POST /gmail-connection"; clarification 6)
 
@@ -2022,7 +2026,7 @@ def disconnect_gmail(user_id: uuid.UUID, config: GoogleOAuthConfig) -> GmailStat
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_usecase_email.py backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`
 **Expected:**
-`20 passed in <t>s`; `1726 passed, 26 skipped in <t>s`.
+`20 passed in <t>s`; `1727 passed, 26 skipped in <t>s`.
 
 - [ ] **Step 5: Commit**
 
@@ -2038,17 +2042,17 @@ shown, its error code is logged only for our own misconfiguration." -m "Co-Autho
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1726 passed, 26 skipped`; frontend `780 passed` in 94 files.
+Expected counts after this task: backend `1727 passed, 26 skipped`; frontend `780 passed` in 94 files.
 
 ### Task 6: `/gmail-connection` (B API, Schemas; clarification 7)
 
 **Files:**
 - Create: `backend/tests/test_api_gmail.py`, `backend/api/routes/gmail.py`
-- Modify: `backend/tests/test_route_guards.py`, `backend/api/deps.py`, `backend/api/main.py`, `frontend/src/lib/api/openapi.json`, `frontend/src/lib/api/schema.d.ts` (regenerated)
+- Modify: `backend/tests/test_route_guards.py`, `backend/tests/test_ratelimit.py`, `backend/api/deps.py`, `backend/api/main.py`, `backend/api/ratelimit.py`, `frontend/src/lib/api/openapi.json`, `frontend/src/lib/api/schema.d.ts` (regenerated)
 
 - [ ] **Step 1: Write the failing tests**
 
-The client fixture overrides `get_google_config`, so the routes see a test client id and the not-configured case sets an empty one. The four routes join `USER_SCOPED`.
+The client fixture overrides `get_google_config`, so the routes see a test client id and the not-configured case sets an empty one. The four routes join `USER_SCOPED`. `POST /gmail-connection/auth-url` gets the new `gmail_connect` bucket (10 in 10 minutes per user; plan review M6), pinned in `test_ratelimit.py`; the 11th request is a 429 and stores no state.
 
 **Create `backend/tests/test_api_gmail.py`:**
 
@@ -2399,24 +2403,25 @@ from api.routes import (bulletin_images, bulletin_settings, churches, contacts, 
 
 - [ ] **Step 4: Regenerate the API files, see the tests pass, and the suites**
 
-Run: `.venv/bin/python backend/scripts/export_openapi.py >/dev/null && (cd frontend && npm run gen:api >/dev/null) && git diff --stat -- frontend/src/lib/api | tail -1` then `.venv/bin/python -m pytest -q backend/tests/test_api_gmail.py backend/tests/test_usecase_email.py backend/tests/test_openapi_contract.py backend/tests/test_route_guards.py backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`
+Run: `.venv/bin/python backend/scripts/export_openapi.py >/dev/null && (cd frontend && npm run gen:api >/dev/null) && git diff --stat -- frontend/src/lib/api | tail -1` then `.venv/bin/python -m pytest -q backend/tests/test_api_gmail.py backend/tests/test_usecase_email.py backend/tests/test_openapi_contract.py backend/tests/test_route_guards.py backend/tests/test_ratelimit.py backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`
 **Expected:**
-` 2 files changed, 656 insertions(+)`; `39 passed in <t>s`; `1737 passed, 26 skipped in <t>s`; `typecheck 0`, `lint 0` (the new types are not used until T7).
+` 2 files changed, @@T6DIFF@@ insertions(+)`; `@@T6N@@ passed in <t>s`; `1739 passed, 26 skipped in <t>s`; `typecheck 0`, `lint 0` (the new types are not used until T7).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/api/routes/gmail.py backend/api/deps.py backend/api/main.py backend/tests/test_api_gmail.py backend/tests/test_route_guards.py frontend/src/lib/api/openapi.json frontend/src/lib/api/schema.d.ts
+git add backend/api/routes/gmail.py backend/api/deps.py backend/api/main.py backend/api/ratelimit.py backend/tests/test_api_gmail.py backend/tests/test_route_guards.py backend/tests/test_ratelimit.py frontend/src/lib/api/openapi.json frontend/src/lib/api/schema.d.ts
 git commit -q -m "Slice 5b-2: GET, POST and DELETE /gmail-connection" -m "The caller's own Gmail connection, user-scoped (X-Church-Id ignored; the
 four routes join USER_SCOPED): the status, Google's consent URL, the
 code and state back from /gmail/callback, and disconnecting. The errors
 are the 5b spec's codes and messages, never Google's text (a seeded
-marker is checked). get_google_config reads the GOOGLE_* settings;
-tests override it. OpenAPI and the types regenerated." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+marker is checked). A new consent URL is limited to 10 in 10 minutes per
+user (the gmail_connect bucket). get_google_config reads the GOOGLE_*
+settings; tests override it. OpenAPI and the types regenerated." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1737 passed, 26 skipped`; frontend `780 passed` in 94 files.
+Expected counts after this task: backend `1739 passed, 26 skipped`; frontend `780 passed` in 94 files.
 
 ### Task 7: The trip to Google in the browser: helpers, queries, the Supabase client (B flows A-C, "Pure modules", "Query hooks"; clarification 8)
 
@@ -2857,7 +2862,7 @@ Supabase browser client no longer reads sign-ins from the address bar, so
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1737 passed, 26 skipped`; frontend `787 passed` in 96 files.
+Expected counts after this task: backend `1739 passed, 26 skipped`; frontend `787 passed` in 96 files.
 
 ### Task 8: `/gmail/callback` (B flow C; clarification 9)
 
@@ -3205,7 +3210,7 @@ and Go back (only Go back when Gmail is not set up here)." -m "Co-Authored-By: C
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1737 passed, 26 skipped`; frontend `793 passed` in 97 files.
+Expected counts after this task: backend `1739 passed, 26 skipped`; frontend `793 passed` in 97 files.
 
 ### Task 9: Settings → Account (B "/settings/account"; S "Settings nav"; clarification 10)
 
@@ -3649,7 +3654,7 @@ gmailDisconnected()." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1737 passed, 26 skipped`; frontend `800 passed` in 98 files.
+Expected counts after this task: backend `1739 passed, 26 skipped`; frontend `800 passed` in 98 files.
 
 ### Task 10: Docs: the connection's manual checks (clarification 23)
 
@@ -3696,7 +3701,7 @@ connecting from Settings → Account, a cancel at Google and a reload of
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1737 passed, 26 skipped`; frontend `800 passed` in 98 files.
+Expected counts after this task: backend `1739 passed, 26 skipped`; frontend `800 passed` in 98 files.
 
 
 ## Group B: emailing the bulletin (T11-T17)
@@ -3968,7 +3973,7 @@ def compose_bulletin_email(*, sender: str, recipients: Sequence[str], service_da
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_bulletin_email.py backend/tests/test_email_addresses.py backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`
 **Expected:**
-`118 passed in <t>s`; `1750 passed, 26 skipped in <t>s`.
+`118 passed in <t>s`; `1752 passed, 26 skipped in <t>s`.
 
 - [ ] **Step 5: Commit**
 
@@ -3984,7 +3989,7 @@ address, ignoring case." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1750 passed, 26 skipped`; frontend `800 passed` in 98 files.
+Expected counts after this task: backend `1752 passed, 26 skipped`; frontend `800 passed` in 98 files.
 
 ### Task 12: Idempotency keeps an uncertain send; the contacts a send names (B §Errors "Stored", "Modules" `email_contacts.py`; clarifications 13 and 14)
 
@@ -4172,7 +4177,7 @@ def get_contacts_for_display(church_id) -> List[Dict[str, str]]:
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_idempotency.py backend/tests/test_email_contacts.py streamlit_tests 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`
 **Expected:**
-`65 passed in <t>s` (the two files' 30 and the 35 `streamlit_tests`); `1754 passed, 26 skipped in <t>s`.
+`65 passed in <t>s` (the two files' 30 and the 35 `streamlit_tests`); `1756 passed, 26 skipped in <t>s`.
 
 - [ ] **Step 5: Commit**
 
@@ -4186,7 +4191,7 @@ order asked, each once; another church's id is simply missing." -m "Co-Authored-
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1754 passed, 26 skipped`; frontend `800 passed` in 98 files.
+Expected counts after this task: backend `1756 passed, 26 skipped`; frontend `800 passed` in 98 files.
 
 ### Task 13: `send_bulletin_email` (B "usecases/email.py", §Errors, Testing "test_usecase_email.py"; clarifications 12, 14 and 15)
 
@@ -4195,7 +4200,7 @@ Expected counts after this task: backend `1754 passed, 26 skipped`; frontend `80
 
 - [ ] **Step 1: Write the failing tests**
 
-The `world` fixture fixes the files' bytes (python-docx output is not byte-reproducible); two tests undo that and build real ones: a deleted hymn and a blank custom label pass through unchanged and send nothing, and the emailed Word copy has the same `word/document.xml` as the download (with no hymn use recorded). One test watches the database pool while the fake Google answers: no connection is checked out during a Google call.
+The `world` fixture fixes the files' bytes (python-docx output is not byte-reproducible); two tests undo that and build real ones: a deleted hymn and a blank custom label pass through unchanged and send nothing, and the emailed Word copy has the same `word/document.xml` as the download (with no hymn use recorded). One test watches the database pool while the fake Google answers: no connection is checked out during a Google call. Two cover the plan review's M4 and M2: Gmail refusing the account (a 401, or a 400 `failedPrecondition`) has its own message, keeps the connection and logs Google's reason name; a message over `MAX_RAW_BYTES` (lowered for the test) is a 422 on `attachments` with nothing charged or sent.
 
 **In `backend/tests/test_usecase_email.py`, replace:**
 
@@ -4769,7 +4774,7 @@ def send_bulletin_email(church_id: uuid.UUID, user_id: uuid.UUID, data: archive.
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_usecase_email.py backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`
 **Expected:**
-`48 passed in <t>s`; `1782 passed, 26 skipped in <t>s`.
+`48 passed in <t>s`; `1786 passed, 26 skipped in <t>s`.
 
 - [ ] **Step 5: Commit**
 
@@ -4782,12 +4787,14 @@ Contacts.\"), at least one attachment, the connection, the files built
 from the posted service (the bulletin copy and/or the printed PDF), the
 email rate limit, then Google with no database session open. A refused
 grant forgets the connection only if it still holds the failed token. A
-send that may have gone out carries details.send_uncertain. The log
-line holds counts only." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+send that may have gone out carries details.send_uncertain. Gmail
+refusing the account has its own message, and a message over 3.5 MB is
+refused before the limit and Google. The log lines hold counts, outcomes
+and Google's reason name only." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1782 passed, 26 skipped`; frontend `800 passed` in 98 files.
+Expected counts after this task: backend `1786 passed, 26 skipped`; frontend `800 passed` in 98 files.
 
 ### Task 14: `POST /bulletin-emails` (B API, Routes, Testing "test_api_bulletin_emails.py"; clarifications 12 and 16)
 
@@ -5197,7 +5204,7 @@ from api.routes import (bulletin_emails, bulletin_images, bulletin_settings, chu
 
 Run: `.venv/bin/python backend/scripts/export_openapi.py >/dev/null && (cd frontend && npm run gen:api >/dev/null) && git diff --stat -- frontend/src/lib/api | tail -1` then `.venv/bin/python -m pytest -q backend/tests/test_api_bulletin_emails.py backend/tests/test_usecase_email.py backend/tests/test_openapi_contract.py backend/tests/test_route_guards.py backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`
 **Expected:**
-` 2 files changed, 409 insertions(+)`; `75 passed in <t>s`; `1801 passed, 26 skipped in <t>s`; `typecheck 0`, `lint 0` (the new types are used in T15).
+` 2 files changed, 409 insertions(+)`; `75 passed in <t>s`; `1805 passed, 26 skipped in <t>s`; `typecheck 0`, `lint 0` (the new types are used in T15).
 
 - [ ] **Step 5: Commit**
 
@@ -5214,7 +5221,7 @@ the types regenerated." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.c
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1801 passed, 26 skipped`; frontend `800 passed` in 98 files.
+Expected counts after this task: backend `1805 passed, 26 skipped`; frontend `800 passed` in 98 files.
 
 ### Task 15: The email dialog's rules (B "Pure modules" `lib/email.ts`, `lib/idempotency.ts`, "Storage keys"; clarifications 12 and 17)
 
@@ -5224,7 +5231,7 @@ Expected counts after this task: backend `1801 passed, 26 skipped`; frontend `80
 
 - [ ] **Step 1: Write the failing tests**
 
-`email.test.ts` reads the shared `bulletin_email.json` (T11) as `download.test.ts` reads `docx_filenames.json`, and stubs `window` with a small storage for the remembered choices.
+`email.test.ts` reads the shared `bulletin_email.json` (T11) as `download.test.ts` reads `docx_filenames.json`, and stubs `window` with a small storage for the remembered choices and the uncertain send (plan review M1: kept per user and church in sessionStorage).
 
 **Create `frontend/src/lib/email.test.ts`:**
 
@@ -5725,7 +5732,7 @@ export function parseReopen(raw: string | null, churchId: string): ReopenEmail |
 
 Run: `(cd frontend && npx vitest run src/lib/email.test.ts src/lib/idempotency.test.ts src/lib/draft/prune.test.ts 2>&1 | grep -E "^ +× |\[ src/|Tests ")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`
 **Expected:**
-`      Tests  19 passed (19)`; ` Test Files  99 passed (99)` and `      Tests  809 passed (809)`; `typecheck 0`, `lint 0`.
+`      Tests  19 passed (19)`; ` Test Files  99 passed (99)` and `      Tests  810 passed (810)`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -5734,24 +5741,25 @@ git add frontend/src/lib/email.ts frontend/src/lib/email.test.ts frontend/src/li
 git commit -q -m "Slice 5b-2: the email dialog's rules and remembered choices" -m "lib/email.ts: the subject and the default message as the server writes
 them (shared fixture), Other addresses as a list, the recipient count
 (each address once), where a 422's field goes, the remembered contacts
-and attachments per user and church, the POST /bulletin-emails body and
-the reopen request after Google. createKeyTracker gains rotate() for
+and attachments per user and church, a send that may already have gone
+out (sessionStorage, per user and church), the POST /bulletin-emails
+body and the reopen request after Google. createKeyTracker gains rotate() for
 \"Send again anyway\"; the draft pruning drops the remembered choices for
-churches left; POST /bulletin-emails waits 90 s." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+churches left; POST /bulletin-emails waits 90 s, the overall limit." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1801 passed, 26 skipped`; frontend `809 passed` in 99 files.
+Expected counts after this task: backend `1805 passed, 26 skipped`; frontend `810 passed` in 99 files.
 
 ### Task 16: The Email the bulletin card and dialog (B "Review step", "Email dialog", "Send outcomes", flows B and D; clarifications 14 and 17-20)
 
 **Files:**
 - Create: `frontend/src/components/builder/review/email-card.test.tsx`, `frontend/src/lib/queries/email.ts`, `frontend/src/components/builder/review/email-dialog.tsx`, `frontend/src/components/builder/review/email-card.tsx`
-- Modify: `frontend/src/components/builder/review/review-send-step.test.tsx`, `frontend/src/components/builder/builder-shell.test.tsx`, `frontend/src/components/builder/liturgy/liturgy-step.test.tsx`, `frontend/src/components/settings/contacts-settings-page.test.tsx`, `frontend/src/components/builder/review/review-send-step.tsx`, `frontend/src/components/settings/contacts-settings-page.tsx`
+- Modify: `frontend/src/components/builder/review/review-send-step.test.tsx`, `frontend/src/components/builder/builder-shell.test.tsx`, `frontend/src/components/builder/liturgy/liturgy-step.test.tsx`, `frontend/src/components/settings/contacts-settings-page.test.tsx`, `frontend/src/components/settings/account-settings-page.test.tsx`, `frontend/src/components/builder/review/review-send-step.tsx`, `frontend/src/components/builder/review/printed-card.tsx`, `frontend/src/components/settings/contacts-settings-page.tsx`, `frontend/src/components/settings/account-settings-page.tsx`
 
 - [ ] **Step 1: Write the failing tests**
 
-The card renders inside the builder layout on Review, as in `review-send-step.test.tsx`, with the clock fixed so a fresh draft is dated Sunday, October 4, 2026. The three test files that render Review (the step itself, the builder shell's step routes, and the liturgy step's walk to Review) gain the status route; the step's heading list gains the card. The Contacts caption test pins clarification 20's line.
+The card renders inside the builder layout on Review, as in `review-send-step.test.tsx`, with the clock fixed so a fresh draft is dated Sunday, October 4, 2026. The three test files that render Review (the step itself, the builder shell's step routes, and the liturgy step's walk to Review) gain the status route; the step's heading list gains the card. The Contacts caption test and the Account page's Gmail sentence test pin clarification 20's lines. From the plan review: the dialog is 5b-1's bottom sheet below `md`, and a class-based test checks that nothing between **Send** and the sheet scrolls by itself (I3; jsdom does not lay out, so manual check 12 stays); after an uncertain send or a lost connection plain Send stays off, also after the card is unmounted and rendered again, and only **Send again anyway** sends (M1); back from Google the dialog waits for last week's bulletin and shows the printed card's notes under a ticked PDF (M7).
 
 **Create `frontend/src/components/builder/review/email-card.test.tsx`:**
 
@@ -6341,8 +6349,8 @@ describe("Review → Email the bulletin: back from Google (slice 5b-2, flow B)",
 
 - [ ] **Step 2: See them fail**
 
-Run: `(cd frontend && npx vitest run src/components/builder/review src/components/settings/contacts-settings-page.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
-**Expected** (the card does not exist yet; the caption is 5b-1's):
+Run: `(cd frontend && npx vitest run src/components/builder/review src/components/settings/contacts-settings-page.test.tsx src/components/settings/account-settings-page.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
+**Expected** (the card does not exist yet; the caption and the Account sentence are 5b-2a's):
 ```
    × Settings → Contacts (slice 5b-1) > shows a member the list as text, with the note, a flag on a bad address, and no controls <t>ms
    × Review & send: the Word documents (slice 5a-1) > shows Still to do, the Archive card and both copies with what they hold, in that order, with no placeholder <t>ms
@@ -7128,24 +7136,27 @@ export function NotFilledInLines() {
 
 Run: `(cd frontend && npx vitest run src/components/builder/review 2>&1 | grep -E "^ +× |\[ src/|Tests ")` (three times) then `(cd frontend && npx vitest run src/components/builder/builder-shell.test.tsx src/components/builder/liturgy/liturgy-step.test.tsx src/components/settings 2>&1 | grep -E "^ +× |\[ src/|Tests ")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`
 **Expected:**
-three times `      Tests  44 passed (44)`, with no `×`; `      Tests  93 passed (93)`; ` Test Files  100 passed (100)` and `      Tests  825 passed (825)`; `typecheck 0`, `lint 0`.
+three times `      Tests  44 passed (44)`, with no `×`; `      Tests  93 passed (93)`; ` Test Files  100 passed (100)` and `      Tests  828 passed (828)`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/src/lib/queries/email.ts frontend/src/components/builder/review/email-dialog.tsx frontend/src/components/builder/review/email-card.tsx frontend/src/components/builder/review/email-card.test.tsx frontend/src/components/builder/review/review-send-step.tsx frontend/src/components/builder/review/review-send-step.test.tsx frontend/src/components/builder/builder-shell.test.tsx frontend/src/components/builder/liturgy/liturgy-step.test.tsx frontend/src/components/settings/contacts-settings-page.tsx frontend/src/components/settings/contacts-settings-page.test.tsx
+git add frontend/src/lib/queries/email.ts frontend/src/components/builder/review/email-dialog.tsx frontend/src/components/builder/review/email-card.tsx frontend/src/components/builder/review/email-card.test.tsx frontend/src/components/builder/review/printed-card.tsx frontend/src/components/builder/review/review-send-step.tsx frontend/src/components/builder/review/review-send-step.test.tsx frontend/src/components/builder/builder-shell.test.tsx frontend/src/components/builder/liturgy/liturgy-step.test.tsx frontend/src/components/settings/contacts-settings-page.tsx frontend/src/components/settings/contacts-settings-page.test.tsx frontend/src/components/settings/account-settings-page.tsx frontend/src/components/settings/account-settings-page.test.tsx
 git commit -q -m "Slice 5b-2: the Email the bulletin card and dialog on Review" -m "The last card on Review shows the Gmail connection and opens the dialog:
 the church's contacts (a flagged one shown but not choosable), other
 addresses, the subject, the two attachments (at least one, remembered),
 the prefilled message and Send to N people, with the BCC note and the
-50-person cap. Every failure shows in the dialog where the 5b spec puts
-it; an uncertain send keeps its key and offers Send again anyway; Connect
-or Reconnect Gmail returns to Review and reopens the dialog with its
-form. The Contacts caption now says emailing is on the Review step." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+50-person cap, as a bottom sheet on a phone. Every failure shows in the
+dialog where the 5b spec puts it; after an uncertain send plain Send
+stays off (kept in the tab) and only Send again anyway sends; Connect or
+Reconnect Gmail returns to Review and reopens the dialog with its form
+once last week's bulletin is carried in; a ticked PDF shows the printed
+card's notes. The Contacts caption and the Account page's Gmail sentence
+now say emailing is on the Review step." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1801 passed, 26 skipped`; frontend `825 passed` in 100 files.
+Expected counts after this task: backend `1805 passed, 26 skipped`; frontend `828 passed` in 100 files.
 
 ### Task 17: Docs: the email's manual checks (clarification 23)
 
@@ -7185,7 +7196,7 @@ contact, and a church switch with the dialog open." -m "Co-Authored-By: Claude O
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1801 passed, 26 skipped`; frontend `825 passed` in 100 files.
+Expected counts after this task: backend `1805 passed, 26 skipped`; frontend `828 passed` in 100 files.
 
 
 ## Verification, the PR, the owner's setup, the merge (T18-T19)
@@ -7217,7 +7228,7 @@ for i in 1 2 3; do (cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Te
 (cd frontend && NEXT_PUBLIC_SUPABASE_URL=https://ci-placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-placeholder NEXT_PUBLIC_API_URL=http://localhost:8000 npm run build 2>&1 | grep -E "Compiled successfully|Error|/settings|/gmail")
 ```
 
-**Expected** (one PR, or 5b-2b): `1801 passed, 26 skipped in <t>s`; three times ` Test Files  100 passed (100)` and `      Tests  825 passed (825)` (5b-2a: `1737 passed, 26 skipped in <t>s`; three times ` Test Files  98 passed (98)` and `      Tests  800 passed (800)`) with no `×` or `FAIL` line (one names the failing test: Step 6); `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s` and the route lines `├ ○ /gmail/callback`, `├ ○ /settings`, `├ ○ /settings/account`, `├ ○ /settings/church` and `├ ○ /settings/contacts` and no `Error` (a font `Failed to fetch` only: say so and rely on CI).
+**Expected** (one PR, or 5b-2b): `1805 passed, 26 skipped in <t>s`; three times ` Test Files  100 passed (100)` and `      Tests  828 passed (828)` (5b-2a: `1739 passed, 26 skipped in <t>s`; three times ` Test Files  98 passed (98)` and `      Tests  800 passed (800)`) with no `×` or `FAIL` line (one names the failing test: Step 6); `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s` and the route lines `├ ○ /gmail/callback`, `├ ○ /settings`, `├ ○ /settings/account`, `├ ○ /settings/church` and `├ ○ /settings/contacts` and no `Error` (a font `Failed to fetch` only: say so and rely on CI).
 
 - [ ] **Step 3 (agent): The API files match, the gates, the paths, the commits**
 
@@ -7315,9 +7326,9 @@ gh pr list -R bbrown62450/church --head claude/slice-2-plan-4q33le --state open 
 
 **Expected:** `[]`. Send the owner exactly this (one PR), and wait for a clear yes:
 
-> Slice 5b-2 is verified on this machine: backend 1801 passed, 26 skipped (1669 before); frontend 825 tests in 100 files (780 before), three runs in a row; typecheck, lint and the production build are clean. It adds Settings → Account, where each person connects their own Gmail, and an **Email the bulletin** card on Review: you pick contacts or type addresses, choose the Word copy, the printed PDF or both, and it is sent from your own Gmail (several people go in Bcc). There is no database change and no new package. Before it can be merged you will add one address in Google Cloud Console and three settings in Railway; I will walk you through that one step at a time and never need to see the secret. May I open the pull request as a **draft** titled "Slice 5b-2: the Gmail connection and emailing the bulletin", so the checks run? Merging stays with you.
+> Slice 5b-2 is verified on this machine: backend 1805 passed, 26 skipped (1669 before); frontend 828 tests in 100 files (780 before), three runs in a row; typecheck, lint and the production build are clean. It adds Settings → Account, where each person connects their own Gmail, and an **Email the bulletin** card on Review: you pick contacts or type addresses, choose the Word copy, the printed PDF or both, and it is sent from your own Gmail (several people go in Bcc). There is no database change and no new package. Before it can be merged you will add one address in Google Cloud Console and three settings in Railway; I will walk you through that one step at a time and never need to see the secret. May I open the pull request as a **draft** titled "Slice 5b-2: the Gmail connection and emailing the bulletin", so the checks run? Merging stays with you.
 
-(5b-2a: "Slice 5b-2a is verified … backend 1737 passed, 26 skipped (1669 before); frontend 800 tests in 98 files (780 before) … It adds Settings → Account, where each person connects their own Gmail; emailing comes in 5b-2b. … May I open the pull request as a **draft** titled "Slice 5b-2a: the Gmail connection" …". 5b-2b: "Slice 5b-2b is verified … backend 1801 passed, 26 skipped (1737 before); frontend 825 tests in 100 files (800 before) … It adds the **Email the bulletin** card on Review … No Google or Railway step this time. May I open the pull request as a **draft** titled "Slice 5b-2b: emailing the bulletin" …".)
+(5b-2a: "Slice 5b-2a is verified … backend 1739 passed, 26 skipped (1669 before); frontend 800 tests in 98 files (780 before) … It adds Settings → Account, where each person connects their own Gmail; emailing comes in 5b-2b. … May I open the pull request as a **draft** titled "Slice 5b-2a: the Gmail connection" …". 5b-2b: "Slice 5b-2b is verified … backend 1805 passed, 26 skipped (1739 before); frontend 828 tests in 100 files (800 before) … It adds the **Email the bulletin** card on Review … No Google or Railway step this time. May I open the pull request as a **draft** titled "Slice 5b-2b: emailing the bulletin" …".)
 
 - [ ] **Step 5 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
 
@@ -7335,7 +7346,7 @@ Slice 5b-2: the Gmail connection and emailing the bulletin (the second of 5b's t
 
 Before merge: the owner adds the /gmail/callback redirect URIs in Google Cloud Console and sets the three GOOGLE_* variables in Railway (Task 19). After merge: a short phone check, then a "Slice 5b-2 record" in docs/ops-runbook.md.
 
-Tests: backend 1669 → 1801 passed, 26 skipped; frontend 780 → 825 in 94 → 100 files
+Tests: backend 1669 → 1805 passed, 26 skipped; frontend 780 → 828 in 94 → 100 files
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 
@@ -7347,7 +7358,7 @@ gh pr create -R bbrown62450/church --draft --base main --head claude/slice-2-pla
 gh pr checks <N> -R bbrown62450/church --watch --interval 30
 ```
 
-Run the last line with `run_in_background: true`. (Two PRs: the same body cut to its half, the title of Step 4, and the tests line `backend 1669 → 1737 passed …; frontend 780 → 800 in 94 → 98 files` for 5b-2a, `backend 1737 → 1801 …; frontend 800 → 825 in 98 → 100 files` for 5b-2b.) **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers as Step 2's, and backend-postgres `26 passed`. Then send: "PR #<N> is green: backend … passed, 26 skipped; … frontend tests in … files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you, after the Google and Railway steps." On the yes: `gh pr ready <N> -R bbrown62450/church`.
+Run the last line with `run_in_background: true`. (Two PRs: the same body cut to its half, the title of Step 4, and the tests line `backend 1669 → 1739 passed …; frontend 780 → 800 in 94 → 98 files` for 5b-2a, `backend 1739 → 1805 …; frontend 800 → 828 in 98 → 100 files` for 5b-2b.) **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers as Step 2's, and backend-postgres `26 passed`. Then send: "PR #<N> is green: backend … passed, 26 skipped; … frontend tests in … files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you, after the Google and Railway steps." On the yes: `gh pr ready <N> -R bbrown62450/church`.
 
 - [ ] **Step 6: Fix any failure in its owning task**
 
@@ -7389,9 +7400,9 @@ If Google refuses the address (B's risk 3: `vercel.app` is a public suffix), sto
 
 - [ ] **Step 2 (OWNER): Setup 2 of 5: the consent screen's publishing status**
 
-> Still in **APIs & Services**, open **OAuth consent screen** (it may be called **Google Auth Platform**, then **Audience**). What does it say under **Publishing status**: **Testing** or **In production**? (If it says Testing, Google signs everyone out of Gmail sending every 7 days, and you would reconnect about once a week; the owner questions in the plan cover what to do. Please do not change it now unless you already decided to.)
+> Still in **APIs & Services**, open **OAuth consent screen** (it may be called **Google Auth Platform**, then **Audience**). What does it say under **Publishing status**: **Testing** or **In production**? If it says Testing, look at **Test users** on the same page: is the Google account of everyone who will email bulletins listed there? (In Testing only listed test users can connect; anyone else sees "Access blocked", and each connection ends after 7 days.) Please do not change anything now unless you already decided to.
 
-Record the status only. If **Testing**, owner question 5's answer applies (recommended: move it to In production, which shows a one-time "Google hasn't verified this app" screen to each person who connects); the owner changes it there, or not, now or later.
+Record the status and, for Testing, whether every sender is a test user (yes/no, never the addresses). If **Testing**, owner question 5's answer applies (recommended: switch to In production, after which each person sees "Google hasn't verified this app" when they connect, probably on every connect, and reconnects once after the switch; or stay in Testing, add every sender as a test user and reconnect weekly); the owner changes it there, or not, now or later.
 
 - [ ] **Step 3 (OWNER): Setup 3 of 5: the client id and secret in Railway**
 
@@ -7426,7 +7437,7 @@ If Step 5 found no `Gmail:` line, first: "In Railway's newest deployment's **Dep
 
 > On your phone, open https://worship-service-builder.vercel.app and pull down to reload. Tap **Settings**: are the sections **Church**, **Bulletin**, **Contacts** and **Account**, all on screen without sideways scrolling? Tap **Account**: do you see your name, your email, "Signed in with Google." and a **Gmail** box? If the Gmail box says "Connected as …", tap **Disconnect** first. Then tap **Connect Gmail**: Google should open in the same tab with your account already chosen. Allow it to send email for you. Are you back on **Account** with "Gmail connected" and "Connected as" your address?
 
-Record yes/no for each and the phone and browser. If Google showed "Google hasn't verified this app", record that it did (In production, unverified) and that the owner went on with **Advanced** → **Go to …**.
+Record yes/no for each and the phone and browser. If Google showed "Google hasn't verified this app", record that it did (In production, unverified) and that the owner went on with **Advanced** → **Go to …**. If Google showed "Access blocked", the account is not a test user (Testing): record it; the owner adds it under **Test users** (or switches to In production, owner question 5) and connects again.
 
 - [ ] **Step 8 (OWNER, then agent): Phone, step 2: disconnect and reconnect (A)**
 
@@ -7535,7 +7546,7 @@ gh pr checks claude/slice-2-plan-4q33le -R bbrown62450/church --watch
 
 Code only (no schema to undo). On the owner's yes for each outward command: a branch `claude/revert-5b2` from `origin/main`, `git revert -m 1 --no-commit <merge sha>`, a commit "Revert slice 5b-2 (PR #<N>)" with the trailer, both suites (`1669 passed, 26 skipped`; `780 passed` in 94, or 5b-2a's counts when reverting 5b-2b only), a PR, CI, and the merge on the owner's yes; record it in the record. Connections made through the new page stay in `gmail_tokens` and keep working for the frozen app (same client); the Railway variables can stay (nothing reads them after the revert).
 
-Expected counts after this task: backend 1801 passed, 26 skipped on `main`; frontend 825 passed in 100 files. The records PR adds no test.
+Expected counts after this task: backend 1805 passed, 26 skipped on `main`; frontend 828 passed in 100 files. The records PR adds no test.
 
 ---
 
@@ -7596,7 +7607,8 @@ Spec items **not** in 5b-2: the parity gate, the Streamlit smoke test and switch
 ## Follow-ups (not in 5b-2)
 
 - Slice 7: delete `app.py`'s Gmail code with the rest of the Streamlit app; encrypt `gmail_tokens.refresh_token` (only `google_oauth.get_connection`, `save_user_token` and `delete_connection` touch it); rotate the Google client secret after the Streamlit app is deleted (it lives in Streamlit Cloud and Railway), then update Railway's `GOOGLE_CLIENT_SECRET`; remove the Streamlit redirect URIs from the client.
-- If the consent screen stays in Testing: the weekly reconnect (owner question 5). If Google ever requires verification for the `gmail.send` scope at our size, that is its own project.
+- If the consent screen stays in Testing: every sender listed as a test user and the weekly reconnect (owner question 5). If Google ever requires verification for the `gmail.send` scope at our size, or the 100-new-user cap of an unverified app is reached, that is its own project.
+- Gmail's media upload endpoint (`uploadType=media`, `message/rfc822`) if a bulletin ever needs more than the 3.5 MB the JSON endpoint is given here (clarification 5).
 - The idempotency store is in memory (F §1.6): a Railway restart between an uncertain send and its retry forgets the stored answer. Move it to Postgres if `--workers` ever exceeds 1.
 - The email dialog has no "send a test to myself" shortcut; the owner can type their own address. A later wish, not in B.
 
@@ -7608,10 +7620,17 @@ Your 5b planning answers of 2026-10-06 (all as recommended) are binding and alre
 2. **The email's words** (clarifications 11 and 21). Subject "Worship service for October 4, 2026"; the message box starts with "Hi! Here's the worship bulletin for this Sunday." (for a service on another day: "Hi! Here's the worship bulletin for Wednesday, February 10."), and you can change it each time; a message left empty is sent as that sentence. The apostrophe is the plain one the app uses everywhere. Recommended: accept.
 3. **When the Email button is available** (clarification 18). It needs a service date and readings without an error on step 1, the same as the download buttons (a reading the app cannot read would also break the printed PDF). Nothing else blocks it: an unfinished or unsaved service can be emailed, and the dialog says so ("Not finished yet: 2 items under Still to do." and "Not saved to the archive yet. The attachments use the service as it is on screen now."). Recommended: accept.
 4. **Remembering the attachment boxes** (clarification 12). Your choice of **Bulletin copy (Word)** and **Printed bulletin (PDF)** is remembered on that phone or computer as soon as you tick or untick a box, for you in that church; the people you chose are remembered after a successful send, so they are ticked next time. Recommended: accept.
-5. **If Google's consent screen says "Testing"** (Risks; T19 Step 2). In Testing, Google ends each Gmail connection after 7 days, so you would tap **Reconnect Gmail** about once a week (the dialog keeps what you typed). Switching it to **In production** stops that; because the app is not reviewed by Google, each person sees a one-time "Google hasn't verified this app" screen when they connect and taps **Advanced**, then **Go to …** (fine for a few people in your church; Google's full review is only needed for wide public use). Recommended: if it says Testing, switch it to In production at T19 Step 2. (The other choice: stay in Testing and reconnect weekly.)
+5. **Google's consent screen: "Testing" or "In production"** (Risks; T19 Step 2). Sending email for someone is a permission Google calls "sensitive" (https://developers.google.com/workspace/gmail/api/auth/scopes). What each status means for your church:
+   - **Testing** (https://support.google.com/cloud/answer/15549945): only the Google accounts you list as test users in Google Cloud Console (at most 100) can connect; anyone else sees "Access blocked". Google also ends every connection 7 days after it was made, so each person taps **Reconnect Gmail** about once a week (the email dialog keeps what they typed). Staying in Testing means adding every person who will send as a test user.
+   - **In production, without Google's review** (https://support.google.com/cloud/answer/7454865): anyone can connect, but Google shows a "Google hasn't verified this app" warning and they tap **Advanced**, then **Go to …**. Google allows an unreviewed app 100 new users in total, ever (plenty for the people who send bulletins).
+   - **Not certain:** we expect the warning on each connect and each reconnect, not just the first time; we do not know whether connections made while in Testing stop expiring after the switch, so plan for each person to reconnect once after switching; Google's policy expects an app to be verified before it is launched to users, so Google could ask for a review later; and if someone connects a church Google Workspace account (not an @gmail.com one), that organization's admin may block unverified apps.
+
+   Recommended: if it says Testing, switch it to In production at T19 Step 2 and have each person reconnect once. (The other choice: stay in Testing, add everyone who will send as a test user, and reconnect weekly.)
 6. **A contact whose address the app cannot use** (clarification 14). In the email dialog it is listed but its box cannot be ticked, with "This address doesn't look valid. An admin can fix it in Settings → Contacts." under it, so a send never fails on it. Recommended: accept.
 7. **Settings → Account** (clarification 10). The new section goes after Contacts; it shows your name, email, "Signed in with Google.", a **Log out** button (the same as the one in the account menu) and the Gmail box; **Disconnect** asks nothing first (connecting again is one tap). Recommended: accept.
-8. **The new wording** (clarification 21): the Gmail box, the callback page's messages, the card, the dialog and the server's messages, all without long dashes. Recommended: accept.
+8. **The new wording** (clarifications 10, 20 and 21): the Gmail box, the callback page's messages, the card, the dialog and the server's messages, all without long dashes. The Account page's Gmail box says "Connect the Gmail account you sign in with. The app gets permission only to send email for you; it can't read your mail." in the first PR, before emailing exists, and "Connect your Gmail to email bulletins from your own account. The app can only send email for you; it can't read your mail." once emailing comes (the Contacts caption changes at the same time). Two server messages are new: "Gmail won't send from this Google account. Nothing was sent. Check that you can send email in Gmail with it, then try again." and "The attachments are too large to email. Try sending only the bulletin copy." Recommended: accept.
+9. **When Gmail may already have sent the email** (clarification 18). If Gmail does not confirm a send, or the connection drops while sending, the dialog says to check your Gmail Sent folder, the **Send** button stays off, and the only way to send is **Send again anyway**. This holds even if you close the dialog, leave Review & send or reload the page in that tab, so a second copy is only ever sent on purpose. Recommended: accept.
+10. **The printed PDF in the email** (clarification 18). When **Printed bulletin (PDF)** is ticked, the dialog shows the same "Not filled in: …" and "From last week, not checked yet: …" lines as the printed bulletin card. After connecting Gmail from Review, the dialog reopens only once last week's music and announcements have been brought in, so an emailed PDF has them. Recommended: accept.
 
 Owner steps still to come: the plan's approval and the answers above; the draft PR on your yes and ready on your yes (T18); the Google Cloud Console and Railway steps, one at a time, before the (first) merge; the merge on your yes; the phone check one step at a time (T19); the records PR.
 
