@@ -7640,6 +7640,8 @@ Your 5b planning answers of 2026-10-06 (all as recommended) are binding and alre
 
 Owner steps still to come: the plan's approval and the answers above; the draft PR on your yes and ready on your yes (T18); the Google Cloud Console and Railway steps, one at a time, before the (first) merge; the merge on your yes; the phone check one step at a time (T19); the records PR.
 
+Owner's answer 2026-10-06: all recommended (binding): two PRs (5b-2a then 5b-2b); if the consent screen says Testing, switch to In production at T19 Step 2.
+
 ## Plan review fixes (2026-10-06)
 
 The plan review's findings, each fixed in the plan; every task they touch was replayed again (see "Build notes"), and the counts above are the replay's.
