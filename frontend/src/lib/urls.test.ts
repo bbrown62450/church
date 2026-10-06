@@ -7,7 +7,7 @@ afterEach(() => {
 });
 
 describe("safeInternalPath", () => {
-  it.each(["/join", "/builder/hymns", "/settings/people"])("accepts %s", (path) => {
+  it.each(["/join", "/builder/hymns", "/settings/people", "/gmail/callback"])("accepts %s", (path) => {
     expect(safeInternalPath(path)).toBe(path);
   });
 
@@ -16,7 +16,7 @@ describe("safeInternalPath", () => {
     ["a backslash, whitespace or control character", ["/\\evil.com", "/join x", "/join\t", "/join\u0000"]],
     ["an absolute URL", ["https://evil.com", "http://localhost/join"]],
     ["a scheme", ["javascript:alert(1)", "data:text/html,x"]],
-    ["a first segment outside the allow-list", ["/joinx", "/", "/login", "/auth/callback"]],
+    ["a first segment outside the allow-list", ["/joinx", "/", "/login", "/auth/callback", "/gmail", "/gmail/other"]],
     ["a query or fragment", ["/join?code=x", "/welcome#create"]],
     ["a `..` segment", ["/settings/../x", "/settings/%2e%2E/x"]],
     ["an empty or non-string value", ["", null, undefined, 42]],
