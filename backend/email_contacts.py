@@ -103,7 +103,10 @@ def email_exists(church_id, email: str, *, exclude_id: Optional[uuid.UUID] = Non
                  session: Optional[Session] = None) -> bool:
     """True when another of the church's contacts has this address, compared
     trimmed and lower-cased (5b's rule: addresses that differ only in case are
-    one; a Streamlit-era address may still have spaces around it)."""
+    one; a Streamlit-era address may still have whitespace around it). Compared
+    in Python over the church's rows, since SQL trim() strips only spaces and
+    not a tab, a line break or a no-break space as str.strip() does; with a
+    session, it runs inside the caller's transaction (under its church-row lock)."""
     if session is not None:
         return _email_exists(session, church_id, email, exclude_id)
     with session_scope() as own:
@@ -111,12 +114,11 @@ def email_exists(church_id, email: str, *, exclude_id: Optional[uuid.UUID] = Non
 
 
 def _email_exists(session, church_id, email, exclude_id) -> bool:
-    query = select(Contact.id).where(
-        Contact.church_id == as_uuid(church_id), func.lower(func.trim(Contact.email)) == email.lower()
-    )
+    query = select(Contact.email).where(Contact.church_id == as_uuid(church_id))
     if exclude_id is not None:
         query = query.where(Contact.id != as_uuid(exclude_id))
-    return session.execute(query.limit(1)).first() is not None
+    wanted = email.lower()
+    return any((stored or "").strip().lower() == wanted for stored in session.execute(query).scalars())
 
 
 def delete_contact(contact_id, church_id, *, session: Optional[Session] = None) -> bool:

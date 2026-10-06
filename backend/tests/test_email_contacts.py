@@ -107,6 +107,17 @@ def test_email_exists_ignores_spaces_around_a_saved_address(tmp_db, make_user, m
     assert not email_exists(a, "mary@x.org", exclude_id=cid)           # an edit of that contact itself
 
 
+def test_email_exists_ignores_any_whitespace_around_a_saved_address(tmp_db, make_user, make_church):
+    a = make_church(name="A", owner_user_id=make_user(email="c9@x.org"))
+    b = make_church(name="B", owner_user_id=make_user(email="c10@x.org"))
+    tab = add_contact(a, name="", email="mary@x.org\t")["id"]          # SQL trim() strips only spaces
+    nbsp = add_contact(a, name="", email="\n\u00a0Office@X.org")["id"]
+    assert email_exists(a, "mary@x.org") and email_exists(a, "office@x.org")
+    assert not email_exists(a, "mary@x.org", exclude_id=tab)
+    assert not email_exists(a, "office@x.org", exclude_id=nbsp)
+    assert not email_exists(b, "mary@x.org")
+
+
 def test_a_malformed_id_is_not_found(tmp_db, make_user, make_church):
     a = make_church(name="A", owner_user_id=make_user(email="c6@x.org"))
     for call in (lambda: update_contact("not-a-uuid", a, {"name": "X"}), lambda: delete_contact("not-a-uuid", a),
