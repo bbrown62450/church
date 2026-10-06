@@ -269,6 +269,39 @@ def test_exchange_code_refuses_another_google_account(tmp_db):
     assert _kind(_exchange) == Kind.EMAIL_MISMATCH
 
 
+@pytest.mark.parametrize("setup, kind, revoked", [
+    (lambda g: None, Kind.EMAIL_MISMATCH, REFRESH_TOKEN),
+    (lambda g: setattr(g, "exchange", httpx.Response(200, json={
+        "access_token": ACCESS_TOKEN, "refresh_token": REFRESH_TOKEN, "scope": "openid email"})),
+     Kind.SCOPE_MISSING, REFRESH_TOKEN),
+    (lambda g: setattr(g, "exchange", httpx.Response(200, json={"access_token": ACCESS_TOKEN, "scope": "openid"})),
+     Kind.SCOPE_MISSING, ACCESS_TOKEN),
+    (lambda g: setattr(g, "revoke", httpx.ConnectError("down")), Kind.EMAIL_MISMATCH, REFRESH_TOKEN),
+], ids=["mismatch", "scope", "scope-no-refresh-token", "revoke-fails"])
+def test_a_refused_grant_is_revoked_at_google_best_effort(tmp_db, caplog, setup, kind, revoked):
+    """Build review M2: the token just issued for a grant we refuse is revoked; a failed
+    revoke changes nothing, and no token reaches the log."""
+    google = FakeGoogle(email="someone.else@example.com" if kind == Kind.EMAIL_MISMATCH else "owner@example.com")
+    setup(google.install())
+    caplog.set_level("DEBUG")
+    assert _kind(_exchange) == kind
+    (revoke,) = google.calls(google_oauth.REVOKE_URI)
+    assert google.form(revoke) == {"token": revoked}
+    assert REFRESH_TOKEN not in caplog.text and ACCESS_TOKEN not in caplog.text
+
+
+@pytest.mark.parametrize("setup", [
+    lambda g: setattr(g, "userinfo", httpx.Response(200, json={})),
+    lambda g: setattr(g, "userinfo", httpx.Response(503)),
+    lambda g: setattr(g, "exchange", google_error(400, "invalid_grant")),
+], ids=["no-email", "userinfo-5xx", "invalid-grant"])
+def test_other_exchange_failures_revoke_nothing(tmp_db, setup):
+    google = FakeGoogle()
+    setup(google.install())
+    _kind(_exchange)
+    assert google.calls(google_oauth.REVOKE_URI) == []
+
+
 def test_exchange_code_opens_no_database_session(tmp_db, monkeypatch):
     FakeGoogle().install()
     monkeypatch.setattr(google_oauth, "session_scope", lambda: pytest.fail("exchange_code opened a session"))

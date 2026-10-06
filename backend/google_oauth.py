@@ -375,7 +375,8 @@ def _fetch_userinfo_email(access_token: str) -> str:
 def exchange_code(config: GoogleOAuthConfig, code: str, *, expected_email: str) -> GmailGrant:
     """Exchange the consent screen's code (15 s), check the granted scopes, read
     the Google address (15 s) and compare it, ignoring case, with the signed-in
-    user's. Stores nothing (the caller does, in its own transaction)."""
+    user's. Stores nothing (the caller does, in its own transaction). A grant
+    refused for its scopes or its address is revoked at Google first, best effort."""
     payload = _token_request({
         "code": code,
         "client_id": config.client_id,
@@ -384,13 +385,20 @@ def exchange_code(config: GoogleOAuthConfig, code: str, *, expected_email: str) 
         "grant_type": "authorization_code",
     }, "token")
     access_token = _access_token(payload)
-    scopes = _granted_scopes(payload)
-    google_email = _fetch_userinfo_email(access_token)
-    if google_email.lower() != expected_email.strip().lower():
-        raise GoogleOAuthError(GoogleErrorKind.EMAIL_MISMATCH)
     refresh = payload.get("refresh_token")
-    return GmailGrant(google_email=google_email, refresh_token=refresh if isinstance(refresh, str) and refresh else None,
-                      scopes=scopes)
+    refresh_token = refresh if isinstance(refresh, str) and refresh else None
+    try:
+        scopes = _granted_scopes(payload)
+        google_email = _fetch_userinfo_email(access_token)
+        if google_email.lower() != expected_email.strip().lower():
+            raise GoogleOAuthError(GoogleErrorKind.EMAIL_MISMATCH)
+    except GoogleOAuthError as error:
+        if error.kind in (GoogleErrorKind.SCOPE_MISSING, GoogleErrorKind.EMAIL_MISMATCH):
+            # A grant we refuse is not left behind at Google (build review M2): best effort,
+            # the refresh token when there is one (it revokes the whole grant), else the access token.
+            revoke_token(refresh_token or access_token)
+        raise
+    return GmailGrant(google_email=google_email, refresh_token=refresh_token, scopes=scopes)
 
 
 def refresh_access_token(config: GoogleOAuthConfig, refresh_token: str) -> str:
