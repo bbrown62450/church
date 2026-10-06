@@ -36,6 +36,9 @@
     "Mary <mary@example.org>",
     "\"mary\"@example.org",
     "anna@bücher.de",
-    "josé@example.org"
+    "josé@example.org",
+    "=?utf-8?b?YUBiLmNvbSwgY0BkLmNvbQ==?=@example.org",
+    "=?utf-8?b?eA0KQmNjOiBldmlsQHgub3Jn?=@example.org",
+    "=?utf-8?b?YUBiLmNvbSwgY0BkLmNvbQ==?=.x@example.org"
   ]
 }

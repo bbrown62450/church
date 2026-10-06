@@ -29,7 +29,9 @@ def normalize_address(raw: str) -> str:
     local part keeps the case typed), or InvalidAddress unless all hold:
     at most 254 characters, ASCII only (an internationalized domain is refused;
     its punycode form is accepted), no whitespace, control character or any of
-    , ; : < > " ( ) [ ] \\, exactly one @, a local part of 1-64 characters made
+    , ; : < > " ( ) [ ] \\, no "=?" (which starts an RFC 2047 encoded-word, which
+    a mail parser decodes into anything, a second address or a line break
+    included), exactly one @, a local part of 1-64 characters made
     of dot-separated runs of letters, digits and ! # $ % & ' * + / = ? ^ _ ` { | } ~ -
     (no leading, trailing or doubled dot), and a domain of at least two labels
     (each 1-63 letters, digits or hyphens, not starting or ending with a hyphen)
@@ -41,7 +43,7 @@ def normalize_address(raw: str) -> str:
         raise InvalidAddress(raw)
     if any(ch.isspace() or ord(ch) < 32 or ord(ch) == 127 or ch in _FORBIDDEN for ch in address):
         raise InvalidAddress(raw)
-    if address.count("@") != 1:
+    if address.count("@") != 1 or "=?" in address:
         raise InvalidAddress(raw)
     local, _, domain = address.partition("@")
     if not 1 <= len(local) <= 64 or not _LOCAL.fullmatch(local):
