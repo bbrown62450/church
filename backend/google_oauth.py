@@ -128,16 +128,19 @@ def create_state(user_id: uuid.UUID, *, session: Optional[Session] = None) -> st
 def consume_state(state: str) -> Optional[uuid.UUID]:
     """The user the state was issued to, or None for a blank, unknown, used or
     expired state. Single use: a found row is deleted, valid or expired. Runs
-    in its own committed transaction."""
+    in its own committed transaction. The row is read by the DELETE itself
+    (RETURNING), so of two consumes racing for one state only the one whose
+    delete removed the row gets the user (build review I1)."""
     if not state:
         return None
     with session_scope() as session:
-        row = session.get(OAuthState, state)
-        if row is None:
-            return None
-        user_id = row.user_id
-        expires_at = row.expires_at
-        session.delete(row)
+        found = session.execute(
+            delete(OAuthState).where(OAuthState.state == state)
+            .returning(OAuthState.user_id, OAuthState.expires_at)
+        ).first()
+    if found is None:
+        return None
+    user_id, expires_at = found
     if expires_at.tzinfo is None:            # SQLite hands back naive datetimes
         expires_at = expires_at.replace(tzinfo=timezone.utc)
     if expires_at < datetime.now(timezone.utc):

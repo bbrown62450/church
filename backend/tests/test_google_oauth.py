@@ -4,6 +4,7 @@ the config, the consent URL, the single-use states and the token store; Task
 and test_gmail_token_store.py: every assertion they made about code that is
 kept is ported here; the Streamlit-only functions went with their tests."""
 import json
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs, urlsplit
 
@@ -85,6 +86,48 @@ def test_consume_state_is_single_use(tmp_db, make_user):
     assert google_oauth.consume_state(state) is None        # already consumed
     with session_scope() as s:
         assert s.get(OAuthState, state) is None
+
+
+def test_two_consumes_racing_for_one_state_let_only_one_through(tmp_db, make_user, monkeypatch):
+    """A second consume slips in while the first is inside its transaction: after the
+    first reads the row, or just before it deletes it (build review I1). The user id
+    must come back once, from whichever delete removed the row."""
+    uid = make_user(email="a@example.com")
+    state = google_oauth.create_state(uid)
+    real_scope = google_oauth.session_scope
+    second = []
+
+    @contextmanager
+    def racing_scope():
+        with real_scope() as session:
+            if getattr(racing_scope, "entered", False):
+                yield session                                  # the second consume runs plainly
+                return
+            racing_scope.entered = True
+            real_get, real_execute = session.get, session.execute
+
+            def slip_in():
+                if not second:
+                    second.append(google_oauth.consume_state(state))
+
+            def get(*args, **kwargs):
+                row = real_get(*args, **kwargs)
+                slip_in()
+                return row
+
+            def execute(statement, *args, **kwargs):
+                if getattr(statement, "is_delete", False):      # not the SELECT inside session.get
+                    slip_in()
+                return real_execute(statement, *args, **kwargs)
+
+            session.get, session.execute = get, execute
+            yield session
+
+    monkeypatch.setattr(google_oauth, "session_scope", racing_scope)
+    first = google_oauth.consume_state(state)
+    assert second, "the second consume never ran"
+    assert [first, second[0]].count(uid) == 1, (first, second[0])
+    assert None in (first, second[0])
 
 
 def test_consume_unknown_or_empty_state_returns_none(tmp_db):
