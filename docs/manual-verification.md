@@ -373,3 +373,24 @@ address or a church id.
 - [ ] **35.** A file that is not a JPEG or PNG (a PDF, a HEIC picture from a computer) or is over 10 MB says so under the buttons ("Choose a JPEG or PNG picture." or "The picture is larger than 10 MB. Choose a smaller one.") and uploads nothing; the picture already chosen stays.
 - [ ] (owner, after PR 3b) **36.** Print test (PR 3 planning answer 10): print side 1 of a bulletin with a picture on the church's color printer, on legal paper: the picture is in color, sharp, inside the margins, and the reading and the date on the band are easy to read.
 - [ ] (agent, after PR 3b) **37.** In a test church: another church's picture id answers 404; the picture's preview is fetched once in a visit, and after a reload the browser asks again and gets 304 (`Cache-Control: private, no-cache` with the ETag); a draft from before PR 3b opens with everything it had and no picture.
+
+## Slice 6a
+
+Run on the production URL https://worship-service-builder.vercel.app, on an
+iPhone with Safari at 375 px and on desktop Chrome. These are the 6a spec's
+manual checks for 6a-1 (the Settings area and the Church page), as the
+owner's planning answers of 2026-10-05 split 6a into three PRs; 6a-2
+(Hymns) and 6a-3 (Liturgy prompts, Prayers, Rubric, Bulletin settings
+moved in) add their own items here. After the 6a-1 merge the owner's guided
+check (one step at a time on the phone) covers the items marked "(owner,
+after 6a-1)"; the results go into `docs/ops-runbook.md` → "Slice 6a-1
+record". Record what the page shows, never an email address or a church id.
+
+- [ ] (owner, after 6a-1) **1.** The menu at the top has **Settings** after **Services**. Tap it: **Settings** opens on **Church** ("You're the owner of {church}."), with the sections **Church** and **Bulletin**; **Bulletin** opens the Bulletin settings page.
+- [ ] (owner, after 6a-1) **2.** On **Church**, the church's name, time zone, default Bible translation, default hymnal (with one hymnal: "{code} (your only hymnal)") and default Benediction show as saved. Change the default Bible translation and tap **Save profile**: "Profile saved.". Open **Builder** step 1 of a service that has not chosen its own translation: the passages are in the new translation with no reload. Expected, not a bug (6a-1 owner question 11): a service whose translation was picked by hand as the one that was then the default follows the new default too, and so does a saved service when it is reopened. Change it back.
+- [ ] (owner, after 6a-1) **3.** Change the default Benediction and save. Start a **New service** (if it asks to clear the current draft, tap **Cancel** and open the liturgy step of the current service instead, when you have not typed its Benediction yourself) and open the liturgy step: the Benediction card shows the new text, and its hint's **Settings.** opens **Settings** → **Church**. A Benediction card you typed yourself is unchanged. Put the Benediction back as it was (if it was the standard Halverson text, type **Halverson**: the word stands for the full text).
+- [ ] (owner, after 6a-1) **4.** On **Church**, change the name without saving and tap **Builder** at the top: "Discard unsaved changes?" asks first; **Keep editing** stays with the change, **Discard changes** goes to the builder. At 375 px: no sideways scroll on **Settings**; the fields, the section links and **Save profile** are easy to tap.
+- [ ] **5.** Rename the church and save: the church switcher shows the new name with no reload. Rename it back.
+- [ ] **6.** The time zone list offers "Use this device's time zone (…)" when the device's zone differs from the church's; tapping it and saving stores it (`GET /church` answers it with `timezone_valid` true).
+- [ ] **7.** Signed in as a plain member of the same church: **Settings** → **Church** shows "Only admins can edit the church profile." and the profile as plain text, with no fields and no **Save profile**; the Benediction hint's **Settings.** opens the same page.
+- [ ] **8.** Saving the profile keeps the church's other settings: the Bulletin settings, the rubric and the liturgy prompts are as they were.
