@@ -32,7 +32,7 @@
   `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
 - TDD: write the failing test first and see it fail as quoted.
 - **Backup push after every task** (standing rule): the controller runs `git push origin claude/slice-2-plan-4q33le` after each task's commit (never `--force`, never a rebase; if the push is rejected, `git pull --no-rebase origin claude/slice-2-plan-4q33le` and push again; on a network error retry after 2, 4, 8 and 16 s). A fix asked for by a review is a new commit, `Fix: <what> (Task <n> review)`. The container can restart and lose uncommitted work: commit as soon as a task's checks pass.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1529 → 1598 passed, 24 → 26 skipped; frontend 759 → 775 in 92 → 94 files`.
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1529 → 1604 passed, 24 → 26 skipped; frontend 759 → 777 in 92 → 94 files`.
 - New prose for the owner has no em dashes and no flattery. New user-facing copy is exactly the list in clarification 15 and has no em dashes (the specs' lines are taken without theirs); existing copy keeps its own punctuation.
 - No church id, real email address, token, key, street address, phone number, database URL or real person's name in any doc, commit, test or record. Tests use the fixtures' "Grace" and `@example.org` / `@example.com` addresses only.
 - Ask the owner before any push to a PR, PR creation, marking ready, merging, or any production or settings action. Owner steps go one at a time, in plain words.
@@ -46,17 +46,17 @@ As in the 6a-1 plan: **Create `path`:** the block is the whole file; **Append to
 
   | After | Backend (delta) | Backend | Frontend (delta) | Frontend |
   |---|---|---|---|---|
-  | T1 | +33 (`test_email_addresses.py`: 8 valid, 22 invalid and 3 blank cases; `test_no_streamlit_in_core.py` edited) | 1562 passed, 24 skipped | 0 | 759 in 92 |
-  | T2 | +5 (`test_email_contacts.py`, 3 → 8) | 1567 passed, 24 skipped | 0 | 759 in 92 |
-  | T3 | +18 (`test_usecase_contacts.py`: 2 + 9 parametrized cases and 7 tests) | 1585 passed, 24 skipped | 0 | 759 in 92 |
-  | T4 | +13 (`test_api_contacts.py`: 6 parametrized cases and 7 tests) | 1598 passed, 24 skipped | 0 | 759 in 92 |
-  | T5 | +2 skipped (`test_contacts_postgres.py`, skipped without `TEST_DATABASE_URL`) | 1598 passed, 26 skipped | 0 | 759 in 92 |
-  | T6 | 0 | 1598 passed, 26 skipped | +4 (`contacts.test.ts`) | 763 in 93 |
-  | T7 | 0 | 1598 passed, 26 skipped | +11 (`contacts-settings-page.test.tsx`) | 774 in 94 |
-  | T8 | 0 | 1598 passed, 26 skipped | +1 (`settings-layout.test.tsx`, two tests edited) | 775 in 94 |
-  | T9 | 0 (`test_slice1_docs.py` edited) | 1598 passed, 26 skipped | 0 | 775 in 94 |
+  | T1 | +38 (`test_email_addresses.py`: 8 valid, 26 invalid and 3 blank cases and the Bcc header test; `test_no_streamlit_in_core.py` edited) | 1567 passed, 24 skipped | 0 | 759 in 92 |
+  | T2 | +6 (`test_email_contacts.py`, 3 → 9) | 1573 passed, 24 skipped | 0 | 759 in 92 |
+  | T3 | +18 (`test_usecase_contacts.py`: 2 + 9 parametrized cases and 7 tests) | 1591 passed, 24 skipped | 0 | 759 in 92 |
+  | T4 | +13 (`test_api_contacts.py`: 6 parametrized cases and 7 tests) | 1604 passed, 24 skipped | 0 | 759 in 92 |
+  | T5 | +2 skipped (`test_contacts_postgres.py`, skipped without `TEST_DATABASE_URL`) | 1604 passed, 26 skipped | 0 | 759 in 92 |
+  | T6 | 0 | 1604 passed, 26 skipped | +4 (`contacts.test.ts`) | 763 in 93 |
+  | T7 | 0 | 1604 passed, 26 skipped | +13 (`contacts-settings-page.test.tsx`) | 776 in 94 |
+  | T8 | 0 | 1604 passed, 26 skipped | +1 (`settings-layout.test.tsx`, two tests edited) | 777 in 94 |
+  | T9 | 0 (`test_slice1_docs.py` edited) | 1604 passed, 26 skipped | 0 | 777 in 94 |
 
-- CI `backend-postgres` goes from `24 passed, 1529 deselected` to `26 passed, 1598 deselected` (T5). Locally, without `TEST_DATABASE_URL`, those two tests are among the 26 skipped.
+- CI `backend-postgres` goes from `24 passed, 1529 deselected` to `26 passed, 1604 deselected` (T5). Locally, without `TEST_DATABASE_URL`, those two tests are among the 26 skipped.
 
 ### Layering and code rules (carried)
 - `email_addresses.py` and `usecases/contacts.py` import no FastAPI, Starlette or Streamlit (`test_no_streamlit_in_core.py` gains both, T1 and T3); the routes are plain `def`s with no SQL and no try/except (F §2.2 rule 1), each one usecase call; the usecase writes through `email_contacts` (no SQL in the usecase).
@@ -82,13 +82,14 @@ The owner's answers win over B, S and F; the code wins over all of them where th
 2. **[owner-visible] Where Contacts sits** (S "Settings nav"). `SETTINGS_SECTIONS` becomes **Church**, **Bulletin**, **Contacts**: Contacts is appended. The final order (S amendment 2026-09-26) puts Contacts after every page about the church's services (Church, Hymns, Liturgy, Prayers, Rubric) and before People and Account; Bulletin settings is one of those service pages and 6a-3 moves it in among them, so appending keeps Contacts where it will end up and no item moves when 6a-2, 6a-3 and 5b-2 add theirs. Owner question 1.
 3. **[owner-visible] The Contacts page, for everyone** (S UX §4). Inside the Settings layout (its `h1` "Settings" and the nav): the heading "Contacts" (an `h2`, as Church's "Church profile") and under it "People you can email the bulletin to. Emailing it from the Review step comes in a later update." (S's caption said "…to from the Review step.", which is not true until 5b-2; 5b-2 sets S's line back; owner question 4). A member also sees "Only admins can add or change contacts." (S's banner). The list (`aria-label="Contacts"`, one row per contact, in the server's order): the name in bold with the address under it in muted text, or the address alone (normal text) when there is no name; addresses break anywhere on a phone. Under an address the send-time rule refuses (`email_valid: false`), in amber text: "This address doesn't look valid. Edit it." for owners and admins, "This address doesn't look valid. An admin can fix it." for members. With no contacts, S's empty states: "No contacts yet" with "Add the people who receive the bulletin, like your church secretary." (admins) or "Ask an admin to add bulletin recipients." (members). The first load shows two skeleton rows; a failed read the usual `ErrorState` with **Retry**.
 4. **[owner-visible] Owners and admins** (S UX §4). Each row has two icon buttons, 44 px below `md` (32 px from `md`): a pencil, "Edit {name or address}" to screen readers, and a bin, "Delete {name or address}".
-   - **Edit** opens a dialog (a bottom sheet below `md`, as "Add custom element" is): title "Edit contact", the contact's name or address under it, "Name (optional)" and "Email" filled in, **Cancel** and **Save changes** ("Saving…" while pending). Only the fields that changed (trimmed) are sent; nothing changed closes it with no request. Success closes it and the row shows the answer; a 422 or 409 shows under its field in the dialog. Cancel, Escape or a tap outside closes it and discards the edits (clarification 6).
-   - **Delete** opens S's `ConfirmDialog`: "Delete {name or address}?", "They won't be offered as a bulletin recipient anymore.", **Delete contact** (red) and **Cancel**. On success the row goes. When the confirmation closes, focus moves to the add form's Name field (after a delete the row and its button are gone).
+   - **Edit** opens a dialog (a bottom sheet below `md`, as "Add custom element" is): title "Edit contact", the contact's name or address under it, "Name (optional)" and "Email" filled in, **Cancel** and **Save changes** ("Saving…" while pending). Only the fields that changed (trimmed) are sent; nothing changed closes it with no request. Success closes it and the row shows the answer; a 422 or 409 shows under its field in the dialog; a 403 or 404 closes it (toasted, clarification 5). The dialog is only ever shown to an owner or admin: if the page turns read-only (a role 403), an open one goes. Cancel, Escape or a tap outside closes it and discards the edits (clarification 6).
+   - **Delete** opens S's `ConfirmDialog`: "Delete {name or address}?", "They won't be offered as a bulletin recipient anymore.", **Delete contact** (red) and **Cancel**. On success the row goes and focus moves to the add form's Name field (the row and its button are gone); a Cancel, or a failed delete, returns focus to the bin button. The confirmation keeps its title while it closes.
    - **Add a contact** (an `h3`) below the list, in a bordered box: "Name (optional)", "Email" (`inputMode="email"`, no auto-capitalize, no autocorrect, no spellcheck, `autocomplete="off"`), **Add contact** (full width on a phone, 44 px, "Saving…" while pending). A blank Email says "Email is required." under it at once, with no request. On success the new row appears at the end, the fields clear and focus returns to Name; no toast (S; F §4.8). Owner question 7.
-5. **Errors.** A 422 that names `name` or `email`, and a 409 (the address is taken; the body has no `fields`, so the page puts it under Email), show under the field in the error colour (`role="alert"`), mark it `aria-invalid` and focus it; they are not toasted. Editing a field clears its error. A role 403 (an admin demoted meanwhile) toasts "Only church admins can do this." and refetches the church profile, which carries the role, so the page turns into the member's view; a 404 (a contact deleted in another tab) toasts "Contact not found." and refetches the list; a 401 or a lost church toasts nothing more (the app handles them); anything else toasts the server's message.
+5. **Errors.** A 422 whose `fields` names `name` or `email`, and a 409 (the address is taken; the body has no `fields`, so the page puts it under Email), show under the field in the error colour (`role="alert"`), mark it `aria-invalid` and focus it; they are not toasted. Editing a field clears its error. A role 403 (an admin demoted meanwhile) toasts "Only church admins can do this." and refetches the church profile, which carries the role, so the page turns into the member's view; a 404 (a contact deleted in another tab) toasts "Contact not found." and refetches the list; a 401 or a lost church toasts nothing more (the app handles them); anything else toasts the server's message, a 422 that names neither field among them (one test shows it). In the edit dialog a 403 or 404 also closes the dialog.
 6. **[owner-visible] The leave guard.** 6a-1's `LeaveGuard` protects the add form while either field holds something (trimmed): a reload or close shows the browser's warning, any in-app link (the Settings sections, the top menu) and "Join or create a church…" ask "Discard unsaved changes?" first. The edit dialog is modal (no link can be reached behind it) and its Cancel discards, so it has no guard of its own. Owner question 8.
-7. **`email_addresses.normalize_address`** (B, exactly). `normalize_address(raw: str) -> str` accepts `raw.strip()` when it is at most 254 characters, ASCII only, holds no whitespace, control character or any of `, ; < > " ( ) [ ] \`, has exactly one `@`, a local part of 1-64 characters, and a domain of at least two dot-separated labels, each 1-63 ASCII letters, digits or hyphens not starting or ending with a hyphen, the last at least two letters; it returns the trimmed address with the domain lower-cased (the local part as typed), and raises `InvalidAddress` (a `ValueError`) otherwise. No dependency. The shared fixture `backend/tests/fixtures/shared/email_addresses.json` (`_about`, `valid: [{raw, normalized}]`, `invalid: [...]`) holds 8 valid cases (plain, trimmed with a mixed-case domain, a plus tag, subdomains, an apostrophe, a punycode domain, the shortest, exactly 254 characters) and 22 invalid ones (B's list: no `@`, two `@`, a space, a trailing dot, `a@b`, 255 characters, two addresses with a comma or a semicolon, a header injection with CR LF, `<a@b.com>`, a display name, a quoted local part, `anna@bücher.de`, `josé@…`; and an empty local part, a 65-character local part, an empty label, a label starting with a hyphen, an underscore, a one-letter and an all-digit last label). `test_email_addresses.py` runs every case through `normalize_address` (and each normalized value again: unchanged), `test_api_contacts.py` through `POST /contacts`. The fixtures README is generated by `record_fixtures.py` and lists only the recorded fixtures and `scripture_refs.json`, so it is not edited; the JSON's `_about` documents the file, as `docx_filenames.json`'s does.
-8. **The contacts repo** (B "Modules" `email_contacts.py`; S "Changed modules"). `backend/email_contacts.py` stays where it is (the frozen `streamlit_views/settings.py` and `app.py` import it; `streamlit_tests/test_settings_profile_contacts.py`, which pytest still collects, calls it through them). Every function gains a keyword-only `session=None` (a given session is used, else its own `session_scope`), and ids go through `db.ids.as_uuid` (a malformed id is a 404, never a 500; its private `_as_uuid` goes). `list_contacts` orders by `created_at`, then `nullif(trim(name), '') ASC NULLS LAST`, then `id` (B; F §1.4), and every function returns a NULL or blank-after-trim name as `None`. New: `get_contact(contact_id, church_id)`, `update_contact(contact_id, church_id, changes)` (sets only `name` and/or `email`, already cleaned; `None` when the church has no such contact) and `email_exists(church_id, email, *, exclude_id=None)` (`lower(email)` within the church). `add_contact` and `delete_contact` keep their signatures (plus `session`). `get_contacts_for_display` is untouched (slice 7 deletes it); `test_email_contacts.py`'s three tests are kept.
+7. **`email_addresses.normalize_address`** (B, with the review's amendment below). `normalize_address(raw: str) -> str` accepts `raw.strip()` when it is at most 254 characters, ASCII only, holds no whitespace, control character or any of `, ; : < > " ( ) [ ] \`, has exactly one `@`, a local part of 1-64 characters, and a domain of at least two dot-separated labels, each 1-63 ASCII letters, digits or hyphens not starting or ending with a hyphen, the last at least two letters; it returns the trimmed address with the domain lower-cased (the local part as typed), and raises `InvalidAddress` (a `ValueError`) otherwise. No dependency. The shared fixture `backend/tests/fixtures/shared/email_addresses.json` (`_about`, `valid: [{raw, normalized}]`, `invalid: [...]`) holds 8 valid cases (plain, trimmed with a mixed-case domain, a plus tag, subdomains, an apostrophe, a punycode domain, the shortest, exactly 254 characters) and 26 invalid ones (B's list: no `@`, two `@`, a space, a trailing dot, `a@b`, 255 characters, two addresses with a comma or a semicolon, a header injection with CR LF, `<a@b.com>`, a display name, a quoted local part, `anna@bücher.de`, `josé@…`; and an empty local part, a colon in the local part, a leading, a trailing and a doubled dot in it, a 65-character local part, an empty label, a label starting with a hyphen, an underscore, a one-letter and an all-digit last label). `test_email_addresses.py` runs every case through `normalize_address` (and each normalized value again: unchanged) and sets each valid one as a `Bcc` header with `email.message.EmailMessage`, which must parse back as exactly that one address with no defect; `test_api_contacts.py` runs every case through `POST /contacts`. The fixtures README is generated by `record_fixtures.py` and lists only the recorded fixtures and `scripture_refs.json`, so it is not edited; the JSON's `_about` documents the file, as `docx_filenames.json`'s does.
+   - **Amended by the plan review (2026-10-06, C1):** B's ban list alone let through `a:b@example.org` (in a `Bcc` header the colon starts a group, so the mail goes to `b@example.org`) and `.a@…`, `a.@…`, `a..b@…` (malformed headers). So the local part must also fullmatch `` [A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)* `` (RFC 5322's dot-atom) and `:` joins the banned characters; every address the rule accepts is one plain `Bcc` recipient.
+8. **The contacts repo** (B "Modules" `email_contacts.py`; S "Changed modules"). `backend/email_contacts.py` stays where it is (the frozen `streamlit_views/settings.py` and `app.py` import it; `streamlit_tests/test_settings_profile_contacts.py`, which pytest still collects, calls it through them). Every function gains a keyword-only `session=None` (a given session is used, else its own `session_scope`), and ids go through `db.ids.as_uuid` (a malformed id is a 404, never a 500; its private `_as_uuid` goes). `list_contacts` orders by `created_at`, then `nullif(trim(name), '') ASC NULLS LAST`, then `id` (B; F §1.4), and every function returns a NULL or blank-after-trim name as `None`. New: `get_contact(contact_id, church_id)`, `update_contact(contact_id, church_id, changes)` (sets only `name` and/or `email`, already cleaned; `None` when the church has no such contact) and `email_exists(church_id, email, *, exclude_id=None)` (`lower(trim(email))` within the church, so a Streamlit-era address saved with spaces around it still counts as taken). `add_contact` and `delete_contact` keep their signatures (plus `session`). `get_contacts_for_display` is untouched (slice 7 deletes it); `test_email_contacts.py`'s three tests are kept. Returning a blank name as `None` changes what the frozen Streamlit `app.py` would show for a nameless contact ("None <email>" instead of " <email>"); accepted, since production Streamlit is retired (owner decision 2) and nothing deploys it.
 9. **The contacts usecases** (S "Semantics" → Contacts and Locking). In a new `backend/usecases/contacts.py`:
    - `list_contacts(church_id)`: `email_contacts.list_contacts` with `email_valid` added to each (`normalize_address` does not raise).
    - `normalize_email(value)`: S's thin wrapper: `None` or blank → `InvalidInput("Email is required.", field="email")`; `InvalidAddress` → `InvalidInput("Enter a valid email address.", field="email")`; else **what `normalize_address` returns is stored** (B's hand-off: "store what it returns"): trimmed, the domain lower-cased, the local part as typed. S's "case kept" holds for the local part; owner question 5.
@@ -102,15 +103,16 @@ The owner's answers win over B, S and F; the code wins over all of them where th
     - `DELETE /contacts/{contact_id}` (`require_admin`) → 200 `DeletedOut {deleted: true}`.
     - `ContactOut {id, name: str | null, email, email_valid: bool}`: B's model plus `email_valid` (additive; clarification 13). The repo already maps a blank name to `None`, so S's `field_validator` on `name` is not needed.
     - `ContactIn {name?: str(200) | null, email: str(320) = ""}` (`extra="forbid"`; an omitted email reaches the usecase as `""`: "Email is required.", F §1.3); `ContactPatchIn {name?: str(200) | null, email?: str(320) | null}` (`extra="forbid"`).
-    - Errors: 401; 403 `forbidden` (a member on a write: "Only church admins can do this."; a non-member: `no_church_access`); 404 `not_found` "Contact not found."; 409 `conflict` "That email is already in your contacts."; 422 `invalid_request` with `fields.email` ("Email is required." / "Enter a valid email address."), `fields.name` (the one-line message), Pydantic's "Too long (max N characters)." and a malformed path id or an unknown body field. No `Idempotency-Key` and no rate-limit bucket (S: the duplicate check under the lock turns a double tap or a retry into a 409). The route-guard allowlists do not change (`require_admin` depends on `require_church`).
+    - Errors: 401; 403 `forbidden` (a member on a write: "Only church admins can do this."; a non-member: `no_church_access`); 404 `not_found` "Contact not found."; 409 `conflict` "That email is already in your contacts."; 422 `invalid_request` with `fields.email` ("Email is required." / "Enter a valid email address."), `fields.name` (the one-line message), Pydantic's "Too long (max N characters)." and a malformed path id or an unknown body field. A JSON `null` email on `POST` (the page never sends one) is Pydantic's generic `fields.email` "Not a valid value.", not "Email is required."; accepted as is (plan review M6). No `Idempotency-Key` and no rate-limit bucket (S: the duplicate check under the lock turns a double tap or a retry into a 409). The route-guard allowlists do not change (`require_admin` depends on `require_church`).
 11. **Concurrency** (S "Semantics" → Locking; Testing → Postgres). The duplicate check and the insert or update run in the transaction that holds `SELECT … FOR UPDATE` on the church row, so two admins adding one address at once (in any capitalization) get one 201 and one 409. SQLite ignores `FOR UPDATE`; T3's `test_each_write_reads_the_church_row_under_its_lock` checks (compiled for Postgres) that each write asks for it, and T5's `test_contacts_postgres.py` proves it on real Postgres in CI's `backend-postgres`: one test holds the first add inside the lock and checks the second waits and gets the 409; the other is S's (two threads with a barrier, 20 rounds, a new address each round). With the lock turned off both fail (Build notes).
 12. **[owner-visible] No database change** (no migration). The table has no unique constraint on the address, and none is added: the locked check above is S's design and is enough now that Streamlit, which wrote without the lock, is retired. A unique index on `(church_id, lower(email))` would be a second guard, but its migration fails on deploy if any church already has the same address twice (Streamlit never checked), so it would first need those duplicates found and removed by hand. Owner question 3.
 13. **[owner-visible] The check of existing contacts** (answer 6). SQL cannot run `normalize_address`, so a database query would only approximate the rule. Instead `GET /contacts` says for each contact whether its stored address passes the rule (`email_valid`), and the page flags each one that does not (clarification 3). The owner's phone check (T11 Step 2) opens Contacts once and fixes any flagged contact with **Edit**; the flag stays useful afterwards (5b-2's send refuses such a contact with "An admin can fix it in Settings → Contacts."). B's `backend/scripts/check_contact_addresses.py` (run over `railway ssh`, or on a saved `GET /contacts` body) is not built: the owner would need a terminal, Railway access and the church's id. Owner question 2.
-14. **Queries** (B "Query hooks"; S "Queries"). `lib/queries/contacts.ts`: `useContacts()` (`api.church` `GET /contacts`, key `keys.contacts(church.id)`, which exists); `useCreateContact()`, `useUpdateContact()` (`{ id, patch }`) and `useDeleteContact()` (the id), each `useChurchMutation`: on success it cancels a list read in flight, puts the answer in the cached list at once (the new row last, as the server orders it; an edited row in its place; a deleted row gone) and then invalidates the list; on failure the policy of clarification 5. Not optimistic (F §4.4). `lib/settings/contacts.ts` (pure): `contactLabel`, `contactFormFrom`, `newContactBody` (trimmed; no name is `null`), `contactPatch` (only the fields whose trimmed value differs; a cleared name is `null`), `hasTyped`, `EMPTY_CONTACT`. The generated types are named in `lib/api/types.ts`: `Contact`, `ContactList`, `ContactBody`, `ContactPatch`.
+14. **Queries** (B "Query hooks"; S "Queries"). `lib/queries/contacts.ts`: `useContacts()` (`api.church` `GET /contacts`, key `keys.contacts(church.id)`, which exists); `useCreateContact()`, `useUpdateContact()` (`{ id, patch }`) and `useDeleteContact()` (the id), each `useChurchMutation`: on success it cancels a list read in flight, puts the answer in the cached list at once (the new row last, as the server orders it; an edited row in its place; a deleted row gone) and then invalidates the list; on failure the policy of clarification 5, with `contactFieldErrors` (exported beside them) deciding what the form shows, so the form and the toast never disagree. Not optimistic (F §4.4). `lib/settings/contacts.ts` (pure): `contactLabel`, `contactFormFrom`, `newContactBody` (trimmed; no name is `null`), `contactPatch` (only the fields whose trimmed value differs; a cleared name is `null`), `hasTyped`, `EMPTY_CONTACT`. The generated types are named in `lib/api/types.ts`: `Contact`, `ContactList`, `ContactBody`, `ContactPatch`.
 15. **[owner-visible] Every new user-facing string** (no em dashes). Settings nav: "Contacts". Contacts page: "Contacts"; "People you can email the bulletin to. Emailing it from the Review step comes in a later update."; "Only admins can add or change contacts."; "This address doesn't look valid. Edit it."; "This address doesn't look valid. An admin can fix it."; "No contacts yet"; "Add the people who receive the bulletin, like your church secretary."; "Ask an admin to add bulletin recipients."; "Add a contact"; "Name (optional)"; "Email"; "Add contact"; "Edit contact"; "Save changes"; "Delete {name or address}?"; "They won't be offered as a bulletin recipient anymore."; "Delete contact"; screen readers: "Edit {name or address}", "Delete {name or address}", the list's "Contacts". From the server (S's, and one new): "Email is required.", "Enter a valid email address.", "That email is already in your contacts.", "Contact not found.", "Name can't contain line breaks or control characters." (new), "Only church admins can do this.", "Too long (max {n} characters).". Reused: "Cancel", "Saving…", "Retry", the skeleton's "Loading", the leave guard's "Discard unsaved changes?", "Your changes on this page haven't been saved.", "Discard changes", "Keep editing".
 16. **Docs.** T9 appends "## Slice 5b" to `docs/manual-verification.md` with items 1-6 (owner items 1-3 after the merge) and moves `test_slice1_docs.py`'s pin from the last nine `##` headings to the last ten (the new heading last). The runbook record is T11's (`### Slice 5b-1 record` before `## Backups`, after `### Slice 6a-1 record`).
 17. **Deviations from B and S** (each the lean choice for 5b-1; none changes 5b-2's contract):
     - `ContactOut` gains `email_valid` (clarification 13); B's `check_contact_addresses.py` is not built.
+    - `normalize_address` is stricter than B's list: the local part is a dot-atom and `:` is banned, so an accepted address is always one `Bcc` recipient (clarification 7's amendment).
     - The contact usecases are in `usecases/contacts.py`, not `usecases/church_admin.py` (clarification 9); `normalize_email` and `clean_name` live there too.
     - S's `field_validator` on `ContactOut.name` is not added: `email_contacts` already returns a blank name as `None` (B).
     - `dedupe_addresses` waits for 5b-2, its first caller.
@@ -145,7 +147,7 @@ The owner's answers win over B, S and F; the code wins over all of them where th
 | Path | Change | Task |
 |---|---|---|
 | `backend/tests/test_no_streamlit_in_core.py` | `email_addresses` (T1), `usecases.contacts` (T3) | T1, T3 |
-| `backend/email_contacts.py`, `backend/tests/test_email_contacts.py` | `session`, the order, blank names as `None`, `get_contact`, `update_contact`, `email_exists`, `as_uuid`; five tests | T2 |
+| `backend/email_contacts.py`, `backend/tests/test_email_contacts.py` | `session`, the order, blank names as `None`, `get_contact`, `update_contact`, `email_exists`, `as_uuid`; six tests | T2 |
 | `backend/api/main.py`, `frontend/src/lib/api/openapi.json`, `frontend/src/lib/api/schema.d.ts` | the router mounted; regenerated | T4 |
 | `frontend/src/lib/api/types.ts`, `frontend/src/test/fixtures/index.ts` | `Contact`, `ContactList`, `ContactBody`, `ContactPatch`; `contact()`, `contactList()` | T6 |
 | `frontend/src/components/settings/sections.ts`, `frontend/src/components/settings/settings-layout.test.tsx` | **Contacts** in the nav | T8 |
@@ -1042,7 +1044,7 @@ def delete_contact(church_id: uuid.UUID, actor_id: uuid.UUID, contact_id: uuid.U
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_usecase_contacts.py backend/tests/test_email_contacts.py backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`
 **Expected:**
-`29 passed in <t>s`; `1585 passed, 24 skipped in <t>s`.
+`30 passed in <t>s`; `1591 passed, 24 skipped in <t>s`.
 
 - [ ] **Step 5: Commit**
 
@@ -1059,7 +1061,7 @@ check (\"That email is already in your contacts.\") under the lock." -m "Co-Auth
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1585 passed, 24 skipped`; frontend `759 passed` in 92 files.
+Expected counts after this task: backend `1591 passed, 24 skipped`; frontend `759 passed` in 92 files.
 
 ### Task 4: `/contacts` (B API, Schemas; S API, Models; clarifications 10, 12)
 
@@ -1364,7 +1366,7 @@ from api.routes import (bulletin_images, bulletin_settings, churches, contacts, 
 
 Run: `.venv/bin/python backend/scripts/export_openapi.py >/dev/null && (cd frontend && npm run gen:api >/dev/null) && git diff --stat -- frontend/src/lib/api | tail -1` then `.venv/bin/python -m pytest -q backend/tests/test_api_contacts.py backend/tests/test_usecase_contacts.py backend/tests/test_openapi_contract.py backend/tests/test_route_guards.py backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`
 **Expected:**
-` 2 files changed, 921 insertions(+)`; `42 passed in <t>s`; `1598 passed, 24 skipped in <t>s`; `typecheck 0`, `lint 0` (the new types are not used until T6).
+` 2 files changed, 921 insertions(+)`; `42 passed in <t>s`; `1604 passed, 24 skipped in <t>s`; `typecheck 0`, `lint 0` (the new types are not used until T6).
 
 - [ ] **Step 5: Commit**
 
@@ -1381,7 +1383,7 @@ OpenAPI and the types regenerated." -m "Co-Authored-By: Claude Opus 5.5 <noreply
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1598 passed, 24 skipped`; frontend `759 passed` in 92 files.
+Expected counts after this task: backend `1604 passed, 24 skipped`; frontend `759 passed` in 92 files.
 
 ### Task 5: The duplicate check under the lock, on real Postgres (S Testing → Postgres; clarification 11)
 
@@ -1503,9 +1505,9 @@ def test_two_adds_of_one_address_at_once_make_one_contact_twenty_times(pg_client
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_contacts_postgres.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`
 **Expected:**
-`2 skipped in <t>s`; `1598 passed, 26 skipped in <t>s`.
+`2 skipped in <t>s`; `1604 passed, 26 skipped in <t>s`.
 
-With a local throwaway Postgres (never a real database), `TEST_DATABASE_URL=postgresql://postgres@localhost:<port>/postgres .venv/bin/python -m pytest -q -m postgres 2>&1 | tail -1` gives `26 passed, 1598 deselected, 1 warning in <t>s`; without one, CI's `backend-postgres` runs them.
+With a local throwaway Postgres (never a real database), `TEST_DATABASE_URL=postgresql://postgres@localhost:<port>/postgres .venv/bin/python -m pytest -q -m postgres 2>&1 | tail -1` gives `26 passed, 1604 deselected, 1 warning in <t>s`; without one, CI's `backend-postgres` runs them.
 
 - [ ] **Step 3: Commit**
 
@@ -1519,7 +1521,7 @@ Skipped without TEST_DATABASE_URL; CI's backend-postgres runs them." -m "Co-Auth
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1598 passed, 26 skipped`; frontend `759 passed` in 92 files.
+Expected counts after this task: backend `1604 passed, 26 skipped`; frontend `759 passed` in 92 files.
 
 
 ## The app (T6-T8)
@@ -1822,7 +1824,7 @@ refetches the profile, a 404 the list." -m "Co-Authored-By: Claude Opus 5.5 <nor
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1598 passed, 26 skipped`; frontend `763 passed` in 93 files.
+Expected counts after this task: backend `1604 passed, 26 skipped`; frontend `763 passed` in 93 files.
 
 ### Task 7: The Contacts page (S UX §4; clarifications 3-6, 13, 15)
 
@@ -2500,7 +2502,7 @@ export default function ContactsSettingsRoute() {
 
 Run: `(cd frontend && npx vitest run src/components/settings 2>&1 | grep -E "^ +× |\[ src/|Tests ")` (three times) then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`
 **Expected:**
-three times `      Tests  25 passed (25)` (the Contacts page's 11, the Church page's 12 and the Settings layout's 2); ` Test Files  94 passed (94)` and `      Tests  774 passed (774)`; `typecheck 0`, `lint 0`.
+three times `      Tests  27 passed (27)` (the Contacts page's 13, the Church page's 12 and the Settings layout's 2); ` Test Files  94 passed (94)` and `      Tests  776 passed (776)`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -2516,7 +2518,7 @@ something typed in the add form asks first." -m "Co-Authored-By: Claude Opus 5.5
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1598 passed, 26 skipped`; frontend `774 passed` in 94 files.
+Expected counts after this task: backend `1604 passed, 26 skipped`; frontend `776 passed` in 94 files.
 
 ### Task 8: Contacts in the Settings nav (S "Settings nav"; clarification 2)
 
@@ -2577,6 +2579,7 @@ Run: `(cd frontend && npx vitest run src/components/settings/settings-layout.tes
    × the Settings area (slice 6a-1) > shows the heading, who you are in the church, and the sections with the current one marked <t>ms
    × the Settings area (slice 6a-1) > marks Contacts current on its page (slice 5b-1) <t>ms
    × the Settings area (slice 6a-1) > shows a member the same sections, and /settings opens Church <t>ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
       Tests  3 failed (3)
 ```
 
@@ -2612,7 +2615,7 @@ Run: `(cd frontend && npx vitest run src/components/settings/settings-layout.tes
 
 Run: `(cd frontend && npx vitest run src/components/settings src/components/app/app-header.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`
 **Expected:**
-`      Tests  32 passed (32)`; ` Test Files  94 passed (94)` and `      Tests  775 passed (775)`; `typecheck 0`, `lint 0`.
+`      Tests  34 passed (34)`; ` Test Files  94 passed (94)` and `      Tests  777 passed (777)`; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -2625,7 +2628,7 @@ its page." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1598 passed, 26 skipped`; frontend `775 passed` in 94 files.
+Expected counts after this task: backend `1604 passed, 26 skipped`; frontend `777 passed` in 94 files.
 
 ## Docs, verification, the PR, the merge (T9-T11)
 
@@ -2670,9 +2673,9 @@ after 5b-1)"; the results go into `docs/ops-runbook.md` → "Slice 5b-1
 record". Record what the page shows (how many contacts, how many flagged),
 never an email address, a person's name or a church id.
 
-- [ ] (owner, after 5b-1) **1.** **Settings** lists **Church**, **Bulletin** and **Contacts**. Tap **Contacts**: the church's saved contacts are listed (a name in bold with its address under it, an address alone when there is no name). Under any address the app could not email, "This address doesn't look valid. Edit it." shows. Note how many contacts there are, how many are flagged, and whether any address is listed twice.
-- [ ] (owner, after 5b-1) **2.** Fix each flagged contact with its pencil button (**Edit contact**, **Save changes**): the note goes away. With nothing flagged, add a contact named "Test" with the address test@example.com instead, edit its name, try adding TEST@example.com again ("That email is already in your contacts."), then delete it with its bin button ("Delete Test?", **Delete contact**).
-- [ ] (owner, after 5b-1) **3.** Type a name in the add form without adding it and tap **Church** in the Settings sections: "Discard unsaved changes?" asks first. At 375 px: no sideways scroll; the section links, the pencil and bin buttons and **Add contact** are easy to tap.
+- [ ] (owner, after 5b-1) **1.** **Settings** lists **Church**, **Bulletin** and **Contacts**. Tap **Contacts**: the church's saved contacts are listed (a name in bold with its address under it, an address alone when there is no name). Under any address the app could not email, "This address doesn't look valid. Edit it." shows. Note how many contacts there are, how many are flagged, and whether any address is listed twice (even with different capital letters or spaces).
+- [ ] (owner, after 5b-1) **2.** Fix each flagged contact with its pencil button (**Edit contact**, **Save changes**): the note goes away. If the box holds more than one address, keep one here, then add each other one with **Add a contact**. Delete one of any address listed twice. Then, every time: add a contact named "Test" with the address test@example.com, rename it "Test 2", try adding TEST@example.com again ("That email is already in your contacts."), then delete it with its bin button ("Delete Test 2?", **Delete contact**).
+- [ ] (owner, after 5b-1) **3.** Type a name in the add form without adding it and tap **Church** in the Settings sections: "Discard unsaved changes?" asks first. At 375 px: no sideways scroll; the section links, the pencil and bin buttons and **Add contact** are easy to tap. In **Edit contact** with the iPhone keyboard open, **Save changes** can be reached and the box being typed in is not covered.
 - [ ] **4.** Signed in as a plain member of the same church: **Settings** → **Contacts** shows "Only admins can add or change contacts." and the list with no buttons and no add form.
 - [ ] **5.** Two tabs as an admin: delete a contact in one, then edit it in the other: "Contact not found." and the row goes away.
 - [ ] **6.** Add a contact as `Someone@Example.ORG`: it is saved and listed as `Someone@example.org` (the domain lower-cased, the rest as typed).
@@ -2690,14 +2693,15 @@ Run: `.venv/bin/python -m pytest -q backend/tests/test_slice1_docs.py backend/te
 git add docs/manual-verification.md backend/tests/test_slice1_docs.py
 git commit -q -m "Docs: slice 5b-1 manual checks" -m "docs/manual-verification.md gains \"## Slice 5b\": the owner's phone
 check after 5b-1 (Contacts in Settings and the flagged addresses, fixing
-one or adding, editing, refusing a duplicate and deleting a test
-contact, the leave guard and the page at 375 px) and the agent's checks
+any flagged one, then adding, editing, refusing a duplicate and deleting
+a test contact, the leave guard, the page at 375 px and the edit sheet
+with the keyboard open) and the agent's checks
 (a member, a contact deleted in another tab, the domain lower-cased).
 test_slice1_docs.py pins the last ten ## headings, the new one last." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1598 passed, 26 skipped`; frontend `775 passed` in 94 files.
+Expected counts after this task: backend `1604 passed, 26 skipped`; frontend `777 passed` in 94 files.
 
 
 ### Task 10: Verification and the draft PR (owner's yes before the PR is opened and before it is marked ready)
@@ -2727,7 +2731,7 @@ for i in 1 2 3; do (cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Te
 (cd frontend && NEXT_PUBLIC_SUPABASE_URL=https://ci-placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-placeholder NEXT_PUBLIC_API_URL=http://localhost:8000 npm run build 2>&1 | grep -E "Compiled successfully|Error|/settings")
 ```
 
-**Expected:** `1598 passed, 26 skipped in <t>s`; three times ` Test Files  94 passed (94)` and `      Tests  775 passed (775)` with no `×` or `FAIL` line (one names the failing test: Step 6); `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s` and the route lines `├ ○ /settings`, `├ ○ /settings/church` and `├ ○ /settings/contacts` and no `Error` (a font `Failed to fetch` only: say so and rely on CI).
+**Expected:** `1604 passed, 26 skipped in <t>s`; three times ` Test Files  94 passed (94)` and `      Tests  777 passed (777)` with no `×` or `FAIL` line (one names the failing test: Step 6); `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s` and the route lines `├ ○ /settings`, `├ ○ /settings/church` and `├ ○ /settings/contacts` and no `Error` (a font `Failed to fetch` only: say so and rely on CI).
 
 - [ ] **Step 3 (agent): The API files match, the gates, the paths, the commits**
 
@@ -2784,7 +2788,7 @@ gh pr list -R bbrown62450/church --head claude/slice-2-plan-4q33le --state open 
 
 **Expected:** `[]`. Send the owner exactly this, and wait for a clear yes:
 
-> The Contacts page (slice 5b-1) is verified on this machine: backend 1598 passed, 26 skipped (1529 and 24 before); frontend 775 tests in 94 files (759 before), three runs in a row; typecheck, lint and the production build are clean. It adds the `/contacts` routes, no database change and no new package. Settings gets a third section, **Contacts**: everyone in the church sees the saved contacts, and you (and any admin) add, edit and delete them. Every address is checked by the same rule the email feature will use, a second copy of an address is refused, and a contact saved in the old app whose address would not work shows "This address doesn't look valid. Edit it.", so you can fix it there. Nothing is emailed yet (that is 5b-2). The pull request also carries the 6a-1 record and today's 5b planning notes. May I open the pull request as a **draft** titled "Slice 5b-1: the Contacts page", so the checks run? Merging stays with you.
+> The Contacts page (slice 5b-1) is verified on this machine: backend 1604 passed, 26 skipped (1529 and 24 before); frontend 777 tests in 94 files (759 before), three runs in a row; typecheck, lint and the production build are clean. It adds the `/contacts` routes, no database change and no new package. Settings gets a third section, **Contacts**: everyone in the church sees the saved contacts, and you (and any admin) add, edit and delete them. Every address is checked by the same rule the email feature will use, a second copy of an address is refused, and a contact saved in the old app whose address would not work shows "This address doesn't look valid. Edit it.", so you can fix it there. Nothing is emailed yet (that is 5b-2). The pull request also carries the 6a-1 record and today's 5b planning notes. May I open the pull request as a **draft** titled "Slice 5b-1: the Contacts page", so the checks run? Merging stays with you.
 
 - [ ] **Step 5 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
 
@@ -2802,7 +2806,7 @@ Slice 5b-1: the Contacts page (the first of 5b's two PRs; owner's 5b planning an
 
 Later: 5b-2 (the Gmail connection, Settings → Account, emailing the bulletin), 6a-2 (Hymns), 6a-3 (Liturgy prompts, Prayers, Rubric, Bulletin settings moved in), 6b (People).
 
-Tests: backend 1529 → 1598 passed, 24 → 26 skipped; frontend 759 → 775 in 92 → 94 files
+Tests: backend 1529 → 1604 passed, 24 → 26 skipped; frontend 759 → 777 in 92 → 94 files
 
 After merge (Task 11): a short check on the owner's phone (which also finds any saved contact the new rule refuses), then a "Slice 5b-1 record" in docs/ops-runbook.md.
 
@@ -2816,7 +2820,7 @@ gh pr create -R bbrown62450/church --draft --base main --head claude/slice-2-pla
 gh pr checks <N> -R bbrown62450/church --watch --interval 30
 ```
 
-Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1598 passed, 26 skipped`, backend-postgres `26 passed, 1598 deselected`, frontend `775 passed` in 94 files. Then send: "PR #<N> is green: backend 1598 passed, 26 skipped (the two new Postgres tests passed in their own job); 775 frontend tests in 94 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R bbrown62450/church`.
+Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1604 passed, 26 skipped`, backend-postgres `26 passed, 1604 deselected`, frontend `777 passed` in 94 files. Then send: "PR #<N> is green: backend 1604 passed, 26 skipped (the two new Postgres tests passed in their own job); 777 frontend tests in 94 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R bbrown62450/church`.
 
 - [ ] **Step 6: Fix any failure in its owning task**
 
@@ -2836,7 +2840,7 @@ Run the last line with `run_in_background: true`. **Expected:** the PR URL; ever
 
 For each fix: change only the owning task's files; rerun Steps 2-3; commit `Fix: <what> (Task <n>, slice 5b-1 final verification)` with the trailer; after the PR exists, ask the owner before pushing it.
 
-Expected counts after this task: backend `1598 passed, 26 skipped`; frontend `775 passed` in 94 files.
+Expected counts after this task: backend `1604 passed, 26 skipped`; frontend `777 passed` in 94 files.
 
 ### Task 11: Merge, the owner's phone check (three steps), the record (OWNER + agent)
 
@@ -2859,23 +2863,25 @@ RUN=$(gh run list -R bbrown62450/church --workflow ci.yml --branch main --commit
 
 - [ ] **Step 2 (OWNER, then agent): Phone, step 1 of 3: your saved contacts (manual-verification item 1; answer 6's check)**
 
-> On your phone, open https://worship-service-builder.vercel.app and pull down to reload it. Tap **Settings** at the top: are the sections **Church**, **Bulletin** and **Contacts**? Tap **Contacts**: do you see your church's saved contacts, each name in bold with its email address under it? Please tell me three numbers, without any names or addresses: how many contacts are listed, how many show "This address doesn't look valid. Edit it." under them, and whether any address appears twice.
+> On your phone, open https://worship-service-builder.vercel.app and pull down to reload it. Tap **Settings** at the top: are the sections **Church**, **Bulletin** and **Contacts**? Tap **Contacts**: do you see your church's saved contacts, each name in bold with its email address under it? Please tell me three numbers, without any names or addresses: how many contacts are listed, how many show "This address doesn't look valid. Edit it." under them, and whether any address appears twice, even with different capital letters or spaces.
 
 This step is the one-time check of existing contacts (owner answer 6): the page runs every saved address through the same rule the email feature will use. Record the three numbers only.
 
-- [ ] **Step 3 (OWNER, then agent): Phone, step 2 of 3: fix, or try it out (item 2)**
+- [ ] **Step 3 (OWNER, then agent): Phone, step 2 of 3: fix, then try it out (item 2)**
 
-If Step 2 found flagged contacts or an address listed twice:
+If Step 2 found flagged contacts or an address listed twice, first:
 
-> For each contact with "This address doesn't look valid. Edit it.": tap its pencil button, correct the email address (one address only, like name@example.org), and tap **Save changes**. Does the note go away? If an address is listed twice, tap the bin button on one of them and then **Delete contact**. Is the list now as you want it?
+> For each contact with "This address doesn't look valid. Edit it.": tap its pencil button, correct the email address (one address only, like name@example.org), and tap **Save changes**. If the box holds more than one address, keep one here, then add each other one with **Add a contact**. Does the note go away? If an address is listed twice, tap the bin button on one of them and then **Delete contact**. Is the list now as you want it? Please also tell me how many contacts held more than one address (a number only).
 
-Otherwise:
+Then, every time (after any fixes, so the add, the duplicate and the delete are always tried):
 
 > Under the list, in **Add a contact**, type the name **Test** and the email **test@example.com**, and tap **Add contact**: does "Test" appear at the end of the list, with the boxes emptied? Tap its pencil button, change the name to **Test 2** and tap **Save changes**: does the list show "Test 2"? Now add **TEST@example.com** again: does it say "That email is already in your contacts." under Email? Clear the Email box, then tap the bin button next to "Test 2" and **Delete contact**: is it gone?
 
+Record how many flagged contacts were fixed, how many rows holding several addresses were split, how many duplicates were deleted, and the four answers of the try-out.
+
 - [ ] **Step 4 (OWNER, then agent): Phone, step 3 of 3: unsaved changes and the phone screen (item 3)**
 
-> In **Add a contact**, type any name but do not add it, then tap **Church** in the Settings sections: does "Discard unsaved changes?" ask first? Tap **Discard changes**: does the Church page open? Back on **Contacts**: is the page easy to use on the phone, with no sideways scrolling, and are the section links, the pencil and bin buttons and **Add contact** easy to tap?
+> In **Add a contact**, type any name but do not add it, then tap **Church** in the Settings sections: does "Discard unsaved changes?" ask first? Tap **Discard changes**: does the Church page open? Back on **Contacts**: is the page easy to use on the phone, with no sideways scrolling, and are the section links, the pencil and bin buttons and **Add contact** easy to tap? Last, tap the pencil button on any contact and tap in the Email box so the keyboard opens: can you still see and tap **Save changes**, and is the box you are typing in visible above the keyboard? Then tap **Cancel** (nothing is changed).
 
 - [ ] **Step 5 (agent): The agent's own checks (items 4-6)**
 
@@ -2918,8 +2924,8 @@ was deleted. No address, name, token or church id is recorded here.
 |---|---|---|
 | Merge and deploy | PR #<N> merged <UTC time> (<Eastern time>), merge commit `<short sha>`. CI on `main` (run <run id>): success | <date> |
 | 1. Saved contacts (phone: <phone and browser>) | <Church, Bulletin and Contacts listed; <n> contacts, <n> flagged, <n> addresses listed twice. / …> | <date> |
-| 2. Fix or try it out | <Each flagged contact fixed (the note went away); <n> duplicates deleted. / A test contact added, renamed, its address refused a second time, deleted. / …> | <date> |
-| 3. Unsaved changes and the phone | <"Discard unsaved changes?" asked; Discard changes opened Church; no sideways scroll, easy to tap. / …> | <date> |
+| 2. Fix, then try it out | <<n> flagged contacts fixed (the note went away), <n> rows holding several addresses split, <n> duplicates deleted. / Nothing to fix.> <A test contact added, renamed, its address refused a second time, deleted. / …> | <date> |
+| 3. Unsaved changes and the phone | <"Discard unsaved changes?" asked; Discard changes opened Church; no sideways scroll, easy to tap; Edit contact usable with the keyboard open (Save changes reachable, the box not covered). / …> | <date> |
 | Agent checks | <Items 5 and 6 in a test church: <results>. / Not run: <why>.> Item 4 (a member): <result / not run> | <date> |
 | Follow-ups | <None. / One line per follow-up.> Next: 5b-2 (the Gmail connection and emailing the bulletin; the owner adds the redirect URI in Google Cloud Console), 6a-2 and 6a-3, in the order the owner picks | <date> |
 ```
@@ -2964,7 +2970,7 @@ gh pr checks claude/slice-2-plan-4q33le -R bbrown62450/church --watch
 
 Code only (no schema to undo). On the owner's yes for each outward command: a branch `claude/revert-5b1` from `origin/main`, `git revert -m 1 --no-commit <merge sha>`, a commit "Revert slice 5b-1 (PR #<N>)" with the trailer, both suites (`1529 passed, 24 skipped`; `759 passed` in 92), a PR, CI, and the merge on the owner's yes; record it in the record. Contacts added or edited through the page stay in the `contacts` table (a name, an address, as the old app stored them), so nothing needs undoing in the data.
 
-Expected counts after this task: backend `1598 passed, 26 skipped` on `main`; frontend `775 passed` in 94 files. The records PR adds no test.
+Expected counts after this task: backend `1604 passed, 26 skipped` on `main`; frontend `777 passed` in 94 files. The records PR adds no test.
 
 ---
 
@@ -2975,15 +2981,15 @@ Expected counts after this task: backend `1598 passed, 26 skipped` on `main`; fr
 - **The Streamlit callers.** `streamlit_tests/test_settings_profile_contacts.py` still runs (pytest collects `streamlit_tests`) and reaches `email_contacts.add_contact` and `list_contacts` through the frozen `streamlit_views/settings.py`; with the new keyword-only `session` and the same positional arguments, its 35-test folder passes unchanged (T2 Step 4).
 - **A fixed `GET /contacts` answer in the page tests** put a deleted row back (and dropped an added one) when the mutation's refetch landed; the tests use `contactsServer`, a fake whose `GET` answers with what the writes left, as the server does.
 - **The 409 has no `fields`** (the error handler adds them only to a 422), so the page puts a 409 under Email itself.
-- **Mutation checks** (each change made by hand in the build worktree, the named tests run, the change undone): the role check dropped from `update_contact` → `1 failed, 38 passed` (usecase, API and repo tests); `email_valid` always true → `2 failed, 37 passed`; the old `created_at, name` order → `2 failed, 37 passed`; the edit's duplicate check not leaving the contact itself out → `3 failed, 36 passed`; the address stored as typed instead of normalized → `4 failed, 35 passed`; the add form's `LeaveGuard` removed → `1 failed, 34 passed` (the settings and rules tests); the row buttons shown to members → `1 failed, 34 passed`; `contactPatch` always sending the email → `2 failed, 33 passed`.
-- **The lock on Postgres.** On a throwaway PG 16 cluster (initialised under `/var/lib/postgresql`, port 5437, never a real database): `test_contacts_postgres.py` `2 passed`; all Postgres-marked tests `26 passed, 1598 deselected, 1 warning`. With `lock_church`'s `with_for_update=True` removed, both fail: "the second add did not wait for the church-row lock" and `round 0: assert [201, 201] == [201, 409]`.
+- **Mutation checks** (each change made by hand in the build worktree, the named tests run, the change undone): the role check dropped from `update_contact` → `1 failed, 38 passed` (usecase, API and repo tests); `email_valid` always true → `2 failed, 37 passed`; the old `created_at, name` order → `2 failed, 37 passed`; the edit's duplicate check not leaving the contact itself out → `3 failed, 36 passed`; the address stored as typed instead of normalized → `4 failed, 35 passed`; the add form's `LeaveGuard` removed → `1 failed, 34 passed` (the settings and rules tests); the row buttons shown to members → `1 failed, 34 passed`; `contactPatch` always sending the email → `2 failed, 33 passed`. These numbers are from the first build, before the plan review's fixes. The fixes' own checks, run the same way in the review replay: the local-part pattern dropped → `4 failed, 47 passed` (`test_email_addresses.py` and `test_api_contacts.py`); the pattern dropped and `:` allowed again → `4 failed, 34 passed`; `email_exists` without `trim` → `1 failed, 8 passed`; the contact writes leaving every 422 to the form again → the page's "toasts a refusal that names no field of the form…" fails; the edit dialog not closing on a 403 or 404 → "closes the edit dialog when the contact was deleted elsewhere…" fails; `finalFocus={nameRef}` again → the delete test's focus-back-to-the-bin check fails.
+- **The lock on Postgres.** On a throwaway PG 16 cluster (initialised under `/var/lib/postgresql`, port 5437, never a real database): `test_contacts_postgres.py` `2 passed`; all Postgres-marked tests `26 passed, 1598 deselected, 1 warning` (before the review's fixes; after them, on a new throwaway cluster on port 5438 at the end of the review replay, `2 passed` and `26 passed, 1604 deselected, 1 warning`). With `lock_church`'s `with_for_update=True` removed, both fail: "the second add did not wait for the church-row lock" and `round 0: assert [201, 201] == [201, 409]`.
 - **The production build** compiled with `○ /settings`, `○ /settings/church` and `○ /settings/contacts`.
 
-**Replay of the finished plan (2026-10-06).** The directives of T1-T9 were applied in order (by `replay.py`, which parses each step's **Create**, **Append** and **In … replace** blocks and runs every command on its "Run:" lines, three times where it says so, then the task's commit block) onto a fresh detached worktree of `62c9cc5`, with the repo's `.venv` (a symlink) and a hard-linked copy of `frontend/node_modules`:
-- All 30 directives applied (T1 3 + 1, T2 2 + 1, T3 2 + 1, T4 1 + 3, T5 1, T6 3 + 3, T7 1 + 2, T8 2 + 2, T9 2); every Replace anchor occurred exactly once. After T9, `backend`, `frontend/src` and `docs/manual-verification.md` equaled the build worktree's (`diff -r`).
+**Replay of the finished plan, after the plan review (2026-10-06).** The directives of T1-T9 were applied in order (by a replay script that parses each step's **Create**, **Append** and **In … replace** blocks and runs every command on its "Run:" lines, three times where it says so, then the task's commit block) onto a fresh detached worktree of the branch at the review-fix commit (outside the repo directory, removed afterwards), with the repo's `.venv` (a symlink) and a hard-linked copy of `frontend/node_modules`. This replay replaces the first one (of `62c9cc5`, before the review), whose numbers the fixes changed:
+- All 30 directives applied (T1 3 + 1, T2 2 + 1, T3 2 + 1, T4 1 + 3, T5 1, T6 3 + 3, T7 1 + 2, T8 2 + 2, T9 2); every Replace anchor occurred exactly once.
 - Baselines before T1: backend `1529 passed, 24 skipped`; frontend `759 passed` in 92 files.
-- Every "see it fail" output is quoted from this replay (times as `<t>`): T1 and T3 the collection error and the import check's `1 failed, 2 passed`; T2 the collection error; T4 `13 failed`; T6 and T7 the new file not loading; T8 three `×`.
-- Every count matched the table: backend 1562, 1567, 1585, 1598 passed with 24 skipped, then 26 skipped from T5; frontend 763 in 93, 774 in 94, 775 in 94; T7's three runs `25 passed` each time, no flaky run; T4 Step 4 ` 2 files changed, 921 insertions(+)` and `42 passed`; T8 Step 4 `32 passed`; typecheck 0 and lint 0 after T4, T6, T7 and T8; T9 `89 passed`, `4`, `0`, ` 2 files changed, 22 insertions(+), 3 deletions(-)`.
+- Every "see it fail" output is quoted from this replay (times as `<t>`): T1 and T3 the collection error and the import check's `1 failed, 2 passed`; T2 the collection error; T4 `13 failed`; T6 and T7 the new file not loading; T8 three `×` (and Vitest's `Failed Tests 3` banner, which the grep also matches).
+- Every count matched the table: backend 1567, 1573, 1591, 1604 passed with 24 skipped, then 26 skipped from T5; frontend 763 in 93, 776 in 94, 777 in 94; T1 Step 4 `41 passed`; T2 Step 4 `44 passed`; T3 Step 4 `30 passed`; T7's three runs `27 passed` each time, no flaky run; T4 Step 4 ` 2 files changed, 921 insertions(+)` and `42 passed`; T8 Step 4 `34 passed`; typecheck 0 and lint 0 after T4, T6, T7 and T8; T9 `89 passed`, `4`, `0`, ` 2 files changed, 22 insertions(+), 3 deletions(-)`. After T9: the backend suite `1604 passed, 26 skipped`, the frontend suite `777 passed` in 94 files, T10 Step 3's em dash count `0` and imports grep exit `1`, and the production build `✓ Compiled successfully` with `○ /settings`, `○ /settings/church` and `○ /settings/contacts`.
 - Not run while planning: the pushes, the PR and CI, the merge, Railway's and Vercel's deploys and the owner's phone check (T11).
 
 ## Spec coverage
@@ -2992,14 +2998,14 @@ Expected counts after this task: backend `1598 passed, 26 skipped` on `main`; fr
 |---|---|
 | Answer 2: 5b-1 is the Contacts page, `GET /contacts` and `normalize_address`, no Google setup | T1, T4, T7, T8; clarification 1 |
 | Answer 6: a one-time check of saved contacts the rule would refuse | T3 `test_the_list_flags_each_saved_address_the_send_time_rule_refuses`; T4 `test_a_member_reads_the_list_in_order_with_blank_names_null_and_bad_addresses_flagged`; T7 "flags a saved address the send-time check refuses, and the admin fixes it", the member's note in "shows a member the list as text…"; T11 Step 2; clarification 13 |
-| B `normalize_address` (the rule, no dependency) and the shared fixture | T1 `test_email_addresses.py` (33 cases); T4 `test_every_shared_address_case_is_accepted_or_refused_as_normalize_address_says` (B acceptance 14a) |
+| B `normalize_address` (the rule, no dependency) and the shared fixture; every accepted address one `Bcc` recipient (review C1) | T1 `test_email_addresses.py` (37 cases and `test_every_valid_address_is_exactly_one_recipient_in_a_bcc_header`); T4 `test_every_shared_address_case_is_accepted_or_refused_as_normalize_address_says` (B acceptance 14a) |
 | B `GET /contacts`: `ContactOut`, the order, blank names as null, `assert_church_isolated` | T2 `test_contacts_are_listed_by_creation_then_name_with_blank_names_last`; T4 the list test and `test_contacts_are_isolated_between_churches` |
 | S UX §4: the list, the member banner, nameless rows, the empty states | T7 "shows a member the list as text…", "shows each role its empty state" |
-| S UX §4: add (fields clear, focus to Name, no toast), edit (dialog, PATCH), delete (confirmed) | T7 "lets an admin add a contact…", "lets an admin edit a contact…", "asks before deleting, then removes the row"; T6 `contacts.test.ts` |
-| S errors inline: "Email is required.", "Enter a valid email address.", "That email is already in your contacts." | T7 "says what is wrong with an address under Email and focuses it", "shows an edit's 409 in the dialog…"; T4 `test_a_bad_field_is_a_422_naming_it`, `test_an_address_already_saved_in_any_case_is_a_409` |
+| S UX §4: add (fields clear, focus to Name, no toast), edit (dialog, PATCH), delete (confirmed) | T7 "lets an admin add a contact…", "lets an admin edit a contact…", "asks before deleting, then removes the row; focus goes back to the bin on Cancel, to Name after a delete"; T6 `contacts.test.ts` |
+| S errors inline: "Email is required.", "Enter a valid email address.", "That email is already in your contacts."; any other failure toasted; a 403 or 404 closes the edit dialog | T7 "says what is wrong with an address under Email and focuses it", "shows an edit's 409 in the dialog…", "toasts a refusal that names no field of the form…", "closes the edit dialog when the contact was deleted elsewhere…"; T4 `test_a_bad_field_is_a_422_naming_it`, `test_an_address_already_saved_in_any_case_is_a_409` |
 | S API rows and models (`POST` 201, `PATCH` only what is sent, `DELETE` `{deleted: true}`, 404 "Contact not found.", `extra="forbid"`, an omitted email is "Email is required.") | T4 `test_an_admin_adds_edits_and_deletes_a_contact`, `test_a_bad_field_is_a_422_naming_it`, `test_unknown_fields_and_malformed_ids_are_422`; T3 `test_an_unknown_contact_or_another_churchs_is_not_found` |
 | S roles: everyone reads, admins write | T4 `test_a_member_cannot_add_edit_or_delete`; T3 `test_a_member_a_demoted_admin_or_a_removed_member_writes_nothing`; T7 the member's view |
-| S Semantics → Contacts: `normalize_email`, the stored address, `lower()` duplicates excluding self, a blank name stored as `""` and returned as null | T3 `test_an_address_is_stored_as_the_send_time_rule_returns_it`, `test_a_missing_or_invalid_address_is_named`, `test_a_name_is_trimmed_blank_is_stored_as_empty_and_it_stays_on_one_line`, `test_an_admin_adds_a_contact_and_a_duplicate_in_any_case_is_refused`, `test_an_edit_changes_only_what_is_sent_and_checks_duplicates_but_not_itself` |
+| S Semantics → Contacts: `normalize_email`, the stored address, `lower()` duplicates excluding self (trimmed: T2 `test_email_exists_ignores_spaces_around_a_saved_address`), a blank name stored as `""` and returned as null | T3 `test_an_address_is_stored_as_the_send_time_rule_returns_it`, `test_a_missing_or_invalid_address_is_named`, `test_a_name_is_trimmed_blank_is_stored_as_empty_and_it_stays_on_one_line`, `test_an_admin_adds_a_contact_and_a_duplicate_in_any_case_is_refused`, `test_an_edit_changes_only_what_is_sent_and_checks_duplicates_but_not_itself` |
 | S Semantics → Locking (the lock, the role re-read, `no_church_access`) | T3 `test_each_write_reads_the_church_row_under_its_lock`, `test_a_member_a_demoted_admin_or_a_removed_member_writes_nothing` |
 | S Postgres: two concurrent adds of one address in two cases → one 201, one 409, one row, 20 rounds | T5 `test_two_adds_of_one_address_at_once_make_one_contact_twenty_times` and `test_a_second_add_waits_for_the_first_and_gets_a_409` (CI `backend-postgres`) |
 | S: a role 403 does not take the church fallback; `["church", id, "contacts"]` invalidated by the writes | T7 "toasts a role 403 and refetches the church profile…"; T6 `lib/queries/contacts.ts` |
@@ -3035,10 +3041,29 @@ Your 5b planning answers of 2026-10-06 (the six, all as recommended) are binding
 
 Owner steps still to come: the plan's approval; the draft PR on your yes and ready on your yes (T10); the merge on your yes, then three phone checks one at a time (the first one is your check of the saved contacts), and the records PR (T11).
 
+## Plan review fixes (2026-10-06)
+
+Each finding of the plan review, and what changed (T1-T9 then replayed again; Build notes):
+
+- **C1** T1: the local part must fullmatch the dot-atom pattern (`_LOCAL`), `:` joins `_FORBIDDEN` and the docstring; the fixture gains `mary:jones@example.org`, `.mary@example.org`, `mary.@example.org`, `ma..ry@example.org` (26 invalid); new `test_every_valid_address_is_exactly_one_recipient_in_a_bcc_header` (each valid address set as a `Bcc` header with `EmailMessage` parses back as exactly itself, one group with no name, no defects); clarification 7's amendment and a deviation line in clarification 17; T1 +38 (was +33), every later backend total +6 (+4 here and +1 each for C1's header test and I2's test), final `1604 passed, 26 skipped`; the PR body line.
+- **I1** T11 Step 3 and manual-verification item 2: "If the box holds more than one address, keep one here, then add each other one with **Add a contact**."; Step 3 asks for, and the record's row 2 records, how many rows were split.
+- **I2** T2: `_email_exists` compares `func.lower(func.trim(Contact.email))`; new `test_email_exists_ignores_spaces_around_a_saved_address` (" Mary@X.org " is found by "mary@x.org" and not when that contact is left out, as on its own PATCH); clarification 8.
+- **I3** T6/T7: `contactFieldErrors` moves to `lib/queries/contacts.ts` and is the one rule for both: `useContactWrite.onError` returns early only for a 401, a lost church, a 409 or a 422 whose `fields` names `name` or `email`, and toasts `errorToastMessage(e)` otherwise; new page test "toasts a refusal that names no field of the form…"; clarifications 5 and 14.
+- **I4** T7: the dialog renders only for `admin && editing`; its `onError` calls `onClose()` on a 403 or 404; new page test "closes the edit dialog when the contact was deleted elsewhere…" (PATCH 404: toast, dialog closed, list refetched, row gone); clarification 4.
+- **I5** T11 Steps 2-3 and manual-verification items 1-2: the add, duplicate (409) and delete try-out runs every time, after any fixes; the duplicate question says "even with different capital letters or spaces".
+- **M1** T7: the confirmation's title comes from `deleteLabel`, set when the bin is tapped and never cleared, so it stays while the dialog closes (state rather than a ref, since React does not allow reading a ref during render).
+- **M2** T7: `finalFocus` is a function: Name only after a successful delete (`deleted` ref set in `onSuccess`), otherwise `true` (back to the bin); the delete test checks both.
+- **M3** The literal U+2028 (T3 test) and U+FFFE/U+FFFF (T3 `_NOT_ONE_LINE`) are written `\u2028`, `\ufffe\uffff`, as `church_admin.py` does; the plan file holds none of U+2028, U+2029, U+FFFE, U+FFFF (checked with Python).
+- **M4** T11 Step 4 and manual-verification item 3: the **Edit contact** sheet with the iPhone keyboard open (Save changes reachable, the box not covered); the record's row 3.
+- **M5** Clarification 8 notes that the frozen Streamlit `app.py` would now show "None <email>" for a nameless contact; accepted, Streamlit is retired.
+- **M6** Clarification 10 notes that a JSON `null` email gets Pydantic's generic "Not a valid value."; not mapped (the page never sends it).
+
+The owner questions are unchanged: no new user-facing string, and the stricter address rule refuses only addresses that cannot be sent to.
+
 ## Self-review
 
 - **Coverage.** Every binding constraint has a home: the nav order and its reason (clarification 2, owner question 1); no migration, with the unique-index trade-off (clarification 12, owner question 3); no em dash in new copy (clarification 15; T9 Step 2 and T10 Step 3 grep the added lines; S's caption is not used as written, and the 5b spec's dialog lines with their dashes belong to 5b-2); no ids, real addresses, keys or phone numbers in the docs (only `@example.org` / `@example.com` addresses; the record's own grep, T11 Step 7); the frozen Streamlit files untouched and `get_contacts_for_display` kept (T2; T10 Step 3's path check counts `app.py`, `streamlit_views` and `streamlit_tests` as 0); the read-only check of existing contacts as option (b), with (a) offered (clarification 13, owner question 2); 6a-1's patterns reused as they are (`lock_and_read_actor`, `require_admin_role`, `LeaveGuard`, `ConfirmDialog`, the generated types, the Settings shell); the second-to-last task opens a draft PR only on the owner's yes, the last merges only on a yes, runs a three-step phone check one step at a time and inserts "### Slice 5b-1 record" before "## Backups", after "### Slice 6a-1 record".
 - **Placeholders.** None in T1-T9's code, tests, commands or expected outputs; every expected output is quoted from the replay. The `<…>` left are T10 and T11's runtime values (`<N>`, `<scratch>`, times, the owner's answers), as in the 6a-1 plan.
-- **Consistency.** Names agree across tasks: `normalize_address`/`InvalidAddress` (T1) are used by `usecases.contacts` (T3); `get_contact`, `update_contact`, `email_exists` (T2) by T3; `list_contacts`, `add_contact`, `update_contact`, `delete_contact` (T3) by the routes (T4); `ContactOut.email_valid` (T4) by `Contact` (T6) and the page (T7); `keys.contacts` (existing) by the queries (T6). The counts in the table, each task's "Expected" and the PR line (`1529 → 1598`, `24 → 26`, `759 → 775`, `92 → 94`) agree.
+- **Consistency.** Names agree across tasks: `normalize_address`/`InvalidAddress` (T1) are used by `usecases.contacts` (T3); `get_contact`, `update_contact`, `email_exists` (T2) by T3; `list_contacts`, `add_contact`, `update_contact`, `delete_contact` (T3) by the routes (T4); `ContactOut.email_valid` (T4) by `Contact` (T6) and the page (T7); `keys.contacts` (existing) by the queries (T6); `contactFieldErrors` (T6) by the page (T7). The counts in the table, each task's "Expected" and the PR line (`1529 → 1604`, `24 → 26`, `759 → 777`, `92 → 94`) agree.
 - **Not verified while planning:** the pushes, the PR and CI, the merge, Railway's and Vercel's deploys, the owner's phone check, and the page at 375 px in a real browser (the classes give 44 px targets and `break-all` addresses; jsdom does not lay out). What the owner's contacts look like is unknown until T11 Step 2.
 - **Judgement calls to watch in review:** the usecases in their own module rather than `church_admin.py`; `email_valid` added to B's `ContactOut`; the held-lock Postgres test beside S's barrier test; the name's one-line rule.
