@@ -24,18 +24,22 @@ or an address. No FastAPI, Starlette or Streamlit.
 """
 from __future__ import annotations
 
+import base64
 import secrets
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from enum import Enum
+from typing import Any, Optional
 from urllib.parse import urlencode
 
+import httpx
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 from db import session_scope
 from db.models import GmailToken, OAuthState
+from integrations import http
 
 # openid and userinfo.email identify the Google account (the callback checks it is
 # the signed-in user's); gmail.send lets the app send mail as them, nothing more.
@@ -186,3 +190,237 @@ def delete_connection(user_id: uuid.UUID, *, only_if_token: Optional[str] = None
     session.delete(row)
     session.flush()
     return token
+
+
+# --------------------------------------------------------------------------- #
+# The Google calls (Task 3)
+# --------------------------------------------------------------------------- #
+# F §1.8. httpx applies each value per phase, not to the whole call: 5 s to connect, then up to 15 s
+# (a token, userinfo or refresh call), 30 s (the send) or 5 s (the revoke) for each wait on a write, a
+# read or the pool. A slow but steady answer can therefore take longer than the number; the browser's own
+# timeout (lib/api/timeouts.ts) is the overall deadline, and a send it stops waiting for is treated there
+# as possibly sent.
+TOKEN_TIMEOUT = httpx.Timeout(15.0, connect=5.0)
+SEND_TIMEOUT = httpx.Timeout(30.0, connect=5.0)
+REVOKE_TIMEOUT = httpx.Timeout(5.0, connect=5.0)
+
+_CLIENT_ERRORS = {"invalid_client", "unauthorized_client", "redirect_uri_mismatch"}
+_SCOPE_ERRORS = {"insufficientPermissions", "ACCESS_TOKEN_SCOPE_INSUFFICIENT"}
+_LIMIT_ERRORS = {"rateLimitExceeded", "userRateLimitExceeded", "dailyLimitExceeded"}
+# Gmail refuses the account itself (a Google account without Gmail, Gmail turned off by a Workspace admin).
+_ACCOUNT_ERRORS = {"failedPrecondition", "FAILED_PRECONDITION"}
+# A send that failed before its request was written cannot have reached Gmail.
+_NOT_SENT = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout, httpx.UnsupportedProtocol)
+
+
+class GoogleErrorKind(str, Enum):
+    INVALID_GRANT = "invalid_grant"                 # the code or the refresh token is no longer valid
+    CLIENT_MISCONFIGURED = "client_misconfigured"   # our client id, secret or redirect URI
+    INCOMPLETE_RESPONSE = "incomplete_response"     # no access token, or an unreadable answer
+    SCOPE_MISSING = "scope_missing"                 # consent given without "send email on your behalf"
+    NO_EMAIL = "no_email"                           # userinfo had no address
+    EMAIL_MISMATCH = "email_mismatch"               # a Google account other than the signed-in one
+    INSUFFICIENT_SCOPE = "insufficient_scope"       # Gmail: the grant no longer allows sending
+    SEND_LIMIT = "send_limit"                       # Gmail: a rate or daily limit
+    ACCOUNT_REFUSED = "account_refused"             # Gmail: a 401 not about the scope, or a failed precondition
+    SEND_REJECTED = "send_rejected"                 # Gmail: any other 4xx; nothing was sent
+    UPSTREAM = "upstream"                           # a 5xx or a network error where nothing changed at Google
+    TIMEOUT = "timeout"                             # no answer in time where nothing changed at Google
+    SEND_UNCONFIRMED = "send_unconfirmed"           # the send was written but not confirmed: it may have gone out
+
+
+class GoogleOAuthError(Exception):
+    """A Google call failed in a way the caller maps to a message. `status` is
+    Google's HTTP status (None for a network error); `google_error` is Google's
+    error code (for example "invalid_client"), for the logs only: never shown."""
+
+    def __init__(self, kind: GoogleErrorKind, *, status: Optional[int] = None,
+                 google_error: Optional[str] = None):
+        super().__init__(kind.value)
+        self.kind = kind
+        self.status = status
+        self.google_error = google_error
+
+
+@dataclass(frozen=True)
+class GmailGrant:
+    """What a successful code exchange gives: the Google address (as Google
+    spells it), the refresh token (None when Google sent none) and the granted scopes."""
+
+    google_email: str
+    refresh_token: Optional[str]
+    scopes: frozenset[str]
+
+
+def _error_names(resp: httpx.Response) -> set[str]:
+    """Google's error names in a response body: the OAuth "error" string, or the
+    Gmail API's error status and each reason. Empty for a body that is not JSON."""
+    try:
+        body = resp.json()
+    except ValueError:
+        return set()
+    if not isinstance(body, dict):
+        return set()
+    error = body.get("error")
+    if isinstance(error, str):
+        return {error}
+    if not isinstance(error, dict):
+        return set()
+    names = {error["status"]} if isinstance(error.get("status"), str) else set()
+    for item in [*(error.get("errors") or []), *(error.get("details") or [])]:
+        if isinstance(item, dict) and isinstance(item.get("reason"), str):
+            names.add(item["reason"])
+    return names
+
+
+def _failure(resp: httpx.Response, phase: str) -> GoogleOAuthError:
+    """The error for a non-2xx answer. `phase` is "token", "userinfo",
+    "refresh" or "send" (5b spec, the one classification helper)."""
+    names = _error_names(resp)
+    named = next(iter(sorted(names, key=lambda name: (name.isupper(), name))), None)   # a reason before a STATUS
+    status = resp.status_code
+    if phase == "send":
+        if status == 403 and names & _SCOPE_ERRORS:
+            return GoogleOAuthError(GoogleErrorKind.INSUFFICIENT_SCOPE, status=status, google_error=named)
+        if status == 429 or (status == 403 and names & _LIMIT_ERRORS):
+            return GoogleOAuthError(GoogleErrorKind.SEND_LIMIT, status=status, google_error=named)
+        if status == 401 or (status == 400 and names & _ACCOUNT_ERRORS):
+            return GoogleOAuthError(GoogleErrorKind.ACCOUNT_REFUSED, status=status, google_error=named)
+        if status >= 500:
+            return GoogleOAuthError(GoogleErrorKind.SEND_UNCONFIRMED, status=status, google_error=named)
+        return GoogleOAuthError(GoogleErrorKind.SEND_REJECTED, status=status, google_error=named)
+    if phase in ("token", "refresh") and status in (400, 401):
+        if "invalid_grant" in names:
+            return GoogleOAuthError(GoogleErrorKind.INVALID_GRANT, status=status, google_error="invalid_grant")
+        client = names & _CLIENT_ERRORS
+        if client:
+            return GoogleOAuthError(GoogleErrorKind.CLIENT_MISCONFIGURED, status=status,
+                                    google_error=sorted(client)[0])
+    if phase == "userinfo" and status < 500:
+        return GoogleOAuthError(GoogleErrorKind.NO_EMAIL, status=status, google_error=named)
+    return GoogleOAuthError(GoogleErrorKind.UPSTREAM, status=status, google_error=named)
+
+
+def _transport_failure(exc: httpx.HTTPError, phase: str) -> GoogleOAuthError:
+    """The error for a request that got no answer. A send that was written may
+    have gone out (SEND_UNCONFIRMED); any other call changed nothing at Google."""
+    if phase == "send":
+        return GoogleOAuthError(GoogleErrorKind.UPSTREAM if isinstance(exc, _NOT_SENT)
+                                else GoogleErrorKind.SEND_UNCONFIRMED)
+    return GoogleOAuthError(GoogleErrorKind.TIMEOUT if isinstance(exc, httpx.TimeoutException)
+                            else GoogleErrorKind.UPSTREAM)
+
+
+def _json(resp: httpx.Response) -> dict[str, Any]:
+    try:
+        body = resp.json()
+    except ValueError:
+        raise GoogleOAuthError(GoogleErrorKind.INCOMPLETE_RESPONSE, status=resp.status_code) from None
+    if not isinstance(body, dict):
+        raise GoogleOAuthError(GoogleErrorKind.INCOMPLETE_RESPONSE, status=resp.status_code)
+    return body
+
+
+def _token_request(form: dict[str, str], phase: str) -> dict[str, Any]:
+    try:
+        resp = http.post(TOKEN_URI, data=form, timeout=TOKEN_TIMEOUT)
+    except httpx.HTTPError as exc:
+        raise _transport_failure(exc, phase) from None
+    if not resp.is_success:
+        raise _failure(resp, phase)
+    return _json(resp)
+
+
+def _access_token(payload: dict[str, Any]) -> str:
+    token = payload.get("access_token")
+    if not isinstance(token, str) or not token:
+        raise GoogleOAuthError(GoogleErrorKind.INCOMPLETE_RESPONSE)
+    return token
+
+
+def _granted_scopes(payload: dict[str, Any]) -> frozenset[str]:
+    """The granted scopes. No `scope` (or a blank one) means exactly the
+    requested ones (RFC 6749 §5.1); one without gmail.send is SCOPE_MISSING."""
+    scope = payload.get("scope")
+    if scope is None or scope == "":
+        return frozenset(SCOPES)
+    if not isinstance(scope, str):
+        raise GoogleOAuthError(GoogleErrorKind.INCOMPLETE_RESPONSE)
+    granted = frozenset(scope.split())
+    if GMAIL_SEND_SCOPE not in granted:
+        raise GoogleOAuthError(GoogleErrorKind.SCOPE_MISSING)
+    return granted
+
+
+def _fetch_userinfo_email(access_token: str) -> str:
+    try:
+        resp = http.get(USERINFO_URI, headers={"Authorization": f"Bearer {access_token}"},
+                        read_timeout=TOKEN_TIMEOUT.read)
+    except httpx.HTTPError as exc:
+        raise _transport_failure(exc, "userinfo") from None
+    if not resp.is_success:
+        raise _failure(resp, "userinfo")
+    try:
+        email = resp.json().get("email")
+    except (ValueError, AttributeError):
+        email = None
+    if not isinstance(email, str) or not email.strip():
+        raise GoogleOAuthError(GoogleErrorKind.NO_EMAIL)
+    return email.strip()
+
+
+def exchange_code(config: GoogleOAuthConfig, code: str, *, expected_email: str) -> GmailGrant:
+    """Exchange the consent screen's code (15 s), check the granted scopes, read
+    the Google address (15 s) and compare it, ignoring case, with the signed-in
+    user's. Stores nothing (the caller does, in its own transaction)."""
+    payload = _token_request({
+        "code": code,
+        "client_id": config.client_id,
+        "client_secret": config.client_secret,
+        "redirect_uri": config.redirect_uri,
+        "grant_type": "authorization_code",
+    }, "token")
+    access_token = _access_token(payload)
+    scopes = _granted_scopes(payload)
+    google_email = _fetch_userinfo_email(access_token)
+    if google_email.lower() != expected_email.strip().lower():
+        raise GoogleOAuthError(GoogleErrorKind.EMAIL_MISMATCH)
+    refresh = payload.get("refresh_token")
+    return GmailGrant(google_email=google_email, refresh_token=refresh if isinstance(refresh, str) and refresh else None,
+                      scopes=scopes)
+
+
+def refresh_access_token(config: GoogleOAuthConfig, refresh_token: str) -> str:
+    """A fresh access token for the stored refresh token (15 s)."""
+    payload = _token_request({
+        "client_id": config.client_id,
+        "client_secret": config.client_secret,
+        "refresh_token": refresh_token,
+        "grant_type": "refresh_token",
+    }, "refresh")
+    return _access_token(payload)
+
+
+def send_raw_message(access_token: str, raw: bytes) -> None:
+    """Send one MIME message (its bytes) through the Gmail API's JSON endpoint
+    (SEND_TIMEOUT, per phase; the caller keeps the message small enough for it).
+    A failure before the request was written is UPSTREAM (nothing was sent); no
+    answer after it, or a Gmail 5xx, is SEND_UNCONFIRMED (it may have been sent)."""
+    body = {"raw": base64.urlsafe_b64encode(raw).decode("ascii")}
+    try:
+        resp = http.post(GMAIL_SEND_URI, json=body, headers={"Authorization": f"Bearer {access_token}"},
+                         timeout=SEND_TIMEOUT)
+    except httpx.HTTPError as exc:
+        raise _transport_failure(exc, "send") from None
+    if not resp.is_success:
+        raise _failure(resp, "send")
+
+
+def revoke_token(token: str) -> bool:
+    """Ask Google to revoke the grant (5 s), best effort: True when Google said
+    yes, False on any failure. Never raises."""
+    try:
+        resp = http.post(REVOKE_URI, data={"token": token}, timeout=REVOKE_TIMEOUT)
+    except httpx.HTTPError:
+        return False
+    return resp.is_success
