@@ -169,7 +169,7 @@ The owner's answers win over B, S and F; the code wins over all of them where th
 
 - [ ] **Step 1: Write the failing tests**
 
-The fixture is the authority for the rule: each `valid` case is accepted and returns its `normalized` value, each `invalid` one raises. The exactly-254-character valid case and the 255-character invalid one are the same shape (a 64-character local part and three labels) one letter apart.
+The fixture is the authority for the rule: each `valid` case is accepted and returns its `normalized` value, each `invalid` one raises. The exactly-254-character valid case and the 255-character invalid one are the same shape (a 64-character local part and three labels) one letter apart. A last test proves what the rule is for: each valid address, set as a `Bcc` header with the standard library's `email.message.EmailMessage` (what 5b-2 sends with), parses back as exactly that one address with no defect, so no accepted address can turn into a group (`mary:jones@…`), a second recipient or a malformed header.
 
 **Create `backend/tests/fixtures/shared/email_addresses.json`:**
 
@@ -195,6 +195,10 @@ The fixture is the authority for the rule: each `valid` case is accepted and ret
     "mary@example..org",
     "a@b",
     "@example.org",
+    "mary:jones@example.org",
+    ".mary@example.org",
+    "mary.@example.org",
+    "ma..ry@example.org",
     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@example.org",
     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.dddddddddddddddddddddddddddddddddddddddddddddddddddddddddd.org",
     "mary@-example.org",
@@ -219,6 +223,7 @@ The fixture is the authority for the rule: each `valid` case is accepted and ret
 """email_addresses.normalize_address, the one address rule (slice 5b spec;
 slice 5b-1), driven by the shared fixture every caller is tested against."""
 import json
+from email.message import EmailMessage
 from pathlib import Path
 
 import pytest
@@ -244,6 +249,16 @@ def test_an_invalid_address_is_refused(raw):
 def test_a_blank_address_is_refused(raw):
     with pytest.raises(InvalidAddress):
         normalize_address(raw)
+
+
+def test_every_valid_address_is_exactly_one_recipient_in_a_bcc_header():
+    for case in CASES["valid"]:
+        message = EmailMessage()
+        message["Bcc"] = case["normalized"]
+        header = message["Bcc"]
+        assert [a.addr_spec for a in header.addresses] == [case["normalized"]], case["raw"]
+        assert [g.display_name for g in header.groups] == [None], case["raw"]       # no group syntax
+        assert header.defects == (), case["raw"]
 ````
 
 **In `backend/tests/test_no_streamlit_in_core.py`, replace:**
@@ -288,8 +303,12 @@ no FastAPI, Starlette or Streamlit here.
 import re
 
 # Characters that never belong in one plain address: they separate lists (", ;"),
+# start a group (":", which in a Bcc header would send to the address after it),
 # wrap display names or quoted parts ("< > \" ( ) [ ]") or escape ("\\").
-_FORBIDDEN = frozenset(',;<>"()[]\\')
+_FORBIDDEN = frozenset(',;:<>"()[]\\')
+# The local part: dot-separated runs of the characters an unquoted address may use (RFC 5322 dot-atom),
+# so no leading, trailing or doubled dot; every address the rule accepts is one plain Bcc recipient.
+_LOCAL = re.compile(r"[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*")
 # One domain label: 1-63 ASCII letters, digits or hyphens, not starting or ending with a hyphen.
 _LABEL = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?")
 
@@ -303,9 +322,12 @@ def normalize_address(raw: str) -> str:
     local part keeps the case typed), or InvalidAddress unless all hold:
     at most 254 characters, ASCII only (an internationalized domain is refused;
     its punycode form is accepted), no whitespace, control character or any of
-    , ; < > " ( ) [ ] \\, exactly one @, a local part of 1-64 characters, and a
-    domain of at least two labels (each 1-63 letters, digits or hyphens, not
-    starting or ending with a hyphen) whose last label is at least two letters.
+    , ; : < > " ( ) [ ] \\, exactly one @, a local part of 1-64 characters made
+    of dot-separated runs of letters, digits and ! # $ % & ' * + / = ? ^ _ ` { | } ~ -
+    (no leading, trailing or doubled dot), and a domain of at least two labels
+    (each 1-63 letters, digits or hyphens, not starting or ending with a hyphen)
+    whose last label is at least two letters. So an accepted address is always
+    exactly one recipient in a Bcc header.
     """
     address = raw.strip()
     if not address or len(address) > 254 or not address.isascii():
@@ -315,7 +337,7 @@ def normalize_address(raw: str) -> str:
     if address.count("@") != 1:
         raise InvalidAddress(raw)
     local, _, domain = address.partition("@")
-    if not 1 <= len(local) <= 64:
+    if not 1 <= len(local) <= 64 or not _LOCAL.fullmatch(local):
         raise InvalidAddress(raw)
     labels = domain.split(".")
     if len(labels) < 2 or not all(_LABEL.fullmatch(label) for label in labels):
@@ -329,23 +351,25 @@ def normalize_address(raw: str) -> str:
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_email_addresses.py backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`
 **Expected:**
-`36 passed in <t>s`; `1562 passed, 24 skipped in <t>s`.
+`41 passed in <t>s`; `1567 passed, 24 skipped in <t>s`.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add backend/email_addresses.py backend/tests/test_email_addresses.py backend/tests/fixtures/shared/email_addresses.json backend/tests/test_no_streamlit_in_core.py
 git commit -q -m "Slice 5b-1: email_addresses.normalize_address, the one address rule" -m "An address is accepted when it is one plain ASCII address: at most 254
-characters, no whitespace, control character or list or quoting
-character, one @, a local part of 1-64 characters and a domain of two or
-more labels ending in letters. It comes back trimmed with the domain
+characters, no whitespace, control character or list, group or quoting
+character, one @, a local part of 1-64 characters of dot-separated
+atoms (no leading, trailing or doubled dot) and a domain of two or more
+labels ending in letters. It comes back trimmed with the domain
 lower-cased. The shared fixture email_addresses.json holds the cases
-(5b spec's list and a few more); POST /contacts runs them too (T4), and
+(5b spec's list and a few more); a test proves each valid one is exactly
+one recipient in a Bcc header. POST /contacts runs them too (T4), and
 5b-2's send will." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1562 passed, 24 skipped`; frontend `759 passed` in 92 files.
+Expected counts after this task: backend `1567 passed, 24 skipped`; frontend `759 passed` in 92 files.
 
 ### Task 2: The contacts repo: sessions, the order, edits and the duplicate check (B "Modules" `email_contacts.py`; S "Changed modules"; clarification 8)
 
@@ -354,7 +378,7 @@ Expected counts after this task: backend `1562 passed, 24 skipped`; frontend `75
 
 - [ ] **Step 1: Write the failing tests**
 
-The three existing tests stay as they are (the church isolation of a list and of a delete, and no `DEFAULT_CONTACTS`). The order test seeds rows with the same `created_at`, so only the name and the id decide; the nameless ones (`""`, `None`, spaces) come last and among themselves by id.
+The three existing tests stay as they are (the church isolation of a list and of a delete, and no `DEFAULT_CONTACTS`). Six are added. The order test seeds rows with the same `created_at`, so only the name and the id decide; the nameless ones (`""`, `None`, spaces) come last and among themselves by id.
 
 **In `backend/tests/test_email_contacts.py`, replace:**
 
@@ -435,6 +459,13 @@ def test_email_exists_ignores_case_and_can_leave_one_contact_out(tmp_db, make_us
     assert email_exists(a, "mary@x.org") and email_exists(a, "MARY@X.ORG")
     assert not email_exists(a, "mary@x.org", exclude_id=cid)
     assert not email_exists(b, "mary@x.org")
+
+
+def test_email_exists_ignores_spaces_around_a_saved_address(tmp_db, make_user, make_church):
+    a = make_church(name="A", owner_user_id=make_user(email="c8@x.org"))
+    cid = add_contact(a, name="", email=" Mary@X.org ")["id"]          # as Streamlit saved it, untrimmed
+    assert email_exists(a, "mary@x.org")
+    assert not email_exists(a, "mary@x.org", exclude_id=cid)           # an edit of that contact itself
 
 
 def test_a_malformed_id_is_not_found(tmp_db, make_user, make_church):
@@ -631,7 +662,8 @@ def _get(session, contact_id, church_id) -> Optional[Contact]:
 def email_exists(church_id, email: str, *, exclude_id: Optional[uuid.UUID] = None,
                  session: Optional[Session] = None) -> bool:
     """True when another of the church's contacts has this address, compared
-    lower-cased (5b's rule: addresses that differ only in case are one)."""
+    trimmed and lower-cased (5b's rule: addresses that differ only in case are
+    one; a Streamlit-era address may still have spaces around it)."""
     if session is not None:
         return _email_exists(session, church_id, email, exclude_id)
     with session_scope() as own:
@@ -640,7 +672,7 @@ def email_exists(church_id, email: str, *, exclude_id: Optional[uuid.UUID] = Non
 
 def _email_exists(session, church_id, email, exclude_id) -> bool:
     query = select(Contact.id).where(
-        Contact.church_id == as_uuid(church_id), func.lower(Contact.email) == email.lower()
+        Contact.church_id == as_uuid(church_id), func.lower(func.trim(Contact.email)) == email.lower()
     )
     if exclude_id is not None:
         query = query.where(Contact.id != as_uuid(exclude_id))
@@ -666,7 +698,7 @@ def _delete_contact(session, contact_id, church_id) -> bool:
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_email_contacts.py streamlit_tests 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`
 **Expected:**
-`43 passed in <t>s` (the repo's 8 and the 35 `streamlit_tests`); `1567 passed, 24 skipped in <t>s`.
+`44 passed in <t>s` (the repo's 9 and the 35 `streamlit_tests`); `1573 passed, 24 skipped in <t>s`.
 
 - [ ] **Step 5: Commit**
 
@@ -677,12 +709,13 @@ can run it under the church-row lock, and ids go through db.ids.as_uuid
 (a malformed id is a 404). The list orders by creation, then name with
 blank names last, then id (5b spec), and a NULL or blank name comes back
 as None. New: get_contact, update_contact (only the keys given) and
-email_exists (case-insensitive, optionally leaving one contact out).
+email_exists (trimmed and case-insensitive, optionally leaving one
+contact out).
 get_contacts_for_display and the Streamlit callers' signatures stay." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1567 passed, 24 skipped`; frontend `759 passed` in 92 files.
+Expected counts after this task: backend `1573 passed, 24 skipped`; frontend `759 passed` in 92 files.
 
 ### Task 3: The contacts usecases: the list's check, the rules, the locked writes (S "Semantics" → Contacts and Locking; clarifications 9, 11, 13)
 
@@ -758,7 +791,7 @@ def test_a_name_is_trimmed_blank_is_stored_as_empty_and_it_stays_on_one_line():
     assert contacts.clean_name("  Mary Jones ") == "Mary Jones"
     assert contacts.clean_name("   ") == ""
     assert contacts.clean_name(None) == ""
-    for bad in ("Mary\nJones", "Mary\x00", "Mary Jones"):
+    for bad in ("Mary\nJones", "Mary\x00", "Mary\u2028Jones"):
         with pytest.raises(InvalidInput) as refused:
             contacts.clean_name(bad)
         assert (refused.value.field, refused.value.message) == (
@@ -922,7 +955,7 @@ CONTACT_NOT_FOUND = "Contact not found."
 
 # A contact's name is one line in the list and, from 5b-2, in the email dialog: no control character (NUL,
 # which Postgres refuses in text, among them), no U+2028/U+2029, no U+FFFE/U+FFFF (the church name's rule).
-_NOT_ONE_LINE = re.compile(f"[{NOT_ONE_LINE}￾￿]")
+_NOT_ONE_LINE = re.compile(f"[{NOT_ONE_LINE}\ufffe\uffff]")
 
 
 def email_is_valid(email: str) -> bool:
@@ -1668,22 +1701,44 @@ export function hasTyped(form: ContactForm): boolean {
  *
  * Each write puts its answer in the cached list at once (the new row last, as
  * the server orders it; an edited row in its place; a deleted row gone) and
- * then refetches the list. A 422 or 409 is the form's to show under its
- * field, so it is not toasted; a 401 or a lost church the app already reports;
- * a role 403 (an admin demoted meanwhile) is toasted and refetches the church
- * profile, which carries the role, so the page turns read-only; anything
- * else, a 404 for a contact deleted elsewhere among them, is toasted.
+ * then refetches the list. A 409, or a 422 that names the name or the email
+ * (`contactFieldErrors`), is the form's to show under its field, so it is not
+ * toasted; a 401 or a lost church the app already reports; a role 403 (an
+ * admin demoted meanwhile) is toasted and refetches the church profile, which
+ * carries the role, so the page turns read-only; anything else (a 404 for a
+ * contact deleted elsewhere, which also refetches the list, or a 422 that
+ * names no field of the form) is toasted.
  */
 import { useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-import type { ApiError } from "@/lib/api/client";
+import { ApiError } from "@/lib/api/client";
 import { errorToastMessage, isNoChurchAccess } from "@/lib/api/errors";
 import type { Contact, ContactBody, ContactList, ContactPatch, DeletedOut } from "@/lib/api/types";
 import { useChurch } from "@/lib/church-context";
+import type { ContactForm } from "@/lib/settings/contacts";
 
 import { useApi, useChurchMutation } from "./client";
 import { keys } from "./keys";
+
+/** A message under each field of a contact form that a failed add or edit names. */
+export type ContactFieldErrors = Partial<Record<keyof ContactForm, string>>;
+
+/**
+ * A failed add or edit's message for its field: a 422's `fields.name` or
+ * `fields.email`, or a 409 (the address is taken; it has no `fields`) under
+ * the email. Null for any other failure, which the mutation toasts.
+ */
+export function contactFieldErrors(e: unknown): ContactFieldErrors | null {
+  if (!(e instanceof ApiError)) return null;
+  if (e.status === 409) return { email: e.message };
+  if (e.status !== 422 || !e.fields) return null;
+  const found: ContactFieldErrors = {};
+  for (const field of ["name", "email"] as const) {
+    if (e.fields[field]) found[field] = e.fields[field];
+  }
+  return Object.keys(found).length > 0 ? found : null;
+}
 
 /** `GET /contacts` for the active church. */
 export function useContacts(): UseQueryResult<ContactList, ApiError> {
@@ -1711,7 +1766,7 @@ function useContactWrite<TData, TVariables>(
       void queryClient.invalidateQueries({ queryKey: key });
     },
     onError: (e) => {
-      if (e.status === 401 || isNoChurchAccess(e) || e.status === 409 || e.status === 422) return;
+      if (e.status === 401 || isNoChurchAccess(e) || contactFieldErrors(e) !== null) return;
       toast.error(errorToastMessage(e));
       if (e.status === 403) void queryClient.invalidateQueries({ queryKey: keys.churchProfile(church.id) });
       if (e.status === 404) void queryClient.invalidateQueries({ queryKey: key });
@@ -1761,8 +1816,9 @@ git commit -q -m "Slice 5b-1: the contact forms' rules and the contacts queries"
 the add body (trimmed, no name as null) and the edit's patch (only what
 changed, a cleared name as null). lib/queries/contacts.ts: useContacts
 and the add, edit and delete mutations, which put the answer in the
-cached list at once and refetch it; a 422 or 409 is left to the form, a
-role 403 refetches the profile, a 404 the list." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+cached list at once and refetch it; a 409, or a 422 naming the name or
+the email, is left to the form, anything else is toasted, a role 403
+refetches the profile, a 404 the list." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
@@ -1942,20 +1998,62 @@ describe("Settings → Contacts (slice 5b-1)", () => {
     expect(rows()[0]).toHaveTextContent("Mary Jonesmary@example.org");
   });
 
-  it("asks before deleting, then removes the row", async () => {
+  it("asks before deleting, then removes the row; focus goes back to the bin on Cancel, to Name after a delete", async () => {
     const server = contactsServer();
     const office = server.list().items[1];
     const { api, user } = renderPage("admin", {
       "GET /contacts": server.list,
       [`DELETE /contacts/${office.id}`]: () => server.remove(office.id),
     });
-    await user.click(await screen.findByRole("button", { name: "Delete office@example.org" }));
-    const confirm = await screen.findByRole("alertdialog", { name: "Delete office@example.org?" });
+    const bin = await screen.findByRole("button", { name: "Delete office@example.org" });
+    await user.click(bin);
+    let confirm = await screen.findByRole("alertdialog", { name: "Delete office@example.org?" });
+    await user.click(within(confirm).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    await waitFor(() => expect(bin).toHaveFocus());
+    await user.click(bin);
+    confirm = await screen.findByRole("alertdialog", { name: "Delete office@example.org?" });
     expect(confirm).toHaveTextContent("They won't be offered as a bulletin recipient anymore.");
     await user.click(within(confirm).getByRole("button", { name: "Delete contact" }));
     await waitFor(() => expect(screen.queryByText("office@example.org")).toBeNull());
     expect(writes(api, "DELETE")).toHaveLength(1);
     expect(rows()).toHaveLength(1);
+    await waitFor(() => expect(screen.getByLabelText("Name (optional)")).toHaveFocus());
+  });
+
+  it("closes the edit dialog when the contact was deleted elsewhere, says so and refetches the list", async () => {
+    const server = contactsServer();
+    const mary = contact();
+    const { api, user } = renderPage("admin", {
+      "GET /contacts": server.list,
+      [`PATCH /contacts/${mary.id}`]: () => {
+        server.remove(mary.id); // deleted in another tab meanwhile
+        return fakeError(404, "not_found", "Contact not found.");
+      },
+    });
+    await user.click(await screen.findByRole("button", { name: "Edit Mary Jones" }));
+    const dialog = await screen.findByRole("dialog", { name: "Edit contact" });
+    await user.type(within(dialog).getByLabelText("Name (optional)"), " Smith");
+    await user.click(within(dialog).getByRole("button", { name: "Save changes" }));
+    expect(await screen.findByText("Contact not found.")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(screen.queryByText("Mary Jones")).toBeNull());
+    expect(writes(api, "GET").length).toBeGreaterThan(1);
+    expect(rows()).toHaveLength(1);
+  });
+
+  it("toasts a refusal that names no field of the form, and leaves the fields as typed", async () => {
+    const { user } = renderPage("admin", {
+      "POST /contacts": fakeError(422, "invalid_request", "The request was not valid.", {
+        fields: { church_id: "Not a valid value." },
+      }),
+    });
+    const email = await screen.findByLabelText("Email");
+    await user.type(email, "sam@example.org");
+    await user.click(screen.getByRole("button", { name: "Add contact" }));
+    expect(await screen.findByText("The request was not valid.")).toBeInTheDocument();
+    expect(email).not.toHaveAttribute("aria-invalid");
+    expect(email).toHaveValue("sam@example.org");
   });
 
   it("flags a saved address the send-time check refuses, and the admin fixes it", async () => {
@@ -2045,11 +2143,17 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ApiError } from "@/lib/api/client";
 import type { Contact } from "@/lib/api/types";
 import { isAdmin } from "@/lib/church";
 import { useChurch } from "@/lib/church-context";
-import { useContacts, useCreateContact, useDeleteContact, useUpdateContact } from "@/lib/queries/contacts";
+import {
+  contactFieldErrors,
+  useContacts,
+  useCreateContact,
+  useDeleteContact,
+  useUpdateContact,
+  type ContactFieldErrors,
+} from "@/lib/queries/contacts";
 import {
   contactFormFrom,
   contactLabel,
@@ -2071,23 +2175,7 @@ const EMPTY_MEMBER = "Ask an admin to add bulletin recipients.";
 const DELETE_BODY = "They won't be offered as a bulletin recipient anymore.";
 
 type Field = keyof ContactForm;
-type FieldErrors = Partial<Record<Field, string>>;
-
-/**
- * A failed add or edit's message for its field: a 422's `fields` (name or
- * email), a 409 (the address is taken) under the email. Null for any other
- * failure, which the mutation toasts.
- */
-function fieldErrors(e: unknown): FieldErrors | null {
-  if (!(e instanceof ApiError)) return null;
-  if (e.status === 409) return { email: e.message };
-  if (e.status !== 422 || !e.fields) return null;
-  const found: FieldErrors = {};
-  for (const field of ["name", "email"] as const) {
-    if (e.fields[field]) found[field] = e.fields[field];
-  }
-  return Object.keys(found).length > 0 ? found : null;
-}
+type FieldErrors = ContactFieldErrors;
 
 /**
  * `/settings/contacts` (slice 5b-1; 6a spec "Contacts"): the people the
@@ -2105,6 +2193,10 @@ export function ContactsSettingsPage() {
   const nameRef = useRef<HTMLInputElement>(null);
   const [editing, setEditing] = useState<Contact | null>(null);
   const [deleting, setDeleting] = useState<Contact | null>(null);
+  // The confirmation's title keeps its contact while the dialog closes (deleting is null by then).
+  const [deleteLabel, setDeleteLabel] = useState("");
+  // Focus goes to Name only after a delete (the row and its bin are gone); otherwise back to the bin.
+  const deleted = useRef(false);
   const remove = useDeleteContact();
 
   let body: ReactNode;
@@ -2120,7 +2212,11 @@ export function ContactsSettingsPage() {
               contact={contact}
               admin={admin}
               onEdit={() => setEditing(contact)}
-              onDelete={() => setDeleting(contact)}
+              onDelete={() => {
+                deleted.current = false;
+                setDeleteLabel(contactLabel(contact));
+                setDeleting(contact);
+              }}
             />
           ))}
         </ul>
@@ -2151,21 +2247,26 @@ export function ContactsSettingsPage() {
       )}
       {body}
       {admin ? <ContactAddForm nameRef={nameRef} /> : null}
-      {editing ? <ContactEditDialog contact={editing} onClose={() => setEditing(null)} /> : null}
+      {admin && editing ? <ContactEditDialog contact={editing} onClose={() => setEditing(null)} /> : null}
       <ConfirmDialog
         open={deleting !== null}
         onOpenChange={(open) => {
           if (!open) setDeleting(null);
         }}
-        title={deleting ? `Delete ${contactLabel(deleting)}?` : ""}
+        title={`Delete ${deleteLabel}?`}
         description={DELETE_BODY}
         confirmLabel="Delete contact"
         destructive
         pending={remove.isPending}
-        finalFocus={nameRef}
+        finalFocus={() => (deleted.current ? nameRef.current : true)}
         onConfirm={() => {
           if (deleting === null) return;
-          remove.mutate(deleting.id, { onSettled: () => setDeleting(null) });
+          remove.mutate(deleting.id, {
+            onSuccess: () => {
+              deleted.current = true;
+            },
+            onSettled: () => setDeleting(null),
+          });
         }}
       />
     </section>
@@ -2283,7 +2384,7 @@ function ContactAddForm({ nameRef }: { nameRef: RefObject<HTMLInputElement | nul
         nameRef.current?.focus();
       },
       onError: (e) => {
-        const found = fieldErrors(e);
+        const found = contactFieldErrors(e);
         if (found === null) return;
         setErrors(found);
         focusFirst(found);
@@ -2338,7 +2439,11 @@ function ContactEditDialog({ contact, onClose }: { contact: Contact; onClose(): 
       {
         onSuccess: onClose,
         onError: (e) => {
-          const found = fieldErrors(e);
+          if (e.status === 403 || e.status === 404) {
+            onClose(); // toasted, and the role or the list refetched, by the mutation
+            return;
+          }
+          const found = contactFieldErrors(e);
           if (found === null) return;
           setErrors(found);
           (found.name ? nameRef : emailRef).current?.focus();
