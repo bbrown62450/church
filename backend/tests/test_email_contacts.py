@@ -61,7 +61,7 @@ def _seed(church_id, rows):
             s.add(Contact(church_id=church_id, name=name, email=email, created_at=created_at))
 
 
-def test_contacts_are_listed_by_creation_then_name_with_blank_names_last(tmp_db, make_user, make_church):
+def test_contacts_are_listed_by_creation_then_name_with_blank_names_last_and_names_as_stored(tmp_db, make_user, make_church):
     church = make_church(name="A", owner_user_id=make_user(email="c3@x.org"))
     first, later = datetime(2026, 1, 1, tzinfo=timezone.utc), datetime(2026, 2, 1, tzinfo=timezone.utc)
     _seed(church, [("Zoe", "zoe@x.org", first), ("", "blank@x.org", first), (None, "null@x.org", first),
@@ -71,7 +71,11 @@ def test_contacts_are_listed_by_creation_then_name_with_blank_names_last(tmp_db,
     assert sorted(c["email"] for c in listed[2:5]) == ["blank@x.org", "null@x.org", "spaces@x.org"]
     assert [c["id"] for c in listed[2:5]] == sorted(c["id"] for c in listed[2:5])     # nameless: by id
     assert listed[5]["email"] == "bob@x.org"
-    assert [c["name"] for c in listed] == ["Amy", "Zoe", None, None, None, "Bob"]
+    # names as stored: the frozen Streamlit pages print c['name'], so a blank one must not read "None"
+    # (usecases.contacts returns a blank name as None to the API)
+    assert {c["email"]: c["name"] for c in listed} == {
+        "amy@x.org": "Amy", "zoe@x.org": "Zoe", "blank@x.org": "", "null@x.org": None, "spaces@x.org": "  ",
+        "bob@x.org": "Bob"}
 
 
 def test_update_contact_sets_only_the_keys_given_and_never_another_church(tmp_db, make_user, make_church):
@@ -79,11 +83,11 @@ def test_update_contact_sets_only_the_keys_given_and_never_another_church(tmp_db
     a = make_church(name="A", owner_user_id=u)
     b = make_church(name="B", owner_user_id=u)
     cid = add_contact(a, name="Mary", email="mary@x.org")["id"]
-    assert update_contact(cid, a, {"name": ""}) == {"id": cid, "name": None, "email": "mary@x.org"}
+    assert update_contact(cid, a, {"name": ""}) == {"id": cid, "name": "", "email": "mary@x.org"}
     assert update_contact(cid, a, {"email": "mary.jones@x.org"})["email"] == "mary.jones@x.org"
     assert update_contact(cid, b, {"name": "Taken"}) is None
     assert get_contact(cid, b) is None
-    assert get_contact(cid, a) == {"id": cid, "name": None, "email": "mary.jones@x.org"}
+    assert get_contact(cid, a) == {"id": cid, "name": "", "email": "mary.jones@x.org"}
 
 
 def test_email_exists_ignores_case_and_can_leave_one_contact_out(tmp_db, make_user, make_church):

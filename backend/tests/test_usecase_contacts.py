@@ -109,7 +109,7 @@ def test_an_unknown_contact_or_another_churchs_is_not_found(world, make_church):
 
 def test_the_list_flags_each_saved_address_the_send_time_rule_refuses(world):
     for name, email in (("Mary", "mary@example.org"), ("Two", "a@example.org, b@example.org"),
-                        ("", "office@example"), (None, " Office@Example.ORG ")):
+                        ("", "office@example"), (None, " Office@Example.ORG "), ("  ", "pastor@example.org")):
         email_contacts.add_contact(world["church"], name=name, email=email)     # as Streamlit saved them
     listed = contacts.list_contacts(world["church"])
     assert [(c["name"], c["email"], c["email_valid"]) for c in listed] == [
@@ -117,6 +117,7 @@ def test_the_list_flags_each_saved_address_the_send_time_rule_refuses(world):
         ("Two", "a@example.org, b@example.org", False),
         (None, "office@example", False),
         (None, " Office@Example.ORG ", True),
+        (None, "pastor@example.org", True),
     ]
 
 

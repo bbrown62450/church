@@ -49,7 +49,10 @@ def email_is_valid(email: str) -> bool:
 
 
 def _out(contact: dict) -> dict:
-    return {**contact, "email_valid": email_is_valid(contact["email"])}
+    """A contact as the API returns it: a NULL or blank name as None (the repo
+    returns it as stored, for the frozen Streamlit pages), and `email_valid`."""
+    name = contact["name"] if contact["name"] is not None and contact["name"].strip() else None
+    return {**contact, "name": name, "email_valid": email_is_valid(contact["email"])}
 
 
 def list_contacts(church_id: uuid.UUID) -> list[dict]:

@@ -57,13 +57,13 @@ def test_a_member_reads_the_list_in_order_with_blank_names_null_and_bad_addresse
     at = datetime(2026, 1, 1, tzinfo=timezone.utc)
     with session_scope() as s:
         for name, email in (("Zoe", "zoe@example.org"), ("", "blank@example.org"), (None, "null@example.org"),
-                            ("Amy", "a@example.org, b@example.org")):
+                            ("   ", "spaces@example.org"), ("Amy", "a@example.org, b@example.org")):
             s.add(Contact(church_id=church, name=name, email=email, created_at=at))
     items = _list(client, church, email=MEMBER)
     assert [(c["name"], c["email"], c["email_valid"]) for c in items[:2]] == [
         ("Amy", "a@example.org, b@example.org", False), ("Zoe", "zoe@example.org", True)]
     assert sorted((c["name"], c["email"], c["email_valid"]) for c in items[2:]) == [
-        (None, "blank@example.org", True), (None, "null@example.org", True)]
+        (None, "blank@example.org", True), (None, "null@example.org", True), (None, "spaces@example.org", True)]
     assert set(items[0]) == {"id", "name", "email", "email_valid"}
 
 

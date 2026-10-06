@@ -8,8 +8,9 @@ Every function is scoped to one church (a contact of another church is never
 read, changed or deleted) and takes an optional `session`, so a usecase can
 run it inside the transaction that holds the church-row lock (slice 5b-1;
 6a spec, "Semantics" → Contacts). Ids go through db.ids.as_uuid, so a
-malformed id is a 404, never a 500. A name that is NULL or blank (Streamlit
-stored "" for a contact without one) is returned as None.
+malformed id is a 404, never a 500. A name is returned as stored (NULL as
+None; Streamlit stored "" for a contact without one), since the frozen
+Streamlit pages print it; usecases.contacts returns a blank one as None.
 """
 import uuid
 from typing import Any, Dict, List, Mapping, Optional
@@ -23,8 +24,7 @@ from db.models import Contact
 
 
 def _to_dict(c: Contact) -> Dict[str, Any]:
-    name = c.name if c.name is not None and c.name.strip() else None
-    return {"id": str(c.id), "name": name, "email": c.email}
+    return {"id": str(c.id), "name": c.name, "email": c.email}
 
 
 def list_contacts(church_id, *, session: Optional[Session] = None) -> List[Dict[str, Any]]:
