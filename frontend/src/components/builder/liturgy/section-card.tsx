@@ -118,7 +118,8 @@ export function useRetryWait(retryAt: number | undefined): boolean {
  * follows it (the full stop) as a link to Settings → Church, where the
  * default lives (6a spec, hand-off from 4; slice 6a-1). The link ends the
  * sentence, so the card's description reads the hint unchanged. Every role
- * gets the link; a member lands on the read-only page.
+ * gets the link; a member lands on the read-only page. Below `md` the link
+ * is a 44 px target (F §4.9) without moving the text around it.
  */
 function withSettingsLink(hint: string): ReactNode {
   const at = hint.lastIndexOf("Settings");
@@ -126,7 +127,10 @@ function withSettingsLink(hint: string): ReactNode {
   return (
     <>
       {hint.slice(0, at)}
-      <Link href="/settings/church" className="underline underline-offset-2 hover:text-foreground">
+      <Link
+        href="/settings/church"
+        className="-my-3 inline-block py-3 underline underline-offset-2 hover:text-foreground md:my-0 md:py-0"
+      >
         {hint.slice(at)}
       </Link>
     </>

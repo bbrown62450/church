@@ -224,6 +224,7 @@ describe("the Liturgy step (S User experience)", () => {
     expect(within(benediction).getByText("Church default")).toBeInTheDocument();
     const settings = within(benediction).getByRole("link", { name: "Settings." });
     expect(settings).toHaveAttribute("href", "/settings/church"); // 6a-1: the default lives in Settings → Church
+    expect(settings).toHaveClass("inline-block", "py-3", "-my-3"); // a 44 px target on a phone (review m6)
     expect(settings.parentElement).toHaveTextContent("Your church's default benediction. Admins can change it in Settings.");
     // An admin changes the default (6a) and the profile refetches.
     act(() => queryClient.setQueryData(keys.churchProfile(church().id), churchProfile({ default_benediction: "The Lord bless you." })));
