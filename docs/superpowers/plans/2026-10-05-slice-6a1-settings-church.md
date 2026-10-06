@@ -32,7 +32,7 @@
   `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
 - TDD: write the failing test first and see it fail as quoted.
 - **Backup push after every task** (standing rule): the controller runs `git push origin claude/slice-2-plan-4q33le` after each task's commit (never `--force`, never a rebase; if the push is rejected, `git pull --no-rebase origin claude/slice-2-plan-4q33le` and push again; on a network error retry after 2, 4, 8 and 16 s). A fix asked for by a review is a new commit, `Fix: <what> (Task <n> review)`. The container can restart and lose uncommitted work: commit as soon as a task's checks pass.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1487 → 1523 passed, 23 → 24 skipped; frontend 734 → 756 in 88 → 92 files`.
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1487 → 1529 passed, 23 → 24 skipped; frontend 734 → 759 in 88 → 92 files`.
 - New prose for the owner has no em dashes and no flattery. New user-facing copy is exactly the list in clarification 14 and has no em dashes; existing copy keeps its own punctuation.
 - No church id, email address, token, database URL or real person's name in any doc, commit, test or record. The tests use the fixtures' "Grace" and "Example Church" and `@example.com` addresses only.
 - Ask the owner before any push to a PR, PR creation, marking ready, merging, or any production or settings action. Owner steps go one at a time, in plain words.
@@ -54,8 +54,9 @@ As in the 2a plan: **Create `path`:** the block is the whole file; **Append to `
   | T6 | 0 | 1523 passed, 24 skipped | +13 (`church-settings-page.test.tsx` 12, `timezone-combobox.test.tsx` 1) | 756 in 92 |
   | T7 | 0 | 1523 passed, 24 skipped | 0 (`liturgy-step.test.tsx` edited) | 756 in 92 |
   | T8 | 0 (`test_slice1_docs.py` edited) | 1523 passed, 24 skipped | 0 | 756 in 92 |
+  | Build review fixes | +6 (`test_church_admin.py` 4: two name cases, two tests; `test_api_church_profile.py` 2: one name case, one test) | 1529 passed, 24 skipped | +3 (`profile.test.ts` 1, `leave-guard.test.tsx` 2) | 759 in 92 |
 
-- CI `backend-postgres` goes from `23 passed, 1487 deselected` to `24 passed, 1523 deselected` (T2's `test_church_admin_postgres.py`; clarification 12). Locally, without `TEST_DATABASE_URL`, that test is one of the 24 skipped.
+- CI `backend-postgres` goes from `23 passed, 1487 deselected` to `24 passed, 1523 deselected` (T2's `test_church_admin_postgres.py`; clarification 12), and `24 passed, 1529 deselected` after the build review fixes. Locally, without `TEST_DATABASE_URL`, that test is one of the 24 skipped.
 
 ### Layering and code rules (carried)
 - `usecases/members.py` and `usecases/church_admin.py` import no FastAPI, Starlette or Streamlit (`test_no_streamlit_in_core.py` gains both, T1); the route is a plain `def` with no SQL and no try/except (F §2.2 rule 1); the write goes through `repos.churches` (no SQL in the usecase).
@@ -2909,7 +2910,7 @@ for i in 1 2 3; do (cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Te
 (cd frontend && NEXT_PUBLIC_SUPABASE_URL=https://ci-placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-placeholder NEXT_PUBLIC_API_URL=http://localhost:8000 npm run build 2>&1 | grep -E "Compiled successfully|Error|/settings")
 ```
 
-**Expected:** `1523 passed, 24 skipped in <t>s`; three times ` Test Files  92 passed (92)` and `      Tests  756 passed (756)` with no `×` or `FAIL` line (one names the failing test: Step 6); `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s` and the route lines `├ ○ /bulletin-settings`, `├ ○ /settings` and `├ ○ /settings/church` and no `Error` (a font `Failed to fetch` only: say so and rely on CI).
+**Expected:** `1529 passed, 24 skipped in <t>s`; three times ` Test Files  92 passed (92)` and `      Tests  759 passed (759)` with no `×` or `FAIL` line (one names the failing test: Step 6); `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s` and the route lines `├ ○ /bulletin-settings`, `├ ○ /settings` and `├ ○ /settings/church` and no `Error` (a font `Failed to fetch` only: say so and rely on CI).
 
 - [ ] **Step 3 (agent): The API files match, the gates, the paths, the commits**
 
@@ -2978,7 +2979,7 @@ gh pr list -R bbrown62450/church --head claude/slice-2-plan-4q33le --state open 
 
 **Expected:** `[]`. Send the owner exactly this, and wait for a clear yes:
 
-> Settings and the Church page (slice 6a-1) are verified on this machine: backend 1523 passed, 24 skipped (1487 before); frontend 756 tests in 92 files (734 before), three runs in a row; typecheck, lint and the production build are clean. It adds one API route (`PATCH /church`), no database change and no new package. The menu at the top gets **Settings**: it opens on **Church**, where you (and any admin) change the church's name, time zone, default Bible translation, default hymnal and default Benediction; other members see them as text. The builder follows a change with no reload, leaving with unsaved changes asks first (also "Join or create a church…" in the church menu), and the Benediction card's "Settings." links there. The Settings menu also lists **Bulletin** (your Bulletin settings page, unchanged until 6a-3 moves it in). The pull request also carries the Voices of the Church documents and the two 6a spec notes from today (the Voices code itself was removed). May I open the pull request as a **draft** titled "Slice 6a-1: the Settings area and the Church page", so the checks run? Merging stays with you.
+> Settings and the Church page (slice 6a-1) are verified on this machine: backend 1529 passed, 24 skipped (1487 before); frontend 759 tests in 92 files (734 before), three runs in a row; typecheck, lint and the production build are clean. It adds one API route (`PATCH /church`), no database change and no new package. The menu at the top gets **Settings**: it opens on **Church**, where you (and any admin) change the church's name, time zone, default Bible translation, default hymnal and default Benediction; other members see them as text. The builder follows a change with no reload, leaving with unsaved changes asks first (also "Join or create a church…" in the church menu), and the Benediction card's "Settings." links there. The Settings menu also lists **Bulletin** (your Bulletin settings page, unchanged until 6a-3 moves it in). The pull request also carries the Voices of the Church documents and the two 6a spec notes from today (the Voices code itself was removed). May I open the pull request as a **draft** titled "Slice 6a-1: the Settings area and the Church page", so the checks run? Merging stays with you.
 
 - [ ] **Step 5 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
 
@@ -2997,7 +2998,7 @@ Slice 6a-1: the Settings area and the Church page (the first of 6a's three PRs; 
 
 Later: 6a-2 (Hymns), 6a-3 (Liturgy prompts, Prayers, Rubric, Bulletin settings moved in), 5b (Account, Contacts, email), 6b (People).
 
-Tests: backend 1487 → 1523 passed, 23 → 24 skipped; frontend 734 → 756 in 88 → 92 files
+Tests: backend 1487 → 1529 passed, 23 → 24 skipped; frontend 734 → 759 in 88 → 92 files
 
 After merge (Task 10): a short check on the owner's phone, then a "Slice 6a-1 record" in docs/ops-runbook.md.
 
@@ -3011,7 +3012,7 @@ gh pr create -R bbrown62450/church --draft --base main --head claude/slice-2-pla
 gh pr checks <N> -R bbrown62450/church --watch --interval 30
 ```
 
-Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1523 passed, 24 skipped`, backend-postgres `24 passed, 1523 deselected`, frontend `756 passed` in 92 files. Then send: "PR #<N> is green: backend 1523 passed, 24 skipped; 751 frontend tests in 92 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R bbrown62450/church`.
+Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1529 passed, 24 skipped`, backend-postgres `24 passed, 1529 deselected`, frontend `759 passed` in 92 files. Then send: "PR #<N> is green: backend 1529 passed, 24 skipped; 759 frontend tests in 92 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R bbrown62450/church`.
 
 - [ ] **Step 6: Fix any failure in its owning task**
 
@@ -3030,7 +3031,7 @@ Run the last line with `run_in_background: true`. **Expected:** the PR URL; ever
 
 For each fix: change only the owning task's files; rerun Steps 2-3; commit `Fix: <what> (Task <n>, slice 6a-1 final verification)` with the trailer; after the PR exists, ask the owner before pushing it.
 
-Expected counts after this task: backend `1523 passed, 24 skipped`; frontend `756 passed` in 92 files.
+Expected counts after this task: backend `1529 passed, 24 skipped`; frontend `759 passed` in 92 files (with the build review fixes).
 
 ### Task 10: Merge, the owner's phone check (four steps), the record (OWNER + agent)
 
@@ -3156,7 +3157,7 @@ gh pr checks claude/slice-2-plan-4q33le -R bbrown62450/church --watch
 
 Code only (no schema to undo). On the owner's yes for each outward command: a branch `claude/revert-6a1` from `origin/main`, `git revert -m 1 --no-commit <merge sha>`, a commit "Revert slice 6a-1 (PR #<N>)" with the trailer, both suites (`1487 passed, 23 skipped`; `734 passed` in 88), a PR, CI, and the merge on the owner's yes; record it in the record. Anything saved through the Church page stays in the church's row (name, time zone, `bible_translation`, `default_hymnal`, `default_benediction`), which the builder already reads, so nothing needs undoing in the data.
 
-Expected counts after this task: backend `1523 passed, 24 skipped` on `main`; frontend `756 passed` in 92 files. The records PR adds no test.
+Expected counts after this task: backend `1529 passed, 24 skipped` on `main`; frontend `759 passed` in 92 files. The records PR adds no test.
 
 ---
 ## Build notes
@@ -3189,6 +3190,16 @@ Expected counts after this task: backend `1523 passed, 24 skipped` on `main`; fr
 - The Postgres-marked tests on the throwaway PG 16 cluster after T8: `24 passed, 1523 deselected, 1 warning`.
 - Not run while planning: the pushes, the PR and CI, the merge, Railway's and Vercel's deploys and the owner's phone check (T10).
 
+**Build review fixes (2026-10-06, 6a-1).** An adversarial code review of the build (`b0772fa..b8f5d0b`; no Critical or Important findings, six Minor) was fixed on the branch in new commits after T8 (no amend, no rebase). Each fix has a test that fails on the build and passes after, except where noted:
+- **m1, the rebase.** `rebaseForm` takes an optional comparator, and the Church page uses `rebaseProfile`, which compares cleaned values (the comparison Save and the leave guard use). A Benediction with only a trailing line break added (or a stored `\r\n` the textarea reports as `\n`) now takes another admin's newer Benediction instead of keeping a stale one a later save would send. The reviewer's probe is a `profile.test.ts` case (`1 failed, 4 passed` with plain `rebaseForm`).
+- **m2, the device-zone button** wraps on a phone (`h-auto min-h-11 whitespace-normal text-left md:min-h-8` in place of `h-11 md:h-8`); the page test checks the classes. Not checked in a real browser at 375 px.
+- **m3, Word-safe text.** `clean_profile_patch` stores the Benediction through `archive._xml_safe` (as the bulletin settings' texts): NUL, the other C0 controls, U+FFFE and U+FFFF go, a vertical tab or form feed becomes a line break. The name also refuses U+FFFE and U+FFFF with the existing 422 ("Church name can't contain line breaks or control characters."). Two usecase name cases, one API name case, one usecase test and one API test. On a throwaway PG 16 cluster the reviewer's HTTP probe now gives `'Go'` for `"Go\u0000"` and `"Go\uffff"` and a 422 for `"Gr\uffffce"`.
+- **m4, after Discard changes** the guard removes its `beforeunload` listener before following the link (or running `confirmLeave`'s `leave`), so a navigation that falls back to a full page load does not ask again; a `leave-guard.test.tsx` test fires `beforeunload` from inside the navigation.
+- **m5, the Settings menu item** does nothing while the page is already under `/settings/` and has unsaved edits (the click is stopped, no dialog, no navigation); a `leave-guard.test.tsx` test.
+- **m6.** The Benediction hint's "Settings." link is a 44 px target below `md` (`-my-3 inline-block py-3`, reset from `md`; `liturgy-step.test.tsx` checks the classes). **Keep editing** after the church menu's "Join or create a church…" returns focus to the menu's trigger (`confirmLeave` takes a `returnFocus`, passed to the dialog's `finalFocus`); the assertion is in the existing switcher test, but in jsdom focus already reached the trigger before the fix, so it does not fail on the build. A default hymnal is matched against the church's codes trimmed and the church's own code is stored (so `" UMH "` can be chosen and still resolves); one usecase test. The demotion lock gap is a 6b Follow-up.
+- Counts: backend +6 (1529 passed, 24 skipped); frontend +3 (759 in 92 files); paths unchanged (42); the OpenAPI export and `gen:api` changed nothing.
+- Checks after the fixes: `.venv/bin/python -m pytest -q` `1529 passed, 24 skipped`; the Postgres-marked tests on a new throwaway PG 16 cluster (`/var/lib/postgresql/rv6a1m`, port 5436, stopped after) `24 passed, 1529 deselected, 1 warning`; the frontend three times ` Test Files  92 passed (92)` and `      Tests  759 passed (759)`; typecheck 0, lint 0; the production build compiled with `/bulletin-settings`, `/settings` and `/settings/church`.
+
 ## Spec coverage
 
 | Owner answer or S item | Task(s) and tests |
@@ -3219,6 +3230,7 @@ S items **not** in 6a-1: Hymns, hymnals, hymn facts (6a-2); Liturgy prompts, Pra
 
 ## Follow-ups (not in 6a-1)
 
+- 6b: move `memberships.set_role` and `remove_membership` under `lock_and_read_actor` (the church-row lock). Until then the role re-read under the lock cannot see a demotion or removal that is still in flight in another transaction (no API route calls them today, so nothing hits it; 6a-1 code review m6).
 - 6a-3: move `PATCH /rubric` and `PUT /church/bulletin-settings` under `lock_and_read_actor` and `require_admin_role`; rename `_merge_settings` to `merge_settings(…, session=None)` when the prompts and prayers writes need it; add `PUT /church/liturgy-prompts` to `test_church_admin_postgres.py`'s race; point the "Bulletin" entry of `SETTINGS_SECTIONS` under `/settings`.
 - 6a-3 or 5b, whichever comes first: on a phone the Settings nav is a wrapping row of 44 px links; it fits today's two, but S's final list of nine would wrap to about three rows at 375 px, so switch the phone row to a horizontal scroller or a Select then (`SETTINGS_SECTIONS` stays one constant; no rework of the layout's place; plan review M12).
 - 6a-2: the no-hymnals line on the Church page can link to Hymns once that page exists.
