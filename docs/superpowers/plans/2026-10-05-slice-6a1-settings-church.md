@@ -3230,6 +3230,8 @@ S items **not** in 6a-1: Hymns, hymnals, hymn facts (6a-2); Liturgy prompts, Pra
 
 ## Questions for the owner
 
+**Owner's answer (Beau, 2026-10-06): "sounds good" (all recommended).** Questions 1-11 below are accepted as written and are binding for the build.
+
 Your 6a planning answers of 2026-10-05 (the seven, and the reversal of answer 7 the same day) are binding and already in the plan. These are the choices this plan makes where you did not say; each is written as recommended.
 
 1. **Where Settings is** (clarification 2): a third item, **Settings**, in the menu at the top, after **Builder** and **Services** (on a phone, the row under the header has three parts). Recommended: accept.
