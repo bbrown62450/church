@@ -211,6 +211,7 @@ def test_a_member_cannot_change_the_profile(client, make_user, make_church):
 @pytest.mark.parametrize("body, field, message", [
     ({"name": "  "}, "name", "Church name is required."),
     ({"name": "Gr\x00ace"}, "name", "Church name can't contain line breaks or control characters."),
+    ({"name": "Gr\uffffce"}, "name", "Church name can't contain line breaks or control characters."),
     ({"timezone": "Mars/Olympus"}, "timezone", "Unknown timezone."),
     ({"bible_translation": "klingon"}, "bible_translation", "Unknown or unavailable translation."),
     ({"default_hymnal": "PH1990"}, "default_hymnal", "Choose one of your church's hymnals."),
@@ -223,6 +224,15 @@ def test_a_bad_field_is_a_422_naming_it_and_nothing_is_written(client, make_user
     assert r.status_code == 422, r.text
     assert (r.json()["error"]["code"], r.json()["error"]["fields"]) == ("invalid_request", {field: message})
     assert _profile(client, cid)["default_benediction"] == HALVERSON
+
+
+def test_the_benediction_is_stored_as_it_prints(client, make_user, make_church):
+    """6a-1 code review m3: NUL, U+FFFF and the like are taken out before storing, so GET answers what prints."""
+    cid = make_church(name="Grace", owner_user_id=make_user(email=EMAIL))
+    r = _patch(client, cid, {"default_benediction": "Go\x00 in peace.\uffff\x0bAmen."})
+    assert r.status_code == 200, r.text
+    assert r.json()["default_benediction"] == "Go in peace.\nAmen."
+    assert _profile(client, cid)["default_benediction"] == "Go in peace.\nAmen."
 
 
 def test_a_church_id_in_the_body_is_refused_and_isolation(client, isolation_world):

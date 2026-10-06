@@ -70,6 +70,8 @@ TRANSLATIONS = ("web", "kjv", "asv")
     ({"name": "   "}, "name", "Church name is required."),
     ({"name": "Gr\x00ace"}, "name", "Church name can't contain line breaks or control characters."),
     ({"name": "Grace\nChurch"}, "name", "Church name can't contain line breaks or control characters."),
+    ({"name": "Gr\uffffce"}, "name", "Church name can't contain line breaks or control characters."),
+    ({"name": "Grace\ufffe"}, "name", "Church name can't contain line breaks or control characters."),
     ({"timezone": ""}, "timezone", "Timezone is required."),
     ({"timezone": "Mars/Olympus"}, "timezone", "Unknown timezone."),
     ({"timezone": "America/New York"}, "timezone", "Unknown timezone."),
@@ -99,6 +101,24 @@ def test_the_fields_sent_are_cleaned_and_nothing_else():
         {"bible_translation": "kjv", "default_hymnal": "GG2013", "default_benediction": "Go in peace.\nAmen."},
     )
     assert clean({"default_benediction": "   "}, translations=(), church_hymnals=()) == ({}, {"default_benediction": ""})
+
+
+def test_the_benediction_is_stored_word_safe():
+    """6a-1 code review m3: what is stored is what prints (archive._xml_safe, as the bulletin settings' texts)."""
+    clean = church_admin.clean_profile_patch
+    sent = {"default_benediction": " Go\x00 in\x0bpeace.\x0cAmen\x07.\ufffe\uffff\r\n"}
+    assert clean(sent, translations=(), church_hymnals=()) == ({}, {"default_benediction": "Go in\npeace.\nAmen."})
+
+
+def test_a_hymnal_code_is_matched_trimmed_and_the_churchs_own_code_is_stored():
+    """6a-1 code review m6: a code imported with spaces around it can still be chosen."""
+    clean = church_admin.clean_profile_patch
+    assert clean({"default_hymnal": "UMH"}, translations=(), church_hymnals=(" UMH ", "GG2013")) == (
+        {}, {"default_hymnal": " UMH "})
+    assert clean({"default_hymnal": " GG2013 "}, translations=(), church_hymnals=(" GG2013", "GG2013")) == (
+        {}, {"default_hymnal": "GG2013"})
+    with pytest.raises(InvalidInput):
+        clean({"default_hymnal": " "}, translations=(), church_hymnals=("  ",))
 
 
 def _church(world) -> dict:

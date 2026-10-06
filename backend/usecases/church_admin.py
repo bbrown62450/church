@@ -20,14 +20,17 @@ from repos import churches
 from repos import hymns as hymn_repo
 from tenancy import is_admin
 from timezones import is_valid_timezone
+from usecases import archive
 from usecases.members import lock_and_read_actor
 
 # require_admin's message (api/deps.py): one wording for the role 403.
 ADMINS_ONLY_MESSAGE = "Only church admins can do this."
 
 # The church's name prints on one line (the bulletin's header and title): no control character (NUL, which
-# Postgres refuses in text, among them), no C1 control and no U+2028/U+2029, as the bulletin settings' lines.
-_NOT_ONE_LINE = re.compile(f"[{NOT_ONE_LINE}]")
+# Postgres refuses in text, among them), no C1 control and no U+2028/U+2029, as the bulletin settings' lines;
+# and nothing a Word file cannot hold (U+FFFE, U+FFFF: archive._XML_BAD's noncharacters; lone surrogates never
+# reach here, pydantic refuses them), so the stored name is the name that prints (6a-1 code review m3).
+_NOT_ONE_LINE = re.compile(f"[{NOT_ONE_LINE}\ufffe\uffff]")
 
 
 def require_admin_role(role: str) -> None:
@@ -45,12 +48,18 @@ def clean_profile_patch(changes: Mapping[str, str], *, translations: Collection[
     in the order name, timezone, bible_translation, default_hymnal, and the
     first failure raises InvalidInput naming its field. The name and the time
     zone are trimmed; the name must hold no control character or line
-    separator (bulletin_settings.NOT_ONE_LINE: it prints on one line); the time zone must be exactly an IANA name
+    separator (bulletin_settings.NOT_ONE_LINE: it prints on one line) and no U+FFFE or U+FFFF (Word cannot hold
+    them); the time zone must be exactly an IANA name
     (timezones.is_valid_timezone, as POST /churches and GET /church's
     timezone_valid); the translation must be one of `translations` (offered on
-    this deployment now) and the hymnal one of `church_hymnals`; the
-    Benediction's line ends become "\\n" and it is trimmed, and "" is kept (the
-    church then has no default Benediction). Returns (columns, settings_patch).
+    this deployment now) and the hymnal one of `church_hymnals`, compared
+    trimmed (a code stored with spaces around it can still be chosen; the
+    church's own code is stored, so it resolves); the Benediction is made
+    Word-safe as the bulletin settings' texts are (archive._xml_safe: its line
+    ends become "\\n", a vertical tab or form feed a line break, and NUL, the
+    other C0 controls, U+FFFE and U+FFFF go; 6a-1 code review m3) and
+    trimmed, and "" is kept (the church then has no default Benediction).
+    Returns (columns, settings_patch).
     """
     columns: dict[str, str] = {}
     settings: dict[str, str] = {}
@@ -71,12 +80,13 @@ def clean_profile_patch(changes: Mapping[str, str], *, translations: Collection[
         if settings["bible_translation"] not in translations:
             raise InvalidInput("Unknown or unavailable translation.", field="bible_translation")
     if "default_hymnal" in changes:
-        settings["default_hymnal"] = changes["default_hymnal"].strip()
-        if settings["default_hymnal"] not in church_hymnals:
+        wanted = changes["default_hymnal"].strip()
+        matches = [code for code in church_hymnals if code.strip() == wanted] if wanted else []
+        if not matches:
             raise InvalidInput("Choose one of your church's hymnals.", field="default_hymnal")
+        settings["default_hymnal"] = wanted if wanted in matches else matches[0]
     if "default_benediction" in changes:
-        text = changes["default_benediction"].replace("\r\n", "\n").replace("\r", "\n")
-        settings["default_benediction"] = text.strip()
+        settings["default_benediction"] = archive._xml_safe(changes["default_benediction"]).strip()
     return columns, settings
 
 
