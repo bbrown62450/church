@@ -8,6 +8,7 @@ import type {
   ChurchProfile,
   Contact,
   ContactList,
+  GmailConnection,
   GenerateLiturgyBody,
   Hymn,
   HymnMatch,
@@ -636,4 +637,16 @@ export function contactList(items: Contact[] = [
   contact({ id: "6c0b5e1a-1d2b-4c3d-8e4f-5a6b7c8d9e02", name: null, email: "office@example.org" }),
 ]): ContactList {
   return { items };
+}
+
+// --- slice 5b-2: the Gmail connection --------------------------------------------------------------
+
+/** `GET /gmail-connection`: set up here and connected as Pat, unless overridden. */
+export function gmailConnection(overrides: Partial<GmailConnection> = {}): GmailConnection {
+  return { configured: true, connected: true, google_email: "pat@example.com", ...overrides };
+}
+
+/** Not connected yet (set up here). */
+export function gmailDisconnected(): GmailConnection {
+  return gmailConnection({ connected: false, google_email: null });
 }

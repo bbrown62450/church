@@ -30,10 +30,10 @@ describe("the Settings area (slice 6a-1)", () => {
       ["Church", "/settings/church"],
       ["Bulletin", "/bulletin-settings"],
       ["Contacts", "/settings/contacts"],
+      ["Account", "/settings/account"],
     ]);
     expect(links[0]).toHaveAttribute("aria-current", "page");
-    expect(links[1]).not.toHaveAttribute("aria-current");
-    expect(links[2]).not.toHaveAttribute("aria-current");
+    for (const link of links.slice(1)) expect(link).not.toHaveAttribute("aria-current");
     expect(links[0]).toHaveClass("h-11", "md:h-9");
     expect(screen.getByText("The section")).toBeInTheDocument();
     unmount();
@@ -42,18 +42,21 @@ describe("the Settings area (slice 6a-1)", () => {
     expect(screen.getByText("You're the owner of Grace.")).toBeInTheDocument();
   });
 
-  it("marks Contacts current on its page (slice 5b-1)", () => {
-    renderShell("member", "/settings/contacts");
+  it.each([
+    ["/settings/contacts", "Contacts"],
+    ["/settings/account", "Account"],
+  ])("marks the section current on its page (slices 5b-1, 5b-2): %s", (path, label) => {
+    renderShell("member", path);
     const links = within(screen.getByRole("navigation", { name: "Settings sections" })).getAllByRole("link");
     expect(links.filter((link) => link.getAttribute("aria-current") === "page").map((link) => link.textContent)).toEqual([
-      "Contacts",
+      label,
     ]);
   });
 
   it("shows a member the same sections, and /settings opens Church", () => {
     renderShell("member", "/settings");
     expect(screen.getByText("You're a member of Grace.")).toBeInTheDocument();
-    expect(within(screen.getByRole("navigation", { name: "Settings sections" })).getAllByRole("link")).toHaveLength(3);
+    expect(within(screen.getByRole("navigation", { name: "Settings sections" })).getAllByRole("link")).toHaveLength(4);
     renderWithProviders(<SettingsHome />, { path: "/settings" });
     expect(testRouter.replace).toHaveBeenCalledWith("/settings/church");
   });
