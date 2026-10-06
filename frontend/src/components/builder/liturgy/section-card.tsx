@@ -2,7 +2,7 @@
 
 import { CircleAlertIcon, EllipsisIcon, XIcon } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { PendingButton } from "@/components/app/pending-button";
@@ -112,6 +112,27 @@ export function useRetryWait(retryAt: number | undefined): boolean {
  * ends, focus goes to the Undo line's button (the text was revised), the
  * Revise button (it failed or was cancelled) or the heading.
  */
+/**
+ * The Benediction's church-default hint ("… Admins can change it in
+ * Settings.", from GET /liturgy/config) with its last "Settings" and what
+ * follows it (the full stop) as a link to Settings → Church, where the
+ * default lives (6a spec, hand-off from 4; slice 6a-1). The link ends the
+ * sentence, so the card's description reads the hint unchanged. Every role
+ * gets the link; a member lands on the read-only page.
+ */
+function withSettingsLink(hint: string): ReactNode {
+  const at = hint.lastIndexOf("Settings");
+  if (at < 0) return hint;
+  return (
+    <>
+      {hint.slice(0, at)}
+      <Link href="/settings/church" className="underline underline-offset-2 hover:text-foreground">
+        {hint.slice(at)}
+      </Link>
+    </>
+  );
+}
+
 export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLength, aiAvailable }: SectionCardProps) {
   const { draft, update } = useDraft();
   const generation = useLiturgyGeneration();
@@ -355,7 +376,7 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
           ) : null}
           {hint ? (
             <p id={`card-${key}-hint`} className="text-sm text-muted-foreground">
-              {hint}
+              {followsDefault ? withSettingsLink(hint) : hint}
             </p>
           ) : null}
           <CardNotes sectionKey={key} label={spec.label} headingId={headingId} busy={run !== undefined} />

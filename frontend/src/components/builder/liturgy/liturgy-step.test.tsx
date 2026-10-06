@@ -222,7 +222,9 @@ describe("the Liturgy step (S User experience)", () => {
     const text = within(benediction).getByRole("textbox", { name: "Benediction" });
     expect(text).toHaveValue(DEFAULT_BENEDICTION_FALLBACK);
     expect(within(benediction).getByText("Church default")).toBeInTheDocument();
-    expect(within(benediction).getByText("Your church's default benediction. Admins can change it in Settings.")).toBeInTheDocument();
+    const settings = within(benediction).getByRole("link", { name: "Settings." });
+    expect(settings).toHaveAttribute("href", "/settings/church"); // 6a-1: the default lives in Settings → Church
+    expect(settings.parentElement).toHaveTextContent("Your church's default benediction. Admins can change it in Settings.");
     // An admin changes the default (6a) and the profile refetches.
     act(() => queryClient.setQueryData(keys.churchProfile(church().id), churchProfile({ default_benediction: "The Lord bless you." })));
     await waitFor(() => expect(text).toHaveValue("The Lord bless you."));
@@ -230,6 +232,7 @@ describe("the Liturgy step (S User experience)", () => {
     await user.type(text, "Go in peace.");
     expect(within(benediction).getByText("Your text")).toBeInTheDocument();
     expect(within(benediction).queryByText(/Your church's default benediction/)).toBeNull();
+    expect(within(benediction).queryByRole("link", { name: "Settings." })).toBeNull();
     act(() => queryClient.setQueryData(keys.churchProfile(church().id), churchProfile({ default_benediction: DEFAULT_BENEDICTION_FALLBACK })));
     await user.click(within(benediction).getByRole("button", { name: "More actions for Benediction" }));
     await user.click(await screen.findByRole("menuitem", { name: "Use church default" }));
