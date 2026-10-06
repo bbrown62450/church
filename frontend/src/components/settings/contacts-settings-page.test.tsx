@@ -202,6 +202,27 @@ describe("Settings → Contacts (slice 5b-1)", () => {
     await waitFor(() => expect(screen.queryByText("Mary Jones")).toBeNull());
     expect(writes(api, "GET").length).toBeGreaterThan(1);
     expect(rows()).toHaveLength(1);
+    // the row and its pencil are gone, so focus goes to the add form's Name, not the page
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Name (optional)")));
+  });
+
+  it("treats a delete of a contact already deleted elsewhere as done: the row goes and Name has focus", async () => {
+    const server = contactsServer();
+    const office = server.list().items[1];
+    const { user } = renderPage("admin", {
+      "GET /contacts": server.list,
+      [`DELETE /contacts/${office.id}`]: () => {
+        server.remove(office.id); // deleted in another tab meanwhile
+        return fakeError(404, "not_found", "Contact not found.");
+      },
+    });
+    await user.click(await screen.findByRole("button", { name: "Delete office@example.org" }));
+    const confirm = await screen.findByRole("alertdialog", { name: "Delete office@example.org?" });
+    await user.click(within(confirm).getByRole("button", { name: "Delete contact" }));
+    expect(await screen.findByText("Contact not found.")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    await waitFor(() => expect(screen.queryByText("office@example.org")).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Name (optional)")));
   });
 
   it("toasts a refusal that names no field of the form, and leaves the fields as typed", async () => {

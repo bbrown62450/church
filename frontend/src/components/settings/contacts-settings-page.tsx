@@ -1,7 +1,7 @@
 "use client";
 
 import { Pencil, Trash2 } from "lucide-react";
-import { useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
 
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { EmptyState } from "@/components/app/empty-state";
@@ -76,7 +76,16 @@ export function ContactsSettingsPage() {
   const [deleteLabel, setDeleteLabel] = useState("");
   // Focus goes to Name only after a delete (the row and its bin are gone); otherwise back to the bin.
   const deleted = useRef(false);
+  // After an edit finds its contact deleted elsewhere (a 404) the row and its pencil are gone, so focus
+  // goes to the add form's Name once the dialog has closed, never to the page.
+  const editGone = useRef(false);
   const remove = useDeleteContact();
+
+  useEffect(() => {
+    if (editing !== null || !editGone.current) return;
+    editGone.current = false;
+    nameRef.current?.focus();
+  }, [editing]);
 
   let body: ReactNode;
   if (list.data) {
@@ -126,7 +135,15 @@ export function ContactsSettingsPage() {
       )}
       {body}
       {admin ? <ContactAddForm nameRef={nameRef} /> : null}
-      {admin && editing ? <ContactEditDialog contact={editing} onClose={() => setEditing(null)} /> : null}
+      {admin && editing ? (
+        <ContactEditDialog
+          contact={editing}
+          onClose={(gone) => {
+            editGone.current = gone === true;
+            setEditing(null);
+          }}
+        />
+      ) : null}
       <ConfirmDialog
         open={deleting !== null}
         onOpenChange={(open) => {
@@ -143,6 +160,9 @@ export function ContactsSettingsPage() {
           remove.mutate(deleting.id, {
             onSuccess: () => {
               deleted.current = true;
+            },
+            onError: (e) => {
+              if (e.status === 404) deleted.current = true; // deleted elsewhere: gone all the same
             },
             onSettled: () => setDeleting(null),
           });
@@ -287,7 +307,7 @@ function ContactAddForm({ nameRef }: { nameRef: RefObject<HTMLInputElement | nul
 }
 
 /** **Edit** on a row: Name and Email, **Save changes**; only the fields that change are sent. */
-function ContactEditDialog({ contact, onClose }: { contact: Contact; onClose(): void }) {
+function ContactEditDialog({ contact, onClose }: { contact: Contact; onClose(gone?: boolean): void }) {
   const save = useUpdateContact();
   const [baseline] = useState(() => contactFormFrom(contact));
   const [form, setForm] = useState<ContactForm>(baseline);
@@ -316,10 +336,10 @@ function ContactEditDialog({ contact, onClose }: { contact: Contact; onClose(): 
     save.mutate(
       { id: contact.id, patch },
       {
-        onSuccess: onClose,
+        onSuccess: () => onClose(),
         onError: (e) => {
           if (e.status === 403 || e.status === 404) {
-            onClose(); // toasted, and the role or the list refetched, by the mutation
+            onClose(e.status === 404); // toasted, and the role or the list refetched, by the mutation
             return;
           }
           const found = contactFieldErrors(e);
