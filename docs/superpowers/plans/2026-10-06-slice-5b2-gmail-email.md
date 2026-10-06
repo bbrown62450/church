@@ -778,11 +778,15 @@ def google_error(status: int, error: str) -> httpx.Response:
     return httpx.Response(status, json={"error": error, "error_description": "SECRET-GOOGLE-TEXT"})
 
 
-def gmail_error(status: int, reason: str) -> httpx.Response:
-    """A Gmail API error with one reason."""
+# The Gmail API's error status for each HTTP status the tests use.
+GMAIL_STATUS = {400: "INVALID_ARGUMENT", 401: "UNAUTHENTICATED", 403: "PERMISSION_DENIED", 429: "RESOURCE_EXHAUSTED"}
+
+
+def gmail_error(status: int, reason: str, api_status: str | None = None) -> httpx.Response:
+    """A Gmail API error with one reason (and its status name, by default the usual one for `status`)."""
     return httpx.Response(status, json={"error": {"code": status, "message": "SECRET-GOOGLE-TEXT",
                                                   "errors": [{"reason": reason, "message": "SECRET-GOOGLE-TEXT"}],
-                                                  "status": "FAILED_PRECONDITION"}})
+                                                  "status": api_status or GMAIL_STATUS.get(status, "UNKNOWN")}})
 
 
 class FakeGoogle:
@@ -842,16 +846,19 @@ class FakeGoogle:
 **In `backend/tests/test_google_oauth.py`, replace:**
 
 ````python
+from datetime import datetime, timedelta, timezone
+from urllib.parse import parse_qs, urlsplit
 
-import pytest
 ````
 
 **with:**
 
 ````python
+import json
+from datetime import datetime, timedelta, timezone
+from urllib.parse import parse_qs, urlsplit
 
 import httpx
-import pytest
 ````
 
 **In `backend/tests/test_google_oauth.py`, replace:**
@@ -982,7 +989,8 @@ def test_send_raw_message_posts_the_message_with_the_access_token():
     (gmail_error(429, "rateLimitExceeded"), Kind.SEND_LIMIT, 429),
     (gmail_error(403, "dailyLimitExceeded"), Kind.SEND_LIMIT, 403),
     (gmail_error(400, "invalidArgument"), Kind.SEND_REJECTED, 400),
-    (gmail_error(401, "authError"), Kind.SEND_REJECTED, 401),
+    (gmail_error(401, "authError"), Kind.ACCOUNT_REFUSED, 401),
+    (gmail_error(400, "failedPrecondition", "FAILED_PRECONDITION"), Kind.ACCOUNT_REFUSED, 400),
     (httpx.ConnectError("down"), Kind.UPSTREAM, None),
     (httpx.ConnectTimeout("slow"), Kind.UPSTREAM, None),
     (httpx.PoolTimeout("busy"), Kind.UPSTREAM, None),
@@ -999,6 +1007,10 @@ def test_send_raw_message_failures(answer, kind, status):
         google_oauth.send_raw_message(FRESH_ACCESS_TOKEN, b"Subject: x\r\n\r\nx\r\n")
     assert (failed.value.kind, failed.value.status) == (kind, status)
     assert "SECRET-GOOGLE-TEXT" not in str(failed.value)
+    if isinstance(answer, httpx.Response) and answer.headers["Content-Type"] == "application/json":
+        error = json.loads(answer.content)["error"]
+        reasons = [item["reason"] for item in error.get("errors", []) + error.get("details", [])]
+        assert failed.value.google_error == reasons[0]                     # logged by the caller: a reason, never text
 
 
 def test_revoke_token_is_best_effort():
@@ -1078,7 +1090,11 @@ from integrations import http
 # --------------------------------------------------------------------------- #
 # The Google calls (Task 3)
 # --------------------------------------------------------------------------- #
-# F §1.8: 15 s for each token, userinfo or refresh call, 30 s for the send, 5 s for the revoke; 5 s to connect.
+# F §1.8. httpx applies each value per phase, not to the whole call: 5 s to connect, then up to 15 s
+# (a token, userinfo or refresh call), 30 s (the send) or 5 s (the revoke) for each wait on a write, a
+# read or the pool. A slow but steady answer can therefore take longer than the number; the browser's own
+# timeout (lib/api/timeouts.ts) is the overall deadline, and a send it stops waiting for is treated there
+# as possibly sent.
 TOKEN_TIMEOUT = httpx.Timeout(15.0, connect=5.0)
 SEND_TIMEOUT = httpx.Timeout(30.0, connect=5.0)
 REVOKE_TIMEOUT = httpx.Timeout(5.0, connect=5.0)
@@ -1086,6 +1102,8 @@ REVOKE_TIMEOUT = httpx.Timeout(5.0, connect=5.0)
 _CLIENT_ERRORS = {"invalid_client", "unauthorized_client", "redirect_uri_mismatch"}
 _SCOPE_ERRORS = {"insufficientPermissions", "ACCESS_TOKEN_SCOPE_INSUFFICIENT"}
 _LIMIT_ERRORS = {"rateLimitExceeded", "userRateLimitExceeded", "dailyLimitExceeded"}
+# Gmail refuses the account itself (a Google account without Gmail, Gmail turned off by a Workspace admin).
+_ACCOUNT_ERRORS = {"failedPrecondition", "FAILED_PRECONDITION"}
 # A send that failed before its request was written cannot have reached Gmail.
 _NOT_SENT = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout, httpx.UnsupportedProtocol)
 
@@ -1099,6 +1117,7 @@ class GoogleErrorKind(str, Enum):
     EMAIL_MISMATCH = "email_mismatch"               # a Google account other than the signed-in one
     INSUFFICIENT_SCOPE = "insufficient_scope"       # Gmail: the grant no longer allows sending
     SEND_LIMIT = "send_limit"                       # Gmail: a rate or daily limit
+    ACCOUNT_REFUSED = "account_refused"             # Gmail: a 401 not about the scope, or a failed precondition
     SEND_REJECTED = "send_rejected"                 # Gmail: any other 4xx; nothing was sent
     UPSTREAM = "upstream"                           # a 5xx or a network error where nothing changed at Google
     TIMEOUT = "timeout"                             # no answer in time where nothing changed at Google
@@ -1153,13 +1172,15 @@ def _failure(resp: httpx.Response, phase: str) -> GoogleOAuthError:
     """The error for a non-2xx answer. `phase` is "token", "userinfo",
     "refresh" or "send" (5b spec, the one classification helper)."""
     names = _error_names(resp)
-    named = next(iter(sorted(names)), None)
+    named = next(iter(sorted(names, key=lambda name: (name.isupper(), name))), None)   # a reason before a STATUS
     status = resp.status_code
     if phase == "send":
         if status == 403 and names & _SCOPE_ERRORS:
             return GoogleOAuthError(GoogleErrorKind.INSUFFICIENT_SCOPE, status=status, google_error=named)
         if status == 429 or (status == 403 and names & _LIMIT_ERRORS):
             return GoogleOAuthError(GoogleErrorKind.SEND_LIMIT, status=status, google_error=named)
+        if status == 401 or (status == 400 and names & _ACCOUNT_ERRORS):
+            return GoogleOAuthError(GoogleErrorKind.ACCOUNT_REFUSED, status=status, google_error=named)
         if status >= 500:
             return GoogleOAuthError(GoogleErrorKind.SEND_UNCONFIRMED, status=status, google_error=named)
         return GoogleOAuthError(GoogleErrorKind.SEND_REJECTED, status=status, google_error=named)
@@ -1276,9 +1297,10 @@ def refresh_access_token(config: GoogleOAuthConfig, refresh_token: str) -> str:
 
 
 def send_raw_message(access_token: str, raw: bytes) -> None:
-    """Send one MIME message (its bytes) through the Gmail API (30 s). A failure
-    before the request was written is UPSTREAM (nothing was sent); no answer
-    after it, or a Gmail 5xx, is SEND_UNCONFIRMED (it may have been sent)."""
+    """Send one MIME message (its bytes) through the Gmail API's JSON endpoint
+    (SEND_TIMEOUT, per phase; the caller keeps the message small enough for it).
+    A failure before the request was written is UPSTREAM (nothing was sent); no
+    answer after it, or a Gmail 5xx, is SEND_UNCONFIRMED (it may have been sent)."""
     body = {"raw": base64.urlsafe_b64encode(raw).decode("ascii")}
     try:
         resp = http.post(GMAIL_SEND_URI, json=body, headers={"Authorization": f"Bearer {access_token}"},
@@ -2041,6 +2063,8 @@ import pytest
 
 import google_oauth
 from api.deps import get_google_config
+from db import session_scope
+from db.models import OAuthState
 from tests.api_helpers import auth_headers, make_api_client
 from tests.fake_google import REFRESH_TOKEN, FakeGoogle, google_error
 
@@ -2138,6 +2162,16 @@ def test_not_configured(client, config):
     assert _error(r) == not_configured
 
 
+def test_consent_urls_are_rate_limited_per_user(client):
+    for _ in range(10):
+        _start(client)
+    r = client.post("/gmail-connection/auth-url", headers=auth_headers(OWNER))
+    assert _error(r)[:2] == (429, "rate_limited") and int(r.headers["Retry-After"]) >= 1
+    with session_scope() as s:
+        assert s.query(OAuthState).count() == 10                      # the refused request stored no state
+    assert _start(client, "other@example.com")                        # another user's bucket is their own
+
+
 def test_the_body_is_checked(client):
     for body in ({"code": "c"}, {"code": "c", "state": "s", "extra": 1}, {"code": "c" * 2049, "state": "s"}):
         r = client.post("/gmail-connection", headers=auth_headers(OWNER), json=body)
@@ -2179,6 +2213,19 @@ def test_every_gmail_route_needs_a_signed_in_user(client):
     ("DELETE", "/gmail-connection"),
 ````
 
+**In `backend/tests/test_ratelimit.py`, replace:**
+
+````python
+        "picture": (Rule("user", 20, 3_600), Rule("church", 60, 86_400)),     # printed bulletin PR 3a
+````
+
+**with:**
+
+````python
+        "picture": (Rule("user", 20, 3_600), Rule("church", 60, 86_400)),     # printed bulletin PR 3a
+        "gmail_connect": (Rule("user", 10, 600),),                            # slice 5b-2
+````
+
 - [ ] **Step 2: See them fail**
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_api_gmail.py backend/tests/test_route_guards.py 2>&1 | tail -3`
@@ -2205,7 +2252,8 @@ no try/except (F §2.2 rule 1). The Google client comes from get_google_config
 
 - GET: configured, connected and the Google address.
 - POST /auth-url: Google's consent URL with a new single-use state; the page
-  sends the browser there in the same tab.
+  sends the browser there in the same tab. Each request stores a state, so
+  the `gmail_connect` bucket allows 10 in 10 minutes per user (429 after).
 - POST: the code and the state Google sent back to /gmail/callback; 200 with
   the new status, or the 5b spec's error table.
 - DELETE: forgets the connection and revokes it at Google (best effort).
@@ -2214,6 +2262,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, ConfigDict, Field
 
 from api.deps import CurrentUser, get_current_user, get_google_config
+from api.ratelimit import rate_limit
 from api.errors import error_responses
 from google_oauth import GoogleOAuthConfig
 from usecases import email
@@ -2249,9 +2298,11 @@ def get_gmail_connection(user: CurrentUser = Depends(get_current_user),
     return _out(email.gmail_status(user.id, config))
 
 
-@router.post("/gmail-connection/auth-url", response_model=GmailAuthUrlOut, responses=error_responses(401, 422, 503))
+@router.post("/gmail-connection/auth-url", response_model=GmailAuthUrlOut,
+             responses=error_responses(401, 422, 429, 503))
 def start_gmail_connect(user: CurrentUser = Depends(get_current_user),
-                        config: GoogleOAuthConfig = Depends(get_google_config)) -> GmailAuthUrlOut:
+                        config: GoogleOAuthConfig = Depends(get_google_config),
+                        _limit: None = Depends(rate_limit("gmail_connect"))) -> GmailAuthUrlOut:
     return GmailAuthUrlOut(auth_url=email.start_gmail_connect(user.id, user.email, config))
 
 
@@ -2318,6 +2369,32 @@ from api.routes import (bulletin_images, bulletin_settings, churches, contacts, 
 ````python
     app.include_router(contacts.router)
     app.include_router(gmail.router)
+````
+
+**In `backend/api/ratelimit.py`, replace:**
+
+````python
+# printed bulletin PR 3a (POST /bulletin-images).
+````
+
+**with:**
+
+````python
+# printed bulletin PR 3a (POST /bulletin-images). gmail_connect: slice 5b-2
+# (POST /gmail-connection/auth-url; a new consent URL and state per request).
+````
+
+**In `backend/api/ratelimit.py`, replace:**
+
+````python
+    "picture": (Rule("user", 20, 3_600), Rule("church", 60, 86_400)),
+````
+
+**with:**
+
+````python
+    "picture": (Rule("user", 20, 3_600), Rule("church", 60, 86_400)),
+    "gmail_connect": (Rule("user", 10, 600),),
 ````
 
 - [ ] **Step 4: Regenerate the API files, see the tests pass, and the suites**
@@ -2495,7 +2572,9 @@ export type GmailConnectBody = components["schemas"]["GmailConnectIn"];
 
 ````ts
   "POST /bulletin-images": 120_000,
-  // Slice 5b-2 (F §1.8): the code exchange and the address lookup, 15 s each at Google, plus the margin.
+  // Slice 5b-2 (F §1.8): the code exchange, then the address lookup. Google's timeouts are per phase (5 s
+  // to connect, then 15 s for each wait), not a deadline for the call, so this is the overall limit; a
+  // connect it stops waiting for shows an error, and connecting again starts afresh.
   "POST /gmail-connection": 40_000,
 ````
 
@@ -2544,7 +2623,12 @@ const INTERNAL_PATH_ROOTS = new Set(["join", "builder", "services", "settings", 
 
 ````ts
 const INTERNAL_PATH_ROOTS = new Set(["join", "builder", "services", "settings", "welcome"]);
-/** Whole paths it may also return to: Google's Gmail return page (slice 5b-2), so a signed-out landing comes back to it. */
+/**
+ * Whole paths it may also return to (slice 5b-2): Google's Gmail return page. The proxy keeps only the
+ * path in `/login?next=`, so a landing there while signed out comes back after sign-in without Google's
+ * answer and shows "Gmail connection didn't finish. Try connecting again." with **Try again**, instead of
+ * dropping the user on the Builder with no word about Gmail.
+ */
 const INTERNAL_PATHS = new Set(["/gmail/callback"]);
 ````
 
@@ -3237,6 +3321,9 @@ describe("Settings → Account (slice 5b-2)", () => {
     await user.click(within(card).getByRole("button", { name: "Disconnect" }));
     expect(await within(card).findByRole("button", { name: "Connect Gmail" })).toBeInTheDocument();
     expect(within(card).getByText(GMAIL_INTRO)).toBeInTheDocument();
+    expect(GMAIL_INTRO).toBe(
+      "Connect the Gmail account you sign in with. The app gets permission only to send email for you; it can't read your mail.",
+    ); // 5b-2a: true before emailing exists (5b-2b says what it is for)
     expect(api.requests.filter((r) => r.method === "DELETE").map((r) => r.path)).toEqual(["/gmail-connection"]);
     expect(api.requests.find((r) => r.path === "/gmail-connection")?.headers["x-church-id"]).toBeUndefined();
     expect(document.querySelectorAll("[data-sonner-toast]")).toHaveLength(0);
@@ -3376,7 +3463,7 @@ export const SIGNED_IN_WITH_GOOGLE = "Signed in with Google.";
 export const GMAIL_STATUS_ERROR = "Couldn't check your Gmail connection.";
 export const GMAIL_NOT_CONFIGURED = "Per-user Gmail sending isn't configured on this deployment.";
 export const GMAIL_INTRO =
-  "Connect your Gmail to email bulletins from your own account. The app can only send email for you; it can't read your mail.";
+  "Connect the Gmail account you sign in with. The app gets permission only to send email for you; it can't read your mail.";
 export const GMAIL_EVERY_CHURCH = "Works in all your churches.";
 const ACCOUNT_PATH = "/settings/account";
 
@@ -4362,6 +4449,31 @@ def test_google_failures_map_to_their_message_and_keep_or_forget_the_connection(
     assert world["charged"] == [1]
 
 
+def test_gmail_refusing_the_account_has_its_own_message_and_its_reason_is_logged(world, caplog):
+    assert email.ACCOUNT_REFUSED == ("Gmail won't send from this Google account. Nothing was sent. "
+                                     "Check that you can send email in Gmail with it, then try again.")
+    for answer, status, reason in ((gmail_error(401, "authError"), 401, "authError"),
+                                   (gmail_error(400, "failedPrecondition", "FAILED_PRECONDITION"), 400,
+                                    "failedPrecondition")):
+        world["google"].send = answer
+        with caplog.at_level(logging.INFO), pytest.raises(UpstreamError) as failed:
+            _send(world, [world["mary"]])
+        assert (failed.value.code, failed.value.message, failed.value.details) == (
+            "gmail_send_failed", email.ACCOUNT_REFUSED, {"disconnected": False, "send_uncertain": False})
+        assert f"outcome=account_refused status={status} google_error={reason}" in caplog.text
+    assert _connected(world) and "SECRET-GOOGLE-TEXT" not in caplog.text
+
+
+def test_a_message_too_large_for_gmail_is_refused_before_the_limit_and_google(world, monkeypatch):
+    assert email.MAX_RAW_BYTES == 3_500_000
+    monkeypatch.setattr(email, "MAX_RAW_BYTES", 100)
+    with pytest.raises(InvalidInput) as failed:
+        _send(world, [world["mary"]], attachments=("docx", "pdf"))
+    assert (failed.value.field, failed.value.message) == (
+        "attachments", "The attachments are too large to email. Try sending only the bulletin copy.")
+    assert world["google"].requests == [] and world["charged"] == []
+
+
 def test_a_connection_made_again_meanwhile_is_kept(world):
     def reconnect_then_refuse(_request):
         google_oauth.save_user_token(world["member"], "member@example.com", "refresh-new")   # in either app
@@ -4442,15 +4554,16 @@ in the 5b spec's order (§Errors, "POST /bulletin-emails"): the recipients
 (the church's contacts by id, the other addresses, each through
 email_addresses.normalize_address, then de-duplicated: 1 to 50), the
 attachments (at least one), the connection, the files built from the posted
-service (5a's bulletin copy, the printed bulletin's PDF), the `email` rate
-limit (`charge`), and only then Google: the token refresh and the send, with
+service (5a's bulletin copy, the printed bulletin's PDF) and the message's
+size (MAX_RAW_BYTES), the `email` rate limit (`charge`), and only then Google: the token refresh and the send, with
 no database session open. A refused grant forgets the connection only if it
 still holds the token that failed. A send that may have gone out is a 502 or
 504 with details.send_uncertain, which the route keeps for a retry with the
 same key. Nothing is recorded (hymn use is recorded on Save).
 
-Logs carry ids, counts and outcomes, never a code, a state, a token, an
-address, the subject or the message (F §2.5). No FastAPI, Starlette or
+Logs carry ids, counts, outcomes and Google's error reason (a name such as
+failedPrecondition), never a code, a state, a token, an address, the
+subject, the message or Google's text (F §2.5). No FastAPI, Starlette or
 ````
 
 **In `backend/usecases/email.py`, replace:**
@@ -4511,6 +4624,15 @@ GMAIL_UNREACHABLE = "Couldn't reach Gmail. Nothing was sent. Try again in a minu
 GOOGLE_SLOW_NOTHING_SENT = "Google took too long to respond. Nothing was sent. Try again."
 SEND_LIMIT = "Gmail's sending limit has been reached. Nothing was sent. Try again later."
 SEND_REJECTED = "Gmail couldn't send this message. Nothing was sent. Check the email addresses and try again."
+ACCOUNT_REFUSED = ("Gmail won't send from this Google account. Nothing was sent. "
+                   "Check that you can send email in Gmail with it, then try again.")
+TOO_LARGE = "The attachments are too large to email. Try sending only the bulletin copy."
+# The Gmail API's JSON endpoint takes the message base64url-encoded inside the request (a third larger),
+# and Google's upload guide puts simple requests at 5 MB at most
+# (https://developers.google.com/workspace/gmail/api/guides/uploads). A message over 3.5 MB (about
+# 4.7 MB once encoded) is refused here, before the email limit is charged and before Google is called.
+# The bulletin copy is tens of KB and the printed PDF about a megabyte at most.
+MAX_RAW_BYTES = 3_500_000
 MAYBE_SENT_PROBLEM = ("Gmail reported a problem, so the email may already have been sent. "
                       "Check your Gmail Sent folder before sending again.")
 MAYBE_SENT_UNCONFIRMED = ("Gmail didn't confirm the email, so it may already have been sent. "
@@ -4589,6 +4711,8 @@ def _send_error(error: GoogleOAuthError, user_id: uuid.UUID, connection: GmailCo
         return _refused_grant(user_id, connection, NO_SEND_PERMISSION)
     if kind == GoogleErrorKind.SEND_LIMIT:
         return _send_failed(SEND_LIMIT)
+    if kind == GoogleErrorKind.ACCOUNT_REFUSED:
+        return _send_failed(ACCOUNT_REFUSED)
     if kind == GoogleErrorKind.SEND_REJECTED:
         return _send_failed(SEND_REJECTED)
     if kind == GoogleErrorKind.SEND_UNCONFIRMED and error.status is not None:
@@ -4620,6 +4744,9 @@ def send_bulletin_email(church_id: uuid.UUID, user_id: uuid.UUID, data: archive.
     files = _attachments(church_id, data, kinds, translation, charge_scripture)
     raw = compose_bulletin_email(sender=connection.google_email, recipients=recipients,
                                  service_date=data.service_date, message=message, attachments=files).as_bytes()
+    if len(raw) > MAX_RAW_BYTES:
+        logger.info("bulletin_email.too_large church_id=%s user_id=%s bytes=%d", church_id, user_id, len(raw))
+        raise InvalidInput(TOO_LARGE, field="attachments")
     charge()                                                    # step 8: the only 429 here
     try:
         access_token = google_oauth.refresh_access_token(config, connection.refresh_token)
@@ -4629,8 +4756,8 @@ def send_bulletin_email(church_id: uuid.UUID, user_id: uuid.UUID, data: archive.
     try:
         google_oauth.send_raw_message(access_token, raw)
     except GoogleOAuthError as error:
-        logger.info("bulletin_email.send church_id=%s user_id=%s outcome=%s status=%s", church_id, user_id,
-                    error.kind.value, error.status)
+        logger.info("bulletin_email.send church_id=%s user_id=%s outcome=%s status=%s google_error=%s", church_id,
+                    user_id, error.kind.value, error.status, error.google_error)
         raise _send_error(error, user_id, connection) from None
     logger.info("bulletin_email.sent church_id=%s user_id=%s recipients=%d bcc=%s attachments=%s bytes=%d ms=%d",
                 church_id, user_id, len(recipients), len(recipients) > 1, ",".join(kinds), len(raw),
@@ -5111,6 +5238,7 @@ import { testDraft } from "@/test/fixtures";
 import {
   bulletinEmailBody,
   bulletinEmailSubject,
+  clearUncertainSend,
   countRecipients,
   defaultBulletinMessage,
   emailPrefsKey,
@@ -5118,7 +5246,10 @@ import {
   parseAddressList,
   parseReopen,
   readEmailPrefs,
+  readUncertainSend,
+  uncertainSendKey,
   writeEmailPrefs,
+  writeUncertainSend,
 } from "./email";
 
 type Case = { date_iso: string; subject: string; default_message: string };
@@ -5185,6 +5316,18 @@ describe("the bulletin email (slice 5b-2)", () => {
     expect(readEmailPrefs("u1", "c3")).toEqual({ version: 1, contact_ids: [], attachments: ["docx"] });
     data.set(emailPrefsKey("u1", "c4"), "{broken");
     expect(readEmailPrefs("u1", "c4").attachments).toEqual(["docx"]);
+  });
+
+  it("remembers a send that may already have gone out, per user and church, in this tab", () => {
+    expect(readUncertainSend("u1", "c1")).toBeNull();
+    writeUncertainSend("u1", "c1", "Check your Gmail Sent folder before sending again.");
+    expect(readUncertainSend("u1", "c1")).toBe("Check your Gmail Sent folder before sending again.");
+    expect(readUncertainSend("u1", "c2")).toBeNull();
+    expect(uncertainSendKey("u1", "c1")).toBe("wsb:emailUncertain:u1:c1");
+    data.set(uncertainSendKey("u1", "c3"), "{broken");
+    expect(readUncertainSend("u1", "c3")).toBeNull();
+    clearUncertainSend("u1", "c1");
+    expect(readUncertainSend("u1", "c1")).toBeNull();
   });
 
   it("sends the service as the downloads do, with the choices and the draft's translation", () => {
@@ -5296,13 +5439,17 @@ Run: `(cd frontend && npx vitest run src/lib/email.test.ts src/lib/idempotency.t
  * - The remembered choices (per user and church, on this device): the
  *   contacts of the last successful send and the attachments last chosen.
  * - `bulletinEmailBody`: the `POST /bulletin-emails` body.
+ * - The uncertain send (`readUncertainSend`, `writeUncertainSend`,
+ *   `clearUncertainSend`): a send that may already have gone out, kept in
+ *   sessionStorage per user and church, so neither leaving Review nor a reload
+ *   quietly allows a plain Send again; only **Send again anyway** does.
  * - `ReopenEmail`: what the dialog keeps while the user is away at Google.
  */
 import type { components } from "@/lib/api/schema";
 import { formatServiceDate, formatShortDate, isSunday, isValidDateIso, weekday } from "@/lib/dates";
 import { serviceBody } from "@/lib/documents";
 import type { DraftV1 } from "@/lib/draft/schema";
-import { readLocal, writeLocal } from "@/lib/storage";
+import { readLocal, readSession, removeSession, writeLocal, writeSession } from "@/lib/storage";
 
 export type BulletinEmailBody = components["schemas"]["BulletinEmailIn"];
 export type AttachmentKind = BulletinEmailBody["attachments"][number];
@@ -5399,6 +5546,31 @@ export function readEmailPrefs(userId: string, churchId: string): EmailPrefs {
 export function writeEmailPrefs(userId: string, churchId: string, changes: Partial<Omit<EmailPrefs, "version">>): void {
   const next = { ...readEmailPrefs(userId, churchId), ...changes, version: 1 };
   writeLocal(emailPrefsKey(userId, churchId), JSON.stringify(next));
+}
+
+/** Where this tab keeps a send that may already have gone out, for this user in this church. */
+export function uncertainSendKey(userId: string, churchId: string): string {
+  return `wsb:emailUncertain:${userId}:${churchId}`;
+}
+
+/** The message of a send that may already have gone out, or null (none, or unreadable). */
+export function readUncertainSend(userId: string, churchId: string): string | null {
+  const raw = readSession(uncertainSendKey(userId, churchId));
+  if (raw === null) return null;
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    return parsed?.version === 1 && typeof parsed.message === "string" && parsed.message !== "" ? parsed.message : null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeUncertainSend(userId: string, churchId: string, message: string): void {
+  writeSession(uncertainSendKey(userId, churchId), JSON.stringify({ version: 1, message }));
+}
+
+export function clearUncertainSend(userId: string, churchId: string): void {
+  removeSession(uncertainSendKey(userId, churchId));
 }
 
 /** The dialog's form. */
@@ -5543,7 +5715,9 @@ export function parseReopen(raw: string | null, churchId: string): ReopenEmail |
 
 ````ts
   "POST /gmail-connection": 40_000,
-  // Slice 5b-2: the printed bulletin's readings (up to 20 s), Google's refresh (15 s) and the send (30 s).
+  // Slice 5b-2: the printed bulletin's readings (their 20 s deadline), then Google's refresh and the send,
+  // whose timeouts are per phase (15 s and 30 s for each wait), not deadlines. This is the overall limit: a
+  // send still unanswered then is shown as possibly sent ("We lost the connection…"), never as failed.
   "POST /bulletin-emails": 90_000,
 ````
 
@@ -5599,7 +5773,7 @@ import ReviewStepPage from "@/app/(signed-in)/(church)/builder/review/page";
 import { Toaster } from "@/components/ui/sonner";
 import type { Church } from "@/lib/api/types";
 import { draftKey } from "@/lib/draft/schema";
-import { emailPrefsKey } from "@/lib/email";
+import { emailPrefsKey, uncertainSendKey } from "@/lib/email";
 import { browser, GMAIL_RETURN_KEY, REOPEN_EMAIL_KEY } from "@/lib/gmail";
 import { fakeError, installFakeApi, type FakeHandler, type RecordedRequest } from "@/test/fake-api";
 import {
@@ -5617,6 +5791,7 @@ import {
   liturgyConfig,
   me,
   previousBulletin,
+  serviceBulletin,
   testDraft,
   translations,
   USER_ID,
@@ -5768,6 +5943,26 @@ describe("Review → Email the bulletin: the dialog (slice 5b-2)", () => {
     expect(sends(api)).toEqual([]);
   });
 
+  it("is a bottom sheet on a phone whose one scroll area holds Send, so the keyboard never hides it", async () => {
+    const { user } = renderReview();
+    const dialog = await openDialog(user);
+    // Below md the sheet itself scrolls (5b-1's contact editor); from md the fields scroll above the buttons.
+    expect(dialog.className).toContain("max-md:overflow-y-auto");
+    expect(dialog.className).toContain("max-md:max-h-[85dvh]");
+    const send = within(dialog).getByRole("button", { name: "Send" });
+    const between: string[] = [];
+    for (let el = send.parentElement; el !== null && el !== dialog; el = el.parentElement) between.push(el.className);
+    expect(between.length).toBeGreaterThan(0);
+    for (const className of between) {
+      expect(className.split(/\s+/)).not.toContain("overflow-y-auto"); // nothing between Send and the sheet scrolls on a phone
+      expect(className.split(/\s+/)).not.toContain("min-h-0");
+    }
+    expect(between.some((className) => className.split(/\s+/).includes("md:overflow-y-auto"))).toBe(false);
+    const fields = within(dialog).getByRole("textbox", { name: "Message" }).closest("div.content-start");
+    expect(fields?.className.split(/\s+/)).toContain("md:overflow-y-auto");
+    expect(fields?.contains(send)).toBe(false);
+  });
+
   it("allows at most 50 people", async () => {
     const { user } = renderReview();
     const dialog = await openDialog(user);
@@ -5872,26 +6067,33 @@ describe("Review → Email the bulletin: the dialog (slice 5b-2)", () => {
     });
   });
 
-  it("after an uncertain send, Send replays the same key and only Send again anyway uses a new one", async () => {
-    const { user, api } = renderReview({
-      "POST /bulletin-emails": fakeError(504, "upstream_timeout",
-        "Gmail didn't confirm the email, so it may already have been sent. Check your Gmail Sent folder before sending again.",
-        { details: { send_uncertain: true } }),
+  it("after an uncertain send turns plain Send off, even after a reload, and only Send again anyway sends, with a new key", async () => {
+    const UNCERTAIN =
+      "Gmail didn't confirm the email, so it may already have been sent. Check your Gmail Sent folder before sending again.";
+    const first = renderReview({
+      "POST /bulletin-emails": fakeError(504, "upstream_timeout", UNCERTAIN, { details: { send_uncertain: true } }),
     });
-    const dialog = await openDialog(user);
-    await user.click(within(dialog).getByRole("checkbox", { name: /Mary Jones/ }));
-    await user.click(within(dialog).getByRole("button", { name: "Send to 1 person" }));
-    expect(await within(dialog).findByText(/may already have been sent/)).toBeInTheDocument();
-    await user.click(within(dialog).getByRole("button", { name: "Send to 1 person" }));
-    await waitFor(() => expect(sends(api)).toHaveLength(2));
-    await user.click(await within(dialog).findByRole("button", { name: "Send again anyway" }));
-    await waitFor(() => expect(sends(api)).toHaveLength(3));
-    const keysSent = sends(api).map((r) => r.headers["idempotency-key"]);
-    expect(keysSent[1]).toBe(keysSent[0]);
-    expect(keysSent[2]).not.toBe(keysSent[0]);
+    const dialog = await openDialog(first.user);
+    await first.user.click(within(dialog).getByRole("checkbox", { name: /Mary Jones/ }));
+    await first.user.click(within(dialog).getByRole("button", { name: "Send to 1 person" }));
+    expect(await within(dialog).findByText(UNCERTAIN)).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Send to 1 person" })).toBeDisabled();
+    expect(sends(first.api)).toHaveLength(1);
+    const firstKey = sends(first.api)[0].headers["idempotency-key"];
+    first.unmount(); // leaving Review, or a reload: this tab still knows
+
+    const again = renderReview({ "POST /bulletin-emails": SENT });
+    const reopened = await openDialog(again.user);
+    expect(within(reopened).getByText(UNCERTAIN)).toBeInTheDocument();
+    await again.user.click(within(reopened).getByRole("checkbox", { name: /Mary Jones/ }));
+    expect(within(reopened).getByRole("button", { name: "Send to 1 person" })).toBeDisabled();
+    await again.user.click(within(reopened).getByRole("button", { name: "Send again anyway" }));
+    expect(await screen.findByText("Email sent to 2 people.")).toBeInTheDocument();
+    expect(sends(again.api).map((r) => r.headers["idempotency-key"])).not.toContain(firstKey);
+    expect(window.sessionStorage.getItem(uncertainSendKey(USER_ID, GRACE.id))).toBeNull();
   });
 
-  it("after a lost connection says the email may have gone, and a retry reuses the key", async () => {
+  it("after a lost connection says the email may have gone, and only Send again anyway sends", async () => {
     let first = true;
     const { user, api } = renderReview({
       "POST /bulletin-emails": () => {
@@ -5906,10 +6108,11 @@ describe("Review → Email the bulletin: the dialog (slice 5b-2)", () => {
     await user.click(within(dialog).getByRole("checkbox", { name: /Mary Jones/ }));
     await user.click(within(dialog).getByRole("button", { name: "Send to 1 person" }));
     expect(await within(dialog).findByText(CONNECTION_LOST)).toBeInTheDocument();
-    await user.click(within(dialog).getByRole("button", { name: "Send to 1 person" }));
+    expect(within(dialog).getByRole("button", { name: "Send to 1 person" })).toBeDisabled();
+    await user.click(within(dialog).getByRole("button", { name: "Send again anyway" }));
     expect(await screen.findByText("Email sent to 2 people.")).toBeInTheDocument();
     const [one, two] = sends(api).map((r) => r.headers["idempotency-key"]);
-    expect(two).toBe(one);
+    expect(two).not.toBe(one);
   });
 
   it("offers Reconnect Gmail when Google dropped the grant", async () => {
@@ -5976,6 +6179,28 @@ describe("Review → Email the bulletin: back from Google (slice 5b-2, flow B)",
     expect(within(dialog).getByRole("textbox", { name: "Message" })).toHaveValue("Hello");
     expect(within(dialog).getByRole("checkbox", { name: /Printed bulletin \(PDF\)/ })).toBeChecked();
     expect(within(dialog).getByRole("checkbox", { name: /Bulletin copy \(Word\)/ })).not.toBeChecked();
+    expect(window.sessionStorage.getItem(REOPEN_EMAIL_KEY)).toBeNull();
+  });
+
+  it("waits for last week's bulletin to be carried in, then shows the printed bulletin's notes with the PDF", async () => {
+    reopen({ church_id: GRACE.id, contact_ids: [MARY.id], attachments: ["pdf"] });
+    let release: (value: unknown) => void = () => {};
+    const held = new Promise((resolve) => {
+      release = resolve;
+    });
+    const lastWeek = serviceBulletin({ announcements: { ...serviceBulletin().announcements, coffee_hour: "The Smiths" } });
+    renderReview({
+      "GET /services/previous-bulletin": async () => {
+        await held;
+        return previousBulletin({ service_date_iso: "2026-09-27", bulletin: lastWeek });
+      },
+    });
+    expect(await within(await emailCard()).findByText("Sends from pat@example.com.")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(window.sessionStorage.getItem(REOPEN_EMAIL_KEY)).not.toBeNull();
+    release(undefined);
+    const dialog = await screen.findByRole("dialog", { name: "Email the bulletin" });
+    expect(within(dialog).getByText("From last week, not checked yet: coffee hour.")).toBeInTheDocument();
     expect(window.sessionStorage.getItem(REOPEN_EMAIL_KEY)).toBeNull();
   });
 
@@ -6100,6 +6325,20 @@ describe("Review → Email the bulletin: back from Google (slice 5b-2, flow B)",
     expect(CONTACTS_INTRO).toBe("People you can email the bulletin to from the Review step."); // slice 5b-2
 ````
 
+**In `frontend/src/components/settings/account-settings-page.test.tsx`, replace:**
+
+````tsx
+      "Connect the Gmail account you sign in with. The app gets permission only to send email for you; it can't read your mail.",
+    ); // 5b-2a: true before emailing exists (5b-2b says what it is for)
+````
+
+**with:**
+
+````tsx
+      "Connect your Gmail to email bulletins from your own account. The app can only send email for you; it can't read your mail.",
+    ); // 5b-2b: emailing is on Review now
+````
+
 - [ ] **Step 2: See them fail**
 
 Run: `(cd frontend && npx vitest run src/components/builder/review src/components/settings/contacts-settings-page.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
@@ -6188,6 +6427,8 @@ import { useSendBulletinEmail } from "@/lib/queries/email";
 import { useStartGmailConnect } from "@/lib/queries/gmail";
 import { keys } from "@/lib/queries/keys";
 
+import { NotFilledInLines } from "./printed-card";
+
 export const BCC_NOTE = "Recipients won't see each other's addresses (sent as BCC).";
 export const CHOOSE_RECIPIENT = "Choose at least one recipient.";
 export const TOO_MANY = `You can email at most ${MAX_RECIPIENTS} people at once.`;
@@ -6221,6 +6462,9 @@ type Props = {
   form: EmailForm;
   onFormChange(change: Partial<EmailForm>): void;
   tracker: KeyTracker;
+  /** A send that may already have gone out (kept by the card in sessionStorage), or null. */
+  uncertain: string | null;
+  onUncertain(message: string | null): void;
   onClose(): void;
   onSent(count: number, contactIds: string[]): void;
 };
@@ -6231,13 +6475,19 @@ type Props = {
  * send-time rule refuses is shown but cannot be chosen), Other addresses, the
  * BCC note from two people on, the subject, the two attachments (at least
  * one), the message (prefilled, editable), notes when the service is not
- * finished or not saved, and **Send to N people**. Full screen on a phone,
- * centred from `md`. The form lives in the card, so closing and reopening
- * keeps it. While a send runs the dialog cannot be closed (abandoning the
- * wait would not stop Gmail). Every failure shows here, where it belongs,
- * never as a toast.
+ * finished or not saved, the printed bulletin's notes while its PDF is
+ * ticked, and **Send to N people**. Below `md` it is a bottom sheet, as the
+ * Contacts page's editor (5b-1): the whole sheet scrolls, its buttons with
+ * it, so the iPhone keyboard never leaves Send out of reach; from `md` it is
+ * centred, the fields scrolling above the buttons. The form lives in the
+ * card, so closing and reopening keeps it. While a send runs the dialog
+ * cannot be closed (abandoning the wait would not stop Gmail). Every failure
+ * shows here, where it belongs, never as a toast. After a send that may
+ * already have gone out (Gmail did not confirm it, or the connection was
+ * lost), plain Send stays off, even after a reload, until **Send again
+ * anyway** sends with a new key.
  */
-export function EmailDialog({ googleEmail, form, onFormChange, tracker, onClose, onSent }: Props) {
+export function EmailDialog({ googleEmail, form, onFormChange, tracker, uncertain, onUncertain, onClose, onSent }: Props) {
   const church = useChurch();
   const { draft, peek } = useDraft();
   const queryClient = useQueryClient();
@@ -6280,7 +6530,8 @@ export function EmailDialog({ googleEmail, form, onFormChange, tracker, onClose,
     const details = e.details ?? {};
     let found: Problem;
     if (e.status === 0) {
-      found = { top: CONNECTION_LOST };
+      found = { top: CONNECTION_LOST, action: "again" };
+      onUncertain(CONNECTION_LOST);
     } else if (e.status === 422 && e.fields && Object.keys(e.fields).length > 0) {
       found = {};
       for (const [key, message] of Object.entries(e.fields)) {
@@ -6300,6 +6551,7 @@ export function EmailDialog({ googleEmail, form, onFormChange, tracker, onClose,
       void queryClient.invalidateQueries({ queryKey: keys.gmailConnection() });
     } else if (details.send_uncertain === true) {
       found = { top: e.message, action: "again" };
+      onUncertain(e.message);
     } else if (e.code === "gmail_not_configured") {
       found = { top: e.message, sendDisabled: true };
       void queryClient.invalidateQueries({ queryKey: keys.gmailConnection() });
@@ -6311,7 +6563,7 @@ export function EmailDialog({ googleEmail, form, onFormChange, tracker, onClose,
   }
 
   function submit({ again = false }: { again?: boolean } = {}) {
-    if (send.isPending || blocked !== null) return;
+    if (send.isPending || blocked !== null || (uncertain !== null && !again)) return;
     const body = bulletinEmailBody(peek(), { ...form, contactIds: chosen.map((c) => c.id) });
     if (again) tracker.rotate();
     const key = tracker.keyFor(body);
@@ -6321,10 +6573,12 @@ export function EmailDialog({ googleEmail, form, onFormChange, tracker, onClose,
       {
         onSuccess: (sent) => {
           tracker.settle("success");
+          onUncertain(null);
           onSent(sent.recipient_count, body.contact_ids ?? []);
         },
         onError: (e) => {
           tracker.settle(settleOutcome(e));
+          if (again) onUncertain(null); // answered: an uncertain answer sets it again in `failed`
           failed(e);
         },
       },
@@ -6350,6 +6604,9 @@ export function EmailDialog({ googleEmail, form, onFormChange, tracker, onClose,
     change("attachments", {
       attachments: ATTACHMENT_KINDS.filter((k) => (k === kind ? on : form.attachments.includes(k))),
     });
+
+  // A failure of this visit, else a send that may already have gone out (this visit or an earlier one).
+  const shown: Problem | null = problem ?? (uncertain !== null ? { top: uncertain, action: "again" } : null);
 
   let toBody: ReactNode;
   if (contacts.data) {
@@ -6414,25 +6671,25 @@ export function EmailDialog({ googleEmail, form, onFormChange, tracker, onClose,
     >
       <DialogContent
         showCloseButton={false}
-        className="grid-rows-[auto_minmax(0,1fr)] max-md:inset-0 max-md:h-dvh max-md:max-w-none! max-md:translate-x-0 max-md:translate-y-0 max-md:rounded-none md:max-h-[calc(100dvh-2rem)] md:max-w-lg"
+        className="max-md:top-auto max-md:bottom-0 max-md:left-0 max-md:max-w-none! max-md:translate-x-0 max-md:translate-y-0 max-md:rounded-b-none max-md:max-h-[85dvh] max-md:overflow-y-auto md:max-h-[calc(100dvh-2rem)] md:max-w-lg md:grid-rows-[auto_minmax(0,1fr)]"
       >
         <DialogHeader>
           <DialogTitle>Email the bulletin</DialogTitle>
         </DialogHeader>
         <form
           noValidate
-          className="grid min-h-0 grid-rows-[minmax(0,1fr)_auto] gap-4"
+          className="grid gap-4 md:min-h-0 md:grid-rows-[minmax(0,1fr)_auto]"
           onSubmit={(event: FormEvent) => {
             event.preventDefault();
             submit();
           }}
         >
-          <div className="grid content-start gap-5 overflow-y-auto">
+          <div className="grid content-start gap-5 md:overflow-y-auto">
             <div aria-live="polite" className="empty:hidden">
-              {problem?.top ? (
+              {shown?.top ? (
                 <div role="alert" className="grid gap-2 rounded-md border border-destructive/40 p-3 text-sm">
-                  <p>{problem.top}</p>
-                  {problem.action === "hymns" ? (
+                  <p>{shown.top}</p>
+                  {shown.action === "hymns" ? (
                     <Link
                       href="/builder/hymns"
                       onClick={onClose}
@@ -6441,13 +6698,20 @@ export function EmailDialog({ googleEmail, form, onFormChange, tracker, onClose,
                       Go to Hymns
                     </Link>
                   ) : null}
-                  {problem.action === "connect" || problem.action === "reconnect" ? (
+                  {shown.action === "connect" || shown.action === "reconnect" ? (
                     <PendingButton size="touch" className="w-full sm:w-fit" pending={start.isPending} pendingLabel="Opening Google…" onClick={connect}>
-                      {problem.action === "connect" ? "Connect Gmail" : "Reconnect Gmail"}
+                      {shown.action === "connect" ? "Connect Gmail" : "Reconnect Gmail"}
                     </PendingButton>
                   ) : null}
-                  {problem.action === "again" ? (
-                    <Button type="button" variant="outline" size="touch" className="w-full sm:w-fit" disabled={send.isPending} onClick={() => submit({ again: true })}>
+                  {shown.action === "again" ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="touch"
+                      className="w-full sm:w-fit"
+                      disabled={send.isPending || blocked !== null}
+                      onClick={() => submit({ again: true })}
+                    >
                       Send again anyway
                     </Button>
                   ) : null}
@@ -6518,6 +6782,11 @@ export function EmailDialog({ googleEmail, form, onFormChange, tracker, onClose,
                   </span>
                 </label>
               ))}
+              {form.attachments.includes("pdf") ? (
+                <div className="grid gap-1 px-1">
+                  <NotFilledInLines />
+                </div>
+              ) : null}
               {problem?.attachments ? (
                 <p role="alert" className="text-sm text-destructive">
                   {problem.attachments}
@@ -6560,7 +6829,7 @@ export function EmailDialog({ googleEmail, form, onFormChange, tracker, onClose,
               className="md:h-8"
               pending={send.isPending}
               pendingLabel={slow ? "Still working…" : "Sending…"}
-              disabled={blocked !== null || problem?.sendDisabled === true}
+              disabled={blocked !== null || problem?.sendDisabled === true || uncertain !== null}
             >
               {count === 0 ? "Send" : `Send to ${people(count)}`}
             </PendingButton>
@@ -6586,19 +6855,24 @@ import { PendingButton } from "@/components/app/pending-button";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useChurch } from "@/lib/church-context";
+import { shouldCarry } from "@/lib/draft/bulletin";
 import { useDraft } from "@/lib/draft/context";
 import { hasReadingsError, hasServiceDate } from "@/lib/draft/status";
 import {
+  clearUncertainSend,
   defaultBulletinMessage,
   parseReopen,
   readEmailPrefs,
+  readUncertainSend,
   writeEmailPrefs,
+  writeUncertainSend,
   type EmailForm,
 } from "@/lib/email";
 import { REOPEN_EMAIL_KEY } from "@/lib/gmail";
 import { createKeyTracker } from "@/lib/idempotency";
 import { useMeContext } from "@/lib/me-context";
 import { useGmailConnection, useStartGmailConnect } from "@/lib/queries/gmail";
+import { usePreviousBulletin } from "@/lib/queries/services";
 import { readSession, removeSession } from "@/lib/storage";
 
 import { EmailDialog, people } from "./email-dialog";
@@ -6619,9 +6893,12 @@ const REVIEW_PATH = "/builder/review";
  * connected ("Sends from …" and **Email bulletin…**, which needs a service
  * date and readings without errors, as the downloads do; nothing else blocks
  * it). It keeps the dialog's form (closing and reopening keeps it, a sent
- * email resets the message) and its Idempotency-Key tracker. After a connect
- * from Review it reopens the dialog with what was in it, once the status says
- * connected, and only in the church it was opened in.
+ * email resets the message), its Idempotency-Key tracker and a send that may
+ * already have gone out (sessionStorage, so a reload keeps plain Send off).
+ * After a connect from Review it reopens the dialog with what was in it, once
+ * the status says connected, only in the church it was opened in, and only
+ * after last week's bulletin has been carried in (the printed card's
+ * `useBulletinCarry`), so a PDF sent at once has it.
  */
 export function EmailCard() {
   const church = useChurch();
@@ -6632,6 +6909,9 @@ export function EmailCard() {
   const [tracker] = useState(() => createKeyTracker());
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<EmailForm | null>(null);
+  const [uncertain, setUncertain] = useState(() => readUncertainSend(user.id, church.id));
+  // Read only, never fetched here: the printed card's useBulletinCarry fetches and applies it.
+  const carry = usePreviousBulletin(draft.readings.date_iso, false);
   const dateIso = draft.readings.date_iso;
   const dated = hasServiceDate(draft);
   const readingsError = hasReadingsError(draft);
@@ -6642,12 +6922,14 @@ export function EmailCard() {
   };
 
   // Back from Google (flow B): the request is read once, when the card mounts, and decided once the
-  // status has settled (during render, so no effect sets state); then it is forgotten either way.
+  // status has settled and, when it reopens the dialog, once last week's bulletin is carried in or its
+  // lookup failed (during render, so no effect sets state); then it is forgotten either way.
   const [reopenRaw, setReopenRaw] = useState(() => readSession(REOPEN_EMAIL_KEY));
   const settled = !status.isPending;
-  if (reopenRaw !== null && settled) {
+  const reopen = reopenRaw !== null && settled ? parseReopen(reopenRaw, church.id) : null;
+  const carrying = reopen !== null && status.data?.connected === true && shouldCarry(draft) && !carry.isError;
+  if (reopenRaw !== null && settled && !carrying) {
     setReopenRaw(null);
-    const reopen = parseReopen(reopenRaw, church.id);
     if (reopen !== null && status.data?.connected === true) {
       const prefs = readEmailPrefs(user.id, church.id);
       setForm({
@@ -6660,8 +6942,8 @@ export function EmailCard() {
     }
   }
   useEffect(() => {
-    if (settled) removeSession(REOPEN_EMAIL_KEY);
-  }, [settled]);
+    if (settled && !carrying) removeSession(REOPEN_EMAIL_KEY);
+  }, [settled, carrying]);
 
   let body;
   if (status.data) {
@@ -6711,6 +6993,12 @@ export function EmailCard() {
                 if (change.attachments) writeEmailPrefs(user.id, church.id, { attachments: change.attachments });
               }}
               tracker={tracker}
+              uncertain={uncertain}
+              onUncertain={(message) => {
+                setUncertain(message);
+                if (message === null) clearUncertainSend(user.id, church.id);
+                else writeUncertainSend(user.id, church.id, message);
+              }}
               onClose={() => setOpen(false)}
               onSent={(count, contactIds) => {
                 writeEmailPrefs(user.id, church.id, { contact_ids: contactIds });
@@ -6805,6 +7093,35 @@ export const CONTACTS_INTRO = "People you can email the bulletin to. Emailing it
 
 ````tsx
 export const CONTACTS_INTRO = "People you can email the bulletin to from the Review step.";
+````
+
+**In `frontend/src/components/builder/review/printed-card.tsx`, replace:**
+
+````tsx
+ * unchecked.
+ */
+function NotFilledInLines() {
+````
+
+**with:**
+
+````tsx
+ * unchecked. The email dialog shows the same lines while its PDF is ticked
+ * (slice 5b-2).
+ */
+export function NotFilledInLines() {
+````
+
+**In `frontend/src/components/settings/account-settings-page.tsx`, replace:**
+
+````tsx
+  "Connect the Gmail account you sign in with. The app gets permission only to send email for you; it can't read your mail.";
+````
+
+**with:**
+
+````tsx
+  "Connect your Gmail to email bulletins from your own account. The app can only send email for you; it can't read your mail.";
 ````
 
 - [ ] **Step 4: See them pass three times, and the suite**
