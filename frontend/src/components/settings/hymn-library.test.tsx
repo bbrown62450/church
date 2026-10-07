@@ -185,7 +185,7 @@ describe("Settings → Hymns, the Hymn library (slice 6a-2)", () => {
     await user.click(within(dialog).getByRole("button", { name: "Add hymn" }));
     expect(await screen.findByText("Hymn added.")).toBeInTheDocument();
     expect(writes(api, "POST")[0].body).toEqual({
-      title: "Be Thou My Vision", number: 339, hymnal: "GG2013", scripture_refs: null, theme: null, link: null, text_year: 1905, hymnal_count: null,
+      title: "Be Thou My Vision", number: 339, hymnal: null, scripture_refs: null, theme: null, link: null, text_year: 1905, hymnal_count: null,
     });
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     for (const key of [["church", church().id, "hymns"], ["church", church().id, "hymnals"], ["church", church().id, "profile"]]) {
@@ -227,6 +227,36 @@ describe("Settings → Hymns, the Hymn library (slice 6a-2)", () => {
     await user.type(within(dialog).getByLabelText("Number"), "138");
     await user.click(within(dialog).getByRole("button", { name: "Add hymn" }));
     expect(await within(dialog).findByRole("alert")).toHaveTextContent("GG2013 already has #138 Holy, Holy, Holy.");
+    expect(screen.getByRole("dialog", { name: "Add hymn" })).toBeInTheDocument();
+  });
+
+  it("sends the chosen hymnal when the church has several (6a-2 build review I1)", async () => {
+    const { api, user } = renderPage("member", {
+      "POST /hymns": { status: 201, body: hymnDetail() },
+      "GET /hymnals": hymnals({ items: [{ code: "GG2013", hymn_count: 1, scripture_ref_count: 1 }, { code: "PH1990", hymn_count: 1, scripture_ref_count: 0 }] }),
+    });
+    await screen.findByRole("group", { name: "Hymnal" });
+    await user.click(screen.getByRole("button", { name: "Add hymn" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add hymn" });
+    expect(within(dialog).getByLabelText("Hymnal")).toBeInTheDocument();
+    await user.type(within(dialog).getByLabelText("Title"), "Be Thou My Vision");
+    await user.click(within(dialog).getByRole("button", { name: "Add hymn" }));
+    expect(await screen.findByText("Hymn added.")).toBeInTheDocument();
+    expect((writes(api, "POST")[0].body as { hymnal: string | null }).hymnal).toBe("GG2013");
+  });
+
+  it("toasts a hymnal error the form has no Hymnal field to show (one hymnal, stale), and stays open (6a-2 build review I1)", async () => {
+    const { user } = renderPage("member", {
+      "POST /hymns": fakeError(422, "invalid_request", "Choose one of your church's hymnals.", { fields: { hymnal: "Choose one of your church's hymnals." } }),
+    });
+    await screen.findByText("3 hymns");
+    await user.click(screen.getByRole("button", { name: "Add hymn" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add hymn" });
+    expect(within(dialog).queryByLabelText("Hymnal")).toBeNull();
+    await user.type(within(dialog).getByLabelText("Title"), "Be Thou My Vision");
+    await user.click(within(dialog).getByRole("button", { name: "Add hymn" }));
+    expect(await screen.findByText("Choose one of your church's hymnals.")).toBeInTheDocument();
+    expect(within(dialog).queryByText("Choose one of your church's hymnals.")).toBeNull();
     expect(screen.getByRole("dialog", { name: "Add hymn" })).toBeInTheDocument();
   });
 

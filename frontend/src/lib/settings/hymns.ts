@@ -84,12 +84,20 @@ export function hymnFormErrors(form: HymnForm, { thisYear, admin }: { thisYear: 
 const blankToNull = (text: string): string | null => (text.trim() === "" ? null : text.trim());
 const whole = (value: number | null | "invalid"): number | null => (value === "invalid" ? null : value);
 
-/** `POST /hymns`'s body (check `hymnFormErrors` first). The year and familiarity only for an admin. */
-export function newHymnBody(form: HymnForm, { thisYear, admin }: { thisYear: number; admin: boolean }): HymnBody {
+/**
+ * `POST /hymns`'s body (check `hymnFormErrors` first). The year and familiarity
+ * only for an admin. With the Hymnal field hidden (`hymnalShown` false: one
+ * hymnal) the hymnal is null, so the server adds to the church's effective
+ * default, never to a code the page may hold stale (6a-2 build review I1).
+ */
+export function newHymnBody(
+  form: HymnForm,
+  { thisYear, admin, hymnalShown = true }: { thisYear: number; admin: boolean; hymnalShown?: boolean },
+): HymnBody {
   const body: HymnBody = {
     title: form.title.trim(),
     number: whole(parseHymnNumber(form.number)),
-    hymnal: blankToNull(form.hymnal),
+    hymnal: hymnalShown ? blankToNull(form.hymnal) : null,
     scripture_refs: blankToNull(form.scripture_refs),
     theme: blankToNull(form.themes),
     link: blankToNull(form.link),

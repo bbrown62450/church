@@ -74,6 +74,12 @@ describe("Settings → Hymns' form rules (slice 6a-2)", () => {
     expect(newHymnBody(form, MEMBER)).not.toHaveProperty("hymnal_count");
   });
 
+  it("sends no hymnal when the form hides the Hymnal field, so the server uses the church's default (6a-2 build review I1)", () => {
+    const form = { ...emptyHymnForm("GG2013"), title: "Be Thou My Vision" };
+    expect(newHymnBody(form, { ...MEMBER, hymnalShown: false }).hymnal).toBeNull();
+    expect(newHymnBody(form, { ...MEMBER, hymnalShown: true }).hymnal).toBe("GG2013");
+  });
+
   it("sends only what changed in an edit, a cleared field as null, and never a member's facts", () => {
     const baseline = hymnFormFrom(hymn({ themes: ["Trinity"], text_year: 1826, hymnal_count: 12 }));
     expect(hymnPatch(baseline, { ...baseline, title: " Come, Thou Almighty King ", number: "0403" }, ADMIN)).toEqual({});

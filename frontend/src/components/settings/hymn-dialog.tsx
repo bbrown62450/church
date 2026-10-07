@@ -82,6 +82,7 @@ export function HymnDialog({ hymn, codes, defaultHymnal, admin, fallbackFocus, o
   const refs = useRef<Partial<Record<keyof HymnForm, HTMLElement | null>>>({});
   const pending = create.isPending || update.isPending || remove.isPending;
   const options = { thisYear, admin };
+  const hymnalShown = codes.length > 1;
 
   const set = (field: keyof HymnForm, value: string) => {
     setForm((f) => ({ ...f, [field]: value }));
@@ -111,7 +112,13 @@ export function HymnDialog({ hymn, codes, defaultHymnal, admin, fallbackFocus, o
         return;
       }
       const found = hymnFieldErrors(e);
-      if (found) showErrors(found);
+      if (!found) return;
+      // A field the form does not show (the Hymnal with one hymnal) is toasted (6a-2 build review I1).
+      if (found.hymnal && !hymnalShown) {
+        toast.error(found.hymnal);
+        delete found.hymnal;
+      }
+      showErrors(found);
     },
   };
 
@@ -124,7 +131,7 @@ export function HymnDialog({ hymn, codes, defaultHymnal, admin, fallbackFocus, o
       return;
     }
     if (hymn === null) {
-      create.mutate(newHymnBody(form, options), {
+      create.mutate(newHymnBody(form, { ...options, hymnalShown }), {
         ...handlers,
         onSuccess: () => {
           toast.success("Hymn added.");
@@ -214,7 +221,7 @@ export function HymnDialog({ hymn, codes, defaultHymnal, admin, fallbackFocus, o
         <form onSubmit={onSubmit} noValidate className="grid gap-4">
           {field("title", "Title", { maxLength: 300 })}
           {field("number", "Number", { numeric: true, maxLength: 5 })}
-          {codes.length > 1 ? (
+          {hymnalShown ? (
             <div className="grid gap-1.5">
               <Label htmlFor="hymn-hymnal">Hymnal</Label>
               <Select
