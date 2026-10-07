@@ -330,3 +330,95 @@ def test_get_hymns_by_ids_is_church_scoped_and_skips_what_it_cannot_find(tmp_db,
         s.rollback()
     with pytest.raises(NotFound):
         get_hymns_by_ids("not-a-church", [a])
+
+
+# --- slice 6a-2: the hymn library's writes and the import (6a spec, `repos/hymns.py`) ---
+
+from repos import hymns as hymn_repo  # noqa: E402
+
+
+def test_an_import_adds_once_fills_only_blanks_and_matches_titles_by_their_words(tmp_db, make_church):
+    cid = make_church()
+    mine = _hymn(cid, "PH1990", "Amazing Grace", 280, refs="John 9:25", hymnary_link="https://example.org/mine")
+    blank = _hymn(cid, "PH1990", "Be Thou My Vision", 339, refs="  ")
+    rows = [{"number": "280", "title": "  amazing \tGRACE ", "scripture_refs": "Ephesians 2:8",
+             "hymnary_link": "https://hymnary.org/hymn/PH1990/280", "text_year": 1779},
+            {"number": 339, "title": "Be Thou\nMy Vision", "scripture_refs": "Psalm 16:5"},
+            {"number": "1", "title": "Come,  Thou long-expected Jesus", "theme": "Advent"},
+            {"number": "1", "title": "come, thou long-expected jesus"},
+            {"number": "", "title": "   "}]
+    assert hymn_repo.import_hymns(cid, "PH1990", rows) == {"inserted": 1, "updated": 2, "total": 3}
+    with session_scope() as s:
+        kept = s.get(Hymn, mine)
+        assert (kept.title, kept.scripture_refs, kept.hymnary_link, kept.text_year) == (
+            "Amazing Grace", "John 9:25", "https://example.org/mine", 1779)    # only the blank year filled
+        assert s.get(Hymn, blank).scripture_refs == "Psalm 16:5"
+        new = s.execute(select(Hymn).where(Hymn.church_id == cid, Hymn.number == 1)).scalar_one()
+        assert (new.title, new.theme) == ("Come, Thou long-expected Jesus", "Advent")
+    assert hymn_repo.import_hymns(cid, "PH1990", rows) == {"inserted": 0, "updated": 0, "total": 0}
+
+
+def test_an_import_flushes_once_in_the_callers_session(tmp_db, make_church):
+    cid = make_church()
+    flushes = []
+    with session_scope() as s:
+        event.listen(s, "before_flush", lambda *_args: flushes.append(1))
+        report = hymn_repo.import_hymns(cid, "PH1990", [{"number": n, "title": f"Hymn {n}"} for n in range(1, 606)],
+                                        session=s)
+        assert report["inserted"] == 605 and len(flushes) == 1
+    assert len(list_hymns(cid, hymnal="PH1990")) == 605
+
+
+def test_create_get_and_patch_are_church_scoped_and_keep_what_is_not_sent(tmp_db, make_church):
+    mine, other = make_church(), make_church(name="Other")
+    created = hymn_repo.create_hymn(mine, {"title": "Holy, Holy, Holy", "number": 138, "hymnal": "GG2013",
+                                           "scripture_refs": "Isaiah 6:3", "theme": "Trinity",
+                                           "link": "https://hymnary.org/hymn/GG2013/138", "text_year": 1826,
+                                           "hymnal_count": None})
+    assert isinstance(created, HymnRecord)
+    assert (created.title, created.number, created.link, created.text_year) == (
+        "Holy, Holy, Holy", 138, "https://hymnary.org/hymn/GG2013/138", 1826)
+    with session_scope() as s:
+        s.get(Hymn, created.id).audio_url = "https://example.org/holy.mp3"
+    patched = hymn_repo.patch_hymn(created.id, mine, {"number": None, "theme": None, "hymnal_count": 1322})
+    assert (patched.title, patched.number, patched.theme, patched.scripture_refs, patched.hymnal_count) == (
+        "Holy, Holy, Holy", None, None, "Isaiah 6:3", 1322)
+    with session_scope() as s:
+        assert s.get(Hymn, created.id).audio_url == "https://example.org/holy.mp3"
+    assert hymn_repo.get_hymn(created.id, mine) == patched
+    assert hymn_repo.get_hymn(created.id, other) is None
+    assert hymn_repo.patch_hymn(created.id, other, {"title": "Theirs"}) is None
+    assert hymn_repo.get_hymn(created.id, mine).title == "Holy, Holy, Holy"
+    with pytest.raises(NotFound):
+        hymn_repo.get_hymn("not-a-uuid", mine)
+
+
+def test_find_duplicate_compares_the_number_and_the_titles_words_in_one_hymnal(tmp_db, make_church):
+    mine, other = make_church(), make_church(name="Other")
+    holy = _hymn(mine, "GG2013", "Holy,  Holy, Holy\t", 138)
+    _hymn(mine, "GG2013", "No Number", None)
+    _hymn(other, "GG2013", "Theirs", 1)
+    assert hymn_repo.find_duplicate(mine, "GG2013", 138, " holy, holy,\u00a0HOLY ")
+    assert not hymn_repo.find_duplicate(mine, "GG2013", 138, "holy, holy, holy", exclude_id=holy)
+    assert not hymn_repo.find_duplicate(mine, "GG2013", 139, "Holy, Holy, Holy")
+    assert not hymn_repo.find_duplicate(mine, "PH1990", 138, "Holy, Holy, Holy")
+    assert hymn_repo.find_duplicate(mine, "GG2013", None, "no number")
+    assert not hymn_repo.find_duplicate(mine, "GG2013", 5, "no number")
+    assert not hymn_repo.find_duplicate(mine, "GG2013", 1, "Theirs")
+
+
+def test_delete_hymnal_and_delete_hymn_touch_only_the_church(tmp_db, make_church):
+    mine, other = make_church(), make_church(name="Other")
+    for n in (1, 2, 3):
+        _hymn(mine, "PH1990", f"Mine {n}", n)
+    kept = _hymn(mine, "GG2013", "Kept", 1)
+    theirs = _hymn(other, "PH1990", "Theirs", 1)
+    with session_scope() as s:
+        assert hymn_repo.delete_hymnal(mine, "PH1990", session=s) == 3
+    assert hymn_repo.delete_hymnal(mine, "PH1990") == 0
+    assert [h.code for h in hymnal_summaries(mine)] == ["GG2013"]
+    assert [h.code for h in hymnal_summaries(other)] == ["PH1990"]
+    with session_scope() as s:
+        assert not hymn_repo.delete_hymn(theirs, mine, session=s)
+        assert hymn_repo.delete_hymn(kept, mine, session=s)
+    assert hymnal_summaries(mine) == [] and len(hymnal_summaries(other)) == 1
