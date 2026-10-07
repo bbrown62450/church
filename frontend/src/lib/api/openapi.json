@@ -170,6 +170,94 @@
         "title": "BulletinAnnouncements",
         "type": "object"
       },
+      "BulletinEmailIn": {
+        "additionalProperties": false,
+        "properties": {
+          "additional_emails": {
+            "items": {
+              "maxLength": 320,
+              "type": "string"
+            },
+            "maxItems": 200,
+            "title": "Additional Emails",
+            "type": "array"
+          },
+          "attachments": {
+            "description": "docx: the bulletin copy; pdf: the printed bulletin. At least one.",
+            "items": {
+              "enum": [
+                "docx",
+                "pdf"
+              ],
+              "type": "string"
+            },
+            "maxItems": 2,
+            "title": "Attachments",
+            "type": "array"
+          },
+          "contact_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 200,
+            "title": "Contact Ids",
+            "type": "array"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "maxLength": 5000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "service": {
+            "$ref": "#/components/schemas/ServiceDraft"
+          },
+          "translation": {
+            "anyOf": [
+              {
+                "maxLength": 20,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Translation"
+          }
+        },
+        "required": [
+          "service",
+          "attachments"
+        ],
+        "title": "BulletinEmailIn",
+        "type": "object"
+      },
+      "BulletinEmailOut": {
+        "properties": {
+          "recipient_count": {
+            "title": "Recipient Count",
+            "type": "integer"
+          },
+          "sent": {
+            "const": true,
+            "title": "Sent",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "sent",
+          "recipient_count"
+        ],
+        "title": "BulletinEmailOut",
+        "type": "object"
+      },
       "BulletinImageOut": {
         "description": "An uploaded cover picture as stored (a JPEG at most 1600 px on its long\nside): put its id in the bulletin's cover_image_id.",
         "properties": {
@@ -3563,6 +3651,174 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/bulletin-emails": {
+      "post": {
+        "operationId": "send_bulletin_email_bulletin_emails_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-church-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Church-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulletinEmailIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulletinEmailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Gateway Timeout"
+          }
+        },
+        "summary": "Send Bulletin Email"
+      }
+    },
     "/bulletin-images": {
       "post": {
         "operationId": "upload_image_bulletin_images_post",
