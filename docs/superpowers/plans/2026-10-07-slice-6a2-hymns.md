@@ -81,12 +81,12 @@ The owner's answers win over S and F; the code wins over both where they disagre
 
 1. **[owner-visible] What 6a-2 ships** (answers 1, 2, 6). The Hymns page with both cards; `POST`, `PATCH` and `DELETE /hymns`; `GET /hymnal-sources`, `POST /hymnals`, `DELETE /hymnals/{code}`; `label` on `GET /hymnals`; the bundled CSV under `backend/` and `hymnal_sources.py`; the CLI's changes; the Postgres tests; the builder's empty-hymnal link and the Church page's link to Hymns (clarification 20). Not here: "Fill from Hymnary.org", anything in 6a-3 or 6b, keying recent use by hymn id.
 2. **[owner-visible] Where Hymns sits** (answer 3). `SETTINGS_SECTIONS` becomes **Church** (`/settings/church`), **Hymns** (`/settings/hymns`), **Bulletin**, **Contacts**, **Account**. On a phone the section nav is a wrapping row of 44 px links; five may wrap to a second row at 375 px (T12 Step 5 checks it is easy to use).
-3. **[owner-visible] The page** (S UX §2). Inside the Settings layout: the heading "Hymns" (an `h2`, as "Church profile" and "Contacts") with "The hymnals and hymns the builder offers when you choose hymns." under it (new: S has no intro), then the **Hymnals** card, then the **Hymn library** (each an `h3`). Every role sees both; what a member may not do is simply not offered.
+3. **[owner-visible] The page** (S UX §2). Inside the Settings layout: the heading "Hymns" (an `h2`, as "Church profile" and "Contacts") with "The hymnals and hymns the builder offers when you choose hymns." under it (new: S has no intro; owner question 3), then the **Hymnals** card, then the **Hymn library** (each an `h3`). Every role sees both; what a member may not do is simply not offered.
 4. **[owner-visible] The Hymnals card** (S UX §2a). A list (`aria-label="Hymnals"`), one row per hymnal in `GET /hymnals`' order: the code in bold with a **Default** badge on the effective default, and under it the label when known ("Glory to God (2013)", "The Presbyterian Hymnal (1990)"; `hymnal_sources.HYMNAL_LABELS`) and "{n} hymns" ("1 hymn"), joined by " · ". Under the list: "{total} hymns in {n} hymnals." ("in 1 hymnal"). With no hymnals: "Your church has no hymnals yet." Owners and admins: **Add a hymnal** under the card (full width on a phone), **Remove…** on every row but the default (`aria-label` "Remove {code}"), and on the default row "Default. Change it in Church profile." with "Church profile" a link to `/settings/church`. Members: no buttons, and "Admins can add bundled hymnals." The first load shows a skeleton row, a failed read `ErrorState` with **Retry**.
-5. **[owner-visible] Add a hymnal** (S UX §2a). A dialog (a bottom sheet below `md`, as **Edit contact**): title "Add a hymnal", "Hymnals this app can add to your church, with their hymns.", then `GET /hymnal-sources` as a list (`aria-label="Bundled hymnals"`), each row "{code} · {label} · {n} hymns" and, when the source has no scripture references, "This hymnal has no scripture references, so “Hymns for the readings” and AI suggestions work less well with it." (S said "“Find hymns”"; the builder's button is "Hymns for the readings"). A source the church has shows a disabled **Added**; the others **Add** (`aria-label` "Add {code}"). An add sends `POST /hymnals {code}` (30 s, `timeouts.ts`); its button reads "Adding…", the other Add buttons and **Done** are disabled, Escape and a tap outside are ignored, and after 8 s "Still working. This can take up to a minute." shows. On success the dialog stays open, the row turns to **Added**, and "Added {code} ({n} hymns)." is toasted; every hymn list refreshes (clarification 19). **Done** closes it. With no sources: "No bundled hymnals are available on this server." In production the list is GG2013 (from the catalog; **Added**) and PH1990.
+5. **[owner-visible] Add a hymnal** (S UX §2a). A dialog (a bottom sheet below `md`, as **Edit contact**): title "Add a hymnal", "Hymnals this app can add to your church, with their hymns.", then `GET /hymnal-sources` as a list (`aria-label="Bundled hymnals"`), each row "{code} · {label} · {n} hymns" and, when the source has no scripture references, "This hymnal has no scripture references, so “Hymns for the readings” and AI suggestions work less well with it." (S said "“Find hymns”"; the builder's button is "Hymns for the readings"; owner question 10). A source the church has shows a disabled **Added**; the others **Add** (`aria-label` "Add {code}"). An add sends `POST /hymnals {code}` (30 s, `timeouts.ts`); its button reads "Adding…", the other Add buttons and **Done** are disabled, Escape and a tap outside are ignored, and after 8 s "Still working. This can take up to a minute." shows. On success the dialog stays open, the row turns to **Added**, and "Added {code} ({n} hymns)." is toasted; every hymn list refreshes (clarification 19). **Done** closes it. With no sources: "No bundled hymnals are available on this server." In production the list is GG2013 (from the catalog; **Added**) and PH1990.
 6. **[owner-visible] Remove a hymnal** (S UX §2a; answer of 2026-10-05). **Remove…** opens a confirmation: title "Remove {code}?", body "This deletes all {n} hymns in {code} from your church's hymnal, including hymns your church added to it. Saved services keep their hymns. Services in progress will ask you to choose replacements." followed, when the bundled list has loaded, by "You can add {code} again later, but edits you made to its hymns will be lost." (a bundled code) or "It can't be added back from the bundled list." (any other); confirm **Remove {code}** (red), **Cancel**. While it runs it cannot be closed. Success: "Removed {code}." and focus moves to **Add a hymnal** (the row is gone); a refusal (the server's 404 or 409, for example a hymnal that became the default in another tab) is toasted with the server's message and the confirmation closes. The default row has no Remove; the server also refuses the only hymnal ("You can't remove your only hymnal.") and the effective default ("{code} is your default hymnal. Choose a different default in Church profile first.").
-7. **[owner-visible] The Hymn library** (S UX §2b; answer 1). Caption "Anyone in your church can add and edit hymns. Only admins can delete them." (S's line predates the 2026-10-05 answer that only admins delete). **Add hymn** (primary, full width on a phone); a search box (`type="search"`, "Search by title or number") that searches 300 ms after typing stops, from the first page, with an × button "Clear search"; with more than one hymnal, toggle chips **All** and each code (`role="group"` "Hymnal", `aria-pressed`). The count line "{n} hymns" ("1 hymn"), or "{n} matching hymns" while searching or filtered. The list (`aria-label="Hymns"`): each row a button "#{number} {title}", or the title alone when there is no number (S's "—" would be an em dash), with a hymnal badge when the church has several; a tap opens **Edit hymn**. Pages of 50 in the server's order (hymnal, number with no-number hymns last, title); **Show more** loads the next 50 ("Loading…"). The search is S's slice 3 rule: 1 to 6 digits also match the number. Empty states: "No hymns yet" with "Add hymns one at a time, or add a bundled hymnal above." (admins) or "Add hymns one at a time, or ask an admin to add a bundled hymnal." (members), with no second **Add hymn** in it (the button is just above); a search with no result: "No hymns match “{q}”." with **Clear search**, which also puts focus back in the search box. A chip whose hymnal was removed meanwhile falls back to **All**.
-8. **[owner-visible] Add hymn / Edit hymn** (S UX §2b; answers 1, 4). One dialog, a bottom sheet below `md` (the **Edit contact** sheet, `max-h-[85dvh]`, scrolling, its footer clear of the iPhone home bar) rather than S's full screen below `sm`, so the keyboard does not hide **Save changes** (T12 Step 5 checks it). Title "Add hymn" ("A hymn your church sings that is not in the list yet.") or "Edit hymn" ("#{number} {title}"). Fields, each 44 px below `md`: **Title**; **Number** (`inputMode="numeric"`); **Hymnal** (a Select of the church's hymnals, shown only with more than one; Add starts at the effective default); **Scripture references** ("e.g. Psalm 23; John 10:11-18"; help "Used by “Hymns for the readings” and AI suggestions."); **Themes** ("e.g. Advent, hope"; Edit starts at the hymn's themes joined by ", ", as S says); **Link** ("https://hymnary.org/…"); **Year the words were written** and **Number of hymnals (familiarity)** (`inputMode="numeric"`; for a member read-only with "Only admins can change this." under each, and never sent). Edit also shows "Changes also appear in saved services that use this hymn." (answer 4) and, for owners and admins, **Delete hymn** (red). Buttons **Cancel**, **Add hymn** ("Adding…") or **Save changes** ("Saving…"). Add sends every field (blank as null; the facts only for an admin); Edit sends only what changed (text trimmed, numbers compared as numbers, a cleared field as null), and nothing changed closes it with no request. Success toasts "Hymn added." or "Hymn updated." and closes. **Delete hymn** opens "Delete “{title}”?", "Saved services keep this hymn. Services in progress that use it will ask you to choose a replacement.", **Delete hymn** (red): success toasts "Hymn deleted.". While any of these requests runs the dialog cannot be closed (Cancel disabled, Escape and a tap outside ignored), and a late answer closes only the dialog it was sent from (the dialog is keyed by the hymn, and closes through `onClose(key)`). When the hymn is gone (deleted here, or a 404 because it was deleted elsewhere) focus goes to **Add hymn**, since the row that opened it is gone too.
+7. **[owner-visible] The Hymn library** (S UX §2b; answer 1). Caption "Anyone in your church can add and edit hymns. Only admins can delete them." (S's line predates the 2026-10-05 answer that only admins delete; owner question 4). **Add hymn** (primary, full width on a phone); a search box (`type="search"`, "Search by title or number") that searches 300 ms after typing stops, from the first page, with an × button "Clear search"; with more than one hymnal, toggle chips **All** and each code (`role="group"` "Hymnal", `aria-pressed`). The count line "{n} hymns" ("1 hymn"), or "{n} matching hymns" while searching or filtered. The list (`aria-label="Hymns"`): each row a button "#{number} {title}", or the title alone when there is no number (S's "—" would be an em dash; owner question 8), with a hymnal badge when the church has several; a tap opens **Edit hymn**. Pages of 50 in the server's order (hymnal, number with no-number hymns last, title); **Show more** loads the next 50 ("Loading…"). The search is S's slice 3 rule: 1 to 6 digits also match the number. Empty states: "No hymns yet" with "Add hymns one at a time, or add a bundled hymnal above." (admins) or "Add hymns one at a time, or ask an admin to add a bundled hymnal." (members), with no second **Add hymn** in it (the button is just above); a search with no result: "No hymns match “{q}”." with **Clear search**, which also puts focus back in the search box. A chip whose hymnal was removed meanwhile falls back to **All**.
+8. **[owner-visible] Add hymn / Edit hymn** (S UX §2b; answers 1, 4). One dialog, a bottom sheet below `md` (the **Edit contact** sheet, `max-h-[85dvh]`, scrolling, its footer clear of the iPhone home bar) rather than S's full screen below `sm`, so the keyboard does not hide **Save changes** (T12 Step 5 checks it; owner question 7). Title "Add hymn" ("A hymn your church sings that is not in the list yet.") or "Edit hymn" ("#{number} {title}"). Fields, each 44 px below `md`: **Title**; **Number** (`inputMode="numeric"`); **Hymnal** (a Select of the church's hymnals, shown only with more than one; Add starts at the effective default); **Scripture references** ("e.g. Psalm 23; John 10:11-18"; help "Used by “Hymns for the readings” and AI suggestions."); **Themes** ("e.g. Advent, hope"; Edit starts at the hymn's themes joined by ", ", as S says); **Link** ("https://hymnary.org/…"); **Year the words were written** and **Number of hymnals (familiarity)** (`inputMode="numeric"`; for a member read-only with "Only admins can change this." under each, and never sent; owner question 6). Edit also shows "Changes also appear in saved services that use this hymn." (answer 4) and, for owners and admins, **Delete hymn** (red). Buttons **Cancel**, **Add hymn** ("Adding…") or **Save changes** ("Saving…"). Add sends every field (blank as null; the facts only for an admin); Edit sends only what changed (text trimmed, numbers compared as numbers, a cleared field as null), and nothing changed closes it with no request. Success toasts "Hymn added." or "Hymn updated." and closes. **Delete hymn** opens "Delete “{title}”?", "Saved services keep this hymn. Services in progress that use it will ask you to choose a replacement.", **Delete hymn** (red): success toasts "Hymn deleted.". While any of these requests runs the dialog cannot be closed (Cancel disabled, Escape and a tap outside ignored), and a late answer closes only the dialog it was sent from (the dialog is keyed by the hymn, and closes through `onClose(key)`). When the hymn is gone (deleted here, or a 404 because it was deleted elsewhere) focus goes to **Add hymn**, since the row that opened it is gone too.
 9. **Client checks** (S "Pure helpers" `hymns.ts`). Before sending, in the form's order and with the server's words: "Hymn title is required." (blank), "Hymn number must be a whole number." (not 1 to 99999), "Links must start with https://." (a non-blank link not starting with `https://`, any case), and for an admin "Year must be a whole number from 1 to {this year}." and "Number of hymnals must be a whole number from 0 to 100000."; each shows under its field (`role="alert"`, `aria-invalid`), the first is focused, nothing is sent, and editing a field clears its message.
 10. **Errors** (the 5b-1 policy, `lib/queries/hymn-library.ts`). A 401 or a lost church: nothing more (the app handles them). In the hymn dialog a 409 shows above the buttons (`role="alert"`) and the dialog stays open; a 422 whose `fields` names one of the form's fields shows under it and focuses the first (`theme` is the Themes box). A role 403 (an admin demoted meanwhile, for example on the facts) toasts "Only church admins can do this.", refetches the church profile (so the page turns into the member's view) and closes the dialog. A 404 in the dialog toasts "This hymn was already deleted.", refreshes the lists, closes the dialog and moves focus as in clarification 8; a delete's 404 is treated as done. Anything else, a 422 that names no field of the form among them, is toasted with the server's message (`errorToastMessage`). The hymnal writes toast every failure but a 401 or a lost church and refresh the lists after a 404 or 409.
 11. **[owner-visible] The field rules on the server** (S "Semantics" → POST and PATCH /hymns). In `usecases/hymn_library.py`, in the order title, number, hymnal, scripture references, themes, link, year, familiarity; the first failure is a 422 naming its field:
@@ -95,7 +95,7 @@ The owner's answers win over S and F; the code wins over both where they disagre
     - The link: blank is NULL; one containing a space or control character is "Links can't contain spaces." (new; owner question 2); otherwise it must start with `https://` in any case and have something after it, else "Links must start with https://.".
     - The year: null, or 1 to the current year, else "Year must be a whole number from 1 to {year}."; the familiarity: null, or 0 to 100000, else "Number of hymnals must be a whole number from 0 to 100000.".
 12. **The duplicate rule** (S Semantics; the 5b-1 lesson on whitespace and case). Two hymns are the same when they share the church, the hymnal, the number (or both have none) and `repos.hymns.title_key(title)`: every run of whitespace (tabs, line breaks and no-break spaces included) one space, trimmed, lower-cased. `find_duplicate` reads the candidates in SQL by hymnal and number and compares the titles in Python (SQL `trim` and `lower` treat tabs and some letters differently on SQLite and Postgres), and `import_hymns` uses the same key. Add: a duplicate is 409 "{hymnal} already has #{number} {title}." or, with no number, "{hymnal} already has {title}." (with the title as sent, tidied). Edit: the check runs only when the hymnal, the number or the title's words change, and leaves the hymn itself out, so editing only the references of a hymn that already has an old twin (Streamlit never checked) is not refused.
-13. **The hymnal of a new hymn** (S Semantics). Null or blank: the effective default (`usecases.hymns.resolve_default_hymnal`), or `GG2013` for a church with no hymns (parity with `add_hymn`). Otherwise it must be one of the church's hymnals, compared trimmed; a church with no hymns may name any code of 2 to 20 letters, digits, `_` or `-`. Else "Choose one of your church's hymnals." An edit's hymnal must be one of the church's (null too is refused); moving a hymn to another hymnal is allowed (clarification 19 says what a draft then shows).
+13. **The hymnal of a new hymn** (S Semantics). Null or blank: the effective default (`usecases.hymns.resolve_default_hymnal`), or `GG2013` for a church with no hymns (parity with `add_hymn`). Otherwise it must be one of the church's hymnals, compared trimmed; a church with no hymns may name any code of 2 to 20 letters, digits, `_` or `-`. Else "Choose one of your church's hymnals." An edit's hymnal must be one of the church's (null too is refused); moving a hymn to another hymnal is allowed (clarification 19 says what a draft then shows; owner question 11).
 14. **Who may do what, and the lock** (answers; S Semantics → Locking). Members add and edit hymns (`require_church`). Owners and admins delete hymns (`DELETE /hymns/{id}` has `require_admin`, answer 5 of 2026-10-05), list sources, add and remove hymnals (`require_admin`), and set the facts. Every write opens one session and starts with `lock_and_read_actor` (a deleted church or a removed member: 403 `no_church_access`, nothing written); the admin writes then call `require_admin_role` on the re-read role (a demoted admin: 403 "Only church admins can do this.", no `reason`, nothing written); a hymn write that sets a fact does too, before any field is checked: on `POST` a non-null `text_year` or `hymnal_count`, on `PATCH` either key present, null included. An edit or a delete of an unknown id, or another church's, is 404 "Hymn not found." (after the role checks, before any field). The duplicate check and the write run under the lock; no `Idempotency-Key` (S: a retry gets the 409, and adding a hymnal twice inserts nothing). `GET /hymnal-sources` reads only (`require_admin`; no lock).
 15. **Routes and models** (S API, Models). In `routes/hymns.py`: `POST /hymns` (`HymnIn`, 201 `HymnDetailOut`), `PATCH /hymns/{hymn_id}` (`HymnPatchIn`, only the keys sent, `model_fields_set`; 200 `HymnDetailOut`), `DELETE /hymns/{hymn_id}` (200 `DeletedOut`). In `routes/hymnals.py` (rewritten): `HymnalOut` gains `label: str | null = null` (additive), `GET /hymnal-sources` → `HymnalSourceList {items: HymnalSourceOut[]}`, `POST /hymnals` (`HymnalIn {code: str(20)}`, 200 `HymnalAddedOut {code, label, inserted, updated}`; an unknown code is 422 `fields.code` "That hymnal isn't available to add."), `DELETE /hymnals/{code}` (`code` must match `^[A-Za-z0-9_-]{2,20}$`, else 422; 404 "Your church doesn't have that hymnal."; 409 as in clarification 6; 200 `HymnalRemovedOut {deleted: true, hymns_deleted}`). All request models have `extra="forbid"`. One deviation: `HymnIn.title` is `str | None = None` (S: `str = ""`), so a JSON null title also gets "Hymn title is required." instead of Pydantic's generic message. The route-guard allowlists do not change.
 16. **The bundled hymnals** (S "New modules" `hymnal_sources.py` and the seed file). `git mv data/hymnals/PH1990_hymns.csv backend/seed/hymnals/PH1990.csv` (content unchanged; `data/` is then empty and removed). `hymnal_sources.load_rows(source, hymnal)` (moved from `import_hymnal.py`, opening files as `utf-8-sig` and dropping a byte order mark from a stream too); `file_sources()` (cached, no database); `list_bundled(session=)` (each catalog hymnal counted in SQL, then the files; a file wins a shared code); `rows_for(code, session=)` (the file's rows, else the catalog's with their year, familiarity and audio; `KeyError` for neither); `HYMNAL_LABELS` and `label_for`. `list_sources` marks each `present` when the church has at least one hymn in it.
@@ -103,8 +103,8 @@ The owner's answers win over S and F; the code wins over both where they disagre
 18. **The CLI** (S "Changed modules" `import_hymnal.py`). `load_rows` delegates to `hymnal_sources.load_rows`; `load_dotenv()` moves into `main()`; `--csv` may be left out for a bundled hymnal (`--hymnal PH1990`), and is required otherwise with a message naming the bundled ones. It stays an ops tool with no role check.
 19. **What the builder sees** (S Queries; the task's "deletions and edits invalidate the builder's queries"). Every write's success invalidates the prefix `["church", id, "hymns"]` (the builder's `useHymnList`/`useHymnLists` lists, `useScriptureMatches`, and the library), `["church", id, "hymnals"]`, `["church", id, "hymnal-sources"]` and `["church", id, "profile"]` (whose `effective_hymnal` can change): the picker shows an added, renamed or deleted hymn with no reload, and a draft's pick of a deleted hymn shows "Not in your hymnal. Choose a replacement." (slice 3). Nothing else caches a hymn's title: a saved service is always fetched again when opened (`useOpenService`), and the services list has no hymns. A pick whose hymn is moved to another hymnal also shows "Not in your hymnal" (the draft keeps the hymnal it was picked from; `reconcilePick`), until another is chosen; accepted (risk below).
 20. **Hand-offs** (S "Hand-off from 3"; the 6a-1 follow-up). `SETTINGS_HYMNS_READY` becomes `true`, so the builder's empty-hymnal state says "Add hymns on the Settings → Hymns page to choose hymns here." with **Open Settings → Hymns** (slice 3's own words). The Church page's no-hymns line gets a link under it, "Add hymns on the Hymns page", to `/settings/hymns` (owner question 9).
-21. **[owner-visible] No database change** (no migration). Hymns and hymnals are rows of the existing `hymns` table; no other table points at a hymn, so deleting one or a whole hymnal touches nothing else: saved services keep their own copy of each hymn and recent use is kept by title and number (S Semantics). The duplicate rule is enforced by the locked check, not by a unique index: churches already have hymns that differ only in spacing or capitals (Streamlit never checked), on which a unique index's migration would fail.
-22. **[owner-visible] Every new user-facing string** (no em dashes). Settings nav: "Hymns". Page: "Hymns"; "The hymnals and hymns the builder offers when you choose hymns."; "Hymnals"; "Default"; "{n} hymns" / "1 hymn"; "{total} hymns in {n} hymnals." / "… in 1 hymnal."; "Your church has no hymnals yet."; "Default. Change it in Church profile."; "Remove…"; "Add a hymnal"; "Admins can add bundled hymnals."; "Hymnals this app can add to your church, with their hymns."; "This hymnal has no scripture references, so “Hymns for the readings” and AI suggestions work less well with it."; "Add"; "Added"; "Adding…"; "Done"; "Still working. This can take up to a minute."; "No bundled hymnals are available on this server."; "Added {code} ({n} hymns)."; "Remove {code}?"; the removal body (clarification 6); "Remove {code}"; "Removed {code}."; "Hymn library"; "Anyone in your church can add and edit hymns. Only admins can delete them."; "Add hymn"; "Search by title or number"; "Clear search"; "All"; "{n} matching hymns" / "1 matching hymn"; "Show more"; "Loading…"; "No hymns yet"; "Add hymns one at a time, or add a bundled hymnal above."; "Add hymns one at a time, or ask an admin to add a bundled hymnal."; "No hymns match “{q}”."; "Edit hymn"; "A hymn your church sings that is not in the list yet."; "Title"; "Number"; "Hymnal"; "Scripture references"; "e.g. Psalm 23; John 10:11-18"; "Used by “Hymns for the readings” and AI suggestions."; "Themes"; "e.g. Advent, hope"; "Link"; "https://hymnary.org/…"; "Year the words were written"; "Number of hymnals (familiarity)"; "Only admins can change this."; "Changes also appear in saved services that use this hymn."; "Delete hymn"; "Save changes"; "Delete “{title}”?"; "Saved services keep this hymn. Services in progress that use it will ask you to choose a replacement."; "Hymn added."; "Hymn updated."; "Hymn deleted."; "This hymn was already deleted."; on the Church page "Add hymns on the Hymns page". From the server: "Hymn title is required."; "Hymn number must be a whole number."; "Choose one of your church's hymnals."; "Links must start with https://."; "Links can't contain spaces." (new); "Year must be a whole number from 1 to {year}."; "Number of hymnals must be a whole number from 0 to 100000."; "{hymnal} already has #{number} {title}." / "{hymnal} already has {title}."; "Hymn not found."; "That hymnal isn't available to add."; "Your church doesn't have that hymnal."; "You can't remove your only hymnal."; "{code} is your default hymnal. Choose a different default in Church profile first."; "Only church admins can do this.". Reused: "Cancel", "Saving…", "Retry", the skeleton's "Loading", "Not in your hymnal. Choose a replacement.".
+21. **[owner-visible] No database change** (no migration). Hymns and hymnals are rows of the existing `hymns` table; no other table points at a hymn, so deleting one or a whole hymnal touches nothing else: saved services keep their own copy of each hymn and recent use is kept by title and number (S Semantics). The duplicate rule is enforced by the locked check, not by a unique index: churches already have hymns that differ only in spacing or capitals (Streamlit never checked), on which a unique index's migration would fail (owner question 12).
+22. **[owner-visible] Every new user-facing string** (no em dashes; owner question 13). Settings nav: "Hymns". Page: "Hymns"; "The hymnals and hymns the builder offers when you choose hymns."; "Hymnals"; "Default"; "{n} hymns" / "1 hymn"; "{total} hymns in {n} hymnals." / "… in 1 hymnal."; "Your church has no hymnals yet."; "Default. Change it in Church profile."; "Remove…"; "Add a hymnal"; "Admins can add bundled hymnals."; "Hymnals this app can add to your church, with their hymns."; "This hymnal has no scripture references, so “Hymns for the readings” and AI suggestions work less well with it."; "Add"; "Added"; "Adding…"; "Done"; "Still working. This can take up to a minute."; "No bundled hymnals are available on this server."; "Added {code} ({n} hymns)."; "Remove {code}?"; the removal body (clarification 6); "Remove {code}"; "Removed {code}."; "Hymn library"; "Anyone in your church can add and edit hymns. Only admins can delete them."; "Add hymn"; "Search by title or number"; "Clear search"; "All"; "{n} matching hymns" / "1 matching hymn"; "Show more"; "Loading…"; "No hymns yet"; "Add hymns one at a time, or add a bundled hymnal above."; "Add hymns one at a time, or ask an admin to add a bundled hymnal."; "No hymns match “{q}”."; "Edit hymn"; "A hymn your church sings that is not in the list yet."; "Title"; "Number"; "Hymnal"; "Scripture references"; "e.g. Psalm 23; John 10:11-18"; "Used by “Hymns for the readings” and AI suggestions."; "Themes"; "e.g. Advent, hope"; "Link"; "https://hymnary.org/…"; "Year the words were written"; "Number of hymnals (familiarity)"; "Only admins can change this."; "Changes also appear in saved services that use this hymn."; "Delete hymn"; "Save changes"; "Delete “{title}”?"; "Saved services keep this hymn. Services in progress that use it will ask you to choose a replacement."; "Hymn added."; "Hymn updated."; "Hymn deleted."; "This hymn was already deleted."; on the Church page "Add hymns on the Hymns page". From the server: "Hymn title is required."; "Hymn number must be a whole number."; "Choose one of your church's hymnals."; "Links must start with https://."; "Links can't contain spaces." (new); "Year must be a whole number from 1 to {year}."; "Number of hymnals must be a whole number from 0 to 100000."; "{hymnal} already has #{number} {title}." / "{hymnal} already has {title}."; "Hymn not found."; "That hymnal isn't available to add."; "Your church doesn't have that hymnal."; "You can't remove your only hymnal."; "{code} is your default hymnal. Choose a different default in Church profile first."; "Only church admins can do this.". Reused: "Cancel", "Saving…", "Retry", the skeleton's "Loading", "Not in your hymnal. Choose a replacement.".
 23. **Docs.** T10 adds the 6a-2 items 9-15 to `docs/manual-verification.md` → "## Slice 6a" (no new `##` heading, so `test_slice1_docs.py`'s pin is unchanged). The runbook record is T12's (`### Slice 6a-2 record` before `## Backups`, after `### Slice 5b-2b record`), with the accepted renamed-hymn risk (answer 5).
 24. **Deviations from S** (each the lean choice for 6a-2):
     - The hymn writes are in `usecases/hymn_library.py` and use 6a-1's `lock_and_read_actor`/`require_admin_role` as they are; S's `repos.hymns.add_hymn` with a session is not needed: the new `create_hymn` returns the typed `HymnRecord`, and `add_hymn` stays for the frozen Streamlit callers.
@@ -207,14 +207,14 @@ def test_the_bundled_ph1990_ships_under_backend_and_loads_605_rows():
 
 def test_a_byte_order_mark_does_not_hide_the_number_column(tmp_path):
     path = tmp_path / "X1.csv"
-    path.write_bytes("﻿number,title,scripture_refs\n7,Be Thou My Vision,Psalm 16\n,No Number,\n,,\n"
+    path.write_bytes("\ufeffnumber,title,scripture_refs\n7,Be Thou My Vision,Psalm 16\n,No Number,\n,,\n"
                      .encode("utf-8"))
     rows = hymnal_sources.load_rows(path, "X1")
     assert [(r["number"], r["title"], r["scripture_refs"], r["hymnary_link"]) for r in rows] == [
         ("7", "Be Thou My Vision", "Psalm 16", "https://hymnary.org/hymn/X1/7"),
         (None, "No Number", None, None),
     ]
-    stream = io.StringIO("﻿number,title,topics\n8,Here I Am,Call\n")
+    stream = io.StringIO("\ufeffnumber,title,topics\n8,Here I Am,Call\n")
     assert hymnal_sources.load_rows(stream, "X1")[0]["number"] == "8"
     assert hymnal_sources.load_rows(io.StringIO("number,title,topics\n8,Here I Am,Call\n"), "X1")[0]["theme"] == "Call"
 
@@ -315,7 +315,12 @@ def test_importing_the_module_does_not_load_a_dotenv_file():
 Run: `.venv/bin/python -m pytest -q backend/tests/test_hymnal_sources.py backend/tests/test_import_hymnal_cli.py 2>&1 | tail -3` then `.venv/bin/python -m pytest -q backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -1`
 **Expected** (`hymnal_sources` does not exist yet: `ModuleNotFoundError` above these lines, so pytest stops at collection; then the import check names the missing module):
 ```
-PENDING
+ERROR backend/tests/test_hymnal_sources.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in <t>s
+```
+```
+1 failed, 2 passed in <t>s
 ```
 
 - [ ] **Step 3: Move the file, then write the module and the CLI**
@@ -388,7 +393,7 @@ def load_rows(source: Union[Path, str, TextIO], hymnal: str) -> list[dict]:
         with open(source, encoding="utf-8-sig", newline="") as f:
             return load_rows(f, hymnal)
     text = source.read()
-    if text.startswith("﻿"):              # a stream opened without utf-8-sig
+    if text.startswith("\ufeff"):              # a stream opened without utf-8-sig
         text = text[1:]
     rows = []
     for r in csv.DictReader(io.StringIO(text)):
@@ -506,7 +511,10 @@ if __name__ == "__main__":
 Run: `.venv/bin/python -m pytest -q backend/tests/test_hymnal_sources.py backend/tests/test_import_hymnal_cli.py backend/tests/test_no_streamlit_in_core.py backend/tests/test_hymnals.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`
 **Expected:**
 ```
-PENDING
+13 passed in <t>s
+```
+```
+1832 passed, 27 skipped in <t>s
 ```
 
 - [ ] **Step 5: Commit**
@@ -605,7 +613,7 @@ def test_find_duplicate_compares_the_number_and_the_titles_words_in_one_hymnal(t
     holy = _hymn(mine, "GG2013", "Holy,  Holy, Holy\t", 138)
     _hymn(mine, "GG2013", "No Number", None)
     _hymn(other, "GG2013", "Theirs", 1)
-    assert hymn_repo.find_duplicate(mine, "GG2013", 138, " holy, holy, HOLY ")
+    assert hymn_repo.find_duplicate(mine, "GG2013", 138, " holy, holy,\u00a0HOLY ")
     assert not hymn_repo.find_duplicate(mine, "GG2013", 138, "holy, holy, holy", exclude_id=holy)
     assert not hymn_repo.find_duplicate(mine, "GG2013", 139, "Holy, Holy, Holy")
     assert not hymn_repo.find_duplicate(mine, "PH1990", 138, "Holy, Holy, Holy")
@@ -636,7 +644,7 @@ def test_delete_hymnal_and_delete_hymn_touch_only_the_church(tmp_db, make_church
 Run: `.venv/bin/python -m pytest -q backend/tests/test_hymns_repo.py 2>&1 | tail -1`
 **Expected** (the new functions do not exist and the import still overwrites and flushes per row):
 ```
-PENDING
+5 failed, 15 passed in <t>s
 ```
 
 - [ ] **Step 3: Write the repo functions**
@@ -893,7 +901,13 @@ def delete_hymnal(church_id, hymnal: str, *, session: Optional[Session] = None) 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_hymns_repo.py backend/tests/test_hymnals.py backend/tests/test_import_hymnal_cli.py backend/tests/test_hymnary_facts.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q streamlit_tests 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`
 **Expected:**
 ```
-PENDING
+93 passed in <t>s
+```
+```
+35 passed in <t>s
+```
+```
+1837 passed, 27 skipped in <t>s
 ```
 
 - [ ] **Step 5: Commit**
@@ -1249,7 +1263,12 @@ def test_each_write_reads_the_church_row_under_its_lock(world):
 Run: `.venv/bin/python -m pytest -q backend/tests/test_hymn_library.py 2>&1 | tail -3` then `.venv/bin/python -m pytest -q backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -1`
 **Expected** (`usecases.hymn_library` does not exist yet: `ModuleNotFoundError` above these lines; then the import check names it):
 ```
-PENDING
+ERROR backend/tests/test_hymn_library.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in <t>s
+```
+```
+1 failed, 2 passed in <t>s
 ```
 
 - [ ] **Step 3: Write the usecases**
@@ -1305,7 +1324,7 @@ MAX_COUNT = 100000
 FIRST_HYMNAL = "GG2013"
 HYMNAL_CODE = re.compile(r"[A-Za-z0-9_-]{2,20}")
 # Control characters (C0, DEL, C1) and the two noncharacters a Word file cannot hold.
-_CONTROL = re.compile("[\x00-\x1f\x7f-\x9f￾￿]")
+_CONTROL = re.compile("[\x00-\x1f\x7f-\x9f\ufffe\uffff]")
 _FACTS = ("text_year", "hymnal_count")
 
 
@@ -1530,7 +1549,10 @@ def remove_hymnal(church_id: uuid.UUID, actor_id: uuid.UUID, code: str) -> int:
 Run: `.venv/bin/python -m pytest -q backend/tests/test_hymn_library.py backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`
 **Expected:**
 ```
-PENDING
+30 passed in <t>s
+```
+```
+1864 passed, 27 skipped in <t>s
 ```
 
 - [ ] **Step 5: Commit**
@@ -1851,7 +1873,7 @@ def test_hymnal_routes_are_isolated_between_churches(client, isolation_world):
 Run: `.venv/bin/python -m pytest -q backend/tests/test_api_hymns_admin.py backend/tests/test_api_hymnals_admin.py backend/tests/test_api_hymnals.py 2>&1 | tail -1`
 **Expected** (no route answers `POST /hymns` or the hymnal routes yet, and `GET /hymnals` has no `label`):
 ```
-PENDING
+19 failed, 6 passed in <t>s
 ```
 
 - [ ] **Step 3: Write the routes**
@@ -2095,7 +2117,17 @@ def remove_hymnal(code: str = Path(pattern=r"^[A-Za-z0-9_-]{2,20}$"),
 Run: `.venv/bin/python backend/scripts/export_openapi.py >/dev/null && (cd frontend && npm run gen:api >/dev/null 2>&1) && git diff --stat -- frontend/src/lib/api | tail -1` then `.venv/bin/python -m pytest -q backend/tests/test_api_hymns_admin.py backend/tests/test_api_hymnals_admin.py backend/tests/test_api_hymnals.py backend/tests/test_openapi_contract.py backend/tests/test_route_guards.py 2>&1 | tail -1` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")` then `.venv/bin/python -m pytest -q | tail -1`
 **Expected** (the snapshot and the types gain the new paths and models; the contract test now matches the live schema):
 ```
-PENDING
+ 2 files changed, 1933 insertions(+), 221 deletions(-)
+```
+```
+33 passed in <t>s
+```
+```
+typecheck 0
+lint 0
+```
+```
+1882 passed, 27 skipped in <t>s
 ```
 
 - [ ] **Step 5: Commit**
@@ -2263,7 +2295,10 @@ They are skipped here (no `TEST_DATABASE_URL`); CI's `backend-postgres` runs the
 Run: `.venv/bin/python -m pytest -q backend/tests/test_hymn_library_postgres.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`
 **Expected:**
 ```
-PENDING
+4 skipped in <t>s
+```
+```
+1882 passed, 31 skipped in <t>s
 ```
 
 - [ ] **Step 3: Commit**
@@ -2403,7 +2438,8 @@ describe("Settings → Hymns' form rules (slice 6a-2)", () => {
 Run: `(cd frontend && npx vitest run src/lib/settings/hymns.test.ts 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
 **Expected** (`./hymns` does not exist yet):
 ```
-PENDING
+ FAIL  |unit| src/lib/settings/hymns.test.ts [ src/lib/settings/hymns.test.ts ]
+      Tests  no tests
 ```
 
 - [ ] **Step 3: Write the types, the fixtures, the rules and the queries**
@@ -2855,7 +2891,15 @@ export function useRemoveHymnal() {
 Run: `(cd frontend && npx vitest run src/lib/settings/hymns.test.ts 2>&1 | grep -E "^ +× |\[ src/|Tests ")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`
 **Expected:**
 ```
-PENDING
+      Tests  7 passed (7)
+```
+```
+ Test Files  101 passed (101)
+      Tests  842 passed (842)
+```
+```
+typecheck 0
+lint 0
 ```
 
 - [ ] **Step 5: Commit**
@@ -3085,7 +3129,8 @@ describe("Settings → Hymns, the Hymnals card (slice 6a-2)", () => {
 Run: `(cd frontend && npx vitest run src/components/settings/hymns-settings-page.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
 **Expected** (the route does not exist yet):
 ```
-PENDING
+ FAIL  |dom| src/components/settings/hymns-settings-page.test.tsx [ src/components/settings/hymns-settings-page.test.tsx ]
+      Tests  no tests
 ```
 
 - [ ] **Step 3: Write the card, the page and the route**
@@ -3444,7 +3489,17 @@ export default function HymnsSettingsRoute() {
 Run: `for i in 1 2 3; do (cd frontend && npx vitest run src/components/settings/hymns-settings-page.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests "); done` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`
 **Expected:**
 ```
-PENDING
+      Tests  7 passed (7)
+      Tests  7 passed (7)
+      Tests  7 passed (7)
+```
+```
+ Test Files  102 passed (102)
+      Tests  849 passed (849)
+```
+```
+typecheck 0
+lint 0
 ```
 
 - [ ] **Step 5: Commit**
@@ -3803,7 +3858,8 @@ describe("Settings → Hymns, the Hymn library (slice 6a-2)", () => {
 Run: `(cd frontend && npx vitest run src/components/settings/hymn-library.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
 **Expected** (`./hymn-library` does not exist yet):
 ```
-PENDING
+ FAIL  |dom| src/components/settings/hymn-library.test.tsx [ src/components/settings/hymn-library.test.tsx ]
+      Tests  no tests
 ```
 
 - [ ] **Step 3: Write the dialog and the library, and put the library on the page**
@@ -3963,7 +4019,11 @@ export function HymnDialog({ hymn, codes, defaultHymnal, admin, fallbackFocus, o
     );
   }
 
-  function field(name: keyof HymnForm, label: string, extra: { help?: string; placeholder?: string; numeric?: boolean; readOnly?: boolean } = {}) {
+  function field(
+    name: keyof HymnForm,
+    label: string,
+    extra: { help?: string; placeholder?: string; numeric?: boolean; readOnly?: boolean; maxLength?: number } = {},
+  ) {
     const id = `hymn-${name}`;
     const error = errors[name];
     const described = [extra.help ? `${id}-help` : null, error ? `${id}-error` : null].filter(Boolean).join(" ");
@@ -3979,6 +4039,7 @@ export function HymnDialog({ hymn, codes, defaultHymnal, admin, fallbackFocus, o
           className="h-11 md:h-9"
           placeholder={extra.placeholder}
           readOnly={extra.readOnly}
+          maxLength={extra.maxLength}
           autoComplete="off"
           {...(extra.numeric ? { inputMode: "numeric" as const } : {})}
           aria-invalid={error ? true : undefined}
@@ -4020,8 +4081,8 @@ export function HymnDialog({ hymn, codes, defaultHymnal, admin, fallbackFocus, o
           <DialogDescription>{hymn ? hymnLabel(hymn) : "A hymn your church sings that is not in the list yet."}</DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} noValidate className="grid gap-4">
-          {field("title", "Title")}
-          {field("number", "Number", { numeric: true })}
+          {field("title", "Title", { maxLength: 300 })}
+          {field("number", "Number", { numeric: true, maxLength: 5 })}
           {codes.length > 1 ? (
             <div className="grid gap-1.5">
               <Label htmlFor="hymn-hymnal">Hymnal</Label>
@@ -4058,9 +4119,9 @@ export function HymnDialog({ hymn, codes, defaultHymnal, admin, fallbackFocus, o
               ) : null}
             </div>
           ) : null}
-          {field("scripture_refs", "Scripture references", { placeholder: "e.g. Psalm 23; John 10:11-18", help: REFS_HELP })}
-          {field("themes", "Themes", { placeholder: "e.g. Advent, hope" })}
-          {field("link", "Link", { placeholder: "https://hymnary.org/…" })}
+          {field("scripture_refs", "Scripture references", { placeholder: "e.g. Psalm 23; John 10:11-18", help: REFS_HELP, maxLength: 2000 })}
+          {field("themes", "Themes", { placeholder: "e.g. Advent, hope", maxLength: 2000 })}
+          {field("link", "Link", { placeholder: "https://hymnary.org/…", maxLength: 500 })}
           {field("text_year", "Year the words were written", { numeric: true, readOnly: !admin, help: factsHelp })}
           {field("hymnal_count", "Number of hymnals (familiarity)", { numeric: true, readOnly: !admin, help: factsHelp })}
           {hymn ? <p className="text-sm text-muted-foreground">{SAVED_SERVICES_NOTE}</p> : null}
@@ -4266,7 +4327,7 @@ export function HymnLibrary({ admin, hymnals }: { admin: boolean; hymnals: Hymna
           aria-label="Search by title or number"
           placeholder="Search by title or number"
           value={text}
-          className="h-11 pr-11 pl-9 md:h-9"
+          className="h-11 pr-11 pl-9 md:h-9 [&::-webkit-search-cancel-button]:appearance-none"
           autoComplete="off"
           onChange={(event) => setText(event.target.value)}
         />
@@ -4350,7 +4411,17 @@ import { HymnalsCard } from "./hymnals-card";
 Run: `for i in 1 2 3; do (cd frontend && npx vitest run src/components/settings/hymn-library.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests "); done` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`
 **Expected:**
 ```
-PENDING
+      Tests  13 passed (13)
+      Tests  13 passed (13)
+      Tests  13 passed (13)
+```
+```
+ Test Files  103 passed (103)
+      Tests  862 passed (862)
+```
+```
+typecheck 0
+lint 0
 ```
 
 - [ ] **Step 5: Commit**
@@ -4454,7 +4525,13 @@ The nav lists Church, Hymns, Bulletin, Contacts, Account (five links) and marks 
 Run: `(cd frontend && npx vitest run src/components/settings/settings-layout.test.tsx src/components/settings/church-settings-page.test.tsx src/components/builder/hymns/hymns-step.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
 **Expected:**
 ```
-PENDING
+   × the Settings area (slice 6a-1) > shows the heading, who you are in the church, and the sections with the current one marked
+   × the Settings area (slice 6a-1) > marks the section current on its page (slices 6a-2, 5b-1, 5b-2): /settings/hymns
+   × the Settings area (slice 6a-1) > shows a member the same sections, and /settings opens Church
+   × Settings → Church (slice 6a-1) > keeps a stale stored translation or hymnal selectable, sends a new hymnal, and says when there are no hymnals
+   × the Hymns step (S User experience) > shows the empty-hymnal state instead of the pickers; a pick still shows, as not in the hymnal
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  5 failed | 51 passed (56)
 ```
 
 - [ ] **Step 3: Add the entry, flip the switch, add the link**
@@ -4535,7 +4612,15 @@ import { useState, type FormEvent, type ReactNode } from "react";
 Run: `(cd frontend && npx vitest run src/components/settings/settings-layout.test.tsx src/components/settings/church-settings-page.test.tsx src/components/builder/hymns/hymns-step.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`
 **Expected:**
 ```
-PENDING
+      Tests  56 passed (56)
+```
+```
+ Test Files  103 passed (103)
+      Tests  863 passed (863)
+```
+```
+typecheck 0
+lint 0
 ```
 
 - [ ] **Step 5: Commit**
@@ -4596,7 +4681,16 @@ is never removed. Record counts and what the page shows, never a church id.
 Run: `.venv/bin/python -m pytest -q backend/tests/test_slice1_docs.py backend/tests/test_docs.py backend/tests/test_ops_workflows.py 2>&1 | tail -1` then `grep -n '\[owner' docs/ops-runbook.md | grep -v 'An entry marked' | wc -l` then `git diff -U0 docs/manual-verification.md | grep '^+' | grep -c '—'` then `git diff --stat | tail -1`
 **Expected** (the docs tests pass, the owner markers are still 4, no em dash was added, one file changed):
 ```
-PENDING
+89 passed in <t>s
+```
+```
+4
+```
+```
+0
+```
+```
+ 1 file changed, 15 insertions(+)
 ```
 
 - [ ] **Step 3: Commit**
@@ -4642,7 +4736,8 @@ for i in 1 2 3; do (cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Te
 (cd frontend && NEXT_PUBLIC_SUPABASE_URL=https://ci-placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-placeholder NEXT_PUBLIC_API_URL=http://localhost:8000 npm run build 2>&1 | grep -E "Compiled successfully|Error|/settings")
 ```
 
-**Expected:** ```
+**Expected** (as in the replay: the suite; three runs of `Test Files  103 passed (103)` and `Tests  863 passed (863)` with no `×` or `FAIL` line, one naming a failing test: Step 6; typecheck and lint 0; the build with `/settings/hymns` and no `Error`, a font `Failed to fetch` only: say so and rely on CI):
+```
 PENDING
 ```
 
@@ -4868,3 +4963,90 @@ Code only (no schema to undo). On the owner's yes for each outward command: a br
 Expected counts after this task: backend `1882 passed, 31 skipped` on `main`; frontend `863 passed` in 103 files. The records PR adds no test.
 
 ---
+
+## Build notes
+
+**How this plan was written (2026-10-07).** Each task's code was built and run in a throwaway worktree of `1534767` (the branch head `446eaa3` plus the plan's skeleton commit; the repo's `.venv` as a symlink; a hard-linked copy of `frontend/node_modules`, since Turbopack's production build refuses a `node_modules` symlink that points outside the project), one commit per task; the directives were then generated from those commits (a new file as **Create**, a rewritten one as **Replace**, an addition at the end of a file as **Append**, every other change as **In … replace** with just enough whole-line context to occur once in the file as it stands at that point, changes three or fewer lines apart in one block) and checked by applying each to the file before the commit and comparing with the file after it. No package, variable or migration was added. While building:
+- **What S assumed and what exists.** S's `get_hymn`, hymn write routes, hymnal routes, `hymnal_sources.py` and `usecases/hymn_library.py` were never built; S's `HymnOut` (with `themes`, not the stored theme), `GET /hymns`' `q` rule and `hymnal_summaries` are slice 3's as S assumed; 6a-1 built the lock helpers and the Settings shell. `keys.hymnalSources` was already in `keys.ts`. The `import_hymns` S calls "idempotent … fills missing enrichment only" in fact overwrote any differing value and flushed per row (clarification 17). No table points at `hymns`, so deleting needs no other change.
+- **The empty `data/hymnals` folder.** `git mv` leaves the emptied folder on disk, and `test_the_bundled_ph1990_ships_under_backend_and_loads_605_rows` checks it is gone, so T1 Step 3 removes it (`rmdir`); a fresh checkout never has it.
+- **The library in T7's tests.** T8 puts the library on the page, which reads `GET /hymns`; T7's page test answers it from the start (an empty page), so T8 does not edit it.
+- **Lint.** React's lint refuses a `setState` called directly in an effect; the "still working" flag is reset when an add starts and shown only while the add is pending.
+- **Mutation checks** (each change made by hand in the build worktree, the named tests run, the change undone): the role check for the facts dropped from `update_hymn` → `3 failed, 38 passed` (`test_hymn_library.py` and `test_api_hymns_admin.py`); `find_duplicate` ignoring `exclude_id` → `1 failed, 60 passed` (the repo, usecase and API tests); the import overwriting differing values again → `1 failed, 22 passed` (`test_hymns_repo.py`, `test_hymnals.py`); `refreshHymns` without the `["church", id, "hymns"]` prefix → `4 failed, 16 passed` (the two page test files); **Delete hymn** shown to members → `1 failed, 12 passed` (`hymn-library.test.tsx`).
+- **The lock on Postgres.** On a throwaway local PG 16 cluster (initialised under `/var/lib/postgresql`, port 5441, never a real database; `TEST_DATABASE_URL=postgresql://postgres@localhost:5441/church_test`): `test_hymn_library_postgres.py` `4 passed`. With `lock_church`'s `with_for_update=True` turned off, three fail (the held-lock test, the barrier test and the two PH1990 adds) and the timing test passes. {{PG_ALL}}
+- **The production build** compiled with `○ /settings/hymns` beside the other Settings routes.
+
+**Replay of the finished plan (2026-10-07).** The directives of T1-T10 were applied in order by a replay script that parses each step's **Create**, **Replace**, **Append** and **In … replace** blocks and its `bash` blocks (T1's move, each commit), and runs every command on its "Run:" lines, onto a fresh detached worktree of the branch at the plan's commit `{{REPLAY_BASE}}` (outside the repo directory, removed afterwards), with the repo's `.venv` (a symlink) and a hard-linked copy of `frontend/node_modules`:
+- {{REPLAY_DIRECTIVES}}
+- Baselines before T1: backend `1825 passed, 27 skipped`; frontend `835 passed` in 100 files; typecheck 0, lint 0.
+- Every "see it fail" output and every count above is quoted from this replay (times as `<t>`, Vitest's per-test times left out).
+- {{REPLAY_COUNTS}}
+- Not run while planning: the pushes, the PR and CI, the merge, Railway's and Vercel's deploys and the owner's phone check (T12).
+
+## Spec coverage
+
+| Owner answer or spec item | Task(s) and tests |
+|---|---|
+| Answer 1: the Hymnals card (counts, admin-only Add a hymnal and Remove…) | T7 "shows a member the hymnals…", "gives an admin Remove on every hymnal but the default…", "lets an admin add PH1990…", "asks before removing a hymnal…"; T3 `test_adding_ph1990_inserts_605_once…`, `test_removing_a_hymnal_deletes_only_its_hymns_but_never_the_only_or_the_default`; T4 `test_an_admin_adds_ph1990_once_and_removes_it` |
+| Answer 1: the Hymn library (search, hymnal filter, add, edit, admin-only delete, pages of 50 with Show more) | T8 every test; T4 `test_a_member_adds_and_edits_a_hymn_and_it_is_listed`, `test_only_admins_delete_a_hymn_or_send_its_year_or_familiarity` |
+| Answer 2: one PR | T11 (one draft PR) |
+| Answer 3: Church, Hymns, Bulletin, Contacts, Account | T9 `settings-layout.test.tsx` |
+| Answer 4: edits reach saved services; the edit dialog's note | T8 "lists the hymns… a member edits one…" (the note), "adds a hymn…" (no note in Add); clarification 19 |
+| Answer 5: the renamed-hymn / 12-week risk accepted and recorded | Risks; T12 Step 8 (the record's paragraph and its Follow-ups row) |
+| Answer 6: no "Fill from Hymnary.org" | Out of scope; Follow-ups |
+| Only admins delete hymns (2026-10-05) | T3 `test_only_admins_delete_a_hymn…`; T4 `test_only_admins_delete…`; T8 the member test (no **Delete hymn**) |
+| Removing a hymnal, never the only or the default (2026-10-05) | T3 `test_removing_a_hymnal…`; T4 `test_the_errors_of_adding_and_removing`; T7 the default row and the refused removal |
+| The year and familiarity, admin-only (2026-09-26) | T3 `test_an_admin_sets_the_year_and_familiarity_and_a_member_may_not`, `test_a_member_may_not_send_the_year_or_familiarity_even_as_null`, `test_a_hand_entered_year_survives_the_backfill`; T4; T6 `newHymnBody`/`hymnPatch`; T8 the member and admin tests |
+| S API rows and models (`POST` 201, `PATCH` only what is sent, `DELETE` `{deleted: true}`, the hymnal routes, `label`, `extra="forbid"`, the path pattern) | T4 all tests; `test_api_hymnals.py`; `test_openapi_contract.py`, `test_route_guards.py` |
+| S error contract (every message and field, an omitted title, a non-whole number, malformed and unknown ids) | T3 `test_a_bad_field_is_named_and_nothing_is_added`; T4 `test_a_bad_field_is_a_422_naming_it`, `test_unknown_fields_and_malformed_or_unknown_ids`, `test_the_errors_of_adding_and_removing` |
+| S duplicate rule and its message (both variants), excluding self | T2 `test_find_duplicate_compares_the_number_and_the_titles_words_in_one_hymnal`; T3 `test_the_same_hymnal_number_and_title_words_is_a_409`, `test_an_edit_checks_its_fields_the_hymnal_and_duplicates_but_not_itself`; T4 `test_the_same_hymn_twice_is_a_409`; T8 the 409 in the dialog |
+| S Semantics → POST /hymns hymnal default (stored, alphabetical, GG2013 with none, any code with none) | T3 `test_the_hymnal_defaults_to_the_effective_one_and_a_church_with_none_may_name_one`; T8 the add body (`hymnal: "GG2013"`) |
+| S Semantics → PATCH merges, keeps `audio_url`, null clears | T2 `test_create_get_and_patch_are_church_scoped_and_keep_what_is_not_sent`; T3 `test_an_edit_changes_only_what_is_sent_and_null_clears` |
+| S Semantics → Locking (the lock, the role re-read, `no_church_access`) | T3 `test_a_member_a_demoted_admin_or_a_removed_member_writes_nothing`, `test_each_write_reads_the_church_row_under_its_lock`; T5 |
+| S Postgres: concurrent identical hymns, concurrent PH1990, 605 rows under 10 s | T5 (CI `backend-postgres`) |
+| S `hymnal_sources.py`, the seed file under `backend/`, BOM, links, `has_scripture_refs`, `KeyError`, catalog merge | T1 `test_hymnal_sources.py` |
+| S `import_hymns` idempotency kept after the flush removal; fills missing only | T2 `test_an_import_adds_once…`, `test_an_import_flushes_once_in_the_callers_session`; `test_hymnals.py` unchanged |
+| S `import_hymnal.py` (no `--csv` for a bundled hymnal, no `.env` at import) | T1 `test_import_hymnal_cli.py` |
+| S `assert_church_isolated` on every route; another church's hymnal code untouched | T4 `test_hymn_writes_are_isolated_between_churches`, `test_hymnal_routes_are_isolated_between_churches` |
+| S Queries: the library's infinite query; writes invalidate `hymns`, `hymnals`, `hymnal-sources`, `profile`; the builder's picker without a reload (acceptance 14) | T6 `lib/queries/hymn-library.ts`; T7 "lets an admin add PH1990…" (the four keys); T8 "adds a hymn…", "asks before an admin deletes a hymn… marks the builder's lists stale…" |
+| S UX §2 DOM cases (count, rows, search with debounce and offset, Show more, chips, add, edit only changed fields, the facts, delete confirmed, 409 in the dialog, Add a hymnal for admins only, PH1990 note, Added, no Remove on the default) | T7, T8 |
+| The 5b-1 lessons: whitespace and case in the duplicate check; focus after a 404; dialogs not closable mid-request; late answers; bottom sheets with the keyboard; a 422 with no known field toasted | T2/T3 (`title_key`); T8 "closes the edit dialog when the hymn was deleted elsewhere…", "keeps the dialog open while a save runs"; T7 "keeps the add dialog open…"; clarifications 8, 10; T12 Step 5 |
+| Hand-offs: `SETTINGS_HYMNS_READY`; the Church page's link | T9 `hymns-step.test.tsx`, `church-settings-page.test.tsx` |
+| A guided phone check after the PR | T12 Steps 2-5; `docs/manual-verification.md` items 9-15 (T10) |
+
+S items **not** in 6a-2: Liturgy prompts, Prayers, Rubric and Bulletin settings moved in (6a-3); People and Danger zone (6b); S's `rebaseForm` and leave guard for the hymn dialog (clarification 24); S's Streamlit compatibility notes and manual check 10 (Streamlit retired); keying recent use by hymn id (answer 5, later).
+
+## Follow-ups (not in 6a-2)
+
+- "Fill from Hymnary.org" in the hymn dialog (answer 6), reusing `hymnary_facts.find_facts` outside the church-row lock.
+- Recent use keyed by hymn id, so a renamed hymn keeps its 12-week history (answer 5; a schema change).
+- A draft's pick of a hymn moved to another hymnal could follow it (look the id up in every hymnal's list) instead of asking for a replacement.
+- If the five section links wrap awkwardly on a phone, a horizontal scroller for the Settings nav (the 6a-1 and 5b-1 follow-up, carried).
+- Choosing another church in the church menu still does not ask before discarding unsaved settings edits (6a-1 follow-up, carried).
+
+## Owner questions
+
+Your 6a-2 planning answers of 2026-10-07 (the six, all as recommended) and the earlier answers on hymns are binding and already in the plan. These are the choices this plan makes where you did not say; each is written as recommended.
+
+1. **Pasted line breaks in a hymn's title, references or themes** (clarification 11). Recommended: the app quietly tidies them: a line break, a tab or an invisible control character becomes a space, and repeated spaces become one, so a title copied from a website saves as one clean line. (The other choice: refuse it with a message such as "Hymn title can't contain line breaks or control characters.", as contact names do.)
+2. **A link with a space in it** (clarification 11). Recommended: refuse it with "Links can't contain spaces." (a link with a space never opens). Links must still start with https://, as the spec says.
+3. **A short line under the page title** (clarification 3): "The hymnals and hymns the builder offers when you choose hymns." Recommended: accept.
+4. **The library's caption** (clarification 7): "Anyone in your church can add and edit hymns. Only admins can delete them." (the spec's line was written before you decided only admins delete). Recommended: accept.
+5. **Adding a hymnal your church already has** (clarification 17). Recommended: it adds only the hymns you are missing and fills in only details that are blank, so your own changes to its hymns (a corrected link, added scripture references) are kept. (The old import tool overwrote them with the bundled values.)
+6. **What a member sees for the year and familiarity** (clarification 8). Recommended: both fields are shown but cannot be changed, with "Only admins can change this." under each; a member's save never sends them.
+7. **The hymn box on a phone** (clarification 8). Recommended: it slides up from the bottom and scrolls, like **Edit contact**, so **Save changes** stays reachable with the keyboard open, rather than filling the whole screen.
+8. **A hymn with no number in the list** (clarification 7). Recommended: just its title (the spec showed a dash, which the no-em-dash rule rules out); such hymns come last in their hymnal, and search finds them.
+9. **A link from the Church page** (clarification 20). When your church has no hymns, the Church page's "Your church has no hymns yet, so there is no default hymnal." gets "Add hymns on the Hymns page" under it. Recommended: accept.
+10. **The note in Add a hymnal** (clarification 5): "This hymnal has no scripture references, so “Hymns for the readings” and AI suggestions work less well with it." (the spec said "Find hymns"; the builder's button is called "Hymns for the readings"). Recommended: accept.
+11. **Moving a hymn to another hymnal** (clarifications 13, 19). Recommended: allowed in **Edit hymn** (as the spec says); a service in progress that had picked that hymn then asks you to choose it again, as if it were deleted. It only matters once your church has two hymnals.
+12. **No database rule for duplicates** (clarification 21). Recommended: keep the app's own check (the same hymnal, number and title, in any capitals or spacing, refused even when two people add it at the same moment), with no database change. A database rule would need a migration that fails if your hymnal already has two copies of a hymn differing only in spacing or capitals, which the old app allowed.
+13. **The wording** (clarification 22): every new line on the page and in the dialogs, as listed there. Recommended: accept.
+
+Owner steps still to come: the plan's approval; the draft PR on your yes and ready on your yes (T11); the merge on your yes, then four phone checks one at a time (the test hymn deleted in the same step; PH1990 added and removed only if your church does not have it), and the records PR (T12).
+
+## Self-review
+
+- **Coverage.** Every binding constraint has a home: the nav order (clarification 2, T9); one PR (T11); the year and familiarity admin-only, delete admin-only, hymnal removal never the only or the default (clarification 14, T3-T4, T7-T8); the edit note (clarification 8, T8); the accepted 12-week risk in the record (T12 Step 8); no Hymnary button; no migration (clarification 21, owner question 12); no em dash in new copy (clarification 22; T10 Step 2 and T11 Step 3 grep the added lines; S's em dashes dropped, owner question 8); no ids or real addresses in the docs (only `@example.com`/`@example.org`; the record's own grep, T12 Step 8); the frozen Streamlit files untouched and their tests passing (T2 Step 4 runs `streamlit_tests`; T11 Step 3's path check counts `app.py`, `streamlit_views` and `streamlit_tests` as 0); tests never reach the network (Global Constraints); the 5b-1 lessons (the Spec coverage row); 6a-1's patterns reused as they are (`lock_and_read_actor`, `require_admin_role`, the Settings shell, the generated types). The second-to-last task opens a draft PR only on the owner's yes; the last merges only on a yes, runs a four-step phone check one step at a time (the test hymn deleted in its step; PH1990 added and removed only when the church lacks it; a hymnal the church uses never removed) and inserts "### Slice 6a-2 record" before "## Backups", after "### Slice 5b-2b record".
+- **Placeholders.** None in T1-T10's code, tests, commands or expected outputs; every expected output is quoted from the replay. The `<…>` left are T11 and T12's runtime values (`<N>`, `<scratch>`, times, the owner's answers), as in the 5b-1 plan.
+- **Consistency.** Names agree across tasks: `hymnal_sources.load_rows`, `file_sources`, `list_bundled`, `rows_for`, `label_for` (T1) are used by `hymn_library` (T3) and the CLI (T1); `title_key`, `get_hymn`, `create_hymn`, `patch_hymn`, `find_duplicate`, `delete_hymnal` and the import's `session` (T2) by T3; the six usecases (T3) by the routes (T4); `HymnDetailOut`, `HymnalSourceList`, `HymnalAddedOut`, `HymnalRemovedOut` (T4) by the type names (T6); `refreshHymns`, `hymnFieldErrors`, `isDuplicateHymn` and the hooks (T6) by the card and the dialog (T7, T8); `keys.hymns`, `keys.hymnalSources` (existing) by the queries. The counts in the table, each task's "Expected" and the PR line (`1825 → 1882`, `27 → 31`, `835 → 863`, `100 → 103`) agree.
+- **Not verified while planning:** the pushes, the PR and CI (the four Postgres tests were run on a local throwaway Postgres instead), the merge, Railway's and Vercel's deploys, the owner's phone check, the import's speed over the Supabase pooler, and the page at 375 px in a real browser (the classes give 44 px targets; jsdom does not lay out).
+- **Judgement calls to watch in review:** tidying text instead of refusing it; the import filling only blanks (a behavior change for the ops CLI too); the duplicate check running on an edit only when the key changes; `HymnIn.title` nullable; the library's empty state without a second **Add hymn**; the catalog's GG2013 listed as a source.
