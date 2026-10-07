@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from email_addresses import InvalidAddress, normalize_address
+from email_addresses import InvalidAddress, dedupe_addresses, normalize_address
 
 CASES = json.loads((Path(__file__).parent / "fixtures" / "shared" / "email_addresses.json").read_text(encoding="utf-8"))
 
@@ -126,3 +126,11 @@ def test_an_address_is_refused_or_is_exactly_one_recipient_once_sent(raw):
     assert [g.display_name for g in header.groups] == [None]
     assert header.defects == ()
     assert parsed.defects == []
+
+
+# --- slice 5b-2: dedupe_addresses -----------------------------------------------------------------
+
+def test_dedupe_keeps_the_first_of_each_address_ignoring_case():
+    assert dedupe_addresses(["Mary@example.org", "office@example.org", "mary@EXAMPLE.org", "office@example.org",
+                             "organist@example.org"]) == ["Mary@example.org", "office@example.org", "organist@example.org"]
+    assert dedupe_addresses([]) == []

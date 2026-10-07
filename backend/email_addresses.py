@@ -8,6 +8,7 @@ pins the rule for both. No dependency (email-validator is not installed);
 no FastAPI, Starlette or Streamlit here.
 """
 import re
+from collections.abc import Iterable
 
 # Characters that never belong in one plain address: they separate lists (", ;"),
 # start a group (":", which in a Bcc header would send to the address after it),
@@ -54,3 +55,17 @@ def normalize_address(raw: str) -> str:
     if len(labels[-1]) < 2 or not labels[-1].isalpha():
         raise InvalidAddress(raw)
     return f"{local}@{domain.lower()}"
+
+
+def dedupe_addresses(addresses: Iterable[str]) -> list[str]:
+    """The addresses in order, each once: a later copy (in any capitalization) is
+    dropped and the first spelling kept (slice 5b-2: a contact also typed under
+    Other addresses is emailed once)."""
+    seen: set[str] = set()
+    kept: list[str] = []
+    for address in addresses:
+        key = address.lower()
+        if key not in seen:
+            seen.add(key)
+            kept.append(address)
+    return kept
