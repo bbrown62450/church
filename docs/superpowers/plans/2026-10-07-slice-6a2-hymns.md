@@ -104,7 +104,7 @@ The owner's answers win over S and F; the code wins over both where they disagre
 19. **What the builder sees** (S Queries; the task's "deletions and edits invalidate the builder's queries"). Every write's success invalidates the prefix `["church", id, "hymns"]` (the builder's `useHymnList`/`useHymnLists` lists, `useScriptureMatches`, and the library), `["church", id, "hymnals"]`, `["church", id, "hymnal-sources"]` and `["church", id, "profile"]` (whose `effective_hymnal` can change): the picker shows an added, renamed or deleted hymn with no reload, and a draft's pick of a deleted hymn shows "Not in your hymnal. Choose a replacement." (slice 3). Nothing else caches a hymn's title: a saved service is always fetched again when opened (`useOpenService`), and the services list has no hymns. A pick whose hymn is moved to another hymnal also shows "Not in your hymnal" (the draft keeps the hymnal it was picked from; `reconcilePick`), until another is chosen; accepted (risk below).
 20. **Hand-offs** (S "Hand-off from 3"; the 6a-1 follow-up). `SETTINGS_HYMNS_READY` becomes `true`, so the builder's empty-hymnal state says "Add hymns on the Settings → Hymns page to choose hymns here." with **Open Settings → Hymns** (slice 3's own words). The Church page's no-hymns line gets a link under it, "Add hymns on the Hymns page", to `/settings/hymns` (owner question 9).
 21. **[owner-visible] No database change** (no migration). Hymns and hymnals are rows of the existing `hymns` table; no other table points at a hymn, so deleting one or a whole hymnal touches nothing else: saved services keep their own copy of each hymn and recent use is kept by title and number (S Semantics). The duplicate rule is enforced by the locked check, not by a unique index: churches already have hymns that differ only in spacing or capitals (Streamlit never checked), on which a unique index's migration would fail (owner question 12).
-22. **[owner-visible] Every new user-facing string** (no em dashes; owner question 13). Settings nav: "Hymns". Page: "Hymns"; "The hymnals and hymns the builder offers when you choose hymns."; "Hymnals"; "Default"; "{n} hymns" / "1 hymn"; "{total} hymns in {n} hymnals." / "… in 1 hymnal."; "Your church has no hymnals yet."; "Default. Change it in Church profile."; "Remove…"; "Add a hymnal"; "Admins can add bundled hymnals."; "Hymnals this app can add to your church, with their hymns."; "This hymnal has no scripture references, so “Hymns for the readings” and AI suggestions work less well with it."; "Add"; "Added"; "Adding…"; "Done"; "Still working. This can take up to a minute."; "No bundled hymnals are available on this server."; "Added {code} ({n} hymns)."; "Remove {code}?"; the removal body (clarification 6); "Remove {code}"; "Removed {code}."; "Hymn library"; "Anyone in your church can add and edit hymns. Only admins can delete them."; "Add hymn"; "Search by title or number"; "Clear search"; "All"; "{n} matching hymns" / "1 matching hymn"; "Show more"; "Loading…"; "No hymns yet"; "Add hymns one at a time, or add a bundled hymnal above."; "Add hymns one at a time, or ask an admin to add a bundled hymnal."; "No hymns match “{q}”."; "Edit hymn"; "A hymn your church sings that is not in the list yet."; "Title"; "Number"; "Hymnal"; "Scripture references"; "e.g. Psalm 23; John 10:11-18"; "Used by “Hymns for the readings” and AI suggestions."; "Themes"; "e.g. Advent, hope"; "Link"; "https://hymnary.org/…"; "Year the words were written"; "Number of hymnals (familiarity)"; "Only admins can change this."; "Changes also appear in saved services that use this hymn."; "Delete hymn"; "Save changes"; "Delete “{title}”?"; "Saved services keep this hymn. Services in progress that use it will ask you to choose a replacement."; "Hymn added."; "Hymn updated."; "Hymn deleted."; "This hymn was already deleted."; on the Church page "Add hymns on the Hymns page". From the server: "Hymn title is required."; "Hymn number must be a whole number."; "Choose one of your church's hymnals."; "Links must start with https://."; "Links can't contain spaces." (new); "Year must be a whole number from 1 to {year}."; "Number of hymnals must be a whole number from 0 to 100000."; "{hymnal} already has #{number} {title}." / "{hymnal} already has {title}."; "Hymn not found."; "That hymnal isn't available to add."; "Your church doesn't have that hymnal."; "You can't remove your only hymnal."; "{code} is your default hymnal. Choose a different default in Church profile first."; "Only church admins can do this.". Reused: "Cancel", "Saving…", "Retry", the skeleton's "Loading", "Not in your hymnal. Choose a replacement.".
+22. **[owner-visible] Every new user-facing string** (no em dashes; owner question 13). Settings nav: "Hymns". Page: "Hymns"; "The hymnals and hymns the builder offers when you choose hymns."; "Hymnals"; "Default"; "{n} hymns" / "1 hymn"; "{total} hymns in {n} hymnals." / "… in 1 hymnal."; "Your church has no hymnals yet."; "Default. Change it in Church profile."; "Remove…"; "Add a hymnal"; "Admins can add bundled hymnals."; "Hymnals this app can add to your church, with their hymns."; "This hymnal has no scripture references, so “Hymns for the readings” and AI suggestions work less well with it."; "Add"; "Added"; "Adding…"; "Done"; "Still working. This can take up to a minute."; "No bundled hymnals are available on this server."; "Added {code} ({n} hymns)."; "Remove {code}?"; the removal body (clarification 6); "Remove {code}"; "Removed {code}."; "Hymn library"; "Anyone in your church can add and edit hymns. Only admins can delete them."; "Add hymn"; "Search by title or number"; "Clear search"; "All"; "{n} matching hymns" / "1 matching hymn"; "Show more"; "Loading…"; "No hymns yet"; "Add hymns one at a time, or add a bundled hymnal above."; "Add hymns one at a time, or ask an admin to add a bundled hymnal."; "No hymns match “{q}”."; "Edit hymn"; "A hymn your church sings that is not in the list yet."; "Title"; "Number"; "Hymnal"; "Scripture references"; "e.g. Psalm 23; John 10:11-18"; "Used by “Hymns for the readings” and AI suggestions."; "Themes"; "e.g. Advent, hope"; "Link"; "https://hymnary.org/…"; "Year the words were written"; "Number of hymnals (familiarity)"; "Only admins can change this."; "Changes also appear in saved services that use this hymn."; "Delete hymn"; "Save changes"; "Delete “{title}”?"; "Saved services keep this hymn. Services in progress that use it will ask you to choose a replacement."; "Hymn added."; "Hymn updated."; "Hymn deleted."; "This hymn was already deleted."; on the Church page "Add hymns on the Hymns page"; screen readers: "Remove {code}", "Add {code}", the lists' "Hymnals", "Bundled hymnals" and "Hymns", the chips' group "Hymnal". From the server: "Hymn title is required."; "Hymn number must be a whole number."; "Choose one of your church's hymnals."; "Links must start with https://."; "Links can't contain spaces." (new); "Year must be a whole number from 1 to {year}."; "Number of hymnals must be a whole number from 0 to 100000."; "{hymnal} already has #{number} {title}." / "{hymnal} already has {title}."; "Hymn not found."; "That hymnal isn't available to add."; "Your church doesn't have that hymnal."; "You can't remove your only hymnal."; "{code} is your default hymnal. Choose a different default in Church profile first."; "Only church admins can do this.". Reused: "Cancel", "Saving…", "Retry", the skeleton's "Loading", "Not in your hymnal. Choose a replacement.".
 23. **Docs.** T10 adds the 6a-2 items 9-15 to `docs/manual-verification.md` → "## Slice 6a" (no new `##` heading, so `test_slice1_docs.py`'s pin is unchanged). The runbook record is T12's (`### Slice 6a-2 record` before `## Backups`, after `### Slice 5b-2b record`), with the accepted renamed-hymn risk (answer 5).
 24. **Deviations from S** (each the lean choice for 6a-2):
     - The hymn writes are in `usecases/hymn_library.py` and use 6a-1's `lock_and_read_actor`/`require_admin_role` as they are; S's `repos.hymns.add_hymn` with a session is not needed: the new `create_hymn` returns the typed `HymnRecord`, and `add_hymn` stays for the frozen Streamlit callers.
@@ -4523,7 +4523,7 @@ The nav lists Church, Hymns, Bulletin, Contacts, Account (five links) and marks 
 - [ ] **Step 2: See them fail**
 
 Run: `(cd frontend && npx vitest run src/components/settings/settings-layout.test.tsx src/components/settings/church-settings-page.test.tsx src/components/builder/hymns/hymns-step.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
-**Expected:**
+**Expected** (five `×`, in any order, and Vitest's `Failed Tests 5` banner, which the grep also matches):
 ```
    × the Settings area (slice 6a-1) > shows the heading, who you are in the church, and the sections with the current one marked
    × the Settings area (slice 6a-1) > marks the section current on its page (slices 6a-2, 5b-1, 5b-2): /settings/hymns
@@ -4738,7 +4738,27 @@ for i in 1 2 3; do (cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Te
 
 **Expected** (as in the replay: the suite; three runs of `Test Files  103 passed (103)` and `Tests  863 passed (863)` with no `×` or `FAIL` line, one naming a failing test: Step 6; typecheck and lint 0; the build with `/settings/hymns` and no `Error`, a font `Failed to fetch` only: say so and rely on CI):
 ```
-PENDING
+1882 passed, 31 skipped in <t>s
+```
+```
+ Test Files  103 passed (103)
+      Tests  863 passed (863)
+ Test Files  103 passed (103)
+      Tests  863 passed (863)
+ Test Files  103 passed (103)
+      Tests  863 passed (863)
+```
+```
+typecheck 0
+lint 0
+```
+```
+✓ Compiled successfully in <t>s
+├ ○ /settings
+├ ○ /settings/account
+├ ○ /settings/church
+├ ○ /settings/contacts
+├ ○ /settings/hymns
 ```
 
 - [ ] **Step 3 (agent): The API files match, the gates, the paths, the commits**
@@ -4756,7 +4776,47 @@ for c in $(git rev-list origin/main..HEAD); do git show -s --format=%B "$c" | gr
 
 **Expected:** nothing from `git status` (the committed snapshot and types are current); `imports grep exit 1`; `raw html grep exit 1`; `0` (no em dash in an added line of code or tests); exactly these 41 paths (the 5b-2b record in the runbook and the 6a spec's amendment ride along until merged):
 ```
-PENDING
+M	backend/api/routes/hymnals.py
+M	backend/api/routes/hymns.py
+A	backend/hymnal_sources.py
+M	backend/import_hymnal.py
+M	backend/repos/hymns.py
+M	backend/tests/test_api_hymnals.py
+A	backend/tests/test_api_hymnals_admin.py
+A	backend/tests/test_api_hymns_admin.py
+A	backend/tests/test_hymn_library.py
+A	backend/tests/test_hymn_library_postgres.py
+A	backend/tests/test_hymnal_sources.py
+M	backend/tests/test_hymns_repo.py
+A	backend/tests/test_import_hymnal_cli.py
+M	backend/tests/test_no_streamlit_in_core.py
+A	backend/usecases/hymn_library.py
+R100	data/hymnals/PH1990_hymns.csv	backend/seed/hymnals/PH1990.csv
+M	docs/manual-verification.md
+M	docs/ops-runbook.md
+A	docs/superpowers/plans/2026-10-07-slice-6a2-hymns.md
+M	docs/superpowers/specs/2026-09-25-slice-6a-settings-church-design.md
+A	frontend/src/app/(signed-in)/(church)/settings/hymns/page.tsx
+M	frontend/src/components/builder/hymns/hymns-step.test.tsx
+M	frontend/src/components/settings/church-settings-page.test.tsx
+M	frontend/src/components/settings/church-settings-page.tsx
+A	frontend/src/components/settings/hymn-dialog.tsx
+A	frontend/src/components/settings/hymn-library.test.tsx
+A	frontend/src/components/settings/hymn-library.tsx
+A	frontend/src/components/settings/hymnals-card.tsx
+A	frontend/src/components/settings/hymns-settings-page.test.tsx
+A	frontend/src/components/settings/hymns-settings-page.tsx
+M	frontend/src/components/settings/sections.ts
+M	frontend/src/components/settings/settings-layout.test.tsx
+M	frontend/src/lib/api/openapi.json
+M	frontend/src/lib/api/schema.d.ts
+M	frontend/src/lib/api/timeouts.ts
+M	frontend/src/lib/api/types.ts
+M	frontend/src/lib/features.ts
+A	frontend/src/lib/queries/hymn-library.ts
+A	frontend/src/lib/settings/hymns.test.ts
+A	frontend/src/lib/settings/hymns.ts
+M	frontend/src/test/fixtures/index.ts
 ```
 `0`; the subjects oldest first: `Runbook: slice 5b-2b record (merged; owner's phone check)`, `Spec: slice 6a-2 (Hymns) planning answers (owner, 2026-10-07)`, the plan commits (`WIP plan: …` and `Plan: slice 6a-2 (Hymns in Settings)`) and any later plan commit, then T1-T10's ten subjects as written above, then any `Fix: …` lines; only `trailer check done`.
 
@@ -4972,14 +5032,14 @@ Expected counts after this task: backend `1882 passed, 31 skipped` on `main`; fr
 - **The library in T7's tests.** T8 puts the library on the page, which reads `GET /hymns`; T7's page test answers it from the start (an empty page), so T8 does not edit it.
 - **Lint.** React's lint refuses a `setState` called directly in an effect; the "still working" flag is reset when an add starts and shown only while the add is pending.
 - **Mutation checks** (each change made by hand in the build worktree, the named tests run, the change undone): the role check for the facts dropped from `update_hymn` → `3 failed, 38 passed` (`test_hymn_library.py` and `test_api_hymns_admin.py`); `find_duplicate` ignoring `exclude_id` → `1 failed, 60 passed` (the repo, usecase and API tests); the import overwriting differing values again → `1 failed, 22 passed` (`test_hymns_repo.py`, `test_hymnals.py`); `refreshHymns` without the `["church", id, "hymns"]` prefix → `4 failed, 16 passed` (the two page test files); **Delete hymn** shown to members → `1 failed, 12 passed` (`hymn-library.test.tsx`).
-- **The lock on Postgres.** On a throwaway local PG 16 cluster (initialised under `/var/lib/postgresql`, port 5441, never a real database; `TEST_DATABASE_URL=postgresql://postgres@localhost:5441/church_test`): `test_hymn_library_postgres.py` `4 passed`. With `lock_church`'s `with_for_update=True` turned off, three fail (the held-lock test, the barrier test and the two PH1990 adds) and the timing test passes. {{PG_ALL}}
+- **The lock on Postgres.** On a throwaway local PG 16 cluster (initialised under `/var/lib/postgresql`, port 5441, never a real database, stopped and deleted afterwards; `TEST_DATABASE_URL=postgresql://postgres@localhost:5441/church_test`): `test_hymn_library_postgres.py` `4 passed`. With `lock_church`'s `with_for_update=True` turned off, three fail (the held-lock test, the barrier test and the two PH1990 adds) and the timing test passes. All Postgres-marked tests on that cluster, at the end of the final replay below: `31 passed, 1882 deselected, 1 warning` (CI's `backend-postgres` job runs the same set).
 - **The production build** compiled with `○ /settings/hymns` beside the other Settings routes.
 
-**Replay of the finished plan (2026-10-07).** The directives of T1-T10 were applied in order by a replay script that parses each step's **Create**, **Replace**, **Append** and **In … replace** blocks and its `bash` blocks (T1's move, each commit), and runs every command on its "Run:" lines, onto a fresh detached worktree of the branch at the plan's commit `{{REPLAY_BASE}}` (outside the repo directory, removed afterwards), with the repo's `.venv` (a symlink) and a hard-linked copy of `frontend/node_modules`:
-- {{REPLAY_DIRECTIVES}}
+**Replay of the finished plan (2026-10-07).** The directives of T1-T10 were applied in order by a replay script that parses each step's **Create**, **Replace**, **Append** and **In … replace** blocks and its `bash` blocks (T1's move, each commit), and runs every command on its "Run:" lines, onto a fresh detached worktree of the branch at the plan's commit ``5abe882`` (outside the repo directory, removed afterwards), with the repo's `.venv` (a symlink) and a hard-linked copy of `frontend/node_modules`:
+- All 48 directives applied (T1 3 + 2, T2 1 + 4, T3 2 + 1, T4 3 + 5, T5 1, T6 1 + 6, T7 1 + 3, T8 1 + 4, T9 5 + 4, T10 1); every **In … replace** anchor occurred exactly once; T1's move and all ten commit blocks ran, each commit with the trailer; afterwards the replayed `backend`, `frontend/src` and `docs/manual-verification.md` trees were identical to the build worktree's.
 - Baselines before T1: backend `1825 passed, 27 skipped`; frontend `835 passed` in 100 files; typecheck 0, lint 0.
 - Every "see it fail" output and every count above is quoted from this replay (times as `<t>`, Vitest's per-test times left out).
-- {{REPLAY_COUNTS}}
+- Every count matched the table: backend 1832, 1837, 1864, 1882 passed with 27 skipped, then 31 skipped from T5; frontend 842 in 101, 849 in 102, 862 in 103, 863 in 103; T1 Step 4 `13 passed`; T2 Step 4 `93 passed` and `streamlit_tests` `35 passed`; T3 Step 4 `30 passed`; T4 Step 4 ` 2 files changed, 1933 insertions(+), 221 deletions(-)` and `33 passed`; T7's and T8's three runs `7 passed` and `13 passed` each time, no flaky run; T9 `56 passed`; typecheck 0 and lint 0 after T4, T6, T7, T8 and T9; T10 `89 passed`, `4`, `0`, ` 1 file changed, 15 insertions(+)`. After T10, T11 Step 2's and Step 3's outputs (quoted there): `1882 passed, 31 skipped`, three runs of `863 passed` in 103 files, typecheck and lint 0, `✓ Compiled successfully` with `○ /settings/hymns`, and the 41 paths. An earlier replay (of the plan before three small changes: `maxLength` on the dialog's text boxes, the search box without the browser's own clear button, and `\ufeff`/`\ufffe`/`\uffff` written as escapes instead of invisible characters) gave the same outputs for T1-T10.
 - Not run while planning: the pushes, the PR and CI, the merge, Railway's and Vercel's deploys and the owner's phone check (T12).
 
 ## Spec coverage
