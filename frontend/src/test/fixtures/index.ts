@@ -11,6 +11,9 @@ import type {
   GmailConnection,
   GenerateLiturgyBody,
   Hymn,
+  HymnalSource,
+  HymnalSources,
+  HymnDetail,
   HymnMatch,
   Hymnals,
   HymnPage,
@@ -649,4 +652,43 @@ export function gmailConnection(overrides: Partial<GmailConnection> = {}): Gmail
 /** Not connected yet (set up here). */
 export function gmailDisconnected(): GmailConnection {
   return gmailConnection({ connected: false, google_email: null });
+}
+
+// --- slice 6a-2: Settings → Hymns ------------------------------------------------------------------
+
+/** One hymn as `POST`/`PATCH /hymns` answer it (`HymnDetailOut`): `hymn(overrides)` with its stored theme text. */
+export function hymnDetail(overrides: Partial<HymnDetail> = {}): HymnDetail {
+  const h = hymn();
+  return {
+    id: h.id,
+    hymnal: h.hymnal,
+    title: h.title,
+    number: h.number,
+    scripture_refs: h.scripture_refs,
+    theme: null,
+    link: h.link,
+    text_year: null,
+    hymnal_count: null,
+    ...overrides,
+  };
+}
+
+/** One bundled hymnal (`HymnalSourceOut`): PH1990, not yet added, unless overridden. */
+export function hymnalSource(overrides: Partial<HymnalSource> = {}): HymnalSource {
+  return {
+    code: "PH1990",
+    label: "The Presbyterian Hymnal (1990)",
+    hymn_count: 605,
+    has_scripture_refs: false,
+    present: false,
+    ...overrides,
+  };
+}
+
+/** `GET /hymnal-sources` for Grace: GG2013 (which Grace has) and PH1990 (which it has not). */
+export function hymnalSources(items: HymnalSource[] = [
+  hymnalSource({ code: "GG2013", label: "Glory to God (2013)", hymn_count: 853, has_scripture_refs: true, present: true }),
+  hymnalSource(),
+]): HymnalSources {
+  return { items };
 }
