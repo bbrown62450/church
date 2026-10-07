@@ -108,3 +108,12 @@ export type Contact = components["schemas"]["ContactOut"];
 export type ContactList = components["schemas"]["ContactList"];
 export type ContactBody = components["schemas"]["ContactIn"];
 export type ContactPatch = components["schemas"]["ContactPatchIn"];
+
+/**
+ * `/gmail-connection` (slice 5b-2): the caller's own Gmail connection
+ * (`configured` false: this deployment has no Google client), Google's consent
+ * URL, and the code and state `/gmail/callback` posts back.
+ */
+export type GmailConnection = components["schemas"]["GmailConnectionOut"];
+export type GmailAuthUrl = components["schemas"]["GmailAuthUrlOut"];
+export type GmailConnectBody = components["schemas"]["GmailConnectIn"];

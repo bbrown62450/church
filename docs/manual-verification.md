@@ -413,3 +413,16 @@ never an email address, a person's name or a church id.
 - [ ] **4.** Signed in as a plain member of the same church: **Settings** → **Contacts** shows "Only admins can add or change contacts." and the list with no buttons and no add form.
 - [ ] **5.** Two tabs as an admin: delete a contact in one, then edit it in the other: "Contact not found." and the row goes away.
 - [ ] **6.** Add a contact as `Someone@Example.ORG`: it is saved and listed as `Someone@example.org` (the domain lower-cased, the rest as typed).
+
+**5b-2 (the Gmail connection and emailing the bulletin).** The owner's Google
+and Railway setup comes before the merge (item 7). After the merge the
+owner's guided check covers the items marked "(owner, after 5b-2)", one step
+at a time on the phone; the results go into `docs/ops-runbook.md` → "Slice
+5b-2 record". Every test email goes only to the owner's own addresses. Record
+what the page shows, never an email address, a token, a code from the
+address bar or a church id.
+
+- [ ] (owner, before the 5b-2 merge) **7.** Google Cloud Console → the OAuth client "Liturgy" lists `https://worship-service-builder.vercel.app/gmail/callback` and `http://localhost:3000/gmail/callback` under Authorized redirect URIs, and the consent screen's publishing status is noted (Testing or In production). Railway → the API service → Variables has `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` (Streamlit's) and `GOOGLE_OAUTH_REDIRECT_URI` = `https://worship-service-builder.vercel.app/gmail/callback`; after the deploy the log has the line `Gmail: configured` and no other line starting `Gmail:`.
+- [ ] (owner, after 5b-2) **8.** **Settings** lists **Church**, **Bulletin**, **Contacts** and **Account**. **Account** shows your name, your email, "Signed in with Google.", **Log out** and the **Gmail** card. If it says "Connected as …", tap **Disconnect** first ("Connect Gmail" shows). Tap **Connect Gmail**: Google opens in the same tab with your account chosen; allow sending; you are back on **Account** with "Gmail connected" and "Connected as" your address. At 375 px the four section links are easy to tap and nothing scrolls sideways.
+- [ ] **9.** On **Account**, **Connect Gmail** and then Cancel at Google: "Gmail connection was cancelled." and back on **Account**.
+- [ ] **10.** After a successful connect, reload `/gmail/callback`: "Gmail connection didn't finish. Try connecting again."; **Account** still says "Connected as …".

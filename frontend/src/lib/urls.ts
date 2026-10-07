@@ -8,6 +8,13 @@ const MAX_INTERNAL_PATH_LENGTH = 512;
 
 /** First path segments a post-login `next` may return to (F §4.3). */
 const INTERNAL_PATH_ROOTS = new Set(["join", "builder", "services", "settings", "welcome"]);
+/**
+ * Whole paths it may also return to (slice 5b-2): Google's Gmail return page. The proxy keeps only the
+ * path in `/login?next=`, so a landing there while signed out comes back after sign-in without Google's
+ * answer and shows "Gmail connection didn't finish. Try connecting again." with **Try again**, instead of
+ * dropping the user on the Builder with no word about Gmail.
+ */
+const INTERNAL_PATHS = new Set(["/gmail/callback"]);
 
 function hasUnsafeCharacter(path: string): boolean {
   for (const ch of path) {
@@ -26,7 +33,7 @@ function isParentSegment(segment: string): boolean {
  * `raw` if it is a same-site path the app may navigate to after sign-in, else null.
  * At most 512 characters; exactly one leading `/`; no `//`, `\`, whitespace, control
  * characters, `?`, `#` or `..` segment; first segment one of join, builder, services,
- * settings, welcome, matched whole (so `/joinx` is rejected).
+ * settings, welcome, matched whole (so `/joinx` is rejected), or exactly `/gmail/callback`.
  */
 export function safeInternalPath(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
@@ -35,6 +42,7 @@ export function safeInternalPath(raw: unknown): string | null {
   if (hasUnsafeCharacter(raw)) return null;
   const segments = raw.slice(1).split("/");
   if (segments.some(isParentSegment)) return null;
+  if (INTERNAL_PATHS.has(raw)) return raw;
   if (!INTERNAL_PATH_ROOTS.has(segments[0])) return null;
   return raw;
 }

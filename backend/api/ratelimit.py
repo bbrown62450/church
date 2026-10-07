@@ -46,7 +46,8 @@ class Rule:
 
 # F §1.8 plus S's `lectionary` addition. Wired in 2a: lectionary, scripture,
 # church_create. ai: slices 3 and 4, PR #7, PR #8. email: slice 5b. picture:
-# printed bulletin PR 3a (POST /bulletin-images).
+# printed bulletin PR 3a (POST /bulletin-images). gmail_connect: slice 5b-2
+# (POST /gmail-connection/auth-url; a new consent URL and state per request).
 BUCKETS: dict[str, tuple[Rule, ...]] = {
     "lectionary": (Rule("user", 120, 300),),
     "scripture": (Rule("user", 60, 300),),
@@ -54,6 +55,7 @@ BUCKETS: dict[str, tuple[Rule, ...]] = {
     "ai": (Rule("user", 40, 600), Rule("church", 400, 86_400)),
     "email": (Rule("user", 10, 3_600),),
     "picture": (Rule("user", 20, 3_600), Rule("church", 60, 86_400)),
+    "gmail_connect": (Rule("user", 10, 600),),
 }
 
 MESSAGE = "Too many requests. Try again in {n} seconds."

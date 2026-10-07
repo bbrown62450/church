@@ -321,6 +321,11 @@ describe("apiFetchBlob (slice 5a; F §1.9, §4.5)", () => {
     expect(timeoutFor("GET", "/bulletin-images/p1")).toBe(20_000);
   });
 
+  it("waits 75 s for POST /gmail-connection: past the server's slowest Google answers (5b-2a build review M3)", () => {
+    expect(timeoutFor("POST", "/gmail-connection")).toBe(75_000);
+    expect(timeoutFor("POST", "/gmail-connection/auth-url")).toBe(20_000);
+  });
+
   it("times out after 30 s on POST /documents", async () => {
     expect(timeoutFor("POST", "/documents")).toBe(30_000);
     vi.useFakeTimers();

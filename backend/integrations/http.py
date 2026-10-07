@@ -1,12 +1,15 @@
 """The one outbound HTTP client (F §2.7; S New modules "integrations/http.py").
 
-Every upstream call the new app makes (Lectio, Vanderbilt, bible-api, ESV)
-goes through get(). One module-level httpx.Client carries the settings F §2.7
-fixes, so no caller picks its own:
+Every upstream call the new app makes (Lectio, Vanderbilt, bible-api, ESV,
+and from slice 5b-2 Google's OAuth and Gmail endpoints) goes through get() or
+post(). One module-level httpx.Client carries the settings F §2.7 fixes, so
+no caller picks its own:
 - User-Agent "WorshipServiceBuilder/1.0";
 - follow_redirects=True, but only to https: a request event hook refuses any
   non-https URL, and httpx runs that hook for every redirect hop too;
-- connect timeout 5 s; the read timeout is chosen per call (S Timeouts).
+- connect timeout 5 s; the read timeout is chosen per call (S Timeouts);
+- post() never follows a redirect: a POST (a token exchange, an email send)
+  is answered where it was sent or not at all, never replayed elsewhere.
 
 A refused URL raises httpx.UnsupportedProtocol, an httpx.HTTPError, so a
 fetcher that catches httpx.HTTPError reports it as an upstream failure rather
@@ -75,6 +78,17 @@ def get(url: str, *, params: Mapping[str, str] | None = None,
         headers=headers,
         timeout=httpx.Timeout(read_timeout, connect=CONNECT_TIMEOUT),
     )
+
+
+def post(url: str, *, data: Mapping[str, str] | None = None, json: object = None,
+         headers: Mapping[str, str] | None = None, timeout: httpx.Timeout) -> httpx.Response:
+    """POST a form (`data`) or a JSON body (`json`) to `url` with the shared
+    client and the given `timeout` (slice 5b-2: Google's token, revoke and
+    Gmail send endpoints). A redirect is returned as it is, never followed.
+
+    As get(): transport problems raise httpx.HTTPError subclasses, a 4xx or
+    5xx is returned for the caller to classify."""
+    return _client.post(url, data=data, json=json, headers=headers, timeout=timeout, follow_redirects=False)
 
 
 def set_http_for_tests(client: httpx.Client | None) -> None:

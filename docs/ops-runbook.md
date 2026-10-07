@@ -710,6 +710,30 @@ church id or person's name is recorded here.
 | Agent checks | Not run: this session has no sign-in for a test church (items 5, 6 and 8). Item 7 (a member): not run | 2026-10-06 |
 | Follow-ups | Confirm the default Benediction reads the standard text on Settings → Church. Next: slice 5b's planning round (Gmail, emailing the bulletin, Contacts; owner, 2026-10-05), then 6a-2 (Hymns), 6a-3 (Liturgy prompts, Prayers, Rubric, Bulletin settings moved in), 6b (People) and Hear it from the pews | 2026-10-06 |
 
+### Slice 5b-1 record
+
+Slice 5b-1 (the Contacts page: Contacts in the Settings sections after
+Church and Bulletin; every member reads the church's contacts, owners and
+admins add, edit and delete them; `GET`, `POST`, `PATCH` and `DELETE
+/contacts`, each write under the church-row lock with the caller's role
+re-read; `email_addresses.normalize_address`, the one address rule, which
+5b-2's send will use) merged as PR #53, the first of slice 5b's two PRs
+(owner's 5b planning answers of 2026-10-06). No database change and no new
+package; production stays at `0007_bulletin_images`. The owner's check was
+three steps on a phone, covering the "(owner, after 5b-1)" items of
+`docs/manual-verification.md` → "Slice 5b"; its first step is the one-time
+check of the contacts saved before the rule (answer 6). Any test contact
+was deleted. No address, name, token or church id is recorded here.
+
+| Step | Result | Date |
+|---|---|---|
+| Merge and deploy | PR #53 merged 17:08 UTC (13:08 Eastern), merge commit `e984963`. CI on `main`: backend, backend-postgres and frontend success | 2026-10-06 |
+| 1. Saved contacts (phone) | Church, Bulletin and Contacts listed; 2 contacts, 0 flagged, 0 addresses listed twice | 2026-10-06 |
+| 2. Fix, then try it out | Nothing to fix. A test contact added, renamed, its address refused a second time, deleted (the owner answered yes to all four) | 2026-10-06 |
+| 3. Unsaved changes and the phone | The owner reported it looked good: "Discard unsaved changes?" asked, the page easy to use on the phone, Edit contact usable with the keyboard open | 2026-10-06 |
+| Agent checks | Not run: this session has no sign-in for a test church (items 5 and 6). Item 4 (a member): not run | 2026-10-06 |
+| Follow-ups | An old contact name made only of tabs or line breaks sorts first instead of last (order only; the plan's Build notes). Next: 5b-2 (the Gmail connection and emailing the bulletin; the owner adds the redirect URI in Google Cloud Console), then 6a-2 and 6a-3, in the order the owner picks | 2026-10-06 |
+
 ## Backups
 
 - **Workflow:** `.github/workflows/backup.yml` (`db-backup`). Daily at 08:37 UTC,

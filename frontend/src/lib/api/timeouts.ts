@@ -28,6 +28,11 @@ const ENDPOINT_TIMEOUTS: Record<string, number> = {
   // 10 MB at about 1 Mbps up takes 80 s; a timed-out upload the server finished still counts toward the
   // church's pictures, so the wait is generous (build review M8).
   "POST /bulletin-images": 120_000,
+  // Slice 5b-2 (F §1.8): the code exchange, then the address lookup (and, for a refused grant, a revoke).
+  // Google's timeouts are per phase (5 s to connect, then 15 s for each wait), not a deadline for the call:
+  // two slow but steady calls can take well over 40 s, so the browser waits 75 s (5b-2a build review M3).
+  // This is the overall limit; a connect it stops waiting for shows an error, and connecting again starts afresh.
+  "POST /gmail-connection": 75_000,
 };
 
 export function timeoutFor(method: string, path: string): number {
