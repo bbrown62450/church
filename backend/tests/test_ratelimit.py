@@ -136,6 +136,24 @@ def test_failed_charge_takes_nothing_across_rules(limiter_clock):
         consume("ai", user_id=late, church_id=uuid.uuid4())
 
 
+def test_check_refuses_as_consume_would_and_takes_nothing(limiter_clock):
+    """5b-2b build review M2: the email send peeks before building its files."""
+    user = _user()
+    for _ in range(3):
+        ratelimit.check("church_create", user_id=user)             # a peek never charges
+    for _ in range(3):
+        consume("church_create", user_id=user)
+    with pytest.raises(RateLimited) as caught:
+        ratelimit.check("church_create", user_id=user)
+    assert caught.value.retry_after_seconds == _rate_limited("church_create", user_id=user).retry_after_seconds == 20
+    limiter_clock.advance(20)
+    ratelimit.check("church_create", user_id=user)
+    ratelimit.check("church_create", user_id=user)
+    consume("church_create", user_id=user)                         # the one token is still there
+    with pytest.raises(ValueError):
+        ratelimit.check("ai", user_id=user)
+
+
 def test_cost_below_one_or_above_capacity_is_value_error(limiter_clock):
     user = _user()
     for cost in (0, -1):

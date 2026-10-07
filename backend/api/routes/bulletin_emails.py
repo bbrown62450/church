@@ -15,7 +15,9 @@ same key and body gets the first answer: the success, any 4xx, and an
 answer that says the email may already have been sent (details.send_uncertain,
 kept by `store_error`), so a lost connection or a second tap never sends twice.
 The `email` bucket (10 an hour) is charged inside the usecase right before
-Google, so a typo, a missing contact or a replay costs nothing; the PDF's
+Google, so a typo, a missing contact or a replay costs nothing, and peeked
+(not charged) before the files are built, so a caller at the limit neither
+waits for the PDF nor pays its readings; the PDF's
 readings charge the `scripture` bucket as the printed download does. Plain
 `def`, one usecase call, no SQL and no try/except (F §2.2 rule 1).
 """
@@ -80,4 +82,5 @@ def send_bulletin_email(
             additional_emails=payload.additional_emails, message=payload.message, attachments=payload.attachments,
             translation=payload.translation, config=config,
             charge=lambda: ratelimit.consume("email", user_id=user.id),
+            check_charge=lambda: ratelimit.check("email", user_id=user.id),
             charge_scripture=lambda parts: ratelimit.consume("scripture", user_id=user.id, cost=parts))))

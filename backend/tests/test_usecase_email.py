@@ -16,7 +16,8 @@ import email_contacts
 import google_oauth
 from db import session_scope
 from db.models import GmailToken, HymnUsage, OAuthState
-from domain_errors import Conflict, DomainError, InvalidInput, NotConfigured, NotFound, Rejected, UpstreamError, UpstreamTimeout
+from domain_errors import (Conflict, DomainError, InvalidInput, NotConfigured, NotFound, RateLimited, Rejected, UpstreamError,
+                           UpstreamTimeout)
 from repos.memberships import add_membership
 from service_output import CustomElement
 from tests.fake_google import REFRESH_TOKEN, FakeGoogle, gmail_error, google_error
@@ -447,6 +448,28 @@ def test_the_rate_limit_is_charged_once_after_the_files_and_before_google(world)
                               attachments=["docx"], translation=None, config=CONFIG,
                               charge=lambda: order.append(("charge", len(world["built"]))))
     assert order == [("charge", 1), "refresh"]
+
+
+def test_a_caller_at_the_rate_limit_is_refused_before_the_files_are_built(world):
+    """5b-2b build review M2: no PDF, no readings charge, nothing sent; the limit is peeked, not charged."""
+    def at_limit():
+        raise RateLimited("Too many requests. Try again in 60 seconds.", retry_after_seconds=60)
+    with pytest.raises(RateLimited):
+        email.send_bulletin_email(world["church"], world["member"], archive.ServiceInput(service_date=SUNDAY),
+                                  contact_ids=[uuid.UUID(world["mary"])], additional_emails=[], message=None,
+                                  attachments=["docx", "pdf"], translation=None, config=CONFIG,
+                                  charge=lambda: world["charged"].append(1),
+                                  charge_scripture=lambda parts: world["scripture"].append(parts),
+                                  check_charge=at_limit)
+    assert (world["built"], world["scripture"], world["charged"], world["google"].requests) == ([], [], [], [])
+    order = []
+    _send(world, [world["mary"]])
+    email.send_bulletin_email(world["church"], world["member"], archive.ServiceInput(service_date=SUNDAY),
+                              contact_ids=[uuid.UUID(world["mary"])], additional_emails=[], message=None,
+                              attachments=["docx"], translation=None, config=CONFIG,
+                              charge=lambda: order.append("charge"),
+                              check_charge=lambda: order.append(("check", len(world["built"]))))
+    assert order == [("check", 1), "charge"]                     # checked before this send's file, charged after
 
 
 def test_no_pooled_connection_is_held_while_google_is_called(world, tmp_db):

@@ -18,7 +18,8 @@ in the 5b spec's order (§Errors, "POST /bulletin-emails"): the recipients
 email_addresses.normalize_address, then de-duplicated: 1 to 50), the
 attachments (at least one), the connection, the files built from the posted
 service (5a's bulletin copy, the printed bulletin's PDF) and the message's
-size (MAX_RAW_BYTES), the `email` rate limit (`charge`), and only then Google: the token refresh and the send, with
+size (MAX_RAW_BYTES), the `email` rate limit (`charge`; peeked with
+`check_charge` before the files are built), and only then Google: the token refresh and the send, with
 no database session open. A refused grant forgets the connection only if it
 still holds the token that failed. A send that may have gone out is a 502 or
 504 with details.send_uncertain, which the route keeps for a retry with the
@@ -283,9 +284,12 @@ def send_bulletin_email(church_id: uuid.UUID, user_id: uuid.UUID, data: archive.
                         contact_ids: Sequence[uuid.UUID], additional_emails: Sequence[str], message: Optional[str],
                         attachments: Sequence[AttachmentKind], translation: Optional[str],
                         config: GoogleOAuthConfig, charge: Callable[[], None] = lambda: None,
-                        charge_scripture: Callable[[int], None] = lambda parts: None) -> int:
+                        charge_scripture: Callable[[int], None] = lambda parts: None,
+                        check_charge: Callable[[], None] = lambda: None) -> int:
     """POST /bulletin-emails: the number of people emailed. `charge` is the
-    `email` bucket (called once, right before Google); `charge_scripture` the
+    `email` bucket (called once, right before Google); `check_charge` peeks at
+    it without charging, before the files are built, so a caller at the limit
+    neither waits for the PDF nor pays its readings; `charge_scripture` the
     printed bulletin's readings fetch (POST /documents/printed's)."""
     started = time.monotonic()
     kinds = [kind for kind in ("docx", "pdf") if kind in attachments]
@@ -298,6 +302,7 @@ def send_bulletin_email(church_id: uuid.UUID, user_id: uuid.UUID, data: archive.
         raise not_configured()
     if connection is None:
         raise Conflict(NOT_CONNECTED, code="gmail_not_connected")
+    check_charge()                                              # at the limit: refused before any file is built
     files = _attachments(church_id, data, kinds, translation, charge_scripture)
     raw = compose_bulletin_email(sender=connection.google_email, recipients=recipients,
                                  service_date=data.service_date, message=message, attachments=files).as_bytes()

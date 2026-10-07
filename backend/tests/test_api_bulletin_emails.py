@@ -15,6 +15,7 @@ import pytest
 
 import email_contacts
 import google_oauth
+from api import ratelimit
 from api.deps import get_google_config
 from repos.memberships import add_membership
 from tests.api_helpers import (  # noqa: F401 (isolation_world is a fixture)
@@ -199,6 +200,21 @@ def test_only_requests_that_reach_gmail_use_the_hourly_limit(client, world):
     r = _post(client, world)
     assert _error(r)[:2] == (429, "rate_limited")
     assert int(r.headers["Retry-After"]) >= 1
+    assert _sends(world) == 10
+
+
+def test_at_the_hourly_limit_the_pdf_is_not_built_and_the_readings_are_not_charged(client, world, monkeypatch):
+    """5b-2b build review M2."""
+    for _ in range(10):
+        assert _post(client, world).status_code == 200
+    built = []
+    monkeypatch.setattr(documents, "build_printed", lambda *args, charge: built.append(charge(3)) or
+                        documents.DocumentResult(b"%PDF-FIXED", "printed_bulletin_October_04_2026.pdf"))
+    r = _post(client, world, _body(world, attachments=["pdf"]))
+    assert _error(r)[:2] == (429, "rate_limited")
+    assert built == []
+    for _ in range(20):                                            # the scripture bucket (60) is still full
+        ratelimit.consume("scripture", user_id=world["member"], cost=3)
     assert _sends(world) == 10
 
 
