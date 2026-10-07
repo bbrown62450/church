@@ -256,6 +256,24 @@ def test_a_member_emails_the_bulletin_with_both_files_in_bcc(world):
     assert world["google"].form(refresh[0])["refresh_token"] == REFRESH_TOKEN
 
 
+def test_the_stored_sender_is_normalized_and_left_out_of_bcc(world):
+    """5b-2b build review M3: a stored address with spaces and capitals is sent as normalize_address gives it."""
+    google_oauth.save_user_token(world["member"], " Member@Example.COM ", REFRESH_TOKEN)
+    assert _send(world, [world["mary"], world["office"]], ["member@EXAMPLE.com"]) == 3
+    (sent,) = world["google"].sent()
+    assert (sent["From"], sent["To"]) == ("Member@example.com", "Member@example.com")
+    assert sent["Bcc"] == "mary@example.org, Office@example.org"
+
+
+def test_a_malformed_stored_sender_is_not_connected_and_nothing_is_sent(world):
+    """5b-2b build review M3."""
+    google_oauth.save_user_token(world["member"], "member@example.com, other@example.org", REFRESH_TOKEN)
+    with pytest.raises(Conflict) as failed:
+        _send(world, [world["mary"]])
+    assert (failed.value.code, failed.value.message) == ("gmail_not_connected", "Connect your Gmail first, then try again.")
+    assert world["google"].requests == [] and world["built"] == [] and world["charged"] == []
+
+
 def test_one_recipient_is_in_to_and_the_default_message_fills_a_blank_one(world):
     assert _send(world, [world["mary"]], message="   ") == 1
     (sent,) = world["google"].sent()

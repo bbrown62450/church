@@ -16,7 +16,8 @@ send_bulletin_email (Task 12) emails the bulletin from the caller's Gmail,
 in the 5b spec's order (§Errors, "POST /bulletin-emails"): the recipients
 (the church's contacts by id, the other addresses, each through
 email_addresses.normalize_address, then de-duplicated: 1 to 50), the
-attachments (at least one), the connection, the files built from the posted
+attachments (at least one), the connection (its stored address through
+normalize_address too, else "not connected"), the files built from the posted
 service (5a's bulletin copy, the printed bulletin's PDF) and the message's
 size (MAX_RAW_BYTES), the `email` rate limit (`charge`; peeked with
 `check_charge` before the files are built), and only then Google: the token refresh and the send, with
@@ -232,6 +233,15 @@ def _recipients(church_id: uuid.UUID, contact_ids: Sequence[uuid.UUID],
     return recipients
 
 
+def _sender(connection: GmailConnection) -> str:
+    """The stored Google address as From and To, through the one address rule;
+    one the rule refuses is treated as no connection (Connect Gmail again)."""
+    try:
+        return normalize_address(connection.google_email)
+    except InvalidAddress:
+        raise Conflict(NOT_CONNECTED, code="gmail_not_connected") from None
+
+
 def _attachments(church_id: uuid.UUID, data: archive.ServiceInput, kinds: Sequence[AttachmentKind],
                  translation: Optional[str], charge_scripture: Callable[[int], None]) -> list[Attachment]:
     """Step 7: each file built from the posted service, as the downloads build it."""
@@ -302,9 +312,10 @@ def send_bulletin_email(church_id: uuid.UUID, user_id: uuid.UUID, data: archive.
         raise not_configured()
     if connection is None:
         raise Conflict(NOT_CONNECTED, code="gmail_not_connected")
+    sender = _sender(connection)
     check_charge()                                              # at the limit: refused before any file is built
     files = _attachments(church_id, data, kinds, translation, charge_scripture)
-    raw = compose_bulletin_email(sender=connection.google_email, recipients=recipients,
+    raw = compose_bulletin_email(sender=sender, recipients=recipients,
                                  service_date=data.service_date, message=message, attachments=files).as_bytes()
     if len(raw) > MAX_RAW_BYTES:
         logger.info("bulletin_email.too_large church_id=%s user_id=%s bytes=%d", church_id, user_id, len(raw))

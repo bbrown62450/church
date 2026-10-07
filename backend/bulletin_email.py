@@ -55,10 +55,12 @@ def default_bulletin_message(d: datetime.date) -> str:
 
 
 def plan_bulletin_addressing(sender: str, recipients: Sequence[str]) -> Addressing:
-    """`recipients` already checked and without duplicates."""
+    """`sender` and `recipients` already through normalize_address, the
+    recipients without duplicates; the sender is left out of Bcc ignoring case."""
     if len(recipients) == 1:
         return Addressing(to=(recipients[0],), bcc=())
-    return Addressing(to=(sender,), bcc=tuple(r for r in recipients if r.lower() != sender.lower()))
+    me = sender.strip().lower()
+    return Addressing(to=(sender,), bcc=tuple(r for r in recipients if r.strip().lower() != me))
 
 
 def compose_bulletin_email(*, sender: str, recipients: Sequence[str], service_date: datetime.date,
