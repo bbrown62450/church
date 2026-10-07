@@ -6,7 +6,8 @@
  * - The subject and the default message, as the server writes them
  *   (`bulletin_email.py`; shared/bulletin_email.json keeps the two equal).
  * - `parseAddressList`: "Other addresses" as addresses (commas, semicolons or
- *   new lines; the part inside <…> when a name comes with it).
+ *   new lines, not inside a quoted name; the part inside <…> when a name
+ *   comes with it).
  * - `countRecipients`: how many people the email goes to (an address chosen
  *   twice, in any capitals, counts once, as the server sends it once).
  * - `fieldTarget`: where a 422's field message goes in the dialog.
@@ -54,10 +55,31 @@ export function defaultBulletinMessage(dateIso: string): string {
   return `Hi! Here's the worship bulletin for ${WEEKDAYS[weekday(dateIso)]}, ${formatShortDate(dateIso)}.`;
 }
 
-/** "Other addresses" as a list: split on commas, semicolons and new lines, trimmed, `Name <a@b.org>` read as `a@b.org`. */
+/** `text` split on commas, semicolons and new lines outside double quotes (all of them when a quote is left open). */
+function splitAddresses(text: string): string[] {
+  const parts: string[] = [];
+  let current = "";
+  let quoted = false;
+  for (const ch of text) {
+    if (ch === '"') quoted = !quoted;
+    if (!quoted && (ch === "," || ch === ";" || ch === "\n")) {
+      parts.push(current);
+      current = "";
+    } else {
+      current += ch;
+    }
+  }
+  if (quoted) return text.split(/[,;\n]/);
+  parts.push(current);
+  return parts;
+}
+
+/**
+ * "Other addresses" as a list: split on commas, semicolons and new lines (not inside a quoted name,
+ * so `"Jones, Pat" <pat@example.org>` is one), trimmed, `Name <a@b.org>` read as `a@b.org`.
+ */
 export function parseAddressList(text: string): string[] {
-  return text
-    .split(/[,;\n]/)
+  return splitAddresses(text)
     .map((part) => {
       const inside = /<([^<>]*)>/.exec(part);
       return (inside ? inside[1] : part).trim();

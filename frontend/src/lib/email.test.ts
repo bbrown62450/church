@@ -61,6 +61,17 @@ describe("the bulletin email (slice 5b-2)", () => {
     expect(parseAddressList("   ")).toEqual([]);
   });
 
+  it("keeps a comma or semicolon inside a quoted name with its address (5b-2b build review M7)", () => {
+    expect(parseAddressList('"Jones, Pat" <pat@example.org>, b@example.org')).toEqual(["pat@example.org", "b@example.org"]);
+    expect(parseAddressList('"Smith; Jo" <jo@example.org>\n"Lee, Sam" <sam@example.org>;c@example.org')).toEqual([
+      "jo@example.org",
+      "sam@example.org",
+      "c@example.org",
+    ]);
+    // An unclosed quote is read as if there were no quotes, never as one long address.
+    expect(parseAddressList('"Jones a@example.org, b@example.org')).toEqual(['"Jones a@example.org', "b@example.org"]);
+  });
+
   it("counts each person once, ignoring capitals and spaces", () => {
     expect(countRecipients(["mary@example.org", "office@example.org"], ["MARY@example.org ", "organist@example.org"])).toBe(3);
     expect(countRecipients([], [])).toBe(0);
