@@ -14,7 +14,7 @@ export const SIGNED_IN_WITH_GOOGLE = "Signed in with Google.";
 export const GMAIL_STATUS_ERROR = "Couldn't check your Gmail connection.";
 export const GMAIL_NOT_CONFIGURED = "Per-user Gmail sending isn't configured on this deployment.";
 export const GMAIL_INTRO =
-  "Connect the Gmail account you sign in with. The app gets permission only to send email for you; it can't read your mail.";
+  "Connect your Gmail to email bulletins from your own account. The app can only send email for you; it can't read your mail.";
 export const GMAIL_EVERY_CHURCH = "Works in all your churches.";
 const ACCOUNT_PATH = "/settings/account";
 

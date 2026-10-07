@@ -52,6 +52,16 @@ describe("createKeyTracker", () => {
     expect(edited).not.toBe(first);
     expect(tracker.keyFor({ ...BODY, name: "New Life Church" })).toBe(edited);
   });
+
+  it("rotate drops the kept key, so the same body is sent as a new request (slice 5b-2: Send again anyway)", () => {
+    const tracker = createKeyTracker();
+    const first = tracker.keyFor(BODY);
+    tracker.settle("uncertain");
+    tracker.rotate();
+    const second = tracker.keyFor(BODY);
+    expect(second).toMatch(UUID);
+    expect(second).not.toBe(first);
+  });
 });
 
 describe("stableStringify", () => {

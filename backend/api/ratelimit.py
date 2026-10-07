@@ -9,6 +9,9 @@ process: backend/Procfile runs a single uvicorn worker. Refill is continuous
   raises domain_errors.RateLimited, never ApiError (F §1.5, §2.2). The
   DomainError handler adds Retry-After and details.retry_after_seconds, and
   run_idempotent never stores it, so a limiter 429 is never replayed.
+- check(...) takes the same arguments and raises as consume would, but
+  charges nothing (slice 5b-2b: the bulletin email peeks before it builds
+  its files and charges only right before Google).
 - rate_limit(name) is the FastAPI dependency that calls consume(name,
   cost=1). It depends on get_current_user, plus require_church when the
   bucket has a church rule (only `ai`), so user-scoped routes stay free of
@@ -80,6 +83,15 @@ class RateLimiter:
 
     def consume(self, bucket: str, *, user_id: uuid.UUID,
                 church_id: uuid.UUID | None = None, cost: int = 1) -> None:
+        self._charge(bucket, user_id, church_id, cost, take=True)
+
+    def check(self, bucket: str, *, user_id: uuid.UUID,
+              church_id: uuid.UUID | None = None, cost: int = 1) -> None:
+        """Raise RateLimited when consume would; take nothing either way."""
+        self._charge(bucket, user_id, church_id, cost, take=False)
+
+    def _charge(self, bucket: str, user_id: uuid.UUID, church_id: uuid.UUID | None, cost: int, *,
+                take: bool) -> None:
         rules = BUCKETS[bucket]                          # KeyError: no such bucket
         if cost < 1:
             raise ValueError("cost must be at least 1")
@@ -98,8 +110,9 @@ class RateLimiter:
             if wait > 0:
                 n = max(1, math.ceil(wait))              # once: message and header agree
                 raise RateLimited(MESSAGE.format(n=n), retry_after_seconds=n)
-            for b in held:
-                b.try_take(cost)
+            if take:
+                for b in held:
+                    b.try_take(cost)
 
     def _bucket(self, key: tuple[str, int, uuid.UUID], rule: Rule) -> TokenBucket:
         found = self._buckets.get(key)
@@ -128,6 +141,17 @@ def consume(bucket: str, *, user_id: uuid.UUID,
     church_id, cost < 1, or cost above a rule's capacity.
     """
     _limiter.consume(bucket, user_id=user_id, church_id=church_id, cost=cost)
+
+
+def check(bucket: str, *, user_id: uuid.UUID,
+          church_id: uuid.UUID | None = None, cost: int = 1) -> None:
+    """Raise RateLimited when `consume` with the same arguments would, and charge nothing.
+
+    For a request that does costly work before the charge (the bulletin email
+    builds its files, then charges right before Google): a caller at the limit
+    is refused before that work. The same errors as `consume`.
+    """
+    _limiter.check(bucket, user_id=user_id, church_id=church_id, cost=cost)
 
 
 def rate_limit(name: str) -> Callable[..., None]:

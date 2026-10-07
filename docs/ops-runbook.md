@@ -44,7 +44,7 @@ deployment → Redeploy.
 | `OPENAI_MODEL` | required with the key; no default in code. A non-reasoning, inexpensive chat model that accepts `response_format` json_object and `max_completion_tokens` (slice 3a plan, "Model"). The startup log names it: `AI: configured (model=...)`. If OpenAI retires the model (possible at any time after a deploy), suggestions read "not set up" and each call logs `ERROR AI: model not available (OPENAI_MODEL=...)`: set a model the project offers and redeploy. | slice 3a |
 | `OPENAI_TIMEOUT_SECONDS`, `OPENAI_MAX_RETRIES`, `OPENAI_MAX_CONCURRENCY`, `OPENAI_TEMPERATURE` | optional: defaults 30, 1 and 4, and no temperature sent | slice 3a |
 | `OPENAI_REASONING_EFFORT` | optional; unset by default, and then nothing is sent. Set it (for example `minimal` or `low`) only for a reasoning (GPT-5-family) model, which otherwise can spend its answer budget on hidden reasoning and answer "had a problem". | slice 3a |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI` | carried over for a later slice (secrets) | slice 0 |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI` | the Gmail connection (`google_oauth.GoogleOAuthConfig`, read since slice 5b-2a): the client id and secret of the Google OAuth client "Liturgy" (the same as Streamlit's, so a connection made in either app works in both), and `https://worship-service-builder.vercel.app/gmail/callback`. Startup logs `Gmail: configured`, or a `Gmail:` warning naming what is missing (secrets) | slice 0; set by the owner 2026-10-07 |
 
 Checked against Railway → the API service → Variables (names only) and Settings → Deploy → Healthcheck Path:
 2026-09-26: the names match this table (`DATABASE_URL` is a `postgresql://` Supabase pooler URL; `CORS_ORIGINS` as in the row above). `APP_ENV` = `production` added, deployed and Active, with no staged change pending; `/health` still answered `{"ok":true}` afterwards. Healthcheck Path `/health` (already set). The Actions variable `API_BASE_URL` is set, and the repository has no Actions secrets.
@@ -90,7 +90,13 @@ the `gmail.send` flow. So a subdomain's URIs are registered only while one of
 this project's apps holds it: the four URIs of the deleted `liturgy` and
 `liturgy-stg` apps were removed before the Freeze, and the two of
 `liturgy-next` after it was deleted in the Freeze (see Freeze record). No
-other redirect URI is touched.
+other redirect URI is touched. Since 2026-10-07 (slice 5b-2a) the client also
+lists `https://worship-service-builder.vercel.app/gmail/callback` and
+`http://localhost:3000/gmail/callback`, the new app's Gmail return addresses.
+Its consent screen stays in **Testing** (owner, 2026-10-07): only the Google
+accounts listed under Test users can connect Gmail (anyone else sees "Access
+blocked"), so add each new sender there first, and Google ends each connection
+7 days after it was made (the app offers Reconnect Gmail).
 
 ## Supabase lockdown record
 
@@ -733,6 +739,31 @@ was deleted. No address, name, token or church id is recorded here.
 | 3. Unsaved changes and the phone | The owner reported it looked good: "Discard unsaved changes?" asked, the page easy to use on the phone, Edit contact usable with the keyboard open | 2026-10-06 |
 | Agent checks | Not run: this session has no sign-in for a test church (items 5 and 6). Item 4 (a member): not run | 2026-10-06 |
 | Follow-ups | An old contact name made only of tabs or line breaks sorts first instead of last (order only; the plan's Build notes). Next: 5b-2 (the Gmail connection and emailing the bulletin; the owner adds the redirect URI in Google Cloud Console), then 6a-2 and 6a-3, in the order the owner picks | 2026-10-06 |
+
+### Slice 5b-2a record
+
+Slice 5b-2a (the Gmail connection: Settings → Account with the Gmail box,
+`/gmail/callback`, `GET`, `POST` and `DELETE /gmail-connection` and `POST
+/gmail-connection/auth-url`, `google_oauth.py` rewritten for the API with
+Streamlit's functions removed, single-use states consumed with one `DELETE …
+RETURNING`, a refused grant revoked at Google, the Supabase browser client no
+longer reading sign-ins from the URL) merged as PR #54, the first of 5b-2's
+two PRs (owner's 5b-2 plan answers of 2026-10-06). No database change and no
+new package; production stays at `0007_bulletin_images`. Before the merge the
+owner did the Google and Railway setup one step at a time; the agent never saw
+the client id or secret. Emailing the bulletin comes in 5b-2b. No address,
+name, token, code or church id is recorded here.
+
+| Step | Result | Date |
+|---|---|---|
+| Setup 1. Return addresses | The two `/gmail/callback` URIs added to the client "Liturgy"; Google saved them without an error (no domain verification asked) | 2026-10-07 |
+| Setup 2. Consent screen | Publishing status Testing; every person who will email bulletins is a test user. The owner chose to stay in Testing (weekly reconnect accepted, no unverified-app screen) | 2026-10-07 |
+| Setup 3-4. Railway | `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` were not already set with the right values, so the owner set them; `GOOGLE_OAUTH_REDIRECT_URI` set to the Vercel callback; redeployed | 2026-10-07 |
+| Merge and deploy | PR #54 merged 16:08 UTC (12:08 Eastern), merge commit `72b4d9c`. CI on `main`: backend, backend-postgres and frontend success. Setup 5: the deploy's log (16:09 UTC) shows `Gmail: configured` and no other `Gmail:` line | 2026-10-07 |
+| Phone 1. Account and connecting | Settings lists Church, Bulletin, Contacts and Account; Account shows the name, email, "Signed in with Google." and the Gmail box; Connect Gmail returned with "Connected as" the owner's address | 2026-10-07 |
+| Phone 2. Disconnect and reconnect | Disconnect went back to Connect Gmail with no pop-up; reconnecting worked; left connected | 2026-10-07 |
+| Agent checks | Not run: this session has no sign-in for a test church | 2026-10-07 |
+| Follow-ups | Next: 5b-2b (the Email the bulletin card and dialog), then 6a-2 and 6a-3 | 2026-10-07 |
 
 ## Backups
 

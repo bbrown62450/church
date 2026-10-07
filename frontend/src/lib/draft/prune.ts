@@ -2,7 +2,8 @@
  * Draft cleanup (F §4.6 "When the draft is cleared or replaced", items 3 and
  * 4; S "prune.ts"). The `(signed-in)` layout calls it once `/me` has loaded:
  * for this user it removes drafts not updated for 30 days and drafts for
- * churches the user no longer belongs to, with their corrupt-draft backups.
+ * churches the user no longer belongs to, with their corrupt-draft backups,
+ * and (slice 5b-2) the email dialog's remembered choices for those churches.
  * Another user's keys on a shared device are never touched.
  */
 import { localKeys, readLocal, removeLocal } from "@/lib/storage";
@@ -23,6 +24,7 @@ function updatedAt(raw: string | null): number {
 export function pruneDrafts(userId: string, churchIds: readonly string[], now: Date = new Date()): string[] {
   const draftPrefix = `wsb:draft:${userId}:`;
   const corruptPrefix = `wsb:draft-corrupt:${userId}:`;
+  const emailPrefix = `wsb:emailPrefs:${userId}:`;
   const members = new Set(churchIds);
   const removed: string[] = [];
   for (const key of localKeys()) {
@@ -36,6 +38,9 @@ export function pruneDrafts(userId: string, churchIds: readonly string[], now: D
         removed.push(key);
       }
     } else if (key.startsWith(corruptPrefix) && !members.has(key.slice(corruptPrefix.length))) {
+      removeLocal(key);
+      removed.push(key);
+    } else if (key.startsWith(emailPrefix) && !members.has(key.slice(emailPrefix.length))) {
       removeLocal(key);
       removed.push(key);
     }

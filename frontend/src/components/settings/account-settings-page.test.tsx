@@ -70,8 +70,8 @@ describe("Settings → Account (slice 5b-2)", () => {
     expect(await within(card).findByRole("button", { name: "Connect Gmail" })).toBeInTheDocument();
     expect(within(card).getByText(GMAIL_INTRO)).toBeInTheDocument();
     expect(GMAIL_INTRO).toBe(
-      "Connect the Gmail account you sign in with. The app gets permission only to send email for you; it can't read your mail.",
-    ); // 5b-2a: true before emailing exists (5b-2b says what it is for)
+      "Connect your Gmail to email bulletins from your own account. The app can only send email for you; it can't read your mail.",
+    ); // 5b-2b: emailing is on Review now
     expect(api.requests.filter((r) => r.method === "DELETE").map((r) => r.path)).toEqual(["/gmail-connection"]);
     expect(api.requests.find((r) => r.path === "/gmail-connection")?.headers["x-church-id"]).toBeUndefined();
     expect(document.querySelectorAll("[data-sonner-toast]")).toHaveLength(0);

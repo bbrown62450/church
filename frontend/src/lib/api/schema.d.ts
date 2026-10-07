@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/bulletin-emails": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Send Bulletin Email */
+        post: operations["send_bulletin_email_bulletin_emails_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/bulletin-images": {
         parameters: {
             query?: never;
@@ -652,6 +669,33 @@ export interface components {
             prayer_concerns: string;
             /** Ushers */
             ushers: string;
+        };
+        /** BulletinEmailIn */
+        BulletinEmailIn: {
+            /** Additional Emails */
+            additional_emails?: string[];
+            /**
+             * Attachments
+             * @description docx: the bulletin copy; pdf: the printed bulletin. At least one.
+             */
+            attachments: ("docx" | "pdf")[];
+            /** Contact Ids */
+            contact_ids?: string[];
+            /** Message */
+            message?: string | null;
+            service: components["schemas"]["ServiceDraft"];
+            /** Translation */
+            translation?: string | null;
+        };
+        /** BulletinEmailOut */
+        BulletinEmailOut: {
+            /** Recipient Count */
+            recipient_count: number;
+            /**
+             * Sent
+             * @constant
+             */
+            sent: true;
         };
         /**
          * BulletinImageOut
@@ -1857,6 +1901,115 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    send_bulletin_email_bulletin_emails_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-church-id"?: string | null;
+                authorization?: string | null;
+                "Idempotency-Key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulletinEmailIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulletinEmailOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Gateway Timeout */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     upload_image_bulletin_images_post: {
         parameters: {
             query?: never;

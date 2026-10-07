@@ -74,6 +74,7 @@ describe("Settings → Contacts (slice 5b-1)", () => {
     renderPage("member", { "GET /contacts": contactList([contact(), contact({ id: "c-2", name: null, email: "office@example.org" }), BROKEN]) });
     expect(await screen.findByText("Mary Jones")).toBeInTheDocument();
     expect(screen.getByText(CONTACTS_INTRO)).toBeInTheDocument();
+    expect(CONTACTS_INTRO).toBe("People you can email the bulletin to from the Review step."); // slice 5b-2
     expect(screen.getByText(ADMINS_ONLY)).toBeInTheDocument();
     expect(rows().map((row) => row.textContent)).toEqual([
       "Mary Jonesmary@example.org",

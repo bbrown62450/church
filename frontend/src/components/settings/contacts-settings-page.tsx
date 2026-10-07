@@ -43,7 +43,7 @@ import {
   type ContactForm,
 } from "@/lib/settings/contacts";
 
-export const CONTACTS_INTRO = "People you can email the bulletin to. Emailing it from the Review step comes in a later update.";
+export const CONTACTS_INTRO = "People you can email the bulletin to from the Review step.";
 export const ADMINS_ONLY = "Only admins can add or change contacts.";
 export const INVALID_ADDRESS_ADMIN = "This address doesn't look valid. Edit it.";
 export const INVALID_ADDRESS_MEMBER = "This address doesn't look valid. An admin can fix it.";

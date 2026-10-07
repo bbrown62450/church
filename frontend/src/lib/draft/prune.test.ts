@@ -53,6 +53,14 @@ describe("pruneDrafts (F §4.6 items 3 and 4)", () => {
     expect([...data.keys()].sort()).toEqual(["activeChurchId", "wsb:draft:u1:c-member", "wsb:draft:u2:c-left"]);
   });
 
+  it("removes the email dialog's remembered choices for churches the user left (slice 5b-2)", () => {
+    data.set("wsb:emailPrefs:u1:c-left", "{}");
+    data.set("wsb:emailPrefs:u1:c-member", "{}");
+    data.set("wsb:emailPrefs:u2:c-left", "{}");
+    expect(pruneDrafts("u1", ["c-member"], NOW)).toEqual(["wsb:emailPrefs:u1:c-left"]);
+    expect([...data.keys()].sort()).toEqual(["wsb:emailPrefs:u1:c-member", "wsb:emailPrefs:u2:c-left"]);
+  });
+
   it("does nothing when storage is missing or blocked", () => {
     vi.stubGlobal("window", {
       get localStorage(): Storage {

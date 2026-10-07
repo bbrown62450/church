@@ -4,8 +4,10 @@
  * reports how the request ended with `settle(...)`. The key is reused only while a request
  * with the identical body is in flight or its outcome is unknown (network error, timeout,
  * cancel, 5xx), so a retry replays the first response instead of creating a second church.
- * Any 2xx or 4xx, or a changed body, gets a new key. 5b's `createSendKeyTracker` is this
- * tracker with the draft as the fingerprint.
+ * Any 2xx or 4xx, or a changed body, gets a new key. The bulletin email (slice 5b-2) uses
+ * this tracker as the 5b spec's `createSendKeyTracker`: a send that may already have gone out
+ * keeps its key, so a plain retry replays "check your Sent folder", and only **Send again
+ * anyway** (`rotate`) sends with a new one.
  */
 import { ApiError } from "@/lib/api/client";
 
@@ -17,6 +19,8 @@ export type KeyTracker = {
   keyFor(body: unknown): string;
   /** `success` and `client_error` drop the pending key; `uncertain` keeps it for an identical retry. */
   settle(outcome: SettleOutcome): void;
+  /** Drop the pending key now: the next request is a new one, even with the same body. */
+  rotate(): void;
 };
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -46,6 +50,9 @@ export function createKeyTracker({
     },
     settle(outcome) {
       if (outcome !== "uncertain") pending = null;
+    },
+    rotate() {
+      pending = null;
     },
   };
 }

@@ -1,0 +1,11 @@
+{
+  "_about": "The bulletin email's subject and default message for a service date (slice 5b-2; 5b spec amended 2026-10-06: no zero padding, no dash). backend/tests/test_bulletin_email.py runs each case through bulletin_email.bulletin_email_subject and default_bulletin_message; frontend/src/lib/email.test.ts through bulletinEmailSubject and defaultBulletinMessage, so the dialog shows exactly what is sent.",
+  "cases": [
+    {"date_iso": "2026-10-04", "subject": "Worship service for October 4, 2026", "default_message": "Hi! Here's the worship bulletin for this Sunday."},
+    {"date_iso": "2026-11-01", "subject": "Worship service for November 1, 2026", "default_message": "Hi! Here's the worship bulletin for this Sunday."},
+    {"date_iso": "2026-12-20", "subject": "Worship service for December 20, 2026", "default_message": "Hi! Here's the worship bulletin for this Sunday."},
+    {"date_iso": "2026-12-24", "subject": "Worship service for December 24, 2026", "default_message": "Hi! Here's the worship bulletin for Thursday, December 24."},
+    {"date_iso": "2027-02-10", "subject": "Worship service for February 10, 2027", "default_message": "Hi! Here's the worship bulletin for Wednesday, February 10."},
+    {"date_iso": "2027-04-02", "subject": "Worship service for April 2, 2027", "default_message": "Hi! Here's the worship bulletin for Friday, April 2."}
+  ]
+}

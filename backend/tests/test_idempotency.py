@@ -24,7 +24,7 @@ from api.idempotency import (
     run_idempotent,
 )
 from api.main import create_app
-from domain_errors import Busy, Conflict, DomainError, RateLimited
+from domain_errors import Busy, Conflict, DomainError, RateLimited, UpstreamTimeout
 from tests.conftest import FakeClock
 
 USER_A = uuid.UUID(int=1)
@@ -301,3 +301,44 @@ def test_body_hash_ignores_key_order():
     with pytest.raises(DomainError) as caught:
         _direct(store, calls, payload=_Tags(tags={"a": 1, "b": 3}))
     assert caught.value.code == "idempotency_mismatch"
+
+
+# --- slice 5b-2: store_error (an uncertain send's 5xx is kept for the retry) ----------------------
+
+def _uncertain(_n):
+    raise UpstreamTimeout("Gmail didn't confirm the email.", code="upstream_timeout",
+                          details={"send_uncertain": True})
+
+
+def _kept(error: DomainError) -> bool:
+    return bool((error.details or {}).get("send_uncertain"))
+
+
+def test_store_error_keeps_a_5xx_it_accepts_and_replays_it():
+    store, calls = IdempotencyStore(), []
+    first = _direct(store, calls, call=lambda: _uncertain(calls.append(1)), store_error=_kept)
+    again = _direct(store, calls, call=lambda: _uncertain(calls.append(1)), store_error=_kept)
+    assert first.status_code == again.status_code == 504
+    assert bytes(again.body) == bytes(first.body) and again.headers[REPLAYED_HEADER] == "true"
+    assert len(calls) == 1
+
+
+def test_store_error_saying_no_or_left_out_keeps_slice_1s_rule():
+    for store_error in (None, lambda error: False):
+        store, calls = IdempotencyStore(), []
+        for _ in range(2):
+            r = _direct(store, calls, call=lambda: _uncertain(calls.append(1)), store_error=store_error)
+            assert r.status_code == 504 and REPLAYED_HEADER.lower() not in r.headers
+        assert len(calls) == 2 and len(store) == 0
+
+
+def test_store_error_never_keeps_a_rate_limit():
+    store, calls = IdempotencyStore(), []
+
+    def limited():
+        calls.append(1)
+        raise RateLimited("Too many requests. Try again in 5 seconds.", retry_after_seconds=5)
+
+    for _ in range(2):
+        assert _direct(store, calls, call=limited, store_error=lambda error: True).status_code == 429
+    assert len(calls) == 2 and len(store) == 0

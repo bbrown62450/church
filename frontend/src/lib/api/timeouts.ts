@@ -33,6 +33,10 @@ const ENDPOINT_TIMEOUTS: Record<string, number> = {
   // two slow but steady calls can take well over 40 s, so the browser waits 75 s (5b-2a build review M3).
   // This is the overall limit; a connect it stops waiting for shows an error, and connecting again starts afresh.
   "POST /gmail-connection": 75_000,
+  // Slice 5b-2: the printed bulletin's readings (their 20 s deadline), then Google's refresh and the send,
+  // whose timeouts are per phase (15 s and 30 s for each wait), not deadlines. This is the overall limit: a
+  // send still unanswered then is shown as possibly sent ("We lost the connection…"), never as failed.
+  "POST /bulletin-emails": 90_000,
 };
 
 export function timeoutFor(method: string, path: string): number {

@@ -136,6 +136,23 @@ def _delete_contact(session, contact_id, church_id) -> bool:
     return result.rowcount > 0
 
 
+def get_contacts_by_ids(church_id, ids, *, session: Optional[Session] = None) -> List[Dict[str, Any]]:
+    """The church's contacts among `ids`, in the order of `ids`, each once (slice
+    5b-2: the contacts a bulletin email names). An id the church has no contact
+    for (another church's included) is simply missing from the answer."""
+    if session is None:
+        with session_scope() as own:
+            return get_contacts_by_ids(church_id, ids, session=own)
+    wanted = list(dict.fromkeys(as_uuid(i) for i in ids))
+    if not wanted:
+        return []
+    rows = session.execute(
+        select(Contact).where(Contact.church_id == as_uuid(church_id), Contact.id.in_(wanted))
+    ).scalars().all()
+    by_id = {c.id: c for c in rows}
+    return [_to_dict(by_id[i]) for i in wanted if i in by_id]
+
+
 def get_contacts_for_display(church_id) -> List[Dict[str, str]]:
     """Contacts for the UI. No defaults — empty list when a church has none."""
     return list_contacts(church_id)

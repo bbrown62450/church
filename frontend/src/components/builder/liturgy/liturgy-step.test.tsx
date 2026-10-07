@@ -26,6 +26,7 @@ import {
   church,
   CHURCH_IDS,
   churchProfile,
+  gmailConnection,
   DRAFT_NOW,
   generateRoute,
   gg2013,
@@ -67,6 +68,7 @@ function renderStep(draft: DraftV1 = testDraft(), routes: Record<string, FakeHan
     "GET /liturgy/config": liturgyConfig(),
     "GET /church/bulletin-settings": bulletinSettings(),
     "GET /services/previous-bulletin": previousBulletin(),
+    "GET /gmail-connection": gmailConnection(), // slice 5b-2: Review's email card
     ...routes,
   });
   const view = renderWithProviders(

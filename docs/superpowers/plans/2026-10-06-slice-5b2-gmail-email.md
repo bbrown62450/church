@@ -32,7 +32,7 @@
   `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
 - TDD: write the failing test first and see it fail as quoted.
 - **Backup push after every task** (standing rule): the controller runs `git push origin claude/slice-2-plan-4q33le` after each task's commit (never `--force`, never a rebase; if the push is rejected, `git pull --no-rebase origin claude/slice-2-plan-4q33le` and push again; on a network error retry after 2, 4, 8 and 16 s). A fix asked for by a review is a new commit, `Fix: <what> (Task <n> review)`. The container can restart and lose uncommitted work: commit as soon as a task's checks pass.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1669 → 1818 passed, 27 skipped; frontend 780 → 829 in 94 → 100 files` (two PRs: the lines of T18's table).
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1669 → 1825 passed, 27 skipped; frontend 780 → 835 in 94 → 100 files` (two PRs: the lines of T18's table).
 - New prose for the owner has no em dashes and no flattery. New user-facing copy is exactly the list in clarification 21 and has no em dashes (B's lines are taken without theirs); existing copy keeps its own punctuation.
 - No church id, real email address, token, key, street address, phone number, database URL or real person's name in any doc, commit, test or record. Tests use the fixtures' "Grace", "Pat Pastor" and `@example.org` / `@example.com` addresses only. **The agent never asks for, reads, prints or handles the Google client secret or id** (T19's owner steps copy them inside Google Cloud Console and Railway only).
 - Ask the owner before any push to a PR, PR creation, marking ready, merging, or any production or settings action. Owner steps go one at a time, in plain words.
@@ -71,7 +71,9 @@ As in the 5b-1 plan: **Create `path`:** the block is the whole file; **Append to
 
   After T10 the 5b-2a build review fixes (see "Build notes") added backend +13 (+1 skipped: a Postgres test) and frontend +1, so the rows from T11 on are the planned deltas on top of them.
 
-  Two PRs: 5b-2a (after T10 and its build review fixes) is backend `1752 passed, 27 skipped` and frontend `801 passed` in 98 files; 5b-2b (after T17) as the last row.
+  After T17 the 5b-2b build review fixes (see "Build notes") added backend +7 and frontend +6: backend `1825 passed, 27 skipped`, frontend `835 passed` in 100 files.
+
+  Two PRs: 5b-2a (after T10 and its build review fixes) is backend `1752 passed, 27 skipped` and frontend `801 passed` in 98 files; 5b-2b (after T17 and its build review fixes) is backend `1825 passed, 27 skipped` and frontend `835 passed` in 100 files.
 
 - CI `backend-postgres`: `27 passed` (26 before; the 5b-2a build review's I1 added `test_gmail_state_postgres.py`, two consumes of one CSRF state on real Postgres). 5b-2b adds no Postgres test: the Gmail rows are per user and the send takes no lock.
 
@@ -7232,7 +7234,7 @@ for i in 1 2 3; do (cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Te
 (cd frontend && NEXT_PUBLIC_SUPABASE_URL=https://ci-placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-placeholder NEXT_PUBLIC_API_URL=http://localhost:8000 npm run build 2>&1 | grep -E "Compiled successfully|Error|/settings|/gmail")
 ```
 
-**Expected** (one PR, or 5b-2b): `1818 passed, 27 skipped in <t>s`; three times ` Test Files  100 passed (100)` and `      Tests  829 passed (829)` (5b-2a: `1752 passed, 27 skipped in <t>s`; three times ` Test Files  98 passed (98)` and `      Tests  801 passed (801)`) with no `×` or `FAIL` line (one names the failing test: Step 6); `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s` and the route lines `├ ○ /gmail/callback`, `├ ○ /settings`, `├ ○ /settings/account`, `├ ○ /settings/church` and `├ ○ /settings/contacts` and no `Error` (a font `Failed to fetch` only: say so and rely on CI).
+**Expected** (one PR, or 5b-2b): `1825 passed, 27 skipped in <t>s`; three times ` Test Files  100 passed (100)` and `      Tests  835 passed (835)` (5b-2a: `1752 passed, 27 skipped in <t>s`; three times ` Test Files  98 passed (98)` and `      Tests  801 passed (801)`) with no `×` or `FAIL` line (one names the failing test: Step 6); `typecheck 0`, `lint 0`; `✓ Compiled successfully in <t>s` and the route lines `├ ○ /gmail/callback`, `├ ○ /settings`, `├ ○ /settings/account`, `├ ○ /settings/church` and `├ ○ /settings/contacts` and no `Error` (a font `Failed to fetch` only: say so and rely on CI).
 
 - [ ] **Step 3 (agent): The API files match, the gates, the paths, the commits**
 
@@ -7336,9 +7338,9 @@ gh pr list -R bbrown62450/church --head claude/slice-2-plan-4q33le --state open 
 
 **Expected:** `[]`. Send the owner exactly this (one PR), and wait for a clear yes:
 
-> Slice 5b-2 is verified on this machine: backend 1818 passed, 27 skipped (1669 before); frontend 829 tests in 100 files (780 before), three runs in a row; typecheck, lint and the production build are clean. It adds Settings → Account, where each person connects their own Gmail, and an **Email the bulletin** card on Review: you pick contacts or type addresses, choose the Word copy, the printed PDF or both, and it is sent from your own Gmail (several people go in Bcc). There is no database change and no new package. Before it can be merged you will add one address in Google Cloud Console and three settings in Railway; I will walk you through that one step at a time and never need to see the secret. May I open the pull request as a **draft** titled "Slice 5b-2: the Gmail connection and emailing the bulletin", so the checks run? Merging stays with you.
+> Slice 5b-2 is verified on this machine: backend 1825 passed, 27 skipped (1669 before); frontend 835 tests in 100 files (780 before), three runs in a row; typecheck, lint and the production build are clean. It adds Settings → Account, where each person connects their own Gmail, and an **Email the bulletin** card on Review: you pick contacts or type addresses, choose the Word copy, the printed PDF or both, and it is sent from your own Gmail (several people go in Bcc). There is no database change and no new package. Before it can be merged you will add one address in Google Cloud Console and three settings in Railway; I will walk you through that one step at a time and never need to see the secret. May I open the pull request as a **draft** titled "Slice 5b-2: the Gmail connection and emailing the bulletin", so the checks run? Merging stays with you.
 
-(5b-2a: "Slice 5b-2a is verified … backend 1752 passed, 27 skipped (1669 before); frontend 801 tests in 98 files (780 before) … It adds Settings → Account, where each person connects their own Gmail; emailing comes in 5b-2b. … May I open the pull request as a **draft** titled "Slice 5b-2a: the Gmail connection" …". 5b-2b: "Slice 5b-2b is verified … backend 1818 passed, 27 skipped (1752 before); frontend 829 tests in 100 files (801 before) … It adds the **Email the bulletin** card on Review … No Google or Railway step this time. May I open the pull request as a **draft** titled "Slice 5b-2b: emailing the bulletin" …".)
+(5b-2a: "Slice 5b-2a is verified … backend 1752 passed, 27 skipped (1669 before); frontend 801 tests in 98 files (780 before) … It adds Settings → Account, where each person connects their own Gmail; emailing comes in 5b-2b. … May I open the pull request as a **draft** titled "Slice 5b-2a: the Gmail connection" …". 5b-2b: "Slice 5b-2b is verified … backend 1825 passed, 27 skipped (1752 before); frontend 835 tests in 100 files (801 before) … It adds the **Email the bulletin** card on Review … No Google or Railway step this time. May I open the pull request as a **draft** titled "Slice 5b-2b: emailing the bulletin" …".)
 
 - [ ] **Step 5 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
 
@@ -7356,7 +7358,7 @@ Slice 5b-2: the Gmail connection and emailing the bulletin (the second of 5b's t
 
 Before merge: the owner adds the /gmail/callback redirect URIs in Google Cloud Console and sets the three GOOGLE_* variables in Railway (Task 19). After merge: a short phone check, then a "Slice 5b-2 record" in docs/ops-runbook.md.
 
-Tests: backend 1669 → 1818 passed, 27 skipped; frontend 780 → 829 in 94 → 100 files
+Tests: backend 1669 → 1825 passed, 27 skipped; frontend 780 → 835 in 94 → 100 files
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 
@@ -7368,7 +7370,7 @@ gh pr create -R bbrown62450/church --draft --base main --head claude/slice-2-pla
 gh pr checks <N> -R bbrown62450/church --watch --interval 30
 ```
 
-Run the last line with `run_in_background: true`. (Two PRs: the same body cut to its half, the title of Step 4, and the tests line `backend 1669 → 1752 passed …; frontend 780 → 801 in 94 → 98 files` for 5b-2a, `backend 1752 → 1818 …; frontend 801 → 829 in 98 → 100 files` for 5b-2b.) **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers as Step 2's, and backend-postgres `26 passed`. Then send: "PR #<N> is green: backend … passed, 27 skipped; … frontend tests in … files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you, after the Google and Railway steps." On the yes: `gh pr ready <N> -R bbrown62450/church`.
+Run the last line with `run_in_background: true`. (Two PRs: the same body cut to its half, the title of Step 4, and the tests line `backend 1669 → 1752 passed …; frontend 780 → 801 in 94 → 98 files` for 5b-2a, `backend 1752 → 1825 …; frontend 801 → 835 in 98 → 100 files` for 5b-2b.) **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers as Step 2's, and backend-postgres `26 passed`. Then send: "PR #<N> is green: backend … passed, 27 skipped; … frontend tests in … files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you, after the Google and Railway steps." On the yes: `gh pr ready <N> -R bbrown62450/church`.
 
 - [ ] **Step 6: Fix any failure in its owning task**
 
@@ -7556,7 +7558,7 @@ gh pr checks claude/slice-2-plan-4q33le -R bbrown62450/church --watch
 
 Code only (no schema to undo). On the owner's yes for each outward command: a branch `claude/revert-5b2` from `origin/main`, `git revert -m 1 --no-commit <merge sha>`, a commit "Revert slice 5b-2 (PR #<N>)" with the trailer, both suites (`1669 passed, 26 skipped`; `780 passed` in 94, or 5b-2a's counts when reverting 5b-2b only), a PR, CI, and the merge on the owner's yes; record it in the record. Connections made through the new page stay in `gmail_tokens` and keep working for the frozen app (same client); the Railway variables can stay (nothing reads them after the revert).
 
-Expected counts after this task: backend 1818 passed, 27 skipped on `main`; frontend 829 passed in 100 files. The records PR adds no test.
+Expected counts after this task: backend 1825 passed, 27 skipped on `main`; frontend 835 passed in 100 files. The records PR adds no test.
 
 ---
 
@@ -7589,6 +7591,17 @@ Expected counts after this task: backend 1818 passed, 27 skipped on `main`; fron
 - **M3** (`lib/api/timeouts.ts`): `POST /gmail-connection` waits 75 s, not 40 s (Google's timeouts are per phase, so the exchange and the lookup can together take longer than 40 s); the "Still working" line still shows after 8 s. Clarifications 5 and 8, the file table, T15's directive and the 5b spec say 75 s. `client.test.ts` +1.
 - **M4** (`google_oauth._failure`): a token endpoint 400 or 401 other than `invalid_grant` and the client errors (`invalid_request`, `invalid_scope`, or no readable error) is `INCOMPLETE_RESPONSE` ("Google returned an incomplete response. Try connecting again."), not `UPSTREAM` ("Couldn't reach Google"); the connect's log line carries Google's error code (`google_error=invalid_request`), never its text. `test_google_oauth.py` +2 cases (one more in the refresh test's loop), `test_usecase_email.py` +2.
 - Counts after the fixes: backend `1752 passed, 27 skipped` (+13, and the Postgres test skipped without `TEST_DATABASE_URL`); `-m postgres` on a local Postgres 16: `27 passed`; frontend `801 passed` in 98 files; typecheck 0, lint 0; the regenerated API files unchanged; the production build compiled with the same five routes. The expected counts of T11-T18 above are moved by the same deltas (backend +13 and one more skipped, frontend +1; `test_usecase_email.py` is 20 before T13, so T13's and T14's focused runs are `53` and `80`), and T18's path list has the three new paths (76 in all).
+
+**5b-2b build review fixes (2026-10-07).** After T17, the code review of T11-T17 found two Important and seven Minor issues. Each was fixed test first (the test seen to fail, then to pass; the reload-style I1 test already passed and guards the behaviour) in its own commit, `Fix: <what> (5b-2b build review <id>)`, pushed after each:
+- **I1** (`email-dialog.tsx`, `email-card.tsx`): the possibly-sent mark was written only in `send.mutate`'s per-call `onError`, which React Query v5 skips after an unmount and a reload kills, and the card's key tracker went with the card, so Back or a reload during "Still working…" allowed a plain Send of a second copy. The card's new `onMaybeSent` writes the mark (the connection-lost message) to sessionStorage before the request leaves, without setting the shown state (no flash); it is cleared only on a definite answer (success, or a 4xx other than 429 that is not `send_uncertain`, excluding 401 and a lost church; an aborted request is status 0 and keeps it). After **Send again anyway** with an answer that is not definite, the warning is hidden (a plain retry replays that key) but the mark stays. This also covers **M1**: leaving Review mid-send and coming back shows the warning with plain Send off. `email-card.test.tsx` +3 (unmount mid-send then back, a reload with the mark, a definite refusal forgets it and a 500 keeps it).
+- **I2** (`email-dialog.tsx`): a problem at the top was off-screen after Send on the 375 px bottom sheet. The alert has a ref and `tabIndex={-1}` and is focused after the next frame (`requestAnimationFrame`); a To problem focuses the first enabled contact (a disabled one cannot take focus, and during the send every checkbox was disabled when focus moved, so attachments too are focused after the frame). `email-card.test.tsx` +1 (`document.activeElement`); the 422 focus test now waits for the frame.
+- **M2** (`usecases/email.py`, `api/ratelimit.py`): the PDF and its readings were built before the email limit was checked. `ratelimit.check` (a peek: raises as `consume` would, charges nothing) is passed as `check_charge` and called before the files; the charge stays right before Google. `test_ratelimit.py` +1, `test_usecase_email.py` +1, `test_api_bulletin_emails.py` +1 (at the limit no PDF is built and the `scripture` bucket is still full).
+- **M3** (`usecases/email.py`, `bulletin_email.py`): the stored `google_email` went into From and To as stored. It now goes through `normalize_address` (a stored address the rule refuses is `gmail_not_connected`, "Connect your Gmail first, then try again."), and the Bcc self-exclusion compares trimmed lower-case addresses. `test_usecase_email.py` +2.
+- **M4** (`usecases/email.py` `_refused_grant`): when Google refused the grant and the row was already gone (a Disconnect meanwhile), the send said "connection changed" (no Reconnect). A row that is gone is now the expired-or-removed failure with `disconnected: true`; a replaced row is still "changed". `test_usecase_email.py` +2 (refresh `invalid_grant` and send `insufficientPermissions`).
+- **M5** (`email-dialog.tsx`): the `aria-live` wrapper around the `role="alert"` child is gone (it could announce twice). An assertion in the Reconnect test.
+- **M6** (`lib/email.ts`): the mark is `{version: 2, message, date_iso}`, and `readUncertainSend(userId, churchId, dateIso)` ignores one for another service date (a version-1 mark is ignored). `email.test.ts` (the existing test extended), `email-card.test.tsx` +1.
+- **M7** (`lib/email.ts` `parseAddressList`): a comma or semicolon inside a quoted name split the address; separators inside double quotes no longer split (an unclosed quote falls back to splitting on all of them). `email.test.ts` +1.
+- Counts after the fixes: backend `1825 passed, 27 skipped` (+7); frontend `835 passed` in 100 files (+6), three runs in a row; typecheck 0, lint 0; the regenerated API files unchanged (no route schema changed); the production build compiled with the same five routes; no em dash in an added line. T18's counts and PR texts above are moved to these; its 5b-2b path list also has `backend/api/ratelimit.py` and `backend/tests/test_ratelimit.py` (as `M`).
 
 ## Spec coverage
 

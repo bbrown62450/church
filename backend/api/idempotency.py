@@ -8,7 +8,9 @@ with a different body is 422 `idempotency_mismatch`.
 
 What is stored: 2xx responses and DomainError 4xx responses, except
 RateLimited (its 429 is returned, the entry dropped, so the same key runs again
-after Retry-After). Never a 5xx: a 5xx DomainError drops the entry, and any
+after Retry-After). A 5xx DomainError drops the entry, unless the route's
+`store_error` says to keep it (slice 5b-2: an email that may already have
+been sent is answered "check your Sent folder" again, never sent twice); any
 other exception drops it and propagates (the app's handlers turn it into a 500).
 
 The store is in memory, keyed by (user_id, church_id, method, route template,
@@ -171,6 +173,7 @@ def run_idempotent(
     method: str = "POST",
     church_id: Optional[uuid.UUID] = None,
     store: Optional[IdempotencyStore] = None,
+    store_error: Optional[Callable[[DomainError], bool]] = None,
 ) -> Response:
     """Run `call` once per (user, church, method, route, key) and replay its response.
 
@@ -179,7 +182,8 @@ def run_idempotent(
     `status_code` the success status, `church_id` the resolved church of a
     church-scoped route (None: user-scoped). Blocks on a threading.Lock while an
     identical request is running: call it only from sync `def` routes.
-    Slice 5b adds a `store_error` keyword (F §1.6).
+    `store_error` (slice 5b-2): a 5xx DomainError for which it returns True is
+    stored and replayed like a 4xx; a RateLimited never is.
     """
     if key is None:
         return _success(call(), status_code)
@@ -201,7 +205,8 @@ def run_idempotent(
                 response = _success(call(), status_code)
             except DomainError as exc:
                 response = domain_error_response(exc)
-                if 400 <= exc.status < 500 and not isinstance(exc, RateLimited):
+                kept = 400 <= exc.status < 500 or (exc.status >= 500 and store_error is not None and store_error(exc))
+                if kept and not isinstance(exc, RateLimited):
                     target.save(entry, response.status_code, bytes(response.body))
                 else:
                     target.drop(scope, entry)
