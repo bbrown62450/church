@@ -15,7 +15,7 @@ import ReviewStepPage from "@/app/(signed-in)/(church)/builder/review/page";
 import { Toaster } from "@/components/ui/sonner";
 import type { Church } from "@/lib/api/types";
 import { draftKey } from "@/lib/draft/schema";
-import { emailPrefsKey, uncertainSendKey } from "@/lib/email";
+import { emailPrefsKey, uncertainSendKey, writeUncertainSend } from "@/lib/email";
 import { browser, GMAIL_RETURN_KEY, REOPEN_EMAIL_KEY } from "@/lib/gmail";
 import { fakeError, installFakeApi, type FakeHandler, type RecordedRequest } from "@/test/fake-api";
 import {
@@ -355,6 +355,55 @@ describe("Review → Email the bulletin: the dialog (slice 5b-2)", () => {
     expect(await screen.findByText("Email sent to 2 people.")).toBeInTheDocument();
     const [one, two] = sends(api).map((r) => r.headers["idempotency-key"]);
     expect(two).not.toBe(one);
+  });
+
+  it("remembers a send as possibly sent before it leaves, so leaving mid-send keeps plain Send off on the way back", async () => {
+    const first = renderReview({ "POST /bulletin-emails": () => new Promise(() => {}) });
+    const dialog = await openDialog(first.user);
+    await first.user.click(within(dialog).getByRole("checkbox", { name: /Mary Jones/ }));
+    await first.user.click(within(dialog).getByRole("button", { name: "Send to 1 person" }));
+    await waitFor(() => expect(sends(first.api)).toHaveLength(1));
+    expect(window.sessionStorage.getItem(uncertainSendKey(USER_ID, GRACE.id))).not.toBeNull();
+    expect(within(dialog).queryByText(CONNECTION_LOST)).toBeNull(); // nothing flashes while it is sending
+    first.unmount(); // Back or a reload during "Still working…": the request's answer never reaches the dialog
+    expect(window.sessionStorage.getItem(uncertainSendKey(USER_ID, GRACE.id))).not.toBeNull();
+
+    const back = renderReview({ "POST /bulletin-emails": SENT });
+    const reopened = await openDialog(back.user);
+    expect(within(reopened).getByText(CONNECTION_LOST)).toBeInTheDocument();
+    await back.user.click(within(reopened).getByRole("checkbox", { name: /Mary Jones/ }));
+    expect(within(reopened).getByRole("button", { name: "Send to 1 person" })).toBeDisabled();
+    expect(sends(back.api)).toEqual([]);
+  });
+
+  it("after a reload reads the stored send, keeps plain Send off, and Send again anyway sends", async () => {
+    writeUncertainSend(USER_ID, GRACE.id, CONNECTION_LOST);
+    const { user, api } = renderReview({ "POST /bulletin-emails": SENT });
+    const dialog = await openDialog(user);
+    expect(within(dialog).getByText(CONNECTION_LOST)).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("checkbox", { name: /Mary Jones/ }));
+    const plain = within(dialog).getByRole("button", { name: "Send to 1 person" });
+    expect(plain).toBeDisabled();
+    await user.click(plain);
+    expect(sends(api)).toEqual([]);
+    await user.click(within(dialog).getByRole("button", { name: "Send again anyway" }));
+    expect(await screen.findByText("Email sent to 2 people.")).toBeInTheDocument();
+    expect(sends(api)).toHaveLength(1);
+    expect(window.sessionStorage.getItem(uncertainSendKey(USER_ID, GRACE.id))).toBeNull();
+  });
+
+  it("forgets the possibly-sent mark on a definite refusal, and keeps it when the answer is not definite", async () => {
+    let answer = fakeError(409, "gmail_not_connected", "Connect your Gmail first, then try again.");
+    const { user } = renderReview({ "POST /bulletin-emails": () => answer });
+    const dialog = await openDialog(user);
+    await user.click(within(dialog).getByRole("checkbox", { name: /Mary Jones/ }));
+    await user.click(within(dialog).getByRole("button", { name: "Send to 1 person" }));
+    expect(await within(dialog).findByText("Connect your Gmail first, then try again.")).toBeInTheDocument();
+    expect(window.sessionStorage.getItem(uncertainSendKey(USER_ID, GRACE.id))).toBeNull();
+    answer = fakeError(500, "internal_error", "Something went wrong.");
+    await user.click(within(dialog).getByRole("button", { name: "Send to 1 person" }));
+    await waitFor(() => expect(within(dialog).getByRole("button", { name: "Send to 1 person" })).toBeEnabled());
+    expect(window.sessionStorage.getItem(uncertainSendKey(USER_ID, GRACE.id))).not.toBeNull();
   });
 
   it("offers Reconnect Gmail when Google dropped the grant", async () => {

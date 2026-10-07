@@ -29,7 +29,7 @@ import { useGmailConnection, useStartGmailConnect } from "@/lib/queries/gmail";
 import { usePreviousBulletin } from "@/lib/queries/services";
 import { readSession, removeSession } from "@/lib/storage";
 
-import { EmailDialog, people } from "./email-dialog";
+import { CONNECTION_LOST, EmailDialog, people } from "./email-dialog";
 
 export const EMAIL_SUMMARY = "Send the bulletin and a short message from your own Gmail.";
 export const EMAIL_STATUS_ERROR = "Couldn't check your Gmail connection.";
@@ -48,7 +48,9 @@ const REVIEW_PATH = "/builder/review";
  * date and readings without errors, as the downloads do; nothing else blocks
  * it). It keeps the dialog's form (closing and reopening keeps it, a sent
  * email resets the message), its Idempotency-Key tracker and a send that may
- * already have gone out (sessionStorage, so a reload keeps plain Send off).
+ * already have gone out (sessionStorage, written before each send leaves and
+ * cleared only on a definite answer, so Back or a reload mid-send, or after
+ * an uncertain answer, keeps plain Send off).
  * After a connect from Review it reopens the dialog with what was in it, once
  * the status says connected, only in the church it was opened in, and only
  * after last week's bulletin has been carried in (the printed card's
@@ -153,6 +155,7 @@ export function EmailCard() {
                 if (message === null) clearUncertainSend(user.id, church.id);
                 else writeUncertainSend(user.id, church.id, message);
               }}
+              onMaybeSent={() => writeUncertainSend(user.id, church.id, CONNECTION_LOST)}
               onClose={() => setOpen(false)}
               onSent={(count, contactIds) => {
                 writeEmailPrefs(user.id, church.id, { contact_ids: contactIds });

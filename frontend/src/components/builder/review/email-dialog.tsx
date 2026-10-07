@@ -61,6 +61,19 @@ type Problem = Partial<Record<FieldTarget, string>> & {
   sendDisabled?: boolean;
 };
 
+/**
+ * The server answered and nothing went out: a 4xx other than 429 that is not an uncertain send,
+ * and not a 401 or a lost church (the session or the church went away; nothing says what the send did).
+ */
+function definitelyNotSent(e: ApiError): boolean {
+  return (
+    settleOutcome(e) === "client_error" &&
+    e.status !== 401 &&
+    !isNoChurchAccess(e) &&
+    e.details?.send_uncertain !== true
+  );
+}
+
 /** "1 person", "2 people". */
 export function people(n: number): string {
   return `${n} ${n === 1 ? "person" : "people"}`;
@@ -78,7 +91,13 @@ type Props = {
   tracker: KeyTracker;
   /** A send that may already have gone out (kept by the card in sessionStorage), or null. */
   uncertain: string | null;
+  /** Show and remember (`message`), or forget (null), a send that may already have gone out. */
   onUncertain(message: string | null): void;
+  /**
+   * A send is about to leave: remember it as possibly sent (sessionStorage only, nothing shown),
+   * so leaving Review or a reload before the answer arrives still keeps plain Send off.
+   */
+  onMaybeSent(): void;
   onClose(): void;
   onSent(count: number, contactIds: string[]): void;
 };
@@ -101,7 +120,7 @@ type Props = {
  * lost), plain Send stays off, even after a reload, until **Send again
  * anyway** sends with a new key.
  */
-export function EmailDialog({ googleEmail, form, onFormChange, tracker, uncertain, onUncertain, onClose, onSent }: Props) {
+export function EmailDialog({ googleEmail, form, onFormChange, tracker, uncertain, onUncertain, onMaybeSent, onClose, onSent }: Props) {
   const church = useChurch();
   const { draft, peek } = useDraft();
   const queryClient = useQueryClient();
@@ -182,6 +201,8 @@ export function EmailDialog({ googleEmail, form, onFormChange, tracker, uncertai
     if (again) tracker.rotate();
     const key = tracker.keyFor(body);
     setProblem(null);
+    // Before the request leaves: an answer that never arrives (Back, a reload, a closed tab) leaves it marked.
+    onMaybeSent();
     send.mutate(
       { body, key },
       {
@@ -192,8 +213,13 @@ export function EmailDialog({ googleEmail, form, onFormChange, tracker, uncertai
         },
         onError: (e) => {
           tracker.settle(settleOutcome(e));
-          if (again) onUncertain(null); // answered: an uncertain answer sets it again in `failed`
-          failed(e);
+          if (definitelyNotSent(e)) onUncertain(null);
+          else if (again) {
+            // Not definite: stop showing the old warning (a plain retry replays this key), but stay marked.
+            onUncertain(null);
+            onMaybeSent();
+          }
+          failed(e); // a lost connection or an uncertain answer shows and marks it again
         },
       },
     );
