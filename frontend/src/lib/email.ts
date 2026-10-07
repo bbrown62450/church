@@ -15,8 +15,9 @@
  * - `bulletinEmailBody`: the `POST /bulletin-emails` body.
  * - The uncertain send (`readUncertainSend`, `writeUncertainSend`,
  *   `clearUncertainSend`): a send that may already have gone out, kept in
- *   sessionStorage per user and church, so neither leaving Review nor a reload
- *   quietly allows a plain Send again; only **Send again anyway** does.
+ *   sessionStorage per user and church with its service date, so neither
+ *   leaving Review nor a reload quietly allows a plain Send again for that
+ *   service; only **Send again anyway** does.
  * - `ReopenEmail`: what the dialog keeps while the user is away at Google.
  */
 import type { components } from "@/lib/api/schema";
@@ -127,20 +128,32 @@ export function uncertainSendKey(userId: string, churchId: string): string {
   return `wsb:emailUncertain:${userId}:${churchId}`;
 }
 
-/** The message of a send that may already have gone out, or null (none, or unreadable). */
-export function readUncertainSend(userId: string, churchId: string): string | null {
+/** What is kept: the message to show and the service date of the email that may have gone out. */
+type UncertainSend = { version: 2; message: string; date_iso: string };
+
+/**
+ * The message of a send that may already have gone out for the service on `dateIso`, or null
+ * (none, unreadable, or another service's: last week's email does not hold this week's back).
+ */
+export function readUncertainSend(userId: string, churchId: string, dateIso: string): string | null {
   const raw = readSession(uncertainSendKey(userId, churchId));
   if (raw === null) return null;
   try {
     const parsed = JSON.parse(raw) as Record<string, unknown>;
-    return parsed?.version === 1 && typeof parsed.message === "string" && parsed.message !== "" ? parsed.message : null;
+    return parsed?.version === 2 &&
+      typeof parsed.message === "string" &&
+      parsed.message !== "" &&
+      parsed.date_iso === dateIso
+      ? parsed.message
+      : null;
   } catch {
     return null;
   }
 }
 
-export function writeUncertainSend(userId: string, churchId: string, message: string): void {
-  writeSession(uncertainSendKey(userId, churchId), JSON.stringify({ version: 1, message }));
+export function writeUncertainSend(userId: string, churchId: string, message: string, dateIso: string): void {
+  const stored: UncertainSend = { version: 2, message, date_iso: dateIso };
+  writeSession(uncertainSendKey(userId, churchId), JSON.stringify(stored));
 }
 
 export function clearUncertainSend(userId: string, churchId: string): void {

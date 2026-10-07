@@ -87,16 +87,26 @@ describe("the bulletin email (slice 5b-2)", () => {
     expect(readEmailPrefs("u1", "c4").attachments).toEqual(["docx"]);
   });
 
-  it("remembers a send that may already have gone out, per user and church, in this tab", () => {
-    expect(readUncertainSend("u1", "c1")).toBeNull();
-    writeUncertainSend("u1", "c1", "Check your Gmail Sent folder before sending again.");
-    expect(readUncertainSend("u1", "c1")).toBe("Check your Gmail Sent folder before sending again.");
-    expect(readUncertainSend("u1", "c2")).toBeNull();
+  it("remembers a send that may already have gone out, per user, church and service date, in this tab", () => {
+    const SENT_FOLDER = "Check your Gmail Sent folder before sending again.";
+    expect(readUncertainSend("u1", "c1", "2026-10-04")).toBeNull();
+    writeUncertainSend("u1", "c1", SENT_FOLDER, "2026-10-04");
+    expect(readUncertainSend("u1", "c1", "2026-10-04")).toBe(SENT_FOLDER);
+    expect(JSON.parse(data.get(uncertainSendKey("u1", "c1")) ?? "null")).toEqual({
+      version: 2,
+      message: SENT_FOLDER,
+      date_iso: "2026-10-04",
+    });
+    expect(readUncertainSend("u1", "c2", "2026-10-04")).toBeNull();
+    // Another service (5b-2b build review M6): last week's possibly-sent email does not hold this one back.
+    expect(readUncertainSend("u1", "c1", "2026-10-11")).toBeNull();
     expect(uncertainSendKey("u1", "c1")).toBe("wsb:emailUncertain:u1:c1");
     data.set(uncertainSendKey("u1", "c3"), "{broken");
-    expect(readUncertainSend("u1", "c3")).toBeNull();
+    expect(readUncertainSend("u1", "c3", "2026-10-04")).toBeNull();
+    data.set(uncertainSendKey("u1", "c4"), JSON.stringify({ version: 2, message: SENT_FOLDER }));
+    expect(readUncertainSend("u1", "c4", "2026-10-04")).toBeNull();
     clearUncertainSend("u1", "c1");
-    expect(readUncertainSend("u1", "c1")).toBeNull();
+    expect(readUncertainSend("u1", "c1", "2026-10-04")).toBeNull();
   });
 
   it("sends the service as the downloads do, with the choices and the draft's translation", () => {

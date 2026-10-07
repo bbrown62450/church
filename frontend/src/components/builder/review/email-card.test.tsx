@@ -377,7 +377,7 @@ describe("Review → Email the bulletin: the dialog (slice 5b-2)", () => {
   });
 
   it("after a reload reads the stored send, keeps plain Send off, and Send again anyway sends", async () => {
-    writeUncertainSend(USER_ID, GRACE.id, CONNECTION_LOST);
+    writeUncertainSend(USER_ID, GRACE.id, CONNECTION_LOST, "2026-10-04");
     const { user, api } = renderReview({ "POST /bulletin-emails": SENT });
     const dialog = await openDialog(user);
     expect(within(dialog).getByText(CONNECTION_LOST)).toBeInTheDocument();
@@ -390,6 +390,17 @@ describe("Review → Email the bulletin: the dialog (slice 5b-2)", () => {
     expect(await screen.findByText("Email sent to 2 people.")).toBeInTheDocument();
     expect(sends(api)).toHaveLength(1);
     expect(window.sessionStorage.getItem(uncertainSendKey(USER_ID, GRACE.id))).toBeNull();
+  });
+
+  it("ignores a possibly-sent mark left by another service date", async () => {
+    writeUncertainSend(USER_ID, GRACE.id, CONNECTION_LOST, "2026-09-27");
+    const { user, api } = renderReview({ "POST /bulletin-emails": SENT });
+    const dialog = await openDialog(user);
+    expect(within(dialog).queryByText(CONNECTION_LOST)).toBeNull();
+    await user.click(within(dialog).getByRole("checkbox", { name: /Mary Jones/ }));
+    await user.click(within(dialog).getByRole("button", { name: "Send to 1 person" }));
+    expect(await screen.findByText("Email sent to 2 people.")).toBeInTheDocument();
+    expect(sends(api)).toHaveLength(1);
   });
 
   it("forgets the possibly-sent mark on a definite refusal, and keeps it when the answer is not definite", async () => {

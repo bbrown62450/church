@@ -65,7 +65,7 @@ export function EmailCard() {
   const [tracker] = useState(() => createKeyTracker());
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<EmailForm | null>(null);
-  const [uncertain, setUncertain] = useState(() => readUncertainSend(user.id, church.id));
+  const [uncertain, setUncertain] = useState(() => readUncertainSend(user.id, church.id, draft.readings.date_iso));
   // Read only, never fetched here: the printed card's useBulletinCarry fetches and applies it.
   const carry = usePreviousBulletin(draft.readings.date_iso, false);
   const dateIso = draft.readings.date_iso;
@@ -153,9 +153,9 @@ export function EmailCard() {
               onUncertain={(message) => {
                 setUncertain(message);
                 if (message === null) clearUncertainSend(user.id, church.id);
-                else writeUncertainSend(user.id, church.id, message);
+                else writeUncertainSend(user.id, church.id, message, dateIso);
               }}
-              onMaybeSent={() => writeUncertainSend(user.id, church.id, CONNECTION_LOST)}
+              onMaybeSent={() => writeUncertainSend(user.id, church.id, CONNECTION_LOST, dateIso)}
               onClose={() => setOpen(false)}
               onSent={(count, contactIds) => {
                 writeEmailPrefs(user.id, church.id, { contact_ids: contactIds });
