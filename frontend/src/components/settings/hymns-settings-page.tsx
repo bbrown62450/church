@@ -4,6 +4,7 @@ import { isAdmin } from "@/lib/church";
 import { useChurch } from "@/lib/church-context";
 import { useHymnals } from "@/lib/queries/hymns";
 
+import { HymnLibrary } from "./hymn-library";
 import { HymnalsCard } from "./hymnals-card";
 
 export const HYMNS_INTRO = "The hymnals and hymns the builder offers when you choose hymns.";
@@ -27,6 +28,7 @@ export function HymnsSettingsPage() {
         <p className="text-sm text-muted-foreground">{HYMNS_INTRO}</p>
       </div>
       <HymnalsCard admin={admin} hymnals={hymnals} />
+      <HymnLibrary admin={admin} hymnals={hymnals.data} />
     </section>
   );
 }
