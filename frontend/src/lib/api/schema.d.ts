@@ -267,6 +267,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/hymnal-sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Hymnal Sources */
+        get: operations["list_hymnal_sources_hymnal_sources_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/hymnals": {
         parameters: {
             query?: never;
@@ -277,8 +294,29 @@ export interface paths {
         /** List Hymnals */
         get: operations["list_hymnals_hymnals_get"];
         put?: never;
-        post?: never;
+        /**
+         * Add Hymnal
+         * @description Idempotent: adding a hymnal the church has again inserts nothing new (no Idempotency-Key).
+         */
+        post: operations["add_hymnal_hymnals_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/hymnals/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove Hymnal */
+        delete: operations["remove_hymnal_hymnals__code__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -298,7 +336,8 @@ export interface paths {
          */
         get: operations["list_hymns_hymns_get"];
         put?: never;
-        post?: never;
+        /** Create Hymn */
+        post: operations["create_hymn_hymns_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -342,6 +381,27 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/hymns/{hymn_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Hymn
+         * @description Owners and admins only (owner, 2026-10-05).
+         */
+        delete: operations["delete_hymn_hymns__hymn_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Hymn */
+        patch: operations["update_hymn_hymns__hymn_id__patch"];
         trace?: never;
     };
     "/invites/accept": {
@@ -1068,6 +1128,57 @@ export interface components {
              */
             google_email: string | null;
         };
+        /**
+         * HymnDetailOut
+         * @description A hymn as Settings → Hymns writes it: the stored theme text, not GET /hymns' parsed themes.
+         */
+        HymnDetailOut: {
+            /** Hymnal */
+            hymnal: string;
+            /** Hymnal Count */
+            hymnal_count: number | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Link */
+            link: string | null;
+            /** Number */
+            number: number | null;
+            /** Scripture Refs */
+            scripture_refs: string | null;
+            /** Text Year */
+            text_year: number | null;
+            /** Theme */
+            theme: string | null;
+            /** Title */
+            title: string;
+        };
+        /**
+         * HymnIn
+         * @description POST /hymns. An omitted or null title is the usecase's "Hymn title is
+         *     required."; a null hymnal is the church's default hymnal; the ranges of
+         *     number, text_year and hymnal_count are the usecase's (friendly messages).
+         */
+        HymnIn: {
+            /** Hymnal */
+            hymnal?: string | null;
+            /** Hymnal Count */
+            hymnal_count?: number | null;
+            /** Link */
+            link?: string | null;
+            /** Number */
+            number?: number | null;
+            /** Scripture Refs */
+            scripture_refs?: string | null;
+            /** Text Year */
+            text_year?: number | null;
+            /** Theme */
+            theme?: string | null;
+            /** Title */
+            title?: string | null;
+        };
         /** HymnMatchOut */
         HymnMatchOut: {
             /** Hymnal */
@@ -1132,6 +1243,31 @@ export interface components {
             title: string;
         };
         /**
+         * HymnPatchIn
+         * @description PATCH /hymns/{id}: omitted = unchanged (model_fields_set). A null title
+         *     or hymnal is refused; a null number, scripture_refs, theme, link,
+         *     text_year or hymnal_count clears it. Sending text_year or hymnal_count at
+         *     all (null included) is for admins.
+         */
+        HymnPatchIn: {
+            /** Hymnal */
+            hymnal?: string | null;
+            /** Hymnal Count */
+            hymnal_count?: number | null;
+            /** Link */
+            link?: string | null;
+            /** Number */
+            number?: number | null;
+            /** Scripture Refs */
+            scripture_refs?: string | null;
+            /** Text Year */
+            text_year?: number | null;
+            /** Theme */
+            theme?: string | null;
+            /** Title */
+            title?: string | null;
+        };
+        /**
          * HymnRef
          * @description One slot's hymn (F §1.3). hymn_id null = an archived snapshot, used as
          *     sent; for a non-null id the server reads title, number and hymnal from
@@ -1189,6 +1325,22 @@ export interface components {
             nt_text_used: boolean;
             slots: components["schemas"]["SuggestedSlots"];
         };
+        /** HymnalAddedOut */
+        HymnalAddedOut: {
+            /** Code */
+            code: string;
+            /** Inserted */
+            inserted: number;
+            /** Label */
+            label: string | null;
+            /** Updated */
+            updated: number;
+        };
+        /** HymnalIn */
+        HymnalIn: {
+            /** Code */
+            code: string;
+        };
         /** HymnalListOut */
         HymnalListOut: {
             /** Default Hymnal */
@@ -1204,8 +1356,39 @@ export interface components {
             code: string;
             /** Hymn Count */
             hymn_count: number;
+            /** Label */
+            label?: string | null;
             /** Scripture Ref Count */
             scripture_ref_count: number;
+        };
+        /** HymnalRemovedOut */
+        HymnalRemovedOut: {
+            /**
+             * Deleted
+             * @default true
+             * @constant
+             */
+            deleted: true;
+            /** Hymns Deleted */
+            hymns_deleted: number;
+        };
+        /** HymnalSourceList */
+        HymnalSourceList: {
+            /** Items */
+            items: components["schemas"]["HymnalSourceOut"][];
+        };
+        /** HymnalSourceOut */
+        HymnalSourceOut: {
+            /** Code */
+            code: string;
+            /** Has Scripture Refs */
+            has_scripture_refs: boolean;
+            /** Hymn Count */
+            hymn_count: number;
+            /** Label */
+            label: string | null;
+            /** Present */
+            present: boolean;
         };
         /** InviteAcceptOut */
         InviteAcceptOut: {
@@ -3183,6 +3366,65 @@ export interface operations {
             };
         };
     };
+    list_hymnal_sources_hymnal_sources_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-church-id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HymnalSourceList"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     list_hymnals_hymnals_get: {
         parameters: {
             query?: never;
@@ -3215,6 +3457,148 @@ export interface operations {
             };
             /** @description Forbidden */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    add_hymnal_hymnals_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-church-id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HymnalIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HymnalAddedOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    remove_hymnal_hymnals__code__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-church-id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HymnalRemovedOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3280,6 +3664,78 @@ export interface operations {
             };
             /** @description Forbidden */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    create_hymn_hymns_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-church-id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HymnIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HymnDetailOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3451,6 +3907,159 @@ export interface operations {
             };
             /** @description Gateway Timeout */
             504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_hymn_hymns__hymn_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-church-id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                hymn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeletedOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    update_hymn_hymns__hymn_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-church-id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                hymn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HymnPatchIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HymnDetailOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
