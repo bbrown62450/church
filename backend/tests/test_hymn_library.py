@@ -253,6 +253,16 @@ def test_catalog_hymnals_are_sources_and_present_follows_the_church(world, make_
     assert sorted(h["Hymn Number"] for h in list_hymns(church_a)) == [1, 2, 3]
 
 
+def test_a_source_is_present_only_once_the_church_has_as_many_hymns_in_it(world):
+    """6a-2 build review M4: one hand-entered PH1990 hymn does not mark the whole bundled PH1990 added."""
+    with session_scope() as s:
+        s.add(Hymn(church_id=world["church"], hymnal="PH1990", title="Hand Entered", number=999))
+    present = lambda: {s["code"]: s["present"] for s in hymn_library.list_sources(world["church"])}   # noqa: E731
+    assert present()["PH1990"] is False
+    assert hymn_library.add_hymnal(world["church"], world["owner"], "PH1990")["inserted"] == 605
+    assert present()["PH1990"] is True
+
+
 def test_removing_a_hymnal_deletes_only_its_hymns_but_never_the_only_or_the_default(world, make_church):
     other = make_church(name="Other", owner_user_id=world["owner"])
     hymn_library.add_hymnal(other, world["owner"], "PH1990")

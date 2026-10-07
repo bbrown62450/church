@@ -228,12 +228,15 @@ def delete_hymn(church_id: uuid.UUID, actor_id: uuid.UUID, hymn_id: uuid.UUID) -
 
 def list_sources(church_id: uuid.UUID) -> list[dict]:
     """GET /hymnal-sources: every hymnal an admin can add, with whether the
-    church has it already (`present`)."""
+    church has it already (`present`): at least as many hymns in that code as
+    the bundled hymnal has, so a few hand-entered ones do not count as the
+    whole hymnal (6a-2 build review M4; adding it then adds only the rest)."""
     with session_scope() as s:
-        codes = set(_codes(church_id, s))
+        counts = {summary.code: summary.hymn_count for summary in hymn_repo.hymnal_summaries(church_id, session=s)}
         bundled = hymnal_sources.list_bundled(session=s)
     return [{"code": b.code, "label": b.label, "hymn_count": b.hymn_count,
-             "has_scripture_refs": b.has_scripture_refs, "present": b.code in codes} for b in bundled]
+             "has_scripture_refs": b.has_scripture_refs, "present": counts.get(b.code, 0) >= b.hymn_count}
+            for b in bundled]
 
 
 def add_hymnal(church_id: uuid.UUID, actor_id: uuid.UUID, code: str) -> dict:

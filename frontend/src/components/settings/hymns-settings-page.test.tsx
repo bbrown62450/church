@@ -25,18 +25,24 @@ afterEach(() => {
 const GG = { code: "GG2013", label: "Glory to God (2013)", hymn_count: 853, scripture_ref_count: 795 };
 const PH = { code: "PH1990", label: "The Presbyterian Hymnal (1990)", hymn_count: 605, scripture_ref_count: 0 };
 
-/** A fake `/hymnals`: `GET` answers with what the adds and removals left, as the server would after a refetch. */
+/**
+ * A fake `/hymnals`: `GET` answers with what the adds and removals left, as the
+ * server would after a refetch. A source is present once the church has at
+ * least as many hymns in its code (6a-2 build review M4).
+ */
 function hymnalsServer(items: Hymnals["items"] = [GG]) {
   let current = [...items];
+  const has = (code: string, bundled: number) => (current.find((h) => h.code === code)?.hymn_count ?? 0) >= bundled;
   return {
     list: () => hymnals({ items: current }),
     sources: () => hymnalSources([
-      hymnalSource({ code: "GG2013", label: "Glory to God (2013)", hymn_count: 853, has_scripture_refs: true, present: current.some((h) => h.code === "GG2013") }),
-      hymnalSource({ present: current.some((h) => h.code === "PH1990") }),
+      hymnalSource({ code: "GG2013", label: "Glory to God (2013)", hymn_count: 853, has_scripture_refs: true, present: has("GG2013", 853) }),
+      hymnalSource({ present: has("PH1990", 605) }),
     ]),
     add: () => {
-      current = [...current, PH];
-      return { code: "PH1990", label: PH.label, inserted: 605, updated: 0 };
+      const before = current.find((h) => h.code === "PH1990")?.hymn_count ?? 0;
+      current = [...current.filter((h) => h.code !== "PH1990"), PH];
+      return { code: "PH1990", label: PH.label, inserted: 605 - before, updated: 0 };
     },
     remove: (code: string) => {
       current = current.filter((h) => h.code !== code);
@@ -122,6 +128,23 @@ describe("Settings → Hymns, the Hymnals card (slice 6a-2)", () => {
     }
     await user.click(within(dialog).getByRole("button", { name: "Done" }));
     await waitFor(() => expect(hymnalRows()).toHaveLength(2));
+  });
+
+  it("offers Add for a hymnal the church has only a few hand-entered hymns of, and adds the rest (6a-2 build review M4)", async () => {
+    const server = hymnalsServer([GG, { ...PH, hymn_count: 1, scripture_ref_count: 0 }]);
+    const { api, user } = renderPage("admin", {
+      "GET /hymnals": server.list,
+      "GET /hymnal-sources": server.sources,
+      "POST /hymnals": server.add,
+    });
+    await user.click(await screen.findByRole("button", { name: "Add a hymnal" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add a hymnal" });
+    const [gg, ph] = within(dialog).getAllByRole("listitem");
+    expect(within(gg).getByRole("button", { name: "Added" })).toBeDisabled();
+    await user.click(await within(ph).findByRole("button", { name: "Add PH1990" }));
+    expect(await screen.findByText("Added PH1990 (604 hymns).")).toBeInTheDocument();
+    expect(requests(api, "POST", "/hymnals")).toHaveLength(1);
+    expect(within(ph).getByRole("button", { name: "Added" })).toBeDisabled();
   });
 
   it("keeps the add dialog open while an add runs, and says it is still working after 8 s", async () => {
