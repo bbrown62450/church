@@ -330,44 +330,42 @@ export function EmailDialog({ googleEmail, form, onFormChange, tracker, uncertai
           }}
         >
           <div className="grid content-start gap-5 md:overflow-y-auto">
-            <div aria-live="polite" className="empty:hidden">
-              {shown?.top ? (
-                <div
-                  ref={topRef}
-                  role="alert"
-                  tabIndex={-1}
-                  className="grid gap-2 rounded-md border border-destructive/40 p-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <p>{shown.top}</p>
-                  {shown.action === "hymns" ? (
-                    <Link
-                      href="/builder/hymns"
-                      onClick={onClose}
-                      className={buttonVariants({ variant: "outline", size: "touch", className: "w-full sm:w-fit" })}
-                    >
-                      Go to Hymns
-                    </Link>
-                  ) : null}
-                  {shown.action === "connect" || shown.action === "reconnect" ? (
-                    <PendingButton size="touch" className="w-full sm:w-fit" pending={start.isPending} pendingLabel="Opening Google…" onClick={connect}>
-                      {shown.action === "connect" ? "Connect Gmail" : "Reconnect Gmail"}
-                    </PendingButton>
-                  ) : null}
-                  {shown.action === "again" ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="touch"
-                      className="w-full sm:w-fit"
-                      disabled={send.isPending || blocked !== null}
-                      onClick={() => submit({ again: true })}
-                    >
-                      Send again anyway
-                    </Button>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
+            {shown?.top ? (
+              <div
+                ref={topRef}
+                role="alert"
+                tabIndex={-1}
+                className="grid gap-2 rounded-md border border-destructive/40 p-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <p>{shown.top}</p>
+                {shown.action === "hymns" ? (
+                  <Link
+                    href="/builder/hymns"
+                    onClick={onClose}
+                    className={buttonVariants({ variant: "outline", size: "touch", className: "w-full sm:w-fit" })}
+                  >
+                    Go to Hymns
+                  </Link>
+                ) : null}
+                {shown.action === "connect" || shown.action === "reconnect" ? (
+                  <PendingButton size="touch" className="w-full sm:w-fit" pending={start.isPending} pendingLabel="Opening Google…" onClick={connect}>
+                    {shown.action === "connect" ? "Connect Gmail" : "Reconnect Gmail"}
+                  </PendingButton>
+                ) : null}
+                {shown.action === "again" ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="touch"
+                    className="w-full sm:w-fit"
+                    disabled={send.isPending || blocked !== null}
+                    onClick={() => submit({ again: true })}
+                  >
+                    Send again anyway
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
             <p className="text-sm">
               <span className="text-muted-foreground">From </span>
               <span className="break-all">{googleEmail}</span>

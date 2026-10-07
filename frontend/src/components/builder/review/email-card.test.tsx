@@ -439,6 +439,9 @@ describe("Review → Email the bulletin: the dialog (slice 5b-2)", () => {
     await user.click(within(dialog).getByRole("button", { name: "Send to 1 person" }));
     expect(await within(dialog).findByText("Your Gmail connection has expired or was removed. Reconnect Gmail and try again.")).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "Reconnect Gmail" })).toBeInTheDocument();
+    // role="alert" announces itself; a live region around it would announce it twice (5b-2b build review M5).
+    const alert = within(dialog).getByText(/has expired or was removed/).closest("[role=alert]");
+    expect(alert?.closest("[aria-live]")).toBeNull();
   });
 
   it("with no contacts says so, links admins to Contacts, and still sends to typed addresses", async () => {
