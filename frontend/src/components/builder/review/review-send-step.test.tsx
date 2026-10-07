@@ -33,6 +33,7 @@ import {
   DRAFT_NOW,
   filledBulletinSettings,
   gg2013,
+  gmailConnection,
   hymnId,
   hymnals,
   hymnListRoute,
@@ -83,6 +84,7 @@ function renderReview(draft: DraftV1 = testDraft(), routes: Record<string, FakeH
     "GET /liturgy/config": liturgyConfig(),
     "GET /church/bulletin-settings": bulletinSettings(),
     "GET /services/previous-bulletin": previousBulletin(),
+    "GET /gmail-connection": gmailConnection(), // slice 5b-2: the email card
     ...routes,
   });
   const view = renderWithProviders(
@@ -151,6 +153,7 @@ describe("Review & send: the Word documents (slice 5a-1)", () => {
       "Archive",
       "Word documents",
       "Printed bulletin",
+      "Email the bulletin",
     ]);
     const archive = screen.getByRole("region", { name: "Archive" });
     expect(within(archive).getByText("Not in the archive yet.")).toHaveAttribute("aria-live", "polite");

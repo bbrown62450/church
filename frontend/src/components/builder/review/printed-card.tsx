@@ -50,9 +50,10 @@ export const WEEKLY_NOTE =
  * announcements (PR 2b). The
  * settings' part is left out while they load or if they fail: the downloads
  * never wait for them. Then the boxes still holding last week's text,
- * unchecked.
+ * unchecked. The email dialog shows the same lines while its PDF is ticked
+ * (slice 5b-2).
  */
-function NotFilledInLines() {
+export function NotFilledInLines() {
   const { draft } = useDraft();
   const settings = useBulletinSettings();
   const missing = printedNotFilledIn(settings.data, draft);

@@ -27,6 +27,7 @@ import {
   bulletinSettings,
   church,
   churchProfile,
+  gmailConnection,
   DRAFT_NOW,
   gg2013,
   hymnals,
@@ -80,6 +81,7 @@ function renderBuilder(page: ReactElement, path: string, lookup = lectionaryRout
     "GET /liturgy/config": liturgyConfig(),
     "GET /church/bulletin-settings": bulletinSettings(),
     "GET /services/previous-bulletin": previousBulletin(),
+    "GET /gmail-connection": gmailConnection(), // slice 5b-2: Review's email card
     ...routes,
   });
   return renderWithProviders(<BuilderLayout>{page}</BuilderLayout>, { me: me(), church: church(), path });
