@@ -458,6 +458,25 @@ def test_a_connection_made_again_meanwhile_is_kept(world):
     assert google_oauth.get_connection(world["member"]).refresh_token == "refresh-new"
 
 
+@pytest.mark.parametrize("answer", [google_error(400, "invalid_grant"),
+                                    gmail_error(403, "insufficientPermissions", "PERMISSION_DENIED")])
+def test_a_connection_removed_meanwhile_offers_reconnect(world, answer):
+    """5b-2b build review M4: a Disconnect during the send leaves no row; that is "removed", not "changed"."""
+    def disconnect_then_refuse(_request):
+        google_oauth.delete_connection(world["member"])
+        return answer
+
+    if answer.status_code == 400:
+        world["google"].refresh = disconnect_then_refuse
+    else:
+        world["google"].send = disconnect_then_refuse
+    with pytest.raises(UpstreamError) as failed:
+        _send(world, [world["mary"]])
+    assert (failed.value.code, failed.value.message, failed.value.details) == (
+        "gmail_send_failed", email.EXPIRED, {"disconnected": True, "send_uncertain": False})
+    assert google_oauth.get_connection(world["member"]) is None
+
+
 def test_the_rate_limit_is_charged_once_after_the_files_and_before_google(world):
     order = []
     world["google"].refresh = lambda request: order.append("refresh") or httpx.Response(200, json={"access_token": "a"})

@@ -256,11 +256,15 @@ def _attachments(church_id: uuid.UUID, data: archive.ServiceInput, kinds: Sequen
 
 
 def _refused_grant(user_id: uuid.UUID, connection: GmailConnection, message: str) -> UpstreamError:
-    """Google says the grant is gone: forget it, unless it was replaced meanwhile."""
+    """Google says the grant is gone: forget it, unless it was replaced meanwhile
+    (a new connection is kept: "changed", try again). When the row is already
+    gone (a Disconnect meanwhile), the user has to connect again: Reconnect."""
     removed = google_oauth.delete_connection(user_id, only_if_token=connection.refresh_token)
-    if removed is None:
-        return _send_failed(CHANGED)
-    return _send_failed(message, disconnected=True)
+    if removed is not None:
+        return _send_failed(message, disconnected=True)
+    if google_oauth.get_connection(user_id) is None:
+        return _send_failed(EXPIRED, disconnected=True)
+    return _send_failed(CHANGED)
 
 
 def _refresh_error(error: GoogleOAuthError, user_id: uuid.UUID, connection: GmailConnection) -> DomainError:
