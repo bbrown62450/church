@@ -135,3 +135,19 @@ def test_the_writes_join_the_callers_session(tmp_db, make_user, make_church):
         assert [c["name"] for c in list_contacts(a, session=s)] == ["Mary J."]
         assert delete_contact(cid, a, session=s) is True
     assert list_contacts(a) == []
+
+
+# --- slice 5b-2: the contacts a send names --------------------------------------------------------
+
+def test_get_contacts_by_ids_returns_the_churchs_contacts_in_the_order_asked(tmp_db, make_user, make_church):
+    u = make_user(email="c9@x.org")
+    a = make_church(name="A", owner_user_id=u)
+    b = make_church(name="B", owner_user_id=u)
+    mary = add_contact(a, name="Mary", email="mary@x.org")["id"]
+    office = add_contact(a, name="", email="office@x.org")["id"]
+    theirs = add_contact(b, name="Theirs", email="theirs@x.org")["id"]
+    found = email_contacts.get_contacts_by_ids(a, [office, theirs, mary, office])
+    assert [(c["id"], c["name"], c["email"]) for c in found] == [(office, "", "office@x.org"), (mary, "Mary", "mary@x.org")]
+    assert email_contacts.get_contacts_by_ids(a, []) == []
+    with session_scope() as s:
+        assert [c["id"] for c in email_contacts.get_contacts_by_ids(b, [theirs, mary], session=s)] == [theirs]
