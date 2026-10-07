@@ -31,7 +31,7 @@
   `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
 - TDD: write the failing test first and see it fail as quoted.
 - **Backup push after every task** (standing rule): the controller runs `git push origin claude/slice-2-plan-4q33le` after each task's commit (never `--force`, never a rebase; if the push is rejected, `git pull --no-rebase origin claude/slice-2-plan-4q33le` and push again; on a network error retry after 2, 4, 8 and 16 s). A fix asked for by a review is a new commit, `Fix: <what> (Task <n> review)`. The container can restart and lose uncommitted work: commit as soon as a task's checks pass.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1825 → 1882 passed, 27 → 31 skipped; frontend 835 → 863 in 100 → 103 files`.
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1825 → 1883 passed, 27 → 31 skipped; frontend 835 → 869 in 100 → 103 files`.
 - New prose for the owner has no em dashes and no flattery. New user-facing copy is exactly the list in clarification 22 and has no em dashes (S's lines are taken without theirs: "Still working. This can take up to a minute.", and a hymn with no number shows its title alone instead of S's "—"); existing copy keeps its own punctuation.
 - No church id, email address, token, database URL or real person's name in any doc, commit, test or record. Tests use the fixtures' "Grace" and `@example.com` / `@example.org` addresses only.
 - Ask the owner before any push to a PR, PR creation, marking ready, merging, or any production or settings action. Owner steps go one at a time, in plain words.
@@ -48,16 +48,16 @@ As in the 5b-1 and 6a-1 plans: **Create `path`:** the block is the whole new fil
   |---|---|---|---|---|
   | T1 | +7 (`test_hymnal_sources.py` 4, `test_import_hymnal_cli.py` 3; `test_no_streamlit_in_core.py` edited) | 1832 passed, 27 skipped | 0 | 835 in 100 |
   | T2 | +5 (`test_hymns_repo.py`, 15 → 20) | 1837 passed, 27 skipped | 0 | 835 in 100 |
-  | T3 | +27 (`test_hymn_library.py`: one test in 13 cases and 14 tests; `test_no_streamlit_in_core.py` edited) | 1864 passed, 27 skipped | 0 | 835 in 100 |
-  | T4 | +18 (`test_api_hymns_admin.py` 14: one test in 9 cases and 5 tests; `test_api_hymnals_admin.py` 4; `test_api_hymnals.py` edited) | 1882 passed, 27 skipped | 0 | 835 in 100 |
-  | T5 | +4 skipped (`test_hymn_library_postgres.py`, skipped without `TEST_DATABASE_URL`) | 1882 passed, 31 skipped | 0 | 835 in 100 |
-  | T6 | 0 | 1882 passed, 31 skipped | +7 (`hymns.test.ts`) | 842 in 101 |
-  | T7 | 0 | 1882 passed, 31 skipped | +7 (`hymns-settings-page.test.tsx`) | 849 in 102 |
-  | T8 | 0 | 1882 passed, 31 skipped | +13 (`hymn-library.test.tsx`) | 862 in 103 |
-  | T9 | 0 | 1882 passed, 31 skipped | +1 (`settings-layout.test.tsx`; `church-settings-page.test.tsx` and `hymns-step.test.tsx` edited) | 863 in 103 |
-  | T10 | 0 | 1882 passed, 31 skipped | 0 | 863 in 103 |
+  | T3 | +28 (`test_hymn_library.py`: one test in 13 cases and 15 tests; `test_no_streamlit_in_core.py` edited) | 1865 passed, 27 skipped | 0 | 835 in 100 |
+  | T4 | +18 (`test_api_hymns_admin.py` 14: one test in 9 cases and 5 tests; `test_api_hymnals_admin.py` 4; `test_api_hymnals.py` edited) | 1883 passed, 27 skipped | 0 | 835 in 100 |
+  | T5 | +4 skipped (`test_hymn_library_postgres.py`, skipped without `TEST_DATABASE_URL`) | 1883 passed, 31 skipped | 0 | 835 in 100 |
+  | T6 | 0 | 1883 passed, 31 skipped | +7 (`hymns.test.ts`) | 842 in 101 |
+  | T7 | 0 | 1883 passed, 31 skipped | +12 (`hymns-settings-page.test.tsx`) | 854 in 102 |
+  | T8 | 0 | 1883 passed, 31 skipped | +13 (`hymn-library.test.tsx`) | 867 in 103 |
+  | T9 | 0 | 1883 passed, 31 skipped | +2 (`settings-layout.test.tsx` 1, `church-settings-page.test.tsx` 1; `hymns-step.test.tsx` edited) | 869 in 103 |
+  | T10 | 0 | 1883 passed, 31 skipped | 0 | 869 in 103 |
 
-- CI `backend-postgres` goes from `27 passed, 1825 deselected` to `31 passed, 1882 deselected` (T5). Locally, without `TEST_DATABASE_URL`, those four tests are among the 31 skipped.
+- CI `backend-postgres` goes from `27 passed, 1825 deselected` to `31 passed, 1883 deselected` (T5). Locally, without `TEST_DATABASE_URL`, those four tests are among the 31 skipped.
 
 ### Layering and code rules (carried)
 - `hymnal_sources.py` and `usecases/hymn_library.py` import no FastAPI, Starlette or Streamlit (`test_no_streamlit_in_core.py` gains both, T1 and T3); the routes are plain `def`s with no SQL and no try/except (F §2.2 rule 1), each one usecase call; the usecase writes through `repos.hymns` (no SQL in the usecase).
@@ -158,7 +158,7 @@ The owner's answers win over S and F; the code wins over both where they disagre
 | `docs/manual-verification.md` | the 6a-2 items | T10 |
 | `docs/ops-runbook.md` | "### Slice 6a-2 record" (the records PR, after the merge) | T12 |
 
-**Counts in the PR:** 41 paths: 19 added (this plan and the eighteen new code and test files above), 21 modified (the nineteen code, test, API and docs paths above, `docs/manual-verification.md` among them, plus the 6a spec (its amendment of 2026-10-07) and `docs/ops-runbook.md` (the 5b-2b record), which ride along until merged) and 1 renamed (the CSV, listed once as `R100`). **Untouched:** migrations, `db/models.py`, `api/deps.py`, `api/schemas.py`, `usecases/hymns.py`, `usecases/church_admin.py`, `usecases/members.py`, `repos/churches.py`, `hymnary_facts.py`, `backfill_hymn_facts.py`, `lib/queries/hymns.ts`, `lib/queries/keys.ts`, the draft schema, `app.py`, `streamlit_views`, `streamlit_tests`.
+**Counts in the PR:** 42 paths: 20 added (this plan, the eighteen new code and test files above and the empty `data/.gitkeep`), 21 modified (the nineteen code, test, API and docs paths above, `docs/manual-verification.md` among them, plus the 6a spec (its amendment of 2026-10-07) and `docs/ops-runbook.md` (the 5b-2b record), which ride along until merged) and 1 renamed (the CSV, listed once as `R100`). **Untouched:** migrations, `db/models.py`, `api/deps.py`, `api/schemas.py`, `usecases/hymns.py`, `usecases/church_admin.py`, `usecases/members.py`, `repos/churches.py`, `hymnary_facts.py`, `backfill_hymn_facts.py`, `lib/queries/hymns.ts`, `lib/queries/keys.ts`, the draft schema, `app.py`, `streamlit_views`, `streamlit_tests`.
 
 **Task order and review batch:** T1 → T10, each one commit and a backup push; then one review of the whole batch with its fixes as `Fix: …` commits; T11 verifies and opens the draft PR on the owner's yes; T12 merges on the owner's yes, runs the phone check and writes the record.
 
@@ -1575,10 +1575,10 @@ def remove_hymnal(church_id: uuid.UUID, actor_id: uuid.UUID, code: str) -> int:
 Run: `.venv/bin/python -m pytest -q backend/tests/test_hymn_library.py backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`
 **Expected:**
 ```
-30 passed in <t>s
+31 passed in <t>s
 ```
 ```
-1864 passed, 27 skipped in <t>s
+1865 passed, 27 skipped in <t>s
 ```
 
 - [ ] **Step 5: Commit**
@@ -1597,7 +1597,7 @@ it is the church's only one or its default." -m "Co-Authored-By: Claude Opus 5.5
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1864 passed, 27 skipped`; frontend `835 passed` in 100 files.
+Expected counts after this task: backend `1865 passed, 27 skipped`; frontend `835 passed` in 100 files.
 
 ### Task 4: `POST`, `PATCH`, `DELETE /hymns` and the hymnal routes (S API, Models; clarification 15)
 
@@ -2153,7 +2153,7 @@ typecheck 0
 lint 0
 ```
 ```
-1882 passed, 27 skipped in <t>s
+1883 passed, 27 skipped in <t>s
 ```
 
 - [ ] **Step 5: Commit**
@@ -2169,7 +2169,7 @@ snapshot and the generated types are regenerated." -m "Co-Authored-By: Claude Op
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1882 passed, 27 skipped`; frontend `835 passed` in 100 files.
+Expected counts after this task: backend `1883 passed, 27 skipped`; frontend `835 passed` in 100 files.
 
 ### Task 5: The lock on real Postgres (S Testing → Postgres; clarification 14)
 
@@ -2324,7 +2324,7 @@ Run: `.venv/bin/python -m pytest -q backend/tests/test_hymn_library_postgres.py 
 4 skipped in <t>s
 ```
 ```
-1882 passed, 31 skipped in <t>s
+1883 passed, 31 skipped in <t>s
 ```
 
 - [ ] **Step 3: Commit**
@@ -2338,7 +2338,7 @@ adds at once make one hymn, 20 rounds; two adds of PH1990 at once make
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1882 passed, 31 skipped`; frontend `835 passed` in 100 files.
+Expected counts after this task: backend `1883 passed, 31 skipped`; frontend `835 passed` in 100 files.
 
 ## The app (T6-T9)
 
@@ -2950,7 +2950,7 @@ hymnal write refreshes the lists too." -m "Co-Authored-By: Claude Opus 5.5 <nore
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1882 passed, 31 skipped`; frontend `842 passed` in 101 files.
+Expected counts after this task: backend `1883 passed, 31 skipped`; frontend `842 passed` in 101 files.
 
 ### Task 7: The Hymns page and its Hymnals card (S UX §2a; clarifications 3-6)
 
@@ -3607,13 +3607,13 @@ export default function HymnsSettingsRoute() {
 Run: `for i in 1 2 3; do (cd frontend && npx vitest run src/components/settings/hymns-settings-page.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests "); done` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`
 **Expected:**
 ```
-      Tests  7 passed (7)
-      Tests  7 passed (7)
-      Tests  7 passed (7)
+      Tests  12 passed (12)
+      Tests  12 passed (12)
+      Tests  12 passed (12)
 ```
 ```
  Test Files  102 passed (102)
-      Tests  849 passed (849)
+      Tests  854 passed (854)
 ```
 ```
 typecheck 0
@@ -3632,7 +3632,7 @@ the default, after a confirmation that says what is lost." -m "Co-Authored-By: C
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1882 passed, 31 skipped`; frontend `849 passed` in 102 files.
+Expected counts after this task: backend `1883 passed, 31 skipped`; frontend `854 passed` in 102 files.
 
 ### Task 8: The Hymn library and the hymn dialog (S UX §2b; clarifications 7-10, 19)
 
@@ -4535,7 +4535,7 @@ Run: `for i in 1 2 3; do (cd frontend && npx vitest run src/components/settings/
 ```
 ```
  Test Files  103 passed (103)
-      Tests  862 passed (862)
+      Tests  867 passed (867)
 ```
 ```
 typecheck 0
@@ -4556,7 +4556,7 @@ a request runs; a hymn deleted elsewhere closes it with a toast." -m "Co-Authore
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1882 passed, 31 skipped`; frontend `862 passed` in 103 files.
+Expected counts after this task: backend `1883 passed, 31 skipped`; frontend `867 passed` in 103 files.
 
 ### Task 9: Hymns in the Settings nav, and the two links to it (answer 3; clarifications 2, 20)
 
@@ -4661,15 +4661,16 @@ The nav lists Church, Hymns, Bulletin, Contacts, Account (five links) and marks 
 - [ ] **Step 2: See them fail**
 
 Run: `(cd frontend && npx vitest run src/components/settings/settings-layout.test.tsx src/components/settings/church-settings-page.test.tsx src/components/builder/hymns/hymns-step.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
-**Expected** (five `×`, in any order, and Vitest's `Failed Tests 5` banner, which the grep also matches):
+**Expected** (six `×`, in any order, and Vitest's `Failed Tests 6` banner, which the grep also matches):
 ```
    × the Settings area (slice 6a-1) > shows the heading, who you are in the church, and the sections with the current one marked
    × the Settings area (slice 6a-1) > marks the section current on its page (slices 6a-2, 5b-1, 5b-2): /settings/hymns
    × the Settings area (slice 6a-1) > shows a member the same sections, and /settings opens Church
+   × Settings → Church (slice 6a-1) > shows a member of a church with no hymns the link to the Hymns page (slice 6a-2)
    × Settings → Church (slice 6a-1) > keeps a stale stored translation or hymnal selectable, sends a new hymnal, and says when there are no hymnals
    × the Hymns step (S User experience) > shows the empty-hymnal state instead of the pickers; a pick still shows, as not in the hymnal
-⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
-      Tests  5 failed | 51 passed (56)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  6 failed | 51 passed (57)
 ```
 
 - [ ] **Step 3: Add the entry, flip the switch, add the link**
@@ -4788,11 +4789,11 @@ function SummaryItem({ label, children }: { label: string; children: ReactNode }
 Run: `(cd frontend && npx vitest run src/components/settings/settings-layout.test.tsx src/components/settings/church-settings-page.test.tsx src/components/builder/hymns/hymns-step.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`
 **Expected:**
 ```
-      Tests  56 passed (56)
+      Tests  57 passed (57)
 ```
 ```
  Test Files  103 passed (103)
-      Tests  863 passed (863)
+      Tests  869 passed (869)
 ```
 ```
 typecheck 0
@@ -4810,7 +4811,7 @@ page's no-hymns line links to the Hymns page, for members too." -m "Co-Authored-
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1882 passed, 31 skipped`; frontend `863 passed` in 103 files.
+Expected counts after this task: backend `1883 passed, 31 skipped`; frontend `869 passed` in 103 files.
 
 ## Docs, verification, the PR, the merge (T10-T12)
 
@@ -4883,7 +4884,7 @@ checks (a member, a picked hymn deleted, a year)." -m "Co-Authored-By: Claude Op
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1882 passed, 31 skipped`; frontend `863 passed` in 103 files.
+Expected counts after this task: backend `1883 passed, 31 skipped`; frontend `869 passed` in 103 files.
 
 
 ### Task 11: Verification and the draft PR (owner's yes before the PR is opened and before it is marked ready)
@@ -4913,17 +4914,17 @@ for i in 1 2 3; do (cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Te
 (cd frontend && NEXT_PUBLIC_SUPABASE_URL=https://ci-placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-placeholder NEXT_PUBLIC_API_URL=http://localhost:8000 npm run build 2>&1 | grep -E "Compiled successfully|Error|/settings")
 ```
 
-**Expected** (as in the replay: the suite; three runs of `Test Files  103 passed (103)` and `Tests  863 passed (863)` with no `×` or `FAIL` line, one naming a failing test: Step 6; typecheck and lint 0; the build with `/settings/hymns` and no `Error`, a font `Failed to fetch` only: say so and rely on CI):
+**Expected** (as in the replay: the suite; three runs of `Test Files  103 passed (103)` and `Tests  869 passed (869)` with no `×` or `FAIL` line, one naming a failing test: Step 6; typecheck and lint 0; the build with `/settings/hymns` and no `Error`, a font `Failed to fetch` only: say so and rely on CI):
 ```
-1882 passed, 31 skipped in <t>s
+1883 passed, 31 skipped in <t>s
 ```
 ```
  Test Files  103 passed (103)
-      Tests  863 passed (863)
+      Tests  869 passed (869)
  Test Files  103 passed (103)
-      Tests  863 passed (863)
+      Tests  869 passed (869)
  Test Files  103 passed (103)
-      Tests  863 passed (863)
+      Tests  869 passed (869)
 ```
 ```
 typecheck 0
@@ -4951,7 +4952,7 @@ git log --reverse --no-merges --format=%s origin/main..HEAD
 for c in $(git rev-list origin/main..HEAD); do git show -s --format=%B "$c" | grep -q '^Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>$' || echo "no trailer: $(git show -s --format='%h %s' "$c")"; done; echo "trailer check done"
 ```
 
-**Expected:** nothing from `git status` (the committed snapshot and types are current); `imports grep exit 1`; `raw html grep exit 1`; `0` (no em dash in an added line of code or tests); exactly these 41 paths (the 5b-2b record in the runbook and the 6a spec's amendment ride along until merged):
+**Expected:** nothing from `git status` (the committed snapshot and types are current); `imports grep exit 1`; `raw html grep exit 1`; `0` (no em dash in an added line of code or tests); exactly these 42 paths (the 5b-2b record in the runbook and the 6a spec's amendment ride along until merged):
 ```
 M	backend/api/routes/hymnals.py
 M	backend/api/routes/hymns.py
@@ -4968,6 +4969,7 @@ M	backend/tests/test_hymns_repo.py
 A	backend/tests/test_import_hymnal_cli.py
 M	backend/tests/test_no_streamlit_in_core.py
 A	backend/usecases/hymn_library.py
+A	data/.gitkeep
 R100	data/hymnals/PH1990_hymns.csv	backend/seed/hymnals/PH1990.csv
 M	docs/manual-verification.md
 M	docs/ops-runbook.md
@@ -5005,7 +5007,7 @@ gh pr list -R bbrown62450/church --head claude/slice-2-plan-4q33le --state open 
 
 **Expected:** `[]`. Send the owner exactly this, and wait for a clear yes:
 
-> The Hymns page (slice 6a-2) is verified on this machine: backend 1882 passed, 31 skipped (1825 and 27 before); frontend 863 tests in 103 files (835 before), three runs in a row; typecheck, lint and the production build are clean. It adds the hymn and hymnal routes, no database change and no new package. Settings gets **Hymns** after **Church**: everyone sees the church's hymnals and hymns, searches them, and adds and edits hymns; you (and any admin) also delete a hymn, set its year and familiarity, add a bundled hymnal and remove one that is neither your only nor your default hymnal. The builder's hymn list follows every change without a reload. The pull request also carries the 5b-2b record and today's 6a-2 planning notes. May I open the pull request as a **draft** titled "Slice 6a-2: Hymns in Settings", so the checks run? Merging stays with you.
+> The Hymns page (slice 6a-2) is verified on this machine: backend 1883 passed, 31 skipped (1825 and 27 before); frontend 869 tests in 103 files (835 before), three runs in a row; typecheck, lint and the production build are clean. It adds the hymn and hymnal routes, no database change and no new package. Settings gets **Hymns** after **Church**: everyone sees the church's hymnals and hymns, searches them, and adds and edits hymns; you (and any admin) also delete a hymn, set its year and familiarity, add a bundled hymnal and remove one that is neither your only nor your default hymnal. The builder's hymn list follows every change without a reload. The pull request also carries the 5b-2b record and today's 6a-2 planning notes. May I open the pull request as a **draft** titled "Slice 6a-2: Hymns in Settings", so the checks run? Merging stays with you.
 
 - [ ] **Step 5 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
 
@@ -5023,7 +5025,7 @@ Slice 6a-2: Hymns in Settings (the second of slice 6a's three PRs; owner's 6a-2 
 
 Later: 6a-3 (Liturgy prompts, Prayers, Rubric, Bulletin settings moved in), 6b (People), a possible "Fill from Hymnary.org".
 
-Tests: backend 1825 → 1882 passed, 27 → 31 skipped; frontend 835 → 863 in 100 → 103 files
+Tests: backend 1825 → 1883 passed, 27 → 31 skipped; frontend 835 → 869 in 100 → 103 files
 
 After merge (Task 12): a short check on the owner's phone, then a "Slice 6a-2 record" in docs/ops-runbook.md.
 
@@ -5037,7 +5039,7 @@ gh pr create -R bbrown62450/church --draft --base main --head claude/slice-2-pla
 gh pr checks <N> -R bbrown62450/church --watch --interval 30
 ```
 
-Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1882 passed, 31 skipped`, backend-postgres `31 passed, 1882 deselected`, frontend `863 passed` in 103 files. Then send: "PR #<N> is green: backend 1882 passed, 31 skipped (the four new Postgres tests passed in their own job, the 605-hymn add under 10 s among them); 863 frontend tests in 103 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R bbrown62450/church`.
+Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1883 passed, 31 skipped`, backend-postgres `31 passed, 1883 deselected`, frontend `869 passed` in 103 files. Then send: "PR #<N> is green: backend 1883 passed, 31 skipped (the four new Postgres tests passed in their own job, the 605-hymn add under 10 s among them); 869 frontend tests in 103 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R bbrown62450/church`.
 
 - [ ] **Step 6: Fix any failure in its owning task**
 
@@ -5058,7 +5060,7 @@ Run the last line with `run_in_background: true`. **Expected:** the PR URL; ever
 
 For each fix: change only the owning task's files; rerun Steps 2-3; commit `Fix: <what> (Task <n>, slice 6a-2 final verification)` with the trailer; after the PR exists, ask the owner before pushing it.
 
-Expected counts after this task: backend `1882 passed, 31 skipped`; frontend `863 passed` in 103 files.
+Expected counts after this task: backend `1883 passed, 31 skipped`; frontend `869 passed` in 103 files.
 
 ### Task 12: Merge, the owner's phone check (four steps), the record (OWNER + agent)
 
@@ -5204,7 +5206,7 @@ gh pr checks claude/slice-2-plan-4q33le -R bbrown62450/church --watch
 
 Code only (no schema to undo). On the owner's yes for each outward command: a branch `claude/revert-6a2` from `origin/main`, `git revert -m 1 --no-commit <merge sha>`, a commit "Revert slice 6a-2 (PR #<N>)" with the trailer, both suites (`1825 passed, 27 skipped`; `835 passed` in 100), a PR, CI, and the merge on the owner's yes; record it in the record. Hymns added, edited or deleted through the page stay as they are in the `hymns` table (the old app could make the same changes), and the CSV goes back to `data/hymnals/`, so nothing needs undoing in the data.
 
-Expected counts after this task: backend `1882 passed, 31 skipped` on `main`; frontend `863 passed` in 103 files. The records PR adds no test.
+Expected counts after this task: backend `1883 passed, 31 skipped` on `main`; frontend `869 passed` in 103 files. The records PR adds no test.
 
 ---
 
@@ -5215,15 +5217,15 @@ Expected counts after this task: backend `1882 passed, 31 skipped` on `main`; fr
 - **The empty `data/hymnals` folder.** `git mv` leaves the emptied folder on disk, and `test_the_bundled_ph1990_ships_under_backend_and_loads_605_rows` checks it is gone, so T1 Step 3 removes it (`rmdir data/hymnals`); a fresh checkout never has it. `data/` itself stays, kept by an empty `data/.gitkeep` (plan review I1), since the local SQLite database lives there.
 - **The library in T7's tests.** T8 puts the library on the page, which reads `GET /hymns`; T7's page test answers it from the start (an empty page), so T8 does not edit it.
 - **Lint.** React's lint refuses a `setState` called directly in an effect; the "still working" flag is reset when an add starts and shown only while the add is pending.
-- **Mutation checks** (each change made by hand in the build worktree, the named tests run, the change undone): the role check for the facts dropped from `update_hymn` → `3 failed, 38 passed` (`test_hymn_library.py` and `test_api_hymns_admin.py`); `find_duplicate` ignoring `exclude_id` → `1 failed, 60 passed` (the repo, usecase and API tests); the import overwriting differing values again → `1 failed, 22 passed` (`test_hymns_repo.py`, `test_hymnals.py`); `refreshHymns` without the `["church", id, "hymns"]` prefix → `4 failed, 16 passed` (the two page test files); **Delete hymn** shown to members → `1 failed, 12 passed` (`hymn-library.test.tsx`).
-- **The lock on Postgres.** On a throwaway local PG 16 cluster (initialised under `/var/lib/postgresql`, port 5441, never a real database, stopped and deleted afterwards; `TEST_DATABASE_URL=postgresql://postgres@localhost:5441/church_test`): `test_hymn_library_postgres.py` `4 passed`. With `lock_church`'s `with_for_update=True` turned off, three fail (the held-lock test, the barrier test and the two PH1990 adds) and the timing test passes. All Postgres-marked tests on that cluster, at the end of the final replay below: `31 passed, 1882 deselected, 1 warning` (CI's `backend-postgres` job runs the same set).
+- **Mutation checks** (each change made by hand in a worktree with every directive applied, the named tests run, the change undone; rerun after the plan review fixes): the role check for the facts dropped from `update_hymn` → `3 failed, 39 passed` (`test_hymn_library.py` and `test_api_hymns_admin.py`); `find_duplicate` ignoring `exclude_id` → `1 failed, 61 passed` (the repo, usecase and API tests); the import overwriting differing values again → `1 failed, 22 passed` (`test_hymns_repo.py`, `test_hymnals.py`); `refreshHymns` without the `["church", id, "hymns"]` prefix → `4 failed, 21 passed` (the two page test files); **Delete hymn** shown to members → `1 failed, 12 passed` (`hymn-library.test.tsx`). The review fixes, each undone alone: the blank-title guard (M8) → `1 failed, 27 passed` (`test_hymn_library.py`); a hymnal write refreshing only after a 404 or 409 again (I3) → `1 failed, 11 passed` (`hymns-settings-page.test.tsx`), and likewise the "already added" toast (I3), the 404 focus (M1), the singular body (M2) and `REMOVABLE_CODE` (M4), each `1 failed, 11 passed`; the member's link (M5) → `1 failed, 12 passed` (`church-settings-page.test.tsx`); `POST /hymnals` back at 30 s → `1 failed, 6 passed` (`hymns.test.ts`).
+- **The lock on Postgres.** On a throwaway local PG 16 cluster (initialised under `/var/lib/postgresql`, port 5441, never a real database, stopped and deleted afterwards; `TEST_DATABASE_URL=postgresql://postgres@localhost:5441/church_test`): `test_hymn_library_postgres.py` `4 passed`. With `lock_church`'s `with_for_update=True` turned off, three fail (the held-lock test, the barrier test and the two PH1990 adds) and the timing test passes. All Postgres-marked tests on that cluster, at the end of the final replay below: `31 passed, 1882 deselected, 1 warning` (CI's `backend-postgres` job runs the same set). After the plan review fixes, on a new throwaway cluster the same way (port 5441, stopped and deleted afterwards), with every directive applied: `test_hymn_library_postgres.py` `4 passed`, the same three failing with `with_for_update=False`, and all Postgres-marked tests `31 passed, 1883 deselected, 1 warning`.
 - **The production build** compiled with `○ /settings/hymns` beside the other Settings routes.
 
-**Replay of the finished plan (2026-10-07).** The directives of T1-T10 were applied in order by a replay script that parses each step's **Create**, **Replace**, **Append** and **In … replace** blocks and its `bash` blocks (T1's move, each commit), and runs every command on its "Run:" lines, onto a fresh detached worktree of the branch at the plan's commit ``5abe882`` (outside the repo directory, removed afterwards), with the repo's `.venv` (a symlink) and a hard-linked copy of `frontend/node_modules`:
-- All 48 directives applied (T1 3 + 2, T2 1 + 4, T3 2 + 1, T4 3 + 5, T5 1, T6 1 + 6, T7 1 + 3, T8 1 + 4, T9 5 + 4, T10 1); every **In … replace** anchor occurred exactly once; T1's move and all ten commit blocks ran, each commit with the trailer; afterwards the replayed `backend`, `frontend/src` and `docs/manual-verification.md` trees were identical to the build worktree's.
+**Replay of the finished plan (2026-10-07, after the plan review fixes).** The directives of T1-T10 were applied in order by a replay script that parses each step's **Create**, **Replace**, **Append** and **In … replace** blocks and its `bash` blocks (T1's move, each commit), and runs every command on its "Run:" lines, onto a fresh detached worktree of the branch at the plan's commit `d2c23a9` (the review fixes' code; the later plan commits change only expected outputs and prose), outside the repo directory and removed afterwards, with the repo's `.venv` (a symlink) and a hard-linked copy of `frontend/node_modules`:
+- All 51 directives applied (T1 3 + 2, T2 1 + 4, T3 2 + 1, T4 3 + 5, T5 1, T6 1 + 6, T7 1 + 3, T8 1 + 4, T9 6 + 6, T10 1); every **In … replace** anchor occurred exactly once; T1's move (with `data/.gitkeep`) and all ten commit blocks ran, each commit with the trailer (T1's staging `data/.gitkeep`); afterwards the replayed `backend` and `frontend/src` trees were identical to a second worktree with the same directives applied, where the mutation checks above were run.
 - Baselines before T1: backend `1825 passed, 27 skipped`; frontend `835 passed` in 100 files; typecheck 0, lint 0.
 - Every "see it fail" output and every count above is quoted from this replay (times as `<t>`, Vitest's per-test times left out).
-- Every count matched the table: backend 1832, 1837, 1864, 1882 passed with 27 skipped, then 31 skipped from T5; frontend 842 in 101, 849 in 102, 862 in 103, 863 in 103; T1 Step 4 `13 passed`; T2 Step 4 `93 passed` and `streamlit_tests` `35 passed`; T3 Step 4 `30 passed`; T4 Step 4 ` 2 files changed, 1933 insertions(+), 221 deletions(-)` and `33 passed`; T7's and T8's three runs `7 passed` and `13 passed` each time, no flaky run; T9 `56 passed`; typecheck 0 and lint 0 after T4, T6, T7, T8 and T9; T10 `89 passed`, `4`, `0`, ` 1 file changed, 15 insertions(+)`. After T10, T11 Step 2's and Step 3's outputs (quoted there): `1882 passed, 31 skipped`, three runs of `863 passed` in 103 files, typecheck and lint 0, `✓ Compiled successfully` with `○ /settings/hymns`, and the 41 paths. An earlier replay (of the plan before three small changes: `maxLength` on the dialog's text boxes, the search box without the browser's own clear button, and `\ufeff`/`\ufffe`/`\uffff` written as escapes instead of invisible characters) gave the same outputs for T1-T10.
+- Every count matched the table: backend 1832, 1837, 1865, 1883 passed with 27 skipped, then 31 skipped from T5; frontend 842 in 101, 854 in 102, 867 in 103, 869 in 103; T1 Step 4 `13 passed`; T2 Step 4 `93 passed` and `streamlit_tests` `35 passed`; T3 Step 4 `31 passed`; T4 Step 4 ` 2 files changed, 1933 insertions(+), 221 deletions(-)` and `33 passed`; T7's and T8's three runs `12 passed` and `13 passed` each time, no flaky run; T9 `6 failed | 51 passed (57)` then `57 passed`; typecheck 0 and lint 0 after T4, T6, T7, T8 and T9; T10 `89 passed`, `4`, `0`, ` 1 file changed, 15 insertions(+)`. After T10, T11 Step 2's and Step 3's outputs (quoted there): `1883 passed, 31 skipped`, three runs of `869 passed` in 103 files, typecheck and lint 0, `✓ Compiled successfully` with `○ /settings/hymns`, and the 42 paths. The replays before the review (at `5abe882`, and an earlier one) gave the outputs the plan then quoted (`1882` and `863`).
 - Not run while planning: the pushes, the PR and CI, the merge, Railway's and Vercel's deploys and the owner's phone check (T12).
 
 ## Spec coverage
@@ -5256,6 +5258,7 @@ Expected counts after this task: backend `1882 passed, 31 skipped` on `main`; fr
 | The 5b-1 lessons: whitespace and case in the duplicate check; focus after a 404; dialogs not closable mid-request; late answers; bottom sheets with the keyboard; a 422 with no known field toasted | T2/T3 (`title_key`); T8 "closes the edit dialog when the hymn was deleted elsewhere…", "keeps the dialog open while a save runs"; T7 "keeps the add dialog open…"; clarifications 8, 10; T12 Step 5 |
 | Hand-offs: `SETTINGS_HYMNS_READY`; the Church page's link | T9 `hymns-step.test.tsx`, `church-settings-page.test.tsx` |
 | A guided phone check after the PR | T12 Steps 2-5; `docs/manual-verification.md` items 9-15 (T10) |
+| The plan review fixes (I1-I3, M1-M8) | T1 `test_the_bundled_ph1990_ships_under_backend_and_loads_605_rows` (`data/.gitkeep`); T3 `test_an_edit_of_an_old_hymn_with_a_blank_title_is_never_a_duplicate`; T6 the 60 s timeout; T7 "says a hymnal is already added…", "toasts a failed add and refreshes every list…", "moves focus to Add a hymnal when the hymnal was already removed elsewhere (404)", "words the removal of a one-hymn hymnal in the singular…", "offers no Remove for a hymnal whose code the removal route cannot take"; T9 the member's link; Risks; T10 item 10 and T12 Steps 3, 4 and 8 |
 
 S items **not** in 6a-2: Liturgy prompts, Prayers, Rubric and Bulletin settings moved in (6a-3); People and Danger zone (6b); S's `rebaseForm` and leave guard for the hymn dialog (clarification 24); S's Streamlit compatibility notes and manual check 10 (Streamlit retired); keying recent use by hymn id (answer 5, later).
 
@@ -5287,10 +5290,28 @@ Your 6a-2 planning answers of 2026-10-07 (the six, all as recommended) and the e
 
 Owner steps still to come: the plan's approval; the draft PR on your yes and ready on your yes (T11); the merge on your yes, then four phone checks one at a time (the test hymn deleted in the same step; PH1990 added and removed only if your church does not have it), and the records PR (T12).
 
+## Plan review fixes (2026-10-07)
+
+Each finding of the plan's review, and what changed. Every changed directive was replayed with the rest (Build notes); the counts and outputs above are that replay's.
+
+- **I1 (T1 Step 3: `data/` must stay).** The README and `backend/.env.example` use `sqlite:///../data/app.db` and `db/engine.py` falls back to `sqlite:///data/church.db`, so T1 Step 3 now runs only `rmdir data/hymnals` and adds an empty `data/.gitkeep` (staged in T1's commit); `test_the_bundled_ph1990_ships_under_backend_and_loads_605_rows` also checks `data/.gitkeep` is there. Clarification 16, the directive rules, File Structure (42 paths: 20 added), T11 Step 3's list (`A	data/.gitkeep`) and the Build notes say so.
+- **I2 (T12 Step 3, manual item 10: the duplicate tried on a real hymn).** The duplicate is now tried on the test hymn itself, before it is deleted: after the rename to **Test hymn 2**, **Add hymn** with the title **test hymn 2** and no number shows "{hymnal} already has test hymn 2." (`duplicate_message` with no number, the title as sent) and adds nothing; **Cancel**; then the test hymn is deleted. The owner is never asked to retype one of the church's hymns (T12's opening rule says so too); the record template's row 2 follows the new order.
+- **I3 (the hymnal add's timeout, its failures and an add that brings nothing).** `POST /hymnals` now waits 60 s (`timeouts.ts`), so "Still working. This can take up to a minute." is true. The server side is fine with that: uvicorn sets no request deadline, the app sets no `statement_timeout` outside migrations, and routes behind Railway already answer later (`POST /liturgy/generate`, an 80 s deadline). `useHymnWrite` now refreshes every hymn list, the hymnals, the sources and the profile after **any** failure of a hymnal write except a 401 or a lost church (a timed-out add may have finished on the server). `AddHymnalDialog` toasts "{code} is already added." when `inserted + updated === 0`. Tests: T6's timeout case (60 000), T7 "says a hymnal is already added when the add brings nothing new" and "toasts a failed add and refreshes every list, since the add may have finished on the server" (the fake server adds PH1990 and answers 500; the row turns to **Added** and the card shows two hymnals). Clarifications 5, 10 and 22 and owner question 13 carry the new line.
+- **M1 (T7: a removal answered 404).** The removal's `onError` marks the hymnal removed on a 404, so focus goes to **Add a hymnal** (its row is gone after the refresh). Test: T7 "moves focus to Add a hymnal when the hymnal was already removed elsewhere (404)". Clarification 6.
+- **M2 (T7: one hymn).** `removeBody` says "This deletes the 1 hymn in {code} …" for a hymnal with one hymn. Test: T7 "words the removal of a one-hymn hymnal in the singular, and says one outside the bundled list can't come back" (which also covers the not-bundled ending). Clarifications 6 and 22, owner question 13.
+- **M3 (Risks: the default hymnal changing silently).** Noted, not refused (refusing needs a count on every hymn write and a new message): a Risks entry, and the record's paragraph and Follow-ups row (T12 Step 8). No code change.
+- **M4 (T4/T7: codes the route cannot take).** Hidden, not widened: a hymnal whose code does not match `^[A-Za-z0-9_-]{2,20}$` (made only by the ops CLI or the old app) has no **Remove…** (`REMOVABLE_CODE` in `hymnals-card.tsx`). Widening the route would have to admit spaces, dots and slashes in a path segment, and a `/` cannot travel in one; `DELETE /hymnals/{code}` keeps S's pattern. Test: T7 "offers no Remove for a hymnal whose code the removal route cannot take" (`PH 1990` and `X` have none, `PH1990` has one). Clarification 4.
+- **M5 (T9: the member's summary).** The Church page's read-only summary shows "Add hymns on the Hymns page" under the no-hymns line too (one `AddHymnsLink` for both views). Test: T9's new "shows a member of a church with no hymns the link to the Hymns page (slice 6a-2)". Clarification 20.
+- **M6 (Risks: re-adding after a rename).** A Risks entry: the import matches by number and title words, so adding a bundled hymnal again after one of its hymns was renamed inserts the bundled title as a second hymn; the record notes it.
+- **M7 (T12 Step 4: the default set back).** Step 4 records whether the owner had to set the default hymnal back in **Church** before removing PH1990 (and to which code), and the record template's row 3 has a cell for it.
+- **M8 (T3 `update_hymn`: a blank title).** The duplicate check is skipped when the resulting title is blank (an old hymn's: null, a space or empty), which would otherwise give "GG2013 already has #5 .". Test: T3 `test_an_edit_of_an_old_hymn_with_a_blank_title_is_never_a_duplicate` (two blank-titled hymns moved onto the number of a third). Clarification 12.
+
+Counts after the fixes: backend `1883 passed, 31 skipped` (T3 +28, one new test); frontend `869 passed` in 103 files (T7 +12, five new tests; T9 +2, one new). Owner questions: still 13; only question 13 (the wording) changed, and now reads: "**The wording** (clarification 22): every new line on the page and in the dialogs, as listed there, including two lines added after the plan's review: "{code} is already added." (when adding a hymnal brings nothing new, for example because it was just added in another tab) and, for a hymnal with a single hymn, "This deletes the 1 hymn in {code} from your church's hymnal, …" instead of "This deletes all 1 hymns …". Recommended: accept."
+
 ## Self-review
 
 - **Coverage.** Every binding constraint has a home: the nav order (clarification 2, T9); one PR (T11); the year and familiarity admin-only, delete admin-only, hymnal removal never the only or the default (clarification 14, T3-T4, T7-T8); the edit note (clarification 8, T8); the accepted 12-week risk in the record (T12 Step 8); no Hymnary button; no migration (clarification 21, owner question 12); no em dash in new copy (clarification 22; T10 Step 2 and T11 Step 3 grep the added lines; S's em dashes dropped, owner question 8); no ids or real addresses in the docs (only `@example.com`/`@example.org`; the record's own grep, T12 Step 8); the frozen Streamlit files untouched and their tests passing (T2 Step 4 runs `streamlit_tests`; T11 Step 3's path check counts `app.py`, `streamlit_views` and `streamlit_tests` as 0); tests never reach the network (Global Constraints); the 5b-1 lessons (the Spec coverage row); 6a-1's patterns reused as they are (`lock_and_read_actor`, `require_admin_role`, the Settings shell, the generated types). The second-to-last task opens a draft PR only on the owner's yes; the last merges only on a yes, runs a four-step phone check one step at a time (the test hymn deleted in its step; PH1990 added and removed only when the church lacks it; a hymnal the church uses never removed) and inserts "### Slice 6a-2 record" before "## Backups", after "### Slice 5b-2b record".
 - **Placeholders.** None in T1-T10's code, tests, commands or expected outputs; every expected output is quoted from the replay. The `<…>` left are T11 and T12's runtime values (`<N>`, `<scratch>`, times, the owner's answers), as in the 5b-1 plan.
-- **Consistency.** Names agree across tasks: `hymnal_sources.load_rows`, `file_sources`, `list_bundled`, `rows_for`, `label_for` (T1) are used by `hymn_library` (T3) and the CLI (T1); `title_key`, `get_hymn`, `create_hymn`, `patch_hymn`, `find_duplicate`, `delete_hymnal` and the import's `session` (T2) by T3; the six usecases (T3) by the routes (T4); `HymnDetailOut`, `HymnalSourceList`, `HymnalAddedOut`, `HymnalRemovedOut` (T4) by the type names (T6); `refreshHymns`, `hymnFieldErrors`, `isDuplicateHymn` and the hooks (T6) by the card and the dialog (T7, T8); `keys.hymns`, `keys.hymnalSources` (existing) by the queries. The counts in the table, each task's "Expected" and the PR line (`1825 → 1882`, `27 → 31`, `835 → 863`, `100 → 103`) agree.
+- **Consistency.** Names agree across tasks: `hymnal_sources.load_rows`, `file_sources`, `list_bundled`, `rows_for`, `label_for` (T1) are used by `hymn_library` (T3) and the CLI (T1); `title_key`, `get_hymn`, `create_hymn`, `patch_hymn`, `find_duplicate`, `delete_hymnal` and the import's `session` (T2) by T3; the six usecases (T3) by the routes (T4); `HymnDetailOut`, `HymnalSourceList`, `HymnalAddedOut`, `HymnalRemovedOut` (T4) by the type names (T6); `refreshHymns`, `hymnFieldErrors`, `isDuplicateHymn` and the hooks (T6) by the card and the dialog (T7, T8); `keys.hymns`, `keys.hymnalSources` (existing) by the queries. The counts in the table, each task's "Expected" and the PR line (`1825 → 1883`, `27 → 31`, `835 → 869`, `100 → 103`) agree.
 - **Not verified while planning:** the pushes, the PR and CI (the four Postgres tests were run on a local throwaway Postgres instead), the merge, Railway's and Vercel's deploys, the owner's phone check, the import's speed over the Supabase pooler, and the page at 375 px in a real browser (the classes give 44 px targets; jsdom does not lay out).
 - **Judgement calls to watch in review:** tidying text instead of refusing it; the import filling only blanks (a behavior change for the ops CLI too); the duplicate check running on an edit only when the key changes; `HymnIn.title` nullable; the library's empty state without a second **Add hymn**; the catalog's GG2013 listed as a source.
