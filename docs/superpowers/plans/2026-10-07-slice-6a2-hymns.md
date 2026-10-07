@@ -5290,6 +5290,8 @@ Your 6a-2 planning answers of 2026-10-07 (the six, all as recommended) and the e
 
 Owner steps still to come: the plan's approval; the draft PR on your yes and ready on your yes (T11); the merge on your yes, then four phone checks one at a time (the test hymn deleted in the same step; PH1990 added and removed only if your church does not have it), and the records PR (T12).
 
+Owner's answer 2026-10-07: all recommended (binding).
+
 ## Plan review fixes (2026-10-07)
 
 Each finding of the plan's review, and what changed. Every changed directive was replayed with the rest (Build notes); the counts and outputs above are that replay's.
