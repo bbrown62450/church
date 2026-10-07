@@ -14,7 +14,7 @@ from db import session_scope
 from db.ids import as_uuid
 from db.models import Hymn, HymnCatalog
 from domain_errors import NotFound
-from hymn_search import normalize_title
+from hymn_search import normalize_title, usage_key
 
 
 def _as_uuid(value: Any) -> uuid.UUID:
@@ -106,6 +106,13 @@ def import_hymns(church_id, hymnal: str, rows: List[Dict[str, Any]], *,
     keys: number, title (required), scripture_refs, theme, hymnary_link, and
     optionally audio_url, text_year, hymnal_count.
 
+    A numbered row with no such match whose number the church already has in
+    this hymnal (a title the church edited) is not added; that hymn's blanks
+    are filled only when its title has the same words, ignoring punctuation
+    (hymn_search.usage_key), and otherwise it is left as it is (6a-2 build
+    review M2). Only the hymns the church had before the import count here,
+    so a hymnal with two hymns under one number still imports both.
+
     The new rows are flushed together at the end (no flush per row), so
     SQLAlchemy sends them as one batched INSERT (6a spec Risk 5)."""
     cid = _as_uuid(church_id)
@@ -116,6 +123,10 @@ def import_hymns(church_id, hymnal: str, rows: List[Dict[str, Any]], *,
             select(Hymn).where(Hymn.church_id == cid, Hymn.hymnal == hymnal)
         ).scalars().all()
         by_key = {(h.number, title_key(h.title)): h for h in existing}
+        by_number: Dict[int, List[Hymn]] = {}
+        for h in existing:
+            if h.number is not None:
+                by_number.setdefault(h.number, []).append(h)
         for r in rows:
             title = " ".join((r.get("title") or "").split())
             if not title:
@@ -128,6 +139,11 @@ def import_hymns(church_id, hymnal: str, rows: List[Dict[str, Any]], *,
             key = (number, title_key(title))
             match = by_key.get(key)
             fields = {attr: r.get(attr) for attr in _ENRICHMENT if r.get(attr) not in (None, "")}
+            if match is None and number in by_number:
+                words = usage_key(title)
+                match = next((h for h in by_number[number] if usage_key(h.title) == words), None)
+                if match is None:
+                    continue
             if match is None:
                 h = Hymn(church_id=cid, hymnal=hymnal, title=title, number=number, **fields)
                 s.add(h)

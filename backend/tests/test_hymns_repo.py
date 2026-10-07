@@ -358,6 +358,28 @@ def test_an_import_adds_once_fills_only_blanks_and_matches_titles_by_their_words
     assert hymn_repo.import_hymns(cid, "PH1990", rows) == {"inserted": 0, "updated": 0, "total": 0}
 
 
+def test_an_import_skips_a_number_the_church_has_and_fills_it_only_when_the_title_words_match(tmp_db, make_church):
+    """6a-2 build review M2: a hymn whose title the church edited is not added again under its old title."""
+    cid = make_church()
+    punctuated = _hymn(cid, "PH1990", "Amazing Grace!", 280, refs=None)
+    retitled = _hymn(cid, "PH1990", "My Own Vision", 339, refs=None)
+    elsewhere = _hymn(cid, "GG2013", "Old Hundredth", 400, refs=None)
+    rows = [{"number": 280, "title": "Amazing  grace", "scripture_refs": "Ephesians 2:8"},
+            {"number": 339, "title": "Be Thou My Vision", "scripture_refs": "Psalm 16:5"},
+            {"number": 400, "title": "All People That on Earth Do Dwell"},
+            {"number": None, "title": "Untitled Tune"}]
+    assert hymn_repo.import_hymns(cid, "PH1990", rows) == {"inserted": 2, "updated": 1, "total": 3}
+    with session_scope() as s:
+        assert (s.get(Hymn, punctuated).title, s.get(Hymn, punctuated).scripture_refs) == (
+            "Amazing Grace!", "Ephesians 2:8")
+        assert (s.get(Hymn, retitled).title, s.get(Hymn, retitled).scripture_refs) == ("My Own Vision", None)
+        assert s.get(Hymn, elsewhere).scripture_refs is None
+        titles = sorted(t for t in s.execute(select(Hymn.title).where(
+            Hymn.church_id == cid, Hymn.hymnal == "PH1990")).scalars())
+    assert titles == ["All People That on Earth Do Dwell", "Amazing Grace!", "My Own Vision", "Untitled Tune"]
+    assert hymn_repo.import_hymns(cid, "PH1990", rows) == {"inserted": 0, "updated": 0, "total": 0}
+
+
 def test_an_import_flushes_once_in_the_callers_session(tmp_db, make_church):
     cid = make_church()
     flushes = []
