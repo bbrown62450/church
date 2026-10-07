@@ -154,6 +154,20 @@ describe("Settings → Hymns, the Hymn library (slice 6a-2)", () => {
     expect(screen.queryByRole("button", { name: "Show more" })).toBeNull();
   });
 
+  it("lists a hymn once when an insert elsewhere shifts the next page (6a-2 build review M5)", async () => {
+    const many = Array.from({ length: 60 }, (_, i) => hymn({ id: `hymn-${i + 2}`, number: i + 2, title: `Hymn ${i + 2}` }));
+    const { api, user } = renderPage("member", { "GET /hymns": hymnsServer(many).list });
+    expect(await screen.findByText("60 hymns")).toBeInTheDocument();
+    // another member adds #1 meanwhile: it sorts first, so the next page starts one hymn earlier
+    api.set("GET /hymns", hymnsServer([hymn({ id: "hymn-1", number: 1, title: "Hymn 1" }), ...many]).list);
+    await user.click(screen.getByRole("button", { name: "Show more" }));
+    await waitFor(() => expect(listRequests(api)).toContain("/hymns?limit=50&offset=50"));
+    await waitFor(() => expect(screen.getByText("#61 Hymn 61")).toBeInTheDocument());
+    const labels = hymnRows().map((row) => row.textContent);
+    expect(labels).toHaveLength(60);
+    expect(new Set(labels).size).toBe(60);
+  });
+
   it("filters by hymnal with chips when the church has several, and badges each row", async () => {
     const server = hymnsServer([HOLY, PH_ONE]);
     const { api, user } = renderPage("member", {

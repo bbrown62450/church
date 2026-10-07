@@ -57,7 +57,13 @@ export function HymnLibrary({ admin, hymnals }: { admin: boolean; hymnals: Hymna
 
   const several = codes.length > 1;
   const pages = library.data?.pages;
-  const items = pages?.flatMap((p) => p.items) ?? [];
+  // A hymn listed on an earlier page is not listed again: another member's add or delete shifts the offsets (6a-2 build review M5).
+  const seen = new Set<string>();
+  const items = (pages?.flatMap((p) => p.items) ?? []).filter((h) => {
+    if (seen.has(h.id)) return false;
+    seen.add(h.id);
+    return true;
+  });
   const total = pages?.[0]?.total ?? 0;
 
   let body;
