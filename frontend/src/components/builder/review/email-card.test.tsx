@@ -258,7 +258,7 @@ describe("Review → Email the bulletin: the dialog (slice 5b-2)", () => {
     await user.type(other, "a@example.org, b@example.org");
     await user.click(within(dialog).getByRole("button", { name: "Send to 2 people" }));
     expect(await within(dialog).findByText("Not a valid value.")).toBeInTheDocument();
-    expect(other).toHaveFocus();
+    await waitFor(() => expect(other).toHaveFocus());
     expect(other).toHaveAttribute("aria-invalid", "true");
     expect(within(dialog).getByText("Too long (max 5000 characters).")).toBeInTheDocument();
     answer = fakeError(422, "invalid_request", "Give each custom element a label.", {
@@ -404,6 +404,28 @@ describe("Review → Email the bulletin: the dialog (slice 5b-2)", () => {
     await user.click(within(dialog).getByRole("button", { name: "Send to 1 person" }));
     await waitFor(() => expect(within(dialog).getByRole("button", { name: "Send to 1 person" })).toBeEnabled());
     expect(window.sessionStorage.getItem(uncertainSendKey(USER_ID, GRACE.id))).not.toBeNull();
+  });
+
+  it("brings a problem at the top into view by focusing it, and a To problem by focusing the first contact that can be chosen", async () => {
+    let answer = fakeError(409, "gmail_not_connected", "Connect your Gmail first, then try again.");
+    const { user } = renderReview({
+      "GET /contacts": contactList([BROKEN, MARY, OFFICE]),
+      "POST /bulletin-emails": () => answer,
+    });
+    const dialog = await openDialog(user);
+    await user.click(within(dialog).getByRole("checkbox", { name: /Mary Jones/ }));
+    await user.click(within(dialog).getByRole("button", { name: "Send to 1 person" }));
+    const top = await within(dialog).findByText("Connect your Gmail first, then try again.");
+    const alert = top.closest("[role=alert]");
+    await waitFor(() => expect(document.activeElement).toBe(alert));
+    expect(alert).toHaveAttribute("tabindex", "-1");
+
+    answer = fakeError(404, "not_found", "One of the selected contacts no longer exists. Refresh the list and try again.", {
+      details: { field: "contact_ids" },
+    });
+    await user.click(within(dialog).getByRole("button", { name: "Send to 1 person" }));
+    expect(await within(dialog).findByText("One of the selected contacts no longer exists. Refresh the list and try again.")).toBeInTheDocument();
+    await waitFor(() => expect(document.activeElement).toBe(within(dialog).getByRole("checkbox", { name: /Mary Jones/ })));
   });
 
   it("offers Reconnect Gmail when Google dropped the grant", async () => {

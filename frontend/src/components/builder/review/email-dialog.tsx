@@ -129,6 +129,7 @@ export function EmailDialog({ googleEmail, form, onFormChange, tracker, uncertai
   const start = useStartGmailConnect();
   const slow = useStillWorking(send.isPending);
   const [problem, setProblem] = useState<Problem | null>(null);
+  const topRef = useRef<HTMLDivElement>(null);
   const toRef = useRef<HTMLFieldSetElement>(null);
   const otherRef = useRef<HTMLInputElement>(null);
   const messageRef = useRef<HTMLTextAreaElement>(null);
@@ -151,12 +152,16 @@ export function EmailDialog({ googleEmail, form, onFormChange, tracker, uncertai
     if (problem?.[target]) setProblem((p) => (p ? { ...p, [target]: undefined } : p));
   };
 
-  const focusFirst = (found: Problem) => {
-    if (found.to) toRef.current?.querySelector("input")?.focus();
-    else if (found.other) otherRef.current?.focus();
-    else if (found.attachments) attachmentsRef.current?.querySelector("input")?.focus();
-    else if (found.message) messageRef.current?.focus();
-  };
+  // After the next paint: the problem is on screen and the inputs a send disabled are enabled again.
+  // A problem at the top is focused itself, so the phone's bottom sheet scrolls up to it.
+  const focusFirst = (found: Problem) =>
+    requestAnimationFrame(() => {
+      if (found.to) toRef.current?.querySelector<HTMLInputElement>("input:not(:disabled)")?.focus();
+      else if (found.other) otherRef.current?.focus();
+      else if (found.attachments) attachmentsRef.current?.querySelector<HTMLInputElement>("input:not(:disabled)")?.focus();
+      else if (found.message) messageRef.current?.focus();
+      else if (found.top) topRef.current?.focus();
+    });
 
   function failed(e: ApiError) {
     if (e.status === 401 || isNoChurchAccess(e) || e.code === "aborted") return;
@@ -327,7 +332,12 @@ export function EmailDialog({ googleEmail, form, onFormChange, tracker, uncertai
           <div className="grid content-start gap-5 md:overflow-y-auto">
             <div aria-live="polite" className="empty:hidden">
               {shown?.top ? (
-                <div role="alert" className="grid gap-2 rounded-md border border-destructive/40 p-3 text-sm">
+                <div
+                  ref={topRef}
+                  role="alert"
+                  tabIndex={-1}
+                  className="grid gap-2 rounded-md border border-destructive/40 p-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
                   <p>{shown.top}</p>
                   {shown.action === "hymns" ? (
                     <Link
