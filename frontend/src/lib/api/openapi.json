@@ -2402,6 +2402,67 @@
         "title": "LiturgyLimitsOut",
         "type": "object"
       },
+      "LiturgyPromptsIn": {
+        "additionalProperties": false,
+        "description": "The church's own wording, whole: a key left out goes back to its default.",
+        "properties": {
+          "prompts": {
+            "additionalProperties": {
+              "maxLength": 8000,
+              "type": "string"
+            },
+            "propertyNames": {
+              "enum": [
+                "system",
+                "call_to_worship",
+                "opening_prayer",
+                "prayer_of_confession",
+                "assurance",
+                "prayer_for_illumination",
+                "prayers_of_the_people",
+                "offertory_prayer",
+                "benediction"
+              ]
+            },
+            "title": "Prompts",
+            "type": "object"
+          }
+        },
+        "required": [
+          "prompts"
+        ],
+        "title": "LiturgyPromptsIn",
+        "type": "object"
+      },
+      "LiturgyPromptsOut": {
+        "properties": {
+          "can_edit": {
+            "description": "the caller is an owner or admin",
+            "title": "Can Edit",
+            "type": "boolean"
+          },
+          "fields": {
+            "description": "the system prompt first, then the sections in order",
+            "items": {
+              "$ref": "#/components/schemas/PromptFieldOut"
+            },
+            "title": "Fields",
+            "type": "array"
+          },
+          "placeholder_help": {
+            "description": "the placeholders a section prompt may use (liturgy_prompts.PLACEHOLDER_HELP)",
+            "title": "Placeholder Help",
+            "type": "string"
+          }
+        },
+        "required": [
+          "placeholder_help",
+          "can_edit",
+          "fields"
+        ],
+        "title": "LiturgyPromptsOut",
+        "type": "object"
+      },
       "MeOut": {
         "properties": {
           "churches": {
@@ -2792,6 +2853,60 @@
         "title": "PrintedDocumentIn",
         "type": "object"
       },
+      "PromptFieldOut": {
+        "properties": {
+          "customized": {
+            "description": "override is not null",
+            "title": "Customized",
+            "type": "boolean"
+          },
+          "default": {
+            "title": "Default",
+            "type": "string"
+          },
+          "key": {
+            "enum": [
+              "system",
+              "call_to_worship",
+              "opening_prayer",
+              "prayer_of_confession",
+              "assurance",
+              "prayer_for_illumination",
+              "prayers_of_the_people",
+              "offertory_prayer",
+              "benediction"
+            ],
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "description": "\"Overall voice\" for the system prompt, else the section's label",
+            "title": "Label",
+            "type": "string"
+          },
+          "override": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the church's own wording, or null when it uses the default",
+            "title": "Override"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "default",
+          "override",
+          "customized"
+        ],
+        "title": "PromptFieldOut",
+        "type": "object"
+      },
       "ReadingSetOut": {
         "description": "One set of readings. `scriptures` is in display order (first, psalm,\nsecond, gospel) with compound cells split; the usecase guarantees 1-20\nlines of 1-200 characters and a name of 1-300 (fits_draft_limits).",
         "properties": {
@@ -3095,13 +3210,18 @@
             "title": "Customized",
             "type": "array"
           },
+          "defaults": {
+            "$ref": "#/components/schemas/RubricModel",
+            "description": "the shared default rubric (slice 6a-3a, additive): the Rubric page's Reset to default"
+          },
           "rubric": {
             "$ref": "#/components/schemas/RubricModel"
           }
         },
         "required": [
           "rubric",
-          "customized"
+          "customized",
+          "defaults"
         ],
         "title": "RubricOut",
         "type": "object"
@@ -4883,6 +5003,198 @@
           }
         },
         "summary": "Save Bulletin Settings"
+      }
+    },
+    "/church/liturgy-prompts": {
+      "get": {
+        "operationId": "read_prompts_church_liturgy_prompts_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-church-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Church-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiturgyPromptsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Read Prompts"
+      },
+      "put": {
+        "operationId": "save_prompts_church_liturgy_prompts_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-church-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Church-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LiturgyPromptsIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiturgyPromptsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Save Prompts"
       }
     },
     "/churches": {

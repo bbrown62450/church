@@ -118,7 +118,7 @@ describe("the Bulletin step (printed bulletin PR 2b)", () => {
     }
     expect(within(step).getByRole("textbox", { name: "Prayers and concerns" }).tagName).toBe("TEXTAREA");
     expect(within(step).getByText("Choose the readings on step 1 to paste their text.")).toBeInTheDocument();
-    expect(within(step).getByRole("link", { name: "Bulletin settings" })).toHaveAttribute("href", "/bulletin-settings");
+    expect(within(step).getByRole("link", { name: "Bulletin settings" })).toHaveAttribute("href", "/settings/bulletin");
 
     await user.type(within(step).getByRole("textbox", { name: "Postlude title" }), "Festive Postlude");
     await user.type(within(step).getByRole("textbox", { name: "Other announcements" }), "The office is closed.");

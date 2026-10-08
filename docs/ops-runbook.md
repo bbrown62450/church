@@ -787,6 +787,32 @@ complete. No address, name, token or church id is recorded here.
 | Agent checks | Not run: this session has no sign-in for a test church | 2026-10-07 |
 | Follow-ups | The first send to two or more people: check the Sent copy lists them under Bcc. Consent screen in Testing: add each new sender as a test user; connections end after 7 days. Next: 6a-2 (Hymns), 6a-3 (Liturgy prompts, Prayers, Rubric, Bulletin settings moved in), 6b (People), Hear it from the pews | 2026-10-07 |
 
+### Slice 6a-2 record
+
+Slice 6a-2 (Hymns in Settings: the Hymnals card with adding and removing a
+bundled hymnal for owners and admins, never the only or the default one; the
+Hymn library with search, hymnal chips, Show more, add and edit for any
+member, delete and the year and familiarity for admins; `POST`, `PATCH` and
+`DELETE /hymns`, `GET /hymnal-sources`, `POST` and `DELETE /hymnals`, each
+write under the church-row lock with the caller's role re-read; the bundled
+PH1990 moved to `backend/seed/hymnals/PH1990.csv`; re-adding a hymnal adds
+only missing hymns and fills only blank details) merged as PR #56, the second
+of slice 6a's three PRs (owner's 6a-2 planning answers of 2026-10-07). No
+database change and no new package; production stays at
+`0007_bulletin_images`. The owner's check was steps on a phone; the test hymn
+was deleted in the same step, and no hymnal was added or removed. No address,
+name, token or church id is recorded here.
+
+| Step | Result | Date |
+|---|---|---|
+| Merge and deploy | PR #56 merged 00:21 UTC (20:21 Eastern, 2026-10-07), merge commit `00db7c6`. CI on `main`: backend, backend-postgres and frontend success | 2026-10-08 |
+| 1. Finding Hymns | Hymns listed among the Settings sections; Hymnals: GG2013 (853 hymns, Default) and PH1990 (605); the library showed 1458 hymns; searching 23 found #23; Show more loaded more | 2026-10-08 |
+| 2. A test hymn | Added, renamed, offered in the builder's picker without a reload, a lowercase duplicate refused with the dialog left open, then deleted | 2026-10-08 |
+| 3. Adding and removing a hymnal | Skipped: the church already has PH1990 (nothing removed) | 2026-10-08 |
+| 4. The phone screen | Easy to use, no sideways scroll; Save changes reachable with the keyboard open | 2026-10-08 |
+| Agent checks | Not run: this session has no sign-in for a test church | 2026-10-08 |
+| Follow-ups | Accepted risks: a renamed or renumbered hymn may be suggested again inside the 12-week window (recent use is kept by title and number); deleting or moving the last hymns of the default or only hymnal moves the effective default with no confirmation; re-adding a hymnal refills a detail someone cleared on purpose. Possible later: "Fill from Hymnary.org". Next: 6a-3 (Liturgy prompts, Prayers, Rubric, Bulletin settings moved in), 6b (People), Hear it from the pews | 2026-10-08 |
+
 ## Backups
 
 - **Workflow:** `.github/workflows/backup.yml` (`db-backup`). Daily at 08:37 UTC,

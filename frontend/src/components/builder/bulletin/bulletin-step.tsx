@@ -576,7 +576,7 @@ export function BulletinStep() {
       <WhoLeads />
       <Announcements />
       <ReadingTexts />
-      <Link href="/bulletin-settings" className={buttonVariants({ variant: "outline", size: "touch", className: "w-full sm:w-fit" })}>
+      <Link href="/settings/bulletin" className={buttonVariants({ variant: "outline", size: "touch", className: "w-full sm:w-fit" })}>
         Bulletin settings
       </Link>
     </section>

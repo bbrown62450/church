@@ -22,13 +22,17 @@ import type {
   InvitePreview,
   Lectionary,
   LiturgyConfig,
+  LiturgyPrompts,
   LiturgySection,
   OutlineItem,
   PreviousBulletin,
+  PromptKey,
   ReviewBody,
   ReviewNote,
   ReviewResult,
   ReviseBody,
+  Rubric,
+  RubricValues,
   ScriptureMatches,
   SectionError,
   SectionResult,
@@ -691,4 +695,67 @@ export function hymnalSources(items: HymnalSource[] = [
   hymnalSource(),
 ]): HymnalSources {
   return { items };
+}
+
+// --- slice 6a-3a: Settings → Liturgy prompts and Rubric ------------------------------------------------
+
+/** Short stand-ins for the shared default prompts, one per key (the real ones are long). */
+export const DEFAULT_PROMPTS: Readonly<Record<PromptKey, string>> = {
+  system: "You are a thoughtful worship writer.",
+  call_to_worship: "Write a Call to Worship for: {occasion}.",
+  opening_prayer: "Write an Opening Prayer for: {occasion}.",
+  prayer_of_confession: "Write a Prayer of Confession for: {occasion}.",
+  assurance: "Write the Assurance of Pardon for: {occasion}.",
+  prayer_for_illumination: "Write a Prayer for Illumination for: {occasion}.",
+  prayers_of_the_people: "Write Prayers of the People for: {occasion}. Hymns: {hymns}.",
+  offertory_prayer: "Write an Offertory Prayer for: {occasion}.",
+  benediction: "Write a Benediction for: {occasion}.",
+};
+
+/** `GET /church/liturgy-prompts` for an admin: every prompt on its default, except `overrides`. */
+export function liturgyPrompts(
+  overrides: Partial<Record<PromptKey, string>> = {},
+  extra: Partial<LiturgyPrompts> = {},
+): LiturgyPrompts {
+  return {
+    placeholder_help:
+      "Placeholders you can use: {occasion}, {scriptures}, {opening_hymn}, {hymns}. Unknown placeholders are ignored (they render as blank).",
+    can_edit: true,
+    fields: (Object.keys(DEFAULT_PROMPTS) as PromptKey[]).map((key) => ({
+      key,
+      label: key === "system" ? "Overall voice" : SECTION_LABELS[key],
+      default: DEFAULT_PROMPTS[key],
+      override: overrides[key] ?? null,
+      customized: key in overrides,
+    })),
+    ...extra,
+  };
+}
+
+/** The shared default rubric (backend `service_rubric.DEFAULT_RUBRIC`), shortened to two points a checklist. */
+export function defaultRubric(): RubricValues {
+  const two = (label: string) => [`${label} point one`, `${label} point two`];
+  return {
+    hymns: { opening: two("Opening"), response: two("Response"), closing: two("Closing") },
+    prayers: Object.fromEntries(Object.entries(SECTION_LABELS).map(([key, label]) => [key, two(label)])),
+    prefer_before_year: 1970,
+    prefer_familiar: true,
+  };
+}
+
+/** `GET /rubric`: the defaults with `overrides` applied (hymns and prayers merged per checklist), and `customized`. */
+export function rubric(overrides: Partial<RubricValues> = {}): Rubric {
+  const defaults = defaultRubric();
+  const merged: RubricValues = {
+    ...defaults,
+    ...overrides,
+    hymns: { ...defaults.hymns, ...overrides.hymns },
+    prayers: { ...defaults.prayers, ...overrides.prayers },
+  };
+  const customized = [
+    ...Object.keys(overrides.hymns ?? {}).map((slot) => `hymns.${slot}`),
+    ...Object.keys(overrides.prayers ?? {}).map((section) => `prayers.${section}`),
+    ...(["prefer_before_year", "prefer_familiar"] as const).filter((key) => key in overrides),
+  ];
+  return { rubric: merged, customized, defaults };
 }

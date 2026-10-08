@@ -5,7 +5,6 @@ import { useEffect, useRef, useState, type ComponentProps, type FormEvent, type 
 
 import { ErrorState } from "@/components/app/error-state";
 import { LeaveGuard } from "@/components/app/leave-guard";
-import { PageHeader } from "@/components/app/page-header";
 import { PendingButton } from "@/components/app/pending-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { buttonVariants } from "@/components/ui/button";
@@ -41,7 +40,8 @@ export const PAGE_DESCRIPTION = "What every printed bulletin uses. A field left 
 export const ADMINS_ONLY = "Only admins can edit the bulletin settings. You can read them below.";
 export { DISCARD_TITLE } from "@/components/app/leave-guard";
 const NOT_FILLED_IN = "Not filled in";
-const BACK_HREF = "/builder/review";
+/** The builder opens the step it was last on (Bulletin or Review & send, where the links to this page are). */
+const BACK_HREF = "/builder";
 const NO_ONE: string = "none"; // "No one" leads this part: a real choice, not a placeholder (F §4.9 item 3)
 const LEADER_ITEMS: Record<string, string> = {
   [NO_ONE]: "No one",
@@ -91,19 +91,22 @@ function PageSkeleton() {
 }
 
 /**
- * `/bulletin-settings` (printed bulletin spec, PR 2a; PR 2 planning answers
- * 1-3): the church's standing bulletin settings, which every member's
- * printed bulletin uses. Admins and owners edit and save the whole form;
- * members read a plain summary, with a note that only admins can edit it.
- * Until 6a folds it into Settings, the Printed bulletin card on Review & send
- * links here.
+ * `/settings/bulletin` (printed bulletin spec, PR 2a; PR 2 planning answers
+ * 1-3; moved into Settings by slice 6a-3a, owner's 6a-3 answer 3, and the old
+ * `/bulletin-settings` forwards here): the church's standing bulletin
+ * settings, which every member's printed bulletin uses. Admins and owners
+ * edit and save the whole form; members read a plain summary, with a note
+ * that only admins can edit it. The builder's Bulletin step and the Printed
+ * bulletin card on Review & send link here; **Back to the builder** returns
+ * to the step the builder was on.
  *
  * The settings are fetched again on opening the page (even when cached), and
  * the form shows only once that fetch is back, so it never starts from an
  * older value. 6a's rules for settings forms: newer server data rebases the
  * form (`rebaseForm`), and leaving with unsaved edits asks first
  * (`LeaveGuard`: the browser's warning on a reload or close, "Discard
- * unsaved changes?" on **Back to Review & send** and any other in-app link).
+ * unsaved changes?" on **Back to the builder**, the Settings sections and
+ * any other in-app link).
  */
 export function BulletinSettingsPage() {
   const church = useChurch();
@@ -115,16 +118,18 @@ export function BulletinSettingsPage() {
   if (!ready && settings.isFetchedAfterMount && settings.isSuccess) setReady(true);
 
   return (
-    <main className="mx-auto grid w-full max-w-2xl content-start gap-4 px-4 py-4">
-      <PageHeader
-        title="Bulletin settings"
-        description={PAGE_DESCRIPTION}
-        actions={
-          <Link href={BACK_HREF} className={buttonVariants({ variant: "outline", size: "touch" })}>
-            Back to Review &amp; send
-          </Link>
-        }
-      />
+    <section aria-labelledby="bulletin-settings-title" className="grid gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="grid min-w-0 gap-1">
+          <h2 id="bulletin-settings-title" className="text-lg font-semibold">
+            Bulletin settings
+          </h2>
+          <p className="text-sm text-muted-foreground">{PAGE_DESCRIPTION}</p>
+        </div>
+        <Link href={BACK_HREF} className={buttonVariants({ variant: "outline", size: "touch" })}>
+          Back to the builder
+        </Link>
+      </div>
       {ready && settings.data ? (
         canEdit ? (
           <SettingsForm settings={settings.data} onDirtyChange={setDirty} />
@@ -137,7 +142,7 @@ export function BulletinSettingsPage() {
         <PageSkeleton />
       )}
       <LeaveGuard when={dirty} />
-    </main>
+    </section>
   );
 }
 
@@ -325,7 +330,7 @@ function SettingsForm({
 function SummarySection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="grid gap-3 rounded-lg border p-4">
-      <h2 className="text-base font-medium">{title}</h2>
+      <h3 className="text-base font-medium">{title}</h3>
       {children}
     </section>
   );

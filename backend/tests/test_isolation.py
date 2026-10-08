@@ -34,6 +34,6 @@ def test_patch_rubric_is_isolated(client, isolation_world):
                            json={"prefer_familiar": False})
     # The denied PATCHes changed nothing in church B; the control changed church A.
     b = client.get("/rubric", headers=church_headers(isolation_world.b, isolation_world.church_b))
-    assert b.json() == {"rubric": default_rubric(), "customized": []}
+    assert b.json() == {"rubric": default_rubric(), "customized": [], "defaults": default_rubric()}
     a = client.get("/rubric", headers=church_headers(isolation_world.a, isolation_world.church_a))
     assert a.json()["customized"] == ["prefer_familiar"]

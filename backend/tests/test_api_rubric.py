@@ -34,7 +34,7 @@ def church(make_user, make_church):
 def test_member_reads_the_default_rubric(client, church):
     r = client.get("/rubric", headers=_headers("member@x.org", church))
     assert r.status_code == 200
-    assert r.json() == {"rubric": default_rubric(), "customized": []}
+    assert r.json() == {"rubric": default_rubric(), "customized": [], "defaults": default_rubric()}
 
 
 def test_reading_requires_membership(client, church, make_user):
@@ -59,7 +59,7 @@ def test_owner_changes_then_resets_an_item(client, church):
     assert client.get("/rubric", headers=h).json() == body
 
     r = client.patch("/rubric", json={"hymns": {"closing": None}}, headers=h)
-    assert r.json() == {"rubric": default_rubric(), "customized": []}
+    assert r.json() == {"rubric": default_rubric(), "customized": [], "defaults": default_rubric()}
 
 
 def test_invalid_values_return_a_readable_422(client, church):
@@ -91,4 +91,12 @@ def test_edits_stay_in_their_church(client, church, make_church, make_user):
     assert mine["rubric"]["prefer_familiar"] is False
     assert mine["customized"] == ["prefer_familiar"]
     r = client.get("/rubric", headers=_headers("other@x.org", other))
-    assert r.json() == {"rubric": default_rubric(), "customized": []}
+    assert r.json() == {"rubric": default_rubric(), "customized": [], "defaults": default_rubric()}
+
+
+def test_both_answers_carry_the_defaults_slice_6a3a(client, church):
+    h = _headers("owner@x.org", church)
+    body = client.patch("/rubric", json={"prayers": {"benediction": ["Sends the people out."]}}, headers=h).json()
+    assert body["defaults"] == default_rubric()
+    assert body["rubric"]["prayers"]["benediction"] == ["Sends the people out."]
+    assert client.get("/rubric", headers=_headers("member@x.org", church)).json() == body

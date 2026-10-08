@@ -137,7 +137,7 @@ export function PrintedCard() {
         ))}
       </ul>
       {downloaded && reviewStatus(draft) !== "saved" ? <p className="text-sm text-muted-foreground">{SAVE_HINT}</p> : null}
-      <Link href="/bulletin-settings" className={buttonVariants({ variant: "outline", size: "touch", className: "w-full sm:w-fit" })}>
+      <Link href="/settings/bulletin" className={buttonVariants({ variant: "outline", size: "touch", className: "w-full sm:w-fit" })}>
         Bulletin settings
       </Link>
     </section>

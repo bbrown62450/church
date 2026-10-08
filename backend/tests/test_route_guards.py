@@ -14,6 +14,13 @@ fastapi.routing.iter_route_contexts, and reads `ctx.dependant`, which, unlike
 `ctx.route.dependant`, includes the dependencies given to include_router(...)
 (checked on 0.141.1; the fastapi==0.141.* pin keeps it stable).
 
+ADMIN_ONLY pins the routes only owners and admins may call: each must have
+require_admin in its tree, and every route that has it must be listed. A
+usecase that re-reads the role under the church-row lock would still refuse
+a member if a route's guard were weakened to require_church, so no request
+test notices that; this does (6a-3a build review 4: PUT
+/church/liturgy-prompts and PATCH /rubric).
+
 Every slice that adds a user-scoped route adds it to USER_SCOPED in the same PR
 (1b: POST /churches, POST /invites/preview, POST /invites/accept;
 2a: GET /lectionary/readings, POST /scripture/passages, GET /translations;
@@ -49,6 +56,19 @@ USER_SCOPED = {
     ("POST", "/gmail-connection/auth-url"),
     ("POST", "/gmail-connection"),
     ("DELETE", "/gmail-connection"),
+}
+ADMIN_ONLY = {
+    ("PATCH", "/church"),
+    ("PUT", "/church/bulletin-settings"),
+    ("PUT", "/church/liturgy-prompts"),
+    ("PATCH", "/rubric"),
+    ("POST", "/contacts"),
+    ("PATCH", "/contacts/{contact_id}"),
+    ("DELETE", "/contacts/{contact_id}"),
+    ("GET", "/hymnal-sources"),
+    ("POST", "/hymnals"),
+    ("DELETE", "/hymnals/{code}"),
+    ("DELETE", "/hymns/{hymn_id}"),
 }
 CHURCH_SCOPED_TODAY = {("GET", "/church"), ("GET", "/rubric"), ("PATCH", "/rubric")}
 
@@ -97,12 +117,21 @@ def test_user_scoped_routes_require_a_user():
         assert require_church not in routes[route], f"{route} is user-scoped but reads X-Church-Id"
 
 
+def test_admin_routes_require_an_admin():
+    routes = route_dependencies(create_app())
+    for route in sorted(ADMIN_ONLY):
+        assert require_admin in routes[route], f"{route} is admin-only but does not depend on require_admin"
+    assert {route for route, calls in routes.items() if require_admin in calls} == ADMIN_ONLY
+
+
 def test_allowlists_name_real_routes():
     """A renamed or removed route must leave the allowlists too, or they hide nothing."""
     served = set(route_dependencies(create_app()))
     assert PUBLIC - served == set()
     assert USER_SCOPED - served == set()
+    assert ADMIN_ONLY - served == set()
     assert PUBLIC.isdisjoint(USER_SCOPED)
+    assert ADMIN_ONLY.isdisjoint(PUBLIC | USER_SCOPED)
 
 
 def _church_scoped_ok(church=Depends(require_church)) -> dict:

@@ -1,35 +1,32 @@
-"""The church's service rubric: any member reads it; admins change it."""
+"""The church's service rubric: any member reads it; admins change it.
+
+PATCH takes 6a's locking rule (slice 6a-3a; 6a spec, Semantics → PATCH
+/rubric): usecases.church_admin.update_rubric takes the church-row lock and
+re-reads the caller's role under it, so an admin demoted after require_admin
+ran gets the role 403. Both answers carry the additive `defaults`.
+"""
 from typing import Any, Dict
 
 from fastapi import APIRouter, Body, Depends
 
-from api.deps import ActiveChurch, require_admin, require_church
-from api.errors import ApiError, error_responses
+from api.deps import ActiveChurch, CurrentUser, get_current_user, require_admin, require_church
+from api.errors import error_responses
 from api.schemas import RubricOut
-from repos.churches import get_church_rubric_overrides, update_church_rubric
-from service_rubric import customized_keys, merge_rubric
+from usecases import church_admin
 
 router = APIRouter()
 
 
-def _rubric_out(church_id) -> RubricOut:
-    overrides = get_church_rubric_overrides(church_id)
-    return RubricOut(rubric=merge_rubric(overrides), customized=customized_keys(overrides))
-
-
 @router.get("/rubric", response_model=RubricOut, responses=error_responses(401, 403, 422, 503))
 def read_rubric(church: ActiveChurch = Depends(require_church)) -> RubricOut:
-    return _rubric_out(church.id)
+    return RubricOut(**church_admin.get_rubric(church.id))
 
 
 @router.patch("/rubric", response_model=RubricOut, responses=error_responses(401, 403, 422, 503))
 def change_rubric(
     patch: Dict[str, Any] = Body(...),
     church: ActiveChurch = Depends(require_admin),
+    user: CurrentUser = Depends(get_current_user),
 ) -> RubricOut:
     """Sparse update: send only what changes; null resets an item to its default."""
-    try:
-        update_church_rubric(church.id, patch)
-    except ValueError as exc:
-        raise ApiError(422, "invalid_rubric", str(exc)) from None
-    return _rubric_out(church.id)
+    return RubricOut(**church_admin.update_rubric(church.id, user.id, patch))
