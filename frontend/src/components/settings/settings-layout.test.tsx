@@ -2,6 +2,7 @@
 import { screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
+import OldBulletinSettingsRoute from "@/app/(signed-in)/(church)/bulletin-settings/page";
 import SettingsLayout from "@/app/(signed-in)/(church)/settings/layout";
 import SettingsHome from "@/app/(signed-in)/(church)/settings/page";
 import type { Church } from "@/lib/api/types";
@@ -29,7 +30,9 @@ describe("the Settings area (slice 6a-1)", () => {
     expect(links.map((link) => [link.textContent, link.getAttribute("href")])).toEqual([
       ["Church", "/settings/church"],
       ["Hymns", "/settings/hymns"],
-      ["Bulletin", "/bulletin-settings"],
+      ["Liturgy", "/settings/liturgy"],
+      ["Rubric", "/settings/rubric"],
+      ["Bulletin", "/settings/bulletin"],
       ["Contacts", "/settings/contacts"],
       ["Account", "/settings/account"],
     ]);
@@ -45,9 +48,12 @@ describe("the Settings area (slice 6a-1)", () => {
 
   it.each([
     ["/settings/hymns", "Hymns"],
+    ["/settings/liturgy", "Liturgy"],
+    ["/settings/rubric", "Rubric"],
+    ["/settings/bulletin", "Bulletin"],
     ["/settings/contacts", "Contacts"],
     ["/settings/account", "Account"],
-  ])("marks the section current on its page (slices 6a-2, 5b-1, 5b-2): %s", (path, label) => {
+  ])("marks the section current on its page (slices 6a-2, 6a-3a, 5b-1, 5b-2): %s", (path, label) => {
     renderShell("member", path);
     const links = within(screen.getByRole("navigation", { name: "Settings sections" })).getAllByRole("link");
     expect(links.filter((link) => link.getAttribute("aria-current") === "page").map((link) => link.textContent)).toEqual([
@@ -58,8 +64,13 @@ describe("the Settings area (slice 6a-1)", () => {
   it("shows a member the same sections, and /settings opens Church", () => {
     renderShell("member", "/settings");
     expect(screen.getByText("You're a member of Grace.")).toBeInTheDocument();
-    expect(within(screen.getByRole("navigation", { name: "Settings sections" })).getAllByRole("link")).toHaveLength(5);
+    expect(within(screen.getByRole("navigation", { name: "Settings sections" })).getAllByRole("link")).toHaveLength(7);
     renderWithProviders(<SettingsHome />, { path: "/settings" });
     expect(testRouter.replace).toHaveBeenCalledWith("/settings/church");
+  });
+
+  it("opens Settings → Bulletin from the old Bulletin settings address (slice 6a-3a)", () => {
+    renderWithProviders(<OldBulletinSettingsRoute />, { path: "/bulletin-settings" });
+    expect(testRouter.replace).toHaveBeenCalledWith("/settings/bulletin");
   });
 });

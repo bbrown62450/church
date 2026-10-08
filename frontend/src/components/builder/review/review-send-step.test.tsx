@@ -399,7 +399,7 @@ describe("Review & send: the printed bulletin (printed bulletin PR 1)", () => {
     expect(missing.compareDocumentPosition(download) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const link = within(card).getByRole("link", { name: "Bulletin settings" });
     expect(download.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(link).toHaveAttribute("href", "/bulletin-settings");
+    expect(link).toHaveAttribute("href", "/settings/bulletin");
     expect(link).toHaveClass("h-11");
     blank.unmount();
     window.localStorage.clear();

@@ -1,13 +1,15 @@
 /**
  * The Bulletin settings page (printed bulletin spec, PR 2a; PR 2 planning
  * answers 1-3): admins edit and save the whole form, members read a summary.
- * The page renders as the route does, with a Toaster.
+ * Since slice 6a-3a it is Settings → Bulletin, so it renders inside the
+ * Settings layout, as the route does, with a Toaster.
  */
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { toast } from "sonner";
 import { afterEach, describe, expect, it } from "vitest";
 
-import BulletinSettingsRoute from "@/app/(signed-in)/(church)/bulletin-settings/page";
+import BulletinSettingsRoute from "@/app/(signed-in)/(church)/settings/bulletin/page";
+import SettingsLayout from "@/app/(signed-in)/(church)/settings/layout";
 import { Toaster } from "@/components/ui/sonner";
 import type { BulletinSettings, Church } from "@/lib/api/types";
 import { makeQueryClient } from "@/lib/queries/client";
@@ -29,10 +31,12 @@ function renderPage(role: Church["role"] = "admin", routes: Record<string, FakeH
   if (cached) queryClient.setQueryData(keys.bulletinSettings(active.id), cached);
   const view = renderWithProviders(
     <>
-      <BulletinSettingsRoute />
+      <SettingsLayout>
+        <BulletinSettingsRoute />
+      </SettingsLayout>
       <Toaster />
     </>,
-    { me: me({ churches: [active] }), church: active, path: "/bulletin-settings", queryClient },
+    { me: me({ churches: [active] }), church: active, path: "/settings/bulletin", queryClient },
   );
   return { ...view, api };
 }
@@ -114,6 +118,9 @@ describe("Bulletin settings (printed bulletin PR 2a)", () => {
     renderPage("member", { [`GET ${PATH}`]: filledBulletinSettings({ email: "" }) });
     expect(await screen.findByText(ADMINS_ONLY)).toBeInTheDocument();
     const main = screen.getByRole("main");
+    // Each summary part is an h3 under the page's h2 "Bulletin settings".
+    expect(within(main).getByRole("heading", { level: 2, name: "Bulletin settings" })).toBeInTheDocument();
+    expect(within(main).getByRole("heading", { level: 3, name: "Church details" })).toBeInTheDocument();
     expect(within(main).getByText("(555) 010-0100")).toBeInTheDocument();
     expect(within(main).getByText("Not filled in")).toBeInTheDocument(); // the email
     expect(within(main).getByText("Sermon:").parentElement).toHaveTextContent("Sermon: Worship leader");
@@ -152,9 +159,9 @@ describe("Bulletin settings (printed bulletin PR 2a)", () => {
     expect(phone).toHaveFocus();
     expect(address).not.toHaveAttribute("aria-invalid");
     expect((puts(api)[0].body as { address_lines: string[] }).address_lines).toEqual([]);
-    expect(within(screen.getByRole("main")).getByRole("link", { name: "Back to Review & send" })).toHaveAttribute(
+    expect(within(screen.getByRole("main")).getByRole("link", { name: "Back to the builder" })).toHaveAttribute(
       "href",
-      "/builder/review",
+      "/builder",
     );
   });
 
@@ -209,7 +216,7 @@ describe("Bulletin settings (printed bulletin PR 2a)", () => {
   it("asks before leaving with unsaved edits", async () => {
     const { user } = renderPage("admin");
     const organist = await screen.findByLabelText("Organist");
-    const back = within(screen.getByRole("main")).getByRole("link", { name: "Back to Review & send" });
+    const back = within(screen.getByRole("main")).getByRole("link", { name: "Back to the builder" });
     expect(leaveWarned()).toBe(false);
     await user.type(organist, " Jr.");
     expect(leaveWarned()).toBe(true);
@@ -222,7 +229,7 @@ describe("Bulletin settings (printed bulletin PR 2a)", () => {
     await user.click(back);
     dialog = await screen.findByRole("alertdialog", { name: DISCARD_TITLE });
     await user.click(within(dialog).getByRole("button", { name: "Discard changes" }));
-    expect(testRouter.push).toHaveBeenCalledWith("/builder/review");
+    expect(testRouter.push).toHaveBeenCalledWith("/builder");
   });
 
   it("sets returnValue too on a reload with unsaved edits (browsers that ask only then)", async () => {
@@ -236,7 +243,7 @@ describe("Bulletin settings (printed bulletin PR 2a)", () => {
   it("lets a modified or middle click on Back open the link as usual, with no discard dialog", async () => {
     const { user } = renderPage("admin");
     const organist = await screen.findByLabelText("Organist");
-    const back = within(screen.getByRole("main")).getByRole("link", { name: "Back to Review & send" });
+    const back = within(screen.getByRole("main")).getByRole("link", { name: "Back to the builder" });
     await user.type(organist, " Jr.");
     for (const init of [{ ctrlKey: true }, { metaKey: true }, { shiftKey: true }, { altKey: true }, { button: 1 }]) {
       expect(clickFollowsLink(back, init)).toBe(true);

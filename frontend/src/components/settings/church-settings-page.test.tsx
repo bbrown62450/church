@@ -218,7 +218,7 @@ describe("Settings → Church (slice 6a-1)", () => {
     await user.click(bulletin);
     dialog = await screen.findByRole("alertdialog", { name: DISCARD_TITLE });
     await user.click(within(dialog).getByRole("button", { name: "Discard changes" }));
-    expect(testRouter.push).toHaveBeenCalledWith("/bulletin-settings");
+    expect(testRouter.push).toHaveBeenCalledWith("/settings/bulletin");
   });
 
   it("shows the error state with Retry when the profile cannot be read", async () => {
