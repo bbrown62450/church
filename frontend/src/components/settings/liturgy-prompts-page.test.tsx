@@ -20,6 +20,7 @@ import { fakeError, installFakeApi, type FakeHandler, type RecordedRequest } fro
 import { church, DEFAULT_PROMPTS, liturgyPrompts, me } from "@/test/fixtures";
 import { testRouter } from "@/test/mocks";
 import { renderWithProviders } from "@/test/render";
+import { positionAt, setViewport } from "@/test/viewport";
 
 import { ADMINS_ONLY, BRACE_NOTE, PROMPTS_INTRO, RESET_ALL_TITLE, SYSTEM_NOTE } from "./liturgy-prompts-page";
 
@@ -251,14 +252,30 @@ describe("Settings → Liturgy prompts (slice 6a-3a)", () => {
     expect(testRouter.push).toHaveBeenCalledWith("/settings/contacts");
   });
 
+  it("lets the footer sit after the cards while the keyboard is open on a phone held sideways (900x400)", async () => {
+    // 6a-3a build review 2: an iPhone in landscape is 844-932px wide, above md, and its keyboard leaves little room.
+    const restore = setViewport(900, 400);
+    try {
+      const { user } = renderPage("admin");
+      const footer = (await screen.findByRole("button", { name: "Save prompts" })).parentElement!;
+      expect(positionAt(footer)).toBe("sticky");
+      await user.click(screen.getByRole("textbox", { name: "Benediction" }));
+      expect(footer).toHaveAttribute("data-keyboard-open");
+      expect(positionAt(footer)).toBe("static");
+    } finally {
+      restore();
+    }
+  });
+
   it("lets the footer sit after the cards while the phone keyboard is open", async () => {
     const { user } = renderPage("admin");
     const footer = (await screen.findByRole("button", { name: "Save prompts" })).parentElement!;
     expect(footer).toHaveClass("sticky", "bottom-0");
+    expect(positionAt(footer, 390)).toBe("sticky");
     expect(footer).not.toHaveAttribute("data-keyboard-open");
     await user.click(await openCard(user, "Benediction"));
     expect(footer).toHaveAttribute("data-keyboard-open");
-    expect(footer).toHaveClass("max-md:static");
+    expect(positionAt(footer, 390)).toBe("static");
   });
 
   it("shows the error state with Retry when the prompts cannot be read", async () => {

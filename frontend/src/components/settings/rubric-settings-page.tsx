@@ -296,8 +296,12 @@ function RubricFormView({ out, admin, headingRef }: { out: Rubric; admin: boolea
           data-keyboard-open={keyboardOpen ? "" : undefined}
           className={cn(
             "sticky bottom-0 z-10 flex flex-wrap gap-2 border-t bg-background/95 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur",
-            // Below md with the iPhone keyboard open the footer sits after the last card, reachable and not covering the box.
-            keyboardOpen && "max-md:static",
+            // While a text field has focus the footer sits after the last card, at every width (6a-3a build
+            // review 2): a phone held sideways is wider than md (844-932px) and its keyboard leaves a short
+            // view the sticky bar would cover. Focus cannot tell an on-screen keyboard from a hardware one,
+            // and pointer media queries misreport tablets with keyboards, so no width or pointer test: on a
+            // desktop the cost is scrolling (or Tab) to Save while typing, and the bar comes back on blur.
+            keyboardOpen && "static",
           )}
         >
           <PendingButton type="submit" size="touch" className="w-full sm:w-fit" pending={save.isPending} disabled={!canSave || reset.isPending}>
