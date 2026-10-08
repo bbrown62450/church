@@ -152,3 +152,16 @@ export type LiturgyPromptsBody = components["schemas"]["LiturgyPromptsIn"];
  */
 export type Rubric = components["schemas"]["RubricOut"];
 export type RubricValues = components["schemas"]["RubricModel"];
+
+/**
+ * Settings → Prayers (slice 6a-3b): `GET`/`PUT /church/prayer-library`'s answer
+ * (the prayers in saved order, the voice profile, `can_edit`), one prayer
+ * (`id`, `type`, `text`, `added_at`), its type (a section key or "other"),
+ * `PUT`'s body (the whole library: a saved prayer keeps its `id`, a new one
+ * has none) and the voice-profile draft (not stored).
+ */
+export type PrayerLibrary = components["schemas"]["PrayerLibraryOut"];
+export type Prayer = components["schemas"]["PrayerOut"];
+export type PrayerType = Prayer["type"];
+export type PrayerLibraryBody = components["schemas"]["PrayerLibraryIn"];
+export type VoiceProfileDraft = components["schemas"]["VoiceProfileDraftOut"];

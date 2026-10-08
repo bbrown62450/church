@@ -321,6 +321,11 @@ describe("apiFetchBlob (slice 5a; F §1.9, §4.5)", () => {
     expect(timeoutFor("GET", "/bulletin-images/p1")).toBe(20_000);
   });
 
+  it("waits 90 s for the voice-profile draft: its 75 s server deadline plus a last connect (slice 6a-3b)", () => {
+    expect(timeoutFor("POST", "/church/prayer-library/voice-profile-draft")).toBe(90_000);
+    expect(timeoutFor("PUT", "/church/prayer-library")).toBe(20_000);
+  });
+
   it("waits 75 s for POST /gmail-connection: past the server's slowest Google answers (5b-2a build review M3)", () => {
     expect(timeoutFor("POST", "/gmail-connection")).toBe(75_000);
     expect(timeoutFor("POST", "/gmail-connection/auth-url")).toBe(20_000);

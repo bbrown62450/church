@@ -25,6 +25,8 @@ import type {
   LiturgyPrompts,
   LiturgySection,
   OutlineItem,
+  Prayer,
+  PrayerLibrary,
   PreviousBulletin,
   PromptKey,
   ReviewBody,
@@ -758,4 +760,22 @@ export function rubric(overrides: Partial<RubricValues> = {}): Rubric {
     ...(["prefer_before_year", "prefer_familiar"] as const).filter((key) => key in overrides),
   ];
   return { rubric: merged, customized, defaults };
+}
+
+// --- slice 6a-3b: Settings → Prayers ------------------------------------------------------------------------
+
+/** One saved prayer; `n` makes its id (a valid UUID) and its added_at. */
+export function prayer(n: number, overrides: Partial<Prayer> = {}): Prayer {
+  return {
+    id: `70000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
+    type: "prayer_of_confession",
+    text: `Merciful God, prayer ${n}.\nWe confess our sin.`,
+    added_at: `2026-10-0${Math.min(n, 9)}T16:00:00Z`,
+    ...overrides,
+  };
+}
+
+/** `GET /church/prayer-library` for an admin: these prayers and this profile. */
+export function prayerLibrary(prayers: Prayer[] = [], overrides: Partial<PrayerLibrary> = {}): PrayerLibrary {
+  return { prayers, voice_profile: "", can_edit: true, ...overrides };
 }
