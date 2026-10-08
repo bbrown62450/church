@@ -175,6 +175,7 @@ They pin S's prompt cases: the read lists all nine prompts in order with "Overal
 ````python
 `usecases.church_admin` (slice 6a-1)."""
 import pytest
+
 ````
 
 **with:**
@@ -357,9 +358,9 @@ def set_church_prompts(church_id, prompts: dict) -> None:
 ````python
 def set_church_prompts(church_id, prompts: dict, *, session: Optional[Session] = None) -> None:
     """Store per-church prompt overrides. A blank value for a key means "reset to
-    default" — it is dropped, so only real overrides are persisted. Runs in the
-    caller's `session` (usecases.church_admin.save_prompts, under the church-row
-    lock) or in its own scope."""
+    default" — it is dropped, so only real overrides are persisted."""
+    # Runs in the caller's `session` (usecases.church_admin.save_prompts, under
+    # the church-row lock, slice 6a-3a) or in its own scope.
 ````
 
 **In `backend/repos/churches.py`, replace:**
@@ -934,6 +935,7 @@ def test_the_prompt_routes_are_isolated_between_churches(client, isolation_world
 ````python
     assert r.status_code == 200
     assert r.json() == {"rubric": default_rubric(), "customized": []}
+
 ````
 
 **with:**
@@ -941,18 +943,23 @@ def test_the_prompt_routes_are_isolated_between_churches(client, isolation_world
 ````python
     assert r.status_code == 200
     assert r.json() == {"rubric": default_rubric(), "customized": [], "defaults": default_rubric()}
+
 ````
 
 **In `backend/tests/test_api_rubric.py`, replace:**
 
 ````python
+    r = client.patch("/rubric", json={"hymns": {"closing": None}}, headers=h)
     assert r.json() == {"rubric": default_rubric(), "customized": []}
+
 ````
 
 **with:**
 
 ````python
+    r = client.patch("/rubric", json={"hymns": {"closing": None}}, headers=h)
     assert r.json() == {"rubric": default_rubric(), "customized": [], "defaults": default_rubric()}
+
 ````
 
 **In `backend/tests/test_api_rubric.py`, replace:**
@@ -3913,12 +3920,13 @@ export default function OldBulletinSettingsRoute() {
 
 ````tsx
 import { PageHeader } from "@/components/app/page-header";
+import { PendingButton } from "@/components/app/pending-button";
 ````
 
 **with:**
 
 ````tsx
-
+import { PendingButton } from "@/components/app/pending-button";
 ````
 
 **In `frontend/src/components/bulletin-settings/bulletin-settings-page.tsx`, replace:**
@@ -4408,7 +4416,17 @@ Expected counts after this task: backend `1922 passed, 33 skipped` on `main`; fr
 
 ## Build notes
 
+**How this plan was written (2026-10-08).** Each task's code was built and run in a throwaway worktree of `6fddb8c` (the branch head `f5bec40` plus the plan's skeleton commit; the repo's `.venv` as a symlink; a hard-linked copy of `frontend/node_modules`, since Turbopack's production build refuses a `node_modules` symlink that points outside the project), one commit per task; the directives were then generated from those commits by a script (a new file as **Create**, a rewritten one as **Replace**, an addition at the end of a file as **Append**, every other change as **In … replace** with just enough whole-line context to occur once in the file as it stands at that point, changes three or fewer lines apart in one block), which also checked that applying each file's directives to the file before the commit gives the file after it. No package, variable or migration was added. While building:
+- **What S assumed and what exists.** 6a-1 built `lock_church`, `lock_and_read_actor`, `require_admin_role`, `LeaveGuard`, `rebaseForm` and the Settings shell, which this plan reuses as they are; slice 4 built `clean_prompt_overrides` (with the CRLF rule and its test) and `check_template`, imported here; `keys.liturgyPrompts` and `keys.rubric` were already in `keys.ts`, and `prompt_invalid` and `invalid_rubric` in `ERROR_CODES`. S's `update_church_rubric` deletion is not made (clarification 17). `test_isolation.py` already covers `GET` and `PATCH /rubric`'s isolation, so only its whole-answer assertion changes.
+- **A held request and a dialog.** With the "not closable while it runs" guard taken out, pressing Escape alone did not make the Rubric test fail, so T6 and T8 also tap **Cancel** while the request is held; the guard must ignore both.
+- **matchMedia in the tests.** One test widens the window with a `vi.spyOn(window, "matchMedia")`; it restores the spy itself, since a spy left in place opened every card in the tests after it.
+- **Mutation checks** (each change made by hand in the build worktree with every task applied, the named tests run, the change undone): `save_prompts` without `require_admin_role` → `1 failed, 61 passed` (`test_church_admin.py`, `test_api_liturgy_prompts.py`); `update_rubric` without it → `1 failed, 61 passed` (`test_church_admin.py`, `test_api_rubric.py`); `get_prompts` reading the stored values raw instead of through `clean_prompt_overrides` → `1 failed, 61 passed`; the prompts page without its `LeaveGuard` → `1 failed, 10 passed`; without the footer's `max-md:static` → `1 failed, 10 passed`; `isCustomized` ignoring the default → `5 failed, 11 passed` (`prompts.test.ts` and the page); `rubricPatch` never sending `null` → `2 failed, 15 passed` (`rubric.test.ts` and the page); the year's save not refreshing the hymn lists → `1 failed, 10 passed`; either Reset all confirmation closable while its request runs → `1 failed, 10 passed` on its page.
+- **The lock on Postgres.** On a throwaway local PG 16 cluster (initialised under `/var/lib/postgresql`, port 5442, never a real database, stopped and deleted afterwards; `TEST_DATABASE_URL=postgresql://postgres@localhost:5442/church_test`): `test_church_admin_postgres.py` `3 passed` (6a-1's test and T4's two). With `lock_church`'s `with_for_update=True` taken out, all three fail. TBD
+- **The production build** compiled with `○ /settings/liturgy`, `○ /settings/rubric` and `○ /settings/bulletin` beside the other Settings routes, and `○ /bulletin-settings` (the forward).
+
+**Replay of the finished plan (2026-10-08).** The directives of T1-T10 were applied in order by a replay script that parses each step's **Create**, **Replace**, **Append** and **In … replace** blocks and its `bash` blocks (each commit), and runs every command on its "Run:" lines and compares the output with the quoted **Expected** blocks, onto a fresh detached worktree of the branch at `6fddb8c` (outside the repo directory and removed afterwards), with the repo's `.venv` (a symlink) and a hard-linked copy of `frontend/node_modules`:
 TBD
+- Not run while planning: the pushes, the PR and CI, the merge, Railway's and Vercel's deploys and the owner's phone check (T12).
 
 ## Spec coverage
 
