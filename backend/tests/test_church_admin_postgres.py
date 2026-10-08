@@ -1,5 +1,6 @@
 """PATCH /church's write on real Postgres (6a spec, "Semantics" → Locking;
-slice 6a-1; slice 6a-3a adds the prompts and the rubric below): while a
+slice 6a-1; slice 6a-3a adds the prompts and the rubric below, and 6a-3b
+the prayer library): while a
 profile save holds the church-row lock, the other
 locked settings writers (the bulletin settings, the rubric) wait for it, and
 when it commits every key survives.
@@ -20,7 +21,7 @@ import pytest
 from repos import churches
 from repos.churches import create_church
 from repos.users import ensure_user
-from usecases import church_admin
+from usecases import church_admin, prayer_library
 
 pytestmark = pytest.mark.postgres
 
@@ -128,3 +129,74 @@ def test_two_rubric_saves_at_once_keep_both_checklists(world, monkeypatch):
     assert out["customized"] == ["hymns.closing", "prayers.benediction"]
     assert churches.get_church_rubric_overrides(church_id) == {
         "hymns": {"closing": ["Joyful."]}, "prayers": {"benediction": ["Sends the people out."]}}
+
+
+# --- slice 6a-3b: the prayer library takes the same lock ---------------------------------------------------------
+
+
+def test_the_other_settings_writers_wait_for_a_prayer_library_save_and_every_key_survives(world, monkeypatch):
+    """PUT /church/prayer-library's write (usecases.prayer_library.save_library)
+    holds the church-row lock from its role re-read to its commit: a profile
+    save, a prompts save, a rubric save and a bulletin settings save started
+    meanwhile wait, and every key is there afterwards (6a spec, Testing →
+    Postgres: the four writers, with the prayer library)."""
+    owner, church_id = world
+    inside, release = threading.Event(), threading.Event()
+    clean = prayer_library.clean_library
+
+    def held(*args, **kwargs):
+        inside.set()                   # save_library holds the church-row lock here
+        assert release.wait(10), "the test never released the prayer library save"
+        return clean(*args, **kwargs)
+
+    monkeypatch.setattr(prayer_library, "clean_library", held)
+    with ThreadPoolExecutor(5) as pool:
+        library = pool.submit(prayer_library.save_library, church_id, owner,
+                              [{"type": "benediction", "text": "Go in peace."}], "Warm.")
+        assert inside.wait(10), "the prayer library save never took the lock"
+        profile = pool.submit(church_admin.update_profile, church_id, owner, {"bible_translation": "kjv"})
+        prompts = pool.submit(church_admin.save_prompts, church_id, owner, {"benediction": "Go."})
+        rubric = pool.submit(church_admin.update_rubric, church_id, owner, {"prefer_before_year": 1900})
+        bulletin = pool.submit(churches.set_bulletin_settings, church_id, {"phone": "555-0100"})
+        threading.Event().wait(1)      # time for any writer to finish if nothing held it
+        waiting = [f for f in (profile, prompts, rubric, bulletin) if not f.done()]
+        assert len(waiting) == 4, "the other settings writers did not wait for the lock"
+        release.set()
+        for future in (library, profile, prompts, rubric, bulletin):
+            future.result(10)
+    settings = churches.get_church(church_id)["settings"]
+    assert [(p["type"], p["text"]) for p in settings["prayer_library"]["prayers"]] == [("benediction", "Go in peace.")]
+    assert settings["prayer_library"]["voice_profile"] == "Warm."
+    assert settings["bible_translation"] == "kjv"
+    assert settings["liturgy_prompts"] == {"benediction": "Go."}
+    assert settings["rubric"] == {"prefer_before_year": 1900}
+    assert settings["bulletin"] == {"phone": "555-0100"}
+
+
+def test_a_prayer_library_save_waits_for_a_prompts_save_and_keeps_the_prompts(world, monkeypatch):
+    """The other way round: a prayer library save started while a prompts
+    save holds the lock reads the row only after that save commits, so
+    neither key is lost."""
+    owner, church_id = world
+    inside, release = threading.Event(), threading.Event()
+    clean = church_admin.liturgy_prompts.clean_prompt_overrides
+
+    def held(*args, **kwargs):
+        inside.set()
+        assert release.wait(10), "the test never released the prompts save"
+        return clean(*args, **kwargs)
+
+    monkeypatch.setattr(church_admin.liturgy_prompts, "clean_prompt_overrides", held)
+    with ThreadPoolExecutor(2) as pool:
+        prompts = pool.submit(church_admin.save_prompts, church_id, owner, {"benediction": "Go."})
+        assert inside.wait(10), "the prompts save never took the lock"
+        library = pool.submit(prayer_library.save_library, church_id, owner,
+                              [{"type": "other", "text": "Bless this meal."}], "")
+        threading.Event().wait(1)
+        assert not library.done(), "the prayer library save did not wait for the lock"
+        release.set()
+        prompts.result(10)
+        library.result(10)
+    settings = churches.get_church(church_id)["settings"]
+    assert settings["liturgy_prompts"] == {"benediction": "Go."}
+    assert [p["text"] for p in settings["prayer_library"]["prayers"]] == ["Bless this meal."]
