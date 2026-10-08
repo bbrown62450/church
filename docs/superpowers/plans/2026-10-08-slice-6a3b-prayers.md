@@ -32,7 +32,7 @@
   `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
 - TDD: write the failing test first and see it fail as quoted.
 - **Backup push after every task** (standing rule): the controller runs `git push origin claude/slice-2-plan-4q33le` after each task's commit (never `--force`, never a rebase; if the push is rejected, `git pull --no-rebase origin claude/slice-2-plan-4q33le` and push again; on a network error retry after 2, 4, 8 and 16 s). A fix asked for by a review is a new commit, `Fix: <what> (Task <n> review)`. The container can restart and lose uncommitted work: commit as soon as a task's checks pass.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1923 → 1978 passed, 33 → 35 skipped; frontend 916 → 948 in 107 → 109 files`.
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1923 → 1983 passed, 33 → 35 skipped; frontend 916 → 952 in 107 → 109 files`.
 - New prose for the owner has no em dashes and no flattery. New user-facing copy is exactly the list in clarification 16 and has no em dashes; existing copy keeps its own punctuation.
 - No church id, email address, token, database URL or real person's name in any doc, commit, test or record. Tests use the fixtures' "Grace" and `@example.com` addresses and made-up prayers; **no prayer or voice profile from the owner's church is ever recorded**, in a doc, a commit, a test, a log line or the results file.
 - Ask the owner before any push to a PR, PR creation, marking ready, merging, or any production or settings action. Owner steps go one at a time, in plain words.
@@ -152,6 +152,7 @@ The owner's answers win over P, S and F; the code wins over all three where they
 |---|---|---|
 | `backend/tests/test_no_streamlit_in_core.py` | the new usecase is below the API layer | T1 |
 | `backend/integrations/http.py`, `backend/tests/test_http_client.py` | the OpenAI SDK's logger held at INFO (clarification 19) | T2 |
+| `backend/integrations/openai_client.py` | holds that logger again after the SDK's import (6a-3b build review 4) | build review |
 | `backend/api/main.py`, `backend/tests/test_route_guards.py`, `frontend/src/lib/api/openapi.json`, `frontend/src/lib/api/schema.d.ts` | the router; `ADMIN_ONLY`; regenerated | T3 |
 | `backend/tests/test_church_admin_postgres.py` | the lock on Postgres | T4 |
 | `frontend/src/lib/api/types.ts`, `frontend/src/test/fixtures/index.ts`, `frontend/src/lib/api/timeouts.ts`, `frontend/src/lib/api/client.test.ts` | the type names; `prayer()`, `prayerLibrary()`; the draft's 90 s | T5 |
@@ -159,7 +160,7 @@ The owner's answers win over P, S and F; the code wins over all three where they
 | `docs/manual-verification.md` | the 6a-3b items | T9 |
 | `docs/ops-runbook.md` | "### Slice 6a-3b record" (the records PR, after the merge) | T11 |
 
-**Counts in the PR:** 29 paths: 13 added (this plan, the eleven new code and test files above, and `.claude/skills/jank-deep/SKILL.md`, committed to the branch by another session) and 16 modified (the fourteen code, test and API paths above, `docs/manual-verification.md`, and `docs/ops-runbook.md`, whose 6a-3a record rides along until merged; the runbook's own T11 change goes in the records PR). **Untouched:** migrations, `db/models.py`, `api/deps.py`, `api/ratelimit.py`, `integrations/openai_client.py`, `prayer_library.py`, `liturgy_prompts.py`, `liturgy_config.py`, `repos/churches.py`, `usecases/church_admin.py`, `usecases/members.py`, `usecases/liturgy.py`, `usecases/liturgy_review.py`, `domain_errors.py`, `lib/queries/keys.ts`, `lib/settings/profile.ts`, `components/app/leave-guard.tsx`, `app.py`, `streamlit_views`, `streamlit_tests`.
+**Counts in the PR:** 30 paths: 13 added (this plan, the eleven new code and test files above, and `.claude/skills/jank-deep/SKILL.md`, committed to the branch by another session) and 17 modified (the fifteen code, test and API paths above, `docs/manual-verification.md`, and `docs/ops-runbook.md`, whose 6a-3a record rides along until merged; the runbook's own T11 change goes in the records PR). **Untouched:** migrations, `db/models.py`, `api/deps.py`, `api/ratelimit.py`, `prayer_library.py`, `liturgy_prompts.py`, `liturgy_config.py`, `repos/churches.py`, `usecases/church_admin.py`, `usecases/members.py`, `usecases/liturgy.py`, `usecases/liturgy_review.py`, `domain_errors.py`, `lib/queries/keys.ts`, `lib/settings/profile.ts`, `components/app/leave-guard.tsx`, `app.py`, `streamlit_views`, `streamlit_tests`.
 
 **Task order and review batch:** T1 → T9, each one commit and a backup push; then one review of the whole batch with its fixes as `Fix: …` commits; T10 verifies and opens the draft PR on the owner's yes; T11 merges on the owner's yes, runs the phone check and writes the record.
 
@@ -3778,17 +3779,17 @@ for i in 1 2 3; do (cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Te
 (cd frontend && NEXT_PUBLIC_SUPABASE_URL=https://ci-placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-placeholder NEXT_PUBLIC_API_URL=http://localhost:8000 npm run build 2>&1 | grep -E "Compiled successfully|Error|/settings")
 ```
 
-**Expected** (the suite; three runs of `Test Files  109 passed (109)` and `Tests  948 passed (948)` with no `×` or `FAIL` line, one naming a failing test: Step 6; typecheck and lint 0; the build with `/settings/prayers` and no `Error`, a font `Failed to fetch` only: say so and rely on CI):
+**Expected** (the suite; three runs of `Test Files  109 passed (109)` and `Tests  952 passed (952)` with no `×` or `FAIL` line, one naming a failing test: Step 6; typecheck and lint 0; the build with `/settings/prayers` and no `Error`, a font `Failed to fetch` only: say so and rely on CI):
 ```
-1978 passed, 35 skipped in <t>s
+1983 passed, 35 skipped in <t>s
 ```
 ```
  Test Files  109 passed (109)
-      Tests  948 passed (948)
+      Tests  952 passed (952)
  Test Files  109 passed (109)
-      Tests  948 passed (948)
+      Tests  952 passed (952)
  Test Files  109 passed (109)
-      Tests  948 passed (948)
+      Tests  952 passed (952)
 ```
 ```
 typecheck 0
@@ -3817,17 +3818,18 @@ grep -c "logger\." backend/usecases/prayer_library.py
 git diff origin/main...HEAD -- backend frontend/src | grep '^+' | grep -c '—'
 python3 -c "import pathlib; t=pathlib.Path('docs/superpowers/plans/2026-10-08-slice-6a3b-prayers.md').read_text(); print(sum(t.count(c) for c in ('\u2028','\u2029','\ufffe','\uffff')))"
 git diff --name-status origin/main...HEAD | LC_ALL=C sort -k2
-git diff --name-only origin/main...HEAD -- backend/migrations backend/db .github frontend/package.json frontend/package-lock.json backend/requirements.txt requirements-dev.txt app.py streamlit_views streamlit_tests backend/prayer_library.py backend/liturgy_prompts.py backend/integrations/openai_client.py backend/integrations/budget.py backend/api/ratelimit.py backend/repos backend/usecases/liturgy.py backend/usecases/liturgy_review.py backend/domain_errors.py | wc -l
+git diff --name-only origin/main...HEAD -- backend/migrations backend/db .github frontend/package.json frontend/package-lock.json backend/requirements.txt requirements-dev.txt app.py streamlit_views streamlit_tests backend/prayer_library.py backend/liturgy_prompts.py backend/integrations/budget.py backend/api/ratelimit.py backend/repos backend/usecases/liturgy.py backend/usecases/liturgy_review.py backend/domain_errors.py | wc -l
 git log --reverse --no-merges --format=%s origin/main..HEAD
 for c in $(git rev-list origin/main..HEAD); do git show -s --format=%B "$c" | grep -q '^Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>$' || echo "no trailer: $(git show -s --format='%h %s' "$c")"; done; echo "trailer check done"
 ```
 
-**Expected:** nothing from `git status` (the committed snapshot and types are current); `imports grep exit 1`; `raw html grep exit 1`; `1` (the usecase's only log call is the draft's INFO line of counts, `_log_draft`); `0` (no em dash in an added line of code or tests); `0` (no U+2028, U+2029, U+FFFE or U+FFFF in this plan); exactly these 29 paths (the 6a-3a record in the runbook and the `/jank-deep` skill committed to the branch by another session ride along until merged):
+**Expected:** nothing from `git status` (the committed snapshot and types are current); `imports grep exit 1`; `raw html grep exit 1`; `1` (the usecase's only log call is the draft's INFO line of counts, `_log_draft`); `0` (no em dash in an added line of code or tests); `0` (no U+2028, U+2029, U+FFFE or U+FFFF in this plan); exactly these 30 paths (`backend/integrations/openai_client.py` from the build review fixes, see "Build notes"; the 6a-3a record in the runbook and the `/jank-deep` skill committed to the branch by another session ride along until merged):
 ```
 A	.claude/skills/jank-deep/SKILL.md
 M	backend/api/main.py
 A	backend/api/routes/prayer_library.py
 M	backend/integrations/http.py
+M	backend/integrations/openai_client.py
 A	backend/tests/test_api_prayer_library.py
 M	backend/tests/test_church_admin_postgres.py
 M	backend/tests/test_http_client.py
@@ -3864,7 +3866,7 @@ gh pr list -R bbrown62450/church --head claude/slice-2-plan-4q33le --state open 
 
 **Expected:** `[]`. Send the owner exactly this, and wait for a clear yes:
 
-> The Prayers page (slice 6a-3b) is verified on this machine: backend 1978 passed, 35 skipped (1923 and 33 before); frontend 948 tests in 109 files (916 in 107 before), three runs in a row; typecheck, lint and the production build are clean. There is no database change and no new package. Settings gets **Prayers** between **Liturgy** and **Rubric**: your own prayers (pasted or typed, up to 30, each with its type) and the voice profile, saved together with one **Save**, and **Update from my prayers**, which asks the AI for a draft profile you can use or ignore (it is never saved unless you choose it and tap **Save**). Everyone in the church can read the page; you (and any admin) can change it. No test talks to OpenAI, and no prayer is ever written to the logs. The pull request also carries the 6a-3a record and the /jank-deep skill. May I open the pull request as a **draft** titled "Slice 6a-3b: Prayers in Settings (the prayer library and the AI voice-profile draft)", so the checks run? Merging stays with you.
+> The Prayers page (slice 6a-3b) is verified on this machine: backend 1983 passed, 35 skipped (1923 and 33 before); frontend 952 tests in 109 files (916 in 107 before), three runs in a row; typecheck, lint and the production build are clean. There is no database change and no new package. Settings gets **Prayers** between **Liturgy** and **Rubric**: your own prayers (pasted or typed, up to 30, each with its type) and the voice profile, saved together with one **Save**, and **Update from my prayers**, which asks the AI for a draft profile you can use or ignore (it is never saved unless you choose it and tap **Save**). Everyone in the church can read the page; you (and any admin) can change it. No test talks to OpenAI, and no prayer is ever written to the logs. The pull request also carries the 6a-3a record and the /jank-deep skill. May I open the pull request as a **draft** titled "Slice 6a-3b: Prayers in Settings (the prayer library and the AI voice-profile draft)", so the checks run? Merging stays with you.
 
 - [ ] **Step 5 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
 
@@ -3881,7 +3883,7 @@ Slice 6a-3b: Prayers in Settings, the prayer library and the AI voice-profile dr
 
 Later: 6b (People).
 
-Tests: backend 1923 → 1978 passed, 33 → 35 skipped; frontend 916 → 948 in 107 → 109 files
+Tests: backend 1923 → 1983 passed, 33 → 35 skipped; frontend 916 → 952 in 107 → 109 files
 
 After merge (Task 11): a short check on the owner's phone, then a "Slice 6a-3b record" in docs/ops-runbook.md.
 
@@ -3895,7 +3897,7 @@ gh pr create -R bbrown62450/church --draft --base main --head claude/slice-2-pla
 gh pr checks <N> -R bbrown62450/church --watch --interval 30
 ```
 
-Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1978 passed, 35 skipped`, backend-postgres `35 passed, 1978 deselected`, frontend `948 passed` in 109 files. Then send: "PR #<N> is green: backend 1978 passed, 35 skipped (the two new Postgres tests passed in their own job); 948 frontend tests in 109 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R bbrown62450/church`.
+Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1983 passed, 35 skipped`, backend-postgres `35 passed, 1983 deselected`, frontend `952 passed` in 109 files. Then send: "PR #<N> is green: backend 1983 passed, 35 skipped (the two new Postgres tests passed in their own job); 952 frontend tests in 109 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R bbrown62450/church`.
 
 - [ ] **Step 6: Fix any failure in its owning task**
 
@@ -3915,7 +3917,7 @@ Run the last line with `run_in_background: true`. **Expected:** the PR URL; ever
 
 For each fix: change only the owning task's files; rerun Steps 2-3; commit `Fix: <what> (Task <n>, slice 6a-3b final verification)` with the trailer; after the PR exists, ask the owner before pushing it.
 
-Expected counts after this task: backend `1978 passed, 35 skipped`; frontend `948 passed` in 109 files.
+Expected counts after this task: backend `1983 passed, 35 skipped`; frontend `952 passed` in 109 files.
 
 ### Task 11: Merge, the owner's phone check (four steps), the record (OWNER + agent)
 
@@ -4068,7 +4070,7 @@ gh pr checks claude/slice-2-plan-4q33le -R bbrown62450/church --watch
 
 Code only (no schema to undo). On the owner's yes for each outward command: a branch `claude/revert-6a3b` from `origin/main`, `git revert -m 1 --no-commit <merge sha>`, a commit "Revert slice 6a-3b (PR #<N>)" with the trailer, both suites (`1923 passed, 33 skipped`; `916 passed` in 107), a PR, CI, and the merge on the owner's yes; record it in the record. A library saved through the page stays in `churches.settings["prayer_library"]` in the shape slice 4 reads, so the liturgy writer keeps using it after a revert; to stop that, ask the owner whether to empty it first (on the page, before the revert).
 
-Expected counts after this task: backend `1978 passed, 35 skipped` on `main`; frontend `948 passed` in 109 files. The records PR adds no test.
+Expected counts after this task: backend `1983 passed, 35 skipped` on `main`; frontend `952 passed` in 109 files. The records PR adds no test.
 
 ---
 
@@ -4090,6 +4092,13 @@ Expected counts after this task: backend `1978 passed, 35 skipped` on `main`; fr
 - Every "see it fail" output and every count above is quoted from these replays (times as `<t>`, Vitest's per-test times left out); both replays after the fixes matched every quoted block (0 mismatches).
 - Every count matched the table: backend 1937, 1952, 1978 passed with 33 skipped, then 35 skipped from T4; frontend 926 in 108, 939 in 109, 947 in 109, 948 in 109; T6's and T7's three runs each passed every time, no flaky run; typecheck 0 and lint 0 after T3 and T5-T8. After T9, T10 Step 2's and Step 3's outputs (quoted there): `1978 passed, 35 skipped`, three runs of `948 passed` in 109 files, typecheck and lint 0, `✓ Compiled successfully` with `○ /settings/prayers`, the 29 paths, no em dash added, one log call, every commit with its trailer.
 - Not run while planning: the pushes, the PR and CI, the merge, Railway's and Vercel's deploys, a real OpenAI call, and the owner's phone check (T11).
+
+**6a-3b build review fixes (2026-10-08).** The build review of T1-T9 found two test gaps and two defects, each fixed in its own commit on the branch after `2b01c7d` and pushed. Every new test was seen to fail first (a test gap: with the violation planted and then removed; a defect: before the fix, and once more with the old behaviour put back), then pass:
+1. **Test: a library save never logs a prayer or the profile** (`Test: … (6a-3b build review 1)`). `test_usecase_prayer_library.py` gains `test_a_save_never_logs_a_prayer_or_the_profile_at_any_level` and `test_api_prayer_library.py` gains `test_a_save_over_http_never_logs_a_prayer_or_the_profile`: with the root logger at DEBUG, two saves (and a read over HTTP) carrying a sentinel string in a prayer and the profile; no record's message or arguments hold it. With a planted `logger.debug("saving %s", value)` in `save_library`: `2 failed`. (SQLAlchemy's own loggers stay at WARNING, which SQLAlchemy sets itself; forced to DEBUG, as `echo=True` would, they log the stored row, prayers included, so `echo` stays off.)
+2. **Test: text typed while a library save runs is kept** (`Test: … (6a-3b build review 2)`). `prayers-settings-page.test.tsx` gains two tests that hold the `PUT` open, type more in the voice profile, or in a new prayer added before the save, then answer it: the typed text stays and **Save** is enabled. With a planted `afterSave(sent, sent, saved)`: `2 failed, 1 passed` (the two, and 6a-3b's own removed-row test).
+3. **Fix: two stored prayers with the same id share a row key** (`Fix: … (6a-3b build review 3)`). `libraryFormFrom` gives an id that repeats an earlier row's the fallback key `saved-<i>`, as an empty id has, and `rebaseLibrary`'s key carry-over matches only an id found once on each side (a row whose own key is taken by a matched one gets `<key>-<i>`), so no two rows share a React key or element ids. `prayers.test.ts` gains one test and the page one (a library with the same id twice: **Edit** opens one row, typing changes one row, every `prayer-…` element id is unique). With the old `prayers.ts`: `2 failed, 32 passed`.
+4. **Fix: `OPENAI_LOG=debug` lowered the `openai` logger below INFO** (`Fix: … (6a-3b build review 4)`). The SDK sets its logger's level from `OPENAI_LOG` when it is imported, which can come after `integrations/http.py`'s cap (it did, on the app's startup path). `http.py` now has `hold_openai_logger()` (the logger at INFO or above; a higher `OPENAI_LOG` level stays), run at its import as before and again by `integrations/openai_client.py`, the one module that imports the SDK, right after that import. `test_http_client.py` gains `test_openai_log_debug_cannot_lower_the_sdks_logger_below_info` in 3 cases: a fresh `python -I` interpreter with `OPENAI_LOG=debug` imports `api.main`, `integrations.http` then `integrations.openai_client`, or `integrations.openai_client` alone, and prints the logger's effective level. Before the fix: `3 failed`; with the call in `openai_client.py` taken out again: `2 failed, 11 passed`. No package change. `backend/integrations/openai_client.py` is now a modified path (30 in the PR; T10 Step 3's list and untouched check follow).
+- **Counts after the fixes:** backend **1983 passed, 35 skipped** (+5: 1 + 1 for finding 1, 3 cases for finding 4); frontend **952 passed in 109 files** (+4: 2 for finding 2, 1 + 1 for finding 3); typecheck 0, lint 0; `export_openapi.py` and `gen:api` leave the snapshot and types unchanged; the production build compiled with `○ /settings/prayers`. T10's numbers, the PR line and T11's expected counts are updated to these; CI's `backend-postgres` becomes `35 passed, 1983 deselected`. The per-task table and each task's "Expected" stay as built.
 
 ## Spec coverage
 
@@ -4154,6 +4163,6 @@ The plan review's findings, each fixed in the task that owns it. Every new test 
 
 - **Coverage.** Every binding constraint has a home: 6a-3b is Prayers with the AI draft (clarification 1, T1-T9, T10); the final nav order (clarification 2, T8); P's page, API, draft, rules and copy verbatim (clarifications 3-7, 16; T1-T7); no em dashes in new copy (clarification 16; T9 Step 2 and T10 Step 3 grep the added lines); no real ids, emails or URLs (the tests use `@example.com` and made-up prayers; the owner messages name no address; the only links are the session link and the PR footer the trailers require; the record's own grep, T11 Step 9); no migration (clarification 14); the frozen Streamlit files untouched (T10 Step 3's path check); tests never reach the network or OpenAI (`FakeAI` in every draft test, the `_no_network` fixture; Global Constraints); AI output untrusted (clarification 9: text only, capped, never stored by the draft, never followed; T7 checks markup stays text; T2 checks the fences); prayers never logged (clarification 13; T2's DEBUG test; T10 Step 3's count of log calls); the AI-call patterns (the 75 s deadline, 800 tokens, read then close, this app's messages, the `ai` bucket charged once and after the role, no Idempotency-Key with the reasons, an uncertain outcome changing nothing: clarifications 7, 8, 10); the 5b and 6a lessons ("Lessons carried": dialogs, late answers, focus, toasts for a 422 the form cannot show, the Save bar at every width, the rebase, the leave guard, `ADMIN_ONLY`, the Postgres lock). The second-to-last task opens a draft PR only on the owner's yes; the last merges only on a yes, runs a four-step phone check one step at a time that leaves the library and the profile as they were unless the owner chooses to keep what they entered (asked, never assumed; a test prayer removed in its own step), and inserts "### Slice 6a-3b record" before "## Backups", after "### Slice 6a-3a record".
 - **Placeholders.** None in T1-T9's code, tests, commands or expected outputs; every expected output is quoted from the replay. The `<…>` left are T10 and T11's runtime values (`<N>`, `<scratch>`, times, the owner's answers), as in the 6a-3a plan.
-- **Consistency.** Names agree across tasks: `get_library`, `save_library`, `clean_library`, `with_ids`, `library_out`, `clean_text` (T1) and `draft_voice_profile`, `build_draft_messages`, `fit_prayers`, `clean_draft`, `TYPE_LABELS`, `NO_PRAYERS` (T2) are used by the routes (T3) and the Postgres tests (T4); `PrayerLibraryOut`, `PrayerOut`, `PrayerLibraryIn`, `VoiceProfileDraftOut` (T3) by the type names (T5); `PRAYER_TYPES`, `PRAYER_TYPE_LABELS`, `libraryFormFrom`, `prayersPayload`, `listChanged`, `hasLibraryChanges`, `libraryErrors`, `libraryFieldErrors`, `namesLibraryField`, `rebaseLibrary`, `afterSave`, `newRow`, `firstLine` (T5) by the page (T6, T7); `usePrayerLibrary`, `useSavePrayerLibrary`, `useDraftVoiceProfile`, `LIBRARY_SAVED` (T5) by the page and the card; `keys.prayerLibrary` (existing) by the queries. The counts in the table, each task's "Expected" and the PR line agree: `1923 → 1978`, `33 → 35`, `916 → 948`, `107 → 109`.
+- **Consistency.** Names agree across tasks: `get_library`, `save_library`, `clean_library`, `with_ids`, `library_out`, `clean_text` (T1) and `draft_voice_profile`, `build_draft_messages`, `fit_prayers`, `clean_draft`, `TYPE_LABELS`, `NO_PRAYERS` (T2) are used by the routes (T3) and the Postgres tests (T4); `PrayerLibraryOut`, `PrayerOut`, `PrayerLibraryIn`, `VoiceProfileDraftOut` (T3) by the type names (T5); `PRAYER_TYPES`, `PRAYER_TYPE_LABELS`, `libraryFormFrom`, `prayersPayload`, `listChanged`, `hasLibraryChanges`, `libraryErrors`, `libraryFieldErrors`, `namesLibraryField`, `rebaseLibrary`, `afterSave`, `newRow`, `firstLine` (T5) by the page (T6, T7); `usePrayerLibrary`, `useSavePrayerLibrary`, `useDraftVoiceProfile`, `LIBRARY_SAVED` (T5) by the page and the card; `keys.prayerLibrary` (existing) by the queries. The counts in the table, each task's "Expected" and the PR line agreed: `1923 → 1978`, `33 → 35`, `916 → 948`, `107 → 109`; after the build review fixes, T10, T11 and the PR line say `1923 → 1983` and `916 → 952` ("Build notes").
 - **Not verified while planning:** the pushes, the PR and CI (the Postgres tests were run on a throwaway local Postgres instead), the merge, Railway's and Vercel's deploys, a real OpenAI call (every draft test uses `FakeAI`; the first real draft is the owner's in T11 Step 4), the owner's phone check, and the page at 375 px in a real browser (the classes give 44 px targets; jsdom does not lay out).
 - **Judgement calls to watch in review:** the string `id` instead of a `uuid` field; logging no prayer text at any level; the role check before the `ai` charge; the two-part rebase; members reading prayers in full; disabling the draft with the server's words when nothing is saved; reusing the builder's `useStillWorking` with 6a-2's no-dash sentence; the draft taking focus only from the wait (plan review I1); softening `cleanText`'s comment rather than copying Python's whitespace set (plan review M6).
