@@ -211,7 +211,7 @@ describe("Settings → Rubric (slice 6a-3a)", () => {
     expect(document.querySelector("[data-sonner-toast]")).toBeNull();
   });
 
-  it("asks before resetting everything, sends null for each customized item, cannot be closed while it runs", async () => {
+  it("asks before resetting everything, sends null for every item, cannot be closed while it runs", async () => {
     let finish: (value: unknown) => void = () => {};
     const { api, user } = renderPage("admin", {
       "GET /rubric": rubric({ hymns: { closing: ["Ours."] }, prefer_familiar: false }),
@@ -227,13 +227,53 @@ describe("Settings → Rubric (slice 6a-3a)", () => {
     await user.keyboard("{Escape}");
     await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
     expect(screen.getByRole("alertdialog", { name: RESET_ALL_TITLE })).toBeInTheDocument();
-    expect(patches(api)[0].body).toEqual({ hymns: { closing: null }, prefer_familiar: null });
+    expect(patches(api)[0].body).toEqual({
+      hymns: { opening: null, response: null, closing: null },
+      prayers: Object.fromEntries(Object.keys(DEFAULTS.prayers).map((section) => [section, null])),
+      prefer_before_year: null,
+      prefer_familiar: null,
+    });
     finish(rubric());
     expect(await screen.findByText(RUBRIC_RESET)).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
     expect(screen.getByRole("switch", { name: "Prefer familiar hymns" })).toBeChecked();
     expect(screen.queryByRole("button", { name: "Reset all to defaults" })).toBeNull();
     await waitFor(() => expect(screen.getByRole("heading", { name: "Service rubric" })).toHaveFocus());
+  });
+
+  it("resets every item, even one another admin customized after the page loaded", async () => {
+    // 6a-3a build review 5: the server keeps sparse overrides, null removes one (service_rubric.apply_patch).
+    type Stored = { hymns: Record<string, string[]>; prayers: Record<string, string[]>; prefer_before_year?: number; prefer_familiar?: boolean };
+    const stored: Stored = { hymns: { closing: ["Ours."] }, prayers: {} };
+    const current = () => rubric(structuredClone(stored) as Partial<RubricValues>);
+    const { api, user } = renderPage("admin", {
+      "GET /rubric": current,
+      "PATCH /rubric": (req: RecordedRequest) => {
+        const patch = req.body as Record<string, unknown>;
+        for (const group of ["hymns", "prayers"] as const) {
+          for (const [item, value] of Object.entries((patch[group] ?? {}) as Record<string, string[] | null>)) {
+            if (value === null) delete stored[group][item];
+            else stored[group][item] = value;
+          }
+        }
+        for (const key of ["prefer_before_year", "prefer_familiar"] as const) {
+          if (patch[key] === null) delete stored[key];
+          else if (key in patch) Object.assign(stored, { [key]: patch[key] });
+        }
+        return current();
+      },
+    });
+    await user.click(await screen.findByRole("button", { name: "Reset all to defaults" }));
+    // Another admin, elsewhere, customizes the Benediction and the year; this page has not refetched.
+    stored.prayers.benediction = ["Theirs."];
+    stored.prefer_before_year = 1900;
+    const dialog = await screen.findByRole("alertdialog", { name: RESET_ALL_TITLE });
+    await user.click(within(dialog).getByRole("button", { name: "Reset all" }));
+    expect(await screen.findByText(RUBRIC_RESET)).toBeInTheDocument();
+    expect(patches(api)).toHaveLength(1);
+    expect(stored).toEqual({ hymns: {}, prayers: {} });
+    expect(current().customized).toEqual([]);
+    expect(screen.queryByRole("button", { name: "Reset all to defaults" })).toBeNull();
   });
 
   it("toasts a role 403, refetches the profile and does not report the church as lost", async () => {

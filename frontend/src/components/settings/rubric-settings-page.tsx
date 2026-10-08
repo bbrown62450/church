@@ -166,7 +166,7 @@ function RubricFormView({ out, admin, headingRef }: { out: Rubric; admin: boolea
     if (pending) return;
     resetDone.current = false;
     reset.mutate(
-      { patch: resetAllPatch(out.customized), reset: true },
+      { patch: resetAllPatch(), reset: true },
       {
         onSuccess: (saved) => {
           const next = rubricFormFrom(saved.rubric);

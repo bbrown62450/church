@@ -85,14 +85,14 @@ describe("Settings → Rubric's form rules (slice 6a-3a)", () => {
     expect(checklistCustomized(form, DEFAULTS, BENEDICTION)).toBe(true);
   });
 
-  it("resets exactly the customized items, and rebases untouched items on newer data", () => {
-    expect(resetAllPatch(["hymns.closing", "prayers.benediction", "prefer_before_year", "prefer_familiar"])).toEqual({
-      hymns: { closing: null },
-      prayers: { benediction: null },
+  it("resets every item, customized or not, and rebases untouched items on newer data", () => {
+    const nulls = (values: object) => Object.fromEntries(Object.keys(values).map((key) => [key, null]));
+    expect(resetAllPatch()).toEqual({
+      hymns: nulls(DEFAULTS.hymns),
+      prayers: nulls(DEFAULTS.prayers),
       prefer_before_year: null,
       prefer_familiar: null,
     });
-    expect(resetAllPatch([])).toEqual({});
     const oldBaseline = rubricFormFrom(DEFAULTS);
     const current = { ...rubricFormFrom(DEFAULTS), prefer_familiar: false };
     current.checklists["prayers.benediction"] = ["Ours."];

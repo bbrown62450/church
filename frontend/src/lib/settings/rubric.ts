@@ -145,15 +145,17 @@ export function rubricPatch(baseline: RubricForm, current: RubricForm, defaults:
   return patch;
 }
 
-/** Reset all's body: null for every item the church has customized (`customized`'s dotted names). */
-export function resetAllPatch(customized: readonly string[]): RubricPatch {
-  const patch: RubricPatch = {};
-  for (const name of customized) {
-    const list = CHECKLISTS.find((l) => l.key === name);
-    if (list?.group === "hymns") patch.hymns = { ...patch.hymns, [list.item]: null };
-    else if (list?.group === "prayers") patch.prayers = { ...patch.prayers, [list.item]: null };
-    else if (name === "prefer_before_year") patch.prefer_before_year = null;
-    else if (name === "prefer_familiar") patch.prefer_familiar = null;
+/**
+ * Reset all's body: null for every checklist and both preferences, not just
+ * the ones this page last read as customized, so an item another admin
+ * customized since then is reset too (6a-3a build review 5). Null for an item
+ * with no override is a no-op on the server.
+ */
+export function resetAllPatch(): RubricPatch {
+  const patch: RubricPatch = { prefer_before_year: null, prefer_familiar: null };
+  for (const list of CHECKLISTS) {
+    if (list.group === "hymns") patch.hymns = { ...patch.hymns, [list.item]: null };
+    else patch.prayers = { ...patch.prayers, [list.item]: null };
   }
   return patch;
 }
