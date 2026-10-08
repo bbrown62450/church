@@ -31,6 +31,8 @@ import type {
   ReviewNote,
   ReviewResult,
   ReviseBody,
+  Rubric,
+  RubricValues,
   ScriptureMatches,
   SectionError,
   SectionResult,
@@ -728,4 +730,32 @@ export function liturgyPrompts(
     })),
     ...extra,
   };
+}
+
+/** The shared default rubric (backend `service_rubric.DEFAULT_RUBRIC`), shortened to two points a checklist. */
+export function defaultRubric(): RubricValues {
+  const two = (label: string) => [`${label} point one`, `${label} point two`];
+  return {
+    hymns: { opening: two("Opening"), response: two("Response"), closing: two("Closing") },
+    prayers: Object.fromEntries(Object.entries(SECTION_LABELS).map(([key, label]) => [key, two(label)])),
+    prefer_before_year: 1970,
+    prefer_familiar: true,
+  };
+}
+
+/** `GET /rubric`: the defaults with `overrides` applied (hymns and prayers merged per checklist), and `customized`. */
+export function rubric(overrides: Partial<RubricValues> = {}): Rubric {
+  const defaults = defaultRubric();
+  const merged: RubricValues = {
+    ...defaults,
+    ...overrides,
+    hymns: { ...defaults.hymns, ...overrides.hymns },
+    prayers: { ...defaults.prayers, ...overrides.prayers },
+  };
+  const customized = [
+    ...Object.keys(overrides.hymns ?? {}).map((slot) => `hymns.${slot}`),
+    ...Object.keys(overrides.prayers ?? {}).map((section) => `prayers.${section}`),
+    ...(["prefer_before_year", "prefer_familiar"] as const).filter((key) => key in overrides),
+  ];
+  return { rubric: merged, customized, defaults };
 }
