@@ -172,8 +172,8 @@ describe("the Hymns step (S User experience)", () => {
   it("shows the empty-hymnal state instead of the pickers; a pick still shows, as not in the hymnal", async () => {
     const { api } = renderStep(draftWith(slots(pick(COME))), { "GET /hymnals": hymnals({ items: [], effective_hymnal: null }) });
     expect(await screen.findByRole("heading", { name: "This church's hymnal is empty" })).toBeInTheDocument();
-    expect(screen.getByText("Add hymns in the current app under Settings → Hymns.")).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /Settings/ })).toBeNull(); // Settings → Hymns ships in 6a
+    expect(screen.getByText("Add hymns on the Settings → Hymns page to choose hymns here.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open Settings → Hymns" })).toHaveAttribute("href", "/settings/hymns"); // 6a-2
     expect(screen.queryByRole("combobox")).toBeNull();
     expect(within(card("Opening")).getByText("#403 Come, Thou Almighty King")).toBeInTheDocument();
     expect(within(card("Opening")).getByText("Not in your hymnal. Choose a replacement.")).toBeInTheDocument();

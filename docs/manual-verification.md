@@ -395,6 +395,21 @@ record". Record what the page shows, never an email address or a church id.
 - [ ] **7.** Signed in as a plain member of the same church: **Settings** → **Church** shows "Only admins can edit the church profile." and the profile as plain text, with no fields and no **Save profile**; the Benediction hint's **Settings.** opens the same page.
 - [ ] **8.** Saving the profile keeps the church's other settings: the Bulletin settings, the rubric and the liturgy prompts are as they were.
 
+**6a-2 (Hymns).** After the 6a-2 merge the owner's guided check covers the
+items marked "(owner, after 6a-2)", one step at a time on the phone; the
+results go into `docs/ops-runbook.md` → "Slice 6a-2 record". Any test hymn is
+deleted in the same step that adds it; a hymnal is added (and then removed)
+only when the church does not have it already, and a hymnal the church uses
+is never removed. Record counts and what the page shows, never a church id.
+
+- [ ] (owner, after 6a-2) **9.** **Settings** lists **Church**, **Hymns**, **Bulletin**, **Contacts** and **Account**. Tap **Hymns**: **Hymnals** lists each of the church's hymnals with its hymn count and **Default** on the default one; **Hymn library** says how many hymns there are. Search for **23**: hymn 23 and titles containing "23" are listed. Clear the search; at the end of the list **Show more** loads more hymns.
+- [ ] (owner, after 6a-2) **10.** **Add hymn**: title **Test hymn**, no number, **Add hymn**: "Hymn added.". Search for it, tap it, change the title to **Test hymn 2**, **Save changes**: "Hymn updated." and the dialog says "Changes also appear in saved services that use this hymn.". Open **Builder** → **Hymns**, tap the Opening hymn's picker and type **Test hymn**: "Test hymn 2" is offered with no reload (do not choose it). Back in **Settings** → **Hymns**, **Add hymn** with the title **test hymn 2** and no number: "{hymnal} already has test hymn 2." (the default hymnal's code) shows in the dialog and nothing is added; **Cancel**. Then open "Test hymn 2", **Delete hymn**, **Delete hymn** again in "Delete “Test hymn 2”?": "Hymn deleted." and it is gone.
+- [ ] (owner, after 6a-2) **11.** Only when **Add a hymnal** shows **Add** beside PH1990 (the church does not have it): **Add**: "Added PH1990 (605 hymns).", the row turns to **Added**; **Done**; PH1990 is listed with 605 hymns, and the library has the chips **All**, **GG2013** and **PH1990**. Then **Remove…** on PH1990, **Remove PH1990**: "Removed PH1990." and only the church's own hymnals are left. If PH1990 shows **Added**, the church has it already: skip this item and remove nothing.
+- [ ] (owner, after 6a-2) **12.** At 375 px: no sideways scroll on **Hymns**; the five section links, the hymn rows, **Add hymn** and the search box are easy to tap. In **Edit hymn** with the iPhone keyboard open, **Save changes** can be reached and the box being typed in is not covered.
+- [ ] **13.** Signed in as a plain member of the same church: **Hymns** shows "Admins can add bundled hymnals." with no **Add a hymnal** or **Remove…**; **Edit hymn** has no **Delete hymn**, and the year and familiarity are read-only ("Only admins can change this."); adding and editing a test hymn works (an admin deletes it).
+- [ ] **14.** In a test church: pick a test hymn in the builder, then delete it in **Settings** → **Hymns**: the builder's slot shows "Not in your hymnal. Choose a replacement." with no reload.
+- [ ] **15.** As an admin, set a hymn's "Year the words were written" to a year after the rubric's preferred year: the builder's picker labels it as newer with no reload.
+
 ## Slice 5b
 
 Run on the production URL https://worship-service-builder.vercel.app, on an

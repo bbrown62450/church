@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, type FormEvent, type ReactNode } from "react";
 
 import { ErrorState } from "@/components/app/error-state";
@@ -241,6 +242,7 @@ function ProfileFormView({ profile }: { profile: ChurchProfile }) {
           <>
             <p className="text-sm font-medium">Default hymnal</p>
             <p className="text-sm text-muted-foreground">{NO_HYMNALS}</p>
+            <AddHymnsLink />
           </>
         ) : onlyHymnal ? (
           <>
@@ -306,6 +308,15 @@ function ProfileFormView({ profile }: { profile: ChurchProfile }) {
   );
 }
 
+/** Under "no hymns yet", for admins and members alike (slice 6a-2; plan review M5). */
+function AddHymnsLink() {
+  return (
+    <Link href="/settings/hymns" className="w-fit text-sm underline underline-offset-4">
+      Add hymns on the Hymns page
+    </Link>
+  );
+}
+
 function SummaryItem({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="grid gap-0.5">
@@ -336,7 +347,14 @@ function ProfileSummary({ profile }: { profile: ChurchProfile }) {
         <SummaryItem label="Church name">{profile.name}</SummaryItem>
         <SummaryItem label="Time zone">{timezoneLabel(profile.timezone)}</SummaryItem>
         <SummaryItem label="Default Bible translation">{profile.effective_translation_label}</SummaryItem>
-        <SummaryItem label="Default hymnal">{hymnal ?? <span className="text-muted-foreground">{NO_HYMNALS}</span>}</SummaryItem>
+        <SummaryItem label="Default hymnal">
+          {hymnal ?? (
+            <>
+              <span className="block text-muted-foreground">{NO_HYMNALS}</span>
+              <AddHymnsLink />
+            </>
+          )}
+        </SummaryItem>
         <SummaryItem label="Default Benediction">
           {profile.default_benediction.trim() !== "" ? (
             profile.default_benediction

@@ -110,6 +110,21 @@ export type ContactBody = components["schemas"]["ContactIn"];
 export type ContactPatch = components["schemas"]["ContactPatchIn"];
 
 /**
+ * Settings → Hymns (slice 6a-2): the body of `POST /hymns` and of `PATCH
+ * /hymns/{id}` (only the fields that change) and the hymn they answer (with the
+ * stored `theme` text); `GET /hymnal-sources` (admins: the hymnals they can add,
+ * `present` when the church has one); `POST /hymnals`'s body and answer; and
+ * `DELETE /hymnals/{code}`'s answer.
+ */
+export type HymnBody = components["schemas"]["HymnIn"];
+export type HymnPatch = components["schemas"]["HymnPatchIn"];
+export type HymnDetail = components["schemas"]["HymnDetailOut"];
+export type HymnalSource = components["schemas"]["HymnalSourceOut"];
+export type HymnalSources = components["schemas"]["HymnalSourceList"];
+export type HymnalAdded = components["schemas"]["HymnalAddedOut"];
+export type HymnalRemoved = components["schemas"]["HymnalRemovedOut"];
+
+/**
  * `/gmail-connection` (slice 5b-2): the caller's own Gmail connection
  * (`configured` false: this deployment has no Google client), Google's consent
  * URL, and the code and state `/gmail/callback` posts back.

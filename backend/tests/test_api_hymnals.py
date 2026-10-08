@@ -49,9 +49,12 @@ def test_counts_and_scripture_ref_counts_ordered_by_code(client, make_user, make
     cid = _church(make_user, make_church)
     _hymns(cid, "PH1990", 3)
     _hymns(cid, "GG2013", 4, refs_every=2)
-    assert _get(client, cid) == {
-        "items": [{"code": "GG2013", "hymn_count": 4, "scripture_ref_count": 2},
-                  {"code": "PH1990", "hymn_count": 3, "scripture_ref_count": 0}],
+    _hymns(cid, "XX2000", 1)
+    assert _get(client, cid) == {      # each with its label (slice 6a-2), null for a code with no known name
+        "items": [{"code": "GG2013", "label": "Glory to God (2013)", "hymn_count": 4, "scripture_ref_count": 2},
+                  {"code": "PH1990", "label": "The Presbyterian Hymnal (1990)", "hymn_count": 3,
+                   "scripture_ref_count": 0},
+                  {"code": "XX2000", "label": None, "hymn_count": 1, "scripture_ref_count": 0}],
         "default_hymnal": None,
         "effective_hymnal": "GG2013",
     }

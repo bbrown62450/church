@@ -765,6 +765,28 @@ name, token, code or church id is recorded here.
 | Agent checks | Not run: this session has no sign-in for a test church | 2026-10-07 |
 | Follow-ups | Next: 5b-2b (the Email the bulletin card and dialog), then 6a-2 and 6a-3 | 2026-10-07 |
 
+### Slice 5b-2b record
+
+Slice 5b-2b (emailing the bulletin: the Email the bulletin card and dialog on
+Review, `POST /bulletin-emails` with the bulletin copy and/or the printed PDF
+built from the posted service, one recipient in To or several in Bcc with the
+sender in To, at most 50, a required Idempotency-Key and a "may already have
+been sent" mark written before the request leaves, so nothing is sent twice)
+merged as PR #55, the second of 5b-2's two PRs. No database change, no new
+package and no setup step; production stays at `0007_bulletin_images`. The
+owner's check was three steps on a phone; every test email went only to the
+owner's own address. Slice 5b (Contacts, the Gmail connection, emailing) is
+complete. No address, name, token or church id is recorded here.
+
+| Step | Result | Date |
+|---|---|---|
+| Merge and deploy | PR #55 merged 17:31 UTC (13:31 Eastern), merge commit `a24b7b5`. CI on `main`: backend, backend-postgres and frontend success | 2026-10-07 |
+| 1. Email to yourself | Sent with both attachments to the owner's own address; it arrived and both the Word copy and the printed PDF opened on the phone | 2026-10-07 |
+| 2. Bcc with two own addresses | Skipped by the owner: Bcc on a real send is not yet confirmed (the tests check the message's headers, not Gmail's delivery) | 2026-10-07 |
+| 3. The dialog on the phone and connecting from Review | The PDF box was remembered; Send stayed reachable with the keyboard open; after Disconnect the Review card offered Connect Gmail, and connecting reopened the dialog | 2026-10-07 |
+| Agent checks | Not run: this session has no sign-in for a test church | 2026-10-07 |
+| Follow-ups | The first send to two or more people: check the Sent copy lists them under Bcc. Consent screen in Testing: add each new sender as a test user; connections end after 7 days. Next: 6a-2 (Hymns), 6a-3 (Liturgy prompts, Prayers, Rubric, Bulletin settings moved in), 6b (People), Hear it from the pews | 2026-10-07 |
+
 ## Backups
 
 - **Workflow:** `.github/workflows/backup.yml` (`db-backup`). Daily at 08:37 UTC,

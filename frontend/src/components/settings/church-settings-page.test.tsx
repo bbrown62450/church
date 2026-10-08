@@ -99,6 +99,12 @@ describe("Settings → Church (slice 6a-1)", () => {
     expect(screen.queryByText("HL1955")).toBeNull();
   });
 
+  it("shows a member of a church with no hymns the link to the Hymns page (slice 6a-2)", async () => {
+    renderPage("member", { default_hymnal: null, effective_hymnal: null });
+    expect(await screen.findByText("Your church has no hymns yet, so there is no default hymnal.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Add hymns on the Hymns page" })).toHaveAttribute("href", "/settings/hymns");
+  });
+
   it("shows a field the server refuses under it and focuses it", async () => {
     const { user } = renderPage("admin", {}, {
       "PATCH /church": fakeError(422, "invalid_request", "Unknown timezone.", { fields: { timezone: "Unknown timezone." } }),
@@ -148,6 +154,7 @@ describe("Settings → Church (slice 6a-1)", () => {
 
     renderPage("admin", { default_hymnal: null, effective_hymnal: null }, { "GET /hymnals": hymnals({ items: [], effective_hymnal: null }) });
     expect(await screen.findByText("Your church has no hymns yet, so there is no default hymnal.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Add hymns on the Hymns page" })).toHaveAttribute("href", "/settings/hymns"); // 6a-2
     expect(screen.queryByRole("combobox", { name: "Default hymnal" })).toBeNull();
   });
 

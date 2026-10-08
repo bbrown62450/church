@@ -37,6 +37,12 @@ const ENDPOINT_TIMEOUTS: Record<string, number> = {
   // whose timeouts are per phase (15 s and 30 s for each wait), not deadlines. This is the overall limit: a
   // send still unanswered then is shown as possibly sent ("We lost the connection…"), never as failed.
   "POST /bulletin-emails": 90_000,
+  // Slice 6a-2 (6a spec, API; F §1.8): adding a bundled hymnal inserts up to about a thousand hymns, and the
+  // dialog says "This can take up to a minute." (plan review I3). Nothing on the server stops it sooner: uvicorn
+  // sets no request deadline, the app sets no statement_timeout outside migrations, and routes behind Railway
+  // already answer later than that (POST /liturgy/generate, an 80 s deadline). A timed-out add may still
+  // finish on the server, so a failed hymnal write refreshes the lists (lib/queries/hymn-library.ts).
+  "POST /hymnals": 60_000,
 };
 
 export function timeoutFor(method: string, path: string): number {

@@ -14,7 +14,7 @@ from db import session_scope
 from db.ids import as_uuid
 from db.models import Hymn, HymnCatalog
 from domain_errors import NotFound
-from hymn_search import normalize_title
+from hymn_search import normalize_title, usage_key
 
 
 def _as_uuid(value: Any) -> uuid.UUID:
@@ -87,20 +87,48 @@ def add_hymn(
         return _hymn_to_dict(h)
 
 
-def import_hymns(church_id, hymnal: str, rows: List[Dict[str, Any]]) -> Dict[str, int]:
-    """Bulk-load a hymnal into a church. Idempotent per (church_id, hymnal, number,
-    normalized title): re-running updates enrichment on matched rows instead of
-    duplicating. `rows` keys: number, title (required), scripture_refs, theme,
-    hymnary_link."""
+def title_key(title: Optional[str]) -> str:
+    """A title as the duplicate rule compares it: every run of whitespace one
+    space (tabs, line breaks and no-break spaces included), trimmed, lower-cased."""
+    return " ".join((title or "").split()).lower()
+
+
+# What an import may fill in on a hymn it already has (never what makes it the same hymn).
+_ENRICHMENT = ("scripture_refs", "theme", "hymnary_link", "audio_url", "text_year", "hymnal_count")
+
+
+def import_hymns(church_id, hymnal: str, rows: List[Dict[str, Any]], *,
+                 session: Optional[Session] = None) -> Dict[str, int]:
+    """Bulk-load a hymnal into a church. Idempotent per (church_id, hymnal,
+    number, title_key(title)): a row the church already has is not added
+    again, and only its blank enrichment is filled in (a value an admin or
+    member entered is kept; 6a spec, POST /hymnals). Never deletes. `rows`
+    keys: number, title (required), scripture_refs, theme, hymnary_link, and
+    optionally audio_url, text_year, hymnal_count.
+
+    A numbered row with no such match whose number the church already has in
+    this hymnal (a title the church edited) is not added; that hymn's blanks
+    are filled only when its title has the same words, ignoring punctuation
+    (hymn_search.usage_key), and otherwise it is left as it is (6a-2 build
+    review M2). Only the hymns the church had before the import count here,
+    so a hymnal with two hymns under one number still imports both.
+
+    The new rows are flushed together at the end (no flush per row), so
+    SQLAlchemy sends them as one batched INSERT (6a spec Risk 5)."""
     cid = _as_uuid(church_id)
-    inserted = updated = 0
-    with session_scope() as session:
-        existing = session.execute(
+
+    def work(s: Session) -> Dict[str, int]:
+        inserted = updated = 0
+        existing = s.execute(
             select(Hymn).where(Hymn.church_id == cid, Hymn.hymnal == hymnal)
         ).scalars().all()
-        by_key = {(h.number, (h.title or "").strip().lower()): h for h in existing}
+        by_key = {(h.number, title_key(h.title)): h for h in existing}
+        by_number: Dict[int, List[Hymn]] = {}
+        for h in existing:
+            if h.number is not None:
+                by_number.setdefault(h.number, []).append(h)
         for r in rows:
-            title = (r.get("title") or "").strip()
+            title = " ".join((r.get("title") or "").split())
             if not title:
                 continue
             number = r.get("number")
@@ -108,29 +136,34 @@ def import_hymns(church_id, hymnal: str, rows: List[Dict[str, Any]]) -> Dict[str
                 number = int(number) if number not in (None, "") else None
             except (TypeError, ValueError):
                 number = None
-            key = (number, title.lower())
+            key = (number, title_key(title))
             match = by_key.get(key)
-            fields = dict(
-                scripture_refs=r.get("scripture_refs") or None,
-                theme=r.get("theme") or None,
-                hymnary_link=r.get("hymnary_link") or None,
-            )
+            fields = {attr: r.get(attr) for attr in _ENRICHMENT if r.get(attr) not in (None, "")}
+            if match is None and number in by_number:
+                words = usage_key(title)
+                match = next((h for h in by_number[number] if usage_key(h.title) == words), None)
+                if match is None:
+                    continue
             if match is None:
                 h = Hymn(church_id=cid, hymnal=hymnal, title=title, number=number, **fields)
-                session.add(h)
-                session.flush()
+                s.add(h)
                 by_key[key] = h
                 inserted += 1
             else:
-                # only fill in enrichment we now have (don't wipe existing with blanks)
-                changed = False
-                for attr, val in fields.items():
-                    if val and getattr(match, attr) != val:
-                        setattr(match, attr, val)
-                        changed = True
-                if changed:
+                blank = {attr: value for attr, value in fields.items()
+                         if getattr(match, attr) is None or (isinstance(getattr(match, attr), str)
+                                                             and not getattr(match, attr).strip())}
+                for attr, value in blank.items():
+                    setattr(match, attr, value)
+                if blank:
                     updated += 1
-    return {"inserted": inserted, "updated": updated, "total": inserted + updated}
+        s.flush()
+        return {"inserted": inserted, "updated": updated, "total": inserted + updated}
+
+    if session is not None:
+        return work(session)
+    with session_scope() as own:
+        return work(own)
 
 
 def update_hymn(
@@ -162,14 +195,18 @@ def update_hymn(
         return _hymn_to_dict(h)
 
 
-def delete_hymn(hymn_id, church_id) -> bool:
+def delete_hymn(hymn_id, church_id, *, session: Optional[Session] = None) -> bool:
     """Delete a hymn only if it belongs to `church_id`. Cross-church -> False."""
     cid = _as_uuid(church_id)
-    with session_scope() as session:
-        result = session.execute(
-            delete(Hymn).where(Hymn.id == _as_uuid(hymn_id), Hymn.church_id == cid)
-        )
+
+    def work(s: Session) -> bool:
+        result = s.execute(delete(Hymn).where(Hymn.id == _as_uuid(hymn_id), Hymn.church_id == cid))
         return result.rowcount > 0
+
+    if session is not None:
+        return work(session)
+    with session_scope() as own:
+        return work(own)
 
 
 def seed_church_from_catalog(church_id, session: Session) -> int:
@@ -370,5 +407,93 @@ def find_hymns_by_titles(church_id, title_keys, *, session: Optional[Session] = 
         rows = s.execute(select(*_RECORD_COLUMNS).where(Hymn.church_id == cid)
                          .order_by(Hymn.hymnal.asc(), Hymn.number.asc().nulls_last(), Hymn.id.asc())).all()
         return [_record(row) for row in rows if normalize_title(row.title) in wanted]
+
+    return _in(session, work)
+
+
+# --- slice 6a-2: the hymn library's writes (6a spec, `repos/hymns.py`) --------------
+# Each runs in the caller's session (usecases.hymn_library, under the
+# church-row lock) or its own; every one is church-scoped.
+
+# The columns a hymn write may set: HymnRecord's names, `link` for hymnary_link.
+_WRITABLE = {"title": Hymn.title, "number": Hymn.number, "hymnal": Hymn.hymnal,
+             "scripture_refs": Hymn.scripture_refs, "theme": Hymn.theme, "link": Hymn.hymnary_link,
+             "text_year": Hymn.text_year, "hymnal_count": Hymn.hymnal_count}
+
+
+def _attr(name: str) -> str:
+    return _WRITABLE[name].key
+
+
+def get_hymn(hymn_id, church_id, *, session: Optional[Session] = None) -> Optional[HymnRecord]:
+    """The church's hymn, or None (another church's id, a deleted hymn)."""
+    hid, cid = as_uuid(hymn_id), as_uuid(church_id)
+
+    def work(s: Session) -> Optional[HymnRecord]:
+        row = s.execute(select(*_RECORD_COLUMNS).where(Hymn.id == hid, Hymn.church_id == cid)).first()
+        return _record(row) if row is not None else None
+
+    return _in(session, work)
+
+
+def create_hymn(church_id, values: Dict[str, Any], *, session: Optional[Session] = None) -> HymnRecord:
+    """Insert a hymn from `values` (keys of _WRITABLE, already cleaned) and return it."""
+    cid = as_uuid(church_id)
+
+    def work(s: Session) -> HymnRecord:
+        h = Hymn(church_id=cid, **{_attr(name): value for name, value in values.items()})
+        s.add(h)
+        s.flush()
+        return get_hymn(h.id, cid, session=s)
+
+    return _in(session, work)
+
+
+def patch_hymn(hymn_id, church_id, changes: Dict[str, Any], *,
+               session: Optional[Session] = None) -> Optional[HymnRecord]:
+    """Set only the keys in `changes` (keys of _WRITABLE, already cleaned);
+    every other column, audio_url among them, is kept. None when the church
+    has no such hymn."""
+    hid, cid = as_uuid(hymn_id), as_uuid(church_id)
+
+    def work(s: Session) -> Optional[HymnRecord]:
+        h = s.execute(select(Hymn).where(Hymn.id == hid, Hymn.church_id == cid)).scalar_one_or_none()
+        if h is None:
+            return None
+        for name, value in changes.items():
+            setattr(h, _attr(name), value)
+        s.flush()
+        return get_hymn(hid, cid, session=s)
+
+    return _in(session, work)
+
+
+def find_duplicate(church_id, hymnal: str, number: Optional[int], title: str, *, exclude_id=None,
+                   session: Optional[Session] = None) -> bool:
+    """True when the church already has a hymn in `hymnal` with this number
+    (or, for None, with no number) whose title_key equals title_key(title),
+    other than `exclude_id`. The titles are compared in Python, because SQL's
+    trim and lower do not treat tabs, line breaks or every letter the same way
+    on SQLite and Postgres (the import uses the same key)."""
+    cid = as_uuid(church_id)
+    wanted = title_key(title)
+    conditions = [Hymn.church_id == cid, Hymn.hymnal == hymnal,
+                  Hymn.number.is_(None) if number is None else Hymn.number == number]
+    if exclude_id is not None:
+        conditions.append(Hymn.id != as_uuid(exclude_id))
+
+    def work(s: Session) -> bool:
+        titles = s.execute(select(Hymn.title).where(*conditions)).scalars().all()
+        return any(title_key(t) == wanted for t in titles)
+
+    return _in(session, work)
+
+
+def delete_hymnal(church_id, hymnal: str, *, session: Optional[Session] = None) -> int:
+    """Delete every hymn of the church in `hymnal`; the number deleted."""
+    cid = as_uuid(church_id)
+
+    def work(s: Session) -> int:
+        return s.execute(delete(Hymn).where(Hymn.church_id == cid, Hymn.hymnal == hymnal)).rowcount
 
     return _in(session, work)

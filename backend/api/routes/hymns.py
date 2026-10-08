@@ -1,6 +1,10 @@
-"""The Hymns step's church-scoped routes (slice 3 spec, API; Backend 4).
-Plain `def` routes that each make one usecase call with church.id only
-(F §1.2 rule 1, §2.2.1). Any member may call them."""
+"""The Hymns step's church-scoped routes (slice 3 spec, API; Backend 4) and
+Settings → Hymns' writes (6a spec, POST, PATCH and DELETE /hymns; slice
+6a-2). Plain `def` routes that each make one usecase call with church.id only
+(F §1.2 rule 1, §2.2.1). Any member may call them, except DELETE (owners and
+admins); a hymn's year and familiarity are admins' too (usecases.hymn_library
+checks the role re-read under the church-row lock). No Idempotency-Key: the
+duplicate check runs under the lock, so a double tap gets a 409."""
 import uuid
 from dataclasses import asdict
 from datetime import date
@@ -9,11 +13,11 @@ from typing import Annotated, Literal, Optional
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
-from api.deps import ActiveChurch, CurrentUser, get_current_user, require_church
+from api.deps import ActiveChurch, CurrentUser, get_current_user, require_admin, require_church
 from api.errors import error_responses
 from api.ratelimit import rate_limit
-from api.schemas import IsoDate, Page
-from usecases import hymns
+from api.schemas import DeletedOut, IsoDate, Page
+from usecases import hymn_library, hymns
 
 router = APIRouter()
 
@@ -101,6 +105,55 @@ class HymnSuggestionsOut(BaseModel):
     slots: SuggestedSlots
 
 
+class HymnIn(BaseModel):
+    """POST /hymns. An omitted or null title is the usecase's "Hymn title is
+    required."; a null hymnal is the church's default hymnal; the ranges of
+    number, text_year and hymnal_count are the usecase's (friendly messages)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: Optional[str] = Field(None, max_length=300)
+    number: Optional[int] = None
+    hymnal: Optional[str] = Field(None, max_length=20)
+    scripture_refs: Optional[str] = Field(None, max_length=2000)
+    theme: Optional[str] = Field(None, max_length=2000)
+    link: Optional[str] = Field(None, max_length=500)
+    text_year: Optional[int] = None          # admins only when not null
+    hymnal_count: Optional[int] = None       # admins only when not null
+
+
+class HymnPatchIn(BaseModel):
+    """PATCH /hymns/{id}: omitted = unchanged (model_fields_set). A null title
+    or hymnal is refused; a null number, scripture_refs, theme, link,
+    text_year or hymnal_count clears it. Sending text_year or hymnal_count at
+    all (null included) is for admins."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: Optional[str] = Field(None, max_length=300)
+    number: Optional[int] = None
+    hymnal: Optional[str] = Field(None, max_length=20)
+    scripture_refs: Optional[str] = Field(None, max_length=2000)
+    theme: Optional[str] = Field(None, max_length=2000)
+    link: Optional[str] = Field(None, max_length=500)
+    text_year: Optional[int] = None
+    hymnal_count: Optional[int] = None
+
+
+class HymnDetailOut(BaseModel):
+    """A hymn as Settings → Hymns writes it: the stored theme text, not GET /hymns' parsed themes."""
+
+    id: uuid.UUID
+    hymnal: str
+    title: str
+    number: Optional[int]
+    scripture_refs: Optional[str]
+    theme: Optional[str]
+    link: Optional[str]
+    text_year: Optional[int]
+    hymnal_count: Optional[int]
+
+
 def hymn_out(view: hymns.HymnView) -> HymnOut:
     return HymnOut(**asdict(view))
 
@@ -152,3 +205,26 @@ def suggest_hymns(payload: HymnSuggestionIn, church: ActiveChurch = Depends(requ
         excluded_recent_count=result.excluded_recent_count,
         slots=SuggestedSlots(**{slot: [SuggestedHymnOut(**asdict(v)) for v in views]
                                 for slot, views in result.slots.items()}))
+
+
+@router.post("/hymns", status_code=201, response_model=HymnDetailOut,
+             responses=error_responses(401, 403, 409, 422, 503))
+def create_hymn(payload: HymnIn, church: ActiveChurch = Depends(require_church),
+                user: CurrentUser = Depends(get_current_user)) -> HymnDetailOut:
+    return HymnDetailOut(**hymn_library.create_hymn(church.id, user.id, payload.model_dump()))
+
+
+@router.patch("/hymns/{hymn_id}", response_model=HymnDetailOut,
+              responses=error_responses(401, 403, 404, 409, 422, 503))
+def update_hymn(hymn_id: uuid.UUID, payload: HymnPatchIn, church: ActiveChurch = Depends(require_church),
+                user: CurrentUser = Depends(get_current_user)) -> HymnDetailOut:
+    return HymnDetailOut(**hymn_library.update_hymn(church.id, user.id, hymn_id,
+                                                    payload.model_dump(include=payload.model_fields_set)))
+
+
+@router.delete("/hymns/{hymn_id}", response_model=DeletedOut, responses=error_responses(401, 403, 404, 422, 503))
+def delete_hymn(hymn_id: uuid.UUID, church: ActiveChurch = Depends(require_admin),
+                user: CurrentUser = Depends(get_current_user)) -> DeletedOut:
+    """Owners and admins only (owner, 2026-10-05)."""
+    hymn_library.delete_hymn(church.id, user.id, hymn_id)
+    return DeletedOut()
