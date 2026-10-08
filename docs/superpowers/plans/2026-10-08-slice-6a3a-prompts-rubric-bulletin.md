@@ -32,7 +32,7 @@
   `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
 - TDD: write the failing test first and see it fail as quoted.
 - **Backup push after every task** (standing rule): the controller runs `git push origin claude/slice-2-plan-4q33le` after each task's commit (never `--force`, never a rebase; if the push is rejected, `git pull --no-rebase origin claude/slice-2-plan-4q33le` and push again; on a network error retry after 2, 4, 8 and 16 s). A fix asked for by a review is a new commit, `Fix: <what> (Task <n> review)`. The container can restart and lose uncommitted work: commit as soon as a task's checks pass.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1885 → 1922 passed, 31 → 33 skipped; frontend 874 → 913 in 103 → 107 files`.
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1885 → 1923 passed, 31 → 33 skipped; frontend 874 → 916 in 103 → 107 files` (the counts after the build review fixes, Build notes).
 - New prose for the owner has no em dashes and no flattery. New user-facing copy is exactly the list in clarification 15 and has no em dashes (S's lines carry none; the shared default prompts and checklists are existing text and keep their own punctuation, owner question 6); existing copy keeps its own punctuation.
 - No church id, email address, token, database URL or real person's name in any doc, commit, test or record. Tests use the fixtures' "Grace" and `@example.com` addresses (the rubric's PR #4 tests keep their `@x.org` ones); no prompt's or checklist's wording from the owner's church is recorded.
 - Ask the owner before any push to a PR, PR creation, marking ready, merging, or any production or settings action. Owner steps go one at a time, in plain words.
@@ -59,6 +59,8 @@ As in the 6a-2 and 5b-1 plans: **Create `path`:** the block is the whole new fil
   | T10 | 0 | 1922 passed, 33 skipped | 0 | 913 in 107 |
 
 - CI `backend-postgres` goes from `31 passed, 1885 deselected` to `33 passed, 1922 deselected` (T4). Locally, without `TEST_DATABASE_URL`, those two tests are among the 33 skipped.
+
+  After T10 the 6a-3a build review fixes (see "Build notes") added backend +1 and frontend +3: backend `1923 passed, 33 skipped`, frontend `916 passed` in 107 files, CI's `backend-postgres` `33 passed, 1923 deselected`. The table keeps the counts each task left; T11's expected outputs and the PR body carry these.
 
 ### Layering and code rules (carried)
 - `usecases/church_admin.py` imports no FastAPI, Starlette or Streamlit (`test_no_streamlit_in_core.py` already lists it); the routes are plain `def`s with no SQL and no try/except (F §2.2 rule 1), each one usecase call; the usecases write through `repos.churches` (no SQL in a usecase). `PATCH /rubric`'s `try/except ValueError` moves out of the route into the usecase.
@@ -155,7 +157,7 @@ The owner's answers win over S and F; the code wins over both where they disagre
 | `docs/manual-verification.md` | the 6a-3a items | T10 |
 | `docs/ops-runbook.md` | "### Slice 6a-3a record" (the records PR, after the merge) | T12 |
 
-**Counts in the PR:** 43 paths: 17 added (this plan and the sixteen new code and test files above) and 26 modified (the twenty-three code, test and API paths above, `docs/manual-verification.md`, and the 6a spec (its amendment of 2026-10-07, later) and `docs/ops-runbook.md` (the 6a-2 record), which ride along until merged; the runbook's own T12 change goes in the records PR). **Untouched:** migrations, `db/models.py`, `api/deps.py`, `liturgy_prompts.py`, `liturgy_config.py`, `service_rubric.py`, `usecases/members.py`, `usecases/liturgy.py`, `lib/queries/keys.ts`, `lib/settings/profile.ts`, `components/app/leave-guard.tsx`, the draft schema, `app.py`, `streamlit_views`, `streamlit_tests`.
+**Counts in the PR:** 45 paths: 18 added (this plan, the sixteen new code and test files above and `frontend/src/test/viewport.ts` from the build review fixes) and 27 modified (the twenty-three code, test and API paths above, `backend/tests/test_route_guards.py` from the build review fixes, `docs/manual-verification.md`, and the 6a spec (its amendment of 2026-10-07, later) and `docs/ops-runbook.md` (the 6a-2 record), which ride along until merged; the runbook's own T12 change goes in the records PR). **Untouched:** migrations, `db/models.py`, `api/deps.py`, `liturgy_prompts.py`, `liturgy_config.py`, `service_rubric.py`, `usecases/members.py`, `usecases/liturgy.py`, `lib/queries/keys.ts`, `lib/settings/profile.ts`, `components/app/leave-guard.tsx`, the draft schema, `app.py`, `streamlit_views`, `streamlit_tests`.
 
 **Task order and review batch:** T1 → T10, each one commit and a backup push; then one review of the whole batch with its fixes as `Fix: …` commits; T11 verifies and opens the draft PR on the owner's yes; T12 merges on the owner's yes, runs the phone check and writes the record.
 
@@ -4301,17 +4303,17 @@ for i in 1 2 3; do (cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Te
 (cd frontend && NEXT_PUBLIC_SUPABASE_URL=https://ci-placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-placeholder NEXT_PUBLIC_API_URL=http://localhost:8000 npm run build 2>&1 | grep -E "Compiled successfully|Error|/settings|/bulletin-settings")
 ```
 
-**Expected** (as in the replay: the suite; three runs of `Test Files  107 passed (107)` and `Tests  913 passed (913)` with no `×` or `FAIL` line, one naming a failing test: Step 6; typecheck and lint 0; the build with the three new Settings routes and no `Error`, a font `Failed to fetch` only: say so and rely on CI):
+**Expected** (after the build review fixes: the suite; three runs of `Test Files  107 passed (107)` and `Tests  916 passed (916)` with no `×` or `FAIL` line, one naming a failing test: Step 6; typecheck and lint 0; the build with the three new Settings routes and no `Error`, a font `Failed to fetch` only: say so and rely on CI):
 ```
-1922 passed, 33 skipped in <t>s
+1923 passed, 33 skipped in <t>s
 ```
 ```
  Test Files  107 passed (107)
-      Tests  913 passed (913)
+      Tests  916 passed (916)
  Test Files  107 passed (107)
-      Tests  913 passed (913)
+      Tests  916 passed (916)
  Test Files  107 passed (107)
-      Tests  913 passed (913)
+      Tests  916 passed (916)
 ```
 ```
 typecheck 0
@@ -4344,7 +4346,7 @@ git log --reverse --no-merges --format=%s origin/main..HEAD
 for c in $(git rev-list origin/main..HEAD); do git show -s --format=%B "$c" | grep -q '^Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>$' || echo "no trailer: $(git show -s --format='%h %s' "$c")"; done; echo "trailer check done"
 ```
 
-**Expected:** nothing from `git status` (the committed snapshot and types are current); `imports grep exit 1`; `raw html grep exit 1`; `0` (no em dash in an added line of code or tests); `0` (no U+2028, U+2029, U+FFFE or U+FFFF in this plan); exactly these 43 paths (the 6a-2 record in the runbook and the 6a spec's later amendment ride along until merged):
+**Expected:** nothing from `git status` (the committed snapshot and types are current); `imports grep exit 1`; `raw html grep exit 1`; `0` (no em dash in an added line of code or tests); `0` (no U+2028, U+2029, U+FFFE or U+FFFF in this plan); exactly these 45 paths (the 6a-2 record in the runbook and the 6a spec's later amendment ride along until merged):
 ```
 M	backend/api/main.py
 A	backend/api/routes/church_prompts.py
@@ -4356,6 +4358,7 @@ M	backend/tests/test_api_rubric.py
 M	backend/tests/test_church_admin.py
 M	backend/tests/test_church_admin_postgres.py
 M	backend/tests/test_isolation.py
+M	backend/tests/test_route_guards.py
 M	backend/usecases/church_admin.py
 M	docs/manual-verification.md
 M	docs/ops-runbook.md
@@ -4389,6 +4392,7 @@ A	frontend/src/lib/settings/prompts.ts
 A	frontend/src/lib/settings/rubric.test.ts
 A	frontend/src/lib/settings/rubric.ts
 M	frontend/src/test/fixtures/index.ts
+A	frontend/src/test/viewport.ts
 ```
 `0`; the subjects oldest first: `Runbook: slice 6a-2 record (merged; owner's phone check)`, `Spec: slice 6a-3 planning answers (owner, 2026-10-08)`, the plan commits (`WIP plan: …` and `Plan: slice 6a-3a (Liturgy prompts, Rubric, Bulletin settings in Settings)`) and any later plan commit, then T1-T10's ten subjects as written above, then any `Fix: …` lines; only `trailer check done`.
 
@@ -4400,7 +4404,7 @@ gh pr list -R bbrown62450/church --head claude/slice-2-plan-4q33le --state open 
 
 **Expected:** `[]`. Send the owner exactly this, and wait for a clear yes:
 
-> The Liturgy prompts, Rubric and Bulletin settings changes (slice 6a-3a) are verified on this machine: backend 1922 passed, 33 skipped (1885 and 31 before); frontend 913 tests in 107 files (874 in 103 before), three runs in a row; typecheck, lint and the production build are clean. There is no database change and no new package. Settings gets **Liturgy** and **Rubric** after **Hymns**, and **Bulletin** moves under Settings (the old address and the builder's buttons lead there). Everyone can read the prompts and the rubric; you (and any admin) can change them, put one back to its default, or reset them all after a confirmation. The pull request also carries the 6a-2 record and the 6a-3 planning notes. May I open the pull request as a **draft** titled "Slice 6a-3a: Liturgy prompts, the Service rubric and Bulletin settings in Settings", so the checks run? Merging stays with you.
+> The Liturgy prompts, Rubric and Bulletin settings changes (slice 6a-3a) are verified on this machine: backend 1923 passed, 33 skipped (1885 and 31 before); frontend 916 tests in 107 files (874 in 103 before), three runs in a row; typecheck, lint and the production build are clean. There is no database change and no new package. Settings gets **Liturgy** and **Rubric** after **Hymns**, and **Bulletin** moves under Settings (the old address and the builder's buttons lead there). Everyone can read the prompts and the rubric; you (and any admin) can change them, put one back to its default, or reset them all after a confirmation. The pull request also carries the 6a-2 record and the 6a-3 planning notes. May I open the pull request as a **draft** titled "Slice 6a-3a: Liturgy prompts, the Service rubric and Bulletin settings in Settings", so the checks run? Merging stays with you.
 
 - [ ] **Step 5 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
 
@@ -4417,7 +4421,7 @@ Slice 6a-3a: Liturgy prompts, the Service rubric and Bulletin settings in Settin
 
 Later: 6a-3b (Prayers, between Liturgy and Rubric), 6b (People).
 
-Tests: backend 1885 → 1922 passed, 31 → 33 skipped; frontend 874 → 913 in 103 → 107 files
+Tests: backend 1885 → 1923 passed, 31 → 33 skipped; frontend 874 → 916 in 103 → 107 files
 
 After merge (Task 12): a short check on the owner's phone, then a "Slice 6a-3a record" in docs/ops-runbook.md.
 
@@ -4431,7 +4435,7 @@ gh pr create -R bbrown62450/church --draft --base main --head claude/slice-2-pla
 gh pr checks <N> -R bbrown62450/church --watch --interval 30
 ```
 
-Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1922 passed, 33 skipped`, backend-postgres `33 passed, 1922 deselected`, frontend `913 passed` in 107 files. Then send: "PR #<N> is green: backend 1922 passed, 33 skipped (the two new Postgres tests passed in their own job); 913 frontend tests in 107 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R bbrown62450/church`.
+Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1923 passed, 33 skipped`, backend-postgres `33 passed, 1923 deselected`, frontend `916 passed` in 107 files. Then send: "PR #<N> is green: backend 1923 passed, 33 skipped (the two new Postgres tests passed in their own job); 916 frontend tests in 107 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R bbrown62450/church`.
 
 - [ ] **Step 6: Fix any failure in its owning task**
 
@@ -4439,7 +4443,7 @@ Run the last line with `run_in_background: true`. **Expected:** the PR URL; ever
 |---|---|
 | `test_church_admin.py` (the prompts), `test_church_settings.py`, `test_churches_repo.py`, `streamlit_tests/` | T1 |
 | `test_church_admin.py` (the rubric), `test_api_hymns.py`, `test_api_hymn_suggestions.py` | T2 |
-| `test_api_liturgy_prompts.py`, `test_api_rubric.py`, `test_isolation.py`, `test_openapi_contract.py`, `test_route_guards.py` | T3 |
+| `test_api_liturgy_prompts.py`, `test_api_rubric.py`, `test_isolation.py`, `test_openapi_contract.py`, `test_route_guards.py` (its `ADMIN_ONLY`: build review 4) | T3 |
 | `test_church_admin_postgres.py` (CI `backend-postgres`) | T4 (the lock itself: T1, T2) |
 | `prompts.test.ts`, `typecheck` in `lib/queries/liturgy-prompts.ts` | T5 |
 | `liturgy-prompts-page.test.tsx` | T6 |
@@ -4452,7 +4456,7 @@ Run the last line with `run_in_background: true`. **Expected:** the PR URL; ever
 
 For each fix: change only the owning task's files; rerun Steps 2-3; commit `Fix: <what> (Task <n>, slice 6a-3a final verification)` with the trailer; after the PR exists, ask the owner before pushing it.
 
-Expected counts after this task: backend `1922 passed, 33 skipped`; frontend `913 passed` in 107 files.
+Expected counts after this task: backend `1923 passed, 33 skipped`; frontend `916 passed` in 107 files.
 
 ### Task 12: Merge, the owner's phone check (five steps), the record (OWNER + agent)
 
@@ -4481,7 +4485,7 @@ Record the sections, the customized cards on each page and the year. **Steps 3 a
 
 - [ ] **Step 3 (OWNER, then agent): Phone, step 2 of 5: a prompt, changed and put back (item 17)**
 
-Pick, from Step 2's answer, a **Liturgy** card that is not customized (the Offertory Prayer if it is not; else the first that is not), and fill in its name for `<card>`:
+Pick, from Step 2's answer, a **Liturgy** card that is not customized (the Offertory Prayer if it is not; else the first that is not), and fill in its name for `<card>`. If the first **Save prompts** names a different card (an old stored prompt that fails today's brace check), stop the step and record that card's name, as the paragraph after the message says:
 
 > On **Liturgy**, tap **<card>** to open it. Tap at the very end of its text and type a space and **{** (an opening curly brace). Tap **Save prompts** (at the bottom; scroll down if the keyboard hides it): does the card show "<card> prompt: It has a { or } without a partner. Use {{ or }} to print a brace." and nothing say "Prompts saved."? Now delete the **{** and type **Amen.** in its place, then tap **Save prompts**: does it say "Prompts saved.", and does the card say **Customized**? Last, put it back: tap **Reset to default** under that card's text, then **Save prompts**: does it say "Prompts saved." again, and is **Customized** gone from that card?
 
@@ -4603,7 +4607,7 @@ gh pr checks claude/slice-2-plan-4q33le -R bbrown62450/church --watch
 
 Code only (no schema to undo). On the owner's yes for each outward command: a branch `claude/revert-6a3a` from `origin/main`, `git revert -m 1 --no-commit <merge sha>`, a commit "Revert slice 6a-3a (PR #<N>)" with the trailer, both suites (`1885 passed, 31 skipped`; `874 passed` in 103), a PR, CI, and the merge on the owner's yes; record it in the record. Prompts and rubric saved through the pages stay in `churches.settings` in the shapes the old code reads, and `/bulletin-settings` becomes the page again, so nothing needs undoing in the data.
 
-Expected counts after this task: backend `1922 passed, 33 skipped` on `main`; frontend `913 passed` in 107 files. The records PR adds no test.
+Expected counts after this task: backend `1923 passed, 33 skipped` on `main`; frontend `916 passed` in 107 files. The records PR adds no test.
 
 ---
 
@@ -4623,6 +4627,13 @@ Expected counts after this task: backend `1922 passed, 33 skipped` on `main`; fr
 - Every "see it fail" output and every count above is quoted from this replay (times as `<t>`, Vitest's per-test times left out), and every quoted block matched what the replay printed.
 - Every count matched the table: backend 1896, 1912, 1922 passed with 31 skipped, then 33 skipped from T4; frontend 879 in 104, 890 in 105, 896 in 106, 909 in 107, 913 in 107; T1 Step 4 `73 passed` and `streamlit_tests` `35 passed`; T2 Step 4 `114 passed, 1 skipped`; T3 Step 4 ` 2 files changed, 508 insertions(+), 1 deletion(-)` and `34 passed`; T6's three runs `11 passed` and T8's `13 passed` each time, no flaky run; T9 `9 failed | 63 passed (72)` (as before the fixes) with the Bulletin settings file not loading, then `81 passed`; typecheck 0 and lint 0 after T3 and T5-T9; T10 `89 passed`, `4`, `0`, ` 1 file changed, 19 insertions(+)`. After T10, T11 Step 2's and Step 3's outputs (quoted there): `1922 passed, 33 skipped`, three runs of `913 passed` in 107 files, typecheck and lint 0, `✓ Compiled successfully` with `○ /settings/liturgy`, `○ /settings/rubric`, `○ /settings/bulletin` and `○ /bulletin-settings`, and the 43 paths; the Postgres runs above.
 - Not run while planning: the pushes, the PR and CI, the merge, Railway's and Vercel's deploys and the owner's phone check (T12).
+
+**6a-3a build review fixes (2026-10-08).** After T1-T10 were built on the branch, the build's review raised three findings fixed here. Each fix is its own commit, `Fix: <what> (6a-3a build review <n>)`, its test written first and seen failing, then the old behaviour planted back once to see the test turn red:
+- **R2 (the sticky Save footer on a phone held sideways).** The Liturgy prompts and Rubric footers left sticky mode only below `md` while a text field had focus, but an iPhone in landscape is 844-932px wide, so the sticky bar could cover the short view left by the keyboard. While `useKeyboardOpen` is true the footer is now `static` at every width: focus cannot tell an on-screen keyboard from a hardware one, and pointer media queries misreport tablets with keyboards, so the simplest robust rule is no width or pointer test (on a desktop, Save is reached by scrolling or Tab while typing, and the bar comes back on blur; the reason is in a code comment on both pages). The builder's `StepFooter` is its own component and is unchanged. `frontend/src/test/viewport.ts` (new) gives `setViewport(width, height)` and `positionAt(element, width)`, which resolves the position utilities and their breakpoint variants at a width, since jsdom applies no CSS. Tests: `liturgy-prompts-page.test.tsx` and `rubric-settings-page.test.tsx` "lets the footer sit after the cards while the keyboard is open on a phone held sideways (900x400)"; the phone test now checks the resolved position at 390px. With `max-md:static` planted back: `2 failed`.
+- **R4 (no test pinned `require_admin`).** Weakening PUT `/church/liturgy-prompts` or PATCH `/rubric` to `require_church` kept every test green, since the usecase's role re-read under the lock still refuses a member. `test_route_guards.py` now keeps `ADMIN_ONLY` (those two and the nine admin routes before them): each must have `require_admin` in its dependency tree, and every route that has it must be listed. Test: `test_admin_routes_require_an_admin` (`test_allowlists_name_real_routes` also checks `ADMIN_ONLY`). With either route switched to `require_church`: `1 failed` naming that route, while `test_api_liturgy_prompts.py`, `test_api_rubric.py` and `test_identity.py` still pass.
+- **R5 (Rubric's Reset all used the page's last-read `customized`).** An item another admin customized after the page loaded stayed customized while the toast said "Rubric reset to defaults." `resetAllPatch()` now sends null for every checklist and both preferences, within the existing sparse `PATCH /rubric` (null for an item with no override is a no-op; `validate_patch` accepts every key; no schema change). Tests: `rubric-settings-page.test.tsx` "resets every item, even one another admin customized after the page loaded" (its fake server keeps sparse overrides and gains a Benediction checklist and a year between load and Reset all); the Reset all test's body and `rubric.test.ts` now expect every key. With the old `resetAllPatch` planted back: `2 failed, 13 passed`.
+
+Counts after the build review fixes: backend `1923 passed, 33 skipped` (+1); frontend `916 passed` in 107 files (+3); typecheck, lint and the production build clean (`○ /settings/liturgy`, `○ /settings/rubric`, `○ /settings/bulletin`, `○ /bulletin-settings`); the generated API files unchanged (no schema changed); the PR's paths 45 (`backend/tests/test_route_guards.py` modified, `frontend/src/test/viewport.ts` added). CI's `backend-postgres` would show `33 passed, 1923 deselected`. T11's expected outputs and PR body carry these counts; the per-task table keeps the counts each task left.
 
 ## Spec coverage
 
@@ -4694,6 +4705,6 @@ Counts: T8 adds two tests (11 → 13), so the frontend ends at **913** in 107 fi
 
 - **Coverage.** Every binding constraint has a home: two PRs and this one's scope (clarification 1, T11); `/settings/bulletin` with the forward and the builder's links (clarification 10, T9); the prompts as designed with the system prompt, Reset to default and Reset all, admins only (clarifications 3-5, T1, T3, T6); the theme keywords kept with the note (clarification 6, T8); the order less Prayers (clarification 2, T9); the locking with the church-row lock and the role re-read (clarifications 5, 9, 12; T1, T2, T4); `clean_prompt_overrides` imported, never copied (T1); the rubric's sparse PATCH with null for a default (clarification 8, T7, T8); no migration (clarification 13); no em dash in new copy (clarification 15; T10 Step 2 and T11 Step 3 grep the added lines); no ids or real addresses in the docs (only `@example.com`, and PR #4's `@x.org` tests unchanged; the record's own grep, T12 Step 9); the frozen Streamlit files untouched and their tests passing (clarification 14; T1 Step 4 runs `streamlit_tests`; T11 Step 3's path check counts `app.py`, `streamlit_views` and `streamlit_tests` as 0); tests never reach the network (Global Constraints); the 5b and 6a lessons ("Lessons carried"). The second-to-last task opens a draft PR only on the owner's yes; the last merges only on a yes, runs a five-step phone check one step at a time (each test change on a card that is not customized and put back in its step; Reset all never tapped; the year never saved) and inserts "### Slice 6a-3a record" before "## Backups", after "### Slice 6a-2 record".
 - **Placeholders.** None in T1-T10's code, tests, commands or expected outputs; every expected output is quoted from the replay. The `<…>` left are T11 and T12's runtime values (`<N>`, `<scratch>`, `<card>`, `<year>`, times, the owner's answers), as in the 6a-2 plan.
-- **Consistency.** Names agree across tasks: `merge_settings`, the sessions on `set_church_prompts` and `update_church_rubric` (T1, T2) are used by `save_prompts` and `update_rubric`; `get_prompts`, `save_prompts`, `prompt_label`, `get_rubric`, `update_rubric`, `rubric_out` (T1, T2) by the routes (T3) and the Postgres tests (T4); `LiturgyPromptsOut`, `PromptFieldOut`, `LiturgyPromptsIn`, `RubricOut`, `RubricModel` (T3) by the type names (T5); `PROMPT_KEYS`, `promptValuesFrom`, `promptsPayload`, `promptFieldErrors`, `rebasePrompts` (T5) by the page (T6); `CHECKLISTS`, `rubricFormFrom`, `rubricPatch`, `resetAllPatch`, `rubricErrors`, `rebaseRubric`, `isInvalidRubric` (T7) by the card and the page (T8); `keys.liturgyPrompts`, `keys.rubric` (existing) by the queries. The counts in the table, each task's "Expected" and the PR line (`1885 → 1922`, `31 → 33`, `874 → 913`, `103 → 107`) agree.
+- **Consistency.** Names agree across tasks: `merge_settings`, the sessions on `set_church_prompts` and `update_church_rubric` (T1, T2) are used by `save_prompts` and `update_rubric`; `get_prompts`, `save_prompts`, `prompt_label`, `get_rubric`, `update_rubric`, `rubric_out` (T1, T2) by the routes (T3) and the Postgres tests (T4); `LiturgyPromptsOut`, `PromptFieldOut`, `LiturgyPromptsIn`, `RubricOut`, `RubricModel` (T3) by the type names (T5); `PROMPT_KEYS`, `promptValuesFrom`, `promptsPayload`, `promptFieldErrors`, `rebasePrompts` (T5) by the page (T6); `CHECKLISTS`, `rubricFormFrom`, `rubricPatch`, `resetAllPatch`, `rubricErrors`, `rebaseRubric`, `isInvalidRubric` (T7) by the card and the page (T8); `keys.liturgyPrompts`, `keys.rubric` (existing) by the queries. The counts in the table and each task's "Expected" agree; after the 6a-3a build review fixes (Build notes) T11 and the PR line carry `1885 → 1923`, `31 → 33`, `874 → 916`, `103 → 107`.
 - **Not verified while planning:** the pushes, the PR and CI (the two Postgres tests were run on a local throwaway Postgres instead), the merge, Railway's and Vercel's deploys, the owner's phone check, and the pages at 375 px in a real browser (the classes give 44 px targets; jsdom does not lay out).
 - **Judgement calls to watch in review:** keeping `update_church_rubric` as the write path instead of deleting it; `GET`'s `override` read through `clean_prompt_overrides`; the footer going static while the keyboard is open; members reading the rubric as text; the hymn slot titles in the client; the client-side forward of the old address.
