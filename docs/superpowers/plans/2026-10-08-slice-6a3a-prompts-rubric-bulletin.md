@@ -32,7 +32,7 @@
   `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
 - TDD: write the failing test first and see it fail as quoted.
 - **Backup push after every task** (standing rule): the controller runs `git push origin claude/slice-2-plan-4q33le` after each task's commit (never `--force`, never a rebase; if the push is rejected, `git pull --no-rebase origin claude/slice-2-plan-4q33le` and push again; on a network error retry after 2, 4, 8 and 16 s). A fix asked for by a review is a new commit, `Fix: <what> (Task <n> review)`. The container can restart and lose uncommitted work: commit as soon as a task's checks pass.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1885 → 1922 passed, 31 → 33 skipped; frontend 874 → 911 in 103 → 107 files`.
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1885 → 1922 passed, 31 → 33 skipped; frontend 874 → 913 in 103 → 107 files`.
 - New prose for the owner has no em dashes and no flattery. New user-facing copy is exactly the list in clarification 15 and has no em dashes (S's lines carry none; the shared default prompts and checklists are existing text and keep their own punctuation, owner question 6); existing copy keeps its own punctuation.
 - No church id, email address, token, database URL or real person's name in any doc, commit, test or record. Tests use the fixtures' "Grace" and `@example.com` addresses (the rubric's PR #4 tests keep their `@x.org` ones); no prompt's or checklist's wording from the owner's church is recorded.
 - Ask the owner before any push to a PR, PR creation, marking ready, merging, or any production or settings action. Owner steps go one at a time, in plain words.
@@ -54,9 +54,9 @@ As in the 6a-2 and 5b-1 plans: **Create `path`:** the block is the whole new fil
   | T5 | 0 | 1922 passed, 33 skipped | +5 (`prompts.test.ts`) | 879 in 104 |
   | T6 | 0 | 1922 passed, 33 skipped | +11 (`liturgy-prompts-page.test.tsx`) | 890 in 105 |
   | T7 | 0 | 1922 passed, 33 skipped | +6 (`rubric.test.ts`) | 896 in 106 |
-  | T8 | 0 | 1922 passed, 33 skipped | +11 (`rubric-settings-page.test.tsx`) | 907 in 107 |
-  | T9 | 0 | 1922 passed, 33 skipped | +4 (`settings-layout.test.tsx`: three `it.each` rows and one test; four other test files edited) | 911 in 107 |
-  | T10 | 0 | 1922 passed, 33 skipped | 0 | 911 in 107 |
+  | T8 | 0 | 1922 passed, 33 skipped | +13 (`rubric-settings-page.test.tsx`) | 909 in 107 |
+  | T9 | 0 | 1922 passed, 33 skipped | +4 (`settings-layout.test.tsx`: three `it.each` rows and one test; four other test files edited) | 913 in 107 |
+  | T10 | 0 | 1922 passed, 33 skipped | 0 | 913 in 107 |
 
 - CI `backend-postgres` goes from `31 passed, 1885 deselected` to `33 passed, 1922 deselected` (T4). Locally, without `TEST_DATABASE_URL`, those two tests are among the 33 skipped.
 
@@ -82,11 +82,11 @@ The owner's answers win over S and F; the code wins over both where they disagre
 
 1. **[owner-visible] What 6a-3a ships** (answers 1-6). The Liturgy prompts page and `GET`/`PUT /church/liturgy-prompts`; the Service rubric page over `GET`/`PATCH /rubric`, with the PATCH moved under the church-row lock and `defaults` added to both answers; Bulletin settings at `/settings/bulletin` with the old address forwarding; **Liturgy** and **Rubric** in the Settings nav and **Bulletin** pointing under `/settings`; the Postgres tests; the manual check items. Not here: Prayers (6a-3b), anything of 6b.
 2. **[owner-visible] Where the pages sit** (answer 6, less Prayers). `SETTINGS_SECTIONS` becomes **Church**, **Hymns**, **Liturgy** (`/settings/liturgy`), **Rubric** (`/settings/rubric`), **Bulletin** (`/settings/bulletin`), **Contacts**, **Account**; 6a-3b inserts **Prayers** (`/settings/prayers`) after Liturgy. The nav labels are S's ("Liturgy", "Rubric"); the pages' headings are "Liturgy prompts", "Service rubric" and "Bulletin settings" (each an `h2`, as "Church profile" and "Hymns"). On a phone the section nav is a wrapping row of 44 px links: seven wrap to two or three rows at 375 px (T12 Step 6 checks it is easy to use; the horizontal-scroller follow-up is carried, owner question 5).
-3. **[owner-visible] The Liturgy prompts page** (S UX §3; answer 4). The heading, then S's intro "These are the instructions the AI follows when it writes your liturgy. Edit any of them to shape the voice; leave a box on its default to use the shared wording."; members first see "Only admins can edit the prompts. You can read them below.". Nine cards in the server's order: **Overall voice (system prompt)** (under its box "Placeholders aren't filled in here; this text is sent as written."), then the small heading **Section prompts** with the server's placeholder help followed by "Use {{ or }} to print a brace." (never in the system card), then the eight sections by their labels. Each card is a collapsible (Base UI Collapsible; a 44 px header with the title and **Customized** while the text in the box would be stored as the church's own: not blank and, read as the server reads it, different from the default); all start closed on a phone and open from `md`. The box grows with its text up to 60 % of the window (`useAutosize`), 8 rows to start for the system prompt and Prayers of the People and 4 otherwise, at most 8,000 characters; members' boxes are read-only. Owners and admins also get **Reset to default** under each box (enabled while the text differs from the default: it puts the default text back, unsaved) and a sticky footer: **Save prompts** (disabled until a save would change what is stored; "Saving…") and, while the church has wording of its own saved, **Reset all to defaults** (owner question 2), which asks "Reset all prompts?", "Your church's custom wording will be removed and the shared defaults used.", **Reset all** (red), **Cancel**. A save sends every card whose cleaned text is the church's own (clarification 5) and toasts "Prompts saved."; Reset all sends `{"prompts": {}}` and toasts "Prompts reset to defaults.". After either, the form shows what the server stored, keeping only text typed while the save ran.
+3. **[owner-visible] The Liturgy prompts page** (S UX §3; answer 4). The heading, then S's intro "These are the instructions the AI follows when it writes your liturgy. Edit any of them to shape the voice; leave a box on its default to use the shared wording."; members first see "Only admins can edit the prompts. You can read them below.". Nine cards in the server's order: **Overall voice (system prompt)** (under its box "Placeholders aren't filled in here; this text is sent as written."), then the small heading **Section prompts** with the server's placeholder help followed by "Use {{ or }} to print a brace." (never in the system card), then the eight sections by their labels. Each card is a collapsible (Base UI Collapsible; a 44 px header with the title and **Customized** while the text in the box would be stored as the church's own: not blank and, read as the server reads it, different from the default); all start closed on a phone and open from `md`. The box grows with its text up to 60 % of the window (`useAutosize`), 8 rows to start for the system prompt and Prayers of the People and 4 otherwise, at most 8,000 characters; members' boxes are read-only. Owners and admins also get **Reset to default** under each box (enabled while the text differs from the default: it puts the default text back, unsaved, and moves focus into the box, since the button is then disabled) and a sticky footer: **Save prompts** (disabled until a save would change what is stored; "Saving…") and, while the church has wording of its own saved, **Reset all to defaults** (owner question 2), which asks "Reset all prompts?", "Your church's custom wording will be removed and the shared defaults used.", **Reset all** (red), **Cancel**. A save sends every card whose cleaned text is the church's own (clarification 5) and toasts "Prompts saved."; Reset all sends `{"prompts": {}}` and toasts "Prompts reset to defaults.". After either, the form shows what the server stored, keeping only text typed while the save ran.
 4. **Errors on the prompts page** (S "Errors"; the 6a-2 build review's I1). A 422 whose `fields` names a card (`prompt_invalid`'s `prompts.<key>`, or a Pydantic `prompts.<key>` such as "Too long (max 8000 characters).") opens that card, shows the message under its box (`role="alert"`, `aria-invalid`) and focuses the first such box; nothing is saved and nothing is toasted; typing in the box clears it. A 422 that names no card (an unknown key, `prompts.sermon.[key]`) is toasted with the server's message and the edits stay. A role 403 is toasted and refetches the church profile, so the page turns read-only (S "Losing a role mid-session"); a lost church or a 401 the app already handles. While Reset all runs its confirmation cannot be closed (Escape, a tap outside and **Cancel** are ignored) and **Save prompts** is disabled; a failure closes it (toasted); after a reset, focus goes to the page's heading (the button that opened it is gone).
 5. **The prompts on the server** (S API, Models, Semantics → PUT /church/liturgy-prompts). `GET /church/liturgy-prompts` (`require_church`) answers `LiturgyPromptsOut {placeholder_help, can_edit, fields}`: `fields` in `PROMPT_KEYS` order, each `{key, label, default, override, customized}`, `label` "Overall voice" for `system` and `SECTION_LABELS` otherwise, `override` what `clean_prompt_overrides` keeps of the stored overrides (so a stored value blank, equal to its default or under an unknown key reads as not customized: generation's own rule), `can_edit` from the caller's role. `PUT` (`require_admin`; `LiturgyPromptsIn {prompts: {PromptKey: str(8000)}}`, `extra="forbid"`) replaces the overrides in `church_admin.save_prompts`: one session, `lock_and_read_actor`, `require_admin_role`, slice 4's `clean_prompt_overrides` (imported; no copy and no pre-processing), then `check_template(key, text)` for each kept prompt in `PROMPT_KEYS` order (the system prompt only for its length, since it is sent as written); the first failure is 422 `prompt_invalid` "<Label> prompt: <reason>" with `fields["prompts.<key>"]` and nothing is written; then `set_church_prompts(…, session=s)` merges the key (`merge_settings`, every other settings key kept) and the answer is the read. An unknown key, a value over 8,000 characters or a null value is Pydantic's 422 `invalid_request` ("Not a valid value.", "Too long (max 8000 characters)."); `{}` and a missing `prompts` are covered. Control characters are not refused: the settings column is JSON (it stores them) and only the AI reads the prompts.
-6. **[owner-visible] The Rubric page** (S UX §6; answer 5). The heading, S's intro ("What makes a good hymn or prayer at your church. The AI follows these checklists when it suggests hymns and writes liturgy. How each prayer is laid out (Leader and People lines, length, “Amen”) stays in Liturgy prompts."), and for members "Only admins can edit the rubric. You can read it below.". **Hymn preferences**: "Prefer hymns written before" (a 44 px box, `inputMode="numeric"`, 4 digits; help "Hymns with older words are suggested first. This is a preference, not a filter: a newer hymn can still be suggested when it fits clearly better, and the builder shows its year.") and "Prefer familiar hymns" (a `Switch`; help "Hymns found in many hymnals are suggested first."), each with **Customized** and **Reset to default** while it differs from the default. Then the heading **Hymns** with the three slot cards ("Opening (Gathering) Hymn", "Response Hymn (after the sermon)", "Closing (Sending) Hymn") and **Prayers** with the eight section cards. Each card is a collapsible (closed on a phone, open from `md`; a card with an error stays open) showing "A good {Label}:" and its points; **Customized** while its cleaned points differ from the default's. For owners and admins each point is a one-line box (`maxLength` 300, growing with its text; "Point {n} of {Label}" to a screen reader): Enter adds an empty point below and moves into it, a typed or pasted line break becomes a space; ✕ ("Remove point {n} from {Label}") removes it and moves focus to the point now in its place, else the one before, else **Add a point**; **Add a point** adds one at the end (disabled at 12, with "A checklist can have at most 12 points."); **Reset to default** puts the default points back, unsaved. Members read the points as a plain list (owner question 3). Under the Opening and Closing cards: "The builder first gathers opening and closing hymns by theme (gathering, praise, sending and similar). This checklist then guides which of them the AI suggests." (answer 5). The sticky footer: **Save rubric** (disabled until something changed and nothing is wrong) and, while `customized` is not empty, **Reset all to defaults** ("Reset the rubric?", "Your church's checklists and preferences go back to the shared defaults.", **Reset all**). A save sends one sparse `PATCH /rubric` (clarification 8) and toasts "Rubric saved."; Reset all sends null for each `customized` item and toasts "Rubric reset to defaults.".
-7. **Rubric checks and errors** (S "Validation copy"). Before sending, with the server's words: a card whose points are all blank or removed shows "Keep at least one point, or use Reset to default." (`role="alert"`) and blocks **Save rubric**; a year that is not a whole number from 1500 to this year shows "The preferred year must be between 1500 and {this year}." under the box (`aria-invalid`) and blocks Save; more than 12 points or 300 characters cannot be typed. A server 422 `invalid_rubric` (a pasted control character, for example) shows its message in an `Alert` just above the footer, which takes focus; the edits stay, nothing is toasted, and any edit clears it. A role 403, a lost church, a 401 and the confirmation's rules are as for the prompts (clarification 4).
+6. **[owner-visible] The Rubric page** (S UX §6; answer 5). The heading, S's intro ("What makes a good hymn or prayer at your church. The AI follows these checklists when it suggests hymns and writes liturgy. How each prayer is laid out (Leader and People lines, length, “Amen”) stays in Liturgy prompts."), and for members "Only admins can edit the rubric. You can read it below.". **Hymn preferences**: "Prefer hymns written before" (a 44 px box, `inputMode="numeric"`, 4 digits; help "Hymns with older words are suggested first. This is a preference, not a filter: a newer hymn can still be suggested when it fits clearly better, and the builder shows its year.") and "Prefer familiar hymns" (a `Switch`; help "Hymns found in many hymnals are suggested first."), each with **Customized** and **Reset to default** while it differs from the default (Reset to default puts the default back and moves focus to the box or the switch, since the button then goes). Then the heading **Hymns** with the three slot cards ("Opening (Gathering) Hymn", "Response Hymn (after the sermon)", "Closing (Sending) Hymn") and **Prayers** with the eight section cards. Each card is a collapsible (closed on a phone, open from `md`; a card with an error stays open) showing "A good {Label}:" and its points; **Customized** while its cleaned points differ from the default's. For owners and admins each point is a one-line box (`maxLength` 300, growing with its text; "Point {n} of {Label}" to a screen reader): Enter adds an empty point below and moves into it, a typed or pasted line break becomes a space; ✕ ("Remove point {n} from {Label}") removes it and moves focus to the point now in its place, else the one before, else **Add a point**; **Add a point** adds one at the end (disabled at 12, with "A checklist can have at most 12 points."); **Reset to default** puts the default points back, unsaved, and focuses the first point. Members read the points as a plain list (owner question 3). Under the Opening and Closing cards, outside the part that collapses (so it shows on a phone while the card is closed): "The builder first gathers opening and closing hymns by theme (gathering, praise, sending and similar). This checklist then guides which of them the AI suggests." (answer 5). The sticky footer: **Save rubric** (disabled until something changed and nothing is wrong) and, while `customized` is not empty, **Reset all to defaults** ("Reset the rubric?", "Your church's checklists and preferences go back to the shared defaults.", **Reset all**). A save sends one sparse `PATCH /rubric` (clarification 8) and toasts "Rubric saved."; Reset all sends null for each `customized` item and toasts "Rubric reset to defaults.".
+7. **Rubric checks and errors** (S "Validation copy"). Before sending, with the server's words: a card whose points are all blank or removed shows "Keep at least one point, or use Reset to default." (`role="alert"`) and blocks **Save rubric**; a year that is not a whole number from 1500 to this year shows "The preferred year must be between 1500 and {this year}." under the box (`aria-invalid`) once the box loses focus or holds four characters (not while the first digits are being typed), and blocks Save from the first keystroke; more than 12 points or 300 characters cannot be typed. A server 422 `invalid_rubric` (a pasted control character, for example) shows its message in an `Alert` just above the footer, which takes focus; the edits stay, nothing is toasted, and any edit clears it. A role 403, a lost church, a 401 and the confirmation's rules are as for the prompts (clarification 4).
 8. **The rubric's body** (S UX §6, `rubric.ts`). Each checklist's points are cleaned as `service_rubric` cleans them (every run of whitespace one space, trimmed, blank points dropped); only items whose cleaned value differs from the baseline are sent; an item whose cleaned value equals its default is sent as `null` (the church keeps following the defaults); the year as a number; never an empty list. A year change also refreshes every hymn list (`["church", id, "hymns"]`: `newer_than_preferred` follows it, so the builder's picker relabels with no reload).
 9. **The rubric on the server** (S Semantics → PATCH /rubric; "Changed modules"). `church_admin.update_rubric(church_id, actor_id, patch)`: one session, `lock_and_read_actor`, `require_admin_role` (a demoted admin's role 403 comes before any check of the patch), then `repos.churches.update_church_rubric(church_id, patch, session=s)` (validate, read the locked row's overrides, a non-dict as `{}`, `apply_patch`, write); a `ValueError` becomes `InvalidInput(message, code="invalid_rubric")`, PR #4's 422 body with no `fields`; the answer is `rubric_out` of what is stored: `{rubric, customized, defaults}` (S's additive `defaults`, the full default rubric, on `GET` too through `church_admin.get_rubric`). The route keeps its path, guards and body (`Body(...)` dict, so a non-object body is still Pydantic's `invalid_request`).
 10. **Bulletin settings in Settings** (answer 3). A new route `settings/bulletin/page.tsx` renders the existing `BulletinSettingsPage`, which now renders as a Settings section: an `h2` "Bulletin settings" with its description and **Back to the builder** (`/builder`, which reopens the step the builder was last on: Bulletin or Review & send, the two places that link here) instead of its own `<main>`, `PageHeader` and "Back to Review & send" (owner question 1). The old `bulletin-settings/page.tsx` becomes a forward: `router.replace("/settings/bulletin")` with a skeleton, as `/settings` opens Church. The builder's Bulletin step and the Printed bulletin card link to `/settings/bulletin`; their tests, the Church page's leave-guard test and the page's own tests follow. The form, its rules, `useBulletinSettings` and the API are unchanged.
@@ -109,20 +109,22 @@ The owner's answers win over S and F; the code wins over both where they disagre
 
 ### Risks
 - **Last write wins for the prompts** (S Risk 6). `PUT` replaces all prompts, so two admins saving at once keep the later set; a refetch rebases untouched cards first, which narrows it. Accepted.
-- **A prompt the old app saved can fail today's check.** It shows on the page, and the next save names it (422, its card opened) until it is fixed; generation already refuses it the same way (slice 4).
+- **A prompt the old app saved can fail today's check.** It shows on the page, and the next save names it (422, its card opened) until it is fixed; generation already refuses it the same way (slice 4). A save sends every customized card, so that 422 can name a card other than the one edited; T12 Step 3 stops there and tells the owner instead of changing it.
+- **A prompts save stores every customized card cleaned.** `PUT` replaces the overrides with what the page sends, cleaned by `clean_prompt_overrides` (CRLF to LF, a value blank, equal to its default or under an unknown key dropped), so a stored prompt's line endings or a dropped entry can change on the first save, while what generation reads stays the same (it applies the same cleaning). T10 and T12 say the prompts end "as generation reads them".
 - **The theme keywords** (answer 5): kept, with the note under the Opening and Closing cards.
 - **Seven section links on a phone** wrap to more rows (clarification 2).
 - **SQLite ignores `FOR UPDATE`.** Only CI's `backend-postgres` proves the lock; T1 and T2 check that each write reads the church row with it in its own session.
 - **The shared defaults' punctuation.** The default prompts and checklists are shown as they are (some carry dashes); they are the AI's instructions for every church, not new copy (owner question 6).
 - **The old address** shows a skeleton for a moment before Settings → Bulletin opens.
+- **At `md` and wider the footer stays sticky while a keyboard is open** (a tablet's on-screen keyboard can cover it), as the builder's `StepFooter` does; only below `md` does it sit after the last card. Accepted.
 
 ### Lessons carried (the 5b-1 and 6a-2 review fixes)
 - Whitespace and case compared the server's way, in one place (5b-1 plan review I2, build review M3): the prompts' `cleanPrompt` and the rubric's `cleanPoints` mirror `clean_prompt_overrides` and `service_rubric`, and the server cleans again.
 - One rule for which 422s the form shows, and a toast for the rest (5b-1 plan review I3, 6a-2 build review I1): `promptFieldErrors`, `isInvalidRubric`; T6 "toasts a refusal that names no card".
 - A dialog closes or stays deliberately (5b-1 plan review I4, build review M5): the Reset all confirmations ignore every close while their request runs and close on a failure; T6 and T8 hold the request and tap **Cancel** and Escape.
-- Focus never drops to the page (5b-1 plan review M2, build review M4; 6a-2 plan review M1): the named card's box after a 422, the server's message after an `invalid_rubric`, the heading after a reset, the next point after a removal.
+- Focus never drops to the page (5b-1 plan review M2, build review M4; 6a-2 plan review M1): the named card's box after a 422, the server's message after an `invalid_rubric`, the heading after a reset, the next point after a removal, and the box, the first point, the year or the switch after **Reset to default** (whose button is then disabled or gone).
 - Late answers touch only their own form (5b-1 build review M5): per-call callbacks on `mutate`, Save and Reset all disable each other, and a church switch remounts the page.
-- The keyboard on a phone (5b-1 plan review M4, 6a-2 clarification 8): the footer goes static below `md` while a text box has focus (`useKeyboardOpen`; T6 checks it); T12 Step 6 checks it on the owner's phone. No bottom sheet here: the only dialogs are confirmations.
+- The keyboard on a phone (5b-1 plan review M4, 6a-2 clarification 8): the footer goes static below `md` while a text box has focus (`useKeyboardOpen`; T6 and T8 check it); T12 Step 6 checks it on the owner's phone. No bottom sheet here: the only dialogs are confirmations.
 - The owner's real data is never at risk in the phone check (6a-2 plan review I2, M7): changes only on a card that is not **Customized**, put back with **Reset to default** and a save in the same step; **Reset all** is never tapped; the record notes which cards were customized, never their wording.
 - The member's view is complete (6a-2 plan review M5): both pages are fully readable, with the note, and no control.
 - Literal Unicode in code is written as escapes (5b-1 plan review M3): this plan's files hold no U+2028, U+2029, U+FFFE or U+FFFF.
@@ -1684,7 +1686,7 @@ Expected counts after this task: backend `1922 passed, 33 skipped`; frontend `87
 
 - [ ] **Step 1: Write the failing tests**
 
-Rendered inside the Settings layout, as the route is. They pin S's DOM cases for this page: the member's read-only view (the note, the nine titles in order, read-only boxes, the system card's note, the placeholder help with the brace sentence under "Section prompts" and not in the system card, no buttons); every card open from `md`; **Customized** following the text, **Reset to default**, and a save that sends only the church's own wording (with `X-Church-Id`); a 422 `prompt_invalid` that opens, marks and focuses its card even when it was closed, with no toast; a 422 naming no card toasted with the edits kept; **Reset all** confirmed, `PUT {prompts: {}}`, not closable while it runs (Escape and **Cancel** ignored), then the defaults shown and focus on the heading; the rebase; the role 403; the leave guard through the Settings nav; the footer going static while the keyboard is open; and the error state.
+Rendered inside the Settings layout, as the route is. They pin S's DOM cases for this page: the member's read-only view (the note, the nine titles in order, read-only boxes, the system card's note, the placeholder help with the brace sentence under "Section prompts" and not in the system card, no buttons); every card open from `md`; **Customized** following the text, **Reset to default** (focus moves into the box), and a save that sends only the church's own wording (with `X-Church-Id`); a 422 `prompt_invalid` that opens, marks and focuses its card even when it was closed, with no toast; a 422 naming no card toasted with the edits kept; **Reset all** confirmed, `PUT {prompts: {}}`, not closable while it runs (Escape and **Cancel** ignored), then the defaults shown and focus on the heading; the rebase; the role 403; the leave guard through the Settings nav; the footer going static while the keyboard is open; and the error state. The wide-screen test restores its `matchMedia` spy in a `finally`, so a failure there cannot open every card in the tests after it.
 
 **Create `frontend/src/components/settings/liturgy-prompts-page.test.tsx`:**
 
@@ -1796,10 +1798,13 @@ describe("Settings → Liturgy prompts (slice 6a-3a)", () => {
     const wide = vi.spyOn(window, "matchMedia").mockImplementation(
       (query) => ({ matches: true, media: query, addEventListener: () => {}, removeEventListener: () => {} }) as unknown as MediaQueryList,
     );
-    renderPage("admin");
-    await screen.findByRole("textbox", { name: "Overall voice (system prompt)" });
-    expect(screen.getAllByRole("textbox")).toHaveLength(9);
-    wide.mockRestore();
+    try {
+      renderPage("admin");
+      await screen.findByRole("textbox", { name: "Overall voice (system prompt)" });
+      expect(screen.getAllByRole("textbox")).toHaveLength(9);
+    } finally {
+      wide.mockRestore(); // even when the test fails: a spy left in place would open every card after it
+    }
   });
 
   it("marks a changed card Customized, puts its default back, and saves only the church's own wording", async () => {
@@ -1815,6 +1820,7 @@ describe("Settings → Liturgy prompts (slice 6a-3a)", () => {
     expect(screen.getByRole("button", { name: /^Benediction/ })).toHaveTextContent("BenedictionCustomized");
     await user.click(reset);
     expect(benediction).toHaveValue(DEFAULT_PROMPTS.benediction);
+    expect(document.activeElement).toBe(benediction); // the button is disabled now: focus is in the box
     expect(screen.getByRole("button", { name: /^Benediction/ })).toHaveTextContent(/^Benediction$/);
     expect(save).toBeDisabled();
     await user.clear(benediction);
@@ -2291,7 +2297,11 @@ function PromptCard({
             variant="link"
             className="h-11 justify-self-start px-0 md:h-auto"
             disabled={value === field.default}
-            onClick={() => onChange(field.default)}
+            onClick={() => {
+              onChange(field.default);
+              // The button is disabled once the default is back: focus stays in the card, on its box.
+              ref.current?.focus();
+            }}
           >
             Reset to default
           </Button>
@@ -2823,7 +2833,7 @@ Expected counts after this task: backend `1922 passed, 33 skipped`; frontend `89
 
 - [ ] **Step 1: Write the failing tests**
 
-Rendered inside the Settings layout. They pin S's DOM cases for this page: a member's read-only view (the note, the points as text, a read-only year and a disabled switch, no add, remove, reset or footer); one `PATCH` with only the edited Benediction checklist, cleaned, with the badge following the points; a checklist put back to its default sent as `null`, with **Reset to default** restoring the default points unsaved; the year alone sent, with `["church", id, "hymns"]` invalidated, and 1499 or next year shown inline with Save disabled; Enter adding a point below (focused), a pasted line break becoming a space, **Add a point** disabled at 12 with its helper, every point removed showing "Keep at least one point, or use Reset to default." with Save disabled and focus on **Add a point**; the theme note only under Opening and Closing; a 422 `invalid_rubric` shown (and focused) just above the footer with the edits kept and no toast; Reset all confirmed, sending `null` for exactly the `customized` items, not closable while it runs; the role 403; the rebase and the leave guard; and the error state.
+Rendered inside the Settings layout. They pin S's DOM cases for this page: a member's read-only view (the note, the points as text, a read-only year and a disabled switch, no add, remove, reset or footer); one `PATCH` with only the edited Benediction checklist, cleaned, with the badge following the points; a checklist put back to its default sent as `null`, with **Reset to default** restoring the default points unsaved and focusing the first point; the year alone sent, with `["church", id, "hymns"]` invalidated, and 1499 or next year shown inline with Save disabled; a partial year (`18`) blocking Save with no message until the box loses focus; Enter adding a point below (focused), a pasted line break becoming a space, **Add a point** disabled at 12 with its helper, every point removed showing "Keep at least one point, or use Reset to default." with Save disabled and focus on **Add a point**; the theme note only under Opening and Closing, shown while those cards are closed; a 422 `invalid_rubric` shown (and focused) just above the footer with the edits kept and no toast; Reset all confirmed, sending `null` for exactly the `customized` items, not closable while it runs; the role 403; the rebase and the leave guard; the footer going static while the keyboard is open; and the error state.
 
 **Create `frontend/src/components/settings/rubric-settings-page.test.tsx`:**
 
@@ -2939,6 +2949,8 @@ describe("Settings → Rubric (slice 6a-3a)", () => {
     expect(points(card)).toEqual(["Ours."]);
     await user.click(within(card).getByRole("button", { name: "Reset to default" }));
     expect(points(card)).toEqual(DEFAULTS.prayers.benediction);
+    // The button is disabled now: focus goes to the first point.
+    await waitFor(() => expect(document.activeElement).toBe(within(card).getByRole("textbox", { name: "Point 1 of Benediction" })));
     expect(screen.getByRole("button", { name: "Benediction" })).toBeInTheDocument();
     expect(within(card).getByRole("button", { name: "Reset to default" })).toBeDisabled();
     expect(patches(api)).toHaveLength(0);
@@ -2968,11 +2980,28 @@ describe("Settings → Rubric (slice 6a-3a)", () => {
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["church", church().id, "hymns"] });
   });
 
+  it("names a partial year only once the box loses focus, and blocks Save meanwhile", async () => {
+    const { user } = renderPage("admin");
+    const year = await screen.findByLabelText("Prefer hymns written before");
+    const save = screen.getByRole("button", { name: "Save rubric" });
+    await user.clear(year);
+    await user.type(year, "18");
+    expect(screen.queryByText(/The preferred year must be/)).toBeNull();
+    expect(year).not.toHaveAttribute("aria-invalid");
+    expect(save).toBeDisabled();
+    await user.tab();
+    expect(screen.getByText(`The preferred year must be between 1500 and ${THIS_YEAR}.`)).toBeInTheDocument();
+    expect(year).toHaveAttribute("aria-invalid", "true");
+    await user.type(year, "50");
+    expect(year).toHaveValue("1850");
+    expect(screen.queryByText(/The preferred year must be/)).toBeNull();
+    expect(save).toBeEnabled();
+  });
+
   it("adds a point below on Enter, keeps a pasted line break as a space, stops at 12, and needs one point", async () => {
     const eleven: RubricValues["hymns"] = { closing: Array.from({ length: 11 }, (_, i) => `Point ${i + 1}`) };
     const { api, user } = renderPage("admin", { "GET /rubric": rubric({ hymns: eleven }) });
     const card = await openCard(user, "Closing (Sending) Hymn");
-    expect(within(card).getByText(THEME_NOTE)).toBeInTheDocument();
     const first = within(card).getByRole("textbox", { name: "Point 1 of Closing (Sending) Hymn" });
     await user.click(first);
     await user.keyboard("{End}{Enter}");
@@ -2998,10 +3027,14 @@ describe("Settings → Rubric (slice 6a-3a)", () => {
     expect(patches(api)[0].body).toEqual({ hymns: { closing: ["Ends in hope"] } });
   });
 
-  it("shows only the Opening and Closing cards' theme note", async () => {
-    const { user } = renderPage("admin");
-    for (const title of ["Opening (Gathering) Hymn", "Response Hymn (after the sermon)", "Benediction"]) await openCard(user, title);
-    expect(screen.getAllByText(THEME_NOTE)).toHaveLength(1);
+  it("shows the theme note under the Opening and Closing cards only, even while they are closed", async () => {
+    renderPage("admin");
+    const opening = await cardButton("Opening (Gathering) Hymn");
+    expect(opening).toHaveAttribute("aria-expanded", "false"); // a phone: every card starts closed
+    const notes = screen.getAllByText(THEME_NOTE);
+    expect(notes).toHaveLength(2);
+    expect(notes[0].previousElementSibling).toContainElement(opening);
+    expect(notes[1].previousElementSibling).toContainElement(await cardButton("Closing (Sending) Hymn"));
   });
 
   it("shows the server's 422 above the footer, keeps the edits and toasts nothing", async () => {
@@ -3066,6 +3099,16 @@ describe("Settings → Rubric (slice 6a-3a)", () => {
     const dialog = await screen.findByRole("alertdialog", { name: DISCARD_TITLE });
     await user.click(within(dialog).getByRole("button", { name: "Discard changes" }));
     expect(testRouter.push).toHaveBeenCalledWith("/settings/contacts");
+  });
+
+  it("lets the footer sit after the cards while the phone keyboard is open", async () => {
+    const { user } = renderPage("admin");
+    const footer = (await screen.findByRole("button", { name: "Save rubric" })).parentElement!;
+    expect(footer).toHaveClass("sticky", "bottom-0");
+    expect(footer).not.toHaveAttribute("data-keyboard-open");
+    await user.click(screen.getByLabelText("Prefer hymns written before"));
+    expect(footer).toHaveAttribute("data-keyboard-open");
+    expect(footer).toHaveClass("max-md:static");
   });
 
   it("shows the error state with Retry when the rubric cannot be read", async () => {
@@ -3165,7 +3208,8 @@ function Point({
  * {Label}:" and its points. Owners and admins edit each point (Enter adds one
  * below, a line break becomes a space), remove one, add one (at most 12) and
  * put the default points back (unsaved until **Save rubric**); members read
- * the points as text. The **Customized** badge follows the points.
+ * the points as text. The **Customized** badge follows the points. A `note`
+ * (the theme note) shows under the card, closed or open.
  */
 export function ChecklistCard({
   list,
@@ -3205,7 +3249,7 @@ export function ChecklistCard({
     onChange(next);
     onFocusPoint(next.length === 0 ? null : Math.min(index, next.length - 1));
   };
-  return (
+  const card = (
     <Collapsible open={open} onOpenChange={onOpenChange} className="rounded-lg border">
       <CollapsibleTrigger className="flex min-h-11 w-full items-center gap-2 rounded-lg px-4 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring">
         <span className="min-w-0 flex-1 text-sm font-medium">{list.label}</span>
@@ -3242,7 +3286,6 @@ export function ChecklistCard({
             {error}
           </p>
         ) : null}
-        {note ? <p className="text-sm text-muted-foreground">{note}</p> : null}
         {admin ? (
           <div className="flex flex-wrap items-center gap-x-4">
             <Button
@@ -3262,6 +3305,7 @@ export function ChecklistCard({
               disabled={points.length === defaultPoints.length && points.every((p, i) => p === defaultPoints[i])}
               onClick={() => {
                 onChange([...defaultPoints]);
+                onFocusPoint(0); // the button is disabled now: focus goes to the first point
               }}
             >
               Reset to default
@@ -3271,6 +3315,14 @@ export function ChecklistCard({
         ) : null}
       </CollapsibleContent>
     </Collapsible>
+  );
+  if (!note) return card;
+  // The note sits under the card, outside the part that collapses, so a phone shows it while the card is closed.
+  return (
+    <div className="grid gap-2">
+      {card}
+      <p className="text-sm text-muted-foreground">{note}</p>
+    </div>
   );
 }
 ````
@@ -3385,6 +3437,8 @@ function RubricFormView({ out, admin, headingRef }: { out: Rubric; admin: boolea
     () => Object.fromEntries(CHECKLISTS.map((list) => [list.key, openAtFirst()])) as Record<ChecklistKey, boolean>,
   );
   const [serverError, setServerError] = useState<string | null>(null);
+  // The year's message waits until the box loses focus or holds four characters (Save is blocked meanwhile).
+  const [yearLeft, setYearLeft] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const focusTarget = useRef<string | null>(null);
   const resetDone = useRef(false);
@@ -3395,6 +3449,7 @@ function RubricFormView({ out, admin, headingRef }: { out: Rubric; admin: boolea
   const canSave = dirty && Object.keys(errors).length === 0;
   // A member (or an admin demoted meanwhile) reads what is stored, never an unsaved edit.
   const shown = admin ? form : rubricFormFrom(out.rubric);
+  const yearError = yearLeft || shown.prefer_before_year.trim().length >= 4 ? errors.prefer_before_year : undefined;
   const defaults = rubricFormFrom(out.defaults);
 
   // Newer server data (a refetch, or this page's own save in the cache): rebase (6a).
@@ -3403,7 +3458,7 @@ function RubricFormView({ out, admin, headingRef }: { out: Rubric; admin: boolea
     setState({ source: out, baseline: next, form: rebaseRubric(baseline, form, next) });
   }
 
-  // A point added or removed (or the server's message): focused once it is on the page.
+  // A point added or removed, a preference or checklist reset, or the server's message: focused once it is on the page.
   useEffect(() => {
     if (focusTarget.current === null) return;
     document.getElementById(focusTarget.current)?.focus();
@@ -3499,16 +3554,17 @@ function RubricFormView({ out, admin, headingRef }: { out: Rubric; admin: boolea
             value={shown.prefer_before_year}
             readOnly={!admin}
             className="h-11 w-28"
-            aria-invalid={errors.prefer_before_year ? true : undefined}
-            aria-describedby={["rubric-year-help", errors.prefer_before_year && "rubric-year-error"].filter(Boolean).join(" ")}
+            aria-invalid={yearError ? true : undefined}
+            aria-describedby={["rubric-year-help", yearError && "rubric-year-error"].filter(Boolean).join(" ")}
             onChange={(e) => edit((f) => ({ ...f, prefer_before_year: e.target.value }))}
+            onBlur={() => setYearLeft(true)}
           />
           <p id="rubric-year-help" className="text-sm text-muted-foreground">
             {YEAR_HELP}
           </p>
-          {errors.prefer_before_year ? (
+          {yearError ? (
             <p id="rubric-year-error" role="alert" className="text-sm text-destructive">
-              {errors.prefer_before_year}
+              {yearError}
             </p>
           ) : null}
           {admin && yearCustomized ? (
@@ -3517,7 +3573,10 @@ function RubricFormView({ out, admin, headingRef }: { out: Rubric; admin: boolea
               variant="link"
               className="h-11 justify-self-start px-0 md:h-auto"
               aria-label="Reset to default: Prefer hymns written before"
-              onClick={() => edit((f) => ({ ...f, prefer_before_year: defaults.prefer_before_year }))}
+              onClick={() => {
+                edit((f) => ({ ...f, prefer_before_year: defaults.prefer_before_year }));
+                focusTarget.current = "rubric-year"; // the button goes: focus stays on the preference
+              }}
             >
               Reset to default
             </Button>
@@ -3545,7 +3604,10 @@ function RubricFormView({ out, admin, headingRef }: { out: Rubric; admin: boolea
               variant="link"
               className="h-11 justify-self-start px-0 md:h-auto"
               aria-label="Reset to default: Prefer familiar hymns"
-              onClick={() => edit((f) => ({ ...f, prefer_familiar: defaults.prefer_familiar }))}
+              onClick={() => {
+                edit((f) => ({ ...f, prefer_familiar: defaults.prefer_familiar }));
+                focusTarget.current = "rubric-familiar"; // the button goes: focus stays on the preference
+              }}
             >
               Reset to default
             </Button>
@@ -3646,7 +3708,7 @@ asks first." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1922 passed, 33 skipped`; frontend `907 passed` in 107 files.
+Expected counts after this task: backend `1922 passed, 33 skipped`; frontend `909 passed` in 107 files.
 
 ### Task 9: Liturgy and Rubric in the Settings nav; Bulletin settings at `/settings/bulletin` (answers 3 and 6; clarifications 2, 10)
 
@@ -3656,7 +3718,7 @@ Expected counts after this task: backend `1922 passed, 33 skipped`; frontend `90
 
 - [ ] **Step 1: Update the tests**
 
-The Settings layout's test expects the seven sections in the new order, marks Liturgy, Rubric and Bulletin current on their pages, and checks that the old address opens `/settings/bulletin`. The Bulletin settings tests render the page inside the Settings layout at its new route, with **Back to the builder** (`/builder`). The builder's two links and the Church page's leave-guard test expect `/settings/bulletin`.
+The Settings layout's test expects the seven sections in the new order, marks Liturgy, Rubric and Bulletin current on their pages, and checks that the old address opens `/settings/bulletin`. The Bulletin settings tests render the page inside the Settings layout at its new route, with **Back to the builder** (`/builder`), and a member's summary sections are `h3` headings under the page's `h2`. The builder's two links and the Church page's leave-guard test expect `/settings/bulletin`.
 
 **In `frontend/src/components/settings/settings-layout.test.tsx`, replace:**
 
@@ -3773,6 +3835,21 @@ import SettingsLayout from "@/app/(signed-in)/(church)/settings/layout";
       <Toaster />
     </>,
     { me: me({ churches: [active] }), church: active, path: "/settings/bulletin", queryClient },
+````
+
+**In `frontend/src/components/bulletin-settings/bulletin-settings-page.test.tsx`, replace:**
+
+````tsx
+    const main = screen.getByRole("main");
+````
+
+**with:**
+
+````tsx
+    const main = screen.getByRole("main");
+    // Each summary part is an h3 under the page's h2 "Bulletin settings".
+    expect(within(main).getByRole("heading", { level: 2, name: "Bulletin settings" })).toBeInTheDocument();
+    expect(within(main).getByRole("heading", { level: 3, name: "Church details" })).toBeInTheDocument();
 ````
 
 **In `frontend/src/components/bulletin-settings/bulletin-settings-page.test.tsx`, replace:**
@@ -3997,6 +4074,19 @@ const BACK_HREF = "/builder";
 **In `frontend/src/components/bulletin-settings/bulletin-settings-page.tsx`, replace:**
 
 ````tsx
+ * unsaved changes?" on **Back to Review & send** and any other in-app link).
+````
+
+**with:**
+
+````tsx
+ * unsaved changes?" on **Back to the builder**, the Settings sections and
+ * any other in-app link).
+````
+
+**In `frontend/src/components/bulletin-settings/bulletin-settings-page.tsx`, replace:**
+
+````tsx
     <main className="mx-auto grid w-full max-w-2xl content-start gap-4 px-4 py-4">
       <PageHeader
         title="Bulletin settings"
@@ -4036,6 +4126,18 @@ const BACK_HREF = "/builder";
 
 ````tsx
     </section>
+````
+
+**In `frontend/src/components/bulletin-settings/bulletin-settings-page.tsx`, replace:**
+
+````tsx
+      <h2 className="text-base font-medium">{title}</h2>
+````
+
+**with:**
+
+````tsx
+      <h3 className="text-base font-medium">{title}</h3>
 ````
 
 **In `frontend/src/components/builder/review/printed-card.tsx`, replace:**
@@ -4093,7 +4195,7 @@ builder's Bulletin step and Printed bulletin card link to it." -m "Co-Authored-B
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1922 passed, 33 skipped`; frontend `911 passed` in 107 files.
+Expected counts after this task: backend `1922 passed, 33 skipped`; frontend `913 passed` in 107 files.
 
 ## Docs, verification, the PR, the merge (T10-T12)
 
@@ -4122,12 +4224,13 @@ owner's guided check covers the items marked "(owner, after 6a-3a)", one step
 at a time on the phone; the results go into `docs/ops-runbook.md` → "Slice
 6a-3a record". A test change to a prompt or to the rubric is made only on a
 card that does not say **Customized**, and is put back with **Reset to
-default** and a save in the same step, so the church's prompts and rubric end
-as they began; **Reset all to defaults** is never tapped on the church's own
-page. Record what the page shows, never a church id or a prompt's wording.
+default** and a save in the same step, so the church's prompts end as
+generation reads them (a prompts save sends every customized card again,
+cleaned as generation reads it) and its rubric as it began; **Reset all to
+defaults** is never tapped on the church's own page. Record what the page shows, never a church id or a prompt's wording.
 
 - [ ] (owner, after 6a-3a) **16.** **Settings** lists **Church**, **Hymns**, **Liturgy**, **Rubric**, **Bulletin**, **Contacts** and **Account**. **Liturgy** shows "Liturgy prompts" with nine cards, "Overall voice (system prompt)" first and "Section prompts" with the placeholder help above the other eight; note which cards say **Customized**. **Rubric** shows "Service rubric" with **Hymn preferences**, three **Hymns** cards and eight **Prayers** cards; note which say **Customized** and the year in "Prefer hymns written before".
-- [ ] (owner, after 6a-3a) **17.** On **Liturgy**, open a card that does not say **Customized** and type **{** at the end of its text; **Save prompts**: the card shows "{Card} prompt: It has a { or } without a partner. Use {{ or }} to print a brace." and nothing is saved. Replace the **{** with the word **Amen.**; **Save prompts**: "Prompts saved." and the card says **Customized**. Then **Reset to default** on that card and **Save prompts**: "Prompts saved." and **Customized** is gone.
+- [ ] (owner, after 6a-3a) **17.** On **Liturgy**, open a card that does not say **Customized** and type **{** at the end of its text; **Save prompts**: the card shows "{Card} prompt: It has a { or } without a partner. Use {{ or }} to print a brace." and nothing is saved (if the message names a different card instead, delete the **{**, note that card's name and stop this item there: that card's saved wording fails today's check and is left as it is for the owner to decide). Replace the **{** with the word **Amen.**; **Save prompts**: "Prompts saved." and the card says **Customized**. Then **Reset to default** on that card and **Save prompts**: "Prompts saved." and **Customized** is gone.
 - [ ] (owner, after 6a-3a) **18.** On **Rubric**, open a **Prayers** card that does not say **Customized**, tap at the end of its last point and press return: a new empty point appears below; type **Test point**; **Save rubric**: "Rubric saved." and the card says **Customized**. Then **Reset to default** on that card and **Save rubric**: "Rubric saved." and **Customized** is gone. In "Prefer hymns written before" type **1400**: "The preferred year must be between 1500 and {this year}." shows and **Save rubric** cannot be tapped; type the year it showed before, and the message goes.
 - [ ] (owner, after 6a-3a) **19.** **Settings** → **Bulletin** shows the bulletin settings as before, with **Back to the builder**. In **Builder** → **Bulletin**, **Bulletin settings** opens **Settings** → **Bulletin**; **Back to the builder** returns to the Bulletin step. On **Review & send** the Printed bulletin card's **Bulletin settings** opens the same page.
 - [ ] (owner, after 6a-3a) **20.** At 375 px: no sideways scroll on **Liturgy**, **Rubric** or **Bulletin**; the seven section links, the cards and the buttons are easy to tap. On **Liturgy** with a card open and the iPhone keyboard up, the box being typed in is not covered and **Save prompts** can be reached by scrolling down.
@@ -4169,7 +4272,7 @@ the picker's year label in a test church, the old address)." -m "Co-Authored-By:
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1922 passed, 33 skipped`; frontend `911 passed` in 107 files.
+Expected counts after this task: backend `1922 passed, 33 skipped`; frontend `913 passed` in 107 files.
 
 ### Task 11: Verification and the draft PR (owner's yes before the PR is opened and before it is marked ready)
 
@@ -4198,7 +4301,7 @@ for i in 1 2 3; do (cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Te
 (cd frontend && NEXT_PUBLIC_SUPABASE_URL=https://ci-placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-placeholder NEXT_PUBLIC_API_URL=http://localhost:8000 npm run build 2>&1 | grep -E "Compiled successfully|Error|/settings|/bulletin-settings")
 ```
 
-**Expected** (as in the replay: the suite; three runs of `Test Files  107 passed (107)` and `Tests  911 passed (911)` with no `×` or `FAIL` line, one naming a failing test: Step 6; typecheck and lint 0; the build with the three new Settings routes and no `Error`, a font `Failed to fetch` only: say so and rely on CI):
+**Expected** (as in the replay: the suite; three runs of `Test Files  107 passed (107)` and `Tests  913 passed (913)` with no `×` or `FAIL` line, one naming a failing test: Step 6; typecheck and lint 0; the build with the three new Settings routes and no `Error`, a font `Failed to fetch` only: say so and rely on CI):
 ```
 1922 passed, 33 skipped in <t>s
 ```
@@ -4297,7 +4400,7 @@ gh pr list -R bbrown62450/church --head claude/slice-2-plan-4q33le --state open 
 
 **Expected:** `[]`. Send the owner exactly this, and wait for a clear yes:
 
-> The Liturgy prompts, Rubric and Bulletin settings changes (slice 6a-3a) are verified on this machine: backend 1922 passed, 33 skipped (1885 and 31 before); frontend 911 tests in 107 files (874 in 103 before), three runs in a row; typecheck, lint and the production build are clean. There is no database change and no new package. Settings gets **Liturgy** and **Rubric** after **Hymns**, and **Bulletin** moves under Settings (the old address and the builder's buttons lead there). Everyone can read the prompts and the rubric; you (and any admin) can change them, put one back to its default, or reset them all after a confirmation. The pull request also carries the 6a-2 record and the 6a-3 planning notes. May I open the pull request as a **draft** titled "Slice 6a-3a: Liturgy prompts, the Service rubric and Bulletin settings in Settings", so the checks run? Merging stays with you.
+> The Liturgy prompts, Rubric and Bulletin settings changes (slice 6a-3a) are verified on this machine: backend 1922 passed, 33 skipped (1885 and 31 before); frontend 913 tests in 107 files (874 in 103 before), three runs in a row; typecheck, lint and the production build are clean. There is no database change and no new package. Settings gets **Liturgy** and **Rubric** after **Hymns**, and **Bulletin** moves under Settings (the old address and the builder's buttons lead there). Everyone can read the prompts and the rubric; you (and any admin) can change them, put one back to its default, or reset them all after a confirmation. The pull request also carries the 6a-2 record and the 6a-3 planning notes. May I open the pull request as a **draft** titled "Slice 6a-3a: Liturgy prompts, the Service rubric and Bulletin settings in Settings", so the checks run? Merging stays with you.
 
 - [ ] **Step 5 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
 
@@ -4314,7 +4417,7 @@ Slice 6a-3a: Liturgy prompts, the Service rubric and Bulletin settings in Settin
 
 Later: 6a-3b (Prayers, between Liturgy and Rubric), 6b (People).
 
-Tests: backend 1885 → 1922 passed, 31 → 33 skipped; frontend 874 → 911 in 103 → 107 files
+Tests: backend 1885 → 1922 passed, 31 → 33 skipped; frontend 874 → 913 in 103 → 107 files
 
 After merge (Task 12): a short check on the owner's phone, then a "Slice 6a-3a record" in docs/ops-runbook.md.
 
@@ -4328,7 +4431,7 @@ gh pr create -R bbrown62450/church --draft --base main --head claude/slice-2-pla
 gh pr checks <N> -R bbrown62450/church --watch --interval 30
 ```
 
-Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1922 passed, 33 skipped`, backend-postgres `33 passed, 1922 deselected`, frontend `911 passed` in 107 files. Then send: "PR #<N> is green: backend 1922 passed, 33 skipped (the two new Postgres tests passed in their own job); 911 frontend tests in 107 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R bbrown62450/church`.
+Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1922 passed, 33 skipped`, backend-postgres `33 passed, 1922 deselected`, frontend `913 passed` in 107 files. Then send: "PR #<N> is green: backend 1922 passed, 33 skipped (the two new Postgres tests passed in their own job); 913 frontend tests in 107 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R bbrown62450/church`.
 
 - [ ] **Step 6: Fix any failure in its owning task**
 
@@ -4349,11 +4452,11 @@ Run the last line with `run_in_background: true`. **Expected:** the PR URL; ever
 
 For each fix: change only the owning task's files; rerun Steps 2-3; commit `Fix: <what> (Task <n>, slice 6a-3a final verification)` with the trailer; after the PR exists, ask the owner before pushing it.
 
-Expected counts after this task: backend `1922 passed, 33 skipped`; frontend `911 passed` in 107 files.
+Expected counts after this task: backend `1922 passed, 33 skipped`; frontend `913 passed` in 107 files.
 
 ### Task 12: Merge, the owner's phone check (five steps), the record (OWNER + agent)
 
-No schema change, so Railway's deploy has nothing to migrate (production stays at `0007_bulletin_images`); Railway serves the prompts route and the rubric's locked write, Vercel the pages. The owner's check is **one step at a time** (send one, wait for the report or "next"), on the phone, on the production URL, in the owner's own church, signed in as its owner. **A test change to a prompt or to the rubric is made only on a card that does not say Customized, and is put back with Reset to default and a save in the same step, so the church's prompts and rubric end exactly as they began; Reset all to defaults is never tapped; the year is only mistyped and retyped, never saved.** If a step's put-back did not happen (the save failed, the owner stopped), the next message helps the owner put it back before anything else. The agent writes each result into `<scratch>/6a3a-t12-results.md` (not committed). Record which cards were customized and what the page showed, never a church id, an email address or the wording of a prompt or a point.
+No schema change, so Railway's deploy has nothing to migrate (production stays at `0007_bulletin_images`); Railway serves the prompts route and the rubric's locked write, Vercel the pages. The owner's check is **one step at a time** (send one, wait for the report or "next"), on the phone, on the production URL, in the owner's own church, signed in as its owner. **A test change to a prompt or to the rubric is made only on a card that does not say Customized, and is put back with Reset to default and a save in the same step, so the church's prompts end as generation reads them (a prompts save sends every customized card again, cleaned as generation reads it: line endings and spaces, and a blank, default or unknown entry dropped) and its rubric exactly as it began; Reset all to defaults is never tapped; the year is only mistyped and retyped, never saved.** If a step's put-back did not happen (the save failed, the owner stopped), the next message helps the owner put it back before anything else. The agent writes each result into `<scratch>/6a3a-t12-results.md` (not committed). Record which cards were customized and what the page showed, never a church id, an email address or the wording of a prompt or a point.
 
 **Files:** Modify (the records PR, Step 9): `docs/ops-runbook.md`: insert `### Slice 6a-3a record` right before `## Backups` (after the last record above it, today `### Slice 6a-2 record`, whose table's last row starts `| Follow-ups |`). A `###` heading, because `test_ops_workflows.py` pins the `##` list.
 
@@ -4381,6 +4484,8 @@ Record the sections, the customized cards on each page and the year. **Steps 3 a
 Pick, from Step 2's answer, a **Liturgy** card that is not customized (the Offertory Prayer if it is not; else the first that is not), and fill in its name for `<card>`:
 
 > On **Liturgy**, tap **<card>** to open it. Tap at the very end of its text and type a space and **{** (an opening curly brace). Tap **Save prompts** (at the bottom; scroll down if the keyboard hides it): does the card show "<card> prompt: It has a { or } without a partner. Use {{ or }} to print a brace." and nothing say "Prompts saved."? Now delete the **{** and type **Amen.** in its place, then tap **Save prompts**: does it say "Prompts saved.", and does the card say **Customized**? Last, put it back: tap **Reset to default** under that card's text, then **Save prompts**: does it say "Prompts saved." again, and is **Customized** gone from that card?
+
+If the first **Save prompts** names a different card (for example "Benediction prompt: …" when the brace was typed in the Offertory Prayer), stop the step there: that is wording the church saved before, which today's check refuses, and every prompts save sends it again. Ask the owner to delete the **{** they typed (so nothing is left changed), record which card was named (its name only, never its wording), and tell the owner: "The page refused a save because your saved <named card> prompt has a brace the AI cannot read; it is refused the same way when the liturgy is written. Nothing was changed. Would you like to fix that card yourself later, or leave it?" Do not change that card during the check, skip the rest of this step, and go on to Step 4.
 
 If the last save did not happen, help the owner tap **Reset to default** and **Save prompts** on that card before Step 4. Record the four answers.
 
@@ -4438,8 +4543,9 @@ new package; production stays at `0007_bulletin_images`. The owner's
 check was five steps on a phone, covering the "(owner, after 6a-3a)"
 items of `docs/manual-verification.md` → "Slice 6a". Each test change was
 made on a card that was not customized and put back in the same step;
-Reset all was never tapped, and the church's prompts and rubric ended as
-they began. Kept (owner's answer 5): the opening and closing theme
+Reset all was never tapped; the church's prompts ended as generation
+reads them (a save stores each customized prompt cleaned) and its rubric
+as it began. Kept (owner's answer 5): the opening and closing theme
 keywords, with the note under those two rubric cards. No church id,
 email address or prompt wording is recorded here.
 
@@ -4497,7 +4603,7 @@ gh pr checks claude/slice-2-plan-4q33le -R bbrown62450/church --watch
 
 Code only (no schema to undo). On the owner's yes for each outward command: a branch `claude/revert-6a3a` from `origin/main`, `git revert -m 1 --no-commit <merge sha>`, a commit "Revert slice 6a-3a (PR #<N>)" with the trailer, both suites (`1885 passed, 31 skipped`; `874 passed` in 103), a PR, CI, and the merge on the owner's yes; record it in the record. Prompts and rubric saved through the pages stay in `churches.settings` in the shapes the old code reads, and `/bulletin-settings` becomes the page again, so nothing needs undoing in the data.
 
-Expected counts after this task: backend `1922 passed, 33 skipped` on `main`; frontend `911 passed` in 107 files. The records PR adds no test.
+Expected counts after this task: backend `1922 passed, 33 skipped` on `main`; frontend `913 passed` in 107 files. The records PR adds no test.
 
 ---
 
@@ -4506,16 +4612,16 @@ Expected counts after this task: backend `1922 passed, 33 skipped` on `main`; fr
 **How this plan was written (2026-10-08).** Each task's code was built and run in a throwaway worktree of `6fddb8c` (the branch head `f5bec40` plus the plan's skeleton commit; the repo's `.venv` as a symlink; a hard-linked copy of `frontend/node_modules`, since Turbopack's production build refuses a `node_modules` symlink that points outside the project), one commit per task; the directives were then generated from those commits by a script (a new file as **Create**, a rewritten one as **Replace**, an addition at the end of a file as **Append**, every other change as **In … replace** with just enough whole-line context to occur once in the file as it stands at that point, changes three or fewer lines apart in one block), which also checked that applying each file's directives to the file before the commit gives the file after it. No package, variable or migration was added. While building:
 - **What S assumed and what exists.** 6a-1 built `lock_church`, `lock_and_read_actor`, `require_admin_role`, `LeaveGuard`, `rebaseForm` and the Settings shell, which this plan reuses as they are; slice 4 built `clean_prompt_overrides` (with the CRLF rule and its test) and `check_template`, imported here; `keys.liturgyPrompts` and `keys.rubric` were already in `keys.ts`, and `prompt_invalid` and `invalid_rubric` in `ERROR_CODES`. S's `update_church_rubric` deletion is not made (clarification 17). `test_isolation.py` already covers `GET` and `PATCH /rubric`'s isolation, so only its whole-answer assertion changes.
 - **A held request and a dialog.** With the "not closable while it runs" guard taken out, pressing Escape alone did not make the Rubric test fail, so T6 and T8 also tap **Cancel** while the request is held; the guard must ignore both.
-- **matchMedia in the tests.** One test widens the window with a `vi.spyOn(window, "matchMedia")`; it restores the spy itself, since a spy left in place opened every card in the tests after it.
-- **Mutation checks** (each change made by hand in the build worktree with every task applied, the named tests run, the change undone): `save_prompts` without `require_admin_role` → `1 failed, 61 passed` (`test_church_admin.py`, `test_api_liturgy_prompts.py`); `update_rubric` without it → `1 failed, 61 passed` (`test_church_admin.py`, `test_api_rubric.py`); `get_prompts` reading the stored values raw instead of through `clean_prompt_overrides` → `1 failed, 61 passed`; the prompts page without its `LeaveGuard` → `1 failed, 10 passed`; without the footer's `max-md:static` → `1 failed, 10 passed`; `isCustomized` ignoring the default → `5 failed, 11 passed` (`prompts.test.ts` and the page); `rubricPatch` never sending `null` → `2 failed, 15 passed` (`rubric.test.ts` and the page); the year's save not refreshing the hymn lists → `1 failed, 10 passed`; either Reset all confirmation closable while its request runs → `1 failed, 10 passed` on its page.
-- **The lock on Postgres.** On a throwaway local PG 16 cluster (initialised under `/var/lib/postgresql`, port 5442, never a real database, stopped and deleted afterwards; `TEST_DATABASE_URL=postgresql://postgres@localhost:5442/church_test`): `test_church_admin_postgres.py` `3 passed` (6a-1's test and T4's two). With `lock_church`'s `with_for_update=True` taken out, all three fail. All Postgres-marked tests on that cluster, at the end of the replay below: `33 passed, 1922 deselected, 1 warning` (CI's `backend-postgres` job runs the same set).
+- **matchMedia in the tests.** One test widens the window with a `vi.spyOn(window, "matchMedia")`; it restores the spy in a `finally` (plan review M5), since a spy left in place, after a failed assertion too, opened every card in the tests after it.
+- **Mutation checks** (each change made by hand in the build worktree with every task applied, the named tests run, the change undone): `save_prompts` without `require_admin_role` → `1 failed, 61 passed` (`test_church_admin.py`, `test_api_liturgy_prompts.py`); `update_rubric` without it → `1 failed, 61 passed` (`test_church_admin.py`, `test_api_rubric.py`); `get_prompts` reading the stored values raw instead of through `clean_prompt_overrides` → `1 failed, 61 passed`; the prompts page without its `LeaveGuard` → `1 failed, 10 passed`; without the footer's `max-md:static` → `1 failed, 10 passed`; `isCustomized` ignoring the default → `5 failed, 11 passed` (`prompts.test.ts` and the page); `rubricPatch` never sending `null` → `2 failed, 17 passed` (`rubric.test.ts` and the page); the year's save not refreshing the hymn lists → `1 failed, 12 passed`; the Reset all confirmation closable while its request runs → `1 failed, 10 passed` on the prompts page and `1 failed, 12 passed` on the Rubric page. After the plan review's fixes (on the rebuilt T6, T8 and T9 commits): the prompt card's **Reset to default** not focusing its box → `1 failed, 10 passed`; the checklist's not focusing its first point → `1 failed, 12 passed`; the year's message shown at once (or never on blur) → `1 failed, 12 passed`; the theme note shown only while its card is open → `2 failed, 11 passed`; the Rubric footer without `max-md:static` → `1 failed, 12 passed`; the member summary's sections back to `h2` → `1 failed, 8 passed` (`bulletin-settings-page.test.tsx`). A throwaway probe (not kept) also checked that the two preferences' **Reset to default** focus `#rubric-year` and the switch.
+- **The lock on Postgres.** On a throwaway local PG 16 cluster (initialised under `/var/lib/postgresql`, never a real database, stopped and deleted afterwards; `TEST_DATABASE_URL` set to a local throwaway URL): `test_church_admin_postgres.py` `3 passed` (6a-1's test and T4's two). With `lock_church`'s `with_for_update=True` taken out, all three fail. All Postgres-marked tests on that cluster, at the end of the first replay: `33 passed, 1922 deselected, 1 warning` (CI's `backend-postgres` job runs the same set). The plan review's fixes change only frontend code, its tests and `docs/manual-verification.md`, so the cluster was not set up again for the second replay.
 - **The production build** compiled with `○ /settings/liturgy`, `○ /settings/rubric` and `○ /settings/bulletin` beside the other Settings routes, and `○ /bulletin-settings` (the forward).
 
-**Replay of the finished plan (2026-10-08).** The directives of T1-T10 were applied in order by a replay script that parses each step's **Create**, **Replace**, **Append** and **In … replace** blocks and its `bash` blocks (each commit), and runs every command on its "Run:" lines and compares the output with the quoted **Expected** blocks, onto a fresh detached worktree of the branch at `6fddb8c` (outside the repo directory and removed afterwards), with the repo's `.venv` (a symlink) and a hard-linked copy of `frontend/node_modules`:
-- All 73 directives applied (T1 2 + 9, T2 2 + 5, T3 5 + 5, T4 2, T5 4 + 2, T6 1 + 2, T7 3 + 2, T8 1 + 3, T9 14 + 10, T10 1); every **In … replace** anchor occurred exactly once; all ten commit blocks ran, each commit with the trailer; afterwards the replayed `backend`, `frontend/src` and `docs` trees were identical to the build worktree's, and `git status` was clean.
+**Replay of the finished plan (2026-10-08, again after the plan review's fixes).** The plan review's fixes were made in the build worktree's T6, T8, T9 and T10 commits (rebuilt from the plan's directives, then amended), the directives regenerated from them, and the whole plan replayed again as below. The directives of T1-T10 were applied in order by a replay script that parses each step's **Create**, **Replace**, **Append** and **In … replace** blocks and its `bash` blocks (each commit), and runs every command on its "Run:" lines and compares the output with the quoted **Expected** blocks, onto a fresh detached worktree of the branch at `6fddb8c` (outside the repo directory and removed afterwards), with the repo's `.venv` (a symlink) and a hard-linked copy of `frontend/node_modules`:
+- All 76 directives applied (T1 2 + 9, T2 2 + 5, T3 5 + 5, T4 2, T5 4 + 2, T6 1 + 2, T7 3 + 2, T8 1 + 3, T9 15 + 12, T10 1); every **In … replace** anchor occurred exactly once; all ten commit blocks ran, each commit with the trailer; afterwards the replayed `backend`, `frontend/src` and `docs` trees were identical to the build worktree's, and `git status` was clean.
 - Baselines before T1: backend `1885 passed, 31 skipped`; frontend `874 passed` in 103 files; typecheck 0, lint 0.
 - Every "see it fail" output and every count above is quoted from this replay (times as `<t>`, Vitest's per-test times left out), and every quoted block matched what the replay printed.
-- Every count matched the table: backend 1896, 1912, 1922 passed with 31 skipped, then 33 skipped from T4; frontend 879 in 104, 890 in 105, 896 in 106, 907 in 107, 911 in 107; T1 Step 4 `73 passed` and `streamlit_tests` `35 passed`; T2 Step 4 `114 passed, 1 skipped`; T3 Step 4 ` 2 files changed, 508 insertions(+), 1 deletion(-)` and `34 passed`; T6's and T8's three runs `11 passed` each time, no flaky run; T9 `9 failed | 63 passed (72)` with the Bulletin settings file not loading, then `81 passed`; typecheck 0 and lint 0 after T3 and T5-T9; T10 `89 passed`, `4`, `0`, ` 1 file changed, 18 insertions(+)`. After T10, T11 Step 2's and Step 3's outputs (quoted there): `1922 passed, 33 skipped`, three runs of `911 passed` in 107 files, typecheck and lint 0, `✓ Compiled successfully` with `○ /settings/liturgy`, `○ /settings/rubric`, `○ /settings/bulletin` and `○ /bulletin-settings`, and the 43 paths; the Postgres runs above.
+- Every count matched the table: backend 1896, 1912, 1922 passed with 31 skipped, then 33 skipped from T4; frontend 879 in 104, 890 in 105, 896 in 106, 909 in 107, 913 in 107; T1 Step 4 `73 passed` and `streamlit_tests` `35 passed`; T2 Step 4 `114 passed, 1 skipped`; T3 Step 4 ` 2 files changed, 508 insertions(+), 1 deletion(-)` and `34 passed`; T6's three runs `11 passed` and T8's `13 passed` each time, no flaky run; T9 `TBD` with the Bulletin settings file not loading, then `81 passed`; typecheck 0 and lint 0 after T3 and T5-T9; T10 `89 passed`, `4`, `0`, `TBD`. After T10, T11 Step 2's and Step 3's outputs (quoted there): `1922 passed, 33 skipped`, three runs of `913 passed` in 107 files, typecheck and lint 0, `✓ Compiled successfully` with `○ /settings/liturgy`, `○ /settings/rubric`, `○ /settings/bulletin` and `○ /bulletin-settings`, and the 43 paths; the Postgres runs above.
 - Not run while planning: the pushes, the PR and CI, the merge, Railway's and Vercel's deploys and the owner's phone check (T12).
 
 ## Spec coverage
@@ -4525,7 +4631,7 @@ Expected counts after this task: backend `1922 passed, 33 skipped` on `main`; fr
 | Answer 1: 6a-3a is Liturgy prompts, the Rubric page and Bulletin settings moved in; one PR | T1-T10; T11 (one draft PR) |
 | Answer 3: `/settings/bulletin`, the old address forwards, the builder's links | T9 `settings-layout.test.tsx` "opens Settings → Bulletin from the old Bulletin settings address", `bulletin-settings-page.test.tsx` (at the new route), `review-send-step.test.tsx`, `bulletin-step.test.tsx` |
 | Answer 4: prompts as designed, admins only, the system prompt included, Reset to default and Reset all | T1 `test_a_save_keeps_only_wording_that_differs_from_the_defaults` (system braces), `test_a_demoted_admin_or_a_removed_member_saves_no_prompts`; T3 `test_a_member_reads_every_prompt_and_may_not_change_them`; T6 "marks a changed card Customized, puts its default back…", "asks before resetting everything…" |
-| Answer 5: keep the theme keywords, the note under Opening and Closing | T8 "shows only the Opening and Closing cards' theme note", "adds a point below on Enter…" (the Closing card's note) |
+| Answer 5: keep the theme keywords, the note under Opening and Closing | T8 "shows the theme note under the Opening and Closing cards only, even while they are closed" |
 | Answer 6: the order (less Prayers) | T9 `settings-layout.test.tsx` |
 | S UX §3 (cards, order, Customized, Reset to default, the system note, the help under "Section prompts", collapsed on phones, the footer, Save sends only customized keys, Reset all confirmed, read-only for members, the 422 opening and focusing its card) | T6 every test; T5 `prompts.test.ts` |
 | S UX §6 (the preferences, the checklists and their titles, "A good {Label}:", Enter, paste, ✕, 12 points, Customized, Reset to default, the footer, one sparse PATCH, null for a default, Reset all with null for `customized`, the validation copy, the inline 422, read-only for members) | T8 every test; T7 `rubric.test.ts` |
@@ -4565,10 +4671,27 @@ Your 6a-3 planning answers of 2026-10-07 (the six, all as recommended) and the e
 
 Owner steps still to come: the plan's approval; the draft PR on your yes and ready on your yes (T11); the merge on your yes, then five phone checks one at a time (every test change made on a card that is not customized and put back in the same step), and the records PR (T12).
 
+## Plan review fixes (2026-10-08)
+
+The plan review's findings and what changed (each code change is in its task's directives, and the whole plan was replayed again afterwards; see "Build notes"):
+
+- **I1 (focus after Reset to default).** Once a card or a preference is back on its default, its **Reset to default** button is disabled (a prompt card, a checklist) or gone (the year, the switch), so focus dropped to the page. Now the prompt card's **Reset to default** focuses its box (T6 `PromptCard`), a checklist's focuses its first point (T8 `ChecklistCard`, through `onFocusPoint(0)`), and the two preferences' focus `#rubric-year` and `#rubric-familiar` (T8, through the page's `focusTarget`). One DOM assertion per page: T6 "marks a changed card Customized, puts its default back…" and T8 "sends null for a checklist put back to its default…" check `document.activeElement`. Clarifications 3 and 6 and "Lessons carried" say so.
+- **M1 (what a prompts save stores; another card named).** A prompts save sends every customized card again, cleaned by `clean_prompt_overrides` (CRLF, whitespace, a blank, default or unknown entry dropped), and a stored prompt from the old app that fails today's brace check makes that save's 422 name its card. T10's preamble and T12's say the prompts end "as generation reads them" (the rubric, saved sparsely, still ends as it began), and so does the record's template; T12 Step 3 gains a branch: if the error names a different card, the owner deletes the **{**, the agent records that card's name, tells the owner, and leaves the card unchanged during the check; T10 item 17 says the same. Two risks are added.
+- **M2 (headings in Bulletin settings).** A member's summary sections were `h2`s under the page's `h2`; `SummarySection` now renders `h3` (T9 Step 3), and T9's member-summary test checks the `h2` and an `h3`. The page's docblock now names **Back to the builder** and the Settings sections as the links the leave guard asks on.
+- **M3 (the Rubric footer with the keyboard open).** T8 adds "lets the footer sit after the cards while the phone keyboard is open", as T6 has.
+- **M4 (the year's message).** The message waits until the box loses focus or holds four characters, so typing "1" no longer flashes it; **Save rubric** stays disabled while the year is not valid. T8 adds "names a partial year only once the box loses focus, and blocks Save meanwhile". Clarification 7 says so.
+- **M5 (the matchMedia spy).** T6's wide-screen test restores its spy in a `finally`.
+- **M6 (the theme note on a phone).** `ChecklistCard` renders the note under the card, outside the collapsing part, so it shows while the Opening and Closing cards are closed. T8's theme-note test now checks both notes with every card closed (and that each follows its card); the Enter test no longer looks for the note inside the open card. Clarification 6 says so.
+- **M7 (build notes).** The Postgres run's database URL is now described as a local throwaway URL.
+- **M8 (the footer at `md` and wider).** Added to "Risks": at `md` and wider the footer stays sticky with a keyboard open, as the builder's `StepFooter` does; accepted.
+- **M9:** no change.
+
+Counts: T8 adds two tests (11 → 13), so the frontend ends at **913** in 107 files (909 after T8); the backend is unchanged. T9 has three more directives (76 in all). The owner questions are unchanged: none of these fixes changes what they describe.
+
 ## Self-review
 
 - **Coverage.** Every binding constraint has a home: two PRs and this one's scope (clarification 1, T11); `/settings/bulletin` with the forward and the builder's links (clarification 10, T9); the prompts as designed with the system prompt, Reset to default and Reset all, admins only (clarifications 3-5, T1, T3, T6); the theme keywords kept with the note (clarification 6, T8); the order less Prayers (clarification 2, T9); the locking with the church-row lock and the role re-read (clarifications 5, 9, 12; T1, T2, T4); `clean_prompt_overrides` imported, never copied (T1); the rubric's sparse PATCH with null for a default (clarification 8, T7, T8); no migration (clarification 13); no em dash in new copy (clarification 15; T10 Step 2 and T11 Step 3 grep the added lines); no ids or real addresses in the docs (only `@example.com`, and PR #4's `@x.org` tests unchanged; the record's own grep, T12 Step 9); the frozen Streamlit files untouched and their tests passing (clarification 14; T1 Step 4 runs `streamlit_tests`; T11 Step 3's path check counts `app.py`, `streamlit_views` and `streamlit_tests` as 0); tests never reach the network (Global Constraints); the 5b and 6a lessons ("Lessons carried"). The second-to-last task opens a draft PR only on the owner's yes; the last merges only on a yes, runs a five-step phone check one step at a time (each test change on a card that is not customized and put back in its step; Reset all never tapped; the year never saved) and inserts "### Slice 6a-3a record" before "## Backups", after "### Slice 6a-2 record".
 - **Placeholders.** None in T1-T10's code, tests, commands or expected outputs; every expected output is quoted from the replay. The `<…>` left are T11 and T12's runtime values (`<N>`, `<scratch>`, `<card>`, `<year>`, times, the owner's answers), as in the 6a-2 plan.
-- **Consistency.** Names agree across tasks: `merge_settings`, the sessions on `set_church_prompts` and `update_church_rubric` (T1, T2) are used by `save_prompts` and `update_rubric`; `get_prompts`, `save_prompts`, `prompt_label`, `get_rubric`, `update_rubric`, `rubric_out` (T1, T2) by the routes (T3) and the Postgres tests (T4); `LiturgyPromptsOut`, `PromptFieldOut`, `LiturgyPromptsIn`, `RubricOut`, `RubricModel` (T3) by the type names (T5); `PROMPT_KEYS`, `promptValuesFrom`, `promptsPayload`, `promptFieldErrors`, `rebasePrompts` (T5) by the page (T6); `CHECKLISTS`, `rubricFormFrom`, `rubricPatch`, `resetAllPatch`, `rubricErrors`, `rebaseRubric`, `isInvalidRubric` (T7) by the card and the page (T8); `keys.liturgyPrompts`, `keys.rubric` (existing) by the queries. The counts in the table, each task's "Expected" and the PR line (`1885 → 1922`, `31 → 33`, `874 → 911`, `103 → 107`) agree.
+- **Consistency.** Names agree across tasks: `merge_settings`, the sessions on `set_church_prompts` and `update_church_rubric` (T1, T2) are used by `save_prompts` and `update_rubric`; `get_prompts`, `save_prompts`, `prompt_label`, `get_rubric`, `update_rubric`, `rubric_out` (T1, T2) by the routes (T3) and the Postgres tests (T4); `LiturgyPromptsOut`, `PromptFieldOut`, `LiturgyPromptsIn`, `RubricOut`, `RubricModel` (T3) by the type names (T5); `PROMPT_KEYS`, `promptValuesFrom`, `promptsPayload`, `promptFieldErrors`, `rebasePrompts` (T5) by the page (T6); `CHECKLISTS`, `rubricFormFrom`, `rubricPatch`, `resetAllPatch`, `rubricErrors`, `rebaseRubric`, `isInvalidRubric` (T7) by the card and the page (T8); `keys.liturgyPrompts`, `keys.rubric` (existing) by the queries. The counts in the table, each task's "Expected" and the PR line (`1885 → 1922`, `31 → 33`, `874 → 913`, `103 → 107`) agree.
 - **Not verified while planning:** the pushes, the PR and CI (the two Postgres tests were run on a local throwaway Postgres instead), the merge, Railway's and Vercel's deploys, the owner's phone check, and the pages at 375 px in a real browser (the classes give 44 px targets; jsdom does not lay out).
 - **Judgement calls to watch in review:** keeping `update_church_rubric` as the write path instead of deleting it; `GET`'s `override` read through `clean_prompt_overrides`; the footer going static while the keyboard is open; members reading the rubric as text; the hymn slot titles in the client; the client-side forward of the old address.
