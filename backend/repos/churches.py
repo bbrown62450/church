@@ -162,14 +162,23 @@ def lock_church(session, church_id) -> Optional[Church]:
     return church
 
 
-def _merge_settings(church_id, patch: dict) -> None:
+def merge_settings(church_id, patch: dict, *, session: Optional[Session] = None) -> None:
     """Shallow-merge `patch` into the church's settings JSON under a row lock
-    (reassigns a new dict so SQLAlchemy detects the change)."""
-    with session_scope() as session:
-        church = lock_church(session, church_id)
-        if church is None:
-            return
-        church.settings = {**(church.settings or {}), **patch}
+    (reassigns a new dict so SQLAlchemy detects the change). Runs in the
+    caller's `session` (a church write that already holds the lock, slice
+    6a-3a) or in its own scope."""
+    if session is not None:
+        _merge_settings(session, church_id, patch)
+        return
+    with session_scope() as own:
+        _merge_settings(own, church_id, patch)
+
+
+def _merge_settings(session, church_id, patch: dict) -> None:
+    church = lock_church(session, church_id)
+    if church is None:
+        return
+    church.settings = {**(church.settings or {}), **patch}
 
 
 def get_church_prompts(church_id, *, session: Optional[Session] = None) -> dict:
@@ -183,9 +192,11 @@ def get_church_prompts(church_id, *, session: Optional[Session] = None) -> dict:
     return dict(stored) if isinstance(stored, dict) else {}
 
 
-def set_church_prompts(church_id, prompts: dict) -> None:
+def set_church_prompts(church_id, prompts: dict, *, session: Optional[Session] = None) -> None:
     """Store per-church prompt overrides. A blank value for a key means "reset to
     default" — it is dropped, so only real overrides are persisted."""
+    # Runs in the caller's `session` (usecases.church_admin.save_prompts, under
+    # the church-row lock, slice 6a-3a) or in its own scope.
     from liturgy_prompts import PROMPT_KEYS
 
     cleaned = {
@@ -193,7 +204,7 @@ def set_church_prompts(church_id, prompts: dict) -> None:
         for k, v in (prompts or {}).items()
         if k in PROMPT_KEYS and (v or "").strip()
     }
-    _merge_settings(church_id, {"liturgy_prompts": cleaned})
+    merge_settings(church_id, {"liturgy_prompts": cleaned}, session=session)
 
 
 def get_church_rubric_overrides(church_id, *, session: Optional[Session] = None) -> dict:
@@ -239,14 +250,14 @@ def get_church_translation(church_id) -> str | None:
 
 
 def set_church_translation(church_id, translation_id: str) -> None:
-    _merge_settings(church_id, {"bible_translation": translation_id})
+    merge_settings(church_id, {"bible_translation": translation_id})
 
 
 def set_bulletin_settings(church_id, value: dict) -> None:
     """Store the church's bulletin settings (printed bulletin spec, PR 2a) as
     settings["bulletin"], whole, under the row lock: every other settings key
     (the translation, the hymnal, the rubric, the prompts) stays as stored."""
-    _merge_settings(church_id, {"bulletin": value})
+    merge_settings(church_id, {"bulletin": value})
 
 
 def update_profile(church_id, *, name=None, timezone=None, settings_patch=None,

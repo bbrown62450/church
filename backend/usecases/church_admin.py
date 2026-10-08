@@ -1,6 +1,7 @@
 """Church administration (6a spec, `usecases/church_admin.py`): the writes an
 owner or admin makes to the church itself. Slice 6a-1 has the profile
-(PATCH /church); 6a-2, 6a-3 and 6b add their writes here.
+(PATCH /church); 6a-3a the liturgy prompts (and their read); 6a-3b and 6b
+add their writes here.
 
 Every write opens one session, starts with
 usecases.members.lock_and_read_actor (the church-row lock and the caller's
@@ -12,10 +13,12 @@ import re
 import uuid
 from collections.abc import Collection, Mapping
 
+import liturgy_prompts
 import scripture_fetcher
 from db import session_scope
 from bulletin_settings import NOT_ONE_LINE
 from domain_errors import Forbidden, InvalidInput
+from liturgy_config import SECTION_LABELS
 from repos import churches
 from repos import hymns as hymn_repo
 from tenancy import is_admin
@@ -106,3 +109,57 @@ def update_profile(church_id: uuid.UUID, actor_id: uuid.UUID, changes: Mapping[s
         churches.update_profile(church_id, **columns, settings_patch=settings_patch, session=s)
         name = churches.get_church(church_id, session=s)["name"]
     return {"name": name, "role": role}
+
+
+# --- Liturgy prompts: GET and PUT /church/liturgy-prompts (slice 6a-3a; 6a spec UX §3, Semantics) ----------
+
+# The system prompt's name in a message ("Overall voice prompt: …"); the page titles its card
+# "Overall voice (system prompt)".
+SYSTEM_PROMPT_LABEL = "Overall voice"
+
+
+def prompt_label(key: str) -> str:
+    """A prompt's name: "Overall voice" for the system prompt, else the section's label."""
+    return SYSTEM_PROMPT_LABEL if key == "system" else SECTION_LABELS[key]
+
+
+def get_prompts(church_id: uuid.UUID, *, can_edit: bool) -> dict:
+    """GET /church/liturgy-prompts: every prompt in PROMPT_KEYS order (the
+    system prompt first, then the sections), each with its default and the
+    church's own wording when it has one. What counts as the church's own is
+    what clean_prompt_overrides keeps of the stored overrides, the rule a save
+    and generation use, so a stored value equal to its default (or blank, or
+    under an unknown key) reads as not customized."""
+    overrides = liturgy_prompts.clean_prompt_overrides(churches.get_church_prompts(church_id))
+    defaults = liturgy_prompts.default_prompts()
+    return {
+        "placeholder_help": liturgy_prompts.PLACEHOLDER_HELP,
+        "can_edit": can_edit,
+        "fields": [{"key": key, "label": prompt_label(key), "default": defaults[key],
+                    "override": overrides.get(key), "customized": key in overrides}
+                   for key in liturgy_prompts.PROMPT_KEYS],
+    }
+
+
+def save_prompts(church_id: uuid.UUID, actor_id: uuid.UUID, prompts: Mapping[str, str]) -> dict:
+    """PUT /church/liturgy-prompts (6a spec, Semantics): replace the church's
+    prompt overrides, under the church-row lock with the caller's role re-read
+    (an admin demoted meanwhile gets the role 403). Cleaning is slice 4's
+    liturgy_prompts.clean_prompt_overrides, the one rule (no copy here): CRLF
+    read as LF, trimmed, and a blank value or one equal to its default is not
+    kept; so {} resets every prompt. Each kept prompt, in PROMPT_KEYS order,
+    must pass liturgy_prompts.check_template (the system prompt is sent as
+    written, so only its length is checked); the first that fails is a 422
+    prompt_invalid "<Label> prompt: <reason>" naming prompts.<key>, and nothing
+    is written. Returns the prompts as get_prompts does."""
+    with session_scope() as s:
+        role = lock_and_read_actor(s, church_id, actor_id)
+        require_admin_role(role)
+        cleaned = liturgy_prompts.clean_prompt_overrides(prompts)
+        for key in liturgy_prompts.PROMPT_KEYS:
+            reason = liturgy_prompts.check_template(key, cleaned[key]).message if key in cleaned else None
+            if reason is not None:
+                raise InvalidInput(f"{prompt_label(key)} prompt: {reason}", code="prompt_invalid",
+                                   field=f"prompts.{key}")
+        churches.set_church_prompts(church_id, cleaned, session=s)
+    return get_prompts(church_id, can_edit=True)

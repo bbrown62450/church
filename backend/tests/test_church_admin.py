@@ -1,8 +1,9 @@
 """The church-row lock and the role re-read every church write starts with
 (6a spec, "Semantics" → Locking; 6b spec, `lock_and_read_actor`), and
-`usecases.church_admin` (slice 6a-1)."""
+`usecases.church_admin` (slices 6a-1 and 6a-3a)."""
 import pytest
 
+import liturgy_prompts
 from db import session_scope
 from db.models import Church
 from domain_errors import Forbidden, InvalidInput
@@ -197,3 +198,109 @@ def test_the_profile_is_read_and_written_under_one_row_lock(world):
         church_admin.update_profile(world["church"], world["owner"], {"name": "Renamed", "bible_translation": "kjv"})
     assert len(writes) == 1
     assert reads and all(session is writes[0] and locked for session, locked in reads)
+
+
+# --- Liturgy prompts: get_prompts and save_prompts (slice 6a-3a) ----------------------------------------------
+
+DEFAULTS = liturgy_prompts.default_prompts()
+PROMPT_ORDER = ["system", "call_to_worship", "opening_prayer", "prayer_of_confession", "assurance",
+                "prayer_for_illumination", "prayers_of_the_people", "offertory_prayer", "benediction"]
+
+
+def _stored_prompts(world) -> dict:
+    return churches.get_church_prompts(world["church"])
+
+
+def test_the_prompts_read_every_default_and_only_the_churchs_own_wording(world):
+    churches.update_church(world["church"], settings={"liturgy_prompts": {
+        "benediction": "Go in peace. {occasion}",
+        "offertory_prayer": "  " + DEFAULTS["offertory_prayer"] + " \r\n",
+        "assurance": "   ",
+        "bogus": "x",
+    }})
+    read = church_admin.get_prompts(world["church"], can_edit=False)
+    assert read["placeholder_help"] == liturgy_prompts.PLACEHOLDER_HELP
+    assert read["can_edit"] is False
+    assert [f["key"] for f in read["fields"]] == PROMPT_ORDER
+    assert [f["label"] for f in read["fields"]] == [
+        "Overall voice", "Call to Worship", "Opening Prayer", "Prayer of Confession", "Assurance of Pardon",
+        "Prayer for Illumination", "Prayers of the People", "Offertory Prayer", "Benediction"]
+    assert all(f["default"] == DEFAULTS[f["key"]] for f in read["fields"])
+    assert {f["key"]: (f["override"], f["customized"]) for f in read["fields"] if f["override"] is not None} == {
+        "benediction": ("Go in peace. {occasion}", True)}
+    assert church_admin.get_prompts(world["church"], can_edit=True)["can_edit"] is True
+    churches.update_church(world["church"], settings={"liturgy_prompts": ["not", "an", "object"]})
+    assert not any(f["customized"] for f in church_admin.get_prompts(world["church"], can_edit=True)["fields"])
+
+
+def test_a_save_keeps_only_wording_that_differs_from_the_defaults(world):
+    churches.update_church(world["church"], settings=EVERY_SETTING)
+    read = church_admin.save_prompts(world["church"], world["admin"], {
+        "system": DEFAULTS["system"],
+        "benediction": "  Go in peace.\r\nServe the Lord.\r\n",
+        "assurance": "   ",
+        "offertory_prayer": "\r\n " + DEFAULTS["offertory_prayer"] + "\r\n",
+        "call_to_worship": "{{Leader}}: Come, {unknown_name}.",
+    })
+    stored = {"benediction": "Go in peace.\nServe the Lord.", "call_to_worship": "{{Leader}}: Come, {unknown_name}."}
+    assert _stored_prompts(world) == stored
+    assert read["can_edit"] is True
+    assert {f["key"]: f["override"] for f in read["fields"] if f["customized"]} == stored
+    assert _church(world)["settings"] == {**EVERY_SETTING, "liturgy_prompts": stored}
+
+    church_admin.save_prompts(world["church"], world["owner"], {"system": "Our {own} voice {."})
+    assert _stored_prompts(world) == {"system": "Our {own} voice {."}         # sent as written: braces are fine
+    church_admin.save_prompts(world["church"], world["owner"], {})
+    assert _stored_prompts(world) == {}
+    assert _church(world)["settings"] == {**EVERY_SETTING, "liturgy_prompts": {}}
+
+
+@pytest.mark.parametrize("template, reason", [
+    ("{curly", liturgy_prompts.UNPAIRED_BRACE),
+    ("{0}", liturgy_prompts.NO_NAME),
+    ("Go }", liturgy_prompts.UNPAIRED_BRACE),
+    ('{"a": 1}', liturgy_prompts.NOT_ONE_WORD),
+    ("{foo.bar}", liturgy_prompts.NOT_PLAIN_NAME),
+    ("{occasion!r}", liturgy_prompts.HAS_SPEC),
+])
+def test_a_section_template_that_cannot_be_filled_is_named_and_nothing_is_saved(world, template, reason):
+    churches.set_church_prompts(world["church"], {"system": "Kept."})
+    with pytest.raises(InvalidInput) as bad:
+        church_admin.save_prompts(world["church"], world["owner"], {"system": "Changed.", "benediction": template})
+    assert (bad.value.code, bad.value.field, bad.value.message) == (
+        "prompt_invalid", "prompts.benediction", f"Benediction prompt: {reason}")
+    assert _stored_prompts(world) == {"system": "Kept."}
+
+
+def test_the_first_bad_prompt_in_order_is_named(world):
+    with pytest.raises(InvalidInput) as bad:
+        church_admin.save_prompts(world["church"], world["owner"],
+                                  {"benediction": "{curly", "call_to_worship": "{0}"})
+    assert (bad.value.field, bad.value.message) == (
+        "prompts.call_to_worship", f"Call to Worship prompt: {liturgy_prompts.NO_NAME}")
+    assert church_admin.prompt_label("system") == "Overall voice"
+
+
+def test_a_demoted_admin_or_a_removed_member_saves_no_prompts(world):
+    set_role(world["admin"], world["church"], "member")            # after require_admin read "admin"
+    with pytest.raises(Forbidden) as demoted:
+        church_admin.save_prompts(world["church"], world["admin"], {"benediction": "Go."})
+    assert (demoted.value.message, demoted.value.details) == ("Only church admins can do this.", None)
+    remove_membership(world["member"], world["church"])
+    with pytest.raises(Forbidden) as removed:
+        church_admin.save_prompts(world["church"], world["member"], {"benediction": "Go."})
+    assert removed.value.details == NO_ACCESS
+    churches.soft_delete_church(world["church"])
+    with pytest.raises(Forbidden) as deleted:
+        church_admin.save_prompts(world["church"], world["owner"], {"benediction": "Go."})
+    assert deleted.value.details == NO_ACCESS
+    with session_scope() as s:
+        assert (s.get(Church, world["church"]).settings or {}) == {}
+
+
+def test_the_prompts_are_read_and_written_under_one_row_lock(world):
+    with _record_church_row_access() as (reads, writes):
+        church_admin.save_prompts(world["church"], world["owner"], {"benediction": "Go."})
+    assert len(writes) == 1
+    in_the_write = [locked for session, locked in reads if session is writes[0]]
+    assert in_the_write and all(in_the_write)
