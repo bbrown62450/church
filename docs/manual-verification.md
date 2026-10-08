@@ -410,6 +410,25 @@ is never removed. Record counts and what the page shows, never a church id.
 - [ ] **14.** In a test church: pick a test hymn in the builder, then delete it in **Settings** → **Hymns**: the builder's slot shows "Not in your hymnal. Choose a replacement." with no reload.
 - [ ] **15.** As an admin, set a hymn's "Year the words were written" to a year after the rubric's preferred year: the builder's picker labels it as newer with no reload.
 
+**6a-3a (Liturgy prompts, Rubric, Bulletin).** After the 6a-3a merge the
+owner's guided check covers the items marked "(owner, after 6a-3a)", one step
+at a time on the phone; the results go into `docs/ops-runbook.md` → "Slice
+6a-3a record". A test change to a prompt or to the rubric is made only on a
+card that does not say **Customized**, and is put back with **Reset to
+default** and a save in the same step, so the church's prompts end as
+generation reads them (a prompts save sends every customized card again,
+cleaned as generation reads it) and its rubric as it began; **Reset all to
+defaults** is never tapped on the church's own page. Record what the page shows, never a church id or a prompt's wording.
+
+- [ ] (owner, after 6a-3a) **16.** **Settings** lists **Church**, **Hymns**, **Liturgy**, **Rubric**, **Bulletin**, **Contacts** and **Account**. **Liturgy** shows "Liturgy prompts" with nine cards, "Overall voice (system prompt)" first and "Section prompts" with the placeholder help above the other eight; note which cards say **Customized**. **Rubric** shows "Service rubric" with **Hymn preferences**, three **Hymns** cards and eight **Prayers** cards; note which say **Customized** and the year in "Prefer hymns written before".
+- [ ] (owner, after 6a-3a) **17.** On **Liturgy**, open a card that does not say **Customized** and type **{** at the end of its text; **Save prompts**: the card shows "{Card} prompt: It has a { or } without a partner. Use {{ or }} to print a brace." and nothing is saved (if the message names a different card instead, delete the **{**, note that card's name and stop this item there: that card's saved wording fails today's check and is left as it is for the owner to decide). Replace the **{** with the word **Amen.**; **Save prompts**: "Prompts saved." and the card says **Customized**. Then **Reset to default** on that card and **Save prompts**: "Prompts saved." and **Customized** is gone.
+- [ ] (owner, after 6a-3a) **18.** On **Rubric**, open a **Prayers** card that does not say **Customized**, tap at the end of its last point and press return: a new empty point appears below; type **Test point**; **Save rubric**: "Rubric saved." and the card says **Customized**. Then **Reset to default** on that card and **Save rubric**: "Rubric saved." and **Customized** is gone. In "Prefer hymns written before" type **1400**: "The preferred year must be between 1500 and {this year}." shows and **Save rubric** cannot be tapped; type the year it showed before, and the message goes.
+- [ ] (owner, after 6a-3a) **19.** **Settings** → **Bulletin** shows the bulletin settings as before, with **Back to the builder**. In **Builder** → **Bulletin**, **Bulletin settings** opens **Settings** → **Bulletin**; **Back to the builder** returns to the Bulletin step. On **Review & send** the Printed bulletin card's **Bulletin settings** opens the same page.
+- [ ] (owner, after 6a-3a) **20.** At 375 px: no sideways scroll on **Liturgy**, **Rubric** or **Bulletin**; the seven section links, the cards and the buttons are easy to tap. On **Liturgy** with a card open and the iPhone keyboard up, the box being typed in is not covered and **Save prompts** can be reached by scrolling down.
+- [ ] **21.** Signed in as a plain member of the same church: **Liturgy** shows "Only admins can edit the prompts. You can read them below." with read-only cards and no buttons; **Rubric** shows "Only admins can edit the rubric. You can read it below." with the points as text and no buttons; **Bulletin** shows its summary.
+- [ ] **22.** In a test church, as an admin: save a Benediction prompt and generate the Benediction in the builder: the text follows it; set "Prefer hymns written before" to 1900: the builder's picker labels hymns written in or after 1900 as newer with no reload; then **Reset all to defaults** on both pages.
+- [ ] **23.** Signed in, open the old address `/bulletin-settings` on the production URL: it opens **Settings** → **Bulletin**.
+
 ## Slice 5b
 
 Run on the production URL https://worship-service-builder.vercel.app, on an
