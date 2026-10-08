@@ -32,7 +32,7 @@
   `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
 - TDD: write the failing test first and see it fail as quoted.
 - **Backup push after every task** (standing rule): the controller runs `git push origin claude/slice-2-plan-4q33le` after each task's commit (never `--force`, never a rebase; if the push is rejected, `git pull --no-rebase origin claude/slice-2-plan-4q33le` and push again; on a network error retry after 2, 4, 8 and 16 s). A fix asked for by a review is a new commit, `Fix: <what> (Task <n> review)`. The container can restart and lose uncommitted work: commit as soon as a task's checks pass.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1923 → 1977 passed, 33 → 35 skipped; frontend 916 → 945 in 107 → 109 files`.
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1923 → 1978 passed, 33 → 35 skipped; frontend 916 → 948 in 107 → 109 files`.
 - New prose for the owner has no em dashes and no flattery. New user-facing copy is exactly the list in clarification 16 and has no em dashes; existing copy keeps its own punctuation.
 - No church id, email address, token, database URL or real person's name in any doc, commit, test or record. Tests use the fixtures' "Grace" and `@example.com` addresses and made-up prayers; **no prayer or voice profile from the owner's church is ever recorded**, in a doc, a commit, a test, a log line or the results file.
 - Ask the owner before any push to a PR, PR creation, marking ready, merging, or any production or settings action. Owner steps go one at a time, in plain words.
@@ -48,16 +48,16 @@ As in the 6a-3a and 6a-2 plans: **Create `path`:** the block is the whole new fi
   | After | Backend (delta) | Backend | Frontend (delta) | Frontend |
   |---|---|---|---|---|
   | T1 | +14 (`test_usecase_prayer_library.py`: one test in 8 cases and 6 tests; `test_no_streamlit_in_core.py` edited) | 1937 passed, 33 skipped | 0 | 916 in 107 |
-  | T2 | +14 (`test_usecase_prayer_library.py`: one test in 7 cases and 7 tests) | 1951 passed, 33 skipped | 0 | 916 in 107 |
-  | T3 | +26 (`test_api_prayer_library.py`: three tests in 5, 7 and 5 cases and 9 tests; `test_route_guards.py` edited) | 1977 passed, 33 skipped | 0 | 916 in 107 |
-  | T4 | +2 skipped (`test_church_admin_postgres.py`, skipped without `TEST_DATABASE_URL`) | 1977 passed, 35 skipped | 0 | 916 in 107 |
-  | T5 | 0 | 1977 passed, 35 skipped | +9 (`prayers.test.ts` 8; `client.test.ts` 1) | 925 in 108 |
-  | T6 | 0 | 1977 passed, 35 skipped | +12 (`prayers-settings-page.test.tsx`) | 937 in 109 |
-  | T7 | 0 | 1977 passed, 35 skipped | +7 (`prayers-settings-page.test.tsx`, the draft) | 944 in 109 |
-  | T8 | 0 | 1977 passed, 35 skipped | +1 (`settings-layout.test.tsx`: one `it.each` row; two tests edited) | 945 in 109 |
-  | T9 | 0 | 1977 passed, 35 skipped | 0 | 945 in 109 |
+  | T2 | +15 (`test_usecase_prayer_library.py`: one test in 7 cases and 7 tests; `test_http_client.py`: 1) | 1952 passed, 33 skipped | 0 | 916 in 107 |
+  | T3 | +26 (`test_api_prayer_library.py`: three tests in 5, 7 and 5 cases and 9 tests; `test_route_guards.py` edited) | 1978 passed, 33 skipped | 0 | 916 in 107 |
+  | T4 | +2 skipped (`test_church_admin_postgres.py`, skipped without `TEST_DATABASE_URL`) | 1978 passed, 35 skipped | 0 | 916 in 107 |
+  | T5 | 0 | 1978 passed, 35 skipped | +10 (`prayers.test.ts` 9; `client.test.ts` 1) | 926 in 108 |
+  | T6 | 0 | 1978 passed, 35 skipped | +13 (`prayers-settings-page.test.tsx`) | 939 in 109 |
+  | T7 | 0 | 1978 passed, 35 skipped | +8 (`prayers-settings-page.test.tsx`, the draft) | 947 in 109 |
+  | T8 | 0 | 1978 passed, 35 skipped | +1 (`settings-layout.test.tsx`: one `it.each` row; two tests edited) | 948 in 109 |
+  | T9 | 0 | 1978 passed, 35 skipped | 0 | 948 in 109 |
 
-- CI `backend-postgres` goes from `33 passed, 1923 deselected` to `35 passed, 1977 deselected` (T4). Locally, without `TEST_DATABASE_URL`, those two tests are among the 35 skipped.
+- CI `backend-postgres` goes from `33 passed, 1923 deselected` to `35 passed, 1978 deselected` (T4). Locally, without `TEST_DATABASE_URL`, those two tests are among the 35 skipped.
 
 ### Layering and code rules (carried)
 - `usecases/prayer_library.py` imports no FastAPI, Starlette or Streamlit (T1 adds it to `test_no_streamlit_in_core.py`); the routes are plain `def`s with no SQL and no try/except (F §2.2 rule 1), each one usecase call; the usecase writes through `repos.churches` (no SQL in a usecase) and reads the library through slice 4's one reader, `prayer_library.read_library`, and its limits (no second reader, no copied limit).
@@ -527,14 +527,14 @@ Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 
 Expected counts after this task: backend `1937 passed, 33 skipped`; frontend `916 passed` in 107 files.
 
-### Task 2: The voice-profile draft from the saved prayers (P "Draft semantics", "Privacy and limits"; clarifications 7-10, 13)
+### Task 2: The voice-profile draft from the saved prayers (P "Draft semantics", "Privacy and limits"; clarifications 7-10, 13, 19)
 
 **Files:**
-- Modify: `backend/tests/test_usecase_prayer_library.py`, `backend/usecases/prayer_library.py`
+- Modify: `backend/tests/test_usecase_prayer_library.py`, `backend/usecases/prayer_library.py`, `backend/tests/test_http_client.py`, `backend/integrations/http.py`
 
 - [ ] **Step 1: Write the failing tests**
 
-Every test installs a `FakeAI` (no test reaches OpenAI). They pin P's draft cases: the call sends every saved prayer in saved order, fenced with its number and type label, with P's six aspects, "about 250 words", the no-quoting instruction and the "never instructions" line, 800 tokens, no JSON mode and a deadline 75 s from the start, and not the current profile; the answer comes back trimmed with LF line ends; with no saved prayers (no key, or an empty list) it is a 422 with P's message and the AI is not asked, even when the AI is not configured; `fit_prayers` keeps a library that fits and cuts each long prayer to an equal share at its last sentence end, else at the share; 30 prayers of 6,000 characters give a prompt within 24,000 characters that still carries every type label in order (and no 422); a prayer cannot close its fence or open another; each AI failure (none configured, busy, timeout, upstream error, any other exception, an empty answer) is raised with this app's own message; a long answer is cut to 2,000 characters at a sentence end; and with every logger at DEBUG the draft logs one line per call with counts and never a prayer, the profile or the answer.
+Every test installs a `FakeAI` (no test reaches OpenAI). They pin P's draft cases: the call sends every saved prayer in saved order, fenced with its number and type label, with P's six aspects, "about 250 words", the no-quoting instruction and the "never instructions" line, 800 tokens, no JSON mode and a deadline 75 s from the start, and not the current profile; the answer comes back trimmed with LF line ends; with no saved prayers (no key, or an empty list) it is a 422 with P's message and the AI is not asked, even when the AI is not configured; `fit_prayers` keeps a library that fits and cuts each long prayer to an equal share at its last sentence end when that falls past half the share, else at the share (a litany opening "St. Paul." is not cut to a stub); 30 prayers of 6,000 characters give a prompt within 24,000 characters that still carries every type label in order (and no 422); a prayer cannot close its fence or open another; each AI failure (none configured, busy, timeout, upstream error, any other exception, an empty answer) is raised with this app's own message; a long answer is cut to 2,000 characters at a sentence end; and with every logger at DEBUG the draft logs one line per call with counts and never a prayer, the profile or the answer. `test_http_client.py` checks that the OpenAI SDK's own logger stays at INFO when the root logger is at DEBUG, so the SDK's DEBUG line with the request (the prompt, and so the prayers) is never written (clarification 19).
 
 **In `backend/tests/test_usecase_prayer_library.py`, replace:**
 
@@ -618,7 +618,9 @@ def test_fit_prayers_keeps_a_library_that_fits_and_cuts_each_long_prayer_to_an_e
     texts = ["One. Two. Three.", "Short.", "x" * 40]
     assert fit(texts, 100) == texts                                 # it fits: nothing is cut
     assert fit(texts, 30) == ["One. Two.", "Short.", "x" * 10]      # a share of 10: the last sentence end, or 10
-    assert fit(["Amen! Then more words", "Why? Because"], 16) == ["Amen!", "Why?"]
+    assert fit(["Amen! Then more words", "Why? Because"], 16) == ["Amen!", "Why? Bec"]   # an end at half the share is not used
+    litany = "St. Paul. For the church, for the world, for the sick and for all in need, we pray."
+    assert fit([litany, "x" * 80], 80) == ["St. Paul. For the church, for the world,", "x" * 40]   # never a stub
     assert sum(map(len, fit(["a" * 7_000] * 30, 20_000))) <= 20_000
 
 
@@ -690,12 +692,44 @@ def test_the_draft_logs_one_line_and_never_a_prayer_or_the_answer(world, caplog)
     assert lines[1].endswith("outcome=ai_busy")
 ````
 
+**In `backend/tests/test_http_client.py`, replace:**
+
+````python
+    assert leaked == []
+
+
+# --- slice 5b-2: post(), for Google's token, revoke and Gmail send endpoints ----------------------
+````
+
+**with:**
+
+````python
+    assert leaked == []
+
+
+def test_the_openai_sdk_logs_at_info_or_above_when_the_root_is_debug(caplog):
+    """Slice 6a-3b: at DEBUG the OpenAI SDK logs each request's options, the
+    prompt (and so the pastor's prayers) included; its logger stays at INFO."""
+    caplog.set_level(logging.DEBUG)
+    assert logging.getLogger().level == logging.DEBUG
+    assert logging.getLogger("openai").level == logging.INFO
+    assert logging.getLogger("openai._base_client").getEffectiveLevel() >= logging.INFO
+    logging.getLogger("openai._base_client").debug("Request options: %s", "a private prayer")
+    assert [r for r in caplog.records if r.name.startswith("openai")] == []
+
+
+# --- slice 5b-2: post(), for Google's token, revoke and Gmail send endpoints ----------------------
+````
+
 - [ ] **Step 2: See them fail**
 
-Run: `.venv/bin/python -m pytest -q backend/tests/test_usecase_prayer_library.py 2>&1 | tail -1`
-**Expected** (the usecase has no `draft_voice_profile`, `fit_prayers` or `TYPE_LABELS` yet; T1's 14 tests pass):
+Run: `.venv/bin/python -m pytest -q backend/tests/test_usecase_prayer_library.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q backend/tests/test_http_client.py 2>&1 | tail -1`
+**Expected** (the usecase has no `draft_voice_profile`, `fit_prayers` or `TYPE_LABELS` yet; T1's 14 tests pass; nothing sets the `openai` logger's level yet):
 ```
 14 failed, 14 passed in <t>s
+```
+```
+1 failed, 9 passed in <t>s
 ```
 
 - [ ] **Step 3: Write the draft**
@@ -805,20 +839,21 @@ DRAFT_ASK = (
 
 
 def _cut(text: str, limit: int) -> str:
-    """`text` cut to `limit` characters, at the last sentence end ('.', '!' or '?') inside them when there is one."""
+    """`text` cut to `limit` characters: at the last sentence end ('.', '!' or '?') inside them when it falls
+    past half the limit, else at the limit itself (so an early "St. Paul." never leaves a stub)."""
     if len(text) <= limit:
         return text
     head = text[:limit]
     ends = [m.end() for m in _SENTENCE_END.finditer(head)]
-    return head[:ends[-1]] if ends else head
+    return head[:ends[-1]] if ends and ends[-1] > limit // 2 else head
 
 
 def fit_prayers(texts: Sequence[str], budget: int) -> list[str]:
     """The prayers' texts within `budget` characters in all (prayer library
     spec, "Draft semantics" → Input budget): unchanged when they fit; else
     each text longer than an equal share of the budget is cut to that share,
-    at its last sentence end inside the share when there is one, else at the
-    share itself."""
+    at its last sentence end inside the share when that falls past half the
+    share, else at the share itself."""
     if sum(len(text) for text in texts) <= budget:
         return list(texts)
     share = max(0, budget // max(1, len(texts)))
@@ -910,34 +945,65 @@ def _log_draft(facts: Mapping[str, Any], started: float, clock: Callable[[], flo
                 round((clock() - started) * 1000), outcome)
 ````
 
+The OpenAI SDK's logger is held at INFO beside the `httpx` one (clarification 19): at DEBUG the SDK logs each request's options, the prompt included.
+
+**In `backend/integrations/http.py`, replace:**
+
+````python
+and ESV queries never reach the logs (F §2.5; 2a clarification 32).
+````
+
+**with:**
+
+````python
+and ESV queries never reach the logs (F §2.5; 2a clarification 32). It also
+holds the OpenAI SDK's "openai" logger at INFO: at DEBUG the SDK logs each
+request's options, the prompt included, and a prompt can hold the pastor's
+prayers (slice 6a-3b clarification 19), so even LOG_LEVEL=DEBUG keeps them out.
+````
+
+**In `backend/integrations/http.py`, replace:**
+
+````python
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+````
+
+**with:**
+
+````python
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("openai").setLevel(logging.INFO)
+````
+
 - [ ] **Step 4: See them pass, with the OpenAI client's and generation's tests, and the suite**
 
-Run: `.venv/bin/python -m pytest -q backend/tests/test_usecase_prayer_library.py backend/tests/test_openai_client.py backend/tests/test_liturgy_generation.py backend/tests/test_prayer_library.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`
+Run: `.venv/bin/python -m pytest -q backend/tests/test_usecase_prayer_library.py backend/tests/test_http_client.py backend/tests/test_openai_client.py backend/tests/test_liturgy_generation.py backend/tests/test_prayer_library.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`
 **Expected:**
 ```
-64 passed in <t>s
+74 passed in <t>s
 ```
 ```
-1951 passed, 33 skipped in <t>s
+1952 passed, 33 skipped in <t>s
 ```
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/tests/test_usecase_prayer_library.py backend/usecases/prayer_library.py
+git add backend/tests/test_usecase_prayer_library.py backend/usecases/prayer_library.py backend/tests/test_http_client.py backend/integrations/http.py
 git commit -q -m "Slice 6a-3b: the voice-profile draft from the saved prayers" -m "usecases.prayer_library gains draft_voice_profile: the saved prayers read
 in their own session and closed before the AI call; none is a 422; every
 prayer in saved order, fenced with its number and type label, cut to an
-equal share of the 24,000-character cap at a sentence end when the
-library is long (fit_prayers), so the draft never answers 422 for length;
-one complete() call, 800 tokens, inside a 75 s deadline; the answer
-trimmed and cut to 2,000 characters; AI failures raised with this app's
-messages. Its one INFO line has counts only: no prayer, profile or draft
-is logged at any level." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+equal share of the 24,000-character cap (at a sentence end past half the
+share, else at the share) when the library is long (fit_prayers), so the
+draft never answers 422 for length; one complete() call, 800 tokens,
+inside a 75 s deadline; the answer trimmed and cut to 2,000 characters;
+AI failures raised with this app's messages. Its one INFO line has counts
+only, and integrations/http.py holds the OpenAI SDK's logger at INFO, so
+no prayer, profile or draft is logged at any level." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1951 passed, 33 skipped`; frontend `916 passed` in 107 files.
+Expected counts after this task: backend `1952 passed, 33 skipped`; frontend `916 passed` in 107 files.
 
 ### Task 3: `GET`/`PUT /church/prayer-library` and the draft route (P "API (slice 6a)"; S API rows and notes; clarifications 6-8, 10, 18)
 
@@ -1350,7 +1416,7 @@ Run: `.venv/bin/python backend/scripts/export_openapi.py >/dev/null && (cd front
 40 passed in <t>s
 ```
 ```
-1977 passed, 33 skipped in <t>s
+1978 passed, 33 skipped in <t>s
 ```
 ```
 typecheck 0
@@ -1371,7 +1437,7 @@ types are regenerated." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.c
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1977 passed, 33 skipped`; frontend `916 passed` in 107 files.
+Expected counts after this task: backend `1978 passed, 33 skipped`; frontend `916 passed` in 107 files.
 
 ### Task 4: The library's save waits for the lock on real Postgres (S Testing → Postgres; clarification 12)
 
@@ -1491,7 +1557,7 @@ Run: `.venv/bin/python -m pytest -q backend/tests/test_church_admin_postgres.py 
 5 skipped in <t>s
 ```
 ```
-1977 passed, 35 skipped in <t>s
+1978 passed, 35 skipped in <t>s
 ```
 
 - [ ] **Step 3: Commit**
@@ -1506,7 +1572,7 @@ waits and keeps the prompts. Skipped without TEST_DATABASE_URL." -m "Co-Authored
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1977 passed, 35 skipped`; frontend `916 passed` in 107 files. CI's `backend-postgres`: `35 passed, 1977 deselected`.
+Expected counts after this task: backend `1978 passed, 35 skipped`; frontend `916 passed` in 107 files. CI's `backend-postgres`: `35 passed, 1978 deselected`.
 
 ## The app (T5-T8)
 
@@ -1628,6 +1694,13 @@ describe("Settings → Prayers' form rules (slice 6a-3b)", () => {
     expect(firstLine("   ")).toBe("");
     expect(cleanText("  Go in peace.\r\nAmen.\r\n ")).toBe("Go in peace.\nAmen.");
     expect(charCount("Amen \u{1F64F}")).toBe(6); // one character, as Python counts it, not two UTF-16 units
+  });
+
+  it("gives a stored prayer with an empty id its own row key, and sends it as a new prayer", () => {
+    const form = libraryFormFrom(prayerLibrary([prayer(1, { id: "" }), prayer(2), prayer(3, { id: "" })]));
+    expect(form.rows.map((r) => r.key)).toEqual(["saved-0", prayer(2).id, "saved-2"]);
+    expect(prayersPayload(form).prayers.map((p) => p.id)).toEqual([undefined, prayer(2).id, undefined]);
+    expect(rebaseLibrary(form, form, form).rows.map((r) => r.key)).toEqual(["saved-0", prayer(2).id, "saved-2"]);
   });
 
   it("starts at the saved library and sends it back whole: saved prayers with their ids, new ones without", () => {
@@ -1765,9 +1838,10 @@ Run: `(cd frontend && npx vitest run src/lib/settings/prayers.test.ts src/lib/ap
  * `prayers.ts`; prayer library spec "Prayers page (slice 6a)"). The form holds
  * the prayer rows (each with a client key: a saved prayer's id, or a made-up
  * key for a new one) and the voice profile. Texts are compared, checked and
- * sent the way the server stores them (`clean_text`: CRLF as LF, trimmed) and
+ * sent close to the way the server stores them (`clean_text`: CRLF as LF,
+ * trimmed; see `cleanText` for the few characters the two trims differ on) and
  * counted the way Python counts them (characters, not UTF-16 units), so the
- * page's checks and the server's agree and a save sends what would be stored.
+ * page's checks and the server's agree for any ordinary text.
  */
 import { ApiError } from "@/lib/api/client";
 import type { PrayerLibrary, PrayerLibraryBody, PrayerType } from "@/lib/api/types";
@@ -1805,7 +1879,11 @@ export type LibraryForm = { rows: PrayerRow[]; profile: string };
 export type RowErrors = { type?: string; text?: string };
 export type LibraryErrors = { rows: Record<string, RowErrors>; profile?: string };
 
-/** A text as the server stores it: CRLF line ends as LF, trimmed. */
+/**
+ * A text as the server stores it, near enough: CRLF line ends as LF, trimmed. Close to `clean_text`, not
+ * identical: JavaScript's trim also drops U+FEFF, and Python's strip also drops U+001C to U+001F and U+0085.
+ * Those are rare in a pasted prayer; the server cleans again, and the form then shows what it stored.
+ */
 export function cleanText(text: string): string {
   return text.replace(/\r\n/g, "\n").trim();
 }
@@ -1830,10 +1908,13 @@ export function newRow(key: string): PrayerRow {
   return { key, id: null, type: "", text: "" };
 }
 
-/** The form a read starts at, and its baseline. */
+/**
+ * The form a read starts at, and its baseline. A row's key is its prayer's id, or `saved-<i>` when the
+ * id is empty (slice 4's reader reads a stored non-string id as ""), so no two rows share a key.
+ */
 export function libraryFormFrom(out: PrayerLibrary): LibraryForm {
   return {
-    rows: out.prayers.map((p) => ({ key: p.id, id: p.id, type: p.type, text: p.text })),
+    rows: out.prayers.map((p, i) => ({ key: p.id || `saved-${i}`, id: p.id, type: p.type, text: p.text })),
     profile: out.voice_profile,
   };
 }
@@ -1904,8 +1985,8 @@ export function libraryFieldErrors(e: unknown, sentKeys: readonly string[]): Lib
 
 /** The newer rows, each saved prayer keeping the key `current` gives it, so an open row stays open. */
 function keepKeys(next: readonly PrayerRow[], current: readonly PrayerRow[]): PrayerRow[] {
-  const keyOf = new Map(current.filter((row) => row.id !== null).map((row) => [row.id, row.key]));
-  return next.map((row) => ({ ...row, key: keyOf.get(row.id) ?? row.key }));
+  const keyOf = new Map(current.filter((row) => row.id).map((row) => [row.id, row.key]));
+  return next.map((row) => ({ ...row, key: (row.id && keyOf.get(row.id)) || row.key }));
 }
 
 /**
@@ -2041,7 +2122,7 @@ export function useDraftVoiceProfile() {
 Run: `(cd frontend && npx vitest run src/lib/settings/prayers.test.ts src/lib/api/client.test.ts 2>&1 | grep -E "^ +× |\[ src/|Tests ")` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")`
 **Expected:**
 ```
-      Tests  33 passed (33)
+      Tests  34 passed (34)
 ```
 ```
 typecheck 0
@@ -2049,7 +2130,7 @@ lint 0
 ```
 ```
  Test Files  108 passed (108)
-      Tests  925 passed (925)
+      Tests  926 passed (926)
 ```
 
 - [ ] **Step 5: Commit**
@@ -2066,7 +2147,7 @@ the draft (the caller's signal for Cancel). The draft waits 90 s." -m "Co-Author
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1977 passed, 35 skipped`; frontend `925 passed` in 108 files.
+Expected counts after this task: backend `1978 passed, 35 skipped`; frontend `926 passed` in 108 files.
 
 ### Task 6: Settings → Prayers: the prayer list and the voice profile (P "Prayers page (slice 6a)"; S UX §5, "Every page"; clarifications 3, 5, 11)
 
@@ -2171,9 +2252,11 @@ describe("Settings → Prayers (slice 6a-3b)", () => {
     expect(screen.getByText(PRAYERS_INTRO)).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Voice profile" })).toHaveAttribute("readonly");
     expect(screen.getByRole("textbox", { name: "Voice profile" })).toHaveValue("Warm and plain.");
+    expect(screen.getByText(PRAYERS_INTRO)).toHaveTextContent("Everyone in your church can read this page.");
     const items = within(screen.getByRole("list", { name: "Prayers" })).getAllByRole("listitem");
     expect(items.map((item) => item.firstChild?.textContent)).toEqual(["Prayer of Confession", "Benediction"]);
     expect(items[1]).toHaveTextContent("Go in peace. Serve the Lord.", { normalizeWhitespace: true });
+    expect(items[1].lastChild).toHaveClass("min-w-0", "break-words", "whitespace-pre-wrap"); // a long word wraps at 375 px
     expect(within(screen.getByRole("form", { name: "Prayer library" })).queryAllByRole("button")).toEqual([]);
     expect(screen.queryByRole("combobox")).toBeNull();
   });
@@ -2181,6 +2264,7 @@ describe("Settings → Prayers (slice 6a-3b)", () => {
   it("shows the empty library and adds a first prayer, which saves with the profile", async () => {
     const { api, user } = renderPage("admin", { "GET /church/prayer-library": prayerLibrary() });
     expect(await screen.findByText(EMPTY_LIBRARY)).toBeInTheDocument();
+    expect(screen.getByText(PRAYERS_INTRO)).toHaveTextContent("Everyone in your church can read this page.");
     const save = screen.getByRole("button", { name: "Save" });
     expect(save).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "Add a prayer" }));
@@ -2283,6 +2367,25 @@ describe("Settings → Prayers (slice 6a-3b)", () => {
     }));
     await user.click(screen.getByRole("button", { name: "Save" }));
     expect(await screen.findByText("You can keep up to 30 prayers.")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Voice profile" })).toHaveValue("Warm and plain. Amen.");
+  });
+
+  it("toasts a refusal naming a row that was removed while the save ran", async () => {
+    const message = "This prayer is too long (6,000 characters at most).";
+    let answer: (response: unknown) => void = () => {};
+    const { api, user } = renderPage("admin", {
+      "PUT /church/prayer-library": () => new Promise((resolve) => (answer = resolve)),
+    });
+    await user.type(await screen.findByRole("textbox", { name: "Voice profile" }), " Amen.");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(puts(api)).toHaveLength(1));
+    await user.click(screen.getByRole("button", { name: "Remove prayer 2" }));
+    const dialog = await screen.findByRole("alertdialog", { name: REMOVE_TITLE });
+    await user.click(within(dialog).getByRole("button", { name: "Remove prayer" }));
+    await waitFor(() => expect(prayerItems()).toHaveLength(1));
+    answer(fakeError(422, "invalid_request", message, { fields: { "prayers.1.text": message } }));
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Prayer 2" })).toBeNull();
     expect(screen.getByRole("textbox", { name: "Voice profile" })).toHaveValue("Warm and plain. Amen.");
   });
 
@@ -2442,6 +2545,7 @@ export function VoiceProfileCard({
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { toast } from "sonner";
 
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { ErrorState } from "@/components/app/error-state";
@@ -2452,6 +2556,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { errorToastMessage } from "@/lib/api/errors";
 import type { PrayerLibrary, PrayerType } from "@/lib/api/types";
 import { isAdmin } from "@/lib/church";
 import { useChurch } from "@/lib/church-context";
@@ -2465,6 +2570,7 @@ import {
   libraryFieldErrors,
   libraryFormFrom,
   MAX_PRAYERS,
+  namesLibraryField,
   newRow,
   PRAYER_TYPE_LABELS,
   PRAYER_TYPES,
@@ -2483,7 +2589,7 @@ import { cn } from "@/lib/utils";
 import { VoiceProfileCard } from "./voice-profile-card";
 
 export const PRAYERS_INTRO =
-  "Your own prayers teach the AI how you pray. When it writes a prayer, it follows your voice profile and reads one of your prayers of the same kind, without reusing its lines.";
+  "Your own prayers teach the AI how you pray. When it writes a prayer, it follows your voice profile and reads one of your prayers of the same kind, without reusing its lines. Everyone in your church can read this page.";
 export const ADMINS_ONLY = "Only admins can edit the prayer library. You can read it below.";
 export const EMPTY_LIBRARY = "No prayers yet. Paste in a few of your own prayers so the writer can learn your voice.";
 export const REMOVE_TITLE = "Remove this prayer?";
@@ -2547,6 +2653,7 @@ function LibraryEditor({ out, admin }: { out: PrayerLibrary; admin: boolean }) {
   const removeFocus = useRef<string | null>(null);
   const focusId = useRef<string | null>(null);
   const added = useRef(0);
+  const rowsNow = useRef<readonly PrayerRow[]>([]);
   const { form, baseline } = state;
   const dirty = admin && hasLibraryChanges(baseline, form);
   // A member (or an admin demoted meanwhile) reads what is stored, never an unsaved edit.
@@ -2557,6 +2664,11 @@ function LibraryEditor({ out, admin }: { out: PrayerLibrary; admin: boolean }) {
     const next = libraryFormFrom(out);
     setState({ source: out, baseline: next, form: rebaseLibrary(baseline, form, next) });
   }
+
+  // The rows on the page now, for a refusal that lands after a row it names was removed.
+  useEffect(() => {
+    rowsNow.current = form.rows;
+  });
 
   // The control a check or a refusal named, or a new row's type: focused once it is on the page.
   useEffect(() => {
@@ -2627,8 +2739,15 @@ function LibraryEditor({ out, admin }: { out: PrayerLibrary; admin: boolean }) {
         setState((s) => ({ ...s, ...afterSave(sent, s.form, saved) }));
       },
       onError: (e) => {
+        if (!namesLibraryField(e)) return; // the hook toasted it, or the app reports it
         const named = libraryFieldErrors(e, sentKeys);
-        if (named !== null) show(named, sentKeys);
+        const onPage = new Set(rowsNow.current.map((row) => row.key));
+        // Shown on the form only while a field it names is still there (a row removed during the save is not).
+        if (named && (named.profile !== undefined || Object.keys(named.rows).some((key) => onPage.has(key)))) {
+          show(named, sentKeys);
+        } else {
+          toast.error(errorToastMessage(e));
+        }
       },
     });
   }
@@ -2675,7 +2794,7 @@ function LibraryEditor({ out, admin }: { out: PrayerLibrary; admin: boolean }) {
               ) : (
                 <li key={row.key} className="grid gap-1 rounded-lg border p-3">
                   <p className="text-sm font-medium">{row.type === "" ? null : PRAYER_TYPE_LABELS[row.type]}</p>
-                  <p className="text-sm whitespace-pre-wrap">{row.text}</p>
+                  <p className="min-w-0 text-sm break-words whitespace-pre-wrap">{row.text}</p>
                 </li>
               ),
             )}
@@ -2846,9 +2965,9 @@ export default function PrayersSettingsRoute() {
 Run: `for i in 1 2 3; do (cd frontend && npx vitest run src/components/settings/prayers-settings-page.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests "); done` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")`
 **Expected:**
 ```
-      Tests  12 passed (12)
-      Tests  12 passed (12)
-      Tests  12 passed (12)
+      Tests  13 passed (13)
+      Tests  13 passed (13)
+      Tests  13 passed (13)
 ```
 ```
 typecheck 0
@@ -2856,7 +2975,7 @@ lint 0
 ```
 ```
  Test Files  109 passed (109)
-      Tests  937 passed (937)
+      Tests  939 passed (939)
 ```
 
 - [ ] **Step 5: Commit**
@@ -2873,7 +2992,7 @@ sit after the list while typing. Members read everything as text." -m "Co-Author
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1977 passed, 35 skipped`; frontend `937 passed` in 109 files.
+Expected counts after this task: backend `1978 passed, 35 skipped`; frontend `939 passed` in 109 files.
 
 ### Task 7: The voice-profile draft on the page (P "Voice profile card"; S UX §5; clarifications 4, 5, 8, 9)
 
@@ -2969,6 +3088,7 @@ describe("Settings → Prayers: the voice-profile draft (slice 6a-3b)", () => {
     await waitFor(() => expect(title).toHaveFocus());
     const panel = title.closest("section")!;
     expect(panel).toHaveTextContent("Warm and <b>plain</b>. Short sentences.", { normalizeWhitespace: true });
+    expect(document.body).not.toHaveTextContent("\u2014"); // no em dash in anything the page shows
     expect(panel.querySelector("b")).toBeNull(); // the AI's answer is text, never markup
     expect(screen.getByRole("textbox", { name: "Voice profile" })).toHaveValue("Warm and plain."); // not replaced yet
     expect(drafts(api)).toHaveLength(1);
@@ -2996,6 +3116,23 @@ describe("Settings → Prayers: the voice-profile draft (slice 6a-3b)", () => {
     expect(puts(api)).toEqual([]);
   });
 
+  it("keeps focus in a prayer being typed in when the draft arrives, and says the draft is there", async () => {
+    let answer: (response: unknown) => void = () => {};
+    const { user } = renderPage("admin", { [DRAFT_ROUTE]: () => new Promise((resolve) => (answer = resolve)) });
+    await user.click(await screen.findByRole("button", { name: "Edit prayer 1" }));
+    await user.click(screen.getByRole("button", { name: "Update from my prayers" }));
+    const box = screen.getByRole("textbox", { name: "Prayer 1" });
+    await user.type(box, " Amen.");
+    answer({ draft: "A warm, plain voice." });
+    const title = await screen.findByRole("heading", { name: DRAFT_TITLE });
+    expect(box).toHaveFocus();
+    expect(title).not.toHaveFocus();
+    const status = document.getElementById("voice-draft-status")!;
+    expect(status).toHaveAttribute("aria-live", "polite");
+    expect(status).toHaveTextContent(DRAFT_TITLE);
+    expect(document.body).not.toHaveTextContent("\u2014");
+  });
+
   it("says it is still working after 8 s, and Cancel stops the wait with nothing shown", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ["setTimeout", "clearTimeout"] });
     try {
@@ -3008,6 +3145,7 @@ describe("Settings → Prayers: the voice-profile draft (slice 6a-3b)", () => {
         vi.advanceTimersByTime(8_000);
       });
       expect(await screen.findByText(STILL_WORKING)).toBeInTheDocument();
+      expect(document.body).not.toHaveTextContent("\u2014");
       await user.click(screen.getByRole("button", { name: "Cancel" }));
       await waitFor(() => expect(update).toHaveTextContent("Update from my prayers"));
       expect(update).toHaveFocus();
@@ -3051,17 +3189,18 @@ describe("Settings → Prayers: the voice-profile draft (slice 6a-3b)", () => {
 - [ ] **Step 2: See them fail**
 
 Run: `(cd frontend && npx vitest run src/components/settings/prayers-settings-page.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
-**Expected** (the card has no draft yet; T6's twelve tests pass):
+**Expected** (the card has no draft yet; T6's thirteen tests pass):
 ```
    × Settings → Prayers: the voice-profile draft (slice 6a-3b) > asks for a draft only from saved prayers: Save your prayers first, or add one first
    × Settings → Prayers: the voice-profile draft (slice 6a-3b) > says to add and save a prayer first when none is saved, and shows a member no button
    × Settings → Prayers: the voice-profile draft (slice 6a-3b) > shows the draft beside the profile as text, and Use this draft puts it in the box to save
    × Settings → Prayers: the voice-profile draft (slice 6a-3b) > Keep mine leaves the profile as it was and puts focus back on the button
+   × Settings → Prayers: the voice-profile draft (slice 6a-3b) > keeps focus in a prayer being typed in when the draft arrives, and says the draft is there
    × Settings → Prayers: the voice-profile draft (slice 6a-3b) > says it is still working after 8 s, and Cancel stops the wait with nothing shown
    × Settings → Prayers: the voice-profile draft (slice 6a-3b) > stops the wait when the page is left
    × Settings → Prayers: the voice-profile draft (slice 6a-3b) > shows why a draft failed in the card, and toasts a role 403 instead
-⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
-      Tests  7 failed | 12 passed (19)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  8 failed | 13 passed (21)
 ```
 
 - [ ] **Step 3: Write the draft into the card, and the page's reason to wait**
@@ -3111,8 +3250,10 @@ function failureText(e: ApiError): string {
  * after 8 s, and **Cancel**, which stops the wait (the draft is not stored, so
  * nothing changes). The draft shows beside the profile (stacked on a phone) as
  * text only, with **Use this draft** (it replaces the box's text, unsaved, so
- * it can still be edited) and **Keep mine**. Leaving the page stops the wait,
- * and an answer for a wait given up on is dropped.
+ * it can still be edited) and **Keep mine**. It takes focus only from where the
+ * wait left it (the button, Cancel, or nowhere); an admin typing elsewhere
+ * keeps their place and hears "Draft from your prayers" instead. Leaving the
+ * page stops the wait, and an answer for a wait given up on is dropped.
  */
 export function VoiceProfileCard({
   value,
@@ -3130,6 +3271,7 @@ export function VoiceProfileCard({
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
   const draftTitleRef = useRef<HTMLHeadingElement>(null);
   const controller = useRef<AbortController | null>(null);
   const focusDraft = useRef(false);
@@ -3137,12 +3279,14 @@ export function VoiceProfileCard({
   const slow = useStillWorking(draft.isPending);
   const [result, setResult] = useState<string | null>(null);
   const [failure, setFailure] = useState<ApiError | null>(null);
+  // True when the draft arrived while focus was elsewhere: the live line says it is there.
+  const [announce, setAnnounce] = useState(false);
   useAutosize(ref, value);
 
   // Leaving the page (or switching church) stops the wait.
   useEffect(() => () => controller.current?.abort(), []);
 
-  // A draft that just arrived takes focus, so it is read out and its two choices are next.
+  // A draft that just arrived takes focus (when the wait still had it), so it is read out and its two choices are next.
   useEffect(() => {
     if (!focusDraft.current) return;
     focusDraft.current = false;
@@ -3155,13 +3299,19 @@ export function VoiceProfileCard({
     controller.current = own;
     setResult(null);
     setFailure(null);
+    setAnnounce(false);
     draft.mutate(
       { signal: own.signal },
       {
         onSuccess: (answer) => {
           if (controller.current !== own) return; // given up on
           controller.current = null;
-          focusDraft.current = true;
+          // Focus moves only from the button, Cancel or nowhere; someone typing elsewhere keeps their place.
+          const active = document.activeElement;
+          const waiting =
+            active === null || active === document.body || active === buttonRef.current || active === cancelRef.current;
+          focusDraft.current = waiting;
+          setAnnounce(!waiting);
           setResult(answer.draft);
         },
         onError: (e) => {
@@ -3222,6 +3372,7 @@ export function VoiceProfileCard({
                 onClick={() => {
                   onChange(result);
                   setResult(null);
+                  setAnnounce(false);
                   ref.current?.focus();
                 }}
               >
@@ -3234,6 +3385,7 @@ export function VoiceProfileCard({
                 className="md:h-9"
                 onClick={() => {
                   setResult(null);
+                  setAnnounce(false);
                   buttonRef.current?.focus();
                 }}
               >
@@ -3261,13 +3413,13 @@ export function VoiceProfileCard({
               Update from my prayers
             </PendingButton>
             {draft.isPending ? (
-              <Button type="button" variant="link" className="h-11 px-0 md:h-9" onClick={cancel}>
+              <Button ref={cancelRef} type="button" variant="link" className="h-11 px-0 md:h-9" onClick={cancel}>
                 Cancel
               </Button>
             ) : null}
           </div>
-          <p aria-live="polite" className="text-sm text-muted-foreground empty:hidden">
-            {draft.isPending && slow ? STILL_WORKING : null}
+          <p id="voice-draft-status" aria-live="polite" className="text-sm text-muted-foreground empty:hidden">
+            {draft.isPending && slow ? STILL_WORKING : announce && result !== null ? DRAFT_TITLE : null}
           </p>
           {blocked !== null && !draft.isPending ? (
             <p id="voice-draft-blocked" className="text-sm text-muted-foreground">
@@ -3356,9 +3508,9 @@ import { NO_SAVED_PRAYERS, SAVE_FIRST, VoiceProfileCard } from "./voice-profile-
 Run: `for i in 1 2 3; do (cd frontend && npx vitest run src/components/settings/prayers-settings-page.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests "); done` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")`
 **Expected:**
 ```
-      Tests  19 passed (19)
-      Tests  19 passed (19)
-      Tests  19 passed (19)
+      Tests  21 passed (21)
+      Tests  21 passed (21)
+      Tests  21 passed (21)
 ```
 ```
 typecheck 0
@@ -3366,7 +3518,7 @@ lint 0
 ```
 ```
  Test Files  109 passed (109)
-      Tests  944 passed (944)
+      Tests  947 passed (947)
 ```
 
 - [ ] **Step 5: Commit**
@@ -3383,7 +3535,7 @@ a role 403 is toasted." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.c
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1977 passed, 35 skipped`; frontend `944 passed` in 109 files.
+Expected counts after this task: backend `1978 passed, 35 skipped`; frontend `947 passed` in 109 files.
 
 ### Task 8: Prayers in the Settings nav (answer 6; clarification 2)
 
@@ -3504,7 +3656,7 @@ lint 0
 ```
 ```
  Test Files  109 passed (109)
-      Tests  945 passed (945)
+      Tests  948 passed (948)
 ```
 
 - [ ] **Step 5: Commit**
@@ -3517,7 +3669,7 @@ Liturgy, Prayers, Rubric, Bulletin, Contacts, Account." -m "Co-Authored-By: Clau
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1977 passed, 35 skipped`; frontend `945 passed` in 109 files.
+Expected counts after this task: backend `1978 passed, 35 skipped`; frontend `948 passed` in 109 files.
 
 ## Docs, verification, the PR, the merge (T9-T11)
 
@@ -3592,7 +3744,7 @@ test church, the leave guard)." -m "Co-Authored-By: Claude Opus 5.5 <noreply@ant
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `1977 passed, 35 skipped`; frontend `945 passed` in 109 files.
+Expected counts after this task: backend `1978 passed, 35 skipped`; frontend `948 passed` in 109 files.
 
 ### Task 10: Verification and the draft PR (owner's yes before the PR is opened and before it is marked ready)
 
@@ -3621,17 +3773,17 @@ for i in 1 2 3; do (cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Te
 (cd frontend && NEXT_PUBLIC_SUPABASE_URL=https://ci-placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-placeholder NEXT_PUBLIC_API_URL=http://localhost:8000 npm run build 2>&1 | grep -E "Compiled successfully|Error|/settings")
 ```
 
-**Expected** (the suite; three runs of `Test Files  109 passed (109)` and `Tests  945 passed (945)` with no `×` or `FAIL` line, one naming a failing test: Step 6; typecheck and lint 0; the build with `/settings/prayers` and no `Error`, a font `Failed to fetch` only: say so and rely on CI):
+**Expected** (the suite; three runs of `Test Files  109 passed (109)` and `Tests  948 passed (948)` with no `×` or `FAIL` line, one naming a failing test: Step 6; typecheck and lint 0; the build with `/settings/prayers` and no `Error`, a font `Failed to fetch` only: say so and rely on CI):
 ```
-1977 passed, 35 skipped in <t>s
+1978 passed, 35 skipped in <t>s
 ```
 ```
  Test Files  109 passed (109)
-      Tests  945 passed (945)
+      Tests  948 passed (948)
  Test Files  109 passed (109)
-      Tests  945 passed (945)
+      Tests  948 passed (948)
  Test Files  109 passed (109)
-      Tests  945 passed (945)
+      Tests  948 passed (948)
 ```
 ```
 typecheck 0
@@ -3705,7 +3857,7 @@ gh pr list -R bbrown62450/church --head claude/slice-2-plan-4q33le --state open 
 
 **Expected:** `[]`. Send the owner exactly this, and wait for a clear yes:
 
-> The Prayers page (slice 6a-3b) is verified on this machine: backend 1977 passed, 35 skipped (1923 and 33 before); frontend 945 tests in 109 files (916 in 107 before), three runs in a row; typecheck, lint and the production build are clean. There is no database change and no new package. Settings gets **Prayers** between **Liturgy** and **Rubric**: your own prayers (pasted or typed, up to 30, each with its type) and the voice profile, saved together with one **Save**, and **Update from my prayers**, which asks the AI for a draft profile you can use or ignore (it is never saved unless you choose it and tap **Save**). Everyone in the church can read the page; you (and any admin) can change it. No test talks to OpenAI, and no prayer is ever written to the logs. The pull request also carries the 6a-3a record and the /jank-deep skill. May I open the pull request as a **draft** titled "Slice 6a-3b: Prayers in Settings (the prayer library and the AI voice-profile draft)", so the checks run? Merging stays with you.
+> The Prayers page (slice 6a-3b) is verified on this machine: backend 1978 passed, 35 skipped (1923 and 33 before); frontend 948 tests in 109 files (916 in 107 before), three runs in a row; typecheck, lint and the production build are clean. There is no database change and no new package. Settings gets **Prayers** between **Liturgy** and **Rubric**: your own prayers (pasted or typed, up to 30, each with its type) and the voice profile, saved together with one **Save**, and **Update from my prayers**, which asks the AI for a draft profile you can use or ignore (it is never saved unless you choose it and tap **Save**). Everyone in the church can read the page; you (and any admin) can change it. No test talks to OpenAI, and no prayer is ever written to the logs. The pull request also carries the 6a-3a record and the /jank-deep skill. May I open the pull request as a **draft** titled "Slice 6a-3b: Prayers in Settings (the prayer library and the AI voice-profile draft)", so the checks run? Merging stays with you.
 
 - [ ] **Step 5 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
 
@@ -3722,7 +3874,7 @@ Slice 6a-3b: Prayers in Settings, the prayer library and the AI voice-profile dr
 
 Later: 6b (People).
 
-Tests: backend 1923 → 1977 passed, 33 → 35 skipped; frontend 916 → 945 in 107 → 109 files
+Tests: backend 1923 → 1978 passed, 33 → 35 skipped; frontend 916 → 948 in 107 → 109 files
 
 After merge (Task 11): a short check on the owner's phone, then a "Slice 6a-3b record" in docs/ops-runbook.md.
 
@@ -3736,7 +3888,7 @@ gh pr create -R bbrown62450/church --draft --base main --head claude/slice-2-pla
 gh pr checks <N> -R bbrown62450/church --watch --interval 30
 ```
 
-Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1977 passed, 35 skipped`, backend-postgres `35 passed, 1977 deselected`, frontend `945 passed` in 109 files. Then send: "PR #<N> is green: backend 1977 passed, 35 skipped (the two new Postgres tests passed in their own job); 945 frontend tests in 109 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R bbrown62450/church`.
+Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `1978 passed, 35 skipped`, backend-postgres `35 passed, 1978 deselected`, frontend `948 passed` in 109 files. Then send: "PR #<N> is green: backend 1978 passed, 35 skipped (the two new Postgres tests passed in their own job); 948 frontend tests in 109 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R bbrown62450/church`.
 
 - [ ] **Step 6: Fix any failure in its owning task**
 
@@ -3756,7 +3908,7 @@ Run the last line with `run_in_background: true`. **Expected:** the PR URL; ever
 
 For each fix: change only the owning task's files; rerun Steps 2-3; commit `Fix: <what> (Task <n>, slice 6a-3b final verification)` with the trailer; after the PR exists, ask the owner before pushing it.
 
-Expected counts after this task: backend `1977 passed, 35 skipped`; frontend `945 passed` in 109 files.
+Expected counts after this task: backend `1978 passed, 35 skipped`; frontend `948 passed` in 109 files.
 
 ### Task 11: Merge, the owner's phone check (four steps), the record (OWNER + agent)
 
@@ -3909,7 +4061,7 @@ gh pr checks claude/slice-2-plan-4q33le -R bbrown62450/church --watch
 
 Code only (no schema to undo). On the owner's yes for each outward command: a branch `claude/revert-6a3b` from `origin/main`, `git revert -m 1 --no-commit <merge sha>`, a commit "Revert slice 6a-3b (PR #<N>)" with the trailer, both suites (`1923 passed, 33 skipped`; `916 passed` in 107), a PR, CI, and the merge on the owner's yes; record it in the record. A library saved through the page stays in `churches.settings["prayer_library"]` in the shape slice 4 reads, so the liturgy writer keeps using it after a revert; to stop that, ask the owner whether to empty it first (on the page, before the revert).
 
-Expected counts after this task: backend `1977 passed, 35 skipped` on `main`; frontend `945 passed` in 109 files. The records PR adds no test.
+Expected counts after this task: backend `1978 passed, 35 skipped` on `main`; frontend `948 passed` in 109 files. The records PR adds no test.
 
 ---
 
@@ -3976,6 +4128,6 @@ Owner steps still to come: the plan's approval; the draft PR on your yes and rea
 
 - **Coverage.** Every binding constraint has a home: 6a-3b is Prayers with the AI draft (clarification 1, T1-T9, T10); the final nav order (clarification 2, T8); P's page, API, draft, rules and copy verbatim (clarifications 3-7, 16; T1-T7); no em dashes in new copy (clarification 16; T9 Step 2 and T10 Step 3 grep the added lines); no real ids, emails or URLs (the tests use `@example.com` and made-up prayers; the owner messages name no address; the only links are the session link and the PR footer the trailers require; the record's own grep, T11 Step 9); no migration (clarification 14); the frozen Streamlit files untouched (T10 Step 3's path check); tests never reach the network or OpenAI (`FakeAI` in every draft test, the `_no_network` fixture; Global Constraints); AI output untrusted (clarification 9: text only, capped, never stored by the draft, never followed; T7 checks markup stays text; T2 checks the fences); prayers never logged (clarification 13; T2's DEBUG test; T10 Step 3's count of log calls); the AI-call patterns (the 75 s deadline, 800 tokens, read then close, this app's messages, the `ai` bucket charged once and after the role, no Idempotency-Key with the reasons, an uncertain outcome changing nothing: clarifications 7, 8, 10); the 5b and 6a lessons ("Lessons carried": dialogs, late answers, focus, toasts for a 422 the form cannot show, the Save bar at every width, the rebase, the leave guard, `ADMIN_ONLY`, the Postgres lock). The second-to-last task opens a draft PR only on the owner's yes; the last merges only on a yes, runs a four-step phone check one step at a time that leaves the library and the profile as they were unless the owner chooses to keep what they entered (asked, never assumed; a test prayer removed in its own step), and inserts "### Slice 6a-3b record" before "## Backups", after "### Slice 6a-3a record".
 - **Placeholders.** None in T1-T9's code, tests, commands or expected outputs; every expected output is quoted from the replay. The `<…>` left are T10 and T11's runtime values (`<N>`, `<scratch>`, times, the owner's answers), as in the 6a-3a plan.
-- **Consistency.** Names agree across tasks: `get_library`, `save_library`, `clean_library`, `with_ids`, `library_out`, `clean_text` (T1) and `draft_voice_profile`, `build_draft_messages`, `fit_prayers`, `clean_draft`, `TYPE_LABELS`, `NO_PRAYERS` (T2) are used by the routes (T3) and the Postgres tests (T4); `PrayerLibraryOut`, `PrayerOut`, `PrayerLibraryIn`, `VoiceProfileDraftOut` (T3) by the type names (T5); `PRAYER_TYPES`, `PRAYER_TYPE_LABELS`, `libraryFormFrom`, `prayersPayload`, `listChanged`, `hasLibraryChanges`, `libraryErrors`, `libraryFieldErrors`, `namesLibraryField`, `rebaseLibrary`, `afterSave`, `newRow`, `firstLine` (T5) by the page (T6, T7); `usePrayerLibrary`, `useSavePrayerLibrary`, `useDraftVoiceProfile`, `LIBRARY_SAVED` (T5) by the page and the card; `keys.prayerLibrary` (existing) by the queries. The counts in the table, each task's "Expected" and the PR line agree: `1923 → 1977`, `33 → 35`, `916 → 945`, `107 → 109`.
+- **Consistency.** Names agree across tasks: `get_library`, `save_library`, `clean_library`, `with_ids`, `library_out`, `clean_text` (T1) and `draft_voice_profile`, `build_draft_messages`, `fit_prayers`, `clean_draft`, `TYPE_LABELS`, `NO_PRAYERS` (T2) are used by the routes (T3) and the Postgres tests (T4); `PrayerLibraryOut`, `PrayerOut`, `PrayerLibraryIn`, `VoiceProfileDraftOut` (T3) by the type names (T5); `PRAYER_TYPES`, `PRAYER_TYPE_LABELS`, `libraryFormFrom`, `prayersPayload`, `listChanged`, `hasLibraryChanges`, `libraryErrors`, `libraryFieldErrors`, `namesLibraryField`, `rebaseLibrary`, `afterSave`, `newRow`, `firstLine` (T5) by the page (T6, T7); `usePrayerLibrary`, `useSavePrayerLibrary`, `useDraftVoiceProfile`, `LIBRARY_SAVED` (T5) by the page and the card; `keys.prayerLibrary` (existing) by the queries. The counts in the table, each task's "Expected" and the PR line agree: `1923 → 1978`, `33 → 35`, `916 → 948`, `107 → 109`.
 - **Not verified while planning:** the pushes, the PR and CI (the Postgres tests were run on a throwaway local Postgres instead), the merge, Railway's and Vercel's deploys, a real OpenAI call (every draft test uses `FakeAI`; the first real draft is the owner's in T11 Step 4), the owner's phone check, and the page at 375 px in a real browser (the classes give 44 px targets; jsdom does not lay out).
 - **Judgement calls to watch in review:** the string `id` instead of a `uuid` field; logging no prayer text at any level; the role check before the `ai` charge; the two-part rebase; members reading prayers in full; disabling the draft with the server's words when nothing is saved; reusing the builder's `useStillWorking` with 6a-2's no-dash sentence.
