@@ -20,9 +20,13 @@ httpx logs every request's full URL, query string included, at INFO, and the
 API's root logger runs at INFO (api/logging_config.py). Importing this module
 sets the "httpx" and "httpcore" loggers to WARNING, so upstream URLs, dates
 and ESV queries never reach the logs (F §2.5; 2a clarification 32). It also
-holds the OpenAI SDK's "openai" logger at INFO: at DEBUG the SDK logs each
-request's options, the prompt included, and a prompt can hold the pastor's
-prayers (slice 6a-3b clarification 19), so even LOG_LEVEL=DEBUG keeps them out.
+holds the OpenAI SDK's "openai" logger at INFO or above: at DEBUG the SDK
+logs each request's options, the prompt included, and a prompt can hold the
+pastor's prayers (slice 6a-3b clarification 19), so even LOG_LEVEL=DEBUG keeps
+them out. The SDK sets that logger's level from OPENAI_LOG when it is
+imported, which can be after this module's cap, so integrations.openai_client
+(the one module that imports the SDK) calls hold_openai_logger() again right
+after its import: OPENAI_LOG=debug never lowers it (6a-3b build review 4).
 
 Tests swap the client with set_http_for_tests(build_client(transport=...));
 set_http_for_tests(None) restores the default, and an autouse fixture in
@@ -41,7 +45,15 @@ DEFAULT_TIMEOUT = httpx.Timeout(10.0, connect=CONNECT_TIMEOUT)
 
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
-logging.getLogger("openai").setLevel(logging.INFO)
+
+
+def hold_openai_logger() -> None:
+    """Keep the "openai" logger at INFO or above (a higher OPENAI_LOG level stays)."""
+    sdk = logging.getLogger("openai")
+    sdk.setLevel(max(sdk.level, logging.INFO))
+
+
+hold_openai_logger()
 
 
 def _require_https(request: httpx.Request) -> None:
