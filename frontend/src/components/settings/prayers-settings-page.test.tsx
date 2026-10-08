@@ -4,13 +4,14 @@
  * edit, remove and save prayers and the voice profile together. Rendered inside
  * the Settings layout, as the route is, with a Toaster.
  */
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { toast } from "sonner";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import SettingsLayout from "@/app/(signed-in)/(church)/settings/layout";
 import PrayersSettingsRoute from "@/app/(signed-in)/(church)/settings/prayers/page";
 import { DISCARD_TITLE } from "@/components/app/leave-guard";
+import { STILL_WORKING } from "@/components/settings/hymnals-card";
 import { Toaster } from "@/components/ui/sonner";
 import type { Church, PrayerLibrary, PrayerLibraryBody } from "@/lib/api/types";
 import { authEvents } from "@/lib/queries/auth-events";
@@ -23,6 +24,7 @@ import { renderWithProviders } from "@/test/render";
 import { positionAt, setViewport } from "@/test/viewport";
 
 import { ADMINS_ONLY, EMPTY_LIBRARY, PRAYERS_INTRO, REMOVE_TITLE } from "./prayers-settings-page";
+import { DRAFT_TITLE, NO_SAVED_PRAYERS, SAVE_FIRST, WRITE_IT_YOURSELF } from "./voice-profile-card";
 
 afterEach(() => {
   toast.dismiss();
@@ -300,5 +302,145 @@ describe("Settings → Prayers (slice 6a-3b)", () => {
   it("shows the error state with Retry when the library cannot be read", async () => {
     renderPage("admin", { "GET /church/prayer-library": fakeError(500, "internal_error", "Something went wrong.") });
     expect(await screen.findByRole("button", { name: "Retry" })).toBeInTheDocument();
+  });
+});
+
+describe("Settings → Prayers: the voice-profile draft (slice 6a-3b)", () => {
+  const DRAFT_ROUTE = "POST /church/prayer-library/voice-profile-draft";
+
+  function drafts(api: { requests: RecordedRequest[] }) {
+    return api.requests.filter((r) => r.method === "POST" && r.path === "/church/prayer-library/voice-profile-draft");
+  }
+
+  it("asks for a draft only from saved prayers: Save your prayers first, or add one first", async () => {
+    const { user } = renderPage("admin", { [DRAFT_ROUTE]: { draft: "x" } });
+    const update = await screen.findByRole("button", { name: "Update from my prayers" });
+    expect(update).toBeEnabled();
+    await user.type(screen.getByRole("textbox", { name: "Voice profile" }), " Amen."); // the profile alone: still allowed
+    expect(update).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Add a prayer" }));
+    expect(update).toBeDisabled();
+    expect(update).toHaveAccessibleDescription(SAVE_FIRST);
+    await chooseType(user, 3, "Other");
+    await user.type(screen.getByRole("textbox", { name: "Prayer 3" }), "Bless this meal.");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await screen.findByText(LIBRARY_SAVED);
+    await waitFor(() => expect(update).toBeEnabled());
+    expect(screen.queryByText(SAVE_FIRST)).toBeNull();
+  });
+
+  it("says to add and save a prayer first when none is saved, and shows a member no button", async () => {
+    const { unmount } = renderPage("admin", { "GET /church/prayer-library": prayerLibrary() });
+    const update = await screen.findByRole("button", { name: "Update from my prayers" });
+    expect(update).toBeDisabled();
+    expect(update).toHaveAccessibleDescription(NO_SAVED_PRAYERS);
+    unmount();
+    renderPage("member", { "GET /church/prayer-library": prayerLibrary([CONFESSION], { can_edit: false }) });
+    await screen.findByText(ADMINS_ONLY);
+    expect(screen.queryByRole("button", { name: "Update from my prayers" })).toBeNull();
+  });
+
+  it("shows the draft beside the profile as text, and Use this draft puts it in the box to save", async () => {
+    const answer = "Warm and <b>plain</b>.\nShort sentences.";
+    const { api, user } = renderPage("admin", { [DRAFT_ROUTE]: { draft: answer } });
+    await user.click(await screen.findByRole("button", { name: "Update from my prayers" }));
+    const title = await screen.findByRole("heading", { name: DRAFT_TITLE });
+    await waitFor(() => expect(title).toHaveFocus());
+    const panel = title.closest("section")!;
+    expect(panel).toHaveTextContent("Warm and <b>plain</b>. Short sentences.", { normalizeWhitespace: true });
+    expect(document.body).not.toHaveTextContent("\u2014"); // no em dash in anything the page shows
+    expect(panel.querySelector("b")).toBeNull(); // the AI's answer is text, never markup
+    expect(screen.getByRole("textbox", { name: "Voice profile" })).toHaveValue("Warm and plain."); // not replaced yet
+    expect(drafts(api)).toHaveLength(1);
+    await user.click(within(panel).getByRole("button", { name: "Use this draft" }));
+    const box = screen.getByRole("textbox", { name: "Voice profile" });
+    expect(box).toHaveValue(answer);
+    expect(box).toHaveFocus();
+    expect(screen.queryByRole("heading", { name: DRAFT_TITLE })).toBeNull();
+    await user.type(box, " Amen.");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await screen.findByText(LIBRARY_SAVED);
+    expect(puts(api)[0].body).toMatchObject({ voice_profile: `${answer} Amen.` });
+  });
+
+  it("Keep mine leaves the profile as it was and puts focus back on the button", async () => {
+    const { api, user } = renderPage("admin", { [DRAFT_ROUTE]: { draft: "A different voice." } });
+    const update = await screen.findByRole("button", { name: "Update from my prayers" });
+    await user.click(update);
+    const title = await screen.findByRole("heading", { name: DRAFT_TITLE });
+    await user.click(within(title.closest("section")!).getByRole("button", { name: "Keep mine" }));
+    expect(screen.queryByRole("heading", { name: DRAFT_TITLE })).toBeNull();
+    expect(screen.getByRole("textbox", { name: "Voice profile" })).toHaveValue("Warm and plain.");
+    expect(update).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    expect(puts(api)).toEqual([]);
+  });
+
+  it("keeps focus in a prayer being typed in when the draft arrives, and says the draft is there", async () => {
+    let answer: (response: unknown) => void = () => {};
+    const { user } = renderPage("admin", { [DRAFT_ROUTE]: () => new Promise((resolve) => (answer = resolve)) });
+    await user.click(await screen.findByRole("button", { name: "Edit prayer 1" }));
+    await user.click(screen.getByRole("button", { name: "Update from my prayers" }));
+    const box = screen.getByRole("textbox", { name: "Prayer 1" });
+    await user.type(box, " Amen.");
+    answer({ draft: "A warm, plain voice." });
+    const title = await screen.findByRole("heading", { name: DRAFT_TITLE });
+    expect(box).toHaveFocus();
+    expect(title).not.toHaveFocus();
+    const status = document.getElementById("voice-draft-status")!;
+    expect(status).toHaveAttribute("aria-live", "polite");
+    expect(status).toHaveTextContent(DRAFT_TITLE);
+    expect(document.body).not.toHaveTextContent("\u2014");
+  });
+
+  it("says it is still working after 8 s, and Cancel stops the wait with nothing shown", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const { user } = renderPage("admin", { [DRAFT_ROUTE]: () => new Promise(() => {}) });
+      const update = await screen.findByRole("button", { name: "Update from my prayers" });
+      await user.click(update);
+      expect(update).toHaveTextContent("Drafting…");
+      expect(screen.queryByText(STILL_WORKING)).toBeNull();
+      act(() => {
+        vi.advanceTimersByTime(8_000);
+      });
+      expect(await screen.findByText(STILL_WORKING)).toBeInTheDocument();
+      expect(document.body).not.toHaveTextContent("\u2014");
+      await user.click(screen.getByRole("button", { name: "Cancel" }));
+      await waitFor(() => expect(update).toHaveTextContent("Update from my prayers"));
+      expect(update).toHaveFocus();
+      expect(vi.mocked(fetch).mock.calls.at(-1)![1]!.signal!.aborted).toBe(true);
+      expect(screen.queryByText(STILL_WORKING)).toBeNull();
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(screen.queryByRole("heading", { name: DRAFT_TITLE })).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stops the wait when the page is left", async () => {
+    const { user, unmount } = renderPage("admin", { [DRAFT_ROUTE]: () => new Promise(() => {}) });
+    await user.click(await screen.findByRole("button", { name: "Update from my prayers" }));
+    const signal = vi.mocked(fetch).mock.calls.at(-1)![1]!.signal!;
+    expect(signal.aborted).toBe(false);
+    unmount();
+    expect(signal.aborted).toBe(true);
+  });
+
+  it("shows why a draft failed in the card, and toasts a role 403 instead", async () => {
+    const { api, user } = renderPage("admin", {
+      [DRAFT_ROUTE]: fakeError(503, "ai_not_configured", "AI isn't set up on this app yet."),
+    });
+    const update = await screen.findByRole("button", { name: "Update from my prayers" });
+    await user.click(update);
+    expect(await screen.findByRole("alert")).toHaveTextContent(`AI isn't set up on this app yet. ${WRITE_IT_YOURSELF}`);
+    api.set(DRAFT_ROUTE, fakeError(429, "rate_limited", "Too many requests. Try again in 15 seconds.", { details: { retry_after_seconds: 15 } }));
+    await user.click(update);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Too many requests. Try again in 15 seconds.");
+    api.set(DRAFT_ROUTE, fakeError(403, "forbidden", "Only church admins can do this."));
+    await user.click(update);
+    expect(await screen.findByText("Only church admins can do this.")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByRole("textbox", { name: "Voice profile" })).toHaveValue("Warm and plain.");
   });
 });

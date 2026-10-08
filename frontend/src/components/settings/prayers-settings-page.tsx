@@ -25,6 +25,7 @@ import {
   libraryErrors,
   libraryFieldErrors,
   libraryFormFrom,
+  listChanged,
   MAX_PRAYERS,
   namesLibraryField,
   newRow,
@@ -42,7 +43,7 @@ import { useAutosize } from "@/lib/use-autosize";
 import { useKeyboardOpen } from "@/lib/use-keyboard-open";
 import { cn } from "@/lib/utils";
 
-import { VoiceProfileCard } from "./voice-profile-card";
+import { NO_SAVED_PRAYERS, SAVE_FIRST, VoiceProfileCard } from "./voice-profile-card";
 
 export const PRAYERS_INTRO =
   "Your own prayers teach the AI how you pray. When it writes a prayer, it follows your voice profile and reads one of your prayers of the same kind, without reusing its lines. Everyone in your church can read this page.";
@@ -59,7 +60,8 @@ const NO_ERRORS: LibraryErrors = { rows: {} };
  * 6a)"; 6a spec UX §5): the church's own prayers, which teach the liturgy
  * writer the pastor's voice, and the voice profile drafted from them. Every
  * member reads them; owners and admins add, edit and remove prayers and edit
- * the profile, all saved together by the one **Save** (a full replace). 6a's
+ * the profile, all saved together by the one **Save** (a full replace), and
+ * ask the AI to draft the profile from the saved prayers. 6a's
  * rules for settings forms: newer server data rebases the form, and leaving
  * with unsaved edits asks first (`LeaveGuard`). Pastor text is React text only.
  */
@@ -114,6 +116,8 @@ function LibraryEditor({ out, admin }: { out: PrayerLibrary; admin: boolean }) {
   const dirty = admin && hasLibraryChanges(baseline, form);
   // A member (or an admin demoted meanwhile) reads what is stored, never an unsaved edit.
   const shown = admin ? form : libraryFormFrom(out);
+  // The draft reads the saved prayers, so it waits for a save of the list (an unsaved profile is fine).
+  const blocked = listChanged(baseline.rows, form.rows) ? SAVE_FIRST : out.prayers.length === 0 ? NO_SAVED_PRAYERS : null;
 
   // Newer server data (a refetch, or this page's own save in the cache): rebase (6a).
   if (out !== state.source) {
@@ -224,6 +228,7 @@ function LibraryEditor({ out, admin }: { out: PrayerLibrary; admin: boolean }) {
           if (errors.profile) setErrors((e) => ({ ...e, profile: undefined }));
         }}
         error={admin ? errors.profile : undefined}
+        blocked={blocked}
       />
       <section aria-labelledby="prayer-list-title" className="grid gap-3">
         <h3 id="prayer-list-title" className="text-base font-medium">
