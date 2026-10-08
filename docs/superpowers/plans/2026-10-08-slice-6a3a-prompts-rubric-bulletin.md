@@ -4234,7 +4234,7 @@ lint 0
 grep -nE "^(import|from) (fastapi|starlette|streamlit)" backend/usecases/church_admin.py; echo "imports grep exit $?"
 grep -rn "dangerouslySetInnerHTML" frontend/src --include=*.tsx; echo "raw html grep exit $?"
 git diff origin/main...HEAD -- backend frontend/src | grep '^+' | grep -c '—'
-python3 -c "import pathlib,sys; t=pathlib.Path('docs/superpowers/plans/2026-10-08-slice-6a3a-prompts-rubric-bulletin.md').read_text(); print(sum(t.count(c) for c in (' ',' ','￾','￿')))"
+python3 -c "import pathlib,sys; t=pathlib.Path('docs/superpowers/plans/2026-10-08-slice-6a3a-prompts-rubric-bulletin.md').read_text(); print(sum(t.count(c) for c in ('\u2028','\u2029','\ufffe','\uffff')))"
 git diff --name-status origin/main...HEAD | LC_ALL=C sort -k2
 git diff --name-only origin/main...HEAD -- backend/migrations backend/db .github frontend/package.json frontend/package-lock.json backend/requirements.txt requirements-dev.txt app.py streamlit_views streamlit_tests backend/liturgy_prompts.py backend/service_rubric.py | wc -l
 git log --reverse --no-merges --format=%s origin/main..HEAD
@@ -4561,7 +4561,7 @@ Your 6a-3 planning answers of 2026-10-07 (the six, all as recommended) and the e
 4. **The Save bar while typing on a phone** (clarifications 3, 6). The Save bar stays at the bottom of the screen, except while the phone keyboard is open: then it sits after the last card, so it never covers the text you are typing; you reach it by scrolling down. Recommended: accept.
 5. **Seven section links on a phone** (clarification 2). They wrap onto two or three rows at the top of Settings (eight after Prayers). Recommended: keep the wrapping row for now and check it in the phone test; a sideways-scrolling row can come later if it feels crowded.
 6. **The shared default prompts and checklists keep their own wording** (clarification 15). Some of the shared defaults (for example the overall voice prompt) contain dashes. They are the AI's instructions for every church, shown as they are; changing them changes what the AI is told. Recommended: leave them unchanged.
-7. **The wording** (clarification 15): every new line on the two pages and the one new button, as listed there, from the spec where it gives them (without dashes), plus "Section prompts", "Hymn preferences", "Add a point", "Back to the builder" and the two save messages for Reset all ("Prompts reset to defaults.", "Rubric reset to defaults."). Recommended: accept.
+7. **The wording** (clarification 15): every new line on the two pages is the spec's own (none has a dash), and so are the save messages. New beyond the spec are the button **Back to the builder** and three labels only a screen reader speaks: "Point {n} of {Label}", "Reset to default: Prefer hymns written before" and "Reset to default: Prefer familiar hymns". Recommended: accept.
 
 Owner steps still to come: the plan's approval; the draft PR on your yes and ready on your yes (T11); the merge on your yes, then five phone checks one at a time (every test change made on a card that is not customized and put back in the same step), and the records PR (T12).
 
