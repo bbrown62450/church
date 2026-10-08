@@ -25,7 +25,7 @@
 - Backend: one or more files `.venv/bin/python -m pytest -q <paths> 2>&1 | tail -1`; the suite `.venv/bin/python -m pytest -q | tail -1`. Frontend: one or more files `(cd frontend && npx vitest run <paths> 2>&1 | grep -E "^ +× |\[ src/|Tests ")` (a file that cannot load shows as `FAIL … [ src/… ]`; the `×` lines may come in another order than quoted, and Vitest's run time after a test name is left out here); the suite `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")`; then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`. A time in an expected output is written `<t>`.
 - The API changes (T3), so T3 regenerates the snapshot and the types in the same commit: `.venv/bin/python backend/scripts/export_openapi.py` then `(cd frontend && npm run gen:api)`. Never edit `openapi.json` or `schema.d.ts` by hand.
 - No new package, no new variable, no migration.
-- Branch `claude/slice-2-plan-4q33le`, at `21f5aee` plus this plan's commits (the `WIP plan: …` commits and `Plan: slice 6a-3b (Prayers in Settings: the prayer library and the AI voice-profile draft)`, and any later plan commit), then T1-T9. Stage files by name (paths with parentheses in single quotes); `.claude/` stays untracked.
+- Branch `claude/slice-2-plan-4q33le`, at `21f5aee` plus this plan's commits (the `WIP plan: …` commits and `Plan: slice 6a-3b (Prayers in Settings: the prayer library and the AI voice-profile draft)`, and any later plan commit), then T1-T9. Stage files by name (paths with parentheses in single quotes); nothing else under `.claude/` is staged.
 - `main` is protected (`backend`, `backend-postgres`, `frontend`, up to date). Merge only with `gh pr merge <N> --merge -R bbrown62450/church`, only on the owner's explicit yes.
 - Every commit message has a subject, a body and, as its last paragraph (a separate `-m`), these two lines:
   `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`
@@ -157,7 +157,7 @@ The owner's answers win over P, S and F; the code wins over all three where they
 | `docs/manual-verification.md` | the 6a-3b items | T9 |
 | `docs/ops-runbook.md` | "### Slice 6a-3b record" (the records PR, after the merge) | T11 |
 
-**Counts in the PR:** 26 paths: 12 added (this plan and the eleven new code and test files above) and 14 modified (the twelve code, test and API paths above, `docs/manual-verification.md`, and `docs/ops-runbook.md`, whose 6a-3a record rides along until merged; the runbook's own T11 change goes in the records PR). **Untouched:** migrations, `db/models.py`, `api/deps.py`, `api/ratelimit.py`, `integrations/openai_client.py`, `prayer_library.py`, `liturgy_prompts.py`, `liturgy_config.py`, `repos/churches.py`, `usecases/church_admin.py`, `usecases/members.py`, `usecases/liturgy.py`, `usecases/liturgy_review.py`, `domain_errors.py`, `lib/queries/keys.ts`, `lib/settings/profile.ts`, `components/app/leave-guard.tsx`, `app.py`, `streamlit_views`, `streamlit_tests`.
+**Counts in the PR:** 27 paths: 13 added (this plan, the eleven new code and test files above, and `.claude/skills/jank-deep/SKILL.md`, committed to the branch by another session) and 14 modified (the twelve code, test and API paths above, `docs/manual-verification.md`, and `docs/ops-runbook.md`, whose 6a-3a record rides along until merged; the runbook's own T11 change goes in the records PR). **Untouched:** migrations, `db/models.py`, `api/deps.py`, `api/ratelimit.py`, `integrations/openai_client.py`, `prayer_library.py`, `liturgy_prompts.py`, `liturgy_config.py`, `repos/churches.py`, `usecases/church_admin.py`, `usecases/members.py`, `usecases/liturgy.py`, `usecases/liturgy_review.py`, `domain_errors.py`, `lib/queries/keys.ts`, `lib/settings/profile.ts`, `components/app/leave-guard.tsx`, `app.py`, `streamlit_views`, `streamlit_tests`.
 
 **Task order and review batch:** T1 → T9, each one commit and a backup push; then one review of the whole batch with its fixes as `Fix: …` commits; T10 verifies and opens the draft PR on the owner's yes; T11 merges on the owner's yes, runs the phone check and writes the record.
 
@@ -3665,8 +3665,9 @@ git log --reverse --no-merges --format=%s origin/main..HEAD
 for c in $(git rev-list origin/main..HEAD); do git show -s --format=%B "$c" | grep -q '^Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>$' || echo "no trailer: $(git show -s --format='%h %s' "$c")"; done; echo "trailer check done"
 ```
 
-**Expected:** nothing from `git status` (the committed snapshot and types are current); `imports grep exit 1`; `raw html grep exit 1`; `1` (the usecase's only log call is the draft's INFO line of counts, `_log_draft`); `0` (no em dash in an added line of code or tests); `0` (no U+2028, U+2029, U+FFFE or U+FFFF in this plan); exactly these 26 paths (the 6a-3a record in the runbook rides along until merged):
+**Expected:** nothing from `git status` (the committed snapshot and types are current); `imports grep exit 1`; `raw html grep exit 1`; `1` (the usecase's only log call is the draft's INFO line of counts, `_log_draft`); `0` (no em dash in an added line of code or tests); `0` (no U+2028, U+2029, U+FFFE or U+FFFF in this plan); exactly these 27 paths (the 6a-3a record in the runbook and the `/jank-deep` skill committed to the branch by another session ride along until merged):
 ```
+A	.claude/skills/jank-deep/SKILL.md
 M	backend/api/main.py
 A	backend/api/routes/prayer_library.py
 A	backend/tests/test_api_prayer_library.py
@@ -3694,7 +3695,7 @@ A	frontend/src/lib/settings/prayers.test.ts
 A	frontend/src/lib/settings/prayers.ts
 M	frontend/src/test/fixtures/index.ts
 ```
-`0`; the subjects oldest first: `Runbook: slice 6a-3a record (merged; owner's phone check)`, the plan commits (the `WIP plan: …` lines and `Plan: slice 6a-3b (Prayers in Settings: the prayer library and the AI voice-profile draft)`) and any later plan commit, then T1-T9's nine subjects as written above, then any `Fix: …` lines; only `trailer check done`.
+`0`; the subjects oldest first: `Runbook: slice 6a-3a record (merged; owner's phone check)`, the plan commits and `Skill: /jank-deep, a report-only hunt for jank in a named part of the app` in the order they were made (the plan commits (the `WIP plan: …` lines and `Plan: slice 6a-3b (Prayers in Settings: the prayer library and the AI voice-profile draft)`) and any later plan commit), then T1-T9's nine subjects as written above, then any `Fix: …` lines; only `trailer check done`.
 
 - [ ] **Step 4 (agent → OWNER): Ask to open the draft PR**
 
@@ -3704,7 +3705,7 @@ gh pr list -R bbrown62450/church --head claude/slice-2-plan-4q33le --state open 
 
 **Expected:** `[]`. Send the owner exactly this, and wait for a clear yes:
 
-> The Prayers page (slice 6a-3b) is verified on this machine: backend 1977 passed, 35 skipped (1923 and 33 before); frontend 945 tests in 109 files (916 in 107 before), three runs in a row; typecheck, lint and the production build are clean. There is no database change and no new package. Settings gets **Prayers** between **Liturgy** and **Rubric**: your own prayers (pasted or typed, up to 30, each with its type) and the voice profile, saved together with one **Save**, and **Update from my prayers**, which asks the AI for a draft profile you can use or ignore (it is never saved unless you choose it and tap **Save**). Everyone in the church can read the page; you (and any admin) can change it. No test talks to OpenAI, and no prayer is ever written to the logs. The pull request also carries the 6a-3a record. May I open the pull request as a **draft** titled "Slice 6a-3b: Prayers in Settings (the prayer library and the AI voice-profile draft)", so the checks run? Merging stays with you.
+> The Prayers page (slice 6a-3b) is verified on this machine: backend 1977 passed, 35 skipped (1923 and 33 before); frontend 945 tests in 109 files (916 in 107 before), three runs in a row; typecheck, lint and the production build are clean. There is no database change and no new package. Settings gets **Prayers** between **Liturgy** and **Rubric**: your own prayers (pasted or typed, up to 30, each with its type) and the voice profile, saved together with one **Save**, and **Update from my prayers**, which asks the AI for a draft profile you can use or ignore (it is never saved unless you choose it and tap **Save**). Everyone in the church can read the page; you (and any admin) can change it. No test talks to OpenAI, and no prayer is ever written to the logs. The pull request also carries the 6a-3a record and the /jank-deep skill. May I open the pull request as a **draft** titled "Slice 6a-3b: Prayers in Settings (the prayer library and the AI voice-profile draft)", so the checks run? Merging stays with you.
 
 - [ ] **Step 5 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
 
@@ -3717,7 +3718,7 @@ Slice 6a-3b: Prayers in Settings, the prayer library and the AI voice-profile dr
 - GET and PUT /church/prayer-library (members read, owners and admins save) and POST /church/prayer-library/voice-profile-draft (admins, then one ai token; the draft not stored). Both admin routes pinned in test_route_guards.
 - Settings → Prayers: the voice profile with Update from my prayers (waits for saved prayers; Drafting…, Still working after 8 s, Cancel; the draft beside the profile as text with Use this draft and Keep mine), the prayer list (type, first line, Edit, Remove with a confirmation, Add a prayer up to 30) and one sticky Save; read-only for members. The Settings nav: Church, Hymns, Liturgy, Prayers, Rubric, Bulletin, Contacts, Account.
 - docs/manual-verification.md: the 6a-3b items under "Slice 6a".
-- Rides along: the 6a-3a record in docs/ops-runbook.md.
+- Rides along: the 6a-3a record in docs/ops-runbook.md and the /jank-deep project skill (.claude/skills/jank-deep/SKILL.md).
 
 Later: 6b (People).
 
@@ -3928,7 +3929,7 @@ Expected counts after this task: backend `1977 passed, 35 skipped` on `main`; fr
 - All 48 directives applied (T1 2 + 1, T2 2 + 5, T3 3 + 3, T4 3, T5 5 + 3, T6 1 + 3, T7 4 + 6, T8 4 + 2, T9 1); every **In … replace** anchor occurred exactly once; all nine commit blocks ran, each commit with the trailer; afterwards the replayed `backend`, `frontend/src` and `docs` trees were identical to the build worktree's.
 - Baselines before T1: backend `1923 passed, 33 skipped`; frontend `916 passed` in 107 files; typecheck 0, lint 0.
 - Every "see it fail" output and every count above is quoted from this replay (times as `<t>`, Vitest's per-test times left out), and a second replay of the finished plan matched every quoted block.
-- Every count matched the table: backend 1937, 1951, 1977 passed with 33 skipped, then 35 skipped from T4; frontend 925 in 108, 937 in 109, 944 in 109, 945 in 109; T6's and T7's three runs each passed every time, no flaky run; typecheck 0 and lint 0 after T3 and T5-T8. After T9, T10 Step 2's and Step 3's outputs (quoted there): `1977 passed, 35 skipped`, three runs of `945 passed` in 109 files, typecheck and lint 0, `✓ Compiled successfully` with `○ /settings/prayers`, the 26 paths, no em dash added, one log call, every commit with its trailer.
+- Every count matched the table: backend 1937, 1951, 1977 passed with 33 skipped, then 35 skipped from T4; frontend 925 in 108, 937 in 109, 944 in 109, 945 in 109; T6's and T7's three runs each passed every time, no flaky run; typecheck 0 and lint 0 after T3 and T5-T8. After T9, T10 Step 2's and Step 3's outputs (quoted there): `1977 passed, 35 skipped`, three runs of `945 passed` in 109 files, typecheck and lint 0, `✓ Compiled successfully` with `○ /settings/prayers`, the 26 paths (27 on the branch today, with the `/jank-deep` skill another session committed after the replay's base), no em dash added, one log call, every commit with its trailer.
 - Not run while planning: the pushes, the PR and CI, the merge, Railway's and Vercel's deploys, a real OpenAI call, and the owner's phone check (T11).
 
 ## Spec coverage
