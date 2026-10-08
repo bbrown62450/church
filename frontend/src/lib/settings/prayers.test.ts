@@ -57,6 +57,16 @@ describe("Settings → Prayers' form rules (slice 6a-3b)", () => {
     expect(rebaseLibrary(form, form, form).rows.map((r) => r.key)).toEqual(["saved-0", prayer(2).id, "saved-2"]);
   });
 
+  it("gives a repeated stored id its own row key, and never carries a key over by a repeated id", () => {
+    const copy = prayer(1, { text: "A copy." });
+    const form = libraryFormFrom(prayerLibrary([prayer(1), prayer(2), copy]));
+    expect(form.rows.map((r) => r.key)).toEqual([prayer(1).id, prayer(2).id, "saved-2"]);
+    expect(rebaseLibrary(form, form, form).rows.map((r) => r.key)).toEqual([prayer(1).id, prayer(2).id, "saved-2"]);
+    const open = [{ ...newRow("new-1"), id: prayer(1).id, type: "other" as const, text: "Bless." }];
+    const keys = rebaseLibrary({ rows: open, profile: "" }, { rows: open, profile: "" }, form).rows.map((r) => r.key);
+    expect(new Set(keys).size).toBe(3);
+  });
+
   it("starts at the saved library and sends it back whole: saved prayers with their ids, new ones without", () => {
     const form = libraryFormFrom(OUT);
     expect(form.rows.map((r) => [r.key, r.id, r.type])).toEqual([

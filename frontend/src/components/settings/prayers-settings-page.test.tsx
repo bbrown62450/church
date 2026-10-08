@@ -228,6 +228,21 @@ describe("Settings → Prayers (slice 6a-3b)", () => {
     expect(screen.getByRole("textbox", { name: "Voice profile" })).toHaveValue("Warm and plain. Amen.");
   });
 
+  it("keeps two stored prayers with the same id apart: Edit opens one, typing changes one", async () => {
+    const copy = prayer(1, { text: "A copy.\nOf the confession." });
+    const { user } = renderPage("admin", { "GET /church/prayer-library": prayerLibrary([CONFESSION, BENEDICTION, copy]) });
+    await user.click(await screen.findByRole("button", { name: "Edit prayer 1" }));
+    expect(screen.getByRole("button", { name: "Close prayer 1" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit prayer 3" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("textbox", { name: "Prayer 3" })).toBeNull();
+    await user.type(screen.getByRole("textbox", { name: "Prayer 1" }), " Amen.");
+    await user.click(screen.getByRole("button", { name: "Edit prayer 3" }));
+    expect(screen.getByRole("textbox", { name: "Prayer 1" })).toHaveValue(`${CONFESSION.text} Amen.`);
+    expect(screen.getByRole("textbox", { name: "Prayer 3" })).toHaveValue(copy.text);
+    const ids = Array.from(document.querySelectorAll("[id^='prayer-']"), (el) => el.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
   /** A page whose `PUT` is held open until `finish()`, then stored and answered as the fake server does. */
   function renderHeldSave() {
     const server = libraryServer();

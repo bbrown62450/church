@@ -75,13 +75,17 @@ export function newRow(key: string): PrayerRow {
 
 /**
  * The form a read starts at, and its baseline. A row's key is its prayer's id, or `saved-<i>` when the
- * id is empty (slice 4's reader reads a stored non-string id as ""), so no two rows share a key.
+ * id is empty (slice 4's reader reads a stored non-string id as "") or repeats an earlier row's (the
+ * server gives that row a fresh id on the next save), so no two rows share a key.
  */
 export function libraryFormFrom(out: PrayerLibrary): LibraryForm {
-  return {
-    rows: out.prayers.map((p, i) => ({ key: p.id || `saved-${i}`, id: p.id, type: p.type, text: p.text })),
-    profile: out.voice_profile,
-  };
+  const seen = new Set<string>();
+  const rows = out.prayers.map((p, i) => {
+    const key = p.id && !seen.has(p.id) ? p.id : `saved-${i}`;
+    seen.add(p.id);
+    return { key, id: p.id, type: p.type, text: p.text };
+  });
+  return { rows, profile: out.voice_profile };
 }
 
 /** `PUT`'s body: every row in order, cleaned, a saved one with its id; and the profile, cleaned. */
@@ -148,10 +152,25 @@ export function libraryFieldErrors(e: unknown, sentKeys: readonly string[]): Lib
   return hasErrors(errors) ? errors : null;
 }
 
-/** The newer rows, each saved prayer keeping the key `current` gives it, so an open row stays open. */
+/** The ids that appear on exactly one of these rows. */
+function uniqueIds(rows: readonly PrayerRow[]): Set<string> {
+  const counts = new Map<string, number>();
+  for (const row of rows) if (row.id) counts.set(row.id, (counts.get(row.id) ?? 0) + 1);
+  return new Set([...counts].filter(([, n]) => n === 1).map(([id]) => id));
+}
+
+/**
+ * The newer rows, each saved prayer keeping the key `current` gives it, so an open row stays open. Only
+ * an id found once on each side is matched (a repeated id names no one row); a row whose own key is
+ * already taken by a matched one gets `<key>-<i>`, so no two rows share a key.
+ */
 function keepKeys(next: readonly PrayerRow[], current: readonly PrayerRow[]): PrayerRow[] {
-  const keyOf = new Map(current.filter((row) => row.id).map((row) => [row.id, row.key]));
-  return next.map((row) => ({ ...row, key: (row.id && keyOf.get(row.id)) || row.key }));
+  const once = uniqueIds(next);
+  const onceNow = uniqueIds(current);
+  const keyOf = new Map(current.filter((row) => row.id && onceNow.has(row.id)).map((row) => [row.id, row.key]));
+  const matched = next.map((row) => (row.id && once.has(row.id) ? keyOf.get(row.id) : undefined));
+  const taken = new Set(matched.filter((key) => key !== undefined));
+  return next.map((row, i) => ({ ...row, key: matched[i] ?? (taken.has(row.key) ? `${row.key}-${i}` : row.key) }));
 }
 
 /**
