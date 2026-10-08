@@ -19,7 +19,10 @@ the URL or its query string.
 httpx logs every request's full URL, query string included, at INFO, and the
 API's root logger runs at INFO (api/logging_config.py). Importing this module
 sets the "httpx" and "httpcore" loggers to WARNING, so upstream URLs, dates
-and ESV queries never reach the logs (F §2.5; 2a clarification 32).
+and ESV queries never reach the logs (F §2.5; 2a clarification 32). It also
+holds the OpenAI SDK's "openai" logger at INFO: at DEBUG the SDK logs each
+request's options, the prompt included, and a prompt can hold the pastor's
+prayers (slice 6a-3b clarification 19), so even LOG_LEVEL=DEBUG keeps them out.
 
 Tests swap the client with set_http_for_tests(build_client(transport=...));
 set_http_for_tests(None) restores the default, and an autouse fixture in
@@ -38,6 +41,7 @@ DEFAULT_TIMEOUT = httpx.Timeout(10.0, connect=CONNECT_TIMEOUT)
 
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("openai").setLevel(logging.INFO)
 
 
 def _require_https(request: httpx.Request) -> None:

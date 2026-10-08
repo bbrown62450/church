@@ -106,6 +106,17 @@ def test_httpx_request_logs_silenced(caplog):
     assert leaked == []
 
 
+def test_the_openai_sdk_logs_at_info_or_above_when_the_root_is_debug(caplog):
+    """Slice 6a-3b: at DEBUG the OpenAI SDK logs each request's options, the
+    prompt (and so the pastor's prayers) included; its logger stays at INFO."""
+    caplog.set_level(logging.DEBUG)
+    assert logging.getLogger().level == logging.DEBUG
+    assert logging.getLogger("openai").level == logging.INFO
+    assert logging.getLogger("openai._base_client").getEffectiveLevel() >= logging.INFO
+    logging.getLogger("openai._base_client").debug("Request options: %s", "a private prayer")
+    assert [r for r in caplog.records if r.name.startswith("openai")] == []
+
+
 # --- slice 5b-2: post(), for Google's token, revoke and Gmail send endpoints ----------------------
 
 def test_post_sends_a_form_or_json_with_its_own_timeout_and_the_user_agent():
