@@ -83,6 +83,15 @@ def test_a_member_reads_the_library_and_may_not_change_it_or_draft(client, churc
     assert len(client.get(PATH, headers=church_headers(OWNER, church)).json()["prayers"]) == 1
 
 
+def test_a_save_over_http_never_logs_a_prayer_or_the_profile(client, church, caplog):
+    sentinel = "SENTINEL-PRAYER-WORDS"
+    caplog.set_level("DEBUG")
+    r = _put(client, church, [{"type": "benediction", "text": f"Go in peace. {sentinel} one."}], f"{sentinel} two.")
+    assert r.status_code == 200, r.text
+    assert client.get(PATH, headers=church_headers(MEMBER, church)).status_code == 200
+    assert all(sentinel not in r.getMessage() and sentinel not in str(r.args) for r in caplog.records)
+
+
 def test_an_admin_replaces_the_library_and_a_retried_save_keeps_one_copy(client, church):
     r = _put(client, church, [{"type": "benediction", "text": " Go in peace.\r\n"},
                               {"type": "other", "text": "Bless this meal."}], " Warm. ")

@@ -4,6 +4,7 @@ locked full-replace save with the role re-read, and (Task 2) the voice-profile
 draft. The church's prayers are the pastor's own words: no test here prints
 one, and the logging tests check that none is logged."""
 import datetime
+import logging
 import uuid
 
 import pytest
@@ -99,6 +100,16 @@ def test_a_known_id_keeps_its_added_at_and_an_unknown_or_repeated_id_is_new(worl
     assert out["prayers"][0]["text"] == BENEDICTION + " Amen."
     assert _save(world, [], "", now=LATER) == {"prayers": [], "voice_profile": "", "can_edit": True}
     assert _stored(world) == {"prayers": [], "voice_profile": ""}
+
+
+def test_a_save_never_logs_a_prayer_or_the_profile_at_any_level(world, caplog):
+    """LOG_LEVEL=DEBUG: every logger that inherits the root's level (this app's, the routes', the repos')
+    logs at DEBUG; none of them may carry a saved prayer or the profile."""
+    sentinel = "SENTINEL-PRAYER-WORDS"
+    caplog.set_level("DEBUG")
+    _save(world, [{"type": "benediction", "text": f"{BENEDICTION} {sentinel} one."}], f"Warm. {sentinel} two.")
+    _save(world, [{"type": "other", "text": f"{sentinel} three."}], f"{sentinel} four.")
+    assert all(sentinel not in r.getMessage() and sentinel not in str(r.args) for r in caplog.records)
 
 
 @pytest.mark.parametrize("prayers, profile, field, message", [
