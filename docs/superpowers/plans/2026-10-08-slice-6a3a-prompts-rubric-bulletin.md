@@ -303,7 +303,7 @@ def test_the_prompts_are_read_and_written_under_one_row_lock(world):
 Run: `.venv/bin/python -m pytest -q backend/tests/test_church_admin.py 2>&1 | tail -1`
 **Expected** (`church_admin` has no `get_prompts`, `save_prompts` or `prompt_label` yet; the 26 tests of 6a-1 pass):
 ```
-TBD
+11 failed, 26 passed in <t>s
 ```
 
 - [ ] **Step 3: Give the repo writes a session and write the usecases**
@@ -504,13 +504,13 @@ def save_prompts(church_id: uuid.UUID, actor_id: uuid.UUID, prompts: Mapping[str
 Run: `.venv/bin/python -m pytest -q backend/tests/test_church_admin.py backend/tests/test_church_settings.py backend/tests/test_churches_repo.py backend/tests/test_usecase_liturgy.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q streamlit_tests 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`
 **Expected:**
 ```
-TBD
+73 passed in <t>s
 ```
 ```
-TBD
+35 passed in <t>s
 ```
 ```
-TBD
+1896 passed, 31 skipped in <t>s
 ```
 
 - [ ] **Step 5: Commit**
@@ -648,7 +648,7 @@ def test_the_rubric_is_read_and_written_under_one_row_lock(world):
 Run: `.venv/bin/python -m pytest -q backend/tests/test_church_admin.py 2>&1 | tail -1`
 **Expected** (`church_admin` has no `get_rubric` or `update_rubric` yet):
 ```
-TBD
+16 failed, 37 passed in <t>s
 ```
 
 - [ ] **Step 3: Give `update_church_rubric` a session and write the usecases**
@@ -778,10 +778,10 @@ def update_rubric(church_id: uuid.UUID, actor_id: uuid.UUID, patch: object) -> d
 Run: `.venv/bin/python -m pytest -q backend/tests/test_church_admin.py backend/tests/test_church_settings.py backend/tests/test_churches_repo.py backend/tests/test_api_rubric.py backend/tests/test_api_hymns.py backend/tests/test_api_hymn_suggestions.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`
 **Expected** (the route still calls the repo directly until T3, so PR #4's API tests pass as they are):
 ```
-TBD
+114 passed, 1 skipped in <t>s
 ```
 ```
-TBD
+1912 passed, 31 skipped in <t>s
 ```
 
 - [ ] **Step 5: Commit**
@@ -999,7 +999,7 @@ def test_both_answers_carry_the_defaults_slice_6a3a(client, church):
 Run: `.venv/bin/python -m pytest -q backend/tests/test_api_liturgy_prompts.py backend/tests/test_api_rubric.py backend/tests/test_isolation.py 2>&1 | tail -1`
 **Expected** (no route answers `/church/liturgy-prompts` yet, and `/rubric`'s answers have no `defaults`):
 ```
-TBD
+14 failed, 7 passed in <t>s
 ```
 
 - [ ] **Step 3: Write the routes**
@@ -1154,16 +1154,17 @@ from api.routes import (bulletin_emails, bulletin_images, bulletin_settings, chu
 Run: `.venv/bin/python backend/scripts/export_openapi.py >/dev/null && (cd frontend && npm run gen:api >/dev/null 2>&1) && git diff --stat -- frontend/src/lib/api | tail -1` then `.venv/bin/python -m pytest -q backend/tests/test_api_liturgy_prompts.py backend/tests/test_api_rubric.py backend/tests/test_isolation.py backend/tests/test_openapi_contract.py backend/tests/test_route_guards.py backend/tests/test_no_streamlit_in_core.py backend/tests/test_error_registry.py 2>&1 | tail -1` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")` then `.venv/bin/python -m pytest -q | tail -1`
 **Expected** (the snapshot and the types gain the prompts' path and models and `RubricOut.defaults`; the contract test now matches the live schema; the route-guard allowlists do not change):
 ```
-TBD
+ 2 files changed, 508 insertions(+), 1 deletion(-)
 ```
 ```
-TBD
+34 passed in <t>s
 ```
 ```
-TBD
+typecheck 0
+lint 0
 ```
 ```
-TBD
+1922 passed, 31 skipped in <t>s
 ```
 
 - [ ] **Step 5: Commit**
@@ -1283,10 +1284,10 @@ def test_two_rubric_saves_at_once_keep_both_checklists(world, monkeypatch):
 Run: `.venv/bin/python -m pytest -q backend/tests/test_church_admin_postgres.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`
 **Expected** (no `TEST_DATABASE_URL`; on a throwaway Postgres they pass, and fail with the lock taken out: Build notes):
 ```
-TBD
+3 skipped in <t>s
 ```
 ```
-TBD
+1922 passed, 33 skipped in <t>s
 ```
 
 - [ ] **Step 3: Commit**
@@ -1485,7 +1486,8 @@ describe("Settings → Liturgy prompts' form rules (slice 6a-3a)", () => {
 Run: `(cd frontend && npx vitest run src/lib/settings/prompts.test.ts 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
 **Expected** (`lib/settings/prompts.ts` does not exist yet, so the file cannot load):
 ```
-TBD
+ FAIL  |unit| src/lib/settings/prompts.test.ts [ src/lib/settings/prompts.test.ts ]
+      Tests  no tests
 ```
 
 - [ ] **Step 3: Write the rules and the queries**
@@ -1648,13 +1650,15 @@ export function useSaveLiturgyPrompts() {
 Run: `(cd frontend && npx vitest run src/lib/settings/prompts.test.ts 2>&1 | grep -E "^ +× |\[ src/|Tests ")` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")`
 **Expected:**
 ```
-TBD
+      Tests  5 passed (5)
 ```
 ```
-TBD
+typecheck 0
+lint 0
 ```
 ```
-TBD
+ Test Files  104 passed (104)
+      Tests  879 passed (879)
 ```
 
 - [ ] **Step 5: Commit**
@@ -1917,7 +1921,7 @@ describe("Settings → Liturgy prompts (slice 6a-3a)", () => {
     off();
   });
 
-  it("asks before leaving with unsaved edits, through the Settings nav, and not without them", async () => {
+  it("asks before leaving with unsaved edits, through the Settings nav", async () => {
     const { user } = renderPage("admin");
     const contacts = await screen.findByRole("link", { name: "Contacts" });
     const benediction = await openCard(user, "Benediction");
@@ -1956,7 +1960,8 @@ describe("Settings → Liturgy prompts (slice 6a-3a)", () => {
 Run: `(cd frontend && npx vitest run src/components/settings/liturgy-prompts-page.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
 **Expected** (the route does not exist yet, so the file cannot load):
 ```
-TBD
+ FAIL  |dom| src/components/settings/liturgy-prompts-page.test.tsx [ src/components/settings/liturgy-prompts-page.test.tsx ]
+      Tests  no tests
 ```
 
 - [ ] **Step 3: Write the page and its route**
@@ -2315,13 +2320,17 @@ export default function LiturgySettingsRoute() {
 Run: `for i in 1 2 3; do (cd frontend && npx vitest run src/components/settings/liturgy-prompts-page.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests "); done` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")`
 **Expected** (no flaky run):
 ```
-TBD
+      Tests  11 passed (11)
+      Tests  11 passed (11)
+      Tests  11 passed (11)
 ```
 ```
-TBD
+typecheck 0
+lint 0
 ```
 ```
-TBD
+ Test Files  105 passed (105)
+      Tests  890 passed (890)
 ```
 
 - [ ] **Step 5: Commit**
@@ -2517,7 +2526,8 @@ describe("Settings → Rubric's form rules (slice 6a-3a)", () => {
 Run: `(cd frontend && npx vitest run src/lib/settings/rubric.test.ts 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
 **Expected** (`lib/settings/rubric.ts` does not exist yet):
 ```
-TBD
+ FAIL  |unit| src/lib/settings/rubric.test.ts [ src/lib/settings/rubric.test.ts ]
+      Tests  no tests
 ```
 
 - [ ] **Step 3: Write the rules and the queries**
@@ -2780,13 +2790,15 @@ export function useSaveRubric() {
 Run: `(cd frontend && npx vitest run src/lib/settings/rubric.test.ts 2>&1 | grep -E "^ +× |\[ src/|Tests ")` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")`
 **Expected:**
 ```
-TBD
+      Tests  6 passed (6)
 ```
 ```
-TBD
+typecheck 0
+lint 0
 ```
 ```
-TBD
+ Test Files  106 passed (106)
+      Tests  896 passed (896)
 ```
 
 - [ ] **Step 5: Commit**
@@ -3068,7 +3080,8 @@ describe("Settings → Rubric (slice 6a-3a)", () => {
 Run: `(cd frontend && npx vitest run src/components/settings/rubric-settings-page.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
 **Expected** (the route does not exist yet):
 ```
-TBD
+ FAIL  |dom| src/components/settings/rubric-settings-page.test.tsx [ src/components/settings/rubric-settings-page.test.tsx ]
+      Tests  no tests
 ```
 
 - [ ] **Step 3: Write the card, the page and its route**
@@ -3605,13 +3618,17 @@ export default function RubricSettingsRoute() {
 Run: `for i in 1 2 3; do (cd frontend && npx vitest run src/components/settings/rubric-settings-page.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests "); done` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")`
 **Expected** (no flaky run):
 ```
-TBD
+      Tests  11 passed (11)
+      Tests  11 passed (11)
+      Tests  11 passed (11)
 ```
 ```
-TBD
+typecheck 0
+lint 0
 ```
 ```
-TBD
+ Test Files  107 passed (107)
+      Tests  907 passed (907)
 ```
 
 - [ ] **Step 5: Commit**
@@ -3853,7 +3870,18 @@ import SettingsLayout from "@/app/(signed-in)/(church)/settings/layout";
 Run: `(cd frontend && npx vitest run src/components/settings/settings-layout.test.tsx src/components/bulletin-settings/bulletin-settings-page.test.tsx src/components/builder/review/review-send-step.test.tsx src/components/builder/bulletin/bulletin-step.test.tsx src/components/settings/church-settings-page.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
 **Expected** (the Bulletin settings tests import the new route, which does not exist yet, so that file cannot load; the nav still has five sections and the links the old address):
 ```
-TBD
+   × Settings → Church (slice 6a-1) > asks before leaving with unsaved edits, through the Settings nav
+   × the Settings area (slice 6a-1) > shows the heading, who you are in the church, and the sections with the current one marked
+   × the Settings area (slice 6a-1) > marks the section current on its page (slices 6a-2, 6a-3a, 5b-1, 5b-2): /settings/liturgy
+   × the Settings area (slice 6a-1) > marks the section current on its page (slices 6a-2, 6a-3a, 5b-1, 5b-2): /settings/rubric
+   × the Settings area (slice 6a-1) > marks the section current on its page (slices 6a-2, 6a-3a, 5b-1, 5b-2): /settings/bulletin
+   × the Settings area (slice 6a-1) > shows a member the same sections, and /settings opens Church
+   × the Settings area (slice 6a-1) > opens Settings → Bulletin from the old Bulletin settings address (slice 6a-3a)
+   × Review & send: the printed bulletin (printed bulletin PR 1) > lists the bulletin settings still blank and links to them (printed bulletin PR 2a)
+   × the Bulletin step (printed bulletin PR 2b) > shows the music, who leads, the announcements and the reading text, all optional, and stores what is typed
+ FAIL  |dom| src/components/bulletin-settings/bulletin-settings-page.test.tsx [ src/components/bulletin-settings/bulletin-settings-page.test.tsx ]
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 9 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  9 failed | 63 passed (72)
 ```
 
 - [ ] **Step 3: Write the nav, the new route, the forward and the links**
@@ -4039,16 +4067,18 @@ const BACK_HREF = "/builder";
 Run: `(cd frontend && npx vitest run src/components/settings/settings-layout.test.tsx src/components/bulletin-settings/bulletin-settings-page.test.tsx src/components/builder/review/review-send-step.test.tsx src/components/builder/bulletin/bulletin-step.test.tsx src/components/settings/church-settings-page.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")` then `grep -rn '"/bulletin-settings"' frontend/src --include=*.ts --include=*.tsx | grep -v 'settings-layout.test.tsx'; echo "old address grep exit $?"` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")`
 **Expected** (no link to the old address is left; only the layout test renders it, to check the forward):
 ```
-TBD
+      Tests  81 passed (81)
 ```
 ```
-TBD
+old address grep exit 1
 ```
 ```
-TBD
+typecheck 0
+lint 0
 ```
 ```
-TBD
+ Test Files  107 passed (107)
+      Tests  911 passed (911)
 ```
 
 - [ ] **Step 5: Commit**
@@ -4113,16 +4143,16 @@ page. Record what the page shows, never a church id or a prompt's wording.
 Run: `.venv/bin/python -m pytest -q backend/tests/test_slice1_docs.py backend/tests/test_docs.py backend/tests/test_ops_workflows.py 2>&1 | tail -1` then `grep -n '\[owner' docs/ops-runbook.md | grep -v 'An entry marked' | wc -l` then `git diff -U0 docs/manual-verification.md | grep '^+' | grep -c '—'` then `git diff --stat | tail -1`
 **Expected** (the docs tests pass, the owner markers are still 4, no em dash was added, one file changed):
 ```
-TBD
+89 passed in <t>s
 ```
 ```
-TBD
+4
 ```
 ```
-TBD
+0
 ```
 ```
-TBD
+ 1 file changed, 18 insertions(+)
 ```
 
 - [ ] **Step 3: Commit**
@@ -4170,16 +4200,31 @@ for i in 1 2 3; do (cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Te
 
 **Expected** (as in the replay: the suite; three runs of `Test Files  107 passed (107)` and `Tests  911 passed (911)` with no `×` or `FAIL` line, one naming a failing test: Step 6; typecheck and lint 0; the build with the three new Settings routes and no `Error`, a font `Failed to fetch` only: say so and rely on CI):
 ```
-TBD
+1922 passed, 33 skipped in <t>s
 ```
 ```
-TBD
+ Test Files  107 passed (107)
+      Tests  911 passed (911)
+ Test Files  107 passed (107)
+      Tests  911 passed (911)
+ Test Files  107 passed (107)
+      Tests  911 passed (911)
 ```
 ```
-TBD
+typecheck 0
+lint 0
 ```
 ```
-TBD
+✓ Compiled successfully in <t>s
+├ ○ /bulletin-settings
+├ ○ /settings
+├ ○ /settings/account
+├ ○ /settings/bulletin
+├ ○ /settings/church
+├ ○ /settings/contacts
+├ ○ /settings/hymns
+├ ○ /settings/liturgy
+├ ○ /settings/rubric
 ```
 
 - [ ] **Step 3 (agent): The API files match, the gates, the paths, the commits**
@@ -4198,7 +4243,49 @@ for c in $(git rev-list origin/main..HEAD); do git show -s --format=%B "$c" | gr
 
 **Expected:** nothing from `git status` (the committed snapshot and types are current); `imports grep exit 1`; `raw html grep exit 1`; `0` (no em dash in an added line of code or tests); `0` (no U+2028, U+2029, U+FFFE or U+FFFF in this plan); exactly these 43 paths (the 6a-2 record in the runbook and the 6a spec's later amendment ride along until merged):
 ```
-TBD
+M	backend/api/main.py
+A	backend/api/routes/church_prompts.py
+M	backend/api/routes/rubric.py
+M	backend/api/schemas.py
+M	backend/repos/churches.py
+A	backend/tests/test_api_liturgy_prompts.py
+M	backend/tests/test_api_rubric.py
+M	backend/tests/test_church_admin.py
+M	backend/tests/test_church_admin_postgres.py
+M	backend/tests/test_isolation.py
+M	backend/usecases/church_admin.py
+M	docs/manual-verification.md
+M	docs/ops-runbook.md
+A	docs/superpowers/plans/2026-10-08-slice-6a3a-prompts-rubric-bulletin.md
+M	docs/superpowers/specs/2026-09-25-slice-6a-settings-church-design.md
+M	frontend/src/app/(signed-in)/(church)/bulletin-settings/page.tsx
+A	frontend/src/app/(signed-in)/(church)/settings/bulletin/page.tsx
+A	frontend/src/app/(signed-in)/(church)/settings/liturgy/page.tsx
+A	frontend/src/app/(signed-in)/(church)/settings/rubric/page.tsx
+M	frontend/src/components/builder/bulletin/bulletin-step.test.tsx
+M	frontend/src/components/builder/bulletin/bulletin-step.tsx
+M	frontend/src/components/builder/review/printed-card.tsx
+M	frontend/src/components/builder/review/review-send-step.test.tsx
+M	frontend/src/components/bulletin-settings/bulletin-settings-page.test.tsx
+M	frontend/src/components/bulletin-settings/bulletin-settings-page.tsx
+A	frontend/src/components/settings/checklist-card.tsx
+M	frontend/src/components/settings/church-settings-page.test.tsx
+A	frontend/src/components/settings/liturgy-prompts-page.test.tsx
+A	frontend/src/components/settings/liturgy-prompts-page.tsx
+A	frontend/src/components/settings/rubric-settings-page.test.tsx
+A	frontend/src/components/settings/rubric-settings-page.tsx
+M	frontend/src/components/settings/sections.ts
+M	frontend/src/components/settings/settings-layout.test.tsx
+M	frontend/src/lib/api/openapi.json
+M	frontend/src/lib/api/schema.d.ts
+M	frontend/src/lib/api/types.ts
+A	frontend/src/lib/queries/liturgy-prompts.ts
+A	frontend/src/lib/queries/rubric.ts
+A	frontend/src/lib/settings/prompts.test.ts
+A	frontend/src/lib/settings/prompts.ts
+A	frontend/src/lib/settings/rubric.test.ts
+A	frontend/src/lib/settings/rubric.ts
+M	frontend/src/test/fixtures/index.ts
 ```
 `0`; the subjects oldest first: `Runbook: slice 6a-2 record (merged; owner's phone check)`, `Spec: slice 6a-3 planning answers (owner, 2026-10-08)`, the plan commits (`WIP plan: …` and `Plan: slice 6a-3a (Liturgy prompts, Rubric, Bulletin settings in Settings)`) and any later plan commit, then T1-T10's ten subjects as written above, then any `Fix: …` lines; only `trailer check done`.
 
@@ -4421,11 +4508,14 @@ Expected counts after this task: backend `1922 passed, 33 skipped` on `main`; fr
 - **A held request and a dialog.** With the "not closable while it runs" guard taken out, pressing Escape alone did not make the Rubric test fail, so T6 and T8 also tap **Cancel** while the request is held; the guard must ignore both.
 - **matchMedia in the tests.** One test widens the window with a `vi.spyOn(window, "matchMedia")`; it restores the spy itself, since a spy left in place opened every card in the tests after it.
 - **Mutation checks** (each change made by hand in the build worktree with every task applied, the named tests run, the change undone): `save_prompts` without `require_admin_role` → `1 failed, 61 passed` (`test_church_admin.py`, `test_api_liturgy_prompts.py`); `update_rubric` without it → `1 failed, 61 passed` (`test_church_admin.py`, `test_api_rubric.py`); `get_prompts` reading the stored values raw instead of through `clean_prompt_overrides` → `1 failed, 61 passed`; the prompts page without its `LeaveGuard` → `1 failed, 10 passed`; without the footer's `max-md:static` → `1 failed, 10 passed`; `isCustomized` ignoring the default → `5 failed, 11 passed` (`prompts.test.ts` and the page); `rubricPatch` never sending `null` → `2 failed, 15 passed` (`rubric.test.ts` and the page); the year's save not refreshing the hymn lists → `1 failed, 10 passed`; either Reset all confirmation closable while its request runs → `1 failed, 10 passed` on its page.
-- **The lock on Postgres.** On a throwaway local PG 16 cluster (initialised under `/var/lib/postgresql`, port 5442, never a real database, stopped and deleted afterwards; `TEST_DATABASE_URL=postgresql://postgres@localhost:5442/church_test`): `test_church_admin_postgres.py` `3 passed` (6a-1's test and T4's two). With `lock_church`'s `with_for_update=True` taken out, all three fail. TBD
+- **The lock on Postgres.** On a throwaway local PG 16 cluster (initialised under `/var/lib/postgresql`, port 5442, never a real database, stopped and deleted afterwards; `TEST_DATABASE_URL=postgresql://postgres@localhost:5442/church_test`): `test_church_admin_postgres.py` `3 passed` (6a-1's test and T4's two). With `lock_church`'s `with_for_update=True` taken out, all three fail. All Postgres-marked tests on that cluster, at the end of the replay below: `33 passed, 1922 deselected, 1 warning` (CI's `backend-postgres` job runs the same set).
 - **The production build** compiled with `○ /settings/liturgy`, `○ /settings/rubric` and `○ /settings/bulletin` beside the other Settings routes, and `○ /bulletin-settings` (the forward).
 
 **Replay of the finished plan (2026-10-08).** The directives of T1-T10 were applied in order by a replay script that parses each step's **Create**, **Replace**, **Append** and **In … replace** blocks and its `bash` blocks (each commit), and runs every command on its "Run:" lines and compares the output with the quoted **Expected** blocks, onto a fresh detached worktree of the branch at `6fddb8c` (outside the repo directory and removed afterwards), with the repo's `.venv` (a symlink) and a hard-linked copy of `frontend/node_modules`:
-TBD
+- All 73 directives applied (T1 2 + 9, T2 2 + 5, T3 5 + 5, T4 2, T5 4 + 2, T6 1 + 2, T7 3 + 2, T8 1 + 3, T9 14 + 10, T10 1); every **In … replace** anchor occurred exactly once; all ten commit blocks ran, each commit with the trailer; afterwards the replayed `backend`, `frontend/src` and `docs` trees were identical to the build worktree's, and `git status` was clean.
+- Baselines before T1: backend `1885 passed, 31 skipped`; frontend `874 passed` in 103 files; typecheck 0, lint 0.
+- Every "see it fail" output and every count above is quoted from this replay (times as `<t>`, Vitest's per-test times left out), and every quoted block matched what the replay printed.
+- Every count matched the table: backend 1896, 1912, 1922 passed with 31 skipped, then 33 skipped from T4; frontend 879 in 104, 890 in 105, 896 in 106, 907 in 107, 911 in 107; T1 Step 4 `73 passed` and `streamlit_tests` `35 passed`; T2 Step 4 `114 passed, 1 skipped`; T3 Step 4 ` 2 files changed, 508 insertions(+), 1 deletion(-)` and `34 passed`; T6's and T8's three runs `11 passed` each time, no flaky run; T9 `9 failed | 63 passed (72)` with the Bulletin settings file not loading, then `81 passed`; typecheck 0 and lint 0 after T3 and T5-T9; T10 `89 passed`, `4`, `0`, ` 1 file changed, 18 insertions(+)`. After T10, T11 Step 2's and Step 3's outputs (quoted there): `1922 passed, 33 skipped`, three runs of `911 passed` in 107 files, typecheck and lint 0, `✓ Compiled successfully` with `○ /settings/liturgy`, `○ /settings/rubric`, `○ /settings/bulletin` and `○ /bulletin-settings`, and the 43 paths; the Postgres runs above.
 - Not run while planning: the pushes, the PR and CI, the merge, Railway's and Vercel's deploys and the owner's phone check (T12).
 
 ## Spec coverage
