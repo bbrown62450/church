@@ -2781,6 +2781,134 @@
         "title": "PlacementOut",
         "type": "object"
       },
+      "PrayerIn": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "a saved prayer's id; left out for a new prayer",
+            "title": "Id"
+          },
+          "text": {
+            "maxLength": 20000,
+            "title": "Text",
+            "type": "string"
+          },
+          "type": {
+            "description": "a section key or \"other\" (\"Choose a prayer type.\" otherwise)",
+            "maxLength": 40,
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "text"
+        ],
+        "title": "PrayerIn",
+        "type": "object"
+      },
+      "PrayerLibraryIn": {
+        "additionalProperties": false,
+        "description": "The whole library: a prayer left out is removed.",
+        "properties": {
+          "prayers": {
+            "items": {
+              "$ref": "#/components/schemas/PrayerIn"
+            },
+            "maxItems": 100,
+            "title": "Prayers",
+            "type": "array"
+          },
+          "voice_profile": {
+            "maxLength": 20000,
+            "title": "Voice Profile",
+            "type": "string"
+          }
+        },
+        "required": [
+          "prayers",
+          "voice_profile"
+        ],
+        "title": "PrayerLibraryIn",
+        "type": "object"
+      },
+      "PrayerLibraryOut": {
+        "properties": {
+          "can_edit": {
+            "description": "the caller is an owner or admin",
+            "title": "Can Edit",
+            "type": "boolean"
+          },
+          "prayers": {
+            "description": "in the order they were saved",
+            "items": {
+              "$ref": "#/components/schemas/PrayerOut"
+            },
+            "title": "Prayers",
+            "type": "array"
+          },
+          "voice_profile": {
+            "title": "Voice Profile",
+            "type": "string"
+          }
+        },
+        "required": [
+          "prayers",
+          "voice_profile",
+          "can_edit"
+        ],
+        "title": "PrayerLibraryOut",
+        "type": "object"
+      },
+      "PrayerOut": {
+        "properties": {
+          "added_at": {
+            "description": "when it was first saved, e.g. \"2026-10-08T16:00:00Z\"",
+            "title": "Added At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "call_to_worship",
+              "opening_prayer",
+              "prayer_of_confession",
+              "assurance",
+              "prayer_for_illumination",
+              "prayers_of_the_people",
+              "offertory_prayer",
+              "benediction",
+              "other"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "text",
+          "added_at"
+        ],
+        "title": "PrayerOut",
+        "type": "object"
+      },
       "PreviousBulletinOut": {
         "description": "GET /services/previous-bulletin (PR 2b, carry forward): the music and the\nannouncements of the church's latest service dated before the date (the\npeople, part leaders and pasted texts empty), or nulls and an empty\nbulletin when there is none.",
         "properties": {
@@ -4197,6 +4325,20 @@
         ],
         "title": "UserOut",
         "type": "object"
+      },
+      "VoiceProfileDraftOut": {
+        "properties": {
+          "draft": {
+            "description": "at most 2,000 characters; not stored",
+            "title": "Draft",
+            "type": "string"
+          }
+        },
+        "required": [
+          "draft"
+        ],
+        "title": "VoiceProfileDraftOut",
+        "type": "object"
       }
     }
   },
@@ -5195,6 +5337,321 @@
           }
         },
         "summary": "Save Prompts"
+      }
+    },
+    "/church/prayer-library": {
+      "get": {
+        "operationId": "read_library_church_prayer_library_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-church-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Church-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrayerLibraryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Read Library"
+      },
+      "put": {
+        "operationId": "save_library_church_prayer_library_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-church-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Church-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrayerLibraryIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrayerLibraryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Save Library"
+      }
+    },
+    "/church/prayer-library/voice-profile-draft": {
+      "post": {
+        "description": "A voice profile drafted from the church's saved prayers, for the admin\nto review before it replaces anything. Charged 1 `ai` token per request\n(40 per 10 min per user, 400 per day per church; F \u00a71.8), a 422 included.",
+        "operationId": "draft_voice_profile_church_prayer_library_voice_profile_draft_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-church-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Church-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceProfileDraftOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Gateway Timeout"
+          }
+        },
+        "summary": "Draft Voice Profile"
       }
     },
     "/churches": {

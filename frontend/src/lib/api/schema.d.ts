@@ -114,6 +114,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/church/prayer-library": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Library */
+        get: operations["read_library_church_prayer_library_get"];
+        /** Save Library */
+        put: operations["save_library_church_prayer_library_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/church/prayer-library/voice-profile-draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Draft Voice Profile
+         * @description A voice profile drafted from the church's saved prayers, for the admin
+         *     to review before it replaces anything. Charged 1 `ai` token per request
+         *     (40 per 10 min per user, 400 per day per church; F §1.8), a 422 included.
+         */
+        post: operations["draft_voice_profile_church_prayer_library_voice_profile_draft_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/churches": {
         parameters: {
             query?: never;
@@ -1655,6 +1695,63 @@ export interface components {
             /** Label */
             label: string;
         };
+        /** PrayerIn */
+        PrayerIn: {
+            /**
+             * Id
+             * @description a saved prayer's id; left out for a new prayer
+             */
+            id?: string | null;
+            /** Text */
+            text: string;
+            /**
+             * Type
+             * @description a section key or "other" ("Choose a prayer type." otherwise)
+             */
+            type: string;
+        };
+        /**
+         * PrayerLibraryIn
+         * @description The whole library: a prayer left out is removed.
+         */
+        PrayerLibraryIn: {
+            /** Prayers */
+            prayers: components["schemas"]["PrayerIn"][];
+            /** Voice Profile */
+            voice_profile: string;
+        };
+        /** PrayerLibraryOut */
+        PrayerLibraryOut: {
+            /**
+             * Can Edit
+             * @description the caller is an owner or admin
+             */
+            can_edit: boolean;
+            /**
+             * Prayers
+             * @description in the order they were saved
+             */
+            prayers: components["schemas"]["PrayerOut"][];
+            /** Voice Profile */
+            voice_profile: string;
+        };
+        /** PrayerOut */
+        PrayerOut: {
+            /**
+             * Added At
+             * @description when it was first saved, e.g. "2026-10-08T16:00:00Z"
+             */
+            added_at: string;
+            /** Id */
+            id: string;
+            /** Text */
+            text: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "call_to_worship" | "opening_prayer" | "prayer_of_confession" | "assurance" | "prayer_for_illumination" | "prayers_of_the_people" | "offertory_prayer" | "benediction" | "other";
+        };
         /**
          * PreviousBulletinOut
          * @description GET /services/previous-bulletin (PR 2b, carry forward): the music and the
@@ -2147,6 +2244,14 @@ export interface components {
             name?: string | null;
             /** Picture */
             picture?: string | null;
+        };
+        /** VoiceProfileDraftOut */
+        VoiceProfileDraftOut: {
+            /**
+             * Draft
+             * @description at most 2,000 characters; not stored
+             */
+            draft: string;
         };
     };
     responses: never;
@@ -2773,6 +2878,214 @@ export interface operations {
             };
             /** @description Service Unavailable */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    read_library_church_prayer_library_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-church-id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrayerLibraryOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    save_library_church_prayer_library_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-church-id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PrayerLibraryIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrayerLibraryOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    draft_voice_profile_church_prayer_library_voice_profile_draft_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-church-id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VoiceProfileDraftOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Gateway Timeout */
+            504: {
                 headers: {
                     [name: string]: unknown;
                 };
