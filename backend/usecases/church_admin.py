@@ -1,7 +1,7 @@
 """Church administration (6a spec, `usecases/church_admin.py`): the writes an
 owner or admin makes to the church itself. Slice 6a-1 has the profile
-(PATCH /church); 6a-3a the liturgy prompts (and their read); 6a-3b and 6b
-add their writes here.
+(PATCH /church); 6a-3a the liturgy prompts and the rubric (and their
+reads); 6a-3b and 6b add their writes here.
 
 Every write opens one session, starts with
 usecases.members.lock_and_read_actor (the church-row lock and the caller's
@@ -15,6 +15,7 @@ from collections.abc import Collection, Mapping
 
 import liturgy_prompts
 import scripture_fetcher
+import service_rubric
 from db import session_scope
 from bulletin_settings import NOT_ONE_LINE
 from domain_errors import Forbidden, InvalidInput
@@ -163,3 +164,41 @@ def save_prompts(church_id: uuid.UUID, actor_id: uuid.UUID, prompts: Mapping[str
                                    field=f"prompts.{key}")
         churches.set_church_prompts(church_id, cleaned, session=s)
     return get_prompts(church_id, can_edit=True)
+
+
+# --- The service rubric: GET and PATCH /rubric (slice 6a-3a; 6a spec UX §6, Semantics → PATCH /rubric) -------
+
+
+def rubric_out(overrides: object) -> dict:
+    """GET and PATCH /rubric's answer (PR #4's, plus 6a's additive `defaults`):
+    the merged rubric, the dotted names of the church's valid overrides, and
+    the full default rubric, so the page can offer "Reset to default" and send
+    null for an item put back to its default."""
+    return {"rubric": service_rubric.merge_rubric(overrides),
+            "customized": service_rubric.customized_keys(overrides),
+            "defaults": service_rubric.default_rubric()}
+
+
+def get_rubric(church_id: uuid.UUID) -> dict:
+    """GET /rubric (any member)."""
+    return rubric_out(churches.get_church_rubric_overrides(church_id))
+
+
+def update_rubric(church_id: uuid.UUID, actor_id: uuid.UUID, patch: object) -> dict:
+    """PATCH /rubric (6a spec, Semantics): one session that takes the
+    church-row lock and re-reads the caller's role (lock_and_read_actor, then
+    require_admin_role), then repos.churches.update_church_rubric in that
+    session: service_rubric.validate_patch (a ValueError is a 422
+    invalid_rubric with its message and no field, PR #4's body, and nothing
+    is written), the stored overrides read from the locked row (a non-dict as
+    {}), apply_patch (null removes an override) and the write. Returns
+    rubric_out of what is stored."""
+    with session_scope() as s:
+        role = lock_and_read_actor(s, church_id, actor_id)
+        require_admin_role(role)
+        try:
+            churches.update_church_rubric(church_id, patch, session=s)
+        except ValueError as exc:
+            raise InvalidInput(str(exc), code="invalid_rubric") from None
+        overrides = churches.get_church_rubric_overrides(church_id, session=s)
+    return rubric_out(overrides)

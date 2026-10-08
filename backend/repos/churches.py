@@ -222,22 +222,30 @@ def get_church_rubric(church_id) -> dict:
     return merge_rubric(get_church_rubric_overrides(church_id))
 
 
-def update_church_rubric(church_id, patch: dict) -> dict:
+def update_church_rubric(church_id, patch: dict, *, session: Optional[Session] = None) -> dict:
     """Validate and apply a sparse rubric patch (None resets that checklist or
     setting to its default). Raises ValueError, storing nothing, on invalid
     input. Returns the merged rubric.
 
     The stored overrides are read from the row this transaction locks and then
     rewrites, so two admins patching at once cannot drop each other's change.
+    Runs in the caller's `session` (usecases.church_admin.update_rubric, which
+    holds the lock already, slice 6a-3a) or in its own scope.
     """
     cleaned = validate_patch(patch)
-    with session_scope() as session:
-        church = lock_church(session, church_id)
-        settings = dict(church.settings or {}) if church is not None else {}
-        stored = settings.get("rubric")
-        overrides = apply_patch(stored if isinstance(stored, dict) else {}, cleaned)
-        if church is not None:
-            church.settings = {**settings, "rubric": overrides}
+    if session is not None:
+        return _update_church_rubric(session, church_id, cleaned)
+    with session_scope() as own:
+        return _update_church_rubric(own, church_id, cleaned)
+
+
+def _update_church_rubric(session, church_id, cleaned: dict) -> dict:
+    church = lock_church(session, church_id)
+    settings = dict(church.settings or {}) if church is not None else {}
+    stored = settings.get("rubric")
+    overrides = apply_patch(stored if isinstance(stored, dict) else {}, cleaned)
+    if church is not None:
+        church.settings = {**settings, "rubric": overrides}
     return merge_rubric(overrides)
 
 
