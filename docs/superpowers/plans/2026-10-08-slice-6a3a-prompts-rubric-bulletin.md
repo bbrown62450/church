@@ -3680,9 +3680,9 @@ export default function RubricSettingsRoute() {
 Run: `for i in 1 2 3; do (cd frontend && npx vitest run src/components/settings/rubric-settings-page.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests "); done` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")`
 **Expected** (no flaky run):
 ```
-      Tests  11 passed (11)
-      Tests  11 passed (11)
-      Tests  11 passed (11)
+      Tests  13 passed (13)
+      Tests  13 passed (13)
+      Tests  13 passed (13)
 ```
 ```
 typecheck 0
@@ -3690,7 +3690,7 @@ lint 0
 ```
 ```
  Test Files  107 passed (107)
-      Tests  907 passed (907)
+      Tests  909 passed (909)
 ```
 
 - [ ] **Step 5: Commit**
@@ -4180,7 +4180,7 @@ lint 0
 ```
 ```
  Test Files  107 passed (107)
-      Tests  911 passed (911)
+      Tests  913 passed (913)
 ```
 
 - [ ] **Step 5: Commit**
@@ -4255,7 +4255,7 @@ Run: `.venv/bin/python -m pytest -q backend/tests/test_slice1_docs.py backend/te
 0
 ```
 ```
- 1 file changed, 18 insertions(+)
+ 1 file changed, 19 insertions(+)
 ```
 
 - [ ] **Step 3: Commit**
@@ -4307,11 +4307,11 @@ for i in 1 2 3; do (cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Te
 ```
 ```
  Test Files  107 passed (107)
-      Tests  911 passed (911)
+      Tests  913 passed (913)
  Test Files  107 passed (107)
-      Tests  911 passed (911)
+      Tests  913 passed (913)
  Test Files  107 passed (107)
-      Tests  911 passed (911)
+      Tests  913 passed (913)
 ```
 ```
 typecheck 0
@@ -4621,7 +4621,7 @@ Expected counts after this task: backend `1922 passed, 33 skipped` on `main`; fr
 - All 76 directives applied (T1 2 + 9, T2 2 + 5, T3 5 + 5, T4 2, T5 4 + 2, T6 1 + 2, T7 3 + 2, T8 1 + 3, T9 15 + 12, T10 1); every **In … replace** anchor occurred exactly once; all ten commit blocks ran, each commit with the trailer; afterwards the replayed `backend`, `frontend/src` and `docs` trees were identical to the build worktree's, and `git status` was clean.
 - Baselines before T1: backend `1885 passed, 31 skipped`; frontend `874 passed` in 103 files; typecheck 0, lint 0.
 - Every "see it fail" output and every count above is quoted from this replay (times as `<t>`, Vitest's per-test times left out), and every quoted block matched what the replay printed.
-- Every count matched the table: backend 1896, 1912, 1922 passed with 31 skipped, then 33 skipped from T4; frontend 879 in 104, 890 in 105, 896 in 106, 909 in 107, 913 in 107; T1 Step 4 `73 passed` and `streamlit_tests` `35 passed`; T2 Step 4 `114 passed, 1 skipped`; T3 Step 4 ` 2 files changed, 508 insertions(+), 1 deletion(-)` and `34 passed`; T6's three runs `11 passed` and T8's `13 passed` each time, no flaky run; T9 `TBD` with the Bulletin settings file not loading, then `81 passed`; typecheck 0 and lint 0 after T3 and T5-T9; T10 `89 passed`, `4`, `0`, `TBD`. After T10, T11 Step 2's and Step 3's outputs (quoted there): `1922 passed, 33 skipped`, three runs of `913 passed` in 107 files, typecheck and lint 0, `✓ Compiled successfully` with `○ /settings/liturgy`, `○ /settings/rubric`, `○ /settings/bulletin` and `○ /bulletin-settings`, and the 43 paths; the Postgres runs above.
+- Every count matched the table: backend 1896, 1912, 1922 passed with 31 skipped, then 33 skipped from T4; frontend 879 in 104, 890 in 105, 896 in 106, 909 in 107, 913 in 107; T1 Step 4 `73 passed` and `streamlit_tests` `35 passed`; T2 Step 4 `114 passed, 1 skipped`; T3 Step 4 ` 2 files changed, 508 insertions(+), 1 deletion(-)` and `34 passed`; T6's three runs `11 passed` and T8's `13 passed` each time, no flaky run; T9 `9 failed | 63 passed (72)` (as before the fixes) with the Bulletin settings file not loading, then `81 passed`; typecheck 0 and lint 0 after T3 and T5-T9; T10 `89 passed`, `4`, `0`, ` 1 file changed, 19 insertions(+)`. After T10, T11 Step 2's and Step 3's outputs (quoted there): `1922 passed, 33 skipped`, three runs of `913 passed` in 107 files, typecheck and lint 0, `✓ Compiled successfully` with `○ /settings/liturgy`, `○ /settings/rubric`, `○ /settings/bulletin` and `○ /bulletin-settings`, and the 43 paths; the Postgres runs above.
 - Not run while planning: the pushes, the PR and CI, the merge, Railway's and Vercel's deploys and the owner's phone check (T12).
 
 ## Spec coverage
