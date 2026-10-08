@@ -429,6 +429,24 @@ defaults** is never tapped on the church's own page. Record what the page shows,
 - [ ] **22.** In a test church, as an admin: save a Benediction prompt and generate the Benediction in the builder: the text follows it; set "Prefer hymns written before" to 1900: the builder's picker labels hymns written in or after 1900 as newer with no reload; then **Reset all to defaults** on both pages.
 - [ ] **23.** Signed in, open the old address `/bulletin-settings` on the production URL: it opens **Settings** → **Bulletin**.
 
+**6a-3b (Prayers).** After the 6a-3b merge the owner's guided check covers
+the items marked "(owner, after 6a-3b)", one step at a time on the phone; the
+results go into `docs/ops-runbook.md` → "Slice 6a-3b record". The prayers are
+the pastor's own words: a prayer is added to keep only when the owner says
+so; a test prayer ("Test prayer. Amen.", type Other) is removed, and the
+library saved again, in the same step that adds it; a draft voice profile
+replaces the church's profile only when the owner taps **Use this draft** and
+**Save** because they want to keep it. Record counts and what the page shows,
+never a prayer's or the profile's wording, a church id or an email address.
+
+- [ ] (owner, after 6a-3b) **24.** **Settings** lists **Church**, **Hymns**, **Liturgy**, **Prayers**, **Rubric**, **Bulletin**, **Contacts** and **Account**. **Prayers** shows "Prayer library", the **Voice profile** box with **Update from my prayers**, and under **Prayers** either the church's prayers (each with its type, its first line, **Edit** and **Remove**) or "No prayers yet. Paste in a few of your own prayers so the writer can learn your voice."; note how many prayers there are and whether the profile box has text.
+- [ ] (owner, after 6a-3b) **25.** **Add a prayer**, choose a type and paste a prayer (one of the owner's own to keep, or the test prayer **Test prayer. Amen.** as **Other**); **Save**: "Prayer library saved.", and the new row shows its first line. A test prayer: **Remove**, "Remove this prayer?", **Remove prayer**, **Save**: "Prayer library saved." and the list is as it was.
+- [ ] (owner, after 6a-3b) **26.** With at least one prayer saved: **Add a prayer** (unsaved): **Update from my prayers** greys out with "Save your prayers first."; remove that empty row (it asks first) and the button comes back. **Update from my prayers**: "Drafting…" (and "Still working. This can take up to a minute." after 8 s), then "Draft from your prayers" beside the profile (below it on a phone) with **Use this draft** and **Keep mine**. **Keep mine** leaves the profile as it was; only if the owner wants the draft: **Use this draft**, edit it if wished, **Save**.
+- [ ] (owner, after 6a-3b) **27.** At 375 px: no sideways scroll on **Prayers**; the eight section links, a row's type, **Edit** and **Remove**, and the buttons are easy to tap. With a prayer open and the iPhone keyboard up, the box being typed in is not covered and **Save** can be reached by scrolling down.
+- [ ] **28.** Signed in as a plain member of the same church: **Prayers** shows "Only admins can edit the prayer library. You can read it below.", the profile and every prayer in full as text, and no buttons.
+- [ ] **29.** In a test church, as an admin: save three prayers of mixed types (one a Prayer of Confession) and a voice profile, then generate the Prayer of Confession in the builder with no reload: it follows the profile and does not repeat the saved prayer's lines (6a spec, manual check 12).
+- [ ] **30.** In the same test church: with prayers unsaved, tap **Builder**: "Discard unsaved changes?" asks first. Then empty the library (remove every prayer, clear the profile, **Save**).
+
 ## Slice 5b
 
 Run on the production URL https://worship-service-builder.vercel.app, on an
