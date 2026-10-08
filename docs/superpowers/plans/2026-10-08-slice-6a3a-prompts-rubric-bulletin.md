@@ -4669,6 +4669,8 @@ Your 6a-3 planning answers of 2026-10-07 (the six, all as recommended) and the e
 6. **The shared default prompts and checklists keep their own wording** (clarification 15). Some of the shared defaults (for example the overall voice prompt) contain dashes. They are the AI's instructions for every church, shown as they are; changing them changes what the AI is told. Recommended: leave them unchanged.
 7. **The wording** (clarification 15): every new line on the two pages is the spec's own (none has a dash), and so are the save messages. New beyond the spec are the button **Back to the builder** and three labels only a screen reader speaks: "Point {n} of {Label}", "Reset to default: Prefer hymns written before" and "Reset to default: Prefer familiar hymns". Recommended: accept.
 
+Owner's answer 2026-10-08: all recommended (binding).
+
 Owner steps still to come: the plan's approval; the draft PR on your yes and ready on your yes (T11); the merge on your yes, then five phone checks one at a time (every test change made on a card that is not customized and put back in the same step), and the records PR (T12).
 
 ## Plan review fixes (2026-10-08)
