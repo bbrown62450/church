@@ -22,9 +22,11 @@ import type {
   InvitePreview,
   Lectionary,
   LiturgyConfig,
+  LiturgyPrompts,
   LiturgySection,
   OutlineItem,
   PreviousBulletin,
+  PromptKey,
   ReviewBody,
   ReviewNote,
   ReviewResult,
@@ -691,4 +693,39 @@ export function hymnalSources(items: HymnalSource[] = [
   hymnalSource(),
 ]): HymnalSources {
   return { items };
+}
+
+// --- slice 6a-3a: Settings → Liturgy prompts and Rubric ------------------------------------------------
+
+/** Short stand-ins for the shared default prompts, one per key (the real ones are long). */
+export const DEFAULT_PROMPTS: Readonly<Record<PromptKey, string>> = {
+  system: "You are a thoughtful worship writer.",
+  call_to_worship: "Write a Call to Worship for: {occasion}.",
+  opening_prayer: "Write an Opening Prayer for: {occasion}.",
+  prayer_of_confession: "Write a Prayer of Confession for: {occasion}.",
+  assurance: "Write the Assurance of Pardon for: {occasion}.",
+  prayer_for_illumination: "Write a Prayer for Illumination for: {occasion}.",
+  prayers_of_the_people: "Write Prayers of the People for: {occasion}. Hymns: {hymns}.",
+  offertory_prayer: "Write an Offertory Prayer for: {occasion}.",
+  benediction: "Write a Benediction for: {occasion}.",
+};
+
+/** `GET /church/liturgy-prompts` for an admin: every prompt on its default, except `overrides`. */
+export function liturgyPrompts(
+  overrides: Partial<Record<PromptKey, string>> = {},
+  extra: Partial<LiturgyPrompts> = {},
+): LiturgyPrompts {
+  return {
+    placeholder_help:
+      "Placeholders you can use: {occasion}, {scriptures}, {opening_hymn}, {hymns}. Unknown placeholders are ignored (they render as blank).",
+    can_edit: true,
+    fields: (Object.keys(DEFAULT_PROMPTS) as PromptKey[]).map((key) => ({
+      key,
+      label: key === "system" ? "Overall voice" : SECTION_LABELS[key],
+      default: DEFAULT_PROMPTS[key],
+      override: overrides[key] ?? null,
+      customized: key in overrides,
+    })),
+    ...extra,
+  };
 }

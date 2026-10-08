@@ -132,3 +132,23 @@ export type HymnalRemoved = components["schemas"]["HymnalRemovedOut"];
 export type GmailConnection = components["schemas"]["GmailConnectionOut"];
 export type GmailAuthUrl = components["schemas"]["GmailAuthUrlOut"];
 export type GmailConnectBody = components["schemas"]["GmailConnectIn"];
+
+/**
+ * Settings → Liturgy prompts (slice 6a-3a): `GET`/`PUT /church/liturgy-prompts`'s
+ * answer (`placeholder_help`, `can_edit` and every prompt, the system prompt
+ * first), one prompt (`key`, `label`, `default`, the church's `override` or
+ * null, `customized`), its key, and `PUT`'s body (the church's own wording,
+ * whole: a key left out goes back to its default).
+ */
+export type LiturgyPrompts = components["schemas"]["LiturgyPromptsOut"];
+export type PromptField = components["schemas"]["PromptFieldOut"];
+export type PromptKey = PromptField["key"];
+export type LiturgyPromptsBody = components["schemas"]["LiturgyPromptsIn"];
+
+/**
+ * Settings → Rubric (slice 6a-3a): `GET`/`PATCH /rubric`'s answer (the merged
+ * `rubric`, the dotted names of the church's overrides in `customized`, and the
+ * shared `defaults`) and one whole rubric.
+ */
+export type Rubric = components["schemas"]["RubricOut"];
+export type RubricValues = components["schemas"]["RubricModel"];
