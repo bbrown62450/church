@@ -228,6 +228,46 @@ describe("Settings → Prayers (slice 6a-3b)", () => {
     expect(screen.getByRole("textbox", { name: "Voice profile" })).toHaveValue("Warm and plain. Amen.");
   });
 
+  /** A page whose `PUT` is held open until `finish()`, then stored and answered as the fake server does. */
+  function renderHeldSave() {
+    const server = libraryServer();
+    let finish: () => void = () => {};
+    const view = renderPage("admin", {
+      "GET /church/prayer-library": server.get,
+      "PUT /church/prayer-library": (req: RecordedRequest) => new Promise((resolve) => (finish = () => resolve(server.put(req)))),
+    });
+    return { ...view, finish: () => finish() };
+  }
+
+  it("keeps a profile edit typed while the save ran, with Save ready to send it", async () => {
+    const { api, user, finish } = renderHeldSave();
+    const profile = await screen.findByRole("textbox", { name: "Voice profile" });
+    await user.type(profile, " Amen.");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(puts(api)).toHaveLength(1));
+    await user.type(profile, " Short lines.");
+    finish();
+    expect(await screen.findByText(LIBRARY_SAVED)).toBeInTheDocument();
+    expect(puts(api)[0].body).toMatchObject({ voice_profile: "Warm and plain. Amen." });
+    expect(screen.getByRole("textbox", { name: "Voice profile" })).toHaveValue("Warm and plain. Amen. Short lines.");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save" })).toBeEnabled());
+  });
+
+  it("keeps a new prayer's text typed while the save ran, with Save ready to send it", async () => {
+    const { api, user, finish } = renderHeldSave();
+    await user.click(await screen.findByRole("button", { name: "Add a prayer" }));
+    await chooseType(user, 3, "Benediction");
+    await user.type(screen.getByRole("textbox", { name: "Prayer 3" }), "Go.");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(puts(api)).toHaveLength(1));
+    await user.type(screen.getByRole("textbox", { name: "Prayer 3" }), " Serve.");
+    finish();
+    expect(await screen.findByText(LIBRARY_SAVED)).toBeInTheDocument();
+    expect((puts(api)[0].body as PrayerLibraryBody).prayers[2]).toEqual({ type: "benediction", text: "Go." });
+    expect(screen.getByRole("textbox", { name: "Prayer 3" })).toHaveValue("Go. Serve.");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save" })).toBeEnabled());
+  });
+
   it("toasts a role 403, refetches the profile and does not report the church as lost", async () => {
     const lost = vi.fn();
     const off = authEvents.onChurchAccessLost(lost);
