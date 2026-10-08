@@ -72,6 +72,8 @@ class RubricModel(BaseModel):
 class RubricOut(BaseModel):
     rubric: RubricModel
     customized: list[str]
+    defaults: RubricModel = Field(description="the shared default rubric (slice 6a-3a, additive): "
+                                              "the Rubric page's Reset to default")
 
 
 class CreateChurchIn(BaseModel):

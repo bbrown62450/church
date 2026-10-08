@@ -96,6 +96,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/church/liturgy-prompts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Prompts */
+        get: operations["read_prompts_church_liturgy_prompts_get"];
+        /** Save Prompts */
+        put: operations["save_prompts_church_liturgy_prompts_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/churches": {
         parameters: {
             query?: never;
@@ -1487,6 +1505,34 @@ export interface components {
             /** Max Sermon Title */
             max_sermon_title: number;
         };
+        /**
+         * LiturgyPromptsIn
+         * @description The church's own wording, whole: a key left out goes back to its default.
+         */
+        LiturgyPromptsIn: {
+            /** Prompts */
+            prompts: {
+                [key: string]: string;
+            };
+        };
+        /** LiturgyPromptsOut */
+        LiturgyPromptsOut: {
+            /**
+             * Can Edit
+             * @description the caller is an owner or admin
+             */
+            can_edit: boolean;
+            /**
+             * Fields
+             * @description the system prompt first, then the sections in order
+             */
+            fields: components["schemas"]["PromptFieldOut"][];
+            /**
+             * Placeholder Help
+             * @description the placeholders a section prompt may use (liturgy_prompts.PLACEHOLDER_HELP)
+             */
+            placeholder_help: string;
+        };
         /** MeOut */
         MeOut: {
             /** Churches */
@@ -1634,6 +1680,31 @@ export interface components {
             /** Translation */
             translation?: string | null;
         };
+        /** PromptFieldOut */
+        PromptFieldOut: {
+            /**
+             * Customized
+             * @description override is not null
+             */
+            customized: boolean;
+            /** Default */
+            default: string;
+            /**
+             * Key
+             * @enum {string}
+             */
+            key: "system" | "call_to_worship" | "opening_prayer" | "prayer_of_confession" | "assurance" | "prayer_for_illumination" | "prayers_of_the_people" | "offertory_prayer" | "benediction";
+            /**
+             * Label
+             * @description "Overall voice" for the system prompt, else the section's label
+             */
+            label: string;
+            /**
+             * Override
+             * @description the church's own wording, or null when it uses the default
+             */
+            override: string | null;
+        };
         /**
          * ReadingSetOut
          * @description One set of readings. `scriptures` is in display order (first, psalm,
@@ -1745,6 +1816,8 @@ export interface components {
         RubricOut: {
             /** Customized */
             customized: string[];
+            /** @description the shared default rubric (slice 6a-3a, additive): the Rubric page's Reset to default */
+            defaults: components["schemas"]["RubricModel"];
             rubric: components["schemas"]["RubricModel"];
         };
         /**
@@ -2547,6 +2620,128 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BulletinSettings"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    read_prompts_church_liturgy_prompts_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-church-id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiturgyPromptsOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    save_prompts_church_liturgy_prompts_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-church-id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LiturgyPromptsIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiturgyPromptsOut"];
                 };
             };
             /** @description Unauthorized */
