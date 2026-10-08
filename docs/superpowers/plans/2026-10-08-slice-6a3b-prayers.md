@@ -25,7 +25,7 @@
 - Backend: one or more files `.venv/bin/python -m pytest -q <paths> 2>&1 | tail -1`; the suite `.venv/bin/python -m pytest -q | tail -1`. Frontend: one or more files `(cd frontend && npx vitest run <paths> 2>&1 | grep -E "^ +× |\[ src/|Tests ")` (a file that cannot load shows as `FAIL … [ src/… ]`; the `×` lines may come in another order than quoted, and Vitest's run time after a test name is left out here); the suite `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")`; then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`. A time in an expected output is written `<t>`.
 - The API changes (T3), so T3 regenerates the snapshot and the types in the same commit: `.venv/bin/python backend/scripts/export_openapi.py` then `(cd frontend && npm run gen:api)`. Never edit `openapi.json` or `schema.d.ts` by hand.
 - No new package, no new variable, no migration.
-- Branch `claude/slice-2-plan-4q33le`, at `21f5aee` plus this plan's commits (`WIP plan: slice 6a-3b skeleton (Prayers in Settings)` and `Plan: slice 6a-3b (Prayers in Settings: the prayer library and the AI voice-profile draft)`, and any later plan commit), then T1-T9. Stage files by name (paths with parentheses in single quotes); `.claude/` stays untracked.
+- Branch `claude/slice-2-plan-4q33le`, at `21f5aee` plus this plan's commits (the `WIP plan: …` commits and `Plan: slice 6a-3b (Prayers in Settings: the prayer library and the AI voice-profile draft)`, and any later plan commit), then T1-T9. Stage files by name (paths with parentheses in single quotes); `.claude/` stays untracked.
 - `main` is protected (`backend`, `backend-postgres`, `frontend`, up to date). Merge only with `gh pr merge <N> --merge -R bbrown62450/church`, only on the owner's explicit yes.
 - Every commit message has a subject, a body and, as its last paragraph (a separate `-m`), these two lines:
   `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`
@@ -354,10 +354,10 @@ def test_the_library_is_read_and_written_under_one_row_lock(world):
 Run: `.venv/bin/python -m pytest -q backend/tests/test_usecase_prayer_library.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -1`
 **Expected** (`usecases.prayer_library` does not exist yet, so the new file cannot be collected and the import check fails):
 ```
-TBD
+1 error in <t>s
 ```
 ```
-TBD
+1 failed, 2 passed in <t>s
 ```
 
 - [ ] **Step 3: Write the read and the save**
@@ -505,10 +505,10 @@ def save_library(church_id: uuid.UUID, actor_id: uuid.UUID, prayers: Sequence[Ma
 Run: `.venv/bin/python -m pytest -q backend/tests/test_usecase_prayer_library.py backend/tests/test_no_streamlit_in_core.py backend/tests/test_prayer_library.py backend/tests/test_church_admin.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`
 **Expected:**
 ```
-TBD
+75 passed in <t>s
 ```
 ```
-TBD
+1937 passed, 33 skipped in <t>s
 ```
 
 - [ ] **Step 5: Commit**
@@ -695,7 +695,7 @@ def test_the_draft_logs_one_line_and_never_a_prayer_or_the_answer(world, caplog)
 Run: `.venv/bin/python -m pytest -q backend/tests/test_usecase_prayer_library.py 2>&1 | tail -1`
 **Expected** (the usecase has no `draft_voice_profile`, `fit_prayers` or `TYPE_LABELS` yet; T1's 14 tests pass):
 ```
-TBD
+14 failed, 14 passed in <t>s
 ```
 
 - [ ] **Step 3: Write the draft**
@@ -915,10 +915,10 @@ def _log_draft(facts: Mapping[str, Any], started: float, clock: Callable[[], flo
 Run: `.venv/bin/python -m pytest -q backend/tests/test_usecase_prayer_library.py backend/tests/test_openai_client.py backend/tests/test_liturgy_generation.py backend/tests/test_prayer_library.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`
 **Expected:**
 ```
-TBD
+64 passed in <t>s
 ```
 ```
-TBD
+1951 passed, 33 skipped in <t>s
 ```
 
 - [ ] **Step 5: Commit**
@@ -1202,10 +1202,10 @@ def test_the_prayer_types_are_the_readers_own():
 Run: `.venv/bin/python -m pytest -q backend/tests/test_route_guards.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q backend/tests/test_api_prayer_library.py 2>&1 | tail -1`
 **Expected** (the routes are not served yet: the two `ADMIN_ONLY` checks fail, and the API tests cannot import the route module):
 ```
-TBD
+2 failed, 4 passed in <t>s
 ```
 ```
-TBD
+1 error in <t>s
 ```
 
 - [ ] **Step 3: Write the routes**
@@ -1344,16 +1344,17 @@ def draft_voice_profile(church: ActiveChurch = Depends(require_admin)) -> VoiceP
 Run: `.venv/bin/python backend/scripts/export_openapi.py >/dev/null && (cd frontend && npm run gen:api >/dev/null) && git diff --stat -- frontend/src/lib/api | tail -1` then `.venv/bin/python -m pytest -q backend/tests/test_api_prayer_library.py backend/tests/test_route_guards.py backend/tests/test_openapi_contract.py backend/tests/test_no_streamlit_in_core.py backend/tests/test_error_registry.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`
 **Expected** (the snapshot and the types gain the three routes and five models; no new error code):
 ```
-TBD
+ 2 files changed, 770 insertions(+)
 ```
 ```
-TBD
+40 passed in <t>s
 ```
 ```
-TBD
+1977 passed, 33 skipped in <t>s
 ```
 ```
-TBD
+typecheck 0
+lint 0
 ```
 
 - [ ] **Step 5: Commit**
@@ -1487,10 +1488,10 @@ def test_a_prayer_library_save_waits_for_a_prompts_save_and_keeps_the_prompts(wo
 Run: `.venv/bin/python -m pytest -q backend/tests/test_church_admin_postgres.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`
 **Expected** (no `TEST_DATABASE_URL` here; CI's `backend-postgres` job runs them, and they were run on a throwaway local Postgres while planning, "Build notes"):
 ```
-TBD
+5 skipped in <t>s
 ```
 ```
-TBD
+1977 passed, 35 skipped in <t>s
 ```
 
 - [ ] **Step 3: Commit**
@@ -1748,7 +1749,10 @@ describe("Settings → Prayers' form rules (slice 6a-3b)", () => {
 Run: `(cd frontend && npx vitest run src/lib/settings/prayers.test.ts src/lib/api/client.test.ts 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
 **Expected** (`prayers.ts` does not exist, so its test file cannot load; the draft has the default 20 s timeout):
 ```
-TBD
+   × apiFetchBlob (slice 5a; F §1.9, §4.5) > waits 90 s for the voice-profile draft: its 75 s server deadline plus a last connect (slice 6a-3b)
+ FAIL  |unit| src/lib/settings/prayers.test.ts [ src/lib/settings/prayers.test.ts ]
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  1 failed | 24 passed (25)
 ```
 
 - [ ] **Step 3: Write the rules, the queries and the timeout**
@@ -2037,13 +2041,15 @@ export function useDraftVoiceProfile() {
 Run: `(cd frontend && npx vitest run src/lib/settings/prayers.test.ts src/lib/api/client.test.ts 2>&1 | grep -E "^ +× |\[ src/|Tests ")` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")`
 **Expected:**
 ```
-TBD
+      Tests  33 passed (33)
 ```
 ```
-TBD
+typecheck 0
+lint 0
 ```
 ```
-TBD
+ Test Files  108 passed (108)
+      Tests  925 passed (925)
 ```
 
 - [ ] **Step 5: Commit**
@@ -2363,7 +2369,8 @@ describe("Settings → Prayers (slice 6a-3b)", () => {
 Run: `(cd frontend && npx vitest run src/components/settings/prayers-settings-page.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
 **Expected** (the route and the page do not exist):
 ```
-TBD
+ FAIL  |dom| src/components/settings/prayers-settings-page.test.tsx [ src/components/settings/prayers-settings-page.test.tsx ]
+      Tests  no tests
 ```
 
 - [ ] **Step 3: Write the profile card, the page and its route**
@@ -2839,13 +2846,17 @@ export default function PrayersSettingsRoute() {
 Run: `for i in 1 2 3; do (cd frontend && npx vitest run src/components/settings/prayers-settings-page.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests "); done` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")`
 **Expected:**
 ```
-TBD
+      Tests  12 passed (12)
+      Tests  12 passed (12)
+      Tests  12 passed (12)
 ```
 ```
-TBD
+typecheck 0
+lint 0
 ```
 ```
-TBD
+ Test Files  109 passed (109)
+      Tests  937 passed (937)
 ```
 
 - [ ] **Step 5: Commit**
@@ -3042,7 +3053,15 @@ describe("Settings → Prayers: the voice-profile draft (slice 6a-3b)", () => {
 Run: `(cd frontend && npx vitest run src/components/settings/prayers-settings-page.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
 **Expected** (the card has no draft yet; T6's twelve tests pass):
 ```
-TBD
+   × Settings → Prayers: the voice-profile draft (slice 6a-3b) > asks for a draft only from saved prayers: Save your prayers first, or add one first
+   × Settings → Prayers: the voice-profile draft (slice 6a-3b) > says to add and save a prayer first when none is saved, and shows a member no button
+   × Settings → Prayers: the voice-profile draft (slice 6a-3b) > shows the draft beside the profile as text, and Use this draft puts it in the box to save
+   × Settings → Prayers: the voice-profile draft (slice 6a-3b) > Keep mine leaves the profile as it was and puts focus back on the button
+   × Settings → Prayers: the voice-profile draft (slice 6a-3b) > says it is still working after 8 s, and Cancel stops the wait with nothing shown
+   × Settings → Prayers: the voice-profile draft (slice 6a-3b) > stops the wait when the page is left
+   × Settings → Prayers: the voice-profile draft (slice 6a-3b) > shows why a draft failed in the card, and toasts a role 403 instead
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  7 failed | 12 passed (19)
 ```
 
 - [ ] **Step 3: Write the draft into the card, and the page's reason to wait**
@@ -3337,13 +3356,17 @@ import { NO_SAVED_PRAYERS, SAVE_FIRST, VoiceProfileCard } from "./voice-profile-
 Run: `for i in 1 2 3; do (cd frontend && npx vitest run src/components/settings/prayers-settings-page.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests "); done` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")`
 **Expected:**
 ```
-TBD
+      Tests  19 passed (19)
+      Tests  19 passed (19)
+      Tests  19 passed (19)
 ```
 ```
-TBD
+typecheck 0
+lint 0
 ```
 ```
-TBD
+ Test Files  109 passed (109)
+      Tests  944 passed (944)
 ```
 
 - [ ] **Step 5: Commit**
@@ -3426,7 +3449,11 @@ The nav lists the eight sections in the final order, marks **Prayers** current o
 Run: `(cd frontend && npx vitest run src/components/settings/settings-layout.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")`
 **Expected:**
 ```
-TBD
+   × the Settings area (slice 6a-1) > shows the heading, who you are in the church, and the sections with the current one marked
+   × the Settings area (slice 6a-1) > marks the section current on its page (slices 6a-2, 6a-3a, 6a-3b, 5b-1, 5b-2): /settings/prayers
+   × the Settings area (slice 6a-1) > shows a member the same sections, and /settings opens Church
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  3 failed | 7 passed (10)
 ```
 
 - [ ] **Step 3: Put Prayers between Liturgy and Rubric**
@@ -3469,13 +3496,15 @@ TBD
 Run: `(cd frontend && npx vitest run src/components/settings/settings-layout.test.tsx 2>&1 | grep -E "^ +× |\[ src/|Tests ")` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")`
 **Expected:**
 ```
-TBD
+      Tests  10 passed (10)
 ```
 ```
-TBD
+typecheck 0
+lint 0
 ```
 ```
-TBD
+ Test Files  109 passed (109)
+      Tests  945 passed (945)
 ```
 
 - [ ] **Step 5: Commit**
@@ -3538,16 +3567,16 @@ never a prayer's or the profile's wording, a church id or an email address.
 Run: `.venv/bin/python -m pytest -q backend/tests/test_slice1_docs.py backend/tests/test_docs.py backend/tests/test_ops_workflows.py 2>&1 | tail -1` then `grep -n '\[owner' docs/ops-runbook.md | grep -v 'An entry marked' | wc -l` then `git diff -U0 docs/manual-verification.md | grep '^+' | grep -c '—'` then `git diff --stat | tail -1`
 **Expected** (the docs tests pass, the owner markers are still 4, no em dash was added, one file changed):
 ```
-TBD
+89 passed in <t>s
 ```
 ```
-TBD
+4
 ```
 ```
-TBD
+0
 ```
 ```
-TBD
+ 1 file changed, 18 insertions(+)
 ```
 
 - [ ] **Step 3: Commit**
@@ -3594,17 +3623,31 @@ for i in 1 2 3; do (cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Te
 
 **Expected** (the suite; three runs of `Test Files  109 passed (109)` and `Tests  945 passed (945)` with no `×` or `FAIL` line, one naming a failing test: Step 6; typecheck and lint 0; the build with `/settings/prayers` and no `Error`, a font `Failed to fetch` only: say so and rely on CI):
 ```
-TBD
+1977 passed, 35 skipped in <t>s
 ```
 ```
-TBD
+ Test Files  109 passed (109)
+      Tests  945 passed (945)
+ Test Files  109 passed (109)
+      Tests  945 passed (945)
+ Test Files  109 passed (109)
+      Tests  945 passed (945)
 ```
 ```
 typecheck 0
 lint 0
 ```
 ```
-TBD
+✓ Compiled successfully in <t>s
+├ ○ /settings
+├ ○ /settings/account
+├ ○ /settings/bulletin
+├ ○ /settings/church
+├ ○ /settings/contacts
+├ ○ /settings/hymns
+├ ○ /settings/liturgy
+├ ○ /settings/prayers
+├ ○ /settings/rubric
 ```
 
 - [ ] **Step 3 (agent): The API files match, the gates, the paths, the commits**
@@ -3615,7 +3658,7 @@ grep -nE "^(import|from) (fastapi|starlette|streamlit)" backend/usecases/prayer_
 grep -rn "dangerouslySetInnerHTML" frontend/src --include=*.tsx; echo "raw html grep exit $?"
 grep -c "logger\." backend/usecases/prayer_library.py
 git diff origin/main...HEAD -- backend frontend/src | grep '^+' | grep -c '—'
-python3 -c "import pathlib; t=pathlib.Path('docs/superpowers/plans/2026-10-08-slice-6a3b-prayers.md').read_text(); print(sum(t.count(c) for c in (' ',' ','￾','￿')))"
+python3 -c "import pathlib; t=pathlib.Path('docs/superpowers/plans/2026-10-08-slice-6a3b-prayers.md').read_text(); print(sum(t.count(c) for c in ('\u2028','\u2029','\ufffe','\uffff')))"
 git diff --name-status origin/main...HEAD | LC_ALL=C sort -k2
 git diff --name-only origin/main...HEAD -- backend/migrations backend/db .github frontend/package.json frontend/package-lock.json backend/requirements.txt requirements-dev.txt app.py streamlit_views streamlit_tests backend/prayer_library.py backend/liturgy_prompts.py backend/integrations backend/api/ratelimit.py backend/repos backend/usecases/liturgy.py backend/usecases/liturgy_review.py backend/domain_errors.py | wc -l
 git log --reverse --no-merges --format=%s origin/main..HEAD
@@ -3624,9 +3667,34 @@ for c in $(git rev-list origin/main..HEAD); do git show -s --format=%B "$c" | gr
 
 **Expected:** nothing from `git status` (the committed snapshot and types are current); `imports grep exit 1`; `raw html grep exit 1`; `1` (the usecase's only log call is the draft's INFO line of counts, `_log_draft`); `0` (no em dash in an added line of code or tests); `0` (no U+2028, U+2029, U+FFFE or U+FFFF in this plan); exactly these 26 paths (the 6a-3a record in the runbook rides along until merged):
 ```
-TBD
+M	backend/api/main.py
+A	backend/api/routes/prayer_library.py
+A	backend/tests/test_api_prayer_library.py
+M	backend/tests/test_church_admin_postgres.py
+M	backend/tests/test_no_streamlit_in_core.py
+M	backend/tests/test_route_guards.py
+A	backend/tests/test_usecase_prayer_library.py
+A	backend/usecases/prayer_library.py
+M	docs/manual-verification.md
+M	docs/ops-runbook.md
+A	docs/superpowers/plans/2026-10-08-slice-6a3b-prayers.md
+A	frontend/src/app/(signed-in)/(church)/settings/prayers/page.tsx
+A	frontend/src/components/settings/prayers-settings-page.test.tsx
+A	frontend/src/components/settings/prayers-settings-page.tsx
+M	frontend/src/components/settings/sections.ts
+M	frontend/src/components/settings/settings-layout.test.tsx
+A	frontend/src/components/settings/voice-profile-card.tsx
+M	frontend/src/lib/api/client.test.ts
+M	frontend/src/lib/api/openapi.json
+M	frontend/src/lib/api/schema.d.ts
+M	frontend/src/lib/api/timeouts.ts
+M	frontend/src/lib/api/types.ts
+A	frontend/src/lib/queries/prayer-library.ts
+A	frontend/src/lib/settings/prayers.test.ts
+A	frontend/src/lib/settings/prayers.ts
+M	frontend/src/test/fixtures/index.ts
 ```
-`0`; the subjects oldest first: `Runbook: slice 6a-3a record (merged; owner's phone check)`, the plan commits (`WIP plan: slice 6a-3b skeleton (Prayers in Settings)` and `Plan: slice 6a-3b (Prayers in Settings: the prayer library and the AI voice-profile draft)`) and any later plan commit, then T1-T9's nine subjects as written above, then any `Fix: …` lines; only `trailer check done`.
+`0`; the subjects oldest first: `Runbook: slice 6a-3a record (merged; owner's phone check)`, the plan commits (the `WIP plan: …` lines and `Plan: slice 6a-3b (Prayers in Settings: the prayer library and the AI voice-profile draft)`) and any later plan commit, then T1-T9's nine subjects as written above, then any `Fix: …` lines; only `trailer check done`.
 
 - [ ] **Step 4 (agent → OWNER): Ask to open the draft PR**
 
@@ -3846,7 +3914,22 @@ Expected counts after this task: backend `1977 passed, 35 skipped` on `main`; fr
 
 ## Build notes
 
-TBD
+**How this plan was written (2026-10-08).** Each task's code was built and run in a throwaway worktree of `df34906` (the branch head `21f5aee` plus the plan's skeleton commit; the repo's `.venv` as a symlink; a hard-linked copy of `frontend/node_modules`, since Turbopack's production build refuses a `node_modules` symlink that points outside the project), one commit per task; the directives were then generated from those commits by a script (a new file as **Create**, the one rewritten file as **Replace**, an addition at the end of a file as **Append**, every other change as **In … replace** with just enough whole-line context to occur once in the file as it stands at that point, changes three or fewer lines apart in one block), which also checked that applying each file's directives to the file before the commit gives the file after it. No package, variable or migration was added. While building:
+- **What P and S assumed and what exists.** Slice 4 built the reader (`prayer_library.read_library`, `PRAYER_TYPES` and the limits) and the writer hook, so 6a-3b adds no reader and changes no generation code; 6a-1 and 6a-3a built `lock_church`, `lock_and_read_actor`, `require_admin_role`, `merge_settings(…, session=)`, `LeaveGuard`, `useKeyboardOpen` and the Settings shell, reused as they are; `keys.prayerLibrary` was already in `keys.ts`, and every error code the routes use was already in `ERROR_CODES`.
+- **The stored library is read from the locked row.** A first version read it for the ids with `repos.churches.get_church` inside the save's session; T1's lock test caught that read as unlocked (`[True, False, True]`). `save_library` now takes it from `lock_church` (the row `lock_and_read_actor` already holds).
+- **A save's answer and the cache.** The first T6 build set the form's `source` to the save's answer in `mutate`'s `onSuccess`; a render could then still see the cache's older copy and rebase onto it, so a new prayer's row closed after its save (T6 "…adds a first prayer…" failed). The page now leaves `source` to the cache's copy and `afterSave`/`rebaseLibrary` keep each prayer's row key. The 6a-3a pages do the first thing; it is harmless there (they settle on the saved values), and a follow-up notes it.
+- **Typing 6,001 characters** with `user.type` took over 5 s; T6 pastes it instead.
+- **Mutation checks** (each change made by hand in the build worktree with every task applied, the named tests run, the change undone): `save_library` without `require_admin_role` → `1 failed, 53 passed` (`test_usecase_prayer_library.py`, `test_api_prayer_library.py`); the draft's `rate_limit("ai")` listed before `require_admin` → `1 failed, 53 passed` (a member's 403 then spends a token); a `logger.debug` of the draft's messages → `1 failed, 53 passed`; no `fit_prayers` → `2 failed, 52 passed`; the fence marks left in → `1 failed, 53 passed`; a known id not keeping its `added_at` → `2 failed, 52 passed`; the answer not capped → `1 failed, 53 passed`; `PUT` guarded by `require_church` → `1 failed, 31 passed` (`test_route_guards.py`, `test_api_prayer_library.py`); the page without its `LeaveGuard` → `1 failed, 18 passed`; the Save bar without `static` while typing → `1 failed, 18 passed`; no focus after a removal → `1 failed, 18 passed`; `afterSave` not keeping row keys → `2 failed, 25 passed` (`prayers.test.ts` and the page); the draft not waiting for an unsaved list → `1 failed, 18 passed`; **Cancel** not moving focus → `1 failed, 18 passed`; leaving the page not aborting the draft → `1 failed, 18 passed`; no checks before sending → `1 failed, 18 passed`.
+- **The lock on Postgres.** On a throwaway local PG 16 cluster (initialised under `/var/lib/postgresql`, never a real database, stopped and deleted afterwards; `TEST_DATABASE_URL` set to a local throwaway URL): `test_church_admin_postgres.py` `5 passed` (6a-1's and 6a-3a's three and T4's two). With `lock_church`'s `with_for_update=True` taken out, all five fail. All Postgres-marked tests on that cluster: `35 passed, 1977 deselected, 1 warning` (CI's `backend-postgres` job runs the same set).
+- **The production build** compiled with `○ /settings/prayers` beside the other Settings routes.
+- **No network.** Every draft test installs a `FakeAI`; the suite's `_no_network` fixture refuses any socket, and `_fresh_ai` removes the fake after each test, so no test can reach OpenAI.
+
+**Replay of the finished plan (2026-10-08).** The directives of T1-T9 were applied in order by a replay script that parses each step's **Create**, **Replace**, **Append** and **In … replace** blocks and its `bash` blocks (each commit), and runs every command on its "Run:" lines and compares the output with the quoted **Expected** blocks, onto a fresh detached worktree of the branch at `df34906` (outside the repo directory and removed afterwards), with the repo's `.venv` (a symlink) and a hard-linked copy of `frontend/node_modules`:
+- All 48 directives applied (T1 2 + 1, T2 2 + 5, T3 3 + 3, T4 3, T5 5 + 3, T6 1 + 3, T7 4 + 6, T8 4 + 2, T9 1); every **In … replace** anchor occurred exactly once; all nine commit blocks ran, each commit with the trailer; afterwards the replayed `backend`, `frontend/src` and `docs` trees were identical to the build worktree's.
+- Baselines before T1: backend `1923 passed, 33 skipped`; frontend `916 passed` in 107 files; typecheck 0, lint 0.
+- Every "see it fail" output and every count above is quoted from this replay (times as `<t>`, Vitest's per-test times left out), and a second replay of the finished plan matched every quoted block.
+- Every count matched the table: backend 1937, 1951, 1977 passed with 33 skipped, then 35 skipped from T4; frontend 925 in 108, 937 in 109, 944 in 109, 945 in 109; T6's and T7's three runs each passed every time, no flaky run; typecheck 0 and lint 0 after T3 and T5-T8. After T9, T10 Step 2's and Step 3's outputs (quoted there): `1977 passed, 35 skipped`, three runs of `945 passed` in 109 files, typecheck and lint 0, `✓ Compiled successfully` with `○ /settings/prayers`, the 26 paths, no em dash added, one log call, every commit with its trailer.
+- Not run while planning: the pushes, the PR and CI, the merge, Railway's and Vercel's deploys, a real OpenAI call, and the owner's phone check (T11).
 
 ## Spec coverage
 
