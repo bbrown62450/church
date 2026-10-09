@@ -196,11 +196,13 @@ def _revoke_invite(session, invite_id, church_id) -> bool:
 # --- Slice 6b-1: the People routes' reads and revocations (6b spec, "Repo changes") ---
 
 def _pending_email(church_id, email: str):
-    """Pending invites of the church for `email` (lower-cased): email-bound,
-    not revoked, not accepted (uq_invites_pending_email's rows)."""
+    """Pending invites of the church for `email`: email-bound, not revoked,
+    not accepted (uq_invites_pending_email's rows), the stored email compared
+    lower(trim(...)) as accept compares it (strip().lower()), so one stored
+    with spaces around it is still found (6b-1 build review 2)."""
     return (
         Invite.church_id == church_id,
-        func.lower(Invite.email) == email.strip().lower(),
+        func.lower(func.trim(Invite.email)) == email.strip().lower(),
         Invite.revoked.is_(False),
         Invite.accepted_at.is_(None),
     )
@@ -282,7 +284,7 @@ def revoke_invites_created_by(church_id, user_id, *, session: Session) -> int:
 
 def revoke_pending_email_invites(church_id, email: str, *, session: Session) -> int:
     """Revoke every pending invite of the church for `email` (compared
-    lower-cased), whoever made it and expired or not; returns how many. A
+    trimmed and lower-cased), whoever made it and expired or not; returns how many. A
     removal runs it for the removed person's email, so a link another admin
     made for them stops working too."""
     return session.execute(

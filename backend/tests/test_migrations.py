@@ -1282,6 +1282,7 @@ def test_the_owner_s_read_only_queries_around_0008(pg_admin_url):
                 _invite_row(conn, church_id, user_id, role="owner")
                 _invite_row(conn, church_id, user_id, email="p@example.com")
                 _invite_row(conn, church_id, user_id, email="P@example.com", revoked=True)
+                _invite_row(conn, church_id, user_id, email=" q@example.com", revoked=True)
                 _invite_row(conn, church_id, user_id)
             with engine.connect() as conn:
                 before = dict(conn.execute(text(_readme_0008_sql(0))).mappings().one())
@@ -1292,9 +1293,9 @@ def test_the_owner_s_read_only_queries_around_0008(pg_admin_url):
                 check_after = dict(conn.execute(text(_readme_0008_sql(1))).mappings().one())
         finally:
             engine.dispose()
-    assert before == {"version": "0007_bulletin_images", "invites": 4, "pending_email_invites": 1,
-                      "duplicate_pending_pairs": 0, "other_role_invites": 1, "old_constraint": 1,
-                      "churches": 2, "churches_without_one_owner": 1, "churches_without_admin": 1}
+    assert before == {"version": "0007_bulletin_images", "invites": 5, "pending_email_invites": 1,
+                      "duplicate_pending_pairs": 0, "other_role_invites": 1, "unnormalized_email_invites": 2,
+                      "old_constraint": 1, "churches": 2, "churches_without_one_owner": 1, "churches_without_admin": 1}
     assert check_before == {"version": "0007_bulletin_images", "pending_email_index": 0, "role_check": 0,
                             "old_constraint": 1}
     assert after == {**before, "version": "0008_invites_integrity", "other_role_invites": 0, "old_constraint": 0}

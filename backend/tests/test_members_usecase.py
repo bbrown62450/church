@@ -258,6 +258,33 @@ def test_removal_revokes_another_admins_pending_invite_for_the_removed_persons_e
     assert get_role(jo, world["church"]) is None
 
 
+@pytest.mark.parametrize("stored", [" jo@example.com", "  Jo@Example.com  "])
+def test_removal_revokes_a_pending_invite_whose_stored_email_has_spaces(world, make_user, stored):
+    """An invite stored with spaces around its email (only a direct database
+    write or an older release could store one) is still the removed person's:
+    accept compares strip().lower(), so the removal must too (6b-1 build
+    review 2)."""
+    bound = _invite(world, email="jo@example.com")
+    with session_scope() as s:
+        s.execute(update(Invite).where(Invite.id == bound["id"]).values(email=stored))
+    jo = make_user(email="jo@example.com", name="Jo")
+    add_membership(jo, world["church"], "member")                  # joined through a code-only link
+    assert members.remove_member(world["church"], world["admin"], jo) == 1
+    assert _invite_row(bound["id"]).revoked is True
+    with pytest.raises(Rejected) as refused:
+        onboarding.accept_invite(user_id=jo, user_email="jo@example.com", code=bound["code"], now=NOW)
+    assert refused.value.details == {"reason": "revoked"}
+
+
+def test_a_pending_invite_whose_stored_email_has_spaces_is_invite_exists(world):
+    bound = _invite(world, email="jo@example.com")
+    with session_scope() as s:
+        s.execute(update(Invite).where(Invite.id == bound["id"]).values(email=" jo@example.com"))
+    with pytest.raises(Conflict) as refused:
+        _invite(world, email="jo@example.com")
+    assert refused.value.code == "invite_exists"
+
+
 def test_an_accept_whose_claim_comes_after_a_removal_claims_nothing(world, make_user, monkeypatch):
     """The accept read the admin's single-use link before the admin's removal
     committed; its claim then finds the link revoked, stamps nothing and the

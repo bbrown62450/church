@@ -163,6 +163,20 @@ def test_the_pending_email_index_refuses_a_second_insert_even_without_the_lock(w
             b.result(10)
 
 
+def test_a_removal_revokes_a_pending_invite_stored_with_spaces_around_its_email(world):
+    """Postgres's trim() as SQLite's: the removed person's pending invite is
+    revoked when its stored email has spaces around it (6b-1 build review 2)."""
+    church, ids = world
+    bound = members.create_invite(church, ids["owner"], email="d@example.com", now=NOW)
+    with session_scope() as s:
+        s.get(Invite, bound["id"]).email = "  D@example.com "
+    d = ensure_user("d@example.com", "D").id
+    add_membership(d, church, "member")
+    assert members.remove_member(church, ids["b"], d) == 1
+    with session_scope() as s:
+        assert s.get(Invite, bound["id"]).revoked is True
+
+
 def test_a_profile_save_and_a_role_change_at_once_both_happen(world, monkeypatch):
     church, ids = world
     inside, release = _hold(monkeypatch, church_admin, "clean_profile_patch")

@@ -809,6 +809,7 @@ SELECT (SELECT version_num FROM alembic_version) AS version,
                                GROUP BY church_id, lower(email) HAVING count(*) > 1) AS d)
          AS duplicate_pending_pairs,
        (SELECT count(*) FROM invites WHERE role NOT IN ('member', 'admin')) AS other_role_invites,
+       (SELECT count(*) FROM invites WHERE email <> lower(trim(email))) AS unnormalized_email_invites,
        (SELECT count(*) FROM pg_constraint WHERE conname = 'uq_invites_church_email') AS old_constraint,
        (SELECT count(*) FROM churches WHERE deleted_at IS NULL) AS churches,
        (SELECT count(*) FROM churches c
@@ -834,6 +835,17 @@ One row. Expected before the merge:
   integrity" step 2 below with the agent first;
 - `other_role_invites` is normally `0`; any number is fine (the upgrade
   makes those invites admin invites and revokes them): record it;
+- `unnormalized_email_invites` is `0` (the app has always stored an
+  invite's email trimmed and lower-cased). It does not block this upgrade,
+  and such an invite still works (accept and removal compare emails trimmed
+  and lower-cased), but the upgrade's duplicate check and the new index
+  compare `lower(email)` without trimming, so one with spaces around its
+  email is not seen as the same email as a clean one. Any other number:
+  record it and tell the agent, who checks with you whether one of them is
+  pending beside another pending invite of the same church for the same
+  email once trimmed; if so, after a fresh backup, "Church integrity" step
+  2's `UPDATE` with `lower(trim(email))` in its `PARTITION BY` keeps the
+  newest, before the merge;
 - `old_constraint` is `1` (the constraint the upgrade replaces; `0`: stop
   and tell the agent);
 - `churches` the churches in use; `churches_without_one_owner` and
