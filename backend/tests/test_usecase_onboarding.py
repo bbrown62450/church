@@ -358,7 +358,8 @@ def test_consumer_sees_church_unavailable_after_soft_delete(invite_world):
     code = _invite(cid, owner, email=JOINER_EMAIL)
     _update_invite(code, accepted_at=datetime(2026, 9, 30, 12, 0), accepted_by=joiner)
     add_membership(joiner, cid, "member")
-    soft_delete_church(cid)   # revokes only pending invites; this one was consumed
+    with session_scope() as s:   # soft-deleted directly: since slice 6b, soft_delete_church revokes used invites too
+        s.execute(update(Church).where(Church.id == cid).values(deleted_at=INVITE_NOW))
     assert get_church(cid) is None
     assert repos.invites.get_invite_by_code(code)["revoked"] is False
     assert get_role(joiner, cid) == "member"

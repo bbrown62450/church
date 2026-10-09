@@ -205,3 +205,20 @@ def test_get_church_with_a_malformed_id_is_not_found(tmp_db):
         with pytest.raises(NotFound):
             get_church_prompts(bad)
     assert get_church(str(uuid.uuid4())) is None
+
+
+def test_soft_delete_revokes_every_unrevoked_invite_and_says_whether_it_deleted(tmp_db, make_user):
+    """Slice 6b: a used reusable link is revoked too (inv §1 B3), in the caller's session."""
+    owner = make_user(email="o4@x.com")
+    cid = create_church(name="Joy", timezone="UTC", owner_user_id=owner)
+    later = datetime.now(timezone.utc) + timedelta(days=7)
+    with session_scope() as s:
+        s.add(Invite(church_id=cid, code="used-reusable", role="member", created_by=owner, expires_at=later,
+                     reusable=True, accepted_at=datetime.now(timezone.utc)))
+        s.add(Invite(church_id=cid, code="pending-single", role="member", created_by=owner, expires_at=later))
+    with session_scope() as s:
+        assert soft_delete_church(str(cid), session=s) is True
+    assert soft_delete_church(cid) is False
+    with session_scope() as s:
+        assert s.execute(select(Invite.code, Invite.revoked).order_by(Invite.code)).all() == [
+            ("pending-single", True), ("used-reusable", True)]
