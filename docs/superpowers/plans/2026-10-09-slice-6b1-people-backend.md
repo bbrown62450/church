@@ -31,7 +31,7 @@
   `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
 - TDD: write the failing test first and see it fail as quoted.
 - **Backup push after every task** (standing rule): the controller runs `git push origin claude/slice-2-plan-4q33le` after each task's commit (never `--force`, never a rebase; if the push is rejected, `git pull --no-rebase origin claude/slice-2-plan-4q33le` and push again; on a network error retry after 2, 4, 8 and 16 s). A fix asked for by a review is a new commit, `Fix: <what> (Task <n> review)`. The container can restart and lose uncommitted work: commit as soon as a task's checks pass.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1983 → 2216 passed, 35 → 45 skipped; frontend 952 in 109 files (unchanged)`.
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1983 → 2222 passed, 35 → 45 skipped; frontend 952 in 109 files (unchanged)`.
 - New prose for the owner has no em dashes and no flattery. New user-facing copy (the server's messages) is exactly the list in clarification 17 and has no em dashes.
 - No church id, email address, invite code or link, token, database URL or real person's name in any doc, commit, test or record. Tests use `@example.com` addresses, the fixtures' "Grace" and made-up names.
 - Ask the owner before any push to a PR, PR creation, marking ready, merging, or any production or settings action. Owner steps go one at a time, in plain words.
@@ -49,14 +49,14 @@ As in the 6a-3a and 6a-3b plans: **Create `path`:** the block is the whole new f
   | T1 | +5 passed, +2 skipped (`test_migrations.py`: five SQLite tests, two Postgres; four test files edited) | 1988 passed, 37 skipped | 37 passed |
   | T2 | +8 passed, +1 skipped (`test_integrity.py`) | 1996 passed, 38 skipped | 38 passed |
   | T3 | +52 (`test_role_policy.py`: one test and one test in 51 cases; `test_no_streamlit_in_core.py` edited) | 2048 passed, 38 skipped | 38 passed |
-  | T4 | +10 (`test_memberships_repo.py` 4, `test_invites_repo.py` 5, `test_churches_repo.py` 1; one onboarding test edited) | 2058 passed, 38 skipped | 38 passed |
-  | T5 | +82 (`test_members_usecase.py`: 28 tests, eight of them parametrized, among them the 29 invalid and 8 valid rows of `email_addresses.json`) | 2140 passed, 38 skipped | 38 passed |
-  | T6 | +23 (`test_church_lifecycle.py`) | 2163 passed, 38 skipped | 38 passed |
-  | T7 | +53 (`test_api_members.py` 30, `test_api_invites_admin.py` 14, `test_api_church_lifecycle.py` 8, `test_route_guards.py` 1) | 2216 passed, 38 skipped | 38 passed |
-  | T8 | +7 skipped (`test_people_postgres.py`) | 2216 passed, 45 skipped | 45 passed |
-  | T9 | 0 (`test_slice1_docs.py` edited) | 2216 passed, 45 skipped | 45 passed |
+  | T4 | +12 (`test_memberships_repo.py` 4, `test_invites_repo.py` 7, `test_churches_repo.py` 1; one onboarding test edited) | 2060 passed, 38 skipped | 38 passed |
+  | T5 | +85 (`test_members_usecase.py`: 31 tests, eight of them parametrized, among them the 29 invalid and 8 valid rows of `email_addresses.json`) | 2145 passed, 38 skipped | 38 passed |
+  | T6 | +24 (`test_church_lifecycle.py`) | 2169 passed, 38 skipped | 38 passed |
+  | T7 | +53 (`test_api_members.py` 30, `test_api_invites_admin.py` 14, `test_api_church_lifecycle.py` 8, `test_route_guards.py` 1) | 2222 passed, 38 skipped | 38 passed |
+  | T8 | +7 skipped (`test_people_postgres.py`) | 2222 passed, 45 skipped | 45 passed |
+  | T9 | 0 (`test_slice1_docs.py` edited) | 2222 passed, 45 skipped | 45 passed |
 
-- CI `backend-postgres` goes from `35 passed, 1983 deselected` to `45 passed, 2216 deselected`. The frontend stays `952 passed` in 109 files; T7 regenerates `schema.d.ts`, so CI's "API types match the OpenAPI snapshot" step and the typecheck run on it.
+- CI `backend-postgres` goes from `35 passed, 1983 deselected` to `45 passed, 2222 deselected`. The frontend stays `952 passed` in 109 files; T7 regenerates `schema.d.ts`, so CI's "API types match the OpenAPI snapshot" step and the typecheck run on it.
 
 ### Layering and code rules (carried)
 - `usecases/role_policy.py` is pure (no database); `usecases/members.py` and `usecases/church_admin.py` import no FastAPI, Starlette or Streamlit (T3 adds `role_policy` and `repos.integrity` to `test_no_streamlit_in_core.py`; the other two are already listed); the routes are plain `def`s with no SQL and no try/except (F §2.2 rule 1), each one usecase call; the usecases write through the repos (no SQL in a usecase), called through their modules so a test can patch one function.
@@ -2663,10 +2663,10 @@ def is_member_email(church_id, email: str, *, session: Session) -> bool:
 Run: `.venv/bin/python -m pytest -q backend/tests/test_memberships_repo.py backend/tests/test_invites_repo.py backend/tests/test_churches_repo.py backend/tests/test_usecase_onboarding.py streamlit_tests 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`
 **Expected:**
 ```
-122 passed in <t>s
+124 passed in <t>s
 ```
 ```
-2058 passed, 38 skipped in <t>s
+2060 passed, 38 skipped in <t>s
 ```
 
 - [ ] **Step 5: Commit**
@@ -2691,7 +2691,7 @@ Streamlit callers keep their positional calls." -m "Co-Authored-By: Claude Opus 
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `2058 passed, 38 skipped`; frontend `952 passed` in 109 files.
+Expected counts after this task: backend `2060 passed, 38 skipped`; frontend `952 passed` in 109 files.
 
 ### Task 5: The member and invite usecases (S "Backend changes" `usecases/members.py`, "Invite semantics", "Transactions and locking"; clarifications 3, 12, 13, 18)
 
@@ -3121,7 +3121,7 @@ def test_a_member_may_not_create_or_revoke_invites(world):
 Run: `.venv/bin/python -m pytest -q backend/tests/test_members_usecase.py 2>&1 | tail -1`
 **Expected:** every test fails: `usecases.members` has only `lock_and_read_actor` (no `list_members`, `change_role`, `remove_member`, `clean_invite_email`, `create_invite`, `list_invites` or `revoke_invite`):
 ```
-82 failed in <t>s
+85 failed in <t>s
 ```
 
 - [ ] **Step 3: The usecases**
@@ -3388,10 +3388,10 @@ def revoke_invite(church_id: uuid.UUID, actor_id: uuid.UUID, invite_id) -> None:
 Run: `.venv/bin/python -m pytest -q backend/tests/test_members_usecase.py backend/tests/test_church_admin.py backend/tests/test_usecase_contacts.py backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`
 **Expected:**
 ```
-156 passed in <t>s
+159 passed in <t>s
 ```
 ```
-2140 passed, 38 skipped in <t>s
+2145 passed, 38 skipped in <t>s
 ```
 
 - [ ] **Step 5: Commit**
@@ -3411,7 +3411,7 @@ revoke_invite (church scoped, idempotent). Logs carry ids, roles and counts only
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `2140 passed, 38 skipped`; frontend `952 passed` in 109 files.
+Expected counts after this task: backend `2145 passed, 38 skipped`; frontend `952 passed` in 109 files.
 
 ### Task 6: Transfer ownership, leave and delete (S "Backend changes" `usecases/church_admin.py`, "Transactions and locking"; clarifications 11, 13)
 
@@ -3649,7 +3649,7 @@ def test_each_write_reads_the_church_row_locked_in_its_own_session(world):
 Run: `.venv/bin/python -m pytest -q backend/tests/test_church_lifecycle.py 2>&1 | tail -1`
 **Expected:** every test fails: `church_admin` has no `transfer_ownership`, `leave_church` or `delete_church` (the fixture's `members.create_invite` exists since T5):
 ```
-23 failed in <t>s
+24 failed in <t>s
 ```
 
 - [ ] **Step 3: The usecases**
@@ -3784,10 +3784,10 @@ def delete_church(church_id: uuid.UUID, actor_id: uuid.UUID, confirm_name: str) 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_church_lifecycle.py backend/tests/test_church_admin.py backend/tests/test_members_usecase.py backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q | tail -1`
 **Expected:**
 ```
-161 passed in <t>s
+165 passed in <t>s
 ```
 ```
-2163 passed, 38 skipped in <t>s
+2169 passed, 38 skipped in <t>s
 ```
 
 - [ ] **Step 5: Commit**
@@ -3805,7 +3805,7 @@ lock_and_read_actor." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `2163 passed, 38 skipped`; frontend `952 passed` in 109 files.
+Expected counts after this task: backend `2169 passed, 38 skipped`; frontend `952 passed` in 109 files.
 
 ### Task 7: `require_owner` and the routes (S API, Models, "Role denials", "Lost access under the lock", "Removal sticks", "Cross-church isolation", "Invites", "Guards and contract"; acceptance 1, 3-11, 21; clarifications 15, 16)
 
@@ -4870,7 +4870,7 @@ typecheck 0
 lint 0
 ```
 ```
-2216 passed, 38 skipped in <t>s
+2222 passed, 38 skipped in <t>s
 ```
 
 - [ ] **Step 5: Commit**
@@ -4890,7 +4890,7 @@ until 6b-2." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `2216 passed, 38 skipped`; frontend `952 passed` in 109 files.
+Expected counts after this task: backend `2222 passed, 38 skipped`; frontend `952 passed` in 109 files.
 
 ### Task 8: The writes serialize on real Postgres (S Testing → Postgres; acceptance 6, 9, 21; clarification 14)
 
@@ -5108,10 +5108,10 @@ Run: `.venv/bin/python -m pytest -q backend/tests/test_people_postgres.py 2>&1 |
 7 passed in <t>s
 ```
 ```
-45 passed, 2216 deselected, 1 warning in <t>s
+45 passed, 2222 deselected, 1 warning in <t>s
 ```
 ```
-2216 passed, 45 skipped in <t>s
+2222 passed, 45 skipped in <t>s
 ```
 
 - [ ] **Step 3: Commit**
@@ -5129,7 +5129,7 @@ unique index). Skipped without TEST_DATABASE_URL." -m "Co-Authored-By: Claude Op
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `2216 passed, 45 skipped`; frontend `952 passed` in 109 files. CI's `backend-postgres`: `45 passed, 2216 deselected`.
+Expected counts after this task: backend `2222 passed, 45 skipped`; frontend `952 passed` in 109 files. CI's `backend-postgres`: `45 passed, 2222 deselected`.
 
 ## Docs, verification, the PR, the owner's routine and the merge (T9-T11)
 
@@ -5217,7 +5217,7 @@ sign-in. test_slice1_docs pins the new heading." -m "Co-Authored-By: Claude Opus
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `2216 passed, 45 skipped`; frontend `952 passed` in 109 files.
+Expected counts after this task: backend `2222 passed, 45 skipped`; frontend `952 passed` in 109 files.
 
 ### Task 10: Verification and the draft PR (owner's yes before the PR is opened and before it is marked ready)
 
@@ -5244,10 +5244,10 @@ Run: `git status --short | grep -v '^?? .claude/' | wc -l` then `git fetch -q or
 Run: `.venv/bin/python -m pytest -q | tail -1` then `TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres 2>&1 | tail -1` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")` then `(cd frontend && NEXT_PUBLIC_SUPABASE_URL=https://ci-placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-placeholder NEXT_PUBLIC_API_URL=http://localhost:8000 npm run build 2>&1 | grep -cE "Compiled successfully")`
 **Expected** (the Postgres line only where a local, throwaway Postgres is at hand; otherwise CI's job is the check; a font `Failed to fetch` in the build: say so and rely on CI):
 ```
-2216 passed, 45 skipped in <t>s
+2222 passed, 45 skipped in <t>s
 ```
 ```
-45 passed, 2216 deselected, 1 warning in <t>s
+45 passed, 2222 deselected, 1 warning in <t>s
 ```
 ```
  Test Files  109 passed (109)
@@ -5348,7 +5348,7 @@ trailer check done
 
 (not replayed) `gh pr list -R <repo> --head claude/slice-2-plan-4q33le --state open --json number,url` → `[]`. Send the owner exactly this, and wait for a clear yes:
 
-> The server side of People (slice 6b-1) is verified on this machine: backend 2216 passed, 45 skipped (1983 and 35 before), and the 45 Postgres tests pass on a throwaway local database; frontend 952 tests in 109 files, typecheck, lint and the production build unchanged and clean. It adds the routes the People and Danger zone pages will use (6b-2): see the members, change roles, remove someone, invite links (single-use by default, or reusable for 7 days, optionally for one email), transfer ownership, leave, delete the church. Nothing in the app changes until 6b-2. It includes one database change, migration 0008: invites can only grant member or admin, and an email can have only one waiting invite at a time (so it can be invited again after a revoke). Before merging I will take you through the same routine as last time: a backup, one read-only query in Supabase, and the SQL to read. May I open the pull request as a **draft** titled "Slice 6b-1: People on the server (members, invites, ownership, leave, delete) and migration 0008", so the checks run? Merging stays with you.
+> The server side of People (slice 6b-1) is verified on this machine: backend 2222 passed, 45 skipped (1983 and 35 before), and the 45 Postgres tests pass on a throwaway local database; frontend 952 tests in 109 files, typecheck, lint and the production build unchanged and clean. It adds the routes the People and Danger zone pages will use (6b-2): see the members, change roles, remove someone, invite links (single-use by default, or reusable for 7 days, optionally for one email), transfer ownership, leave, delete the church. Nothing in the app changes until 6b-2. It includes one database change, migration 0008: invites can only grant member or admin, and an email can have only one waiting invite at a time (so it can be invited again after a revoke). Before merging I will take you through the same routine as last time: a backup, one read-only query in Supabase, and the SQL to read. May I open the pull request as a **draft** titled "Slice 6b-1: People on the server (members, invites, ownership, leave, delete) and migration 0008", so the checks run? Merging stays with you.
 
 - [ ] **Step 5 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
 
@@ -5365,7 +5365,7 @@ Slice 6b-1: the server side of People and the Danger zone, with migration 0008_i
 
 Before the merge (Task 11): the backup, the read-only counts and integrity check, and the SQL preview with the owner. After: the after-deploy check, a short phone check, a "Slice 6b-1 record" in docs/ops-runbook.md.
 
-Tests: backend 1983 → 2216 passed, 35 → 45 skipped; frontend 952 in 109 files (unchanged)
+Tests: backend 1983 → 2222 passed, 35 → 45 skipped; frontend 952 in 109 files (unchanged)
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 
@@ -5377,7 +5377,7 @@ gh pr create -R <repo> --draft --base main --head claude/slice-2-plan-4q33le \
 gh pr checks <N> -R <repo> --watch --interval 30
 ```
 
-Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `2216 passed, 45 skipped`, backend-postgres `45 passed, 2216 deselected` (after its `alembic upgrade head`, `alembic check`, `alembic downgrade base` and `alembic upgrade head` steps, which now include 0008 on Postgres 17), frontend `952 passed` in 109 files. Then send: "PR #<N> is green: backend 2216 passed, 45 skipped (the ten new Postgres tests passed in their own job, and the migration went up, down and up again on Postgres); 952 frontend tests in 109 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you, after the backup, the query and the SQL." On the yes: `gh pr ready <N> -R <repo>`.
+Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `2222 passed, 45 skipped`, backend-postgres `45 passed, 2222 deselected` (after its `alembic upgrade head`, `alembic check`, `alembic downgrade base` and `alembic upgrade head` steps, which now include 0008 on Postgres 17), frontend `952 passed` in 109 files. Then send: "PR #<N> is green: backend 2222 passed, 45 skipped (the ten new Postgres tests passed in their own job, and the migration went up, down and up again on Postgres); 952 frontend tests in 109 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you, after the backup, the query and the SQL." On the yes: `gh pr ready <N> -R <repo>`.
 
 - [ ] **Step 6: Fix any failure in its owning task**
 
@@ -5397,7 +5397,7 @@ Run the last line with `run_in_background: true`. **Expected:** the PR URL; ever
 
 For each fix: change only the owning task's files; rerun Steps 2-3; commit `Fix: <what> (Task <n>, slice 6b-1 final verification)` with the trailer; after the PR exists, ask the owner before pushing it.
 
-Expected counts after this task: backend `2216 passed, 45 skipped`; frontend `952 passed` in 109 files.
+Expected counts after this task: backend `2222 passed, 45 skipped`; frontend `952 passed` in 109 files.
 
 ### Task 11: Before the merge (backup, counts and checks, SQL), the merge, the after-deploy check, the phone check, the record (OWNER + agent)
 
@@ -5563,9 +5563,31 @@ gh pr checks claude/slice-2-plan-4q33le -R <repo> --watch
 
 - [ ] **Step R (only if the release must come out): Revert**
 
-Code only; the schema stays at `0008_invites_integrity` (README "Reverting 6b-1": the code before 6b-1 creates no invite, so it runs on it unchanged). On the owner's yes for each outward command: a branch `claude/revert-6b1` from `origin/main`; `git revert -m 1 --no-commit <merge sha>`; then restore `backend/migrations/versions/0008_invites_integrity.py`, the `Invite` table arguments in `backend/db/models.py` and `pytest.ini`'s two filters from the merge commit (`git checkout <merge sha> -- backend/migrations/versions/0008_invites_integrity.py pytest.ini`, and the model's lines by hand), so Railway's `alembic upgrade head` still finds the database at head and `alembic check` stays clean; a commit "Revert slice 6b-1 (PR #<N>), keeping migration 0008" with the trailer; the backend suite; a PR, CI, and the merge on the owner's yes; record it in the record. Never `alembic downgrade` production for this.
+Code only; the schema stays at `0008_invites_integrity` (README "Reverting 6b-1": the code before 6b-1 creates no invite, so it runs on it unchanged). Reverting the merge and restoring only the revision, the `Invite` model and `pytest.ini` is not enough: the head constants of `test_api_app.py` and `test_schema_check.py`, `test_schema_check.py`'s baseline drift, the 0008 tests and slice 1's two tests that store an `owner` or `foo` invite would fail (SIMOLD). So the revert keeps T1's whole commit, and the docs that rode along (the 6a-3b record, the 6b spec's amendment and this plan). On the owner's yes for each outward command, on a branch `claude/revert-6b1` from `origin/main`:
 
-Expected counts after this task: backend `2216 passed, 45 skipped` on `main`; frontend `952 passed` in 109 files. The records PR adds no test.
+```bash
+git revert -m 1 --no-commit <merge sha>
+git show --name-only --format= "$(git log -1 --format=%H --grep='^Migration 0008_invites_integrity: ' <merge sha>)" | LC_ALL=C sort
+git checkout <merge sha> -- backend/migrations/versions/0008_invites_integrity.py backend/db/models.py pytest.ini backend/migrations/README.md backend/tests/invite_helpers.py backend/tests/test_migrations.py backend/tests/test_schema_check.py backend/tests/test_api_app.py backend/tests/test_services_postgres.py backend/tests/test_api_invites.py backend/tests/test_usecase_onboarding.py
+git checkout <merge sha> -- docs/ops-runbook.md docs/superpowers/specs/2026-09-25-slice-6b-settings-people-design.md docs/superpowers/plans/2026-10-09-slice-6b1-people-backend.md
+.venv/bin/python -m pytest -q | tail -1
+TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres 2>&1 | tail -1
+```
+
+**Expected** (simulated in the replay, see "Build notes": a `--no-ff` merge of the replayed branch into `origin/main`, then these commands): the second line prints exactly the eleven paths of the `git checkout` after it (if T1's commit lists any other path, add it before going on); the suite passes with T1's tests and nothing of T2-T9; the Postgres line where a local, throwaway Postgres is at hand:
+```
+SIMLIST
+```
+```
+SIMSUITE
+```
+```
+SIMPG
+```
+
+Then a commit "Revert slice 6b-1 (PR #<N>), keeping migration 0008" with the trailer; a PR, CI (whose `alembic check` then compares the restored model with the database at `0008`, clean in the simulation), and the merge on the owner's yes; record it in the record. Never `alembic downgrade` production for this.
+
+Expected counts after this task: backend `2222 passed, 45 skipped` on `main`; frontend `952 passed` in 109 files. The records PR adds no test.
 
 ---
 
@@ -5594,11 +5616,11 @@ Expected counts after this task: backend `2216 passed, 45 skipped` on `main`; fr
 | Answer 2: no Streamlit work, no port or ledger, no `LegacySettingsNote`; `check_integrity.py` and its runbook kept | clarifications 1, 9, 10; T2; T1's README section |
 | Answer 3: visibility (members see members with emails; admins invite, change roles, remove; the owner transfers and deletes) | T7 `test_a_member_reads_every_member_with_emails`, `test_member_cannot_change_role_or_remove`, `test_member_cannot_create_list_or_revoke_invites`, `test_admin_cannot_transfer_or_delete`; T3 every row |
 | Answer 4: single-use by default, reusable for 7 days, optional email binding | T5 `test_an_invite_is_single_use_member_by_default_for_seven_days`, `test_a_bad_invite_is_refused_and_nothing_is_stored`; T7 `test_a_single_use_link_works_once_and_a_reusable_one_for_everyone` |
-| Answer 5: removal revokes the removed person's links; the reusable flag | T5 `test_removing_a_member_keeps_their_services_and_revokes_every_invite_they_made`, `test_revoke_reusable_also_revokes_every_live_reusable_link_counting_each_once`; T7 the three "removal sticks" tests |
-| Answer 6: no own role change; delete needs the exact name | T3; T6 `test_delete_needs_the_exact_name_after_trimming`; T7 `test_delete_needs_the_exact_name_and_leaves_everyone_without_the_church` |
+| Answer 5: removal revokes the removed person's links; the reusable flag | T5 `test_removing_a_member_keeps_their_services_and_revokes_every_invite_they_made`, `test_revoke_reusable_also_revokes_every_live_reusable_link_counting_each_once`, `test_removal_revokes_another_admins_pending_invite_for_the_removed_persons_email`, `test_an_accept_whose_claim_comes_after_a_removal_claims_nothing`; T4 `test_revoke_pending_email_invites_takes_every_pending_one_for_the_email_expired_too`, `test_claim_stamps_only_a_live_invite`; T7 the three "removal sticks" tests |
+| Answer 6: no own role change; delete needs the exact name | T3; T6 `test_delete_needs_the_exact_name_after_trimming`, `test_delete_trims_the_stored_name_too_and_keeps_case`; T7 `test_delete_needs_the_exact_name_and_leaves_everyone_without_the_church` |
 | S API (routes, guards, errors, `no-store`, Idempotency-Key, the JSON body of `DELETE /church`, no 409 on members) | T7 every test; `test_route_guards.py` |
 | S "Role policy" and its evaluation order; acceptance 2 | T3 `test_the_fixture_holds_exactly_the_51_reachable_states`, `test_every_row_has_its_outcome`; T5 and T6 the 404-before-policy cases |
-| S "Invite semantics" (TTL, email rule, reusable with email, member conflict, pending duplicate, expired revoked, race, list filter, revoke, removal) | T4 the invites repo tests; T5 the invite tests; T7 `test_the_two_conflicts_have_their_codes_and_words`; T8 `test_two_invites_for_one_email_at_once_make_one`, `test_the_pending_email_index_refuses_a_second_insert_even_without_the_lock` |
+| S "Invite semantics" (TTL, email rule, reusable with email, member conflict, pending duplicate, expired revoked, race, list filter, revoke, removal) | T4 the invites repo tests; T5 the invite tests; T5 `test_an_integrity_error_from_another_constraint_is_not_invite_exists`; T7 `test_the_two_conflicts_have_their_codes_and_words`; T8 `test_two_invites_for_one_email_at_once_make_one`, `test_the_pending_email_index_refuses_a_second_insert_even_without_the_lock` |
 | S "Transactions and locking" (one session, the lock, the role re-read, lost access as `no_church_access`, the transfer's order) | T5 and T6 the "lost access" and "row locked" tests; T4 `test_transfer_ownership_demotes_then_promotes`; T7 the late-guard tests; T8 every test |
 | S "Repo changes" | T4 |
 | S "Data and migrations" (`0006` = `0008`: repair, pre-check, index, CHECK, downgrade; models; compare) | T1 every 0008 test; CI's `alembic check` on Postgres |
@@ -5626,10 +5648,24 @@ Your 6b planning answers of 2026-10-09 (all as recommended) and the earlier answ
 
 Owner steps still to come: the plan's approval; the draft PR on your yes and ready on your yes (T10); the backup, one read-only query and the SQL to read, the merge on your yes, one more read-only query, a two-minute phone check, and the records PR (T11).
 
+## Plan review fixes (2026-10-09)
+
+The plan review of 2026-10-09 found one Important and six Minor issues; each is fixed above, and T1-T9 were replayed again afterwards (Build notes).
+
+- **I1 (Important): the revert left 15 tests failing.** Reverting the merge and restoring only `0008_invites_integrity.py`, the `Invite` table arguments and `pytest.ini` leaves the head constants of `test_api_app.py` and `test_schema_check.py`, `test_schema_check.py`'s baseline drift, the 0008 tests and slice 1's two tests that store an `owner` or `foo` invite failing (measured in the simulation: SIMOLDSHORT). T11 Step R and README "Reverting 6b-1" now restore T1's whole commit (the eleven paths, checked against `git show --name-only` of T1's commit), and Step R keeps the docs that rode along; the simulated revert passes (SIMSUITESHORT; Postgres SIMPGSHORT; `alembic check` on Postgres at `0008` reports nothing).
+- **M1: a removal left other admins' invites for the removed person working.** `remove_member` also revokes, in the same transaction, every pending invite of the church whose email is the removed person's (any creator, expired or not; T4 `revoke_pending_email_invites`), counted once in `revoked_invites`. Tests: T4 `test_revoke_pending_email_invites_takes_every_pending_one_for_the_email_expired_too`; T5 `test_removal_revokes_another_admins_pending_invite_for_the_removed_persons_email` (the owner's email-bound invite for the removed person is refused afterwards as revoked; the same email's invite in another church stays).
+- **M2: an accept racing a removal could claim a link the removal had just revoked.** `invites.claim`'s `UPDATE` now also requires `NOT revoked` and `expires_at >= now` (with the existing `accepted_at IS NULL`), so on Postgres a claim that waited for the removal's row lock re-reads the revoked row and matches nothing; the accept is refused with slice 1's "used" words and nobody joins (clarification 4). `usecases/onboarding.py` is unchanged and no route takes `lock_church` for accept. Tests: T4 `test_claim_stamps_only_a_live_invite`; T5 `test_an_accept_whose_claim_comes_after_a_removal_claims_nothing`. Left as is: a reusable link is never claimed, so an accept already past its checks when a reusable link is revoked still joins (as if it had come first).
+- **M3: the delete compared the trimmed typed name with the untrimmed stored one.** Both sides are trimmed now, case still exact. Test: T6 `test_delete_trims_the_stored_name_too_and_keeps_case`.
+- **M4: any `IntegrityError` of the insert became `invite_exists`.** Only one naming `uq_invites_pending_email` does; any other is raised as it is (a 500 with the real cause, never a misleading 409). Test: T5 `test_an_integrity_error_from_another_constraint_is_not_invite_exists` (a `ck_invites_role` refusal).
+- **M5: README step 2's `pending_email_invites` read as if it excluded expired invites.** It now says expired ones are included (the upgrade's rule counts them until the app revokes them).
+- **M6: the integrity repairs used bind-style placeholders (`:c`, `:keep`, `:new_owner`).** Steps 3 and 4 of "Church integrity" now use quoted placeholders (`'<church id>'`, `'<user id of the owner who stays>'`, `'<user id of the new owner>'`), which the SQL Editor never tries to fill and which fail on the `uuid` columns, changing nothing, if run as they are (checked on the throwaway Postgres: `invalid input syntax for type uuid`), and say the agent fills in the real ids in the chat only, never in a committed file, the PR or the record.
+- **Owner question 2** now says a church without exactly one owner must be fixed before 6b-2 merges (a gate), because `0009` only refuses a second owner; Risks, the README (step 2 and "Church integrity" step 1), T11 Step 2 and Follow-ups say the same.
+- **Counts.** Seven new tests (T4 +2, T5 +3, T6 +1): backend `1983 → 2222 passed`, `35 → 45 skipped`; CI `backend-postgres` `45 passed, 2222 deselected`.
+
 ## Self-review
 
 - **Coverage.** Every binding constraint has a home: 6b-1 as the server side with `0008_…`, the one-owner revision left to 6b-2 (clarifications 1, 2; T1-T9); Streamlit treated as unused with `check_integrity.py` kept (clarifications 1, 9, 10; T2); no em dashes in server messages (clarification 17; T10 Step 3 greps the added lines); no real ids, emails or URLs (tests use `@example.com`; commands use `<repo>`, `<api>`, `<app>`; the record's own grep, T11 Step 8); migrations safe on production data (the duplicate pre-check before the unique index, the CHECK after the repair, one transaction under the 5 s lock timeout, a working downgrade that refuses rather than half-runs; clarifications 5-7; T1's SQLite and Postgres tests); frozen Streamlit untouched (T10 Step 3's untouched check; clarification 10); no network in tests (Global Constraints); every write under the church-row lock with the role re-read (Layering rules; T5, T6, T7's lost-access tests); Postgres concurrency tests for transfer, remove and the invite unique index (T8). The second-to-last task opens a draft PR only on the owner's yes; the last runs the owner's routine one step at a time (backup, read-only counts and the duplicate pre-check in the SQL Editor, the SQL preview), merges only on a yes, checks production, runs a minimal phone check (6b-1 is server-only: the app loads, Settings unchanged, an unused invite link still opens if one exists) and inserts "### Slice 6b-1 record" before "## Backups", after "### Slice 6a-3b record".
 - **Placeholders.** None in T1-T9's code, tests, commands or expected outputs; every expected output is quoted from the replay. The `<…>` left are T10 and T11's runtime values (`<N>`, `<repo>`, `<api>`, `<scratch>`, `<local url>`, times, the owner's answers), as in the earlier plans.
-- **Consistency.** Names agree across tasks: `find_violations` (T2) is used by T6's and T8's tests; `role_policy.check_role_change`, `check_remove`, `check_leave`, `check_transfer`, `NOT_ADMIN`, `OWNER_ONLY` (T3) by T5, T6 and T8; `list_member_rows`, `get_member`, `count_owner_admins`, `is_member_email`, `transfer_ownership`, `insert_invite`, `list_active_invites`, `find_pending_email_invite`, `revoke_expired_email_invites`, `revoke_invites_created_by`, `revoke_reusable_invites`, `revoke_invite`, `soft_delete_church` (T4) by T5 and T6; `member_out`, `MEMBER_NOT_FOUND`, `clean_invite_email`, `create_invite`, `list_invites` (T5) by T6, T7 and T8; `MemberOut`, `MemberListOut` (T7 `routes/members.py`) by `routes/churches.py`. The counts in the table, each task's "Expected" and the PR line agree: `1983 → 2216`, `35 → 45`, frontend `952` in 109 unchanged.
+- **Consistency.** Names agree across tasks: `find_violations` (T2) is used by T6's and T8's tests; `role_policy.check_role_change`, `check_remove`, `check_leave`, `check_transfer`, `NOT_ADMIN`, `OWNER_ONLY` (T3) by T5, T6 and T8; `list_member_rows`, `get_member`, `count_owner_admins`, `is_member_email`, `transfer_ownership`, `insert_invite`, `list_active_invites`, `find_pending_email_invite`, `revoke_expired_email_invites`, `revoke_invites_created_by`, `revoke_pending_email_invites`, `revoke_reusable_invites`, `claim`, `revoke_invite`, `soft_delete_church` (T4) by T5 and T6; `member_out`, `MEMBER_NOT_FOUND`, `clean_invite_email`, `create_invite`, `list_invites` (T5) by T6, T7 and T8; `MemberOut`, `MemberListOut` (T7 `routes/members.py`) by `routes/churches.py`. The counts in the table, each task's "Expected" and the PR line agree: `1983 → 2222`, `35 → 45`, frontend `952` in 109 unchanged.
 - **Not verified while planning:** the pushes, the PR and CI (the Postgres tests and CI's Alembic sequence were run on a throwaway local PostgreSQL 16 instead of CI's 17), the merge, Railway's pre-deploy migration on production data, Vercel's deploy, and the owner's checks.
 - **Judgement calls to watch in review:** the deterministic races instead of 20 barrier rounds (clarification 14); the pre-check as a `DO` block on Postgres (5); no separate role assertion (6); the SQL Editor query as the integrity check (9); the script reading only an exported `DATABASE_URL` (9); `pytest.ini`'s two warning filters (7); the lazy import of `require_admin_role` (3); `revoke_reusable` defaulting to false on the API while the page will check it by default (answer 5).
