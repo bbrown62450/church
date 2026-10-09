@@ -1160,6 +1160,39 @@ def test_0008_refuses_duplicate_pending_emails_until_the_runbook_step_runs(sqlit
     assert _version(sqlite_url) == "0008_invites_integrity"
 
 
+REPAIR_LOG = "0008_invites_integrity: {} invite(s) with another role made admin and revoked"
+
+
+def _repair_logs(caplog) -> list[str]:
+    return [r.getMessage() for r in caplog.records
+            if r.name == "alembic.runtime.migration" and "made admin and revoked" in r.getMessage()]
+
+
+def test_0008_logs_the_role_repair_only_once_the_duplicate_check_passed(sqlite_url, caplog):
+    """A refused upgrade never claims a repair (6b-1 build review 4): the line
+    comes after the duplicate check, with the repair's own count."""
+    _alembic(sqlite_url, "upgrade", "0007_bulletin_images")
+    engine = sa.create_engine(sqlite_url, poolclass=NullPool)
+    try:
+        with engine.begin() as conn:
+            user_id, church_id = _seed_owner_and_church(conn)
+            _invite_row(conn, church_id, user_id, role="owner")
+            _invite_row(conn, church_id, user_id, email="dup@example.com")
+            _invite_row(conn, church_id, user_id, email="Dup@example.com", created_at=T9_NOW + timedelta(hours=1))
+        caplog.set_level(logging.INFO, logger="alembic.runtime.migration")
+        with pytest.raises(RuntimeError):
+            _alembic(sqlite_url, "upgrade", "0008_invites_integrity")
+        refused_logs = _repair_logs(caplog)
+        with engine.begin() as conn:
+            conn.execute(sa.text(_runbook_dedupe_sql()))
+        caplog.clear()
+        _alembic(sqlite_url, "upgrade", "0008_invites_integrity")
+    finally:
+        engine.dispose()
+    assert refused_logs == []
+    assert _repair_logs(caplog) == [REPAIR_LOG.format(1)]
+
+
 def test_0008_downgrade_restores_the_old_constraint_or_refuses_over_duplicates(sqlite_url):
     _alembic(sqlite_url, "upgrade", "0007_bulletin_images")
     before = _tables_snapshot(sqlite_url)
@@ -1210,7 +1243,7 @@ def _readme_0008_sql(n: int) -> str:
 
 
 @pytest.mark.postgres
-def test_0008_on_postgres_refuses_duplicates_then_repairs_swaps_and_downgrades(pg_admin_url):
+def test_0008_on_postgres_refuses_duplicates_then_repairs_swaps_and_downgrades(pg_admin_url, caplog):
     """The same upgrade on Postgres: the DO block's refusal rolls back the whole
     run (the role repair too), the runbook's dedupe makes it pass, the partial
     expression index and the CHECK hold, and the downgrade refuses over exact
@@ -1225,14 +1258,17 @@ def test_0008_on_postgres_refuses_duplicates_then_repairs_swaps_and_downgrades(p
                 older = _invite_row(conn, church_id, user_id, email="dup@example.com")
                 newer = _invite_row(conn, church_id, user_id, email="Dup@example.com",
                                     created_at=T9_NOW + timedelta(hours=1))
+            caplog.set_level(logging.INFO, logger="alembic.runtime.migration")
             with pytest.raises(sa.exc.DBAPIError) as refused:
                 _alembic(sandbox.role_url, "upgrade", "0008_invites_integrity")
+            assert _repair_logs(caplog) == []                                   # no repair claimed
             with engine.connect() as conn:
                 assert _invite_state(conn, owner_invite) == ("owner", False)   # rolled back with the refusal
             assert _version(sandbox.role_url) == "0007_bulletin_images"
             with engine.begin() as conn:
                 conn.execute(text(_runbook_dedupe_sql()))
             _alembic(sandbox.role_url, "upgrade", "0008_invites_integrity")
+            assert _repair_logs(caplog) == [REPAIR_LOG.format(1)]
             with engine.begin() as conn:
                 states = [_invite_state(conn, i) for i in (owner_invite, older, newer)]
                 index = conn.execute(text(

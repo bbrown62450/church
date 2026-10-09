@@ -8,7 +8,8 @@ Upgrade, in order:
 1. Role repair: an invite whose role is neither member nor admin (only a
    direct database write could make one; it would have granted a second
    owner) becomes an admin invite and is revoked. Data only; the downgrade
-   does not undo it. Online runs log how many rows it changed.
+   does not undo it. Online runs log how many rows it changed once step 2
+   has passed (6b-1 build review 4), so a refused run never claims it.
 2. Duplicate pre-check: if two pending invites (email set, not revoked, not
    accepted) of one church share an email in any capitalization, stop with
    the runbook message, naming the church ids and never an email. On
@@ -90,11 +91,11 @@ def upgrade() -> None:
     dialect = op.get_context().dialect.name
     repair = invites.update().where(invites.c.role.not_in(["member", "admin"])).values(
         role="admin", revoked=sa.true())
+    repaired = None
     if context.is_offline_mode():
         op.execute(repair)
     else:
         repaired = op.get_bind().execute(repair).rowcount
-        logger.info("0008_invites_integrity: %d invite(s) with another role made admin and revoked", repaired)
     if dialect == "postgresql":
         op.execute(DUPLICATES_CHECK_PG)
     else:
@@ -102,6 +103,8 @@ def upgrade() -> None:
         if rows:
             churches = ", ".join(sorted({str(uuid.UUID(str(row[0]))) for row in rows}))   # SQLite keeps hex
             raise RuntimeError(DUPLICATES_MESSAGE.format(pairs=len(rows), churches=churches))
+    if repaired is not None:   # logged once the check passed: a refusal rolls the repair back
+        logger.info("0008_invites_integrity: %d invite(s) with another role made admin and revoked", repaired)
     with op.batch_alter_table("invites") as batch:
         batch.drop_constraint("uq_invites_church_email", type_="unique")
         batch.create_check_constraint("ck_invites_role", ROLES)
