@@ -5659,7 +5659,9 @@ Your 6b planning answers of 2026-10-09 (all as recommended) and the earlier answ
 2. **What to do if a church turns out to have no owner (or two, or no admin)** (Risks). It does not block this update, but in such a church nobody can transfer ownership or delete it, and its only admin cannot leave. If a count in step 2 is not 0, I will give you a second read-only query that names the church (in our chat only, never recorded), and recommend we fix it before the People page arrives (6b-2), choosing the owner with you, with the runbook's one-line repair after a fresh backup. This is a gate for 6b-2: a church without exactly one owner must be fixed before 6b-2 merges, because 6b-2's database change (0009) only refuses a second owner and would not notice a church with none. Recommended: fix it before 6b-2, with your choice of owner.
 3. **The phone check after the merge** (Task 11, step 6). This PR changes nothing you can see, so the check is two minutes: the app loads, the builder opens, Settings is unchanged, and (only if you happen to have one) an unused invite link still opens. Recommended: this short check, with the full People checks coming with 6b-2.
 
-Owner steps still to come: the plan's approval; the draft PR on your yes and ready on your yes (T10); the backup, one read-only query and the SQL to read, the merge on your yes, one more read-only query, a two-minute phone check, and the records PR (T11).
+Owner's answer 2026-10-09: all recommended (binding).
+
+Owner steps still to come: the draft PR on your yes and ready on your yes (T10); the backup, one read-only query and the SQL to read, the merge on your yes, one more read-only query, a two-minute phone check, and the records PR (T11).
 
 ## Plan review fixes (2026-10-09)
 
