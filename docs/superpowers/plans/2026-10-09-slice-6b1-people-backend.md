@@ -31,7 +31,7 @@
   `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
 - TDD: write the failing test first and see it fail as quoted.
 - **Backup push after every task** (standing rule): the controller runs `git push origin claude/slice-2-plan-4q33le` after each task's commit (never `--force`, never a rebase; if the push is rejected, `git pull --no-rebase origin claude/slice-2-plan-4q33le` and push again; on a network error retry after 2, 4, 8 and 16 s). A fix asked for by a review is a new commit, `Fix: <what> (Task <n> review)`. The container can restart and lose uncommitted work: commit as soon as a task's checks pass.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1983 → 2222 passed, 35 → 45 skipped; frontend 952 in 109 files (unchanged)`.
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 1983 → 2235 passed, 35 → 46 skipped; frontend 952 in 109 files (unchanged)`.
 - New prose for the owner has no em dashes and no flattery. New user-facing copy (the server's messages) is exactly the list in clarification 17 and has no em dashes.
 - No church id, email address, invite code or link, token, database URL or real person's name in any doc, commit, test or record. Tests use `@example.com` addresses, the fixtures' "Grace" and made-up names.
 - Ask the owner before any push to a PR, PR creation, marking ready, merging, or any production or settings action. Owner steps go one at a time, in plain words.
@@ -55,8 +55,9 @@ As in the 6a-3a and 6a-3b plans: **Create `path`:** the block is the whole new f
   | T7 | +53 (`test_api_members.py` 30, `test_api_invites_admin.py` 14, `test_api_church_lifecycle.py` 8, `test_route_guards.py` 1) | 2222 passed, 38 skipped | 38 passed |
   | T8 | +7 skipped (`test_people_postgres.py`) | 2222 passed, 45 skipped | 45 passed |
   | T9 | 0 (`test_slice1_docs.py` edited) | 2222 passed, 45 skipped | 45 passed |
+  | Build review fixes | +13 passed, +1 skipped (`test_members_usecase.py` 10, `test_integrity.py` 1, `test_migrations.py` 1 and one Postgres test edited, `test_people_postgres.py` +1 skipped; see "Build notes") | 2235 passed, 46 skipped | 46 passed |
 
-- CI `backend-postgres` goes from `35 passed, 1983 deselected` to `45 passed, 2222 deselected`. The frontend stays `952 passed` in 109 files; T7 regenerates `schema.d.ts`, so CI's "API types match the OpenAPI snapshot" step and the typecheck run on it.
+- CI `backend-postgres` goes from `35 passed, 1983 deselected` to `46 passed, 2235 deselected`. The frontend stays `952 passed` in 109 files; T7 regenerates `schema.d.ts`, so CI's "API types match the OpenAPI snapshot" step and the typecheck run on it.
 
 ### Layering and code rules (carried)
 - `usecases/role_policy.py` is pure (no database); `usecases/members.py` and `usecases/church_admin.py` import no FastAPI, Starlette or Streamlit (T3 adds `role_policy` and `repos.integrity` to `test_no_streamlit_in_core.py`; the other two are already listed); the routes are plain `def`s with no SQL and no try/except (F §2.2 rule 1), each one usecase call; the usecases write through the repos (no SQL in a usecase), called through their modules so a test can patch one function.
@@ -5246,10 +5247,10 @@ Run: `git status --short | grep -v '^?? .claude/' | wc -l` then `git fetch -q or
 Run: `.venv/bin/python -m pytest -q | tail -1` then `TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres 2>&1 | tail -1` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")` then `(cd frontend && NEXT_PUBLIC_SUPABASE_URL=https://ci-placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-placeholder NEXT_PUBLIC_API_URL=http://localhost:8000 npm run build 2>&1 | grep -cE "Compiled successfully")`
 **Expected** (the Postgres line only where a local, throwaway Postgres is at hand; otherwise CI's job is the check; a font `Failed to fetch` in the build: say so and rely on CI):
 ```
-2222 passed, 45 skipped in <t>s
+2235 passed, 46 skipped in <t>s
 ```
 ```
-45 passed, 2222 deselected, 1 warning in <t>s
+46 passed, 2235 deselected, 1 warning in <t>s
 ```
 ```
  Test Files  109 passed (109)
@@ -5266,7 +5267,7 @@ lint 0
 - [ ] **Step 3 (agent): The API files match, the gates, the paths, the commits**
 
 Run: `.venv/bin/python backend/scripts/export_openapi.py >/dev/null && (cd frontend && npm run gen:api >/dev/null 2>&1) && git status --short -- frontend backend | wc -l` then `grep -nE "^(import|from) (fastapi|starlette|streamlit)" backend/usecases/members.py backend/usecases/church_admin.py backend/usecases/role_policy.py backend/repos/integrity.py; echo "imports grep exit $?"` then `git diff origin/main...HEAD -- backend frontend/src pytest.ini docs/manual-verification.md | grep '^+' | grep -c '—'` then `python3 -c "import pathlib; t=pathlib.Path('docs/superpowers/plans/2026-10-09-slice-6b1-people-backend.md').read_text(); print(sum(t.count(c) for c in ('\u2028','\u2029','\ufffe','\uffff')))"` then `git diff --name-status origin/main...HEAD | LC_ALL=C sort -k2` then `git diff --name-only origin/main...HEAD -- .github frontend/package.json frontend/package-lock.json backend/requirements.txt requirements-dev.txt requirements.txt app.py streamlit_views streamlit_tests streamlit_auth.py streamlit_tenancy.py ui_helpers.py backend/api/idempotency.py backend/api/schemas.py backend/api/errors.py backend/domain_errors.py backend/email_addresses.py backend/usecases/onboarding.py backend/migrations/env.py backend/db/schema_check.py | wc -l` then `git log --reverse --no-merges --format=%s origin/main..HEAD | grep -v -e '^WIP plan: ' -e '^Plan: '` then `for c in $(git rev-list origin/main..HEAD); do git show -s --format=%B "$c" | grep -q '^Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>$' || echo "no trailer: $(git show -s --format='%h %s' "$c")"; done; echo "trailer check done"`
-**Expected:** `0` (the committed snapshot and types are current); `imports grep exit 1`; `0` (no em dash in an added line of code, tests or the checklist); `0` (no U+2028, U+2029, U+FFFE or U+FFFF in this plan); exactly these 45 paths (the 6a-3b record and the 6b amendment ride along until merged); `0` (nothing that must stay untouched changed); the subjects oldest first, then any `Fix: …` lines (the plan's own commits are left out by the `grep`); only `trailer check done`:
+**Expected:** `0` (the committed snapshot and types are current); `imports grep exit 1`; `0` (no em dash in an added line of code, tests or the checklist); `0` (no U+2028, U+2029, U+FFFE or U+FFFF in this plan); exactly these 45 paths (the 6a-3b record and the 6b amendment ride along until merged); `0` (nothing that must stay untouched changed); the subjects oldest first, then any `Fix: …` and `Test: …` lines (the build review's four among them) (the plan's own commits are left out by the `grep`); only `trailer check done`:
 ```
 0
 ```
@@ -5350,7 +5351,7 @@ trailer check done
 
 (not replayed) `gh pr list -R <repo> --head claude/slice-2-plan-4q33le --state open --json number,url` → `[]`. Send the owner exactly this, and wait for a clear yes:
 
-> The server side of People (slice 6b-1) is verified on this machine: backend 2222 passed, 45 skipped (1983 and 35 before), and the 45 Postgres tests pass on a throwaway local database; frontend 952 tests in 109 files, typecheck, lint and the production build unchanged and clean. It adds the routes the People and Danger zone pages will use (6b-2): see the members, change roles, remove someone, invite links (single-use by default, or reusable for 7 days, optionally for one email), transfer ownership, leave, delete the church. Nothing in the app changes until 6b-2. It includes one database change, migration 0008: invites can only grant member or admin, and an email can have only one waiting invite at a time (so it can be invited again after a revoke). Before merging I will take you through the same routine as last time: a backup, one read-only query in Supabase, and the SQL to read. May I open the pull request as a **draft** titled "Slice 6b-1: People on the server (members, invites, ownership, leave, delete) and migration 0008", so the checks run? Merging stays with you.
+> The server side of People (slice 6b-1) is verified on this machine: backend 2235 passed, 46 skipped (1983 and 35 before), and the 45 Postgres tests pass on a throwaway local database; frontend 952 tests in 109 files, typecheck, lint and the production build unchanged and clean. It adds the routes the People and Danger zone pages will use (6b-2): see the members, change roles, remove someone, invite links (single-use by default, or reusable for 7 days, optionally for one email), transfer ownership, leave, delete the church. Nothing in the app changes until 6b-2. It includes one database change, migration 0008: invites can only grant member or admin, and an email can have only one waiting invite at a time (so it can be invited again after a revoke). Before merging I will take you through the same routine as last time: a backup, one read-only query in Supabase, and the SQL to read. May I open the pull request as a **draft** titled "Slice 6b-1: People on the server (members, invites, ownership, leave, delete) and migration 0008", so the checks run? Merging stays with you.
 
 - [ ] **Step 5 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
 
@@ -5367,7 +5368,7 @@ Slice 6b-1: the server side of People and the Danger zone, with migration 0008_i
 
 Before the merge (Task 11): the backup, the read-only counts and integrity check, and the SQL preview with the owner. After: the after-deploy check, a short phone check, a "Slice 6b-1 record" in docs/ops-runbook.md.
 
-Tests: backend 1983 → 2222 passed, 35 → 45 skipped; frontend 952 in 109 files (unchanged)
+Tests: backend 1983 → 2235 passed, 35 → 46 skipped; frontend 952 in 109 files (unchanged)
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 
@@ -5379,7 +5380,7 @@ gh pr create -R <repo> --draft --base main --head claude/slice-2-plan-4q33le \
 gh pr checks <N> -R <repo> --watch --interval 30
 ```
 
-Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `2222 passed, 45 skipped`, backend-postgres `45 passed, 2222 deselected` (after its `alembic upgrade head`, `alembic check`, `alembic downgrade base` and `alembic upgrade head` steps, which now include 0008 on Postgres 17), frontend `952 passed` in 109 files. Then send: "PR #<N> is green: backend 2222 passed, 45 skipped (the ten new Postgres tests passed in their own job, and the migration went up, down and up again on Postgres); 952 frontend tests in 109 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you, after the backup, the query and the SQL." On the yes: `gh pr ready <N> -R <repo>`.
+Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `2235 passed, 46 skipped`, backend-postgres `46 passed, 2235 deselected` (after its `alembic upgrade head`, `alembic check`, `alembic downgrade base` and `alembic upgrade head` steps, which now include 0008 on Postgres 17), frontend `952 passed` in 109 files. Then send: "PR #<N> is green: backend 2235 passed, 46 skipped (the eleven new Postgres tests passed in their own job, and the migration went up, down and up again on Postgres); 952 frontend tests in 109 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you, after the backup, the query and the SQL." On the yes: `gh pr ready <N> -R <repo>`.
 
 - [ ] **Step 6: Fix any failure in its owning task**
 
@@ -5399,7 +5400,7 @@ Run the last line with `run_in_background: true`. **Expected:** the PR URL; ever
 
 For each fix: change only the owning task's files; rerun Steps 2-3; commit `Fix: <what> (Task <n>, slice 6b-1 final verification)` with the trailer; after the PR exists, ask the owner before pushing it.
 
-Expected counts after this task: backend `2222 passed, 45 skipped`; frontend `952 passed` in 109 files.
+Expected counts after this task: backend `2235 passed, 46 skipped`; frontend `952 passed` in 109 files.
 
 ### Task 11: Before the merge (backup, counts and checks, SQL), the merge, the after-deploy check, the phone check, the record (OWNER + agent)
 
@@ -5600,7 +5601,7 @@ pytest.ini
 
 Then a commit "Revert slice 6b-1 (PR #<N>), keeping migration 0008" with the trailer; a PR, CI (whose `alembic check` then compares the restored model with the database at `0008`, clean in the simulation), and the merge on the owner's yes; record it in the record. Never `alembic downgrade` production for this.
 
-Expected counts after this task: backend `2222 passed, 45 skipped` on `main`; frontend `952 passed` in 109 files. The records PR adds no test.
+Expected counts after this task: backend `2235 passed, 46 skipped` on `main`; frontend `952 passed` in 109 files. The records PR adds no test.
 
 ---
 
@@ -5621,6 +5622,13 @@ Expected counts after this task: backend `2222 passed, 45 skipped` on `main`; fr
 - Every "see it fail" output, every count and every T10 Step 1-3 output above is quoted from the first replay (times as `<t>`); the plan as committed was then replayed once more onto another fresh worktree and fresh database and matched every quoted block but one: T10 Step 3's check of this plan for U+2028, U+2029, U+FFFE and U+FFFF found 4, because the command itself had been written with those characters instead of their `\u` escapes; the command now uses the escapes, and run again on the replayed tree with the committed plan it prints `0`. The migration ran up, down (refusing, then restoring) and up again on SQLite in T1's tests and on Postgres in T1's Postgres tests, and CI's own Alembic sequence (upgrade, check, downgrade base, upgrade) was run by hand on the throwaway cluster.
 - **Replay after the plan review fixes (2026-10-09).** The fixed plan (T1-T9, then T10 Steps 1-3) was replayed by the same script onto a fresh detached worktree of its own commit (outside the repo directory, the repo's `.venv` as a symlink and a hard-linked `frontend/node_modules`), with a fresh database on a new throwaway local PostgreSQL 16 cluster: all 77 directives applied (15 **Create**, 11 **Append**, 51 **In … replace**, each replace block exactly once), all nine commits made with the trailer, 50 commands run, and every quoted output above matched (0 mismatches; the base differs from the first replay's only by plan commits, so the baselines stand). The migration again ran up, down (refusing, then restoring) and up on SQLite and on Postgres in T1's tests. T11 Step R was then simulated on that worktree: a `--no-ff` merge of the replayed branch into `origin/main`; the old revert (the revision, the model and `pytest.ini` only) gave `15 failed, 1968 passed, 35 skipped`; the new one (T1's eleven paths, which `git show --name-only` of T1's commit listed exactly, plus the ride-along docs) gave `1988 passed, 37 skipped` and `37 passed, 1988 deselected, 1 warning` on Postgres, and on a fresh Postgres database `alembic upgrade head` logged "0008_invites_integrity: 0 invite(s) with another role made admin and revoked" and `alembic check` printed "No new upgrade operations detected.". The worktree, its branches and the cluster were removed afterwards.
 - Not run while planning: the pushes, the PR and CI, the merge, Railway's pre-deploy migration on production data, Vercel's deploy, and the owner's steps (T11).
+- **6b-1 build review fixes (2026-10-09).** After T1-T9 were built on the branch, a code review found four things, each fixed test first (seen red, fixed, seen green, then the old behaviour planted once by hand to confirm the test turns red) as its own commit, after the T9 commit; the T1-T9 directives above stay as built, and the commits are the record of each change:
+  1. `Fix: change_role refuses a role outside member and admin (6b-1 build review 1)`. `usecases.members.change_role` accepted any `new_role`, so a direct call (Pydantic refuses it at the route) could make a second owner. It now checks `ASSIGNABLE_ROLES` after the role 403, as `create_invite` does: a 422 naming `role`, "Not a valid value.". `test_members_usecase.py` +8 (`owner`, `Admin`, `superuser` and an empty role, for an admin and a member target; nothing written). Planted (the check removed): `8 failed, 85 passed`.
+  2. `Fix: pending email invites compare lower(trim(email)) (6b-1 build review 2)`. `repos.invites._pending_email` compared `lower(email)` while accept compares `strip().lower()`, so removing someone left a pending invite stored as ` member@example.com` live. It now compares `lower(trim(email))` (SQL `trim` strips spaces only; the app has always stored the email trimmed and lower-cased). `test_members_usecase.py` +3 (the removal for two padded spellings, and `invite_exists` over a padded one), `test_people_postgres.py` +1 (the removal on Postgres). Planted (the old comparison): `3 failed` on SQLite and `1 failed` on Postgres. The README's "Before 0008_invites_integrity" step 2 query gains `unnormalized_email_invites` (invites whose `email <> lower(trim(email))`, expected `0`, not a blocker; its bullet says what a non-zero count means), `test_the_owner_s_read_only_queries_around_0008` pins it (a fifth, padded invite), `docs/manual-verification.md` item 2 expects `0`, and T11 Step 2 asks for it and says how to handle a non-zero count. The T1 and T9 copies of the README and the checklist above are left as built.
+  3. `Test: the integrity check reports duplicate pending invites in a soft-deleted church (6b-1 build review 3)`. No code change: `find_violations` already checks invites in every church, as 0008's pre-check does; a test now pins it. `test_integrity.py` +1. Planted (a not-deleted filter on `pending_duplicate`): `1 failed, 8 passed, 1 skipped`.
+  4. `Fix: 0008 logs the role repair only after the duplicate check passed (6b-1 build review 4)`. The upgrade logged "made admin and revoked" before the duplicate check, which may refuse and roll the repair back. The repair still runs first; the line is logged once the check has passed. The offline SQL is byte-for-byte the same (README step 3 and `PREVIEW_0008` unchanged; compared with the rendering before the change). `test_migrations.py` +1 (SQLite: no line on the refused run, one with the count after the runbook's dedupe), and the Postgres upgrade test asserts the same. Planted (the line back before the check): `2 failed, 6 passed`.
+
+  After the four: backend `2235 passed, 46 skipped`; on a throwaway local PostgreSQL 16 cluster `46 passed, 2235 deselected, 1 warning`, and CI's Alembic sequence by hand (`upgrade head`, which logged "0008_invites_integrity: 0 invite(s) with another role made admin and revoked"; `check`, "No new upgrade operations detected."; `downgrade 0007_bulletin_images`; `downgrade base`; `upgrade head`; `check` again, clean); frontend `952 passed` in 109 files, typecheck 0, lint 0, the build compiled; the exported OpenAPI and the generated types unchanged (`0`). T10 Step 3's path list is unchanged (45 paths: every file touched was already in it). The cluster was removed afterwards.
 
 ## Spec coverage
 
