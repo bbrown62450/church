@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship the first of slice 6b's two PRs (owner's 6b planning answers of 2026-10-09, "all recommended"; binding): **the server side of People and the Danger zone, with the invites-integrity migration.** After it merges, the API serves `GET /members` (every member sees every member, with emails), `PATCH /members/{user_id}` (owners and admins make a member an admin or an admin a member, never the owner, never themselves), `DELETE /members/{user_id}` (owners and admins remove someone other than the owner or themselves; every invite link the removed person made stops working, and with `?revoke_reusable=true` every live reusable link of the church too), `GET`, `POST` and `DELETE /invites` (owners and admins list the live invite links, make a single-use link (or one "Reusable for 7 days"), optionally for one email address, and revoke one), `POST /church/transfer-ownership` and `DELETE /church` (the owner only; the delete needs the church's exact name), and `POST /church/leave` (anyone but the owner). Every write runs in one transaction under the church-row lock with the caller's role re-read under it, and the role rules are one pure, table-tested module. Migration **`0008_invites_integrity`** makes the database refuse an invite for any role but member or admin (a stored one is first made an admin invite and revoked) and allows one pending invite per church and email in any capitalization (replacing the old "one invite per church and email, ever" constraint, so an email can be invited again after a revoke or an acceptance); it refuses to run over duplicate pending invites, naming the churches, never an email. `backend/scripts/check_integrity.py` and the README's "Church integrity" runbook find churches without exactly one owner or without an admin, bad invite roles and duplicate pending invites. **No page changes**: People and Danger zone are 6b-2's (with the one-owner revision `0009_…`); the app looks and works as before, and only the generated API types are refreshed. Production moves from `0007_bulletin_images` to `0008_invites_integrity` through the owner's routine (backup, read-only counts and checks, the SQL preview, the after-deploy check). No new package or variable; the frozen Streamlit files are untouched. Tests never reach the network.
+**Goal:** Ship the first of slice 6b's two PRs (owner's 6b planning answers of 2026-10-09, "all recommended"; binding): **the server side of People and the Danger zone, with the invites-integrity migration.** After it merges, the API serves `GET /members` (every member sees every member, with emails), `PATCH /members/{user_id}` (owners and admins make a member an admin or an admin a member, never the owner, never themselves), `DELETE /members/{user_id}` (owners and admins remove someone other than the owner or themselves; every invite link the removed person made stops working, so does every pending invite for their email, and with `?revoke_reusable=true` every live reusable link of the church too), `GET`, `POST` and `DELETE /invites` (owners and admins list the live invite links, make a single-use link (or one "Reusable for 7 days"), optionally for one email address, and revoke one), `POST /church/transfer-ownership` and `DELETE /church` (the owner only; the delete needs the church's exact name), and `POST /church/leave` (anyone but the owner). Every write runs in one transaction under the church-row lock with the caller's role re-read under it, and the role rules are one pure, table-tested module. Migration **`0008_invites_integrity`** makes the database refuse an invite for any role but member or admin (a stored one is first made an admin invite and revoked) and allows one pending invite per church and email in any capitalization (replacing the old "one invite per church and email, ever" constraint, so an email can be invited again after a revoke or an acceptance); it refuses to run over duplicate pending invites, naming the churches, never an email. `backend/scripts/check_integrity.py` and the README's "Church integrity" runbook find churches without exactly one owner or without an admin, bad invite roles and duplicate pending invites. **No page changes**: People and Danger zone are 6b-2's (with the one-owner revision `0009_…`); the app looks and works as before, and only the generated API types are refreshed. Production moves from `0007_bulletin_images` to `0008_invites_integrity` through the owner's routine (backup, read-only counts and checks, the SQL preview, the after-deploy check). No new package or variable; the frozen Streamlit files are untouched. Tests never reach the network.
 
-**Architecture:** Backend only, bottom up. T1: the revision, the `Invite` model's table arguments, `pytest.ini`'s two targeted warning filters (SQLite cannot reflect an expression index), and the README's "Before 0008_invites_integrity" and "Church integrity (slice 6b)" sections, every query and the SQL preview pinned by tests on SQLite and Postgres. T2: `repos/integrity.py` (`find_violations`, ids and counts only) and `scripts/check_integrity.py` (read-only, an exported `DATABASE_URL` only, like `schema_drift.py`). T3: `usecases/role_policy.py` (four pure checks with the spec's exact messages) and the shared fixture `tests/fixtures/shared/role_policy.json` (the 51 reachable states, for 6b-2's page too). T4: the repos (`memberships`: `set_role`/`remove_membership` in the caller's session, `list_member_rows`, `get_member`, `count_owner_admins`, `is_member_email`, `transfer_ownership` as two Core UPDATEs, demote then promote; `invites`: `insert_invite`, `list_active_invites`, the pending-email lookups, the two revocations, `revoke_invite` returning whether the church has it; `churches.soft_delete_church` in the caller's session, revoking every unrevoked invite), every frozen-Streamlit caller unchanged. T5: `usecases/members.py`'s member and invite functions after 6a-1's `lock_and_read_actor`. T6: `usecases/church_admin.py`'s `transfer_ownership`, `leave_church`, `delete_church`. T7: `api/deps.require_owner`, `api/routes/members.py` (new), the admin invite routes in `routes/invites.py`, the lifecycle routes in `routes/churches.py`, `ADMIN_ONLY` and a new `OWNER_ONLY` in `test_route_guards.py`, the regenerated `openapi.json` and `schema.d.ts`. T8: Postgres tests that each write waits for the other and sees its result. T9: the manual check items.
+**Architecture:** Backend only, bottom up. T1: the revision, the `Invite` model's table arguments, `pytest.ini`'s two targeted warning filters (SQLite cannot reflect an expression index), and the README's "Before 0008_invites_integrity" and "Church integrity (slice 6b)" sections, every query and the SQL preview pinned by tests on SQLite and Postgres. T2: `repos/integrity.py` (`find_violations`, ids and counts only) and `scripts/check_integrity.py` (read-only, an exported `DATABASE_URL` only, like `schema_drift.py`). T3: `usecases/role_policy.py` (four pure checks with the spec's exact messages) and the shared fixture `tests/fixtures/shared/role_policy.json` (the 51 reachable states, for 6b-2's page too). T4: the repos (`memberships`: `set_role`/`remove_membership` in the caller's session, `list_member_rows`, `get_member`, `count_owner_admins`, `is_member_email`, `transfer_ownership` as two Core UPDATEs, demote then promote; `invites`: `insert_invite`, `list_active_invites`, the pending-email lookups, the three revocations, `claim` stamping only an unrevoked, unexpired invite, `revoke_invite` returning whether the church has it; `churches.soft_delete_church` in the caller's session, revoking every unrevoked invite), every frozen-Streamlit caller unchanged. T5: `usecases/members.py`'s member and invite functions after 6a-1's `lock_and_read_actor`. T6: `usecases/church_admin.py`'s `transfer_ownership`, `leave_church`, `delete_church`. T7: `api/deps.require_owner`, `api/routes/members.py` (new), the admin invite routes in `routes/invites.py`, the lifecycle routes in `routes/churches.py`, `ADMIN_ONLY` and a new `OWNER_ONLY` in `test_route_guards.py`, the regenerated `openapi.json` and `schema.d.ts`. T8: Postgres tests that each write waits for the other and sees its result. T9: the manual check items.
 
 **Tech Stack:** Python 3.11 (`.venv`), FastAPI 0.141, Pydantic 2, SQLAlchemy 2.1, Alembic 1.20, psycopg2, pytest; the frontend only regenerates `schema.d.ts` (openapi-typescript 7) and is checked with Vitest 3, `tsc` and ESLint.
 
@@ -82,7 +82,7 @@ The owner's answers win over S and F; the code wins over both where they disagre
 1. **[owner-visible] What 6b-1 ships** (answers 1 and 2). The nine routes and `require_owner`; `usecases/role_policy.py` and its shared fixture; the member, invite, transfer, leave and delete usecases and their repos; migration `0008_invites_integrity`; `repos/integrity.py` and `scripts/check_integrity.py` with the README's "Church integrity (slice 6b)" runbook and "Before 0008_invites_integrity" steps; the Postgres tests; the regenerated `openapi.json` and `schema.d.ts`; the manual check items. Not here: the People and Danger zone pages, the Settings nav, the client's type aliases, `useExitChurch` and role meta, the frontend tests (6b-2); the one-owner revision (`0009_…`, 6b-2); the `streamlit_tests` port and ledger and the deletion of `streamlit_tests/test_settings_members_invites.py` (answer 2: dropped; the file keeps passing, see 10); `LegacySettingsNote` (never built). Nothing in the app changes for anyone until 6b-2; the routes are live but no page calls them.
 2. **The revision's number and place.** S's `0006_invites_integrity` is `0008_invites_integrity` (answer 1), `down_revision = "0007_bulletin_images"`, the head on `main` today. The head constants move with it: `test_api_app.SCHEMA_HEAD`, `test_schema_check.EXPECTED_HEAD` (and its test's name), and the head version the README's 0005-0007 queries report on the Postgres test database (`test_services_postgres.py`). `test_migrations.test_there_is_a_single_head` already enforces the chain.
 3. **What S assumed and what exists** (S "Assumed interfaces"). Slice 1, 5b and 6a shipped every interface 6b-1 needs, and nothing is created twice: `lock_church`, `lock_and_read_actor` (in `usecases/members.py`, where 6b adds its functions), `require_admin_role` (`church_admin`, which imports `members`, so `members` imports it inside `_require_admin` when called: one helper, no import cycle), `normalize_address` and its fixture, `DeletedOut`, church-scoped Idempotency-Keys (`run_idempotent(church_id=)`), every error code, `assert_church_isolated`. `ActiveChurch.role` is never trusted for a write: the role read under the lock is.
-4. **Slice 1's accept already makes code-only invites single-use** (S "Assumed interfaces", row 3). `accept_invite` claims every non-reusable invite a new member accepts (`if not inv.reusable and not invites.claim(...)`), so a code-only single-use link refuses a second user with "This invite has already been used." (`test_single_use_code_only_lifecycle`). No fix: T7 adds the end-to-end test through `POST /invites`. Slice 1's exception stays: someone already in the church who opens an unused code-only link does not use it up.
+4. **Slice 1's accept already makes code-only invites single-use** (S "Assumed interfaces", row 3). `accept_invite` claims every non-reusable invite a new member accepts (`if not inv.reusable and not invites.claim(...)`), so a code-only single-use link refuses a second user with "This invite has already been used." (`test_single_use_code_only_lifecycle`). No fix: T7 adds the end-to-end test through `POST /invites`. Slice 1's exception stays: someone already in the church who opens an unused code-only link does not use it up. One change (plan review M2): `claim`'s `UPDATE` now also requires the invite unrevoked and unexpired, so an accept that read a single-use link before a removal or a delete revoked it claims nothing and is refused with slice 1's "used" words (on Postgres the `UPDATE` waits for the revoking transaction's row lock and re-reads the row); `usecases/onboarding.py` is unchanged. A reusable link is never claimed, so an accept already past its checks when the link is revoked still joins, as if it had come first.
 5. **The duplicate pre-check runs inside the migration on both dialects** (S "Data and migrations", step 2). On Postgres it is a `DO` block that raises (so the owner's SQL preview shows it, and it runs in the upgrade's one transaction: a refusal rolls back the role repair too, the pre-deploy step fails and the previous release keeps serving); on SQLite it is the same words as a `RuntimeError`. The words: `0008_invites_integrity: {n} (church, email) pair(s) have more than one pending invite: {church ids}. Follow "Church integrity" in backend/migrations/README.md, then redeploy.` (church ids as UUIDs, never an email; S had `0006:`). On Postgres the error reaches Railway's log as the database's exception rather than a Python `RuntimeError`.
 6. **The role repair needs no separate assertion** (S step 1, "then assertion"). The `UPDATE` covers every row (`role` is NOT NULL), and adding a CHECK makes Postgres check every existing row itself (SQLite's batch copy does the same), so a separate assertion could never fire. Online runs log `0008_invites_integrity: <n> invite(s) with another role made admin and revoked`; the offline preview cannot count, so it only shows the `UPDATE`.
 7. **The expression index and autogenerate** (S Risk 3). On Postgres Alembic compares `uq_invites_pending_email` with the model (`alembic check` reports nothing, measured on PG 16), so `env.py`'s `include_object` needs no exception. SQLite cannot reflect an expression index: SQLAlchemy and Alembic each warn once per comparison and skip it, so `pytest.ini` filters exactly those two warnings, by the index's name, and the SQLite tests read the index from `sqlite_master`. On SQLite the drift of a database stamped at the baseline gains one line, `remove_constraint uq_invites_church_email` (`test_schema_check.BASELINE_DRIFT`).
@@ -90,8 +90,8 @@ The owner's answers win over S and F; the code wins over both where they disagre
 9. **[owner-visible] How the integrity check is run** (S "Church integrity runbook"). Step 2 of "Before 0008_invites_integrity" is one read-only query for Supabase's SQL Editor that counts the same four kinds `check_integrity.py` reports (T2 checks on Postgres that both agree), so the owner needs no laptop setup. `scripts/check_integrity.py` stays for a laptop, and reads only an exported `DATABASE_URL`, like `schema_drift.py` (S said `load_dotenv()`: a `backend/.env` pointing at Supabase would then be used without anyone choosing it); without one it exits 2. Streamlit is retired, so S's "run it right before slice 7 retires Streamlit" is dropped: the check runs before and after each 6b PR. Owner question 1.
 10. **The frozen Streamlit pages keep working on the changed repos** (answer 2; the frozen files are not edited). `streamlit_views/settings.py` imports seven of the changed repo functions; each keeps its positional signature and gains only a keyword-only `session=None` (`revoke_invite` now returns a bool its callers ignore). `streamlit_tests/test_settings_members_invites.py` keeps passing (its transfer runs before any one-owner index). The transfer lives in the repo as `memberships.transfer_ownership`: two Core `UPDATE`s, demote then promote (S "Transactions and locking"), checked by statement order.
 11. **Deleting a church revokes every unrevoked invite** (S "Repo changes", inv §1 B3). `soft_delete_church` drops its `accepted_at IS NULL` filter, so a used reusable link is revoked too. One slice 1 test deleted a church through it to keep a consumed invite live for its check-order case; it now sets `deleted_at` directly, as its neighbour `_rejected_code` already does.
-12. **Invite creation in detail** (S "Invite semantics"). The checks run in this order, the first failure answering: the role 403 (under the lock); `role` not member or admin, 422 `fields.role` "Not a valid value." (Pydantic answers first over HTTP with the same words; the usecase checks too, for direct callers); the email (`clean_invite_email`: blank is none, else `normalize_address` then lower-cased; refused, 422 `fields.email`); `reusable` with an email, 422 `fields.reusable`; a member of this church with that email, 409 `conflict` "{email} is already a member of this church."; the email's expired pending invites revoked; a live pending one, 409 `invite_exists`; the insert in a savepoint, its `IntegrityError` (a writer that skipped the lock) the same 409. `{email}` is the stored, lower-cased address. Seven days from `now`. The answer is the invite as `GET /invites` lists it, with its creator.
-13. **The evaluation order** (S "Role policy"). Change role and remove: the role 403 (`require_admin_role`), then the target as a membership of this church (404 "Member not found."), then the policy (self, the owner). Transfer: `check_transfer` (owner only; self is a 422 naming `user_id`), then the target (404). Leave: `check_leave` with the owner and admin count read under the admin-row lock. Delete: owner only, then the name (trimmed, exact, case included; 422 naming `confirm_name`). The repo's `LastAdminError` cannot fire behind the policy; if it ever does it is a 409 `last_admin` with the repo's words (not in the OpenAPI document, as S says).
+12. **Invite creation in detail** (S "Invite semantics"). The checks run in this order, the first failure answering: the role 403 (under the lock); `role` not member or admin, 422 `fields.role` "Not a valid value." (Pydantic answers first over HTTP with the same words; the usecase checks too, for direct callers); the email (`clean_invite_email`: blank is none, else `normalize_address` then lower-cased; refused, 422 `fields.email`); `reusable` with an email, 422 `fields.reusable`; a member of this church with that email, 409 `conflict` "{email} is already a member of this church."; the email's expired pending invites revoked; a live pending one, 409 `invite_exists`; the insert in a savepoint, an `IntegrityError` naming `uq_invites_pending_email` (a writer that skipped the lock) the same 409, and any other `IntegrityError` raised as it is, never a misleading 409 (plan review M4). `{email}` is the stored, lower-cased address. Seven days from `now`. The answer is the invite as `GET /invites` lists it, with its creator.
+13. **The evaluation order** (S "Role policy"). Change role and remove: the role 403 (`require_admin_role`), then the target as a membership of this church (404 "Member not found."), then the policy (self, the owner). Transfer: `check_transfer` (owner only; self is a 422 naming `user_id`), then the target (404). Leave: `check_leave` with the owner and admin count read under the admin-row lock. Delete: owner only, then the name (the typed and the stored name both trimmed, then exact, case included; 422 naming `confirm_name`; plan review M3). The repo's `LastAdminError` cannot fire behind the policy; if it ever does it is a 409 `last_admin` with the repo's words (not in the OpenAPI document, as S says).
 14. **Postgres concurrency tests force each race deterministically** (S Testing → Postgres). Instead of 20 rounds behind a `Barrier`, each test holds the first write inside the lock (a function it calls through its module after taking it), starts the second, checks it is still waiting a second later, then releases: the order is then certain and the loser's answer exact, every run. The six S cases plus one: two transactions that skip the lock (a direct write) still cannot store two pending invites for one email. With `lock_church`'s `FOR UPDATE` taken out, six of the seven fail (measured).
 15. **The API in detail** (S API). `DELETE /church` takes a JSON body (`confirm_name`); `revoke_reusable` is a query flag (`true`/`false`; anything else 422). `GET` and `POST /invites` answers carry `Cache-Control: no-store` (a replayed or refused `POST` too). `POST /invites`'s Idempotency-Key is scoped to the user, the church and the route. `GET /members` depends on `get_current_user` as well, for `is_me`. `PATCH` and `DELETE /members` document no 409. Every route is a plain `def`.
 16. **`test_route_guards.py` pins the new routes** (S API notes; the 6a-3a lesson). `ADMIN_ONLY` gains `PATCH` and `DELETE /members/{user_id}`, `GET` and `POST /invites` and `DELETE /invites/{invite_id}`; a new `OWNER_ONLY` (S's `OWNER_ROUTES`) holds `POST /church/transfer-ownership` and `DELETE /church`, checked both ways as `ADMIN_ONLY` is. `GET /members` and `POST /church/leave` stay church-scoped. The user-scoped allowlist does not change.
@@ -103,7 +103,7 @@ The owner's answers win over S and F; the code wins over both where they disagre
 ### Risks
 - **Production may hold duplicate pending email invites** (unlikely: the old exact-case constraint and the lower-casing since slice 1). T11's step 2 counts them before the merge; the migration refuses to run over them in any case, safely (the previous release keeps serving), and the runbook's step 2 repairs them with the owner.
 - **The old constraint's name in production.** The upgrade drops `uq_invites_church_email` by name; step 2 checks it exists (`old_constraint` `1`). The 1a drift check found production's invites table equal to the models, so it is expected.
-- **A church without exactly one owner** (made by the retired Streamlit app's role select or by hand). It does not block 0008, but in it transfer and delete are refused (the owner-only 403) and its only admin cannot leave (409). Step 2 counts such churches; owner question 2 says what then.
+- **A church without exactly one owner** (made by the retired Streamlit app's role select or by hand). It does not block 0008, but in it transfer and delete are refused (the owner-only 403) and its only admin cannot leave (409). Step 2 counts such churches; owner question 2 says what then. It is a gate for 6b-2: `0009_…` only refuses a second owner, so every church must have exactly one owner before 6b-2 merges.
 - **The routes are live before any page uses them** (6b-1 before 6b-2). Only a signed-in owner or admin calling the API directly reaches the writes, under the same rules the pages will use. Nothing removes an owner except a transfer.
 - **The lock timeout.** Creating the index and the CHECK takes a short lock on `invites`; another connection holding one for more than 5 s fails the deploy safely; redeploy.
 - **SQLite ignores `FOR UPDATE` and cannot reflect the expression index.** Only CI's `backend-postgres` proves the waiting (T8) and compares the index (`alembic check`); T1's SQLite tests read the index from `sqlite_master`.
@@ -801,8 +801,10 @@ SELECT (SELECT version_num FROM alembic_version) AS version,
 One row. Expected before the merge:
 
 - `version` is `0007_bulletin_images` (anything else: stop);
-- `invites` all invites ever made, `pending_email_invites` those bound to an
-  email and still waiting;
+- `invites` all invites ever made; `pending_email_invites` those bound to an
+  email that are neither revoked nor used, expired ones included (the
+  upgrade's "one waiting invite per church and email" rule counts an
+  expired one too, until the app revokes it);
 - `duplicate_pending_pairs` is `0`. Anything else: stop. The upgrade would
   refuse (safely: the previous release keeps serving); follow "Church
   integrity" step 2 below with the agent first;
@@ -813,8 +815,10 @@ One row. Expected before the merge:
 - `churches` the churches in use; `churches_without_one_owner` and
   `churches_without_admin` are normally `0`. They do not block this
   upgrade, but a church with no owner cannot transfer ownership or be
-  deleted in the new app: tell the agent, who records it, and decide
-  together whether to repair it ("Church integrity" steps 3 and 4).
+  deleted in the new app: tell the agent, who records it, and repair it
+  together ("Church integrity" steps 3 and 4) before slice 6b-2 merges.
+  That is a gate: 6b-2's revision only refuses a second owner, so it
+  would not notice a church with none.
 
 This is the same check as `backend/scripts/check_integrity.py` ("Church
 integrity" below), as one query for the SQL Editor.
@@ -890,11 +894,21 @@ deploy), except `other_role_invites` `0` and `old_constraint` `0`.
 
 The schema stays at `0008_invites_integrity`: the code before 6b-1 creates
 no invites (only `POST /invites/accept` and `/preview` read them), so it
-runs on it unchanged. Revert the merge commit, then restore
-`backend/migrations/versions/0008_invites_integrity.py` and the `Invite`
-table arguments in `backend/db/models.py` from the merge commit in the same
-PR, so Railway's `alembic upgrade head` still finds the database at head and
-`alembic check` stays clean. Never `alembic downgrade` production for this.
+runs on it unchanged. Revert the merge commit, then, in the same PR, restore
+from the merge commit every file of 6b-1's first commit ("Migration
+0008_invites_integrity: …"), not only the revision: the `Invite` model,
+`pytest.ini`'s two filters, this README, the test helper and the tests that
+know the head or store an old invite role. Then Railway's `alembic upgrade
+head` still finds the database at head, `alembic check` stays clean, and
+the backend suite passes (restoring only the revision, the model and
+`pytest.ini` leaves 15 tests failing). From the repo root:
+
+```bash
+git checkout <merge sha> -- backend/migrations/versions/0008_invites_integrity.py backend/db/models.py pytest.ini backend/migrations/README.md backend/tests/invite_helpers.py backend/tests/test_migrations.py backend/tests/test_schema_check.py backend/tests/test_api_app.py backend/tests/test_services_postgres.py backend/tests/test_api_invites.py backend/tests/test_usecase_onboarding.py
+```
+
+Run the backend suite before the revert's PR opens; it must pass. Never
+`alembic downgrade` production for this.
 
 ## Church integrity (slice 6b)
 
@@ -911,7 +925,9 @@ invites of one church should share an email. The new app keeps all of this
    (read-only). The script prints one line per problem (its kind, the church
    id, a count) and `OK: no integrity violations.` when there is none; it
    exits 1 when it found any. Record the result (never a church id) in the
-   PR or the slice's record.
+   PR or the slice's record. Before slice 6b-2 merges, every church must
+   have exactly one owner (steps 3 and 4): its revision only refuses a
+   second owner.
 2. **Duplicate pending email invites** (`duplicate_pending_pairs` above,
    `pending_duplicate` in the script; `0008` refuses to run over them): after
    a fresh backup, keep the newest pending invite per church and email, and
@@ -929,12 +945,19 @@ invites of one church should share an email. The new app keeps all of this
    ```
    The people those invites were for can still use the newest one.
 3. **More than one owner** in a church (`owner_count` with a count above 1):
-   agree with the church who keeps ownership, then, with the agent, make the
-   others admins:
-   `UPDATE memberships SET role = 'admin' WHERE church_id = :c AND role = 'owner' AND user_id <> :keep;`
+   agree with the church who keeps ownership, then, after a fresh backup,
+   make the others admins. The statements in steps 3 and 4 hold
+   placeholders in quotes (`'<church id>'`, `'<user id of the owner who
+   stays>'`, `'<user id of the new owner>'`), which the SQL Editor never
+   tries to fill in and which fail, changing nothing, if run as they are.
+   The agent writes the statement out with the real ids in the chat only,
+   for the owner to paste; the real ids never go into a committed file,
+   the PR or the record.
+   `UPDATE memberships SET role = 'admin' WHERE church_id = '<church id>' AND role = 'owner' AND user_id <> '<user id of the owner who stays>';`
 4. **No owner** (`owner_count` 0): pick an existing admin with the church,
-   then:
-   `UPDATE memberships SET role = 'owner' WHERE church_id = :c AND user_id = :new_owner;`
+   then, after a fresh backup (the agent fills in the ids in the chat, as
+   in step 3):
+   `UPDATE memberships SET role = 'owner' WHERE church_id = '<church id>' AND user_id = '<user id of the new owner>';`
    If the church has no admin either (`no_admin`), pick any member.
 5. **Invites with another role** (`invite_role`): `0008` repairs them; after
    it, the database refuses new ones.
@@ -1803,7 +1826,7 @@ Expected counts after this task: backend `2048 passed, 38 skipped`; frontend `95
 **Files:**
 - Modify: `backend/tests/test_memberships_repo.py`, `backend/tests/test_invites_repo.py`, `backend/tests/test_churches_repo.py`, `backend/tests/test_usecase_onboarding.py`, `backend/repos/memberships.py`, `backend/repos/invites.py`, `backend/repos/churches.py`
 
-The new reads and writes take the caller's session, so a usecase runs them under its church-row lock. The members' order (the owner, admins, members, each by name or else email, then id); the lookups scoped to the church; `set_role` and `remove_membership` in a caller's session (rolled back with it); the transfer's two UPDATEs in order (demote, then promote); `insert_invite` returning the whole row; the live-invite list (not revoked, not expired, unused unless reusable, newest first, the creator or `None`); the pending-email lookups ignoring case; the two revocations counted and scoped; `revoke_invite` saying whether the church has the invite (a string id works, a malformed one is `NotFound`); the delete revoking a used reusable link too and saying whether it deleted. Every old caller (the frozen Streamlit pages among them) keeps its positional call. One slice 1 test that deleted a church through `soft_delete_church` to keep a consumed invite live now sets `deleted_at` directly (clarification 11).
+The new reads and writes take the caller's session, so a usecase runs them under its church-row lock. The members' order (the owner, admins, members, each by name or else email, then id); the lookups scoped to the church; `set_role` and `remove_membership` in a caller's session (rolled back with it); the transfer's two UPDATEs in order (demote, then promote); `insert_invite` returning the whole row; the live-invite list (not revoked, not expired, unused unless reusable, newest first, the creator or `None`); the pending-email lookups ignoring case; the three revocations (by creator, by the email of a removed person, every reusable link) counted and scoped; `claim` stamping only an invite that is still unrevoked and unexpired (plan review M2); `revoke_invite` saying whether the church has the invite (a string id works, a malformed one is `NotFound`); the delete revoking a used reusable link too and saying whether it deleted. Every old caller (the frozen Streamlit pages among them) keeps its positional call. One slice 1 test that deleted a church through `soft_delete_church` to keep a consumed invite live now sets `deleted_at` directly (clarification 11).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1853,7 +1876,7 @@ from repos.churches import create_church
 from repos.invites import (
     create_invite, get_invite_by_code, list_invites, revoke_invite,
     find_pending_email_invite, insert_invite, list_active_invites, revoke_expired_email_invites,
-    revoke_invites_created_by, revoke_reusable_invites,
+    revoke_invites_created_by, revoke_pending_email_invites, revoke_reusable_invites,
 ````
 
 **Append to `backend/tests/test_invites_repo.py`:**
@@ -1956,6 +1979,42 @@ def test_revoke_invite_says_whether_the_church_has_it(tmp_db, make_user):
     assert revoke_invite(invite_id, cid) is True                    # already revoked: still the church's
     with pytest.raises(NotFound):
         revoke_invite("not-a-uuid", cid)
+
+
+def test_revoke_pending_email_invites_takes_every_pending_one_for_the_email_expired_too(tmp_db, make_user):
+    """A removal revokes the pending invites for the removed person's email,
+    whoever made them (plan review M1)."""
+    owner = make_user(email="o@x.com")
+    cid = create_church(name="C", timezone="UTC", owner_user_id=owner)
+    other = create_church(name="D", timezone="UTC", owner_user_id=owner)
+    live = create_invite(church_id=cid, created_by=owner, email="Mary@x.com")
+    expired = create_invite(church_id=cid, created_by=owner, email="mary@x.com", role="admin")
+    used = create_invite(church_id=cid, created_by=owner, email="mary@x.com")
+    someone_else = create_invite(church_id=cid, created_by=owner, email="ann@x.com")
+    elsewhere = create_invite(church_id=other, created_by=owner, email="mary@x.com")
+    _set(expired, expires_at=NOW)
+    _set(used, accepted_at=NOW)
+    with session_scope() as s:
+        assert revoke_pending_email_invites(cid, " MARY@X.com ", session=s) == 2
+        assert revoke_pending_email_invites(cid, "mary@x.com", session=s) == 0
+    assert [_revoked(c) for c in (live, expired, used, someone_else, elsewhere)] == [True, True, False, False, False]
+
+
+def test_claim_stamps_only_a_live_invite(tmp_db, make_user):
+    """claim's UPDATE also requires the invite unrevoked and unexpired, so an
+    accept that read the invite before a removal revoked it claims nothing
+    (plan review M2)."""
+    owner = make_user(email="o@x.com")
+    joiner = make_user(email="j@x.com")
+    cid = create_church(name="C", timezone="UTC", owner_user_id=owner)
+    revoked, expired, live = (create_invite(church_id=cid, created_by=owner) for _ in range(3))
+    _set(revoked, revoked=True)
+    _set(expired, expires_at=NOW)
+    _set(live, expires_at=NOW)
+    assert claim(get_invite_by_code(revoked)["id"], joiner, NOW - timedelta(minutes=1)) is False
+    assert claim(get_invite_by_code(expired)["id"], joiner, NOW + timedelta(seconds=1)) is False
+    assert claim(get_invite_by_code(live)["id"], joiner, NOW) is True          # expires_at == now: still live
+    assert [get_invite_by_code(c)["accepted_by"] for c in (revoked, expired, live)] == [None, None, joiner]
 ````
 
 **In `backend/tests/test_memberships_repo.py`, replace:**
@@ -2232,6 +2291,48 @@ def insert_invite(*, church_id, created_by, role, email, reusable: bool, ttl_day
 **In `backend/repos/invites.py`, replace:**
 
 ````python
+    """Stamp an unaccepted invite as accepted by `user_id` at `now`; True when
+    this call stamped it:
+
+        UPDATE invites SET accepted_at = :now, accepted_by = :user_id
+        WHERE id = :invite_id AND accepted_at IS NULL
+
+    The portable race guard: on Postgres a concurrent claimer waits on the row
+    lock and then matches zero rows; SQLite serializes writers.
+````
+
+**with:**
+
+````python
+    """Stamp a live invite (unused, unrevoked, unexpired at `now`) as accepted
+    by `user_id` at `now`; True when this call stamped it:
+
+        UPDATE invites SET accepted_at = :now, accepted_by = :user_id
+        WHERE id = :invite_id AND accepted_at IS NULL AND NOT revoked
+          AND expires_at >= :now
+
+    The portable race guard: on Postgres a concurrent claimer, or a removal
+    or a delete revoking the invite (slice 6b-1), holds the row lock; this
+    UPDATE waits, re-reads the row as committed and then matches zero rows;
+    SQLite serializes writers.
+````
+
+**In `backend/repos/invites.py`, replace:**
+
+````python
+        .where(Invite.id == as_uuid(invite_id), Invite.accepted_at.is_(None))
+````
+
+**with:**
+
+````python
+        .where(Invite.id == as_uuid(invite_id), Invite.accepted_at.is_(None), Invite.revoked.is_(False),
+               Invite.expires_at >= as_utc(now))
+````
+
+**In `backend/repos/invites.py`, replace:**
+
+````python
 def revoke_invite(invite_id, church_id) -> None:
     """Revoke an invite, scoped to church_id so a caller can never revoke
     another church's invite by id (IDOR-safe)."""
@@ -2348,6 +2449,19 @@ def revoke_invites_created_by(church_id, user_id, *, session: Session) -> int:
         update(Invite)
         .where(Invite.church_id == as_uuid(church_id), Invite.created_by == as_uuid(user_id),
                Invite.revoked.is_(False))
+        .values(revoked=True)
+        .execution_options(synchronize_session=False)
+    ).rowcount
+
+
+def revoke_pending_email_invites(church_id, email: str, *, session: Session) -> int:
+    """Revoke every pending invite of the church for `email` (compared
+    lower-cased), whoever made it and expired or not; returns how many. A
+    removal runs it for the removed person's email, so a link another admin
+    made for them stops working too."""
+    return session.execute(
+        update(Invite)
+        .where(*_pending_email(as_uuid(church_id), email))
         .values(revoked=True)
         .execution_options(synchronize_session=False)
     ).rowcount
@@ -2567,8 +2681,10 @@ transfer_ownership as two Core UPDATEs, demote then promote. invites:
 insert_invite returns the whole row (create_invite wraps it);
 list_active_invites filters in SQL and names the creator;
 find_pending_email_invite and revoke_expired_email_invites ignore case;
-revoke_invites_created_by and revoke_reusable_invites count their rows;
-revoke_invite says whether the church has the invite. churches:
+revoke_invites_created_by, revoke_pending_email_invites and
+revoke_reusable_invites count their rows; claim stamps only an unrevoked,
+unexpired invite; revoke_invite says whether the church has the invite.
+churches:
 soft_delete_church runs in a caller's session, revokes every unrevoked
 invite (a used reusable link too) and says whether it deleted. The frozen
 Streamlit callers keep their positional calls." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
@@ -2583,7 +2699,7 @@ Expected counts after this task: backend `2058 passed, 38 skipped`; frontend `95
 - Create: `backend/tests/test_members_usecase.py`
 - Modify: `backend/usecases/members.py`
 
-The list (order, `is_me`, a blank name as `None`); role changes (both ways; the policy's four refusals change nothing; a stranger, another church's member or a malformed id is not found; the same role writes nothing; in a church with no owner one admin demotes another; the repo's `LastAdminError` is a 409, not a 500; an admin demoted after the guard gets the role 403 without a reason); for each of the four writes, a church deleted or a caller removed after the guard is `no_church_access` with nothing written; each write reads the church row locked, in its own session; removal (services kept, every invite the removed person made in this church revoked and counted, `revoke_reusable` counting each row once, the policy's refusals, another church's member not found, two admins of an ownerless church); invites (`clean_invite_email` with every row of `email_addresses.json`; the defaults; the three 422s; the two 409s with their words; re-inviting after a revoke, an acceptance or expiry, the expired row then revoked; a unique-index race; the log line; the list's filters and creators; idempotent, church-scoped revoking; members refused).
+The list (order, `is_me`, a blank name as `None`); role changes (both ways; the policy's four refusals change nothing; a stranger, another church's member or a malformed id is not found; the same role writes nothing; in a church with no owner one admin demotes another; the repo's `LastAdminError` is a 409, not a 500; an admin demoted after the guard gets the role 403 without a reason); for each of the four writes, a church deleted or a caller removed after the guard is `no_church_access` with nothing written; each write reads the church row locked, in its own session; removal (services kept, every invite the removed person made in this church revoked and counted, so is another admin's pending invite for their email (it then stops working), an accept whose claim comes after the removal claims nothing, `revoke_reusable` counting each row once, the policy's refusals, another church's member not found, two admins of an ownerless church); invites (`clean_invite_email` with every row of `email_addresses.json`; the defaults; the three 422s; the two 409s with their words; re-inviting after a revoke, an acceptance or expiry, the expired row then revoked; a unique-index race; another constraint's `IntegrityError` raised as it is; the log line; the list's filters and creators; idempotent, church-scoped revoking; members refused).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -2603,14 +2719,15 @@ from pathlib import Path
 
 import pytest
 from sqlalchemy import delete, select, update
+from sqlalchemy.exc import IntegrityError
 
 from db import session_scope
 from db.models import Church, Invite, Service, User
-from domain_errors import Conflict, Forbidden, InvalidInput, NotFound
+from domain_errors import Conflict, Forbidden, InvalidInput, NotFound, Rejected
 from repos import invites, memberships
 from repos.memberships import LastAdminError, add_membership, get_role, remove_membership, set_role
 from tests.test_church_settings import _record_church_row_access
-from usecases import members
+from usecases import members, onboarding
 
 NOW = datetime(2026, 10, 9, 12, 0, tzinfo=timezone.utc)
 NO_ACCESS = ("You don't have access to this church.", {"reason": "no_church_access"})
@@ -2820,6 +2937,43 @@ def test_in_an_ownerless_church_with_two_admins_one_removes_the_other(world, mak
     assert get_role(world["admin"], world["church"]) is None
 
 
+def test_removal_revokes_another_admins_pending_invite_for_the_removed_persons_email(world, make_user):
+    """The owner invited Jo by email; Jo joined through another link, so that
+    invite is still pending. After an admin removes Jo it stops working, and
+    Jo's email in another church is untouched (plan review M1)."""
+    bound = _invite(world, email="Jo@Example.com")
+    jo = make_user(email="jo@example.com", name="Jo")
+    add_membership(jo, world["church"], "member")                  # joined through a code-only link
+    elsewhere = members.create_invite(world["other"], world["other_owner"], email="jo@example.com", now=NOW)
+    assert members.remove_member(world["church"], world["admin"], jo) == 1
+    assert (_invite_row(bound["id"]).revoked, _invite_row(elsewhere["id"]).revoked) == (True, False)
+    with pytest.raises(Rejected) as refused:
+        onboarding.accept_invite(user_id=jo, user_email="jo@example.com", code=bound["code"], now=NOW)
+    assert refused.value.details == {"reason": "revoked"}
+    assert get_role(jo, world["church"]) is None
+
+
+def test_an_accept_whose_claim_comes_after_a_removal_claims_nothing(world, make_user, monkeypatch):
+    """The accept read the admin's single-use link before the admin's removal
+    committed; its claim then finds the link revoked, stamps nothing and the
+    joiner is not let in (plan review M2; on Postgres the claim waits for the
+    removal's row lock, then re-reads the row)."""
+    joiner = make_user(email="joiner@example.com")
+    link = members.create_invite(world["church"], world["admin"], now=NOW)
+    real_claim = invites.claim
+
+    def removal_commits_first(invite_id, user_id, now, *, session=None):
+        members.remove_member(world["church"], world["owner"], world["admin"])   # its own transaction
+        return real_claim(invite_id, user_id, now, session=session)
+
+    monkeypatch.setattr(invites, "claim", removal_commits_first)
+    with pytest.raises(Rejected) as refused:
+        onboarding.accept_invite(user_id=joiner, user_email="joiner@example.com", code=link["code"], now=NOW)
+    assert refused.value.details == {"reason": "used"}           # the loser's words since slice 1
+    assert get_role(joiner, world["church"]) is None
+    assert (_invite_row(link["id"]).revoked, _invite_row(link["id"]).accepted_at) == (True, None)
+
+
 # --- invites ---
 
 
@@ -2899,6 +3053,16 @@ def test_a_unique_index_race_is_invite_exists_too(world, monkeypatch):
     assert refused.value.code == "invite_exists"
     with session_scope() as s:
         assert s.execute(select(Invite.email)).scalars().all() == ["new@example.com"]
+
+
+def test_an_integrity_error_from_another_constraint_is_not_invite_exists(world, monkeypatch):
+    """Only uq_invites_pending_email is answered as invite_exists; anything
+    else the database refuses is raised as it is (plan review M4)."""
+    real_insert = invites.insert_invite
+    monkeypatch.setattr(invites, "insert_invite", lambda **kw: real_insert(**{**kw, "role": "owner"}))
+    with pytest.raises(IntegrityError, match="ck_invites_role"):
+        _invite(world, email="new@example.com")
+    assert _codes(world) == []
 
 
 def test_creating_an_invite_logs_ids_never_the_code_or_the_email(world, caplog):
@@ -3091,9 +3255,10 @@ def remove_member(church_id: uuid.UUID, actor_id: uuid.UUID, target_id, *, revok
     role re-read, the role 403, the target (404), role_policy.check_remove
     (self, the owner), then in the same transaction: the membership goes (its
     services.created_by is nulled), every unrevoked invite of this church the
-    removed person created is revoked, and with `revoke_reusable` every
-    unrevoked reusable invite of the church too. Returns how many invites were
-    revoked (each once)."""
+    removed person created is revoked, so is every pending invite of this
+    church for the removed person's email (whoever made it), and with
+    `revoke_reusable` every unrevoked reusable invite of the church too.
+    Returns how many invites were revoked (each once)."""
     actor_id, target_id = as_uuid(actor_id), as_uuid(target_id)
     with session_scope() as s:
         role = lock_and_read_actor(s, church_id, actor_id)
@@ -3106,6 +3271,7 @@ def remove_member(church_id: uuid.UUID, actor_id: uuid.UUID, target_id, *, revok
         except LastAdminError as exc:
             raise Conflict(str(exc), code="last_admin") from None
         revoked = invites.revoke_invites_created_by(church_id, target_id, session=s)
+        revoked += invites.revoke_pending_email_invites(church_id, target["email"], session=s)
         if revoke_reusable:
             revoked += invites.revoke_reusable_invites(church_id, session=s)
     logger.info("member_removed church_id=%s actor_id=%s target_id=%s revoked_invites=%d",
@@ -3122,6 +3288,7 @@ ALREADY_MEMBER = "{email} is already a member of this church."
 INVITE_EXISTS = "There's already a pending invite for {email}. Copy its link below or revoke it first."
 INVITE_NOT_FOUND = "Invite not found."
 ASSIGNABLE_ROLES = ("member", "admin")
+PENDING_EMAIL_INDEX = "uq_invites_pending_email"   # the only IntegrityError create_invite answers as a 409
 INVITE_TTL_DAYS = 7
 
 
@@ -3167,7 +3334,8 @@ def create_invite(church_id: uuid.UUID, actor_id: uuid.UUID, *, role: str = "mem
     `reusable`: an email-bound link works once), then for an email: a member
     of this church with it is a 409 conflict; its pending invites that have
     expired are revoked; a live pending one is a 409 invite_exists; and a
-    unique-index race (uq_invites_pending_email) is the same 409. Expires 7
+    unique-index race (an IntegrityError naming uq_invites_pending_email) is
+    the same 409, while any other IntegrityError is raised as it is. Expires 7
     days from `now`. Returns the invite as GET /invites lists it. Logs the
     ids, the role and whether it is reusable or email-bound; never the code
     or the email."""
@@ -3191,7 +3359,9 @@ def create_invite(church_id: uuid.UUID, actor_id: uuid.UUID, *, role: str = "mem
             with s.begin_nested():
                 row = invites.insert_invite(church_id=church_id, created_by=actor_id, role=role, email=email,
                                             reusable=reusable, ttl_days=INVITE_TTL_DAYS, now=now, session=s)
-        except IntegrityError:
+        except IntegrityError as exc:
+            if PENDING_EMAIL_INDEX not in str(exc.orig):
+                raise
             raise Conflict(INVITE_EXISTS.format(email=email), code="invite_exists") from None
         creator = memberships.get_member(church_id, actor_id, session=s)
     logger.info("invite_created church_id=%s invite_id=%s role=%s reusable=%s email_bound=%s",
@@ -3231,12 +3401,13 @@ git add backend/usecases/members.py backend/tests/test_members_usecase.py
 git commit -q -m "Slice 6b-1: the member and invite usecases under the church-row lock" -m "usecases/members.py: list_members (is_me, a blank name as None);
 change_role and remove_member (lock_and_read_actor, the role 403, the
 target as a membership of this church or 404, then role_policy; removal
-revokes every invite the removed person made, and with revoke_reusable
-every live reusable link, counting each once); list_invites, create_invite
-(the role, clean_invite_email with normalize_address, reusable only without
-an email, the conflict and invite_exists 409s, expired pending invites
-revoked, a unique-index race as invite_exists) and revoke_invite (church
-scoped, idempotent). Logs carry ids, roles and counts only." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+revokes every invite the removed person made and every pending invite for
+their email, and with revoke_reusable every live reusable link, counting
+each once); list_invites, create_invite (the role, clean_invite_email with
+normalize_address, reusable only without an email, the conflict and
+invite_exists 409s, expired pending invites revoked, a unique-index race
+as invite_exists and any other IntegrityError raised as it is) and
+revoke_invite (church scoped, idempotent). Logs carry ids, roles and counts only." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
@@ -3248,7 +3419,7 @@ Expected counts after this task: backend `2140 passed, 38 skipped`; frontend `95
 - Create: `backend/tests/test_church_lifecycle.py`
 - Modify: `backend/usecases/church_admin.py`
 
-Transfer (to a member or an admin; the answer lists the members afterwards; exactly one owner, `find_violations() == []`; oneself is a 422 naming `user_id`; a stranger or another church's member is a 404 with roles unchanged; only the owner, and an owner who already transferred in another tab is refused); leave (a member or an admin, their services kept and the church gone from their list; an admin's invites keep working; the owner must transfer, even alone; the only admin of an ownerless church cannot, with the exact words, while a member still can); delete (the exact name after trimming, case included; the church soft-deleted and every invite revoked, a used reusable one too, so accepting any says "This invite has been revoked."; only the owner); for each, a church deleted or a caller removed after the guard is `no_church_access`; each reads the church row locked in its own session.
+Transfer (to a member or an admin; the answer lists the members afterwards; exactly one owner, `find_violations() == []`; oneself is a 422 naming `user_id`; a stranger or another church's member is a 404 with roles unchanged; only the owner, and an owner who already transferred in another tab is refused); leave (a member or an admin, their services kept and the church gone from their list; an admin's invites keep working; the owner must transfer, even alone; the only admin of an ownerless church cannot, with the exact words, while a member still can); delete (the exact name, the typed and the stored one both trimmed, case included; the church soft-deleted and every invite revoked, a used reusable one too, so accepting any says "This invite has been revoked."; only the owner); for each, a church deleted or a caller removed after the guard is `no_church_access`; each reads the church row locked in its own session.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -3402,6 +3573,18 @@ def test_delete_needs_the_exact_name_after_trimming(world):
         assert (refused.value.message, refused.value.field) == ("Church name did not match.", "confirm_name")
     assert get_church(world["church"]) is not None
     church_admin.delete_church(world["church"], world["owner"], "  Grace  ")
+    assert get_church(world["church"]) is None
+
+
+def test_delete_trims_the_stored_name_too_and_keeps_case(world):
+    """A name stored with spaces around it (an old client, or by hand) matches
+    what the owner types, both trimmed; case still counts (plan review M3)."""
+    with session_scope() as s:
+        s.execute(update(Church).where(Church.id == world["church"]).values(name=" Grace Chapel  "))
+    with pytest.raises(InvalidInput) as refused:
+        church_admin.delete_church(world["church"], world["owner"], "grace chapel")
+    assert refused.value.field == "confirm_name"
+    church_admin.delete_church(world["church"], world["owner"], "Grace Chapel")
     assert get_church(world["church"]) is None
 
 
@@ -3580,8 +3763,8 @@ def leave_church(church_id: uuid.UUID, actor_id: uuid.UUID) -> None:
 
 def delete_church(church_id: uuid.UUID, actor_id: uuid.UUID, confirm_name: str) -> None:
     """DELETE /church: under the church-row lock with the caller's role
-    re-read, only the owner (403), and `confirm_name`, trimmed, must equal the
-    church's name exactly, case included (a 422 naming confirm_name), then
+    re-read, only the owner (403), and `confirm_name` must equal the church's
+    name, both trimmed, exactly, case included (a 422 naming confirm_name), then
     repos.churches.soft_delete_church in the same transaction: the church is
     soft-deleted and every unrevoked invite of it revoked. Nothing is
     hard-deleted."""
@@ -3590,7 +3773,7 @@ def delete_church(church_id: uuid.UUID, actor_id: uuid.UUID, confirm_name: str) 
         role = lock_and_read_actor(s, church_id, actor_id)
         if role != "owner":
             raise Forbidden(role_policy.OWNER_ONLY)
-        if (confirm_name or "").strip() != churches.get_church(church_id, session=s)["name"]:
+        if (confirm_name or "").strip() != (churches.get_church(church_id, session=s)["name"] or "").strip():
             raise InvalidInput(NAME_MISMATCH, field="confirm_name")
         churches.soft_delete_church(church_id, session=s)
     logger.info("church_deleted church_id=%s user_id=%s", church_id, actor_id)
@@ -3615,7 +3798,8 @@ git commit -q -m "Slice 6b-1: transfer ownership, leave and delete under the chu
 a member of this church or 404, then the demote and the promote; answers
 the members afterwards), leave_church (check_leave with the owner and
 admin count; the leaver's invites stay) and delete_church (the owner only,
-the exact name after trimming or a 422 naming confirm_name, then the soft
+the exact name, typed and stored both trimmed, or a 422 naming
+confirm_name, then the soft
 delete revoking every invite), each in one transaction starting with
 lock_and_read_actor." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
@@ -5249,7 +5433,7 @@ Send, with README step 2's query pasted in full inside a code block:
 - `version` not `0007_bulletin_images`, or `old_constraint` not `1`: stop and tell the owner what it means before going on (another release ran, or the constraint has another name; the migration would refuse, safely).
 - `duplicate_pending_pairs` above `0`: stop. Explain: "Some person was invited twice and both invites are still waiting; the update refuses to run over that. The fix keeps the newest invite for each person and cancels the older copies (the person can still use the newest link)." On the owner's yes, guide them through "Church integrity" step 2's `UPDATE` in the SQL Editor (the backup of Step 1 is fresh), then run this step's query again: `0`.
 - `other_role_invites` above `0`: not a stop; record it (the update turns those invites into admin invites and cancels them).
-- `churches_without_one_owner` or `churches_without_admin` above `0`: not a stop for this PR; record the counts, and, as owner question 2 says, send a second read-only query that names the church (`SELECT c.name, (SELECT count(*) FROM memberships m WHERE m.church_id = c.id AND m.role = 'owner') AS owners, (SELECT count(*) FROM memberships m WHERE m.church_id = c.id AND m.role IN ('owner', 'admin')) AS owners_and_admins FROM churches c WHERE c.deleted_at IS NULL AND ((SELECT count(*) FROM memberships m WHERE m.church_id = c.id AND m.role = 'owner') <> 1 OR NOT EXISTS (SELECT 1 FROM memberships m WHERE m.church_id = c.id AND m.role IN ('owner', 'admin')));`); the repair waits for the owner's choice ("Church integrity" steps 3 and 4, after a fresh backup) and is recorded without the name.
+- `churches_without_one_owner` or `churches_without_admin` above `0`: not a stop for this PR, but a gate for 6b-2 (owner question 2: fixed before 6b-2 merges); record the counts, and, as owner question 2 says, send a second read-only query that names the church (`SELECT c.name, (SELECT count(*) FROM memberships m WHERE m.church_id = c.id AND m.role = 'owner') AS owners, (SELECT count(*) FROM memberships m WHERE m.church_id = c.id AND m.role IN ('owner', 'admin')) AS owners_and_admins FROM churches c WHERE c.deleted_at IS NULL AND ((SELECT count(*) FROM memberships m WHERE m.church_id = c.id AND m.role = 'owner') <> 1 OR NOT EXISTS (SELECT 1 FROM memberships m WHERE m.church_id = c.id AND m.role IN ('owner', 'admin')));`); the repair waits for the owner's choice ("Church integrity" steps 3 and 4, after a fresh backup) and is recorded without the name.
 
 - [ ] **Step 3 (agent → OWNER): The SQL the migration will run**
 
@@ -5428,7 +5612,7 @@ S items **not** in 6b-1: everything of the UX, the frontend and the manual check
 
 ## Follow-ups (not in 6b-1)
 
-- 6b-2 builds on these routes: the pages, the Settings nav, the client's role meta and `useExitChurch`, and `0009_memberships_one_owner` (run the integrity check before it, README "Church integrity").
+- 6b-2 builds on these routes: the pages, the Settings nav, the client's role meta and `useExitChurch`, and `0009_memberships_one_owner` (run the integrity check before it, README "Church integrity"). Its merge is gated on every church having exactly one owner (owner question 2): `0009` only refuses a second owner.
 - `usecases.onboarding._clamp_role` can never fire once 0008 is applied; it stays as a harmless defense (clarification 8) and could go in a later clean-up.
 - If an admin ever needs to see why an invite stopped working (revoked by a removal or a delete), a "revoked reason" column would say; not asked for.
 
@@ -5437,7 +5621,7 @@ S items **not** in 6b-1: everything of the UX, the frontend and the manual check
 Your 6b planning answers of 2026-10-09 (all as recommended) and the earlier answers on roles, invites and the migration routine are binding and already in the plan. These are the choices this plan makes where you did not say; each is written as recommended.
 
 1. **How to run the integrity check before and after the merge** (clarification 9). The spec's check is a script run from a laptop with the database's address. This plan gives you the same check as one read-only query to paste into Supabase's SQL Editor (Task 11, step 2), which you already use for the counts; the script stays for anyone with the laptop setup. Recommended: the SQL Editor query.
-2. **What to do if a church turns out to have no owner (or two, or no admin)** (Risks). It does not block this update, but in such a church nobody can transfer ownership or delete it, and its only admin cannot leave. If a count in step 2 is not 0, I will give you a second read-only query that names the church (in our chat only, never recorded), and recommend we fix it before the People page arrives (6b-2), choosing the owner with you, with the runbook's one-line repair after a fresh backup. Recommended: fix it before 6b-2, with your choice of owner.
+2. **What to do if a church turns out to have no owner (or two, or no admin)** (Risks). It does not block this update, but in such a church nobody can transfer ownership or delete it, and its only admin cannot leave. If a count in step 2 is not 0, I will give you a second read-only query that names the church (in our chat only, never recorded), and recommend we fix it before the People page arrives (6b-2), choosing the owner with you, with the runbook's one-line repair after a fresh backup. This is a gate for 6b-2: a church without exactly one owner must be fixed before 6b-2 merges, because 6b-2's database change (0009) only refuses a second owner and would not notice a church with none. Recommended: fix it before 6b-2, with your choice of owner.
 3. **The phone check after the merge** (Task 11, step 6). This PR changes nothing you can see, so the check is two minutes: the app loads, the builder opens, Settings is unchanged, and (only if you happen to have one) an unused invite link still opens. Recommended: this short check, with the full People checks coming with 6b-2.
 
 Owner steps still to come: the plan's approval; the draft PR on your yes and ready on your yes (T10); the backup, one read-only query and the SQL to read, the merge on your yes, one more read-only query, a two-minute phone check, and the records PR (T11).
