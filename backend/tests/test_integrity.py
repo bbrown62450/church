@@ -107,6 +107,20 @@ def test_duplicate_pending_invites_are_reported_and_the_runbook_step_keeps_the_n
     assert find_violations() == []
 
 
+def test_duplicate_pending_invites_in_a_soft_deleted_church_are_reported_too(grace):
+    """0008's pre-check counts every church's invites, soft-deleted ones
+    included, so the check must report them there too, or it says OK and the
+    upgrade still refuses (6b-1 build review 3)."""
+    church, owner = grace
+    with session_scope() as s:                  # as a database from before 0008 could hold them
+        s.execute(text("DROP INDEX uq_invites_pending_email"))
+    _pending(church, owner, "dup@example.com")
+    _pending(church, owner, "Dup@Example.com", created_at=NOW + timedelta(hours=1))
+    with session_scope() as s:
+        s.execute(update(Church).where(Church.id == church).values(deleted_at=NOW))
+    assert find_violations() == [{"kind": "pending_duplicate", "church_id": church, "invites": 2}]
+
+
 def test_the_script_prints_ids_and_counts_only_and_exits_1(grace, tmp_db, monkeypatch, capsys):
     church, owner = grace
     _set_roles(church, "admin", where_role="owner")
