@@ -484,3 +484,26 @@ address bar or a church id.
 - [ ] **14.** Double-tap **Send to 1 person**: one email arrives.
 - [ ] **15.** A contact flagged on the Contacts page shows in the dialog with "This address doesn't look valid. An admin can fix it in Settings → Contacts." and cannot be ticked.
 - [ ] **16.** Switch church with the dialog open: it closes; opening it again lists the other church's contacts.
+
+## Slice 6b
+
+Slice 6b moves People (members and invites) and the Danger zone (transfer
+ownership, leave, delete the church) into Settings, in two PRs (owner's 6b
+planning answers of 2026-10-09). **6b-1** is the server side only:
+`GET /members`, `PATCH` and `DELETE /members/{user_id}`, `GET`, `POST` and
+`DELETE /invites`, `POST /church/transfer-ownership`, `POST /church/leave`
+and `DELETE /church`, and migration `0008_invites_integrity`. No page uses
+them until 6b-2, so the app looks and works as before. The owner's steps
+around the 6b-1 merge follow `backend/migrations/README.md` → "Before
+0008_invites_integrity", one step at a time; the results go into
+`docs/ops-runbook.md` → "Slice 6b-1 record". Record counts and what the
+screens show, never an email address, an invite code or link, a church id
+or a database URL. 6b-2 (the People and Danger zone pages) adds its items
+here.
+
+- [ ] (owner, before the 6b-1 merge) **1.** A fresh backup: the db-backup workflow on `main` finishes green with an artifact `db-backup`.
+- [ ] (owner, before the 6b-1 merge) **2.** "Before 0008_invites_integrity" step 2's read-only query in Supabase's SQL Editor shows `version` `0007_bulletin_images`, `duplicate_pending_pairs` `0` and `old_constraint` `1`; the other counts are recorded (`churches_without_one_owner` and `churches_without_admin` are normally `0`).
+- [ ] (owner, before the 6b-1 merge) **3.** The SQL preview the agent renders from the PR's code matches step 3 of that section, and the owner has read it.
+- [ ] (owner, after 6b-1) **4.** Step 4's read-only query shows `0008_invites_integrity`, `1`, `1`, `0`; step 2's query again shows the same counts (or more invites), with `other_role_invites` `0` and `old_constraint` `0`.
+- [ ] (owner, after 6b-1) **5.** On the phone, the app loads as before (pull down to reload): the builder opens and **Settings** lists the same sections as before 6b-1 (no People or Danger zone yet). If you still have an invite link (`…/join?code=…`) to your church that nobody has used yet, open it on the phone while signed in: it says "You're already a member of {church}." with **Open {church}**, which opens the church and changes nothing (the link stays unused); without such a link, that half is skipped.
+- [ ] (agent, after 6b-1) **6.** `/health/ready` answers `{"ok":true,"db":"ok"}`; `/openapi.json` lists `/members`, `/members/{user_id}`, `/invites`, `/invites/{invite_id}`, `/church/transfer-ownership` and `/church/leave`, and `/church` with `delete`; each of the new routes answers 401 when called signed out.
