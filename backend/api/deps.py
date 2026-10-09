@@ -117,6 +117,14 @@ def require_admin(church: ActiveChurch = Depends(require_church)) -> ActiveChurc
     return church
 
 
+def require_owner(church: ActiveChurch = Depends(require_church)) -> ActiveChurch:
+    """The church's owner only (slice 6b-1: transfer ownership, delete the
+    church). The usecase re-reads the role under the church-row lock."""
+    if church.role != "owner":
+        raise forbidden("Only the owner can do that.")
+    return church
+
+
 def get_google_config() -> GoogleOAuthConfig:
     """The Google OAuth client for the Gmail routes (slice 5b-2), from the
     GOOGLE_* variables; tests override this dependency."""

@@ -20,7 +20,12 @@ usecase that re-reads the role under the church-row lock would still refuse
 a member if a route's guard were weakened to require_church, so no request
 test notices that; this does (6a-3a build review 4: PUT
 /church/liturgy-prompts and PATCH /rubric; 6a-3b: PUT
-/church/prayer-library and its voice-profile draft).
+/church/prayer-library and its voice-profile draft; 6b-1: the member and
+invite writes and GET /invites).
+
+OWNER_ONLY pins the routes only the church's owner may call (slice 6b-1:
+transfer ownership and delete the church): each must have require_owner in
+its tree, and every route that has it must be listed.
 
 Every slice that adds a user-scoped route adds it to USER_SCOPED in the same PR
 (1b: POST /churches, POST /invites/preview, POST /invites/accept;
@@ -33,7 +38,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.routing import iter_route_contexts
 
-from api.deps import get_current_user, require_admin, require_church
+from api.deps import get_current_user, require_admin, require_church, require_owner
 from api.main import create_app
 
 PUBLIC = {
@@ -72,6 +77,15 @@ ADMIN_ONLY = {
     ("POST", "/hymnals"),
     ("DELETE", "/hymnals/{code}"),
     ("DELETE", "/hymns/{hymn_id}"),
+    ("PATCH", "/members/{user_id}"),
+    ("DELETE", "/members/{user_id}"),
+    ("GET", "/invites"),
+    ("POST", "/invites"),
+    ("DELETE", "/invites/{invite_id}"),
+}
+OWNER_ONLY = {
+    ("POST", "/church/transfer-ownership"),
+    ("DELETE", "/church"),
 }
 CHURCH_SCOPED_TODAY = {("GET", "/church"), ("GET", "/rubric"), ("PATCH", "/rubric")}
 
@@ -127,14 +141,23 @@ def test_admin_routes_require_an_admin():
     assert {route for route, calls in routes.items() if require_admin in calls} == ADMIN_ONLY
 
 
+def test_owner_routes_require_the_owner():
+    routes = route_dependencies(create_app())
+    for route in sorted(OWNER_ONLY):
+        assert require_owner in routes[route], f"{route} is owner-only but does not depend on require_owner"
+    assert {route for route, calls in routes.items() if require_owner in calls} == OWNER_ONLY
+
+
 def test_allowlists_name_real_routes():
     """A renamed or removed route must leave the allowlists too, or they hide nothing."""
     served = set(route_dependencies(create_app()))
     assert PUBLIC - served == set()
     assert USER_SCOPED - served == set()
     assert ADMIN_ONLY - served == set()
+    assert OWNER_ONLY - served == set()
     assert PUBLIC.isdisjoint(USER_SCOPED)
     assert ADMIN_ONLY.isdisjoint(PUBLIC | USER_SCOPED)
+    assert OWNER_ONLY.isdisjoint(PUBLIC | USER_SCOPED | ADMIN_ONLY)
 
 
 def _church_scoped_ok(church=Depends(require_church)) -> dict:
