@@ -1,16 +1,17 @@
 /**
  * The Settings area's pages, in the nav's order (6a spec "Settings nav"; slice
  * 6a-1). `/settings` opens the first. 6a-2 added Hymns after Church; 6a-3a
- * adds Liturgy (the prompts) and Rubric and moves Bulletin settings in under
- * /settings (owner's 6a-3 answers of 2026-10-07: once 6a is done the order is
- * Church, Hymns, Liturgy, Prayers, Rubric, Bulletin, Contacts, Account, so
- * 6a-3b puts Prayers between Liturgy and Rubric); 5b-1 added Contacts and
- * 5b-2 Account after it (6b's People will go between them).
+ * added Liturgy (the prompts) and Rubric and moved Bulletin settings in under
+ * /settings; 6a-3b puts Prayers between Liturgy and Rubric, the order the
+ * owner's 6a-3 answers of 2026-10-07 set for once 6a is done (Church, Hymns,
+ * Liturgy, Prayers, Rubric, Bulletin, Contacts, Account); 5b-1 added Contacts
+ * and 5b-2 Account after it (6b's People will go between them).
  */
 export const SETTINGS_SECTIONS = [
   { href: "/settings/church", label: "Church" },
   { href: "/settings/hymns", label: "Hymns" },
   { href: "/settings/liturgy", label: "Liturgy" },
+  { href: "/settings/prayers", label: "Prayers" },
   { href: "/settings/rubric", label: "Rubric" },
   { href: "/settings/bulletin", label: "Bulletin" },
   { href: "/settings/contacts", label: "Contacts" },

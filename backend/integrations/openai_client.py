@@ -36,8 +36,10 @@ from typing import Any, Callable, Mapping, Optional, Sequence
 import openai
 
 from domain_errors import Busy, NotConfigured, UpstreamError, UpstreamTimeout
+from integrations.http import hold_openai_logger
 
 logger = logging.getLogger(__name__)
+hold_openai_logger()       # after the SDK's import, which sets its logger from OPENAI_LOG (6a-3b review 4)
 
 NOT_CONFIGURED_MESSAGE = "AI isn't set up on this app yet."
 BUSY_MESSAGE = "The AI service is busy. Try again in a minute."

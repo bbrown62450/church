@@ -12,7 +12,7 @@ from api.logging_config import configure_logging
 from api.middleware import RequestIdMiddleware, UnhandledErrorMiddleware, UploadSizeMiddleware
 from api.routes import (bulletin_emails, bulletin_images, bulletin_settings, church_prompts, churches, contacts,
                         documents, gmail, health, hymnals, hymns, invites, lectionary, liturgy, liturgy_review, me,
-                        reference, rubric, scripture, services)
+                        prayer_library, reference, rubric, scripture, services)
 from api.settings import get_settings
 from api.startup import check_app_env, describe_database, enforce_production_guards, log_gmail_state
 from db import get_engine
@@ -68,6 +68,7 @@ def create_app() -> FastAPI:
     app.include_router(me.router)
     app.include_router(rubric.router)
     app.include_router(church_prompts.router)
+    app.include_router(prayer_library.router)
     app.include_router(bulletin_settings.router)
     app.include_router(churches.router)
     app.include_router(invites.router)

@@ -813,6 +813,32 @@ name, token or church id is recorded here.
 | Agent checks | Not run: this session has no sign-in for a test church | 2026-10-08 |
 | Follow-ups | Accepted risks: a renamed or renumbered hymn may be suggested again inside the 12-week window (recent use is kept by title and number); deleting or moving the last hymns of the default or only hymnal moves the effective default with no confirmation; re-adding a hymnal refills a detail someone cleared on purpose. Possible later: "Fill from Hymnary.org". Next: 6a-3 (Liturgy prompts, Prayers, Rubric, Bulletin settings moved in), 6b (People), Hear it from the pews | 2026-10-08 |
 
+### Slice 6a-3a record
+
+Slice 6a-3a (Liturgy prompts and the Service rubric in Settings, and Bulletin
+settings moved into Settings: `GET` and `PUT /church/liturgy-prompts` and the
+rubric `PATCH`, each write under the church-row lock with the caller's role
+re-read; collapsible cards with Customized, Reset to default and a confirmed
+Reset all; a Save bar that steps aside while typing; Settings → Bulletin at
+`/settings/bulletin`, with `/bulletin-settings` forwarding there and a Back to
+the builder button) merged as PR #57, the first of slice 6a-3's two PRs
+(owner's 6a-3 planning answers). No database change and no new package;
+production stays at `0007_bulletin_images`. The owner's check was five steps on
+a phone; each test change was made on a card that was not customized and put
+back in the same step, so the church's prompts and rubric end as generation
+read them before. No address, name, token or church id is recorded here.
+
+| Step | Result | Date |
+|---|---|---|
+| Merge and deploy | PR #57 merged 17:49 UTC (13:49 Eastern), merge commit `a095408`. CI on `main`: backend, backend-postgres and frontend success | 2026-10-08 |
+| 1. Finding the pages | Settings lists Church, Hymns, Liturgy, Rubric, Bulletin, Contacts, Account; Liturgy shows nine cards with Benediction the only Customized one; Rubric shows no Customized card | 2026-10-08 |
+| 2. A prompt, changed and put back | On Offertory Prayer a lone brace was refused with the card's message; "Amen." saved and showed Customized; Reset to default and Save put it back. The stored Benediction passed today's brace check (no other card was named) | 2026-10-08 |
+| 3. A checklist, changed and put back | On the rubric's Offertory Prayer, return added a point; "Test point" saved and showed Customized; Reset to default and Save put it back. The year 1400 was refused with Save greyed out; the original year typed back cleared the message, nothing saved | 2026-10-08 |
+| 4. Bulletin settings | The settings are under Settings → Bulletin with Back to the builder; the Bulletin step's link opened it; Back returned to the Bulletin step | 2026-10-08 |
+| 5. The phone screen | Seven links easy to tap, no sideways scroll; with the keyboard open the text stayed visible and Save was reachable by scrolling, upright and sideways | 2026-10-08 |
+| Agent checks | Not run: this session has no sign-in for a test church | 2026-10-08 |
+| Follow-ups | On a computer the Save bar also steps aside while a box has focus (scroll or Tab to Save). Next: 6a-3b (Prayers, with the AI voice profile), then 6b (People) and Hear it from the pews | 2026-10-08 |
+
 ## Backups
 
 - **Workflow:** `.github/workflows/backup.yml` (`db-backup`). Daily at 08:37 UTC,

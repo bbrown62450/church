@@ -6,6 +6,10 @@ set_http_for_tests, so nothing leaves the process (the _no_network guard in
 conftest.py stays active); the autouse _fresh_http_client fixture restores
 the default client before the next test."""
 import logging
+import os
+import subprocess
+import sys
+from pathlib import Path
 
 import httpx
 import pytest
@@ -105,6 +109,40 @@ def test_httpx_request_logs_silenced(caplog):
               if record.name.split(".")[0] in ("httpx", "httpcore")]
     assert leaked == []
 
+
+def test_the_openai_sdk_logs_at_info_or_above_when_the_root_is_debug(caplog):
+    """Slice 6a-3b: at DEBUG the OpenAI SDK logs each request's options, the
+    prompt (and so the pastor's prayers) included; its logger stays at INFO."""
+    caplog.set_level(logging.DEBUG)
+    assert logging.getLogger().level == logging.DEBUG
+    assert logging.getLogger("openai").level == logging.INFO
+    assert logging.getLogger("openai._base_client").getEffectiveLevel() >= logging.INFO
+    logging.getLogger("openai._base_client").debug("Request options: %s", "a private prayer")
+    assert [r for r in caplog.records if r.name.startswith("openai")] == []
+
+
+
+OPENAI_LEVEL_PROBE = """
+import logging, sys
+sys.path[:0] = sys.argv[1:3]
+for name in sys.argv[3].split():
+    __import__(name)
+print(logging.getLogger("openai").getEffectiveLevel())
+"""
+
+
+@pytest.mark.parametrize("modules", ["api.main", "integrations.http integrations.openai_client",
+                                     "integrations.openai_client"])
+def test_openai_log_debug_cannot_lower_the_sdks_logger_below_info(modules):
+    """6a-3b build review 4: the SDK sets its logger's level from OPENAI_LOG when it is imported, which may
+    be after integrations.http first caps it; the app's startup path and either import order end at INFO or
+    above (a fresh, isolated interpreter, so this process's logging is untouched)."""
+    backend = Path(__file__).resolve().parents[1]
+    env = {**os.environ, "OPENAI_LOG": "debug"}
+    run = subprocess.run([sys.executable, "-I", "-c", OPENAI_LEVEL_PROBE, str(backend), str(backend.parent), modules],
+                         cwd=backend, env=env, capture_output=True, text=True)
+    assert run.returncode == 0, run.stderr
+    assert int(run.stdout.strip().splitlines()[-1]) >= logging.INFO
 
 # --- slice 5b-2: post(), for Google's token, revoke and Gmail send endpoints ----------------------
 

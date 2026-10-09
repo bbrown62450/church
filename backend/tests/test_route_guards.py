@@ -19,7 +19,8 @@ require_admin in its tree, and every route that has it must be listed. A
 usecase that re-reads the role under the church-row lock would still refuse
 a member if a route's guard were weakened to require_church, so no request
 test notices that; this does (6a-3a build review 4: PUT
-/church/liturgy-prompts and PATCH /rubric).
+/church/liturgy-prompts and PATCH /rubric; 6a-3b: PUT
+/church/prayer-library and its voice-profile draft).
 
 Every slice that adds a user-scoped route adds it to USER_SCOPED in the same PR
 (1b: POST /churches, POST /invites/preview, POST /invites/accept;
@@ -61,6 +62,8 @@ ADMIN_ONLY = {
     ("PATCH", "/church"),
     ("PUT", "/church/bulletin-settings"),
     ("PUT", "/church/liturgy-prompts"),
+    ("PUT", "/church/prayer-library"),
+    ("POST", "/church/prayer-library/voice-profile-draft"),
     ("PATCH", "/rubric"),
     ("POST", "/contacts"),
     ("PATCH", "/contacts/{contact_id}"),

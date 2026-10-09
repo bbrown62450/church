@@ -43,6 +43,10 @@ const ENDPOINT_TIMEOUTS: Record<string, number> = {
   // already answer later than that (POST /liturgy/generate, an 80 s deadline). A timed-out add may still
   // finish on the server, so a failed hymnal write refreshes the lists (lib/queries/hymn-library.ts).
   "POST /hymnals": 60_000,
+  // Slice 6a-3b (6a spec, API "Client timeouts"; F §1.8): the voice-profile draft answers within its 75 s server
+  // deadline, as /hymns/suggestions does, plus a last connect. Cancel stops the wait sooner; the draft is not
+  // stored, so a wait given up on changes nothing.
+  "POST /church/prayer-library/voice-profile-draft": 90_000,
 };
 
 export function timeoutFor(method: string, path: string): number {
