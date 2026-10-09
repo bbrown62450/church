@@ -34,7 +34,8 @@ LAST_ADMIN = "You're the last admin. Make someone else an admin before you leave
 def check_role_change(*, actor_id: uuid.UUID, actor_role: str, target_id: uuid.UUID, target_role: str,
                       new_role: str) -> Literal["change", "noop"]:
     """PATCH /members/{user_id}: "change", or "noop" when the target already
-    has `new_role` (member or admin; Pydantic refuses owner before this).
+    has `new_role` (member or admin; Pydantic and usecases.members.change_role
+    refuse any other role before this).
     Refuses a non-admin, a change to one's own role and a change to the
     owner's role."""
     if actor_role not in ADMIN_ROLES:

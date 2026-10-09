@@ -104,6 +104,19 @@ def test_a_role_change_for_a_non_member_is_not_found(world, make_user):
     assert get_role(world["other_owner"], world["other"]) == "owner"
 
 
+@pytest.mark.parametrize("new_role", ["owner", "Admin", "superuser", ""])
+@pytest.mark.parametrize("target", ["member", "admin"])
+def test_a_role_change_to_a_role_an_invite_cannot_carry_is_refused(world, monkeypatch, target, new_role):
+    """The route's Pydantic refuses these first; called directly, the usecase
+    refuses them too, so it can never make a second owner (6b-1 build
+    review 1)."""
+    monkeypatch.setattr(memberships, "set_role", lambda *a, **k: pytest.fail("set_role called"))
+    with pytest.raises(InvalidInput) as refused:
+        members.change_role(world["church"], world["owner"], world[target], new_role)
+    assert (refused.value.field, refused.value.message) == ("role", "Not a valid value.")
+    assert [get_role(world[w], world["church"]) for w in ("owner", "admin", "member")] == ["owner", "admin", "member"]
+
+
 def test_the_same_role_writes_nothing(world, monkeypatch):
     monkeypatch.setattr(memberships, "set_role", lambda *a, **k: pytest.fail("set_role called"))
     assert members.change_role(world["church"], world["owner"], world["admin"], "admin")["role"] == "admin"

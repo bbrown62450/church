@@ -85,8 +85,10 @@ def _target(s: Session, church_id: uuid.UUID, target_id) -> dict:
 
 def change_role(church_id: uuid.UUID, actor_id: uuid.UUID, target_id, new_role: str) -> dict:
     """PATCH /members/{user_id}: under the church-row lock with the caller's
-    role re-read, the role 403, then the target (404 when not a member of this
-    church), then role_policy.check_role_change (self, the owner); a role the
+    role re-read, the role 403, then `new_role` (a 422 naming `role` unless
+    it is in ASSIGNABLE_ROLES, as create_invite: never "owner", whoever
+    calls), then the target (404 when not a member of this church), then
+    role_policy.check_role_change (self, the owner); a role the
     target already has writes nothing. Returns the target as GET /members
     shows it. repos.memberships' LastAdminError cannot fire here (the actor and
     an admin target are two owners or admins); if it does, it is a 409
@@ -95,6 +97,8 @@ def change_role(church_id: uuid.UUID, actor_id: uuid.UUID, target_id, new_role: 
     with session_scope() as s:
         role = lock_and_read_actor(s, church_id, actor_id)
         _require_admin(role)
+        if new_role not in ASSIGNABLE_ROLES:
+            raise InvalidInput(ROLE_INVALID, field="role")
         target = _target(s, church_id, target_id)
         outcome = role_policy.check_role_change(actor_id=actor_id, actor_role=role, target_id=target_id,
                                                 target_role=target["role"], new_role=new_role)
