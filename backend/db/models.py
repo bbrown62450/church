@@ -80,6 +80,11 @@ class Membership(Base):
     )
 
 
+# An invite still waiting to be used: email-bound, not revoked, not accepted
+# (uq_invites_pending_email's predicate; revision 0008_invites_integrity).
+PENDING_INVITE = "email IS NOT NULL AND NOT revoked AND accepted_at IS NULL"
+
+
 class Invite(Base):
     __tablename__ = "invites"
 
@@ -88,7 +93,7 @@ class Invite(Base):
         Uuid, ForeignKey("churches.id", ondelete="CASCADE"), nullable=False
     )
     code = Column(String, nullable=False, unique=True)
-    email = Column(String)  # nullable; when set, one pending per (church, email)
+    email = Column(String)  # nullable (anyone with the link); stored lower-cased
     role = Column(String, nullable=False, default="member")
     created_by = Column(Uuid, ForeignKey("users.id", ondelete="SET NULL"))
     created_at = Column(DateTime(timezone=True), nullable=False, default=_utcnow)
@@ -105,9 +110,15 @@ class Invite(Base):
     )
 
     __table_args__ = (
-        # NULL emails are distinct on both SQLite and Postgres, so many
-        # code-only invites coexist while an email-bound one is single-pending.
-        UniqueConstraint("church_id", "email", name="uq_invites_church_email"),
+        # Revision 0008_invites_integrity (slice 6b-1): an invite grants member
+        # or admin, never owner; and one pending invite per church and email,
+        # in any capitalization (a revoked, accepted or code-only one never
+        # counts, so re-inviting after a revoke or an acceptance works).
+        CheckConstraint("role IN ('member','admin')", name="ck_invites_role"),
+        Index(
+            "uq_invites_pending_email", "church_id", sa.func.lower(email), unique=True,
+            postgresql_where=sa.text(PENDING_INVITE), sqlite_where=sa.text(PENDING_INVITE),
+        ),
         Index("ix_invites_church_id", "church_id"),
     )
 

@@ -22,6 +22,7 @@ from liturgy_config import DEFAULT_BENEDICTION_FALLBACK
 from repos.invites import create_invite, get_invite_by_code
 from repos.memberships import get_role
 from tests.api_helpers import auth_headers, church_headers, make_api_client
+from tests.invite_helpers import store_unchecked_role
 
 OWNER = "owner@example.com"
 JOINER = "joiner@example.com"
@@ -163,7 +164,8 @@ def test_accept_body_shape(world):
 
 
 def test_preview_owner_role_is_admin(world):
-    code = world.invite(role="owner")            # no CHECK on invites.role until 6b
+    code = world.invite()
+    store_unchecked_role(code, "owner")          # a row from before 0008's CHECK
     r = world.post("preview", code)
     assert r.status_code == 200, r.text          # clamped, not a response-validation 500
     assert r.json()["role"] == "admin"

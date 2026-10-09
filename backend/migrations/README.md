@@ -26,7 +26,7 @@ fails its deploy health check.
   `SET LOCAL statement_timeout = '60s'`, and all pending revisions run in one
   transaction, so any failure rolls every one of them back.
 - Revisions live in `migrations/versions/`, one file per revision, named
-  `NNNN_short_slug.py`. Head is `0007_bulletin_images`.
+  `NNNN_short_slug.py`. Head is `0008_invites_integrity`.
 
 | Revision | What it does |
 |---|---|
@@ -37,6 +37,7 @@ fails its deploy health check.
 | `0005_services_extras` | Slice 5a-2: `services.custom_elements` (JSON) and `services.hymnal` (VARCHAR), both nullable with no default and no backfill, and the index `ix_services_church_date` on `services (church_id, service_date_iso)`. Before it reaches production: "Before 0005_services_extras" below. |
 | `0006_services_bulletin` | Printed bulletin PR 2b: `services.bulletin` (JSON), nullable with no default and no backfill: the printed bulletin's weekly fields. Before it reaches production: "Before 0006_services_bulletin" below. |
 | `0007_bulletin_images` | Printed bulletin PR 3a: the table `bulletin_images` (the cover pictures, stored as JPEG in `bytes`) with the index `ix_bulletin_images_church_created`, and on Postgres row-level security on it and, when Supabase's `anon` and `authenticated` roles exist, `REVOKE ALL` on it from both. No other table changes. Before it reaches production: "Before 0007_bulletin_images" below. |
+| `0008_invites_integrity` | Slice 6b-1: an invite whose role is neither `member` nor `admin` becomes an `admin` invite and is revoked; then, unless two pending invites of one church share an email in any capitalization (it refuses, naming the churches: "Church integrity" below), the unique constraint `uq_invites_church_email` is replaced by the partial unique index `uq_invites_pending_email` on `(church_id, lower(email))` for pending email invites, and the check `ck_invites_role` (`member` or `admin`) is added. No column changes. Before it reaches production: "Before 0008_invites_integrity" below. |
 
 ## Rules for a new revision
 
@@ -774,3 +775,216 @@ commit in the same PR, so Railway's `alembic upgrade head` still finds the
 database at head and `alembic check` stays clean. Never `alembic downgrade`
 production for this: the pictures uploaded since the merge stay in the
 table, unread, and come back when 3a does.
+
+## Before 0008_invites_integrity (slice 6b-1)
+
+Railway's Pre-deploy Command (`alembic upgrade head`) applies
+`0008_invites_integrity` when slice 6b-1 (the server side of People:
+members, invites, ownership, leave and delete) merges. First, as the owner
+decided on 2026-10-09 (6b planning answer 1, the same routine as 0007): a
+backup, one read-only query that counts the invites and checks the
+churches' owners, and a look at the SQL; after the deploy, one read-only
+check. One step at a time. Nothing here changes data. The agent guides the
+owner and records the results in `docs/ops-runbook.md` → "Slice 6b-1
+record", never with an email address, a church id or a database URL.
+
+### Step 1: Backup
+
+Actions → db-backup → Run workflow (branch `main`), or
+`gh workflow run db-backup --ref main`. It must finish green with an
+artifact `db-backup`. Record the run URL and the artifact's size.
+
+### Step 2: Count the invites and check the churches (read-only)
+
+Supabase → the project → SQL Editor → New query. Paste this and Run:
+
+```sql
+-- Read-only: the invites and the churches' owners before 0008. Changes nothing.
+SELECT (SELECT version_num FROM alembic_version) AS version,
+       (SELECT count(*) FROM invites) AS invites,
+       (SELECT count(*) FROM invites
+         WHERE email IS NOT NULL AND NOT revoked AND accepted_at IS NULL) AS pending_email_invites,
+       (SELECT count(*) FROM (SELECT 1 FROM invites
+                               WHERE email IS NOT NULL AND NOT revoked AND accepted_at IS NULL
+                               GROUP BY church_id, lower(email) HAVING count(*) > 1) AS d)
+         AS duplicate_pending_pairs,
+       (SELECT count(*) FROM invites WHERE role NOT IN ('member', 'admin')) AS other_role_invites,
+       (SELECT count(*) FROM pg_constraint WHERE conname = 'uq_invites_church_email') AS old_constraint,
+       (SELECT count(*) FROM churches WHERE deleted_at IS NULL) AS churches,
+       (SELECT count(*) FROM churches c
+         WHERE c.deleted_at IS NULL
+           AND (SELECT count(*) FROM memberships m
+                 WHERE m.church_id = c.id AND m.role = 'owner') <> 1) AS churches_without_one_owner,
+       (SELECT count(*) FROM churches c
+         WHERE c.deleted_at IS NULL
+           AND NOT EXISTS (SELECT 1 FROM memberships m
+                            WHERE m.church_id = c.id AND m.role IN ('owner', 'admin')))
+         AS churches_without_admin;
+```
+
+One row. Expected before the merge:
+
+- `version` is `0007_bulletin_images` (anything else: stop);
+- `invites` all invites ever made; `pending_email_invites` those bound to an
+  email that are neither revoked nor used, expired ones included (the
+  upgrade's "one waiting invite per church and email" rule counts an
+  expired one too, until the app revokes it);
+- `duplicate_pending_pairs` is `0`. Anything else: stop. The upgrade would
+  refuse (safely: the previous release keeps serving); follow "Church
+  integrity" step 2 below with the agent first;
+- `other_role_invites` is normally `0`; any number is fine (the upgrade
+  makes those invites admin invites and revokes them): record it;
+- `old_constraint` is `1` (the constraint the upgrade replaces; `0`: stop
+  and tell the agent);
+- `churches` the churches in use; `churches_without_one_owner` and
+  `churches_without_admin` are normally `0`. They do not block this
+  upgrade, but a church with no owner cannot transfer ownership or be
+  deleted in the new app: tell the agent, who records it, and repair it
+  together ("Church integrity" steps 3 and 4) before slice 6b-2 merges.
+  That is a gate: 6b-2's revision only refuses a second owner, so it
+  would not notice a church with none.
+
+This is the same check as `backend/scripts/check_integrity.py` ("Church
+integrity" below), as one query for the SQL Editor.
+
+### Step 3: Read the SQL the upgrade will run
+
+The agent renders it from the PR's code without connecting to any database
+(from `backend/`):
+
+```bash
+DATABASE_URL=postgresql://preview@localhost:1/preview ../.venv/bin/alembic upgrade 0007_bulletin_images:0008_invites_integrity --sql 2>/dev/null | grep -v -e '^--' -e '^$' | sed 's/ *$//'
+```
+
+Expected, exactly (`backend/tests/test_migrations.py` pins it):
+
+```
+BEGIN;
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '60s';
+UPDATE invites SET role='admin', revoked=true WHERE (invites.role NOT IN ('member', 'admin'));
+DO $$
+DECLARE
+  pairs integer;
+  church_ids text;
+BEGIN
+  SELECT count(*), string_agg(DISTINCT church_id::text, ', ')
+    INTO pairs, church_ids
+    FROM (SELECT church_id FROM invites
+           WHERE email IS NOT NULL AND NOT revoked AND accepted_at IS NULL
+           GROUP BY church_id, lower(email) HAVING count(*) > 1) AS duplicates;
+  IF pairs > 0 THEN
+    RAISE EXCEPTION '0008_invites_integrity: % (church, email) pair(s) have more than one pending invite: %. Follow "Church integrity" in backend/migrations/README.md, then redeploy.', pairs, church_ids;
+  END IF;
+END $$;
+ALTER TABLE invites DROP CONSTRAINT uq_invites_church_email;
+ALTER TABLE invites ADD CONSTRAINT ck_invites_role CHECK (role IN ('member','admin'));
+CREATE UNIQUE INDEX uq_invites_pending_email ON invites (church_id, lower(email)) WHERE email IS NOT NULL AND NOT revoked AND accepted_at IS NULL;
+UPDATE alembic_version SET version_num='0008_invites_integrity' WHERE alembic_version.version_num = '0007_bulletin_images';
+COMMIT;
+```
+
+In one transaction: invites with a role other than member or admin (only a
+direct database write could make one) become admin invites and are revoked;
+the check stops everything if two waiting invites of one church share an
+email; the old rule (one invite per church and email, ever) is replaced by
+one waiting invite per church and email, in any capitalization; and an
+invite's role must be member or admin from now on. No row is deleted and
+no column changes. If another connection holds a lock on `invites` for
+more than 5 s, the deploy fails and the previous release keeps serving;
+run the deploy again.
+
+### Step 4: After the deploy (read-only)
+
+SQL Editor:
+
+```sql
+-- Read-only: is 0008 applied? Changes nothing.
+-- Before 0008 is applied it still runs: 0007_bulletin_images, 0, 0, 1.
+SELECT (SELECT version_num FROM alembic_version) AS version,
+       (SELECT count(*) FROM pg_indexes
+         WHERE schemaname = 'public' AND indexname = 'uq_invites_pending_email') AS pending_email_index,
+       (SELECT count(*) FROM pg_constraint WHERE conname = 'ck_invites_role') AS role_check,
+       (SELECT count(*) FROM pg_constraint WHERE conname = 'uq_invites_church_email') AS old_constraint;
+```
+
+Expected: `0008_invites_integrity`, `1`, `1`, `0`. `0007_bulletin_images`,
+`0`, `0`, `1` means the deploy has not applied 0008 yet: wait a minute and
+run it again. Then step 2's query again: the same counts as before (or more
+`invites` and `pending_email_invites`, by the invites made since the
+deploy), except `other_role_invites` `0` and `old_constraint` `0`.
+
+### Reverting 6b-1
+
+The schema stays at `0008_invites_integrity`: the code before 6b-1 creates
+no invites (only `POST /invites/accept` and `/preview` read them), so it
+runs on it unchanged. Revert the merge commit, then, in the same PR, restore
+from the merge commit every file of 6b-1's first commit ("Migration
+0008_invites_integrity: …"), not only the revision: the `Invite` model,
+`pytest.ini`'s two filters, this README, the test helper and the tests that
+know the head or store an old invite role. Then Railway's `alembic upgrade
+head` still finds the database at head, `alembic check` stays clean, and
+the backend suite passes (restoring only the revision, the model and
+`pytest.ini` leaves 15 tests failing). From the repo root:
+
+```bash
+git checkout <merge sha> -- backend/migrations/versions/0008_invites_integrity.py backend/db/models.py pytest.ini backend/migrations/README.md backend/tests/invite_helpers.py backend/tests/test_migrations.py backend/tests/test_schema_check.py backend/tests/test_api_app.py backend/tests/test_services_postgres.py backend/tests/test_api_invites.py backend/tests/test_usecase_onboarding.py
+```
+
+Run the backend suite before the revert's PR opens; it must pass. Never
+`alembic downgrade` production for this.
+
+## Church integrity (slice 6b)
+
+Every church should have exactly one owner and at least one owner or
+admin, every invite should grant member or admin, and no two waiting
+invites of one church should share an email. The new app keeps all of this
+(slice 6b), but rows written before it, or by hand, may not.
+
+1. **When to check:** before merging slice 6b-1 and slice 6b-2, and after
+   each of their deploys. Either run "Before 0008_invites_integrity" step 2's
+   query in the SQL Editor (read-only), or, from a laptop with the
+   production `DATABASE_URL` (the laptop setup of "Production runbook"
+   above), `../.venv/bin/python scripts/check_integrity.py` from `backend/`
+   (read-only). The script prints one line per problem (its kind, the church
+   id, a count) and `OK: no integrity violations.` when there is none; it
+   exits 1 when it found any. Record the result (never a church id) in the
+   PR or the slice's record. Before slice 6b-2 merges, every church must
+   have exactly one owner (steps 3 and 4): its revision only refuses a
+   second owner.
+2. **Duplicate pending email invites** (`duplicate_pending_pairs` above,
+   `pending_duplicate` in the script; `0008` refuses to run over them): after
+   a fresh backup, keep the newest pending invite per church and email, and
+   revoke the rest. In the SQL Editor:
+   ```sql
+   UPDATE invites SET revoked = true
+   WHERE id IN (
+     SELECT id FROM (
+       SELECT id, row_number() OVER (
+         PARTITION BY church_id, lower(email) ORDER BY created_at DESC, id DESC) AS rn
+       FROM invites
+       WHERE email IS NOT NULL AND NOT revoked AND accepted_at IS NULL
+     ) ranked WHERE rn > 1
+   );
+   ```
+   The people those invites were for can still use the newest one.
+3. **More than one owner** in a church (`owner_count` with a count above 1):
+   agree with the church who keeps ownership, then, after a fresh backup,
+   make the others admins. The statements in steps 3 and 4 hold
+   placeholders in quotes (`'<church id>'`, `'<user id of the owner who
+   stays>'`, `'<user id of the new owner>'`), which the SQL Editor never
+   tries to fill in and which fail, changing nothing, if run as they are.
+   The agent writes the statement out with the real ids in the chat only,
+   for the owner to paste; the real ids never go into a committed file,
+   the PR or the record.
+   `UPDATE memberships SET role = 'admin' WHERE church_id = '<church id>' AND role = 'owner' AND user_id <> '<user id of the owner who stays>';`
+4. **No owner** (`owner_count` 0): pick an existing admin with the church,
+   then, after a fresh backup (the agent fills in the ids in the chat, as
+   in step 3):
+   `UPDATE memberships SET role = 'owner' WHERE church_id = '<church id>' AND user_id = '<user id of the new owner>';`
+   If the church has no admin either (`no_admin`), pick any member.
+5. **Invites with another role** (`invite_role`): `0008` repairs them; after
+   it, the database refuses new ones.
+6. Check again until it shows none of these, then merge. Railway's
+   pre-deploy runs `alembic upgrade head`.
+7. After the deploy, check once more.

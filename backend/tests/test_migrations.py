@@ -1019,3 +1019,284 @@ def test_the_after_deploy_check_runs_before_0007_too(pg_admin_url):
         finally:
             engine.dispose()
     assert row == {"version": "0006_services_bulletin", "row_security": None, "open_grants": 0, "pictures": None}
+
+
+# --- Slice 6b-1: 0008_invites_integrity (6b spec, "Data and migrations"; owner's 6b planning answers) ---
+
+# What `alembic upgrade 0007_bulletin_images:0008_invites_integrity --sql` prints on Postgres,
+# comments, blank lines and trailing spaces left out: the preview the owner reads before the
+# merge (backend/migrations/README.md, "Before 0008_invites_integrity", step 3).
+PREVIEW_0008 = [
+    "BEGIN;",
+    "SET LOCAL lock_timeout = '5s';",
+    "SET LOCAL statement_timeout = '60s';",
+    "UPDATE invites SET role='admin', revoked=true WHERE (invites.role NOT IN ('member', 'admin'));",
+    "DO $$",
+    "DECLARE",
+    "  pairs integer;",
+    "  church_ids text;",
+    "BEGIN",
+    "  SELECT count(*), string_agg(DISTINCT church_id::text, ', ')",
+    "    INTO pairs, church_ids",
+    "    FROM (SELECT church_id FROM invites",
+    "           WHERE email IS NOT NULL AND NOT revoked AND accepted_at IS NULL",
+    "           GROUP BY church_id, lower(email) HAVING count(*) > 1) AS duplicates;",
+    "  IF pairs > 0 THEN",
+    "    RAISE EXCEPTION '0008_invites_integrity: % (church, email) pair(s) have more than one pending invite: %. "
+    "Follow \"Church integrity\" in backend/migrations/README.md, then redeploy.', pairs, church_ids;",
+    "  END IF;",
+    "END $$;",
+    "ALTER TABLE invites DROP CONSTRAINT uq_invites_church_email;",
+    "ALTER TABLE invites ADD CONSTRAINT ck_invites_role CHECK (role IN ('member','admin'));",
+    "CREATE UNIQUE INDEX uq_invites_pending_email ON invites (church_id, lower(email)) "
+    "WHERE email IS NOT NULL AND NOT revoked AND accepted_at IS NULL;",
+    "UPDATE alembic_version SET version_num='0008_invites_integrity' "
+    "WHERE alembic_version.version_num = '0007_bulletin_images';",
+    "COMMIT;",
+]
+
+# Church integrity, step 2 (backend/migrations/README.md): keep the newest pending invite per
+# church and email, revoke the rest. The tests run it exactly as the README prints it.
+RUNBOOK_DEDUPE_PATTERN = re.compile(r"\n2\. \*\*Duplicate pending email invites\*\*.*?```sql\n(.*?)```", re.S)
+
+
+def _readme() -> str:
+    return (Path(__file__).resolve().parents[1] / "migrations" / "README.md").read_text(encoding="utf-8")
+
+
+def _runbook_dedupe_sql() -> str:
+    return RUNBOOK_DEDUPE_PATTERN.search(_readme()).group(1)
+
+
+def _invite_row(conn, church_id, user_id, *, email=None, role="member", revoked=False, accepted=False,
+                created_at=T9_NOW) -> uuid.UUID:
+    """An invite inserted with plain SQL, as any client of the table could."""
+    invite_id = uuid.uuid4()
+    conn.execute(sa.text(
+        "INSERT INTO invites (id, church_id, code, email, role, created_by, created_at, expires_at, revoked, "
+        "accepted_at, reusable) VALUES (:id, :church, :code, :email, :role, :user, :created, :expires, :revoked, "
+        ":accepted, :reusable)"),
+        {"id": invite_id.hex if conn.dialect.name == "sqlite" else invite_id,
+         "church": church_id.hex if conn.dialect.name == "sqlite" else church_id,
+         "code": uuid.uuid4().hex, "email": email, "role": role,
+         "user": user_id.hex if conn.dialect.name == "sqlite" else user_id,
+         "created": created_at, "expires": created_at + timedelta(days=7), "revoked": revoked,
+         "accepted": T9_NOW if accepted else None, "reusable": email is None})
+    return invite_id
+
+
+def _invite_state(conn, invite_id) -> tuple:
+    key = invite_id.hex if conn.dialect.name == "sqlite" else invite_id
+    row = conn.execute(sa.text("SELECT role, revoked FROM invites WHERE id = :id"), {"id": key}).one()
+    return row.role, bool(row.revoked)
+
+
+def _version(url: str) -> str:
+    with _connection(_normalize_url(url)) as conn:
+        return conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
+
+
+def test_0008_repairs_roles_and_allows_one_pending_invite_per_email(sqlite_url):
+    _alembic(sqlite_url, "upgrade", "0007_bulletin_images")
+    engine = sa.create_engine(sqlite_url, poolclass=NullPool)
+    try:
+        with engine.begin() as conn:
+            user_id, church_id = _seed_owner_and_church(conn)
+            owner_invite = _invite_row(conn, church_id, user_id, role="owner")
+            junk_invite = _invite_row(conn, church_id, user_id, email="junk@example.com", role="pastor")
+            kept = _invite_row(conn, church_id, user_id, email="b@example.com", role="admin")
+            _invite_row(conn, church_id, user_id, email="a@example.com", revoked=True)   # the old constraint
+            _invite_row(conn, church_id, user_id, email="A@example.com")                 # allows these two
+        _alembic(sqlite_url, "upgrade", "0008_invites_integrity")
+        with engine.begin() as conn:
+            states = [_invite_state(conn, i) for i in (owner_invite, junk_invite, kept)]
+            shape = _invites_shape(conn)
+            index_sql = conn.execute(sa.text(
+                "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'uq_invites_pending_email'")).scalar_one()
+            checks = sa.inspect(conn).get_check_constraints("invites")
+        with engine.begin() as conn:     # a re-invite after a revoke, an accepted one, and code-only links
+            _invite_row(conn, church_id, user_id, email="b@example.com", accepted=True)
+            _invite_row(conn, church_id, user_id, email="c@example.com", revoked=True)
+            _invite_row(conn, church_id, user_id, email="C@example.com")
+            _invite_row(conn, church_id, user_id)
+            _invite_row(conn, church_id, user_id)
+        for email, role in (("a@EXAMPLE.com", "member"), ("x@example.com", "owner")):
+            with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
+                _invite_row(conn, church_id, user_id, email=email, role=role)
+    finally:
+        engine.dispose()
+    assert states == [("admin", True), ("admin", True), ("admin", False)]
+    assert shape["uniques"] == [("", ("code",))]
+    assert index_sql == ("CREATE UNIQUE INDEX uq_invites_pending_email ON invites (church_id, lower(email)) "
+                         "WHERE email IS NOT NULL AND NOT revoked AND accepted_at IS NULL")
+    assert [(c["name"], c["sqltext"]) for c in checks] == [("ck_invites_role", "role IN ('member','admin')")]
+    assert _version(sqlite_url) == "0008_invites_integrity"
+
+
+def test_0008_refuses_duplicate_pending_emails_until_the_runbook_step_runs(sqlite_url):
+    _alembic(sqlite_url, "upgrade", "0007_bulletin_images")
+    engine = sa.create_engine(sqlite_url, poolclass=NullPool)
+    try:
+        with engine.begin() as conn:
+            user_id, church_id = _seed_owner_and_church(conn)
+            older = _invite_row(conn, church_id, user_id, email="dup@example.com")
+            newer = _invite_row(conn, church_id, user_id, email="Dup@example.com",
+                                created_at=T9_NOW + timedelta(hours=1))
+        with pytest.raises(RuntimeError) as refused:
+            _alembic(sqlite_url, "upgrade", "0008_invites_integrity")
+        assert _version(sqlite_url) == "0007_bulletin_images"
+        with engine.begin() as conn:
+            conn.execute(sa.text(_runbook_dedupe_sql()))
+        _alembic(sqlite_url, "upgrade", "0008_invites_integrity")
+        with engine.begin() as conn:
+            states = {i: _invite_state(conn, i)[1] for i in (older, newer)}
+    finally:
+        engine.dispose()
+    assert str(refused.value) == (
+        f"0008_invites_integrity: 1 (church, email) pair(s) have more than one pending invite: {church_id}. "
+        "Follow \"Church integrity\" in backend/migrations/README.md, then redeploy.")
+    assert "dup@" not in str(refused.value).lower()
+    assert states == {older: True, newer: False}
+    assert _version(sqlite_url) == "0008_invites_integrity"
+
+
+def test_0008_downgrade_restores_the_old_constraint_or_refuses_over_duplicates(sqlite_url):
+    _alembic(sqlite_url, "upgrade", "0007_bulletin_images")
+    before = _tables_snapshot(sqlite_url)
+    _alembic(sqlite_url, "upgrade", "0008_invites_integrity")
+    engine = sa.create_engine(sqlite_url, poolclass=NullPool)
+    try:
+        with engine.begin() as conn:
+            user_id, church_id = _seed_owner_and_church(conn)
+            revoked = _invite_row(conn, church_id, user_id, email="again@example.com", revoked=True)
+            _invite_row(conn, church_id, user_id, email="again@example.com")
+        with pytest.raises(RuntimeError) as refused:
+            _alembic(sqlite_url, "downgrade", "0007_bulletin_images")
+        assert _version(sqlite_url) == "0008_invites_integrity"
+        with engine.begin() as conn:
+            conn.execute(sa.text("DELETE FROM invites WHERE id = :id"), {"id": revoked.hex})
+    finally:
+        engine.dispose()
+    _alembic(sqlite_url, "downgrade", "0007_bulletin_images")
+    assert str(refused.value) == (
+        "Cannot restore uq_invites_church_email: 1 (church, email) pairs have more than one invite. "
+        "Delete the revoked or accepted duplicates first.")
+    assert _tables_snapshot(sqlite_url) == before
+    assert _version(sqlite_url) == "0007_bulletin_images"
+
+
+def test_offline_sql_for_0008_repairs_checks_and_swaps_the_constraint_under_the_timeouts():
+    cfg = alembic_config(url="postgresql://preview@localhost:1/preview", configure_logger=False)
+    cfg.output_buffer = buffer = io.StringIO()
+    command.upgrade(cfg, "0007_bulletin_images:0008_invites_integrity", sql=True)
+    lines = [line.rstrip() for line in buffer.getvalue().splitlines() if line.strip() and not line.startswith("--")]
+    assert lines == PREVIEW_0008
+
+
+def test_the_readme_shows_the_0008_preview_exactly():
+    """The owner reads backend/migrations/README.md → "Before 0008_invites_integrity",
+    step 3, against the agent's rendering; both must be PREVIEW_0008."""
+    section = _readme().split("\n## Before 0008_invites_integrity (slice 6b-1)\n", 1)[1]
+    step = section.split("\n### Step 3: Read the SQL the upgrade will run\n", 1)[1].split("\n### ", 1)[0]
+    block = "BEGIN;" + step.split("\n```\nBEGIN;", 1)[1].split("\n```", 1)[0]   # the bare fence
+    assert block.splitlines() == PREVIEW_0008
+
+
+def _readme_0008_sql(n: int) -> str:
+    """The n-th ```sql block of README "Before 0008_invites_integrity": 0 is step 2's
+    counts and integrity check, 1 step 4's after-deploy check."""
+    section = _readme().split("\n## Before 0008_invites_integrity (slice 6b-1)\n", 1)[1]
+    return re.findall(r"```sql\n(.*?)```", section, re.S)[n]
+
+
+@pytest.mark.postgres
+def test_0008_on_postgres_refuses_duplicates_then_repairs_swaps_and_downgrades(pg_admin_url):
+    """The same upgrade on Postgres: the DO block's refusal rolls back the whole
+    run (the role repair too), the runbook's dedupe makes it pass, the partial
+    expression index and the CHECK hold, and the downgrade refuses over exact
+    duplicates and otherwise restores uq_invites_church_email."""
+    with throwaway_database(pg_admin_url, role_bypassrls=True) as sandbox:
+        _alembic(sandbox.role_url, "upgrade", "0007_bulletin_images")
+        engine = _pg_engine(sandbox.role_url)
+        try:
+            with engine.begin() as conn:
+                user_id, church_id = _seed_owner_and_church(conn)
+                owner_invite = _invite_row(conn, church_id, user_id, role="owner")
+                older = _invite_row(conn, church_id, user_id, email="dup@example.com")
+                newer = _invite_row(conn, church_id, user_id, email="Dup@example.com",
+                                    created_at=T9_NOW + timedelta(hours=1))
+            with pytest.raises(sa.exc.DBAPIError) as refused:
+                _alembic(sandbox.role_url, "upgrade", "0008_invites_integrity")
+            with engine.connect() as conn:
+                assert _invite_state(conn, owner_invite) == ("owner", False)   # rolled back with the refusal
+            assert _version(sandbox.role_url) == "0007_bulletin_images"
+            with engine.begin() as conn:
+                conn.execute(text(_runbook_dedupe_sql()))
+            _alembic(sandbox.role_url, "upgrade", "0008_invites_integrity")
+            with engine.begin() as conn:
+                states = [_invite_state(conn, i) for i in (owner_invite, older, newer)]
+                index = conn.execute(text(
+                    "SELECT indexdef FROM pg_indexes WHERE indexname = 'uq_invites_pending_email'")).scalar_one()
+                old = conn.execute(text(
+                    "SELECT count(*) FROM pg_constraint WHERE conname = 'uq_invites_church_email'")).scalar_one()
+                _invite_row(conn, church_id, user_id, email="dup@example.com", accepted=True)
+            for email, role in (("DUP@example.com", "member"), (None, "owner")):
+                with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
+                    _invite_row(conn, church_id, user_id, email=email, role=role)
+            with pytest.raises(RuntimeError, match="Cannot restore uq_invites_church_email: 1 "):
+                _alembic(sandbox.role_url, "downgrade", "0007_bulletin_images")
+            with engine.begin() as conn:
+                conn.execute(text("DELETE FROM invites WHERE email IS NOT NULL AND id <> :id"), {"id": newer})
+            _alembic(sandbox.role_url, "downgrade", "0007_bulletin_images")
+            with engine.connect() as conn:
+                restored = conn.execute(text(
+                    "SELECT count(*) FROM pg_constraint WHERE conname = 'uq_invites_church_email'")).scalar_one()
+        finally:
+            engine.dispose()
+    message = str(refused.value.orig).splitlines()[0]
+    assert message == (
+        f"0008_invites_integrity: 1 (church, email) pair(s) have more than one pending invite: {church_id}. "
+        "Follow \"Church integrity\" in backend/migrations/README.md, then redeploy.")
+    assert states == [("admin", True), ("member", True), ("member", False)]
+    assert index == ("CREATE UNIQUE INDEX uq_invites_pending_email ON public.invites USING btree "
+                     "(church_id, lower((email)::text)) WHERE ((email IS NOT NULL) AND (NOT revoked) "
+                     "AND (accepted_at IS NULL))")
+    assert (old, restored) == (0, 1)
+
+
+@pytest.mark.postgres
+def test_the_owner_s_read_only_queries_around_0008(pg_admin_url):
+    """README "Before 0008_invites_integrity": step 2's counts and integrity check
+    before and after the upgrade, and step 4's check (which also answers before
+    0008 is applied)."""
+    with throwaway_database(pg_admin_url, role_bypassrls=True) as sandbox:
+        _alembic(sandbox.role_url, "upgrade", "0007_bulletin_images")
+        engine = _pg_engine(sandbox.role_url)
+        try:
+            with engine.begin() as conn:
+                user_id, church_id = _seed_owner_and_church(conn)
+                conn.execute(text("INSERT INTO memberships (church_id, user_id, role, created_at) "
+                                  "VALUES (:c, :u, 'owner', now())"), {"c": church_id, "u": user_id})
+                conn.execute(text("INSERT INTO churches (id, name, timezone, settings, created_at) "
+                                  "VALUES (:id, 'Hope', 'UTC', '{}', now())"), {"id": uuid.uuid4()})
+                _invite_row(conn, church_id, user_id, role="owner")
+                _invite_row(conn, church_id, user_id, email="p@example.com")
+                _invite_row(conn, church_id, user_id, email="P@example.com", revoked=True)
+                _invite_row(conn, church_id, user_id)
+            with engine.connect() as conn:
+                before = dict(conn.execute(text(_readme_0008_sql(0))).mappings().one())
+                check_before = dict(conn.execute(text(_readme_0008_sql(1))).mappings().one())
+            _alembic(sandbox.role_url, "upgrade", "0008_invites_integrity")
+            with engine.connect() as conn:
+                after = dict(conn.execute(text(_readme_0008_sql(0))).mappings().one())
+                check_after = dict(conn.execute(text(_readme_0008_sql(1))).mappings().one())
+        finally:
+            engine.dispose()
+    assert before == {"version": "0007_bulletin_images", "invites": 4, "pending_email_invites": 1,
+                      "duplicate_pending_pairs": 0, "other_role_invites": 1, "old_constraint": 1,
+                      "churches": 2, "churches_without_one_owner": 1, "churches_without_admin": 1}
+    assert check_before == {"version": "0007_bulletin_images", "pending_email_index": 0, "role_check": 0,
+                            "old_constraint": 1}
+    assert after == {**before, "version": "0008_invites_integrity", "other_role_invites": 0, "old_constraint": 0}
+    assert check_after == {"version": "0008_invites_integrity", "pending_email_index": 1, "role_check": 1,
+                           "old_constraint": 0}
