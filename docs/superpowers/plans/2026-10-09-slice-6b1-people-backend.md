@@ -1987,15 +1987,17 @@ def test_revoke_pending_email_invites_takes_every_pending_one_for_the_email_expi
     owner = make_user(email="o@x.com")
     cid = create_church(name="C", timezone="UTC", owner_user_id=owner)
     other = create_church(name="D", timezone="UTC", owner_user_id=owner)
-    live = create_invite(church_id=cid, created_by=owner, email="Mary@x.com")
-    expired = create_invite(church_id=cid, created_by=owner, email="mary@x.com", role="admin")
     used = create_invite(church_id=cid, created_by=owner, email="mary@x.com")
+    _set(used, accepted_at=NOW)
+    expired = create_invite(church_id=cid, created_by=owner, email="Mary@x.com", role="admin")
+    _set(expired, expires_at=NOW)
     someone_else = create_invite(church_id=cid, created_by=owner, email="ann@x.com")
     elsewhere = create_invite(church_id=other, created_by=owner, email="mary@x.com")
-    _set(expired, expires_at=NOW)
-    _set(used, accepted_at=NOW)
     with session_scope() as s:
-        assert revoke_pending_email_invites(cid, " MARY@X.com ", session=s) == 2
+        assert revoke_pending_email_invites(cid, " MARY@X.com ", session=s) == 1      # the expired one
+    live = create_invite(church_id=cid, created_by=owner, email="mary@x.com")
+    with session_scope() as s:
+        assert revoke_pending_email_invites(cid, "mary@x.com", session=s) == 1
         assert revoke_pending_email_invites(cid, "mary@x.com", session=s) == 0
     assert [_revoked(c) for c in (live, expired, used, someone_else, elsewhere)] == [True, True, False, False, False]
 
@@ -5600,7 +5602,7 @@ Expected counts after this task: backend `2222 passed, 45 skipped` on `main`; fr
 - **What the new CHECK and the wider delete broke.** The full suite after T1's model found slice 1's three clamp tests storing `owner`/`foo` invites (clarification 8); after T4's repos, one onboarding test that deleted a church to keep a consumed invite live (clarification 11). `streamlit_tests` passed throughout.
 - **An import cycle.** `church_admin` imports `members` at load, so `members` imports `require_admin_role` when it is called (clarification 3).
 - **Flaky orderings caught while building.** Two invites made at the same instant tie on `created_at` (the order then falls to the random id), so the test that reads the list's order gives them different times; the members' order by name depends on the token's name, which `get_current_user` writes back to the user row, so the lifecycle API test compares the two admins as a set.
-- **Mutation checks** (each change made by hand in the build worktree with every task applied, the named tests run, the change undone): no revocation of the removed person's invites → `2 failed, 110 passed` (`test_members_usecase.py`, `test_api_members.py`); no revocation of expired pending invites → `1 failed, 95 passed` (`test_members_usecase.py`, `test_api_invites_admin.py`); `DELETE /church` guarded by `require_church` → `1 failed, 14 passed` (`test_route_guards.py`, `test_api_church_lifecycle.py`); the delete revoking only unaccepted invites (the old filter) → `2 failed, 33 passed` (`test_churches_repo.py`, `test_church_lifecycle.py`); `check_leave` without its last-admin rule → `3 failed, 80 passed` (`test_role_policy.py`, `test_church_lifecycle.py`, `test_api_church_lifecycle.py`); `revoke_invite` without the lock and role re-read → `4 failed, 78 passed` (`test_members_usecase.py`); `GET /invites` without `no-store` → `1 failed, 13 passed` (`test_api_invites_admin.py`); `lock_church` without `FOR UPDATE` → `6 failed, 1 passed` (`test_people_postgres.py`, on Postgres).
+- **Mutation checks** (each change made by hand in the build worktree with every task applied, the named tests run, the change undone): no revocation of the removed person's invites → `3 failed, 112 passed` (`test_members_usecase.py`, `test_api_members.py`); no revocation of expired pending invites → `1 failed, 98 passed` (`test_members_usecase.py`, `test_api_invites_admin.py`); `DELETE /church` guarded by `require_church` → `1 failed, 14 passed` (`test_route_guards.py`, `test_api_church_lifecycle.py`); the delete revoking only unaccepted invites (the old filter) → `2 failed, 34 passed` (`test_churches_repo.py`, `test_church_lifecycle.py`); `check_leave` without its last-admin rule → `3 failed, 81 passed` (`test_role_policy.py`, `test_church_lifecycle.py`, `test_api_church_lifecycle.py`); `revoke_invite` without the lock and role re-read → `4 failed, 81 passed` (`test_members_usecase.py`); `GET /invites` without `no-store` → `1 failed, 13 passed` (`test_api_invites_admin.py`); `lock_church` without `FOR UPDATE` → `6 failed, 1 passed` (`test_people_postgres.py`, on Postgres). After the plan review fixes (2026-10-09) the checks touching a changed test file were measured again (the counts above), and four more: no revocation of the pending invites for the removed person's email → `1 failed, 114 passed` (`test_members_usecase.py`, `test_api_members.py`); `claim` without `NOT revoked` and the expiry → `2 failed, 149 passed` (`test_invites_repo.py`, `test_members_usecase.py`, `test_usecase_onboarding.py`); the delete comparing with the untrimmed stored name → `1 failed, 31 passed` (`test_church_lifecycle.py`, `test_api_church_lifecycle.py`); every `IntegrityError` of the insert as `invite_exists` → `1 failed, 98 passed` (`test_members_usecase.py`, `test_api_invites_admin.py`).
 
 **Replay of the finished plan (2026-10-09).** The directives of T1-T9 were applied in order by a replay script that parses each step's **Create**, **Append** and **In … replace** blocks and its `bash` blocks (each commit), runs every command on its "Run:" lines (T1-T9 and T10 Steps 1-3; `<local url>` a fresh database on the throwaway local PostgreSQL 16 cluster) and compares the output with the quoted **Expected** blocks, onto a fresh detached worktree of the branch (outside the repo directory and removed afterwards), with the repo's `.venv` (a symlink) and a hard-linked copy of `frontend/node_modules`:
 - Baselines before T1, on the replay worktree: backend `1983 passed, 35 skipped`; Postgres `35 passed, 1983 deselected, 1 warning`; frontend `952 passed` in 109 files; typecheck 0, lint 0.
