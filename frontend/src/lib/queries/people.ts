@@ -169,6 +169,8 @@ export function inviteFieldError(e: unknown): { field: "email" | "reusable"; mes
  * `POST /invites` (owners and admins), with a new `Idempotency-Key` for every
  * click (6b spec), so a repeat of the same request is never a second link.
  * The new invite goes first in the cached list, then the list refetches.
+ * `gcTime: 0`: the answer carries the code, so the mutation leaves the cache
+ * once unobserved (the next create, or the form unmounting).
  */
 export function useCreateInvite() {
   const api = useApi();
@@ -176,6 +178,7 @@ export function useCreateInvite() {
   const queryClient = useQueryClient();
   const key = keys.invites(church.id);
   return useChurchMutation<Invite, ApiError, InviteBody>({
+    gcTime: 0,
     mutationFn: (body) =>
       api.church<Invite>("/invites", { method: "POST", json: body, idempotencyKey: crypto.randomUUID() }),
     onSuccess: async (created) => {

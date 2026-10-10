@@ -462,6 +462,17 @@ describe("Settings → People: Invite someone and Pending invites (slice 6b-2a)"
     expect(inviteRows()).toHaveLength(1);
   });
 
+  it("lets the created link's code leave the mutation cache once the form is gone (gcTime 0)", async () => {
+    const server = invitesServer();
+    const { user, queryClient, unmount } = renderPage("admin", { "GET /invites": server.list, "POST /invites": server.add(CODE_FREE) });
+    await user.click(await screen.findByRole("button", { name: "Create invite link" }));
+    await screen.findByRole("group", { name: "Invite link ready" });
+    const created = () => queryClient.getMutationCache().getAll().filter((m) => (m.state.data as Invite | undefined)?.code === "abc");
+    expect(created().map((m) => m.options.gcTime)).toEqual([0]);
+    unmount();
+    await waitFor(() => expect(created()).toEqual([]));
+  });
+
   it("sends an admin, reusable link with a new key each time, and says who can use it", async () => {
     const reusable = invite({ id: "c0000000-0000-4000-8000-000000000009", code: "r-123", role: "admin", reusable: true });
     const server = invitesServer();
