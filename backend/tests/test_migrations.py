@@ -1393,6 +1393,10 @@ def _demote_extra_owners(conn, church_id, keep) -> None:
                  {"church": church_id.hex if hexed else church_id, "keep": keep.hex if hexed else keep})
 
 
+# A church id that sorts before any uuid4 the seed makes: the refusal names the churches sorted.
+EARLY_CHURCH = uuid.UUID("00000000-0000-4000-8000-000000000001")
+
+
 def test_0009_refuses_two_owners_then_allows_one_owner_per_church(sqlite_url):
     _alembic(sqlite_url, "upgrade", "0008_invites_integrity")
     engine = sa.create_engine(sqlite_url, poolclass=NullPool)
@@ -1403,11 +1407,17 @@ def test_0009_refuses_two_owners_then_allows_one_owner_per_church(sqlite_url):
             _membership_row(conn, church_id, owner, "owner")
             _membership_row(conn, church_id, second, "owner")                  # 0008 still allows it
             _membership_row(conn, church_id, _user_row(conn, "m@example.com"), "member")
+            # a second church with two owners, made after the first but sorting before it
+            conn.execute(_t9_churches.insert().values(
+                id=EARLY_CHURCH, name="Grace", timezone="America/New_York", settings={}, created_at=T9_NOW))
+            _membership_row(conn, EARLY_CHURCH, second, "owner")
+            _membership_row(conn, EARLY_CHURCH, owner, "owner")
         with pytest.raises(RuntimeError) as refused:
             _alembic(sqlite_url, "upgrade", "0009_memberships_one_owner")
         assert _version(sqlite_url) == "0008_invites_integrity"
         with engine.begin() as conn:
             _demote_extra_owners(conn, church_id, keep=owner)
+            _demote_extra_owners(conn, EARLY_CHURCH, keep=second)
         _alembic(sqlite_url, "upgrade", "0009_memberships_one_owner")
         with engine.begin() as conn:
             index_sql = conn.execute(sa.text(
@@ -1424,8 +1434,9 @@ def test_0009_refuses_two_owners_then_allows_one_owner_per_church(sqlite_url):
                          {"c": other_church.hex, "u": second.hex})
     finally:
         engine.dispose()
+    assert str(church_id) > str(EARLY_CHURCH)
     assert str(refused.value) == (
-        f"0009_memberships_one_owner: 1 church(es) have more than one owner: {church_id}. "
+        f"0009_memberships_one_owner: 2 church(es) have more than one owner: {EARLY_CHURCH}, {church_id}. "
         "Follow \"Church integrity\" in backend/migrations/README.md, then redeploy.")
     assert index_sql == "CREATE UNIQUE INDEX uq_memberships_one_owner ON memberships (church_id) WHERE role = 'owner'"
     assert _version(sqlite_url) == "0009_memberships_one_owner"
