@@ -12,7 +12,7 @@ import { act, renderHook, screen, waitFor, within } from "@testing-library/react
 import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 
-import type { Church } from "@/lib/church";
+import { type Church, markChurchExited } from "@/lib/church";
 import { useChurch } from "@/lib/church-context";
 import { makeQueryClient, useApi } from "@/lib/queries/client";
 import { keys } from "@/lib/queries/keys";
@@ -387,5 +387,55 @@ describe("(church) layout", () => {
 
     await expect(Promise.resolve().then(() => result.current.church("/church"))).rejects.toThrow();
     expect(api.requests).toEqual([]);
+  });
+
+  it("re-picks without the toast after a 403 for a church just left or deleted here (slice 6b-2b)", async () => {
+    markChurchExited(GRACE.id);
+    const api = installFakeApi({
+      "GET /me": me({ churches: [GRACE, HOPE] }),
+      "GET /church": churchById(HOPE),
+    });
+
+    renderShell();
+
+    expect(await screen.findByText("Showing Hope")).toBeInTheDocument();
+    await waitFor(() => expect(meRequests(api)).toHaveLength(2));
+    expect(churchRequests(api)).toEqual([GRACE.id, HOPE.id]);
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
+  it("stays quiet when /me stops listing a church just left or deleted here (slice 6b-2b)", async () => {
+    let meCalls = 0;
+    installFakeApi({
+      "GET /me": () => {
+        meCalls += 1;
+        return meCalls === 1 ? me({ churches: [GRACE, HOPE] }) : me({ churches: [HOPE] });
+      },
+      "GET /church": churchById(GRACE, HOPE),
+    });
+    const { queryClient } = renderShell();
+    expect(await screen.findByText("Showing Grace")).toBeInTheDocument();
+
+    markChurchExited(GRACE.id);
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: keys.me() });
+    });
+
+    expect(await screen.findByText("Showing Hope")).toBeInTheDocument();
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
+  it("says so again once the mark is 60 seconds old (slice 6b-2b)", async () => {
+    markChurchExited(GRACE.id, Date.now() - 60_000);
+    installFakeApi({
+      "GET /me": me({ churches: [GRACE, HOPE] }),
+      "GET /church": churchById(HOPE),
+    });
+
+    renderShell();
+
+    expect(await screen.findByText("Showing Hope")).toBeInTheDocument();
+    expect(toastError).toHaveBeenCalledTimes(1);
+    expect(toastError).toHaveBeenCalledWith("You no longer have access to Grace.");
   });
 });
