@@ -1337,3 +1337,276 @@ def test_the_owner_s_read_only_queries_around_0008(pg_admin_url):
     assert after == {**before, "version": "0008_invites_integrity", "other_role_invites": 0, "old_constraint": 0}
     assert check_after == {"version": "0008_invites_integrity", "pending_email_index": 1, "role_check": 1,
                            "old_constraint": 0}
+
+
+# --- Slice 6b-2a: 0009_memberships_one_owner (6b spec, "Data and migrations"; owner's 6b-2 planning answers) ---
+
+# What `alembic upgrade 0008_invites_integrity:0009_memberships_one_owner --sql` prints on Postgres,
+# comments, blank lines and trailing spaces left out: the preview the owner reads before the
+# merge (backend/migrations/README.md, "Before 0009_memberships_one_owner", step 3).
+PREVIEW_0009 = [
+    "BEGIN;",
+    "SET LOCAL lock_timeout = '5s';",
+    "SET LOCAL statement_timeout = '60s';",
+    "DO $$",
+    "DECLARE",
+    "  hits integer;",
+    "  church_ids text;",
+    "BEGIN",
+    "  SELECT count(*), string_agg(church_id::text, ', ' ORDER BY church_id::text)",
+    "    INTO hits, church_ids",
+    "    FROM (SELECT church_id FROM memberships",
+    "           WHERE role = 'owner'",
+    "           GROUP BY church_id HAVING count(*) > 1) AS owners;",
+    "  IF hits > 0 THEN",
+    "    RAISE EXCEPTION '0009_memberships_one_owner: % church(es) have more than one owner: %. "
+    "Follow \"Church integrity\" in backend/migrations/README.md, then redeploy.', hits, church_ids;",
+    "  END IF;",
+    "END $$;",
+    "CREATE UNIQUE INDEX uq_memberships_one_owner ON memberships (church_id) WHERE role = 'owner';",
+    "UPDATE alembic_version SET version_num='0009_memberships_one_owner' "
+    "WHERE alembic_version.version_num = '0008_invites_integrity';",
+    "COMMIT;",
+]
+
+
+def _membership_row(conn, church_id, user_id, role) -> None:
+    """A membership inserted with plain SQL, as any client of the table could."""
+    hexed = conn.dialect.name == "sqlite"
+    conn.execute(sa.text("INSERT INTO memberships (church_id, user_id, role, created_at) "
+                         "VALUES (:church, :user, :role, :created)"),
+                 {"church": church_id.hex if hexed else church_id, "user": user_id.hex if hexed else user_id,
+                  "role": role, "created": T9_NOW})
+
+
+def _user_row(conn, email: str) -> uuid.UUID:
+    user_id = uuid.uuid4()
+    conn.execute(_t9_users.insert().values(id=user_id, email=email, created_at=T9_NOW))
+    return user_id
+
+
+def _demote_extra_owners(conn, church_id, keep) -> None:
+    """Church integrity step 3, with the ids filled in (the agent does this in the chat only)."""
+    hexed = conn.dialect.name == "sqlite"
+    conn.execute(sa.text("UPDATE memberships SET role = 'admin' "
+                         "WHERE church_id = :church AND role = 'owner' AND user_id <> :keep"),
+                 {"church": church_id.hex if hexed else church_id, "keep": keep.hex if hexed else keep})
+
+
+# A church id that sorts before any uuid4 the seed makes: the refusal names the churches sorted.
+EARLY_CHURCH = uuid.UUID("00000000-0000-4000-8000-000000000001")
+
+
+def test_0009_refuses_two_owners_then_allows_one_owner_per_church(sqlite_url):
+    _alembic(sqlite_url, "upgrade", "0008_invites_integrity")
+    engine = sa.create_engine(sqlite_url, poolclass=NullPool)
+    try:
+        with engine.begin() as conn:
+            owner, church_id = _seed_owner_and_church(conn)
+            second = _user_row(conn, "second@example.com")
+            _membership_row(conn, church_id, owner, "owner")
+            _membership_row(conn, church_id, second, "owner")                  # 0008 still allows it
+            _membership_row(conn, church_id, _user_row(conn, "m@example.com"), "member")
+            # a second church with two owners, made after the first but sorting before it
+            conn.execute(_t9_churches.insert().values(
+                id=EARLY_CHURCH, name="Grace", timezone="America/New_York", settings={}, created_at=T9_NOW))
+            _membership_row(conn, EARLY_CHURCH, second, "owner")
+            _membership_row(conn, EARLY_CHURCH, owner, "owner")
+        with pytest.raises(RuntimeError) as refused:
+            _alembic(sqlite_url, "upgrade", "0009_memberships_one_owner")
+        assert _version(sqlite_url) == "0008_invites_integrity"
+        with engine.begin() as conn:
+            _demote_extra_owners(conn, church_id, keep=owner)
+            _demote_extra_owners(conn, EARLY_CHURCH, keep=second)
+        _alembic(sqlite_url, "upgrade", "0009_memberships_one_owner")
+        with engine.begin() as conn:
+            index_sql = conn.execute(sa.text(
+                "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'uq_memberships_one_owner'")).scalar_one()
+            other_church = uuid.uuid4()
+            conn.execute(_t9_churches.insert().values(
+                id=other_church, name="Hope", timezone="America/New_York", settings={}, created_at=T9_NOW))
+            _membership_row(conn, other_church, owner, "owner")                # one owner in another church
+            _membership_row(conn, other_church, second, "admin")
+        with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
+            _membership_row(conn, church_id, _user_row(conn, "third@example.com"), "owner")
+        with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
+            conn.execute(sa.text("UPDATE memberships SET role = 'owner' WHERE church_id = :c AND user_id = :u"),
+                         {"c": other_church.hex, "u": second.hex})
+    finally:
+        engine.dispose()
+    assert str(church_id) > str(EARLY_CHURCH)
+    assert str(refused.value) == (
+        f"0009_memberships_one_owner: 2 church(es) have more than one owner: {EARLY_CHURCH}, {church_id}. "
+        "Follow \"Church integrity\" in backend/migrations/README.md, then redeploy.")
+    assert index_sql == "CREATE UNIQUE INDEX uq_memberships_one_owner ON memberships (church_id) WHERE role = 'owner'"
+    assert _version(sqlite_url) == "0009_memberships_one_owner"
+
+
+def test_0009_downgrade_drops_only_the_index(sqlite_url):
+    _alembic(sqlite_url, "upgrade", "0008_invites_integrity")
+    before = _tables_snapshot(sqlite_url)
+    _alembic(sqlite_url, "upgrade", "0009_memberships_one_owner")
+    _alembic(sqlite_url, "downgrade", "0008_invites_integrity")
+    engine = sa.create_engine(sqlite_url, poolclass=NullPool)
+    try:
+        with engine.begin() as conn:
+            gone = conn.execute(sa.text(
+                "SELECT count(*) FROM sqlite_master WHERE name = 'uq_memberships_one_owner'")).scalar_one()
+    finally:
+        engine.dispose()
+    assert gone == 0
+    assert _tables_snapshot(sqlite_url) == before
+    assert _version(sqlite_url) == "0008_invites_integrity"
+
+
+def test_offline_sql_for_0009_is_the_owner_check_and_one_index_under_the_timeouts():
+    cfg = alembic_config(url="postgresql://preview@localhost:1/preview", configure_logger=False)
+    cfg.output_buffer = buffer = io.StringIO()
+    command.upgrade(cfg, "0008_invites_integrity:0009_memberships_one_owner", sql=True)
+    lines = [line.rstrip() for line in buffer.getvalue().splitlines() if line.strip() and not line.startswith("--")]
+    assert lines == PREVIEW_0009
+
+
+def test_the_readme_shows_the_0009_preview_exactly_and_in_full():
+    """The owner reads backend/migrations/README.md → "Before 0009_memberships_one_owner",
+    step 3, against the agent's rendering: both must be PREVIEW_0009, nothing shortened,
+    and the step says it is for reading only (the slice 6b-1 record's lesson)."""
+    section = _readme().split("\n## Before 0009_memberships_one_owner (slice 6b-2a)\n", 1)[1]
+    step = section.split("\n### Step 3: Read the SQL the upgrade will run\n", 1)[1].split("\n### ", 1)[0]
+    block = "BEGIN;" + step.split("\n```\nBEGIN;", 1)[1].split("\n```", 1)[0]   # the bare fence
+    assert block.splitlines() == PREVIEW_0009
+    assert "**Read only. Do not run this.**" in step
+    assert "..." not in step and "…" not in step
+
+
+def _one_owner_index():
+    return next(i for i in models.Membership.__table__.indexes if i.name == "uq_memberships_one_owner")
+
+
+def test_the_model_s_one_owner_index_is_the_migration_s():
+    """Alembic compares no index predicates, so `alembic check` would not see the
+    model's WHERE drift from 0009's: both dialects' predicates are the revision's
+    ONE_OWNER, and the model's DDL is the statement the migration runs (the
+    preview's on Postgres, sqlite_master's on SQLite)."""
+    from sqlalchemy.dialects import postgresql, sqlite
+    from sqlalchemy.schema import CreateIndex
+
+    module = ScriptDirectory.from_config(alembic_config(configure_logger=False)).get_revision(
+        "0009_memberships_one_owner").module
+    index = _one_owner_index()
+    migrated = next(line for line in PREVIEW_0009 if line.startswith("CREATE UNIQUE INDEX")).removesuffix(";")
+    assert module.ONE_OWNER == "role = 'owner'"
+    assert {d: str(index.dialect_options[d]["where"]) for d in ("postgresql", "sqlite")} == {
+        "postgresql": module.ONE_OWNER, "sqlite": module.ONE_OWNER}
+    assert str(CreateIndex(index).compile(dialect=postgresql.dialect())).strip() == migrated
+    assert str(CreateIndex(index).compile(dialect=sqlite.dialect())).strip() == migrated
+
+
+def _readme_0009_sql(n: int) -> str:
+    """The n-th ```sql block of README "Before 0009_memberships_one_owner": 0 is step 2's
+    counts, 1 step 4's after-deploy check."""
+    section = _readme().split("\n## Before 0009_memberships_one_owner (slice 6b-2a)\n", 1)[1]
+    return re.findall(r"```sql\n(.*?)```", section, re.S)[n]
+
+
+@pytest.mark.postgres
+def test_0009_on_postgres_refuses_two_owners_then_creates_the_index_and_downgrades(pg_admin_url):
+    """The same upgrade on Postgres: the DO block refuses a church with two
+    owners (a soft-deleted one too) and changes nothing; after the runbook's
+    step 3 the partial unique index exists and refuses a second owner; the
+    downgrade drops it; the upgrade runs again."""
+    with throwaway_database(pg_admin_url, role_bypassrls=True) as sandbox:
+        _alembic(sandbox.role_url, "upgrade", "0008_invites_integrity")
+        engine = _pg_engine(sandbox.role_url)
+        try:
+            with engine.begin() as conn:
+                owner, church_id = _seed_owner_and_church(conn)
+                second = _user_row(conn, "second@example.com")
+                _membership_row(conn, church_id, owner, "owner")
+                _membership_row(conn, church_id, second, "owner")
+                conn.execute(text("UPDATE churches SET deleted_at = now() WHERE id = :c"), {"c": church_id})
+            with pytest.raises(sa.exc.DBAPIError) as refused:
+                _alembic(sandbox.role_url, "upgrade", "0009_memberships_one_owner")
+            assert _version(sandbox.role_url) == "0008_invites_integrity"
+            with engine.begin() as conn:
+                _demote_extra_owners(conn, church_id, keep=owner)
+            _alembic(sandbox.role_url, "upgrade", "0009_memberships_one_owner")
+            with engine.begin() as conn:
+                index = conn.execute(text(
+                    "SELECT indexdef FROM pg_indexes WHERE indexname = 'uq_memberships_one_owner'")).scalar_one()
+            with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
+                conn.execute(text("UPDATE memberships SET role = 'owner' WHERE church_id = :c AND user_id = :u"),
+                             {"c": church_id, "u": second})
+            _alembic(sandbox.role_url, "downgrade", "0008_invites_integrity")
+            with engine.begin() as conn:
+                dropped = conn.execute(text(
+                    "SELECT count(*) FROM pg_indexes WHERE indexname = 'uq_memberships_one_owner'")).scalar_one()
+            _alembic(sandbox.role_url, "upgrade", "0009_memberships_one_owner")
+            again = _version(sandbox.role_url)
+        finally:
+            engine.dispose()
+    message = str(refused.value.orig).splitlines()[0]
+    assert message == (
+        f"0009_memberships_one_owner: 1 church(es) have more than one owner: {church_id}. "
+        "Follow \"Church integrity\" in backend/migrations/README.md, then redeploy.")
+    assert index == ("CREATE UNIQUE INDEX uq_memberships_one_owner ON public.memberships USING btree (church_id) "
+                     "WHERE ((role)::text = 'owner'::text)")
+    assert (dropped, again) == (0, "0009_memberships_one_owner")
+
+
+@pytest.mark.postgres
+def test_0009_s_index_on_postgres_is_the_one_create_all_makes(pg_admin_url):
+    """The model's uq_memberships_one_owner, made by create_all, is the index the
+    migration made, predicate and all (Alembic compares no predicates)."""
+    defs = []
+    for build in ("create_all", "migrate"):
+        with throwaway_database(pg_admin_url, role_bypassrls=True) as sandbox:
+            if build == "migrate":
+                _alembic(sandbox.role_url, "upgrade", "head")
+            engine = _pg_engine(sandbox.role_url)
+            try:
+                if build == "create_all":
+                    Base.metadata.create_all(engine)
+                with engine.connect() as conn:
+                    defs.append(conn.execute(text(
+                        "SELECT indexdef FROM pg_indexes WHERE indexname = 'uq_memberships_one_owner'")).scalar_one())
+            finally:
+                engine.dispose()
+    assert defs[0] == defs[1] == (
+        "CREATE UNIQUE INDEX uq_memberships_one_owner ON public.memberships USING btree (church_id) "
+        "WHERE ((role)::text = 'owner'::text)")
+
+
+@pytest.mark.postgres
+def test_the_owner_s_read_only_queries_around_0009(pg_admin_url):
+    """README "Before 0009_memberships_one_owner": step 2's counts before and
+    after the upgrade, and step 4's check (which also answers before 0009 is
+    applied)."""
+    with throwaway_database(pg_admin_url, role_bypassrls=True) as sandbox:
+        _alembic(sandbox.role_url, "upgrade", "0008_invites_integrity")
+        engine = _pg_engine(sandbox.role_url)
+        try:
+            with engine.begin() as conn:
+                owner, church_id = _seed_owner_and_church(conn)
+                _membership_row(conn, church_id, owner, "owner")
+                _membership_row(conn, church_id, _user_row(conn, "a@example.com"), "admin")
+                _membership_row(conn, church_id, _user_row(conn, "m@example.com"), "member")
+                hope = uuid.uuid4()
+                conn.execute(text("INSERT INTO churches (id, name, timezone, settings, created_at, deleted_at) "
+                                  "VALUES (:id, 'Hope', 'UTC', '{}', now(), now())"), {"id": hope})
+                _membership_row(conn, hope, owner, "owner")
+            with engine.connect() as conn:
+                before = dict(conn.execute(text(_readme_0009_sql(0))).mappings().one())
+                check_before = dict(conn.execute(text(_readme_0009_sql(1))).mappings().one())
+            _alembic(sandbox.role_url, "upgrade", "0009_memberships_one_owner")
+            with engine.connect() as conn:
+                after = dict(conn.execute(text(_readme_0009_sql(0))).mappings().one())
+                check_after = dict(conn.execute(text(_readme_0009_sql(1))).mappings().one())
+        finally:
+            engine.dispose()
+    assert before == {"version": "0008_invites_integrity", "churches": 1, "deleted_churches": 1, "memberships": 4,
+                      "owners": 2, "churches_with_two_owners": 0, "churches_without_one_owner": 0,
+                      "churches_without_admin": 0, "one_owner_index": 0}
+    assert check_before == {"version": "0008_invites_integrity", "one_owner_index": 0}
+    assert after == {**before, "version": "0009_memberships_one_owner", "one_owner_index": 1}
+    assert check_after == {"version": "0009_memberships_one_owner", "one_owner_index": 1}

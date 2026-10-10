@@ -130,4 +130,36 @@ describe("ConfirmDialog", () => {
     await waitFor(() => expect(screen.getByTestId("after")).toHaveFocus());
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
+
+  it("shows more of the body under the description, above the buttons (slice 6b-2a)", async () => {
+    render(
+      <ConfirmDialog
+        open
+        onOpenChange={() => {}}
+        title="Remove Ann Admin?"
+        description="Ann Admin will lose access to Grace."
+        confirmLabel="Remove member"
+        onConfirm={() => {}}
+        destructive
+      >
+        <label>
+          <input type="checkbox" defaultChecked /> Also revoke the 1 reusable invite link
+        </label>
+      </ConfirmDialog>,
+    );
+    const dialog = await screen.findByRole("alertdialog", { name: "Remove Ann Admin?" });
+    const box = within(dialog).getByRole("checkbox", { name: "Also revoke the 1 reusable invite link" });
+    expect(box).toBeChecked();
+    expect(box.compareDocumentPosition(within(dialog).getByRole("button", { name: "Remove member" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(dialog).toHaveAccessibleDescription("Ann Admin will lose access to Grace.");
+  });
+
+  it("names the pending action when asked (slice 6b-2a)", async () => {
+    render(
+      <ConfirmDialog open onOpenChange={() => {}} title="Revoke this invite?" confirmLabel="Revoke invite"
+        onConfirm={() => {}} destructive pending pendingLabel="Revoking…" />,
+    );
+    const dialog = await screen.findByRole("alertdialog", { name: "Revoke this invite?" });
+    expect(within(dialog).getByRole("button", { name: "Revoking…" })).toHaveAttribute("aria-disabled", "true");
+  });
 });

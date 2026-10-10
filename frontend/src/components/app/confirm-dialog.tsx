@@ -1,6 +1,7 @@
 "use client";
 
 import type { AlertDialog as AlertDialogPrimitive } from "@base-ui/react/alert-dialog";
+import type { ReactNode } from "react";
 
 import { PendingButton } from "@/components/app/pending-button";
 import {
@@ -25,7 +26,11 @@ export type ConfirmDialogProps = {
   onConfirm(): void;
   /** While true the confirm button is a disabled "Saving…"; the caller closes the dialog on success. */
   pending?: boolean;
+  /** The confirm button's words while `pending` ("Removing…"; slice 6b-2a): "Saving…" unless given. */
+  pendingLabel?: string;
   destructive?: boolean;
+  /** Breaks the title and description anywhere (`[overflow-wrap:anywhere]`), for one that may hold a long email (slice 6b-2a). */
+  wrapAnywhere?: boolean;
   /** Called by the cancel button only; Escape and a click outside just close. */
   onCancel?(): void;
   /**
@@ -34,6 +39,8 @@ export type ConfirmDialogProps = {
    * drops to the page.
    */
   finalFocus?: AlertDialogPrimitive.Popup.Props["finalFocus"];
+  /** More of the dialog's body under the description (a sentence that depends on data, a checkbox; slice 6b-2a). */
+  children?: ReactNode;
 };
 
 /**
@@ -51,23 +58,32 @@ export function ConfirmDialog({
   cancelLabel = "Cancel",
   onConfirm,
   pending = false,
+  pendingLabel,
   destructive = false,
+  wrapAnywhere = false,
   onCancel,
   finalFocus,
+  children,
 }: ConfirmDialogProps) {
   return (
     <AlertDialog open={open} onOpenChange={(next) => onOpenChange(next)}>
       <AlertDialogContent {...(finalFocus === undefined ? {} : { finalFocus })}>
         <AlertDialogHeader>
-          <AlertDialogTitle>{title}</AlertDialogTitle>
-          {description ? <AlertDialogDescription>{description}</AlertDialogDescription> : null}
+          <AlertDialogTitle className={wrapAnywhere ? "[overflow-wrap:anywhere]" : undefined}>{title}</AlertDialogTitle>
+          {description ? (
+            <AlertDialogDescription className={wrapAnywhere ? "[overflow-wrap:anywhere]" : undefined}>
+              {description}
+            </AlertDialogDescription>
+          ) : null}
         </AlertDialogHeader>
+        {children}
         <AlertDialogFooter>
           <AlertDialogCancel size="touch" className="md:h-8" onClick={onCancel ? () => onCancel() : undefined}>
             {cancelLabel}
           </AlertDialogCancel>
           <PendingButton
             pending={pending}
+            {...(pendingLabel === undefined ? {} : { pendingLabel })}
             size="touch"
             className="md:h-8"
             variant={destructive ? "destructive" : "default"}

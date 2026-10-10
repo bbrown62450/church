@@ -26,7 +26,7 @@ fails its deploy health check.
   `SET LOCAL statement_timeout = '60s'`, and all pending revisions run in one
   transaction, so any failure rolls every one of them back.
 - Revisions live in `migrations/versions/`, one file per revision, named
-  `NNNN_short_slug.py`. Head is `0008_invites_integrity`.
+  `NNNN_short_slug.py`. Head is `0009_memberships_one_owner`.
 
 | Revision | What it does |
 |---|---|
@@ -38,6 +38,7 @@ fails its deploy health check.
 | `0006_services_bulletin` | Printed bulletin PR 2b: `services.bulletin` (JSON), nullable with no default and no backfill: the printed bulletin's weekly fields. Before it reaches production: "Before 0006_services_bulletin" below. |
 | `0007_bulletin_images` | Printed bulletin PR 3a: the table `bulletin_images` (the cover pictures, stored as JPEG in `bytes`) with the index `ix_bulletin_images_church_created`, and on Postgres row-level security on it and, when Supabase's `anon` and `authenticated` roles exist, `REVOKE ALL` on it from both. No other table changes. Before it reaches production: "Before 0007_bulletin_images" below. |
 | `0008_invites_integrity` | Slice 6b-1: an invite whose role is neither `member` nor `admin` becomes an `admin` invite and is revoked; then, unless two pending invites of one church share an email in any capitalization (it refuses, naming the churches: "Church integrity" below), the unique constraint `uq_invites_church_email` is replaced by the partial unique index `uq_invites_pending_email` on `(church_id, lower(email))` for pending email invites, and the check `ck_invites_role` (`member` or `admin`) is added. No column changes. Before it reaches production: "Before 0008_invites_integrity" below. |
+| `0009_memberships_one_owner` | Slice 6b-2a: unless a church has more than one owner (it refuses, naming the churches: "Church integrity" below), the partial unique index `uq_memberships_one_owner` on `memberships (church_id)` `WHERE role = 'owner'`: the database refuses a second owner. No column or data changes. Before it reaches production: "Before 0009_memberships_one_owner" below. |
 
 ## Rules for a new revision
 
@@ -946,6 +947,152 @@ git checkout <merge sha> -- backend/migrations/versions/0008_invites_integrity.p
 Run the backend suite before the revert's PR opens; it must pass. Never
 `alembic downgrade` production for this.
 
+## Before 0009_memberships_one_owner (slice 6b-2a)
+
+Railway's Pre-deploy Command (`alembic upgrade head`) applies
+`0009_memberships_one_owner` when slice 6b-2a (Settings → People: invite
+links, the member list, roles and removal) merges. First, as the owner
+decided on 2026-10-10 (6b-2 planning answer 1, the same routine as 0008): a
+backup, one read-only query that counts the churches' owners, and a look at
+the SQL; after the deploy, one read-only check. One step at a time. Nothing
+here changes data. The agent guides the owner and records the results in
+`docs/ops-runbook.md` → "Slice 6b-2a record", never with an email address,
+a church id or a database URL.
+
+### Step 1: Backup
+
+Actions → db-backup → Run workflow (branch `main`), or
+`gh workflow run db-backup --ref main`. It must finish green with an
+artifact `db-backup`. Record the run URL and the artifact's size.
+
+### Step 2: Count the churches' owners (read-only)
+
+Supabase → the project → SQL Editor → New query. Paste this and Run (it
+only reads):
+
+```sql
+-- Read-only: the churches' owners before 0009. Changes nothing.
+SELECT (SELECT version_num FROM alembic_version) AS version,
+       (SELECT count(*) FROM churches WHERE deleted_at IS NULL) AS churches,
+       (SELECT count(*) FROM churches WHERE deleted_at IS NOT NULL) AS deleted_churches,
+       (SELECT count(*) FROM memberships) AS memberships,
+       (SELECT count(*) FROM memberships WHERE role = 'owner') AS owners,
+       (SELECT count(*) FROM (SELECT 1 FROM memberships WHERE role = 'owner'
+                               GROUP BY church_id HAVING count(*) > 1) AS d)
+         AS churches_with_two_owners,
+       (SELECT count(*) FROM churches c
+         WHERE c.deleted_at IS NULL
+           AND (SELECT count(*) FROM memberships m
+                 WHERE m.church_id = c.id AND m.role = 'owner') <> 1) AS churches_without_one_owner,
+       (SELECT count(*) FROM churches c
+         WHERE c.deleted_at IS NULL
+           AND NOT EXISTS (SELECT 1 FROM memberships m
+                            WHERE m.church_id = c.id AND m.role IN ('owner', 'admin')))
+         AS churches_without_admin,
+       (SELECT count(*) FROM pg_indexes
+         WHERE schemaname = 'public' AND indexname = 'uq_memberships_one_owner') AS one_owner_index;
+```
+
+One row. Expected before the merge:
+
+- `version` is `0008_invites_integrity` (anything else: stop);
+- `churches` the churches in use and `deleted_churches` the deleted ones;
+  `memberships` every person in every church; `owners` the owner rows
+  (normally one per church, deleted churches included);
+- `churches_with_two_owners` is `0`. It counts deleted churches too,
+  because the new index covers every row. Anything else: stop. The
+  upgrade would refuse (safely: the previous release keeps serving);
+  agree with the church who keeps ownership and follow "Church integrity"
+  step 3 below with the agent first;
+- `churches_without_one_owner` and `churches_without_admin` are `0` (the
+  gate from slice 6b-1: the index only refuses a second owner, so it
+  would not notice a church with none). Anything else: stop and repair
+  it with the agent ("Church integrity" step 4) before the merge;
+- `one_owner_index` is `0` (the index does not exist yet).
+
+### Step 3: Read the SQL the upgrade will run
+
+**Read only. Do not run this.** It is the SQL Railway runs when the PR
+merges, shown here so the owner can read it; pasting it into the SQL
+Editor would change the database. The agent renders it from the PR's code
+without connecting to any database (from `backend/`):
+
+```bash
+DATABASE_URL=postgresql://preview@localhost:1/preview ../.venv/bin/alembic upgrade 0008_invites_integrity:0009_memberships_one_owner --sql 2>/dev/null | grep -v -e '^--' -e '^$' | sed 's/ *$//'
+```
+
+Expected, exactly and in full (`backend/tests/test_migrations.py` pins it;
+when the agent shows it in the chat it is the whole block, never shortened):
+
+```
+BEGIN;
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '60s';
+DO $$
+DECLARE
+  hits integer;
+  church_ids text;
+BEGIN
+  SELECT count(*), string_agg(church_id::text, ', ' ORDER BY church_id::text)
+    INTO hits, church_ids
+    FROM (SELECT church_id FROM memberships
+           WHERE role = 'owner'
+           GROUP BY church_id HAVING count(*) > 1) AS owners;
+  IF hits > 0 THEN
+    RAISE EXCEPTION '0009_memberships_one_owner: % church(es) have more than one owner: %. Follow "Church integrity" in backend/migrations/README.md, then redeploy.', hits, church_ids;
+  END IF;
+END $$;
+CREATE UNIQUE INDEX uq_memberships_one_owner ON memberships (church_id) WHERE role = 'owner';
+UPDATE alembic_version SET version_num='0009_memberships_one_owner' WHERE alembic_version.version_num = '0008_invites_integrity';
+COMMIT;
+```
+
+In one transaction: a check that stops everything if any church has more
+than one owner (your count was 0); then the new rule that a church can have
+at most one owner; note the new version; finish. No row is changed or
+deleted and no column changes. If another connection holds a lock on
+`memberships` for more than 5 s, the deploy fails and the previous release
+keeps serving; run the deploy again.
+
+### Step 4: After the deploy (read-only)
+
+SQL Editor (it only reads):
+
+```sql
+-- Read-only: is 0009 applied? Changes nothing.
+-- Before 0009 is applied it still runs: 0008_invites_integrity, 0.
+SELECT (SELECT version_num FROM alembic_version) AS version,
+       (SELECT count(*) FROM pg_indexes
+         WHERE schemaname = 'public' AND indexname = 'uq_memberships_one_owner') AS one_owner_index;
+```
+
+Expected: `0009_memberships_one_owner`, `1`. `0008_invites_integrity`, `0`
+means the deploy has not applied 0009 yet: wait a minute and run it again.
+Then step 2's query again: the same counts as before, except `version`
+`0009_memberships_one_owner` and `one_owner_index` `1` (or more
+`memberships` and `churches`, by the people and churches added since).
+
+### Reverting 6b-2a
+
+The schema stays at `0009_memberships_one_owner`: the code before 6b-2a
+never makes a second owner (slice 6b-1's transfer demotes the owner before
+it promotes the new one), so it runs on it unchanged. Revert the merge
+commit, then, in the same PR, restore from the merge commit every file of
+6b-2a's first commit ("Migration 0009_memberships_one_owner: …"), not only
+the revision: the `Membership` model, this README and the tests that know
+the head or the index, and keep the frozen app's transfer test deleted
+(it promotes before it demotes, which the index refuses). Then Railway's
+`alembic upgrade head` still finds the database at head, `alembic check`
+stays clean, and the backend suite passes. From the repo root:
+
+```bash
+git checkout <merge sha> -- backend/migrations/versions/0009_memberships_one_owner.py backend/db/models.py backend/migrations/README.md backend/tests/test_migrations.py backend/tests/test_schema_check.py backend/tests/test_api_app.py backend/tests/test_services_postgres.py backend/tests/test_integrity.py
+git rm -q -f streamlit_tests/test_settings_members_invites.py
+```
+
+Run the backend suite before the revert's PR opens; it must pass. Never
+`alembic downgrade` production for this.
+
 ## Church integrity (slice 6b)
 
 Every church should have exactly one owner and at least one owner or
@@ -980,7 +1127,8 @@ invites of one church should share an email. The new app keeps all of this
    );
    ```
    The people those invites were for can still use the newest one.
-3. **More than one owner** in a church (`owner_count` with a count above 1):
+3. **More than one owner** in a church (`owner_count` with a count above 1;
+   `0009_memberships_one_owner` refuses to run over it):
    agree with the church who keeps ownership, then, after a fresh backup,
    make the others admins. The statements in steps 3 and 4 hold
    placeholders in quotes (`'<church id>'`, `'<user id of the owner who

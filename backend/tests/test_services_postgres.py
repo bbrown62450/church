@@ -169,9 +169,9 @@ def test_the_owner_s_read_only_queries_count_as_the_api_reads(world):
         counts = dict(s.execute(text(readme_sql(0))).mappings().one())
         applied = dict(s.execute(text(readme_sql(1))).mappings().one())
     # The 5a-2 save has 3 slots; the other five are old-style; "", NULL and "Sept 13" are undated. The
-    # test database is at head (0008_invites_integrity since slice 6b-1).
-    assert counts == {"version": "0008_invites_integrity", "services": 6, "undated": 3, "old_style_hymn_lists": 5}
-    assert applied == {"version": "0008_invites_integrity", "new_columns": 2, "new_index": 1}
+    # test database is at head (0009_memberships_one_owner since slice 6b-2a).
+    assert counts == {"version": "0009_memberships_one_owner", "services": 6, "undated": 3, "old_style_hymn_lists": 5}
+    assert applied == {"version": "0009_memberships_one_owner", "new_columns": 2, "new_index": 1}
 
 
 def readme_0006_sql(n: int) -> str:
@@ -193,8 +193,8 @@ def test_the_owner_s_read_only_queries_around_0006(world):
     with session_scope() as s:
         counts = dict(s.execute(text(readme_0006_sql(0))).mappings().one())
         applied = dict(s.execute(text(readme_0006_sql(1))).mappings().one())
-    assert counts == {"version": "0008_invites_integrity", "services": 3, "churches": 2}
-    assert applied == {"version": "0008_invites_integrity", "new_column": 1, "with_bulletin": 1}
+    assert counts == {"version": "0009_memberships_one_owner", "services": 3, "churches": 2}
+    assert applied == {"version": "0009_memberships_one_owner", "new_column": 1, "with_bulletin": 1}
 
 
 def readme_0007_sql(n: int) -> str:
@@ -221,7 +221,7 @@ def test_the_owner_s_read_only_queries_around_0007(world):
         applied = dict(s.execute(text(readme_0007_sql(1))).mappings().one())
         storage = dict(s.execute(text(readme_0007_sql(2))).mappings().one())
     assert re.fullmatch(r"\d+ (bytes|kB|MB|GB)", counts.pop("database_size"))
-    assert counts == {"version": "0008_invites_integrity", "services": 2, "with_bulletin": 1}
-    assert applied == {"version": "0008_invites_integrity", "row_security": True, "open_grants": 0, "pictures": 1}
+    assert counts == {"version": "0009_memberships_one_owner", "services": 2, "with_bulletin": 1}
+    assert applied == {"version": "0009_memberships_one_owner", "row_security": True, "open_grants": 0, "pictures": 1}
     assert re.fullmatch(r"\d+ (bytes|kB|MB|GB)", storage.pop("database_size"))
     assert storage == {"pictures": 1, "churches": 1, "pictures_size": "2 bytes", "most_in_one_church": 1}
