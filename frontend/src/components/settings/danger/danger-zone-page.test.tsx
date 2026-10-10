@@ -510,6 +510,63 @@ describe("Settings → Danger zone: the owner (slice 6b-2b)", () => {
   });
 });
 
+describe("Settings → Danger zone: a dialog stays open while its request runs (slice 6b-2b)", () => {
+  /** Escape, then Cancel, while the request is held: the dialog is still there after each. */
+  async function tryToClose(user: ReturnType<typeof renderPage>["user"], name: string) {
+    await user.keyboard("{Escape}");
+    expect(screen.getByRole("alertdialog", { name })).toBeInTheDocument();
+    await user.click(within(screen.getByRole("alertdialog", { name })).getByRole("button", { name: "Cancel" }));
+    expect(screen.getByRole("alertdialog", { name })).toBeInTheDocument();
+  }
+
+  it("ignores Escape and Cancel while leaving", async () => {
+    let release: () => void = () => {};
+    const { user } = renderPage("member", {
+      "POST /church/leave": () => new Promise((resolve) => (release = () => resolve({ left: true }))),
+      "GET /me": me(),
+    });
+    await user.click(await screen.findByRole("button", { name: "Leave church…" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "Leave Grace?" });
+    await user.click(within(dialog).getByRole("button", { name: "Leave church" }));
+    await within(dialog).findByRole("button", { name: "Leaving…" });
+    await tryToClose(user, "Leave Grace?");
+    release();
+    await waitFor(() => expect(testRouter.replace).toHaveBeenCalledWith("/"));
+  });
+
+  it("ignores Escape and Cancel while transferring", async () => {
+    let release: () => void = () => {};
+    const { user } = renderPage("owner", {
+      "POST /church/transfer-ownership": () => new Promise((resolve) => (release = () => resolve(memberList("admin")))),
+    });
+    await user.click(await screen.findByRole("combobox", { name: "New owner" }));
+    await user.click(await screen.findByRole("option", { name: "Ann Admin (ann@example.com)" }));
+    await user.click(screen.getByRole("button", { name: "Transfer ownership…" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "Make Ann Admin the owner?" });
+    await user.click(within(dialog).getByRole("button", { name: "Transfer ownership" }));
+    await within(dialog).findByRole("button", { name: "Transferring…" });
+    await tryToClose(user, "Make Ann Admin the owner?");
+    release();
+    expect(await screen.findByText(TRANSFERRED)).toBeInTheDocument();
+  });
+
+  it("ignores Escape and Cancel while deleting", async () => {
+    let release: () => void = () => {};
+    const { user } = renderPage("owner", {
+      "DELETE /church": () => new Promise((resolve) => (release = () => resolve({ deleted: true }))),
+      "GET /me": me({ churches: [] }),
+    });
+    await user.click(await screen.findByRole("button", { name: "Delete church…" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "Delete Grace?" });
+    await user.type(within(dialog).getByRole("textbox", { name: "Type Grace to confirm" }), "Grace");
+    await user.click(within(dialog).getByRole("button", { name: "Delete church" }));
+    await within(dialog).findByRole("button", { name: "Deleting…" });
+    await tryToClose(user, "Delete Grace?");
+    release();
+    await waitFor(() => expect(testRouter.replace).toHaveBeenCalledWith("/welcome"));
+  });
+});
+
 describe("Settings → Danger zone: the copy and the phone screen (slice 6b-2b)", () => {
   it("lets a long church name wrap at 375 px in the cards, the dialogs and the typed-name label", async () => {
     const long = "TheVeryLongChurchNameThatNeverEndsWithoutASingleSpaceAnywhereInItsWholeLengthAtAll";
