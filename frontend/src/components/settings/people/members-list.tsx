@@ -57,7 +57,21 @@ export function MembersList({ actor, churchName }: { actor: { id: string; role: 
   // After a removal the row and its menu are gone, so focus goes to the heading.
   const removed = useRef(false);
 
-  const changingId = changeRole.isPending ? changeRole.variables?.userId : undefined;
+  // Every role change still running, by person: `changeRole.variables` names only the latest.
+  const [changing, setChanging] = useState<ReadonlySet<string>>(() => new Set());
+  function startRoleChange(userId: string, role: "admin" | "member") {
+    setChanging((ids) => new Set(ids).add(userId));
+    changeRole
+      .mutateAsync({ userId, role })
+      .catch(() => {}) // the hook toasts or hands it to the app
+      .finally(() =>
+        setChanging((ids) => {
+          const next = new Set(ids);
+          next.delete(userId);
+          return next;
+        }),
+      );
+  }
 
   let body: ReactNode;
   if (list.data) {
@@ -68,8 +82,8 @@ export function MembersList({ actor, churchName }: { actor: { id: string; role: 
             key={m.user_id}
             member={m}
             actor={actor}
-            busy={changingId === m.user_id}
-            onChangeRole={(role) => changeRole.mutate({ userId: m.user_id, role })}
+            busy={changing.has(m.user_id)}
+            onChangeRole={(role) => startRoleChange(m.user_id, role)}
             onRemove={() => {
               removed.current = false;
               setRevokeReusable(true);

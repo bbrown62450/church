@@ -170,6 +170,41 @@ describe("Settings → People: Members (slice 6b-2a)", () => {
     expect(screen.getByRole("button", { name: "Actions for Mo Member" })).toBeEnabled();
   });
 
+  it("keeps each running role change's row busy, not only the latest one's", async () => {
+    const releases: Record<string, () => void> = {};
+    const server = membersServer(memberList("admin"));
+    const held = (userId: string) => async (r: RecordedRequest) => {
+      await new Promise<void>((resolve) => (releases[userId] = resolve));
+      return server.patch(userId)(r);
+    };
+    const { user } = renderPage("admin", {
+      "GET /members": server.list,
+      [`PATCH /members/${PEOPLE.mo}`]: held(PEOPLE.mo),
+      [`PATCH /members/${PEOPLE.sam}`]: held(PEOPLE.sam),
+    });
+    const busy = (name: string) => {
+      const trigger = screen.getByRole("button", { name: `Actions for ${name}` });
+      expect(trigger).toBeDisabled();
+      expect(trigger).toHaveAttribute("aria-busy", "true");
+      expect(trigger.querySelector(".animate-spin")).not.toBeNull();
+    };
+    await user.click(await screen.findByRole("button", { name: "Actions for Mo Member" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Make admin" }));
+    await waitFor(() => busy("Mo Member"));
+    await user.click(screen.getByRole("button", { name: "Actions for sam@example.com" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Make admin" }));
+    await waitFor(() => busy("sam@example.com"));
+    busy("Mo Member");
+    expect(screen.getByRole("button", { name: "Actions for Ann Admin" })).toBeEnabled();
+    releases[PEOPLE.sam]();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Actions for sam@example.com" })).toBeEnabled());
+    busy("Mo Member");
+    releases[PEOPLE.mo]();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Actions for Mo Member" })).toBeEnabled());
+    expect(within(row("Mo Member")).getByText("Admin")).toBeInTheDocument();
+    expect(within(row("sam@example.com")).getByText("Admin")).toBeInTheDocument();
+  });
+
   it("asks before removing, says which links stop working, and revokes the reusable ones when left checked", async () => {
     const server = membersServer(memberList("admin"));
     const invites: Invite[] = [
