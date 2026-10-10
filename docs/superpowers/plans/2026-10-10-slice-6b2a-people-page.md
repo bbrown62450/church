@@ -31,7 +31,7 @@
   `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
 - TDD: write the failing test first and see it fail as quoted.
 - **Backup push after every task** (standing rule): the controller runs `git push origin claude/slice-2-plan-4q33le` after each task's commit (never `--force`, never a rebase; if the push is rejected, `git pull --no-rebase origin claude/slice-2-plan-4q33le` and push again; on a network error retry after 2, 4, 8 and 16 s). A fix asked for by a review is a new commit, `Fix: <what> (Task <n> review)`. The container can restart and lose uncommitted work: commit as soon as a task's checks pass.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 2235 → @@BE_FINAL_P@@ passed, 46 → @@BE_FINAL_S@@ skipped; frontend 952 → @@FE_FINAL_T@@ in 109 → @@FE_FINAL_F@@ files`.
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 2235 → 2235 passed, 46 → 48 skipped; frontend 952 → 1002 in 109 → 113 files`.
 - New prose for the owner has no em dashes and no flattery. New user-facing copy is exactly the list in clarification 11 and has no em dashes ("Copied ✓" keeps its check mark).
 - No church id, email address, invite code or link, token, database URL or real person's name in any doc, commit, test or record. Tests use `@example.com` addresses, the fixtures' "Grace" and made-up names. Invite codes are never logged, by the server (6b-1) or by the app (nothing here logs).
 - **SQL the owner must not run is shown in full and marked.** The SQL preview (T9 Step 3, README step 3) is shown whole, never shortened with "...", inside a code block, and the message says "Read only. Do not run this." before it (the "Slice 6b-1 record" lesson: a shortened preview was pasted and run, and Postgres refused it). The read-only queries the owner does run say "Read-only … Changes nothing." in their first line.
@@ -46,9 +46,17 @@ As in the 6b-1, 6a-3a and 6a-3b plans: **Create `path`:** the block is the whole
 - Starting baselines: backend **2235 passed, 46 skipped**; Postgres **46 passed, 2235 deselected**; frontend **952 passed in 109 files**, typecheck and lint clean; Alembic head **`0008_invites_integrity`** (8 revision files; T1 adds the 9th); runbook owner markers `grep -n '\[owner' docs/ops-runbook.md | grep -v 'An entry marked' | wc -l` = **4**. If any differs, stop and ask.
 - Planned cumulative counts (observed in the replay). A backend delta is the number of collected tests; a frontend delta counts tests (an `it.each` counts each case) and files.
 
-@@COUNTS_TABLE@@
+  | After | Backend (delta) | Backend | Postgres job (local) | Frontend (delta) | Frontend |
+  |---|---|---|---|---|---|
+  | T1 | +4 passed, +2 skipped (`test_migrations.py`: four SQLite tests, two Postgres), -4 passed (`streamlit_tests/test_settings_members_invites.py` deleted); four test files edited | 2235 passed, 48 skipped | 48 passed, 2235 deselected | 0 | 952 in 109 files |
+  | T2 | 0 | 2235 passed, 48 skipped | 48 passed | +22 (`people.test.ts` 18, `clipboard.test.tsx` 3, `urls.test.ts` 1), +2 files | 974 in 111 files |
+  | T3 | 0 | 2235 passed, 48 skipped | 48 passed | +5 (`confirm-dialog.test.tsx` 2, `copy-link-button.test.tsx` 3), +1 file | 979 in 112 files |
+  | T4 | 0 | 2235 passed, 48 skipped | 48 passed | +12 (`people-settings-page.test.tsx`), +1 file | 991 in 113 files |
+  | T5 | 0 | 2235 passed, 48 skipped | 48 passed | +10 (`people-settings-page.test.tsx`) | 1001 in 113 files |
+  | T6 | 0 | 2235 passed, 48 skipped | 48 passed | +1 (`settings-layout.test.tsx`: the People case) | 1002 in 113 files |
+  | T7 | 0 (`docs/manual-verification.md` only) | 2235 passed, 48 skipped | 48 passed | 0 | 1002 in 113 files |
 
-- CI `backend-postgres` goes from `46 passed, 2235 deselected` to `@@PG_FINAL@@`.
+- CI `backend-postgres` goes from `46 passed, 2235 deselected` to `48 passed, 2235 deselected`.
 
 ### Layering and code rules (carried)
 - Pages and components never call `apiFetch`: the hooks in `src/lib/queries/people.ts` use `useApi().church`, and every write goes through `useChurchMutation`, so a `no_church_access` 403 reaches the `(church)` layout's fallback (another church, "You no longer have access to {name}.").
@@ -144,7 +152,7 @@ The owner's answers win over S and F; the code wins over both where they disagre
 
 **Deleted:** `streamlit_tests/test_settings_members_invites.py` (T1, clarification 5).
 
-**Counts in the PR:** @@PATHS_COUNT@@ paths: @@PATHS_SPLIT@@. **Untouched:** everything under `backend/api`, `backend/usecases`, `backend/repos`, `backend/scripts`, `backend/migrations/env.py`, every other migration, `frontend/src/lib/api/openapi.json`, `frontend/src/lib/api/schema.d.ts`, `frontend/src/lib/queries/client.ts`, `frontend/src/components/ui`, `frontend/src/app/(signed-in)/(church)/layout.tsx`, `requirements*.txt`, `frontend/package*.json`, `.github`, `pytest.ini`, `app.py`, `streamlit_views`, `streamlit_auth.py`, `streamlit_tenancy.py`, `ui_helpers.py`.
+**Counts in the PR:** 35 paths: 17 added (this plan and the sixteen new code and test files above), 17 modified (the fifteen code, test and doc paths above, and two that ride along until merged: `docs/ops-runbook.md` with the 6b-1 record and the 6b spec with its 6b-2 amendment; the runbook's own T10 change goes in the records PR) and 1 deleted. **Untouched:** everything under `backend/api`, `backend/usecases`, `backend/repos`, `backend/scripts`, `backend/migrations/env.py`, every other migration, `frontend/src/lib/api/openapi.json`, `frontend/src/lib/api/schema.d.ts`, `frontend/src/lib/queries/client.ts`, `frontend/src/components/ui`, `frontend/src/app/(signed-in)/(church)/layout.tsx`, `requirements*.txt`, `frontend/package*.json`, `.github`, `pytest.ini`, `app.py`, `streamlit_views`, `streamlit_auth.py`, `streamlit_tenancy.py`, `ui_helpers.py`.
 
 **Task order and review batch:** T1 → T7, each one commit and a backup push; then one review of the whole batch with its fixes as `Fix: …` commits; T8 verifies; T9 takes the owner through the backup, the counts and the SQL preview; T10 opens the draft PR on the owner's yes, merges on the owner's yes, checks production, runs the phone check and writes the record.
 
@@ -522,10 +530,10 @@ SCHEMA_HEAD = "0009_memberships_one_owner"
 Run: `.venv/bin/python -m pytest -q backend/tests/test_migrations.py backend/tests/test_schema_check.py backend/tests/test_api_app.py backend/tests/test_integrity.py 2>&1 | tail -1` then `TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres backend/tests/test_migrations.py backend/tests/test_services_postgres.py 2>&1 | tail -1`
 **Expected:** on SQLite, the head constants (`test_api_app.py`, `test_schema_check.py`), the baseline drift without the index, the four 0009 tests (no such revision; the README has no 0009 section) and the integrity test (no index to drop yet); on a local Postgres, the two 0009 tests and the three README-query tests of `test_services_postgres.py` (they expect the head's version):
 ```
-@@EXP@@
+16 failed, 78 passed, 12 skipped in <t>s
 ```
 ```
-@@EXP@@
+5 failed, 12 passed, 43 deselected in <t>s
 ```
 
 - [ ] **Step 3: The revision, the model, the README**
@@ -813,7 +821,7 @@ stays clean, and the backend suite passes. From the repo root:
 
 ```bash
 git checkout <merge sha> -- backend/migrations/versions/0009_memberships_one_owner.py backend/db/models.py backend/migrations/README.md backend/tests/test_migrations.py backend/tests/test_schema_check.py backend/tests/test_api_app.py backend/tests/test_services_postgres.py backend/tests/test_integrity.py
-git rm -q streamlit_tests/test_settings_members_invites.py
+git rm -q -f streamlit_tests/test_settings_members_invites.py
 ```
 
 Run the backend suite before the revert's PR opens; it must pass. Never
@@ -842,10 +850,10 @@ With the index in the model, the frozen app's transfer (promote first, then demo
 Run: `.venv/bin/python -m pytest -q streamlit_tests/test_settings_members_invites.py 2>&1 | tail -1` then `git rm -q streamlit_tests/test_settings_members_invites.py && git status --short streamlit_tests`
 **Expected:**
 ```
-@@EXP@@
+1 failed, 3 passed in <t>s
 ```
 ```
-@@EXP@@
+D  streamlit_tests/test_settings_members_invites.py
 ```
 
 - [ ] **Step 5: See them pass, the suite, Postgres, and the SQL preview**
@@ -853,19 +861,38 @@ Run: `.venv/bin/python -m pytest -q streamlit_tests/test_settings_members_invite
 Run: `.venv/bin/python -m pytest -q backend/tests/test_migrations.py backend/tests/test_schema_check.py backend/tests/test_api_app.py backend/tests/test_integrity.py 2>&1 | tail -1` then `TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres backend/tests/test_migrations.py backend/tests/test_services_postgres.py backend/tests/test_integrity.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q 2>&1 | tail -1` then `TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres 2>&1 | tail -1` then `(cd backend && DATABASE_URL=postgresql://preview@localhost:1/preview ../.venv/bin/alembic upgrade 0008_invites_integrity:0009_memberships_one_owner --sql 2>/dev/null | grep -v -e '^--' -e '^$' | sed 's/ *$//')`
 **Expected:** all pass; the suite: four 0009 tests in, the frozen app's four out; Postgres: two more; the preview is exactly README step 3's block:
 ```
-@@EXP@@
+94 passed, 12 skipped in <t>s
 ```
 ```
-@@EXP@@
+18 passed, 52 deselected in <t>s
 ```
 ```
-@@EXP@@
+2235 passed, 48 skipped in <t>s
 ```
 ```
-@@EXP@@
+48 passed, 2235 deselected, 1 warning in <t>s
 ```
 ```
-@@EXP@@
+BEGIN;
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '60s';
+DO $$
+DECLARE
+  hits integer;
+  church_ids text;
+BEGIN
+  SELECT count(*), string_agg(church_id::text, ', ' ORDER BY church_id::text)
+    INTO hits, church_ids
+    FROM (SELECT church_id FROM memberships
+           WHERE role = 'owner'
+           GROUP BY church_id HAVING count(*) > 1) AS owners;
+  IF hits > 0 THEN
+    RAISE EXCEPTION '0009_memberships_one_owner: % church(es) have more than one owner: %. Follow "Church integrity" in backend/migrations/README.md, then redeploy.', hits, church_ids;
+  END IF;
+END $$;
+CREATE UNIQUE INDEX uq_memberships_one_owner ON memberships (church_id) WHERE role = 'owner';
+UPDATE alembic_version SET version_num='0009_memberships_one_owner' WHERE alembic_version.version_num = '0008_invites_integrity';
+COMMIT;
 ```
 
 - [ ] **Step 6: Commit**
@@ -885,7 +912,7 @@ deleted (its checks have had new-stack equivalents since slice 6b-1)." -m "Co-Au
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: @@AFTER_T1@@
+Expected counts after this task: backend `2235 passed, 48 skipped`; Postgres `48 passed`; frontend `952 passed` in 109 files.
 
 ## The People page (T2-T6)
 
@@ -1213,7 +1240,9 @@ describe("copyText (slice 6b-2a)", () => {
 Run: `(cd frontend && npx vitest run src/lib/settings/people.test.ts src/lib/clipboard.test.tsx src/lib/urls.test.ts 2>&1 | grep -E "^ +× |FAIL|Tests " | sed -E 's/ [0-9]+ms$//')`
 **Expected:** the two new files cannot load their modules; the new `buildInviteUrl` case passes already:
 ```
-@@EXP@@
+ FAIL  |unit| src/lib/settings/people.test.ts [ src/lib/settings/people.test.ts ]
+ FAIL  |dom| src/lib/clipboard.test.tsx [ src/lib/clipboard.test.tsx ]
+      Tests  23 passed (23)
 ```
 
 - [ ] **Step 3: The rules, `copyText` and the types**
@@ -1408,13 +1437,15 @@ function copyWithTextarea(text: string): boolean {
 Run: `(cd frontend && npx vitest run src/lib/settings/people.test.ts src/lib/clipboard.test.tsx src/lib/urls.test.ts 2>&1 | grep -E "^ +× |FAIL|Tests " | sed -E 's/ [0-9]+ms$//')` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")`
 **Expected:**
 ```
-@@EXP@@
+      Tests  44 passed (44)
 ```
 ```
-@@EXP@@
+typecheck 0
+lint 0
 ```
 ```
-@@EXP@@
+ Test Files  111 passed (111)
+      Tests  974 passed (974)
 ```
 
 - [ ] **Step 5: Commit**
@@ -1430,7 +1461,7 @@ test fixtures, and one buildInviteUrl case pinning (code, origin)." -m "Co-Autho
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: @@AFTER_T2@@
+Expected counts after this task: backend `2235 passed, 48 skipped`; frontend `974 passed` in 111 files.
 
 ### Task 3: The People queries, Copy link, the initials avatar, and a confirm dialog with a body (S "Queries and mutations", "Components" `CopyLinkButton` and `InitialsAvatar`; clarifications 6a-6c, 7, 10)
 
@@ -1565,7 +1596,14 @@ describe("InitialsAvatar (slice 6b-2a)", () => {
 Run: `(cd frontend && npx vitest run src/components/app/confirm-dialog.test.tsx src/components/app/copy-link-button.test.tsx 2>&1 | grep -E "^ +× |FAIL|Tests " | sed -E 's/ [0-9]+ms$//')`
 **Expected:** the body is not shown and the pending label is "Saving…"; the new file cannot load its modules:
 ```
-@@EXP@@
+   × ConfirmDialog > shows more of the body under the description, above the buttons (slice 6b-2a)
+   × ConfirmDialog > names the pending action when asked (slice 6b-2a)
+ FAIL  |dom| src/components/app/copy-link-button.test.tsx [ src/components/app/copy-link-button.test.tsx ]
+  7  |  import { COPY_FAILED, CopyLinkButton, LINK_COPIED } from "./copy-link-button";
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  |dom| src/components/app/confirm-dialog.test.tsx > ConfirmDialog > shows more of the body under the description, above the buttons (slice 6b-2a)
+ FAIL  |dom| src/components/app/confirm-dialog.test.tsx > ConfirmDialog > names the pending action when asked (slice 6b-2a)
+      Tests  2 failed | 4 passed (6)
 ```
 
 - [ ] **Step 3: The dialog's two props, Copy link, the avatar and the queries**
@@ -1946,13 +1984,15 @@ export function useRevokeInvite() {
 Run: `(cd frontend && npx vitest run src/components/app/confirm-dialog.test.tsx src/components/app/copy-link-button.test.tsx 2>&1 | grep -E "^ +× |FAIL|Tests " | sed -E 's/ [0-9]+ms$//')` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")`
 **Expected:**
 ```
-@@EXP@@
+      Tests  9 passed (9)
 ```
 ```
-@@EXP@@
+typecheck 0
+lint 0
 ```
 ```
-@@EXP@@
+ Test Files  112 passed (112)
+      Tests  979 passed (979)
 ```
 
 - [ ] **Step 5: Commit**
@@ -1969,7 +2009,7 @@ ConfirmDialog gains children under the description and a pendingLabel." -m "Co-A
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: @@AFTER_T3@@
+Expected counts after this task: backend `2235 passed, 48 skipped`; frontend `979 passed` in 112 files.
 
 ### Task 4: Settings → People: the page and Members (S UX "Every page", 1b, "Losing a role mid-session"; Testing → Frontend DOM; acceptance 14, 16, 18; clarifications 6a, 6d, 7-9)
 
@@ -2260,7 +2300,8 @@ describe("Settings → People: Members (slice 6b-2a)", () => {
 Run: `(cd frontend && npx vitest run src/components/settings/people/people-settings-page.test.tsx 2>&1 | grep -E "^ +× |FAIL|Tests " | sed -E 's/ [0-9]+ms$//')`
 **Expected:** the route and the list do not exist yet:
 ```
-@@EXP@@
+ FAIL  |dom| src/components/settings/people/people-settings-page.test.tsx [ src/components/settings/people/people-settings-page.test.tsx ]
+      Tests  no tests
 ```
 
 - [ ] **Step 3: The route, the page and Members**
@@ -2601,13 +2642,15 @@ export default function PeopleSettingsRoute() {
 Run: `(cd frontend && npx vitest run src/components/settings/people/people-settings-page.test.tsx 2>&1 | grep -E "^ +× |FAIL|Tests " | sed -E 's/ [0-9]+ms$//')` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")`
 **Expected:**
 ```
-@@EXP@@
+      Tests  12 passed (12)
 ```
 ```
-@@EXP@@
+typecheck 0
+lint 0
 ```
 ```
-@@EXP@@
+ Test Files  113 passed (113)
+      Tests  991 passed (991)
 ```
 
 - [ ] **Step 5: Commit**
@@ -2624,7 +2667,7 @@ app's; a failed list shows Retry." -m "Co-Authored-By: Claude Opus 5.5 <noreply@
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: @@AFTER_T4@@
+Expected counts after this task: backend `2235 passed, 48 skipped`; frontend `991 passed` in 113 files.
 
 ### Task 5: Invite someone, the link panel and Pending invites (S UX 1a, 1c; Testing → Frontend DOM "Create invite", "Pending invites"; acceptance 14; clarifications 7, 9-12)
 
@@ -2874,7 +2917,8 @@ describe("Settings → People: Invite someone and Pending invites (slice 6b-2a)"
 Run: `(cd frontend && npx vitest run src/components/settings/people/people-settings-page.test.tsx 2>&1 | grep -E "^ +× |FAIL|Tests " | sed -E 's/ [0-9]+ms$//')`
 **Expected:** the form's constants do not exist yet, so the file cannot load:
 ```
-@@EXP@@
+ FAIL  |dom| src/components/settings/people/people-settings-page.test.tsx [ src/components/settings/people/people-settings-page.test.tsx ]
+      Tests  no tests
 ```
 
 - [ ] **Step 3: The form, the panel, the list, and the page shows them to owners and admins**
@@ -3372,13 +3416,15 @@ import { PendingInvitesList } from "./pending-invites-list";
 Run: `(cd frontend && npx vitest run src/components/settings/people/people-settings-page.test.tsx 2>&1 | grep -E "^ +× |FAIL|Tests " | sed -E 's/ [0-9]+ms$//')` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")`
 **Expected:**
 ```
-@@EXP@@
+      Tests  22 passed (22)
 ```
 ```
-@@EXP@@
+typecheck 0
+lint 0
 ```
 ```
-@@EXP@@
+ Test Files  113 passed (113)
+      Tests  1001 passed (1001)
 ```
 
 - [ ] **Step 5: Commit**
@@ -3394,7 +3440,7 @@ expiry and maker, Copy link and Revoke (after a confirmation)." -m "Co-Authored-
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: @@AFTER_T5@@
+Expected counts after this task: backend `2235 passed, 48 skipped`; frontend `1001 passed` in 113 files.
 
 ### Task 6: People in the Settings nav (answer 7 of 2026-10-09; S "Settings nav"; acceptance 22's People half)
 
@@ -3450,7 +3496,14 @@ The nav lists nine sections, People between Contacts and Account, marks **People
 Run: `(cd frontend && npx vitest run src/components/settings/settings-layout.test.tsx 2>&1 | grep -E "^ +× |FAIL|Tests " | sed -E 's/ [0-9]+ms$//')`
 **Expected:**
 ```
-@@EXP@@
+   × the Settings area (slice 6a-1) > shows the heading, who you are in the church, and the sections with the current one marked
+   × the Settings area (slice 6a-1) > marks the section current on its page (slices 6a-2, 6a-3a, 6a-3b, 5b-1, 5b-2, 6b-2a): /settings/people
+   × the Settings area (slice 6a-1) > shows a member the same sections, and /settings opens Church
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  |dom| src/components/settings/settings-layout.test.tsx > the Settings area (slice 6a-1) > shows the heading, who you are in the church, and the sections with the current one marked
+ FAIL  |dom| src/components/settings/settings-layout.test.tsx > the Settings area (slice 6a-1) > marks the section current on its page (slices 6a-2, 6a-3a, 6a-3b, 5b-1, 5b-2, 6b-2a): /settings/people
+ FAIL  |dom| src/components/settings/settings-layout.test.tsx > the Settings area (slice 6a-1) > shows a member the same sections, and /settings opens Church
+      Tests  3 failed | 8 passed (11)
 ```
 
 - [ ] **Step 3: Put People between Contacts and Account**
@@ -3487,13 +3540,15 @@ Run: `(cd frontend && npx vitest run src/components/settings/settings-layout.tes
 Run: `(cd frontend && npx vitest run src/components/settings/settings-layout.test.tsx 2>&1 | grep -E "^ +× |FAIL|Tests " | sed -E 's/ [0-9]+ms$//')` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")`
 **Expected:**
 ```
-@@EXP@@
+      Tests  11 passed (11)
 ```
 ```
-@@EXP@@
+typecheck 0
+lint 0
 ```
 ```
-@@EXP@@
+ Test Files  113 passed (113)
+      Tests  1002 passed (1002)
 ```
 
 - [ ] **Step 5: Commit**
@@ -3506,7 +3561,7 @@ People, Account (6b-2b adds Danger zone last)." -m "Co-Authored-By: Claude Opus 
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: @@AFTER_T6@@
+Expected counts after this task: backend `2235 passed, 48 skipped`; frontend `1002 passed` in 113 files.
 
 ## Docs, verification, the owner's routine, the PR and the merge (T7-T10)
 
@@ -3551,10 +3606,10 @@ address, an invite code or link, a church id or a database URL.
 Run: `.venv/bin/python -m pytest -q backend/tests/test_slice1_docs.py backend/tests/test_docs.py backend/tests/test_ops_workflows.py 2>&1 | tail -1` then `git diff -- docs/manual-verification.md | grep '^+' | grep -c '—'`
 **Expected:**
 ```
-@@EXP@@
+89 passed in <t>s
 ```
 ```
-@@EXP@@
+0
 ```
 
 - [ ] **Step 2: Commit**
@@ -3570,7 +3625,7 @@ removal); the phone screen; and the agent's check." -m "Co-Authored-By: Claude O
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: @@AFTER_T7@@
+Expected counts after this task: backend `2235 passed, 48 skipped`; frontend `1002 passed` in 113 files.
 
 ### Task 8: Verification (agent)
 
@@ -3583,13 +3638,13 @@ Every `gh` command uses `-R <repo>` (or the session's GitHub tools, with the sam
 Run: `git status --short | grep -v '^?? .claude/' | wc -l` then `git fetch -q origin && git rev-list --count HEAD..origin/main` then `ls backend/migrations/versions | grep -c '^0'`
 **Expected:** `0` (nothing uncommitted); `0`; `9` (with T1's revision). If `main` moved: `git merge origin/main -m "Merge origin/main into claude/slice-2-plan-4q33le (Task 8)"` with the trailer as a second `-m`; on a conflict, `git merge --abort` and tell the owner. If `main` gained a revision after `0008_invites_integrity`, stop: `0009`'s `down_revision` and number must follow it (clarification 2), and the owner's SQL preview changes.
 ```
-@@EXP@@
+0
 ```
 ```
-@@EXP@@
+0
 ```
 ```
-@@EXP@@
+9
 ```
 
 - [ ] **Step 2 (agent): Both suites, Postgres, types, lint, the build**
@@ -3597,45 +3652,89 @@ Run: `git status --short | grep -v '^?? .claude/' | wc -l` then `git fetch -q or
 Run: `.venv/bin/python -m pytest -q 2>&1 | tail -1` then `TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres 2>&1 | tail -1` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")` then `(cd frontend && NEXT_PUBLIC_SUPABASE_URL=https://ci-placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-placeholder NEXT_PUBLIC_API_URL=http://localhost:8000 npm run build 2>&1 | grep -cE "Compiled successfully")`
 **Expected** (the Postgres line only where a local, throwaway Postgres is at hand; otherwise CI's job is the check; a font `Failed to fetch` in the build: say so and rely on CI):
 ```
-@@EXP@@
+2235 passed, 48 skipped in <t>s
 ```
 ```
-@@EXP@@
+48 passed, 2235 deselected, 1 warning in <t>s
 ```
 ```
-@@EXP@@
+ Test Files  113 passed (113)
+      Tests  1002 passed (1002)
 ```
 ```
-@@EXP@@
+typecheck 0
+lint 0
 ```
 ```
-@@EXP@@
+1
 ```
 
 - [ ] **Step 3 (agent): The API files unchanged, the gates, the paths, the commits**
 
-Run: `.venv/bin/python backend/scripts/export_openapi.py >/dev/null && (cd frontend && npm run gen:api >/dev/null 2>&1) && git status --short -- frontend backend | wc -l` then `git diff origin/main...HEAD -- backend frontend/src docs/manual-verification.md | grep '^+' | grep -c '—'` then `python3 -c "import pathlib; t=pathlib.Path('docs/superpowers/plans/2026-10-10-slice-6b2a-people-page.md').read_text(); print(sum(t.count(c) for c in (' ',' ','￾','￿')))"` then `git diff --name-status origin/main...HEAD | LC_ALL=C sort -k2` then `git diff --name-only origin/main...HEAD -- .github frontend/package.json frontend/package-lock.json backend/requirements.txt requirements-dev.txt requirements.txt pytest.ini app.py streamlit_views streamlit_auth.py streamlit_tenancy.py ui_helpers.py backend/api backend/usecases backend/repos backend/scripts backend/migrations/env.py frontend/src/lib/api/openapi.json frontend/src/lib/api/schema.d.ts frontend/src/lib/queries/client.ts frontend/src/components/ui | wc -l` then `git log --reverse --no-merges --format=%s origin/main..HEAD | grep -v -e '^WIP plan: ' -e '^Plan: '` then `for c in $(git rev-list origin/main..HEAD); do git show -s --format=%B "$c" | grep -q '^Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>$' || echo "no trailer: $(git show -s --format='%h %s' "$c")"; done; echo "trailer check done"`
-**Expected:** `0` (the committed snapshot and types are current: no API change); `0` (no em dash in an added line of code, tests or the checklist); `0` (no U+2028, U+2029, U+FFFE or U+FFFF in this plan); exactly these @@PATHS_COUNT@@ paths (the 6b-1 record and the 6b-2 amendment ride along until merged); `0` (nothing that must stay untouched changed); the subjects oldest first, then any `Fix: …` lines (the plan's own commits are left out by the `grep`); only `trailer check done`:
+Run: `.venv/bin/python backend/scripts/export_openapi.py >/dev/null && (cd frontend && npm run gen:api >/dev/null 2>&1) && git status --short -- frontend backend | wc -l` then `git diff origin/main...HEAD -- backend frontend/src docs/manual-verification.md | grep '^+' | grep -c '—'` then `python3 -c "import pathlib; t=pathlib.Path('docs/superpowers/plans/2026-10-10-slice-6b2a-people-page.md').read_text(); print(sum(t.count(c) for c in ('\u2028','\u2029','\ufffe','\uffff')))"` then `git diff --name-status origin/main...HEAD | LC_ALL=C sort -k2` then `git diff --name-only origin/main...HEAD -- .github frontend/package.json frontend/package-lock.json backend/requirements.txt requirements-dev.txt requirements.txt pytest.ini app.py streamlit_views streamlit_auth.py streamlit_tenancy.py ui_helpers.py backend/api backend/usecases backend/repos backend/scripts backend/migrations/env.py frontend/src/lib/api/openapi.json frontend/src/lib/api/schema.d.ts frontend/src/lib/queries/client.ts frontend/src/components/ui | wc -l` then `git log --reverse --no-merges --format=%s origin/main..HEAD | grep -v -e '^WIP plan: ' -e '^Plan: '` then `for c in $(git rev-list origin/main..HEAD); do git show -s --format=%B "$c" | grep -q '^Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>$' || echo "no trailer: $(git show -s --format='%h %s' "$c")"; done; echo "trailer check done"`
+**Expected:** `0` (the committed snapshot and types are current: no API change); `0` (no em dash in an added line of code, tests or the checklist); `0` (no U+2028, U+2029, U+FFFE or U+FFFF in this plan); exactly these 35 paths (the 6b-1 record and the 6b-2 amendment ride along until merged); `0` (nothing that must stay untouched changed); the subjects oldest first, then any `Fix: …` lines (the plan's own commits are left out by the `grep`); only `trailer check done`:
 ```
-@@EXP@@
-```
-```
-@@EXP@@
+0
 ```
 ```
-@@EXP@@
+0
 ```
 ```
-@@EXP@@
+0
 ```
 ```
-@@EXP@@
+M	backend/db/models.py
+M	backend/migrations/README.md
+A	backend/migrations/versions/0009_memberships_one_owner.py
+M	backend/tests/test_api_app.py
+M	backend/tests/test_integrity.py
+M	backend/tests/test_migrations.py
+M	backend/tests/test_schema_check.py
+M	backend/tests/test_services_postgres.py
+M	docs/manual-verification.md
+M	docs/ops-runbook.md
+A	docs/superpowers/plans/2026-10-10-slice-6b2a-people-page.md
+M	docs/superpowers/specs/2026-09-25-slice-6b-settings-people-design.md
+A	frontend/src/app/(signed-in)/(church)/settings/people/page.tsx
+M	frontend/src/components/app/confirm-dialog.test.tsx
+M	frontend/src/components/app/confirm-dialog.tsx
+A	frontend/src/components/app/copy-link-button.test.tsx
+A	frontend/src/components/app/copy-link-button.tsx
+A	frontend/src/components/app/initials-avatar.tsx
+A	frontend/src/components/settings/people/create-invite-form.tsx
+A	frontend/src/components/settings/people/invite-link-panel.tsx
+A	frontend/src/components/settings/people/members-list.tsx
+A	frontend/src/components/settings/people/pending-invites-list.tsx
+A	frontend/src/components/settings/people/people-settings-page.test.tsx
+A	frontend/src/components/settings/people/people-settings-page.tsx
+M	frontend/src/components/settings/sections.ts
+M	frontend/src/components/settings/settings-layout.test.tsx
+M	frontend/src/lib/api/types.ts
+A	frontend/src/lib/clipboard.test.tsx
+A	frontend/src/lib/clipboard.ts
+A	frontend/src/lib/queries/people.ts
+A	frontend/src/lib/settings/people.test.ts
+A	frontend/src/lib/settings/people.ts
+M	frontend/src/lib/urls.test.ts
+M	frontend/src/test/fixtures/index.ts
+D	streamlit_tests/test_settings_members_invites.py
 ```
 ```
-@@EXP@@
+0
 ```
 ```
-@@EXP@@
+Docs: slice 6b-1 record in the ops runbook
+Docs: slice 6b spec amendment with the owner's 6b-2 planning answers
+Migration 0009_memberships_one_owner: at most one owner per church
+Slice 6b-2a: the People rules, copyText and the types
+Slice 6b-2a: the People queries, Copy link, initials, and a confirm dialog with a body
+Slice 6b-2a: Settings > People, the members, roles and removal
+Slice 6b-2a: Settings > People, invite links and pending invites
+Slice 6b-2a: People in the Settings nav
+Docs: slice 6b-2a's manual check items
+```
+```
+trailer check done
 ```
 
 - [ ] **Step 4: Fix any failure in its owning task**
@@ -3653,7 +3752,7 @@ Run: `.venv/bin/python backend/scripts/export_openapi.py >/dev/null && (cd front
 
 For each fix: change only the owning task's files; rerun Steps 2-3; commit `Fix: <what> (Task <n>, slice 6b-2a final verification)` with the trailer; after the PR exists, ask the owner before pushing it.
 
-Expected counts after this task: @@AFTER_T8@@
+Expected counts after this task: backend `2235 passed, 48 skipped`; frontend `1002 passed` in 113 files.
 
 ### Task 9: Before the PR: the owner's pre-merge routine for 0009 (backup, counts, the SQL) (OWNER + agent; clarification 14)
 
@@ -3713,7 +3812,7 @@ Expected counts after this task: unchanged.
 
 (not replayed) `gh pr list -R <repo> --head claude/slice-2-plan-4q33le --state open --json number,url` → `[]`. Send the owner exactly this, and wait for a clear yes:
 
-> The People page (slice 6b-2a) is verified on this machine: backend @@BE_FINAL_P@@ passed, @@BE_FINAL_S@@ skipped (2235 and 46 before), and the @@PG_FINAL_N@@ Postgres tests pass on a throwaway local database; frontend @@FE_FINAL_T@@ tests in @@FE_FINAL_F@@ files (952 in 109 before), typecheck, lint and the production build clean. It adds Settings → People: everyone sees the members with emails; owners and admins invite (single-use links by default, or reusable for 7 days, optionally for one email), copy or share the link, make someone an admin or a member, remove someone, and see and revoke the pending links. With it comes migration 0009 (at most one owner per church), whose checks you have just done. May I open the pull request as a **draft** titled "Slice 6b-2a: Settings > People (invite links, members, pending invites) and migration 0009", so the checks run? Merging stays with you.
+> The People page (slice 6b-2a) is verified on this machine: backend 2235 passed, 48 skipped (2235 and 46 before), and the 48 Postgres tests pass on a throwaway local database; frontend 1002 tests in 113 files (952 in 109 before), typecheck, lint and the production build clean. It adds Settings → People: everyone sees the members with emails; owners and admins invite (single-use links by default, or reusable for 7 days, optionally for one email), copy or share the link, make someone an admin or a member, remove someone, and see and revoke the pending links. With it comes migration 0009 (at most one owner per church), whose checks you have just done. May I open the pull request as a **draft** titled "Slice 6b-2a: Settings > People (invite links, members, pending invites) and migration 0009", so the checks run? Merging stays with you.
 
 - [ ] **Step 2 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
 
@@ -3729,7 +3828,7 @@ Slice 6b-2a: Settings > People and migration 0009_memberships_one_owner (the fir
 
 Before the PR (Task 9): the backup, the read-only owner counts and the SQL preview with the owner. After the merge: the after-deploy check, the phone check in a test church with a second Google account (join, role change, revoke, removal), a "Slice 6b-2a record" in docs/ops-runbook.md.
 
-Tests: backend 2235 → @@BE_FINAL_P@@ passed, 46 → @@BE_FINAL_S@@ skipped; frontend 952 → @@FE_FINAL_T@@ in 109 → @@FE_FINAL_F@@ files
+Tests: backend 2235 → 2235 passed, 46 → 48 skipped; frontend 952 → 1002 in 109 → 113 files
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 
@@ -3741,7 +3840,7 @@ gh pr create -R <repo> --draft --base main --head claude/slice-2-plan-4q33le \
 gh pr checks <N> -R <repo> --watch --interval 30
 ```
 
-Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `@@BE_FINAL_P@@ passed, @@BE_FINAL_S@@ skipped`, backend-postgres `@@PG_FINAL@@` (after its `alembic upgrade head`, `alembic check`, `alembic downgrade base` and `alembic upgrade head` steps, which now include 0009 on Postgres 17), frontend `@@FE_FINAL_T@@ passed` in @@FE_FINAL_F@@ files. Then send: "PR #<N> is green: backend @@BE_FINAL_P@@ passed, @@BE_FINAL_S@@ skipped (the two new Postgres tests passed in their own job, and the migration went up, down and up again on Postgres); @@FE_FINAL_T@@ frontend tests in @@FE_FINAL_F@@ files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R <repo>`.
+Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `2235 passed, 48 skipped`, backend-postgres `48 passed, 2235 deselected` (after its `alembic upgrade head`, `alembic check`, `alembic downgrade base` and `alembic upgrade head` steps, which now include 0009 on Postgres 17), frontend `1002 passed` in 113 files. Then send: "PR #<N> is green: backend 2235 passed, 48 skipped (the two new Postgres tests passed in their own job, and the migration went up, down and up again on Postgres); 1002 frontend tests in 113 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R <repo>`.
 
 - [ ] **Step 3 (agent, only if needed): A fresh backup and the counts again**
 
@@ -3893,7 +3992,7 @@ Code only; the schema stays at `0009_memberships_one_owner` (README "Reverting 6
 git revert -m 1 --no-commit <merge sha>
 git show --name-only --format= "$(git log -1 --format=%H --grep='^Migration 0009_memberships_one_owner: ' <merge sha>)" | LC_ALL=C sort
 git checkout <merge sha> -- backend/migrations/versions/0009_memberships_one_owner.py backend/db/models.py backend/migrations/README.md backend/tests/test_migrations.py backend/tests/test_schema_check.py backend/tests/test_api_app.py backend/tests/test_services_postgres.py backend/tests/test_integrity.py
-git rm -q streamlit_tests/test_settings_members_invites.py
+git rm -q -f streamlit_tests/test_settings_members_invites.py
 git checkout <merge sha> -- docs/ops-runbook.md docs/superpowers/specs/2026-09-25-slice-6b-settings-people-design.md docs/superpowers/plans/2026-10-10-slice-6b2a-people-page.md
 .venv/bin/python -m pytest -q | tail -1
 TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres 2>&1 | tail -1
@@ -3901,30 +4000,92 @@ TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres 2>&1 | t
 ```
 
 **Expected** (simulated in the replay, see "Build notes": a `--no-ff` merge of the replayed branch into `origin/main`, then these commands): the second line prints exactly the nine paths of T1's commit (the eight of the `git checkout` after it and the deleted test; if T1's commit lists any other path, add it before going on); the suites pass with T1's changes and nothing of T2-T7:
-@@REVERT_EXP@@
+```
+backend/db/models.py
+backend/migrations/README.md
+backend/migrations/versions/0009_memberships_one_owner.py
+backend/tests/test_api_app.py
+backend/tests/test_integrity.py
+backend/tests/test_migrations.py
+backend/tests/test_schema_check.py
+backend/tests/test_services_postgres.py
+streamlit_tests/test_settings_members_invites.py
+```
+```
+2235 passed, 48 skipped in <t>s
+```
+```
+48 passed, 2235 deselected, 1 warning in <t>s
+```
+```
+ Test Files  109 passed (109)
+      Tests  952 passed (952)
+```
 
 Then a commit "Revert slice 6b-2a (PR #<N>), keeping migration 0009" with the trailer; a PR, CI (whose `alembic check` then compares the restored model with the database at `0009`), and the merge on the owner's yes; record it in the record. Never `alembic downgrade` production for this.
 
-Expected counts after this task: backend `@@BE_FINAL_P@@ passed, @@BE_FINAL_S@@ skipped` on `main`; frontend `@@FE_FINAL_T@@ passed` in @@FE_FINAL_F@@ files. The records PR adds no test.
+Expected counts after this task: backend `2235 passed, 48 skipped` on `main`; frontend `1002 passed` in 113 files. The records PR adds no test.
 
 ---
 
 ## Build notes
 
-@@BUILD_NOTES@@
+**How this plan was written (2026-10-10).** Each task's code was built and run in a throwaway worktree of `dd2e7f0` (outside the repo directory; the repo's `.venv` as a symlink; a hard-linked copy of `frontend/node_modules`), one commit per task; the directives were then generated from those commits by a script (a new file as **Create**, an addition at the end of a file as **Append**, every other change as **In … replace** with just enough whole-line context to occur once in the file as it stands at that point, changes three or fewer lines apart in one block), which also checked that applying each file's directives to the file before the commit gives the file after it. The deletion in T1 is a `git rm` on a "Run:" line. The Postgres runs used a throwaway local PostgreSQL 16 cluster (initialised under `/var/lib/postgresql`, never a real database, on a local port), stopped and deleted afterwards. No package or variable was added. While building:
+- **What S assumed and what exists.** Clarification 6: no `forbiddenIsRole` meta (6a decided against it; the People hooks follow 6a), no checkbox component (native checkboxes, as the email dialog's), `ConfirmDialog` without a body or a pending label (two optional props), no per-page `PageHeader` in Settings, `useMeContext` for the user's id. `buildInviteUrl`, the keys, the UI kit and the Base UI components S lists exist. `npx shadcn@latest view checkbox` reached the shadcn registry from this session (2026-10-10), so generating components is possible here; none was needed.
+- **The index and the frozen app's test.** With the index in the model, `streamlit_tests/test_settings_members_invites.py::test_owner_only_transfer_and_delete` fails (`1 failed, 3 passed`), because the frozen app's transfer promotes first (clarification 5); `test_integrity.test_two_owners_are_reported` needed the index dropped first (clarification 4); the SQLite baseline drift gained `add_index uq_memberships_one_owner` (clarification 2). Nothing else in the backend suite or `streamlit_tests` touched a second owner.
+- **The migration on Postgres.** Postgres prints the index's predicate as `((role)::text = 'owner'::text)` (the test pins it). CI's Alembic sequence by hand on a fresh database of the throwaway cluster: `upgrade head` (it logged "Running upgrade 0008_invites_integrity -> 0009_memberships_one_owner"), `check` ("No new upgrade operations detected."), `downgrade 0008_invites_integrity`, `downgrade base`, `upgrade head`, `check` again, clean.
+- **Two test fixes while building.** The first 0009 SQLite test seeded a second church with the same owner email (the users table's unique email refused it); it now inserts the second church directly. In the People page tests the dropdown's items appear a tick after the trigger is clicked, so they are found with `findByRole`, and the second removal's invite list is set before the first removal refetches it.
+- **Mutation checks** (each change made by hand in the build worktree with every task applied, the named tests run, the change undone): `memberActions` letting an admin act on their own row → `2 failed, 38 passed` (`people.test.ts`, `people-settings-page.test.tsx`); a role refusal not refetching the members → `2 failed, 38 passed`; the Remove dialog always sending `revoke_reusable=false` → `2 failed, 38 passed`; `useInvites` without its role-refusal handling → `1 failed, 39 passed`; Reusable left on and enabled while an email is typed → `1 failed, 39 passed`; the migration's SQLite pre-check removed → `1 failed, 42 passed, 10 skipped` (`test_migrations.py`); the model without the index → `9 failed, 63 passed, 11 skipped` (`test_migrations.py`, `test_models.py`, `test_integrity.py`, `test_schema_check.py`).
+
+**Replay of the finished plan (2026-10-10).** The directives of T1-T7 were applied in order by a replay script that parses each step's **Create**, **Append** and **In … replace** blocks and its `bash` blocks (each commit), runs every command on its "Run:" lines (T1-T7 and T8 Steps 1-3; `<local url>` a fresh database on the throwaway local PostgreSQL 16 cluster) and compares the output with the quoted **Expected** blocks, onto a fresh detached worktree of the branch at the plan's commit (outside the repo directory and removed afterwards), with the repo's `.venv` (a symlink) and a hard-linked copy of `frontend/node_modules`:
+- Baselines before T1 (on a worktree of `dd2e7f0`): backend `2235 passed, 46 skipped`; Postgres `46 passed, 2235 deselected, 1 warning`; frontend `952 passed` in 109 files; typecheck 0, lint 0.
+- All 55 directives applied (16 **Create**, 5 **Append**, 34 **In … replace**); every **In … replace** block occurred exactly once; all seven commit blocks ran, each commit with the trailer; 46 commands run. Every "see it fail" output, every count and every T8 Step 1-3 output above is quoted from that replay (times as `<t>`), with one exception, fixed and run again: T8 Step 3's check of this plan for U+2028, U+2029, U+FFFE and U+FFFF found 4, because the command itself had been written with those characters instead of their `\u` escapes (6b-1's lesson, repeated); the command now uses the escapes and prints `0`. The production build compiled (`1`).
+- **The revert (T10 Step R), simulated** on that worktree: a `--no-ff` merge of the replayed branch into `origin/main`, then Step R's commands. The first run showed that after `git revert -m 1 --no-commit` the deleted test is back **and staged**, so a plain `git rm -q` refuses it; Step R and the README's "Reverting 6b-2a" now say `git rm -q -f`. With that: `git show --name-only` of T1's commit listed exactly the nine paths, and the suites gave backend `2235 passed, 48 skipped`, Postgres `48 passed, 2235 deselected, 1 warning`, frontend `952 passed` in 109 files (T1's changes only).
+- **The plan as committed** was then replayed once more by the same script with `--check` onto another fresh worktree and a fresh database: @@CHECK_RESULT@@
+- Not run while planning (each marked "(not replayed)" where it appears): T9 and T10 (the owner's backup, counts and SQL; the pushes, the PR and CI, the merge, Railway's pre-deploy migration on production data, Vercel's deploy, the after-deploy check, the phone check, the record and its PR). T9 Step 3's render is the same command T1 Step 5 runs.
 
 ## Spec coverage
 
-@@SPEC_COVERAGE@@
+| Owner answer or spec item | Task(s) and tests |
+|---|---|
+| 2026-10-10 answer 1: 6b-2a is the People page, its nav entry and `0009_…` with the owner routine (the SQL in full, marked read-only) | T1-T7; T9 Steps 1-3; T10 Steps 4-5; T1 `test_the_readme_shows_the_0009_preview_exactly_and_in_full` |
+| 2026-10-10 answer 2: the phone check is a real join in a test church with a second Google account, then its removal | T7 items 12-15; T10 Steps 7-9 |
+| 2026-10-09 answers: visibility; invites; removal revoking links with the reusable box checked; no own role change; role changes without confirmation; the Settings order; no em dashes | T4 "shows a member everyone…", "gives an admin a menu…", "lets the owner make an admin a member at once…", "asks before removing…"; T5 the invite tests; T6; T8 Step 3's em dash gate |
+| S UX "Every page" (skeletons, ErrorState with Retry, the pending words, toasts, inline errors with focus, React text, initials only) | T4 "shows the error state with Retry…"; T5 "says under Email…"; T3 "names the pending action when asked", "shows initials only…" |
+| S UX 1a (Invite someone and the panel) | T5 "creates a single-use member link…", "sends an admin, reusable link…", "turns Reusable off while an email is typed…", "says under Email…", "offers Share on a device that can share…"; T3 the Copy link tests |
+| S UX 1b (Members, the menu, the Remove dialog) | T4 every test |
+| S UX 1c (Pending invites) | T5 "puts Invite someone, Members and Pending invites in that order…", "lists pending invites…", "shows a row's link, selected…", "revokes an invite after asking…" |
+| S "Losing a role mid-session" | T4 "toasts the server's refusal…", "toasts a role refusal of the invite list…", "leaves a lost church to the app…" (clarification 6a) |
+| S "Alembic revision `memberships_one_owner`" (the pre-check, the index, the downgrade, the model) | T1 every 0009 test; CI's `alembic check` on Postgres |
+| S "Church integrity runbook" (step 3 for two owners; the check before the revision) | T1 README; T1 `test_integrity.test_two_owners_are_reported`; T9 Step 2 |
+| S "Frontend changes" (routes, components, pure helpers, queries; the People parts) | T2-T5 |
+| S Testing → Frontend unit (`memberActions` against the fixture with S's mapping, `copyText`, `buildInviteUrl`'s argument order, `inviteSummary`, `formatExpiry`) | T2 every test |
+| S Testing → Frontend DOM (People as a member and as an admin, create invite, pending invites, role loss, lost access, ErrorState, the Settings nav) | T4, T5, T6 |
+| S "Manual checks" (the People items, rewritten for a test church and a second account) | T7 items 7-17; T10 Steps 6-10 |
+| S acceptance 2 (client half), 12 (one-owner half), 14, 16, 18, 22 (People half) | T2; T1 and T10 Step 5; T4, T5; T4; T4, T5 and T7 item 16; T6 |
+| The binding rules (no em dashes; no real ids, emails or links in docs; SQL for reading shown in full and marked; migrations safe on production data; frozen Streamlit files untouched; no network in tests; never log invite codes) | Global Constraints; clarifications 3, 5, 11, 13; T8 Step 3; T9 Step 3; T10 Step 12's record checks |
+
+S items **not** in 6b-2a: the Danger zone (UX §2), `useExitChurch`, `markChurchExited`, the `(church)` layout's exited-church check, `leaveBlock`, `deleteNameMatches`, the transfer, leave and delete hooks and their DOM tests (6b-2b); `LegacySettingsNote` (never built); the `streamlit_tests` port and ledger (dropped by the 2026-10-09 answer 2); S's `handleAuthErrors` meta test (no meta, clarification 6a; the page tests cover the behavior).
 
 ## Follow-ups (not in 6b-2a)
 
-@@FOLLOWUPS@@
+- 6b-2b builds on this: the Danger zone page and its nav entry, `useExitChurch` with `markChurchExited`, the layout's exited-church check, and its phone check on a throwaway church. Its Transfer card can link to **Invite someone** on this page ("Invite another member first to transfer ownership.").
+- If the owner ever wants the Remove dialog to also count the pending invites for the removed person's own email (which 6b-1's removal revokes too; clarification 8), it is one more count in `lib/settings/people.ts`.
+- `components/ui` still has no `checkbox.tsx`; if a later page wants Base UI's styled checkbox, `npx shadcn@latest add checkbox` works from this environment.
 
 ## Questions for the owner
 
-@@QUESTIONS@@
+Your 6b-2 planning answers of 2026-10-10 and your 6b answers of 2026-10-09 (all as recommended) are binding and already in the plan. Two choices remain where you did not say; each is written as recommended.
+
+1. **The retired Streamlit app's members test** (clarification 5). One of its tests runs the old app's "Transfer ownership", which makes the new owner before it demotes the old one; the new one-owner rule refuses that (safely, nothing changes), so the test now fails. **Recommended: delete that test file** (four tests), as the 6b design said; everything it checked has had a new test since 6b-1, and the old app's own files stay untouched. The alternative is to keep the file and mark that one test as expected to fail until slice 7 removes the old app's tests.
+2. **Two small wording changes** (clarification 11). The design wrote "The 2 invite link(s) Ann created will stop working." and "join Grace as a {member|admin}". **Recommended: plain English**: "The 1 invite link Ann created …" / "The 2 invite links Ann created …", "Also revoke the 1 reusable invite link" / "… the 2 reusable invite links", and "as a member" / "as an admin". The alternative keeps "link(s)" as written.
+
+Owner steps still to come: the backup, one read-only query and the SQL to read (T9); the draft PR on your yes and ready on your yes, the merge on your yes, one more read-only query, a phone check in five short steps (the last four in a test church with your second Google account), and the records PR (T10).
 
 ## Self-review
 
-@@SELF_REVIEW@@
+- **Coverage.** Every binding constraint has a home: 6b-2a as the People page with `0009_…` and the owner routine (clarifications 1, 2; T1-T7, T9, T10); the phone check as a real join and removal in a test church with a second account (answer 2; T7 items 12-15; T10 Steps 7-9); the SQL for reading shown in full and marked "Read only. Do not run this." (T1's README and its test refusing "..."; T9 Step 3); no em dashes in user-facing copy (clarification 11; T8 Step 3 greps the added lines); no real ids, emails, codes or links in committed docs (tests use `@example.com` and made-up names; commands use `<repo>`, `<api>`, `<app>`; the record's own grep, T10 Step 12); invite codes never logged (nothing in the app logs; the server's are 6b-1's); migrations safe on production data (the pre-check before the index in one transaction under the 5 s lock timeout, a refusal rather than a repair, a working downgrade; clarification 3; T1's SQLite and Postgres tests); the frozen Streamlit files untouched (T8 Step 3's untouched check; one of its tests deleted, clarification 5); no network in tests (Global Constraints). The second-to-last task (T9) runs the owner's pre-merge routine for 0009 one step at a time; the last (T10) opens the draft PR only on the owner's yes, merges only on a yes, checks production, runs the phone check and inserts "### Slice 6b-2a record" before "## Backups", after "### Slice 6b-1 record".
+- **Placeholders.** None in T1-T8's code, tests, commands or expected outputs; every expected output is quoted from the replay. The `<…>` left are T9 and T10's runtime values (`<N>`, `<repo>`, `<api>`, `<app>`, `<scratch>`, `<local url>`, times, the owner's answers), as in the earlier plans.
+- **Consistency.** Names agree across tasks: `displayName`, `initials`, `memberActions`, `inviteSummary`, `formatDateTime`, `formatExpiry`, `invitesCreatedBy`, `otherReusableInvites` (T2) are used by T3 (`InitialsAvatar`), T4 and T5; `copyText` (T2) by `CopyLinkButton` (T3); `useMembers`, `useInvites`, `useChangeRole`, `useRemoveMember`, `useCreateInvite`, `useRevokeInvite`, `inviteFieldError`, `isRoleRefusal` (T3) by T4 and T5; `ConfirmDialog`'s `children` and `pendingLabel` (T3) by T4 and T5; `member`, `memberList`, `invite`, `inviteList`, `PEOPLE` (T2) by T2, T4 and T5; `PREVIEW_0009` (T1) by two T1 tests. The counts in the table, each task's "Expected" and the PR line agree.
+- **Not verified while planning:** the pushes, the PR and CI (the Postgres tests and CI's Alembic sequence were run on a throwaway local PostgreSQL 16 instead of CI's 17), Railway's pre-deploy migration on production data, Vercel's deploy, the production build's font fetch if it fails here, the owner's checks, and the page on a real phone (Share, the keyboard, 375 px): those are T10's phone steps.
+- **Judgement calls to watch in review:** the role refusal per hook instead of S's meta (6a); native checkboxes (6b); `ConfirmDialog`'s two new props (6c); an h2 instead of a `PageHeader` (6d); the frozen app's test deleted here (5, owner question 1); the wording (11, owner question 2); a row's link revealed when copying fails (10); the pre-merge routine before the PR is opened, with a fresh backup if a day passes (14).
