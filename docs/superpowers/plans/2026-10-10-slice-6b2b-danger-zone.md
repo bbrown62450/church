@@ -2703,6 +2703,8 @@ With the real code every file passes.
 
 **Not run while planning** (each marked "(not replayed)" where it appears): T8 (the pushes, the PR and CI, the merge, Vercel's and Railway's deploys, the after-deploy check, the phone check, the record and its PR) and T8 Step R. No headless browser was available in this session, so the 375 px wrapping is checked by class in jsdom only; the phone check's Step 11 is the real-device check. No local Postgres was needed (no backend change; CI's `backend-postgres` job still runs).
 
+**Replay of the fixed plan (2026-10-10).** The plan as committed at `ce8e02c` was replayed by the same script with `--check` onto a third fresh detached worktree of that commit: all 45 directives applied (8 **Create**, 4 **Append**, 33 **In … replace**, each **In … replace** block exactly once), all five commit blocks ran with the trailer, and all 42 commands of T1-T7 matched their quoted **Expected** blocks: 0 mismatches. Counts: backend `2236 passed, 49 skipped` before and after; frontend `1010` in 113 files before, `1041` in 115 files after. The three worktrees were removed afterwards.
+
 ## Spec coverage
 
 | Owner answer or spec item | Task(s) and tests |
