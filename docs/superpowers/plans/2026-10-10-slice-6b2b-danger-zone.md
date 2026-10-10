@@ -998,7 +998,7 @@ Expected counts after this task: backend `2236 passed, 49 skipped` (unchanged); 
  * `(church)` layouts, so the switch to the next church and the absence of the
  * "no longer have access" toast are the app's own.
  */
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { toast } from "sonner";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -1179,6 +1179,38 @@ describe("Settings → Danger zone: admins and members (slice 6b-2b)", () => {
     expect(screen.getByRole("heading", { level: 3, name: "Leave Grace" })).toBeInTheDocument();
   });
 
+  it("keeps the dialog on Leaving… until the exit is done", async () => {
+    let release: () => void = () => {};
+    const { api, user } = renderPage("member", {
+      "POST /church/leave": { left: true },
+      "GET /me": () => new Promise((resolve) => (release = () => resolve(me()))),
+    });
+    await user.click(await screen.findByRole("button", { name: "Leave church…" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "Leave Grace?" });
+    await user.click(within(dialog).getByRole("button", { name: "Leave church" }));
+    expect(await screen.findByText(leftChurch("Grace"))).toBeInTheDocument();
+    await waitFor(() => expect(sent(api, "GET", "/me")).toHaveLength(1));
+    expect(within(dialog).getByRole("button", { name: "Leaving…" })).toHaveAttribute("aria-disabled", "true");
+    expect(testRouter.replace).not.toHaveBeenCalled();
+    release();
+    await waitFor(() => expect(testRouter.replace).toHaveBeenCalledWith("/"));
+  });
+
+  it("leaves a lost church to the app's one message, with no toast of its own", async () => {
+    const error = vi.spyOn(toast, "error");
+    const refused = "You don't have access to this church.";
+    const { user } = renderShell("member", {
+      "POST /church/leave": fakeError(403, "forbidden", refused, { details: { reason: "no_church_access" } }),
+    });
+    await user.click(await screen.findByRole("button", { name: "Leave church…" }));
+    await user.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Leave church" }));
+    expect(await screen.findByText("You no longer have access to Grace.")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 3, name: "Leave Hope" })).toBeInTheDocument();
+    expect(error.mock.calls).toEqual([["You no longer have access to Grace."]]);
+    expect(screen.queryByText(refused)).toBeNull();
+    error.mockRestore();
+  });
+
   it("says when /me does not come back after leaving", async () => {
     const { user } = renderPage("member", {
       "POST /church/leave": { left: true },
@@ -1252,7 +1284,7 @@ describe("Settings → Danger zone: the owner (slice 6b-2b)", () => {
     expect(invalidate).toHaveBeenCalledWith({ queryKey: keys.members(church().id) });
   });
 
-  it("turns to the admin form inside the church layout once the transfer is done", async () => {
+  it("turns to the admin form inside the church layout once the transfer is done, focus on the heading", async () => {
     window.localStorage.setItem(ACTIVE_CHURCH_KEY, church().id);
     let role: Church["role"] = "owner";
     installFakeApi({
@@ -1282,6 +1314,9 @@ describe("Settings → Danger zone: the owner (slice 6b-2b)", () => {
     expect(screen.getByText("You're an admin of Grace.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Delete church…" })).toBeNull();
     expect(screen.getByRole("button", { name: "Leave church…" })).toBeEnabled();
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole("heading", { level: 2, name: "Danger zone" })),
+    );
   });
 
   it("toasts a role refusal of the transfer and refetches the role and the members, staying in the church", async () => {
@@ -1299,6 +1334,71 @@ describe("Settings → Danger zone: the owner (slice 6b-2b)", () => {
     expect(invalidate).toHaveBeenCalledWith({ queryKey: keys.churchProfile(church().id) });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: keys.members(church().id) });
     expect(lost).not.toHaveBeenCalled();
+    unsubscribe();
+  });
+
+  it("toasts a transfer to someone who has left and refetches the members", async () => {
+    const { user, queryClient } = renderPage("owner", {
+      "POST /church/transfer-ownership": fakeError(404, "not_found", "Member not found."),
+    });
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+    await user.click(await screen.findByRole("combobox", { name: "New owner" }));
+    await user.click(await screen.findByRole("option", { name: "Mo Member (mo@example.com)" }));
+    await user.click(screen.getByRole("button", { name: "Transfer ownership…" }));
+    await user.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Transfer ownership" }));
+    expect(await screen.findByText("Member not found.")).toBeInTheDocument();
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: keys.members(church().id) });
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+  });
+
+  it("sends one transfer for a double tap", async () => {
+    let release: () => void = () => {};
+    const { api, user } = renderPage("owner", {
+      "POST /church/transfer-ownership": () => new Promise((resolve) => (release = () => resolve(memberList("admin")))),
+    });
+    await user.click(await screen.findByRole("combobox", { name: "New owner" }));
+    await user.click(await screen.findByRole("option", { name: "Ann Admin (ann@example.com)" }));
+    await user.click(screen.getByRole("button", { name: "Transfer ownership…" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "Make Ann Admin the owner?" });
+    await user.dblClick(within(dialog).getByRole("button", { name: "Transfer ownership" }));
+    expect(sent(api, "POST", "/church/transfer-ownership")).toHaveLength(1);
+    expect(await within(dialog).findByRole("button", { name: "Transferring…" })).toHaveAttribute("aria-disabled", "true");
+    release();
+    expect(await screen.findByText(TRANSFERRED)).toBeInTheDocument();
+    expect(sent(api, "POST", "/church/transfer-ownership")).toHaveLength(1);
+  });
+
+  it("un-chooses a new owner who has left meanwhile, and turns Transfer off again", async () => {
+    const { api, user, queryClient } = renderPage("owner");
+    await user.click(await screen.findByRole("combobox", { name: "New owner" }));
+    await user.click(await screen.findByRole("option", { name: "Mo Member (mo@example.com)" }));
+    const start = screen.getByRole("button", { name: "Transfer ownership…" });
+    expect(start).toBeEnabled();
+    api.set("GET /members", { items: memberList("owner").items.filter((m) => m.user_id !== PEOPLE.mo) });
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: keys.members(church().id) });
+    });
+    await waitFor(() => expect(start).toBeDisabled());
+    expect(screen.getByRole("combobox", { name: "New owner" })).toHaveTextContent("Choose a person");
+  });
+
+  it("toasts a role refusal of the delete and refetches the role and the members, staying in the church", async () => {
+    const lost = vi.fn();
+    const unsubscribe = authEvents.onChurchAccessLost(lost);
+    const { user, queryClient } = renderPage("owner", {
+      "DELETE /church": fakeError(403, "forbidden", "Only the owner can do that."),
+    });
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+    await user.click(await screen.findByRole("button", { name: "Delete church…" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "Delete Grace?" });
+    await user.type(within(dialog).getByRole("textbox", { name: "Type Grace to confirm" }), "Grace");
+    await user.click(within(dialog).getByRole("button", { name: "Delete church" }));
+    expect(await screen.findByText("Only the owner can do that.")).toBeInTheDocument();
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: keys.churchProfile(church().id) });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: keys.members(church().id) });
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(lost).not.toHaveBeenCalled();
+    expect(testRouter.replace).not.toHaveBeenCalled();
     unsubscribe();
   });
 
@@ -1339,13 +1439,15 @@ describe("Settings → Danger zone: the owner (slice 6b-2b)", () => {
     error.mockRestore();
   });
 
-  it("says when the server finds the name does not match, under the box, and focuses it", async () => {
-    const { user } = renderPage("owner", {
+  it("says when the server finds the name does not match, under the box only, focuses it and refetches the name", async () => {
+    const error = vi.spyOn(toast, "error");
+    const { user, queryClient } = renderPage("owner", {
       "DELETE /church": fakeError(422, "invalid_request", "Church name did not match.", {
         fields: { confirm_name: "Church name did not match." },
       }),
     });
     await user.click(await screen.findByRole("button", { name: "Delete church…" }));
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
     const dialog = await screen.findByRole("alertdialog", { name: "Delete Grace?" });
     const box = within(dialog).getByRole("textbox", { name: "Type Grace to confirm" });
     await user.type(box, "Grace");
@@ -1355,6 +1457,10 @@ describe("Settings → Danger zone: the owner (slice 6b-2b)", () => {
     expect(box).toHaveAttribute("aria-invalid", "true");
     expect(box).toHaveAccessibleDescription("Church name did not match.");
     expect(testRouter.replace).not.toHaveBeenCalled();
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: keys.churchProfile(church().id) });
+    expect(screen.getAllByText("Church name did not match.")).toHaveLength(1);
+    expect(error).not.toHaveBeenCalled();
+    error.mockRestore();
   });
 
   it("sends one delete for a double tap, and says so for the owner alone in the singular", async () => {
@@ -1625,15 +1731,17 @@ export function deleteNameError(e: unknown): string | null {
 /**
  * `DELETE /church` with `{confirm_name}` (the owner; sent as typed, the
  * server trims): "Church deleted.", then the same exit as Leave. A name
- * mismatch is the dialog's (`deleteNameError`); a role refusal (ownership
- * moved elsewhere) is toasted and refetches the role and the members; a 401
- * or a lost church is the app's; anything else is toasted.
+ * mismatch is the dialog's (`deleteNameError`), not toasted, and refetches
+ * the profile, in case the church was renamed elsewhere; a role refusal
+ * (ownership moved elsewhere) is toasted and refetches the role and the
+ * members; a 401 or a lost church is the app's; anything else is toasted.
  */
 export function useDeleteChurch() {
   const api = useApi();
   const church = useChurch();
   const queryClient = useQueryClient();
   const exit = useExitChurch();
+  const writeError = onWriteError(queryClient, church.id, keys.members(church.id));
   return useChurchMutation<DeletedOut, ApiError, string>({
     mutationFn: (confirmName) =>
       api.church<DeletedOut>("/church", { method: "DELETE", json: { confirm_name: confirmName } }),
@@ -1641,7 +1749,13 @@ export function useDeleteChurch() {
       toast.success(CHURCH_DELETED);
       await exit(church.id);
     },
-    onError: onWriteError(queryClient, church.id, keys.members(church.id), (e) => deleteNameError(e) !== null),
+    onError: (e) => {
+      if (deleteNameError(e) === null) {
+        writeError(e);
+        return;
+      }
+      void queryClient.invalidateQueries({ queryKey: keys.churchProfile(church.id) });
+    },
   });
 }
 ````
