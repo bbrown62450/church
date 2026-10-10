@@ -863,6 +863,30 @@ here.
 | Agent checks | Not run: this session has no sign-in for a test church | 2026-10-09 |
 | Follow-ups | The Prayers page is readable by every member (the page says so). Slice 6a (Settings) is complete. Next: 6b (People), then Hear it from the pews | 2026-10-09 |
 
+### Slice 6b-1 record
+
+Slice 6b-1 (the server side of People and the Danger zone: members, invites,
+ownership transfer, leave and delete, every write under the church-row lock
+with the caller's role re-read) merged as PR #59, the first of slice 6b's two
+PRs, with migration `0008_invites_integrity`. The owner followed "Before
+0008_invites_integrity" in `backend/migrations/README.md`: a backup, the
+read-only counts, the SQL, and after the deploy the read-only check and the
+counts again. Then a short check on a phone. No email address, church id,
+token or database URL is recorded here.
+
+| Step | Result | Date |
+|---|---|---|
+| 1. Backup | db-backup run 38008714398 (started by the agent on the owner's word, from `main`): success, artifact `db-backup` 464,995 bytes, 00:22 UTC | 2026-10-10 |
+| 2. Counts before | `0007_bulletin_images`; invites 2, pending email invites 0, duplicate pending pairs 0, other-role invites 0, unnormalized email invites 0, old constraint 1, churches 3, churches without one owner 0, churches without an admin 0 | 2026-10-10 |
+| 3. The SQL | The agent's offline render matched the README's expected SQL exactly. The agent's chat copy shortened the `DO` block with "..." and did not say it was for reading only; the owner ran it in the SQL Editor and Postgres refused it with a syntax error before running anything. A read-only check confirmed no change: still `0007_bulletin_images`, old constraint 1, `ck_invites_role` 0, `uq_invites_pending_email` 0, revoked invites 0. Lesson: show SQL meant only for reading in full, and say plainly not to run it | 2026-10-10 |
+| Merge and deploy | PR #59 merged 00:25 UTC (20:25 Eastern on 2026-10-09), merge commit `24828b1`. CI on `main`: success | 2026-10-10 |
+| 4. After the deploy | `0008_invites_integrity`, pending email index 1, role check 1, old constraint 0. The counts again: the same as step 2 except the version and old constraint 0 | 2026-10-10 |
+| Phone 1. Services and builder | The list loaded and the builder opened and moved between steps as before | 2026-10-10 |
+| Phone 2. Settings | The same eight items (Church, Hymns, Liturgy, Prayers, Rubric, Bulletin, Contacts, Account); the pages opened with the church's details | 2026-10-10 |
+| Phone 3. An unused invite link | Skipped by the owner (no unused link to try) | 2026-10-10 |
+| Agent checks | Not run: this session has no sign-in for a test church | 2026-10-10 |
+| Follow-ups | Every church has exactly one owner and at least one admin, so nothing needs repair before 6b-2 (the gate in "Church integrity"). Next: 6b-2 (the People and Danger zone pages, migration 0009 one owner per church), then Hear it from the pews | 2026-10-10 |
+
 ## Backups
 
 - **Workflow:** `.github/workflows/backup.yml` (`db-backup`). Daily at 08:37 UTC,
