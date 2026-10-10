@@ -30,7 +30,7 @@
   `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
 - TDD: write the failing test first and see it fail as quoted.
 - **Backup push after every task** (standing rule): the controller runs `git push origin claude/slice-2-plan-4q33le` after each task's commit (never `--force`, never a rebase; if the push is rejected, `git pull --no-rebase origin claude/slice-2-plan-4q33le` and push again; on a network error retry after 2, 4, 8 and 16 s). A fix asked for by a review is a new commit, `Fix: <what> (Task <n> review)`. The container can restart and lose uncommitted work: commit as soon as a task's checks pass.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 2236 → 2236 passed, 49 → 49 skipped (unchanged); frontend 1010 → 1041 in 113 → 115 files`.
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 2236 → 2236 passed, 49 → 49 skipped (unchanged); frontend 1010 → 1047 in 113 → 115 files`.
 - New prose for the owner has no em dashes and no flattery. New user-facing copy is exactly the list in clarification 9 and has no em dashes.
 - No church id, email address, invite code or link, token, database URL, street address or real person's name in any doc, commit, test or record. Tests use `@example.com` addresses, the fixtures' "Grace" and "Hope" and made-up names.
 - Ask the owner before any push to a PR, PR creation, marking ready, merging, or any production or settings action. Owner steps go one at a time, in plain words.
@@ -48,9 +48,9 @@ As in the 6b-1 and 6b-2a plans: **Create `path`:** the block is the whole new fi
   |---|---|---|
   | T1 | +5 (`church.test.ts` 1, `people.test.ts` 4) | 1015 in 113 files |
   | T2 | +6 (`church-exit.test.ts` 2, a new file; `membership.test.tsx` 1; `church-layout.test.tsx` 3) | 1021 in 114 files |
-  | T3 | +19 (`confirm-dialog.test.tsx` 1; `danger-zone-page.test.tsx` 18, a new file) | 1040 in 115 files |
-  | T4 | +1 (`settings-layout.test.tsx`: the Danger zone case) | 1041 in 115 files |
-  | T5 | 0 (`docs/manual-verification.md` only) | 1041 in 115 files |
+  | T3 | +25 (`confirm-dialog.test.tsx` 1; `danger-zone-page.test.tsx` 24, a new file) | 1046 in 115 files |
+  | T4 | +1 (`settings-layout.test.tsx`: the Danger zone case) | 1047 in 115 files |
+  | T5 | 0 (`docs/manual-verification.md` only) | 1047 in 115 files |
 
 ### Layering and code rules (carried)
 - Pages and components never call `apiFetch`: the hooks in `src/lib/queries/church.ts` use `useApi().church`, and every write goes through `useChurchMutation`, so a `no_church_access` 403 reaches the `(church)` layout's fallback.
@@ -91,7 +91,7 @@ The owner's answers win over S and F; the code wins over both where they disagre
 5. **Leave for the owner** (S UX 2a). `leaveBlock(role, memberCount)` is `"owner_with_others"`, `"owner_alone"` or `null`; the owner's button is off with the matching sentence. The count is the member list's, so the owner's cards wait for `GET /members` (skeletons, then the cards, or ErrorState with Retry). Admins and members never ask for the member list here. The last admin of a church with no owner is not blocked on the page (only a hand-made church can be in that state); the server's 409 is toasted.
 6. **The New owner list** (S UX 2b: "`items` map `user_id → "{display name} ({email})"`"). `transferCandidates` is everyone else but the owner, admins first, each in the server's order (by name). A person with no name is listed by the email alone (`transferChoiceLabel`), not "sam@example.com (sam@example.com)". Someone chosen who has left meanwhile (gone from the refetched list) is no longer chosen, and the button turns off again.
 7. **After a transfer** (answer 5). The answer (the member list afterwards) goes in the cache; the members, `["church", id, "profile"]` (the role) and `["me"]` (the switcher's role) refetch; the toast "Ownership transferred. You are now an admin."; once the profile says admin, the page shows the note and Leave only, and the Settings heading says "You're an admin of {church}." Focus goes to the page's heading, since the Transfer card is gone.
-8. **The dialogs while they run** (F §4.8; 6b-2a's lessons). Each confirmation stays open while its request runs, ignores Escape and Cancel then, and sends one request per confirmation (a ref guard besides `PendingButton`'s, since a fast double tap can land before the button turns to "Leaving…"). Leave and Delete stay pending through the exit, until the page is gone. A Leave that fails (409, network) closes its dialog with the toast. A Delete that fails on the name keeps the dialog open with "Church name did not match." under the box (focused, `aria-invalid`, described by the message); any other failure closes it with the toast (a role refusal also turns the page to the admin form).
+8. **The dialogs while they run** (F §4.8; 6b-2a's lessons). Each confirmation stays open while its request runs, ignores Escape and Cancel then, and sends one request per confirmation (a ref guard besides `PendingButton`'s, since a fast double tap can land before the button turns to "Leaving…"). Leave and Delete stay pending through the exit, until the page is gone. A Leave that fails (409, network) closes its dialog with the toast. A Delete that fails on the name keeps the dialog open with "Church name did not match." under the box (focused, `aria-invalid`, described by the message), toasts nothing, and refetches the church profile, so a name changed in another tab shows in the card, the dialog and the label (plan review finding 4); any other failure closes it with the toast (a role refusal also turns the page to the admin form).
 9. **[owner-visible] Every new user-facing string** (S's words, no em dashes): page and nav "Danger zone"; the note "Only the owner can transfer ownership or delete the church."; "Loading" (the skeletons' name for screen readers, as on every Settings page). Leave: "Leave {church}", "You'll lose access to {church}'s services, hymns and settings. To come back you'll need a new invite.", "You're the owner. Transfer ownership below before you leave.", "You're the only person in {church}. To stop using it, delete the church below.", "Leave church…", "Leave {church}?", "You'll lose access right away. Your unsaved draft for {church} on this device will be discarded.", "Leave church" ("Leaving…"), "You left {church}.". Transfer: "Transfer ownership", "The new owner can transfer ownership and delete the church. You'll become an admin.", "New owner", "Choose a person", "{name} ({email})" or "{email}", "Transfer ownership…", "Make {name} the owner?", "{name} will become the owner of {church} and you'll become an admin. Only the new owner can transfer ownership back.", "Transfer ownership" ("Transferring…"), "Ownership transferred. You are now an admin.", "Invite another member first to transfer ownership." with the link "Invite someone". Delete: "Delete {church}", "Deleting {church} removes it for everyone. Pending invite links stop working.", "Delete church…", "Delete {church}?", "This removes {church} for all {n} people in it. They'll lose access to its services, hymns, contacts and settings. Your unsaved draft for {church} on this device will be discarded. This can't be undone." (for the owner alone, the proper singular of 6b-2a's answer: "This removes {church}. You're the only person in it, and you'll lose access to its services, hymns, contacts and settings. Your unsaved draft …"), "Type {church} to confirm", "Delete church" ("Deleting…"), "Church deleted.". The exit: "Can't reach the server. Check your connection and try again." (S's words, when `/me` does not come back). From the server (6b-1's, shown as they come): "Transfer ownership before you leave. If you're the only person in the church, delete it instead.", "You're the last admin. Make someone else an admin before you leave.", "Only the owner can do that.", "Member not found.", "Choose someone else to be the new owner.", "Church name did not match.".
 10. **Cards** (S UX 2: "Destructive cards have a `border-destructive/40` outline"): Leave and Delete are outlined that way; Transfer has the plain border. The buttons: **Leave church…** outline, **Transfer ownership…** primary, **Delete church…** destructive; each `size="touch"` (44 px on phones).
 11. **Deviations from S** (each the lean or the safer choice): the role refusal per hook, not a meta (2c); the layout's two guarded toasts (2d); `useMembershipChanged`'s boolean (2b); `ConfirmDialog`'s `confirmDisabled` (2f); a note instead of an alert (2g); both names trimmed (4); the email alone for a person with no name (6); the singular Delete body (9); no separate `DeleteChurchDialog` file (1).
@@ -100,7 +100,8 @@ The owner's answers win over S and F; the code wins over both where they disagre
 - **A leave or delete in another tab.** That tab keeps the church until its next request, which answers 403 `no_church_access`; its layout then says "You no longer have access to {church}." (the mark is per tab) and moves on. A builder open there may write its draft back; the next full load's prune removes it (S "Draft store").
 - **A late 403 after the 60 s mark** (a very slow request for the church just left) would show the toast; the exit cancels every request for the church first, so none is in flight.
 - **The phone check deletes a real (throwaway) church in production.** Deletion is 6b-1's soft delete: the church's rows stay and its invites are revoked; nothing else is touched. The check uses a church made for it ("Delete me"), never the real church or the test churches, and the agent names the church in every step.
-- **The second Google account ends with no church** after it deletes "Delete me" (it lands on the welcome page); that is expected and harmless.
+- **The second Google account ends with no church** after it deletes "Delete me" (it lands on the welcome page), unless it belongs to another church, which it then opens; either is expected and harmless.
+- **A brief view of the next church's page before `/`** (plan review finding 8, low confidence). The exit's `/me` comes back before `router.replace("/")`, so for a moment the `(church)` layout may show the next church's Danger zone (T3's leave test sees "Leave Hope" in jsdom) before the app opens `/`. Nothing can be tapped by mistake: the old dialog unmounts with Grace's page, and the next church's page has no dialog open. Not fixed here: the order is slice 1's `useMembershipChanged`, shared with the create and join forms, and changing it is not a trivial, safe change for this slice. The phone check's Leave and Delete steps would show it if it is visible on a real phone; then it is a follow-up.
 - **A Vercel preview** behaves the same; the phone check uses production.
 
 ### Lessons carried (the 6b-1 and 6b-2a plans and their reviews and records)
@@ -108,7 +109,7 @@ The owner's answers win over S and F; the code wins over both where they disagre
 - A role 403 is toasted and refetches the role without leaving the church; a lost church is the app's; both are tested on the page (6a-1, 6b-2a).
 - Long user text wraps at 375 px (6b-2a build review 1): the cards' titles and texts, both dialogs and the typed-name label carry `[overflow-wrap:anywhere]`; a test checks it with a long name.
 - Confirmations keep their subject while they close and ignore Cancel while the write runs; focus never drops to the page when the card is gone (5b-1, 6a-3b, 6b-2a).
-- Each important rule has a test that fails when the rule breaks, proved by planting the violation (6b-2a's mutation checks; see "Build notes").
+- Each rule this plan says is tested has a test that fails when the rule breaks, proved by planting the violation (6b-2a's mutation checks; the 27 planted violations in "Build notes", 10 of them added by the plan review). What is not tested in jsdom is named there and in T8 (the real-device screen; a real removal toast and a real draft discard are jsdom only).
 - The phone check goes one short step at a time, and the record holds what the screens showed, never an id, an email or a link.
 
 ## File Structure
@@ -948,7 +949,7 @@ Expected counts after this task: backend `2236 passed, 49 skipped` (unchanged); 
 - Create: `frontend/src/app/(signed-in)/(church)/settings/danger/page.tsx`, `frontend/src/components/settings/danger/danger-zone-page.tsx`, `frontend/src/components/settings/danger/leave-church-card.tsx`, `frontend/src/components/settings/danger/transfer-ownership-card.tsx`, `frontend/src/components/settings/danger/delete-church-card.tsx`, `frontend/src/components/settings/danger/danger-zone-page.test.tsx`
 - Modify: `frontend/src/lib/api/types.ts`, `frontend/src/lib/queries/people.ts`, `frontend/src/lib/queries/church.ts`, `frontend/src/components/app/confirm-dialog.tsx`, `frontend/src/components/app/confirm-dialog.test.tsx`
 
-`ConfirmDialog`'s confirm stays off while `confirmDisabled` holds. The page: an admin and a member see the note and Leave only, and the page asks for nothing; Leave, inside the real `(signed-in)` and `(church)` layouts, asks first, sends `POST /church/leave` once with `X-Church-Id`, toasts "You left Grace.", removes both draft keys, goes to `/` and shows the next church (Hope) with no "no longer have access" text and no error toast; a double tap sends one leave; a 409 is toasted and the dialog closes; a `/me` that does not come back is said. The owner: Leave off with each of the two sentences, both destructive cards outlined; Transfer lists the others admins first, stays off until one is chosen, asks, sends `{user_id}`, toasts, refetches the profile, `/me` and the members, and inside the church layout turns to the admin form; a role refusal is toasted and refetches without leaving the church; alone, "Invite another member first…" with the link to People. Delete is off for every wrong spelling and on for " Grace ", sends `{"confirm_name":" Grace "}`, toasts "Church deleted." and exits quietly; the server's 422 shows under the box and focuses it; a double tap sends one delete; the body is singular for the owner alone. A long church name wraps in the cards, both dialogs and the label; nothing the page says, in any state, has an em dash. ErrorState with Retry when the members cannot be read.
+`ConfirmDialog`'s confirm stays off while `confirmDisabled` holds. The page: an admin and a member see the note and Leave only, and the page asks for nothing; Leave, inside the real `(signed-in)` and `(church)` layouts, asks first, sends `POST /church/leave` once with `X-Church-Id`, toasts "You left Grace.", removes both draft keys, goes to `/` and shows the next church (Hope) with no "no longer have access" text and no error toast; the dialog stays on "Leaving…" while the exit's `/me` is still out (and Delete's on "Deleting…"); a double tap sends one leave; a 409 is toasted and the dialog closes; a lost church (403 `no_church_access`) is said once, by the layout, not toasted again by Leave; a `/me` that does not come back is said. The owner: Leave off with each of the two sentences, both destructive cards outlined; Transfer lists the others admins first, stays off until one is chosen, asks, sends `{user_id}`, toasts, refetches the profile, `/me` and the members, and inside the church layout turns to the admin form with focus on the "Danger zone" heading; someone chosen who leaves meanwhile is un-chosen and Transfer turns off; a double tap sends one transfer; a role refusal is toasted and refetches without leaving the church; a 404 is toasted and refetches the members; alone, "Invite another member first…" with the link to People. Delete is off for every wrong spelling and on for " Grace ", sends `{"confirm_name":" Grace "}`, toasts "Church deleted." and exits quietly; the server's 422 shows under the box only (no toast), focuses it and refetches the profile (the name may have changed elsewhere); a role refusal is toasted and refetches the role and the members, staying in the church; a double tap sends one delete; the body is singular for the owner alone. A long church name wraps in the cards, both dialogs and the label; nothing the page says, in any state, has an em dash. ErrorState with Retry when the members cannot be read.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1463,11 +1464,12 @@ describe("Settings → Danger zone: the owner (slice 6b-2b)", () => {
     error.mockRestore();
   });
 
-  it("sends one delete for a double tap, and says so for the owner alone in the singular", async () => {
+  it("sends one delete for a double tap, stays on Deleting… through the exit, and says so for the owner alone in the singular", async () => {
     let release: () => void = () => {};
+    let releaseMe: () => void = () => {};
     const { api, user } = renderPage("owner", {
       "GET /members": alone(),
-      "GET /me": me({ churches: [] }),
+      "GET /me": () => new Promise((resolve) => (releaseMe = () => resolve(me({ churches: [] })))),
       "DELETE /church": () => new Promise((resolve) => (release = () => resolve({ deleted: true }))),
     });
     await user.click(await screen.findByRole("button", { name: "Delete church…" }));
@@ -1482,6 +1484,11 @@ describe("Settings → Danger zone: the owner (slice 6b-2b)", () => {
     expect(sent(api, "DELETE", "/church")).toHaveLength(1);
     expect(await within(dialog).findByRole("button", { name: "Deleting…" })).toHaveAttribute("aria-disabled", "true");
     release();
+    expect(await screen.findByText(CHURCH_DELETED)).toBeInTheDocument();
+    await waitFor(() => expect(sent(api, "GET", "/me")).toHaveLength(1));
+    expect(within(dialog).getByRole("button", { name: "Deleting…" })).toHaveAttribute("aria-disabled", "true");
+    expect(testRouter.replace).not.toHaveBeenCalled();
+    releaseMe();
     await waitFor(() => expect(testRouter.replace).toHaveBeenCalledWith("/welcome"));
     expect(sent(api, "DELETE", "/church")).toHaveLength(1);
   });
@@ -2267,7 +2274,7 @@ Run: `(cd frontend && npx vitest run src/components/app/confirm-dialog.test.tsx 
       Tests  7 passed (7)
 ```
 ```
-      Tests  18 passed (18)
+      Tests  24 passed (24)
 ```
 ```
 typecheck 0
@@ -2275,7 +2282,7 @@ lint 0
 ```
 ```
  Test Files  115 passed (115)
-      Tests  1040 passed (1040)
+      Tests  1046 passed (1046)
 ```
 
 - [ ] **Step 5: Commit**
@@ -2292,7 +2299,7 @@ refetched as on People); ConfirmDialog gains confirmDisabled." -m "Co-Authored-B
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `2236 passed, 49 skipped` (unchanged); frontend `1040 passed` in 115 files.
+Expected counts after this task: backend `2236 passed, 49 skipped` (unchanged); frontend `1046 passed` in 115 files.
 
 ### Task 4: Danger zone in the Settings nav (answer 5; 2026-10-09 answer 7; S "Settings nav"; acceptance 22's Danger zone half)
 
@@ -2401,7 +2408,7 @@ lint 0
 ```
 ```
  Test Files  115 passed (115)
-      Tests  1041 passed (1041)
+      Tests  1047 passed (1047)
 ```
 
 - [ ] **Step 5: Commit**
@@ -2414,7 +2421,7 @@ the final order of the owner's 6b answers." -m "Co-Authored-By: Claude Opus 5.5 
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `2236 passed, 49 skipped` (unchanged); frontend `1041 passed` in 115 files.
+Expected counts after this task: backend `2236 passed, 49 skipped` (unchanged); frontend `1047 passed` in 115 files.
 
 ## Docs, verification, the PR and the merge (T5-T8)
 
@@ -2442,13 +2449,13 @@ kept. The results go into `docs/ops-runbook.md` → "Slice 6b-2b record":
 what the screens show, never an email address, an invite link, a church id
 or a database URL.
 
-- [ ] (owner, after 6b-2b) **18.** On the phone, in the real church: **Settings** lists Church, Hymns, Liturgy, Prayers, Rubric, Bulletin, Contacts, People, Account, **Danger zone**. **Danger zone** shows **Leave {church}** with its button off and "You're the owner. Transfer ownership below before you leave.", **Transfer ownership** with **New owner**, and **Delete {church}**. **Delete church…** asks "Delete {church}?"; with the name typed in small letters **Delete church** stays off; **Cancel**. Nothing is changed here.
+- [ ] (owner, after 6b-2b) **18.** On the phone, in the real church: **Settings** lists Church, Hymns, Liturgy, Prayers, Rubric, Bulletin, Contacts, People, Account, **Danger zone**. **Danger zone** shows **Leave {church}** with its button off and either "You're the owner. Transfer ownership below before you leave." or, if the owner is the only person, "You're the only person in {church}. To stop using it, delete the church below."; **Transfer ownership** with **New owner** (or, alone, "Invite another member first to transfer ownership."); and **Delete {church}**. **Delete church…** asks "Delete {church}?"; with a plainly wrong word such as "xyz" typed (never the church's name) **Delete church** stays off; **Cancel**. Nothing is changed here.
 - [ ] (owner, after 6b-2b) **19.** From the church menu, create a church named **Delete me**. In it, **Settings → People → Create invite link** (Member), and join with the second Google account in a private window, as in item 12.
 - [ ] (owner, after 6b-2b) **20.** In the private window (the second account, a member of Delete me): **Danger zone** says "Only the owner can transfer ownership or delete the church." and shows **Leave Delete me** only. **Leave church…** asks "Leave Delete me?"; **Cancel**.
-- [ ] (owner, after 6b-2b) **21.** In your own window, Delete me's **Danger zone → New owner**: the second account is listed; choose it, **Transfer ownership…** asks "Make {name} the owner?"; **Transfer ownership**: "Ownership transferred. You are now an admin.", and the page turns to the short form (the note and Leave only; the Settings heading says "You're an admin of Delete me.").
+- [ ] (owner, after 6b-2b) **21.** In your own window, Delete me's **Danger zone → New owner**: the second account is listed; choose it, **Transfer ownership…** asks "Make {name} the owner?" and says {name} "will become the owner of Delete me" (check the church's name before going on); **Transfer ownership**: "Ownership transferred. You are now an admin.", and the page turns to the short form (the note and Leave only; the Settings heading says "You're an admin of Delete me.").
 - [ ] (owner, after 6b-2b) **22.** Still in your own window: **Leave church…** → **Leave church**: "You left Delete me.", and the app opens another of your churches with **no** "You no longer have access" message; Delete me is gone from the church menu.
-- [ ] (owner, after 6b-2b) **23.** In the private window (the second account, now Delete me's owner and only person; pull to reload): **Danger zone** shows Leave off with "You're the only person in Delete me. To stop using it, delete the church below.", and Transfer ownership says "Invite another member first to transfer ownership." with **Invite someone**. **Delete church…**: with "delete me" typed, **Delete church** stays off; with "Delete me", it turns on; tap it: "Church deleted.", then the welcome page (that account has no other church), with no "no longer have access" message.
-- [ ] (owner, after 6b-2b) **24.** At 375 px (the phone): no sideways scroll on Danger zone; the dialogs and the New owner list fit the screen; the keyboard does not cover the name box while typing; every button is easy to tap.
+- [ ] (owner, after 6b-2b) **23.** In the private window (the second account, now Delete me's owner and only person; pull to reload): **Danger zone** shows Leave off with "You're the only person in Delete me. To stop using it, delete the church below.", and Transfer ownership says "Invite another member first to transfer ownership." with **Invite someone**. **Delete church…**: with "delete me" typed, **Delete church** stays off; with "Delete me", it turns on; tap it: "Church deleted.", then the welcome page, or that account's other church, with no "no longer have access" message.
+- [ ] (owner, after 6b-2b) **24.** At 375 px (the phone): no sideways scroll on Danger zone; the dialogs and the New owner list fit the screen; the keyboard does not cover the name box while typing; every button is easy to tap. (A real removal toast and a real draft discard are not shown by these steps; jsdom tests cover them, as the 6b-2b plan's T8 names.)
 - [ ] (agent, after 6b-2b) **25.** `/health/ready` answers `{"ok":true,"db":"ok"}`; the app's `/settings/danger` is served (signed out, it sends you to sign in).
 ````
 
@@ -2473,7 +2480,7 @@ screen; and the agent's check." -m "Co-Authored-By: Claude Opus 5.5 <noreply@ant
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `2236 passed, 49 skipped` (unchanged); frontend `1041 passed` in 115 files.
+Expected counts after this task: backend `2236 passed, 49 skipped` (unchanged); frontend `1047 passed` in 115 files.
 
 ### Task 6: Verification (agent)
 
@@ -2504,7 +2511,7 @@ Run: `.venv/bin/python -m pytest -q 2>&1 | tail -1` then `(cd frontend && npx vi
 ```
 ```
  Test Files  115 passed (115)
-      Tests  1041 passed (1041)
+      Tests  1047 passed (1047)
 ```
 ```
 typecheck 0
@@ -2584,7 +2591,7 @@ trailer check done
 
 For each fix: change only the owning task's files; rerun Steps 2-3; commit `Fix: <what> (Task <n>, slice 6b-2b final verification)` with the trailer; after the PR exists, ask the owner before pushing it.
 
-Expected counts after this task: backend `2236 passed, 49 skipped` (unchanged); frontend `1041 passed` in 115 files.
+Expected counts after this task: backend `2236 passed, 49 skipped` (unchanged); frontend `1047 passed` in 115 files.
 
 ### Task 7: Before the PR: no migration, so no owner routine (agent; answer 7)
 
@@ -2607,13 +2614,13 @@ Run: `git diff --name-only origin/main...HEAD -- backend | wc -l` then `ls backe
 
 ### Task 8: The draft PR, the merge, the after-deploy check, the phone check, the record (OWNER + agent)
 
-**Files:** Modify (Step 13, the records PR): `docs/ops-runbook.md`: insert `### Slice 6b-2b record` right before `## Backups` (after the last record above it, today `### Slice 6b-2a record`, whose table's last row starts `| Follow-ups |`). A `###` heading, because `test_ops_workflows.py` pins the `##` list.
+**Files:** Modify (Step 15, the records PR): `docs/ops-runbook.md`: insert `### Slice 6b-2b record` right before `## Backups` (after the last record above it, today `### Slice 6b-2a record`, whose table's last row starts `| Follow-ups |`). A `###` heading, because `test_ops_workflows.py` pins the `##` list.
 
 - [ ] **Step 1 (agent → OWNER): Ask to open the draft PR**
 
 (not replayed) `gh pr list -R <repo> --head claude/slice-2-plan-4q33le --state open --json number,url` → `[]`. Send the owner exactly this, and wait for a clear yes:
 
-> The Danger zone page (slice 6b-2b) is verified on this machine: backend 2236 passed, 49 skipped (unchanged); frontend 1041 tests in 115 files (1010 in 113 before), typecheck, lint and the production build clean. It adds Settings → Danger zone: anyone but the owner can leave a church (it then opens another of their churches, without the "no longer have access" message, and drops that church's unsaved draft on this device); the owner can transfer ownership to someone else in the church, or delete the church after typing its exact name. There is no database change this time, so no backup or SQL check before it. May I open the pull request as a **draft** titled "Slice 6b-2b: Settings > Danger zone (leave, transfer ownership, delete)", so the checks run? Merging stays with you.
+> The Danger zone page (slice 6b-2b) is verified on this machine: backend 2236 passed, 49 skipped (unchanged); frontend 1047 tests in 115 files (1010 in 113 before), typecheck, lint and the production build clean. It adds Settings → Danger zone: anyone but the owner can leave a church (it then opens another of their churches, without the "no longer have access" message, and drops that church's unsaved draft on this device); the owner can transfer ownership to someone else in the church, or delete the church after typing its exact name. There is no database change this time, so no backup or SQL check before it. May I open the pull request as a **draft** titled "Slice 6b-2b: Settings > Danger zone (leave, transfer ownership, delete)", so the checks run? Merging stays with you.
 
 - [ ] **Step 2 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
 
@@ -2628,7 +2635,7 @@ Slice 6b-2b: Settings > Danger zone (the second of slice 6b-2's two PRs; owner's
 
 Before the PR: nothing (no migration; Task 7). After the merge: the after-deploy check, the phone check on a throwaway church with a second Google account (member view, transfer, leave, delete), a "Slice 6b-2b record" in docs/ops-runbook.md.
 
-Tests: backend 2236 → 2236 passed, 49 → 49 skipped (unchanged); frontend 1010 → 1041 in 113 → 115 files
+Tests: backend 2236 → 2236 passed, 49 → 49 skipped (unchanged); frontend 1010 → 1047 in 113 → 115 files
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 
@@ -2640,7 +2647,7 @@ gh pr create -R <repo> --draft --base main --head claude/slice-2-plan-4q33le \
 gh pr checks <N> -R <repo> --watch --interval 30
 ```
 
-Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `2236 passed, 49 skipped`, backend-postgres `49 passed, 2236 deselected`, frontend `1041 passed` in 115 files. Then send: "PR #<N> is green: the backend is unchanged (2236 passed, 49 skipped); 1041 frontend tests in 115 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R <repo>`.
+Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `2236 passed, 49 skipped`, backend-postgres `49 passed, 2236 deselected`, frontend `1047 passed` in 115 files. Then send: "PR #<N> is green: the backend is unchanged (2236 passed, 49 skipped); 1047 frontend tests in 115 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R <repo>`.
 
 - [ ] **Step 3 (agent → OWNER): Ask to merge, then merge**
 
@@ -2665,39 +2672,49 @@ curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' <app>/settings/danger
 
 **Expected:** `{"ok":true,"db":"ok"}`; `307 <app>/login?next=%2Fsettings%2Fdanger` (signed out, the page sends you to sign in). A `404` means Vercel has not published yet: wait a minute and ask again. Nothing for the owner to run.
 
-- [ ] **Step 5 (OWNER, then agent): Phone, step 1 of 7: the page in your church, read only (item 18)**
+- [ ] **Step 5 (OWNER, then agent): Phone, step 1 of 9: the page in your church, read only (item 18)**
 
-> On your phone, open the app and pull down to reload. Tap **Settings**: is **Danger zone** the last section, after Account? Tap it. Do you see **Leave {your church}** with its button greyed out and "You're the owner. Transfer ownership below before you leave.", then **Transfer ownership** with a **New owner** list, then **Delete {your church}**? Tap **Delete church…**, type your church's name in small letters: does **Delete church** stay greyed out? Tap **Cancel**. Please change nothing in this church.
+> On your phone, open the app and pull down to reload. Tap **Settings**, then **Danger zone** (the last section, after Account). Do you see **Leave {your church}** with its button greyed out and one of these two sentences: "You're the owner. Transfer ownership below before you leave." or "You're the only person in {your church}. To stop using it, delete the church below."? Below it, **Transfer ownership** with a **New owner** list, or, if you are the only person, "Invite another member first to transfer ownership."? And **Delete {your church}**? Then tap **Delete church…**, type **xyz** in the box (not your church's name), and check that **Delete church** stays greyed out. Tap **Cancel**. Please change nothing in this church.
 
-- [ ] **Step 6 (OWNER, then agent): Phone, step 2 of 7: a throwaway church (item 19)**
+- [ ] **Step 6 (OWNER, then agent): Phone, step 2 of 9: a throwaway church (item 19)**
 
-> Open the church menu at the top and create a new church named **Delete me** (it is only for this check and will be deleted at the end). In Delete me, open **Settings → People** and tap **Create invite link** (Member). Copy the link, open it in a **private window**, and join with your **second Google account**. Did Delete me open there?
+> Open the church menu at the top and create a new church named **Delete me** (it is only for this check and will be deleted at the end). Does the app now show Delete me?
 
-- [ ] **Step 7 (OWNER, then agent): Phone, step 3 of 7: the member's view (item 20)**
+- [ ] **Step 7 (OWNER, then agent): Phone, step 3 of 9: your second account joins (item 19)**
+
+> In Delete me, open **Settings → People**, tap **Create invite link** (Member) and copy the link. Open it in a **private window** and join with your **second Google account**. Did Delete me open there?
+
+- [ ] **Step 8 (OWNER, then agent): Phone, step 4 of 9: the member's view (item 20)**
 
 > In the private window (your second account, in Delete me): tap **Settings → Danger zone**. Does it say "Only the owner can transfer ownership or delete the church." with only **Leave Delete me** below? Tap **Leave church…**: does it ask "Leave Delete me?"? Tap **Cancel** (not Leave).
 
-- [ ] **Step 8 (OWNER, then agent): Phone, step 4 of 7: the transfer (item 21)**
+- [ ] **Step 9 (OWNER, then agent): Phone, step 5 of 9: the transfer (item 21)**
 
-> In your own window, in Delete me: **Settings → Danger zone**. In **New owner**, choose your second account, then tap **Transfer ownership…**. Does it ask "Make {name} the owner?"? Tap **Transfer ownership**. Do you see "Ownership transferred. You are now an admin.", and does the page now show the note and Leave only? Does the Settings heading say "You're an admin of Delete me."?
+> In your own window, in Delete me: **Settings → Danger zone**. In **New owner**, choose your second account, then tap **Transfer ownership…**. Before you go on: does the question say your second account "will become the owner of **Delete me**"? If it names any other church, tap **Cancel** and tell me. If it says Delete me, tap **Transfer ownership**. Do you see "Ownership transferred. You are now an admin.", the page with the note and Leave only, and "You're an admin of Delete me." in the Settings heading?
 
-- [ ] **Step 9 (OWNER, then agent): Phone, step 5 of 7: you leave (item 22)**
+- [ ] **Step 10 (OWNER, then agent): Phone, step 6 of 9: you leave (item 22)**
 
 > Still in your own window: tap **Leave church…**, then **Leave church**. Do you see "You left Delete me.", and does the app open your other church **without** a message "You no longer have access…"? Is Delete me gone from the church menu?
 
-- [ ] **Step 10 (OWNER, then agent): Phone, step 6 of 7: the new owner deletes it (item 23)**
+- [ ] **Step 11 (OWNER, then agent): Phone, step 7 of 9: the new owner's page (item 23)**
 
-> In the private window (your second account, now the owner and the only person in Delete me): pull down to reload, then **Settings → Danger zone**. Is Leave greyed out with "You're the only person in Delete me. To stop using it, delete the church below."? Does Transfer ownership say "Invite another member first to transfer ownership."? Tap **Delete church…** and type **delete me** in small letters: is **Delete church** greyed out? Change it to **Delete me**: is it on now? Tap it. Do you see "Church deleted." and then the welcome page, without a "no longer have access" message? You can close the private window afterwards.
+> In the private window (your second account, now the owner and the only person in Delete me): pull down to reload, then tap **Settings → Danger zone**. Is Leave greyed out with "You're the only person in Delete me. To stop using it, delete the church below."? Does Transfer ownership say "Invite another member first to transfer ownership."?
 
-- [ ] **Step 11 (OWNER, then agent): Phone, step 7 of 7: the phone screen (item 24)**
+- [ ] **Step 12 (OWNER, then agent): Phone, step 8 of 9: the new owner deletes it (item 23)**
+
+> Still in the private window: tap **Delete church…** and type **delete me** in small letters: is **Delete church** greyed out? Change it to **Delete me**: is it on now? Tap it. Do you see "Church deleted." and then the welcome page, or that account's other church, without a "no longer have access" message? You can close the private window afterwards.
+
+- [ ] **Step 13 (OWNER, then agent): Phone, step 9 of 9: the phone screen (item 24)**
 
 > Thinking back over these screens: was there any sideways scrolling on Danger zone? Did the dialogs and the New owner list fit the screen? Did the keyboard leave the name box visible while you typed? Were the buttons easy to tap?
 
-- [ ] **Step 12 (agent): The results**
+**What the phone check cannot show.** A real removal toast ("You no longer have access to {church}.", when someone else removes you) and a real draft discard are not part of this check: the owner leaves Delete me before the second account deletes it, so no window is still showing Delete me when it goes, and a discarded draft leaves nothing to see. They are covered by jsdom tests only: the removal toast by slice 1's `church-layout.test.tsx` tests "on 403 no_church_access says so, refetches /me and confirms the next church" and "on refocus, a /me that no longer lists the shown church says so and confirms the next one", T2's "says so again once the mark is 60 seconds old (slice 6b-2b)" and T3's "leaves a lost church to the app's one message, with no toast of its own"; the draft discard by T2's `church-exit.test.ts` "marks the church, cancels its requests, drops its draft keys, then /me, then its cache, in that order" and "still drops the draft keys and the cache when /me does not come back, and says so", and T3's "leaves after asking, says so, drops the draft and moves to the next church with no access toast" and "deletes only after the exact name is typed, then says so and moves on with no access toast".
 
-Write each step's result, with the date, into `<scratch>/6b2b-t8-results.md` (not committed). A step the owner could not do (no second account at hand, for example) is "Not checked" with the reason; Steps 8-10 then become: open the Transfer and Delete dialogs in Delete me as the owner, check them, **Cancel**, and delete Delete me as its only person (Step 10's checks). A problem the owner reports is a follow-up for the record (and for the owner to decide), not a change made now.
+- [ ] **Step 14 (agent): The results**
 
-- [ ] **Step 13 (agent): Write the record**
+Write each step's result, with the date, into `<scratch>/6b2b-t8-results.md` (not committed). A step the owner could not do (no second account at hand, for example) is "Not checked" with the reason; Steps 9-12 then become: open the Transfer and Delete dialogs in Delete me as the owner, check them, **Cancel**, and delete Delete me as its only person (Step 12's checks). A problem the owner reports is a follow-up for the record (and for the owner to decide), not a change made now.
+
+- [ ] **Step 15 (agent): Write the record**
 
 (not replayed)
 ```bash
@@ -2726,13 +2743,16 @@ database URL is recorded here.
 | Step | Result | Date |
 |---|---|---|
 | Merge and deploy | PR #<N> merged <UTC time> (<Eastern time>), merge commit `<short sha>`. CI on `main` (run <run id>): success. `/health/ready` `{"ok":true,"db":"ok"}`; `/settings/danger` signed out: 307 to sign in | <date> |
-| Phone 1. The page in the real church (read only) | <Danger zone last in the nav; Leave off with the transfer sentence; Transfer with New owner; Delete's button off for the name in small letters; cancelled. / …> | <date> |
-| Phone 2. A throwaway church | <"Delete me" created from the church menu; the second account joined with a single-use link in a private window. / …> | <date> |
-| Phone 3. The member's view | <The note and Leave only; the Leave dialog opened and cancelled. / …> | <date> |
-| Phone 4. Transfer | <"Make {name} the owner?"; "Ownership transferred. You are now an admin."; the page turned to the note and Leave; the heading said admin. / …> | <date> |
-| Phone 5. Leave | <"You left Delete me."; another church opened with no access message; Delete me gone from the menu. / …> | <date> |
-| Phone 6. Delete | <Leave off with the only-person sentence; "Invite another member first…"; the button off for small letters, on for the exact name; "Church deleted."; the welcome page with no access message. / …> | <date> |
-| Phone 7. The screen (<phone and browser>) | <No sideways scroll; dialogs and the list fit; the keyboard left the box visible; easy to tap. / …> | <date> |
+| Phone 1. The page in the real church (read only) | <Danger zone last in the nav; Leave off with the transfer sentence (or the only-person sentence); Transfer with New owner (or "Invite another member first…"); Delete's button off for "xyz"; cancelled. / …> | <date> |
+| Phone 2. A throwaway church | <"Delete me" created from the church menu. / …> | <date> |
+| Phone 3. The second account joins | <A single-use link; the second account joined in a private window. / …> | <date> |
+| Phone 4. The member's view | <The note and Leave only; the Leave dialog opened and cancelled. / …> | <date> |
+| Phone 5. Transfer | <The question named Delete me; "Ownership transferred. You are now an admin."; the page turned to the note and Leave; the heading said admin. / …> | <date> |
+| Phone 6. Leave | <"You left Delete me."; another church opened with no access message; Delete me gone from the menu. / …> | <date> |
+| Phone 7. The new owner's page | <Leave off with the only-person sentence; "Invite another member first…". / …> | <date> |
+| Phone 8. Delete | <The button off for small letters, on for the exact name; "Church deleted."; the welcome page (or that account's other church) with no access message. / …> | <date> |
+| Phone 9. The screen (<phone and browser>) | <No sideways scroll; dialogs and the list fit; the keyboard left the box visible; easy to tap. / …> | <date> |
+| Not on the phone | A real removal toast and a real draft discard: covered by jsdom tests only (T8 "What the phone check cannot show") | <date> |
 | Agent checks | Item 25: Step 4's two lines | <date> |
 | Follow-ups | <None. / One line per follow-up.> Slice 6b is done; next: <what the owner names> | <date> |
 ```
@@ -2755,7 +2775,7 @@ Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 
 **Expected:** `0`; `0`; `0`; `89 passed in <t>s`; one commit.
 
-- [ ] **Step 14 (agent, on the owner's yes): Push, open and merge the records PR**
+- [ ] **Step 16 (agent, on the owner's yes): Push, open and merge the records PR**
 
 Ask: "The slice 6b-2b record is written (docs/ops-runbook.md only). May I push it and open its PR?" On the yes (not replayed):
 
@@ -2777,7 +2797,7 @@ gh pr checks claude/slice-2-plan-4q33le -R <repo> --watch
 
 Code only (there is no migration to undo). On the owner's yes for each outward command, on a branch `claude/revert-6b2b` from `origin/main`: `git revert -m 1 --no-commit <merge sha>`, then keep the docs that rode along (`git checkout <merge sha> -- docs/ops-runbook.md docs/superpowers/plans/2026-10-10-slice-6b2b-danger-zone.md`), then the suites (frontend back to 1010 in 113 files), a commit "Revert slice 6b-2b (PR #<N>)" with the trailer, a PR, CI and the merge on the owner's yes; record it in the record.
 
-Expected counts after this task: backend `2236 passed, 49 skipped` on `main`; frontend `1041 passed` in 115 files. The records PR adds no test.
+Expected counts after this task: backend `2236 passed, 49 skipped` on `main`; frontend `1047 passed` in 115 files. The records PR adds no test.
 
 ---
 
@@ -2789,33 +2809,43 @@ Expected counts after this task: backend `2236 passed, 49 skipped` on `main`; fr
 - **The escapes lesson, a third time.** The first replay found T6 Step 3's stray-code-point check printing `4` and the em dash gate printing `1`, because the file writer had turned the `\u2028`, `\u2029`, `\ufffe`, `\uffff` escapes of the command, and the `\u2014` of T3's em dash test, into the characters themselves. Both are now written as escapes (the test reads `"\u2014"` in its source), and both checks print `0`.
 - **A double tap.** `PendingButton` already turns the confirm into a disabled "Leaving…" before a second tap lands in jsdom, so the ref guard alone is never what the test sees; the mutation check below removes both (the guard and the pending state) and the test then counts two requests.
 
-**Mutation checks** (each violation planted in the build worktree with T1-T5 applied, the named file or files run, the change undone; `danger-zone-page.test.tsx` unless named):
+**Mutation checks** (each violation planted in a worktree with T1-T4 applied, the named file or files run, the change undone; `danger-zone-page.test.tsx` unless named). The first 17 rows were planted while building; all 27 were planted again by the plan review's replay (below) against the final tests, and the results are those of that run:
 
 | Planted violation | Result |
 |---|---|
 | `runChurchExit` calls `membershipChanged` before cancelling and removing the draft keys | `church-exit.test.ts`: 1 failed, 1 passed |
 | `runChurchExit` keeps the draft keys | `church-exit.test.ts`: 2 failed |
-| `runChurchExit` does not mark the church | `church-exit.test.ts` and this file: 3 failed, 17 passed |
+| `runChurchExit` does not mark the church | `church-exit.test.ts` and this file: 3 failed, 23 passed |
 | The layout's `churchAccessLost` toast not guarded | `church-layout.test.tsx`: 1 failed, 17 passed |
-| The layout's `/me` toast not guarded | `church-layout.test.tsx` and this file: 3 failed, 33 passed (the leave and delete exits both toast) |
+| The layout's `/me` toast not guarded | `church-layout.test.tsx` and this file: 3 failed, 39 passed (the leave and delete exits both toast) |
 | The mark never expires | `church.test.ts`, `church-layout.test.tsx`: 2 failed, 24 passed |
-| `deleteNameMatches` ignores capitals | `people.test.ts` and this file: 2 failed, 39 passed |
-| `deleteNameMatches` does not trim | `people.test.ts` and this file: 2 failed, 39 passed |
-| Delete's confirm on before the name is typed (`confirmDisabled` dropped) | 1 failed, 17 passed |
-| The owner may leave (`leaveBlock` always null) | `people.test.ts` and this file: 5 failed, 36 passed |
-| Admins see the owner's cards | 3 failed, 15 passed |
-| Leave without the ref guard and never pending | 1 failed, 17 passed (two `POST /church/leave`) |
-| Delete without the ref guard and never pending | 1 failed, 17 passed (two `DELETE /church`) |
-| Leave's title without `[overflow-wrap:anywhere]` | 1 failed, 17 passed |
-| The Delete dialog without `wrapAnywhere` | 1 failed, 17 passed |
-| An em dash in "You're the owner…" | 2 failed, 16 passed |
-| The transfer does not refetch the profile | 2 failed, 16 passed (the toast-and-refetch test and the admin-form test) |
+| `deleteNameMatches` ignores capitals | `people.test.ts` and this file: 2 failed, 45 passed |
+| `deleteNameMatches` does not trim | `people.test.ts` and this file: 2 failed, 45 passed |
+| Delete's confirm on before the name is typed (`confirmDisabled` dropped) | 1 failed, 23 passed |
+| The owner may leave (`leaveBlock` always null) | `people.test.ts` and this file: 5 failed, 42 passed |
+| Admins see the owner's cards | 3 failed, 21 passed |
+| Leave without the ref guard and never pending | 2 failed, 22 passed (two `POST /church/leave`; and not "Leaving…" through the exit) |
+| Delete without the ref guard and never pending | 1 failed, 23 passed (two `DELETE /church`) |
+| Leave's title without `[overflow-wrap:anywhere]` | 1 failed, 23 passed |
+| The Delete dialog without `wrapAnywhere` | 1 failed, 23 passed |
+| An em dash in "You're the owner…" | 2 failed, 22 passed |
+| The transfer does not refetch the profile | 2 failed, 22 passed (the transfer test and the admin-form test) |
+| Leave's exit not awaited (`void exit`) | 1 failed, 23 passed ("keeps the dialog on Leaving… until the exit is done") |
+| Delete's exit not awaited (`void exit`) | 1 failed, 23 passed ("sends one delete for a double tap, stays on Deleting… through the exit…") |
+| Focus not moved to the heading after a transfer (`finalFocus={() => true}`) | 1 failed, 23 passed ("turns to the admin form inside the church layout once the transfer is done, focus on the heading") |
+| Delete's role 403 neither toasted nor refetched | 1 failed, 23 passed ("toasts a role refusal of the delete…") |
+| Leave also toasts a lost church (`isNoChurchAccess` dropped from its `onError`) | 1 failed, 23 passed ("leaves a lost church to the app's one message, with no toast of its own") |
+| A transfer target who has left stays chosen | 1 failed, 23 passed ("un-chooses a new owner who has left meanwhile…") |
+| A transfer 404 refetches the profile instead of the members | 1 failed, 23 passed ("toasts a transfer to someone who has left and refetches the members") |
+| Transfer without the ref guard and never pending | 1 failed, 23 passed ("sends one transfer for a double tap": two `POST /church/transfer-ownership`) |
+| A delete 422 toasted too (the form check dropped) | 1 failed, 23 passed ("says when the server finds the name does not match, under the box only…") |
+| A delete 422 does not refetch the profile | 1 failed, 23 passed (the same test) |
 
 With the real code every file passes.
 
 **Replay of the plan (2026-10-10).** A replay script parsed the plan's **Create**, **Append** and **In … replace** blocks, its "Run:" lines and its commit blocks, and applied T1-T7 in order onto a fresh detached worktree of the branch at the plan's first commit (`eafcccc`; scratchpad, the repo's `.venv` as a symlink, a hard-linked `frontend/node_modules`): all 45 directives applied (8 **Create**, 4 **Append**, 33 **In … replace**; every **In … replace** block occurred exactly once), all five commit blocks ran with the trailer, and its 42 commands' outputs are the ones quoted above (times as `<t>`), except the two gates fixed as described (escapes). The fixed plan was then replayed once more, with `--check`, onto another fresh worktree: see the last paragraph of these notes. The production build compiled and listed `/settings/danger`. Backend `2236 passed, 49 skipped` before and after (no backend file changes).
 
-**Not run while planning** (each marked "(not replayed)" where it appears): T8 (the pushes, the PR and CI, the merge, Vercel's and Railway's deploys, the after-deploy check, the phone check, the record and its PR) and T8 Step R. No headless browser was available in this session, so the 375 px wrapping is checked by class in jsdom only; the phone check's Step 11 is the real-device check. No local Postgres was needed (no backend change; CI's `backend-postgres` job still runs).
+**Not run while planning** (each marked "(not replayed)" where it appears): T8 (the pushes, the PR and CI, the merge, Vercel's and Railway's deploys, the after-deploy check, the phone check, the record and its PR) and T8 Step R. No headless browser was available in this session, so the 375 px wrapping is checked by class in jsdom only; the phone check's Step 13 is the real-device check. No local Postgres was needed (no backend change; CI's `backend-postgres` job still runs).
 
 **Replay of the fixed plan (2026-10-10).** The plan as committed at `ce8e02c` was replayed by the same script with `--check` onto a third fresh detached worktree of that commit: all 45 directives applied (8 **Create**, 4 **Append**, 33 **In … replace**, each **In … replace** block exactly once), all five commit blocks ran with the trailer, and all 42 commands of T1-T7 matched their quoted **Expected** blocks: 0 mismatches. Counts: backend `2236 passed, 49 skipped` before and after; frontend `1010` in 113 files before, `1041` in 115 files after. The three worktrees were removed afterwards.
 
@@ -2824,7 +2854,7 @@ With the real code every file passes.
 | Owner answer or spec item | Task(s) and tests |
 |---|---|
 | 2026-10-10 answer 1 (6b-2b's scope: the Danger zone, its nav entry, the exit, the mark, the layout check) | T1-T4 |
-| 2026-10-10 answer 3 (Delete on a throwaway church; the test churches kept; Leave and Transfer with the second account, else open and cancel) | T5 items 18-24; T8 Steps 5-12 |
+| 2026-10-10 answer 3 (Delete on a throwaway church; the test churches kept; Leave and Transfer with the second account, else open and cancel) | T5 items 18-24; T8 Steps 5-14 |
 | Answer 5: Leave for everyone, the owner blocked with the two explanations | T1 `leaveBlock` tests; T3 "shows member…", "shows admin…", "shows Leave off with why…", "tells the owner alone…" |
 | Answer 5: Transfer (others, admins first; confirm; refetch profile, /me, members; the non-owner form; Invite someone when alone) | T1 `transferCandidates`; T3 "transfers to the person chosen…", "turns to the admin form inside the church layout…", "tells the owner alone…" |
 | Answer 5: Delete (typed exact name; confirm; 422 under the box) | T1 `deleteNameMatches`; T3 "deletes only after the exact name…", "says when the server finds the name does not match…" |
@@ -2836,7 +2866,7 @@ With the real code every file passes.
 | S "Draft store" (the exit removes both draft keys at once) | T2 "marks the church, cancels…", "still drops the draft keys…"; T3 the leave and delete tests |
 | S UX "Every page" (skeletons, ErrorState with Retry, pending words, toasts, inline errors with focus, React text, 44 px) | T3 "shows the error state with Retry…", "says when the server finds the name…", the long-name tests |
 | S acceptance 15, 16, 18, 22 (Danger zone half) | T2, T3; T3; T3 and T5 item 24; T4 |
-| The binding rules (no em dashes; no real ids, emails or links in docs; no SQL in chat; frozen Streamlit untouched; no network in tests) | Global Constraints; T3 "has no em dash…"; T6 Step 3; T7; T8 Step 13's checks |
+| The binding rules (no em dashes; no real ids, emails or links in docs; no SQL in chat; frozen Streamlit untouched; no network in tests) | Global Constraints; T3 "has no em dash…"; T6 Step 3; T7; T8 Step 15's checks |
 
 S items **not** in 6b-2b: everything of 6b-1 and 6b-2a (shipped); S's `handleAuthErrors` meta test (no meta, clarification 2c); S manual check 7 (the Streamlit smoke check; Streamlit is retired, 2026-10-09 answer 2).
 
@@ -2849,11 +2879,11 @@ S items **not** in 6b-2b: everything of 6b-1 and 6b-2a (shipped); S's `handleAut
 
 Your 6b-2 planning answers of 2026-10-10 (all as recommended), your answers for this plan (the scope, the order of the exit, the phone check on a throwaway church) and your 6b answers of 2026-10-09 are binding and already in the plan. **There is no open question.** The few places where the plan departs from the design's wording follow an earlier answer or the code as it is (clarifications 2, 4, 6 and 9: the layout's two quiet paths instead of one line, both church names trimmed as the server does, a person without a name listed by email alone, the singular Delete sentence when the owner is alone); none changes what an owner can or cannot do. If you would rather have any of them as the design wrote it, say so and it is a one-line change in T1 or T3.
 
-Owner steps still to come: the draft PR on your yes and ready on your yes, the merge on your yes (no backup or SQL check this time), and a phone check in seven short steps, the last six in a throwaway church "Delete me" with your second Google account; then the records PR (T8).
+Owner steps still to come: the draft PR on your yes and ready on your yes, the merge on your yes (no backup or SQL check this time), and a phone check in nine short steps, the last eight in a throwaway church "Delete me" with your second Google account; then the records PR (T8).
 
 ## Self-review
 
-- **Coverage.** Every binding constraint has a home: 6b-2b's scope (clarification 1; T1-T4); the phone check on a throwaway church with the second account, the test churches kept (answer 4 (3); T5 items 18-24; T8 Steps 5-12); no migration and so no backup routine, said plainly (T7); no SQL in chat (Lessons carried; T7; T8 has none); no em dashes in user-facing copy (clarification 9; T3's test; T6 Step 3's grep); no real ids, emails or links in committed docs (fixtures use `@example.com`; commands use `<repo>`, `<api>`, `<app>`; T8 Step 13's grep); the frozen Streamlit files untouched (T6 Step 3); no network in tests (Global Constraints).
+- **Coverage.** Every binding constraint has a home: 6b-2b's scope (clarification 1; T1-T4); the phone check on a throwaway church with the second account, the test churches kept (answer 4 (3); T5 items 18-24; T8 Steps 5-14); no migration and so no backup routine, said plainly (T7); no SQL in chat (Lessons carried; T7; T8 has none); no em dashes in user-facing copy (clarification 9; T3's test; T6 Step 3's grep); no real ids, emails or links in committed docs (fixtures use `@example.com`; commands use `<repo>`, `<api>`, `<app>`; T8 Step 15's grep); the frozen Streamlit files untouched (T6 Step 3); no network in tests (Global Constraints).
 - **Placeholders.** None in T1-T7's code, tests, commands or expected outputs; every expected output is quoted from the replay. The `<…>` left are T8's runtime values, as in the earlier plans.
 - **Consistency.** Names agree across tasks: `markChurchExited`, `wasChurchExited`, `resetExitedChurchesForTests` (T1) are used by T2's exit and layout and by `setup-dom.ts`; `leaveBlock`, `deleteNameMatches`, `transferCandidates`, `transferChoiceLabel` (T1) by T3's cards; `runChurchExit`, `useExitChurch`, `EXIT_ME_FAILED` (T2) by T3's hooks and tests; `useTransferOwnership`, `useLeaveChurch`, `useDeleteChurch`, `deleteNameError`, `TRANSFERRED`, `leftChurch`, `CHURCH_DELETED` (T3) by its cards and tests; `confirmDisabled` (T3) by the Delete card.
 - **Not verified while planning:** the pushes, the PR and CI, Vercel's deploy, the page on a real phone (375 px in a real browser, the keyboard), the owner's checks: those are T8's steps. The 375 px wrapping is checked by class in jsdom only (no headless browser was at hand in this session; 6b-2a's build review measured the same classes in Chromium).
