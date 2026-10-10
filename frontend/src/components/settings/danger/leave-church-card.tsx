@@ -46,7 +46,9 @@ export function LeaveChurchCard({
       <h3 id="leave-title" className="text-base font-medium [overflow-wrap:anywhere]">
         Leave {churchName}
       </h3>
-      <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">{text}</p>
+      <p id="leave-why" className="text-sm text-muted-foreground [overflow-wrap:anywhere]">
+        {text}
+      </p>
       <div>
         <Button
           type="button"
@@ -54,6 +56,8 @@ export function LeaveChurchCard({
           size="touch"
           className="md:h-8"
           disabled={block !== null}
+          // the owner's button is off: the sentence above says why
+          aria-describedby={block !== null ? "leave-why" : undefined}
           onClick={() => {
             sent.current = false;
             setOpen(true);

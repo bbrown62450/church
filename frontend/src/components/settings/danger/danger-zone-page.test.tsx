@@ -129,6 +129,7 @@ describe("Settings → Danger zone: admins and members (slice 6b-2b)", () => {
       "You'll lose access to Grace's services, hymns and settings. To come back you'll need a new invite.",
     );
     expect(screen.getByRole("button", { name: "Leave church…" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Leave church…" })).not.toHaveAttribute("aria-describedby");
     expect(screen.queryByRole("button", { name: "Transfer ownership…" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Delete church…" })).toBeNull();
     expect(api.requests).toEqual([]);
@@ -244,6 +245,7 @@ describe("Settings → Danger zone: the owner (slice 6b-2b)", () => {
     ]);
     expect(screen.queryByRole("note")).toBeNull();
     expect(screen.getByRole("button", { name: "Leave church…" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Leave church…" })).toHaveAccessibleDescription(OWNER_MUST_TRANSFER);
     expect(screen.getByText(OWNER_MUST_TRANSFER)).toBeInTheDocument();
     expect(OWNER_MUST_TRANSFER).toBe("You're the owner. Transfer ownership below before you leave.");
     expect(screen.getByText(TRANSFER_TEXT)).toBeInTheDocument();
@@ -259,6 +261,7 @@ describe("Settings → Danger zone: the owner (slice 6b-2b)", () => {
     expect(await screen.findByText(ownerAloneText("Grace"))).toBeInTheDocument();
     expect(ownerAloneText("Grace")).toBe("You're the only person in Grace. To stop using it, delete the church below.");
     expect(screen.getByRole("button", { name: "Leave church…" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Leave church…" })).toHaveAccessibleDescription(ownerAloneText("Grace"));
     expect(screen.getByText(INVITE_FIRST, { exact: false })).toBeInTheDocument();
     expect(INVITE_FIRST).toBe("Invite another member first to transfer ownership.");
     expect(screen.getByRole("link", { name: "Invite someone" })).toHaveAttribute("href", "/settings/people");
