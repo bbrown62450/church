@@ -63,6 +63,10 @@ describe("buildInviteUrl", () => {
     vi.stubGlobal("window", { location: { origin: "https://app.example" } });
     expect(buildInviteUrl("Abc123")).toBe("https://app.example/join?code=Abc123");
   });
+
+  it("takes the code first and the origin second, as the People page calls it (slice 6b-2a)", () => {
+    expect(buildInviteUrl("abc", "http://localhost:3000")).toBe("http://localhost:3000/join?code=abc");
+  });
 });
 
 describe("safeHttpsUrl", () => {

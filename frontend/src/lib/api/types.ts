@@ -165,3 +165,24 @@ export type Prayer = components["schemas"]["PrayerOut"];
 export type PrayerType = Prayer["type"];
 export type PrayerLibraryBody = components["schemas"]["PrayerLibraryIn"];
 export type VoiceProfileDraft = components["schemas"]["VoiceProfileDraftOut"];
+
+/**
+ * Settings → People (slice 6b-2a; the routes are slice 6b-1's): `GET /members`
+ * (every member, with emails: the owner, admins, members, each by name) and one
+ * member (`name` null when blank, `is_me` on the caller's own row); `PATCH
+ * /members/{user_id}`'s body (member or admin, never owner) and `DELETE`'s
+ * answer (how many invites the removal revoked); `GET /invites` (owners and
+ * admins: the live links, newest first), one invite (its `code` is a bearer
+ * secret: never logged, never in a URL but the link the admin shares) and its
+ * creator (null once their account is gone); `POST /invites`'s body; and
+ * `DELETE /invites/{invite_id}`'s answer.
+ */
+export type MemberList = components["schemas"]["MemberListOut"];
+export type Member = components["schemas"]["MemberOut"];
+export type RoleChangeBody = components["schemas"]["RoleChangeIn"];
+export type MemberRemoved = components["schemas"]["RemovedOut"];
+export type InviteList = components["schemas"]["InviteListOut"];
+export type Invite = components["schemas"]["InviteOut"];
+export type InviteCreator = components["schemas"]["InviteCreatorOut"];
+export type InviteBody = components["schemas"]["InviteCreateIn"];
+export type InviteRevoked = components["schemas"]["RevokedOut"];

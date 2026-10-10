@@ -18,12 +18,16 @@ import type {
   Hymnals,
   HymnPage,
   HymnSuggestions,
+  Invite,
   InviteAccepted,
+  InviteList,
   InvitePreview,
   Lectionary,
   LiturgyConfig,
   LiturgyPrompts,
   LiturgySection,
+  Member,
+  MemberList,
   OutlineItem,
   Prayer,
   PrayerLibrary,
@@ -778,4 +782,65 @@ export function prayer(n: number, overrides: Partial<Prayer> = {}): Prayer {
 /** `GET /church/prayer-library` for an admin: these prayers and this profile. */
 export function prayerLibrary(prayers: Prayer[] = [], overrides: Partial<PrayerLibrary> = {}): PrayerLibrary {
   return { prayers, voice_profile: "", can_edit: true, ...overrides };
+}
+
+// --- slice 6b-2a: Settings → People -------------------------------------------------------------------------
+
+/** The people of Grace in the People tests: Pat Pastor is `USER_ID` (the viewer of `me()`). */
+export const PEOPLE = {
+  olive: "a0000000-0000-4000-8000-000000000001",
+  ann: "a0000000-0000-4000-8000-000000000002",
+  mo: "a0000000-0000-4000-8000-000000000003",
+  sam: "a0000000-0000-4000-8000-000000000004",
+} as const;
+
+/** One member of Grace: Mo Member unless overridden. */
+export function member(overrides: Partial<Member> = {}): Member {
+  return { user_id: PEOPLE.mo, email: "mo@example.com", name: "Mo Member", role: "member", is_me: false, ...overrides };
+}
+
+const ROLE_ORDER: Record<Member["role"], number> = { owner: 0, admin: 1, member: 2 };
+
+/**
+ * `GET /members` as Pat (`USER_ID`) sees it with `myRole`: Olive Owner (unless
+ * Pat is the owner), Ann Admin, Mo Member, sam@example.com (no name) and Pat,
+ * in the server's order (owner, admins, members; each by name, else email).
+ */
+export function memberList(myRole: Member["role"] = "admin"): MemberList {
+  const people: Member[] = [
+    member({ user_id: PEOPLE.ann, email: "ann@example.com", name: "Ann Admin", role: "admin" }),
+    member(),
+    member({ user_id: PEOPLE.sam, email: "sam@example.com", name: null }),
+    member({ user_id: USER_ID, email: "pat@example.com", name: "Pat Pastor", role: myRole, is_me: true }),
+  ];
+  if (myRole !== "owner") {
+    people.push(member({ user_id: PEOPLE.olive, email: "olive@example.com", name: "Olive Owner", role: "owner" }));
+  }
+  const key = (m: Member) => (m.name?.trim() || m.email).toLowerCase();
+  return { items: people.sort((a, b) => ROLE_ORDER[a.role] - ROLE_ORDER[b.role] || key(a).localeCompare(key(b))) };
+}
+
+/**
+ * One live invite: a single-use member link for anyone, made by Olive a
+ * minute ago, expiring in seven days less that minute (times are relative to
+ * now, so its row reads "Expires in 7 days"), unless overridden.
+ */
+export function invite(overrides: Partial<Invite> = {}): Invite {
+  const created = Date.now() - 60_000;
+  return {
+    id: "b0000000-0000-4000-8000-000000000001",
+    code: "abc",
+    email: null,
+    role: "member",
+    reusable: false,
+    created_at: new Date(created).toISOString(),
+    expires_at: new Date(created + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    created_by: { user_id: PEOPLE.olive, name: "Olive Owner", email: "olive@example.com" },
+    ...overrides,
+  };
+}
+
+/** `GET /invites`: these invites (none by default). */
+export function inviteList(items: Invite[] = []): InviteList {
+  return { items };
 }
