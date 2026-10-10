@@ -22,6 +22,9 @@ import { renderWithProviders } from "@/test/render";
 import { EMAIL_HELP, INVITE_CREATED, ONE_EMAIL_ONCE, REUSABLE_HELP, ROLE_HELP } from "./create-invite-form";
 import { MEMBERS_NOTE } from "./members-list";
 
+/** Breaks a long email anywhere, so it wraps at 375 px instead of widening the page (as the rows do). */
+const WRAP = "[overflow-wrap:anywhere]";
+
 /** The invite codes in these tests' fixtures: none may reach the console (codes are never logged). */
 const FIXTURE_CODES = ["abc", "r-123", "r-1"];
 const CONSOLE_METHODS = ["debug", "error", "info", "log", "trace", "warn"] as const;
@@ -212,6 +215,10 @@ describe("Settings → People: Members (slice 6b-2a)", () => {
     await waitFor(() => expect(rows()).toHaveLength(4));
     dialog = await openRemove(user, "sam@example.com");
     await waitFor(() => expect(within(dialog).getByText("The 1 invite link sam@example.com created will stop working.")).toBeInTheDocument());
+    // an email-only name wraps anywhere in the title, the description and the body
+    expect(within(dialog).getByText("Remove sam@example.com?")).toHaveClass(WRAP);
+    expect(within(dialog).getByText("sam@example.com will lose access to Grace. Services they saved stay in the archive.")).toHaveClass(WRAP);
+    expect(within(dialog).getByText("The 1 invite link sam@example.com created will stop working.").closest(`.${CSS.escape(WRAP)}`)).not.toBeNull();
     expect(within(dialog).queryByRole("checkbox")).toBeNull();
     await user.click(within(dialog).getByRole("button", { name: "Remove member" }));
     await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
@@ -435,7 +442,7 @@ describe("Settings → People: Invite someone and Pending invites (slice 6b-2a)"
     await user.click(form.getByRole("button", { name: "Create invite link" }));
     const panel = await screen.findByRole("group", { name: "Invite link ready" });
     expect(invitesSent(api, "POST")[0].body).toEqual({ role: "member", email: "b@example.com", reusable: false });
-    expect(within(panel).getByText(/^Only b@example\.com can use this link to join Grace as a member\. It works once and expires .+\.$/)).toBeInTheDocument();
+    expect(within(panel).getByText(/^Only b@example\.com can use this link to join Grace as a member\. It works once and expires .+\.$/)).toHaveClass(WRAP);
     expect(form.getByLabelText("Email (optional)")).toHaveValue("");
   });
 
@@ -447,6 +454,7 @@ describe("Settings → People: Invite someone and Pending invites (slice 6b-2a)"
     await user.type(email, "b@example.com");
     await user.click(form.getByRole("button", { name: "Create invite link" }));
     expect(await form.findByRole("alert")).toHaveTextContent(pending);
+    expect(form.getByRole("alert")).toHaveClass(WRAP);
     await waitFor(() => expect(email).toHaveFocus());
     expect(email).toHaveAttribute("aria-invalid", "true");
     expect(email).toHaveValue("b@example.com");

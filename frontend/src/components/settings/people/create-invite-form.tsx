@@ -125,7 +125,7 @@ export function CreateInviteForm({ churchName }: { churchName: string }) {
             }}
           />
           {errors.email ? (
-            <p id="invite-email-error" role="alert" className="text-sm text-destructive">
+            <p id="invite-email-error" role="alert" className="text-sm text-destructive [overflow-wrap:anywhere]">
               {errors.email}
             </p>
           ) : null}

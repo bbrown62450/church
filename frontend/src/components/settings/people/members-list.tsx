@@ -246,12 +246,13 @@ function RemoveMemberDialog({
       confirmLabel="Remove member"
       pendingLabel="Removing…"
       destructive
+      wrapAnywhere
       pending={pending}
       finalFocus={finalFocus}
       onConfirm={() => onConfirm(showBox && revokeReusable)}
     >
       {sentence !== null || showBox ? (
-        <div className="grid gap-3 text-sm">
+        <div className="grid gap-3 text-sm [overflow-wrap:anywhere]">
           {sentence !== null ? <p className="text-muted-foreground">{sentence}</p> : null}
           {showBox ? (
             <div className="grid gap-1">

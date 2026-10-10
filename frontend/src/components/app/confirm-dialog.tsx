@@ -29,6 +29,8 @@ export type ConfirmDialogProps = {
   /** The confirm button's words while `pending` ("Removing…"; slice 6b-2a): "Saving…" unless given. */
   pendingLabel?: string;
   destructive?: boolean;
+  /** Breaks the title and description anywhere (`[overflow-wrap:anywhere]`), for one that may hold a long email (slice 6b-2a). */
+  wrapAnywhere?: boolean;
   /** Called by the cancel button only; Escape and a click outside just close. */
   onCancel?(): void;
   /**
@@ -58,6 +60,7 @@ export function ConfirmDialog({
   pending = false,
   pendingLabel,
   destructive = false,
+  wrapAnywhere = false,
   onCancel,
   finalFocus,
   children,
@@ -66,8 +69,12 @@ export function ConfirmDialog({
     <AlertDialog open={open} onOpenChange={(next) => onOpenChange(next)}>
       <AlertDialogContent {...(finalFocus === undefined ? {} : { finalFocus })}>
         <AlertDialogHeader>
-          <AlertDialogTitle>{title}</AlertDialogTitle>
-          {description ? <AlertDialogDescription>{description}</AlertDialogDescription> : null}
+          <AlertDialogTitle className={wrapAnywhere ? "[overflow-wrap:anywhere]" : undefined}>{title}</AlertDialogTitle>
+          {description ? (
+            <AlertDialogDescription className={wrapAnywhere ? "[overflow-wrap:anywhere]" : undefined}>
+              {description}
+            </AlertDialogDescription>
+          ) : null}
         </AlertDialogHeader>
         {children}
         <AlertDialogFooter>

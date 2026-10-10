@@ -47,7 +47,7 @@ export function InviteLinkPanel({ invite, churchName, onDone }: { invite: Invite
           onFocus={(event) => event.currentTarget.select()}
         />
       </div>
-      <p className="text-sm text-muted-foreground">{inviteSummary(invite, churchName, (iso) => formatDateTime(iso))}</p>
+      <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">{inviteSummary(invite, churchName, (iso) => formatDateTime(iso))}</p>
       <div className="flex flex-col gap-2 sm:flex-row">
         <CopyLinkButton ref={copyRef} text={url} onCopyFailed={selectLink} size="touch" className="w-full sm:w-fit" />
         {canShare ? (
