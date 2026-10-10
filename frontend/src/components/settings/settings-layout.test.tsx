@@ -21,6 +21,18 @@ function renderShell(role: Church["role"], path = "/settings/church") {
 }
 
 describe("the Settings area (slice 6a-1)", () => {
+  it("lets a long church name wrap in who you are, so the page fits 375 px (slice 6b-2b review)", () => {
+    const long = "TheVeryLongChurchNameThatNeverEndsWithoutASingleSpaceAnywhereInItsWholeLengthAtAll";
+    const active = church({ role: "owner", name: long });
+    renderWithProviders(
+      <SettingsLayout>
+        <p>The section</p>
+      </SettingsLayout>,
+      { me: me({ churches: [active] }), church: active, path: "/settings/danger" },
+    );
+    expect(screen.getByText(`You're the owner of ${long}.`)).toHaveClass("[overflow-wrap:anywhere]");
+  });
+
   it("shows the heading, who you are in the church, and the sections with the current one marked", () => {
     const { unmount } = renderShell("admin");
     expect(screen.getByRole("heading", { level: 1, name: "Settings" })).toBeInTheDocument();

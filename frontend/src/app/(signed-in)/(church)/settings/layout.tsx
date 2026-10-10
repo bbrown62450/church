@@ -18,7 +18,12 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
   const church = useChurch();
   return (
     <main className="mx-auto grid w-full max-w-5xl content-start gap-4 px-4 py-4">
-      <PageHeader title="Settings" description={`You're ${YOU_ARE[church.role]} of ${church.name}.`} />
+      <PageHeader
+        title="Settings"
+        description={`You're ${YOU_ARE[church.role]} of ${church.name}.`}
+        // a long church name with no spaces wraps instead of widening the page
+        descriptionClassName="[overflow-wrap:anywhere]"
+      />
       <div className="grid gap-4 md:grid-cols-[11rem_minmax(0,1fr)] md:items-start">
         <SettingsNav />
         <div className="min-w-0 max-w-3xl">{children}</div>
