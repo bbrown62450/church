@@ -73,11 +73,20 @@ export function TransferOwnershipCard({
                 id="transfer-new-owner"
                 className="h-11 w-full min-w-0 overflow-hidden data-[size=default]:h-11 md:h-9 md:data-[size=default]:h-9"
               >
-                <SelectValue placeholder="Choose a person" />
+                <SelectValue placeholder="Choose a person" className="min-w-0">
+                  {/* A long name is shortened with an ellipsis here; the list below wraps it. */}
+                  {(value: string | null) => (
+                    <span className="truncate">{value === null ? "Choose a person" : items[value]}</span>
+                  )}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {candidates.map((m) => (
-                  <SelectItem key={m.user_id} value={m.user_id} className="[overflow-wrap:anywhere]">
+                  <SelectItem
+                    key={m.user_id}
+                    value={m.user_id}
+                    textClassName="whitespace-normal [overflow-wrap:anywhere]"
+                  >
                     {items[m.user_id]}
                   </SelectItem>
                 ))}

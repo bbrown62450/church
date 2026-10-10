@@ -518,12 +518,31 @@ describe("Settings → Danger zone: the copy and the phone screen (slice 6b-2b)"
     expect(screen.getByRole("heading", { level: 3, name: `Delete ${long}` })).toHaveClass(WRAP);
     expect(screen.getByText(deleteText(long))).toHaveClass(WRAP);
     expect(screen.getByText(OWNER_MUST_TRANSFER)).toHaveClass(WRAP);
-    expect(screen.getByRole("combobox", { name: "New owner" })).toHaveClass("w-full", "min-w-0", "overflow-hidden");
     await user.click(screen.getByRole("button", { name: "Delete church…" }));
     const dialog = await screen.findByRole("alertdialog");
     expect(within(dialog).getByRole("heading", { name: `Delete ${long}?` })).toHaveClass(WRAP);
     expect(within(dialog).getByText(deleteBody(long, 4))).toHaveClass(WRAP);
     expect(within(dialog).getByText(`Type ${long} to confirm`)).toHaveClass(WRAP);
+  });
+
+  it("wraps a long new owner's name in the list and shortens it with an ellipsis once chosen", async () => {
+    const label = "Margaret Thompson-Williams (margaret.thompson.williams@gmail.com)";
+    const margaret = member({ email: "margaret.thompson.williams@gmail.com", name: "Margaret Thompson-Williams" });
+    const { user } = renderPage("owner", { "GET /members": { items: [...alone().items, margaret] } });
+    const trigger = await screen.findByRole("combobox", { name: "New owner" });
+    expect(trigger).toHaveClass("w-full", "min-w-0", "overflow-hidden");
+    await user.click(trigger);
+    const option = await screen.findByRole("option", { name: label });
+    // The element holding the text is the one that must wrap (the option row around it cannot).
+    const text = within(option).getByText(label);
+    expect(text).not.toHaveClass("whitespace-nowrap");
+    expect(text).toHaveClass("whitespace-normal", WRAP);
+    await user.click(option);
+    // The chosen name stays whole in the text (and so for a screen reader), shortened only on screen.
+    await waitFor(() => expect(screen.queryByRole("option")).toBeNull());
+    const shown = within(trigger).getByText(label);
+    expect(shown).toHaveClass("truncate");
+    expect(shown.parentElement).toHaveClass("min-w-0");
   });
 
   it("lets a long church name wrap in the Leave dialog too", async () => {
