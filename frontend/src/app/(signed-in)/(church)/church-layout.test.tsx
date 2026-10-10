@@ -425,6 +425,47 @@ describe("(church) layout", () => {
     expect(toastError).not.toHaveBeenCalled();
   });
 
+  it("still says so for another church lost within 60 seconds of leaving one (slice 6b-2b)", async () => {
+    const TRINITY = church({ id: CHURCH_IDS.trinity, name: "Trinity", role: "member" });
+    let churches = [GRACE, HOPE, TRINITY];
+    installFakeApi({
+      "GET /me": () => me({ churches }),
+      "GET /church": (req: RecordedRequest) => churchById(...churches)(req),
+    });
+    const { queryClient } = renderShell();
+    expect(await screen.findByText("Showing Grace")).toBeInTheDocument();
+
+    // Grace left here: the next church is picked quietly.
+    markChurchExited(GRACE.id);
+    churches = [HOPE, TRINITY];
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: keys.me() });
+    });
+    expect(await screen.findByText("Showing Hope")).toBeInTheDocument();
+    expect(toastError).not.toHaveBeenCalled();
+
+    // Hope removed by someone else a moment later: that loss is said.
+    churches = [TRINITY];
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: keys.me() });
+    });
+    expect(await screen.findByText("Showing Trinity")).toBeInTheDocument();
+    expect(toastError.mock.calls).toEqual([["You no longer have access to Hope."]]);
+  });
+
+  it("still says so for another church refused within 60 seconds of leaving one (slice 6b-2b)", async () => {
+    markChurchExited(GRACE.id);
+    installFakeApi({
+      "GET /me": me({ churches: [HOPE, church({ id: CHURCH_IDS.trinity, name: "Trinity", role: "member" })] }),
+      "GET /church": churchById(church({ id: CHURCH_IDS.trinity, name: "Trinity", role: "member" })),
+    });
+
+    renderShell();
+
+    expect(await screen.findByText("Showing Trinity")).toBeInTheDocument();
+    expect(toastError.mock.calls).toEqual([["You no longer have access to Hope."]]);
+  });
+
   it("says so again once the mark is 60 seconds old (slice 6b-2b)", async () => {
     markChurchExited(GRACE.id, Date.now() - 60_000);
     installFakeApi({
