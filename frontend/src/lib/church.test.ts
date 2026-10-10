@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   type Church,
+  forgetChurchExited,
   isAdmin,
   markChurchExited,
   pickActiveChurch,
@@ -67,5 +68,13 @@ describe("markChurchExited / wasChurchExited (slice 6b-2b)", () => {
     expect(wasChurchExited("c2", 1_000)).toBe(false);
     expect(wasChurchExited("c1", 61_000)).toBe(false);
     expect(wasChurchExited("c1", 1_000)).toBe(false); // the expired mark is gone
+  });
+
+  it("forgets one church's mark when it is listed again, keeping the others", () => {
+    markChurchExited("c1", 1_000);
+    markChurchExited("c2", 1_000);
+    forgetChurchExited("c1");
+    expect(wasChurchExited("c1", 1_000)).toBe(false);
+    expect(wasChurchExited("c2", 1_000)).toBe(true);
   });
 });

@@ -12,7 +12,7 @@ import { act, renderHook, screen, waitFor, within } from "@testing-library/react
 import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 
-import { type Church, markChurchExited } from "@/lib/church";
+import { type Church, markChurchExited, storeChurchId } from "@/lib/church";
 import { useChurch } from "@/lib/church-context";
 import { makeQueryClient, useApi } from "@/lib/queries/client";
 import { keys } from "@/lib/queries/keys";
@@ -464,6 +464,38 @@ describe("(church) layout", () => {
 
     expect(await screen.findByText("Showing Trinity")).toBeInTheDocument();
     expect(toastError.mock.calls).toEqual([["You no longer have access to Hope."]]);
+  });
+
+  it("says so for a church rejoined and then lost within 60 seconds of leaving it (slice 6b-2b)", async () => {
+    let churches = [GRACE, HOPE];
+    installFakeApi({
+      "GET /me": () => me({ churches }),
+      "GET /church": (req: RecordedRequest) => churchById(...churches)(req),
+    });
+    const { queryClient } = renderShell();
+    expect(await screen.findByText("Showing Grace")).toBeInTheDocument();
+    const refetchMe = () =>
+      act(async () => {
+        await queryClient.invalidateQueries({ queryKey: keys.me() });
+      });
+
+    markChurchExited(GRACE.id);
+    churches = [HOPE];
+    await refetchMe();
+    expect(await screen.findByText("Showing Hope")).toBeInTheDocument();
+
+    // Rejoined with a new invite: /me lists Grace again, and Grace is chosen.
+    churches = [GRACE, HOPE];
+    await refetchMe();
+    await waitFor(() => expect(within(header()).getByText("Hope")).toBeInTheDocument());
+    act(() => storeChurchId(GRACE.id));
+    expect(await screen.findByText("Showing Grace")).toBeInTheDocument();
+
+    // Removed by an admin a moment later: that loss is said.
+    churches = [HOPE];
+    await refetchMe();
+    expect(await screen.findByText("Showing Hope")).toBeInTheDocument();
+    expect(toastError.mock.calls).toEqual([["You no longer have access to Grace."]]);
   });
 
   it("says so again once the mark is 60 seconds old (slice 6b-2b)", async () => {

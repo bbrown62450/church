@@ -106,8 +106,8 @@ export function markChurchExited(id: string, at: number = Date.now()): void {
 }
 
 /**
- * True for 60 s after `markChurchExited(id)`. A later loss of the same church
- * (rejoined, then removed) shows the toast again.
+ * True for 60 s after `markChurchExited(id)`, unless `forgetChurchExited(id)`
+ * came first. A later loss of the same church shows the toast again.
  */
 export function wasChurchExited(id: string, now: number = Date.now()): boolean {
   const at = exitedAt.get(id);
@@ -115,6 +115,14 @@ export function wasChurchExited(id: string, now: number = Date.now()): boolean {
   if (now - at < EXITED_MARK_MS) return true;
   exitedAt.delete(id);
   return false;
+}
+
+/**
+ * Drops `id`'s mark: `/me` lists the church again (rejoined with a new
+ * invite), so losing it again, even within the 60 s, is said.
+ */
+export function forgetChurchExited(id: string): void {
+  exitedAt.delete(id);
 }
 
 /** Forget every mark (test isolation). */

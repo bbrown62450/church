@@ -20,7 +20,8 @@
  *    before the 403 on refocus) toasts the same message once. Neither path
  *    toasts for a church the user has just left or deleted here
  *    (`wasChurchExited`, slice 6b-2b): it is still excluded and `/me`
- *    refetched, so the next church is picked quietly.
+ *    refetched, so the next church is picked quietly. The church's return
+ *    to `/me` (rejoined) drops that mark.
  * 6. A switch stores the new id. Once the old church is no longer shown, its
  *    `["church", oldId]` queries are cancelled and removed.
  * 7. The header and the page share a viewport-high flex column, so a page can
@@ -40,7 +41,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError } from "@/lib/api/client";
 import { isNoChurchAccess } from "@/lib/api/errors";
 import { isSigningOut, useSignOut } from "@/lib/auth";
-import { type Church, pickActiveChurch, storeChurchId, useStoredChurchId, wasChurchExited } from "@/lib/church";
+import {
+  type Church,
+  forgetChurchExited,
+  pickActiveChurch,
+  storeChurchId,
+  useStoredChurchId,
+  wasChurchExited,
+} from "@/lib/church";
 import { ChurchProvider } from "@/lib/church-context";
 import { useMeContext } from "@/lib/me-context";
 import { authEvents } from "@/lib/queries/auth-events";
@@ -105,6 +113,18 @@ export default function ChurchLayout({ children }: { children: ReactNode }) {
     if (!me.churches.some((c) => c.id === shown.id) && !wasChurchExited(shown.id)) {
       toast.error(`You no longer have access to ${shown.name}.`);
     }
+  }, [me.churches]);
+
+  // Step 5, the mark's end: a church that comes back into `/me` after a
+  // `/me` without it (rejoined with a new invite) is no longer one just left
+  // here, so losing it again is said. Only a return counts: the exit marks
+  // the church while `/me` still lists it.
+  const listedRef = useRef<ReadonlySet<string> | null>(null);
+  useEffect(() => {
+    const before = listedRef.current;
+    listedRef.current = new Set(me.churches.map((c) => c.id));
+    if (before === null) return;
+    for (const c of me.churches) if (!before.has(c.id)) forgetChurchExited(c.id);
   }, [me.churches]);
 
   // Step 6: runs after the render that stopped showing the old church, so no
