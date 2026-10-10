@@ -839,6 +839,30 @@ read them before. No address, name, token or church id is recorded here.
 | Agent checks | Not run: this session has no sign-in for a test church | 2026-10-08 |
 | Follow-ups | On a computer the Save bar also steps aside while a box has focus (scroll or Tab to Save). Next: 6a-3b (Prayers, with the AI voice profile), then 6b (People) and Hear it from the pews | 2026-10-08 |
 
+### Slice 6a-3b record
+
+Slice 6a-3b (Prayers in Settings: the prayer library and the voice profile in
+`churches.settings`, `GET` and `PUT /church/prayer-library` with the save under
+the church-row lock and the caller's role re-read, and `POST
+/church/prayer-library/voice-profile-draft`, an admin-only AI draft that is
+never stored by itself; prayer text is never logged, and the OpenAI library's
+logger is held at INFO) merged as PR #58, the second of slice 6a-3's two PRs
+and the last of slice 6a. No database change and no new package; production
+stays at `0007_bulletin_images`. The owner's check was four steps on a phone.
+The owner chose to keep one real prayer in the library and kept the empty
+voice profile. No prayer text, name, address, token or church id is recorded
+here.
+
+| Step | Result | Date |
+|---|---|---|
+| Merge and deploy | PR #58 merged 12:59 UTC (08:59 Eastern), merge commit `3550645`. CI on `main`: backend, backend-postgres and frontend success | 2026-10-09 |
+| 1. Finding the page | Settings lists Church, Hymns, Liturgy, Prayers, Rubric, Bulletin, Contacts, Account; the Prayers page started with no prayers and an empty voice profile | 2026-10-09 |
+| 2. A prayer (kept) | An untyped save showed "Choose a prayer type."; one Call to Worship prayer was saved and kept | 2026-10-09 |
+| 3. The draft profile | Update from my prayers was greyed with "Save your prayers first." while a row was unsaved and came back after Remove; a real AI draft appeared with Use this draft and Keep mine; the owner chose Keep mine, so the profile stays empty | 2026-10-09 |
+| 4. The phone screen | Eight links easy to tap, no sideways scroll; the edit box stayed visible with the keyboard open and Save was reachable | 2026-10-09 |
+| Agent checks | Not run: this session has no sign-in for a test church | 2026-10-09 |
+| Follow-ups | The Prayers page is readable by every member (the page says so). Slice 6a (Settings) is complete. Next: 6b (People), then Hear it from the pews | 2026-10-09 |
+
 ## Backups
 
 - **Workflow:** `.github/workflows/backup.yml` (`db-backup`). Daily at 08:37 UTC,

@@ -118,23 +118,31 @@ def list_user_churches(user_id) -> list:
         return [{"id": r.id, "name": r.name, "role": r.role} for r in rows]
 
 
-def soft_delete_church(church_id) -> None:
+def soft_delete_church(church_id, *, session: Optional[Session] = None) -> bool:
     """Soft-delete the church (excluded from every query afterward) and revoke
-    all still-pending invites for it."""
-    with session_scope() as session:
-        church = session.get(Church, church_id)
-        if church is None or church.deleted_at is not None:
-            return
-        church.deleted_at = _dt.datetime.now(_dt.timezone.utc)
-        session.execute(
-            update(Invite)
-            .where(
-                Invite.church_id == church_id,
-                Invite.revoked.is_(False),
-                Invite.accepted_at.is_(None),
-            )
-            .values(revoked=True)
-        )
+    every unrevoked invite of it, a used reusable link included (slice 6b;
+    inv §1 B3). True when this call deleted it; False when it was missing or
+    already deleted. Runs in the caller's `session` (DELETE /church, under
+    the church-row lock) or in its own scope."""
+    cid = as_uuid(church_id)
+    if session is not None:
+        return _soft_delete_church(session, cid)
+    with session_scope() as own:
+        return _soft_delete_church(own, cid)
+
+
+def _soft_delete_church(session, church_id) -> bool:
+    church = session.get(Church, church_id)
+    if church is None or church.deleted_at is not None:
+        return False
+    church.deleted_at = _dt.datetime.now(_dt.timezone.utc)
+    session.execute(
+        update(Invite)
+        .where(Invite.church_id == church_id, Invite.revoked.is_(False))
+        .values(revoked=True)
+        .execution_options(synchronize_session=False)
+    )
+    return True
 
 
 def update_church(church_id, *, name=None, timezone=None, settings=None) -> None:

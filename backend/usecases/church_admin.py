@@ -1,7 +1,9 @@
 """Church administration (6a spec, `usecases/church_admin.py`): the writes an
 owner or admin makes to the church itself. Slice 6a-1 has the profile
 (PATCH /church); 6a-3a the liturgy prompts and the rubric (and their
-reads); 6a-3b and 6b add their writes here.
+reads); 6a-3b and 6b add their writes here (6b-1: transfer ownership,
+leave and delete, which check usecases.role_policy instead of
+require_admin_role).
 
 Every write opens one session, starts with
 usecases.members.lock_and_read_actor (the church-row lock and the caller's
@@ -9,6 +11,7 @@ role re-read under it) and then require_admin_role on that re-read role, so
 an admin demoted after require_admin ran gets the role 403 and nothing is
 written. No FastAPI, Starlette or Streamlit here (usecases/__init__.py).
 """
+import logging
 import re
 import uuid
 from collections.abc import Collection, Mapping
@@ -17,15 +20,19 @@ import liturgy_prompts
 import scripture_fetcher
 import service_rubric
 from db import session_scope
+from db.ids import as_uuid
 from bulletin_settings import NOT_ONE_LINE
-from domain_errors import Forbidden, InvalidInput
+from domain_errors import Conflict, Forbidden, InvalidInput, NotFound
 from liturgy_config import SECTION_LABELS
-from repos import churches
+from repos import churches, memberships
 from repos import hymns as hymn_repo
+from repos.memberships import LastAdminError
 from tenancy import is_admin
 from timezones import is_valid_timezone
-from usecases import archive
-from usecases.members import lock_and_read_actor
+from usecases import archive, role_policy
+from usecases.members import MEMBER_NOT_FOUND, lock_and_read_actor, member_out
+
+logger = logging.getLogger(__name__)
 
 # require_admin's message (api/deps.py): one wording for the role 403.
 ADMINS_ONLY_MESSAGE = "Only church admins can do this."
@@ -202,3 +209,64 @@ def update_rubric(church_id: uuid.UUID, actor_id: uuid.UUID, patch: object) -> d
             raise InvalidInput(str(exc), code="invalid_rubric") from None
         overrides = churches.get_church_rubric_overrides(church_id, session=s)
     return rubric_out(overrides)
+
+
+# --- Ownership, leaving and deleting (slice 6b-1; 6b spec, "Transactions and locking") ---------------------
+
+NAME_MISMATCH = "Church name did not match."
+
+
+def transfer_ownership(church_id: uuid.UUID, actor_id: uuid.UUID, target_id) -> list[dict]:
+    """POST /church/transfer-ownership: in one transaction under the
+    church-row lock, with the caller's role re-read under it,
+    role_policy.check_transfer (only the owner; not to oneself, a 422 naming
+    user_id), then the target must be a member of this church (404), then
+    repos.memberships.transfer_ownership demotes the caller to admin and then
+    promotes the target to owner. Two transfers at once serialize on the lock:
+    the second re-reads its role as admin and gets the owner-only 403.
+    Returns the members as GET /members lists them, afterwards."""
+    actor_id, target_id = as_uuid(actor_id), as_uuid(target_id)
+    with session_scope() as s:
+        role = lock_and_read_actor(s, church_id, actor_id)
+        role_policy.check_transfer(actor_id=actor_id, actor_role=role, target_id=target_id)
+        if memberships.get_member(church_id, target_id, session=s) is None:
+            raise NotFound(MEMBER_NOT_FOUND)
+        memberships.transfer_ownership(church_id, actor_id, target_id, session=s)
+        rows = memberships.list_member_rows(church_id, session=s)
+    logger.info("ownership_transferred church_id=%s from_user_id=%s to_user_id=%s", church_id, actor_id, target_id)
+    return [member_out(row, actor_id) for row in rows]
+
+
+def leave_church(church_id: uuid.UUID, actor_id: uuid.UUID) -> None:
+    """POST /church/leave: under the church-row lock with the caller's role
+    re-read, role_policy.check_leave with the church's owner and admin count
+    (the owner must transfer first; the only admin of a church with no owner
+    may not leave), then the membership goes, its services.created_by nulled.
+    The invites the leaver made stay: they were sent to other people."""
+    actor_id = as_uuid(actor_id)
+    with session_scope() as s:
+        role = lock_and_read_actor(s, church_id, actor_id)
+        role_policy.check_leave(role=role, admin_count=memberships.count_owner_admins(church_id, session=s))
+        try:
+            memberships.remove_membership(actor_id, church_id, session=s)
+        except LastAdminError as exc:   # check_leave refuses first; a backstop, never a 500
+            raise Conflict(str(exc), code="last_admin") from None
+    logger.info("church_left church_id=%s user_id=%s role=%s", church_id, actor_id, role)
+
+
+def delete_church(church_id: uuid.UUID, actor_id: uuid.UUID, confirm_name: str) -> None:
+    """DELETE /church: under the church-row lock with the caller's role
+    re-read, only the owner (403), and `confirm_name` must equal the church's
+    name, both trimmed, exactly, case included (a 422 naming confirm_name), then
+    repos.churches.soft_delete_church in the same transaction: the church is
+    soft-deleted and every unrevoked invite of it revoked. Nothing is
+    hard-deleted."""
+    actor_id = as_uuid(actor_id)
+    with session_scope() as s:
+        role = lock_and_read_actor(s, church_id, actor_id)
+        if role != "owner":
+            raise Forbidden(role_policy.OWNER_ONLY)
+        if (confirm_name or "").strip() != (churches.get_church(church_id, session=s)["name"] or "").strip():
+            raise InvalidInput(NAME_MISMATCH, field="confirm_name")
+        churches.soft_delete_church(church_id, session=s)
+    logger.info("church_deleted church_id=%s user_id=%s", church_id, actor_id)

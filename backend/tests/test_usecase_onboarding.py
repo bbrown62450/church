@@ -24,6 +24,7 @@ from repos.churches import create_church, get_church, list_user_churches, soft_d
 from repos.hymns import list_hymns
 from repos.invites import as_utc, create_invite, get_invite_by_code, list_invites
 from repos.memberships import add_membership, get_role, remove_membership
+from tests.invite_helpers import store_unchecked_role
 from usecases import onboarding
 
 NOW = datetime(2026, 9, 28, 12, 0, tzinfo=UTC)
@@ -357,7 +358,8 @@ def test_consumer_sees_church_unavailable_after_soft_delete(invite_world):
     code = _invite(cid, owner, email=JOINER_EMAIL)
     _update_invite(code, accepted_at=datetime(2026, 9, 30, 12, 0), accepted_by=joiner)
     add_membership(joiner, cid, "member")
-    soft_delete_church(cid)   # revokes only pending invites; this one was consumed
+    with session_scope() as s:   # soft-deleted directly: since slice 6b, soft_delete_church revokes used invites too
+        s.execute(update(Church).where(Church.id == cid).values(deleted_at=INVITE_NOW))
     assert get_church(cid) is None
     assert repos.invites.get_invite_by_code(code)["revoked"] is False
     assert get_role(joiner, cid) == "member"
@@ -441,7 +443,8 @@ def test_preview_writes_nothing_and_has_five_fields(invite_world):
     pytest.param("foo", "member", id="foo"),
 ])
 def test_preview_clamps_role(stored, granted, invite_world):
-    code = _invite(invite_world["church_id"], invite_world["owner"], role=stored)
+    code = _invite(invite_world["church_id"], invite_world["owner"])
+    store_unchecked_role(code, stored)                    # a row from before 0008's CHECK
     preview = onboarding.preview_invite(
         user_id=invite_world["joiner"], user_email=JOINER_EMAIL, code=code, now=INVITE_NOW,
     )
@@ -519,7 +522,8 @@ def test_accept_adds_membership_with_invite_role(tmp_db, make_user):
         onboarding.ChurchSummary(cid, "Grace", "member"), False, "Joined Grace.")
     assert get_role(joiner, cid) == "member"
     # The granted role is clamped: an invite stored as owner makes an admin, never an owner.
-    owner_code = create_invite(church_id=cid, created_by=owner, role="owner")
+    owner_code = create_invite(church_id=cid, created_by=owner)
+    store_unchecked_role(owner_code, "owner")             # a row from before 0008's CHECK
     assert _accept(promoted, "promoted@x.com", owner_code).church.role == "admin"
     assert get_role(promoted, cid) == "admin"
 
