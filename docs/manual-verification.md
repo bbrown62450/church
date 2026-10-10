@@ -507,3 +507,27 @@ here.
 - [ ] (owner, after 6b-1) **4.** Step 4's read-only query shows `0008_invites_integrity`, `1`, `1`, `0`; step 2's query again shows the same counts (or more invites), with `other_role_invites` `0` and `old_constraint` `0`.
 - [ ] (owner, after 6b-1) **5.** On the phone, the app loads as before (pull down to reload): the builder opens and **Settings** lists the same sections as before 6b-1 (no People or Danger zone yet). If you still have an invite link (`…/join?code=…`) to your church that nobody has used yet, open it on the phone while signed in: it says "You're already a member of {church}." with **Open {church}**, which opens the church and changes nothing (the link stays unused); without such a link, that half is skipped.
 - [ ] (agent, after 6b-1) **6.** `/health/ready` answers `{"ok":true,"db":"ok"}`; `/openapi.json` lists `/members`, `/members/{user_id}`, `/invites`, `/invites/{invite_id}`, `/church/transfer-ownership` and `/church/leave`, and `/church` with `delete`; each of the new routes answers 401 when called signed out.
+
+**6b-2a** (owner's 6b-2 planning answers of 2026-10-10) brings Settings →
+**People** (`/settings/people`: Invite someone, Members, Pending invites;
+the People entry between Contacts and Account) and migration
+`0009_memberships_one_owner` (at most one owner per church). The owner's
+steps around the merge follow `backend/migrations/README.md` → "Before
+0009_memberships_one_owner", one step at a time; the results go into
+`docs/ops-runbook.md` → "Slice 6b-2a record". The People checks that
+change anything run in one of the owner's **test churches**, never the
+real one, with a **second Google account the owner controls** (in a
+private window). Record counts and what the screens show, never an email
+address, an invite code or link, a church id or a database URL.
+
+- [ ] (owner, before the 6b-2a merge) **7.** A fresh backup: the db-backup workflow on `main` finishes green with an artifact `db-backup`.
+- [ ] (owner, before the 6b-2a merge) **8.** "Before 0009_memberships_one_owner" step 2's read-only query shows `version` `0008_invites_integrity`, `churches_with_two_owners` `0`, `churches_without_one_owner` `0`, `churches_without_admin` `0` and `one_owner_index` `0`; the other counts are recorded.
+- [ ] (owner, before the 6b-2a merge) **9.** The SQL preview the agent shows in full (marked "Read only. Do not run this.") matches step 3 of that section, and the owner has read it without running it.
+- [ ] (owner, after 6b-2a) **10.** Step 4's read-only query shows `0009_memberships_one_owner`, `1`; step 2's query again shows the same counts, with `one_owner_index` `1`.
+- [ ] (owner, after 6b-2a) **11.** On the phone, in the real church: **Settings** lists Church, Hymns, Liturgy, Prayers, Rubric, Bulletin, Contacts, **People**, Account. **People** shows "Everyone in {church} can see this list.", **Invite someone**, **Members ({n})** with everyone's email, your row marked **You** and **Owner**, and **Pending invites ({n})**. Nothing is changed here.
+- [ ] (owner, after 6b-2a) **12.** In a test church: **Create invite link** (Member, no email, not reusable) shows **Invite link ready** with the link, **Copy link** ("Copied ✓", "Link copied") and, on the phone, **Share…** (the share sheet opens; cancel it). The invite is listed under Pending invites as **Single use**. Open the copied link in a private window, sign in there with the second Google account, and join: the test church opens for it, and its People page shows the members note and no invite form or menus. Back on the owner's People page (pull to reload), the second account is listed as **Member** and the link is gone from Pending invites.
+- [ ] (owner, after 6b-2a) **13.** In the test church: the second account's ⋮ menu → **Make admin**: the badge says **Admin** at once, with no question; ⋮ → **Make member**: **Member** again. Your own row and the owner's have no menu.
+- [ ] (owner, after 6b-2a) **14.** In the test church: create another link, then **Revoke** it: "Revoke this invite?" → **Revoke invite**, and it leaves Pending invites. Opening it in the private window says "This invite has been revoked."
+- [ ] (owner, after 6b-2a) **15.** In the test church: the second account's ⋮ → **Remove from church**: "Remove {name}?" says they lose access and that services they saved stay; **Remove member** removes the row. In the private window, the second account's next tap in the test church says "You no longer have access to {church}." and moves it to another church or the welcome page.
+- [ ] (owner, after 6b-2a) **16.** At 375 px (the phone): no sideways scroll on People, even with a long email or the link in its box (the link scrolls inside the box); the keyboard does not cover the Email field while typing; the dialogs fit the screen; every button and menu is easy to tap.
+- [ ] (agent, after 6b-2a) **17.** `/health/ready` answers `{"ok":true,"db":"ok"}`; the app's `/settings/people` is served (signed out, it sends you to sign in).
