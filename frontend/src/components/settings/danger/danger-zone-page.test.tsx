@@ -345,6 +345,41 @@ describe("Settings → Danger zone: the owner (slice 6b-2b)", () => {
     unsubscribe();
   });
 
+  it("puts focus on the heading when a role refusal of the transfer turns the page to the admin form", async () => {
+    window.localStorage.setItem(ACTIVE_CHURCH_KEY, church().id);
+    let role: Church["role"] = "owner";
+    installFakeApi({
+      "GET /church": () => church({ role }),
+      "GET /members": () => memberList(role),
+      // Ownership moved elsewhere meanwhile: the refusal, then the role refetch says admin.
+      "POST /church/transfer-ownership": () => {
+        role = "admin";
+        return fakeError(403, "forbidden", "Only the owner can do that.");
+      },
+    });
+    const { user } = renderWithProviders(
+      <>
+        <ChurchLayout>
+          <SettingsLayout>
+            <DangerZoneRoute />
+          </SettingsLayout>
+        </ChurchLayout>
+        <Toaster />
+      </>,
+      { me: me(), path: "/settings/danger" },
+    );
+    await user.click(await screen.findByRole("combobox", { name: "New owner" }));
+    await user.click(await screen.findByRole("option", { name: "Ann Admin (ann@example.com)" }));
+    await user.click(screen.getByRole("button", { name: "Transfer ownership…" }));
+    await user.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Transfer ownership" }));
+    expect(await screen.findByText("Only the owner can do that.")).toBeInTheDocument();
+    expect(await screen.findByRole("note")).toHaveTextContent(OWNER_ONLY_NOTE);
+    expect(screen.queryByRole("combobox", { name: "New owner" })).toBeNull();
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole("heading", { level: 2, name: "Danger zone" })),
+    );
+  });
+
   it("toasts a transfer to someone who has left and refetches the members", async () => {
     const { user, queryClient } = renderPage("owner", {
       "POST /church/transfer-ownership": fakeError(404, "not_found", "Member not found."),

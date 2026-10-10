@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 
 import { ErrorState } from "@/components/app/error-state";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -24,12 +24,24 @@ export const OWNER_ONLY_NOTE = "Only the owner can transfer ownership or delete 
 export function DangerZonePage() {
   const church = useChurch();
   const heading = useRef<HTMLHeadingElement>(null);
+  const owner = church.role === "owner";
+  const wasOwner = useRef(owner);
+  // The role can go while focus is in the owner's cards (a transfer refused
+  // because ownership moved elsewhere, then the role refetch): those cards
+  // are gone, so focus would drop to the page. It goes to the heading.
+  useEffect(() => {
+    const lostOwner = wasOwner.current && !owner;
+    wasOwner.current = owner;
+    if (lostOwner && (document.activeElement === null || document.activeElement === document.body)) {
+      heading.current?.focus();
+    }
+  }, [owner]);
   return (
     <section aria-labelledby="danger-title" className="grid gap-6">
       <h2 id="danger-title" ref={heading} tabIndex={-1} className="text-lg font-semibold outline-none">
         Danger zone
       </h2>
-      {church.role === "owner" ? (
+      {owner ? (
         <OwnerCards churchName={church.name} focusAfterTransfer={() => heading.current} />
       ) : (
         <>
