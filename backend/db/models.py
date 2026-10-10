@@ -77,6 +77,13 @@ class Membership(Base):
             "role IN ('owner','admin','member')", name="ck_memberships_role"
         ),
         Index("ix_memberships_user_id", "user_id"),
+        # Revision 0009_memberships_one_owner (slice 6b-2a): at most one owner
+        # per church. Ownership moves only by a transfer, which demotes the
+        # owner before it promotes the new one (repos.memberships.transfer_ownership).
+        Index(
+            "uq_memberships_one_owner", "church_id", unique=True,
+            postgresql_where=sa.text("role = 'owner'"), sqlite_where=sa.text("role = 'owner'"),
+        ),
     )
 
 

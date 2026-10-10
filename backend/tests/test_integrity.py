@@ -76,6 +76,8 @@ def test_an_ownerless_church_and_one_with_no_admin_are_reported(grace, make_chur
 
 def test_two_owners_are_reported(grace):
     church, _ = grace
+    with session_scope() as s:   # a row from before 0009 (or written by hand with the index gone)
+        s.execute(text("DROP INDEX uq_memberships_one_owner"))
     _set_roles(church, "owner", where_role="admin")
     assert find_violations() == [{"kind": "owner_count", "church_id": church, "owners": 2}]
 
