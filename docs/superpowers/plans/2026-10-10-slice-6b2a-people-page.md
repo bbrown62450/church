@@ -31,7 +31,7 @@
   `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
 - TDD: write the failing test first and see it fail as quoted.
 - **Backup push after every task** (standing rule): the controller runs `git push origin claude/slice-2-plan-4q33le` after each task's commit (never `--force`, never a rebase; if the push is rejected, `git pull --no-rebase origin claude/slice-2-plan-4q33le` and push again; on a network error retry after 2, 4, 8 and 16 s). A fix asked for by a review is a new commit, `Fix: <what> (Task <n> review)`. The container can restart and lose uncommitted work: commit as soon as a task's checks pass.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 2235 → 2235 passed, 46 → 48 skipped; frontend 952 → 1007 in 109 → 113 files`.
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 2235 → 2236 passed, 46 → 49 skipped; frontend 952 → 1010 in 109 → 113 files`.
 - New prose for the owner has no em dashes and no flattery. New user-facing copy is exactly the list in clarification 11 and has no em dashes ("Copied ✓" keeps its check mark).
 - No church id, email address, invite code or link, token, database URL or real person's name in any doc, commit, test or record. Tests use `@example.com` addresses, the fixtures' "Grace" and made-up names. Invite codes are never logged, by the server (6b-1) or by the app (nothing here logs; every People page test fails if any `console` call carries a fixture's invite code or `code=`).
 - **SQL the owner must not run is shown in full and marked.** The SQL preview (T9 Step 3, README step 3) is shown whole, never shortened with "...", inside a code block, and the message says "Read only. Do not run this." before it (the "Slice 6b-1 record" lesson: a shortened preview was pasted and run, and Postgres refused it). The read-only queries the owner does run say "Read-only … Changes nothing." in their first line.
@@ -55,8 +55,9 @@ As in the 6b-1, 6a-3a and 6a-3b plans: **Create `path`:** the block is the whole
   | T5 | 0 | 2235 passed, 48 skipped | 48 passed | +12 (`people-settings-page.test.tsx`) | 1006 in 113 files |
   | T6 | 0 | 2235 passed, 48 skipped | 48 passed | +1 (`settings-layout.test.tsx`: the People case) | 1007 in 113 files |
   | T7 | 0 (`docs/manual-verification.md` only) | 2235 passed, 48 skipped | 48 passed | 0 | 1007 in 113 files |
+  | Build review fixes | +1 passed, +1 skipped (`test_migrations.py`: one SQLite test, one Postgres) | 2236 passed, 49 skipped | 49 passed, 2236 deselected | +3 (`people-settings-page.test.tsx`) | 1010 in 113 files |
 
-- CI `backend-postgres` goes from `46 passed, 2235 deselected` to `48 passed, 2235 deselected`.
+- CI `backend-postgres` goes from `46 passed, 2235 deselected` to `49 passed, 2236 deselected` (48 after T1, one more from the build review fixes).
 
 ### Layering and code rules (carried)
 - Pages and components never call `apiFetch`: the hooks in `src/lib/queries/people.ts` use `useApi().church`, and every write goes through `useChurchMutation`, so a `no_church_access` 403 reaches the `(church)` layout's fallback (another church, "You no longer have access to {name}.").
@@ -3819,14 +3820,14 @@ Run: `git status --short | grep -v '^?? .claude/' | wc -l` then `git fetch -q or
 Run: `.venv/bin/python -m pytest -q 2>&1 | tail -1` then `TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres 2>&1 | tail -1` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")` then `(cd frontend && NEXT_PUBLIC_SUPABASE_URL=https://ci-placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-placeholder NEXT_PUBLIC_API_URL=http://localhost:8000 npm run build 2>&1 | grep -cE "Compiled successfully")`
 **Expected** (the Postgres line only where a local, throwaway Postgres is at hand; otherwise CI's job is the check; a font `Failed to fetch` in the build: say so and rely on CI):
 ```
-2235 passed, 48 skipped in <t>s
+2236 passed, 49 skipped in <t>s
 ```
 ```
-48 passed, 2235 deselected, 1 warning in <t>s
+49 passed, 2236 deselected, 1 warning in <t>s
 ```
 ```
  Test Files  113 passed (113)
-      Tests  1007 passed (1007)
+      Tests  1010 passed (1010)
 ```
 ```
 typecheck 0
@@ -3899,6 +3900,12 @@ Slice 6b-2a: Settings > People, the members, roles and removal
 Slice 6b-2a: Settings > People, invite links and pending invites
 Slice 6b-2a: People in the Settings nav
 Docs: slice 6b-2a's manual check items
+Fix: long emails wrap at 375 px in the link panel, the Email error and the Remove dialog (Tasks 3-5, slice 6b-2a build review)
+Fix: test that names and emails with markup show as text (Tasks 4-5, slice 6b-2a build review)
+Fix: every running role change keeps its row busy (Task 4, slice 6b-2a build review)
+Fix: the created invite leaves the mutation cache once unobserved (Task 3, slice 6b-2a build review)
+Fix: pin the model's one-owner predicate to the migration's (Task 1, slice 6b-2a build review)
+Fix: the SQLite 0009 refusal test names two churches, sorted (Task 1, slice 6b-2a build review)
 ```
 ```
 trailer check done
@@ -3919,7 +3926,7 @@ trailer check done
 
 For each fix: change only the owning task's files; rerun Steps 2-3; commit `Fix: <what> (Task <n>, slice 6b-2a final verification)` with the trailer; after the PR exists, ask the owner before pushing it.
 
-Expected counts after this task: backend `2235 passed, 48 skipped`; frontend `1007 passed` in 113 files.
+Expected counts after this task: backend `2236 passed, 49 skipped`; frontend `1010 passed` in 113 files.
 
 ### Task 9: Before the PR: the owner's pre-merge routine for 0009 (backup, counts, the SQL) (OWNER + agent; clarification 14)
 
@@ -3979,7 +3986,7 @@ Expected counts after this task: unchanged.
 
 (not replayed) `gh pr list -R <repo> --head claude/slice-2-plan-4q33le --state open --json number,url` → `[]`. Send the owner exactly this, and wait for a clear yes:
 
-> The People page (slice 6b-2a) is verified on this machine: backend 2235 passed, 48 skipped (2235 and 46 before), and the 48 Postgres tests pass on a throwaway local database; frontend 1007 tests in 113 files (952 in 109 before), typecheck, lint and the production build clean. It adds Settings → People: everyone sees the members with emails; owners and admins invite (single-use links by default, or reusable for 7 days, optionally for one email), copy or share the link, make someone an admin or a member, remove someone, and see and revoke the pending links. With it comes migration 0009 (at most one owner per church), whose checks you have just done. May I open the pull request as a **draft** titled "Slice 6b-2a: Settings > People (invite links, members, pending invites) and migration 0009", so the checks run? Merging stays with you.
+> The People page (slice 6b-2a) is verified on this machine: backend 2236 passed, 49 skipped (2235 and 46 before), and the 49 Postgres tests pass on a throwaway local database; frontend 1010 tests in 113 files (952 in 109 before), typecheck, lint and the production build clean. It adds Settings → People: everyone sees the members with emails; owners and admins invite (single-use links by default, or reusable for 7 days, optionally for one email), copy or share the link, make someone an admin or a member, remove someone, and see and revoke the pending links. With it comes migration 0009 (at most one owner per church), whose checks you have just done. May I open the pull request as a **draft** titled "Slice 6b-2a: Settings > People (invite links, members, pending invites) and migration 0009", so the checks run? Merging stays with you.
 
 - [ ] **Step 2 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
 
@@ -3995,7 +4002,7 @@ Slice 6b-2a: Settings > People and migration 0009_memberships_one_owner (the fir
 
 Before the PR (Task 9): the backup, the read-only owner counts and the SQL preview with the owner. After the merge: the after-deploy check, the phone check in a test church with a second Google account (join, role change, revoke, removal), a "Slice 6b-2a record" in docs/ops-runbook.md.
 
-Tests: backend 2235 → 2235 passed, 46 → 48 skipped; frontend 952 → 1007 in 109 → 113 files
+Tests: backend 2235 → 2236 passed, 46 → 49 skipped; frontend 952 → 1010 in 109 → 113 files
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 
@@ -4007,7 +4014,7 @@ gh pr create -R <repo> --draft --base main --head claude/slice-2-plan-4q33le \
 gh pr checks <N> -R <repo> --watch --interval 30
 ```
 
-Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `2235 passed, 48 skipped`, backend-postgres `48 passed, 2235 deselected` (after its `alembic upgrade head`, `alembic check`, `alembic downgrade base` and `alembic upgrade head` steps, which now include 0009 on Postgres 17), frontend `1007 passed` in 113 files. Then send: "PR #<N> is green: backend 2235 passed, 48 skipped (the two new Postgres tests passed in their own job, and the migration went up, down and up again on Postgres); 1007 frontend tests in 113 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R <repo>`.
+Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `2236 passed, 49 skipped`, backend-postgres `49 passed, 2236 deselected` (after its `alembic upgrade head`, `alembic check`, `alembic downgrade base` and `alembic upgrade head` steps, which now include 0009 on Postgres 17), frontend `1010 passed` in 113 files. Then send: "PR #<N> is green: backend 2236 passed, 49 skipped (the three new Postgres tests passed in their own job, and the migration went up, down and up again on Postgres); 1010 frontend tests in 113 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R <repo>`.
 
 - [ ] **Step 3 (agent, only if needed): A fresh backup and the counts again**
 
@@ -4166,7 +4173,7 @@ TEST_DATABASE_URL=<local url> .venv/bin/python -m pytest -q -m postgres 2>&1 | t
 (cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")
 ```
 
-**Expected** (simulated in the replay, see "Build notes": a `--no-ff` merge of the replayed branch into `origin/main`, then these commands): the second line prints exactly the nine paths of T1's commit (the eight of the `git checkout` after it and the deleted test; if T1's commit lists any other path, add it before going on); the suites pass with T1's changes and nothing of T2-T7:
+**Expected** (simulated in the replay, see "Build notes": a `--no-ff` merge of the replayed branch into `origin/main`, then these commands): the second line prints exactly the nine paths of T1's commit (the eight of the `git checkout` after it and the deleted test; if T1's commit lists any other path, add it before going on); the suites pass with T1's changes and nothing of T2-T7 (`test_migrations.py` as merged, so with the build review's two 0009 tests):
 ```
 backend/db/models.py
 backend/migrations/README.md
@@ -4179,10 +4186,10 @@ backend/tests/test_services_postgres.py
 streamlit_tests/test_settings_members_invites.py
 ```
 ```
-2235 passed, 48 skipped in <t>s
+2236 passed, 49 skipped in <t>s
 ```
 ```
-48 passed, 2235 deselected, 1 warning in <t>s
+49 passed, 2236 deselected, 1 warning in <t>s
 ```
 ```
  Test Files  109 passed (109)
@@ -4191,7 +4198,7 @@ streamlit_tests/test_settings_members_invites.py
 
 Then a commit "Revert slice 6b-2a (PR #<N>), keeping migration 0009" with the trailer; a PR, CI (whose `alembic check` then compares the restored model with the database at `0009`), and the merge on the owner's yes; record it in the record. Never `alembic downgrade` production for this.
 
-Expected counts after this task: backend `2235 passed, 48 skipped` on `main`; frontend `1007 passed` in 113 files. The records PR adds no test.
+Expected counts after this task: backend `2236 passed, 49 skipped` on `main`; frontend `1010 passed` in 113 files. The records PR adds no test.
 
 ---
 
@@ -4233,6 +4240,17 @@ Counts: frontend 1002 → 1007 (T2 +1 in `people.test.ts`, T4 +2 and T5 +2 in `p
 - T8: Step 1 `0`, `0`, `9`; Step 2 backend `2235 passed, 48 skipped`, Postgres `48 passed, 2235 deselected, 1 warning`, frontend `1007 passed` in 113 files, typecheck 0, lint 0, the production build compiled (`1`); Step 3 `0` (API files regenerate unchanged), `0` em dashes in added lines, `0` stray code points, exactly the 35 paths, `0` untouched paths changed, the nine subjects in order, `trailer check done`. CI's Alembic sequence by hand on a fresh database (`upgrade head`, `check`, `downgrade base`, `upgrade head`, `check`): "No new upgrade operations detected." both times; `pg_smoke.py` OK. Runbook owner markers still `4`. The PR line's counts (`backend 2235 → 2235 passed, 46 → 48 skipped; frontend 952 → 1007 in 109 → 113 files`) match.
 - One difference, in the environment only: the throwaway PostgreSQL 16 cluster could not live in the session scratchpad (its parent directory is private to root, and Postgres does not run as root), so it was initialised under `/var/lib/postgresql` on a local port, as when planning, and stopped and deleted at the end. No code or test differs from the plan.
 - Not run here: T9 and T10 (the owner's routine, the PR, CI, the merge, production).
+
+**6b-2a build review fixes (2026-10-10).** An independent code review of the build at `f7a98cd` found seven things. Each fix has a test that failed on the code before it (or, where the code was already right, on a planted violation, then undone), one `Fix: …` commit each (the clarification 11 change a `Plan: …` commit), every commit pushed:
+1. **(Minor) Long emails could widen the page at 375 px.** The link panel's email-bound sentence, the 409 message under Email and the Remove dialog's title, description and body now carry `[overflow-wrap:anywhere]`, as the rows do; `ConfirmDialog` gains `wrapAnywhere` for its title and description. T4's "sends revoke_reusable=false…" and T5's "turns Reusable off…" and "says under Email…" check the class (3 failed before the fix). In a real browser: the page's DOM in those three states with a 100-character email, rendered by the pre-installed Chromium (headless shell 1194, Python Playwright, at 375 px) with the production build's CSS, gives `scrollWidth` 375 and no element past the right edge; with the class stripped the same elements reach 623 to 800 px.
+2. **(Minor) No test caught user text rendered as HTML.** T4 "shows names and emails with markup in them as text, never as HTML": a member named `<b>x</b>` with the email `<i>y</i>@example.com` and an invite for `<img src=x>@example.com` made by them read as literal text (the row, the menu's name, "Created by"), and the page holds no `b`, `i` or `img` element. React already escapes; a planted `dangerouslySetInnerHTML` in a member row, then in an invite row, failed it.
+3. **(Nit-minor) The model's partial-index predicate could drift unnoticed** (Alembic compares no predicates). `test_migrations.py` "the model's one-owner index is the migration's" (SQLite run): both dialects' `where` is 0009's `ONE_OWNER` (`role = 'owner'`) and the model's `CREATE INDEX` on each dialect is the migration's statement (the preview's line). Postgres "0009's index on Postgres is the one create_all makes": `pg_indexes.indexdef` after `create_all` equals the migrated one, `... WHERE ((role)::text = 'owner'::text)`. A planted Postgres predicate `role IN ('owner', 'admin')` failed both; a planted SQLite one failed the SQLite test.
+4. **(Minor) The role-change busy state followed only the latest mutation.** `MembersList` keeps the set of people whose change is running (each removed when its own `mutateAsync` settles), so every such row's trigger is disabled with the spinner (S UX 1b). T4 "keeps each running role change's row busy…": Mo's PATCH held, sam changed, Mo's trigger still disabled, `aria-busy` and spinning (failed before the fix), then each frees on its own answer.
+5. **(Nit) The created code stayed in the MutationCache for five minutes.** `useCreateInvite` sets `gcTime: 0`. T5 "lets the created link's code leave the mutation cache…": the mutation's `gcTime` is 0 and, once the page unmounts, no mutation holding the code is left (failed before the fix).
+6. **(Nit) Screen-reader names missing from clarification 11.** It now lists "Members" and "Pending invites" (the lists' names), "Loading" (the skeletons', the word every Settings page uses), "Invite link for {who}" and "Expires {date, time}". No em dashes.
+7. **(Nit) The SQLite refusal's sorted ids were not pinned.** The refusal test adds a second church with two owners whose id sorts before the seeded one's: "2 church(es) have more than one owner: {early}, {seeded}." A planted reversed sort, and the rows listed in reverse, failed it.
+
+Counts: backend `2235 → 2236 passed, 48 → 49 skipped`; Postgres `48 → 49 passed, 2236 deselected, 1 warning`; frontend `1007 → 1010` in 113 files; still 35 paths (every fix is in a file already on the list). Checks after the fixes: typecheck 0, lint 0, the production build compiled (`1`); CI's Alembic sequence on a fresh database of a throwaway local PostgreSQL 16 cluster (`upgrade head`, `check`, `downgrade base`, `upgrade head`, `check`): "No new upgrade operations detected." both times; `0` em dashes in added lines of `backend`, `frontend/src` and `docs/manual-verification.md`. The cluster lived under `/var/lib/postgresql` on a local port (Postgres does not run as root, and the scratchpad's parent is root's), and was stopped and deleted afterwards. T8, T10 and the PR line now carry these counts.
 
 ## Spec coverage
 
