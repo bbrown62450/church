@@ -37,6 +37,7 @@ describe("the Settings area (slice 6a-1)", () => {
       ["Contacts", "/settings/contacts"],
       ["People", "/settings/people"],
       ["Account", "/settings/account"],
+      ["Danger zone", "/settings/danger"],
     ]);
     expect(links[0]).toHaveAttribute("aria-current", "page");
     for (const link of links.slice(1)) expect(link).not.toHaveAttribute("aria-current");
@@ -57,7 +58,8 @@ describe("the Settings area (slice 6a-1)", () => {
     ["/settings/contacts", "Contacts"],
     ["/settings/people", "People"],
     ["/settings/account", "Account"],
-  ])("marks the section current on its page (slices 6a-2, 6a-3a, 6a-3b, 5b-1, 5b-2, 6b-2a): %s", (path, label) => {
+    ["/settings/danger", "Danger zone"],
+  ])("marks the section current on its page (slices 6a-2, 6a-3a, 6a-3b, 5b-1, 5b-2, 6b-2a, 6b-2b): %s", (path, label) => {
     renderShell("member", path);
     const links = within(screen.getByRole("navigation", { name: "Settings sections" })).getAllByRole("link");
     expect(links.filter((link) => link.getAttribute("aria-current") === "page").map((link) => link.textContent)).toEqual([
@@ -68,7 +70,7 @@ describe("the Settings area (slice 6a-1)", () => {
   it("shows a member the same sections, and /settings opens Church", () => {
     renderShell("member", "/settings");
     expect(screen.getByText("You're a member of Grace.")).toBeInTheDocument();
-    expect(within(screen.getByRole("navigation", { name: "Settings sections" })).getAllByRole("link")).toHaveLength(9);
+    expect(within(screen.getByRole("navigation", { name: "Settings sections" })).getAllByRole("link")).toHaveLength(10);
     renderWithProviders(<SettingsHome />, { path: "/settings" });
     expect(testRouter.replace).toHaveBeenCalledWith("/settings/church");
   });
