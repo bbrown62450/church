@@ -7,16 +7,19 @@ import { screen, waitFor, within } from "@testing-library/react";
 import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 
+import ChurchLayout from "@/app/(signed-in)/(church)/layout";
 import SettingsLayout from "@/app/(signed-in)/(church)/settings/layout";
 import PeopleSettingsRoute from "@/app/(signed-in)/(church)/settings/people/page";
 import { Toaster } from "@/components/ui/sonner";
 import type { Church, Invite, Member, MemberList } from "@/lib/api/types";
 import { authEvents } from "@/lib/queries/auth-events";
 import { keys } from "@/lib/queries/keys";
+import { ACTIVE_CHURCH_KEY } from "@/lib/storage";
 import { fakeError, installFakeApi, type FakeHandler, type RecordedRequest } from "@/test/fake-api";
-import { church, invite, inviteList, me, memberList, PEOPLE } from "@/test/fixtures";
+import { church, churchProfile, invite, inviteList, me, memberList, PEOPLE } from "@/test/fixtures";
 import { renderWithProviders } from "@/test/render";
 
+import { EMAIL_HELP, INVITE_CREATED, ONE_EMAIL_ONCE, REUSABLE_HELP, ROLE_HELP } from "./create-invite-form";
 import { MEMBERS_NOTE } from "./members-list";
 
 /** The invite codes in these tests' fixtures: none may reach the console (codes are never logged). */
@@ -312,5 +315,275 @@ describe("Settings → People: Members (slice 6b-2a)", () => {
     api.set("GET /members", memberList("member"));
     await user.click(screen.getByRole("button", { name: "Retry" }));
     expect(await screen.findByRole("heading", { name: "Members (5)" })).toBeInTheDocument();
+  });
+});
+
+const CODE_FREE = invite();
+const NEW_LINK = "http://localhost:3000/join?code=abc";
+
+function invitesSent(api: { requests: RecordedRequest[] }, method: string) {
+  return api.requests.filter((r) => r.method === method && r.path.startsWith("/invites"));
+}
+
+function inviteRows() {
+  return within(screen.getByRole("list", { name: "Pending invites" })).getAllByRole("listitem");
+}
+
+/** A fake `/invites`: `POST` adds the answer first, `DELETE` revokes, `GET` lists what is left. */
+function invitesServer(initial: Invite[] = []) {
+  let items = [...initial];
+  return {
+    list: () => inviteList(items),
+    add: (made: Invite) => () => {
+      items = [made, ...items.filter((i) => i.id !== made.id)];
+      return { status: 201, body: made };
+    },
+    revoke: (id: string) => () => {
+      items = items.filter((i) => i.id !== id);
+      return { revoked: true };
+    },
+  };
+}
+
+describe("Settings → People: Invite someone and Pending invites (slice 6b-2a)", () => {
+  it("shows a member neither the invite form nor the pending invites", async () => {
+    renderPage("member");
+    await screen.findByRole("heading", { name: "Members (5)" });
+    expect(screen.queryByRole("heading", { name: "Invite someone" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: /^Pending invites/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Create invite link" })).toBeNull();
+  });
+
+  it("puts Invite someone, Members and Pending invites in that order for an admin", async () => {
+    renderPage("admin");
+    await screen.findByRole("heading", { name: "Pending invites (0)" });
+    expect(screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent)).toEqual([
+      "Invite someone",
+      "Members (5)",
+      "Pending invites (0)",
+    ]);
+    expect(screen.getByText("No pending invites")).toBeInTheDocument();
+    expect(screen.getByText("Create an invite link above to add someone to Grace.")).toBeInTheDocument();
+  });
+
+  it("creates a single-use member link, shows it with Copy link focused, and copies it", async () => {
+    const server = invitesServer();
+    const { api, user } = renderPage("admin", { "GET /invites": server.list, "POST /invites": server.add(CODE_FREE) });
+    const form = within((await screen.findByRole("heading", { name: "Invite someone" })).closest("section")!);
+    expect(form.getByRole("radio", { name: /^Member/ })).toBeChecked();
+    expect(form.getByRole("radio", { name: /^Member/ })).toHaveAccessibleDescription(ROLE_HELP.member);
+    expect(form.getByRole("radio", { name: /^Admin/ })).toHaveAccessibleDescription(ROLE_HELP.admin);
+    expect(form.getByLabelText("Email (optional)")).toHaveAccessibleDescription(EMAIL_HELP);
+    expect(form.getByRole("checkbox", { name: "Reusable for 7 days" })).toHaveAccessibleDescription(REUSABLE_HELP);
+    await user.click(form.getByRole("button", { name: "Create invite link" }));
+
+    const panel = await screen.findByRole("group", { name: "Invite link ready" });
+    expect(within(panel).getByLabelText("Invite link")).toHaveValue(NEW_LINK);
+    await waitFor(() => expect(within(panel).getByRole("button", { name: "Copy link" })).toHaveFocus());
+    expect(screen.getByText(INVITE_CREATED).closest('[aria-live="polite"]')).not.toBeNull();
+    expect(within(panel).getByText(/^Anyone who opens this link can join Grace as a member\. It works once and expires .+\.$/)).toBeInTheDocument();
+    const post = invitesSent(api, "POST")[0];
+    expect(post.body).toEqual({ role: "member", email: null, reusable: false });
+    expect(post.headers["idempotency-key"]).toMatch(/^[0-9a-f-]{36}$/);
+    expect(post.headers["x-church-id"]).toBe(church().id);
+
+    await user.click(within(panel).getByRole("button", { name: "Copy link" }));
+    expect(await screen.findByText("Link copied")).toBeInTheDocument();
+    expect(await navigator.clipboard.readText()).toBe(NEW_LINK);
+    expect(within(panel).getByRole("button", { name: "Copied ✓" })).toBeInTheDocument();
+    expect(within(panel).queryByRole("button", { name: "Share…" })).toBeNull();
+
+    await waitFor(() => expect(inviteRows()).toHaveLength(1));
+    await user.click(within(panel).getByRole("button", { name: "Done" }));
+    expect(screen.queryByRole("group", { name: "Invite link ready" })).toBeNull();
+    expect(form.getByRole("button", { name: "Create invite link" })).toHaveFocus();
+    expect(inviteRows()).toHaveLength(1);
+  });
+
+  it("sends an admin, reusable link with a new key each time, and says who can use it", async () => {
+    const reusable = invite({ id: "c0000000-0000-4000-8000-000000000009", code: "r-123", role: "admin", reusable: true });
+    const server = invitesServer();
+    const { api, user } = renderPage("admin", { "GET /invites": server.list, "POST /invites": server.add(reusable) });
+    const form = within((await screen.findByRole("heading", { name: "Invite someone" })).closest("section")!);
+    await user.click(form.getByRole("radio", { name: /^Admin/ }));
+    await user.click(form.getByRole("checkbox", { name: "Reusable for 7 days" }));
+    await user.click(form.getByRole("button", { name: "Create invite link" }));
+    const panel = await screen.findByRole("group", { name: "Invite link ready" });
+    expect(within(panel).getByText(/^Anyone with this link can join Grace as an admin until .+\. Share it only with people you trust\.$/)).toBeInTheDocument();
+    expect(form.getByRole("radio", { name: /^Member/ })).toBeChecked();
+    expect(form.getByRole("checkbox", { name: "Reusable for 7 days" })).not.toBeChecked();
+    await user.click(form.getByRole("button", { name: "Create invite link" }));
+    await waitFor(() => expect(invitesSent(api, "POST")).toHaveLength(2));
+    const [first, second] = invitesSent(api, "POST");
+    expect(first.body).toEqual({ role: "admin", email: null, reusable: true });
+    expect(second.body).toEqual({ role: "member", email: null, reusable: false });
+    expect(first.headers["idempotency-key"]).not.toBe(second.headers["idempotency-key"]);
+  });
+
+  it("turns Reusable off while an email is typed, and sends the email trimmed", async () => {
+    const bound = invite({ email: "b@example.com" });
+    const server = invitesServer();
+    const { api, user } = renderPage("admin", { "GET /invites": server.list, "POST /invites": server.add(bound) });
+    const form = within((await screen.findByRole("heading", { name: "Invite someone" })).closest("section")!);
+    const box = form.getByRole("checkbox", { name: "Reusable for 7 days" });
+    await user.click(box);
+    expect(box).toBeChecked();
+    await user.type(form.getByLabelText("Email (optional)"), " b@example.com ");
+    expect(box).toBeDisabled();
+    expect(box).not.toBeChecked();
+    expect(box).toHaveAccessibleDescription(ONE_EMAIL_ONCE);
+    await user.click(form.getByRole("button", { name: "Create invite link" }));
+    const panel = await screen.findByRole("group", { name: "Invite link ready" });
+    expect(invitesSent(api, "POST")[0].body).toEqual({ role: "member", email: "b@example.com", reusable: false });
+    expect(within(panel).getByText(/^Only b@example\.com can use this link to join Grace as a member\. It works once and expires .+\.$/)).toBeInTheDocument();
+    expect(form.getByLabelText("Email (optional)")).toHaveValue("");
+  });
+
+  it("says under Email when the address has a pending invite or is a member, and focuses it", async () => {
+    const pending = "There's already a pending invite for b@example.com. Copy its link below or revoke it first.";
+    const { api, user } = renderPage("admin", { "POST /invites": fakeError(409, "invite_exists", pending) });
+    const form = within((await screen.findByRole("heading", { name: "Invite someone" })).closest("section")!);
+    const email = form.getByLabelText("Email (optional)");
+    await user.type(email, "b@example.com");
+    await user.click(form.getByRole("button", { name: "Create invite link" }));
+    expect(await form.findByRole("alert")).toHaveTextContent(pending);
+    await waitFor(() => expect(email).toHaveFocus());
+    expect(email).toHaveAttribute("aria-invalid", "true");
+    expect(email).toHaveValue("b@example.com");
+    expect(screen.queryByText(pending, { selector: "[data-sonner-toast] *" })).toBeNull();
+
+    api.set("POST /invites", fakeError(409, "conflict", "b@example.com is already a member of this church."));
+    await user.click(form.getByRole("button", { name: "Create invite link" }));
+    expect(await form.findByText("b@example.com is already a member of this church.")).toBeInTheDocument();
+
+    api.set("POST /invites", fakeError(422, "invalid_request", "Enter a valid email address.", { fields: { email: "Enter a valid email address." } }));
+    await user.click(form.getByRole("button", { name: "Create invite link" }));
+    expect(await form.findByText("Enter a valid email address.")).toBeInTheDocument();
+    await user.type(email, "x");
+    expect(form.queryByRole("alert")).toBeNull();
+  });
+
+  it("offers Share on a device that can share, with the church's words and the link", async () => {
+    const share = vi.fn(async () => {});
+    Object.defineProperty(navigator, "share", { value: share, configurable: true });
+    try {
+      const server = invitesServer();
+      const { user } = renderPage("admin", { "GET /invites": server.list, "POST /invites": server.add(CODE_FREE) });
+      await user.click(await screen.findByRole("button", { name: "Create invite link" }));
+      const panel = await screen.findByRole("group", { name: "Invite link ready" });
+      await user.click(within(panel).getByRole("button", { name: "Share…" }));
+      expect(share).toHaveBeenCalledWith({
+        title: "Join Grace",
+        text: "You're invited to plan worship with Grace.",
+        url: NEW_LINK,
+      });
+    } finally {
+      delete (navigator as { share?: unknown }).share;
+    }
+  });
+
+  it("lists pending invites with their role, type, expiry and maker, and copies a row's link", async () => {
+    const items = [
+      invite({ id: "c0000000-0000-4000-8000-000000000001", email: "b@example.com", role: "admin", created_by: ANN }),
+      invite({ id: "c0000000-0000-4000-8000-000000000002", code: "r-1", reusable: true, created_by: null }),
+    ];
+    const { user } = renderPage("admin", { "GET /invites": inviteList(items) });
+    await screen.findByRole("heading", { name: "Pending invites (2)" });
+    expect(inviteRows().map((r) => r.textContent)).toEqual([
+      "b@example.comAdminSingle useExpires in 7 days · Created by Ann AdminCopy linkRevoke",
+      "Anyone with the linkMemberReusableExpires in 7 days · Created by a former memberCopy linkRevoke",
+    ]);
+    const expiry = within(inviteRows()[0]).getByText("Expires in 7 days");
+    expect(expiry).toHaveAttribute("title", expect.stringMatching(/^[A-Z][a-z]{2} \d{1,2}, \d{4}, \d{1,2}:\d{2} [AP]M$/));
+    expect(expiry).toHaveAttribute("aria-label", `Expires ${expiry.getAttribute("title")}`);
+    await user.click(screen.getByRole("button", { name: "Copy link for Anyone with the link" }));
+    expect(await navigator.clipboard.readText()).toBe("http://localhost:3000/join?code=r-1");
+    expect(within(inviteRows()[1]).getByRole("button", { name: "Copied ✓" })).toBeInTheDocument();
+  });
+
+  it("shows a row's link, selected, when copying is refused", async () => {
+    const { user } = renderPage("admin", { "GET /invites": inviteList([CODE_FREE]) });
+    const copy = await screen.findByRole("button", { name: "Copy link for Anyone with the link" });
+    vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(new DOMException("Not allowed", "NotAllowedError"));
+    const realExecCommand = document.execCommand;
+    document.execCommand = vi.fn(() => false);
+    try {
+      await user.click(copy);
+      const link = await screen.findByRole("textbox", { name: "Invite link for Anyone with the link" });
+      expect(link).toHaveValue(NEW_LINK);
+      await waitFor(() => expect(link).toHaveFocus());
+      expect(await screen.findByText("Couldn't copy. The link is selected; copy it from there.")).toBeInTheDocument();
+    } finally {
+      document.execCommand = realExecCommand;
+    }
+  });
+
+  it("revokes an invite after asking, and the list empties", async () => {
+    const server = invitesServer([CODE_FREE]);
+    const { api, user } = renderPage("admin", {
+      "GET /invites": server.list,
+      [`DELETE /invites/${CODE_FREE.id}`]: server.revoke(CODE_FREE.id),
+    });
+    await user.click(await screen.findByRole("button", { name: "Revoke the invite for Anyone with the link" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "Revoke this invite?" });
+    expect(dialog).toHaveAccessibleDescription("The link will stop working. People who already joined stay in the church.");
+    await user.click(within(dialog).getByRole("button", { name: "Revoke invite" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(invitesSent(api, "DELETE").map((r) => r.path)).toEqual([`/invites/${CODE_FREE.id}`]);
+    expect(await screen.findByText("No pending invites")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Pending invites (0)" })).toHaveFocus());
+  });
+
+  it("clears the link panel when its invite is revoked", async () => {
+    const server = invitesServer();
+    const { user } = renderPage("admin", {
+      "GET /invites": server.list,
+      "POST /invites": server.add(CODE_FREE),
+      [`DELETE /invites/${CODE_FREE.id}`]: server.revoke(CODE_FREE.id),
+    });
+    await user.click(await screen.findByRole("button", { name: "Create invite link" }));
+    await screen.findByRole("group", { name: "Invite link ready" });
+    await user.click(await screen.findByRole("button", { name: "Revoke the invite for Anyone with the link" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "Revoke this invite?" });
+    await user.click(within(dialog).getByRole("button", { name: "Revoke invite" }));
+    await waitFor(() => expect(screen.queryByRole("group", { name: "Invite link ready" })).toBeNull());
+    expect(screen.queryByDisplayValue(NEW_LINK)).toBeNull();
+    expect(screen.queryByText(INVITE_CREATED)).toBeNull();
+  });
+
+  it("turns read-only inside the church layout once GET /church says member after a refusal, and drops the codes", async () => {
+    window.localStorage.setItem(ACTIVE_CHURCH_KEY, church().id);
+    let role: Church["role"] = "admin";
+    const api = installFakeApi({
+      "GET /church": () => churchProfile({ role }),
+      "GET /members": () => memberList(role),
+      "GET /invites": inviteList([CODE_FREE]),
+      [`DELETE /invites/${CODE_FREE.id}`]: () => {
+        role = "member"; // demoted elsewhere just before
+        return fakeError(403, "forbidden", "Only church admins can do this.");
+      },
+    });
+    const { user, queryClient } = renderWithProviders(
+      <>
+        <ChurchLayout>
+          <SettingsLayout>
+            <PeopleSettingsRoute />
+          </SettingsLayout>
+        </ChurchLayout>
+        <Toaster />
+      </>,
+      { me: me(), path: "/settings/people" },
+    );
+    await user.click(await screen.findByRole("button", { name: "Revoke the invite for Anyone with the link" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "Revoke this invite?" });
+    await user.click(within(dialog).getByRole("button", { name: "Revoke invite" }));
+    expect(await screen.findByText("Only church admins can do this.")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(MEMBERS_NOTE)).toBeInTheDocument());
+    expect(screen.getByRole("heading", { level: 2, name: "People" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Invite someone" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Actions for / })).toBeNull();
+    expect(screen.queryByRole("heading", { name: /^Pending invites/ })).toBeNull();
+    expect(api.requests.filter((r) => r.path === "/church")).toHaveLength(2);
+    expect(queryClient.getQueryData(keys.invites(church().id))).toBeUndefined();
   });
 });
