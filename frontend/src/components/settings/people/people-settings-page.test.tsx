@@ -315,6 +315,26 @@ describe("Settings → People: Members (slice 6b-2a)", () => {
     expect(new Set(query.observers.map((observer) => observer.options.staleTime))).toEqual(new Set([0]));
   });
 
+  it("shows names and emails with markup in them as text, never as HTML", async () => {
+    const list = memberList("admin");
+    list.items = list.items.map((m) =>
+      m.user_id === PEOPLE.mo ? { ...m, name: "<b>x</b>", email: "<i>y</i>@example.com" } : m,
+    );
+    const maker = { user_id: PEOPLE.mo, name: "<b>x</b>", email: "<i>y</i>@example.com" };
+    renderPage("admin", {
+      "GET /members": list,
+      "GET /invites": inviteList([invite({ email: "<img src=x>@example.com", created_by: maker })]),
+    });
+    await screen.findByRole("heading", { name: "Pending invites (1)" });
+    const mo = row("<b>x</b>");
+    expect(within(mo).getByText("<i>y</i>@example.com")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Actions for <b>x</b>" })).toBeInTheDocument();
+    const pending = inviteRows()[0];
+    expect(within(pending).getByText("<img src=x>@example.com")).toBeInTheDocument();
+    expect(pending.textContent).toContain("Created by <b>x</b>");
+    expect(document.body.querySelectorAll("b, i, img")).toHaveLength(0);
+  });
+
   it("shows the error state with Retry when the list cannot be read", async () => {
     const { api, user } = renderPage("member", { "GET /members": fakeError(500, "internal_error", "Something went wrong.") });
     expect(await screen.findByRole("button", { name: "Retry" })).toBeInTheDocument();
