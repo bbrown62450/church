@@ -30,7 +30,7 @@
   `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
 - TDD: write the failing test first and see it fail as quoted.
 - **Backup push after every task** (standing rule): the controller runs `git push origin claude/slice-2-plan-4q33le` after each task's commit (never `--force`, never a rebase; if the push is rejected, `git pull --no-rebase origin claude/slice-2-plan-4q33le` and push again; on a network error retry after 2, 4, 8 and 16 s). A fix asked for by a review is a new commit, `Fix: <what> (Task <n> review)`. The container can restart and lose uncommitted work: commit as soon as a task's checks pass.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 2236 → 2236 passed, 49 → 49 skipped (unchanged); frontend 1010 → 1047 in 113 → 115 files`.
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 2236 → 2236 passed, 49 → 49 skipped (unchanged); frontend 1010 → 1057 in 113 → 115 files`.
 - New prose for the owner has no em dashes and no flattery. New user-facing copy is exactly the list in clarification 9 and has no em dashes.
 - No church id, email address, invite code or link, token, database URL, street address or real person's name in any doc, commit, test or record. Tests use `@example.com` addresses, the fixtures' "Grace" and "Hope" and made-up names.
 - Ask the owner before any push to a PR, PR creation, marking ready, merging, or any production or settings action. Owner steps go one at a time, in plain words.
@@ -51,6 +51,7 @@ As in the 6b-1 and 6b-2a plans: **Create `path`:** the block is the whole new fi
   | T3 | +25 (`confirm-dialog.test.tsx` 1; `danger-zone-page.test.tsx` 24, a new file) | 1046 in 115 files |
   | T4 | +1 (`settings-layout.test.tsx`: the Danger zone case) | 1047 in 115 files |
   | T5 | 0 (`docs/manual-verification.md` only) | 1047 in 115 files |
+  | Build review fixes | +10 (`danger-zone-page.test.tsx` 5 (the 375 px New owner list, Escape and Cancel while each of the three requests runs, focus after a refused transfer); `church-layout.test.tsx` 3; `church.test.ts` 1; `settings-layout.test.tsx` 1) | 1057 in 115 files |
 
 ### Layering and code rules (carried)
 - Pages and components never call `apiFetch`: the hooks in `src/lib/queries/church.ts` use `useApi().church`, and every write goes through `useChurchMutation`, so a `no_church_access` 403 reaches the `(church)` layout's fallback.
@@ -126,20 +127,23 @@ The owner's answers win over S and F; the code wins over both where they disagre
 
 | Path | Change | Task |
 |---|---|---|
-| `frontend/src/lib/church.ts` (+ `church.test.ts`) | `markChurchExited`, `wasChurchExited`, `EXITED_MARK_MS`, `resetExitedChurchesForTests` | T1 |
+| `frontend/src/lib/church.ts` (+ `church.test.ts`) | `markChurchExited`, `wasChurchExited`, `EXITED_MARK_MS`, `resetExitedChurchesForTests`; `forgetChurchExited` (build review fix 5) | T1 |
 | `frontend/src/lib/settings/people.ts` (+ `people.test.ts`) | `leaveBlock`, `deleteNameMatches`, `transferCandidates`, `transferChoiceLabel` | T1 |
 | `frontend/src/test/setup-dom.ts` | the marks' reset after each DOM test | T1 |
 | `frontend/src/lib/queries/membership.ts` (+ `membership.test.tsx`) | resolves to whether `/me` came back | T2 |
-| `frontend/src/app/(signed-in)/(church)/layout.tsx` (+ `church-layout.test.tsx`) | no lost-access toast for a church just left or deleted here | T2 |
+| `frontend/src/app/(signed-in)/(church)/layout.tsx` (+ `church-layout.test.tsx`) | no lost-access toast for a church just left or deleted here; the mark dropped when the church returns to `/me` (build review fix 5) | T2 |
 | `frontend/src/lib/api/types.ts` | `TransferOwnershipBody`, `ChurchLeft`, `DeleteChurchBody` | T3 |
 | `frontend/src/lib/queries/people.ts` | `onRoleRefused` and `onWriteError` exported | T3 |
 | `frontend/src/lib/queries/church.ts` | `useTransferOwnership`, `useLeaveChurch`, `useDeleteChurch`, `deleteNameError` and the toasts | T3 |
 | `frontend/src/components/app/confirm-dialog.tsx` (+ `confirm-dialog.test.tsx`) | `confirmDisabled` | T3 |
 | `frontend/src/components/settings/sections.ts`, `settings-layout.test.tsx` | Danger zone last | T4 |
 | `docs/manual-verification.md` | "## Slice 6b": items 18-25 | T5 |
+| `frontend/src/components/ui/select.tsx` | `SelectItem`'s optional `textClassName` for its text wrapper (other callers unchanged) | build review fix 1 |
+| `frontend/src/components/app/page-header.tsx` | an optional `descriptionClassName` | build review fix 8 |
+| `frontend/src/app/(signed-in)/(church)/settings/layout.tsx` | "You're the owner of {church}." wraps a long name (`[overflow-wrap:anywhere]`) | build review fix 8 |
 | `docs/ops-runbook.md` | "### Slice 6b-2a record" rides along (already on the branch); "### Slice 6b-2b record" is T8's records PR | T8 |
 
-**Counts in the PR:** 27 paths: 9 added (this plan and the eight new code and test files above) and 18 modified (the seventeen code, test and doc paths above, and `docs/ops-runbook.md`, which rides along with the 6b-2a record until merged; the runbook's own T8 change goes in the records PR); none deleted. **Untouched:** everything under `backend/`, `frontend/src/lib/api/openapi.json`, `frontend/src/lib/api/schema.d.ts`, `frontend/src/lib/queries/client.ts`, `frontend/src/components/ui`, `requirements*.txt`, `frontend/package*.json`, `.github`, `pytest.ini`, `app.py`, `streamlit_views`, `streamlit_tests`, `streamlit_auth.py`, `streamlit_tenancy.py`, `ui_helpers.py`.
+**Counts in the PR:** 30 paths: 9 added (this plan and the eight new code and test files above) and 21 modified (the twenty code, test and doc paths above, three of them from the build review fixes, and `docs/ops-runbook.md`, which rides along with the 6b-2a record until merged; the runbook's own T8 change goes in the records PR); none deleted. **Untouched:** everything under `backend/`, `frontend/src/lib/api/openapi.json`, `frontend/src/lib/api/schema.d.ts`, `frontend/src/lib/queries/client.ts`, `frontend/src/components/ui` but `select.tsx`, `requirements*.txt`, `frontend/package*.json`, `.github`, `pytest.ini`, `app.py`, `streamlit_views`, `streamlit_tests`, `streamlit_auth.py`, `streamlit_tenancy.py`, `ui_helpers.py`.
 
 **Task order and review batch:** T1 → T5, each one commit and a backup push; then one review of the whole batch with its fixes as `Fix: …` commits; T6 verifies; T7 is the pre-merge note; T8 opens the draft PR on the owner's yes, merges on the owner's yes, checks production, runs the phone check and writes the record.
 
@@ -2511,7 +2515,7 @@ Run: `.venv/bin/python -m pytest -q 2>&1 | tail -1` then `(cd frontend && npx vi
 ```
 ```
  Test Files  115 passed (115)
-      Tests  1047 passed (1047)
+      Tests  1057 passed (1057)
 ```
 ```
 typecheck 0
@@ -2523,7 +2527,7 @@ lint 0
 
 - [ ] **Step 3 (agent): The API files unchanged, the gates, the paths, the commits**
 
-Run: `.venv/bin/python backend/scripts/export_openapi.py >/dev/null && (cd frontend && npm run gen:api >/dev/null 2>&1) && git status --short -- frontend backend | wc -l` then `git diff origin/main...HEAD -- frontend/src docs/manual-verification.md | grep '^+' | grep -c '—'` then `python3 -c "import pathlib; t=pathlib.Path('docs/superpowers/plans/2026-10-10-slice-6b2b-danger-zone.md').read_text(); print(sum(t.count(c) for c in ('\u2028','\u2029','\ufffe','\uffff')))"` then `git diff --name-status origin/main...HEAD | LC_ALL=C sort -k2` then `git diff --name-only origin/main...HEAD -- backend .github frontend/package.json frontend/package-lock.json requirements-dev.txt requirements.txt pytest.ini app.py streamlit_views streamlit_tests streamlit_auth.py streamlit_tenancy.py ui_helpers.py frontend/src/lib/api/openapi.json frontend/src/lib/api/schema.d.ts frontend/src/lib/queries/client.ts frontend/src/components/ui | wc -l` then `git log --reverse --no-merges --format=%s origin/main..HEAD | grep -v -e '^WIP plan: ' -e '^Plan: '` then `for c in $(git rev-list origin/main..HEAD); do git show -s --format=%B "$c" | grep -q '^Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>$' || echo "no trailer: $(git show -s --format='%h %s' "$c")"; done; echo "trailer check done"`
+Run: `.venv/bin/python backend/scripts/export_openapi.py >/dev/null && (cd frontend && npm run gen:api >/dev/null 2>&1) && git status --short -- frontend backend | wc -l` then `git diff origin/main...HEAD -- frontend/src docs/manual-verification.md | grep '^+' | grep -c '—'` then `python3 -c "import pathlib; t=pathlib.Path('docs/superpowers/plans/2026-10-10-slice-6b2b-danger-zone.md').read_text(); print(sum(t.count(c) for c in ('\u2028','\u2029','\ufffe','\uffff')))"` then `git diff --name-status origin/main...HEAD | LC_ALL=C sort -k2` then `git diff --name-only origin/main...HEAD -- backend .github frontend/package.json frontend/package-lock.json requirements-dev.txt requirements.txt pytest.ini app.py streamlit_views streamlit_tests streamlit_auth.py streamlit_tenancy.py ui_helpers.py frontend/src/lib/api/openapi.json frontend/src/lib/api/schema.d.ts frontend/src/lib/queries/client.ts frontend/src/components/ui ':(exclude)frontend/src/components/ui/select.tsx' | wc -l` then `git log --reverse --no-merges --format=%s origin/main..HEAD | grep -v -e '^WIP plan: ' -e '^Plan: '` then `for c in $(git rev-list origin/main..HEAD); do git show -s --format=%B "$c" | grep -q '^Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>$' || echo "no trailer: $(git show -s --format='%h %s' "$c")"; done; echo "trailer check done"`
 **Expected:** `0` (no API change); `0` (no em dash in an added line of code, tests or the checklist); `0` (no U+2028, U+2029, U+FFFE or U+FFFF in this plan); exactly these paths (the 6b-2a record rides along until merged); `0` (nothing that must stay untouched changed); the subjects oldest first, then any `Fix: …` lines; only `trailer check done`:
 ```
 0
@@ -2541,8 +2545,10 @@ A	docs/superpowers/plans/2026-10-10-slice-6b2b-danger-zone.md
 M	frontend/src/app/(signed-in)/(church)/church-layout.test.tsx
 M	frontend/src/app/(signed-in)/(church)/layout.tsx
 A	frontend/src/app/(signed-in)/(church)/settings/danger/page.tsx
+M	frontend/src/app/(signed-in)/(church)/settings/layout.tsx
 M	frontend/src/components/app/confirm-dialog.test.tsx
 M	frontend/src/components/app/confirm-dialog.tsx
+M	frontend/src/components/app/page-header.tsx
 A	frontend/src/components/settings/danger/danger-zone-page.test.tsx
 A	frontend/src/components/settings/danger/danger-zone-page.tsx
 A	frontend/src/components/settings/danger/delete-church-card.tsx
@@ -2550,6 +2556,7 @@ A	frontend/src/components/settings/danger/leave-church-card.tsx
 A	frontend/src/components/settings/danger/transfer-ownership-card.tsx
 M	frontend/src/components/settings/sections.ts
 M	frontend/src/components/settings/settings-layout.test.tsx
+M	frontend/src/components/ui/select.tsx
 M	frontend/src/lib/api/types.ts
 A	frontend/src/lib/church-exit.test.ts
 A	frontend/src/lib/church-exit.ts
@@ -2573,6 +2580,13 @@ Slice 6b-2b: the quiet exit after a leave or delete
 Slice 6b-2b: Settings > Danger zone (leave, transfer ownership, delete)
 Slice 6b-2b: Danger zone in the Settings nav
 Docs: slice 6b-2b's manual check items
+Slice 6b-2b review: wrap long names in the New owner list
+Slice 6b-2b review: test that Escape and Cancel wait for the request
+Slice 6b-2b review: focus the heading when a refused transfer ends ownership
+Slice 6b-2b review: test that one church's exit mark does not hide another's loss
+Slice 6b-2b review: drop a church's exit mark when it returns to /me
+Slice 6b-2b review: describe the owner's disabled Leave button by its reason
+Slice 6b-2b review: wrap a long church name under the Settings heading
 ```
 ```
 trailer check done
@@ -2591,7 +2605,7 @@ trailer check done
 
 For each fix: change only the owning task's files; rerun Steps 2-3; commit `Fix: <what> (Task <n>, slice 6b-2b final verification)` with the trailer; after the PR exists, ask the owner before pushing it.
 
-Expected counts after this task: backend `2236 passed, 49 skipped` (unchanged); frontend `1047 passed` in 115 files.
+Expected counts after this task: backend `2236 passed, 49 skipped` (unchanged); frontend `1057 passed` in 115 files (1047 after T5, plus the build review fixes' 10).
 
 ### Task 7: Before the PR: no migration, so no owner routine (agent; answer 7)
 
@@ -2620,7 +2634,7 @@ Run: `git diff --name-only origin/main...HEAD -- backend | wc -l` then `ls backe
 
 (not replayed) `gh pr list -R <repo> --head claude/slice-2-plan-4q33le --state open --json number,url` → `[]`. Send the owner exactly this, and wait for a clear yes:
 
-> The Danger zone page (slice 6b-2b) is verified on this machine: backend 2236 passed, 49 skipped (unchanged); frontend 1047 tests in 115 files (1010 in 113 before), typecheck, lint and the production build clean. It adds Settings → Danger zone: anyone but the owner can leave a church (it then opens another of their churches, without the "no longer have access" message, and drops that church's unsaved draft on this device); the owner can transfer ownership to someone else in the church, or delete the church after typing its exact name. There is no database change this time, so no backup or SQL check before it. May I open the pull request as a **draft** titled "Slice 6b-2b: Settings > Danger zone (leave, transfer ownership, delete)", so the checks run? Merging stays with you.
+> The Danger zone page (slice 6b-2b) is verified on this machine: backend 2236 passed, 49 skipped (unchanged); frontend 1057 tests in 115 files (1010 in 113 before), typecheck, lint and the production build clean. It adds Settings → Danger zone: anyone but the owner can leave a church (it then opens another of their churches, without the "no longer have access" message, and drops that church's unsaved draft on this device); the owner can transfer ownership to someone else in the church, or delete the church after typing its exact name. There is no database change this time, so no backup or SQL check before it. May I open the pull request as a **draft** titled "Slice 6b-2b: Settings > Danger zone (leave, transfer ownership, delete)", so the checks run? Merging stays with you.
 
 - [ ] **Step 2 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
 
@@ -2631,11 +2645,11 @@ Slice 6b-2b: Settings > Danger zone (the second of slice 6b-2's two PRs; owner's
 
 - /settings/danger: admins and members read "Only the owner can transfer ownership or delete the church." and can leave after a confirmation. The owner's Leave is off with why (transfer first, or alone delete); Transfer ownership offers everyone else, admins first, confirms, then refetches the profile, /me and the members, and the page turns to its admin form ("Invite another member first…" with a link to People when alone); Delete church needs the exact name typed (both trimmed, capitals included), confirms, and shows the server's 422 under the box. One confirmation sends one request; Leaving…, Transferring…, Deleting…; a role refusal is toasted and refetched as on People; a 409 is toasted. The Danger zone nav entry last (the final Settings order).
 - The quiet exit after a leave or delete: lib/church-exit.ts runChurchExit (mark the church as exited, cancel its requests, remove its draft keys, useMembershipChanged({selectChurchId: null}), remove its cache) and useExitChurch (toasts when /me did not come back; useMembershipChanged now resolves to that). The (church) layout's two lost-access toasts skip a church marked in the last 60 s (markChurchExited / wasChurchExited in lib/church.ts).
-- lib/settings/people.ts: leaveBlock, deleteNameMatches, transferCandidates, transferChoiceLabel. ConfirmDialog gains confirmDisabled. docs/manual-verification.md: "Slice 6b" items 18-25. Rides along: the 6b-2a record in docs/ops-runbook.md.
+- lib/settings/people.ts: leaveBlock, deleteNameMatches, transferCandidates, transferChoiceLabel. ConfirmDialog gains confirmDisabled; ui/select's SelectItem an optional textClassName (the New owner list wraps a long name) and PageHeader an optional descriptionClassName (the Settings heading wraps a long church name), both from the build review, other callers unchanged. docs/manual-verification.md: "Slice 6b" items 18-25. Rides along: the 6b-2a record in docs/ops-runbook.md.
 
 Before the PR: nothing (no migration; Task 7). After the merge: the after-deploy check, the phone check on a throwaway church with a second Google account (member view, transfer, leave, delete), a "Slice 6b-2b record" in docs/ops-runbook.md.
 
-Tests: backend 2236 → 2236 passed, 49 → 49 skipped (unchanged); frontend 1010 → 1047 in 113 → 115 files
+Tests: backend 2236 → 2236 passed, 49 → 49 skipped (unchanged); frontend 1010 → 1057 in 113 → 115 files
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 
@@ -2647,7 +2661,7 @@ gh pr create -R <repo> --draft --base main --head claude/slice-2-plan-4q33le \
 gh pr checks <N> -R <repo> --watch --interval 30
 ```
 
-Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `2236 passed, 49 skipped`, backend-postgres `49 passed, 2236 deselected`, frontend `1047 passed` in 115 files. Then send: "PR #<N> is green: the backend is unchanged (2236 passed, 49 skipped); 1047 frontend tests in 115 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R <repo>`.
+Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `2236 passed, 49 skipped`, backend-postgres `49 passed, 2236 deselected`, frontend `1057 passed` in 115 files. Then send: "PR #<N> is green: the backend is unchanged (2236 passed, 49 skipped); 1057 frontend tests in 115 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R <repo>`.
 
 - [ ] **Step 3 (agent → OWNER): Ask to merge, then merge**
 
@@ -2797,7 +2811,7 @@ gh pr checks claude/slice-2-plan-4q33le -R <repo> --watch
 
 Code only (there is no migration to undo). On the owner's yes for each outward command, on a branch `claude/revert-6b2b` from `origin/main`: `git revert -m 1 --no-commit <merge sha>`, then keep the docs that rode along (`git checkout <merge sha> -- docs/ops-runbook.md docs/superpowers/plans/2026-10-10-slice-6b2b-danger-zone.md`), then the suites (frontend back to 1010 in 113 files), a commit "Revert slice 6b-2b (PR #<N>)" with the trailer, a PR, CI and the merge on the owner's yes; record it in the record.
 
-Expected counts after this task: backend `2236 passed, 49 skipped` on `main`; frontend `1047 passed` in 115 files. The records PR adds no test.
+Expected counts after this task: backend `2236 passed, 49 skipped` on `main`; frontend `1057 passed` in 115 files. The records PR adds no test.
 
 ---
 
@@ -2861,7 +2875,20 @@ With the real code every file passes.
 
 **Replay of the reviewed plan (2026-10-10).** The plan with these fixes was replayed by the same script with `--check` onto a fresh detached worktree of `60d0b9c` (scratchpad; the repo's `.venv` as a symlink, a hard-linked `frontend/node_modules`): all 45 directives applied (8 **Create**, 4 **Append**, 33 **In … replace**, each **In … replace** block exactly once), all five commit blocks ran with the trailer, and all 42 commands of T1-T7 matched their quoted **Expected** blocks: 0 mismatches. That covers the affected tests (T3's two files, `danger-zone-page.test.tsx` 24 passed), the full frontend suite after each task (`1047 passed` in 115 files after T4), typecheck 0, lint 0, the production build (compiled, `/settings/danger` listed) and the backend `2236 passed, 49 skipped`. The 27 planted violations were run in a second worktree with T1-T4 applied and the final tests. T8 and Step R stay "(not replayed)". Both worktrees were removed afterwards.
 
-**6b-2b build (2026-10-10).** T1-T6 were built on the branch from `986ae52` (the last plan commit) by applying each task's directives in order with a small script (every **In … replace** block occurred exactly once; 45 directives in all: T1 10, T2 14, T3 15, T4 5, T5 1), Step 1's tests before Step 3's code. Baselines before T1: backend `2236 passed, 49 skipped`; frontend `1010 passed` in 113 files; typecheck 0, lint 0; 9 revision files. Every "See them fail" and "See them pass" output matched the plan's quoted **Expected** block, and the counts after each task were the table's: 1015 in 113 files (T1), 1021 in 114 (T2), 1046 in 115 (T3), 1047 in 115 (T4 and T5). T5's docs tests: `89 passed`; its em dash count `0`. One commit per task, each pushed. T6: nothing uncommitted, `origin/main` not ahead (0), 9 revision files; backend `2236 passed, 49 skipped`; frontend `1047 passed` in 115 files; typecheck 0, lint 0; the production build compiled and listed `/settings/danger` (`2`, no font fetch failure); regenerating `openapi.json` and `schema.d.ts` changed nothing (`0`); em dashes added in `frontend/src` and the checklist `0`; stray code points in this plan `0`; the 27 paths as listed (9 added, 18 modified); nothing that must stay untouched changed (`0`); the six subjects as listed; every commit has the trailer. The PR body's line (`backend 2236 → 2236 passed, 49 → 49 skipped (unchanged); frontend 1010 → 1047 in 113 → 115 files`) matches. **No deviation** from the plan. Not run here: T7 and T8 (the pre-merge note, the PR, CI, the merge, the deploy, the phone check and the record), and no review of the batch.
+**6b-2b build (2026-10-10).** T1-T6 were built on the branch from `986ae52` (the last plan commit) by applying each task's directives in order with a small script (every **In … replace** block occurred exactly once; 45 directives in all: T1 10, T2 14, T3 15, T4 5, T5 1), Step 1's tests before Step 3's code. Baselines before T1: backend `2236 passed, 49 skipped`; frontend `1010 passed` in 113 files; typecheck 0, lint 0; 9 revision files. Every "See them fail" and "See them pass" output matched the plan's quoted **Expected** block, and the counts after each task were the table's: 1015 in 113 files (T1), 1021 in 114 (T2), 1046 in 115 (T3), 1047 in 115 (T4 and T5). T5's docs tests: `89 passed`; its em dash count `0`. One commit per task, each pushed. T6: nothing uncommitted, `origin/main` not ahead (0), 9 revision files; backend `2236 passed, 49 skipped`; frontend `1047 passed` in 115 files; typecheck 0, lint 0; the production build compiled and listed `/settings/danger` (`2`, no font fetch failure); regenerating `openapi.json` and `schema.d.ts` changed nothing (`0`); em dashes added in `frontend/src` and the checklist `0`; stray code points in this plan `0`; the 27 paths as listed (9 added, 18 modified); nothing that must stay untouched changed (`0`); the six subjects as listed; every commit has the trailer. The PR body's line (`backend 2236 → 2236 passed, 49 → 49 skipped (unchanged); frontend 1010 → 1057 in 113 → 115 files`) matches. **No deviation** from the plan. Not run here: T7 and T8 (the pre-merge note, the PR, CI, the merge, the deploy, the phone check and the record), and no review of the batch.
+
+**6b-2b build review fixes (2026-10-10).** An independent review of the build (head `e3c56b7`) found eight items; seven were acted on, each test first and seen failing (on the code as it was, or on a planted violation where the code was already right), one commit each, pushed:
+
+1. **Long names clipped in the New owner list at 375 px** (minor, observed). `SelectItem`'s text sat in a `whitespace-nowrap` wrapper inside a popup the trigger's width with `overflow-x` hidden, and the chosen value was clipped with no ellipsis. `ui/select.tsx`'s `SelectItem` takes an optional `textClassName` for that wrapper (no other caller passes it, so their classes are unchanged); the New owner list passes `whitespace-normal [overflow-wrap:anywhere]`, and the trigger shows the chosen name in a `truncate` span inside a `min-w-0` value. The class-only check on the trigger became a test of the element that holds the text (it failed: `whitespace-nowrap`). Headless Chromium (Playwright, the pre-installed `chromium_headless_shell-1194`), the built CSS, a member "Margaret Thompson-Williams (margaret.thompson.williams@gmail.com)", 375 px: before, that option's text was 415 px wide in a 309 px popup (right edge 459 px) and the chosen value was clipped (`text-overflow: clip`); after, it wraps to two lines (271 px wide, inside the popup), every option's text fits the popup, the chosen value ends in an ellipsis, and the page has no sideways scroll (`scrollWidth` 375).
+2. **No test that the dialogs ignore Escape and Cancel while pending** (minor). Three tests (Leave, Transfer, Delete): with the request held, Escape and then Cancel leave the dialog open. Each failed with its card's `isPending` guard removed.
+3. **Focus after a transfer refused for the role** (nit). When the refusal's role refetch turns the page to the admin form, the New owner trigger that held focus is gone and focus fell to the body (the new test failed so). `DangerZonePage` now focuses its heading when the role stops being owner and nothing has focus.
+4. **Another church lost within 60 s of an exit** (nit). Two `(church)` layout tests: after Grace was left here, Hope lost within 60 s (a `/me` without it, or a 403) still toasts "You no longer have access to Hope." The code was right; both failed with a planted mark that ignores the church id.
+5. **The exit mark outlived a rejoin** (nit). `forgetChurchExited` in `lib/church.ts`; the `(church)` layout calls it for a church that comes back into `/me` after a `/me` without it, so a church rejoined and removed again within 60 s toasts. Only a return counts: the exit marks the church while `/me` still lists it (clearing on any listing broke the existing "re-picks without the toast after a 403" test). One unit test and one layout test, both failing first.
+6. **The owner's disabled Leave button** (nit). `aria-describedby` points at the sentence that says why (`leave-why`); a member's or an admin's button has none. The owner tests failed first.
+7. **JS trim and Python strip differ on some edge characters** (no fix): the server's 422 "Church name did not match." covers it, and is tested.
+8. **"You're the owner of {church}." widened the Settings pages** (observed, outside the slice's diff but on this page). `PageHeader` takes an optional `descriptionClassName`; the Settings layout passes `[overflow-wrap:anywhere]` (the class test failed first). Headless Chromium at 375 px with an 82-character church name with no spaces: before, the Danger zone page was 577 px wide (`scrollWidth`; the review saw 545 px with the app's font); after, 375 px for the owner's page, the member's page, the open New owner list, and with each of the Transfer, Delete and Leave dialogs open (each dialog 320 px wide, `scrollWidth` equal to `clientWidth`).
+
+The harness (a Vite page in the session scratchpad rendering the Settings layout and the Danger zone page with the built CSS and the members preloaded; no server) was not committed; it ran without the Geist font (a fallback font), so the pixel widths are close to, not exactly, the app's. Paths: 27 → 30 (`frontend/src/components/ui/select.tsx`, `frontend/src/components/app/page-header.tsx` and `frontend/src/app/(signed-in)/(church)/settings/layout.tsx` modified); T6 Step 3's untouched check now excludes `select.tsx` only. Counts: frontend 1047 → 1057 in 115 files; backend `2236 passed, 49 skipped` (unchanged); typecheck 0, lint 0; the production build compiled; em dashes in added lines `0`. Not assessed: a real phone (T8's phone check), screen reader output for the new description.
 
 ## Spec coverage
 
