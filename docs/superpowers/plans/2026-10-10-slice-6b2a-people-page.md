@@ -31,7 +31,7 @@
   `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
 - TDD: write the failing test first and see it fail as quoted.
 - **Backup push after every task** (standing rule): the controller runs `git push origin claude/slice-2-plan-4q33le` after each task's commit (never `--force`, never a rebase; if the push is rejected, `git pull --no-rebase origin claude/slice-2-plan-4q33le` and push again; on a network error retry after 2, 4, 8 and 16 s). A fix asked for by a review is a new commit, `Fix: <what> (Task <n> review)`. The container can restart and lose uncommitted work: commit as soon as a task's checks pass.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 2235 → 2235 passed, 46 → 48 skipped; frontend 952 → 1002 in 109 → 113 files`.
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 2235 → 2235 passed, 46 → 48 skipped; frontend 952 → 1007 in 109 → 113 files`.
 - New prose for the owner has no em dashes and no flattery. New user-facing copy is exactly the list in clarification 11 and has no em dashes ("Copied ✓" keeps its check mark).
 - No church id, email address, invite code or link, token, database URL or real person's name in any doc, commit, test or record. Tests use `@example.com` addresses, the fixtures' "Grace" and made-up names. Invite codes are never logged, by the server (6b-1) or by the app (nothing here logs).
 - **SQL the owner must not run is shown in full and marked.** The SQL preview (T9 Step 3, README step 3) is shown whole, never shortened with "...", inside a code block, and the message says "Read only. Do not run this." before it (the "Slice 6b-1 record" lesson: a shortened preview was pasted and run, and Postgres refused it). The read-only queries the owner does run say "Read-only … Changes nothing." in their first line.
@@ -49,12 +49,12 @@ As in the 6b-1, 6a-3a and 6a-3b plans: **Create `path`:** the block is the whole
   | After | Backend (delta) | Backend | Postgres job (local) | Frontend (delta) | Frontend |
   |---|---|---|---|---|---|
   | T1 | +4 passed, +2 skipped (`test_migrations.py`: four SQLite tests, two Postgres), -4 passed (`streamlit_tests/test_settings_members_invites.py` deleted); four test files edited | 2235 passed, 48 skipped | 48 passed, 2235 deselected | 0 | 952 in 109 files |
-  | T2 | 0 | 2235 passed, 48 skipped | 48 passed | +22 (`people.test.ts` 18, `clipboard.test.tsx` 3, `urls.test.ts` 1), +2 files | 974 in 111 files |
-  | T3 | 0 | 2235 passed, 48 skipped | 48 passed | +5 (`confirm-dialog.test.tsx` 2, `copy-link-button.test.tsx` 3), +1 file | 979 in 112 files |
-  | T4 | 0 | 2235 passed, 48 skipped | 48 passed | +12 (`people-settings-page.test.tsx`), +1 file | 991 in 113 files |
-  | T5 | 0 | 2235 passed, 48 skipped | 48 passed | +10 (`people-settings-page.test.tsx`) | 1001 in 113 files |
-  | T6 | 0 | 2235 passed, 48 skipped | 48 passed | +1 (`settings-layout.test.tsx`: the People case) | 1002 in 113 files |
-  | T7 | 0 (`docs/manual-verification.md` only) | 2235 passed, 48 skipped | 48 passed | 0 | 1002 in 113 files |
+  | T2 | 0 | 2235 passed, 48 skipped | 48 passed | +23 (`people.test.ts` 19, `clipboard.test.tsx` 3, `urls.test.ts` 1), +2 files | 975 in 111 files |
+  | T3 | 0 | 2235 passed, 48 skipped | 48 passed | +5 (`confirm-dialog.test.tsx` 2, `copy-link-button.test.tsx` 3), +1 file | 980 in 112 files |
+  | T4 | 0 | 2235 passed, 48 skipped | 48 passed | +14 (`people-settings-page.test.tsx`), +1 file | 994 in 113 files |
+  | T5 | 0 | 2235 passed, 48 skipped | 48 passed | +12 (`people-settings-page.test.tsx`) | 1006 in 113 files |
+  | T6 | 0 | 2235 passed, 48 skipped | 48 passed | +1 (`settings-layout.test.tsx`: the People case) | 1007 in 113 files |
+  | T7 | 0 (`docs/manual-verification.md` only) | 2235 passed, 48 skipped | 48 passed | 0 | 1007 in 113 files |
 
 - CI `backend-postgres` goes from `46 passed, 2235 deselected` to `48 passed, 2235 deselected`.
 
@@ -1142,6 +1142,13 @@ describe("the People page's names and sentences (slice 6b-2a)", () => {
     expect(formatExpiry("2026-10-10T11:00:00Z", now, zone).relative).toBe("in less than an hour");
   });
 
+  it("chooses the unit after rounding, so 23.5 hours or more reads in 1 day", () => {
+    const now = new Date("2026-10-10T12:00:00Z");
+    expect(formatExpiry("2026-10-11T11:30:00Z", now).relative).toBe("in 1 day");
+    expect(formatExpiry("2026-10-11T11:59:00Z", now).relative).toBe("in 1 day");
+    expect(formatExpiry("2026-10-11T11:20:00Z", now).relative).toBe("in 23 hours");
+  });
+
   it("counts the invites a person made, and the reusable links others made", () => {
     const mine = { user_id: PEOPLE.ann, name: "Ann Admin", email: "ann@example.com" };
     const invites = [
@@ -1354,7 +1361,7 @@ export function formatDateTime(iso: string, { timeZone }: { timeZone?: string } 
     ...(timeZone === undefined ? {} : { timeZone }),
   };
   // Newer ICU puts a narrow no-break space before AM/PM; a plain space reads the same everywhere.
-  return new Intl.DateTimeFormat("en-US", options).format(at).replace(/ /g, " ");
+  return new Intl.DateTimeFormat("en-US", options).format(at).replace(/\u202f/g, " ");
 }
 
 const HOUR = 60 * 60 * 1000;
@@ -1373,8 +1380,10 @@ export function formatExpiry(
   const left = Date.parse(expiresAtIso) - now.getTime();
   const words = new Intl.RelativeTimeFormat("en-US", { numeric: "always" });
   let relative: string;
+  const hours = Math.round(left / HOUR);
+  // The unit is chosen after rounding, so 23.5 hours reads "in 1 day", never "in 24 hours".
   if (!(left >= HOUR)) relative = "in less than an hour";
-  else if (left < DAY) relative = words.format(Math.round(left / HOUR), "hour");
+  else if (hours < 24) relative = words.format(hours, "hour");
   else relative = words.format(Math.round(left / DAY), "day");
   return { relative, full: formatDateTime(expiresAtIso, { timeZone }) };
 }
@@ -1437,7 +1446,7 @@ function copyWithTextarea(text: string): boolean {
 Run: `(cd frontend && npx vitest run src/lib/settings/people.test.ts src/lib/clipboard.test.tsx src/lib/urls.test.ts 2>&1 | grep -E "^ +× |FAIL|Tests " | sed -E 's/ [0-9]+ms$//')` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")`
 **Expected:**
 ```
-      Tests  44 passed (44)
+      Tests  45 passed (45)
 ```
 ```
 typecheck 0
@@ -1445,7 +1454,7 @@ lint 0
 ```
 ```
  Test Files  111 passed (111)
-      Tests  974 passed (974)
+      Tests  975 passed (975)
 ```
 
 - [ ] **Step 5: Commit**
@@ -1461,7 +1470,7 @@ test fixtures, and one buildInviteUrl case pinning (code, origin)." -m "Co-Autho
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `2235 passed, 48 skipped`; frontend `974 passed` in 111 files.
+Expected counts after this task: backend `2235 passed, 48 skipped`; frontend `975 passed` in 111 files.
 
 ### Task 3: The People queries, Copy link, the initials avatar, and a confirm dialog with a body (S "Queries and mutations", "Components" `CopyLinkButton` and `InitialsAvatar`; clarifications 6a-6c, 7, 10)
 
@@ -1714,7 +1723,10 @@ export type CopyLinkButtonProps = Omit<ComponentProps<typeof Button>, "onClick" 
   text: string;
   /** When copying fails: show and select the link so the user can copy it themselves. */
   onCopyFailed(): void;
-  /** Screen readers' name when the visible label alone is not enough ("Copy link for …"). */
+  /**
+   * Screen readers' name when the visible label alone is not enough ("Copy link
+   * for …"); dropped while "Copied ✓" shows, so the name follows the label.
+   */
   label?: string;
 };
 
@@ -1744,7 +1756,7 @@ export function CopyLinkButton({ text, onCopyFailed, label, ...props }: CopyLink
   }
 
   return (
-    <Button type="button" aria-label={label} {...props} onClick={() => void onClick()}>
+    <Button type="button" aria-label={copied ? undefined : label} {...props} onClick={() => void onClick()}>
       {copied ? null : <CopyIcon data-icon="inline-start" aria-hidden="true" />}
       {copied ? "Copied ✓" : "Copy link"}
     </Button>
@@ -1791,6 +1803,7 @@ export function InitialsAvatar({ name, email }: { name: string | null; email: st
  * cache, then refetches.
  */
 import { useQuery, useQueryClient, type QueryClient, type UseQueryResult } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { toast } from "sonner";
 
 import { ApiError } from "@/lib/api/client";
@@ -1853,12 +1866,18 @@ export function useMembers(): UseQueryResult<MemberList, ApiError> {
 /**
  * `GET /invites` (owners and admins; no request otherwise): the live links,
  * newest first. A role refusal is handled as for a write, here in the query,
- * so a demoted admin's page turns read-only.
+ * so a demoted admin's page turns read-only. Once the role no longer allows
+ * it (`enabled` false), the cached list and its codes are removed. Not at the
+ * refusal itself: the page's queries are still enabled then, so they would
+ * fetch the list again and be refused again until the new role arrives.
  */
 export function useInvites({ enabled }: { enabled: boolean }): UseQueryResult<InviteList, ApiError> {
   const api = useApi();
   const church = useChurch();
   const queryClient = useQueryClient();
+  useEffect(() => {
+    if (!enabled) queryClient.removeQueries({ queryKey: keys.invites(church.id) });
+  }, [enabled, church.id, queryClient]);
   return useQuery<InviteList, ApiError>({
     queryKey: keys.invites(church.id),
     queryFn: async ({ signal }) => {
@@ -1992,7 +2011,7 @@ lint 0
 ```
 ```
  Test Files  112 passed (112)
-      Tests  979 passed (979)
+      Tests  980 passed (980)
 ```
 
 - [ ] **Step 5: Commit**
@@ -2009,7 +2028,7 @@ ConfirmDialog gains children under the description and a pendingLabel." -m "Co-A
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `2235 passed, 48 skipped`; frontend `979 passed` in 112 files.
+Expected counts after this task: backend `2235 passed, 48 skipped`; frontend `980 passed` in 112 files.
 
 ### Task 4: Settings → People: the page and Members (S UX "Every page", 1b, "Losing a role mid-session"; Testing → Frontend DOM; acceptance 14, 16, 18; clarifications 6a, 6d, 7-9)
 
@@ -2030,7 +2049,7 @@ Rendered inside the Settings layout with a Toaster, over a fake `/members` that 
  */
 import { screen, waitFor, within } from "@testing-library/react";
 import { toast } from "sonner";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 
 import SettingsLayout from "@/app/(signed-in)/(church)/settings/layout";
 import PeopleSettingsRoute from "@/app/(signed-in)/(church)/settings/people/page";
@@ -2044,8 +2063,33 @@ import { renderWithProviders } from "@/test/render";
 
 import { MEMBERS_NOTE } from "./members-list";
 
+/** The invite codes in these tests' fixtures: none may reach the console (codes are never logged). */
+const FIXTURE_CODES = ["abc", "r-123", "r-1"];
+const CONSOLE_METHODS = ["debug", "error", "info", "log", "trace", "warn"] as const;
+let consoleSpies: MockInstance[] = [];
+
+function printable(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value instanceof Error) return `${value.message} ${value.stack ?? ""}`;
+  try {
+    return JSON.stringify(value) ?? String(value);
+  } catch {
+    return String(value);
+  }
+}
+
+beforeEach(() => {
+  consoleSpies = CONSOLE_METHODS.map((method) => vi.spyOn(console, method));
+});
+
 afterEach(() => {
   toast.dismiss();
+  const printed = consoleSpies.flatMap((spy) => spy.mock.calls.map((args) => args.map(printable).join(" ")));
+  consoleSpies.forEach((spy) => spy.mockRestore());
+  for (const line of printed) {
+    expect(line).not.toMatch(/code=/);
+    for (const code of FIXTURE_CODES) expect(line).not.toMatch(new RegExp(`\\b${code}\\b`));
+  }
 });
 
 const ANN = { user_id: PEOPLE.ann, name: "Ann Admin", email: "ann@example.com" };
@@ -2230,6 +2274,19 @@ describe("Settings → People: Members (slice 6b-2a)", () => {
     await waitFor(() => expect(sent(api, "DELETE").map((r) => r.path)).toEqual([`/members/${PEOPLE.mo}?revoke_reusable=true`]));
   });
 
+  it("checks Also revoke again each time the dialog opens, even after it was unchecked and cancelled", async () => {
+    const { api, user } = renderPage("admin", { "GET /invites": inviteList([invite({ reusable: true })]) });
+    let dialog = await openRemove(user, "Mo Member");
+    const box = await within(dialog).findByRole("checkbox", { name: "Also revoke the 1 reusable invite link" });
+    await user.click(box);
+    expect(box).not.toBeChecked();
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    dialog = await openRemove(user, "Mo Member");
+    expect(await within(dialog).findByRole("checkbox", { name: "Also revoke the 1 reusable invite link" })).toBeChecked();
+    expect(sent(api, "DELETE")).toEqual([]);
+  });
+
   it("Cancel keeps the person and sends nothing", async () => {
     const { api, user } = renderPage("admin");
     const dialog = await openRemove(user, "Mo Member");
@@ -2282,6 +2339,14 @@ describe("Settings → People: Members (slice 6b-2a)", () => {
     await waitFor(() => expect(lost).toHaveBeenCalledWith(church().id));
     expect(screen.queryByText("You don't have access to this church.")).toBeNull();
     unsubscribe();
+  });
+
+  it("never keeps the invite list as fresh, since its codes are secrets (staleTime 0)", async () => {
+    const { queryClient } = renderPage("admin");
+    await screen.findByRole("heading", { name: "Members (5)" });
+    await waitFor(() => expect(queryClient.getQueryCache().find({ queryKey: keys.invites(church().id) })?.state.status).toBe("success"));
+    const query = queryClient.getQueryCache().find({ queryKey: keys.invites(church().id) })!;
+    expect(new Set(query.observers.map((observer) => observer.options.staleTime))).toEqual(new Set([0]));
   });
 
   it("shows the error state with Retry when the list cannot be read", async () => {
@@ -2642,7 +2707,7 @@ export default function PeopleSettingsRoute() {
 Run: `(cd frontend && npx vitest run src/components/settings/people/people-settings-page.test.tsx 2>&1 | grep -E "^ +× |FAIL|Tests " | sed -E 's/ [0-9]+ms$//')` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")`
 **Expected:**
 ```
-      Tests  12 passed (12)
+      Tests  14 passed (14)
 ```
 ```
 typecheck 0
@@ -2650,7 +2715,7 @@ lint 0
 ```
 ```
  Test Files  113 passed (113)
-      Tests  991 passed (991)
+      Tests  994 passed (994)
 ```
 
 - [ ] **Step 5: Commit**
@@ -2667,7 +2732,7 @@ app's; a failed list shows Retry." -m "Co-Authored-By: Claude Opus 5.5 <noreply@
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `2235 passed, 48 skipped`; frontend `991 passed` in 113 files.
+Expected counts after this task: backend `2235 passed, 48 skipped`; frontend `994 passed` in 113 files.
 
 ### Task 5: Invite someone, the link panel and Pending invites (S UX 1a, 1c; Testing → Frontend DOM "Create invite", "Pending invites"; acceptance 14; clarifications 7, 9-12)
 
@@ -2694,6 +2759,44 @@ import { EMAIL_HELP, INVITE_CREATED, ONE_EMAIL_ONCE, REUSABLE_HELP, ROLE_HELP } 
 import { MEMBERS_NOTE } from "./members-list";
 ````
 
+**In `frontend/src/components/settings/people/people-settings-page.test.tsx`, replace:**
+
+````tsx
+import SettingsLayout from "@/app/(signed-in)/(church)/settings/layout";
+````
+
+**with:**
+
+````tsx
+import ChurchLayout from "@/app/(signed-in)/(church)/layout";
+import SettingsLayout from "@/app/(signed-in)/(church)/settings/layout";
+````
+
+**In `frontend/src/components/settings/people/people-settings-page.test.tsx`, replace:**
+
+````tsx
+import { keys } from "@/lib/queries/keys";
+````
+
+**with:**
+
+````tsx
+import { keys } from "@/lib/queries/keys";
+import { ACTIVE_CHURCH_KEY } from "@/lib/storage";
+````
+
+**In `frontend/src/components/settings/people/people-settings-page.test.tsx`, replace:**
+
+````tsx
+import { church, invite, inviteList, me, memberList, PEOPLE } from "@/test/fixtures";
+````
+
+**with:**
+
+````tsx
+import { church, churchProfile, invite, inviteList, me, memberList, PEOPLE } from "@/test/fixtures";
+````
+
 **Append to `frontend/src/components/settings/people/people-settings-page.test.tsx`:**
 
 ````tsx
@@ -2715,7 +2818,7 @@ function invitesServer(initial: Invite[] = []) {
   return {
     list: () => inviteList(items),
     add: (made: Invite) => () => {
-      items = [made, ...items];
+      items = [made, ...items.filter((i) => i.id !== made.id)];
       return { status: 201, body: made };
     },
     revoke: (id: string) => () => {
@@ -2760,7 +2863,7 @@ describe("Settings → People: Invite someone and Pending invites (slice 6b-2a)"
     const panel = await screen.findByRole("group", { name: "Invite link ready" });
     expect(within(panel).getByLabelText("Invite link")).toHaveValue(NEW_LINK);
     await waitFor(() => expect(within(panel).getByRole("button", { name: "Copy link" })).toHaveFocus());
-    expect(screen.getByText(INVITE_CREATED)).toBeInTheDocument();
+    expect(screen.getByText(INVITE_CREATED).closest('[aria-live="polite"]')).not.toBeNull();
     expect(within(panel).getByText(/^Anyone who opens this link can join Grace as a member\. It works once and expires .+\.$/)).toBeInTheDocument();
     const post = invitesSent(api, "POST")[0];
     expect(post.body).toEqual({ role: "member", email: null, reusable: false });
@@ -2782,7 +2885,8 @@ describe("Settings → People: Invite someone and Pending invites (slice 6b-2a)"
 
   it("sends an admin, reusable link with a new key each time, and says who can use it", async () => {
     const reusable = invite({ id: "c0000000-0000-4000-8000-000000000009", code: "r-123", role: "admin", reusable: true });
-    const { api, user } = renderPage("admin", { "POST /invites": { status: 201, body: reusable } });
+    const server = invitesServer();
+    const { api, user } = renderPage("admin", { "GET /invites": server.list, "POST /invites": server.add(reusable) });
     const form = within((await screen.findByRole("heading", { name: "Invite someone" })).closest("section")!);
     await user.click(form.getByRole("radio", { name: /^Admin/ }));
     await user.click(form.getByRole("checkbox", { name: "Reusable for 7 days" }));
@@ -2801,7 +2905,8 @@ describe("Settings → People: Invite someone and Pending invites (slice 6b-2a)"
 
   it("turns Reusable off while an email is typed, and sends the email trimmed", async () => {
     const bound = invite({ email: "b@example.com" });
-    const { api, user } = renderPage("admin", { "POST /invites": { status: 201, body: bound } });
+    const server = invitesServer();
+    const { api, user } = renderPage("admin", { "GET /invites": server.list, "POST /invites": server.add(bound) });
     const form = within((await screen.findByRole("heading", { name: "Invite someone" })).closest("section")!);
     const box = form.getByRole("checkbox", { name: "Reusable for 7 days" });
     await user.click(box);
@@ -2845,7 +2950,8 @@ describe("Settings → People: Invite someone and Pending invites (slice 6b-2a)"
     const share = vi.fn(async () => {});
     Object.defineProperty(navigator, "share", { value: share, configurable: true });
     try {
-      const { user } = renderPage("admin", { "POST /invites": { status: 201, body: CODE_FREE } });
+      const server = invitesServer();
+      const { user } = renderPage("admin", { "GET /invites": server.list, "POST /invites": server.add(CODE_FREE) });
       await user.click(await screen.findByRole("button", { name: "Create invite link" }));
       const panel = await screen.findByRole("group", { name: "Invite link ready" });
       await user.click(within(panel).getByRole("button", { name: "Share…" }));
@@ -2875,6 +2981,7 @@ describe("Settings → People: Invite someone and Pending invites (slice 6b-2a)"
     expect(expiry).toHaveAttribute("aria-label", `Expires ${expiry.getAttribute("title")}`);
     await user.click(screen.getByRole("button", { name: "Copy link for Anyone with the link" }));
     expect(await navigator.clipboard.readText()).toBe("http://localhost:3000/join?code=r-1");
+    expect(within(inviteRows()[1]).getByRole("button", { name: "Copied ✓" })).toBeInTheDocument();
   });
 
   it("shows a row's link, selected, when copying is refused", async () => {
@@ -2908,6 +3015,59 @@ describe("Settings → People: Invite someone and Pending invites (slice 6b-2a)"
     expect(invitesSent(api, "DELETE").map((r) => r.path)).toEqual([`/invites/${CODE_FREE.id}`]);
     expect(await screen.findByText("No pending invites")).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole("heading", { name: "Pending invites (0)" })).toHaveFocus());
+  });
+
+  it("clears the link panel when its invite is revoked", async () => {
+    const server = invitesServer();
+    const { user } = renderPage("admin", {
+      "GET /invites": server.list,
+      "POST /invites": server.add(CODE_FREE),
+      [`DELETE /invites/${CODE_FREE.id}`]: server.revoke(CODE_FREE.id),
+    });
+    await user.click(await screen.findByRole("button", { name: "Create invite link" }));
+    await screen.findByRole("group", { name: "Invite link ready" });
+    await user.click(await screen.findByRole("button", { name: "Revoke the invite for Anyone with the link" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "Revoke this invite?" });
+    await user.click(within(dialog).getByRole("button", { name: "Revoke invite" }));
+    await waitFor(() => expect(screen.queryByRole("group", { name: "Invite link ready" })).toBeNull());
+    expect(screen.queryByDisplayValue(NEW_LINK)).toBeNull();
+    expect(screen.queryByText(INVITE_CREATED)).toBeNull();
+  });
+
+  it("turns read-only inside the church layout once GET /church says member after a refusal, and drops the codes", async () => {
+    window.localStorage.setItem(ACTIVE_CHURCH_KEY, church().id);
+    let role: Church["role"] = "admin";
+    const api = installFakeApi({
+      "GET /church": () => churchProfile({ role }),
+      "GET /members": () => memberList(role),
+      "GET /invites": inviteList([CODE_FREE]),
+      [`DELETE /invites/${CODE_FREE.id}`]: () => {
+        role = "member"; // demoted elsewhere just before
+        return fakeError(403, "forbidden", "Only church admins can do this.");
+      },
+    });
+    const { user, queryClient } = renderWithProviders(
+      <>
+        <ChurchLayout>
+          <SettingsLayout>
+            <PeopleSettingsRoute />
+          </SettingsLayout>
+        </ChurchLayout>
+        <Toaster />
+      </>,
+      { me: me(), path: "/settings/people" },
+    );
+    await user.click(await screen.findByRole("button", { name: "Revoke the invite for Anyone with the link" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "Revoke this invite?" });
+    await user.click(within(dialog).getByRole("button", { name: "Revoke invite" }));
+    expect(await screen.findByText("Only church admins can do this.")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(MEMBERS_NOTE)).toBeInTheDocument());
+    expect(screen.getByRole("heading", { level: 2, name: "People" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Invite someone" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Actions for / })).toBeNull();
+    expect(screen.queryByRole("heading", { name: /^Pending invites/ })).toBeNull();
+    expect(api.requests.filter((r) => r.path === "/church")).toHaveLength(2);
+    expect(queryClient.getQueryData(keys.invites(church().id))).toBeUndefined();
   });
 });
 ````
@@ -3014,7 +3174,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import type { Invite, InviteBody } from "@/lib/api/types";
-import { inviteFieldError, useCreateInvite } from "@/lib/queries/people";
+import { inviteFieldError, useCreateInvite, useInvites } from "@/lib/queries/people";
 
 import { InviteLinkPanel } from "./invite-link-panel";
 
@@ -3038,6 +3198,7 @@ type FieldErrors = Partial<Record<"email" | "reusable", string>>;
  */
 export function CreateInviteForm({ churchName }: { churchName: string }) {
   const create = useCreateInvite();
+  const invites = useInvites({ enabled: true });
   const emailRef = useRef<HTMLInputElement>(null);
   const reusableRef = useRef<HTMLInputElement>(null);
   const submitRef = useRef<HTMLButtonElement>(null);
@@ -3048,6 +3209,11 @@ export function CreateInviteForm({ churchName }: { churchName: string }) {
   const [created, setCreated] = useState<Invite | null>(null);
   const [announcement, setAnnouncement] = useState("");
   const emailBound = email.trim() !== "";
+  // A link revoked since (in Pending invites, or by a removal) leaves the panel too.
+  const shown =
+    created !== null && (invites.data === undefined || invites.data.items.some((i) => i.id === created.id))
+      ? created
+      : null;
 
   function onSubmit(event: FormEvent) {
     event.preventDefault();
@@ -3172,11 +3338,11 @@ export function CreateInviteForm({ churchName }: { churchName: string }) {
         </PendingButton>
       </form>
       <p className="sr-only" aria-live="polite">
-        {announcement}
+        {shown ? announcement : ""}
       </p>
-      {created ? (
+      {shown ? (
         <InviteLinkPanel
-          invite={created}
+          invite={shown}
           churchName={churchName}
           onDone={() => {
             setCreated(null);
@@ -3416,7 +3582,7 @@ import { PendingInvitesList } from "./pending-invites-list";
 Run: `(cd frontend && npx vitest run src/components/settings/people/people-settings-page.test.tsx 2>&1 | grep -E "^ +× |FAIL|Tests " | sed -E 's/ [0-9]+ms$//')` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")`
 **Expected:**
 ```
-      Tests  22 passed (22)
+      Tests  26 passed (26)
 ```
 ```
 typecheck 0
@@ -3424,7 +3590,7 @@ lint 0
 ```
 ```
  Test Files  113 passed (113)
-      Tests  1001 passed (1001)
+      Tests  1006 passed (1006)
 ```
 
 - [ ] **Step 5: Commit**
@@ -3440,7 +3606,7 @@ expiry and maker, Copy link and Revoke (after a confirmation)." -m "Co-Authored-
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `2235 passed, 48 skipped`; frontend `1001 passed` in 113 files.
+Expected counts after this task: backend `2235 passed, 48 skipped`; frontend `1006 passed` in 113 files.
 
 ### Task 6: People in the Settings nav (answer 7 of 2026-10-09; S "Settings nav"; acceptance 22's People half)
 
@@ -3548,7 +3714,7 @@ lint 0
 ```
 ```
  Test Files  113 passed (113)
-      Tests  1002 passed (1002)
+      Tests  1007 passed (1007)
 ```
 
 - [ ] **Step 5: Commit**
@@ -3561,7 +3727,7 @@ People, Account (6b-2b adds Danger zone last)." -m "Co-Authored-By: Claude Opus 
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `2235 passed, 48 skipped`; frontend `1002 passed` in 113 files.
+Expected counts after this task: backend `2235 passed, 48 skipped`; frontend `1007 passed` in 113 files.
 
 ## Docs, verification, the owner's routine, the PR and the merge (T7-T10)
 
@@ -3625,7 +3791,7 @@ removal); the phone screen; and the agent's check." -m "Co-Authored-By: Claude O
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-Expected counts after this task: backend `2235 passed, 48 skipped`; frontend `1002 passed` in 113 files.
+Expected counts after this task: backend `2235 passed, 48 skipped`; frontend `1007 passed` in 113 files.
 
 ### Task 8: Verification (agent)
 
@@ -3659,7 +3825,7 @@ Run: `.venv/bin/python -m pytest -q 2>&1 | tail -1` then `TEST_DATABASE_URL=<loc
 ```
 ```
  Test Files  113 passed (113)
-      Tests  1002 passed (1002)
+      Tests  1007 passed (1007)
 ```
 ```
 typecheck 0
@@ -3752,7 +3918,7 @@ trailer check done
 
 For each fix: change only the owning task's files; rerun Steps 2-3; commit `Fix: <what> (Task <n>, slice 6b-2a final verification)` with the trailer; after the PR exists, ask the owner before pushing it.
 
-Expected counts after this task: backend `2235 passed, 48 skipped`; frontend `1002 passed` in 113 files.
+Expected counts after this task: backend `2235 passed, 48 skipped`; frontend `1007 passed` in 113 files.
 
 ### Task 9: Before the PR: the owner's pre-merge routine for 0009 (backup, counts, the SQL) (OWNER + agent; clarification 14)
 
@@ -3812,7 +3978,7 @@ Expected counts after this task: unchanged.
 
 (not replayed) `gh pr list -R <repo> --head claude/slice-2-plan-4q33le --state open --json number,url` → `[]`. Send the owner exactly this, and wait for a clear yes:
 
-> The People page (slice 6b-2a) is verified on this machine: backend 2235 passed, 48 skipped (2235 and 46 before), and the 48 Postgres tests pass on a throwaway local database; frontend 1002 tests in 113 files (952 in 109 before), typecheck, lint and the production build clean. It adds Settings → People: everyone sees the members with emails; owners and admins invite (single-use links by default, or reusable for 7 days, optionally for one email), copy or share the link, make someone an admin or a member, remove someone, and see and revoke the pending links. With it comes migration 0009 (at most one owner per church), whose checks you have just done. May I open the pull request as a **draft** titled "Slice 6b-2a: Settings > People (invite links, members, pending invites) and migration 0009", so the checks run? Merging stays with you.
+> The People page (slice 6b-2a) is verified on this machine: backend 2235 passed, 48 skipped (2235 and 46 before), and the 48 Postgres tests pass on a throwaway local database; frontend 1007 tests in 113 files (952 in 109 before), typecheck, lint and the production build clean. It adds Settings → People: everyone sees the members with emails; owners and admins invite (single-use links by default, or reusable for 7 days, optionally for one email), copy or share the link, make someone an admin or a member, remove someone, and see and revoke the pending links. With it comes migration 0009 (at most one owner per church), whose checks you have just done. May I open the pull request as a **draft** titled "Slice 6b-2a: Settings > People (invite links, members, pending invites) and migration 0009", so the checks run? Merging stays with you.
 
 - [ ] **Step 2 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
 
@@ -3828,7 +3994,7 @@ Slice 6b-2a: Settings > People and migration 0009_memberships_one_owner (the fir
 
 Before the PR (Task 9): the backup, the read-only owner counts and the SQL preview with the owner. After the merge: the after-deploy check, the phone check in a test church with a second Google account (join, role change, revoke, removal), a "Slice 6b-2a record" in docs/ops-runbook.md.
 
-Tests: backend 2235 → 2235 passed, 46 → 48 skipped; frontend 952 → 1002 in 109 → 113 files
+Tests: backend 2235 → 2235 passed, 46 → 48 skipped; frontend 952 → 1007 in 109 → 113 files
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 
@@ -3840,7 +4006,7 @@ gh pr create -R <repo> --draft --base main --head claude/slice-2-plan-4q33le \
 gh pr checks <N> -R <repo> --watch --interval 30
 ```
 
-Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `2235 passed, 48 skipped`, backend-postgres `48 passed, 2235 deselected` (after its `alembic upgrade head`, `alembic check`, `alembic downgrade base` and `alembic upgrade head` steps, which now include 0009 on Postgres 17), frontend `1002 passed` in 113 files. Then send: "PR #<N> is green: backend 2235 passed, 48 skipped (the two new Postgres tests passed in their own job, and the migration went up, down and up again on Postgres); 1002 frontend tests in 113 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R <repo>`.
+Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `2235 passed, 48 skipped`, backend-postgres `48 passed, 2235 deselected` (after its `alembic upgrade head`, `alembic check`, `alembic downgrade base` and `alembic upgrade head` steps, which now include 0009 on Postgres 17), frontend `1007 passed` in 113 files. Then send: "PR #<N> is green: backend 2235 passed, 48 skipped (the two new Postgres tests passed in their own job, and the migration went up, down and up again on Postgres); 1007 frontend tests in 113 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R <repo>`.
 
 - [ ] **Step 3 (agent, only if needed): A fresh backup and the counts again**
 
@@ -4024,7 +4190,7 @@ streamlit_tests/test_settings_members_invites.py
 
 Then a commit "Revert slice 6b-2a (PR #<N>), keeping migration 0009" with the trailer; a PR, CI (whose `alembic check` then compares the restored model with the database at `0009`), and the merge on the owner's yes; record it in the record. Never `alembic downgrade` production for this.
 
-Expected counts after this task: backend `2235 passed, 48 skipped` on `main`; frontend `1002 passed` in 113 files. The records PR adds no test.
+Expected counts after this task: backend `2235 passed, 48 skipped` on `main`; frontend `1007 passed` in 113 files. The records PR adds no test.
 
 ---
 
