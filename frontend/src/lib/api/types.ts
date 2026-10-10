@@ -186,3 +186,14 @@ export type Invite = components["schemas"]["InviteOut"];
 export type InviteCreator = components["schemas"]["InviteCreatorOut"];
 export type InviteBody = components["schemas"]["InviteCreateIn"];
 export type InviteRevoked = components["schemas"]["RevokedOut"];
+
+/**
+ * Settings → Danger zone (slice 6b-2b; the routes are slice 6b-1's): `POST
+ * /church/transfer-ownership`'s body (another member of the church; the
+ * answer is the member list afterwards), `POST /church/leave`'s answer, and
+ * `DELETE /church`'s body (the church's name, typed; the answer is
+ * `DeletedOut`).
+ */
+export type TransferOwnershipBody = components["schemas"]["TransferOwnershipIn"];
+export type ChurchLeft = components["schemas"]["LeftOut"];
+export type DeleteChurchBody = components["schemas"]["DeleteChurchIn"];
