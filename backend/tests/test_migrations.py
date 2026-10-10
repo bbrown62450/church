@@ -1468,6 +1468,29 @@ def test_the_readme_shows_the_0009_preview_exactly_and_in_full():
     assert "..." not in step and "…" not in step
 
 
+def _one_owner_index():
+    return next(i for i in models.Membership.__table__.indexes if i.name == "uq_memberships_one_owner")
+
+
+def test_the_model_s_one_owner_index_is_the_migration_s():
+    """Alembic compares no index predicates, so `alembic check` would not see the
+    model's WHERE drift from 0009's: both dialects' predicates are the revision's
+    ONE_OWNER, and the model's DDL is the statement the migration runs (the
+    preview's on Postgres, sqlite_master's on SQLite)."""
+    from sqlalchemy.dialects import postgresql, sqlite
+    from sqlalchemy.schema import CreateIndex
+
+    module = ScriptDirectory.from_config(alembic_config(configure_logger=False)).get_revision(
+        "0009_memberships_one_owner").module
+    index = _one_owner_index()
+    migrated = next(line for line in PREVIEW_0009 if line.startswith("CREATE UNIQUE INDEX")).removesuffix(";")
+    assert module.ONE_OWNER == "role = 'owner'"
+    assert {d: str(index.dialect_options[d]["where"]) for d in ("postgresql", "sqlite")} == {
+        "postgresql": module.ONE_OWNER, "sqlite": module.ONE_OWNER}
+    assert str(CreateIndex(index).compile(dialect=postgresql.dialect())).strip() == migrated
+    assert str(CreateIndex(index).compile(dialect=sqlite.dialect())).strip() == migrated
+
+
 def _readme_0009_sql(n: int) -> str:
     """The n-th ```sql block of README "Before 0009_memberships_one_owner": 0 is step 2's
     counts, 1 step 4's after-deploy check."""
@@ -1518,6 +1541,29 @@ def test_0009_on_postgres_refuses_two_owners_then_creates_the_index_and_downgrad
     assert index == ("CREATE UNIQUE INDEX uq_memberships_one_owner ON public.memberships USING btree (church_id) "
                      "WHERE ((role)::text = 'owner'::text)")
     assert (dropped, again) == (0, "0009_memberships_one_owner")
+
+
+@pytest.mark.postgres
+def test_0009_s_index_on_postgres_is_the_one_create_all_makes(pg_admin_url):
+    """The model's uq_memberships_one_owner, made by create_all, is the index the
+    migration made, predicate and all (Alembic compares no predicates)."""
+    defs = []
+    for build in ("create_all", "migrate"):
+        with throwaway_database(pg_admin_url, role_bypassrls=True) as sandbox:
+            if build == "migrate":
+                _alembic(sandbox.role_url, "upgrade", "head")
+            engine = _pg_engine(sandbox.role_url)
+            try:
+                if build == "create_all":
+                    Base.metadata.create_all(engine)
+                with engine.connect() as conn:
+                    defs.append(conn.execute(text(
+                        "SELECT indexdef FROM pg_indexes WHERE indexname = 'uq_memberships_one_owner'")).scalar_one())
+            finally:
+                engine.dispose()
+    assert defs[0] == defs[1] == (
+        "CREATE UNIQUE INDEX uq_memberships_one_owner ON public.memberships USING btree (church_id) "
+        "WHERE ((role)::text = 'owner'::text)")
 
 
 @pytest.mark.postgres
