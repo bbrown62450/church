@@ -30,7 +30,7 @@
   `Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`
 - TDD: write the failing test first and see it fail as quoted.
 - **Backup push after every task** (standing rule): the controller runs `git push origin claude/slice-2-plan-4q33le` after each task's commit (never `--force`, never a rebase; if the push is rejected, `git pull --no-rebase origin claude/slice-2-plan-4q33le` and push again; on a network error retry after 2, 4, 8 and 16 s). A fix asked for by a review is a new commit, `Fix: <what> (Task <n> review)`. The container can restart and lose uncommitted work: commit as soon as a task's checks pass.
-- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `@@PRLINE@@`.
+- The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and then `https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS`, and includes the line `Tests: backend 2236 → 2236 passed, 49 → 49 skipped (unchanged); frontend 1010 → 1041 in 113 → 115 files`.
 - New prose for the owner has no em dashes and no flattery. New user-facing copy is exactly the list in clarification 9 and has no em dashes.
 - No church id, email address, invite code or link, token, database URL, street address or real person's name in any doc, commit, test or record. Tests use `@example.com` addresses, the fixtures' "Grace" and "Hope" and made-up names.
 - Ask the owner before any push to a PR, PR creation, marking ready, merging, or any production or settings action. Owner steps go one at a time, in plain words.
@@ -44,7 +44,13 @@ As in the 6b-1 and 6b-2a plans: **Create `path`:** the block is the whole new fi
 - Starting baselines: backend **2236 passed, 49 skipped**; frontend **1010 passed in 113 files**, typecheck and lint clean; Alembic head **`0009_memberships_one_owner`** (9 revision files). If any differs, stop and ask.
 - Planned cumulative counts (observed in the replay). A frontend delta counts tests (an `it.each` counts each case) and files. The backend never changes: `2236 passed, 49 skipped` after every task (CI's `backend-postgres` stays `49 passed, 2236 deselected`).
 
-@@COUNTS@@
+  | After | Frontend (delta) | Frontend |
+  |---|---|---|
+  | T1 | +5 (`church.test.ts` 1, `people.test.ts` 4) | 1015 in 113 files |
+  | T2 | +6 (`church-exit.test.ts` 2, a new file; `membership.test.tsx` 1; `church-layout.test.tsx` 3) | 1021 in 114 files |
+  | T3 | +19 (`confirm-dialog.test.tsx` 1; `danger-zone-page.test.tsx` 18, a new file) | 1040 in 115 files |
+  | T4 | +1 (`settings-layout.test.tsx`: the Danger zone case) | 1041 in 115 files |
+  | T5 | 0 (`docs/manual-verification.md` only) | 1041 in 115 files |
 
 ### Layering and code rules (carried)
 - Pages and components never call `apiFetch`: the hooks in `src/lib/queries/church.ts` use `useApi().church`, and every write goes through `useChurchMutation`, so a `no_church_access` 403 reaches the `(church)` layout's fallback.
@@ -132,7 +138,7 @@ The owner's answers win over S and F; the code wins over both where they disagre
 | `docs/manual-verification.md` | "## Slice 6b": items 18-25 | T5 |
 | `docs/ops-runbook.md` | "### Slice 6b-2a record" rides along (already on the branch); "### Slice 6b-2b record" is T8's records PR | T8 |
 
-**Counts in the PR:** @@PATHCOUNT@@ **Untouched:** everything under `backend/`, `frontend/src/lib/api/openapi.json`, `frontend/src/lib/api/schema.d.ts`, `frontend/src/lib/queries/client.ts`, `frontend/src/components/ui`, `requirements*.txt`, `frontend/package*.json`, `.github`, `pytest.ini`, `app.py`, `streamlit_views`, `streamlit_tests`, `streamlit_auth.py`, `streamlit_tenancy.py`, `ui_helpers.py`.
+**Counts in the PR:** 27 paths: 9 added (this plan and the eight new code and test files above) and 18 modified (the seventeen code, test and doc paths above, and `docs/ops-runbook.md`, which rides along with the 6b-2a record until merged; the runbook's own T8 change goes in the records PR); none deleted. **Untouched:** everything under `backend/`, `frontend/src/lib/api/openapi.json`, `frontend/src/lib/api/schema.d.ts`, `frontend/src/lib/queries/client.ts`, `frontend/src/components/ui`, `requirements*.txt`, `frontend/package*.json`, `.github`, `pytest.ini`, `app.py`, `streamlit_views`, `streamlit_tests`, `streamlit_auth.py`, `streamlit_tenancy.py`, `ui_helpers.py`.
 
 **Task order and review batch:** T1 → T5, each one commit and a backup push; then one review of the whole batch with its fixes as `Fix: …` commits; T6 verifies; T7 is the pre-merge note; T8 opens the draft PR on the owner's yes, merges on the owner's yes, checks production, runs the phone check and writes the record.
 
@@ -320,10 +326,23 @@ describe("the Danger zone rules (slice 6b-2b)", () => {
 Run: `(cd frontend && npx vitest run src/lib/church.test.ts 2>&1 | grep -E "^ +× |FAIL|Tests " | sed -E 's/ [0-9]+ms$//')` then `(cd frontend && npx vitest run src/lib/settings/people.test.ts 2>&1 | grep -E "^ +× |FAIL|Tests " | sed -E 's/ [0-9]+ms$//')`
 **Expected:**
 ```
-TBD
+   × markChurchExited / wasChurchExited (slice 6b-2b) > marks one church for 60 seconds, then forgets it
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  |unit| src/lib/church.test.ts > markChurchExited / wasChurchExited (slice 6b-2b) > marks one church for 60 seconds, then forgets it
+ FAIL  |unit| src/lib/church.test.ts > markChurchExited / wasChurchExited (slice 6b-2b) > marks one church for 60 seconds, then forgets it
+      Tests  1 failed | 7 passed (8)
 ```
 ```
-TBD
+   × the Danger zone rules (slice 6b-2b) > keeps the owner from leaving, with or without others, and nobody else
+   × the Danger zone rules (slice 6b-2b) > blocks exactly the shared fixture's leave rows the server refuses for the owner
+   × the Danger zone rules (slice 6b-2b) > matches the typed name only exactly, capitals included, spaces around it ignored
+   × the Danger zone rules (slice 6b-2b) > offers everyone else as the new owner, admins first, and names them with their email
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  |unit| src/lib/settings/people.test.ts > the Danger zone rules (slice 6b-2b) > keeps the owner from leaving, with or without others, and nobody else
+ FAIL  |unit| src/lib/settings/people.test.ts > the Danger zone rules (slice 6b-2b) > blocks exactly the shared fixture's leave rows the server refuses for the owner
+ FAIL  |unit| src/lib/settings/people.test.ts > the Danger zone rules (slice 6b-2b) > matches the typed name only exactly, capitals included, spaces around it ignored
+ FAIL  |unit| src/lib/settings/people.test.ts > the Danger zone rules (slice 6b-2b) > offers everyone else as the new owner, admins first, and names them with their email
+      Tests  4 failed | 19 passed (23)
 ```
 
 - [ ] **Step 3: The mark, the rules and the reset**
@@ -437,16 +456,18 @@ import { resetExitedChurchesForTests, resetStoredChurchIdForTests } from "@/lib/
 Run: `(cd frontend && npx vitest run src/lib/church.test.ts 2>&1 | grep -E "^ +× |FAIL|Tests " | sed -E 's/ [0-9]+ms$//')` then `(cd frontend && npx vitest run src/lib/settings/people.test.ts 2>&1 | grep -E "^ +× |FAIL|Tests " | sed -E 's/ [0-9]+ms$//')` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")`
 **Expected:**
 ```
-TBD
+      Tests  8 passed (8)
 ```
 ```
-TBD
+      Tests  23 passed (23)
 ```
 ```
-TBD
+typecheck 0
+lint 0
 ```
 ```
-TBD
+ Test Files  113 passed (113)
+      Tests  1015 passed (1015)
 ```
 
 - [ ] **Step 5: Commit**
@@ -462,7 +483,7 @@ transferChoiceLabel." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-@@AFTER 1@@
+Expected counts after this task: backend `2236 passed, 49 skipped` (unchanged); frontend `1015 passed` in 113 files.
 
 ### Task 2: The quiet exit: `runChurchExit`, `useExitChurch` and the layout (S "`src/lib/church-exit.ts`", "Change to slice 1's `(church)` layout"; Testing → Frontend unit `runChurchExit`, DOM "`(church)` layout, exited church"; acceptance 15; clarifications 2a, 2b, 2d, 2e, 3)
 
@@ -654,13 +675,22 @@ import { type Church, markChurchExited } from "@/lib/church";
 Run: `(cd frontend && npx vitest run src/lib/church-exit.test.ts 2>&1 | grep -E "^ +× |FAIL|Tests " | sed -E 's/ [0-9]+ms$//')` then `(cd frontend && npx vitest run src/lib/queries/membership.test.tsx 2>&1 | grep -E "^ +× |FAIL|Tests " | sed -E 's/ [0-9]+ms$//')` then `(cd frontend && npx vitest run "src/app/(signed-in)/(church)/church-layout.test.tsx" 2>&1 | grep -E "^ +× |FAIL|Tests " | sed -E 's/ [0-9]+ms$//')`
 **Expected:**
 ```
-TBD
+ FAIL  |unit| src/lib/church-exit.test.ts [ src/lib/church-exit.test.ts ]
+      Tests  no tests
 ```
 ```
-TBD
+   × useMembershipChanged > resolves to whether /me came back (slice 6b-2b)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  |dom| src/lib/queries/membership.test.tsx > useMembershipChanged > resolves to whether /me came back (slice 6b-2b)
+      Tests  1 failed | 5 passed (6)
 ```
 ```
-TBD
+   × (church) layout > re-picks without the toast after a 403 for a church just left or deleted here (slice 6b-2b)
+   × (church) layout > stays quiet when /me stops listing a church just left or deleted here (slice 6b-2b)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  |dom| src/app/(signed-in)/(church)/church-layout.test.tsx > (church) layout > re-picks without the toast after a 403 for a church just left or deleted here (slice 6b-2b)
+ FAIL  |dom| src/app/(signed-in)/(church)/church-layout.test.tsx > (church) layout > stays quiet when /me stops listing a church just left or deleted here (slice 6b-2b)
+      Tests  2 failed | 16 passed (18)
 ```
 
 - [ ] **Step 3: The exit and the layout's two quiet paths**
@@ -878,19 +908,21 @@ import { type Church, pickActiveChurch, storeChurchId, useStoredChurchId, wasChu
 Run: `(cd frontend && npx vitest run src/lib/church-exit.test.ts 2>&1 | grep -E "^ +× |FAIL|Tests " | sed -E 's/ [0-9]+ms$//')` then `(cd frontend && npx vitest run src/lib/queries/membership.test.tsx 2>&1 | grep -E "^ +× |FAIL|Tests " | sed -E 's/ [0-9]+ms$//')` then `(cd frontend && npx vitest run "src/app/(signed-in)/(church)/church-layout.test.tsx" 2>&1 | grep -E "^ +× |FAIL|Tests " | sed -E 's/ [0-9]+ms$//')` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")`
 **Expected:**
 ```
-TBD
+      Tests  2 passed (2)
 ```
 ```
-TBD
+      Tests  6 passed (6)
 ```
 ```
-TBD
+      Tests  18 passed (18)
 ```
 ```
-TBD
+typecheck 0
+lint 0
 ```
 ```
-TBD
+ Test Files  114 passed (114)
+      Tests  1021 passed (1021)
 ```
 
 - [ ] **Step 5: Commit**
@@ -906,7 +938,7 @@ longer lists the shown church) skip a church marked as just left here." -m "Co-A
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-@@AFTER 2@@
+Expected counts after this task: backend `2236 passed, 49 skipped` (unchanged); frontend `1021 passed` in 114 files.
 
 ## The page and the nav (T3-T4)
 
@@ -1409,7 +1441,7 @@ describe("Settings → Danger zone: the copy and the phone screen (slice 6b-2b)"
       leaveText("Grace"), ownerAloneText("Grace"), deleteText("Grace"), deleteBody("Grace", 1), deleteBody("Grace", 3),
       leftChurch("Grace"),
     ];
-    for (const text of [...seen, ...copy]) expect(text).not.toContain("—");
+    for (const text of [...seen, ...copy]) expect(text).not.toContain("\u2014");
     expect(seen.join(" ")).toContain("Leave Grace?");
     expect(seen.join(" ")).toContain("Make Ann Admin the owner?");
     expect(seen.join(" ")).toContain("Delete Grace?");
@@ -1422,10 +1454,14 @@ describe("Settings → Danger zone: the copy and the phone screen (slice 6b-2b)"
 Run: `(cd frontend && npx vitest run src/components/app/confirm-dialog.test.tsx 2>&1 | grep -E "^ +× |FAIL|Tests " | sed -E 's/ [0-9]+ms$//')` then `(cd frontend && npx vitest run src/components/settings/danger/danger-zone-page.test.tsx 2>&1 | grep -E "^ +× |FAIL|Tests " | sed -E 's/ [0-9]+ms$//')`
 **Expected:**
 ```
-TBD
+   × ConfirmDialog > keeps the confirm button off while confirmDisabled holds (slice 6b-2b)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  |dom| src/components/app/confirm-dialog.test.tsx > ConfirmDialog > keeps the confirm button off while confirmDisabled holds (slice 6b-2b)
+      Tests  1 failed | 6 passed (7)
 ```
 ```
-TBD
+ FAIL  |dom| src/components/settings/danger/danger-zone-page.test.tsx [ src/components/settings/danger/danger-zone-page.test.tsx ]
+      Tests  no tests
 ```
 
 - [ ] **Step 3: The types, the hooks, `confirmDisabled`, the cards, the page and the route**
@@ -2114,16 +2150,18 @@ export default function DangerZoneRoute() {
 Run: `(cd frontend && npx vitest run src/components/app/confirm-dialog.test.tsx 2>&1 | grep -E "^ +× |FAIL|Tests " | sed -E 's/ [0-9]+ms$//')` then `(cd frontend && npx vitest run src/components/settings/danger/danger-zone-page.test.tsx 2>&1 | grep -E "^ +× |FAIL|Tests " | sed -E 's/ [0-9]+ms$//')` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")`
 **Expected:**
 ```
-TBD
+      Tests  7 passed (7)
 ```
 ```
-TBD
+      Tests  18 passed (18)
 ```
 ```
-TBD
+typecheck 0
+lint 0
 ```
 ```
-TBD
+ Test Files  115 passed (115)
+      Tests  1040 passed (1040)
 ```
 
 - [ ] **Step 5: Commit**
@@ -2140,7 +2178,7 @@ refetched as on People); ConfirmDialog gains confirmDisabled." -m "Co-Authored-B
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-@@AFTER 3@@
+Expected counts after this task: backend `2236 passed, 49 skipped` (unchanged); frontend `1040 passed` in 115 files.
 
 ### Task 4: Danger zone in the Settings nav (answer 5; 2026-10-09 answer 7; S "Settings nav"; acceptance 22's Danger zone half)
 
@@ -2196,7 +2234,14 @@ The nav lists ten sections, Danger zone last (the final order), marks **Danger z
 Run: `(cd frontend && npx vitest run src/components/settings/settings-layout.test.tsx 2>&1 | grep -E "^ +× |FAIL|Tests " | sed -E 's/ [0-9]+ms$//')`
 **Expected:**
 ```
-TBD
+   × the Settings area (slice 6a-1) > shows the heading, who you are in the church, and the sections with the current one marked
+   × the Settings area (slice 6a-1) > marks the section current on its page (slices 6a-2, 6a-3a, 6a-3b, 5b-1, 5b-2, 6b-2a, 6b-2b): /settings/danger
+   × the Settings area (slice 6a-1) > shows a member the same sections, and /settings opens Church
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  |dom| src/components/settings/settings-layout.test.tsx > the Settings area (slice 6a-1) > shows the heading, who you are in the church, and the sections with the current one marked
+ FAIL  |dom| src/components/settings/settings-layout.test.tsx > the Settings area (slice 6a-1) > marks the section current on its page (slices 6a-2, 6a-3a, 6a-3b, 5b-1, 5b-2, 6b-2a, 6b-2b): /settings/danger
+ FAIL  |dom| src/components/settings/settings-layout.test.tsx > the Settings area (slice 6a-1) > shows a member the same sections, and /settings opens Church
+      Tests  3 failed | 9 passed (12)
 ```
 
 - [ ] **Step 3: Put Danger zone last**
@@ -2234,13 +2279,15 @@ TBD
 Run: `(cd frontend && npx vitest run src/components/settings/settings-layout.test.tsx 2>&1 | grep -E "^ +× |FAIL|Tests " | sed -E 's/ [0-9]+ms$//')` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")`
 **Expected:**
 ```
-TBD
+      Tests  12 passed (12)
 ```
 ```
-TBD
+typecheck 0
+lint 0
 ```
 ```
-TBD
+ Test Files  115 passed (115)
+      Tests  1041 passed (1041)
 ```
 
 - [ ] **Step 5: Commit**
@@ -2253,7 +2300,7 @@ the final order of the owner's 6b answers." -m "Co-Authored-By: Claude Opus 5.5 
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-@@AFTER 4@@
+Expected counts after this task: backend `2236 passed, 49 skipped` (unchanged); frontend `1041 passed` in 115 files.
 
 ## Docs, verification, the PR and the merge (T5-T8)
 
@@ -2294,10 +2341,10 @@ or a database URL.
 Run: `.venv/bin/python -m pytest -q backend/tests/test_slice1_docs.py backend/tests/test_docs.py backend/tests/test_ops_workflows.py 2>&1 | tail -1` then `git diff -- docs/manual-verification.md | grep '^+' | grep -c '—'`
 **Expected:**
 ```
-TBD
+89 passed in <t>s
 ```
 ```
-TBD
+0
 ```
 
 - [ ] **Step 2: Commit**
@@ -2312,7 +2359,7 @@ screen; and the agent's check." -m "Co-Authored-By: Claude Opus 5.5 <noreply@ant
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-@@AFTER 5@@
+Expected counts after this task: backend `2236 passed, 49 skipped` (unchanged); frontend `1041 passed` in 115 files.
 
 ### Task 6: Verification (agent)
 
@@ -2325,13 +2372,13 @@ Every `gh` command uses `-R <repo>` (or the session's GitHub tools, with the sam
 Run: `git status --short | grep -v '^?? .claude/' | wc -l` then `git fetch -q origin && git rev-list --count HEAD..origin/main` then `ls backend/migrations/versions | grep -c '^0'`
 **Expected:** `0` (nothing uncommitted); `0`; `9` (no new revision). If `main` moved: `git merge origin/main -m "Merge origin/main into claude/slice-2-plan-4q33le (Task 6)"` with the trailer as a second `-m`; on a conflict, `git merge --abort` and tell the owner. If `main` gained a migration, nothing here depends on it, but say so in the PR.
 ```
-TBD
+0
 ```
 ```
-TBD
+0
 ```
 ```
-TBD
+9
 ```
 
 - [ ] **Step 2 (agent): Both suites, types, lint, the build**
@@ -2339,42 +2386,75 @@ TBD
 Run: `.venv/bin/python -m pytest -q 2>&1 | tail -1` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")` then `(cd frontend && NEXT_PUBLIC_SUPABASE_URL=https://ci-placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-placeholder NEXT_PUBLIC_API_URL=http://localhost:8000 npm run build 2>&1 | grep -cE "Compiled successfully|/settings/danger")`
 **Expected** (a font `Failed to fetch` in the build: say so and rely on CI): the backend unchanged; the frontend as in the counts table; `2` (compiled, and the `/settings/danger` route listed):
 ```
-TBD
+2236 passed, 49 skipped in <t>s
 ```
 ```
-TBD
+ Test Files  115 passed (115)
+      Tests  1041 passed (1041)
 ```
 ```
-TBD
+typecheck 0
+lint 0
 ```
 ```
-TBD
+2
 ```
 
 - [ ] **Step 3 (agent): The API files unchanged, the gates, the paths, the commits**
 
-Run: `.venv/bin/python backend/scripts/export_openapi.py >/dev/null && (cd frontend && npm run gen:api >/dev/null 2>&1) && git status --short -- frontend backend | wc -l` then `git diff origin/main...HEAD -- frontend/src docs/manual-verification.md | grep '^+' | grep -c '—'` then `python3 -c "import pathlib; t=pathlib.Path('docs/superpowers/plans/2026-10-10-slice-6b2b-danger-zone.md').read_text(); print(sum(t.count(c) for c in (' ',' ','￾','￿')))"` then `git diff --name-status origin/main...HEAD | LC_ALL=C sort -k2` then `git diff --name-only origin/main...HEAD -- backend .github frontend/package.json frontend/package-lock.json requirements-dev.txt requirements.txt pytest.ini app.py streamlit_views streamlit_tests streamlit_auth.py streamlit_tenancy.py ui_helpers.py frontend/src/lib/api/openapi.json frontend/src/lib/api/schema.d.ts frontend/src/lib/queries/client.ts frontend/src/components/ui | wc -l` then `git log --reverse --no-merges --format=%s origin/main..HEAD | grep -v -e '^WIP plan: ' -e '^Plan: '` then `for c in $(git rev-list origin/main..HEAD); do git show -s --format=%B "$c" | grep -q '^Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>$' || echo "no trailer: $(git show -s --format='%h %s' "$c")"; done; echo "trailer check done"`
+Run: `.venv/bin/python backend/scripts/export_openapi.py >/dev/null && (cd frontend && npm run gen:api >/dev/null 2>&1) && git status --short -- frontend backend | wc -l` then `git diff origin/main...HEAD -- frontend/src docs/manual-verification.md | grep '^+' | grep -c '—'` then `python3 -c "import pathlib; t=pathlib.Path('docs/superpowers/plans/2026-10-10-slice-6b2b-danger-zone.md').read_text(); print(sum(t.count(c) for c in ('\u2028','\u2029','\ufffe','\uffff')))"` then `git diff --name-status origin/main...HEAD | LC_ALL=C sort -k2` then `git diff --name-only origin/main...HEAD -- backend .github frontend/package.json frontend/package-lock.json requirements-dev.txt requirements.txt pytest.ini app.py streamlit_views streamlit_tests streamlit_auth.py streamlit_tenancy.py ui_helpers.py frontend/src/lib/api/openapi.json frontend/src/lib/api/schema.d.ts frontend/src/lib/queries/client.ts frontend/src/components/ui | wc -l` then `git log --reverse --no-merges --format=%s origin/main..HEAD | grep -v -e '^WIP plan: ' -e '^Plan: '` then `for c in $(git rev-list origin/main..HEAD); do git show -s --format=%B "$c" | grep -q '^Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>$' || echo "no trailer: $(git show -s --format='%h %s' "$c")"; done; echo "trailer check done"`
 **Expected:** `0` (no API change); `0` (no em dash in an added line of code, tests or the checklist); `0` (no U+2028, U+2029, U+FFFE or U+FFFF in this plan); exactly these paths (the 6b-2a record rides along until merged); `0` (nothing that must stay untouched changed); the subjects oldest first, then any `Fix: …` lines; only `trailer check done`:
 ```
-TBD
+0
 ```
 ```
-TBD
+0
 ```
 ```
-TBD
+0
 ```
 ```
-TBD
+M	docs/manual-verification.md
+M	docs/ops-runbook.md
+A	docs/superpowers/plans/2026-10-10-slice-6b2b-danger-zone.md
+M	frontend/src/app/(signed-in)/(church)/church-layout.test.tsx
+M	frontend/src/app/(signed-in)/(church)/layout.tsx
+A	frontend/src/app/(signed-in)/(church)/settings/danger/page.tsx
+M	frontend/src/components/app/confirm-dialog.test.tsx
+M	frontend/src/components/app/confirm-dialog.tsx
+A	frontend/src/components/settings/danger/danger-zone-page.test.tsx
+A	frontend/src/components/settings/danger/danger-zone-page.tsx
+A	frontend/src/components/settings/danger/delete-church-card.tsx
+A	frontend/src/components/settings/danger/leave-church-card.tsx
+A	frontend/src/components/settings/danger/transfer-ownership-card.tsx
+M	frontend/src/components/settings/sections.ts
+M	frontend/src/components/settings/settings-layout.test.tsx
+M	frontend/src/lib/api/types.ts
+A	frontend/src/lib/church-exit.test.ts
+A	frontend/src/lib/church-exit.ts
+M	frontend/src/lib/church.test.ts
+M	frontend/src/lib/church.ts
+M	frontend/src/lib/queries/church.ts
+M	frontend/src/lib/queries/membership.test.tsx
+M	frontend/src/lib/queries/membership.ts
+M	frontend/src/lib/queries/people.ts
+M	frontend/src/lib/settings/people.test.ts
+M	frontend/src/lib/settings/people.ts
+M	frontend/src/test/setup-dom.ts
 ```
 ```
-TBD
+0
 ```
 ```
-TBD
+Docs: slice 6b-2a record in the ops runbook
+Slice 6b-2b: the exit mark and the Danger zone rules
+Slice 6b-2b: the quiet exit after a leave or delete
+Slice 6b-2b: Settings > Danger zone (leave, transfer ownership, delete)
+Slice 6b-2b: Danger zone in the Settings nav
+Docs: slice 6b-2b's manual check items
 ```
 ```
-TBD
+trailer check done
 ```
 
 - [ ] **Step 4: Fix any failure in its owning task**
@@ -2390,7 +2470,7 @@ TBD
 
 For each fix: change only the owning task's files; rerun Steps 2-3; commit `Fix: <what> (Task <n>, slice 6b-2b final verification)` with the trailer; after the PR exists, ask the owner before pushing it.
 
-@@AFTER 6@@
+Expected counts after this task: backend `2236 passed, 49 skipped` (unchanged); frontend `1041 passed` in 115 files.
 
 ### Task 7: Before the PR: no migration, so no owner routine (agent; answer 7)
 
@@ -2405,10 +2485,10 @@ Delete church calls 6b-1's `DELETE /church`, shipped and live since PR #59: a so
 Run: `git diff --name-only origin/main...HEAD -- backend | wc -l` then `ls backend/migrations/versions | grep -c '^0'`
 **Expected:** `0` and `9`. Anything else: stop and tell the owner before the PR, since the plan then needs the owner routine of the 6b-1 and 6b-2a plans (without SQL in chat; see "Lessons carried").
 ```
-TBD
+0
 ```
 ```
-TBD
+9
 ```
 
 ### Task 8: The draft PR, the merge, the after-deploy check, the phone check, the record (OWNER + agent)
@@ -2419,7 +2499,7 @@ TBD
 
 (not replayed) `gh pr list -R <repo> --head claude/slice-2-plan-4q33le --state open --json number,url` → `[]`. Send the owner exactly this, and wait for a clear yes:
 
-> The Danger zone page (slice 6b-2b) is verified on this machine: backend @@BACKEND@@ (unchanged); frontend @@FRONTEND@@ tests in @@FILES@@ files (1010 in 113 before), typecheck, lint and the production build clean. It adds Settings → Danger zone: anyone but the owner can leave a church (it then opens another of their churches, without the "no longer have access" message, and drops that church's unsaved draft on this device); the owner can transfer ownership to someone else in the church, or delete the church after typing its exact name. There is no database change this time, so no backup or SQL check before it. May I open the pull request as a **draft** titled "Slice 6b-2b: Settings > Danger zone (leave, transfer ownership, delete)", so the checks run? Merging stays with you.
+> The Danger zone page (slice 6b-2b) is verified on this machine: backend 2236 passed, 49 skipped (unchanged); frontend 1041 tests in 115 files (1010 in 113 before), typecheck, lint and the production build clean. It adds Settings → Danger zone: anyone but the owner can leave a church (it then opens another of their churches, without the "no longer have access" message, and drops that church's unsaved draft on this device); the owner can transfer ownership to someone else in the church, or delete the church after typing its exact name. There is no database change this time, so no backup or SQL check before it. May I open the pull request as a **draft** titled "Slice 6b-2b: Settings > Danger zone (leave, transfer ownership, delete)", so the checks run? Merging stays with you.
 
 - [ ] **Step 2 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
 
@@ -2434,7 +2514,7 @@ Slice 6b-2b: Settings > Danger zone (the second of slice 6b-2's two PRs; owner's
 
 Before the PR: nothing (no migration; Task 7). After the merge: the after-deploy check, the phone check on a throwaway church with a second Google account (member view, transfer, leave, delete), a "Slice 6b-2b record" in docs/ops-runbook.md.
 
-@@PRLINE@@
+Tests: backend 2236 → 2236 passed, 49 → 49 skipped (unchanged); frontend 1010 → 1041 in 113 → 115 files
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 
@@ -2446,7 +2526,7 @@ gh pr create -R <repo> --draft --base main --head claude/slice-2-plan-4q33le \
 gh pr checks <N> -R <repo> --watch --interval 30
 ```
 
-Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `2236 passed, 49 skipped`, backend-postgres `49 passed, 2236 deselected`, frontend `@@FRONTEND@@ passed` in @@FILES@@ files. Then send: "PR #<N> is green: the backend is unchanged (2236 passed, 49 skipped); @@FRONTEND@@ frontend tests in @@FILES@@ files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R <repo>`.
+Run the last line with `run_in_background: true`. **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `2236 passed, 49 skipped`, backend-postgres `49 passed, 2236 deselected`, frontend `1041 passed` in 115 files. Then send: "PR #<N> is green: the backend is unchanged (2236 passed, 49 skipped); 1041 frontend tests in 115 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R <repo>`.
 
 - [ ] **Step 3 (agent → OWNER): Ask to merge, then merge**
 
@@ -2583,13 +2663,45 @@ gh pr checks claude/slice-2-plan-4q33le -R <repo> --watch
 
 Code only (there is no migration to undo). On the owner's yes for each outward command, on a branch `claude/revert-6b2b` from `origin/main`: `git revert -m 1 --no-commit <merge sha>`, then keep the docs that rode along (`git checkout <merge sha> -- docs/ops-runbook.md docs/superpowers/plans/2026-10-10-slice-6b2b-danger-zone.md`), then the suites (frontend back to 1010 in 113 files), a commit "Revert slice 6b-2b (PR #<N>)" with the trailer, a PR, CI and the merge on the owner's yes; record it in the record.
 
-@@AFTER 8@@
+Expected counts after this task: backend `2236 passed, 49 skipped` on `main`; frontend `1041 passed` in 115 files. The records PR adds no test.
 
 ---
 
 ## Build notes
 
-@@BUILDNOTES@@
+**How this plan was written (2026-10-10).** Each task's code was built and run in a throwaway worktree of `6fe88d6` (in the session scratchpad, outside the repo directory; the repo's `.venv` as a symlink; a hard-linked copy of `frontend/node_modules`). The directives were then generated from that worktree by a script (a new file as **Create**, an addition at the end of a file as **Append**, every other change as **In … replace** with just enough whole-line context to occur once in the file as it stands at that point), and replayed (below). Baselines on `6fe88d6`: backend `2236 passed, 49 skipped`; frontend `1010 passed` in 113 files; typecheck 0, lint 0. While building:
+- **What S assumed and what exists** (clarification 2). `useMembershipChanged({selectChurchId: null})` stores nothing (slice 1's own test says so) and never reported a failed `/me`, so it now resolves to a boolean. The `(church)` layout toasts lost access from two places, not one: with only the `churchAccessLost` subscriber guarded, T3's leave test still found "You no longer have access to Grace." (the exit's own `/me` refetch no longer lists the church, which is slice 1's second path), so both are guarded. The draft prune reruns whenever `/me`'s data changes, not once per load. No `forbiddenIsRole` meta (6b-2a). `ConfirmDialog` could not keep its confirm off, hence `confirmDisabled`. Every component S lists exists (`select`, `input`, `label`, `button`, `alert-dialog`); `npx shadcn` was not needed.
+- **One test fix while building.** The fixtures' owner list (`memberList("owner")`) has four people (Ann, Mo, sam and Pat; Olive is left out when Pat is the owner), so the Delete body's count is 4, and the transfer test no longer compares the cache with the answer after the refetch replaced it.
+- **The escapes lesson, a third time.** The first replay found T6 Step 3's stray-code-point check printing `4` and the em dash gate printing `1`, because the file writer had turned the `\u2028`, `\u2029`, `\ufffe`, `\uffff` escapes of the command, and the `\u2014` of T3's em dash test, into the characters themselves. Both are now written as escapes (the test reads `"\u2014"` in its source), and both checks print `0`.
+- **A double tap.** `PendingButton` already turns the confirm into a disabled "Leaving…" before a second tap lands in jsdom, so the ref guard alone is never what the test sees; the mutation check below removes both (the guard and the pending state) and the test then counts two requests.
+
+**Mutation checks** (each violation planted in the build worktree with T1-T5 applied, the named file or files run, the change undone; `danger-zone-page.test.tsx` unless named):
+
+| Planted violation | Result |
+|---|---|
+| `runChurchExit` calls `membershipChanged` before cancelling and removing the draft keys | `church-exit.test.ts`: 1 failed, 1 passed |
+| `runChurchExit` keeps the draft keys | `church-exit.test.ts`: 2 failed |
+| `runChurchExit` does not mark the church | `church-exit.test.ts` and this file: 3 failed, 17 passed |
+| The layout's `churchAccessLost` toast not guarded | `church-layout.test.tsx`: 1 failed, 17 passed |
+| The layout's `/me` toast not guarded | `church-layout.test.tsx` and this file: 3 failed, 33 passed (the leave and delete exits both toast) |
+| The mark never expires | `church.test.ts`, `church-layout.test.tsx`: 2 failed, 24 passed |
+| `deleteNameMatches` ignores capitals | `people.test.ts` and this file: 2 failed, 39 passed |
+| `deleteNameMatches` does not trim | `people.test.ts` and this file: 2 failed, 39 passed |
+| Delete's confirm on before the name is typed (`confirmDisabled` dropped) | 1 failed, 17 passed |
+| The owner may leave (`leaveBlock` always null) | `people.test.ts` and this file: 5 failed, 36 passed |
+| Admins see the owner's cards | 3 failed, 15 passed |
+| Leave without the ref guard and never pending | 1 failed, 17 passed (two `POST /church/leave`) |
+| Delete without the ref guard and never pending | 1 failed, 17 passed (two `DELETE /church`) |
+| Leave's title without `[overflow-wrap:anywhere]` | 1 failed, 17 passed |
+| The Delete dialog without `wrapAnywhere` | 1 failed, 17 passed |
+| An em dash in "You're the owner…" | 2 failed, 16 passed |
+| The transfer does not refetch the profile | 2 failed, 16 passed (the toast-and-refetch test and the admin-form test) |
+
+With the real code every file passes.
+
+**Replay of the plan (2026-10-10).** A replay script parsed the plan's **Create**, **Append** and **In … replace** blocks, its "Run:" lines and its commit blocks, and applied T1-T7 in order onto a fresh detached worktree of the branch at the plan's first commit (`eafcccc`; scratchpad, the repo's `.venv` as a symlink, a hard-linked `frontend/node_modules`): all 45 directives applied (8 **Create**, 4 **Append**, 33 **In … replace**; every **In … replace** block occurred exactly once), all five commit blocks ran with the trailer, and its 42 commands' outputs are the ones quoted above (times as `<t>`), except the two gates fixed as described (escapes). The fixed plan was then replayed once more, with `--check`, onto another fresh worktree: see the last paragraph of these notes. The production build compiled and listed `/settings/danger`. Backend `2236 passed, 49 skipped` before and after (no backend file changes).
+
+**Not run while planning** (each marked "(not replayed)" where it appears): T8 (the pushes, the PR and CI, the merge, Vercel's and Railway's deploys, the after-deploy check, the phone check, the record and its PR) and T8 Step R. No headless browser was available in this session, so the 375 px wrapping is checked by class in jsdom only; the phone check's Step 11 is the real-device check. No local Postgres was needed (no backend change; CI's `backend-postgres` job still runs).
 
 ## Spec coverage
 
@@ -2619,7 +2731,9 @@ S items **not** in 6b-2b: everything of 6b-1 and 6b-2a (shipped); S's `handleAut
 
 ## Questions for the owner
 
-@@QUESTIONS@@
+Your 6b-2 planning answers of 2026-10-10 (all as recommended), your answers for this plan (the scope, the order of the exit, the phone check on a throwaway church) and your 6b answers of 2026-10-09 are binding and already in the plan. **There is no open question.** The few places where the plan departs from the design's wording follow an earlier answer or the code as it is (clarifications 2, 4, 6 and 9: the layout's two quiet paths instead of one line, both church names trimmed as the server does, a person without a name listed by email alone, the singular Delete sentence when the owner is alone); none changes what an owner can or cannot do. If you would rather have any of them as the design wrote it, say so and it is a one-line change in T1 or T3.
+
+Owner steps still to come: the draft PR on your yes and ready on your yes, the merge on your yes (no backup or SQL check this time), and a phone check in seven short steps, the last six in a throwaway church "Delete me" with your second Google account; then the records PR (T8).
 
 ## Self-review
 
