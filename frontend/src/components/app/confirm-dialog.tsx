@@ -28,6 +28,8 @@ export type ConfirmDialogProps = {
   pending?: boolean;
   /** The confirm button's words while `pending` ("Removing…"; slice 6b-2a): "Saving…" unless given. */
   pendingLabel?: string;
+  /** Keeps the confirm button off until the dialog's own condition holds (a typed name; slice 6b-2b). */
+  confirmDisabled?: boolean;
   destructive?: boolean;
   /** Breaks the title and description anywhere (`[overflow-wrap:anywhere]`), for one that may hold a long email (slice 6b-2a). */
   wrapAnywhere?: boolean;
@@ -59,6 +61,7 @@ export function ConfirmDialog({
   onConfirm,
   pending = false,
   pendingLabel,
+  confirmDisabled = false,
   destructive = false,
   wrapAnywhere = false,
   onCancel,
@@ -84,6 +87,7 @@ export function ConfirmDialog({
           <PendingButton
             pending={pending}
             {...(pendingLabel === undefined ? {} : { pendingLabel })}
+            disabled={confirmDisabled}
             size="touch"
             className="md:h-8"
             variant={destructive ? "destructive" : "default"}

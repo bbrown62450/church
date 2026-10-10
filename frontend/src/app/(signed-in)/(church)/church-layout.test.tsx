@@ -12,7 +12,7 @@ import { act, renderHook, screen, waitFor, within } from "@testing-library/react
 import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 
-import type { Church } from "@/lib/church";
+import { type Church, markChurchExited, storeChurchId } from "@/lib/church";
 import { useChurch } from "@/lib/church-context";
 import { makeQueryClient, useApi } from "@/lib/queries/client";
 import { keys } from "@/lib/queries/keys";
@@ -387,5 +387,128 @@ describe("(church) layout", () => {
 
     await expect(Promise.resolve().then(() => result.current.church("/church"))).rejects.toThrow();
     expect(api.requests).toEqual([]);
+  });
+
+  it("re-picks without the toast after a 403 for a church just left or deleted here (slice 6b-2b)", async () => {
+    markChurchExited(GRACE.id);
+    const api = installFakeApi({
+      "GET /me": me({ churches: [GRACE, HOPE] }),
+      "GET /church": churchById(HOPE),
+    });
+
+    renderShell();
+
+    expect(await screen.findByText("Showing Hope")).toBeInTheDocument();
+    await waitFor(() => expect(meRequests(api)).toHaveLength(2));
+    expect(churchRequests(api)).toEqual([GRACE.id, HOPE.id]);
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
+  it("stays quiet when /me stops listing a church just left or deleted here (slice 6b-2b)", async () => {
+    let meCalls = 0;
+    installFakeApi({
+      "GET /me": () => {
+        meCalls += 1;
+        return meCalls === 1 ? me({ churches: [GRACE, HOPE] }) : me({ churches: [HOPE] });
+      },
+      "GET /church": churchById(GRACE, HOPE),
+    });
+    const { queryClient } = renderShell();
+    expect(await screen.findByText("Showing Grace")).toBeInTheDocument();
+
+    markChurchExited(GRACE.id);
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: keys.me() });
+    });
+
+    expect(await screen.findByText("Showing Hope")).toBeInTheDocument();
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
+  it("still says so for another church lost within 60 seconds of leaving one (slice 6b-2b)", async () => {
+    const TRINITY = church({ id: CHURCH_IDS.trinity, name: "Trinity", role: "member" });
+    let churches = [GRACE, HOPE, TRINITY];
+    installFakeApi({
+      "GET /me": () => me({ churches }),
+      "GET /church": (req: RecordedRequest) => churchById(...churches)(req),
+    });
+    const { queryClient } = renderShell();
+    expect(await screen.findByText("Showing Grace")).toBeInTheDocument();
+
+    // Grace left here: the next church is picked quietly.
+    markChurchExited(GRACE.id);
+    churches = [HOPE, TRINITY];
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: keys.me() });
+    });
+    expect(await screen.findByText("Showing Hope")).toBeInTheDocument();
+    expect(toastError).not.toHaveBeenCalled();
+
+    // Hope removed by someone else a moment later: that loss is said.
+    churches = [TRINITY];
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: keys.me() });
+    });
+    expect(await screen.findByText("Showing Trinity")).toBeInTheDocument();
+    expect(toastError.mock.calls).toEqual([["You no longer have access to Hope."]]);
+  });
+
+  it("still says so for another church refused within 60 seconds of leaving one (slice 6b-2b)", async () => {
+    markChurchExited(GRACE.id);
+    installFakeApi({
+      "GET /me": me({ churches: [HOPE, church({ id: CHURCH_IDS.trinity, name: "Trinity", role: "member" })] }),
+      "GET /church": churchById(church({ id: CHURCH_IDS.trinity, name: "Trinity", role: "member" })),
+    });
+
+    renderShell();
+
+    expect(await screen.findByText("Showing Trinity")).toBeInTheDocument();
+    expect(toastError.mock.calls).toEqual([["You no longer have access to Hope."]]);
+  });
+
+  it("says so for a church rejoined and then lost within 60 seconds of leaving it (slice 6b-2b)", async () => {
+    let churches = [GRACE, HOPE];
+    installFakeApi({
+      "GET /me": () => me({ churches }),
+      "GET /church": (req: RecordedRequest) => churchById(...churches)(req),
+    });
+    const { queryClient } = renderShell();
+    expect(await screen.findByText("Showing Grace")).toBeInTheDocument();
+    const refetchMe = () =>
+      act(async () => {
+        await queryClient.invalidateQueries({ queryKey: keys.me() });
+      });
+
+    markChurchExited(GRACE.id);
+    churches = [HOPE];
+    await refetchMe();
+    expect(await screen.findByText("Showing Hope")).toBeInTheDocument();
+
+    // Rejoined with a new invite: /me lists Grace again, and Grace is chosen.
+    churches = [GRACE, HOPE];
+    await refetchMe();
+    await waitFor(() => expect(within(header()).getByText("Hope")).toBeInTheDocument());
+    act(() => storeChurchId(GRACE.id));
+    expect(await screen.findByText("Showing Grace")).toBeInTheDocument();
+
+    // Removed by an admin a moment later: that loss is said.
+    churches = [HOPE];
+    await refetchMe();
+    expect(await screen.findByText("Showing Hope")).toBeInTheDocument();
+    expect(toastError.mock.calls).toEqual([["You no longer have access to Grace."]]);
+  });
+
+  it("says so again once the mark is 60 seconds old (slice 6b-2b)", async () => {
+    markChurchExited(GRACE.id, Date.now() - 60_000);
+    installFakeApi({
+      "GET /me": me({ churches: [GRACE, HOPE] }),
+      "GET /church": churchById(HOPE),
+    });
+
+    renderShell();
+
+    expect(await screen.findByText("Showing Hope")).toBeInTheDocument();
+    expect(toastError).toHaveBeenCalledTimes(1);
+    expect(toastError).toHaveBeenCalledWith("You no longer have access to Grace.");
   });
 });

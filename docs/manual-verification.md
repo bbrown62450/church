@@ -531,3 +531,23 @@ address, an invite code or link, a church id or a database URL.
 - [ ] (owner, after 6b-2a) **15.** In the test church: the second account's ⋮ → **Remove from church**: "Remove {name}?" says they lose access and that services they saved stay; **Remove member** removes the row. In the private window, the second account's next tap in the test church says "You no longer have access to {church}." and moves it to another church or the welcome page.
 - [ ] (owner, after 6b-2a) **16.** At 375 px (the phone): no sideways scroll on People, even with a long email or the link in its box (the link scrolls inside the box); the keyboard does not cover the Email field while typing; the dialogs fit the screen; every button and menu is easy to tap.
 - [ ] (agent, after 6b-2a) **17.** `/health/ready` answers `{"ok":true,"db":"ok"}`; the app's `/settings/people` is served (signed out, it sends you to sign in).
+
+**6b-2b** (owner's 6b-2 planning answers of 2026-10-10) brings Settings →
+**Danger zone** (`/settings/danger`: Leave church for everyone; Transfer
+ownership and Delete church for the owner; the Danger zone entry last in
+the Settings nav). No migration. The checks that change anything run in a
+**throwaway church made from the church menu for this check** (for example
+"Delete me"), with the owner's **second Google account** in a private
+window; the real church and the test churches are only read, and are
+kept. The results go into `docs/ops-runbook.md` → "Slice 6b-2b record":
+what the screens show, never an email address, an invite link, a church id
+or a database URL.
+
+- [ ] (owner, after 6b-2b) **18.** On the phone, in the real church: **Settings** lists Church, Hymns, Liturgy, Prayers, Rubric, Bulletin, Contacts, People, Account, **Danger zone**. **Danger zone** shows **Leave {church}** with its button off and either "You're the owner. Transfer ownership below before you leave." or, if the owner is the only person, "You're the only person in {church}. To stop using it, delete the church below."; **Transfer ownership** with **New owner** (or, alone, "Invite another member first to transfer ownership."); and **Delete {church}**. **Delete church…** asks "Delete {church}?"; with a plainly wrong word such as "xyz" typed (never the church's name) **Delete church** stays off; **Cancel**. Nothing is changed here.
+- [ ] (owner, after 6b-2b) **19.** From the church menu, create a church named **Delete me**. In it, **Settings → People → Create invite link** (Member), and join with the second Google account in a private window, as in item 12.
+- [ ] (owner, after 6b-2b) **20.** In the private window (the second account, a member of Delete me): **Danger zone** says "Only the owner can transfer ownership or delete the church." and shows **Leave Delete me** only. **Leave church…** asks "Leave Delete me?"; **Cancel**.
+- [ ] (owner, after 6b-2b) **21.** In your own window, Delete me's **Danger zone → New owner**: the second account is listed; choose it, **Transfer ownership…** asks "Make {name} the owner?" and says {name} "will become the owner of Delete me" (check the church's name before going on); **Transfer ownership**: "Ownership transferred. You are now an admin.", and the page turns to the short form (the note and Leave only; the Settings heading says "You're an admin of Delete me.").
+- [ ] (owner, after 6b-2b) **22.** Still in your own window: **Leave church…** → **Leave church**: "You left Delete me.", and the app opens another of your churches with **no** "You no longer have access" message; Delete me is gone from the church menu.
+- [ ] (owner, after 6b-2b) **23.** In the private window (the second account, now Delete me's owner and only person; pull to reload): **Danger zone** shows Leave off with "You're the only person in Delete me. To stop using it, delete the church below.", and Transfer ownership says "Invite another member first to transfer ownership." with **Invite someone**. **Delete church…**: with "delete me" typed, **Delete church** stays off; with "Delete me", it turns on; tap it: "Church deleted.", then the welcome page, or that account's other church, with no "no longer have access" message.
+- [ ] (owner, after 6b-2b) **24.** At 375 px (the phone): no sideways scroll on Danger zone; the dialogs and the New owner list fit the screen; the keyboard does not cover the name box while typing; every button is easy to tap. (A real removal toast and a real draft discard are not shown by these steps; jsdom tests cover them, as the 6b-2b plan's T8 names.)
+- [ ] (agent, after 6b-2b) **25.** `/health/ready` answers `{"ok":true,"db":"ok"}`; the app's `/settings/danger` is served (signed out, it sends you to sign in).

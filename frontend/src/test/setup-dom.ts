@@ -13,7 +13,7 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
 import { afterEach, beforeEach, vi } from "vitest";
-import { resetStoredChurchIdForTests } from "@/lib/church";
+import { resetExitedChurchesForTests, resetStoredChurchIdForTests } from "@/lib/church";
 import { resetTestMocks } from "./mocks";
 import { resetSigningOutForTests } from "@/lib/auth";
 
@@ -95,6 +95,7 @@ afterEach(() => {
   window.localStorage.clear();
   window.sessionStorage.clear();
   resetStoredChurchIdForTests();
+  resetExitedChurchesForTests();
   // Task 18: the signing-out flag is module state; clear it after the tree is unmounted.
   resetSigningOutForTests();
 });

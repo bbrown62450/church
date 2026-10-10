@@ -29,7 +29,9 @@ export type MembershipChange = { selectChurchId?: string | null };
  * the stored id is kept and it still goes to `/`: the `(signed-in)` layout
  * shows its skeleton, then an ErrorState with Retry, until `/me` loads, so the
  * `(church)` layout never picks from the old list. It never throws: the change
- * itself succeeded, so the caller still shows its success toast.
+ * itself succeeded, so the caller still shows its success toast. It resolves
+ * to whether `/me` came back (slice 6b-2b: a leave or delete says so when it
+ * did not).
  *
  * Slice 6b calls it with `selectChurchId: null` after a leave or delete, while
  * the `(church)` layout still shows the church just left. Any refetch of that
@@ -38,7 +40,7 @@ export type MembershipChange = { selectChurchId?: string | null };
  * have the new `/me` (step 2) before anything refetches that church, or leave
  * `(church)` first.
  */
-export function useMembershipChanged(): (change: MembershipChange) => Promise<void> {
+export function useMembershipChanged(): (change: MembershipChange) => Promise<boolean> {
   const api = useApi();
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -46,15 +48,18 @@ export function useMembershipChanged(): (change: MembershipChange) => Promise<vo
     async ({ selectChurchId }: MembershipChange) => {
       if (selectChurchId) storeChurchId(selectChurchId);
       let hasChurch = true;
+      let meLoaded = false;
       try {
         // A /me already in flight may predate the change; fetchQuery would reuse it.
         await queryClient.cancelQueries({ queryKey: keys.me() });
         const me = await queryClient.fetchQuery({ ...meQueryOptions(api), staleTime: 0 });
         hasChurch = me.churches.length > 0;
+        meLoaded = true;
       } catch {
         void queryClient.resetQueries({ queryKey: keys.me() });
       }
       router.replace(hasChurch ? "/" : "/welcome");
+      return meLoaded;
     },
     [api, queryClient, router],
   );

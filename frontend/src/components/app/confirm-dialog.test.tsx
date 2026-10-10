@@ -162,4 +162,25 @@ describe("ConfirmDialog", () => {
     const dialog = await screen.findByRole("alertdialog", { name: "Revoke this invite?" });
     expect(within(dialog).getByRole("button", { name: "Revoking…" })).toHaveAttribute("aria-disabled", "true");
   });
+
+  it("keeps the confirm button off while confirmDisabled holds (slice 6b-2b)", async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+    const { rerender } = render(
+      <ConfirmDialog open onOpenChange={() => {}} title="Delete Grace?" confirmLabel="Delete church"
+        onConfirm={onConfirm} destructive confirmDisabled />,
+    );
+    const dialog = await screen.findByRole("alertdialog", { name: "Delete Grace?" });
+    const confirm = within(dialog).getByRole("button", { name: "Delete church" });
+    expect(confirm).toBeDisabled();
+    await user.click(confirm);
+    expect(onConfirm).not.toHaveBeenCalled();
+    rerender(
+      <ConfirmDialog open onOpenChange={() => {}} title="Delete Grace?" confirmLabel="Delete church"
+        onConfirm={onConfirm} destructive />,
+    );
+    expect(within(dialog).getByRole("button", { name: "Delete church" })).toBeEnabled();
+    await user.click(within(dialog).getByRole("button", { name: "Delete church" }));
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
 });

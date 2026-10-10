@@ -111,4 +111,21 @@ describe("useMembershipChanged", () => {
     expect(testRouter.replace).toHaveBeenCalledTimes(1);
     expect(testRouter.replace).toHaveBeenCalledWith("/");
   });
+
+  it("resolves to whether /me came back (slice 6b-2b)", async () => {
+    const api = installFakeApi({ "GET /me": me() });
+    const { changed } = renderMembershipChanged();
+    let loaded: boolean | undefined;
+    await act(async () => {
+      loaded = await changed({ selectChurchId: null });
+    });
+    expect(loaded).toBe(true);
+
+    api.set("GET /me", fakeError(503, "db_unavailable", "The database is unavailable."));
+    await act(async () => {
+      loaded = await changed({ selectChurchId: null });
+    });
+    expect(loaded).toBe(false);
+    expect(testRouter.replace).toHaveBeenCalledTimes(2);
+  });
 });

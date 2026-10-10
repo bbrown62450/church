@@ -887,6 +887,34 @@ token or database URL is recorded here.
 | Agent checks | Not run: this session has no sign-in for a test church | 2026-10-10 |
 | Follow-ups | Every church has exactly one owner and at least one admin, so nothing needs repair before 6b-2 (the gate in "Church integrity"). Next: 6b-2 (the People and Danger zone pages, migration 0009 one owner per church), then Hear it from the pews | 2026-10-10 |
 
+### Slice 6b-2a record
+
+Slice 6b-2a (Settings → People: invite links, the member list with role
+changes and removal, pending invites; the People nav entry) merged as PR
+#60, the first of slice 6b-2's two PRs, with migration
+`0009_memberships_one_owner` (at most one owner per church). The owner
+followed "Before 0009_memberships_one_owner" in
+`backend/migrations/README.md`, then a six-step phone check in a test
+church with a second Google account. No email address, church id, invite
+link or database URL is recorded here.
+
+| Step | Result | Date |
+|---|---|---|
+| 1. Backup | db-backup run 38058576830 (started by the agent on the owner's word, from `main`): success, artifact `db-backup` 465,193 bytes, 14:11 UTC | 2026-10-10 |
+| 2. Counts before | `0008_invites_integrity`; churches 3, deleted churches 0, memberships 5, owners 3, churches with two owners 0, without one owner 0, without an admin 0, one-owner index 0 | 2026-10-10 |
+| 3. The SQL (ran by hand) | The agent's offline render matched the README's block exactly and was shown in full, marked "Read only. Do not run this." The owner pasted and ran it in the SQL Editor ("Success"). A read-only check then showed `0009_memberships_one_owner` and the index present: the hand run did what Railway would have done (the two-owner check passed; no row changed). Until the merge, a new deploy of `main` would have failed at `alembic upgrade head` (unknown revision) while the previous release kept serving; the running app only logs a warning when the database is ahead. Merged promptly to close that gap. Second time read-only SQL shown in chat was run (see 6b-1): from now on the agent does not put migration SQL in chat as a pasteable block; it describes it in plain words and points to the README | 2026-10-10 |
+| Merge and deploy | PR #60 merged 14:14 UTC (10:14 Eastern), merge commit `518a729`. CI on `main`: success. Railway's deploy of `518a729`: Active (its upgrade found nothing to do) | 2026-10-10 |
+| 4. After the deploy | The counts again: `0009_memberships_one_owner`; churches 3, deleted 0, memberships 5, owners 3, 0, 0, 0, one-owner index 1 | 2026-10-10 |
+| Phone 1. Finding the page | Settings lists Church, Hymns, Liturgy, Prayers, Rubric, Bulletin, Contacts, People, Account; People shows Invite someone, Members (the owner with You and Owner) and Pending invites; nothing ran off the screen | 2026-10-10 |
+| Phone 2. An invite link | A single-use Member link: the panel and its sentence appeared; Copy link showed "Copied ✓" and "Link copied" | 2026-10-10 |
+| Phone 3. A real join | The second Google account opened the link in a private window and joined the test church; it appeared under Members as Member and the used invite left Pending invites | 2026-10-10 |
+| Phone 4. Role change | Make admin and Make member applied at once, with no confirmation | 2026-10-10 |
+| Phone 5. Revoke | A reusable link showed the "Share it only with people you trust." sentence and the Reusable badge; Revoke removed it and Pending invites read "No pending invites" | 2026-10-10 |
+| Phone 6. Removal | Remove from church removed the second account, which lost access to the test church on refresh | 2026-10-10 |
+| Not checked on the phone | A very long email wrapping at 375 px (checked by the agent in a headless browser only) and Share on the phone | 2026-10-10 |
+| Agent checks | Not run: this session has no sign-in for a test church | 2026-10-10 |
+| Follow-ups | Next: 6b-2b (the Danger zone page: leave, transfer, delete), then Hear it from the pews | 2026-10-10 |
+
 ## Backups
 
 - **Workflow:** `.github/workflows/backup.yml` (`db-backup`). Daily at 08:37 UTC,

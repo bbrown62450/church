@@ -39,7 +39,7 @@ export function isRoleRefusal(e: unknown): boolean {
 }
 
 /** A role refusal's toast and refetches: the page re-renders for the role the user has now. */
-function onRoleRefused(queryClient: QueryClient, churchId: string, e: ApiError): void {
+export function onRoleRefused(queryClient: QueryClient, churchId: string, e: ApiError): void {
   toast.error(errorToastMessage(e));
   void queryClient.invalidateQueries({ queryKey: keys.churchProfile(churchId) });
   void queryClient.invalidateQueries({ queryKey: keys.members(churchId) });
@@ -49,9 +49,10 @@ function onRoleRefused(queryClient: QueryClient, churchId: string, e: ApiError):
  * A failed write's handling: nothing for a 401 or a lost church (the app's),
  * nothing for a failure `isForm` says the form shows under a field, a role
  * refusal as above, and any other message toasted (a 404 also refetches
- * `refetchKey`, the list the missing row came from).
+ * `refetchKey`, the list the missing row came from). Slice 6b-2b's transfer
+ * and delete use it too.
  */
-function onWriteError(queryClient: QueryClient, churchId: string, refetchKey: readonly unknown[],
+export function onWriteError(queryClient: QueryClient, churchId: string, refetchKey: readonly unknown[],
                       isForm: (e: ApiError) => boolean = () => false) {
   return (e: ApiError) => {
     if (e.status === 401 || isNoChurchAccess(e) || isForm(e)) return;

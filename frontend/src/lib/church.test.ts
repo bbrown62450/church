@@ -1,6 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
-import { type Church, isAdmin, pickActiveChurch, roleLabel } from "./church";
+import {
+  type Church,
+  forgetChurchExited,
+  isAdmin,
+  markChurchExited,
+  pickActiveChurch,
+  resetExitedChurchesForTests,
+  roleLabel,
+  wasChurchExited,
+} from "./church";
 
 const churches: Church[] = [
   { id: "a", name: "Alpha", role: "owner" },
@@ -46,5 +55,26 @@ describe("roleLabel", () => {
 describe("isAdmin", () => {
   it("lets owners and admins edit the church's settings (printed bulletin PR 2a)", () => {
     expect((["owner", "admin", "member"] as const).map(isAdmin)).toEqual([true, true, false]);
+  });
+});
+
+describe("markChurchExited / wasChurchExited (slice 6b-2b)", () => {
+  afterEach(() => resetExitedChurchesForTests());
+
+  it("marks one church for 60 seconds, then forgets it", () => {
+    markChurchExited("c1", 1_000);
+    expect(wasChurchExited("c1", 1_000)).toBe(true);
+    expect(wasChurchExited("c1", 60_999)).toBe(true);
+    expect(wasChurchExited("c2", 1_000)).toBe(false);
+    expect(wasChurchExited("c1", 61_000)).toBe(false);
+    expect(wasChurchExited("c1", 1_000)).toBe(false); // the expired mark is gone
+  });
+
+  it("forgets one church's mark when it is listed again, keeping the others", () => {
+    markChurchExited("c1", 1_000);
+    markChurchExited("c2", 1_000);
+    forgetChurchExited("c1");
+    expect(wasChurchExited("c1", 1_000)).toBe(false);
+    expect(wasChurchExited("c2", 1_000)).toBe(true);
   });
 });
