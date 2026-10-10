@@ -112,3 +112,36 @@ export function invitesCreatedBy(invites: readonly Invite[], creatorId: string):
 export function otherReusableInvites(invites: readonly Invite[], creatorId: string): number {
   return invites.filter((invite) => invite.reusable && invite.created_by?.user_id !== creatorId).length;
 }
+
+// --- Slice 6b-2b: the Danger zone ---------------------------------------------------------------------------
+
+/**
+ * Why Leave church is off (6b spec UX 2a): the owner must transfer first
+ * ("owner_with_others") or, alone, delete the church ("owner_alone"); null
+ * for an admin or a member, who may leave (the server still refuses the last
+ * admin of a church with no owner, and that answer is toasted).
+ */
+export function leaveBlock(role: Church["role"], memberCount: number): "owner_with_others" | "owner_alone" | null {
+  if (role !== "owner") return null;
+  return memberCount > 1 ? "owner_with_others" : "owner_alone";
+}
+
+/**
+ * Delete church's typed name (6b spec UX 2c): equal to the church's name once
+ * both are trimmed, exactly, capitals included, as the server compares them.
+ */
+export function deleteNameMatches(typed: string, name: string): boolean {
+  return typed.trim() === name.trim();
+}
+
+/** Who can become the owner (6b spec UX 2b): everyone else in the church, admins first, each in the list's order. */
+export function transferCandidates(members: readonly Member[]): Member[] {
+  const others = members.filter((m) => !m.is_me && m.role !== "owner");
+  return [...others.filter((m) => m.role === "admin"), ...others.filter((m) => m.role !== "admin")];
+}
+
+/** A person in the New owner list: "{name} ({email})", or the email alone when there is no name. */
+export function transferChoiceLabel(member: Member): string {
+  const name = displayName(member);
+  return name === member.email ? member.email : `${name} (${member.email})`;
+}

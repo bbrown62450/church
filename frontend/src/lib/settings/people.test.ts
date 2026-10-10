@@ -6,14 +6,18 @@ import type { Church, Member } from "@/lib/api/types";
 import { invite, member, PEOPLE } from "@/test/fixtures";
 
 import {
+  deleteNameMatches,
   displayName,
   formatDateTime,
   formatExpiry,
   initials,
   inviteSummary,
   invitesCreatedBy,
+  leaveBlock,
   memberActions,
   otherReusableInvites,
+  transferCandidates,
+  transferChoiceLabel,
 } from "./people";
 
 type PolicyRow = {
@@ -21,6 +25,7 @@ type PolicyRow = {
   actor_role: Church["role"];
   target?: "self" | Member["role"];
   new_role?: "member" | "admin";
+  admin_count?: number;
   expected: string;
 };
 
@@ -136,5 +141,56 @@ describe("the People page's names and sentences (slice 6b-2a)", () => {
     expect(invitesCreatedBy(invites, PEOPLE.ann)).toBe(2);
     expect(otherReusableInvites(invites, PEOPLE.ann)).toBe(2);
     expect(invitesCreatedBy([], PEOPLE.ann)).toBe(0);
+  });
+});
+
+describe("the Danger zone rules (slice 6b-2b)", () => {
+  it("keeps the owner from leaving, with or without others, and nobody else", () => {
+    expect(leaveBlock("owner", 2)).toBe("owner_with_others");
+    expect(leaveBlock("owner", 1)).toBe("owner_alone");
+    expect(leaveBlock("admin", 1)).toBeNull();
+    expect(leaveBlock("admin", 5)).toBeNull();
+    expect(leaveBlock("member", 1)).toBeNull();
+  });
+
+  it("blocks exactly the shared fixture's leave rows the server refuses for the owner", () => {
+    const leaves = POLICY.rows.filter((r) => r.action === "leave");
+    expect(leaves).toHaveLength(7);
+    for (const row of leaves) {
+      const blocked = leaveBlock(row.actor_role, Math.max(row.admin_count ?? 1, 1)) !== null;
+      expect([row.actor_role, row.admin_count, blocked]).toEqual([
+        row.actor_role,
+        row.admin_count,
+        row.expected === "owner_must_transfer",
+      ]);
+    }
+  });
+
+  it("matches the typed name only exactly, capitals included, spaces around it ignored", () => {
+    expect(deleteNameMatches("Grace", "Grace")).toBe(true);
+    expect(deleteNameMatches("  Grace ", "Grace")).toBe(true);
+    expect(deleteNameMatches("grace", "Grace")).toBe(false);
+    expect(deleteNameMatches("GRACE", "Grace")).toBe(false);
+    expect(deleteNameMatches("Grac", "Grace")).toBe(false);
+    expect(deleteNameMatches("Gr ace", "Grace")).toBe(false);
+    expect(deleteNameMatches("", "Grace")).toBe(false);
+    expect(deleteNameMatches("St. Mark's", "St. Mark's")).toBe(true);
+  });
+
+  it("offers everyone else as the new owner, admins first, and names them with their email", () => {
+    const people = [
+      member({ user_id: PEOPLE.olive, email: "olive@example.com", name: "Olive Owner", role: "owner", is_me: true }),
+      member({ user_id: PEOPLE.ann, email: "ann@example.com", name: "Ann Admin", role: "admin" }),
+      member(),
+      member({ user_id: PEOPLE.sam, email: "sam@example.com", name: null, role: "member" }),
+      member({ user_id: PEOPLE.mo + "-2", email: "zed@example.com", name: "Zed Admin", role: "admin" }),
+    ];
+    expect(transferCandidates(people).map(transferChoiceLabel)).toEqual([
+      "Ann Admin (ann@example.com)",
+      "Zed Admin (zed@example.com)",
+      "Mo Member (mo@example.com)",
+      "sam@example.com",
+    ]);
+    expect(transferCandidates([people[0]])).toEqual([]);
   });
 });

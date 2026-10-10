@@ -87,3 +87,37 @@ export function useStoredChurchId(): string | null | undefined {
 export function resetStoredChurchIdForTests(): void {
   storedChurchId = undefined;
 }
+
+// --- Slice 6b-2b: a church the user just left or deleted ------------------------------------------------------
+
+/** How long `markChurchExited` lasts (6b spec "Change to slice 1's (church) layout"). */
+export const EXITED_MARK_MS = 60_000;
+
+// When each church was marked, by id. Module state: one tab, never stored.
+const exitedAt = new Map<string, number>();
+
+/**
+ * Marks `id` as a church the user has just left or deleted here
+ * (`runChurchExit`'s first step), so the `(church)` layout re-picks quietly
+ * instead of saying "You no longer have access to {name}." for it.
+ */
+export function markChurchExited(id: string, at: number = Date.now()): void {
+  exitedAt.set(id, at);
+}
+
+/**
+ * True for 60 s after `markChurchExited(id)`. A later loss of the same church
+ * (rejoined, then removed) shows the toast again.
+ */
+export function wasChurchExited(id: string, now: number = Date.now()): boolean {
+  const at = exitedAt.get(id);
+  if (at === undefined) return false;
+  if (now - at < EXITED_MARK_MS) return true;
+  exitedAt.delete(id);
+  return false;
+}
+
+/** Forget every mark (test isolation). */
+export function resetExitedChurchesForTests(): void {
+  exitedAt.clear();
+}
