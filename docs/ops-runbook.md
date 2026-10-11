@@ -915,6 +915,34 @@ link or database URL is recorded here.
 | Agent checks | Not run: this session has no sign-in for a test church | 2026-10-10 |
 | Follow-ups | Next: 6b-2b (the Danger zone page: leave, transfer, delete), then Hear it from the pews | 2026-10-10 |
 
+### Slice 6b-2b record
+
+Slice 6b-2b (Settings → Danger zone: anyone but the owner leaves; the owner
+transfers ownership or deletes the church after typing its name; a leave or
+delete then opens another church quietly and drops that church's draft)
+merged as PR #61, the second of slice 6b-2's two PRs (owner's 6b-2
+planning answers of 2026-10-10). No migration, so no backup routine before
+the merge. The phone check deleted a throwaway church made for it, with
+the owner's second Google account; the real church and the test churches
+were only read. No church id, email address, invite link, token or
+database URL is recorded here.
+
+| Step | Result | Date |
+|---|---|---|
+| Merge and deploy | PR #61 merged 22:40 UTC (18:40 Eastern), merge commit `12fd346`. CI on `main`: success. Railway's deploy of `12fd346`: successful | 2026-10-10 |
+| Phone 1. The page in the real church (read only) | Danger zone last in the nav; Leave off with its owner sentence; Transfer shown; Delete's button stayed off for "xyz"; cancelled; nothing changed | 2026-10-11 |
+| Phone 2. A throwaway church | "Delete me" created from the church menu | 2026-10-11 |
+| Phone 3. The second account joins | A single-use link; the second account joined Delete me in a private window | 2026-10-11 |
+| Phone 4. The member's view | The owner-only note and Leave only; the Leave dialog asked "Leave Delete me?" and was cancelled | 2026-10-11 |
+| Phone 5. Transfer | The question named Delete me; "Ownership transferred. You are now an admin."; the page turned to the note and Leave; the heading said admin of Delete me | 2026-10-11 |
+| Phone 6. Leave | "You left Delete me."; the owner's other church opened with no access message; Delete me gone from the menu | 2026-10-11 |
+| Phone 7. The new owner's page | Leave off with the only-person sentence; "Invite another member first to transfer ownership." | 2026-10-11 |
+| Phone 8. Delete | The button stayed off for "delete me" in small letters and came on for the exact name; "Church deleted." and then the welcome page or the account's other church, with no access message | 2026-10-11 |
+| Phone 9. The screen | No sideways scroll on Danger zone; the dialogs and the New owner list fit; the keyboard left the name box visible; buttons easy to tap | 2026-10-11 |
+| Not on the phone | A real removal toast (someone else removes you) and a real draft discard: covered by jsdom tests only (slice 1's `church-layout.test.tsx` and 6b-2b's `church-exit.test.ts` and `danger-zone-page.test.tsx`) | 2026-10-11 |
+| Agent checks | Not run: this session has no sign-in for a test church | 2026-10-11 |
+| Follow-ups | Slice 6b is complete; Settings is in its final order (Church, Hymns, Liturgy, Prayers, Rubric, Bulletin, Contacts, People, Account, Danger zone). Next: Hear it from the pews | 2026-10-11 |
+
 ## Backups
 
 - **Workflow:** `.github/workflows/backup.yml` (`db-backup`). Daily at 08:37 UTC,
