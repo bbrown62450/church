@@ -37,6 +37,9 @@ A section under the voice profile card, above the prayer list, on `/settings/pra
   the change is undone by not saving, as with any unsaved edit on the page.
 - "Add a voice" adds an empty, turned-on row and focuses it; off at 12 voices with "You can keep up to 12
   voices." under it.
+- "Restore the starter voices" (admins only; owner's answer B, 2026-10-20) puts the owner's five, all on, in
+  place of the list in the form. Nothing is stored until the admin taps Save, so leaving without saving
+  undoes it like any unsaved edit.
 - Saved with the page's one **Save** (the full-replace `PUT /church/prayer-library`), so the Save bar,
   the rebase onto newer server data and the leave guard work as they do for prayers and the profile.
 - Members read the list (each voice with "On" or "Off") and cannot edit; the page's existing note
@@ -53,10 +56,12 @@ A section under the voice profile card, above the prayer list, on `/settings/pra
 - **Absent or not a list:** the owner's five, all on, in this order: "Sharp, very conservative, reads every
   word"; "A teenager"; "A man who rarely comes to church"; "Parents of busy young kids"; "Someone
   deeply worried about their health". So every church starts with them and nothing is written until an
-  admin saves.
+  admin saves. A church that saved its own list keeps it even if the defaults in the code change later
+  (the defaults are read only when nothing was saved).
 - **Saved:** stored as sent once cleaned (whitespace runs collapsed to one space, trimmed). An empty list
   is stored and read as no voices (not the defaults). An entry of the wrong shape, or with a blank
-  description, is skipped on read.
+  description, is skipped on read, and a description over 300 characters (only a hand edit could store
+  one) is cut to 300 on read.
 - **Limits** (server, after cleaning): at most 12 voices ("You can keep up to 12 voices."), each
   description 1 to 300 characters, at most 6 turned on. The first failure is a 422 naming its field
   (`pew_voices`, `pew_voices.<i>.description`). A request with no `pew_voices` key leaves the stored
@@ -75,7 +80,11 @@ A section under the voice profile card, above the prayer list, on `/settings/pra
 - **Cancel** aborts the wait and keeps the panel already shown. The server deadline is 75 s, the client
   timeout 100 000 ms (as review).
 - A failure shows its message in an alert under the header (503, 504, 502, 429 with its wait, 422 "Turn on
-  at least one voice in Settings → Prayers."). A 401 or a lost church is the app's.
+  at least one voice in Settings → Prayers."). A 404 (a page published before its server, during a
+  deploy) shows its own plain line, "Hear it from the pews is not available yet. Try again in a few
+  minutes.", never the cards' hymn message. A 401 or a lost church is the app's.
+- **Deploy order:** if the page is published before the server, `GET /church/prayer-library` answers
+  without `pew_voices`; Settings then shows the starter voices, unchanged, so a save does not send them.
 
 **The "From the pews" panel**, at the top of the step under the header, above "Across the service", in its
 own bordered box.
