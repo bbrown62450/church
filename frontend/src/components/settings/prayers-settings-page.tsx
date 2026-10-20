@@ -29,7 +29,9 @@ import {
   MAX_PRAYERS,
   namesLibraryField,
   newRow,
+  newVoice,
   PRAYER_TYPE_LABELS,
+  starterVoiceRows,
   PRAYER_TYPES,
   prayersPayload,
   rebaseLibrary,
@@ -38,11 +40,13 @@ import {
   type LibraryForm,
   type PrayerRow,
   type RowErrors,
+  type VoiceRow,
 } from "@/lib/settings/prayers";
 import { useAutosize } from "@/lib/use-autosize";
 import { useKeyboardOpen } from "@/lib/use-keyboard-open";
 import { cn } from "@/lib/utils";
 
+import { PewVoicesCard, voiceOnId, voiceTextId } from "./pew-voices-card";
 import { NO_SAVED_PRAYERS, SAVE_FIRST, VoiceProfileCard } from "./voice-profile-card";
 
 export const PRAYERS_INTRO =
@@ -61,7 +65,9 @@ const NO_ERRORS: LibraryErrors = { rows: {} };
  * writer the pastor's voice, and the voice profile drafted from them. Every
  * member reads them; owners and admins add, edit and remove prayers and edit
  * the profile, all saved together by the one **Save** (a full replace), and
- * ask the AI to draft the profile from the saved prayers. 6a's
+ * ask the AI to draft the profile from the saved prayers. Under the profile,
+ * "From the pews" (pew voices spec 2026-10-20): the voices for "Hear it from
+ * the pews", edited by admins and saved by the same Save. 6a's
  * rules for settings forms: newer server data rebases the form, and leaving
  * with unsaved edits asks first (`LeaveGuard`). Pastor text is React text only.
  */
@@ -138,6 +144,40 @@ function LibraryEditor({ out, admin }: { out: PrayerLibrary; admin: boolean }) {
   });
 
   const setRows = (rows: (rows: PrayerRow[]) => PrayerRow[]) => setState((s) => ({ ...s, form: { ...s.form, rows: rows(s.form.rows) } }));
+  const setVoices = (voices: (voices: VoiceRow[]) => VoiceRow[]) =>
+    setState((s) => ({ ...s, form: { ...s.form, voices: voices(s.form.voices) } }));
+  /** A voice edit clears that voice's message, and the count's (it may no longer hold). */
+  const clearVoiceErrors = (key: string) => {
+    if (!errors.voices?.[key] && !errors.voicesList) return;
+    setErrors((e) => {
+      const voices = { ...e.voices };
+      delete voices[key];
+      return { ...e, voices, voicesList: undefined };
+    });
+  };
+  const updateVoice = (key: string, patch: Partial<VoiceRow>) => {
+    setVoices((voices) => voices.map((v) => (v.key === key ? { ...v, ...patch } : v)));
+    clearVoiceErrors(key);
+  };
+  const addVoice = () => {
+    added.current += 1;
+    const key = `new-voice-${added.current}`;
+    setVoices((voices) => [...voices, newVoice(key)]);
+    focusId.current = voiceTextId(key);
+  };
+  /** "Restore the starter voices": the owner's five, all on, in place of the list (saved only by Save). */
+  const restoreVoices = () => {
+    added.current += 1;
+    setVoices(() => starterVoiceRows(`starter-${added.current}`));
+    if (errors.voices || errors.voicesList) setErrors((e) => ({ ...e, voices: undefined, voicesList: undefined }));
+  };
+  const removeVoice = (key: string) => {
+    const at = form.voices.findIndex((v) => v.key === key);
+    const next = form.voices[at + 1] ?? form.voices[at - 1];
+    focusId.current = next ? voiceTextId(next.key) : "add-voice";
+    setVoices((voices) => voices.filter((v) => v.key !== key));
+    clearVoiceErrors(key);
+  };
   const clearError = (key: string, field: keyof RowErrors) => {
     if (!errors.rows[key]?.[field]) return;
     setErrors((e) => ({ ...e, rows: { ...e.rows, [key]: { ...e.rows[key], [field]: undefined } } }));
@@ -172,12 +212,19 @@ function LibraryEditor({ out, admin }: { out: PrayerLibrary; admin: boolean }) {
     setRemoving(null);
   }
 
-  /** Shows these messages and focuses the first in page order: the profile, then each row's type, then its text. */
-  function show(found: LibraryErrors, order: readonly string[]) {
+  /**
+   * Shows these messages and focuses the first in page order: the profile, then the voices (a description, else
+   * the first voice turned on, for the count), then each row's type, then its text.
+   */
+  function show(found: LibraryErrors, order: readonly string[], voiceOrder: readonly string[] = []) {
     setErrors(found);
     setOpen((o) => new Set([...o, ...Object.keys(found.rows)]));
     const first = order.find((key) => found.rows[key]);
+    const voice = voiceOrder.find((key) => found.voices?.[key]);
+    const firstOn = form.voices.find((v) => v.on);
     if (found.profile) focusId.current = "voice-profile";
+    else if (voice) focusId.current = voiceTextId(voice);
+    else if (found.voicesList && firstOn) focusId.current = voiceOnId(firstOn.key);
     else if (first) focusId.current = found.rows[first].type ? `prayer-type-${first}` : `prayer-text-${first}`;
   }
 
@@ -186,12 +233,13 @@ function LibraryEditor({ out, admin }: { out: PrayerLibrary; admin: boolean }) {
     if (save.isPending || !dirty) return;
     const sent = form;
     const sentKeys = sent.rows.map((row) => row.key);
+    const sentVoiceKeys = sent.voices.map((voice) => voice.key);
     const found = libraryErrors(sent);
     if (hasErrors(found)) {
-      show(found, sentKeys);
+      show(found, sentKeys, sentVoiceKeys);
       return;
     }
-    save.mutate(prayersPayload(sent), {
+    save.mutate(prayersPayload(sent, baseline), {
       // What was typed while saving stays; everything else shows what was stored. `source` is left for the
       // cache's copy of the answer to replace, which rebases onto this (a render may still see the old copy).
       onSuccess: (saved) => {
@@ -200,11 +248,12 @@ function LibraryEditor({ out, admin }: { out: PrayerLibrary; admin: boolean }) {
       },
       onError: (e) => {
         if (!namesLibraryField(e)) return; // the hook toasted it, or the app reports it
-        const named = libraryFieldErrors(e, sentKeys);
+        const named = libraryFieldErrors(e, sentKeys, sentVoiceKeys);
         const onPage = new Set(rowsNow.current.map((row) => row.key));
         // Shown on the form only while a field it names is still there (a row removed during the save is not).
-        if (named && (named.profile !== undefined || Object.keys(named.rows).some((key) => onPage.has(key)))) {
-          show(named, sentKeys);
+        const voiceShown = named !== null && (named.voicesList !== undefined || Object.keys(named.voices ?? {}).length > 0);
+        if (named && (named.profile !== undefined || voiceShown || Object.keys(named.rows).some((key) => onPage.has(key)))) {
+          show(named, sentKeys, sentVoiceKeys);
         } else {
           toast.error(errorToastMessage(e));
         }
@@ -229,6 +278,16 @@ function LibraryEditor({ out, admin }: { out: PrayerLibrary; admin: boolean }) {
         }}
         error={admin ? errors.profile : undefined}
         blocked={blocked}
+      />
+      <PewVoicesCard
+        voices={shown.voices}
+        admin={admin}
+        errors={admin ? errors.voices : undefined}
+        listError={admin ? errors.voicesList : undefined}
+        onChange={updateVoice}
+        onAdd={addVoice}
+        onRemove={removeVoice}
+        onRestore={restoreVoices}
       />
       <section aria-labelledby="prayer-list-title" className="grid gap-3">
         <h3 id="prayer-list-title" className="text-base font-medium">
