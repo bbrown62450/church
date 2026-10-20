@@ -2,7 +2,9 @@
 
 Date: 2026-10-20
 Status: written from the owner's planning answers of 2026-10-20 ("all recommended"; binding), revised the same
-day for the independent plan review and the owner's answers A to D to it (idea doc; binding). Plan: `docs/superpowers/plans/2026-10-20-pew-voices.md`
+day for the independent plan review and the owner's answers A to D to it (idea doc; binding), and amended the
+same day for the code review and the owner's answers 1 and 2 to it (the last section; it wins over the sections
+above where they differ). Plan: `docs/superpowers/plans/2026-10-20-pew-voices.md`
 Builds on:
 - `2026-10-02-pew-voices-idea.md` (the idea and the owner's answers; the 2026-10-20 answers win)
 - `2026-09-26-service-reviewer-design.md` and its amendments (R): the review's request, fencing, budgets, deadline, `ai` bucket and Revise
@@ -256,3 +258,39 @@ Every rule above that has a test is proved by planting its violation (the plan's
   drops the card's review notes (R's rule for any Revise).
 - **Model drift.** If `OPENAI_MODEL` changes to a reasoning model, 1,500 tokens may be spent on reasoning
   (the slice 3a note); `OPENAI_REASONING_EFFORT` then applies as for every AI call.
+
+## Amendment 2026-10-20: the code review (owner's answers 1 and 2)
+
+The owner's answers to the code review of the build (2026-10-20, "all recommended"; binding), and the review's
+other findings. Where this section differs from the sections above, it wins.
+
+1. **Helped or missed** (owner's answer 1). The output contract asks for each reaction's `kind`: `"helped"`
+   when it truly helped that listener, `"missed"` when it did not land; the example shows `"missed"`. The
+   answer's reactions carry `kind: "helped" | "missed" | null` (OpenAPI and the TypeScript types regenerated).
+   Tolerant parsing takes either word in any case, trimmed; any other word, a non-string or no kind is kept as
+   `null`. The panel shows a small "Helped" or "Didn't land" beside "About {Label}" (nothing for `null`).
+   **"Revise with this" is offered only on a `"missed"` reaction**; a `"helped"` one shows without it, and so
+   does one with no kind: offering Revise on a reaction that may have been praise is the riskier mistake, so an
+   unknown kind is the safer default of no Revise (not "missed").
+2. **The description box grows** (owner's answer 2). On Settings → Prayers → From the pews each voice's
+   description is a one-row text box that grows with its text (up to 60 vh, then it scrolls), in place of the
+   one-line text box; its label ("Voice {n}"), the 300-character limit and the checks' messages are unchanged,
+   and it is at least 44 px tall on phones. Line breaks become spaces when saved, as before.
+3. **The prompt** (review). The contract's example shows one voice with one reaction and one with none (no
+   longer a voice with two), so it does not suggest every voice gives two. Reactions are asked for as "one or
+   two short sentences, about 35 words at most" (no character count); the server's 240-character cut stays,
+   and a reaction it shortens ends with "…" (240 characters at most with it). The sermon text is labelled
+   "The passage the sermon is on ({ref}), for context only:" (not "Sermon text"), and `ONLY_WHAT_SEEN` names
+   "the passage the sermon is on", so nothing called the sermon sits beside "never react to the sermon as
+   preached".
+4. **The wait beside Revise with this** (review). During a 429's wait (Generate's or Revise's), "Revise with
+   this" is off with "Too many requests. Try again in {n} seconds." beside it, as "Off with the wait beside it"
+   above says (the server's words: the reviewer's line has an em dash).
+5. **The pews request's own 429** (review). A 429 with its wait starts a wait: "Hear it from the pews" is off
+   and its alert (the server's sentence) stays until the wait passes; then the alert goes and the button comes
+   back, as Generate's and Revise's waits do. A new service does not end it (the bucket is the member's).
+6. **Tests** (review). The logging test over the four AI routes marks the church's voice description in the
+   pews case and reads every record as a handler writes it, exception and stack text included, with a failed
+   pews call whose exception quotes the marked voice and prayer; the Cancel test checks that the request's
+   AbortSignal is aborted.
+
