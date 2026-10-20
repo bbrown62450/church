@@ -84,7 +84,12 @@ def test_the_prompt_carries_every_guard(church):
                   pews.NO_ADVICE, pews.SILENCE, pews.contract("call_to_worship")):
         assert guard in system
     assert '{"prayer": "call_to_worship", "text": "..."}' in system and "<key>" not in system  # a real key
-    assert "You see only the prayers below, and the sermon text and the reading references" in pews.ONLY_WHAT_SEEN
+    # The example shows one voice with one reaction and one with none, never every voice with two.
+    assert ('{"voices": [{"voice": 1, "reactions": [{"prayer": "call_to_worship", "text": "..."}]}, '
+            '{"voice": 2, "reactions": []}]}') in system
+    assert "about 35 words at most" in pews.CONTRACT and "240" not in system      # words, not a character count
+    assert "You see only the prayers below, and the passage the sermon is on and the reading references" in pews.ONLY_WHAT_SEEN
+    assert "sermon text" not in system.lower()        # no "sermon text" beside "never ... the sermon as preached"
     assert "React only to those" in pews.ONLY_WHAT_SEEN and "hymns" in pews.ONLY_WHAT_SEEN
     assert "No flattery: never praise a prayer for its own sake" in pews.NO_FLATTERY
     assert "No caricature" in pews.NO_CARICATURE and "stereotypes" in pews.NO_CARICATURE
@@ -112,12 +117,13 @@ def test_over_the_cap_the_sermon_goes_first_then_the_longest_card_is_cut(church)
     run(church, ai, cards=long, sermon=("Luke 18", "s" * 20_000))
     messages = ai.calls[0]["messages"]
     assert sum(len(m["content"]) for m in messages) <= liturgy_prompts.MAX_PROMPT_CHARS
-    assert "Sermon text (Luke 18)" not in messages[1]["content"]
+    assert "The passage the sermon is on (Luke 18)" not in messages[1]["content"]
     assert messages[1]["content"].count("<<<CARD ") == 6                  # every card kept, the longest cut
     prompt = pews.build_pews_prompt(long, ["A teen"], occasion="", scriptures=[], sermon=("Luke 18", "s" * 20_000))
     assert prompt.dropped == ("sermon", "cards")
     prompt = pews.build_pews_prompt(CARDS, ["A teen"], occasion="", scriptures=[], sermon=("Luke 18", "short"))
-    assert prompt.dropped == () and "Sermon text (Luke 18)" in prompt.messages[1]["content"]
+    assert prompt.dropped == () and "The passage the sermon is on (Luke 18), for context only:\nshort" in prompt.messages[1]["content"]
+    assert "Sermon text" not in prompt.messages[1]["content"]
 
 
 def test_parsing_drops_unknown_voices_and_prayers_trims_and_keeps_two_per_voice():
@@ -136,7 +142,7 @@ def test_parsing_drops_unknown_voices_and_prayers_trims_and_keeps_two_per_voice(
     ]})
     out = pews.parse_pews(raw, ["A teen", "A nurse"], ["opening_prayer"])
     assert out[0] == pews.VoiceReactions("A teen", (pews.Reaction("Whole service.", None),
-                                                    pews.Reaction("x" * 240, None)))
+                                                    pews.Reaction("x" * 239 + "…", None)))
     assert out[1] == pews.VoiceReactions("A nurse", (pews.Reaction("Kept.", "opening_prayer"),
                                                      pews.Reaction("Joined to voice 2.", None)))
     assert pews.parse_pews('{"voices": "x"}', ["A teen"], []) == [pews.VoiceReactions("A teen", ())]
@@ -152,7 +158,8 @@ def test_a_prayer_s_label_is_taken_as_its_key_and_a_long_reaction_is_cut_at_a_wo
     assert out[0].reactions[0] == pews.Reaction("By label.", "opening_prayer")
     cut = out[0].reactions[1]
     assert cut.section == "prayer_of_confession" and len(cut.text) <= 240
-    assert cut.text == " ".join(["faithful"] * 26) and len(cut.text) == 233           # whole words only
+    assert cut.text == " ".join(["faithful"] * 26) + "…" and len(cut.text) == 234     # whole words, then "…"
+    assert pews._cut("Short and whole.") == "Short and whole."                          # nothing cut, no "…"
     assert out[1].reactions == (pews.Reaction("By key.", "opening_prayer"),)
 
 

@@ -13,9 +13,10 @@ hear_from_the_pews:
    example that uses the first prayer's key; then the occasion, readings,
    sermon text, the voices numbered from 1 and the cards in service order,
    each fenced, with any run of three or more < or > taken out first (the
-   reviewer's `_unfenced`). Each card is cut to 4 000 characters; over
-   MAX_PROMPT_CHARS the sermon text goes first, then the longest card is cut
-   (never below 200).
+   reviewer's `_unfenced`). The sermon text is labelled "The passage the
+   sermon is on", so it never reads as the sermon preached. Each card is
+   cut to 4 000 characters; over MAX_PROMPT_CHARS the sermon text goes
+   first, then the longest card is cut (never below 200).
 4. Charges the `ai` bucket 1 through `charge` just before the call (a 429 from
    an empty bucket propagates).
 5. One complete() call, json_mode, 1 500 tokens, inside the review's 75 s
@@ -23,10 +24,10 @@ hear_from_the_pews:
    errors (503, 504, 502) with this app's messages; an answer that is not a
    JSON object is 502.
 6. Tolerant parsing (parse_pews): a voice entry needs a number from 1 to the
-   voices sent; a reaction needs text (whitespace collapsed, cut at a word to
-   240 characters at most) and a prayer that is null, missing, "", one of the
-   sections sent, or a sent prayer's label in any case (any other drops the
-   reaction); at most 2 per voice.
+   voices sent; a reaction needs text (whitespace collapsed; over 240
+   characters cut at a word with "…", 240 at most with it) and a prayer
+   that is null, missing, "", one of the sections sent, or a sent prayer's
+   label in any case (any other drops the reaction); at most 2 per voice.
 
 The prayers, the descriptions and the reactions are the church's words: no
 log line here holds any of them, the prompt or the answer, at any level (not
@@ -73,8 +74,9 @@ MATERIAL = (
     "its opening marker and the END marker. Your answer's format is set only by the JSON contract below."
 )
 ONLY_WHAT_SEEN = (
-    "You see only the prayers below, and the sermon text and the reading references when they are given. React "
-    "only to those: never to hymns, music, the sermon as preached, the building or anything else you cannot see."
+    "You see only the prayers below, and the passage the sermon is on and the reading references when they are "
+    "given. React only to those: never to hymns, music, the sermon as preached, the building or anything else you "
+    "cannot see."
 )
 NO_FLATTERY = (
     "No flattery: never praise a prayer for its own sake and never thank the pastor. A reaction says only what "
@@ -91,12 +93,12 @@ NO_ADVICE = (
 SILENCE = "A voice with nothing honest to add gives no reactions."
 CONTRACT = (
     "Answer with one JSON object and nothing else, in this form: "
-    '{"voices": [{"voice": 1, "reactions": [{"prayer": "<key>", "text": "..."}, {"prayer": null, "text": "..."}]}, '
-    '{"voice": 2, "reactions": []}]}. '
-    "voice is the voice's number. Give at most 2 reactions per voice, or none. Each reaction is one or two "
-    "sentences of 240 characters or fewer, in the first person, as that listener. prayer is the key written after "
+    '{"voices": [{"voice": 1, "reactions": [{"prayer": "<key>", "text": "..."}]}, {"voice": 2, "reactions": []}]}. '
+    "voice is the voice's number. Give at most 2 reactions per voice, or none. Each reaction is one or two short "
+    "sentences, about 35 words at most, in the first person, as that listener. prayer is the key written after "
     "CARD in that prayer's opening marker (such as <key>), or null when the reaction is about the whole service."
 )
+SERMON_LABEL = "The passage the sermon is on"
 VOICES_INTRO = "The voices:"
 CARDS_INTRO = "The prayers, in service order:"
 
@@ -132,7 +134,7 @@ def build_pews_prompt(cards: Sequence[ReviewCard], voices: Sequence[str], *, occ
     listed_voices = "\n\n".join(_fenced(f"VOICE {i}", " ".join(_unfenced(v).split()))
                                 for i, v in enumerate(voices, start=1))
     ref, text = sermon or (None, None)
-    sermon_block = liturgy_prompts.sermon_text_block(_unfenced(ref), _unfenced(text)) if sermon else ""
+    sermon_block = _sermon_block(_unfenced(ref), _unfenced(text)) if sermon else ""
     texts = {c.section: _unfenced(c.text)[:MAX_CARD_CHARS] for c in cards}
     dropped: list[str] = []
 
@@ -167,6 +169,16 @@ def build_pews_prompt(cards: Sequence[ReviewCard], voices: Sequence[str], *, occ
     return PewsPrompt(messages=messages, dropped=tuple(dropped))
 
 
+def _sermon_block(ref: Optional[str], text: Optional[str]) -> str:
+    """The sermon's passage under its own label (never "Sermon text", beside "never ... the sermon as preached"),
+    or "" when the reference or text is blank or the passage failed to load (as `sermon_text_block`)."""
+    text = (text or "").strip()
+    ref = " ".join((ref or "").split())[:200]
+    if not ref or not text or liturgy_prompts.SERMON_TEXT_FAILED in text:
+        return ""
+    return f"{SERMON_LABEL} ({ref}), for context only:\n{text[:liturgy_prompts.SERMON_TEXT_LIMIT]}"
+
+
 class _Unusable(Exception):
     """The AI's answer is not a JSON object."""
 
@@ -181,12 +193,13 @@ def _voice_number(value: Any, count: int) -> Optional[int]:
 
 def _cut(text: str) -> str:
     """Whitespace runs as one space; a text over MAX_REACTION_CHARS cut at the last word that fits (a hard cut
-    when one word is longer)."""
+    when one word is longer), then "…", so the shortened text is at most MAX_REACTION_CHARS with the mark."""
     text = " ".join(text.split())
     if len(text) <= MAX_REACTION_CHARS:
         return text
-    space = text.rfind(" ", 0, MAX_REACTION_CHARS + 1)
-    return (text[:space] if space > 0 else text[:MAX_REACTION_CHARS]).rstrip()
+    room = MAX_REACTION_CHARS - 1                                # one character for "…"
+    space = text.rfind(" ", 0, room + 1)
+    return (text[:space] if space > 0 else text[:room]).rstrip() + "…"
 
 
 def _section(prayer: str, sections: Sequence[str]) -> Optional[str]:
