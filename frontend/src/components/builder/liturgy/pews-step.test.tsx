@@ -52,10 +52,10 @@ function seeded(): DraftV1 {
 
 const ANSWER: PewsResult = {
   voices: [
-    { description: "Sharp, very conservative, reads every word", reactions: [{ text: SHARP, section: "prayer_of_confession" }] },
-    { description: "A teenager", reactions: [{ text: TEEN, section: "opening_prayer" }] },
+    { description: "Sharp, very conservative, reads every word", reactions: [{ text: SHARP, section: "prayer_of_confession", kind: "missed" }] },
+    { description: "A teenager", reactions: [{ text: TEEN, section: "opening_prayer", kind: "missed" }] },
     { description: "A man who rarely comes to church", reactions: [] },
-    { description: "Someone deeply worried about their health", reactions: [{ text: WORRIED, section: null }] },
+    { description: "Someone deeply worried about their health", reactions: [{ text: WORRIED, section: null, kind: "missed" }] },
   ],
 };
 
@@ -135,12 +135,45 @@ describe("Hear it from the pews (pew voices spec)", () => {
     expect(within(box).getByRole("heading", { name: "A teenager" })).toBeInTheDocument();
     expect(within(box).queryByRole("heading", { name: "A man who rarely comes to church" })).toBeNull(); // no reactions
     const teen = within(box).getByRole("list", { name: "Reactions from A teenager" });
-    expect(teen).toHaveTextContent(`About Opening Prayer${TEEN}`);
+    expect(teen).toHaveTextContent(`Didn't landAbout Opening Prayer${TEEN}`);
     const worried = within(box).getByRole("list", { name: "Reactions from Someone deeply worried about their health" });
     expect(worried).toHaveTextContent(WORRIED);
     expect(within(worried).queryByText(/^About /)).toBeNull();
     expect(within(worried).queryByRole("button", { name: "Revise with this" })).toBeNull(); // the whole service
     expect(api.requests.some((r) => r.path === "/liturgy/review")).toBe(false); // its own button, its own request
+  });
+
+  it("labels each reaction Helped or Didn't land, and offers Revise with this only on one that did not land", async () => {
+    const helped = "Naming the hospital waiting room in the prayer made me feel seen.";
+    const missed = "The long middle sentence lost me.";
+    const unknown = "I was not sure what this prayer asked of me.";
+    const { user } = renderStep(seeded(), {
+      "POST /liturgy/pews": pewsRoute(() => ({
+        voices: [
+          {
+            description: "A teenager",
+            reactions: [
+              { text: helped, section: "opening_prayer", kind: "helped" },
+              { text: missed, section: "opening_prayer", kind: "missed" },
+            ],
+          },
+          { description: "A man who rarely comes to church", reactions: [{ text: unknown, section: "opening_prayer", kind: null }] },
+        ],
+      })),
+    });
+    await user.click(await screen.findByRole("button", { name: "Hear it from the pews" }));
+    const box = await screen.findByRole("region", { name: "From the pews" });
+    const items = within(within(box).getByRole("list", { name: "Reactions from A teenager" })).getAllByRole("listitem");
+    expect(items[0]).toHaveTextContent(`HelpedAbout Opening Prayer${helped}`);
+    expect(within(items[0]).queryByRole("button", { name: "Revise with this" })).toBeNull();
+    expect(items[1]).toHaveTextContent(`Didn't landAbout Opening Prayer${missed}`);
+    expect(within(items[1]).getByRole("button", { name: "Revise with this" })).toBeInTheDocument();
+    // No kind (the AI gave neither): no label, and no Revise, the safer default.
+    const other = within(box).getByRole("list", { name: "Reactions from A man who rarely comes to church" });
+    expect(other).toHaveTextContent(`About Opening Prayer${unknown}`);
+    expect(within(other).queryByText(/^(Helped|Didn't land)$/)).toBeNull();
+    expect(within(other).queryByRole("button", { name: "Revise with this" })).toBeNull();
+    expect(box.textContent).not.toContain("\u2014");
   });
 
   it("says No reactions this time. for an empty answer, and shows a failure's message", async () => {
@@ -284,7 +317,7 @@ describe("Hear it from the pews (pew voices spec)", () => {
   it("asks before revising the member's own typed text too", async () => {
     const typed = "The call to worship moved so fast I missed the invitation.";
     const { user, api } = renderStep(seeded(), {
-      "POST /liturgy/pews": pewsRoute(() => ({ voices: [{ description: "A teenager", reactions: [{ text: typed, section: "call_to_worship" }] }] })),
+      "POST /liturgy/pews": pewsRoute(() => ({ voices: [{ description: "A teenager", reactions: [{ text: typed, section: "call_to_worship", kind: "missed" }] }] })),
     });
     await user.click(await screen.findByRole("button", { name: "Hear it from the pews" }));
     const teen = await within(await screen.findByRole("region", { name: "From the pews" })).findByRole("list", { name: "Reactions from A teenager" });
@@ -322,7 +355,7 @@ describe("Hear it from the pews (pew voices spec)", () => {
   it("wraps long text at 375 px, with no em dash in its copy", async () => {
     const long = "w".repeat(400);
     const { user } = renderStep(seeded(), {
-      "POST /liturgy/pews": pewsRoute(() => ({ voices: [{ description: `A ${long}`, reactions: [{ text: long, section: "opening_prayer" }] }] })),
+      "POST /liturgy/pews": pewsRoute(() => ({ voices: [{ description: `A ${long}`, reactions: [{ text: long, section: "opening_prayer", kind: "missed" }] }] })),
     });
     await user.click(await screen.findByRole("button", { name: "Hear it from the pews" }));
     const box = await screen.findByRole("region", { name: "From the pews" });

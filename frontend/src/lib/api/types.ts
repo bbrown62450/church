@@ -98,8 +98,9 @@ export type ReviseResult = components["schemas"]["ReviseOut"];
 /**
  * Hear it from the pews (pew voices spec 2026-10-20): `POST /liturgy/pews`
  * takes the review's own body (`ReviewBody`) and answers one entry per
- * turned-on voice, each with 0 to 2 reactions (a sentence and the prayer it
- * is about, or null for the whole service).
+ * turned-on voice, each with 0 to 2 reactions (a sentence, the prayer it is
+ * about or null for the whole service, and its kind: "helped", "missed", or
+ * null when the AI gave neither).
  */
 export type PewsResult = components["schemas"]["PewsOut"];
 export type PewVoiceReactions = components["schemas"]["PewVoiceReactionsOut"];

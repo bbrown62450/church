@@ -12,7 +12,7 @@ import type { SectionKey } from "@/lib/draft/schema";
 import { needsRegenerateConfirm } from "@/lib/liturgy/cards";
 import { useLiturgyGeneration } from "@/lib/liturgy/generation";
 import { revisable } from "@/lib/liturgy/notes";
-import { NO_REACTIONS, reactionCount, type ShownReaction } from "@/lib/liturgy/pews";
+import { KIND_LABELS, NO_REACTIONS, reactionCount, type ShownReaction } from "@/lib/liturgy/pews";
 import { usePews } from "@/lib/liturgy/pews-provider";
 import { reviewTargets } from "@/lib/liturgy/request";
 import { useLiturgyReview } from "@/lib/liturgy/review";
@@ -83,13 +83,14 @@ export function PewsStatus() {
 
 /**
  * The "From the pews" box at the top of the step: each voice that has
- * reactions, its description, then its reactions (the sentence, "About
- * {Label}" when it is about one prayer, a dismiss ×). "No reactions this
- * time." when the answer had none; gone once every reaction is dismissed or
- * cleared. "Revise with this" on a reaction about a prayer Revise can change,
- * through the reviewer's Revise (its Undo, its "Revising…" and Cancel on the
- * card); typed or saved text asks first. Off while the card is written or
- * revised, or during a 429's wait.
+ * reactions, its description, then its reactions (a small "Helped" or "Didn't
+ * land" by its kind, "About {Label}" when it is about one prayer, the
+ * sentence, a dismiss ×). "No reactions this time." when the answer had none;
+ * gone once every reaction is dismissed or cleared. "Revise with this" on a
+ * reaction that did not land (never one that helped or has no kind) about a
+ * prayer Revise can change, through the reviewer's Revise (its Undo, its
+ * "Revising…" and Cancel on the card); typed or saved text asks first. Off
+ * while the card is written or revised, or during a 429's wait.
  */
 export function PewsPanel() {
   const pews = usePews();
@@ -137,16 +138,24 @@ export function PewsPanel() {
             {voice.reactions.map((reaction) => {
               const key = reaction.section;
               const card = key === null ? null : draft.liturgy.cards[key];
-              const offered = key !== null && card !== null && card.enabled && revisable(card);
+              // Only a reaction that did not land is offered to Revise; one that helped, or has no kind, is not.
+              const offered = reaction.kind === "missed" && key !== null && card !== null && card.enabled && revisable(card);
               const busy = key !== null && (runs[key] !== undefined || review.revising[key] === true);
               return (
                 <li key={reaction.id} className="grid min-w-0 gap-2">
                   <div className="flex min-w-0 items-start gap-2">
                     <div className="grid min-w-0 flex-1 gap-1">
-                      {key === null ? null : (
-                        <Badge variant="outline" className="w-fit">
-                          {`About ${SECTION_LABELS[key]}`}
-                        </Badge>
+                      {reaction.kind === null && key === null ? null : (
+                        <div className="flex flex-wrap items-center gap-2">
+                          {reaction.kind === null ? null : (
+                            <span className="text-xs font-medium text-muted-foreground">{KIND_LABELS[reaction.kind]}</span>
+                          )}
+                          {key === null ? null : (
+                            <Badge variant="outline" className="w-fit">
+                              {`About ${SECTION_LABELS[key]}`}
+                            </Badge>
+                          )}
+                        </div>
                       )}
                       <p id={`${reaction.id}-text`} className="min-w-0 text-sm [overflow-wrap:anywhere]">
                         {reaction.text}

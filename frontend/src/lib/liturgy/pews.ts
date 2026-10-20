@@ -6,7 +6,8 @@
  *   null when the service is no longer the one asked about. A reaction about
  *   a prayer whose text or origin changed while the request ran is dropped
  *   (slice 4's stale rule, as the review's `applyReview`); each kept one
- *   remembers the prayer's text it was about.
+ *   remembers the prayer's text it was about, and its kind ("helped",
+ *   "missed", or null when the AI gave neither).
  * - `prunePews(panel, draft)`: on every draft change, a reaction whose
  *   prayer's text changed goes; a new service drops the panel.
  * - `dismissReaction`, `reactionCount`, `pewsDoneMessage`.
@@ -22,14 +23,19 @@ export type ShownReaction = {
   id: string;
   text: string;
   section: SectionKey | null;
+  /** "helped", "missed" (did not land), or null when the AI gave neither: then no label and no Revise. */
+  kind: ReactionKind | null;
   /** The prayer's text the reaction was about (null for the whole service). */
   about: string | null;
 };
+export type ReactionKind = "helped" | "missed";
 export type ShownVoice = { description: string; reactions: ShownReaction[] };
 /** `found`: how many reactions the answer had once stale ones were dropped (0 shows "No reactions this time."). */
 export type PewsPanel = { createdAt: string; voices: ShownVoice[]; found: number };
 
 export const NO_REACTIONS = "No reactions this time.";
+/** A reaction's small label, by its kind (none when the AI gave neither). */
+export const KIND_LABELS: Record<ReactionKind, string> = { helped: "Helped", missed: "Didn't land" };
 export const PEWS_UNAVAILABLE = "Hear it from the pews is not available yet. Try again in a few minutes.";
 
 /** `prefix` keeps each answer's reaction ids apart from the last one's. */
@@ -41,11 +47,12 @@ export function applyPews(d: DraftV1, ask: ReviewAsk, result: PewsResult, prefix
     reactions: voice.reactions.flatMap((r): ShownReaction[] => {
       n += 1;
       const id = `${prefix}-${n}`;
-      if (r.section === null || r.section === undefined) return [{ id, text: r.text, section: null, about: null }];
+      const kind = r.kind ?? null;
+      if (r.section === null || r.section === undefined) return [{ id, text: r.text, section: null, kind, about: null }];
       const was = ask.cards[r.section];
       const card = d.liturgy.cards[r.section];
       if (was === undefined || card.text !== was.text || card.origin !== was.origin) return [];
-      return [{ id, text: r.text, section: r.section, about: card.text }];
+      return [{ id, text: r.text, section: r.section, kind, about: card.text }];
     }),
   }));
   return { createdAt: ask.createdAt, voices, found: voices.reduce((sum, v) => sum + v.reactions.length, 0) };

@@ -24,7 +24,8 @@ MEMBER = "member@example.com"
 PEWS = "/liturgy/pews"
 LIBRARY = "/church/prayer-library"
 CARDS = [{"section": "opening_prayer", "origin": "ai", "text": "Gracious God, we praise you. Amen."}]
-REACTION = {"voices": [{"voice": 2, "reactions": [{"prayer": "opening_prayer", "text": "Too fast for me."}]}]}
+REACTION = {"voices": [{"voice": 2, "reactions": [{"prayer": "opening_prayer", "kind": "missed",
+                                                   "text": "Too fast for me."}]}]}
 
 
 @pytest.fixture
@@ -70,7 +71,8 @@ def test_every_member_hears_from_the_pews(client, church):
         body = post(client, church, email=email)
         assert [v["description"] for v in body["voices"]][:2] == ["Sharp, very conservative, reads every word",
                                                                    "A teenager"]
-        assert body["voices"][1]["reactions"] == [{"text": "Too fast for me.", "section": "opening_prayer"}]
+        assert body["voices"][1]["reactions"] == [{"text": "Too fast for me.", "section": "opening_prayer",
+                                                   "kind": "missed"}]
         assert body["voices"][0]["reactions"] == [] and len(body["voices"]) == 5
 
 

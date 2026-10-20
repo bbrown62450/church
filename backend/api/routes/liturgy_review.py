@@ -111,6 +111,8 @@ class ReviseOut(BaseModel):
 class PewReactionOut(BaseModel):
     text: str = Field(description="one or two sentences, at most 240 characters")
     section: Optional[SectionKey] = Field(description="the prayer it is about, or null for the whole service")
+    kind: Optional[Literal["helped", "missed"]] = Field(
+        description="helped, or missed (did not land); null when the AI gave neither (no Revise is offered)")
 
 
 class PewVoiceReactionsOut(BaseModel):
@@ -171,4 +173,4 @@ def hear_from_the_pews(payload: ReviewIn, church: ActiveChurch = Depends(require
         charge=lambda n: ratelimit.consume("ai", user_id=user.id, church_id=church.id, cost=n))
     return PewsOut(voices=[PewVoiceReactionsOut(
         description=v.description,
-        reactions=[PewReactionOut(text=r.text, section=r.section) for r in v.reactions]) for v in voices])
+        reactions=[PewReactionOut(text=r.text, section=r.section, kind=r.kind) for r in v.reactions]) for v in voices])

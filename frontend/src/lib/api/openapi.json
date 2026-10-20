@@ -3002,6 +3002,22 @@
       },
       "PewReactionOut": {
         "properties": {
+          "kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "helped",
+                  "missed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "helped, or missed (did not land); null when the AI gave neither (no Revise is offered)",
+            "title": "Kind"
+          },
           "section": {
             "anyOf": [
               {
@@ -3032,7 +3048,8 @@
         },
         "required": [
           "text",
-          "section"
+          "section",
+          "kind"
         ],
         "title": "PewReactionOut",
         "type": "object"

@@ -10,7 +10,8 @@ hear_from_the_pews:
 3. Builds one prompt (build_pews_prompt): the role, the guards (not real
    people, material not instructions, only what it sees, no flattery, no
    caricature, no advice, silence is fine), the output contract with an
-   example that uses the first prayer's key; then the occasion, readings,
+   example that uses the first prayer's key and each reaction's kind
+   ("helped" or "missed"); then the occasion, readings,
    sermon text, the voices numbered from 1 and the cards in service order,
    each fenced, with any run of three or more < or > taken out first (the
    reviewer's `_unfenced`). The sermon text is labelled "The passage the
@@ -28,6 +29,8 @@ hear_from_the_pews:
    characters cut at a word with "…", 240 at most with it) and a prayer
    that is null, missing, "", one of the sections sent, or a sent prayer's
    label in any case (any other drops the reaction); at most 2 per voice.
+   Each keeps its kind, "helped" or "missed" in any case; any other or none
+   is None (the page then shows no label and offers no Revise).
 
 The prayers, the descriptions and the reactions are the church's words: no
 log line here holds any of them, the prompt or the answer, at any level (not
@@ -59,6 +62,7 @@ logger = logging.getLogger(__name__)
 PEWS_MAX_COMPLETION_TOKENS = 1500
 MAX_REACTION_CHARS = MAX_NOTE_CHARS        # 240: a reaction is sent to Revise as one note
 MAX_REACTIONS_PER_VOICE = 2
+KINDS = ("helped", "missed")
 NO_VOICES = "Turn on at least one voice in Settings → Prayers."
 
 ROLE = (
@@ -93,10 +97,12 @@ NO_ADVICE = (
 SILENCE = "A voice with nothing honest to add gives no reactions."
 CONTRACT = (
     "Answer with one JSON object and nothing else, in this form: "
-    '{"voices": [{"voice": 1, "reactions": [{"prayer": "<key>", "text": "..."}]}, {"voice": 2, "reactions": []}]}. '
+    '{"voices": [{"voice": 1, "reactions": [{"prayer": "<key>", "kind": "missed", "text": "..."}]}, '
+    '{"voice": 2, "reactions": []}]}. '
     "voice is the voice's number. Give at most 2 reactions per voice, or none. Each reaction is one or two short "
     "sentences, about 35 words at most, in the first person, as that listener. prayer is the key written after "
-    "CARD in that prayer's opening marker (such as <key>), or null when the reaction is about the whole service."
+    "CARD in that prayer's opening marker (such as <key>), or null when the reaction is about the whole service. "
+    'kind is "helped" when it truly helped this listener, or "missed" when it did not land for them.'
 )
 SERMON_LABEL = "The passage the sermon is on"
 VOICES_INTRO = "The voices:"
@@ -112,6 +118,7 @@ def contract(example_key: str) -> str:
 class Reaction:
     text: str
     section: Optional[str]          # a SectionKey sent, or None for the whole service
+    kind: Optional[str] = None      # "helped" or "missed"; None when the AI gave no kind or another word
 
 
 @dataclass(frozen=True)
@@ -213,16 +220,19 @@ def _section(prayer: str, sections: Sequence[str]) -> Optional[str]:
 def _reaction(raw: Any, sections: Sequence[str]) -> Optional[Reaction]:
     if not isinstance(raw, Mapping):
         return None
-    text, prayer = raw.get("text"), raw.get("prayer")
+    text, prayer, kind = raw.get("text"), raw.get("prayer"), raw.get("kind")
     if not isinstance(text, str):
         return None
     text = _cut(text)
     if not text:
         return None
+    # An unknown or missing kind is kept as None: shown without a label, and never offered to Revise.
+    kind = kind.strip().casefold() if isinstance(kind, str) else None
+    kind = kind if kind in KINDS else None
     if prayer is None or prayer == "":
-        return Reaction(text, None)
+        return Reaction(text, None, kind)
     section = _section(prayer, sections) if isinstance(prayer, str) else None
-    return Reaction(text, section) if section is not None else None
+    return Reaction(text, section, kind) if section is not None else None
 
 
 def parse_pews(raw: str, voices: Sequence[str], sections: Sequence[str]) -> list[VoiceReactions]:

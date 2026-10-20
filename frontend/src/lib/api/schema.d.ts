@@ -1925,6 +1925,11 @@ export interface components {
         /** PewReactionOut */
         PewReactionOut: {
             /**
+             * Kind
+             * @description helped, or missed (did not land); null when the AI gave neither (no Revise is offered)
+             */
+            kind: ("helped" | "missed") | null;
+            /**
              * Section
              * @description the prayer it is about, or null for the whole service
              */

@@ -83,10 +83,11 @@ def test_the_prompt_carries_every_guard(church):
     for guard in (pews.NOT_REAL, pews.MATERIAL, pews.ONLY_WHAT_SEEN, pews.NO_FLATTERY, pews.NO_CARICATURE,
                   pews.NO_ADVICE, pews.SILENCE, pews.contract("call_to_worship")):
         assert guard in system
-    assert '{"prayer": "call_to_worship", "text": "..."}' in system and "<key>" not in system  # a real key
+    assert '{"prayer": "call_to_worship", "kind": "missed", "text": "..."}' in system and "<key>" not in system
     # The example shows one voice with one reaction and one with none, never every voice with two.
-    assert ('{"voices": [{"voice": 1, "reactions": [{"prayer": "call_to_worship", "text": "..."}]}, '
+    assert ('{"voices": [{"voice": 1, "reactions": [{"prayer": "call_to_worship", "kind": "missed", "text": "..."}]}, '
             '{"voice": 2, "reactions": []}]}') in system
+    assert 'kind is "helped" when' in pews.CONTRACT and '"missed" when' in pews.CONTRACT
     assert "about 35 words at most" in pews.CONTRACT and "240" not in system      # words, not a character count
     assert "You see only the prayers below, and the passage the sermon is on and the reading references" in pews.ONLY_WHAT_SEEN
     assert "sermon text" not in system.lower()        # no "sermon text" beside "never ... the sermon as preached"
@@ -155,7 +156,7 @@ def test_a_prayer_s_label_is_taken_as_its_key_and_a_long_reaction_is_cut_at_a_wo
                                  {"voice": 2, "reactions": [{"prayer": "Offering", "text": "Not sent."},
                                                             {"prayer": "OPENING_PRAYER", "text": "By key."}]}]})
     out = pews.parse_pews(raw, ["A teen", "A nurse"], ["opening_prayer", "prayer_of_confession"])
-    assert out[0].reactions[0] == pews.Reaction("By label.", "opening_prayer")
+    assert out[0].reactions[0] == pews.Reaction("By label.", "opening_prayer", None)
     cut = out[0].reactions[1]
     assert cut.section == "prayer_of_confession" and len(cut.text) <= 240
     assert cut.text == " ".join(["faithful"] * 26) + "…" and len(cut.text) == 234     # whole words, then "…"
@@ -228,3 +229,20 @@ def test_no_log_record_at_any_level_holds_a_prayer_a_voice_or_a_reaction(church,
     logged = "\n".join(r.getMessage() for r in caplog.records)
     assert "liturgy.pews" in logged and "outcome=ok" in logged and "outcome=ai_upstream_error" in logged
     assert "SECRET" not in logged
+
+
+def test_each_reaction_keeps_its_kind_and_an_unknown_or_missing_kind_is_none():
+    raw = json.dumps({"voices": [
+        {"voice": 1, "reactions": [{"prayer": "opening_prayer", "kind": "helped", "text": "It named my fear."},
+                                   {"prayer": None, "kind": " MISSED ", "text": "Too fast for me."}]},
+        {"voice": 2, "reactions": [{"prayer": "opening_prayer", "kind": "meh", "text": "Unknown kind."},
+                                   {"prayer": "opening_prayer", "text": "No kind."}]},
+        {"voice": 3, "reactions": [{"prayer": "opening_prayer", "kind": ["missed"], "text": "Not a string."}]},
+    ]})
+    out = pews.parse_pews(raw, ["A", "B", "C"], ["opening_prayer"])
+    assert out[0].reactions == (pews.Reaction("It named my fear.", "opening_prayer", "helped"),
+                                pews.Reaction("Too fast for me.", None, "missed"))
+    # Kept, with no kind: the page shows it without a label and offers no Revise (the safer default).
+    assert out[1].reactions == (pews.Reaction("Unknown kind.", "opening_prayer", None),
+                                pews.Reaction("No kind.", "opening_prayer", None))
+    assert out[2].reactions == (pews.Reaction("Not a string.", "opening_prayer", None),)
