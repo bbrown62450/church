@@ -7,12 +7,15 @@ reader, prayer_library.read_library (slice 4), so a missing or junk value
 reads as the empty library here as it does for the liturgy writer.
 
 - get_library(church_id, *, can_edit): GET /church/prayer-library, the
-  prayers in the order they were saved.
-- save_library(church_id, actor_id, prayers, voice_profile): PUT, a full
-  replace in one session that starts with lock_and_read_actor and
+  prayers in the order they were saved, and the pew voices (pew voices spec
+  2026-10-20: churches.settings["pew_voices"] through pew_voices.read_voices,
+  so a church that never saved them reads the owner's five).
+- save_library(church_id, actor_id, prayers, voice_profile, pew_voices=None):
+  PUT, a full replace in one session that starts with lock_and_read_actor and
   require_admin_role (an admin demoted meanwhile gets the role 403 before the
-  body is looked at), then clean_library, then the ids, then merge_settings
-  in that session, so every other settings key stays as it was.
+  body is looked at), then clean_library, then clean_voices when voices were
+  sent (None leaves the stored ones), then the ids, then merge_settings in
+  that session, so every other settings key stays as it was.
 - draft_voice_profile(church_id): POST .../voice-profile-draft. Reads the
   saved prayers in one session and closes it before the AI call (F §1.8);
   none saved is a 422. Then one complete() call (800 tokens, inside a 75 s
@@ -38,6 +41,7 @@ import uuid
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any, Optional
 
+import pew_voices
 import prayer_library
 from db import session_scope
 from domain_errors import Busy, DomainError, InvalidInput, NotConfigured, UpstreamError, UpstreamTimeout
@@ -53,6 +57,10 @@ TEXT_TOO_LONG = "This prayer is too long (6,000 characters at most)."
 TYPE_REQUIRED = "Choose a prayer type."
 TOO_MANY = "You can keep up to 30 prayers."
 PROFILE_TOO_LONG = "The voice profile is too long (2,000 characters at most)."
+TOO_MANY_VOICES = "You can keep up to 12 voices."
+DESCRIPTION_REQUIRED = "Describe this voice."
+DESCRIPTION_TOO_LONG = "This description is too long (300 characters at most)."
+TOO_MANY_ON = "Turn on at most 6 voices."
 
 logger = logging.getLogger(__name__)
 
@@ -66,17 +74,20 @@ def clean_text(text: str) -> str:
     return text.replace("\r\n", "\n").strip()
 
 
-def library_out(library: prayer_library.PrayerLibrary, *, can_edit: bool) -> dict:
-    """GET and PUT's answer: the prayers in saved order, the profile, and whether the caller may edit."""
+def library_out(library: prayer_library.PrayerLibrary, voices: tuple[pew_voices.PewVoice, ...], *,
+                can_edit: bool) -> dict:
+    """GET and PUT's answer: the prayers in saved order, the profile, the pew voices, and whether the caller
+    may edit."""
     return {"prayers": [{"id": p.id, "type": p.type, "text": p.text, "added_at": p.added_at}
                         for p in library.prayers],
-            "voice_profile": library.voice_profile, "can_edit": can_edit}
+            "voice_profile": library.voice_profile, "pew_voices": pew_voices.voices_out(voices),
+            "can_edit": can_edit}
 
 
 def get_library(church_id: uuid.UUID, *, can_edit: bool) -> dict:
     """GET /church/prayer-library (any member)."""
-    church = churches.get_church(church_id)
-    return library_out(prayer_library.read_library((church or {}).get("settings")), can_edit=can_edit)
+    settings = (churches.get_church(church_id) or {}).get("settings")
+    return library_out(prayer_library.read_library(settings), pew_voices.read_voices(settings), can_edit=can_edit)
 
 
 def clean_library(prayers: Sequence[Mapping[str, Any]], voice_profile: str) -> tuple[list[dict], str]:
@@ -102,6 +113,25 @@ def clean_library(prayers: Sequence[Mapping[str, Any]], voice_profile: str) -> t
     if len(profile) > prayer_library.MAX_PROFILE_CHARS:
         raise InvalidInput(PROFILE_TOO_LONG, field="voice_profile")
     return rows, profile
+
+
+def clean_voices(voices: Sequence[Mapping[str, Any]]) -> list[dict]:
+    """PUT's pew voices, cleaned (pew_voices.clean_description) and checked (pure). The first failure raises
+    InvalidInput naming its field: "pew_voices" for more than 12, then row by row
+    "pew_voices.<i>.description", then "pew_voices" for more than 6 turned on."""
+    if len(voices) > pew_voices.MAX_VOICES:
+        raise InvalidInput(TOO_MANY_VOICES, field="pew_voices")
+    rows = []
+    for i, row in enumerate(voices):
+        description = pew_voices.clean_description(row.get("description") or "")
+        if not description:
+            raise InvalidInput(DESCRIPTION_REQUIRED, field=f"pew_voices.{i}.description")
+        if len(description) > pew_voices.MAX_DESCRIPTION_CHARS:
+            raise InvalidInput(DESCRIPTION_TOO_LONG, field=f"pew_voices.{i}.description")
+        rows.append({"description": description, "on": row.get("on") is True})
+    if sum(row["on"] for row in rows) > pew_voices.MAX_ON:
+        raise InvalidInput(TOO_MANY_ON, field="pew_voices")
+    return rows
 
 
 def _is_uuid(value: Any) -> bool:
@@ -132,21 +162,29 @@ def with_ids(rows: Sequence[Mapping[str, Any]], stored: prayer_library.PrayerLib
 
 
 def save_library(church_id: uuid.UUID, actor_id: uuid.UUID, prayers: Sequence[Mapping[str, Any]],
-                 voice_profile: str, *, now: Callable[[], datetime.datetime] = _utc_now,
+                 voice_profile: str, pew_voices_sent: Optional[Sequence[Mapping[str, Any]]] = None, *,
+                 now: Callable[[], datetime.datetime] = _utc_now,
                  new_id: Callable[[], uuid.UUID] = uuid.uuid4) -> dict:
-    """PUT /church/prayer-library: replace the church's library, under the
-    church-row lock with the caller's role re-read, keeping every other
-    settings key. Returns the library as get_library does."""
+    """PUT /church/prayer-library: replace the church's library (and its pew
+    voices, when sent), under the church-row lock with the caller's role
+    re-read, keeping every other settings key. Returns the library as
+    get_library does."""
     with session_scope() as s:
         role = lock_and_read_actor(s, church_id, actor_id)
         require_admin_role(role)
         rows, profile = clean_library(prayers, voice_profile)
+        voices = None if pew_voices_sent is None else clean_voices(pew_voices_sent)
         locked = churches.lock_church(s, church_id)          # the row lock_and_read_actor holds
-        stored = prayer_library.read_library(locked.settings if locked is not None else None)
+        settings = locked.settings if locked is not None else None
+        stored = prayer_library.read_library(settings)
         value = {"prayers": with_ids(rows, stored, added_at=now().strftime("%Y-%m-%dT%H:%M:%SZ"), new_id=new_id),
                  "voice_profile": profile}
-        churches.merge_settings(church_id, {"prayer_library": value}, session=s)
-    return library_out(prayer_library.read_library({"prayer_library": value}), can_edit=True)
+        patch: dict[str, Any] = {"prayer_library": value}
+        if voices is not None:
+            patch["pew_voices"] = voices
+        churches.merge_settings(church_id, patch, session=s)
+        kept = pew_voices.read_voices({"pew_voices": voices} if voices is not None else settings)
+    return library_out(prayer_library.read_library({"prayer_library": value}), kept, can_edit=True)
 
 
 # --- The voice-profile draft: POST /church/prayer-library/voice-profile-draft ---------------------------------

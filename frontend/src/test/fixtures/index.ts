@@ -29,6 +29,7 @@ import type {
   Member,
   MemberList,
   OutlineItem,
+  PewVoice,
   Prayer,
   PrayerLibrary,
   PreviousBulletin,
@@ -780,8 +781,17 @@ export function prayer(n: number, overrides: Partial<Prayer> = {}): Prayer {
 }
 
 /** `GET /church/prayer-library` for an admin: these prayers and this profile. */
+/** The owner's five, as `GET /church/prayer-library` answers for a church that never saved its voices. */
+export const DEFAULT_PEW_VOICES: PewVoice[] = [
+  { description: "Sharp, very conservative, reads every word", on: true },
+  { description: "A teenager", on: true },
+  { description: "A man who rarely comes to church", on: true },
+  { description: "Parents of busy young kids", on: true },
+  { description: "Someone deeply worried about their health", on: true },
+];
+
 export function prayerLibrary(prayers: Prayer[] = [], overrides: Partial<PrayerLibrary> = {}): PrayerLibrary {
-  return { prayers, voice_profile: "", can_edit: true, ...overrides };
+  return { prayers, voice_profile: "", pew_voices: DEFAULT_PEW_VOICES, can_edit: true, ...overrides };
 }
 
 // --- slice 6b-2a: Settings → People -------------------------------------------------------------------------

@@ -10,6 +10,7 @@ import uuid
 import pytest
 
 import liturgy_prompts
+import pew_voices
 import prayer_library
 from db import session_scope
 from db.models import Church
@@ -25,6 +26,7 @@ CONFESSION = "Merciful God, we confess that we have not loved you with our whole
 BENEDICTION = "Go in peace to love and serve the Lord."
 NOON = datetime.datetime(2026, 10, 8, 16, 0, tzinfo=datetime.timezone.utc)
 LATER = datetime.datetime(2026, 10, 9, 9, 30, tzinfo=datetime.timezone.utc)
+DEFAULT_VOICES = pew_voices.voices_out(pew_voices.DEFAULT_VOICES)      # every read carries them until saved
 
 
 @pytest.fixture
@@ -55,10 +57,10 @@ def _stored(world):
 
 def test_the_library_reads_empty_until_saved_and_a_junk_value_reads_empty(world):
     assert library_usecase.get_library(world["church"], can_edit=False) == {
-        "prayers": [], "voice_profile": "", "can_edit": False}
+        "prayers": [], "voice_profile": "", "pew_voices": DEFAULT_VOICES, "can_edit": False}
     churches.update_church(world["church"], settings={"prayer_library": ["junk"], "foo": 1})
     assert library_usecase.get_library(world["church"], can_edit=True) == {
-        "prayers": [], "voice_profile": "", "can_edit": True}
+        "prayers": [], "voice_profile": "", "pew_voices": DEFAULT_VOICES, "can_edit": True}
 
 
 def test_a_save_normalizes_assigns_ids_and_keeps_every_other_setting(world):
@@ -75,6 +77,7 @@ def test_a_save_normalizes_assigns_ids_and_keeps_every_other_setting(world):
             {"id": second, "type": "other", "text": "A wedding prayer.", "added_at": "2026-10-08T16:00:00Z"},
         ],
         "voice_profile": "Warm and plain.\nShort sentences.",
+        "pew_voices": DEFAULT_VOICES,
         "can_edit": True,
     }
     assert _stored(world) == {"prayers": out["prayers"], "voice_profile": "Warm and plain.\nShort sentences."}
@@ -98,7 +101,8 @@ def test_a_known_id_keeps_its_added_at_and_an_unknown_or_repeated_id_is_new(worl
         (str(uuid.UUID(int=3)), "2026-10-09T09:30:00Z"),
     ]
     assert out["prayers"][0]["text"] == BENEDICTION + " Amen."
-    assert _save(world, [], "", now=LATER) == {"prayers": [], "voice_profile": "", "can_edit": True}
+    assert _save(world, [], "", now=LATER) == {"prayers": [], "voice_profile": "", "pew_voices": DEFAULT_VOICES,
+                                               "can_edit": True}
     assert _stored(world) == {"prayers": [], "voice_profile": ""}
 
 

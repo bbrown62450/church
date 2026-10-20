@@ -3000,6 +3000,45 @@
         "title": "PassagesOut",
         "type": "object"
       },
+      "PewVoiceIn": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "description": "at most 300 characters once cleaned",
+            "maxLength": 2000,
+            "title": "Description",
+            "type": "string"
+          },
+          "on": {
+            "title": "On",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "description",
+          "on"
+        ],
+        "title": "PewVoiceIn",
+        "type": "object"
+      },
+      "PewVoiceOut": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "on": {
+            "title": "On",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "description",
+          "on"
+        ],
+        "title": "PewVoiceOut",
+        "type": "object"
+      },
       "PlacementOut": {
         "properties": {
           "key": {
@@ -3055,8 +3094,23 @@
       },
       "PrayerLibraryIn": {
         "additionalProperties": false,
-        "description": "The whole library: a prayer left out is removed.",
+        "description": "The whole library: a prayer left out is removed. `pew_voices`, when sent, replaces the voices; left\nout, the stored voices stay.",
         "properties": {
+          "pew_voices": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/PewVoiceIn"
+                },
+                "maxItems": 50,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pew Voices"
+          },
           "prayers": {
             "items": {
               "$ref": "#/components/schemas/PrayerIn"
@@ -3085,6 +3139,14 @@
             "title": "Can Edit",
             "type": "boolean"
           },
+          "pew_voices": {
+            "description": "in the order shown; the owner's five until saved",
+            "items": {
+              "$ref": "#/components/schemas/PewVoiceOut"
+            },
+            "title": "Pew Voices",
+            "type": "array"
+          },
           "prayers": {
             "description": "in the order they were saved",
             "items": {
@@ -3101,6 +3163,7 @@
         "required": [
           "prayers",
           "voice_profile",
+          "pew_voices",
           "can_edit"
         ],
         "title": "PrayerLibraryOut",

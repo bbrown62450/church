@@ -2,12 +2,15 @@
 6a)"; 6a spec, API rows; slice 6a-3b).
 
 - GET /church/prayer-library (`require_church`): the prayers in the order
-  they were saved, the voice profile, and `can_edit` (the caller is an owner
-  or admin).
+  they were saved, the voice profile, the pew voices (pew voices spec
+  2026-10-20; the owner's five until saved), and `can_edit` (the caller is an
+  owner or admin).
 - PUT /church/prayer-library (`require_admin`, then the role re-read under
   the church-row lock in usecases.prayer_library.save_library): a full
   replace. A saved prayer is sent back with its `id` and keeps its
-  `added_at`; a new one is sent without an id.
+  `added_at`; a new one is sent without an id. `pew_voices`, when sent,
+  replaces the voices (12 at most, 6 on, 300 characters each, checked in the
+  usecase); left out, the stored voices stay.
 - POST /church/prayer-library/voice-profile-draft (`require_admin`, then
   `rate_limit("ai")`, cost 1, in that order, so a member's 403 spends no
   token): a voice profile drafted from the saved prayers (75 s deadline).
@@ -47,13 +50,22 @@ class PrayerIn(BaseModel):
     text: str = Field(max_length=20_000)
 
 
+class PewVoiceIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    description: str = Field(max_length=2_000, description="at most 300 characters once cleaned")
+    on: bool
+
+
 class PrayerLibraryIn(BaseModel):
-    """The whole library: a prayer left out is removed."""
+    """The whole library: a prayer left out is removed. `pew_voices`, when sent, replaces the voices; left
+    out, the stored voices stay."""
 
     model_config = ConfigDict(extra="forbid")
 
     prayers: list[PrayerIn] = Field(max_length=100)
     voice_profile: str = Field(max_length=20_000)
+    pew_voices: Optional[list[PewVoiceIn]] = Field(None, max_length=50)
 
 
 class PrayerOut(BaseModel):
@@ -63,9 +75,15 @@ class PrayerOut(BaseModel):
     added_at: str = Field(description='when it was first saved, e.g. "2026-10-08T16:00:00Z"')
 
 
+class PewVoiceOut(BaseModel):
+    description: str
+    on: bool
+
+
 class PrayerLibraryOut(BaseModel):
     prayers: list[PrayerOut] = Field(description="in the order they were saved")
     voice_profile: str
+    pew_voices: list[PewVoiceOut] = Field(description="in the order shown; the owner's five until saved")
     can_edit: bool = Field(description="the caller is an owner or admin")
 
 
@@ -84,7 +102,8 @@ def read_library(church: ActiveChurch = Depends(require_church)) -> PrayerLibrar
 def save_library(payload: PrayerLibraryIn, church: ActiveChurch = Depends(require_admin),
                  user: CurrentUser = Depends(get_current_user)) -> PrayerLibraryOut:
     return PrayerLibraryOut(**prayer_library.save_library(
-        church.id, user.id, [p.model_dump() for p in payload.prayers], payload.voice_profile))
+        church.id, user.id, [p.model_dump() for p in payload.prayers], payload.voice_profile,
+        None if payload.pew_voices is None else [v.model_dump() for v in payload.pew_voices]))
 
 
 @router.post("/church/prayer-library/voice-profile-draft", response_model=VoiceProfileDraftOut,

@@ -1901,6 +1901,23 @@ export interface components {
             /** Translation Label */
             translation_label: string;
         };
+        /** PewVoiceIn */
+        PewVoiceIn: {
+            /**
+             * Description
+             * @description at most 300 characters once cleaned
+             */
+            description: string;
+            /** On */
+            on: boolean;
+        };
+        /** PewVoiceOut */
+        PewVoiceOut: {
+            /** Description */
+            description: string;
+            /** On */
+            on: boolean;
+        };
         /** PlacementOut */
         PlacementOut: {
             /** Key */
@@ -1925,9 +1942,12 @@ export interface components {
         };
         /**
          * PrayerLibraryIn
-         * @description The whole library: a prayer left out is removed.
+         * @description The whole library: a prayer left out is removed. `pew_voices`, when sent, replaces the voices; left
+         *     out, the stored voices stay.
          */
         PrayerLibraryIn: {
+            /** Pew Voices */
+            pew_voices?: components["schemas"]["PewVoiceIn"][] | null;
             /** Prayers */
             prayers: components["schemas"]["PrayerIn"][];
             /** Voice Profile */
@@ -1940,6 +1960,11 @@ export interface components {
              * @description the caller is an owner or admin
              */
             can_edit: boolean;
+            /**
+             * Pew Voices
+             * @description in the order shown; the owner's five until saved
+             */
+            pew_voices: components["schemas"]["PewVoiceOut"][];
             /**
              * Prayers
              * @description in the order they were saved

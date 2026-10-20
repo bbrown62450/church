@@ -165,6 +165,8 @@ export type Prayer = components["schemas"]["PrayerOut"];
 export type PrayerType = Prayer["type"];
 export type PrayerLibraryBody = components["schemas"]["PrayerLibraryIn"];
 export type VoiceProfileDraft = components["schemas"]["VoiceProfileDraftOut"];
+/** A pew voice as Settings → Prayers reads and saves it (the owner's five until a church saves its own). */
+export type PewVoice = components["schemas"]["PewVoiceOut"];
 
 /**
  * Settings → People (slice 6b-2a; the routes are slice 6b-1's): `GET /members`
