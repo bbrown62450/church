@@ -1,7 +1,8 @@
 # Hear It From the Pews: Design
 
 Date: 2026-10-20
-Status: written from the owner's planning answers of 2026-10-20 ("all recommended"; binding). Plan: `docs/superpowers/plans/2026-10-20-pew-voices.md`
+Status: written from the owner's planning answers of 2026-10-20 ("all recommended"; binding), revised the same
+day for the independent plan review and the owner's answers A to D to it (idea doc; binding). Plan: `docs/superpowers/plans/2026-10-20-pew-voices.md`
 Builds on:
 - `2026-10-02-pew-voices-idea.md` (the idea and the owner's answers; the 2026-10-20 answers win)
 - `2026-09-26-service-reviewer-design.md` and its amendments (R): the review's request, fencing, budgets, deadline, `ai` bucket and Revise
@@ -147,16 +148,22 @@ System message:
   contract sets the answer's format. Any run of three or more `<` or `>` is taken out of every
   description, prayer, occasion, reading and sermon text first (the reviewer's `_unfenced`), so nothing
   can close its fence or open another.
+- **Only what it sees:** the AI sees only the prayers, and the sermon text and the reading references when
+  they are given, and reacts only to those: never to hymns, music, the sermon as preached, the building or
+  anything else it cannot see.
 - **No flattery:** never praise a prayer for its own sake, never thank the pastor; a reaction says what did
   not land for this listener, or what truly helped, and why, in plain words.
 - **No caricature:** each voice is a thoughtful, whole person who came to worship; no mockery,
   exaggeration, stereotypes, slang or put-on way of talking.
 - **No advice:** no voice gives medical, legal or financial advice. A voice worried about health reacts as
   a worshipper, never as a clinician: no diagnoses, treatments or medical suggestions.
-- **Silence is fine:** a voice with nothing honest to add gives no reactions.
-- **Output contract:** `{"voices": [{"voice": n, "reactions": [{"prayer": key or null, "text": s}]}]}`; at
-  most 2 reactions per voice; each one or two sentences of 240 characters or fewer, in the first person;
-  `prayer` is the key of the one prayer it is about, or null for the whole service.
+- **Silence is fine** (owner's answer C, 2026-10-20): a voice with nothing honest to add gives no reactions;
+  zero reactions for a voice is allowed and is simply not shown.
+- **Output contract:** one JSON object, shown with a concrete example whose `prayer` is the first sent
+  prayer's real key (for example `{"voices": [{"voice": 1, "reactions": [{"prayer": "call_to_worship",
+  "text": "..."}, {"prayer": null, "text": "..."}]}, {"voice": 2, "reactions": []}]}`); at most 2 reactions
+  per voice, or none; each one or two sentences of 240 characters or fewer, in the first person; `prayer` is
+  the key written after CARD in that prayer's opening marker, or null for the whole service.
 
 User message: the occasion, the readings, the sermon text (2,000 characters, as R), the voices numbered
 from 1, and the prayers in service order with their labels.
@@ -168,64 +175,80 @@ length.
 
 **Tolerant parsing:** invalid JSON or a non-object is 502. A voice entry needs an integer (or digit string)
 `voice` from 1 to the number of voices sent; others are dropped; entries for one voice are joined. A
-reaction needs a string `text` (whitespace collapsed, cut to 240, dropped when empty); a `prayer` that is
-null, missing or "" means the whole service; any other `prayer` that is not one of the sections sent drops
-that reaction. At most 2 per voice, in the AI's order.
+reaction needs a string `text` (whitespace collapsed, dropped when empty; over 240 characters it is cut at
+the last whole word that fits); a `prayer` that is null, missing or "" means the whole service; a sent
+prayer's key, or its label in any case ("Opening Prayer", "opening prayer:"), names that prayer; any other
+`prayer` drops that reaction. At most 2 per voice, in the AI's order.
 
 ## Cost
 
 Model: `OPENAI_MODEL` on Railway, `gpt-4.1-mini` (ops runbook, slice 3a record). Price: $0.40 per million
 input tokens and $1.60 per million output tokens (OpenAI's pricing page, developers.openai.com/api/docs/pricing,
-read 2026-10-20; standard tier, no cached input assumed). Tokens are estimated at 4 characters each.
-- **Worst case:** a 24,000-character prompt (about 6,000 tokens, $0.0024) and the full 1,500 answer tokens
-  ($0.0024): about **$0.005** per tap.
+read 2026-10-20; standard tier, no cached input assumed). Tokens are counted with OpenAI's tokenizer
+(`tiktoken`, the `o200k_base` encoding of `gpt-4.1-mini`), offline.
 - **Typical** (measured with `build_pews_prompt`, the plan's Build notes): a full eight-prayer service with five
-  voices and the sermon text is a 10,812-character prompt, about 2,700 tokens ($0.0011); an answer of about ten
-  reactions is about 600 tokens ($0.0010): about **$0.002** per tap.
-- One tap is one `ai` token, so the bucket (400 per church per day) bounds the spend at about $0.80 a day per
-  church typical and $2 at worst; the owner's $15 monthly cap remains the backstop.
+  voices and the sermon text is an 11,166-character prompt, 2,443 tokens ($0.00098); an answer of ten
+  reactions is 420 tokens ($0.00067): about **$0.0017** per tap.
+- **Worst case** (an estimate from that text's 4.59 characters a token): a 24,000-character prompt (about
+  5,200 tokens, $0.0021) and the full 1,500 answer tokens ($0.0024): about **$0.005** per tap.
+- One tap is one `ai` token, so the bucket (400 per church per day) bounds the spend at about $0.70 a day per
+  church typical and $2 at worst; the owner's $15 monthly cap remains the backstop. The owner's phone check
+  can read one real call's token counts from the `ai_call` INFO line (only counts are logged).
 
 ## Privacy and logging
 
 The prayers, the voices' descriptions and the reactions are the church's words. **No log line, at any
-level, holds a prayer, a description, the prompt, the answer or a reaction** (stricter than the reviewer,
-which logs prompts at DEBUG). The usecase logs one INFO line per call with counts only:
+level, holds a prayer, a description, the prompt, the answer or a reaction.** The same PR removes the six
+DEBUG lines that logged prompts and answers for generate, review and revise (owner's answer A,
+2026-10-20); their INFO count lines stay. A test posts to all four AI routes with the `api`, `usecases`
+and `integrations` loggers at DEBUG and fails if any marked prompt, prayer, note, reaction or answer
+reaches a record. The usecase logs one INFO line per call with counts only:
 `liturgy.pews church=… cards=… voices=… sermon=yes|no dropped=… ai=0|1 reactions=… duration_ms=… outcome=…`.
 An unusable answer logs its length only. The prayer library's save already logs no text.
 
 ## Testing
 
 Backend (FakeAI; no test reaches OpenAI):
-- `pew_voices.read_voices`: defaults when absent or junk; an empty list is none; bad entries skipped.
+- `pew_voices.read_voices`: defaults when absent or junk; an empty list is none; bad entries skipped; a long
+  description cut to 300.
 - Save: a member's save is 403 and stores nothing; more than 6 on, a blank or too-long description and
   more than 12 voices are 422 with their fields; no `pew_voices` key keeps the stored ones; other settings
   keys stay.
 - The prompt: fenced voices and cards; fence markers stripped from descriptions and prayers; the
-  no-flattery, no-caricature, not-real-people and no-medical-advice sentences present; only turned-on
-  voices sent; the budget drops the sermon text first.
-- Parsing: unknown voices and unknown prayers dropped, null prayer kept, 2 per voice, 240 characters.
+  no-flattery, no-caricature, not-real-people, only-what-it-sees and no-medical-advice sentences present;
+  the example's real key; only turned-on voices sent, at most 6 even when more are stored; the budget drops
+  the sermon text first.
+- Parsing: unknown voices and unknown prayers dropped, null prayer kept, a label taken as its key, 2 per
+  voice, 240 characters cut at a word.
 - The route: guards and isolation (another church's voices never reach the AI); one `ai` token per call,
   none with no AI or no voice on; the 41st is 429; AI failures as 503, 504, 502; no prayer, description
-  or reaction in any log record at DEBUG and above.
+  or reaction in any log record at DEBUG and above (the `api` and `usecases` loggers), and the same for
+  generate, review and revise.
 
 Frontend (DOM tests in the real builder layout and the real Settings page):
-- Settings: a member sees the voices read only (no text boxes, no Save); a 7th voice turned on shows "Turn
-  on at most 6 voices." and sends nothing; defaults show for a church that never saved; Save sends
-  `pew_voices`.
-- The panel: the button is off with nothing to review; reactions grouped by voice; Cancel stops the wait and
-  sends nothing more; "Still working" after 8 s; stale results dropped; a reaction clears when its prayer's
-  text changes; dismiss; "No reactions this time."; Revise with this (one note, Undo, the confirm on typed
-  text); one request per tap; the panel's copy has no em dash; long text wraps at 375 px.
+- Settings: a member sees the voices read only (no text boxes, no Save, no Restore); a 7th voice turned on
+  shows "Turn on at most 6 voices." and sends nothing; defaults show for a church that never saved, and for
+  a server that answers without `pew_voices`; Restore the starter voices refills the five and only Save
+  stores them; Save sends `pew_voices`.
+- The panel: the button is off with nothing to review; reactions grouped by voice; Cancel leaves no request
+  live (an answer held until after Cancel shows nothing, and the next tap sends a new request); "Still
+  working" after 8 s; stale results dropped; a reaction clears when its prayer's text changes; dismiss; "No
+  reactions this time."; the 422 and the 404 messages; Revise with this (one note, Undo, the confirm on
+  saved and on typed text; gone on a switched-off card; off while the card is revised); one request per
+  tap; the panel's copy has no em dash; long text wraps at 375 px.
 
 Every rule above that has a test is proved by planting its violation (the plan's Build notes).
 
 ## Risks
 
-- **Flattery or caricature anyway.** The prompt forbids both; a model can still slip. The owner's phone
-  check reads a real answer; prompt changes are a small follow-up.
+- **Flattery, caricature or reactions to what it cannot see, anyway.** The prompt forbids each; a model can
+  still slip. The owner's phone check starts with a short real-AI trial (owner's answer D): three taps on
+  three different services (about $0.01), each answer read for flattery, an exaggerated voice, medical
+  advice and reactions to things the AI cannot see; the owner gives a paraphrase, never a copy of prayer
+  text. A fail means the prompt is fixed before others use the feature.
 - **A health voice that gives advice.** Forbidden for every voice and named for the health one; the phone
   check reads it.
-- **Cost.** About half a cent per tap at worst; the `ai` bucket and the $15 monthly cap bound it.
+- **Cost.** About a fifth of a cent per tap for a full service, about half a cent at worst; the `ai` bucket and the $15 monthly cap bound it.
 - **Shared Revise state.** "Revise with this" uses the reviewer's revision machinery, so a card revising
   from a reaction shows on the card like a review revision and blocks a second one; a successful one also
   drops the card's review notes (R's rule for any Revise).

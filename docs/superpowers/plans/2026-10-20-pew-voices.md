@@ -2,15 +2,15 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship "Hear it from the pews" in one PR (owner's planning answers of 2026-10-20, "all recommended"; binding). After it merges, **Settings → Prayers** has a **From the pews** section under the voice profile: every church starts with the owner's five voices, all on; admins (and the owner) edit, turn off, add or remove them (at most 12, at most 6 on, 300 characters each) and save them with the page's one **Save**; members read them. On the **Liturgy** step, **Hear it from the pews** beside **Review service** sends the same cards as a review in one AI request (one `ai` token), and a **From the pews** box at the top shows each voice's one or two short reactions; a reaction about one prayer offers **Revise with this**, which is today's Revise (its confirm on the member's own text, its Undo). No migration, no new package or variable; the frozen Streamlit files are untouched. Tests never reach the network or OpenAI.
+**Goal:** Ship "Hear it from the pews" in one PR (owner's planning answers of 2026-10-20, "all recommended"; binding). After it merges, **Settings → Prayers** has a **From the pews** section under the voice profile: every church starts with the owner's five voices, all on; admins (and the owner) edit, turn off, add or remove them (at most 12, at most 6 on, 300 characters each), can put the five back with **Restore the starter voices**, and save them with the page's one **Save**; members read them. On the **Liturgy** step, **Hear it from the pews** beside **Review service** sends the same cards as a review in one AI request (one `ai` token), and a **From the pews** box at the top shows each voice's one or two short reactions; a reaction about one prayer offers **Revise with this**, which is today's Revise (its confirm on the member's own text, its Undo). The same PR stops `/liturgy/generate`, `/liturgy/review` and `/liturgy/revise` from logging prompts and answers at DEBUG (the owner's answer A of 2026-10-20), with a test over all four AI routes. No migration, no new package or variable; the frozen Streamlit files are untouched. Tests never reach the network or OpenAI.
 
-**Architecture:** Bottom up, reusing the reviewer's and the prayer library's machinery. T1: storage (`backend/pew_voices.py`: the one reader, the defaults, the limits) and the save through the prayer library's locked full-replace `PUT` (an optional `pew_voices` field; GET always answers it). T2: `POST /liturgy/pews` (`usecases/pew_voices.py`: the review's request model, fences, budget, deadline and `charge`; its own prompt, tolerant parser and counts-only log line). T3: Settings → Prayers (`lib/settings/prayers.ts` grows a voices part with the same rebase and Save rules; `pew-voices-card.tsx`). T4: the Liturgy step (`lib/liturgy/pews.ts` pure rules, `PewsProvider`, `pews-panel.tsx`, and `reviseWith` on the reviewer's provider so "Revise with this" is the existing Revise). T5: the manual check items. T6: verification. T7: the pre-merge note. T8: the draft PR, CI, the merge on the owner's yes, the after-deploy check, the phone check and the record.
+**Architecture:** Bottom up, reusing the reviewer's and the prayer library's machinery. T1: storage (`backend/pew_voices.py`: the one reader, the defaults, the limits) and the save through the prayer library's locked full-replace `PUT` (an optional `pew_voices` field; GET always answers it). T2: `POST /liturgy/pews` (`usecases/pew_voices.py`: the review's request model, fences, budget, deadline and `charge`; its own prompt, tolerant parser and counts-only log line), and the six DEBUG lines of the older AI usecases removed. T3: Settings → Prayers (`lib/settings/prayers.ts` grows a voices part with the same rebase and Save rules; `pew-voices-card.tsx`). T4: the Liturgy step (`lib/liturgy/pews.ts` pure rules, `PewsProvider`, `pews-panel.tsx`, and `reviseWith` on the reviewer's provider so "Revise with this" is the existing Revise). T5: the manual check items. T6: verification. T7: the pre-merge note. T8: the draft PR, CI, the merge on the owner's yes, the after-deploy check, the phone check and the record.
 
 **Tech Stack:** Python 3.11, FastAPI, Pydantic 2, SQLAlchemy, pytest (SQLite locally, Postgres in CI); Next.js 16, React 19, TanStack Query 5, Base UI, Tailwind 4, Vitest 3 with Testing Library and jsdom, ESLint, `tsc`; openapi-typescript 7 for the regenerated types; OpenAI `gpt-4.1-mini` on Railway (`OPENAI_MODEL`).
 
 **Source documents:**
 - Spec ("S"): `docs/superpowers/specs/2026-10-20-pew-voices-design.md` (written with this plan).
-- The idea and the owner's answers: `docs/superpowers/specs/2026-10-02-pew-voices-idea.md`, "Owner's planning answers (2026-10-20)" (binding; answer 3 supersedes "editable by the church's members").
+- The idea and the owner's answers: `docs/superpowers/specs/2026-10-02-pew-voices-idea.md`, "Owner's planning answers (2026-10-20)" (binding; answer 3 supersedes "editable by the church's members") and "Owner's answers to the plan review (2026-10-20)" (A to D, binding).
 - The reviewer ("R"): `docs/superpowers/specs/2026-09-26-service-reviewer-design.md` and its amendments; code `backend/usecases/liturgy_review.py`, `backend/api/routes/liturgy_review.py`, `frontend/src/lib/liturgy/review.tsx`, `frontend/src/components/builder/liturgy/`.
 - The prayer library (slice 6a-3b): `docs/superpowers/plans/2026-10-08-slice-6a3b-prayers.md`, `backend/usecases/prayer_library.py`, `backend/prayer_library.py`, `frontend/src/components/settings/prayers-settings-page.tsx`, `frontend/src/lib/settings/prayers.ts`.
 - The model plans for structure: `docs/superpowers/plans/2026-10-10-slice-6b2a-people-page.md`, `2026-10-10-slice-6b2b-danger-zone.md`.
@@ -34,7 +34,7 @@
 - `main` is protected (`backend`, `backend-postgres`, `frontend`). Never open, mark ready or merge a PR without the owner's explicit yes for that step.
 - New user-facing copy has no em dashes (clarification 9 lists it); new prose for the owner has no em dashes and no flattery.
 - No church id, email address, invite code, token, key, database URL, street address or real person's name in any doc, commit, test or record. Tests use `@example.com` addresses and made-up voices.
-- **No prayer text, voice description, prompt, AI answer or reaction is logged, at any level** (S "Privacy and logging"). Tests use FakeAI and `installFakeApi`; nothing reaches OpenAI.
+- **No prayer text, voice description, prompt, AI answer or reaction is logged, at any level** (S "Privacy and logging"), now on every AI route (answer A). Tests use FakeAI and `installFakeApi`; nothing reaches OpenAI.
 - The frozen Streamlit files (`app.py`, `streamlit_views/`, `streamlit_auth.py`, `streamlit_tenancy.py`, `ui_helpers.py`, `streamlit_tests/`) are not edited.
 
 ### How the file directives below read
@@ -65,6 +65,7 @@ As in the 6b plans: **Create `path`:** the block is the whole new file; **Append
 1. **The planning answers of 2026-10-20** ("all recommended"; binding): (1) one PR, no migration, voices in `churches.settings`; (2) a "From the pews" section on Settings → Prayers under the voice profile, no nav item; (3) admins and the owner edit, every member reads; (4) the owner's five as defaults, no invented first names; edit, turn off, add; at most 6 on; about 300 characters each; (5) one AI request for all turned-on voices; one or two short reactions each to the whole service, a reaction may point at one prayer; only what did not land or what helped; no flattery, no caricature; not real people; the health voice never gives medical advice; a "From the pews" panel at the top of the liturgy step, separate from the reviewer's notes; client memory only; a reaction clears when its prayer's text changes; (6) "Revise with this" under today's Revise rules (Undo; asks before replacing the member's own text); (7) `OPENAI_MODEL` and the `ai` bucket as Review service, one request per tap, "Still working" and Cancel as on Review; the real cost measured in the plan; one plan agent, one plan review, one code review.
 2. **Standing permission** for safety and reliability fixes with no owner-visible change (carried). Each use is a numbered clarification.
 3. **No migration, no owner routine before the merge** (T7).
+4. **The owner's answers to the plan review** (2026-10-20, "all recommended"; binding): (A) this PR removes the six `logger.debug` lines that logged prompts and answers in `usecases/liturgy.py` and `usecases/liturgy_review.py` (the INFO count lines stay), with a test that fails if a prompt, prayer, reaction or AI answer reaches a log at DEBUG on generate, review, revise or pews; the reviewer's two em-dash strings wait for a follow-up PR (Follow-ups); (B) "Restore the starter voices" on Settings → Prayers → From the pews, admins only, refills the five in the form and the admin still saves; a church that saved its own list keeps it even if the code's defaults change later; (C) a voice may give no reactions ("silence is fine"; clarification 11); (D) the phone check starts with a short real-AI trial on three services before the feature is relied on (T8 Steps 6-11), about $0.01; a fail means the prompt is fixed before others use it; the owner gives a paraphrase, never a copy of prayer text.
 
 ## Spec clarifications
 
@@ -74,22 +75,26 @@ The owner's answers win over S; the code wins over both where they disagree. **[
 2. **Defaults are read, not written.** A church that never saved voices reads the owner's five, all on, from code (`pew_voices.DEFAULT_VOICES`); nothing is written until an admin saves. A saved empty list stays empty (the admin removed them all). Voices have no ids: they are kept in order, and the page keys them `voice-<i>`.
 3. **The limits.** At most 12 voices (S's "total count cap"; "You can keep up to 12 voices."), each description 1 to 300 characters after whitespace runs become one space, at most 6 on. The model's own bounds (50 rows, 2,000 characters) only stop a body no page would send; the usecase checks the real limits with the page's words.
 4. **The request is the review's.** `POST /liturgy/pews` takes `ReviewIn` as it is, and the client sends what "Review service" would (`reviewTargets`, `buildReviewRequest`): a Benediction following the church default is left out, as the reviewer's 2026-10-02 amendment does. The prompt carries no standing rules, rubric or voice profile: the voices react as listeners, not editors.
-5. **Logging is stricter than the reviewer's.** The reviewer logs prompts and answers at DEBUG; this request logs nothing but counts, at any level (S "Privacy and logging", the task's "never log prayer text"). A test plants DEBUG logging of the prompt and fails.
+5. **No AI route logs text, at any level** (answer A). This request logs nothing but counts (S "Privacy and logging"), and T2 removes the six DEBUG lines that logged prompts and answers in `usecases/liturgy.py` (generate) and `usecases/liturgy_review.py` (review, revise); their INFO count lines stay. `test_api_ai_logging.py` posts to all four AI routes with the `api`, `usecases` and `integrations` loggers at DEBUG and fails on any marked text; the pews API test also captures `api` and `usecases` at DEBUG.
 6. **"Revise with this" is the reviewer's Revise** (answer 6). `LiturgyReview` gains `reviseWith(key, notes)`, the same `startRevise` path that "Revise the other prayers" already uses with its own note: the stale rule, "Revising…" and its Cancel on the card, the failure on the card, the 429 wait, Undo ("Revised with these notes."). A success also drops the card's review notes (R: any Revise does) and changes the prayer, so the reaction clears. The confirm on typed or saved text is the panel's own `ConfirmDialog` with Revise's words.
-7. **Errors are HTTP statuses**, as on Revise (no code notes to keep, so no `ai_status`): 503, 504, 502 (also for an answer that is not a JSON object), 429, and 422 "Turn on at least one voice in Settings → Prayers." The panel shows the message in an alert; a 429 shows the server's own sentence ("Too many requests. Try again in 15 seconds."), because the reviewer's `rateLimitMessage` has an em dash.
+7. **Errors are HTTP statuses**, as on Revise (no code notes to keep, so no `ai_status`): 503, 504, 502 (also for an answer that is not a JSON object), 429, and 422 "Turn on at least one voice in Settings → Prayers." The panel shows the message in an alert; a 429 shows the server's own sentence ("Too many requests. Try again in 15 seconds."), because the reviewer's `rateLimitMessage` has an em dash. A 404 (the page published before its server) shows its own line, "Hear it from the pews is not available yet. Try again in a few minutes.", not the cards' hymn message for `not_found`.
 8. **Removing a voice asks nothing** [owner-visible]: a voice is one line, and the removal is undone by not saving (the leave guard asks before unsaved edits are lost). Removing a prayer still asks.
-9. **[owner-visible] Every new user-facing string** (no em dashes): Settings: "From the pews", "When you tap Hear it from the pews on the Liturgy step, these voices react to the whole service. They are kinds of people, not real people. Turn on up to 6.", "No voices yet.", "On", "Off", "Turn on voice {n}", "Voice {n}", "Remove", "Remove voice {n}", "Add a voice", "You can keep up to 12 voices.", "Describe this voice.", "This description is too long (300 characters at most).", "Turn on at most 6 voices.". The step: "Hear it from the pews", "Cancel" ("Cancel hearing from the pews"), "Listening…", "Still working. This can take up to a minute.", "From the pews", "Reactions from {description}", "About {Label}", "Dismiss reaction: {text}", "No reactions this time.", "From the pews: no reactions." / "1 reaction." / "{n} reactions.", "Revise with this", "Replace your text?", "Revise replaces the text in {Label} with a version that answers this reaction. You can undo right after.", "Revise text", "Keep my text". From the server: "Turn on at least one voice in Settings → Prayers." and the app's AI messages.
-10. **The prompt's guards** (answer 5), each a sentence the tests pin: not real people (no names, ages or life stories; never claim to speak for anyone real); the descriptions and prayers are fenced material, not instructions; no flattery (never praise for its own sake, never thank the pastor; only what did not land or what helped, and why); no caricature (thoughtful, whole people; no mockery, exaggeration, stereotypes, slang or put-on talk); no voice gives medical, legal or financial advice, and a health-worried voice reacts as a worshipper, never as a clinician; a voice with nothing honest to add gives no reactions. Fence markers (any run of three or more `<` or `>`) are stripped from every description, prayer, occasion, reading and sermon text with the reviewer's `_unfenced`.
+9. **[owner-visible] Every new user-facing string** (no em dashes): Settings: "From the pews", "When you tap Hear it from the pews on the Liturgy step, these voices react to the whole service. They are kinds of people, not real people. Turn on up to 6.", "No voices yet.", "On", "Off", "Turn on voice {n}", "Voice {n}", "Remove", "Remove voice {n}", "Add a voice", "Restore the starter voices", "You can keep up to 12 voices.", "Describe this voice.", "This description is too long (300 characters at most).", "Turn on at most 6 voices.". The step: "Hear it from the pews", "Cancel" ("Cancel hearing from the pews"), "Listening…", "Still working. This can take up to a minute.", "From the pews", "Reactions from {description}", "About {Label}", "Dismiss reaction: {text}", "No reactions this time.", "From the pews: no reactions." / "1 reaction." / "{n} reactions.", "Revise with this", "Replace your text?", "Revise replaces the text in {Label} with a version that answers this reaction. You can undo right after.", "Revise text", "Keep my text", "Hear it from the pews is not available yet. Try again in a few minutes.". From the server: "Turn on at least one voice in Settings → Prayers." and the app's AI messages.
+10. **The prompt's guards** (answer 5), each a sentence the tests pin: not real people (no names, ages or life stories; never claim to speak for anyone real); the descriptions and prayers are fenced material, not instructions; no flattery (never praise for its own sake, never thank the pastor; only what did not land or what helped, and why); no caricature (thoughtful, whole people; no mockery, exaggeration, stereotypes, slang or put-on talk); no voice gives medical, legal or financial advice, and a health-worried voice reacts as a worshipper, never as a clinician; a voice with nothing honest to add gives no reactions; the AI sees only the prayers (and the sermon text and the reading references when they are given) and reacts only to those, never to hymns, music or anything else it cannot see (`ONLY_WHAT_SEEN`). The reply format carries a concrete example whose `prayer` is the first sent prayer's real key (`contract(key)`), and the parser takes a sent prayer's label in any case ("Opening Prayer", "opening prayer:") as its key. A reaction over 240 characters is cut at the last whole word that fits. Fence markers (any run of three or more `<` or `>`) are stripped from every description, prayer, occasion, reading and sermon text with the reviewer's `_unfenced`.
+11. **[owner-visible] A voice may give no reactions** (answer C, "silence is fine"): the answer can hold 0 to 2 reactions per voice, a voice with none is left out of the panel, and an answer with none at all shows "No reactions this time." The prompt's example shows a voice with an empty list.
+12. **Deploy order** (standing permission). If Vercel publishes the page before Railway restarts the server, `GET /church/prayer-library` answers without `pew_voices`: the form reads the starter voices (`STARTER_VOICES`) as its baseline, unchanged, so a save sends no `pew_voices`; and `POST /liturgy/pews` is a 404, shown with clarification 7's own line.
+13. **[owner-visible] "Restore the starter voices"** (answer B): admins only, beside "Add a voice"; it puts the owner's five, all on, in place of the form's list (new keys, so every row is fresh) and clears the voices' messages; nothing is stored until Save, and the leave guard covers it like any unsaved edit. The five live in the backend (`pew_voices.DEFAULT_DESCRIPTIONS`) and in `lib/settings/prayers.ts` (`STARTER_VOICES`); `prayers.test.ts` pins the copy to the fixture that mirrors the server's answer. A saved list is never replaced by a later change to the defaults.
+14. **A long description read is cut to 300 characters** (standing permission): only a hand edit of `churches.settings` could store one, and the prompt's budget assumes 300 each. Likewise at most 6 turned-on voices are sent, whatever is stored (`turned_on`; a usecase test with nine on).
 
 ### Assumptions that turned out false while building
-- "Same as reviewer" for logging: the reviewer does log prompts at DEBUG (clarification 5).
-- The shared still-working line (`STILL_WORKING` in `use-still-working.ts`) and the reviewer's 429 line (`rateLimitMessage` in `lib/liturgy/errors.ts`) contain em dashes; this feature uses its own line and the server's sentence (question 1).
+- "Same as reviewer" for logging: the reviewer did log prompts and answers at DEBUG; the owner chose to remove those lines here (answer A; clarification 5).
+- The shared still-working line (`STILL_WORKING` in `use-still-working.ts`) and the reviewer's 429 line (`rateLimitMessage` in `lib/liturgy/errors.ts`) contain em dashes; this feature uses its own line and the server's sentence (Follow-ups 1).
 - The settings tests compare whole `PUT` bodies; sending `pew_voices` only when changed keeps every existing assertion true (clarification 1). Three usecase tests compare whole GET answers and gain the `pew_voices` key (T1).
-- `test_slice1_docs.py` pins the last eleven `##` headings of `docs/manual-verification.md`, so the check items go into the existing "## Service reviewer" section as items 11-16, not a new section (T5).
+- `test_slice1_docs.py` pins the last eleven `##` headings of `docs/manual-verification.md`, so the check items go into the existing "## Service reviewer" section as items 11-17, not a new section (T5).
 
 ### Risks
-- **Flattery, caricature or advice anyway.** The prompt forbids each; a model can still slip. The phone check reads a real answer (T8); a prompt change is a small follow-up.
-- **Cost.** Measured from the prompt the replay built (Build notes): about $0.002 a tap for a full service, about $0.005 at worst; the `ai` bucket (40 per 10 min per user, 400 a day per church) and the $15 monthly cap bound it.
+- **Flattery, caricature, advice or reactions to what the AI cannot see, anyway.** The prompt forbids each; a model can still slip. The phone check's real-AI trial reads three answers before the feature is relied on (answer D, T8); a fail means the prompt is fixed before others use it.
+- **Cost.** Counted with OpenAI's tokenizer (`tiktoken`, `o200k_base`) on the prompt the build made (Build notes): about $0.0017 a tap for a full service, about $0.005 at worst (the worst case is an estimate from that text's characters per token); the `ai` bucket (40 per 10 min per user, 400 a day per church) and the $15 monthly cap bound it. The phone check can read one real call's token counts (T8 Step 17, optional).
 - **A reasoning model** set later in `OPENAI_MODEL` could spend the 1,500 answer tokens thinking (slice 3a's note); `OPENAI_REASONING_EFFORT` applies as to every AI call.
 - **Two admins editing voices at once**: the second save replaces the first's voices if both changed them (the full replace), as with prayers; a save that did not change them leaves them.
 
@@ -101,6 +106,7 @@ The owner's answers win over S; the code wins over both where they disagree. **[
 |---|---|---|
 | `backend/pew_voices.py` (+ `backend/tests/test_pew_voices.py`) | the reader, the defaults, the limits | T1 |
 | `backend/usecases/pew_voices.py` (+ `backend/tests/test_usecase_pew_voices.py`, `backend/tests/test_api_pew_voices.py`) | the request: prompt, parser, errors, log line | T2 |
+| `backend/tests/test_api_ai_logging.py` | no prompt, prayer or answer in any log record down to DEBUG on the four AI routes (answer A) | T2 |
 | `frontend/src/components/settings/pew-voices-card.tsx` | the Settings section | T3 |
 | `frontend/src/lib/liturgy/pews.ts`, `pews-provider.tsx` | the panel's rules and state | T4 |
 | `frontend/src/components/builder/liturgy/pews-panel.tsx` (+ `pews-step.test.tsx`) | the button, the status line, the panel | T4 |
@@ -111,17 +117,18 @@ The owner's answers win over S; the code wins over both where they disagree. **[
 |---|---|---|
 | `backend/usecases/prayer_library.py`, `backend/api/routes/prayer_library.py` (+ `test_usecase_prayer_library.py`) | `pew_voices` on GET and PUT, `clean_voices` | T1 |
 | `backend/api/routes/liturgy_review.py` | `POST /liturgy/pews`, `PewsOut` | T2 |
+| `backend/usecases/liturgy.py`, `backend/usecases/liturgy_review.py` | the six DEBUG lines that logged prompts and answers removed (answer A) | T2 |
 | `frontend/src/lib/api/openapi.json`, `schema.d.ts` | regenerated | T1, T2 |
 | `frontend/src/lib/api/types.ts` | `PewVoice` (T1); `PewsResult`, `PewVoiceReactions`, `PewReaction` (T4) | T1, T4 |
 | `frontend/src/test/fixtures/index.ts` | `DEFAULT_PEW_VOICES`; `prayerLibrary` answers them | T1 |
-| `frontend/src/lib/settings/prayers.ts` (+ `prayers.test.ts`), `frontend/src/components/settings/prayers-settings-page.tsx` (+ its test) | the voices part of the form | T3 |
+| `frontend/src/lib/settings/prayers.ts` (+ `prayers.test.ts`), `frontend/src/components/settings/prayers-settings-page.tsx` (+ its test) | the voices part of the form, `STARTER_VOICES` and Restore | T3 |
 | `frontend/src/lib/api/timeouts.ts`, `frontend/src/lib/queries/liturgy.ts` | `POST /liturgy/pews` 100 s, `hearFromThePews` | T4 |
 | `frontend/src/lib/liturgy/review.tsx` | `reviseWith` | T4 |
 | `frontend/src/components/builder/builder-shell.tsx`, `frontend/src/components/builder/liturgy/liturgy-step.tsx` | `PewsProvider`; the button, status and panel | T4 |
-| `docs/manual-verification.md` | "Service reviewer" items 11-16 | T5 |
+| `docs/manual-verification.md` | "Service reviewer" items 11-17 | T5 |
 | `docs/ops-runbook.md` | the 6b-2b record rides along (already on the branch); the pews record is T8's records PR | T8 |
 
-**Counts in the PR:** 32 paths: 12 added (this plan, the spec, and the ten new code and test files above) and 20 modified (the seventeen code, test and generated files above, `docs/manual-verification.md`, and two docs already on the branch: `docs/ops-runbook.md` with the 6b-2b record and the idea doc with the owner's 2026-10-20 answers); none deleted. **Untouched:** `backend/migrations`, `requirements*.txt`, `frontend/package*.json`, `frontend/src/components/ui`, `.github`, the frozen Streamlit files.
+**Counts in the PR:** 35 paths: 13 added (this plan, the spec, and the eleven new code and test files above) and 22 modified (the nineteen code, test and generated files above, `docs/manual-verification.md`, and two docs already on the branch: `docs/ops-runbook.md` with the 6b-2b record and the idea doc with the owner's 2026-10-20 answers); none deleted. **Untouched:** `backend/migrations`, `requirements*.txt`, `frontend/package*.json`, `frontend/src/components/ui`, `.github`, the frozen Streamlit files.
 
 **Task order and review batch:** T1 → T5, each one commit and a backup push; then one code review of the whole batch with its fixes as `Fix: …` commits; T6 verifies; T7 is the pre-merge note; T8 opens the draft PR on the owner's yes, merges on the owner's yes, checks production, runs the phone check and writes the record.
 
@@ -3949,7 +3956,7 @@ git push -q origin claude/slice-2-plan-4q33le
 
 ### Task 5: The manual check items (S Testing; R "Append a manual check at 375 px")
 
-**Files:** Modify `docs/manual-verification.md` (items 11-16 at the end of "## Service reviewer", before "## Slice 5a").
+**Files:** Modify `docs/manual-verification.md` (items 11-17 at the end of "## Service reviewer", before "## Slice 5a").
 
 - [ ] **Step 1: Add the items**
 
@@ -3998,7 +4005,7 @@ Run: `.venv/bin/python -m pytest -q backend/tests/test_slice1_docs.py backend/te
 
 ```bash
 git add docs/manual-verification.md
-git commit -q -m "Docs: manual check items for Hear it from the pews" -m "Items 11-16 in the Service reviewer section: the Settings section, a real answer read for flattery, caricature and advice, Revise with this, Cancel, 375 px, and the agent's deploy check." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+git commit -q -m "Docs: manual check items for Hear it from the pews" -m "Items 11-17 in the Service reviewer section: the Settings section, the real-AI trial on three services (flattery, exaggeration, medical advice, reactions to what the AI cannot see), Revise with this, Cancel, 375 px, the agent's deploy check and the optional token counts." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 git push -q origin claude/slice-2-plan-4q33le
 ```
@@ -4036,9 +4043,9 @@ lint 0
 ├ ○ /settings/prayers
 ```
 
-- [ ] **Step 3: No em dash in the new copy, and no prayer text in a log call**
+- [ ] **Step 3: No em dash in the new copy, no prayer text in a log call, no DEBUG line left in the AI usecases**
 
-Run: `grep -c $'\xe2\x80\x94' frontend/src/components/builder/liturgy/pews-panel.tsx frontend/src/components/settings/pew-voices-card.tsx frontend/src/lib/liturgy/pews.ts backend/usecases/pew_voices.py | grep -v ':0$' | wc -l` then `grep -nE 'logger\.(debug|info|warning|error|exception)' backend/usecases/pew_voices.py`
+Run: `grep -c $'\xe2\x80\x94' frontend/src/components/builder/liturgy/pews-panel.tsx frontend/src/components/settings/pew-voices-card.tsx frontend/src/lib/liturgy/pews.ts frontend/src/lib/liturgy/pews-provider.tsx backend/usecases/pew_voices.py | grep -v ':0$' | wc -l` then `grep -nE 'logger\.(debug|info|warning|error|exception)' backend/usecases/pew_voices.py` then `grep -c 'logger\.debug' backend/usecases/liturgy.py backend/usecases/liturgy_review.py backend/usecases/pew_voices.py`
 **Expected:** 
 ```
 0
@@ -4060,13 +4067,13 @@ This PR changes no table, column, index or row shape and adds no migration (T6 S
 
 ### Task 8: The draft PR, the merge, the after-deploy check, the phone check, the record (OWNER + agent)
 
-**Files:** Modify (Step 12, the records PR): `docs/ops-runbook.md`: insert `### Hear it from the pews record` right before `## Backups` (after `### Slice 6b-2b record`, which rides along in this PR). A `###` heading, because `test_ops_workflows.py` pins the `##` list.
+**Files:** Modify (Step 18, the records PR): `docs/ops-runbook.md`: insert `### Hear it from the pews record` right before `## Backups` (after `### Slice 6b-2b record`, which rides along in this PR). A `###` heading, because `test_ops_workflows.py` pins the `##` list.
 
 - [ ] **Step 1 (agent → OWNER): Ask to open the draft PR**
 
 (not replayed: it needs the owner and GitHub) `gh pr list -R <repo> --head claude/slice-2-plan-4q33le --state open --json number,url` → `[]`. Send the owner exactly this, and wait for a clear yes:
 
-> "Hear it from the pews" is verified on this machine: backend 2274 passed, 49 skipped (2236 before); frontend 1074 tests in 116 files (1057 in 115 before); typecheck, lint and the production build clean. It adds a From the pews section on Settings → Prayers (your five voices to start; admins edit them, at most 6 on) and a Hear it from the pews button on the Liturgy step that asks the AI once for each voice's short reactions, with Revise with this on a reaction about one prayer. A tap costs about a fifth of a cent. There is no database change, so no backup or SQL check before it. May I open the pull request as a **draft** titled "Hear it from the pews", so the checks run? Merging stays with you.
+> "Hear it from the pews" is verified on this machine: backend 2280 passed, 49 skipped (2236 before); frontend 1080 tests in 116 files (1057 in 115 before); typecheck, lint and the production build clean. It adds a From the pews section on Settings → Prayers (your five voices to start; admins edit them, at most 6 on, and can restore the five) and a Hear it from the pews button on the Liturgy step that asks the AI once for each voice's short reactions, with Revise with this on a reaction about one prayer. As you asked, it also stops the other AI requests from logging prompts and answers. A tap costs about a fifth of a cent. There is no database change, so no backup or SQL check before it. May I open the pull request as a **draft** titled "Hear it from the pews", so the checks run? Merging stays with you.
 
 - [ ] **Step 2 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
 
@@ -4076,14 +4083,16 @@ cat > "<scratch>/pews-pr-body.md" <<'BODY'
 Hear it from the pews (owner's planning answers of 2026-10-20). Spec: docs/superpowers/specs/2026-10-20-pew-voices-design.md. Plan: docs/superpowers/plans/2026-10-20-pew-voices.md. No migration, no new package or variable.
 
 - Storage: churches.settings["pew_voices"] through backend/pew_voices.py (the owner's five until saved); saved by PUT /church/prayer-library when sent (12 voices, 6 on, 300 characters; the role re-read under the church-row lock); GET answers them.
-- POST /liturgy/pews (backend/usecases/pew_voices.py): the review's body; one AI call for the turned-on voices; fenced voices and prayers; guards against flattery, caricature and advice; the voices are not real people; tolerant parsing (unknown voices and prayers dropped); one ai token per request, only when the AI is called; 503/504/502/429/422; a counts-only log line, nothing logged at DEBUG.
-- Settings > Prayers: a From the pews section under the voice profile, saved by the page's one Save (sent only when the voices changed); members read it.
-- Liturgy step: Hear it from the pews beside Review service (Listening..., Still working after 8 s, Cancel); a From the pews box at the top; stale reactions dropped; a reaction clears when its prayer changes; Revise with this through the reviewer's Revise (reviseWith), with its confirm and Undo.
-- docs/manual-verification.md: Service reviewer items 11-16. Rides along: the 6b-2b record in docs/ops-runbook.md.
+- POST /liturgy/pews (backend/usecases/pew_voices.py): the review's body; one AI call for the turned-on voices; fenced voices and prayers; guards against flattery, caricature, advice and reactions to what the AI cannot see; the voices are not real people; a reply example with a real prayer key; tolerant parsing (unknown voices and prayers dropped, a prayer's label taken as its key, long reactions cut at a word); one ai token per request, only when the AI is called; 503/504/502/429/422; a counts-only log line, nothing logged at DEBUG.
+- Generate, review and revise no longer log prompts or answers at DEBUG (owner's answer A); backend/tests/test_api_ai_logging.py checks all four AI routes down to DEBUG.
+- Settings > Prayers: a From the pews section under the voice profile, saved by the page's one Save (sent only when the voices changed), with Restore the starter voices for admins; members read it. A server not yet deployed: the starter voices show, unchanged.
+- Liturgy step: Hear it from the pews beside Review service (Listening..., Still working after 8 s, Cancel); a From the pews box at the top; stale reactions dropped; a reaction clears when its prayer changes; Revise with this through the reviewer's Revise (reviseWith), with its confirm and Undo; a 404 has its own message.
+- docs/manual-verification.md: Service reviewer items 11-17. Rides along: the 6b-2b record in docs/ops-runbook.md.
+- Follow-up after this PR: the reviewer's two em-dash strings (STILL_WORKING, rateLimitMessage).
 
 Before the PR: nothing (no migration; Task 7). After the merge: the after-deploy check, a short phone check, a "Hear it from the pews record" in docs/ops-runbook.md.
 
-Tests: backend 2236 → 2274 passed, 49 → 49 skipped; frontend 1057 → 1074 in 115 → 116 files
+Tests: backend 2236 → 2280 passed, 49 → 49 skipped; frontend 1057 → 1080 in 115 → 116 files
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 
@@ -4093,7 +4102,7 @@ gh pr create -R <repo> --draft --base main --head claude/slice-2-plan-4q33le --t
 gh pr checks <N> -R <repo> --watch --interval 30
 ```
 
-Run the last line with `run_in_background: true` (or the session's GitHub tools, to the same effect). **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `2274 passed, 49 skipped`, backend-postgres `49 passed, 2274 deselected`, frontend `1074 passed` in 116 files. Then send: "PR #<N> is green: backend 2274 passed, 49 skipped; 1074 frontend tests in 116 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R <repo>`.
+Run the last line with `run_in_background: true` (or the session's GitHub tools, to the same effect). **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's numbers: backend `2280 passed, 49 skipped`, backend-postgres `49 passed, 2280 deselected`, frontend `1080 passed` in 116 files. Then send: "PR #<N> is green: backend 2280 passed, 49 skipped; 1080 frontend tests in 116 files; the build and the Vercel preview are fine. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R <repo>`.
 
 - [ ] **Step 3 (agent → OWNER): Ask to merge, then merge**
 
@@ -4119,37 +4128,67 @@ curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' <app>/settings/prayers
 
 **Expected:** `{"ok":true,"db":"ok"}`; `307 <app>/login?next=%2Fbuilder%2Fliturgy` and `307 <app>/login?next=%2Fsettings%2Fprayers` (signed out, sign-in first). A `404`: Vercel has not published yet; ask again a minute later. Nothing for the owner to run.
 
-- [ ] **Step 5 (OWNER, then agent): Phone, step 1 of 5: the voices (item 11)**
+The phone check is one short action per message; send the next only after the answer. Steps 6-11 are the real-AI trial (answer D): three taps on three different services, about $0.01 in all, before anyone relies on the feature.
 
-> On your phone, open the app and pull down to reload. Tap **Settings**, then **Prayers**. Under the voice profile, do you see **From the pews** with five voices, each with **On** ticked? Please change nothing.
+- [ ] **Step 5 (OWNER, then agent): Phone 1: the voices (item 11)**
 
-- [ ] **Step 6 (OWNER, then agent): Phone, step 2 of 5: hear it (item 12)**
+> On your phone, open the app and tap **Settings**, then **Prayers**. Under the voice profile, do you see **From the pews** with five voices, each **On**, and a **Restore the starter voices** button? Please change nothing.
 
-> Open the **Liturgy** step of a service with a few prayers written. Tap **Hear it from the pews**. When the **From the pews** box appears at the top, does any reaction praise the service for its own sake, mock its voice, or give medical advice? Please copy one reaction here.
+- [ ] **Step 6 (OWNER, then agent): Phone 2: the first trial service (item 12)**
 
-- [ ] **Step 7 (OWNER, then agent): Phone, step 3 of 5: Revise with this (item 13)**
+> Open the **Liturgy** step of a service with a few prayers written. Tap **Hear it from the pews** once and wait for the **From the pews** box at the top.
 
-> On a reaction marked **About** an AI-written prayer, tap **Revise with this**. Does that prayer show "Revising…", then new text with **Undo**? Tap **Undo**. Is your old text back?
+- [ ] **Step 7 (OWNER, then agent): Phone 3: read the first answer (item 12)**
 
-- [ ] **Step 8 (OWNER, then agent): Phone, step 4 of 5: Cancel (item 14)**
+> Please read the reactions and answer yes or no to each: Does any flatter the service? Does any exaggerate its voice? Does any give medical advice? Does any react to something the AI cannot see, such as a hymn or the music? Then tell me one reaction in your own words (please do not copy a prayer).
 
-> Tap **Hear it from the pews**, then **Cancel** right away. Does "Listening…" go, with nothing else changed?
+- [ ] **Step 8 (OWNER, then agent): Phone 4: the second trial service (item 12)**
 
-- [ ] **Step 9 (OWNER, then agent): Phone, step 5 of 5: the screen (item 15)**
+> Open a **different** service's Liturgy step and tap **Hear it from the pews** once.
+
+- [ ] **Step 9 (OWNER, then agent): Phone 5: read the second answer (item 12)**
+
+> The same four questions, yes or no each: flattery, an exaggerated voice, medical advice, a reaction to something the AI cannot see? And one reaction in your own words.
+
+- [ ] **Step 10 (OWNER, then agent): Phone 6: the third trial service (item 12)**
+
+> Open a **third** service's Liturgy step and tap **Hear it from the pews** once.
+
+- [ ] **Step 11 (OWNER, then agent): Phone 7: read the third answer (item 12)**
+
+> The same four questions once more, yes or no each, and one reaction in your own words.
+
+**A fail stops the check.** Any yes in Steps 7, 9 or 11: tell the owner "Thank you. That is a fail, so the prompt gets fixed before anyone else uses this; I will write the fix as a small follow-up for your yes." Record the paraphrase and which rule it broke; skip to Step 16.
+
+- [ ] **Step 12 (OWNER, then agent): Phone 8: Revise with this (item 13)**
+
+> On a reaction marked **About** an AI-written prayer, tap **Revise with this**. Does that prayer change, with **Undo** under it? If no reaction points at an AI-written prayer, just say "skip" (and skip the next step too).
+
+- [ ] **Step 13 (OWNER, then agent): Phone 9: Undo (item 13)**
+
+> Tap **Undo** on that prayer. Is your old text back?
+
+- [ ] **Step 14 (OWNER, then agent): Phone 10: Cancel (item 14)**
+
+> Tap **Hear it from the pews**, then **Cancel** right away. Did "Listening…" go away, with nothing else changed?
+
+- [ ] **Step 15 (OWNER, then agent): Phone 11: the screen (item 15)**
 
 > Thinking back: any sideways scrolling on the Liturgy step or Settings → Prayers? Were the buttons easy to tap?
 
-**What the phone check cannot show.** A reaction clearing when its prayer changes, a stale answer dropped, a member's read-only view and the 6-on check are covered by jsdom tests only: `pews-step.test.tsx` "clears a reaction when its prayer's text changes…" and "drops a reaction about a prayer edited while it ran…"; `prayers-settings-page.test.tsx` "shows a member the owner's five, read only…" and "refuses a 7th voice turned on…".
+**What the phone check cannot show.** A reaction clearing when its prayer changes, a stale answer dropped, a member's read-only view, Restore the starter voices (pressing it would change the form), the 6-on check, a 404 during a deploy, and a reaction naming a prayer by its label are covered by tests only: `pews-step.test.tsx` "clears a reaction when its prayer's text changes…", "drops a reaction about a prayer edited while it ran…" and "shows the server's 422…"; `prayers-settings-page.test.tsx` "shows a member the owner's five, read only…", "Restore the starter voices…" and "refuses a 7th voice turned on…"; `test_usecase_pew_voices.py` "…a prayer_s_label_is_taken_as_its_key…".
 
-- [ ] **Step 10 (agent): The results**
+- [ ] **Step 16 (agent): The results**
 
-Write each step's result, with the date, into `<scratch>/pews-t8-results.md` (not committed). A reaction is recorded only as "a reaction about {prayer}: {one short paraphrase}", never a prayer's text. A problem the owner reports is a follow-up for the record (and for the owner to decide), not a change made now.
+Write each step's result, with the date, into `<scratch>/pews-t8-results.md` (not committed). A reaction is recorded only as "a reaction about {prayer}: {one short paraphrase}", never a prayer's text. A problem the owner reports is a follow-up for the record (and for the owner to decide), not a change made now; a trial fail (Steps 7, 9, 11) is the prompt follow-up the owner already asked for (answer D).
 
-- [ ] **Step 11 (agent): Measure one real call's size, if the owner agrees**
+- [ ] **Step 17 (OWNER, optional, then agent): Phone 12: the real token counts (item 17)**
 
-Ask: "May I read one line of Railway's logs for the request you just made? It holds only counts." On the yes, the owner reads the `liturgy.pews … outcome=ok` line and the client's `ai_call` line (its token counts) aloud; record `cards`, `voices`, `reactions`, `duration_ms` and the prompt and completion tokens. The cost is prompt tokens × $0.40 + completion tokens × $1.60 per million (Build notes). Skipped: "Not measured live".
+> Optional, about a minute: in Railway, open the backend service's **Logs**, search for `ai_call`, and tell me the `prompt_tokens` and `completion_tokens` on the newest line. That line holds only counts. Say "skip" if you would rather not.
 
-- [ ] **Step 12 (agent): Write the record**
+On the numbers: the cost of that tap is prompt tokens × $0.40 + completion tokens × $1.60 per million (Build notes); compare it with the tokenizer count (2,443 prompt tokens for a full eight-prayer service). Skipped: the record says "Not measured live; the tokenizer count of the Build notes stands".
+
+- [ ] **Step 18 (agent): Write the record**
 
 (not replayed)
 ```bash
@@ -4168,20 +4207,23 @@ grep -n '^### ' docs/ops-runbook.md | awk -F: '$1 < '"$(grep -n '^## Backups$' d
 Hear it from the pews (Settings → Prayers → From the pews; the Liturgy
 step's Hear it from the pews button and From the pews box; Revise with
 this) merged as PR #<N> (owner's planning answers of 2026-10-20). No
-migration, so no backup routine before the merge. The phone check read one
-real answer; no prayer text, voice description in full, church id, email
-address, token or database URL is recorded here.
+migration, so no backup routine before the merge. The phone check began
+with a real-AI trial on three services (the owner's answer D); no prayer
+text, voice description in full, church id, email address, token or database
+URL is recorded here.
 
 | Step | Result | Date |
 |---|---|---|
 | Merge and deploy | PR #<N> merged <UTC time> (<Eastern time>), merge commit `<short sha>`. CI on `main` (run <run id>): success. `/health/ready` `{"ok":true,"db":"ok"}`; `/builder/liturgy` and `/settings/prayers` signed out: 307 to sign in | <date> |
-| Phone 1. The voices | <From the pews with the five voices, all on. / …> | <date> |
-| Phone 2. A real answer | <The box at the top; n reactions; none flattering, mocking or advising / what the owner saw. A reaction about {prayer}: {paraphrase}> | <date> |
-| Phone 3. Revise with this | <Revising…, new text, Undo brought the old text back. / …> | <date> |
-| Phone 4. Cancel | <Listening… went; nothing else changed. / …> | <date> |
-| Phone 5. The screen (<phone and browser>) | <No sideways scroll; easy to tap. / …> | <date> |
-| Cost | <cards, voices, reactions, duration; prompt and completion tokens; $ per tap / Not measured live> | <date> |
-| Not on the phone | A reaction clearing on an edit, a stale answer, the member's view and the 6-on check: jsdom tests only (T8 "What the phone check cannot show") | <date> |
+| Phone 1. The voices | <From the pews with the five voices, all on, and Restore the starter voices. / …> | <date> |
+| Trial 1 of 3 | <n reactions; no flattery, exaggeration, medical advice or reaction to what the AI cannot see / which rule broke. A reaction about {prayer}: {paraphrase}> | <date> |
+| Trial 2 of 3 | <as trial 1> | <date> |
+| Trial 3 of 3 | <as trial 1> | <date> |
+| Revise with this | <New text with Undo; Undo brought the old text back. / Skipped: no reaction pointed at an AI-written prayer. / …> | <date> |
+| Cancel | <Listening… went; nothing else changed. / …> | <date> |
+| The screen (<phone and browser>) | <No sideways scroll; easy to tap. / …> | <date> |
+| Cost | <prompt and completion tokens of one tap; $ per tap / Not measured live; the tokenizer count of the plan's Build notes stands> | <date> |
+| Not on the phone | A reaction clearing on an edit, a stale answer, the member's view, Restore, the 6-on check, a 404 and label parsing: tests only (T8 "What the phone check cannot show") | <date> |
 | Follow-ups | <None. / One line per follow-up.> | <date> |
 ```
 
@@ -4199,7 +4241,7 @@ Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 
 **Expected:** `0`; `0`; `0`; `89 passed in <t>s`; one commit.
 
-- [ ] **Step 13 (agent, on the owner's yes): Push, open and merge the records PR**
+- [ ] **Step 19 (agent, on the owner's yes): Push, open and merge the records PR**
 
 Ask: "The Hear it from the pews record is written (docs/ops-runbook.md only). May I push it and open its PR?" On the yes (not replayed): push; `gh pr create -R <repo> --base main --head claude/slice-2-plan-4q33le --title "Runbook: Hear it from the pews record" --body "Records PR #<N> in docs/ops-runbook.md → Hear it from the pews record. Docs only. No prayer text, church id or email address is recorded.
 
@@ -4222,7 +4264,7 @@ Code only (no migration to undo; a church's saved `pew_voices` key is then unrea
 **While building:**
 - Three usecase tests compare whole GET answers, so they gain `"pew_voices": DEFAULT_VOICES` (T1 Step 1). No settings page test changed its expectation: the page sends `pew_voices` only when the voices changed (clarification 1), so every existing `PUT` body assertion still holds; the fake server in that test keeps the voices it is sent.
 - The first log test captured every logger at DEBUG and so read SQLAlchemy's own row logging (which holds the settings JSON, outside this app's code); it now captures `usecases.pew_voices` at DEBUG and every logger at INFO, the reviewer's way.
-- `rateLimitMessage` and the shared `STILL_WORKING` both hold an em dash (question 1), hence the feature's own still-working line and the server's 429 sentence.
+- `rateLimitMessage` and the shared `STILL_WORKING` both hold an em dash (Follow-ups 1), hence the feature's own still-working line and the server's 429 sentence.
 - The route guard test needed no new row: `POST /liturgy/pews` uses `require_church`, as the review does.
 
 **Planted violations** (each planted in the build worktree with T1-T4 applied, the named test files run, the change undone; all 23 were caught):
@@ -4253,11 +4295,12 @@ Code only (no migration to undo; a church's saved `pew_voices` key is then unrea
 | F10 | two requests per tap | same | caught: 2 failed |
 | F11 | the member's view renders the edit row | `prayers-settings-page.test.tsx` | caught: 2 failed |
 
-**Cost (S "Cost").** `OPENAI_MODEL` is `gpt-4.1-mini` (ops runbook, slice 3a record). Its price, read on 2026-10-20 from OpenAI's pricing page (developers.openai.com/api/docs/pricing, the standard tier's `gpt-4.1-mini` row): **$0.40 per million input tokens, $1.60 per million output tokens** (cached input $0.10, not assumed). Tokens are estimated at 4 characters each (not counted with a tokenizer; the live check in T8 Step 11 reads the real counts).
-- Measured in the build worktree with `build_pews_prompt`: the five default voices, all eight prayers (400, 600, 700, 300, 300, 3,500, 300 and 200 characters), four readings and a 5,000-character sermon text (cut to 2,000): system message 1,516 characters, whole prompt **10,812 characters**, about **2,700 tokens**, **$0.0011**. An answer of about ten reactions is about 600 tokens, **$0.0010**. About **$0.002 a tap**.
-- Worst case: the 24,000-character cap (about 6,000 tokens, $0.0024) and all 1,500 answer tokens ($0.0024): about **$0.005 a tap**.
-- The `ai` bucket bounds a church at 400 taps a day (about $0.80 a day typical, $2 at worst); the $15 monthly cap is the backstop.
+**Cost (S "Cost").** `OPENAI_MODEL` is `gpt-4.1-mini` (ops runbook, slice 3a record). Its price, read on 2026-10-20 from OpenAI's pricing page (developers.openai.com/api/docs/pricing, the standard tier's `gpt-4.1-mini` row): **$0.40 per million input tokens, $1.60 per million output tokens** (cached input $0.10, not assumed). Tokens are **counted with OpenAI's tokenizer**: `tiktoken` 0.14.0 installed with pip into a scratchpad directory (`pip install --target`, not the repo's `.venv`, so no package changes), the `o200k_base` encoding that `gpt-4.1-mini` uses, plus the chat format's 3 tokens per message and 3 for the reply. The live check (T8 Step 17, optional) can read a real call's counts from the `ai_call` INFO line.
+- Measured in the build worktree with `build_pews_prompt` after the review fixes: the five default voices, all eight prayers (400, 600, 700, 300, 300, 3,500, 300 and 200 characters of plain English prayer text), four readings and a 5,000-character sermon text (cut to 2,000): system message 1,897 characters, whole prompt **11,166 characters**, **2,443 prompt tokens** (4.59 characters a token), **$0.00098**. An answer of ten reactions of about 105 characters (two per voice, 1,554 characters of JSON) is **420 tokens**, **$0.00067**. About **$0.0017 a tap**.
+- Worst case (an estimate: the cap was not tokenized as such): the 24,000-character cap at that text's 4.59 characters a token is about 5,200 tokens ($0.0021), and all 1,500 answer tokens are $0.0024: about **$0.005 a tap**. The phone check's three trial taps cost about half a cent.
+- The `ai` bucket bounds a church at 400 taps a day (about $0.70 a day typical, $2 at worst); the $15 monthly cap is the backstop.
 
-## Questions for the owner
+## Follow-ups
 
-1. **The reviewer's two em dashes.** The shared still-working line (`STILL_WORKING`, under Review service and Generate) and the reviewer's 429 line (`rateLimitMessage`, "Too many requests" then the seconds) predate the no-em-dash rule. This plan leaves them and gives the new feature its own wording ("Still working. This can take up to a minute.", the server's 429 sentence). **Recommended:** a small follow-up after this PR that changes both to full stops and updates their tests, so this PR stays about the pews.
+1. **The reviewer's two em dashes** (answered: the owner's answer A, 2026-10-20). The shared still-working line (`STILL_WORKING` in `use-still-working.ts`, under Review service and Generate) and the reviewer's 429 line (`rateLimitMessage` in `lib/liturgy/errors.ts`, "Too many requests" then the seconds) predate the no-em-dash rule. This PR leaves them and gives the new feature its own wording ("Still working. This can take up to a minute.", the server's 429 sentence). A small follow-up PR after this one changes both to full stops and updates their tests.
+2. **A prompt fix, if the real-AI trial fails** (answer D): any flattery, exaggerated voice, medical advice or reaction to what the AI cannot see in T8 Steps 7, 9 or 11 is fixed in the prompt before others rely on the feature.
