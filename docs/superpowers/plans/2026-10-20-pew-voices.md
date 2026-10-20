@@ -322,7 +322,10 @@ DEFAULT_VOICES = pew_voices.voices_out(pew_voices.DEFAULT_VOICES)      # every r
 - [ ] **Step 2: Run them and see them fail**
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_pew_voices.py backend/tests/test_usecase_prayer_library.py 2>&1 | tail -1`
-**Expected:** {{OUT:T1S2}}
+**Expected:** 
+```
+2 errors in <t>s
+```
 
 - [ ] **Step 3: Implement**
 
@@ -752,7 +755,20 @@ export function prayerLibrary(prayers: Prayer[] = [], overrides: Partial<PrayerL
 - [ ] **Step 4: Regenerate the API types and run the checks**
 
 Run: `.venv/bin/python backend/scripts/export_openapi.py >/dev/null && (cd frontend && npm run gen:api >/dev/null 2>&1) && git diff --stat -- frontend/src/lib/api | tail -1` then `.venv/bin/python -m pytest -q backend/tests/test_pew_voices.py backend/tests/test_usecase_prayer_library.py backend/tests/test_api_prayer_library.py backend/tests/test_openapi_contract.py backend/tests/test_route_guards.py backend/tests/test_no_streamlit_in_core.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q 2>&1 | tail -1` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`
-**Expected:** {{OUT:T1S4}}
+**Expected:** 
+```
+ 3 files changed, 92 insertions(+), 2 deletions(-)
+```
+```
+80 passed in <t>s
+```
+```
+2247 passed, 49 skipped in <t>s
+```
+```
+typecheck 0
+lint 0
+```
 
 - [ ] **Step 5: Commit and push**
 
@@ -1139,7 +1155,13 @@ def test_no_log_record_holds_a_prayer_a_voice_or_a_reaction(client, church, capl
 - [ ] **Step 2: Run them and see them fail**
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_usecase_pew_voices.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q backend/tests/test_api_pew_voices.py 2>&1 | tail -1`
-**Expected:** {{OUT:T2S2}}
+**Expected:** 
+```
+1 error in <t>s
+```
+```
+7 failed, 2 passed in <t>s
+```
 
 - [ ] **Step 3: Implement**
 
@@ -1497,7 +1519,20 @@ def hear_from_the_pews(payload: ReviewIn, church: ActiveChurch = Depends(require
 - [ ] **Step 4: Regenerate the API types and run the checks**
 
 Run: `.venv/bin/python backend/scripts/export_openapi.py >/dev/null && (cd frontend && npm run gen:api >/dev/null 2>&1) && git diff --stat -- frontend/src/lib/api | tail -1` then `.venv/bin/python -m pytest -q backend/tests/test_usecase_pew_voices.py backend/tests/test_api_pew_voices.py backend/tests/test_api_liturgy_review.py backend/tests/test_openapi_contract.py backend/tests/test_route_guards.py backend/tests/test_no_streamlit_in_core.py backend/tests/test_error_registry.py 2>&1 | tail -1` then `.venv/bin/python -m pytest -q 2>&1 | tail -1` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`
-**Expected:** {{OUT:T2S4}}
+**Expected:** 
+```
+ 2 files changed, 343 insertions(+)
+```
+```
+50 passed in <t>s
+```
+```
+2274 passed, 49 skipped in <t>s
+```
+```
+typecheck 0
+lint 0
+```
 
 - [ ] **Step 5: Commit and push**
 
@@ -1836,7 +1871,23 @@ describe("Settings → Prayers: From the pews (pew voices spec 2026-10-20)", () 
 - [ ] **Step 2: Run them and see them fail**
 
 Run: `(cd frontend && npx vitest run src/lib/settings/prayers.test.ts 2>&1 | grep -E "^ +× |FAIL|Tests " | sed -E 's/ [0-9]+ms$//')` then `(cd frontend && npx vitest run src/components/settings/prayers-settings-page.test.tsx 2>&1 | grep -E "^ +× |FAIL|Tests " | sed -E 's/ [0-9]+ms$//')`
-**Expected:** {{OUT:T3S2}}
+**Expected:** 
+```
+   × Settings → Prayers' form rules (slice 6a-3b) > the pew voices (pew voices spec 2026-10-20) > starts at the owner's five, and sends the voices only when they changed
+   × Settings → Prayers' form rules (slice 6a-3b) > the pew voices (pew voices spec 2026-10-20) > checks the voices with the server's words: a blank or long description, more than 6 on
+   × Settings → Prayers' form rules (slice 6a-3b) > the pew voices (pew voices spec 2026-10-20) > puts a refusal's voice fields on the voices that were sent
+   × Settings → Prayers' form rules (slice 6a-3b) > the pew voices (pew voices spec 2026-10-20) > rebases the voices as their own part and keeps their keys through a save
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  |unit| src/lib/settings/prayers.test.ts > Settings → Prayers' form rules (slice 6a-3b) > the pew voices (pew voices spec 2026-10-20) > starts at the owner's five, and sends the voices only when they changed
+ FAIL  |unit| src/lib/settings/prayers.test.ts > Settings → Prayers' form rules (slice 6a-3b) > the pew voices (pew voices spec 2026-10-20) > checks the voices with the server's words: a blank or long description, more than 6 on
+ FAIL  |unit| src/lib/settings/prayers.test.ts > Settings → Prayers' form rules (slice 6a-3b) > the pew voices (pew voices spec 2026-10-20) > puts a refusal's voice fields on the voices that were sent
+ FAIL  |unit| src/lib/settings/prayers.test.ts > Settings → Prayers' form rules (slice 6a-3b) > the pew voices (pew voices spec 2026-10-20) > rebases the voices as their own part and keeps their keys through a save
+      Tests  4 failed | 10 passed (14)
+```
+```
+ FAIL  |dom| src/components/settings/prayers-settings-page.test.tsx [ src/components/settings/prayers-settings-page.test.tsx ]
+      Tests  no tests
+```
 
 - [ ] **Step 3: Implement**
 
@@ -2480,7 +2531,21 @@ import { NO_SAVED_PRAYERS, SAVE_FIRST, VoiceProfileCard } from "./voice-profile-
 - [ ] **Step 4: Run the checks**
 
 Run: `(cd frontend && npx vitest run src/lib/settings/prayers.test.ts 2>&1 | grep -E "^ +× |FAIL|Tests " | sed -E 's/ [0-9]+ms$//')` then `(cd frontend && npx vitest run src/components/settings/prayers-settings-page.test.tsx 2>&1 | grep -E "^ +× |FAIL|Tests " | sed -E 's/ [0-9]+ms$//')` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")`
-**Expected:** {{OUT:T3S4}}
+**Expected:** 
+```
+      Tests  14 passed (14)
+```
+```
+      Tests  29 passed (29)
+```
+```
+typecheck 0
+lint 0
+```
+```
+ Test Files  115 passed (115)
+      Tests  1066 passed (1066)
+```
 
 - [ ] **Step 5: Commit and push**
 
@@ -2765,7 +2830,12 @@ describe("Hear it from the pews (pew voices spec)", () => {
 - [ ] **Step 2: Run it and see it fail**
 
 Run: `(cd frontend && npx vitest run src/components/builder/liturgy/pews-step.test.tsx 2>&1 | grep -E "^ +× |FAIL|Tests |Error:" | sed -E 's/ [0-9]+ms$//' | head -3)`
-**Expected:** {{OUT:T4S2}}
+**Expected:** 
+```
+ FAIL  |dom| src/components/builder/liturgy/pews-step.test.tsx [ src/components/builder/liturgy/pews-step.test.tsx ]
+Error: Failed to resolve import "./pews-panel" from "src/components/builder/liturgy/pews-step.test.tsx". Does the file exist?
+      Tests  no tests
+```
 
 - [ ] **Step 3: Implement**
 
@@ -3458,7 +3528,21 @@ import { ReviewButton, ReviewStatus } from "./review-bar";
 - [ ] **Step 4: Run the checks**
 
 Run: `(cd frontend && npx vitest run src/components/builder/liturgy/pews-step.test.tsx 2>&1 | grep -E "^ +× |FAIL|Tests " | sed -E 's/ [0-9]+ms$//')` then `(cd frontend && npx vitest run src/components/builder/liturgy/review-step.test.tsx 2>&1 | grep -E "^ +× |FAIL|Tests " | sed -E 's/ [0-9]+ms$//')` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")`
-**Expected:** {{OUT:T4S4}}
+**Expected:** 
+```
+      Tests  8 passed (8)
+```
+```
+      Tests  29 passed (29)
+```
+```
+typecheck 0
+lint 0
+```
+```
+ Test Files  116 passed (116)
+      Tests  1074 passed (1074)
+```
 
 - [ ] **Step 5: Commit and push**
 
@@ -3509,7 +3593,13 @@ never a prayer's full text, an email address or a church id.
 - [ ] **Step 2: Run the docs tests**
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_slice1_docs.py backend/tests/test_docs.py backend/tests/test_ops_workflows.py 2>&1 | tail -1` then `git diff -U0 -- docs/manual-verification.md | grep '^+' | grep -c $'\xe2\x80\x94'`
-**Expected:** {{OUT:T5S2}}
+**Expected:** 
+```
+89 passed in <t>s
+```
+```
+0
+```
 
 - [ ] **Step 3: Commit and push**
 
@@ -3532,12 +3622,37 @@ Run: `ls backend/migrations/versions | grep -c '^0'` then `git diff --name-only 
 - [ ] **Step 2: The suites, the regenerated types and the build**
 
 Run: `.venv/bin/python -m pytest -q 2>&1 | tail -1` then `.venv/bin/python backend/scripts/export_openapi.py >/dev/null && (cd frontend && npm run gen:api >/dev/null 2>&1) && git status --short -- frontend/src/lib/api | wc -l` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")` then `(cd frontend && npm run build 2>&1 | grep -E "Compiled successfully|/builder/liturgy|/settings/prayers" | sed -E 's/ in [0-9.]+m?s//')`
-**Expected:** {{OUT:T6S2}}
+**Expected:** 
+```
+2274 passed, 49 skipped in <t>s
+```
+```
+0
+```
+```
+ Test Files  116 passed (116)
+      Tests  1074 passed (1074)
+```
+```
+typecheck 0
+lint 0
+```
+```
+✓ Compiled successfully
+├ ○ /builder/liturgy
+├ ○ /settings/prayers
+```
 
 - [ ] **Step 3: No em dash in the new copy, and no prayer text in a log call**
 
 Run: `grep -c $'\xe2\x80\x94' frontend/src/components/builder/liturgy/pews-panel.tsx frontend/src/components/settings/pew-voices-card.tsx frontend/src/lib/liturgy/pews.ts backend/usecases/pew_voices.py | grep -v ':0$' | wc -l` then `grep -nE 'logger\.(debug|info|warning|error|exception)' backend/usecases/pew_voices.py`
-**Expected:** {{OUT:T6S3}}
+**Expected:** 
+```
+0
+```
+```
+266:    logger.info("liturgy.pews %s duration_ms=%d outcome=%s", details, round((clock() - started) * 1000), outcome)
+```
 
 - [ ] **Step 4: The branch's paths**
 
@@ -3709,7 +3824,7 @@ Code only (no migration to undo; a church's saved `pew_voices` key is then unrea
 
 **How this plan was written (2026-10-20).** Each task's code was built and run in a throwaway worktree of `7b9200e` (in the session scratchpad, outside the repo directory; the repo's `.venv` as a symlink; a hard-linked copy of `frontend/node_modules`). The directives were then generated from that worktree by a script (a new file as **Create**; every change as **In … replace** with just enough whole-line context to occur once in the file as it stands at that point) and the plan was **replayed**: a fresh worktree of the plan's own commit, every directive of T1-T5 applied from this file by a second script, every "Run:" line run, and its output pasted as the step's **Expected**. Not replayed: T7 (no commands) and T8 (the owner, GitHub and production); T6 was run on the replay worktree. Baselines on `7b9200e`: backend `2236 passed, 49 skipped`; frontend `1057 passed` in 115 files; typecheck 0, lint 0.
 
-**Replay result:** {{REPLAY}}
+**Replay result:** green. On a fresh worktree of the plan's commit `c28e4cd`, every directive of T1-T5 applied as written (none failed to match once); each Step 2 failed as quoted and each later check passed as quoted. Counts: backend 2236 → **2247** (T1) → **2274** (T2), 49 skipped throughout; frontend 1057 in 115 files → **1066** in 115 (T3) → **1074** in 116 (T4); T5's docs tests 89 passed; T6 as quoted (9 revision files, no frozen or package file touched, regenerated types unchanged, the build compiled with `/builder/liturgy` and `/settings/prayers`, no em dash in the new files, one INFO log call, 12 added and 20 changed paths). The first replay (of `88ea561`) passed too, but found three literal em dashes in T4's test and in two commands (the file writer had turned the `\u2014` escapes into the character, the 6b-2b lesson again); they are now escapes, and the planted em dash (F8) is still caught. The replay script's own local commits failed on the first pass, so T6's two diff checks were run again once the replayed tasks were committed.
 
 **While building:**
 - Three usecase tests compare whole GET answers, so they gain `"pew_voices": DEFAULT_VOICES` (T1 Step 1). No settings page test changed its expectation: the page sends `pew_voices` only when the voices changed (clarification 1), so every existing `PUT` body assertion still holds; the fake server in that test keeps the voices it is sent.

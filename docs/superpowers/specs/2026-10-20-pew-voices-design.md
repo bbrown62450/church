@@ -1,7 +1,7 @@
 # Hear It From the Pews: Design
 
 Date: 2026-10-20
-Status: written from the owner's planning answers of 2026-10-20 ("all recommended"; binding)
+Status: written from the owner's planning answers of 2026-10-20 ("all recommended"; binding). Plan: `docs/superpowers/plans/2026-10-20-pew-voices.md`
 Builds on:
 - `2026-10-02-pew-voices-idea.md` (the idea and the owner's answers; the 2026-10-20 answers win)
 - `2026-09-26-service-reviewer-design.md` and its amendments (R): the review's request, fencing, budgets, deadline, `ai` bucket and Revise
@@ -170,10 +170,11 @@ input tokens and $1.60 per million output tokens (OpenAI's pricing page, develop
 read 2026-10-20; standard tier, no cached input assumed). Tokens are estimated at 4 characters each.
 - **Worst case:** a 24,000-character prompt (about 6,000 tokens, $0.0024) and the full 1,500 answer tokens
   ($0.0024): about **$0.005** per tap.
-- **Typical:** the plan's replay measures the prompt for a full eight-prayer service (see the plan's Build
-  notes); with five voices an answer of about 10 reactions is about 400 to 600 tokens.
-- One tap is one `ai` token, so the bucket (400 per church per day) bounds the spend at about $2 a day per
-  church, inside the owner's $15 monthly cap only if use stays modest; the cap remains the backstop.
+- **Typical** (measured with `build_pews_prompt`, the plan's Build notes): a full eight-prayer service with five
+  voices and the sermon text is a 10,812-character prompt, about 2,700 tokens ($0.0011); an answer of about ten
+  reactions is about 600 tokens ($0.0010): about **$0.002** per tap.
+- One tap is one `ai` token, so the bucket (400 per church per day) bounds the spend at about $0.80 a day per
+  church typical and $2 at worst; the owner's $15 monthly cap remains the backstop.
 
 ## Privacy and logging
 
