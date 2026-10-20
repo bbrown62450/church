@@ -83,7 +83,7 @@ The owner's answers win over S; the code wins over both where they disagree. **[
 
 ### Assumptions that turned out false while building
 - "Same as reviewer" for logging: the reviewer does log prompts at DEBUG (clarification 5).
-- The shared "Still working — this can take up to a minute." (`use-still-working.ts`) and the reviewer's 429 line contain em dashes; this feature uses its own line and the server's sentence (question 1).
+- The shared still-working line (`STILL_WORKING` in `use-still-working.ts`) and the reviewer's 429 line (`rateLimitMessage` in `lib/liturgy/errors.ts`) contain em dashes; this feature uses its own line and the server's sentence (question 1).
 - The settings tests compare whole `PUT` bodies; sending `pew_voices` only when changed keeps every existing assertion true (clarification 1). Three usecase tests compare whole GET answers and gain the `pew_voices` key (T1).
 - `test_slice1_docs.py` pins the last eleven `##` headings of `docs/manual-verification.md`, so the check items go into the existing "## Service reviewer" section as items 11-16, not a new section (T5).
 
@@ -121,7 +121,7 @@ The owner's answers win over S; the code wins over both where they disagree. **[
 | `docs/manual-verification.md` | "Service reviewer" items 11-16 | T5 |
 | `docs/ops-runbook.md` | the 6b-2b record rides along (already on the branch); the pews record is T8's records PR | T8 |
 
-**Counts in the PR:** 33 paths: 11 added (this plan, the spec, and the nine new code and test files above) and 22 modified (the code, test and generated files above, `docs/manual-verification.md` and `docs/ops-runbook.md`); none deleted. **Untouched:** `backend/migrations`, `requirements*.txt`, `frontend/package*.json`, `frontend/src/components/ui`, `.github`, the frozen Streamlit files.
+**Counts in the PR:** 32 paths: 12 added (this plan, the spec, and the ten new code and test files above) and 20 modified (the seventeen code, test and generated files above, `docs/manual-verification.md`, and two docs already on the branch: `docs/ops-runbook.md` with the 6b-2b record and the idea doc with the owner's 2026-10-20 answers); none deleted. **Untouched:** `backend/migrations`, `requirements*.txt`, `frontend/package*.json`, `frontend/src/components/ui`, `.github`, the frozen Streamlit files.
 
 **Task order and review batch:** T1 → T5, each one commit and a backup push; then one code review of the whole batch with its fixes as `Fix: …` commits; T6 verifies; T7 is the pre-merge note; T8 opens the draft PR on the owner's yes, merges on the owner's yes, checks production, runs the phone check and writes the record.
 
@@ -2667,7 +2667,7 @@ describe("Hear it from the pews (pew voices spec)", () => {
       vi.advanceTimersByTime(8_000);
     });
     const line = screen.getByText(`Listening… ${PEWS_STILL_WORKING}`);
-    expect(line.textContent).not.toContain("—");
+    expect(line.textContent).not.toContain("\u2014");
     await user.click(cancel);
     expect(screen.getByRole("button", { name: "Hear it from the pews" })).toHaveFocus();
     expect(screen.queryByText(/Listening…/)).toBeNull();
@@ -2736,7 +2736,7 @@ describe("Hear it from the pews (pew voices spec)", () => {
     expect(dialog).toHaveTextContent(
       "Revise replaces the text in Prayer of Confession with a version that answers this reaction. You can undo right after.",
     );
-    expect(dialog.textContent).not.toContain("—");
+    expect(dialog.textContent).not.toContain("\u2014");
     await user.click(within(dialog).getByRole("button", { name: "Keep my text" }));
     expect(api.requests.some((r) => r.path === "/liturgy/revise")).toBe(false);
     await user.click(within(sharp).getByRole("button", { name: "Revise with this" }));
@@ -2757,7 +2757,7 @@ describe("Hear it from the pews (pew voices spec)", () => {
     expect(within(box).getByText(long)).toHaveClass("min-w-0", "[overflow-wrap:anywhere]");
     expect(box).toHaveClass("min-w-0");
     expect(screen.getByRole("button", { name: "Hear it from the pews" }).parentElement).toHaveClass("flex-wrap");
-    expect(box.textContent).not.toContain("—");
+    expect(box.textContent).not.toContain("\u2014");
   });
 });
 ````
@@ -3508,7 +3508,7 @@ never a prayer's full text, an email address or a church id.
 
 - [ ] **Step 2: Run the docs tests**
 
-Run: `.venv/bin/python -m pytest -q backend/tests/test_slice1_docs.py backend/tests/test_docs.py backend/tests/test_ops_workflows.py 2>&1 | tail -1` then `git diff -U0 -- docs/manual-verification.md | grep '^+' | grep -c $'—'`
+Run: `.venv/bin/python -m pytest -q backend/tests/test_slice1_docs.py backend/tests/test_docs.py backend/tests/test_ops_workflows.py 2>&1 | tail -1` then `git diff -U0 -- docs/manual-verification.md | grep '^+' | grep -c $'\xe2\x80\x94'`
 **Expected:** {{OUT:T5S2}}
 
 - [ ] **Step 3: Commit and push**
@@ -3536,13 +3536,13 @@ Run: `.venv/bin/python -m pytest -q 2>&1 | tail -1` then `.venv/bin/python backe
 
 - [ ] **Step 3: No em dash in the new copy, and no prayer text in a log call**
 
-Run: `grep -c $'—' frontend/src/components/builder/liturgy/pews-panel.tsx frontend/src/components/settings/pew-voices-card.tsx frontend/src/lib/liturgy/pews.ts backend/usecases/pew_voices.py | grep -v ':0$' | wc -l` then `grep -nE 'logger\.(debug|info|warning|error|exception)' backend/usecases/pew_voices.py`
+Run: `grep -c $'\xe2\x80\x94' frontend/src/components/builder/liturgy/pews-panel.tsx frontend/src/components/settings/pew-voices-card.tsx frontend/src/lib/liturgy/pews.ts backend/usecases/pew_voices.py | grep -v ':0$' | wc -l` then `grep -nE 'logger\.(debug|info|warning|error|exception)' backend/usecases/pew_voices.py`
 **Expected:** {{OUT:T6S3}}
 
 - [ ] **Step 4: The branch's paths**
 
 Run: `git diff --name-status origin/main...HEAD | awk '{print $1}' | sort | uniq -c`
-**Expected:** `11 A` and `22 M` (clarification "Counts in the PR"). Anything else: find why before the PR.
+**Expected:** `12 A` and `20 M` ("Counts in the PR"). Anything else: find why before the PR.
 
 ### Task 7: Before the PR: no migration, so no owner routine (agent)
 
@@ -3682,7 +3682,7 @@ Replace every `<…>` from the results file, keeping one alternative where a cel
 ```bash
 sed -n '/^### Hear it from the pews record$/,/^## Backups$/p' docs/ops-runbook.md | grep -c '<'
 sed -n '/^### Hear it from the pews record$/,/^## Backups$/p' docs/ops-runbook.md | grep -Eic '@|bearer|eyJ|sk-|postgres(ql)?://|[0-9a-f]{8}-[0-9a-f]{4}-'
-sed -n '/^### Hear it from the pews record$/,/^## Backups$/p' docs/ops-runbook.md | grep -c $'—'
+sed -n '/^### Hear it from the pews record$/,/^## Backups$/p' docs/ops-runbook.md | grep -c $'\xe2\x80\x94'
 .venv/bin/python -m pytest -q backend/tests/test_ops_workflows.py backend/tests/test_slice1_docs.py backend/tests/test_docs.py 2>&1 | tail -1
 git add docs/ops-runbook.md
 git commit -q -m "Runbook: Hear it from the pews record" -m "Records PR #<N>: the merge and deploy (no migration) and the owner's phone check. No prayer text, church id, email address, token or database URL is recorded." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
@@ -3707,8 +3707,49 @@ Code only (no migration to undo; a church's saved `pew_voices` key is then unrea
 
 ## Build notes
 
-{{BUILD_NOTES}}
+**How this plan was written (2026-10-20).** Each task's code was built and run in a throwaway worktree of `7b9200e` (in the session scratchpad, outside the repo directory; the repo's `.venv` as a symlink; a hard-linked copy of `frontend/node_modules`). The directives were then generated from that worktree by a script (a new file as **Create**; every change as **In … replace** with just enough whole-line context to occur once in the file as it stands at that point) and the plan was **replayed**: a fresh worktree of the plan's own commit, every directive of T1-T5 applied from this file by a second script, every "Run:" line run, and its output pasted as the step's **Expected**. Not replayed: T7 (no commands) and T8 (the owner, GitHub and production); T6 was run on the replay worktree. Baselines on `7b9200e`: backend `2236 passed, 49 skipped`; frontend `1057 passed` in 115 files; typecheck 0, lint 0.
+
+**Replay result:** {{REPLAY}}
+
+**While building:**
+- Three usecase tests compare whole GET answers, so they gain `"pew_voices": DEFAULT_VOICES` (T1 Step 1). No settings page test changed its expectation: the page sends `pew_voices` only when the voices changed (clarification 1), so every existing `PUT` body assertion still holds; the fake server in that test keeps the voices it is sent.
+- The first log test captured every logger at DEBUG and so read SQLAlchemy's own row logging (which holds the settings JSON, outside this app's code); it now captures `usecases.pew_voices` at DEBUG and every logger at INFO, the reviewer's way.
+- `rateLimitMessage` and the shared `STILL_WORKING` both hold an em dash (question 1), hence the feature's own still-working line and the server's 429 sentence.
+- The route guard test needed no new row: `POST /liturgy/pews` uses `require_church`, as the review does.
+
+**Planted violations** (each planted in the build worktree with T1-T4 applied, the named test files run, the change undone; all 23 were caught):
+
+| # | Planted violation | Test file(s) | Result |
+|---|---|---|---|
+| B1 | `save_library` without `require_admin_role` (a member saves voices) | `test_pew_voices.py`, `test_api_pew_voices.py` | caught: 1 failed |
+| B2 | 7 voices on accepted (`> MAX_ON` → `> 99`) | same | caught: 1 failed |
+| B3 | no defaults when the key is absent (`return ()`) | `test_pew_voices.py` | caught: 1 failed |
+| B4 | the descriptions put in the log line (`voices=voices`) | `test_usecase_pew_voices.py`, `test_api_pew_voices.py` | caught: 1 failed |
+| B5 | the prompt logged at DEBUG | `test_usecase_pew_voices.py` | caught: 1 failed |
+| B6 | a description fenced without `_unfenced` | same | caught: 1 failed |
+| B7 | `NO_FLATTERY` left out of the system message | same | caught: 1 failed |
+| B8 | `NO_CARICATURE` left out | same | caught: 1 failed |
+| B9 | a reaction on an unknown prayer kept (as the whole service) | same | caught: 1 failed |
+| B10 | `charge(1)` twice per request | `test_api_pew_voices.py` | caught: 1 failed |
+| B11 | `charge(1)` before the AI check | `test_usecase_pew_voices.py` | caught: 1 failed |
+| B12 | the "never as a clinician" sentence emptied | same | caught: 1 failed |
+| F1 | the page passes `admin` (true) to the voices card for a member | `prayers-settings-page.test.tsx` | caught: 2 failed |
+| F2 | no client check of 6 on | same | caught: 1 failed |
+| F3 | a reaction kept when its prayer changes (`prunePews`) | `pews-step.test.tsx` | caught: 2 failed |
+| F4 | stale reactions kept (`applyPews` without the text check) | same | caught: 1 failed |
+| F5 | Revise with this skips the confirm on saved text | same | caught: 1 failed |
+| F6 | a revision with a reaction leaves no Undo | same | caught: 2 failed |
+| F7 | Cancel does nothing | same | caught: 1 failed |
+| F8 | an em dash in the still-working line | same | caught: 1 failed |
+| F9 | a long reaction without `[overflow-wrap:anywhere]` | same | caught: 1 failed |
+| F10 | two requests per tap | same | caught: 2 failed |
+| F11 | the member's view renders the edit row | `prayers-settings-page.test.tsx` | caught: 2 failed |
+
+**Cost (S "Cost").** `OPENAI_MODEL` is `gpt-4.1-mini` (ops runbook, slice 3a record). Its price, read on 2026-10-20 from OpenAI's pricing page (developers.openai.com/api/docs/pricing, the standard tier's `gpt-4.1-mini` row): **$0.40 per million input tokens, $1.60 per million output tokens** (cached input $0.10, not assumed). Tokens are estimated at 4 characters each (not counted with a tokenizer; the live check in T8 Step 11 reads the real counts).
+- Measured in the build worktree with `build_pews_prompt`: the five default voices, all eight prayers (400, 600, 700, 300, 300, 3,500, 300 and 200 characters), four readings and a 5,000-character sermon text (cut to 2,000): system message 1,516 characters, whole prompt **10,812 characters**, about **2,700 tokens**, **$0.0011**. An answer of about ten reactions is about 600 tokens, **$0.0010**. About **$0.002 a tap**.
+- Worst case: the 24,000-character cap (about 6,000 tokens, $0.0024) and all 1,500 answer tokens ($0.0024): about **$0.005 a tap**.
+- The `ai` bucket bounds a church at 400 taps a day (about $0.80 a day typical, $2 at worst); the $15 monthly cap is the backstop.
 
 ## Questions for the owner
 
-1. **The reviewer's two em dashes.** The shared "Still working — this can take up to a minute." (Review service, Generate) and the reviewer's 429 line "Too many requests — try again in {n} s." predate the no-em-dash rule. This plan leaves them and gives the new feature its own wording ("Still working. This can take up to a minute.", the server's 429 sentence). **Recommended:** a small follow-up after this PR that changes both to full stops and updates their tests, so this PR stays about the pews.
+1. **The reviewer's two em dashes.** The shared still-working line (`STILL_WORKING`, under Review service and Generate) and the reviewer's 429 line (`rateLimitMessage`, "Too many requests" then the seconds) predate the no-em-dash rule. This plan leaves them and gives the new feature its own wording ("Still working. This can take up to a minute.", the server's 429 sentence). **Recommended:** a small follow-up after this PR that changes both to full stops and updates their tests, so this PR stays about the pews.
