@@ -10,6 +10,10 @@ amendment "Routes"; F §1.5, §1.8).
   draft revised to address its notes. AI failures are HTTP statuses (503,
   504, 502), as on /hymns/suggestions; a draft too long to revise is 422
   prompt_invalid "This prayer is too long to revise.".
+- POST /liturgy/pews (church-scoped; pew voices spec 2026-10-20): the
+  church's turned-on pew voices react to the same cards as a review. The
+  usecase charges the `ai` bucket 1 through `charge`, only when it calls the
+  AI (a 429 then); AI failures are 503, 504, 502; no voice turned on is 422.
 
 The rubric, the system prompt and the voice profile are read on the server,
 never taken from the client. Plain `def` routes (F §1.8), no SQL and no
@@ -25,7 +29,7 @@ from api.deps import ActiveChurch, CurrentUser, get_current_user, require_church
 from api.errors import error_responses
 from api.ratelimit import rate_limit
 from api.schemas import SectionKey, SermonText
-from usecases import liturgy_review
+from usecases import liturgy_review, pew_voices
 
 router = APIRouter()
 
@@ -104,6 +108,20 @@ class ReviseOut(BaseModel):
     text: str
 
 
+class PewReactionOut(BaseModel):
+    text: str = Field(description="one or two sentences, at most 240 characters")
+    section: Optional[SectionKey] = Field(description="the prayer it is about, or null for the whole service")
+
+
+class PewVoiceReactionsOut(BaseModel):
+    description: str
+    reactions: list[PewReactionOut]       # 0 to 2
+
+
+class PewsOut(BaseModel):
+    voices: list[PewVoiceReactionsOut]    # one per turned-on voice, in saved order (at most 6)
+
+
 def _sermon(sermon_text: Optional[SermonText]) -> Optional[tuple[str, str]]:
     return (sermon_text.ref, sermon_text.text) if sermon_text else None
 
@@ -138,3 +156,19 @@ def revise_section(payload: ReviseIn, church: ActiveChurch = Depends(require_chu
         church_id=church.id, user_id=user.id, section=payload.section, text=payload.text, notes=payload.notes,
         occasion=payload.occasion, scriptures=payload.scriptures, sermon=_sermon(payload.sermon_text))
     return ReviseOut(text=text)
+
+
+@router.post("/liturgy/pews", response_model=PewsOut,
+             responses=error_responses(401, 403, 422, 429, 502, 503, 504))
+def hear_from_the_pews(payload: ReviewIn, church: ActiveChurch = Depends(require_church),
+                       user: CurrentUser = Depends(get_current_user)) -> PewsOut:
+    """The church's turned-on pew voices react to the service (75 s deadline). Charged 1 `ai` token per
+    request, only when the AI is called (40 per 10 min per user, 400 per day per church)."""
+    voices = pew_voices.hear_from_the_pews(
+        church_id=church.id, user_id=user.id, occasion=payload.occasion, scriptures=payload.scriptures,
+        cards=[liturgy_review.ReviewCard(c.section, c.origin, c.text) for c in payload.cards],
+        sermon=_sermon(payload.sermon_text),
+        charge=lambda n: ratelimit.consume("ai", user_id=user.id, church_id=church.id, cost=n))
+    return PewsOut(voices=[PewVoiceReactionsOut(
+        description=v.description,
+        reactions=[PewReactionOut(text=r.text, section=r.section) for r in v.reactions]) for v in voices])

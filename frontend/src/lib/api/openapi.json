@@ -3000,6 +3000,43 @@
         "title": "PassagesOut",
         "type": "object"
       },
+      "PewReactionOut": {
+        "properties": {
+          "section": {
+            "anyOf": [
+              {
+                "enum": [
+                  "call_to_worship",
+                  "opening_prayer",
+                  "prayer_of_confession",
+                  "assurance",
+                  "prayer_for_illumination",
+                  "prayers_of_the_people",
+                  "offertory_prayer",
+                  "benediction"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the prayer it is about, or null for the whole service",
+            "title": "Section"
+          },
+          "text": {
+            "description": "one or two sentences, at most 240 characters",
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "section"
+        ],
+        "title": "PewReactionOut",
+        "type": "object"
+      },
       "PewVoiceIn": {
         "additionalProperties": false,
         "properties": {
@@ -3037,6 +3074,43 @@
           "on"
         ],
         "title": "PewVoiceOut",
+        "type": "object"
+      },
+      "PewVoiceReactionsOut": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "reactions": {
+            "items": {
+              "$ref": "#/components/schemas/PewReactionOut"
+            },
+            "title": "Reactions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "description",
+          "reactions"
+        ],
+        "title": "PewVoiceReactionsOut",
+        "type": "object"
+      },
+      "PewsOut": {
+        "properties": {
+          "voices": {
+            "items": {
+              "$ref": "#/components/schemas/PewVoiceReactionsOut"
+            },
+            "title": "Voices",
+            "type": "array"
+          }
+        },
+        "required": [
+          "voices"
+        ],
+        "title": "PewsOut",
         "type": "object"
       },
       "PlacementOut": {
@@ -9433,6 +9507,139 @@
           }
         },
         "summary": "Generate Liturgy"
+      }
+    },
+    "/liturgy/pews": {
+      "post": {
+        "description": "The church's turned-on pew voices react to the service (75 s deadline). Charged 1 `ai` token per\nrequest, only when the AI is called (40 per 10 min per user, 400 per day per church).",
+        "operationId": "hear_from_the_pews_liturgy_pews_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-church-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Church-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PewsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Gateway Timeout"
+          }
+        },
+        "summary": "Hear From The Pews"
       }
     },
     "/liturgy/review": {
