@@ -23,3 +23,13 @@ well-rounded approach to prayer writing.
 - Its own panel, not mixed with the reviewer's notes.
 - Guard against caricature and against flattery (only what did not land, or
   what helped).
+
+## Owner's planning answers (2026-10-20, "all recommended"; binding)
+
+1. One PR: persona storage, Settings editing, the AI request, the builder button and panel. No migration (personas live in `churches.settings`, like the prayer library). Split only if the plan comes out unusually large.
+2. Settings: a "From the pews" section on the existing Prayers page, under the voice profile. No new nav item.
+3. Admins (and the owner) edit the personas; every member reads them (supersedes "editable by the church's members" above).
+4. Every church starts with the owner's five, as short descriptions with no invented first names: "Sharp, very conservative, reads every word"; "A teenager"; "A man who rarely comes to church"; "Parents of busy young kids"; "Someone deeply worried about their health". Admins can edit, turn off or add; at most 6 turned on; each description about 300 characters at most.
+5. One AI request for all turned-on personas, like Review service. Each persona gives one or two short reactions to the whole service; a reaction may point at one prayer; only what did not land or what helped; no flattery, no caricature; the personas are not real people; the health persona reacts as a worshipper and never gives medical advice. Shown in a "From the pews" panel at the top of the liturgy step, separate from the reviewer's notes; client memory only; a reaction clears when its prayer's text changes.
+6. A reaction that points at a prayer has "Revise with this", under today's Revise rules (Undo kept; asks before replacing the member's own text).
+7. Same AI model (OPENAI_MODEL) and the same `ai` rate-limit bucket as Review service; one request per tap; "Still working" and Cancel as on Review. Measure the real cost in the plan. Keep the process lean: one plan agent, one plan review, one code review.
