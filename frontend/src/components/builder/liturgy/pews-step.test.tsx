@@ -97,6 +97,11 @@ function pewsRequests(api: ReturnType<typeof renderStep>["api"]) {
   return api.requests.filter((r) => r.path === "/liturgy/pews");
 }
 
+/** The `fetch` calls that sent `POST /liturgy/pews`, with their init (its `signal`). */
+function pewsFetches() {
+  return vi.mocked(fetch).mock.calls.filter(([url]) => String(url instanceof Request ? url.url : url).includes("/liturgy/pews"));
+}
+
 async function hear(user: ReturnType<typeof renderStep>["user"]) {
   await user.click(await screen.findByRole("button", { name: "Hear it from the pews" }));
   await screen.findByText("From the pews: 3 reactions.");
@@ -210,7 +215,11 @@ describe("Hear it from the pews (pew voices spec)", () => {
       }),
     });
     await user.click(await screen.findByRole("button", { name: "Hear it from the pews" }));
+    await waitFor(() => expect(pewsFetches()).toHaveLength(1));
+    const signal = pewsFetches()[0][1]!.signal!;
+    expect(signal.aborted).toBe(false);
     await user.click(await screen.findByRole("button", { name: "Cancel hearing from the pews" }));
+    expect(signal.aborted).toBe(true); // the request itself is aborted, not just ignored
     release();
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
