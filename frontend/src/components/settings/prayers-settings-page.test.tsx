@@ -6,7 +6,7 @@
  */
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { toast } from "sonner";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 import SettingsLayout from "@/app/(signed-in)/(church)/settings/layout";
 import PrayersSettingsRoute from "@/app/(signed-in)/(church)/settings/prayers/page";
@@ -551,6 +551,23 @@ describe("Settings → Prayers: From the pews (pew voices spec 2026-10-20)", () 
       { description: "A nurse who works nights", on: true },
     ]);
     await waitFor(() => expect(screen.getByRole("button", { name: "Save" })).toBeDisabled());
+  });
+
+  it("gives each voice an auto-growing text box, at least 44 px tall on phones, with its label and checks", async () => {
+    const height = vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(80);
+    onTestFinished(() => height.mockRestore());
+    const { user } = renderPage("admin");
+    const first = await screen.findByRole("textbox", { name: "Voice 1" });
+    expect(first.tagName).toBe("TEXTAREA"); // a box that grows with a long description, not a one-line input
+    expect(first).toHaveAttribute("rows", "1");
+    expect(first).toHaveClass("min-h-11", "md:min-h-9", "max-h-[60vh]", "field-sizing-content");
+    expect(first.style.height).toBe("82px"); // sized to its text where the browser cannot size it itself
+    await user.clear(first);
+    await user.type(first, "x".repeat(301));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByRole("textbox", { name: "Voice 1" })).toHaveAccessibleDescription(
+      "This description is too long (300 characters at most).",
+    );
   });
 
   it("Restore the starter voices puts the owner's five back in the form, and only Save stores them", async () => {

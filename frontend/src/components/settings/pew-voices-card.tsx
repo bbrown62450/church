@@ -1,8 +1,11 @@
 "use client";
 
+import { useRef } from "react";
+
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { MAX_VOICES, TOO_MANY_VOICES, type VoiceRow } from "@/lib/settings/prayers";
+import { useAutosize } from "@/lib/use-autosize";
 
 export const PEWS_INTRO =
   "When you tap Hear it from the pews on the Liturgy step, these voices react to the whole service. They are kinds of people, not real people. Turn on up to 6.";
@@ -20,11 +23,47 @@ export function voiceOnId(key: string): string {
 }
 
 /**
+ * A voice's description: a one-row box that grows with its text (up to 60 vh,
+ * then it scrolls; `useAutosize` where the browser cannot size it itself), at
+ * least 44 px tall on phones. Line breaks become spaces when saved.
+ */
+function VoiceText({
+  id,
+  value,
+  label,
+  error,
+  onChange,
+}: {
+  id: string;
+  value: string;
+  label: string;
+  error?: string;
+  onChange: (value: string) => void;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useAutosize(ref, value);
+  return (
+    <Textarea
+      ref={ref}
+      id={id}
+      rows={1}
+      value={value}
+      aria-label={label}
+      aria-invalid={error ? true : undefined}
+      aria-describedby={error ? `${id}-error` : undefined}
+      className="max-h-[60vh] min-h-11 min-w-0 flex-1 basis-48 resize-none overflow-y-auto [overflow-wrap:anywhere] md:min-h-9"
+      onChange={(event) => onChange(event.target.value)}
+    />
+  );
+}
+
+/**
  * "From the pews" on Settings → Prayers (pew voices spec 2026-10-20), under
  * the voice profile, saved by the page's one Save. Admins get a row per voice
  * (an "On" checkbox, the description, Remove), "Add a voice" (off at 12) and
  * "Restore the starter voices" (the owner's five back in the form, saved only
- * by Save); members read each voice with "On" or "Off" and get no control. The checks'
+ * by Save); members read each voice with "On" or "Off" and get no control. Each
+ * description is a box that grows with its text (`VoiceText`). The checks'
  * messages show under the box they name, and "Turn on at most 6 voices."
  * under the heading. Descriptions are React text only and wrap at 375 px.
  */
@@ -76,7 +115,7 @@ export function PewVoicesCard({
             }
             return (
               <li key={voice.key} className="grid min-w-0 gap-1 rounded-lg border p-3">
-                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <div className="flex min-w-0 flex-wrap items-start gap-2">
                   <label className="flex min-h-11 cursor-pointer items-center gap-2 md:min-h-9">
                     <input
                       id={voiceOnId(voice.key)}
@@ -89,14 +128,12 @@ export function PewVoicesCard({
                     />
                     <span className="text-sm">On</span>
                   </label>
-                  <Input
+                  <VoiceText
                     id={voiceTextId(voice.key)}
                     value={voice.description}
-                    aria-label={`Voice ${n}`}
-                    aria-invalid={error ? true : undefined}
-                    aria-describedby={error ? `${voiceTextId(voice.key)}-error` : undefined}
-                    className="h-11 min-w-0 flex-1 basis-48 md:h-9"
-                    onChange={(event) => onChange(voice.key, { description: event.target.value })}
+                    label={`Voice ${n}`}
+                    error={error}
+                    onChange={(description) => onChange(voice.key, { description })}
                   />
                   <Button type="button" variant="ghost" size="touch" className="md:h-9" aria-label={`Remove voice ${n}`} onClick={() => onRemove(voice.key)}>
                     Remove
