@@ -10,7 +10,7 @@
  *   "missed", or null when the AI gave neither).
  * - `prunePews(panel, draft)`: on every draft change, a reaction whose
  *   prayer's text changed goes; a new service drops the panel.
- * - `dismissReaction`, `reactionCount`, `pewsDoneMessage`.
+ * - `dismissReaction`, `reactionCount`, `pewsDoneMessage`, `pewsWaitMessage`.
  * - `PEWS_UNAVAILABLE`: a 404's message (a page newer than the server it
  *   talks to), in place of the cards' hymn message for "not_found".
  */
@@ -76,6 +76,11 @@ export function dismissReaction(panel: PewsPanel, id: string): PewsPanel {
 
 export function reactionCount(panel: PewsPanel): number {
   return panel.voices.reduce((sum, v) => sum + v.reactions.length, 0);
+}
+
+/** A 429's wait beside "Revise with this", in the server's words (the reviewer's `rateLimitMessage` has an em dash). */
+export function pewsWaitMessage(seconds: number): string {
+  return seconds === 1 ? "Too many requests. Try again in 1 second." : `Too many requests. Try again in ${seconds} seconds.`;
 }
 
 /** The polite line read out when an answer arrives. */

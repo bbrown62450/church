@@ -352,6 +352,31 @@ describe("Hear it from the pews (pew voices spec)", () => {
     await waitFor(() => expect(screen.getByRole("textbox", { name: "Opening Prayer" })).toHaveValue("Gracious God, hear us now."));
   });
 
+  it("during a 429's wait, Revise with this is off with the wait beside it, until the wait ends", async () => {
+    vi.useRealTimers(); // a second useFakeTimers call would keep beforeEach's Date-only fake
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"], shouldAdvanceTime: true });
+    vi.setSystemTime(DRAFT_NOW);
+    const { user, api } = renderStep(seeded(), {
+      "POST /liturgy/revise": fakeError(429, "rate_limited", "Too many requests. Try again in 30 seconds.", { details: { retry_after_seconds: 30 } }),
+    });
+    await hear(user);
+    const teen = within(panel()).getByRole("list", { name: "Reactions from A teenager" });
+    await user.click(within(teen).getByRole("button", { name: "Revise with this" }));
+    expect(await within(card("Opening Prayer")).findByRole("alert")).toHaveTextContent(/Too many requests/);
+    const revise = within(teen).getByRole("button", { name: "Revise with this" });
+    expect(revise).toHaveAttribute("aria-disabled", "true");
+    const wait = within(teen).getByText(/^Too many requests\. Try again in \d+ seconds\.$/);
+    expect(wait.parentElement).toBe(revise.parentElement); // beside the button
+    expect(wait.textContent).not.toContain("\u2014");
+    await user.click(revise);
+    expect(api.requests.filter((r) => r.path === "/liturgy/revise")).toHaveLength(1);
+    act(() => {
+      vi.advanceTimersByTime(31_000);
+    });
+    expect(revise).toBeEnabled();
+    expect(within(teen).queryByText(/Too many requests/)).toBeNull();
+  });
+
   it("wraps long text at 375 px, with no em dash in its copy", async () => {
     const long = "w".repeat(400);
     const { user } = renderStep(seeded(), {

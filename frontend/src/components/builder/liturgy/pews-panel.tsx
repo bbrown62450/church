@@ -12,7 +12,7 @@ import type { SectionKey } from "@/lib/draft/schema";
 import { needsRegenerateConfirm } from "@/lib/liturgy/cards";
 import { useLiturgyGeneration } from "@/lib/liturgy/generation";
 import { revisable } from "@/lib/liturgy/notes";
-import { KIND_LABELS, NO_REACTIONS, reactionCount, type ShownReaction } from "@/lib/liturgy/pews";
+import { KIND_LABELS, NO_REACTIONS, pewsWaitMessage, reactionCount, type ShownReaction } from "@/lib/liturgy/pews";
 import { usePews } from "@/lib/liturgy/pews-provider";
 import { reviewTargets } from "@/lib/liturgy/request";
 import { useLiturgyReview } from "@/lib/liturgy/review";
@@ -81,6 +81,12 @@ export function PewsStatus() {
   );
 }
 
+/** A 429's wait beside "Revise with this", in the seconds left when it appeared (keyed by the wait, so a new one recounts). */
+function PewsWaitLine({ until }: { until: number }) {
+  const [seconds] = useState(() => Math.max(1, Math.ceil((until - Date.now()) / 1000)));
+  return <span className="text-sm text-muted-foreground">{pewsWaitMessage(seconds)}</span>;
+}
+
 /**
  * The "From the pews" box at the top of the step: each voice that has
  * reactions, its description, then its reactions (a small "Helped" or "Didn't
@@ -90,7 +96,8 @@ export function PewsStatus() {
  * reaction that did not land (never one that helped or has no kind) about a
  * prayer Revise can change, through the reviewer's Revise (its Undo, its
  * "Revising…" and Cancel on the card); typed or saved text asks first. Off
- * while the card is written or revised, or during a 429's wait.
+ * while the card is written or revised, or during a 429's wait, with the
+ * wait beside it.
  */
 export function PewsPanel() {
   const pews = usePews();
@@ -173,6 +180,7 @@ export function PewsPanel() {
                   </div>
                   {offered && key !== null && card !== null ? (
                     <div className="flex flex-wrap items-center justify-end gap-2">
+                      {waiting && !busy && rateLimitedUntil !== null ? <PewsWaitLine key={rateLimitedUntil} until={rateLimitedUntil} /> : null}
                       <Button
                         id={`${reaction.id}-revise`}
                         variant="outline"
