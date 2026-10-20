@@ -95,6 +95,16 @@ export type AiStatus = ReviewResult["ai_status"];
 export type ReviseBody = components["schemas"]["ReviseIn"];
 export type ReviseResult = components["schemas"]["ReviseOut"];
 
+/**
+ * Hear it from the pews (pew voices spec 2026-10-20): `POST /liturgy/pews`
+ * takes the review's own body (`ReviewBody`) and answers one entry per
+ * turned-on voice, each with 0 to 2 reactions (a sentence and the prayer it
+ * is about, or null for the whole service).
+ */
+export type PewsResult = components["schemas"]["PewsOut"];
+export type PewVoiceReactions = components["schemas"]["PewVoiceReactionsOut"];
+export type PewReaction = components["schemas"]["PewReactionOut"];
+
 /** `GET`/`PUT /church/bulletin-settings` (printed bulletin PR 2a): the church's standing bulletin settings. */
 export type BulletinSettings = components["schemas"]["BulletinSettings"];
 

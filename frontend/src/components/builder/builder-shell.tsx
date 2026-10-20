@@ -17,7 +17,8 @@
  * every step (slice 2c). `<LiturgyGenerationProvider>` holds the Liturgy
  * step's AI runs, so they keep going on the other steps (slice 4b), and
  * `<LiturgyReviewProvider>` the service reviewer's review, notes and
- * revisions, in memory only.
+ * revisions, and `<PewsProvider>` the "From the pews" panel, both in memory
+ * only.
  */
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
@@ -28,6 +29,7 @@ import { DraftProvider, useDraft } from "@/lib/draft/context";
 import type { DraftChurch } from "@/lib/draft/schema";
 import { stepFromPath } from "@/lib/draft/steps";
 import { LiturgyGenerationProvider } from "@/lib/liturgy/generation";
+import { PewsProvider } from "@/lib/liturgy/pews-provider";
 import { LiturgyReviewProvider } from "@/lib/liturgy/review";
 import { useMeContext } from "@/lib/me-context";
 import { useChurchProfile } from "@/lib/queries/church";
@@ -49,9 +51,11 @@ export function BuilderShell({ children }: { children: ReactNode }) {
     <DraftProvider key={`${me.user.id}:${church.id}`} userId={me.user.id} church={profile.data}>
       <LiturgyGenerationProvider church={profile.data}>
         <LiturgyReviewProvider church={profile.data}>
-          <LectionarySync>
-            <BuilderFrame church={profile.data}>{children}</BuilderFrame>
-          </LectionarySync>
+          <PewsProvider church={profile.data}>
+            <LectionarySync>
+              <BuilderFrame church={profile.data}>{children}</BuilderFrame>
+            </LectionarySync>
+          </PewsProvider>
         </LiturgyReviewProvider>
       </LiturgyGenerationProvider>
     </DraftProvider>
