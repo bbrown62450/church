@@ -377,6 +377,31 @@ describe("Hear it from the pews (pew voices spec)", () => {
     expect(within(teen).queryByText(/Too many requests/)).toBeNull();
   });
 
+  it("a 429 on Hear it from the pews holds the button, with the wait shown, until the wait ends", async () => {
+    vi.useRealTimers(); // a second useFakeTimers call would keep beforeEach's Date-only fake
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"], shouldAdvanceTime: true });
+    vi.setSystemTime(DRAFT_NOW);
+    let answer: PewsResult | { status: number } = fakeError(429, "rate_limited", "Too many requests. Try again in 30 seconds.", {
+      details: { retry_after_seconds: 30 },
+    });
+    const { user, api } = renderStep(seeded(), { "POST /liturgy/pews": pewsRoute(() => answer) });
+    await user.click(await screen.findByRole("button", { name: "Hear it from the pews" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Too many requests. Try again in 30 seconds.");
+    const button = screen.getByRole("button", { name: "Hear it from the pews" });
+    expect(button).toHaveAttribute("aria-disabled", "true");
+    await user.click(button);
+    expect(pewsRequests(api)).toHaveLength(1); // nothing sent during the wait
+    answer = ANSWER;
+    act(() => {
+      vi.advanceTimersByTime(31_000);
+    });
+    expect(button).toBeEnabled();
+    expect(screen.queryByRole("alert")).toBeNull(); // the wait is over, so its line goes
+    await user.click(button);
+    expect(await screen.findByText("From the pews: 3 reactions.")).toBeInTheDocument();
+    expect(pewsRequests(api)).toHaveLength(2);
+  });
+
   it("wraps long text at 375 px, with no em dash in its copy", async () => {
     const long = "w".repeat(400);
     const { user } = renderStep(seeded(), {

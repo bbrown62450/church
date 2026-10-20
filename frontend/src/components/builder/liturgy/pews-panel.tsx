@@ -29,7 +29,8 @@ export const PEWS_BUTTON_ID = "hear-from-the-pews";
 
 /**
  * "Hear it from the pews" beside "Review service" (pew voices spec, "The
- * liturgy step"): on when "Review service" would be (`reviewTargets`); while
+ * liturgy step"): on when "Review service" would be (`reviewTargets`) and no
+ * 429's wait of its own is running (its alert shows the wait); while
  * the request runs it reads "Cancel" (named "Cancel hearing from the pews").
  * `aria-disabled` rather than `disabled`, so focus stays on it.
  */
@@ -43,7 +44,7 @@ export function PewsButton() {
       variant="outline"
       size="touch"
       focusableWhenDisabled
-      disabled={!pews.running && !ready}
+      disabled={!pews.running && (!ready || pews.limitedUntil !== null)}
       aria-label={pews.running ? "Cancel hearing from the pews" : undefined}
       className="data-disabled:pointer-events-none data-disabled:opacity-50"
       onClick={() => (pews.running ? pews.cancel() : pews.start())}

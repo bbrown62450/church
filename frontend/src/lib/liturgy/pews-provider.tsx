@@ -17,7 +17,9 @@
  * - `cancel()` aborts the wait and keeps the panel already shown. A failure
  *   keeps it too and shows its message in `error` (a 429 in the server's own
  *   words; a 404, from a server not yet deployed, as `PEWS_UNAVAILABLE`); a
- *   401 or a lost church goes to the app's handling.
+ *   401 or a lost church goes to the app's handling. A 429 with its wait
+ *   starts a wait (`limitedUntil`): nothing is sent and the button is off
+ *   until it ends, when its alert goes too (as Generate's and Revise's waits).
  * - Every draft change drops reactions whose prayer's text changed
  *   (`prunePews`); a new service cancels the request and drops the panel.
  */
@@ -40,6 +42,8 @@ export type Pews = {
   panel: PewsPanel | null;
   running: boolean;
   error: string | null;
+  /** A 429's wait (ms since the epoch): until then "Hear it from the pews" is off and its alert shows the wait. */
+  limitedUntil: number | null;
   announcement: string;
   start: () => void;
   cancel: () => void;
@@ -63,6 +67,8 @@ export function PewsProvider({
   const [panel, setPanel] = useState<PewsPanel | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [limitedUntil, setLimitedUntil] = useState<number | null>(null);
+  const limitedRef = useRef<number | null>(null);
   const [announcement, setAnnouncement] = useState("");
   const active = useRef<AbortController | null>(null);
   const mounted = useRef(true);
@@ -84,6 +90,18 @@ export function PewsProvider({
     setPanel((current) => prunePews(current, draft));
   }
 
+  // A 429's wait: when it ends, the button comes back and the wait's alert goes. A new service does not end it
+  // (the bucket is the member's, as Generate's wait).
+  useEffect(() => {
+    if (limitedUntil === null) return;
+    const timer = setTimeout(() => {
+      limitedRef.current = null;
+      setLimitedUntil(null);
+      setError(null);
+    }, Math.max(limitedUntil - Date.now(), 0));
+    return () => clearTimeout(timer);
+  }, [limitedUntil]);
+
   const createdAt = draft.created_at;
   useEffect(() => {
     if (service.current === createdAt) return;
@@ -97,6 +115,7 @@ export function PewsProvider({
 
   const start = useCallback(() => {
     if (active.current !== null) return;
+    if (limitedRef.current !== null && Date.now() < limitedRef.current) return; // a 429's wait is not over
     const asked = peek();
     const keys = reviewTargets(asked, defaultBenediction);
     if (keys.length === 0) return;
@@ -129,6 +148,12 @@ export function PewsProvider({
         // A 429 in the server's words ("Too many requests. Try again in 15 seconds."); a 404 in its own.
         if (e instanceof ApiError && e.status === 404) setError(PEWS_UNAVAILABLE);
         else setError(e instanceof ApiError && e.code === "rate_limited" ? e.message : (cardErrorFrom(e)?.message ?? null));
+        // A 429 starts a wait: the button is off, and the alert stays, until it ends.
+        if (e instanceof ApiError && e.code === "rate_limited" && e.retryAfterSeconds !== undefined) {
+          const until = Date.now() + e.retryAfterSeconds * 1000;
+          limitedRef.current = until;
+          setLimitedUntil(until);
+        }
       } finally {
         if (active.current === controller) {
           active.current = null;
@@ -149,8 +174,8 @@ export function PewsProvider({
   }, []);
 
   const value = useMemo<Pews>(
-    () => ({ panel, running, error, announcement, start, cancel, dismiss }),
-    [panel, running, error, announcement, start, cancel, dismiss],
+    () => ({ panel, running, error, limitedUntil, announcement, start, cancel, dismiss }),
+    [panel, running, error, limitedUntil, announcement, start, cancel, dismiss],
   );
   return <PewsContext value={value}>{children}</PewsContext>;
 }
