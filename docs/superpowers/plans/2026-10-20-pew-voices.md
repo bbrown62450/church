@@ -47,12 +47,12 @@ As in the 6b plans: **Create `path`:** the block is the whole new file; **Append
   | After | Backend | Frontend |
   |---|---|---|
   | T1 | +11 (`test_pew_voices.py`, a new file) → **2247 passed, 49 skipped** | 1057 in 115 files |
-  | T2 | +27 (`test_usecase_pew_voices.py` 18, `test_api_pew_voices.py` 9, new files) → **2274 passed, 49 skipped** | 1057 in 115 files |
-  | T3 | 2274 | +9 (`prayers.test.ts` 4, `prayers-settings-page.test.tsx` 5) → **1066 in 115 files** |
-  | T4 | 2274 | +8 (`pews-step.test.tsx`, a new file) → **1074 in 116 files** |
-  | T5 | 2274 (the docs tests unchanged: 89) | 1074 in 116 files |
+  | T2 | +33 (`test_usecase_pew_voices.py` 20, `test_api_pew_voices.py` 9, `test_api_ai_logging.py` 4, new files) → **2280 passed, 49 skipped** | 1057 in 115 files |
+  | T3 | 2280 | +11 (`prayers.test.ts` 5, `prayers-settings-page.test.tsx` 6) → **1068 in 115 files** |
+  | T4 | 2280 | +12 (`pews-step.test.tsx`, a new file) → **1080 in 116 files** |
+  | T5 | 2280 (the docs tests unchanged: 89) | 1080 in 116 files |
 
-  CI's `backend-postgres` goes from `49 passed, 2236 deselected` to `49 passed, 2274 deselected`.
+  CI's `backend-postgres` goes from `49 passed, 2236 deselected` to `49 passed, 2280 deselected`.
 
 ### Code rules (carried)
 - Routes are plain `def`, one usecase call, no SQL, no try/except (F §2.2); request models `extra="forbid"`. The voices are read on the server from the active church's settings, never from the client, in one session closed before the AI call (F §1.8).
@@ -1266,6 +1266,9 @@ Run: `.venv/bin/python -m pytest -q backend/tests/test_usecase_pew_voices.py 2>&
 ```
 7 failed, 2 passed in <t>s
 ```
+```
+4 failed in <t>s
+```
 
 - [ ] **Step 3: Implement**
 
@@ -1778,10 +1781,10 @@ Run: `.venv/bin/python backend/scripts/export_openapi.py >/dev/null && (cd front
  2 files changed, 343 insertions(+)
 ```
 ```
-50 passed in <t>s
+84 passed in <t>s
 ```
 ```
-2274 passed, 49 skipped in <t>s
+2280 passed, 49 skipped in <t>s
 ```
 ```
 typecheck 0
@@ -2159,15 +2162,17 @@ Run: `(cd frontend && npx vitest run src/lib/settings/prayers.test.ts 2>&1 | gre
 **Expected:** 
 ```
    × Settings → Prayers' form rules (slice 6a-3b) > the pew voices (pew voices spec 2026-10-20) > starts at the owner's five, and sends the voices only when they changed
+   × Settings → Prayers' form rules (slice 6a-3b) > the pew voices (pew voices spec 2026-10-20) > reads the starter voices from a server that answers without them, and never sends them unchanged
    × Settings → Prayers' form rules (slice 6a-3b) > the pew voices (pew voices spec 2026-10-20) > checks the voices with the server's words: a blank or long description, more than 6 on
    × Settings → Prayers' form rules (slice 6a-3b) > the pew voices (pew voices spec 2026-10-20) > puts a refusal's voice fields on the voices that were sent
    × Settings → Prayers' form rules (slice 6a-3b) > the pew voices (pew voices spec 2026-10-20) > rebases the voices as their own part and keeps their keys through a save
-⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
  FAIL  |unit| src/lib/settings/prayers.test.ts > Settings → Prayers' form rules (slice 6a-3b) > the pew voices (pew voices spec 2026-10-20) > starts at the owner's five, and sends the voices only when they changed
+ FAIL  |unit| src/lib/settings/prayers.test.ts > Settings → Prayers' form rules (slice 6a-3b) > the pew voices (pew voices spec 2026-10-20) > reads the starter voices from a server that answers without them, and never sends them unchanged
  FAIL  |unit| src/lib/settings/prayers.test.ts > Settings → Prayers' form rules (slice 6a-3b) > the pew voices (pew voices spec 2026-10-20) > checks the voices with the server's words: a blank or long description, more than 6 on
  FAIL  |unit| src/lib/settings/prayers.test.ts > Settings → Prayers' form rules (slice 6a-3b) > the pew voices (pew voices spec 2026-10-20) > puts a refusal's voice fields on the voices that were sent
  FAIL  |unit| src/lib/settings/prayers.test.ts > Settings → Prayers' form rules (slice 6a-3b) > the pew voices (pew voices spec 2026-10-20) > rebases the voices as their own part and keeps their keys through a save
-      Tests  4 failed | 10 passed (14)
+      Tests  5 failed | 10 passed (15)
 ```
 ```
  FAIL  |dom| src/components/settings/prayers-settings-page.test.tsx [ src/components/settings/prayers-settings-page.test.tsx ]
@@ -2853,10 +2858,10 @@ import { NO_SAVED_PRAYERS, SAVE_FIRST, VoiceProfileCard } from "./voice-profile-
 Run: `(cd frontend && npx vitest run src/lib/settings/prayers.test.ts 2>&1 | grep -E "^ +× |FAIL|Tests " | sed -E 's/ [0-9]+ms$//')` then `(cd frontend && npx vitest run src/components/settings/prayers-settings-page.test.tsx 2>&1 | grep -E "^ +× |FAIL|Tests " | sed -E 's/ [0-9]+ms$//')` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")`
 **Expected:** 
 ```
-      Tests  14 passed (14)
+      Tests  15 passed (15)
 ```
 ```
-      Tests  29 passed (29)
+      Tests  30 passed (30)
 ```
 ```
 typecheck 0
@@ -2864,7 +2869,7 @@ lint 0
 ```
 ```
  Test Files  115 passed (115)
-      Tests  1066 passed (1066)
+      Tests  1068 passed (1068)
 ```
 
 - [ ] **Step 5: Commit and push**
@@ -3929,7 +3934,7 @@ import { ReviewButton, ReviewStatus } from "./review-bar";
 Run: `(cd frontend && npx vitest run src/components/builder/liturgy/pews-step.test.tsx 2>&1 | grep -E "^ +× |FAIL|Tests " | sed -E 's/ [0-9]+ms$//')` then `(cd frontend && npx vitest run src/components/builder/liturgy/review-step.test.tsx 2>&1 | grep -E "^ +× |FAIL|Tests " | sed -E 's/ [0-9]+ms$//')` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")`
 **Expected:** 
 ```
-      Tests  8 passed (8)
+      Tests  12 passed (12)
 ```
 ```
       Tests  29 passed (29)
@@ -3940,7 +3945,7 @@ lint 0
 ```
 ```
  Test Files  116 passed (116)
-      Tests  1074 passed (1074)
+      Tests  1080 passed (1080)
 ```
 
 - [ ] **Step 5: Commit and push**
@@ -4024,14 +4029,14 @@ Run: `ls backend/migrations/versions | grep -c '^0'` then `git diff --name-only 
 Run: `.venv/bin/python -m pytest -q 2>&1 | tail -1` then `.venv/bin/python backend/scripts/export_openapi.py >/dev/null && (cd frontend && npm run gen:api >/dev/null 2>&1) && git status --short -- frontend/src/lib/api | wc -l` then `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")` then `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")` then `(cd frontend && npm run build 2>&1 | grep -E "Compiled successfully|/builder/liturgy|/settings/prayers" | sed -E 's/ in [0-9.]+m?s//')`
 **Expected:** 
 ```
-2274 passed, 49 skipped in <t>s
+2280 passed, 49 skipped in <t>s
 ```
 ```
 0
 ```
 ```
  Test Files  116 passed (116)
-      Tests  1074 passed (1074)
+      Tests  1080 passed (1080)
 ```
 ```
 typecheck 0
@@ -4051,19 +4056,24 @@ Run: `grep -c $'\xe2\x80\x94' frontend/src/components/builder/liturgy/pews-panel
 0
 ```
 ```
-266:    logger.info("liturgy.pews %s duration_ms=%d outcome=%s", details, round((clock() - started) * 1000), outcome)
+298:    logger.info("liturgy.pews %s duration_ms=%d outcome=%s", details, round((clock() - started) * 1000), outcome)
+```
+```
+backend/usecases/liturgy.py:0
+backend/usecases/liturgy_review.py:0
+backend/usecases/pew_voices.py:0
 ```
 
 - [ ] **Step 4: The branch's paths**
 
 Run: `git diff --name-status origin/main...HEAD | awk '{print $1}' | sort | uniq -c`
-**Expected:** `12 A` and `20 M` ("Counts in the PR"). Anything else: find why before the PR.
+**Expected:** `13 A` and `22 M` ("Counts in the PR"). Anything else: find why before the PR.
 
 ### Task 7: Before the PR: no migration, so no owner routine (agent)
 
 **Files:** none.
 
-This PR changes no table, column, index or row shape and adds no migration (T6 Step 1 counts 9 revision files, as on `main`); the voices are a new key inside `churches.settings`, written only when an admin saves, and a church without the key reads the defaults. Railway's pre-deploy `alembic upgrade head` finds nothing to do. So there is **no backup, no count query and no SQL to read before this merge**, and nothing of the kind is sent to the owner. The daily `db-backup` run stands as the safety net. If anything here turns out to change the database, stop and tell the owner before going on.
+(not replayed: no commands.) This PR changes no table, column, index or row shape and adds no migration (T6 Step 1 counts 9 revision files, as on `main`); the voices are a new key inside `churches.settings`, written only when an admin saves, and a church without the key reads the defaults. Railway's pre-deploy `alembic upgrade head` finds nothing to do. So there is **no backup, no count query and no SQL to read before this merge**, and nothing of the kind is sent to the owner. The daily `db-backup` run stands as the safety net. If anything here turns out to change the database, stop and tell the owner before going on.
 
 ### Task 8: The draft PR, the merge, the after-deploy check, the phone check, the record (OWNER + agent)
 
@@ -4128,7 +4138,7 @@ curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' <app>/settings/prayers
 
 **Expected:** `{"ok":true,"db":"ok"}`; `307 <app>/login?next=%2Fbuilder%2Fliturgy` and `307 <app>/login?next=%2Fsettings%2Fprayers` (signed out, sign-in first). A `404`: Vercel has not published yet; ask again a minute later. Nothing for the owner to run.
 
-The phone check is one short action per message; send the next only after the answer. Steps 6-11 are the real-AI trial (answer D): three taps on three different services, about $0.01 in all, before anyone relies on the feature.
+(not replayed: Steps 5-17 need the owner's phone and production.) The phone check is one short action per message; send the next only after the answer. Steps 6-11 are the real-AI trial (answer D): three taps on three different services, about $0.01 in all, before anyone relies on the feature.
 
 - [ ] **Step 5 (OWNER, then agent): Phone 1: the voices (item 11)**
 
@@ -4259,11 +4269,13 @@ Code only (no migration to undo; a church's saved `pew_voices` key is then unrea
 
 **How this plan was written (2026-10-20).** Each task's code was built and run in a throwaway worktree of `7b9200e` (in the session scratchpad, outside the repo directory; the repo's `.venv` as a symlink; a hard-linked copy of `frontend/node_modules`). The directives were then generated from that worktree by a script (a new file as **Create**; every change as **In … replace** with just enough whole-line context to occur once in the file as it stands at that point) and the plan was **replayed**: a fresh worktree of the plan's own commit, every directive of T1-T5 applied from this file by a second script, every "Run:" line run, and its output pasted as the step's **Expected**. Not replayed: T7 (no commands) and T8 (the owner, GitHub and production); T6 was run on the replay worktree. Baselines on `7b9200e`: backend `2236 passed, 49 skipped`; frontend `1057 passed` in 115 files; typecheck 0, lint 0.
 
-**Replay result:** green. On a fresh worktree of the plan's commit `c28e4cd`, every directive of T1-T5 applied as written (none failed to match once); each Step 2 failed as quoted and each later check passed as quoted. Counts: backend 2236 → **2247** (T1) → **2274** (T2), 49 skipped throughout; frontend 1057 in 115 files → **1066** in 115 (T3) → **1074** in 116 (T4); T5's docs tests 89 passed; T6 as quoted (9 revision files, no frozen or package file touched, regenerated types unchanged, the build compiled with `/builder/liturgy` and `/settings/prayers`, no em dash in the new files, one INFO log call, 12 added and 20 changed paths). The first replay (of `88ea561`) passed too, but found three literal em dashes in T4's test and in two commands (the file writer had turned the `\u2014` escapes into the character, the 6b-2b lesson again); they are now escapes, and the planted em dash (F8) is still caught. The replay script's own local commits failed on the first pass, so T6's two diff checks were run again once the replayed tasks were committed.
+**Replay after the plan review (2026-10-20):** green. On a fresh worktree of `bc74461` (in the session scratchpad, outside the repo directory), every directive of T1-T5 of this revised plan was applied from a snapshot of this file by the replay script (none failed to match once), every "Run:" line of T1-T6 was run, and its output is pasted above as the step's **Expected** (times as `<t>`). Each Step 2 failed as quoted and each later check passed as quoted. Counts: backend 2236 → **2247** (T1) → **2280** (T2), 49 skipped throughout; frontend 1057 in 115 files → **1068** in 115 (T3) → **1080** in 116 (T4); T5's docs tests 89 passed with no em dash added; T6: 9 revision files, no frozen or package file touched, the full suites as above, the regenerated types unchanged, typecheck 0 and lint 0, the build compiled with `/builder/liturgy` and `/settings/prayers`, no em dash in the new files, one INFO log call in `usecases/pew_voices.py` (line 298), no `logger.debug` left in the three AI usecases, and **13 added and 22 changed paths**. Before the replay, the same directives applied to another fresh worktree gave a tree identical to the build worktree's (`diff -r`, only a `tsc` cache file apart). The planted violations of "Plan review fixes" were run in the build worktree, not in the replay. **Not replayed:** T7 (no commands) and T8 (the owner, GitHub and production: Steps 1-4 and 18-19 say so; the phone Steps 5-17 are the owner's).
+
+**First replay result (before the plan review; its counts are superseded above):** green. On a fresh worktree of the plan's commit `c28e4cd`, every directive of T1-T5 applied as written (none failed to match once); each Step 2 failed as quoted and each later check passed as quoted. Counts: backend 2236 → **2247** (T1) → **2274** (T2), 49 skipped throughout; frontend 1057 in 115 files → **1066** in 115 (T3) → **1074** in 116 (T4); T5's docs tests 89 passed; T6 as quoted (9 revision files, no frozen or package file touched, regenerated types unchanged, the build compiled with `/builder/liturgy` and `/settings/prayers`, no em dash in the new files, one INFO log call, 12 added and 20 changed paths). The first replay (of `88ea561`) passed too, but found three literal em dashes in T4's test and in two commands (the file writer had turned the `\u2014` escapes into the character, the 6b-2b lesson again); they are now escapes, and the planted em dash (F8) is still caught. The replay script's own local commits failed on the first pass, so T6's two diff checks were run again once the replayed tasks were committed.
 
 **While building:**
 - Three usecase tests compare whole GET answers, so they gain `"pew_voices": DEFAULT_VOICES` (T1 Step 1). No settings page test changed its expectation: the page sends `pew_voices` only when the voices changed (clarification 1), so every existing `PUT` body assertion still holds; the fake server in that test keeps the voices it is sent.
-- The first log test captured every logger at DEBUG and so read SQLAlchemy's own row logging (which holds the settings JSON, outside this app's code); it now captures `usecases.pew_voices` at DEBUG and every logger at INFO, the reviewer's way.
+- The first log test captured every logger at DEBUG and so read SQLAlchemy's own row logging (which holds the settings JSON, outside this app's code); the log tests now set DEBUG on this app's loggers by name (`usecases.pew_voices` in the usecase test; `api` and `usecases` in the pews API test; `api`, `usecases` and `integrations` in `test_api_ai_logging.py`), which leaves SQLAlchemy out.
 - `rateLimitMessage` and the shared `STILL_WORKING` both hold an em dash (Follow-ups 1), hence the feature's own still-working line and the server's 429 sentence.
 - The route guard test needed no new row: `POST /liturgy/pews` uses `require_church`, as the review does.
 
@@ -4294,6 +4306,24 @@ Code only (no migration to undo; a church's saved `pew_voices` key is then unrea
 | F9 | a long reaction without `[overflow-wrap:anywhere]` | same | caught: 1 failed |
 | F10 | two requests per tap | same | caught: 2 failed |
 | F11 | the member's view renders the edit row | `prayers-settings-page.test.tsx` | caught: 2 failed |
+
+**Plan review fixes (2026-10-20).** The independent review of the plan at `bc74461` and the owner's answers A to D to it (idea doc, "Owner's answers to the plan review"). Each fix was built in a fresh worktree of `bc74461` with T1-T5 applied as then written; each new rule's violation was planted there, the named tests run and the change undone (`git status` clean after each). All 22 new plants were caught.
+
+| Finding | Fix | Planted violation (tests run) | Result |
+|---|---|---|---|
+| 1 (major; answer A). Generate, review and revise log prompts and answers at DEBUG | T2 removes the six DEBUG lines (two each in generate, review and revise) and says so in both module docstrings; the INFO count lines stay. New `test_api_ai_logging.py`: each of the four AI routes posted with marked text, the `api`, `usecases` and `integrations` loggers at DEBUG, no marked text in any record. The two reviewer em-dash strings are left for a follow-up (Follow-ups 1) | a DEBUG line put back: generate's prompt; review's answer; revise's answer; a pews prompt (`test_api_ai_logging.py`, and the pews tests) | caught: 1, 1, 1 and 3 failed |
+| 2 (major). The Cancel test could not catch a Cancel that leaves the request live | new test "Cancel leaves no request live…": the first answer is held behind a gate, Cancel, release, then no panel and no count line; a second tap sends a second request and shows its answer | `cancel()` only flips the button (`pews-step.test.tsx`) | caught: 1 failed |
+| 3 (major). The prompt had no concrete key, the parser took only keys, nothing said the AI sees only the prayers | `contract(key)`: the reply format with an example whose `prayer` is the first sent prayer's key and a second voice with no reactions; `_section` takes a sent prayer's label in any case (a trailing colon too); `ONLY_WHAT_SEEN` ("You see only the prayers below, and the sermon text and the reading references when they are given. React only to those…"); tests for the sentence, the example key and label parsing | `ONLY_WHAT_SEEN` left out; the example's `<key>` left unreplaced; labels refused (`test_usecase_pew_voices.py`) | caught: 1 failed each |
+| 4 (minor). No test of the confirm on the member's typed text | new test "asks before revising the member's own typed text too" (a reaction on the typed Call to Worship) | the confirm only for saved text (`pews-step.test.tsx`) | caught: 1 failed |
+| 5 (minor). The pews API log test captured INFO only | it now sets `api` and `usecases` to DEBUG and checks the reaction came back | a DEBUG log of the request body in the route (`test_api_pew_voices.py`) | caught: 1 failed (and the pews case of `test_api_ai_logging.py`) |
+| 6 (minor). Deploy order | `libraryFormFrom` reads `STARTER_VOICES` when the answer has no `pew_voices` (unchanged, so never sent); a 404 shows `PEWS_UNAVAILABLE` ("Hear it from the pews is not available yet. Try again in a few minutes."), not the hymn line; tests in `prayers.test.ts` and `pews-step.test.tsx` | the fallback removed (`prayers.test.ts`); the 404 line removed (`pews-step.test.tsx`) | caught: 1 failed each |
+| 7 (answer B). Restore the starter voices | the button beside "Add a voice" (admins only), `starterVoiceRows`, the page's `restoreVoices`; the spec states a saved list is kept when the defaults change; a page test (a saved one-voice list, Restore, the five in the form, nothing sent until Save, then the five sent) and a member check | Restore does nothing; Restore shown to a member (`prayers-settings-page.test.tsx`) | caught: 1 failed; 2 failed |
+| 8 (minor). The cost was a 4-characters-a-token estimate | counted offline with `tiktoken` 0.14.0 (`o200k_base`), installed into a scratchpad directory, not the repo's `.venv`: 2,443 prompt tokens and 420 answer tokens, about $0.0017 a tap; the worst case stays a stated estimate; reading one real call's counts is T8 Step 17 (optional) | none (no code) | n/a |
+| 9 (answer C). Zero reactions per voice | clarification 11 (owner-visible); the prompt's example shows a voice with an empty list; the existing tests already cover an empty voice and "No reactions this time." | none (no new rule) | n/a |
+| 10 (minor). Long phone steps | T8 Steps 5-15, one short action each; the trial split into tap and read steps; "Revise with this" has a skip when no reaction points at an AI-written prayer; Railway logs only in the optional Step 17 | none (prose) | n/a |
+| 11 (nit). Descriptions on read; no test of the 6-on cap past the save | `read_voices` cuts a description to 300; a usecase test stores nine turned-on voices by hand and sees six sent | the cut removed (`test_pew_voices.py`); `turned_on` without `[:MAX_ON]` (`test_usecase_pew_voices.py`) | caught: 1 failed each |
+| 12 (nit). Long reactions cut mid-word | `_cut`: at the last whole word within 240 (a hard cut only for one long word) | a hard cut at 240 (`test_usecase_pew_voices.py`) | caught: 1 failed, once the test's word was changed: with "steadfast" the hard cut fell on a space and the plant passed |
+| The review's not-caught plants | new test "Revise with this is gone on a switched-off card and off while its card is being revised"; new test "shows the server's 422 for no voice turned on, and its own words for a 404" | `disabled` without `busy`; `offered` without `card.enabled` (`revisable` does not check it, so the button would send a Revise for a card that is off); a 422 not shown (`pews-step.test.tsx`) | caught: 1 failed each |
 
 **Cost (S "Cost").** `OPENAI_MODEL` is `gpt-4.1-mini` (ops runbook, slice 3a record). Its price, read on 2026-10-20 from OpenAI's pricing page (developers.openai.com/api/docs/pricing, the standard tier's `gpt-4.1-mini` row): **$0.40 per million input tokens, $1.60 per million output tokens** (cached input $0.10, not assumed). Tokens are **counted with OpenAI's tokenizer**: `tiktoken` 0.14.0 installed with pip into a scratchpad directory (`pip install --target`, not the repo's `.venv`, so no package changes), the `o200k_base` encoding that `gpt-4.1-mini` uses, plus the chat format's 3 tokens per message and 3 for the reply. The live check (T8 Step 17, optional) can read a real call's counts from the `ai_call` INFO line.
 - Measured in the build worktree with `build_pews_prompt` after the review fixes: the five default voices, all eight prayers (400, 600, 700, 300, 300, 3,500, 300 and 200 characters of plain English prayer text), four readings and a 5,000-character sermon text (cut to 2,000): system message 1,897 characters, whole prompt **11,166 characters**, **2,443 prompt tokens** (4.59 characters a token), **$0.00098**. An answer of ten reactions of about 105 characters (two per voice, 1,554 characters of JSON) is **420 tokens**, **$0.00067**. About **$0.0017 a tap**.

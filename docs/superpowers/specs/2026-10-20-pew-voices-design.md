@@ -22,7 +22,9 @@ In scope (one PR, no migration):
 - a "From the pews" section on Settings → Prayers, saved by the page's one Save;
 - `POST /liturgy/pews`: one AI request for all turned-on voices;
 - the liturgy step's "Hear it from the pews" button and "From the pews" panel;
-- "Revise with this" on a reaction that points at a prayer, through the existing `POST /liturgy/revise`.
+- "Revise with this" on a reaction that points at a prayer, through the existing `POST /liturgy/revise`;
+- the six DEBUG lines that logged prompts and answers in generate, review and revise removed (owner's
+  answer A, 2026-10-20).
 
 Out of scope: saving reactions; reactions to hymns, readings or custom elements; invented names, ages or
 life stories for the voices; a nav item of its own; anything in Streamlit.
