@@ -6,7 +6,7 @@
  */
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { toast } from "sonner";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 import SettingsLayout from "@/app/(signed-in)/(church)/settings/layout";
 import PrayersSettingsRoute from "@/app/(signed-in)/(church)/settings/prayers/page";
@@ -18,12 +18,13 @@ import { authEvents } from "@/lib/queries/auth-events";
 import { keys } from "@/lib/queries/keys";
 import { LIBRARY_SAVED } from "@/lib/queries/prayer-library";
 import { fakeError, installFakeApi, type FakeHandler, type RecordedRequest } from "@/test/fake-api";
-import { church, me, prayer, prayerLibrary } from "@/test/fixtures";
+import { church, DEFAULT_PEW_VOICES, me, prayer, prayerLibrary } from "@/test/fixtures";
 import { testRouter } from "@/test/mocks";
 import { renderWithProviders } from "@/test/render";
 import { positionAt, setViewport } from "@/test/viewport";
 
 import { ADMINS_ONLY, EMPTY_LIBRARY, PRAYERS_INTRO, REMOVE_TITLE } from "./prayers-settings-page";
+import { PEWS_INTRO, RESTORE_STARTERS } from "./pew-voices-card";
 import { DRAFT_TITLE, NO_SAVED_PRAYERS, SAVE_FIRST, WRITE_IT_YOURSELF } from "./voice-profile-card";
 
 afterEach(() => {
@@ -46,7 +47,7 @@ function libraryServer(initial: PrayerLibrary = prayerLibrary([CONFESSION, BENED
           const id = p.id ?? prayer((made += 1)).id;
           return { id, type: p.type as PrayerLibrary["prayers"][number]["type"], text: p.text, added_at: "2026-10-08T16:00:00Z" };
         }),
-        { voice_profile: body.voice_profile },
+        { voice_profile: body.voice_profile, pew_voices: body.pew_voices ?? stored.pew_voices },
       );
       return stored;
     },
@@ -499,3 +500,132 @@ describe("Settings → Prayers: the voice-profile draft (slice 6a-3b)", () => {
     expect(screen.getByRole("textbox", { name: "Voice profile" })).toHaveValue("Warm and plain.");
   });
 });
+
+describe("Settings → Prayers: From the pews (pew voices spec 2026-10-20)", () => {
+  function voicesList() {
+    return screen.getByRole("list", { name: "From the pews" });
+  }
+
+  it("shows a member the owner's five, read only, with On or Off and no control", async () => {
+    const long = "w".repeat(300);
+    renderPage("member", {
+      "GET /church/prayer-library": prayerLibrary([], {
+        can_edit: false,
+        pew_voices: [...DEFAULT_PEW_VOICES.slice(0, 4), { description: long, on: false }],
+      }),
+    });
+    expect(await screen.findByText(PEWS_INTRO)).toBeInTheDocument();
+    const items = within(voicesList()).getAllByRole("listitem");
+    expect(items.map((item) => item.textContent)).toEqual([
+      "Sharp, very conservative, reads every wordOn",
+      "A teenagerOn",
+      "A man who rarely comes to churchOn",
+      "Parents of busy young kidsOn",
+      `${long}Off`,
+    ]);
+    expect(within(items[4]).getByText(long)).toHaveClass("min-w-0", "[overflow-wrap:anywhere]"); // wraps at 375 px
+    expect(within(voicesList()).queryAllByRole("checkbox")).toEqual([]);
+    expect(within(voicesList()).queryAllByRole("textbox")).toEqual([]);
+    expect(screen.queryByRole("button", { name: "Add a voice" })).toBeNull();
+    expect(screen.queryByRole("button", { name: RESTORE_STARTERS })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+  });
+
+  it("lets an admin edit, turn off, add and remove voices, and Save sends them with the library", async () => {
+    const { api, user } = renderPage("admin");
+    const first = await screen.findByRole("textbox", { name: "Voice 1" });
+    expect(first).toHaveValue("Sharp, very conservative, reads every word");
+    await user.click(screen.getByRole("checkbox", { name: "Turn on voice 2" }));
+    await user.click(screen.getByRole("button", { name: "Remove voice 3" }));
+    await user.click(screen.getByRole("button", { name: "Add a voice" }));
+    const added = screen.getByRole("textbox", { name: "Voice 5" });
+    expect(added).toHaveFocus();
+    await user.type(added, "  A nurse who works   nights ");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText(LIBRARY_SAVED)).toBeInTheDocument();
+    expect((puts(api)[0].body as PrayerLibraryBody).pew_voices).toEqual([
+      { description: "Sharp, very conservative, reads every word", on: true },
+      { description: "A teenager", on: false },
+      { description: "Parents of busy young kids", on: true },
+      { description: "Someone deeply worried about their health", on: true },
+      { description: "A nurse who works nights", on: true },
+    ]);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save" })).toBeDisabled());
+  });
+
+  it("gives each voice an auto-growing text box, at least 44 px tall on phones, with its label and checks", async () => {
+    const height = vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(80);
+    onTestFinished(() => height.mockRestore());
+    const { user } = renderPage("admin");
+    const first = await screen.findByRole("textbox", { name: "Voice 1" });
+    expect(first.tagName).toBe("TEXTAREA"); // a box that grows with a long description, not a one-line input
+    expect(first).toHaveAttribute("rows", "1");
+    expect(first).toHaveClass("min-h-11", "md:min-h-9", "max-h-[60vh]", "field-sizing-content");
+    expect(first.style.height).toBe("82px"); // sized to its text where the browser cannot size it itself
+    await user.clear(first);
+    await user.type(first, "x".repeat(301));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByRole("textbox", { name: "Voice 1" })).toHaveAccessibleDescription(
+      "This description is too long (300 characters at most).",
+    );
+  });
+
+  it("Restore the starter voices puts the owner's five back in the form, and only Save stores them", async () => {
+    const { api, user } = renderPage("admin", {
+      "GET /church/prayer-library": prayerLibrary([], { pew_voices: [{ description: "A nurse", on: false }] }),
+    });
+    expect(await screen.findByRole("textbox", { name: "Voice 1" })).toHaveValue("A nurse");
+    await user.click(screen.getByRole("button", { name: RESTORE_STARTERS }));
+    const boxes = screen.getAllByRole("textbox", { name: /^Voice \d+$/ }) as HTMLInputElement[];
+    expect(boxes.map((box) => box.value)).toEqual(DEFAULT_PEW_VOICES.map((v) => v.description));
+    expect(screen.getByRole("checkbox", { name: "Turn on voice 1" })).toBeChecked();
+    expect(puts(api)).toEqual([]); // nothing is stored until Save
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText(LIBRARY_SAVED)).toBeInTheDocument();
+    expect((puts(api)[0].body as PrayerLibraryBody).pew_voices).toEqual(DEFAULT_PEW_VOICES);
+  });
+
+  it("leaves the voices out of a save that did not change them", async () => {
+    const { api, user } = renderPage("admin");
+    await user.type(await screen.findByRole("textbox", { name: "Voice profile" }), " Short sentences.");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText(LIBRARY_SAVED)).toBeInTheDocument();
+    expect(puts(api)[0].body).not.toHaveProperty("pew_voices");
+  });
+
+  it("refuses a 7th voice turned on and a blank description before sending, with the server's words", async () => {
+    const { api, user } = renderPage("admin");
+    await user.click(await screen.findByRole("button", { name: "Add a voice" }));
+    await user.type(screen.getByRole("textbox", { name: "Voice 6" }), "A choir member");
+    await user.click(screen.getByRole("button", { name: "Add a voice" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(screen.getByRole("textbox", { name: "Voice 7" })).toHaveFocus();
+    expect(screen.getByRole("textbox", { name: "Voice 7" })).toHaveAccessibleDescription("Describe this voice.");
+    expect(screen.getByText("Turn on at most 6 voices.")).toBeInTheDocument();
+    expect(puts(api)).toEqual([]);
+    await user.type(screen.getByRole("textbox", { name: "Voice 7" }), "A nurse");
+    expect(screen.queryByText("Turn on at most 6 voices.")).toBeNull(); // an edit clears the count's message
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(screen.getByText("Turn on at most 6 voices.")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Turn on voice 1" })).toHaveFocus();
+    expect(puts(api)).toEqual([]);
+    await user.click(screen.getByRole("checkbox", { name: "Turn on voice 7" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText(LIBRARY_SAVED)).toBeInTheDocument();
+    expect(puts(api)).toHaveLength(1);
+  });
+
+  it("shows the server's refusal of a description under its box", async () => {
+    const { user } = renderPage("admin", {
+      "PUT /church/prayer-library": () =>
+        fakeError(422, "invalid_request", "x", { fields: { "pew_voices.1.description": "This description is too long (300 characters at most)." } }),
+    });
+    await user.type(await screen.findByRole("textbox", { name: "Voice 2" }), " who texts");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Voice 2" })).toHaveFocus());
+    expect(screen.getByRole("textbox", { name: "Voice 2" })).toHaveAccessibleDescription(
+      "This description is too long (300 characters at most).",
+    );
+  });
+});
+

@@ -95,6 +95,17 @@ export type AiStatus = ReviewResult["ai_status"];
 export type ReviseBody = components["schemas"]["ReviseIn"];
 export type ReviseResult = components["schemas"]["ReviseOut"];
 
+/**
+ * Hear it from the pews (pew voices spec 2026-10-20): `POST /liturgy/pews`
+ * takes the review's own body (`ReviewBody`) and answers one entry per
+ * turned-on voice, each with 0 to 2 reactions (a sentence, the prayer it is
+ * about or null for the whole service, and its kind: "helped", "missed", or
+ * null when the AI gave neither).
+ */
+export type PewsResult = components["schemas"]["PewsOut"];
+export type PewVoiceReactions = components["schemas"]["PewVoiceReactionsOut"];
+export type PewReaction = components["schemas"]["PewReactionOut"];
+
 /** `GET`/`PUT /church/bulletin-settings` (printed bulletin PR 2a): the church's standing bulletin settings. */
 export type BulletinSettings = components["schemas"]["BulletinSettings"];
 
@@ -165,6 +176,8 @@ export type Prayer = components["schemas"]["PrayerOut"];
 export type PrayerType = Prayer["type"];
 export type PrayerLibraryBody = components["schemas"]["PrayerLibraryIn"];
 export type VoiceProfileDraft = components["schemas"]["VoiceProfileDraftOut"];
+/** A pew voice as Settings → Prayers reads and saves it (the owner's five until a church saves its own). */
+export type PewVoice = components["schemas"]["PewVoiceOut"];
 
 /**
  * Settings → People (slice 6b-2a; the routes are slice 6b-1's): `GET /members`

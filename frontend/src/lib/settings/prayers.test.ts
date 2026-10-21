@@ -2,12 +2,15 @@
 import { describe, expect, it } from "vitest";
 
 import { ApiError } from "@/lib/api/client";
-import { prayer, prayerLibrary } from "@/test/fixtures";
+import type { PrayerLibrary } from "@/lib/api/types";
+import { DEFAULT_PEW_VOICES, prayer, prayerLibrary } from "@/test/fixtures";
 
 import {
   afterSave,
   charCount,
   cleanText,
+  DESCRIPTION_REQUIRED,
+  DESCRIPTION_TOO_LONG,
   firstLine,
   hasErrors,
   hasLibraryChanges,
@@ -15,12 +18,19 @@ import {
   libraryFieldErrors,
   libraryFormFrom,
   listChanged,
+  MAX_DESCRIPTION_CHARS,
+  MAX_VOICES,
+  MAX_VOICES_ON,
   namesLibraryField,
   newRow,
+  newVoice,
   PRAYER_TYPE_LABELS,
   PRAYER_TYPES,
   prayersPayload,
   rebaseLibrary,
+  STARTER_VOICES,
+  starterVoiceRows,
+  TOO_MANY_ON,
   type LibraryForm,
 } from "./prayers";
 
@@ -63,7 +73,7 @@ describe("Settings → Prayers' form rules (slice 6a-3b)", () => {
     expect(form.rows.map((r) => r.key)).toEqual([prayer(1).id, prayer(2).id, "saved-2"]);
     expect(rebaseLibrary(form, form, form).rows.map((r) => r.key)).toEqual([prayer(1).id, prayer(2).id, "saved-2"]);
     const open = [{ ...newRow("new-1"), id: prayer(1).id, type: "other" as const, text: "Bless." }];
-    const keys = rebaseLibrary({ rows: open, profile: "" }, { rows: open, profile: "" }, form).rows.map((r) => r.key);
+    const keys = rebaseLibrary({ rows: open, profile: "", voices: [] }, { rows: open, profile: "", voices: [] }, form).rows.map((r) => r.key);
     expect(new Set(keys).size).toBe(3);
   });
 
@@ -76,6 +86,7 @@ describe("Settings → Prayers' form rules (slice 6a-3b)", () => {
     const edited: LibraryForm = {
       rows: [{ ...form.rows[1], text: " Go in peace.\r\nAmen. " }, { ...newRow("new-1"), type: "other", text: " Bless this meal. " }],
       profile: " Warm.\r\n",
+      voices: form.voices,
     };
     expect(prayersPayload(edited)).toEqual({
       prayers: [
@@ -104,7 +115,7 @@ describe("Settings → Prayers' form rules (slice 6a-3b)", () => {
       { ...newRow("c"), type: "benediction" as const, text: ` ${"x".repeat(6_000)} ` },
       { ...newRow("d"), type: "benediction" as const, text: "y".repeat(6_001) },
     ];
-    const errors = libraryErrors({ rows, profile: "z".repeat(2_001) });
+    const errors = libraryErrors({ rows, profile: "z".repeat(2_001), voices: [] });
     expect(errors).toEqual({
       rows: {
         a: { text: "Prayer text is required." },
@@ -140,9 +151,9 @@ describe("Settings → Prayers' form rules (slice 6a-3b)", () => {
     const newer = libraryFormFrom(prayerLibrary([prayer(3)], { voice_profile: "Another admin's profile." }));
     expect(rebaseLibrary(base, base, newer)).toEqual(newer);
     const typed = { ...base, profile: "Mine." };
-    expect(rebaseLibrary(base, typed, newer)).toEqual({ rows: newer.rows, profile: "Mine." });
+    expect(rebaseLibrary(base, typed, newer)).toEqual({ rows: newer.rows, profile: "Mine.", voices: newer.voices });
     const removed = { ...base, rows: base.rows.slice(1) };
-    expect(rebaseLibrary(base, removed, newer)).toEqual({ rows: removed.rows, profile: "Another admin's profile." });
+    expect(rebaseLibrary(base, removed, newer)).toEqual({ rows: removed.rows, profile: "Another admin's profile.", voices: newer.voices });
   });
 
   it("keeps each prayer's key through a save and a refetch, so an open row stays open", () => {
@@ -158,5 +169,70 @@ describe("Settings → Prayers' form rules (slice 6a-3b)", () => {
     expect(rebaseLibrary(baseline, form, libraryFormFrom(saved)).rows.map((r) => r.key)).toEqual([prayer(1).id, "new-1"]);
     const typing = { ...sent, profile: "Typed while saving." };
     expect(afterSave(sent, typing, saved).form.profile).toBe("Typed while saving.");
+  });
+
+  describe("the pew voices (pew voices spec 2026-10-20)", () => {
+    it("starts at the owner's five, and sends the voices only when they changed", () => {
+      const base = libraryFormFrom(prayerLibrary());
+      expect(base.voices.map((v) => [v.key, v.description, v.on])).toEqual(
+        DEFAULT_PEW_VOICES.map((v, i) => [`voice-${i}`, v.description, true]),
+      );
+      expect(prayersPayload(base, base)).not.toHaveProperty("pew_voices");
+      const same = { ...base, voices: base.voices.map((v) => ({ ...v, description: ` ${v.description}\n` })) };
+      expect(hasLibraryChanges(base, same)).toBe(false);
+      const edited = { ...base, voices: [{ ...base.voices[0], on: false }, { ...newVoice("new-voice-1"), description: " A  nurse\non nights " }] };
+      expect(hasLibraryChanges(base, edited)).toBe(true);
+      expect(prayersPayload(edited, base).pew_voices).toEqual([
+        { description: "Sharp, very conservative, reads every word", on: false },
+        { description: "A nurse on nights", on: true },
+      ]);
+      expect(prayersPayload({ ...base, voices: [] }, base).pew_voices).toEqual([]);
+    });
+
+    it("reads the starter voices from a server that answers without them, and never sends them unchanged", () => {
+      const older: Partial<PrayerLibrary> = { ...prayerLibrary() };
+      delete older.pew_voices; // a backend deployed before the voices
+      const form = libraryFormFrom(older as PrayerLibrary);
+      expect(form.voices.map((v) => ({ description: v.description, on: v.on }))).toEqual(DEFAULT_PEW_VOICES);
+      expect(prayersPayload(form, form)).not.toHaveProperty("pew_voices");
+      expect(STARTER_VOICES).toEqual(DEFAULT_PEW_VOICES);
+      expect(starterVoiceRows("s").map((v) => [v.key, v.on])).toEqual([0, 1, 2, 3, 4].map((i) => [`s-${i}`, true]));
+    });
+
+    it("checks the voices with the server's words: a blank or long description, more than 6 on", () => {
+      const voices = [
+        { ...newVoice("a"), description: "  " },
+        { ...newVoice("b"), description: "x".repeat(301) },
+        ...[1, 2, 3, 4, 5].map((n) => ({ ...newVoice(`on-${n}`), description: `Voice ${n}` })),
+      ];
+      const errors = libraryErrors({ rows: [], profile: "", voices });
+      expect(errors).toEqual({
+        rows: {},
+        voices: { a: DESCRIPTION_REQUIRED, b: DESCRIPTION_TOO_LONG },
+        voicesList: TOO_MANY_ON,
+      });
+      expect(hasErrors({ rows: {}, voicesList: TOO_MANY_ON })).toBe(true);
+      const six = voices.slice(1).map((v) => ({ ...v, description: "Fine." }));
+      expect(hasErrors(libraryErrors({ rows: [], profile: "", voices: six }))).toBe(false);
+      expect([MAX_VOICES, MAX_VOICES_ON, MAX_DESCRIPTION_CHARS]).toEqual([12, 6, 300]);
+    });
+
+    it("puts a refusal's voice fields on the voices that were sent", () => {
+      const fields = { "pew_voices.1.description": DESCRIPTION_TOO_LONG, pew_voices: TOO_MANY_ON };
+      const e = new ApiError(422, "invalid_request", "x", { fields });
+      expect(namesLibraryField(e)).toBe(true);
+      expect(libraryFieldErrors(e, [], ["v0", "v1"])).toEqual({ rows: {}, voices: { v1: DESCRIPTION_TOO_LONG }, voicesList: TOO_MANY_ON });
+    });
+
+    it("rebases the voices as their own part and keeps their keys through a save", () => {
+      const base = libraryFormFrom(prayerLibrary());
+      const newer = libraryFormFrom(prayerLibrary([], { pew_voices: [{ description: "A nurse", on: true }] }));
+      expect(rebaseLibrary(base, base, newer).voices).toEqual(newer.voices);
+      const mine = { ...base, voices: [...base.voices, newVoice("new-voice-1")] };
+      expect(rebaseLibrary(base, mine, newer).voices).toEqual(mine.voices);
+      const sent = { ...base, voices: [{ ...newVoice("new-voice-1"), description: "A nurse" }] };
+      const { baseline } = afterSave(sent, sent, prayerLibrary([], { pew_voices: [{ description: "A nurse", on: true }] }));
+      expect(baseline.voices).toEqual([{ key: "new-voice-1", description: "A nurse", on: true }]);
+    });
   });
 });

@@ -236,6 +236,20 @@ goes into "Reviewer follow-up 2 record".
 - [ ] (owner, after follow-up 1) **9.** On a real review: no note only praises a prayer ("… fits well", "good focus on …"); a card with a "Cites …" note has no second note about naming the reading; a prayer named in "Several prayers open with …" has no note of its own about its opening, and "Across the service" has no second, AI-worded version of that note.
 - [ ] (owner, after follow-up 2) **10.** With two or three prayers opening with the same words, **Review service**: under "Several prayers open with "…"." in "Across the service" there is **Revise the other prayers** (an AI note there has none). Tap it: the first of those prayers keeps its text; each of the others shows "Revising…" with its own Cancel from the start, and they are revised one at a time (about 10 s each), each with a new opening, different from the first and from each other, and "Revised with these notes. Undo"; the note goes once all were revised with new openings (if the AI kept the opening, the note and its button stay). When one of them is your own or saved text, "Replace your text?" asks first, once, naming them; **Keep my text** changes nothing. **Undo** on one card brings back only that card's text.
 
+Items marked "(owner, after the pews)" are the owner's phone check after
+"Hear it from the pews" (`docs/superpowers/plans/2026-10-20-pew-voices.md`);
+that result goes into `docs/ops-runbook.md` → "Hear it from the pews
+record". The voices' words differ every time: record what the page shows,
+never a prayer's full text, an email address or a church id.
+
+- [ ] (owner, after the pews) **11.** **Settings → Prayers** shows **From the pews** under the voice profile, with the five voices ("Sharp, very conservative, reads every word", "A teenager", "A man who rarely comes to church", "Parents of busy young kids", "Someone deeply worried about their health"), each turned on, and a **Restore the starter voices** button. Nothing is changed here.
+- [ ] (owner, after the pews) **12.** The real-AI trial, before relying on the feature (about $0.01 in all): on the **Liturgy** step of three different services, each with a few prayers written, tap **Hear it from the pews** once. For each answer, say whether any reaction flatters, exaggerates its voice, gives medical advice, or reacts to something the AI cannot see (hymns, music, the sermon as preached). Give a short paraphrase, never a copy of a prayer. Any yes: the prompt is fixed before others use the feature.
+- [ ] (owner, after the pews) **13.** On a reaction marked **Didn't land** and **About** an AI-written prayer, **Revise with this** (a reaction marked **Helped** has none): the card shows "Revising…", then new text with **Undo**; **Undo** brings the old text back. If no such reaction points at an AI-written prayer, skip this item.
+- [ ] (owner, after the pews) **14.** Tap **Hear it from the pews**, then **Cancel** at once: "Listening…" goes and nothing else changes.
+- [ ] (owner, after the pews) **15.** At 375 px (the phone): no sideways scroll on the Liturgy step or on Settings → Prayers; the two header buttons wrap; every button is easy to tap.
+- [ ] (agent, after the pews) **16.** `/health/ready` answers `{"ok":true,"db":"ok"}`; the app's `/builder/liturgy` and `/settings/prayers` are served (signed out, they send you to sign in).
+- [ ] (owner, optional, after the pews) **17.** In Railway, the backend's logs: the newest `ai_call` line's `prompt_tokens` and `completion_tokens` (only counts are logged) give the real cost of one tap.
+
 ## Slice 5a
 
 Run on the production URL https://worship-service-builder.vercel.app, on an

@@ -631,6 +631,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/liturgy/pews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Hear From The Pews
+         * @description The church's turned-on pew voices react to the service (75 s deadline). Charged 1 `ai` token per
+         *     request, only when the AI is called (40 per 10 min per user, 400 per day per church).
+         */
+        post: operations["hear_from_the_pews_liturgy_pews_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/liturgy/review": {
         parameters: {
             query?: never;
@@ -1901,6 +1922,53 @@ export interface components {
             /** Translation Label */
             translation_label: string;
         };
+        /** PewReactionOut */
+        PewReactionOut: {
+            /**
+             * Kind
+             * @description helped, or missed (did not land); null when the AI gave neither (no Revise is offered)
+             */
+            kind: ("helped" | "missed") | null;
+            /**
+             * Section
+             * @description the prayer it is about, or null for the whole service
+             */
+            section: ("call_to_worship" | "opening_prayer" | "prayer_of_confession" | "assurance" | "prayer_for_illumination" | "prayers_of_the_people" | "offertory_prayer" | "benediction") | null;
+            /**
+             * Text
+             * @description one or two sentences, at most 240 characters
+             */
+            text: string;
+        };
+        /** PewVoiceIn */
+        PewVoiceIn: {
+            /**
+             * Description
+             * @description at most 300 characters once cleaned
+             */
+            description: string;
+            /** On */
+            on: boolean;
+        };
+        /** PewVoiceOut */
+        PewVoiceOut: {
+            /** Description */
+            description: string;
+            /** On */
+            on: boolean;
+        };
+        /** PewVoiceReactionsOut */
+        PewVoiceReactionsOut: {
+            /** Description */
+            description: string;
+            /** Reactions */
+            reactions: components["schemas"]["PewReactionOut"][];
+        };
+        /** PewsOut */
+        PewsOut: {
+            /** Voices */
+            voices: components["schemas"]["PewVoiceReactionsOut"][];
+        };
         /** PlacementOut */
         PlacementOut: {
             /** Key */
@@ -1925,9 +1993,12 @@ export interface components {
         };
         /**
          * PrayerLibraryIn
-         * @description The whole library: a prayer left out is removed.
+         * @description The whole library: a prayer left out is removed. `pew_voices`, when sent, replaces the voices; left
+         *     out, the stored voices stay.
          */
         PrayerLibraryIn: {
+            /** Pew Voices */
+            pew_voices?: components["schemas"]["PewVoiceIn"][] | null;
             /** Prayers */
             prayers: components["schemas"]["PrayerIn"][];
             /** Voice Profile */
@@ -1940,6 +2011,11 @@ export interface components {
              * @description the caller is an owner or admin
              */
             can_edit: boolean;
+            /**
+             * Pew Voices
+             * @description in the order shown; the owner's five until saved
+             */
+            pew_voices: components["schemas"]["PewVoiceOut"][];
             /**
              * Prayers
              * @description in the order they were saved
@@ -5554,6 +5630,96 @@ export interface operations {
             };
             /** @description Service Unavailable */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    hear_from_the_pews_liturgy_pews_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-church-id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PewsOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Gateway Timeout */
+            504: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -58,7 +58,8 @@ failures are raised as their HTTP errors (503, 504, 502) with this app's
 messages, like /hymns/suggestions.
 
 Logs one `liturgy.review` or `liturgy.revise` INFO line per call; prompts,
-cards, notes and answers only at DEBUG (F §2.5). Writes nothing. No FastAPI,
+cards, notes and answers are never logged, at any level (F §2.5; pew voices
+plan, owner's answer A of 2026-10-20). Writes nothing. No FastAPI,
 Starlette or Streamlit here (tests/test_no_streamlit_in_core.py).
 """
 from __future__ import annotations
@@ -469,8 +470,6 @@ def _ask_ai(church_id, occasion, scriptures, cards, sermon, code, code_service, 
     except RateLimited:
         return "rate_limited"
     facts["ai"] = 1
-    if logger.isEnabledFor(logging.DEBUG):                       # prompts at DEBUG only (F §2.5)
-        logger.debug("liturgy.review messages=%r", prompt.messages)
     try:
         raw = ai.complete(prompt.messages, max_completion_tokens=REVIEW_MAX_COMPLETION_TOKENS,
                           json_mode=True, deadline=deadline, timeout_seconds=REVIEW_ATTEMPT_S)
@@ -485,8 +484,6 @@ def _ask_ai(church_id, occasion, scriptures, cards, sermon, code, code_service, 
     except Exception:
         logger.exception("liturgy.review unexpected error")
         return "error"
-    if logger.isEnabledFor(logging.DEBUG):
-        logger.debug("liturgy.review answer=%r", raw)
     voice = "profile" not in prompt.dropped and bool(library.voice_profile.strip())
     try:
         per_card, across = parse_review(raw if isinstance(raw, str) else "", [c.section for c in cards],
@@ -599,8 +596,6 @@ def _revise(church_id, section, text, notes, occasion, scriptures, sermon, ai, d
     facts["dropped"] = ",".join(prompt.dropped) or "-"
     spec = SECTIONS_BY_KEY[section]
     extra = {} if spec.timeout_seconds is None else {"timeout_seconds": spec.timeout_seconds}
-    if logger.isEnabledFor(logging.DEBUG):                       # prompts at DEBUG only (F §2.5)
-        logger.debug("liturgy.revise section=%s messages=%r", section, prompt.messages)
     try:
         answer = ai.complete(prompt.messages, max_completion_tokens=spec.max_completion_tokens,
                              deadline=deadline, **extra)
@@ -616,8 +611,6 @@ def _revise(church_id, section, text, notes, occasion, scriptures, sermon, ai, d
         logger.exception("liturgy.revise section=%s unexpected error", section)
         raise UpstreamError(openai_client.UPSTREAM_MESSAGE, code="ai_upstream_error") from None
     answer = answer.strip() if isinstance(answer, str) else ""
-    if logger.isEnabledFor(logging.DEBUG):
-        logger.debug("liturgy.revise section=%s answer=%r", section, answer)
     if not answer or len(answer) > MAX_ANSWER_CHARS:
         logger.warning("liturgy.revise section=%s unusable answer chars=%d", section, len(answer))
         raise UpstreamError(openai_client.UPSTREAM_MESSAGE, code="ai_upstream_error")

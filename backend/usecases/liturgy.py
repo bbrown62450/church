@@ -21,8 +21,9 @@ generate_liturgy:
 6. Returns the outcomes in request order.
 
 Logs one `liturgy.generate` INFO line per call (counts, codes, which optional
-blocks were present or dropped, the duration); prompts and outputs only at
-DEBUG (F §2.5). Writes nothing. The layer rules are in usecases/__init__.py:
+blocks were present or dropped, the duration); prompts and outputs are never
+logged, at any level (F §2.5; pew voices plan, owner's answer A of
+2026-10-20). Writes nothing. The layer rules are in usecases/__init__.py:
 no FastAPI, Starlette or Streamlit here (test_no_streamlit_in_core.py).
 """
 from __future__ import annotations
@@ -119,8 +120,6 @@ def _resolved(ref: Optional[HymnRefData], found: Mapping[uuid.UUID, Any]) -> Opt
 
 def _generate_one(ai: Any, section: str, prompt: liturgy_prompts.BuiltPrompt,
                   deadline: float) -> SectionOutcome:
-    if logger.isEnabledFor(logging.DEBUG):                 # prompts at DEBUG only (F §2.5)
-        logger.debug("liturgy.generate section=%s messages=%r", section, prompt.messages)
     spec = SECTIONS_BY_KEY[section]
     extra = {} if spec.timeout_seconds is None else {"timeout_seconds": spec.timeout_seconds}
     try:
@@ -138,8 +137,6 @@ def _generate_one(ai: Any, section: str, prompt: liturgy_prompts.BuiltPrompt,
         logger.exception("liturgy.generate section=%s unexpected error", section)
         return _error(section, "ai_upstream_error")
     text = text.strip() if isinstance(text, str) else ""
-    if logger.isEnabledFor(logging.DEBUG):
-        logger.debug("liturgy.generate section=%s answer=%r", section, text)
     if not text or len(text) > MAX_ANSWER_CHARS:
         logger.warning("liturgy.generate section=%s unusable answer chars=%d", section, len(text))
         return _error(section, "ai_upstream_error")

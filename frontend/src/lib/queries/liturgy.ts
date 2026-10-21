@@ -15,6 +15,9 @@
  *   100 s client timeout (owner answer 3, 2026-10-01). A review answers 200
  *   with the notes whatever the AI did (`ai_status`); a revision's AI
  *   failures arrive as `ApiError`s.
+ * - `hearFromThePews(call, body, signal)`: `POST /liturgy/pews` (pew voices
+ *   spec 2026-10-20), the review's body, a 100 s client timeout; its AI
+ *   failures arrive as `ApiError`s.
  */
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 
@@ -23,6 +26,7 @@ import type {
   GenerateLiturgyBody,
   GenerateLiturgyResult,
   LiturgyConfig,
+  PewsResult,
   ReviewBody,
   ReviewResult,
   ReviseBody,
@@ -57,6 +61,11 @@ export async function generateSection(
 
 export function reviewService(call: ApiCall, body: ReviewBody, signal?: AbortSignal): Promise<ReviewResult> {
   return call<ReviewResult>("/liturgy/review", { method: "POST", json: body, signal });
+}
+
+/** Hear it from the pews: the review's body, one entry per turned-on voice back (100 s; pew voices spec). */
+export function hearFromThePews(call: ApiCall, body: ReviewBody, signal?: AbortSignal): Promise<PewsResult> {
+  return call<PewsResult>("/liturgy/pews", { method: "POST", json: body, signal });
 }
 
 /** The revised text of one AI card. */

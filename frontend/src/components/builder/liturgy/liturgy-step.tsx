@@ -28,6 +28,7 @@ import { CommunionCard } from "./communion-card";
 import { CustomElementCard } from "./custom-element-card";
 import { ServiceNotes } from "./card-notes";
 import { OutlineLandmark } from "./outline-landmark";
+import { PewsButton, PewsPanel, PewsStatus } from "./pews-panel";
 import { ReviewButton, ReviewStatus } from "./review-bar";
 import { SectionCard } from "./section-card";
 import { SermonTitleField } from "./sermon-title-field";
@@ -60,9 +61,10 @@ function LiturgySkeleton() {
  * step's Undo lines go when it unmounts. On mount it scrolls to the card the
  * address names (`#card-…`, `#custom-…`).
  *
- * The header holds the service reviewer's "Review service" button; its
- * progress, failure and "Only quick checks ran…" line follow, then the
- * "Across the service" box. Custom elements are never reviewed.
+ * The header holds the service reviewer's "Review service" button and "Hear
+ * it from the pews" (pew voices spec 2026-10-20); their progress and failure
+ * lines follow, then the "From the pews" panel and the "Across the service"
+ * box. Custom elements are never reviewed.
  */
 export function LiturgyStep() {
   const configQuery = useLiturgyConfig();
@@ -180,9 +182,14 @@ export function LiturgyStep() {
           <h2 id="liturgy-step-title" className="text-lg font-semibold">
             Liturgy
           </h2>
-          <ReviewButton />
+          <div className="flex flex-wrap gap-2">
+            <ReviewButton />
+            <PewsButton />
+          </div>
         </div>
         <ReviewStatus />
+        <PewsStatus />
+        <PewsPanel />
         <ServiceNotes />
       </div>
       <SermonTitleField maxLength={config.limits.max_sermon_title} />

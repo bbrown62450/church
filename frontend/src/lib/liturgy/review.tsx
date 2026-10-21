@@ -57,6 +57,9 @@
  *   of them was revised, fewer than two prayers still share the opening (an
  *   Undo may have brought it back, or the AI kept it), and only while the review it came from is
  *   still the one shown (`generation`); otherwise it stays.
+ * - `reviseWith(key, notes)` (pew voices spec 2026-10-20, "Revise with
+ *   this"): the same path as `revise`, with these notes (a pew reaction's
+ *   sentence) instead of the card's own; true when it started.
  * - `announcement`: the polite line read out when a review ends.
  */
 import {
@@ -118,6 +121,8 @@ export type LiturgyReview = {
   reviseErrors: Partial<Record<SectionKey, ReviseError>>;
   /** True when the revision started (`canRevise`, not already revising, not being written, no 429 wait). */
   revise: (key: SectionKey) => boolean;
+  /** Revise with these notes instead of the card's own (a pew reaction); true when it started. */
+  reviseWith: (key: SectionKey, notes: string[]) => boolean;
   /** "Revise the other prayers" on a shared-opening note, one at a time; true when the first revision started. */
   reviseAcross: (noteId: string) => boolean;
   /** Stops a card's revision, or takes it out of a "Revise the other prayers" batch before it is sent. */
@@ -413,6 +418,10 @@ export function LiturgyReviewProvider({
   }, [startRevise, rateLimitedUntil]);
 
   const revise = useCallback((key: SectionKey) => startRevise(key) === true, [startRevise]);
+  const reviseWith = useCallback(
+    (key: SectionKey, notes: string[]) => notes.length > 0 && startRevise(key, notes) === true,
+    [startRevise],
+  );
 
   // Sends a batch's next prayer, skipping one edited meanwhile; when none is left, the note goes if every one was
   // revised, fewer than two prayers still share the opening (an Undo may have brought one back) and its review is
@@ -533,8 +542,8 @@ export function LiturgyReviewProvider({
   }, []);
 
   const value = useMemo<LiturgyReview>(
-    () => ({ review, running, error, announcement, start, cancel, dismiss, revising, reviseErrors, revise, reviseAcross, cancelRevise }),
-    [review, running, error, announcement, start, cancel, dismiss, revising, reviseErrors, revise, reviseAcross, cancelRevise],
+    () => ({ review, running, error, announcement, start, cancel, dismiss, revising, reviseErrors, revise, reviseWith, reviseAcross, cancelRevise }),
+    [review, running, error, announcement, start, cancel, dismiss, revising, reviseErrors, revise, reviseWith, reviseAcross, cancelRevise],
   );
   return <ReviewContext value={value}>{children}</ReviewContext>;
 }
