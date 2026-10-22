@@ -185,4 +185,22 @@ describe("AppHeader", () => {
     render(<AppHeader user={pat} onSignOut={vi.fn()} />);
     expect(screen.queryByRole("navigation", { name: "Main" })).toBeNull();
   });
+
+  it("draws each main nav link with a full-strength focus ring and its label at full strength (Theme PR 1)", () => {
+    setTestPath("/builder");
+    render(<AppHeader user={pat} churches={[graceAdmin]} active={graceAdmin} onSelectChurch={vi.fn()} onSignOut={vi.fn()} />);
+    const links = within(screen.getByRole("navigation", { name: "Main" })).getAllByRole("link");
+    expect(links).toHaveLength(3);
+    for (const link of links) {
+      expect(link).toHaveClass(
+        "outline-none",
+        "focus-visible:ring-2",
+        "focus-visible:ring-ring",
+        "text-muted-foreground",
+        "aria-[current=page]:bg-secondary",
+        "aria-[current=page]:text-secondary-foreground",
+      );
+      expect(link.className).not.toMatch(/\b(?:text|ring|bg)-[\w-]+\/\d+|\bopacity-/); // nothing faded
+    }
+  });
 });
