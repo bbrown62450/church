@@ -316,6 +316,7 @@ describe("the cover picture (printed bulletin PR 3b; PR 3 planning answers 5-8)"
     const shown = await within(group).findByRole("img", { name: PICTURE_ALT });
     expect(shown).toHaveAttribute("src", "blob:test/1");
     expect(shown).toHaveClass("object-cover", "aspect-[372/300]");
+    expect(shown.parentElement).toHaveClass("paper"); // the printed cover stays light in dark mode (Theme PR 1)
     // The band as it prints over the picture: the New Testament reading the files print (here the epistle) and the date.
     expect(screen.getByTestId("cover-band")).toHaveTextContent(`Philippians 3:4b-14${formatServiceDate(readings.readings.date_iso)}`);
     const [post] = api.requests.filter((r) => r.method === "POST");

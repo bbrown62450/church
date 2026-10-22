@@ -23,7 +23,7 @@ export function StepFooter({ current }: { current: StepId }) {
       aria-label="Step navigation"
       data-keyboard-open={keyboardOpen ? "" : undefined}
       className={cn(
-        "sticky bottom-0 z-10 -mx-4 border-t bg-background/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur",
+        "sticky bottom-0 z-10 -mx-4 border-t bg-surface-container/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur",
         "lg:static lg:mx-0 lg:border-t-0 lg:bg-transparent lg:px-0 lg:pb-6 lg:backdrop-blur-none",
         keyboardOpen && "max-md:hidden",
       )}

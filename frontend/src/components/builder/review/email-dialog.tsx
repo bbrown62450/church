@@ -285,7 +285,7 @@ export function EmailDialog({ googleEmail, form, onFormChange, tracker, uncertai
                     {contact.email}
                   </span>
                   {contact.email_valid ? null : (
-                    <span className="text-sm text-amber-700 dark:text-amber-400">{INVALID_CONTACT}</span>
+                    <span className="text-sm text-warning">{INVALID_CONTACT}</span>
                   )}
                 </span>
               </label>

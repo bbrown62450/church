@@ -215,7 +215,7 @@ function PromptsForm({
         <div
           data-keyboard-open={keyboardOpen ? "" : undefined}
           className={cn(
-            "sticky bottom-0 z-10 flex flex-wrap gap-2 border-t bg-background/95 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur",
+            "sticky bottom-0 z-10 flex flex-wrap gap-2 rounded-t-xl border-t bg-surface-container/95 px-3 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur",
             // While a text field has focus the footer sits after the last card, at every width (6a-3a build
             // review 2): a phone held sideways is wider than md (844-932px) and its keyboard leaves a short
             // view the sticky bar would cover. Focus cannot tell an on-screen keyboard from a hardware one,

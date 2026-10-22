@@ -31,10 +31,11 @@ export function statusText(status: StepStatus): string {
 
 /**
  * The five steps (F §4.7 "StepProgress"; S "Builder shell"; the Bulletin
- * step from printed bulletin PR 2b): every step is a link (F D9). Below `lg`
- * a line "Step 1 of 5 · Date & readings" sits above five segments (each
- * 44 px tall, about 60 px wide at 375 px); from `lg` each step shows its
- * number, label and status. The
+ * step from printed bulletin PR 2b): every step is a link (F D9), drawn as a
+ * Material 3 chip (Theme PR 1): the current step filled, a done step with a
+ * check. Below `lg` a line "Step 1 of 5 · Date & readings" sits above five
+ * number chips (each 44 px tall, about 60 px wide at 375 px); from `lg` each
+ * chip shows the number and label, with the status under it. The
  * labels and statuses are in the DOM at every width (screen-reader text below
  * `lg`), so each link's name is "{n} {label} {status}".
  */
@@ -51,31 +52,30 @@ export function StepProgress({ current, shipped = SHIPPED_STEPS }: { current: St
           const status = stepStatus(draft, s.id, shipped);
           const isCurrent = s.id === current;
           const muted = status.kind === "soon" || status.kind === "not_in_archive" || status.kind === "optional";
+          const done = status.kind === "complete" || status.kind === "saved";
           return (
             <li key={s.id}>
               <Link
                 href={s.href}
                 aria-current={isCurrent ? "step" : undefined}
-                className="flex min-h-11 flex-col justify-center gap-1 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring lg:min-h-0 lg:py-1"
+                className="group flex min-h-11 flex-col justify-center gap-1 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring lg:min-h-0"
               >
                 <span
-                  aria-hidden="true"
                   className={cn(
-                    "h-1.5 rounded-full bg-muted",
-                    (status.kind === "complete" || status.kind === "saved") && "bg-primary/60",
-                    isCurrent && "bg-primary",
+                    "flex h-11 min-w-0 items-center justify-center gap-1 rounded-full border border-border px-2 text-sm font-medium text-muted-foreground group-hover:bg-foreground/8 lg:h-9 lg:justify-start lg:px-3",
+                    done && "border-primary/40 text-primary",
+                    isCurrent && "border-transparent bg-secondary text-secondary-foreground group-hover:bg-secondary",
                   )}
-                />
-                <span className="sr-only lg:not-sr-only lg:text-sm lg:font-medium">
-                  {s.number} {s.label}
+                >
+                  {done ? <CheckIcon aria-hidden="true" className="size-4 shrink-0" /> : null}
+                  <span>{s.number}</span> <span className="sr-only lg:not-sr-only lg:truncate">{s.label}</span>
                 </span>{" "}
                 <span
                   className={cn(
-                    "sr-only lg:not-sr-only lg:flex lg:items-center lg:gap-1 lg:text-xs",
+                    "sr-only lg:not-sr-only lg:px-3 lg:text-xs",
                     muted ? "lg:text-muted-foreground" : "lg:text-foreground",
                   )}
                 >
-                  {status.kind === "complete" || status.kind === "saved" ? <CheckIcon aria-hidden="true" className="size-3" /> : null}
                   {statusText(status)}
                 </span>
               </Link>

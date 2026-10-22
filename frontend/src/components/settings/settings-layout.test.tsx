@@ -61,6 +61,17 @@ describe("the Settings area (slice 6a-1)", () => {
     expect(screen.getByText("You're the owner of Grace.")).toBeInTheDocument();
   });
 
+  it("draws the sections as chips, 44 px tall on phones, each with a focus ring and the current one filled (Theme PR 1)", () => {
+    renderShell("admin", "/settings/liturgy");
+    const links = within(screen.getByRole("navigation", { name: "Settings sections" })).getAllByRole("link");
+    for (const link of links) {
+      expect(link).toHaveClass("h-11", "md:h-9", "rounded-full", "outline-none", "focus-visible:ring-2", "focus-visible:ring-ring");
+      expect(link).toHaveClass("aria-[current=page]:bg-secondary", "aria-[current=page]:text-secondary-foreground");
+      expect(link.className).not.toMatch(/\bopacity-/);
+    }
+    expect(links.filter((link) => link.getAttribute("aria-current") === "page").map((link) => link.textContent)).toEqual(["Liturgy"]);
+  });
+
   it.each([
     ["/settings/hymns", "Hymns"],
     ["/settings/liturgy", "Liturgy"],

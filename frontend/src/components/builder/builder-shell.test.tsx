@@ -524,3 +524,41 @@ describe("the shell with Liturgy shipped (slice 4b)", () => {
     expect(within(needed).getAllByRole("link", { name: "Add one" }).at(-1)).toHaveAttribute("href", "/builder/liturgy");
   });
 });
+
+describe("the steps as Material 3 chips (Theme PR 1)", () => {
+  /** A class that hides or fades an element at some width: `sr-only`, `hidden`, `invisible` or `opacity-*`, with any variants. */
+  const HIDES = /(?:^|\s)(?:[\w-]+:)*(?:sr-only|hidden|invisible|opacity-\d+)(?=\s|$)/;
+
+  async function chips() {
+    renderBuilder(<HymnsStepPage />, "/builder/hymns");
+    const links = within(await screen.findByRole("navigation", { name: "Steps" })).getAllByRole("link");
+    return links.map((link) => ({ link, chip: link.firstElementChild as HTMLElement }));
+  }
+
+  it("keep each step link and its chip 44 px tall on phones, the number shown and unfaded, with a focus ring", async () => {
+    const steps = await chips();
+    expect(steps).toHaveLength(5);
+    steps.forEach(({ link, chip }, i) => {
+      expect(link).toHaveClass("min-h-11", "lg:min-h-0", "outline-none", "focus-visible:ring-2", "focus-visible:ring-ring");
+      expect(chip).toHaveClass("h-11", "lg:h-9", "rounded-full");
+      // The number shows at every width; only the label and the status are screen-reader text below lg.
+      const number = within(chip).getByText(String(i + 1), { exact: true });
+      for (const el of [number, chip, link]) expect(el.getAttribute("class") ?? "").not.toMatch(HIDES);
+      // Nothing in the chip is faded with opacity.
+      for (const el of [link, ...link.querySelectorAll("*")]) expect(el.getAttribute("class") ?? "").not.toMatch(/\bopacity-/);
+    });
+  });
+
+  it("fill the current step's chip and outline the others", async () => {
+    const steps = await chips();
+    const current = steps.filter(({ link }) => link.getAttribute("aria-current") === "step");
+    expect(current.map(({ link }) => link.getAttribute("href"))).toEqual(["/builder/hymns"]);
+    expect(current[0].chip).toHaveClass("border-transparent", "bg-secondary", "text-secondary-foreground");
+    for (const { link, chip } of steps) {
+      if (link === current[0].link) continue;
+      expect(chip).toHaveClass("border", "border-border");
+      expect(chip).not.toHaveClass("bg-secondary");
+      expect(chip).not.toHaveClass("border-transparent");
+    }
+  });
+});
