@@ -22,4 +22,9 @@ The owner likes Material Design and wants it "a little bit more dazzling".
 5. **A simple teal app icon now** (owner, overriding the recommendation to wait): favicon, Apple touch icon and web manifest icons.
 6. Two PRs: **Theme PR 1**: the Material 3 tokens (light and dark), Figtree, shapes, buttons, cards, chips, the restyled Save bar, dark mode and the icon, with no behavior change. **Theme PR 2**: the bottom navigation bar and gentle motion.
 
+## Theme PR 1 plan answers (2026-10-22; binding)
+
+1. **The icon's mark is a "W" in Figtree** on the teal, not a cross. The icons are made offline: no font is fetched when the icons are generated or tested.
+2. **The home-screen icon opens the app in the browser, as today**: the web manifest's `display` is `browser`, and the page carries no `appleWebApp` or `mobile-web-app-capable` tag (no full-screen web-app mode).
+
 The preview canvas is private to the owner (claude.ai artifact "Worship app Material 3 themes").
