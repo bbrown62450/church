@@ -19,10 +19,10 @@ export function themeBlock(): string {
   return css.slice(css.indexOf("/* theme:start"), css.indexOf(end) + end.length);
 }
 
-/** The committed tokens: light (:root), dark (under prefers-color-scheme: dark) and paper (.paper). */
+/** The committed tokens: light (:root), dark (on screen under prefers-color-scheme: dark) and paper (.paper). */
 export function committedTokens(): Record<"light" | "dark" | "paper", Tokens> {
   const block = themeBlock();
-  const darkAt = block.indexOf("@media (prefers-color-scheme: dark)");
+  const darkAt = block.indexOf("@media screen and (prefers-color-scheme: dark)");
   const paperAt = block.indexOf(".paper {");
   return {
     light: tokensOf(block.slice(0, darkAt)),

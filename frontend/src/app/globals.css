@@ -2,9 +2,9 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-/* Dark follows the phone's setting (Theme PR 1); nothing inside .paper is dark. */
+/* Dark follows the phone's setting on screen (Theme PR 1); printing stays light, and nothing inside .paper is dark. */
 @custom-variant dark {
-  @media (prefers-color-scheme: dark) {
+  @media screen and (prefers-color-scheme: dark) {
     &:not(.paper, .paper *) {
       @slot;
     }
@@ -105,7 +105,7 @@
   --warning: #8c5000;
 }
 
-@media (prefers-color-scheme: dark) {
+@media screen and (prefers-color-scheme: dark) {
   :root {
     --background: #0e1513;
     --foreground: #dde4e1;

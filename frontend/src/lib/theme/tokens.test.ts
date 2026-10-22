@@ -57,10 +57,19 @@ describe("the Material 3 tokens (Theme PR 1)", () => {
 
   it("follow the phone's setting, and nothing inside .paper turns dark", () => {
     const css = read("src/app/globals.css");
-    expect(css).toMatch(/@custom-variant dark \{\s*@media \(prefers-color-scheme: dark\) \{\s*&:not\(\.paper, \.paper \*\) \{\s*@slot;/);
+    expect(css).toMatch(/@custom-variant dark \{\s*@media screen and \(prefers-color-scheme: dark\) \{\s*&:not\(\.paper, \.paper \*\) \{\s*@slot;/);
     expect(css).not.toContain(".dark {");
     expect(css).toMatch(/:root \{\s*--radius: 0\.75rem;\s*color-scheme: light dark;/);
     expect(css).toMatch(/\.paper \{\s*color-scheme: light;/);
+  });
+
+  it("print light: the dark variant and the dark tokens apply on screen only", () => {
+    const css = read("src/app/globals.css");
+    expect(themeCss()).toContain("@media screen and (prefers-color-scheme: dark) {\n  :root {");
+    expect(css.match(/@media[^{]*prefers-color-scheme: dark/g)).toEqual([
+      "@media screen and (prefers-color-scheme: dark",
+      "@media screen and (prefers-color-scheme: dark",
+    ]);
   });
 
   it("give .paper its own light surface, so a transparent cover picture sits on light paper in dark mode", () => {
