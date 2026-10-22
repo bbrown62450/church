@@ -21,6 +21,8 @@ const ARBITRARY = /[\w:-]+-\[[^\]\s]*(?:#[0-9a-fA-F]{3,8}|rgba?\(|hsla?\(|oklch\
 const STYLE_COLOR = /\b(?:color|background|backgroundColor|backgroundImage|borderColor|outlineColor|fill|stroke)\s*:|#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?|oklch|oklab)\(/g;
 /** A focus ring drawn faded (`ring-ring/50` reaches only about 2.2:1 in light mode); rings are drawn at full strength. */
 const FADED_RING = /\bring-ring\/\d+|\bfocus-visible:ring-[\w-]+\/\d+/g;
+/** Text drawn faded (`text-foreground/60` on the muted surface is about 4.2:1); text uses a token at full strength, `muted-foreground` for quiet text. */
+const FADED_TEXT = /\btext-[\w-]+\/\d+/g;
 
 function sources(dir: string): string[] {
   return readdirSync(join(FRONTEND, dir)).flatMap((name) => {
@@ -69,6 +71,15 @@ describe("colors and type (Theme PR 1)", () => {
 
   it("draw every focus ring at full strength", () => {
     expect(hits(FADED_RING)).toEqual([]);
+  });
+
+  it("draw all text at full strength, so its contrast is the tokens' (checked in tokens.test.ts)", () => {
+    expect(hits(FADED_TEXT)).toEqual([]);
+    expect("hover:text-foreground/80 *:data-[slot=x]:text-destructive/90 text-sm/6".match(FADED_TEXT)).toEqual([
+      "text-foreground/80",
+      "text-destructive/90",
+      "text-sm/6",
+    ]); // the pattern itself (a line height such as text-sm/6 is not used either)
   });
 
   it("set the app in Figtree", () => {
