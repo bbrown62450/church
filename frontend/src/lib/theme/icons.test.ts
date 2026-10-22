@@ -2,6 +2,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import * as staticInfo from "next/dist/build/analysis/get-page-static-info";
 import { describe, expect, it } from "vitest";
 
 import manifest from "@/app/manifest";
@@ -9,6 +10,10 @@ import { config } from "@/proxy";
 import { committedTokens, FRONTEND, read } from "@/test/theme";
 
 const MODES = committedTokens();
+/** Next.js's own matcher compiler: exported at run time, not in its types. */
+const { getMiddlewareMatchers } = staticInfo as unknown as {
+  getMiddlewareMatchers: (matcher: string[], nextConfig: object) => { regexp: string }[];
+};
 
 function png(path: string): { width: number; height: number } {
   const b = readFileSync(join(FRONTEND, path));
@@ -50,8 +55,14 @@ describe("the app icon and manifest (Theme PR 1)", () => {
   });
 
   it("serves the manifest and icons without the sign-in redirect, and still guards the pages", () => {
-    const matcher = new RegExp(`^${config.matcher[0]}$`);
+    // The matcher as Next.js compiles it (its own path-to-regexp step and the .rsc and data-route suffixes).
+    const [compiled] = getMiddlewareMatchers(config.matcher, {});
+    const matcher = new RegExp(compiled.regexp);
     expect(matcher.test("/manifest.webmanifest")).toBe(false);
+    // Only the manifest itself skips: the dot is literal and the name ends there.
+    expect(matcher.test("/manifestxwebmanifest")).toBe(true);
+    expect(matcher.test("/manifest.webmanifest/builder")).toBe(true);
+    expect(matcher.test("/manifest.webmanifest.rsc")).toBe(true);
     expect(matcher.test("/icons/icon-192.png")).toBe(false);
     expect(matcher.test("/apple-icon.png")).toBe(false);
     expect(matcher.test("/builder")).toBe(true);
