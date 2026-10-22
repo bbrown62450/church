@@ -9,7 +9,7 @@ The app stops wearing the component kit's stock look and wears the owner's chose
 1. Material 3 color roles, generated from the seed `#006A60` with Google's Material Color Utilities, in light and in dark (dark follows the phone's setting).
 2. Figtree for all text; Material 3 shapes (full-round buttons and chips, rounder fields, cards and dialogs) and elevation.
 3. Buttons, cards, fields and dialogs restyled; the builder's steps and the Settings sections drawn as Material 3 chip rows (same links, same order, same targets); the Settings Save bar restyled with its behavior unchanged.
-4. A simple teal app icon: favicon, Apple touch icon and web manifest icons.
+4. A simple teal app icon, a white "W" in Figtree (owner, 2026-10-22): favicon, Apple touch icon and web manifest icons. The home-screen icon opens the app in the browser, as today.
 5. Every text and background pair the components draw reaches WCAG AA in both modes, checked by a test.
 
 ## Scope
@@ -78,24 +78,25 @@ Figtree through `next/font/google` as `--font-sans` (replacing Geist; `next/font
 
 - `@custom-variant dark` becomes `@media (prefers-color-scheme: dark)`, excluding anything inside `.paper`. Before this PR the kit's `dark:` classes keyed on a `.dark` class that nothing set, so they never applied; from now they apply when the phone is dark. No toggle.
 - `:root` declares `color-scheme: light dark` so native controls and scrollbars follow; the viewport's `theme-color` is the surface color of each mode.
-- **What stays light**: the app has no rendered bulletin page (the Word and PDF files are downloads). The one thing on screen that stands for paper is the cover picture preview on the Bulletin step (the picture with its printed band), which gets `class="paper"`: it re-declares the light tokens and `color-scheme: light`, and the dark variant skips it. Any later paper-like view uses the same class.
+- **What stays light**: the app has no rendered bulletin page (the Word and PDF files are downloads). The one thing on screen that stands for paper is the cover picture preview on the Bulletin step (the picture with its printed band), which gets `class="paper"`: it re-declares the light tokens and `color-scheme: light`, and the dark variant skips it. `.paper` also paints its own light surface (`background-color: var(--background)`, which inside `.paper` is the light surface), so a cover picture with transparent parts sits on light paper in dark mode, not on the dark page. Any later paper-like view uses the same class.
 
 ## The icon
 
-A white Latin cross on the seed teal, in `frontend/scripts/generate-icons.mjs` as SVG geometry. The script writes `src/app/icon.svg` (rounded square, the SVG favicon), `src/app/favicon.ico` (16, 32 and 48 px PNGs inside an ICO, replacing Next's default), `src/app/apple-icon.png` (180 px, full bleed; iOS rounds it) and `public/icons/icon-192.png`, `icon-512.png` and `icon-maskable-512.png` (full bleed; the cross sits inside the maskable safe circle). It renders with `sharp`, which is already installed with Next.js, so there is no network and no new package. `src/app/manifest.ts` names the app "Worship Service Builder" (short "Worship"), starts at `/builder`, standalone, theme color primary, background surface.
+A white "W" in Figtree on the seed teal (owner, 2026-10-22), in `frontend/scripts/generate-icons.mjs` as SVG geometry. The W is Figtree's own glyph at weight 700, converted once, while planning, from the Figtree file that `next/font` fetched, to one SVG path (fontTools; Figtree's W is all straight lines, so the path is 13 points) and placed 216 px tall in the middle of a 512 px box. Nothing fetches or reads a font when the icons are generated or tested. The script writes `src/app/icon.svg` (rounded square, the SVG favicon), `src/app/favicon.ico` (16, 32 and 48 px PNGs inside an ICO, replacing Next's default), `src/app/apple-icon.png` (180 px, full bleed; iOS rounds it) and `public/icons/icon-192.png`, `icon-512.png` and `icon-maskable-512.png` (full bleed; the W sits inside the maskable safe circle). It renders with `sharp`, which is already installed with Next.js, so there is no network and no new package. `src/app/manifest.ts` names the app "Worship Service Builder" (short "Worship"), starts at `/builder`, theme color primary, background surface, and `display: "browser"`: the home-screen icon opens the app in the browser, as today (owner, 2026-10-22). The layout sets no `appleWebApp` metadata, so the page carries no `apple-mobile-web-app-capable` or `mobile-web-app-capable` tag; a test checks the source and the build is checked for the tags.
 
 The sign-in proxy's matcher already skips `.svg`, `.png` and `favicon.ico`; it now also skips `manifest.webmanifest`, which browsers fetch without the session cookie and which would otherwise be redirected to `/login`.
 
 ## Accessibility
 
-- `tokens.test.ts` computes WCAG contrast for every text pair the components draw (foreground, muted foreground, primary, destructive and warning on background, card, popover, muted and surface container; each "on" color on its container; the destructive button's text on its 10% (light) or 20% (dark) tint), at least 4.5:1 in both modes, and field edges and focus rings at least 3:1.
+- `tokens.test.ts` computes WCAG contrast for every text pair the components draw (foreground, muted foreground, primary, destructive and warning on background, card, popover, muted and surface container; each "on" color on its container; the destructive button's text on its 10% (light) or 20% (dark) tint), at least 4.5:1 in both modes, and field edges and focus rings at least 3:1. Focus rings are drawn at full strength (`ring-ring`, the destructive button's `ring-destructive`), not at the kit's 50%: a half-strength teal ring reaches only about 2.2:1 in light mode. `colors.test.ts` fails on any faded focus ring in a component.
 - Results (light / dark): the lowest text pair is 5.27 / 7.24 (warning on muted; secondary chip text on its container); foreground on background 16.31 / 14.32; on-primary on primary 6.50 / 7.72; primary on background 6.19 / 10.83; muted foreground on muted 7.62 / 8.48; field edges at least 3.68 / 4.56.
 - Unselected chips have a light outline-variant edge (below 3:1, as in Material 3); their label text identifies them and meets 4.5:1, so the edge is decoration, not the control's only boundary.
-- Tap targets stay 44 px on phones (the existing class tests still pass).
+- Tap targets stay 44 px on phones (the existing class tests still pass; new tests pin each builder step link at `min-h-11` with its chip at `h-11`, and the Settings chips at `h-11`).
+- Every builder step chip shows its number at every width, nothing in a chip is faded with opacity, and the current step is filled while the others are outlined (tests).
 
 ## Testing
 
-New: `src/lib/theme/tokens.test.ts` (the committed block equals the generator's output, paper equals light, contrast in both modes, the dark variant skips `.paper`), `colors.test.ts` (no fixed palette color in `src/components` or `src/app` outside an allow-list of the three dialog scrims and the printed cover band; Figtree), `icons.test.ts` (the icon files exist at their sizes, the manifest's icons and colors, the browser bar colors, the matcher). Changed: the cover preview carries `paper` (`bulletin-step.test.tsx`); the outline button is recognized by `border-input` (`review-send-step.test.tsx`). Plus a visual check at 375 px and desktop, light and dark, with the pre-installed Chromium (screenshots to the scratchpad only), and a short phone check after the deploy.
+New: `src/lib/theme/tokens.test.ts` (the committed block equals the generator's output, paper equals light, contrast in both modes, the dark variant skips `.paper`), `colors.test.ts` (no fixed palette color in `src/components` or `src/app` outside an allow-list of the three dialog scrims and the printed cover band; no arbitrary color class such as `bg-[#ffffff]` and no color in an inline `style`; no faded focus ring; Figtree), `icons.test.ts` (the icon files exist at their sizes, the manifest's icons, colors and `browser` display, no Apple web-app metadata, the browser bar colors, the matcher). Added to existing files: the builder step chips (`builder-shell.test.tsx`: 44 px, number shown, nothing faded, focus ring, current filled), the Settings chips (`settings-layout.test.tsx`), the button's focus ring (`button.test.tsx`). Changed: the cover preview carries `paper` (`bulletin-step.test.tsx`); the outline button is recognized by `border-input` (`review-send-step.test.tsx`). Plus a visual check of the real pages, signed in through a fake sign-in and a fake API built from the test fixtures: sign-in, the five builder steps, Services and Settings (Church, Liturgy, Prayers, People) at 375 px, light and dark, with the pre-installed Chromium (screenshots to the scratchpad only), and a short phone check after the deploy.
 
 ## Risks
 
@@ -105,6 +106,12 @@ New: `src/lib/theme/tokens.test.ts` (the committed block equals the generator's 
 - **Safari before version 26 ignores SVG favicons**; it takes `favicon.ico`.
 - **Shapes change the feel of every page at once.** Nothing moves or changes size (the class tests on 44 px targets still pass), but corners and colors do; Theme PR 2 adds motion on top.
 
-## Questions for the owner
+## Answered questions
 
-1. **The icon's mark.** Recommended: a plain white cross on the teal (drawn in the plan). Alternative: the letter W in Figtree on the teal, if a cross feels too specific for every church that may use the app.
+1. **The icon's mark** (owner, 2026-10-22): a "W" in Figtree on the teal, not a cross; made offline.
+2. **What the home-screen icon opens** (owner, 2026-10-22): the app in the browser, as today (manifest `display: "browser"`, no web-app meta).
+
+## Follow-ups (not Theme PR 1)
+
+- **Dark mode's grey-filled menus and comboboxes**: the kit's dark-only fills on selects, comboboxes and their menus read as flat grey next to the teal surfaces. Kept as the kit drew them in this PR; a small follow-up restyles them.
+- **Em dashes in existing user-facing copy**, to be fixed in the em-dash follow-up PR together with the plan reviewer's two strings: for example "Off — not in the service. Any text is kept." (a liturgy section switched off), "Off by default — it's on by default only on the first Sunday of the month." (communion), "Still working — this can take up to a minute.", "Too many requests — try again in … s." and the Still to do lines ("… is empty — Write or generate it"). About a dozen strings in all (`grep -rn "—" frontend/src/components frontend/src/app`). This PR adds no new one.
