@@ -13,7 +13,15 @@ export const metadata: Metadata = {
   description: "Plan Sunday worship services with your church.",
 };
 
-export const viewport: Viewport = { width: "device-width", initialScale: 1 };
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  // The browser bar takes the page's surface color in each mode (Theme PR 1).
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f4fbf8" },
+    { media: "(prefers-color-scheme: dark)", color: "#0e1513" },
+  ],
+};
 
 export default function RootLayout({
   children,
