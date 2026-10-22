@@ -200,7 +200,7 @@ function ContactRow({
           {contact.email}
         </p>
         {contact.email_valid ? null : (
-          <p className="text-sm text-amber-700 dark:text-amber-400">
+          <p className="text-sm text-warning">
             {admin ? INVALID_ADDRESS_ADMIN : INVALID_ADDRESS_MEMBER}
           </p>
         )}

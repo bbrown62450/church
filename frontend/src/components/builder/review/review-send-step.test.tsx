@@ -601,7 +601,7 @@ describe("Review & send: saving (slice 5a-3)", () => {
     const dialog = await screen.findByRole("alertdialog", { name: CONFLICT_TITLE });
     expect(dialog).toHaveAccessibleDescription(`${CONFLICT_MESSAGE} ${RELOAD_REPLACES}`);
     expect(within(dialog).getByRole("button", { name: "Save mine as a new service" })).toHaveClass("bg-primary"); // the primary choice
-    expect(within(dialog).getByRole("button", { name: "Reload their version" })).toHaveClass("bg-background"); // outline
+    expect(within(dialog).getByRole("button", { name: "Reload their version" })).toHaveClass("border-input"); // outline
     await user.click(within(dialog).getByRole("button", { name: "Reload their version" }));
     expect(await screen.findByText(LOADED_LATEST)).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());

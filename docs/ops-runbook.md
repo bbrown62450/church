@@ -943,6 +943,47 @@ database URL is recorded here.
 | Agent checks | Not run: this session has no sign-in for a test church | 2026-10-11 |
 | Follow-ups | Slice 6b is complete; Settings is in its final order (Church, Hymns, Liturgy, Prayers, Rubric, Bulletin, Contacts, People, Account, Danger zone). Next: Hear it from the pews | 2026-10-11 |
 
+### Hear it from the pews record
+
+Hear it from the pews (Settings → Prayers → From the pews: up to 12 voices,
+6 on, admins edit, members read, "Restore the starter voices"; the Liturgy
+step's "Hear it from the pews" with one AI call for the voices that are on,
+reactions labelled Helped or Didn't land, and "Revise with this" only on
+Didn't land) merged as PR #62. It also removed the six DEBUG lines that
+logged prompts and AI answers in generate, review and revise. No migration,
+so no backup routine before the merge. No prayer text, church id, email
+address or secret is recorded here.
+
+| Step | Result | Date |
+|---|---|---|
+| Merge | PR #62 merged 13:06 UTC (09:06 Eastern), merge commit `ff7ee52`. CI on `main`: success | 2026-10-21 |
+| Deploy | Delayed by Railway's outage and security incident (record below): builds were paused and the merge's deploy never ran. Once builds resumed, the owner deployed the latest commit with the rotated variables: success. `/health/ready` `{"ok":true,"db":"ok"}` and `/liturgy/pews` in the live OpenAPI | 2026-10-22 |
+| Phone 1. The voices | Settings → Prayers shows From the pews with the five starter voices, each On, and Restore the starter voices; nothing changed | 2026-10-22 |
+| Phone 2-7. Real-AI trial, three services | All three passed: no flattery, no exaggerated voice, no medical advice, no reaction to things the AI cannot see. One reaction (owner's paraphrase): the teenager found the Opening Prayer hard to connect with day-to-day life. Each reaction showed its "About" prayer label | 2026-10-22 |
+| Phone 8-9. Revise with this, Undo | A Didn't land reaction on an AI-written prayer revised it, with Undo; Undo brought the old text back | 2026-10-22 |
+| Phone 10. Cancel | Listening… went away with nothing changed | 2026-10-22 |
+| Phone 11. The screen | No sideways scroll on the Liturgy step or Settings → Prayers; buttons easy to tap | 2026-10-22 |
+| Not on the phone | A reaction clearing when its prayer changes, stale answers dropped, a member's read-only view, Restore the starter voices, the 6-on check, the 404 during a deploy, a prayer named by its label: tests only (`pews-step.test.tsx`, `prayers-settings-page.test.tsx`, `test_usecase_pew_voices.py`). Real token counts not read (estimate about $0.0017 a tap) | 2026-10-22 |
+| Follow-ups | Owner question: keep a history of reactions per service (today they are client memory only, by design). The reviewer's two em-dash strings (follow-up PR). Remove the retired Streamlit and localhost redirect URIs from the Google OAuth client | 2026-10-22 |
+
+### Railway security incident record
+
+Railway reported unauthorized access to systems storing customer
+environment variables, with some decrypted, and paused builds in every
+region (Railway's status page and email, 2026-10-21). The running app kept
+serving until the database password was changed. No secret value is
+recorded here; the owner rotated each one in its own service.
+
+| Step | Result | Date |
+|---|---|---|
+| Google OAuth client secret | New secret added and set in Railway; the old one disabled (delete it after the next bulletin email works). Disabling it makes any stolen Gmail refresh token unusable | 2026-10-22 |
+| OpenAI API key | New key set in Railway; the old one revoked. Usage since 2026-10-20: nothing unusual (owner) | 2026-10-22 |
+| Supabase database password | Reset; `DATABASE_URL` in Railway and `BACKUP_DATABASE_URL` in GitHub updated. The app was offline (`db_unavailable`) from the reset until Railway could deploy the new variable. Supabase logs since 2026-10-20: nothing unusual (owner) | 2026-10-22 |
+| Backups | The scheduled backup at 14:03 UTC failed (the password had changed before GitHub's secret); a run by hand afterwards succeeded (run 39821761604, artifact `db-backup` 467,785 bytes) | 2026-10-22 |
+| ESV API key | Not rotated (owner's choice: low risk, at worst the quota is used up) | 2026-10-22 |
+| Notion | The running API never reads `NOTION_*` (only the one-off migration scripts do); the owner may delete the `NOTION_*` variables in Railway and should disconnect the integration in Notion so a stolen key stops working | 2026-10-22 |
+| Follow-ups | Delete the disabled Google secret after the next bulletin email. Owner to decide whether to move off Railway (a custom `api.` domain would make any move easier) | 2026-10-22 |
+
 ## Backups
 
 - **Workflow:** `.github/workflows/backup.yml` (`db-backup`). Daily at 08:37 UTC,

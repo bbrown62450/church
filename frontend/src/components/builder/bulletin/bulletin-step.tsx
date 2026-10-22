@@ -252,7 +252,8 @@ function CoverPicture() {
         <Skeleton role="status" aria-label="Loading the cover picture" className="aspect-[372/300] w-full max-w-sm" />
       ) : (
         <div className="grid gap-2">
-          <div className="relative w-full max-w-sm overflow-hidden rounded-md border">
+          {/* The cover as printed: paper, so it stays light in dark mode (Theme PR 1). */}
+          <div className="paper relative w-full max-w-sm overflow-hidden rounded-md border">
             {/* A blob URL of the church's own picture: next/image could not fetch it, and nothing here needs optimizing. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img

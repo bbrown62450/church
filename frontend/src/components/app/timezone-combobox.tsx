@@ -125,7 +125,7 @@ export function TimezoneCombobox({ value, onChange, error, id, warning }: Timezo
         {TIMEZONE_HELPER}
       </p>
       {warning ? (
-        <p id={warningId} className="text-sm text-amber-700 dark:text-amber-400">
+        <p id={warningId} className="text-sm text-warning">
           {warning}
         </p>
       ) : null}
