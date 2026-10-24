@@ -86,6 +86,14 @@ describe("Settings → Liturgy: the Affirmation of Faith default (affirmation sp
     expect(card.textContent).not.toContain("\u2014");
   });
 
+  it("holds the own text to the server's limit (Affirmation PR B build review 3)", async () => {
+    const { user } = renderPage("admin");
+    const card = await form();
+    await user.click(within(card).getByRole("radio", { name: "Your own text" }));
+    const box = within(card).getByRole("textbox", { name: "Your church's own text" });
+    expect(box).toHaveAttribute("maxlength", String(liturgyConfig().limits.max_section_text));
+  });
+
   it("shows a creed's text and credit, and asks before leaving with an unsaved change", async () => {
     const { user, api } = renderPage("owner");
     const card = await form();

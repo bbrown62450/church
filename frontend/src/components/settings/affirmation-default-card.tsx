@@ -57,7 +57,14 @@ export function AffirmationDefaultCard({ onDirtyChange }: { onDirtyChange: (dirt
   if (config.data && !config.data.affirmation) return null;
   let body;
   if (profile.data && config.data) {
-    body = <AffirmationForm profile={profile.data} config={config.data.affirmation} onDirtyChange={onDirtyChange} />;
+    body = (
+      <AffirmationForm
+        profile={profile.data}
+        config={config.data.affirmation}
+        maxLength={config.data.limits.max_section_text}
+        onDirtyChange={onDirtyChange}
+      />
+    );
   } else if (profile.isError || config.isError) {
     const failed = profile.isError ? profile : config;
     body = <ErrorState error={failed.error} onRetry={() => void failed.refetch()} retrying={failed.isFetching} />;
@@ -87,10 +94,13 @@ type FormState = { source: ChurchProfile; baseline: ChurchAffirmation; form: Chu
 function AffirmationForm({
   profile,
   config,
+  maxLength,
   onDirtyChange,
 }: {
   profile: ChurchProfile;
   config: AffirmationConfig;
+  /** The server's limit for the own text (`limits.max_section_text`, as the Liturgy step's card). */
+  maxLength: number;
   onDirtyChange: (dirty: boolean) => void;
 }) {
   const admin = isAdmin(profile.role);
@@ -155,6 +165,7 @@ function AffirmationForm({
             ref={textRef}
             value={shown.text}
             readOnly={!admin}
+            maxLength={maxLength}
             rows={6}
             className="max-h-[60vh] overflow-y-auto"
             aria-describedby="affirmation-default-help"
