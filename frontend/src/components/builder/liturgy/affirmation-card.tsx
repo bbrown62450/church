@@ -20,6 +20,8 @@ import {
 import { useAutosize } from "@/lib/use-autosize";
 import { cn } from "@/lib/utils";
 
+import { COUNTER_FROM } from "./section-card";
+
 export const AFFIRMATION_OFF = "Not printed or emailed.";
 export const OWN_TEXT_HINT = "Printed in bold for everyone to read together.";
 export const OWN_TEXT_BLANK = "Nothing prints until you type it.";
@@ -66,6 +68,8 @@ export function AffirmationCard({ config, maxLength }: { config: AffirmationConf
   const own = a.include && a.choice === "own";
   useAutosize(textRef, a.text, own);
   const chosen = config.choices.find((choice) => choice.key === a.choice);
+  // A prayer card's counter (S "Other card rules"): past 18,000 characters, against the limit.
+  const showCounter = a.text.length > COUNTER_FROM;
 
   return (
     <section id="affirmation" aria-labelledby="affirmation-title" className="grid scroll-mt-24 gap-3 rounded-lg border p-4">
@@ -123,9 +127,14 @@ export function AffirmationCard({ config, maxLength }: { config: AffirmationConf
                 maxLength={maxLength}
                 rows={4}
                 className="max-h-[60vh] overflow-y-auto"
-                aria-describedby="affirmation-hint"
+                aria-describedby={showCounter ? "affirmation-hint affirmation-count" : "affirmation-hint"}
                 onChange={(e) => update((d) => editAffirmationText(d, e.target.value))}
               />
+              {showCounter ? (
+                <p id="affirmation-count" className="text-right text-xs text-muted-foreground">
+                  {a.text.length.toLocaleString("en-US")} / {maxLength.toLocaleString("en-US")}
+                </p>
+              ) : null}
               <p id="affirmation-hint" className="text-sm text-muted-foreground">
                 {a.text.trim() === "" ? `${OWN_TEXT_HINT} ${OWN_TEXT_BLANK}` : OWN_TEXT_HINT}
               </p>

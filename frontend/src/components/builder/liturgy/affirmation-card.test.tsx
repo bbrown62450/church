@@ -123,6 +123,24 @@ describe("the Affirmation of Faith card (affirmation spec)", () => {
     await waitFor(() => expect(stored().liturgy.affirmation).toEqual({ include: true, choice: "apostles", text: "", origin: "default" }));
   });
 
+  it("counts the own text's characters past 18,000, as a prayer card does (Affirmation PR B build review 5)", async () => {
+    const d = testDraft();
+    const at = (n: number): DraftV1 => ({
+      ...d,
+      liturgy: { ...d.liturgy, affirmation: { include: true, choice: "own", text: "y".repeat(n), origin: "user" } },
+    });
+    const first = renderStep(at(18_000));
+    let box = within(await card()).getByRole("textbox", { name: "Your own text" });
+    expect(box).toHaveAttribute("maxLength", "20000");
+    expect(within(await card()).queryByText(/\/ 20,000/)).toBeNull();
+    first.unmount();
+    renderStep(at(18_001));
+    const region = await card();
+    box = within(region).getByRole("textbox", { name: "Your own text" });
+    expect(within(region).getByText("18,001 / 20,000")).toBeInTheDocument();
+    expect(box).toHaveAccessibleDescription(`${OWN_TEXT_HINT} 18,001 / 20,000`);
+  });
+
   it("follows a church whose default is its own text", async () => {
     const own = churchProfile({ default_affirmation: { choice: "own", text: OWN } });
     renderStep(testDraft(), { "GET /church": own });
