@@ -13,11 +13,15 @@
  *   shared/first_sunday.json in `defaults.test.ts`). This is the one place for
  *   the rule: `date-effects.ts` calls `applyCommunionDefault` on a date change.
  *
- * Both return the same object when nothing changes, so the draft store can
+ * - An Affirmation of Faith card whose origin is "default" follows the
+ *   church's `default_affirmation` (affirmation spec): switched on, its
+ *   choice and, for "own", its text.
+ *
+ * They return the same object when nothing changes, so the draft store can
  * run them after every change without writing.
  */
 import { isFirstSundayOfMonth } from "@/lib/dates";
-import type { DraftV1 } from "@/lib/draft/schema";
+import { affirmationFromDefault, type AffirmationDefault, type DraftV1 } from "@/lib/draft/schema";
 
 /** The built-in Benediction (owner, 2026-10-02): the full Halverson text, as
  * the owner's bulletin prints it. Mirrors liturgy_config.DEFAULT_BENEDICTION_FALLBACK
@@ -28,7 +32,8 @@ export const DEFAULT_BENEDICTION_FALLBACK =
   "something he wants to do through you where you are. Believe this and go in the grace and " +
   "love and power of Jesus Christ.\u201d - Richard Halverson";
 
-export type LiturgyDefaults = { defaultBenediction: string };
+/** `defaultAffirmation` left out (a caller from before the affirmation spec): the card is left as it is. */
+export type LiturgyDefaults = { defaultBenediction: string; defaultAffirmation?: AffirmationDefault };
 
 export function applyCommunionDefault(d: DraftV1): DraftV1 {
   if (d.liturgy.communion_origin !== "default") return d;
@@ -37,7 +42,15 @@ export function applyCommunionDefault(d: DraftV1): DraftV1 {
   return { ...d, liturgy: { ...d.liturgy, include_communion: include } };
 }
 
-export function applyLiturgyDefaults(d: DraftV1, { defaultBenediction }: LiturgyDefaults): DraftV1 {
+export function applyAffirmationDefault(d: DraftV1, def: AffirmationDefault): DraftV1 {
+  const a = d.liturgy.affirmation;
+  if (a.origin !== "default") return d;
+  const next = affirmationFromDefault(def);
+  if (a.include === next.include && a.choice === next.choice && a.text === next.text) return d;
+  return { ...d, liturgy: { ...d.liturgy, affirmation: next } };
+}
+
+export function applyLiturgyDefaults(d: DraftV1, { defaultBenediction, defaultAffirmation }: LiturgyDefaults): DraftV1 {
   const benediction = d.liturgy.cards.benediction;
   let next = d;
   if (benediction.origin === "default" && benediction.text !== defaultBenediction) {
@@ -46,5 +59,6 @@ export function applyLiturgyDefaults(d: DraftV1, { defaultBenediction }: Liturgy
       liturgy: { ...d.liturgy, cards: { ...d.liturgy.cards, benediction: { ...benediction, text: defaultBenediction } } },
     };
   }
-  return applyCommunionDefault(next);
+  next = applyCommunionDefault(next);
+  return defaultAffirmation === undefined ? next : applyAffirmationDefault(next, defaultAffirmation);
 }

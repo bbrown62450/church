@@ -10,11 +10,13 @@ import { freshBulletin } from "./schema";
 import { reviewStatus } from "./status";
 
 const OWNER = { userId: USER_ID, churchId: churchProfile().id };
+/** What 4 → 5 gives a saved service's draft (the affirmation spec). */
+const ARCHIVED_APOSTLES = { include: true, choice: "apostles", text: "", origin: "archive" } as const;
 
 describe("draft migrate and parseStoredDraft (F §4.6 Versioning)", () => {
   it("round-trips a stored draft", () => {
     const d = testDraft();
-    expect(Object.keys(migrations)).toEqual(["1", "2", "3"]);
+    expect(Object.keys(migrations)).toEqual(["1", "2", "3", "4"]);
     expect(parseStoredDraft(JSON.stringify(d), OWNER)).toEqual(d);
   });
 
@@ -24,7 +26,7 @@ describe("draft migrate and parseStoredDraft (F §4.6 Versioning)", () => {
     const editing = { service_id: "s1", saved_at: "2026-10-01T14:42:00+00:00" };
     expect(parseStoredDraft(JSON.stringify(v1), OWNER)).toEqual({ ...testDraft(), save_key: v1.save_key });
     expect(parseStoredDraft(JSON.stringify({ ...v1, editing }), OWNER)).toMatchObject({
-      version: 4,
+      version: 5,
       save_key_fingerprint: null,
       editing: { ...editing, date_iso: "2026-10-04" },
     });
@@ -41,7 +43,13 @@ describe("draft migrate and parseStoredDraft (F §4.6 Versioning)", () => {
     const editing = { service_id: "s1", saved_at: "2026-10-01T14:42:00+00:00", date_iso: "2026-10-04" };
     const saved = { ...v2, editing, saved_fingerprint: fingerprint(payload), last_step: "review" };
     const migrated = parseStoredDraft(JSON.stringify(saved), OWNER);
-    expect(migrated).toEqual({ ...testDraft(), ...saved, version: 4, bulletin: freshBulletin() });
+    expect(migrated).toEqual({
+      ...testDraft(),
+      ...saved,
+      version: 5,
+      bulletin: freshBulletin(),
+      liturgy: { ...saved.liturgy, affirmation: ARCHIVED_APOSTLES },
+    });
     expect(reviewStatus(migrated)).toBe("saved");
   });
 
@@ -55,8 +63,30 @@ describe("draft migrate and parseStoredDraft (F §4.6 Versioning)", () => {
     const editing = { service_id: "s1", saved_at: "2026-10-01T14:42:00+00:00", date_iso: "2026-10-04" };
     const v3 = { ...filled, version: 3, bulletin, editing, saved_fingerprint: fingerprint(payload), last_step: "review" };
     const migrated = parseStoredDraft(JSON.stringify(v3), OWNER);
-    expect(migrated).toEqual({ ...v3, version: 4, bulletin: { ...bulletin, cover_image_id: null } });
+    expect(migrated).toEqual({
+      ...v3,
+      version: 5,
+      bulletin: { ...bulletin, cover_image_id: null },
+      liturgy: { ...v3.liturgy, affirmation: ARCHIVED_APOSTLES },
+    });
     expect(reviewStatus(migrated)).toBe("saved");
+  });
+
+  it("migrates a version 4 draft: the Apostles' Creed, switched on, following the default unless saved, and a saved draft stays Saved (affirmation spec)", () => {
+    const d = testDraft();
+    const { affirmation, ...liturgy } = d.liturgy;
+    expect(affirmation).toEqual({ include: true, choice: "apostles", text: "", origin: "default" });
+    const v4 = { ...d, version: 4, liturgy };
+    expect(parseStoredDraft(JSON.stringify(v4), OWNER)).toEqual(d);
+    // The payload leaves out the Apostles' Creed switched on, so 3b's fingerprint is today's.
+    const payload = draftToServicePayload(d);
+    expect("affirmation" in payload).toBe(false);
+    const editing = { service_id: "s1", saved_at: "2026-10-01T14:42:00+00:00", date_iso: "2026-10-04" };
+    const saved = { ...v4, editing, saved_fingerprint: fingerprint(payload), last_step: "review" };
+    const migrated = parseStoredDraft(JSON.stringify(saved), OWNER);
+    expect(migrated.liturgy).toEqual({ ...liturgy, affirmation: ARCHIVED_APOSTLES });
+    expect(reviewStatus(migrated)).toBe("saved");
+    expect(() => parseStoredDraft(JSON.stringify({ ...v4, liturgy: "none" }), OWNER)).toThrow(DraftRestoreError);
   });
 
   it("rejects corrupt JSON, invalid data, a missing or future version, and another owner's draft", () => {
@@ -67,7 +97,7 @@ describe("draft migrate and parseStoredDraft (F §4.6 Versioning)", () => {
       ["null", "null"],
       ["no version", JSON.stringify({ ...d, version: undefined })],
       ["version 0", JSON.stringify({ ...d, version: 0 })],
-      ["a future version", JSON.stringify({ ...d, version: 5 })],
+      ["a future version", JSON.stringify({ ...d, version: 6 })],
       ["schema-invalid", JSON.stringify({ ...d, readings: { ...d.readings, scriptures: "Psalm 23" } })],
       ["another user", JSON.stringify({ ...d, user_id: "someone-else" })],
       ["another church", JSON.stringify({ ...d, church_id: CHURCH_IDS.hope })],

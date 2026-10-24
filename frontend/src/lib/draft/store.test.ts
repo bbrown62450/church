@@ -90,7 +90,7 @@ describe("DraftStore load (F §4.6 Versioning)", () => {
   });
 
   it("backs up a draft it cannot restore, starts fresh and reports it once", () => {
-    for (const raw of ["{not json", JSON.stringify({ ...testDraft(), version: 5 }), JSON.stringify({ version: 1 })]) {
+    for (const raw of ["{not json", JSON.stringify({ ...testDraft(), version: 6 }), JSON.stringify({ version: 1 })]) {
       const { storage, data } = memoryStorage({ [KEY]: raw });
       const { store, notices } = makeStore(storage);
       store.start();
@@ -103,7 +103,7 @@ describe("DraftStore load (F §4.6 Versioning)", () => {
     }
 
     // The backup cannot be written (quota): the unrestorable draft stays in the main key until the user edits.
-    const raw = JSON.stringify({ ...testDraft(), version: 5 });
+    const raw = JSON.stringify({ ...testDraft(), version: 6 });
     const { storage, data } = memoryStorage({ [KEY]: raw, [corruptDraftKey(USER_ID, GRACE.id)]: "older backup" });
     storage.failKeys.add(corruptDraftKey(USER_ID, GRACE.id));
     const { store, notices } = makeStore(storage);
@@ -235,6 +235,33 @@ describe("DraftStore and the liturgy defaults (slice 4 spec, Draft store integra
     expect(store.getSnapshot().draft.liturgy.cards.benediction).toEqual({ enabled: true, text: DEFAULT_BENEDICTION_FALLBACK, origin: "default" });
   });
 
+  it("follows a new Affirmation default alone, the Benediction default unchanged, in an open builder (Affirmation PR B build review 2)", () => {
+    const { storage, data } = memoryStorage();
+    const t = clock();
+    const store = new DraftStore({
+      userId: USER_ID,
+      church: GRACE,
+      storage,
+      now: t.now,
+      liturgyDefaults: { defaultBenediction: DEFAULT_BENEDICTION_FALLBACK, defaultAffirmation: { choice: "apostles", text: "" } },
+    });
+    store.start();
+    expect(store.getSnapshot().draft.liturgy.affirmation).toEqual({ include: true, choice: "apostles", text: "", origin: "default" });
+    const before = store.getSnapshot().draft.updated_at;
+    t.advance(60_000);
+    // An admin chooses the Nicene Creed on Settings, Liturgy; only that default changed.
+    store.setLiturgyDefaults({ defaultBenediction: DEFAULT_BENEDICTION_FALLBACK, defaultAffirmation: { choice: "nicene", text: "" } });
+    const followed = store.getSnapshot().draft;
+    expect(followed.liturgy.affirmation).toEqual({ include: true, choice: "nicene", text: "", origin: "default" });
+    expect(followed.updated_at).toBe(new Date(Date.parse(before) + 1).toISOString());
+    // Own text with only the text changed follows too.
+    store.setLiturgyDefaults({ defaultBenediction: DEFAULT_BENEDICTION_FALLBACK, defaultAffirmation: { choice: "own", text: "We trust." } });
+    store.setLiturgyDefaults({ defaultBenediction: DEFAULT_BENEDICTION_FALLBACK, defaultAffirmation: { choice: "own", text: "We trust in God." } });
+    expect(store.getSnapshot().draft.liturgy.affirmation).toEqual({ include: true, choice: "own", text: "We trust in God.", origin: "default" });
+    vi.advanceTimersByTime(WRITE_DELAY_MS);
+    expect(stored(data).liturgy.affirmation.text).toBe("We trust in God.");
+  });
+
   it("loads a stored draft with today's default and the date's communion, stamped just after the stored draft", () => {
     const old = testDraft((d) => ({
       ...d,
@@ -362,7 +389,7 @@ describe("DraftStore changes (S store.ts)", () => {
     store.syncFromStorage();
     expect(store.getSnapshot().draft).toBe(mine);
     store.flush();
-    expect(stored(data)).toMatchObject({ version: 4, readings: { occasion: "Mine" } });
+    expect(stored(data)).toMatchObject({ version: 5, readings: { occasion: "Mine" } });
     expect(notices).toEqual([]);
   });
 
@@ -378,7 +405,7 @@ describe("DraftStore changes (S store.ts)", () => {
     const services = makeStore(storage);
     expect(services.store.getSnapshot().draft.readings.occasion).toBe("");
     builder.flush(); // ...then the builder unmounts and flushes,
-    expect(stored(data)).toMatchObject({ version: 4, readings: { occasion: "Mine" } });
+    expect(stored(data)).toMatchObject({ version: 5, readings: { occasion: "Mine" } });
     services.store.syncFromStorage({ quiet: true }); // and Services reads it back once mounted.
     expect(services.store.getSnapshot().draft).toMatchObject({ readings: { occasion: "Mine" }, updated_at: mine.updated_at });
     expect(services.notices).toEqual([]);

@@ -38,12 +38,13 @@ export function useChurchProfile(
  * answer as the profile, so the header, the builder's translation and its
  * Benediction default follow at once, refreshes `/me` (the switcher's name)
  * and, when the default hymnal was sent, `GET /hymnals` (the Hymns step's
- * hymnal), and toasts "Profile saved.". A failure toasts the server's message,
+ * hymnal), and toasts "Profile saved." (or `savedMessage`: Settings → Liturgy's
+ * Affirmation of Faith default, the affirmation spec). A failure toasts the server's message,
  * except a 401 or a lost church, which the app already reports; a role 403
  * (an admin demoted meanwhile) also refetches the profile, so the page turns
  * read-only.
  */
-export function useUpdateChurch() {
+export function useUpdateChurch({ savedMessage = PROFILE_SAVED }: { savedMessage?: string } = {}) {
   const api = useApi();
   const church = useChurch();
   const queryClient = useQueryClient();
@@ -54,7 +55,7 @@ export function useUpdateChurch() {
       queryClient.setQueryData(keys.churchProfile(church.id), saved);
       void queryClient.invalidateQueries({ queryKey: keys.me() });
       if (patch.default_hymnal !== undefined) void queryClient.invalidateQueries({ queryKey: keys.hymnals(church.id) });
-      toast.success(PROFILE_SAVED);
+      toast.success(savedMessage);
     },
     onError: (e) => {
       if (e.status === 401 || isNoChurchAccess(e)) return;

@@ -30,6 +30,12 @@ export type Migration = (draft: StoredDraft) => StoredDraft;
  * 3 → 4 (printed bulletin PR 3b): the bulletin gains `cover_image_id`, null
  * (no picture); nothing else changes, so a saved draft stays "Saved" (the
  * payload leaves out a null picture).
+ *
+ * 4 → 5 (the affirmation spec): `liturgy.affirmation` is the Apostles' Creed,
+ * switched on, as every draft printed before: "archive" for a saved service
+ * (it prints as saved, and stays "Saved": the payload leaves that value
+ * out), "default" otherwise (it follows the church's default, which is the
+ * Apostles' Creed until an admin changes it).
  */
 export const migrations: Readonly<Record<number, Migration>> = {
   1: (draft) => {
@@ -40,6 +46,11 @@ export const migrations: Readonly<Record<number, Migration>> = {
   },
   2: (draft) => ({ ...draft, bulletin: freshBulletin() }),
   3: (draft) => ({ ...draft, bulletin: isRecord(draft.bulletin) ? { ...draft.bulletin, cover_image_id: null } : draft.bulletin }),
+  4: (draft) => {
+    if (!isRecord(draft.liturgy)) return draft;
+    const origin = isRecord(draft.editing) ? "archive" : "default";
+    return { ...draft, liturgy: { ...draft.liturgy, affirmation: { include: true, choice: "apostles", text: "", origin } } };
+  },
 };
 
 export class DraftRestoreError extends Error {

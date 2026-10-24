@@ -111,7 +111,9 @@ export function stepStatus(
  * a card switched away from its default, communion the user set, the sermon
  * title and custom elements; a Benediction still following the church
  * default (origin "default") and text that prints nothing (blank after
- * trimming) do not (owner answer 1, 2026-09-30, slice 4b). On the Bulletin
+ * trimming) do not (owner answer 1, 2026-09-30, slice 4b). An Affirmation of
+ * Faith changed in any way counts; one following the church default does not
+ * (the affirmation spec). On the Bulletin
  * step (printed bulletin PR 2b) a box typed, edited or kept counts, and so
  * does a person, a part's leader or a pasted text; last week's text carried
  * in and not touched does not (it comes back on its own).
@@ -134,6 +136,7 @@ export function isPristine(draft: DraftV1): boolean {
       return card.enabled === DEFAULT_ENABLED[key] && text;
     }) &&
     l.communion_origin === "default" &&
+    l.affirmation.origin === "default" &&
     l.sermon_title.trim() === "" &&
     l.custom_elements.length === 0 &&
     b.edited.length === 0 &&

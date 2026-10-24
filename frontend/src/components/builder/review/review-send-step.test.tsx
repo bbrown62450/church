@@ -9,6 +9,7 @@
  * renders a probe button that applies it.
  */
 import { act, screen, waitFor, within } from "@testing-library/react";
+import { isDeepStrictEqual } from "node:util";
 import type { ReactNode } from "react";
 import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -19,11 +20,13 @@ import { Toaster } from "@/components/ui/sonner";
 import { formatSavedAt } from "@/lib/dates";
 import { emptyServiceBulletin, setAnnouncement, setCover } from "@/lib/draft/bulletin";
 import { useDraft } from "@/lib/draft/context";
-import { serviceToDraft } from "@/lib/draft/mapping";
+import { serviceBody } from "@/lib/documents";
+import { fingerprint } from "@/lib/draft/fingerprint";
+import { draftToServicePayload, serviceToDraft } from "@/lib/draft/mapping";
 import { draftKey, type DraftV1 } from "@/lib/draft/schema";
 import { pickFromHymn, setSlot } from "@/lib/hymns/picks";
 import { editOccasion, editScriptureLines, setDate, setTranslation } from "@/lib/draft/readings";
-import { editCardText, setCardEnabled } from "@/lib/liturgy/cards";
+import { editAffirmationText, editCardText, setAffirmationChoice, setCardEnabled } from "@/lib/liturgy/cards";
 import { REVOKE_AFTER_MS } from "@/lib/download";
 import { fakeError, installFakeApi, type FakeHandler, type RecordedRequest } from "@/test/fake-api";
 import {
@@ -747,6 +750,75 @@ describe("Review & send: saving (slice 5a-3)", () => {
     const [post] = serviceRequests(api, "POST");
     expect(post.body).toMatchObject({ bulletin: { announcements: { coffee_hour: "The Sample family" } } });
     expect((post.body as { bulletin: object }).bulletin).not.toHaveProperty("cover_image_id"); // no picture (PR 3b)
+  });
+
+  it("leaves the Apostles' Creed out of a POST, so a version 4 draft's lost POST is replayed, not saved twice (Affirmation PR B build review 1)", async () => {
+    // A POST sent before PR B, whose answer was lost: its key and fingerprint are in the version 4 draft, and the
+    // server holds that key with the body 3b sent (today's without affirmation, and as a POST, without the blank
+    // bulletin). A body that differs is a mismatch.
+    const d = editOccasion(testDraft(), "Harvest");
+    const { affirmation: today, ...liturgy } = d.liturgy;
+    expect(today).toMatchObject({ include: true, choice: "apostles" });
+    const v4 = { ...d, version: 4, liturgy, save_key_fingerprint: fingerprint(draftToServicePayload(d)) };
+    const before: Record<string, unknown> = { ...serviceBody(d) };
+    delete before.affirmation;
+    delete before.bulletin;
+    const held = new Map<string, unknown>([[d.save_key, JSON.parse(JSON.stringify(before))]]);
+    let posts = 0;
+    const { api, user } = renderReview(v4 as unknown as DraftV1, {
+      "POST /services": (request: RecordedRequest) => {
+        posts += 1;
+        if (posts === 1) throw new TypeError("Failed to fetch"); // lost again: the retry must be identical
+        const key = request.headers["idempotency-key"];
+        if (held.has(key) && !isDeepStrictEqual(held.get(key), request.body)) {
+          return fakeError(422, "idempotency_mismatch", "This request was already sent with different details.");
+        }
+        return { status: 201, body: savedService({ occasion: "Harvest", saved_at: FIRST_SAVE }) };
+      },
+    });
+    const card = await archiveCard();
+    const save = () => user.click(within(card).getByRole("button", { name: "Save to archive" }));
+    await save();
+    await waitFor(() => expect(posts).toBe(1));
+    await save();
+    expect(await screen.findByText(SAVED_MESSAGE)).toBeInTheDocument();
+    const sent = serviceRequests(api, "POST");
+    expect(sent).toHaveLength(2); // replayed: no mismatch, so no second copy under a new key
+    expect(sent.map((r) => r.headers["idempotency-key"])).toEqual([d.save_key, d.save_key]);
+    expect(sent[1].body).toEqual(sent[0].body);
+    expect(sent[0].body).not.toHaveProperty("affirmation");
+  });
+
+  it("sends own text in a POST (Affirmation PR B build review 1)", async () => {
+    const own = editAffirmationText(setAffirmationChoice(editOccasion(testDraft(), "Harvest"), "own"), "We trust in God.");
+    const { api, user } = renderReview(own, {
+      "POST /services": () => ({ status: 201, body: savedService({ occasion: "Harvest", saved_at: FIRST_SAVE }) }),
+    });
+    const card = await archiveCard();
+    await user.click(within(card).getByRole("button", { name: "Save to archive" }));
+    expect(await screen.findByText(SAVED_MESSAGE)).toBeInTheDocument();
+    expect(serviceRequests(api, "POST")[0].body).toHaveProperty("affirmation", { include: true, choice: "own", text: "We trust in God." });
+  });
+
+  it("sends the Nicene Creed in a POST, and the Apostles' Creed in a PUT (Affirmation PR B build review 1)", async () => {
+    const nicene = { include: true, choice: "nicene", text: "" } as const;
+    const { api, user } = renderReview(
+      setAffirmationChoice(editOccasion(testDraft(), "Harvest"), "nicene"),
+      {
+        "POST /services": () => ({ status: 201, body: savedService({ occasion: "Harvest", saved_at: FIRST_SAVE, affirmation: nicene }) }),
+        [`PUT /services/${SERVICE_ID}`]: () => savedService({ occasion: "Harvest", saved_at: SECOND_SAVE }),
+      },
+      <Probe edit={(draft) => setAffirmationChoice(draft, "apostles")} />,
+    );
+    const card = await archiveCard();
+    await user.click(within(card).getByRole("button", { name: "Save to archive" }));
+    expect(await screen.findByText(SAVED_MESSAGE)).toBeInTheDocument();
+    expect(serviceRequests(api, "POST")[0].body).toHaveProperty("affirmation", nicene);
+    // Back to the Apostles' Creed on the saved Nicene service: the PUT says so, or the server would keep the Nicene Creed.
+    await user.click(screen.getByRole("button", { name: "Probe edit" }));
+    await user.click(within(card).getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(within(card).getByText(`Saved to the archive · ${formatSavedAt(SECOND_SAVE)}`)).toBeInTheDocument());
+    expect(serviceRequests(api, "PUT")[0].body).toHaveProperty("affirmation", { include: true, choice: "apostles", text: "" });
   });
 
   it("says when the cover picture sent was gone, so the service was saved without one, and drops it from the draft (PR 3a build review M2)", async () => {

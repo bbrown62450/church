@@ -51,12 +51,13 @@ As in the earlier plans: **Create `path`:** the block is the whole new file; **I
   | Build review fixes | +3 (`test_affirmation.py` +1, `test_api_affirmation.py` +2) → **2291 passed, 50 skipped** | unchanged: **1122 in 119 files** |
   | T7 | unchanged | +15 (`affirmation.test.ts` 8 and `affirmation-card.test.tsx` 6, new files; `migrate.test.ts` +1) → **1137 in 121 files** |
   | T8 | unchanged | +4 (`affirmation-default-card.test.tsx`, a new file) → **1141 in 122 files** |
+  | PR B build review fixes | unchanged | +7 (`review-send-step.test.tsx` +3, `affirmation-default-card.test.tsx` +2, `store.test.ts` +1, `affirmation-card.test.tsx` +1) → **1148 in 122 files** |
 
   | CI on | `backend` job | `backend-postgres` job | `frontend` job |
   |---|---|---|---|
   | `main` before | 2282 passed, 49 skipped | 49 passed, 2282 deselected | 1122 in 119 files |
   | PR A | **2322 passed, 50 skipped** | **50 passed, 2322 deselected** | **1122 in 119 files** |
-  | PR B | **2322 passed, 50 skipped** (no backend change) | **50 passed, 2322 deselected** | **1141 in 122 files** |
+  | PR B | **2322 passed, 50 skipped** (no backend change) | **50 passed, 2322 deselected** | **1148 in 122 files** |
 
 ## Owner decisions
 
@@ -4818,12 +4819,12 @@ As T3. Frontend rows: `(cd frontend && npx vitest run <files> 2>&1 | grep -E "Te
 - [ ] **Step 1: The suites, typecheck, lint and the build**
 
 Run: `.venv/bin/python -m pytest -q backend/tests 2>&1 | tail -1`; the frontend suite; typecheck and lint; `(cd frontend && npm run build 2>&1 | grep -cE "Compiled successfully")`; `(cd frontend && npm run gen:api >/dev/null 2>&1 && git diff --exit-code src/lib/api/schema.d.ts >/dev/null; echo "drift $?")`
-**Expected:** `2291 passed, 50 skipped in <t>s` (no backend change: CI's jobs give PR A's `2322 passed, 50 skipped` and `50 passed, 2322 deselected`); `1141 passed` in 122 files; `typecheck 0`, `lint 0`; `1`; `drift 0`.
+**Expected:** `2291 passed, 50 skipped in <t>s` (no backend change: CI's jobs give PR A's `2322 passed, 50 skipped` and `50 passed, 2322 deselected`); `1148 passed` in 122 files (1141 before the build review fixes); `typecheck 0`, `lint 0`; `1`; `drift 0`.
 
 - [ ] **Step 2: No em dash added, nothing frozen touched, the branch's paths**
 
 Run: T4 Step 4's three commands (with PR A merged, `origin/main...HEAD` is PR B alone).
-**Expected:** `0`; `0`; `5 A` and `26 M` (the five new frontend files; the modified files of T7-T8 and `docs/ops-runbook.md`, PR A's record). No backend file, no migration, no generated file. Anything else: find why before the PR.
+**Expected:** `0`; `0`; `5 A` and `28 M` (the five new frontend files; the modified files of T7-T8, the build review fixes' two more, `frontend/src/lib/queries/services.ts` and `frontend/src/components/builder/review/review-send-step.test.tsx`, and `docs/ops-runbook.md`, PR A's record; this plan, with its build notes, makes `29 M`). No backend file, no migration, no generated file. Anything else: find why before the PR.
 
 ### Task 11: PR B: the draft PR, the merge, the after-deploy check, the phone check, the record (OWNER + agent)
 
@@ -4833,7 +4834,7 @@ Run: T4 Step 4's three commands (with PR A merged, `origin/main...HEAD` is PR B 
 
 (not replayed) `gh pr view <NA> -R <repo> --json state --jq .state` → `MERGED`; `curl -s <api>/openapi.json | python3 -c 'import json, sys; print("ServiceAffirmation" in json.load(sys.stdin)["components"]["schemas"])'` → `True` (PR B's pages send `affirmation`, which only PR A's API accepts: clarification 10); `gh pr list -R <repo> --head claude/slice-2-plan-4q33le --state open --json number,url` → `[]`. Send the owner exactly this, and wait for a clear yes:
 
-> The second half of the Affirmation of Faith change, the pages, is verified on this machine: frontend 1141 tests in 122 files (1122 in 119 before), typecheck, lint and the production build clean; the server side is live since PR #<NA>. In the Liturgy step the Affirmation becomes a card: a switch to include it, and a choice of the Apostles' Creed, the Nicene Creed or your own text. Switched off, nothing of it prints or goes in the email. Settings, Liturgy holds your church's default; admins change it, members read it. Old services print exactly as before. No database change this time. May I open the pull request as a **draft** titled "Affirmation PR B: the pages", so the checks run? Merging stays with you.
+> The second half of the Affirmation of Faith change, the pages, is verified on this machine: frontend 1148 tests in 122 files (1122 in 119 before), typecheck, lint and the production build clean; the server side is live since PR #<NA>. In the Liturgy step the Affirmation becomes a card: a switch to include it, and a choice of the Apostles' Creed, the Nicene Creed or your own text. Switched off, nothing of it prints or goes in the email. Settings, Liturgy holds your church's default; admins change it, members read it. Old services print exactly as before. No database change this time. May I open the pull request as a **draft** titled "Affirmation PR B: the pages", so the checks run? Merging stays with you.
 
 - [ ] **Step 2 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
 
@@ -4847,12 +4848,13 @@ Affirmation PR B: the pages of the Affirmation of Faith (owner's decisions 1, 2 
 - Data: draft version 5 (old drafts become the Apostles' Creed, switched on; a saved one stays Saved). Every body sends affirmation; "Save as new service" keeps the saved service's choice.
 - Guarded if it ever ran ahead of PR A: with no affirmation in GET /liturgy/config the Liturgy step keeps today's row and Settings leaves the default card out.
 - Tests: planted violations F1-F10 in the plan's Task 9 (no em dash, 44 px rows, old drafts stay Saved and print as saved, members cannot change the default, the body always carries it, Save as new service keeps the Nicene Creed, the two guards, the hanging indent).
+- Build review fixes: a POST leaves out the Apostles' Creed switched on, as it leaves out a blank bulletin, so a POST sent before the deploy whose answer was lost is replayed, not saved twice (a PUT always sends it); Settings' own text holds to the server's limit; the builder's own-text box counts characters past 18,000 as a prayer card does; tests for an open builder following a new Affirmation default and for Settings never sending own text left blank.
 - Rides along: the Affirmation PR A record in docs/ops-runbook.md.
 - Next: formatting (decisions 3 to 5).
 
 Before the merge: nothing (no migration). After the merge: the after-deploy check, a phone check of the card, an "Affirmation PR B record" in docs/ops-runbook.md.
 
-Tests: frontend 1122 → 1141 in 119 → 122 files; backend unchanged (backend/tests 2291 passed, 50 skipped; CI backend job 2322 passed, 50 skipped; CI Postgres job 50 passed, 2322 deselected)
+Tests: frontend 1122 → 1148 in 119 → 122 files; backend unchanged (backend/tests 2291 passed, 50 skipped; CI backend job 2322 passed, 50 skipped; CI Postgres job 50 passed, 2322 deselected)
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 
@@ -4862,7 +4864,7 @@ gh pr create -R <repo> --draft --base main --head claude/slice-2-plan-4q33le --t
 gh pr checks <NB> -R <repo> --watch --interval 30
 ```
 
-Run the last line with `run_in_background: true` (or the session's GitHub tools, to the same effect). **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's `backend` job `2322 passed, 50 skipped`, its `backend-postgres` job `50 passed, 2322 deselected` (both as on `main` after PR A), its `frontend` job `1141 passed` in 122 files. Then send: "PR #<NB> is green: frontend 1141 in 122 files, the backend as on main (2322 in CI, Postgres 50), and the Vercel preview builds. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <NB> -R <repo>`.
+Run the last line with `run_in_background: true` (or the session's GitHub tools, to the same effect). **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's `backend` job `2322 passed, 50 skipped`, its `backend-postgres` job `50 passed, 2322 deselected` (both as on `main` after PR A), its `frontend` job `1148 passed` in 122 files. Then send: "PR #<NB> is green: frontend 1148 in 122 files, the backend as on main (2322 in CI, Postgres 50), and the Vercel preview builds. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <NB> -R <repo>`.
 
 - [ ] **Step 3 (agent → OWNER): Ask to merge, then merge**
 
@@ -4991,6 +4993,23 @@ Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 5. Accepted, not changed (as with 0006).
 
 Counts after the fixes: local `backend/tests` **2291 passed, 50 skipped** (+3); CI-shaped (`.venv/bin/python -m pytest -q` from the root) **2322 passed, 50 skipped**; Postgres-marked collection `50/2372 tests collected (2322 deselected)` (not run on a cluster: the three new tests are not Postgres-only, so CI's job gives **50 passed, 2322 deselected**); frontend **1122 passed in 119 files**, unchanged. The counts in Part 1 (the count tables, T4's Expected, the owner's message, PR A's body and CI expectations) and Part 2's references to PR A's backend counts now give these numbers.
+
+**Affirmation PR B build (2026-10-24, T7-T10).** Built on `claude/slice-2-plan-4q33le` from `85a276a` (PR A's record on top of `main`, which carries PR A, merged as PR #64). Baseline as planned: local `backend/tests` 2291 passed, 50 skipped; frontend 1122 in 119 files. The 90 directives of T7 and T8 were applied from this file by the same script as PR A's (session scratchpad, not committed); none failed to match once. Every output matched its **Expected**, with no deviation in code or tests:
+- T7 (`fafd3eb`): 24 test directives; Step 2 `8 failed (8)`, `22 failed | 80 passed (102)`; 46 implementation directives; Step 4 `8 passed (8)`, `108 passed (108)`, then the suite **1137 passed in 121 files**, `typecheck 0`, `lint 0`.
+- T8 (`15fd3d3`): 6 test directives; Step 2 `2 failed | 1 passed (3)`, `2 failed | 23 passed (25)`; 14 implementation directives; Step 4 `3 passed (3)`, `29 passed (29)`, then the suite **1141 passed in 122 files**, `typecheck 0`, `lint 0`.
+- T9 (no commit): F1-F10 each failed exactly as the table says (F1, F2, F8, F10 `1 failed | 5 passed (6)`; F3 `2 failed | 13 passed (15)`; F4 `3 failed | 4 passed (7)`; F5, F9 `1 failed | 3 passed (4)`; F6 `3 failed | 15 passed (18)`; F7 `1 failed | 23 passed (24)`), each passed again once undone, and `git status --short` was empty. F7's text occurs twice in `followSaveMode`; the first was planted, as the row says.
+- T10: Step 1 local **2291 passed, 50 skipped** (no backend change), frontend **1141 passed in 122 files**, `typecheck 0`, `lint 0`, build `1`, `drift 0`. Step 2 against `origin/main` (`f9ad062`): `0` em dashes added, `0` frozen or CI files, `5 A` and `26 M` (the 26th is `docs/ops-runbook.md`, PR A's record); no backend, migration or generated file. This entry, committed after T10, makes this plan a 27th modified path: PR B shows `5 A` and `27 M`.
+- PR B's body (T11 Step 2) states these counts: frontend 1122 → 1141 in 119 → 122 files; backend/tests 2291 passed, 50 skipped; CI backend 2322 passed, 50 skipped; CI Postgres 50 passed, 2322 deselected (as on `main` after PR A; not rerun on a cluster, since PR B changes no backend file). They match.
+- Not run here: T11 (the PR, CI on GitHub, the merge, production and the phone).
+
+**Affirmation PR B build review fixes (2026-10-24).** A code review of PR B at `39d8cd2` found five things; all fixed here, frontend only. Each new test was run on the code before its fix or against a planted violation (it failed), then passed:
+1. **No duplicate save across the deploy** (`79e0533`). A version 4 draft's POST sent before the deploy, whose answer was lost, carried no `affirmation`; its key survives the migration (the fingerprint leaves out the Apostles' Creed switched on), but PR B's body always sent it, so the retry met `idempotency_mismatch` and was saved again under a new key. `useSaveService`'s POST body now leaves out the Apostles' Creed switched on (`TODAYS_AFFIRMATION`), as it leaves out a blank bulletin (2b-2 build review M1); the server stores NULL, which reads as it. The Nicene Creed, own text and switched off are sent; a PUT always sends it (clarification 5: a PUT without it keeps the saved choice), so a saved Nicene service switched back to the Apostles' Creed is saved. `review-send-step.test.tsx`: a v4 draft keyed by a lost POST, against a fake server holding that key with 3b's body (mismatch on any other body), lost again then retried: two POSTs, one key, identical bodies, no `affirmation` (on the code before: three POSTs, the mismatch retried under a new key); own text in a POST; the Nicene Creed in a POST, then the Apostles' Creed in the PUT. Planted, each failed: the POST never sending it (2 failed), the PUT sending the POST's body (2 failed, with 2b-2's M1 test).
+2. **An open builder follows a new Affirmation default alone** (`879dd93`). `store.test.ts`: `setLiturgyDefaults` with only `defaultAffirmation` changed (the Nicene Creed, then own text with only its text changed) updates a card still following it, stamped 1 ms after the draft, and writes it. Planted: the default-comparison clause removed, and its text clause alone; each `1 failed | 21 passed (22)`.
+3. **Settings' own text holds to the server's limit** (`3c0ea6b`). `ChurchAffirmation.text` has `max_length=max_section_text`; the box now takes `limits.max_section_text` as its `maxLength`, as the Liturgy step's card does. Failed before the fix.
+4. **The `ownBlank` guard in `onSubmit`** (`1c2f0d9`): own text left blank, the form submitted past the disabled button (as Enter would), sends nothing; a creed submitted the same way is saved. Planted: `ownBlank` removed from the guard; `1 failed | 5 passed (6)`.
+5. **The test title** "…and says so for a saved service" is now "follows a church whose default is its own text" (`295b5f9`); and the builder's own-text box counts characters past 18,000 against the limit, as a prayer card does (`COUNTER_FROM`, the count part of its description) (`19c292c`; failed before it).
+
+Counts after the fixes: frontend **1148 passed in 122 files** (+7), `typecheck 0`, `lint 0`, build `1`; no backend file changed (local `backend/tests` and CI counts as above, not rerun); `0` em dashes in the added lines; against `origin/main`, `5 A` and `29 M` with this plan. The counts table, T10's Expected, the owner's message, PR B's body and its CI expectations now give 1148.
 
 ## Follow-ups
 

@@ -17,7 +17,7 @@ import { toast } from "sonner";
 
 import { DEFAULT_BENEDICTION_FALLBACK } from "@/lib/liturgy/defaults";
 
-import type { DraftChurch, DraftV1, StepId } from "./schema";
+import { APOSTLES_DEFAULT, type AffirmationDefault, type DraftChurch, type DraftV1, type StepId } from "./schema";
 import { DraftStore, type DraftNotice, type Persistence } from "./store";
 
 export type DraftApi = {
@@ -45,6 +45,8 @@ export type DraftApi = {
   persistence: Persistence;
   /** The church's current default Benediction (its own, else the fallback), as the store applies it. */
   defaultBenediction: string;
+  /** The church's default Affirmation of Faith (the Apostles' Creed when the profile has none), as the store applies it. */
+  defaultAffirmation: AffirmationDefault;
 };
 
 export const DRAFT_MESSAGES = {
@@ -81,18 +83,24 @@ export function DraftProvider({
   children: ReactNode;
 }) {
   const defaultBenediction = church.default_benediction ?? DEFAULT_BENEDICTION_FALLBACK;
+  const affirmationChoice = church.default_affirmation?.choice ?? APOSTLES_DEFAULT.choice;
+  const affirmationText = church.default_affirmation?.text ?? APOSTLES_DEFAULT.text;
+  const defaultAffirmation = useMemo<AffirmationDefault>(
+    () => ({ choice: affirmationChoice, text: affirmationText }),
+    [affirmationChoice, affirmationText],
+  );
   const [store] = useState(
-    () => new DraftStore({ userId, church, notify, liturgyDefaults: { defaultBenediction } }),
+    () => new DraftStore({ userId, church, notify, liturgyDefaults: { defaultBenediction, defaultAffirmation } }),
   );
   const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   // Built once, so callbacks that read the draft through it (the generation provider's) keep their identity across edits.
   const [peek] = useState(() => () => store.getSnapshot().draft);
   const [sync] = useState(() => () => store.syncFromStorage({ quiet: true }));
 
-  // The profile refetched with another default (6a's Settings): untouched Benediction cards follow it.
+  // The profile refetched with another default (6a's Settings): untouched Benediction and Affirmation cards follow it.
   useEffect(() => {
-    store.setLiturgyDefaults({ defaultBenediction });
-  }, [store, defaultBenediction]);
+    store.setLiturgyDefaults({ defaultBenediction, defaultAffirmation });
+  }, [store, defaultBenediction, defaultAffirmation]);
 
   useEffect(() => {
     store.start();
@@ -130,8 +138,9 @@ export function DraftProvider({
       flush: store.flush,
       sync,
       defaultBenediction,
+      defaultAffirmation,
     }),
-    [snapshot, store, peek, sync, defaultBenediction],
+    [snapshot, store, peek, sync, defaultBenediction, defaultAffirmation],
   );
   return <DraftContext value={value}>{children}</DraftContext>;
 }

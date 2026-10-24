@@ -6,7 +6,15 @@ import { describe, expect, it } from "vitest";
 
 import { editScriptureLines, setPick, setTranslation } from "@/lib/draft/readings";
 import { pickFromHymn, setSlot } from "@/lib/hymns/picks";
-import { addCustomElement, editCardText, setCardEnabled, setCommunion, setSermonTitle } from "@/lib/liturgy/cards";
+import {
+  addCustomElement,
+  editAffirmationText,
+  editCardText,
+  setAffirmationChoice,
+  setCardEnabled,
+  setCommunion,
+  setSermonTitle,
+} from "@/lib/liturgy/cards";
 import { setAnnouncement, setCover, setPerson } from "@/lib/draft/bulletin";
 import { gg2013, savedService, serviceBulletin, testDraft } from "@/test/fixtures";
 
@@ -52,6 +60,7 @@ describe("documentRequest (slice 5a)", () => {
           { label: "Old place", text: "", insert_after: "end" },
         ],
         bulletin: serviceBulletin(), // always sent (printed bulletin PR 2b), here with nothing filled in
+        affirmation: { include: true, choice: "apostles", text: "" }, // always sent (the affirmation spec)
       },
     });
     expect(documentRequest(d, "bulletin").variant).toBe("bulletin");
@@ -76,6 +85,8 @@ describe("documentRequest (slice 5a)", () => {
     expect(service.sermon_title).toHaveLength(300);
     expect(service.custom_elements).toHaveLength(30);
     expect(service.custom_elements?.[0]).toEqual({ label: "L".repeat(200), text: "T".repeat(10_000), insert_after: "end" });
+    const own = setAffirmationChoice(editAffirmationText(d, "a".repeat(20_005)), "own");
+    expect(documentRequest(own, "bulletin").service.affirmation).toEqual({ include: true, choice: "own", text: "a".repeat(20_000) });
 
     // A picked reading over 200 characters goes cut, as its line does, so the pick still names that line.
     const long = `Matthew 21:33-46 ${"x".repeat(190)}`;

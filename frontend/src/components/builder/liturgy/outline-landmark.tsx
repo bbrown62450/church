@@ -24,7 +24,8 @@ const ROW = "flex min-h-11 w-full min-w-0 flex-wrap items-center gap-x-1 border-
  * slot's title and open Hymns; the readings show `effectivePicks` (an
  * automatic one marked "auto") and open Date & readings; the Sermon row shows
  * the title, or "[Sermon title]" when blank, and focuses the sermon field;
- * the Affirmation row shows its fixed text.
+ * the Affirmation row shows its fixed text (only when the API sends no
+ * Affirmation card: the affirmation spec).
  */
 export function OutlineLandmark({ item, draft }: { item: OutlineItem; draft: DraftV1 }) {
   const label = <span className="font-medium text-foreground">{item.label}</span>;

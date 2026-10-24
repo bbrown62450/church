@@ -1005,6 +1005,28 @@ canvas; decisions in
 | Not on the phone | Printing an app page from a dark-mode device prints light (checked in a headless browser only); contrast of every text pair (tests) | 2026-10-24 |
 | Follow-ups | Dark-mode menus and comboboxes keep a grey fill. Next, in the owner's order: the Affirmation of Faith change, text formatting, the em-dash follow-up, Theme PR 2 (bottom navigation bar and motion) | 2026-10-24 |
 
+### Affirmation PR A record
+
+Affirmation PR A, the server side of the Affirmation of Faith (the card's
+data, saving it with a service, the church default; owner's decisions and
+answers of 2026-10-24), merged as PR #64 with migration
+`0010_services_affirmation`. The owner followed "Before
+0010_services_affirmation" in `backend/migrations/README.md`. The pages are
+PR B.
+
+| Step | Result | Date |
+|---|---|---|
+| 1. Backup | db-backup run 40136232321 (started by the agent on the owner's word, from `main`): success, artifact `db-backup` 470,927 bytes | 2026-10-24 |
+| 2. Counts before | `0009_memberships_one_owner`, 31 services, 1 church | 2026-10-24 |
+| 3. The SQL | Rendered from the PR's code and matching README Step 3; described to the owner in plain words (one empty column added in one transaction, no row changed), not pasted and not run | 2026-10-24 |
+| Merge and deploy | PR #64 merged 21:57 UTC (17:57 Eastern), merge commit `f9ad062`. CI on `main`: success. `/health/ready` `{"ok":true,"db":"ok"}`; the live `/openapi.json` names `ServiceAffirmation` | 2026-10-24 |
+| 4. After the deploy | Deploy Logs not read (the live API and the query below confirm the upgrade ran). `0010_services_affirmation`, new column 1, with_affirmation 0 | 2026-10-24 |
+| Phone A1. The Liturgy step | The row "Affirmation of Faith · Apostles' Creed" as before | 2026-10-24 |
+| Phone A2. The downloads | The Word file downloaded and opened, the Apostles' Creed as before | 2026-10-24 |
+| Phone A3. Saving | A small change saved without an error | 2026-10-24 |
+| Not on the phone | The new choices, the email's attachments, a member's refused change and the exact creed texts: tests only | 2026-10-24 |
+| Follow-ups | Next: Affirmation PR B (the card and the Settings default), opened now that the live API names the new field | 2026-10-24 |
+
 ## Backups
 
 - **Workflow:** `.github/workflows/backup.yml` (`db-backup`). Daily at 08:37 UTC,
