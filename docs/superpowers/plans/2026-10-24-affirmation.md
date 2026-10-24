@@ -4560,7 +4560,7 @@ On a throwaway local cluster (never production), as the `postgres` user under `/
 - [ ] **Step 3: No em dash added, nothing frozen touched, the branch's paths**
 
 Run: `git diff origin/main...HEAD | grep '^+' | grep -c $'\xe2\x80\x94'`; `git diff --name-only origin/main...HEAD -- app.py streamlit_views streamlit_auth.py streamlit_tenancy.py ui_helpers.py streamlit_tests requirements.txt requirements-dev.txt .github | wc -l`; `git diff --name-status origin/main...HEAD | awk '{print $1}' | sort | uniq -c`
-**Expected:** `0`; `0`; `{{AM_COUNTS}}` (the nine new files, the spec, this plan and the decisions doc; the modified files of T1-T4 and `docs/ops-runbook.md`, whose Theme PR 1 record rides along). Anything else: find why before the PR.
+**Expected:** `0`; `0`; `12 A` and `52 M` (the nine new files, the spec, this plan and the decisions doc; the modified files of T1-T4 and `docs/ops-runbook.md`, whose Theme PR 1 record rides along). Anything else: find why before the PR.
 
 ### Task 7: Before the merge: the migration routine (OWNER + agent)
 
@@ -4723,7 +4723,15 @@ Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 
 ## Build notes
 
-{{BUILD_NOTES}}
+**How this plan was written (2026-10-24).** The code was built and run in a throwaway worktree of `4fdd605` (in the session scratchpad, outside the repo directory; the repo's `.venv` linked in, a hard-linked copy of `frontend/node_modules`, because Turbopack refuses a symlinked one). The directives were generated from that worktree by a script (a new file as **Create**; every change as **In … replace** with just enough whole-line context to occur once in the file as it stands at that point; files split across tasks by hunk), and the script checked that applying them in order gives the worktree's files exactly. The plan was then **replayed**.
+
+**Replay result: green.** On a fresh worktree of `7a3ae24` (this plan as committed), all 167 directives of T1-T4 were applied from this file by the replay script (none failed to match once), every "Run:" of T1-T6 was run, and its output is the step's **Expected** above (times as `<t>`, absolute paths as `<repo root>`). Each tests-first step failed as quoted and each later check passed as quoted; the four commits (by the plan's `git add` lists) left the worktree clean, and its files were byte-identical to the build worktree's. Counts: backend 2251 passed, 49 skipped → **2270**, 49 (T1) → **2285**, 50 (T2); frontend 1122 in 119 files → **1135** in 121 (T3) → **1138** in 122 (T4); typecheck and lint clean after each frontend task. T5: all twelve planted violations failed exactly as the table says, and each was undone. T6: the production build compiled, `schema.d.ts` had no drift, `0` em dashes in the branch's added lines, `0` frozen or CI files, `12 A` and `52 M`. Postgres (T6 Step 2) on a throwaway PostgreSQL 16 cluster run as the `postgres` user under `/var/lib/postgresql/` (deleted afterwards): `50 passed, 2285 deselected`; `alembic upgrade head`, `check` ("No new upgrade operations detected."), `downgrade base`, `upgrade head` all exit 0 and `current` is `0010_services_affirmation (head)`. The backend docs tests T8 Step 12 runs: `89 passed`. **Not replayed:** T7 and T8 (the owner, GitHub, production).
+
+**While building:**
+- The first frontend split put the card in T4; the replay showed the liturgy queries test (`uses a test config equal to the shared fixtures`) failing in T3 once T2 regenerated the shared outline, so the card moved into T3 with the outline fixture.
+- Test sources spell the em dash as an escape (`"\u2014"`), so T6 Step 3 counts none in the added lines.
+- `test_0006_adds_the_nullable_bulletin_column_and_keeps_rows` compared 0006's new column against head; it now upgrades to `0006_services_bulletin` (T2 Step 1).
+- The member check holds at two layers (`require_admin` on the route and `require_admin_role` under the church-row lock); P5 removes both to show the test catches it.
 
 ## Follow-ups
 

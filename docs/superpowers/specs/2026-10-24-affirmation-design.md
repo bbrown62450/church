@@ -33,7 +33,7 @@ A card **Affirmation of Faith** above "Liturgy prompts" on `/settings/liturgy`, 
 - The same three choices and, for Your own text, a text box ("Paste your church's own text, for example A Brief Statement of Faith." as its hint). The creeds show their text behind "Show creed text".
 - Owners and admins change it and press **Save default** (disabled until something changed; the leave guard asks before leaving unsaved; newer server data rebases the form as on the other settings pages). Your own text with a blank box cannot be saved: "Type your church's own text, or choose a creed."
 - Members see it read-only, with "Only admins can change the default. You can read it below.", and no Save button. The server refuses a member's change (403, `PATCH /church` is admins only) and writes nothing.
-- A church that never set it has the Apostles' Creed as its default (today's behavior). The default is always "included": a church that never says a creed switches it off per service (owner question 3).
+- A church that never set it has the Apostles' Creed as its default (today's behavior). The default is always "included": a church that never says a creed switches it off per service (owner question 4).
 
 ### Review step and summary
 
