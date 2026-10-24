@@ -984,6 +984,27 @@ recorded here; the owner rotated each one in its own service.
 | Notion | The running API never reads `NOTION_*` (only the one-off migration scripts do); the owner may delete the `NOTION_*` variables in Railway and should disconnect the integration in Notion so a stolen key stops working | 2026-10-22 |
 | Follow-ups | Delete the disabled Google secret after the next bulletin email. Owner to decide whether to move off Railway (a custom `api.` domain would make any move easier) | 2026-10-22 |
 
+### Theme PR 1 record
+
+Theme PR 1 (the Material 3 look: teal seed, Figtree, rounder shapes,
+chips for the builder steps and Settings sections, the restyled Save bar,
+dark mode following the phone on screen only, a white W app icon on teal,
+focus rings at full strength) merged as PR #63. No migration and no
+backend change. The owner chose Option B (teal, Figtree) from a preview
+canvas; decisions in
+`docs/superpowers/specs/2026-10-22-material-theme-decisions.md`.
+
+| Step | Result | Date |
+|---|---|---|
+| Merge and deploy | PR #63 merged 20:51 UTC (16:51 Eastern), merge commit `46077dd`. CI on `main`: success. Backend `/health/ready` `{"ok":true,"db":"ok"}` | 2026-10-22 |
+| Phone 1. Light | The new look showed after a reload | 2026-10-24 |
+| Phone 2. Dark | All text readable in dark mode, in the builder and Settings | 2026-10-24 |
+| Phone 3. Paper | The cover picture's frame stayed light in dark mode | 2026-10-24 |
+| Phone 4. Chips | Settings section chips and the builder's step chips easy to read and tap | 2026-10-24 |
+| Phone 5. The icon (iPhone, Safari) | Teal with a white W on the home screen; it opens the app in Safari | 2026-10-24 |
+| Not on the phone | Printing an app page from a dark-mode device prints light (checked in a headless browser only); contrast of every text pair (tests) | 2026-10-24 |
+| Follow-ups | Dark-mode menus and comboboxes keep a grey fill. Next, in the owner's order: the Affirmation of Faith change, text formatting, the em-dash follow-up, Theme PR 2 (bottom navigation bar and motion) | 2026-10-24 |
+
 ## Backups
 
 - **Workflow:** `.github/workflows/backup.yml` (`db-backup`). Daily at 08:37 UTC,
