@@ -119,6 +119,16 @@ def test_the_church_default_reads_as_the_apostles_creed_until_an_admin_sets_it(c
     assert r.json()["default_affirmation"] == {"choice": "nicene", "text": ""}
 
 
+def test_the_church_default_s_own_text_is_stored_word_safe(client, church):
+    r = call(client, "PATCH", "/church", church,
+             json={"default_affirmation": {"choice": "own", "text": "We trust\x00 in God.\x0bAmen."}})
+    assert r.status_code == 200, r.text
+    assert r.json()["default_affirmation"] == {"choice": "own", "text": "We trust in God.\nAmen."}
+    with session_scope() as s:
+        settings = s.get(Church, church).settings
+    assert settings["default_affirmation"] == {"choice": "own", "text": "We trust in God.\nAmen."}
+
+
 def test_a_member_cannot_change_the_church_default(client, church):
     call(client, "PATCH", "/church", church, json={"default_affirmation": {"choice": "nicene", "text": ""}})
     r = call(client, "PATCH", "/church", church, email=MEMBER,
