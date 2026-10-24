@@ -22,7 +22,7 @@ def test_usecases_package_imports_no_fastapi_or_streamlit():
     code = ("import sys, usecases, usecases.onboarding, usecases.church_profile, usecases.lectionary, usecases.passages, vanderbilt_lectionary, domain_errors, db.ids, timezones, "
             "cache, integrations.http, "
             "token_bucket, integrations.budget, scripture_refs, scripture_fetcher, integrations.openai_client, hymn_search, hymn_suggest, usecases.hymns, "
-            "liturgy_config, prayer_library, liturgy_prompts, usecases.liturgy, review_checks, usecases.liturgy_review, "
+            "affirmation, liturgy_config, prayer_library, liturgy_prompts, usecases.liturgy, review_checks, usecases.liturgy_review, "
             "service_output, worship_service, usecases.archive, usecases.documents, repos.services, hymn_usage, "
             "printed_bulletin, printed_pdf, printed_docx, bulletin_settings, usecases.church_bulletin, service_bulletin, "
             "bulletin_image, usecases.bulletin_images, repos.bulletin_images, usecases.members, usecases.church_admin, email_addresses, usecases.contacts, google_oauth, usecases.email, bulletin_email, hymnal_sources, usecases.hymn_library, usecases.prayer_library, usecases.role_policy, repos.integrity; "

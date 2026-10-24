@@ -29,6 +29,8 @@ prints PR 1's placeholders. The log line never carries a bulletin's text.
 PR 3a adds the week's cover picture: the church's picture the bulletin
 points at, read with the name (none when it is not the church's or no
 longer there: the reading and the date print alone).
+The affirmation spec adds the Affirmation of Faith as posted; a body
+without one (a page from before it) prints the Apostles' Creed, as before.
 """
 from __future__ import annotations
 
@@ -44,6 +46,7 @@ import printed_docx
 import printed_pdf
 import scripture_fetcher
 import service_output
+from affirmation import Affirmation
 from db import session_scope
 from service_bulletin import ServiceBulletin
 from domain_errors import Forbidden
@@ -70,7 +73,7 @@ def build_document(church_id: uuid.UUID, data: archive.ServiceInput,
         service_date=clean.service_date, occasion=clean.occasion, scriptures=clean.scriptures, hymns=hymns,
         liturgy=clean.liturgy, sermon_title=clean.sermon_title, selected_ot_ref=clean.selected_ot_ref,
         selected_nt_ref=clean.selected_nt_ref, include_communion=clean.include_communion,
-        custom_elements=clean.custom_elements)
+        custom_elements=clean.custom_elements, affirmation=clean.affirmation or Affirmation())
     content = service_output.render_docx(resolved, variant)
     logger.info("documents.build church=%s variant=%s bytes=%d ms=%d", church_id, variant, len(content),
                 round((time.monotonic() - started) * 1000))
@@ -131,7 +134,7 @@ def build_printed(church_id: uuid.UUID, data: archive.ServiceInput, fmt: printed
         service_date=clean.service_date, occasion=clean.occasion, scriptures=clean.scriptures, hymns=hymns,
         liturgy=clean.liturgy, sermon_title=clean.sermon_title, selected_ot_ref=clean.selected_ot_ref,
         selected_nt_ref=clean.selected_nt_ref, include_communion=clean.include_communion,
-        custom_elements=clean.custom_elements)
+        custom_elements=clean.custom_elements, affirmation=clean.affirmation or Affirmation())
     ot, nt = service_output.resolve_doc_readings(list(clean.scriptures), clean.selected_ot_ref,
                                                  clean.selected_nt_ref)
     tid = effective_translation(translation, church["settings"])

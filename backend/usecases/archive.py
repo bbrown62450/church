@@ -65,6 +65,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from typing import Optional
 
+import affirmation as af
 from db import session_scope
 from db.ids import as_uuid
 from domain_errors import Conflict, InvalidInput, NotFound
@@ -115,6 +116,7 @@ class ServiceInput:
     include_communion: bool = False
     custom_elements: tuple[CustomElement, ...] = ()
     bulletin: Optional[ServiceBulletin] = None   # None: not sent (a client from before printed bulletin PR 2b)
+    affirmation: Optional[af.Affirmation] = None  # None: not sent (a client from before the affirmation spec)
 
 
 def clean_input(data: ServiceInput) -> ServiceInput:
@@ -142,6 +144,7 @@ def clean_input(data: ServiceInput) -> ServiceInput:
         custom_elements=tuple(CustomElement(clean(e.label), clean(e.text), e.insert_after)
                               for e in data.custom_elements),
         bulletin=None if data.bulletin is None else data.bulletin.map_texts(clean),
+        affirmation=None if data.affirmation is None else replace(data.affirmation, text=clean(data.affirmation.text)),
     )
 
 
