@@ -11,14 +11,19 @@ from docx import Document
 from sqlalchemy import select
 
 import affirmation as af
+import email_contacts
+import google_oauth
+from api.deps import get_google_config
 from db import session_scope
 from db.models import Church, Service
 from repos.memberships import add_membership
 from tests.api_helpers import church_headers, make_api_client
+from tests.fake_google import REFRESH_TOKEN, FakeGoogle
 
 EMAIL = "pastor@example.com"
 MEMBER = "member@example.com"
 ADMIN = "admin@example.com"
+SENDER = "sender@example.com"
 SERVICE = {"service_date_iso": "2026-10-04", "occasion": "World Communion Sunday", "sermon_title": "Living Water"}
 DEFAULT = {"include": True, "choice": "apostles", "text": ""}
 OWN = "We trust in God the Holy Spirit."
@@ -104,6 +109,32 @@ def test_the_word_file_follows_the_body_and_logs_no_text(client, church, caplog)
     assert "Affirmation of Faith" not in paragraphs({**SERVICE, "affirmation": {**DEFAULT, "include": False}})
     assert OWN in paragraphs({**SERVICE, "affirmation": {"include": True, "choice": "own", "text": OWN}})
     assert OWN not in caplog.text
+
+
+def test_the_printed_bulletin_and_the_email_log_no_text(client, church, make_user, caplog):
+    """The printed bulletin (POST /documents/printed) and its email (POST
+    /bulletin-emails, Gmail faked: nothing is sent) build the real files with
+    the member's own text and log none of it."""
+    caplog.set_level(logging.DEBUG)
+    marked = "MARKED-AFFIRMATION-7f3a we trust in God."
+    body = {**SERVICE, "affirmation": {"include": True, "choice": "own", "text": marked}}
+    r = call(client, "POST", "/documents/printed", church, json={"format": "pdf", "service": body})
+    assert r.status_code == 200, r.text
+    sender = make_user(email=SENDER)
+    add_membership(sender, church, "member")
+    google_oauth.save_user_token(sender, SENDER, REFRESH_TOKEN)
+    google = FakeGoogle(email=SENDER).install()
+    client.app.dependency_overrides[get_google_config] = lambda: google_oauth.GoogleOAuthConfig(
+        "client-123", "secret-456", "https://app.example.org/gmail/callback")
+    mary = email_contacts.add_contact(church, name="Mary", email="mary@example.org")["id"]
+    r = call(client, "POST", "/bulletin-emails", church, email=SENDER, **{"Idempotency-Key": str(uuid.uuid4())},
+             json={"service": body, "contact_ids": [mary], "attachments": ["docx", "pdf"]})
+    assert (r.status_code, r.json()) == (200, {"sent": True, "recipient_count": 1}), r.text
+    (sent,) = google.sent()
+    docx_file = next(p for p in sent.iter_attachments() if p.get_filename().endswith(".docx"))
+    assert marked in [p.text for p in Document(BytesIO(docx_file.get_content())).paragraphs]
+    assert caplog.records                                           # the routes did log; none of it is the text
+    assert "MARKED-AFFIRMATION" not in caplog.text and "we trust in God" not in caplog.text
 
 
 def test_the_church_default_reads_as_the_apostles_creed_until_an_admin_sets_it(client, church):
