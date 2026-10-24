@@ -48,14 +48,15 @@ As in the earlier plans: **Create `path`:** the block is the whole new file; **I
   |---|---|---|
   | T1 | +20 (`test_affirmation.py`, a new file) → **2271 passed, 49 skipped** | unchanged |
   | T2 | +17 (`test_api_affirmation.py`, a new file, 12; `test_migrations.py` +5) and +1 Postgres-only (`test_migrations.py`, skipped here) → **2288 passed, 50 skipped** | unchanged: **1122 in 119 files** (only the test fixtures and the generated types change) |
+  | Build review fixes | +3 (`test_affirmation.py` +1, `test_api_affirmation.py` +2) → **2291 passed, 50 skipped** | unchanged: **1122 in 119 files** |
   | T7 | unchanged | +15 (`affirmation.test.ts` 8 and `affirmation-card.test.tsx` 6, new files; `migrate.test.ts` +1) → **1137 in 121 files** |
   | T8 | unchanged | +4 (`affirmation-default-card.test.tsx`, a new file) → **1141 in 122 files** |
 
   | CI on | `backend` job | `backend-postgres` job | `frontend` job |
   |---|---|---|---|
   | `main` before | 2282 passed, 49 skipped | 49 passed, 2282 deselected | 1122 in 119 files |
-  | PR A | **2319 passed, 50 skipped** | **50 passed, 2319 deselected** | **1122 in 119 files** |
-  | PR B | **2319 passed, 50 skipped** (no backend change) | **50 passed, 2319 deselected** | **1141 in 122 files** |
+  | PR A | **2322 passed, 50 skipped** | **50 passed, 2322 deselected** | **1122 in 119 files** |
+  | PR B | **2322 passed, 50 skipped** (no backend change) | **50 passed, 2322 deselected** | **1141 in 122 files** |
 
 ## Owner decisions
 
@@ -2157,7 +2158,7 @@ Backend rows: `.venv/bin/python -m pytest -q <files> 2>&1 | tail -1`.
 - [ ] **Step 1: The suites, as run here and as CI runs them**
 
 Run: `.venv/bin/python -m pytest -q backend/tests 2>&1 | tail -1`; then CI's `backend` command, from the repo root: `.venv/bin/python -m pytest -q 2>&1 | tail -1`
-**Expected:** `2288 passed, 50 skipped in <t>s` (local); `2319 passed, 50 skipped in <t>s` (CI's: the same plus `streamlit_tests`' 31).
+**Expected:** `2291 passed, 50 skipped in <t>s` (local); `2322 passed, 50 skipped in <t>s` (CI's: the same plus `streamlit_tests`' 31).
 
 - [ ] **Step 2: Today's pages against PR A (owner answer A)**
 
@@ -2169,7 +2170,7 @@ Run: the frontend suite; typecheck and lint; `(cd frontend && npm run build 2>&1
 - [ ] **Step 3: Postgres, as CI's `backend-postgres` job**
 
 On a throwaway local cluster (never production), as the `postgres` user under `/var/lib/postgresql/<new dir>`, port 55432, trust auth: CI's command from the repo root, `TEST_DATABASE_URL=postgresql://postgres@localhost:55432/postgres .venv/bin/python -m pytest -m postgres -q 2>&1 | tail -1`; then plant P9 (T3) and run `TEST_DATABASE_URL=postgresql://postgres@localhost:55432/postgres .venv/bin/python -m pytest -m postgres -q backend/tests/test_migrations.py -k 0010 2>&1 | tail -1`, and undo it; then, on a new database `ci_check` there, from `backend/` with `DATABASE_URL` pointing at it: `alembic upgrade head 2>&1 | grep "Running upgrade 0009"`, `alembic check`, `alembic downgrade base`, `alembic upgrade head`, `alembic current`. Stop the cluster and delete its directory afterwards.
-**Expected:** `50 passed, 2319 deselected, 1 warning in <t>s`; P9: `1 failed, 60 deselected`; the upgrade prints the README's Step 4 line exactly (`INFO  [alembic.runtime.migration] Running upgrade 0009_memberships_one_owner -> 0010_services_affirmation, Services: the Affirmation of Faith (affirmation spec, "Data shape")`); each command exits 0, `check` prints `No new upgrade operations detected.`, `current` prints `0010_services_affirmation (head)`.
+**Expected:** `50 passed, 2322 deselected, 1 warning in <t>s`; P9: `1 failed, 60 deselected`; the upgrade prints the README's Step 4 line exactly (`INFO  [alembic.runtime.migration] Running upgrade 0009_memberships_one_owner -> 0010_services_affirmation, Services: the Affirmation of Faith (affirmation spec, "Data shape")`); each command exits 0, `check` prints `No new upgrade operations detected.`, `current` prints `0010_services_affirmation (head)`.
 
 - [ ] **Step 4: No em dash added, nothing frozen touched, the branch's paths**
 
@@ -2194,7 +2195,7 @@ Run: `git diff origin/main...HEAD | grep '^+' | grep -c $'\xe2\x80\x94'`; `git d
 
 (not replayed) `gh pr list -R <repo> --head claude/slice-2-plan-4q33le --state open --json number,url` → `[]`. Send the owner exactly this, and wait for a clear yes:
 
-> The first half of the Affirmation of Faith change, the server side, is verified on this machine: 2288 backend tests here (2251 before), today's 1122 frontend tests unchanged against it, typecheck, lint, the production build and the Postgres checks clean. It teaches the server the Affirmation card (the Apostles' Creed, the Nicene Creed or your own text, and your church's default) and adds one empty database column, so the backup and the read-only checks you did come first. You will see no change in the app yet: today's pages keep working exactly as now. The pages come in a second pull request once this one is live. May I open this one as a **draft** titled "Affirmation PR A: the server side", so the checks run? Merging stays with you.
+> The first half of the Affirmation of Faith change, the server side, is verified on this machine: 2291 backend tests here (2251 before), today's 1122 frontend tests unchanged against it, typecheck, lint, the production build and the Postgres checks clean. It teaches the server the Affirmation card (the Apostles' Creed, the Nicene Creed or your own text, and your church's default) and adds one empty database column, so the backup and the read-only checks you did come first. You will see no change in the app yet: today's pages keep working exactly as now. The pages come in a second pull request once this one is live. May I open this one as a **draft** titled "Affirmation PR A: the server side", so the checks run? Merging stays with you.
 
 - [ ] **Step 2 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
 
@@ -2214,7 +2215,7 @@ Affirmation PR A: the server side of the Affirmation of Faith (owner's decisions
 
 Before the merge: backend/migrations/README.md "Before 0010_services_affirmation" (backup, counts, the SQL; done). After the merge: its Step 4 (the deploy log line, the live /openapi.json, the read-only check), a minimal phone check, an "Affirmation PR A record" in docs/ops-runbook.md.
 
-Tests: backend/tests 2251 → 2288 passed (49 → 50 Postgres-only skipped here); CI backend job 2282 → 2319 passed (with streamlit_tests' 31), 49 → 50 skipped; CI Postgres job 49 → 50 passed, 2282 → 2319 deselected; frontend unchanged, 1122 in 119 files
+Tests: backend/tests 2251 → 2291 passed (49 → 50 Postgres-only skipped here); CI backend job 2282 → 2322 passed (with streamlit_tests' 31), 49 → 50 skipped; CI Postgres job 49 → 50 passed, 2282 → 2322 deselected; frontend unchanged, 1122 in 119 files
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 
@@ -2224,7 +2225,7 @@ gh pr create -R <repo> --draft --base main --head claude/slice-2-plan-4q33le --t
 gh pr checks <NA> -R <repo> --watch --interval 30
 ```
 
-Run the last line with `run_in_background: true` (or the session's GitHub tools, to the same effect). **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's `backend` job `2319 passed, 50 skipped`, its `backend-postgres` job `50 passed, 2319 deselected`, its `frontend` job `1122 passed` in 119 files. Then send: "PR #<NA> is green: backend 2319 in CI (2288 plus the 31 old Streamlit tests), Postgres 50, frontend 1122 in 119 files unchanged, and the Vercel preview builds. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <NA> -R <repo>`.
+Run the last line with `run_in_background: true` (or the session's GitHub tools, to the same effect). **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's `backend` job `2322 passed, 50 skipped`, its `backend-postgres` job `50 passed, 2322 deselected`, its `frontend` job `1122 passed` in 119 files. Then send: "PR #<NA> is green: backend 2322 in CI (2291 plus the 31 old Streamlit tests), Postgres 50, frontend 1122 in 119 files unchanged, and the Vercel preview builds. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <NA> -R <repo>`.
 
 - [ ] **Step 3 (agent → OWNER): Ask to merge, then merge**
 
@@ -4817,7 +4818,7 @@ As T3. Frontend rows: `(cd frontend && npx vitest run <files> 2>&1 | grep -E "Te
 - [ ] **Step 1: The suites, typecheck, lint and the build**
 
 Run: `.venv/bin/python -m pytest -q backend/tests 2>&1 | tail -1`; the frontend suite; typecheck and lint; `(cd frontend && npm run build 2>&1 | grep -cE "Compiled successfully")`; `(cd frontend && npm run gen:api >/dev/null 2>&1 && git diff --exit-code src/lib/api/schema.d.ts >/dev/null; echo "drift $?")`
-**Expected:** `2288 passed, 50 skipped in <t>s` (no backend change: CI's jobs give PR A's `2319 passed, 50 skipped` and `50 passed, 2319 deselected`); `1141 passed` in 122 files; `typecheck 0`, `lint 0`; `1`; `drift 0`.
+**Expected:** `2291 passed, 50 skipped in <t>s` (no backend change: CI's jobs give PR A's `2322 passed, 50 skipped` and `50 passed, 2322 deselected`); `1141 passed` in 122 files; `typecheck 0`, `lint 0`; `1`; `drift 0`.
 
 - [ ] **Step 2: No em dash added, nothing frozen touched, the branch's paths**
 
@@ -4851,7 +4852,7 @@ Affirmation PR B: the pages of the Affirmation of Faith (owner's decisions 1, 2 
 
 Before the merge: nothing (no migration). After the merge: the after-deploy check, a phone check of the card, an "Affirmation PR B record" in docs/ops-runbook.md.
 
-Tests: frontend 1122 → 1141 in 119 → 122 files; backend unchanged (backend/tests 2288 passed, 50 skipped; CI backend job 2319 passed, 50 skipped; CI Postgres job 50 passed, 2319 deselected)
+Tests: frontend 1122 → 1141 in 119 → 122 files; backend unchanged (backend/tests 2291 passed, 50 skipped; CI backend job 2322 passed, 50 skipped; CI Postgres job 50 passed, 2322 deselected)
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 
@@ -4861,7 +4862,7 @@ gh pr create -R <repo> --draft --base main --head claude/slice-2-plan-4q33le --t
 gh pr checks <NB> -R <repo> --watch --interval 30
 ```
 
-Run the last line with `run_in_background: true` (or the session's GitHub tools, to the same effect). **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's `backend` job `2319 passed, 50 skipped`, its `backend-postgres` job `50 passed, 2319 deselected` (both as on `main` after PR A), its `frontend` job `1141 passed` in 122 files. Then send: "PR #<NB> is green: frontend 1141 in 122 files, the backend as on main (2319 in CI, Postgres 50), and the Vercel preview builds. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <NB> -R <repo>`.
+Run the last line with `run_in_background: true` (or the session's GitHub tools, to the same effect). **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's `backend` job `2322 passed, 50 skipped`, its `backend-postgres` job `50 passed, 2322 deselected` (both as on `main` after PR A), its `frontend` job `1141 passed` in 122 files. Then send: "PR #<NB> is green: frontend 1141 in 122 files, the backend as on main (2322 in CI, Postgres 50), and the Vercel preview builds. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <NB> -R <repo>`.
 
 - [ ] **Step 3 (agent → OWNER): Ask to merge, then merge**
 
@@ -4981,6 +4982,15 @@ Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 - T4: Step 1 local **2288 passed, 50 skipped**, CI-shaped (`python -m pytest -q` from the root) **2319 passed, 50 skipped**. Step 2 frontend **1122 passed in 119 files** (unchanged), `typecheck 0`, `lint 0`, build `1`, `drift 0`. Step 3 on a throwaway PostgreSQL 16 cluster run as the `postgres` user under `/var/lib/postgresql/` on port 55432 (stopped and deleted afterwards): CI's command **50 passed, 2319 deselected, 1 warning**; on `ci_check`, `alembic upgrade head` printed the README's Step 4 line exactly, `check` printed `No new upgrade operations detected.`, `downgrade base` and `upgrade head` exited 0, `current` printed `0010_services_affirmation (head)`. Step 4: `0` em dashes added, `0` frozen or CI files, `7 A` and `25 M` against `origin/main`.
 - PR A's body (T6 Step 2) states these counts: backend/tests 2288 (50 skipped), CI backend 2319 passed and 50 skipped, CI Postgres 50 passed and 2319 deselected, frontend 1122 in 119 files. They match.
 - Not run here: T5 and T6 (the owner's routine, the PR, CI on GitHub, the merge, production and the phone) and Part 2.
+
+**Affirmation PR A build review fixes (2026-10-24).** A code review of PR A at `3c0551e` found five things; four fixed here, tests and one doc line only, no behavior change. Each new test was run, its violation planted (it failed), undone (it passed):
+1. **The creeds word for word** (major test gap; `363f7d0`). `test_the_creeds_in_full_word_for_word` writes out, in the test file itself, the Nicene Creed's 32 sense lines (one assertion per line, numbered), the Apostles' Creed in full and the ELLC credit line, and compares `affirmation.py` with them. The module's Nicene text was checked against https://www.englishtexts.org/the-nicene-creed (fetched 2026-10-24) and matches it exactly, line 26 without its brackets. Planted, each failed: "quick" → "quack" (Apostles'), "heaven" → "Heaven" on line 14, lines 13 and 14 swapped, "worshiped" → "worshipped".
+2. **The church default's own text is stored Word-safe** (`82198fe`). `test_the_church_default_s_own_text_is_stored_word_safe`: PATCH /church with a NUL and a vertical tab inside the text; the answer and `churches.settings` hold `"We trust in God.\nAmen."`. Planted: `archive._xml_safe` removed from the `default_affirmation` branch of `usecases/church_admin.py`; it failed.
+3. **No text in the logs of the printed bulletin and the email** (`7c7cd9f`). `test_the_printed_bulletin_and_the_email_log_no_text`: POST /documents/printed and POST /bulletin-emails (Gmail is `tests.fake_google`; nothing is sent) with own text carrying a marked string, the real files built (the emailed Word file holds the text), caplog at DEBUG holding none of it. Planted: `logger.info("affirmation %s", resolved.affirmation.text)` in `usecases/documents.build_printed`; it failed.
+4. **The spec's credit line** (`1e69045`) now quotes the notice as the code prints it, in ELLC's worked example form (no comma after 1998).
+5. Accepted, not changed (as with 0006).
+
+Counts after the fixes: local `backend/tests` **2291 passed, 50 skipped** (+3); CI-shaped (`.venv/bin/python -m pytest -q` from the root) **2322 passed, 50 skipped**; Postgres-marked collection `50/2372 tests collected (2322 deselected)` (not run on a cluster: the three new tests are not Postgres-only, so CI's job gives **50 passed, 2322 deselected**); frontend **1122 passed in 119 files**, unchanged. The counts in Part 1 (the count tables, T4's Expected, the owner's message, PR A's body and CI expectations) and Part 2's references to PR A's backend counts now give these numbers.
 
 ## Follow-ups
 
