@@ -3032,7 +3032,8 @@ describe("the Affirmation of Faith card (affirmation spec)", () => {
 Run: `(cd frontend && npx vitest run src/lib/liturgy/affirmation.test.ts src/lib/draft/schema.test.ts src/lib/draft/migrate.test.ts src/lib/draft/store.test.ts src/lib/draft/mapping.test.ts src/lib/documents.test.ts src/components/builder/liturgy/affirmation-card.test.tsx src/components/builder/liturgy/liturgy-step.test.tsx 2>&1 | grep -E "Test Files|Tests ")`
 **Expected:**
 ```
-@@T7FAIL@@
+ Test Files  8 failed (8)
+      Tests  22 failed | 80 passed (102)
 ```
 (The two new files fail to load: their imports do not exist yet.)
 
@@ -4073,7 +4074,8 @@ import { AiBar } from "./ai-bar";
 Run: the Step 2 command; then the suite; then typecheck and lint.
 **Expected:**
 ```
-@@T7PASS@@
+ Test Files  8 passed (8)
+      Tests  108 passed (108)
 ```
 ```
  Test Files  121 passed (121)
@@ -4321,7 +4323,8 @@ import { testRouter } from "@/test/mocks";
 Run: `(cd frontend && npx vitest run src/components/settings/affirmation-default-card.test.tsx src/components/builder/builder-shell.test.tsx src/components/settings/liturgy-prompts-page.test.tsx 2>&1 | grep -E "Test Files|Tests ")`
 **Expected:**
 ```
-@@T8FAIL@@
+ Test Files  2 failed | 1 passed (3)
+      Tests  2 failed | 23 passed (25)
 ```
 
 - [ ] **Step 3: Write the Settings card and the summary line**
@@ -4767,7 +4770,8 @@ export default function LiturgySettingsRoute() {
 Run: the Step 2 command; then the suite; then typecheck and lint.
 **Expected:**
 ```
-@@T8PASS@@
+ Test Files  3 passed (3)
+      Tests  29 passed (29)
 ```
 ```
  Test Files  122 passed (122)
@@ -4795,16 +4799,16 @@ As T3. Frontend rows: `(cd frontend && npx vitest run <files> 2>&1 | grep -E "Te
 
 | # | Rule | Change | Run | Expected |
 |---|---|---|---|---|
-| F1 | no em dash in user-facing copy | `frontend/src/components/builder/liturgy/affirmation-card.tsx`: `"Not printed or emailed."` → `"Not printed \u2014 or emailed."` | `src/components/builder/liturgy/affirmation-card.test.tsx` | `@@F1@@` |
-| F2 | 44 px rows at 375 px | same file: `className="flex min-h-11 cursor-pointer items-center gap-3 text-sm"` → `className="flex cursor-pointer items-center gap-3 text-sm"` | `src/components/builder/liturgy/affirmation-card.test.tsx` | `@@F2@@` |
-| F3 | an old saved draft stays Saved (the payload leaves out today's value) | `frontend/src/lib/draft/mapping.ts`: `    ...(today ? {} : { affirmation }),` → `    affirmation,` | `src/lib/draft/migrate.test.ts src/lib/liturgy/affirmation.test.ts` | `@@F3@@` |
-| F4 | an old saved service's draft prints as saved | `frontend/src/lib/draft/migrate.ts`: `isRecord(draft.editing) ? "archive" : "default"` → `"default"` | `src/lib/draft/migrate.test.ts` | `@@F4@@` |
-| F5 | members read the default, never change it | `frontend/src/components/settings/affirmation-default-card.tsx`: `        disabled={!admin}` → `        disabled={false}` | `src/components/settings/affirmation-default-card.test.tsx` | `@@F5@@` |
-| F6 | the body always carries it (a PUT never keeps an older choice by accident) | `frontend/src/lib/documents.ts`: delete the line starting `    affirmation: { ...(payload.affirmation ?? TODAYS_AFFIRMATION)` | `src/lib/documents.test.ts src/lib/liturgy/affirmation.test.ts` | `@@F6@@` |
-| F7 | "Save as new service" from a saved Nicene service posts the Nicene Creed (review fix 5) | `frontend/src/lib/draft/bulletin.ts`, the first `    return withBulletin(d, {` (in `followSaveMode`) → `    return withBulletin({ ...d, liturgy: { ...d.liturgy, affirmation: { include: true, choice: "apostles", text: "", origin: "default" } } }, {` | `src/lib/liturgy/affirmation.test.ts src/lib/draft/bulletin.test.ts` | `@@F7@@` |
-| F8 | ahead of PR A, the Liturgy step keeps today's row | `frontend/src/components/builder/liturgy/liturgy-step.tsx`: `item.key === "affirmation_of_faith" && config.affirmation ? (` → `item.key === "affirmation_of_faith" ? (` | `src/components/builder/liturgy/affirmation-card.test.tsx` | `@@F8@@` |
-| F9 | ahead of PR A, Settings leaves the default card out | `frontend/src/components/settings/affirmation-default-card.tsx`: delete the line `  if (config.data && !config.data.affirmation) return null;` | `src/components/settings/affirmation-default-card.test.tsx` | `@@F9@@` |
-| F10 | the Nicene sense lines wrap with a hanging indent on the phone | `frontend/src/components/builder/liturgy/affirmation-card.tsx`: `<p key={index} className="pl-4 -indent-4">` → `<p key={index}>` | `src/components/builder/liturgy/affirmation-card.test.tsx` | `@@F10@@` |
+| F1 | no em dash in user-facing copy | `frontend/src/components/builder/liturgy/affirmation-card.tsx`: `"Not printed or emailed."` → `"Not printed \u2014 or emailed."` | `src/components/builder/liturgy/affirmation-card.test.tsx` | `1 failed | 5 passed (6)` |
+| F2 | 44 px rows at 375 px | same file: `className="flex min-h-11 cursor-pointer items-center gap-3 text-sm"` → `className="flex cursor-pointer items-center gap-3 text-sm"` | `src/components/builder/liturgy/affirmation-card.test.tsx` | `1 failed | 5 passed (6)` |
+| F3 | an old saved draft stays Saved (the payload leaves out today's value) | `frontend/src/lib/draft/mapping.ts`: `    ...(today ? {} : { affirmation }),` → `    affirmation,` | `src/lib/draft/migrate.test.ts src/lib/liturgy/affirmation.test.ts` | `2 failed | 13 passed (15)` |
+| F4 | an old saved service's draft prints as saved | `frontend/src/lib/draft/migrate.ts`: `isRecord(draft.editing) ? "archive" : "default"` → `"default"` | `src/lib/draft/migrate.test.ts` | `3 failed | 4 passed (7)` |
+| F5 | members read the default, never change it | `frontend/src/components/settings/affirmation-default-card.tsx`: `        disabled={!admin}` → `        disabled={false}` | `src/components/settings/affirmation-default-card.test.tsx` | `1 failed | 3 passed (4)` |
+| F6 | the body always carries it (a PUT never keeps an older choice by accident) | `frontend/src/lib/documents.ts`: delete the line starting `    affirmation: { ...(payload.affirmation ?? TODAYS_AFFIRMATION)` | `src/lib/documents.test.ts src/lib/liturgy/affirmation.test.ts` | `3 failed | 15 passed (18)` |
+| F7 | "Save as new service" from a saved Nicene service posts the Nicene Creed (review fix 5) | `frontend/src/lib/draft/bulletin.ts`, the first `    return withBulletin(d, {` (in `followSaveMode`) → `    return withBulletin({ ...d, liturgy: { ...d.liturgy, affirmation: { include: true, choice: "apostles", text: "", origin: "default" } } }, {` | `src/lib/liturgy/affirmation.test.ts src/lib/draft/bulletin.test.ts` | `1 failed | 23 passed (24)` |
+| F8 | ahead of PR A, the Liturgy step keeps today's row | `frontend/src/components/builder/liturgy/liturgy-step.tsx`: `item.key === "affirmation_of_faith" && config.affirmation ? (` → `item.key === "affirmation_of_faith" ? (` | `src/components/builder/liturgy/affirmation-card.test.tsx` | `1 failed | 5 passed (6)` |
+| F9 | ahead of PR A, Settings leaves the default card out | `frontend/src/components/settings/affirmation-default-card.tsx`: delete the line `  if (config.data && !config.data.affirmation) return null;` | `src/components/settings/affirmation-default-card.test.tsx` | `1 failed | 3 passed (4)` |
+| F10 | the Nicene sense lines wrap with a hanging indent on the phone | `frontend/src/components/builder/liturgy/affirmation-card.tsx`: `<p key={index} className="pl-4 -indent-4">` → `<p key={index}>` | `src/components/builder/liturgy/affirmation-card.test.tsx` | `1 failed | 5 passed (6)` |
 
 ### Task 10: Verification, PR B (agent)
 
@@ -4818,7 +4822,7 @@ Run: `.venv/bin/python -m pytest -q backend/tests 2>&1 | tail -1`; the frontend 
 - [ ] **Step 2: No em dash added, nothing frozen touched, the branch's paths**
 
 Run: T4 Step 4's three commands (with PR A merged, `origin/main...HEAD` is PR B alone).
-**Expected:** `0`; `0`; `@@PATHSB@@` (the five new frontend files; the modified files of T7-T8 and `docs/ops-runbook.md`, PR A's record). No backend file, no migration, no generated file. Anything else: find why before the PR.
+**Expected:** `0`; `0`; `5 A` and `26 M` (the five new frontend files; the modified files of T7-T8 and `docs/ops-runbook.md`, PR A's record). No backend file, no migration, no generated file. Anything else: find why before the PR.
 
 ### Task 11: PR B: the draft PR, the merge, the after-deploy check, the phone check, the record (OWNER + agent)
 
@@ -4962,7 +4966,7 @@ Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 5. **"Save as new service"** from a saved Nicene service posts the Nicene Creed (`affirmation.test.ts`); planting the reset in `followSaveMode` fails it (F7).
 6. **Hanging indent** (small, so built; clarification 11): the printed bulletin's Nicene Creed is one paragraph per sense line in the existing "hanging" style (PDF and Word; P8, and a test reads the Word file's indents), and "Show creed text" does the same (`CreedText`, F10). The Apostles' Creed stays one paragraph, as today.
 
-**Replay result.** @@REPLAY@@
+**Replay result.** **Green.** On a fresh worktree of `f654dcf` (its code is `4fdd605`'s) with the three docs of `2a291da` (this plan as committed before the replay) as its first commit, all 162 directives of T1, T2, T7 and T8 were applied from this file by the replay script (none failed to match once), every "Run:" of T1-T4, T7, T8 and T10 was run, and its output is the step's **Expected** above (times as `<t>`, absolute paths as `<repo root>`). Each tests-first step failed as quoted and each later check passed as quoted; the four commits (by the plan's `git add` lists) left the worktree clean, and its 58 changed code files were byte-identical to the build worktree's. Counts, local `backend/tests`: 2251 passed, 49 skipped → **2271**, 49 (T1) → **2288**, 50 (T2); CI-shaped (`python -m pytest -q` from the root): **2319 passed, 50 skipped** after T2 (2282 before); frontend 1122 in 119 files, unchanged through Part 1 → **1137** in 121 (T7) → **1141** in 122 (T8); typecheck and lint clean after T2, T7 and T8. **PR A alone with today's frontend:** after T2 (before any page change) today's frontend suite passed on PR A's regenerated `schema.d.ts` and fixtures, 1122 in 119 files, with typecheck, lint, the production build and `drift 0`; without the fixtures' three additions typecheck failed on the three new required fields (why they are in PR A). A probe (not committed) on PR A's API with bodies shaped like today's pages send got 200, 200, 201, 200, 200 and 200 (Build notes, fix 1). T3: P1-P8 failed as the table says, each undone; P9 on Postgres. T9: F1-F10 failed as the table says, each undone. T4 and T10: the production build compiled, no drift, `0` em dashes in the added lines, `0` frozen or CI files; PR A `7 A` and `25 M` against `origin/main`; PR B `5 A` and `25 M`, no backend file, against PR A's head standing in for `main` after PR A's merge (the `26 M` above adds PR A's record, not written in the replay). Postgres (T4 Step 3) on a throwaway PostgreSQL 16 cluster run as the `postgres` user under `/var/lib/postgresql/` (deleted afterwards): CI's command `50 passed, 2319 deselected, 1 warning`; P9 `1 failed, 60 deselected`; `alembic upgrade head` printed the README's Step 4 line exactly; `check` ("No new upgrade operations detected."), `downgrade base`, `upgrade head` exit 0 and `current` is `0010_services_affirmation (head)`. The docs tests T6 Step 8 runs: `89 passed` (on the runbook without a new record). At the printed page's 6 in text width no Nicene line wraps today (the longest is 61 characters), so the printed indent is insurance; on a 375 px phone several do. **Not replayed:** T5, T6 and T11 (the owner, GitHub, Railway, Supabase, Vercel, production and the phone), including the live `/openapi.json` and Deploy Logs checks; the records' contents and their docs-test runs with a record inserted.
 
 **While building:**
 - The first frontend split put the card in its own task after the Settings card; the replay showed the liturgy queries test (`uses a test config equal to the shared fixtures`) failing once the shared outline changed. With the outline now unchanged (clarification 9) that coupling is gone; the card stays with the draft in T7.
