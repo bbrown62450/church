@@ -251,7 +251,7 @@ describe("builder shell (F §4.7)", () => {
     const hymnsBlock = within(aside).getByRole("link", { name: "Hymns" }).closest("h3");
     expect(hymnsBlock?.nextElementSibling).toHaveTextContent(/^No Opening hymnNo Response hymnNo Closing hymn$/);
     const liturgy = within(aside).getByRole("link", { name: "Liturgy" }).closest("h3");
-    expect(liturgy?.nextElementSibling).toHaveTextContent(/^1 of 7 liturgy sections readyCommunion: YesNo custom elements$/);
+    expect(liturgy?.nextElementSibling).toHaveTextContent(/^1 of 7 liturgy sections readyCommunion: YesAffirmation of Faith: Apostles' CreedNo custom elements$/);
     expect(within(aside).getByRole("link", { name: "Date" })).toHaveAttribute("href", "/builder/readings");
     const archive = within(aside).getByRole("link", { name: "Not in archive" }); // only the archive half links (build review M5)
     expect(archive).toHaveAttribute("href", "/builder/review");
@@ -490,6 +490,7 @@ describe("the shell with Liturgy shipped (slice 4b)", () => {
     expect(within(block).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
       "2 of 7 liturgy sections ready",
       "Communion: No",
+      "Affirmation of Faith: Apostles' Creed",
       "1 custom element",
     ]);
     expect(within(aside).getByRole("link", { name: "Liturgy" })).toHaveAttribute("href", "/builder/liturgy");

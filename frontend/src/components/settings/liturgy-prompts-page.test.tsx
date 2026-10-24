@@ -17,7 +17,7 @@ import { authEvents } from "@/lib/queries/auth-events";
 import { keys } from "@/lib/queries/keys";
 import { PROMPTS_RESET, PROMPTS_SAVED } from "@/lib/queries/liturgy-prompts";
 import { fakeError, installFakeApi, type FakeHandler, type RecordedRequest } from "@/test/fake-api";
-import { church, DEFAULT_PROMPTS, liturgyPrompts, me } from "@/test/fixtures";
+import { church, churchProfile, DEFAULT_PROMPTS, liturgyConfig, liturgyPrompts, me } from "@/test/fixtures";
 import { testRouter } from "@/test/mocks";
 import { renderWithProviders } from "@/test/render";
 import { positionAt, setViewport } from "@/test/viewport";
@@ -42,7 +42,13 @@ function promptsServer(initial: Partial<Record<PromptKey, string>> = {}) {
 
 function renderPage(role: Church["role"] = "admin", routes: Record<string, FakeHandler> = {}) {
   const active = church({ role });
-  const api = installFakeApi({ "GET /church/liturgy-prompts": liturgyPrompts(), ...routes });
+  // The Affirmation of Faith card above the prompts (affirmation spec) reads the profile and the config.
+  const api = installFakeApi({
+    "GET /church/liturgy-prompts": liturgyPrompts(),
+    "GET /church": churchProfile({ role }),
+    "GET /liturgy/config": liturgyConfig(),
+    ...routes,
+  });
   const view = renderWithProviders(
     <>
       <SettingsLayout>
@@ -75,7 +81,8 @@ describe("Settings → Liturgy prompts (slice 6a-3a)", () => {
     const { user } = renderPage("member", { "GET /church/liturgy-prompts": liturgyPrompts({ benediction: "Go in peace." }, { can_edit: false }) });
     expect(await screen.findByText(ADMINS_ONLY)).toBeInTheDocument();
     expect(screen.getByText(PROMPTS_INTRO)).toBeInTheDocument();
-    const titles = screen.getAllByRole("button", { name: /./ }).map((b) => b.textContent);
+    const form = screen.getByRole("form", { name: "Liturgy prompts" });
+    const titles = within(form).getAllByRole("button", { name: /./ }).map((b) => b.textContent);
     expect(titles).toEqual([
       "Overall voice (system prompt)",
       "Call to Worship",

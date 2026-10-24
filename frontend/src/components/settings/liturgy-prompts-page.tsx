@@ -58,16 +58,17 @@ const allKeys = (open: boolean) => Object.fromEntries(PROMPT_KEYS.map((key) => [
  * owners and admins edit them, put one back to its default (unsaved until
  * **Save prompts**) and reset them all (confirmed). 6a's rules for settings
  * forms: newer server data rebases the form, and leaving with unsaved edits
- * asks first (`LeaveGuard`).
+ * asks first (`LeaveGuard`; with `onDirtyChange`, the page's own guard, which
+ * also covers the Affirmation of Faith default above it: affirmation spec).
  */
-export function LiturgyPromptsPage() {
+export function LiturgyPromptsPage({ onDirtyChange }: { onDirtyChange?: (dirty: boolean) => void } = {}) {
   const church = useChurch();
   const admin = isAdmin(church.role);
   const prompts = useLiturgyPrompts();
   const headingRef = useRef<HTMLHeadingElement>(null);
   let body: ReactNode;
   if (prompts.data) {
-    body = <PromptsForm out={prompts.data} admin={admin} headingRef={headingRef} />;
+    body = <PromptsForm out={prompts.data} admin={admin} headingRef={headingRef} onDirtyChange={onDirtyChange} />;
   } else if (prompts.isError) {
     body = <ErrorState error={prompts.error} onRetry={() => void prompts.refetch()} retrying={prompts.isFetching} />;
   } else {
@@ -98,10 +99,12 @@ function PromptsForm({
   out,
   admin,
   headingRef,
+  onDirtyChange,
 }: {
   out: LiturgyPrompts;
   admin: boolean;
   headingRef: RefObject<HTMLHeadingElement | null>;
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const save = useSaveLiturgyPrompts();
   const reset = useSaveLiturgyPrompts();
@@ -126,6 +129,8 @@ function PromptsForm({
     const next = promptValuesFrom(out);
     setState({ source: out, baseline: next, form: rebasePrompts(baseline, form, next) });
   }
+
+  useEffect(() => onDirtyChange?.(dirty), [dirty, onDirtyChange]);
 
   // The first card a failed save named: opened by onError, focused once it is on the page.
   useEffect(() => {
@@ -255,7 +260,7 @@ function PromptsForm({
         // After a reset the button that opened it is gone (nothing is customized): the page's heading takes focus.
         finalFocus={() => (resetDone.current ? headingRef.current : true)}
       />
-      <LeaveGuard when={dirty} />
+      {onDirtyChange ? null : <LeaveGuard when={dirty} />}
     </form>
   );
 }
