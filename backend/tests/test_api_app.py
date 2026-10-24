@@ -328,7 +328,7 @@ from sqlalchemy import text
 import db.schema_check
 from db.schema_check import RevisionState, rls_disabled_tables, run_startup_checks
 
-SCHEMA_HEAD = "0009_memberships_one_owner"
+SCHEMA_HEAD = "0010_services_affirmation"
 BEHIND_WARNING = f"schema revision None != head {SCHEMA_HEAD}"
 
 

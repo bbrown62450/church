@@ -85,6 +85,7 @@ def test_church_returns_the_active_church_for_a_member(client, make_user, make_c
         "effective_translation": "web", "effective_translation_label": "World English Bible (WEB)",
         "default_hymnal": None, "effective_hymnal": None,     # slice 3: no hymns in this church
         "default_benediction": DEFAULT_BENEDICTION_FALLBACK,  # slice 4: the full Halverson text
+        "default_affirmation": {"choice": "apostles", "text": ""},  # the affirmation spec
     }
 
 

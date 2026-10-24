@@ -16,6 +16,7 @@ from typing import Annotated, Literal, Optional
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, ConfigDict, Field
 
+import affirmation
 import liturgy_config
 from api import ratelimit
 from api.deps import ActiveChurch, CurrentUser, get_current_user, require_church
@@ -90,6 +91,19 @@ class CommunionOut(BaseModel):
     blocks: list[CommunionBlockOut]
 
 
+class AffirmationChoiceOut(BaseModel):
+    key: Literal["apostles", "nicene", "own"]
+    label: str                      # "Apostles' Creed", "Nicene Creed", "Your own text"
+    text: str                       # the creed as the printed bulletin prints it; "" for own text
+    credit: str                     # the acknowledgement printed under it (the Nicene Creed's, ELLC); "" for none
+
+
+class AffirmationConfigOut(BaseModel):
+    title: str                      # "Affirmation of Faith"
+    toggle_label: str               # "Include Affirmation of Faith"
+    choices: list[AffirmationChoiceOut]
+
+
 class LiturgyLimitsOut(BaseModel):
     max_section_text: int
     max_sermon_title: int
@@ -106,6 +120,9 @@ class LiturgyConfigOut(BaseModel):
     assurance_response: str                 # "People: Thanks be to God! Amen."
     default_benediction_fallback: str       # the full Halverson text (owner, 2026-10-02)
     communion: CommunionOut
+    # The affirmation spec. The outline's affirmation_of_faith item stays a landmark ("Apostles' Creed"), so a
+    # page from before the card keeps its row; a page with the card shows it there when this is present.
+    affirmation: AffirmationConfigOut
     limits: LiturgyLimitsOut
     ai_available: bool                      # openai_client.ai_available(); never why
 
@@ -123,6 +140,12 @@ def get_liturgy_config(user: CurrentUser = Depends(get_current_user)) -> Liturgy
         communion=CommunionOut(title=lc.COMMUNION_TITLE, toggle_label=lc.COMMUNION_TOGGLE_LABEL,
                                default_rule="first_sunday_of_month",
                                blocks=[CommunionBlockOut(style=b.style, text=b.text) for b in lc.COMMUNION_BLOCKS]),
+        affirmation=AffirmationConfigOut(
+            title=affirmation.TITLE, toggle_label=affirmation.TOGGLE_LABEL,
+            choices=[AffirmationChoiceOut(key=key, label=affirmation.CHOICE_LABELS[key],
+                                          text=affirmation.CREED_TEXT.get(key, ""),
+                                          credit=affirmation.CREED_CREDIT.get(key, ""))
+                     for key in affirmation.CHOICES]),
         limits=LiturgyLimitsOut(**vars(lc.LIMITS)),
         ai_available=openai_client.ai_available(),
     )

@@ -118,6 +118,7 @@ export function churchProfile(overrides: Partial<ChurchProfile> = {}): ChurchPro
     default_hymnal: null,
     effective_hymnal: "GG2013",
     default_benediction: DEFAULT_BENEDICTION_FALLBACK, // what the API resolves an unset or "Halverson" default to
+    default_affirmation: { choice: "apostles", text: "" }, // the affirmation spec: what the API answers when unset
     ...overrides,
   };
 }
@@ -418,6 +419,21 @@ export function liturgyConfig(overrides: Partial<LiturgyConfig> = {}): LiturgyCo
         { style: "response", text: "And also with you." },
       ],
     },
+    // The affirmation spec (the creeds shortened; the API sends them in full).
+    affirmation: {
+      title: "Affirmation of Faith",
+      toggle_label: "Include Affirmation of Faith",
+      choices: [
+        { key: "apostles", label: "Apostles' Creed", text: "I believe in God, the Father almighty, Maker of heaven and earth.", credit: "" },
+        {
+          key: "nicene",
+          label: "Nicene Creed",
+          text: "We believe in one God,\nthe Father, the Almighty,",
+          credit: "English translations of the Nicene Creed, \u00a9 1998 English Language Liturgical Consultation (ELLC), and used by permission. www.englishtexts.org",
+        },
+        { key: "own", label: "Your own text", text: "", credit: "" },
+      ],
+    },
     limits: {
       max_section_text: 20_000,
       max_sermon_title: 300,
@@ -524,6 +540,7 @@ export function savedService(overrides: Partial<ServiceOut> = {}): ServiceOut {
     include_communion: true,
     custom_elements: [{ label: "Anthem", text: "Choir", insert_after: "sermon" }],
     bulletin: serviceBulletin(),
+    affirmation: { include: true, choice: "apostles", text: "" },
     created_by: { id: USER_ID, name: "Pat Pastor" },
     saved_at: "2026-10-01T14:42:00.123456+00:00",
     ...overrides,

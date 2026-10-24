@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from api.deps import ActiveChurch, CurrentUser, get_current_user, require_admin, require_church
 from api.errors import error_responses
-from api.schemas import ChurchOut, ChurchProfileOut, MeOut, UserOut
+from api.schemas import ChurchAffirmation, ChurchOut, ChurchProfileOut, MeOut, UserOut
 from repos.churches import list_user_churches
 from usecases import church_admin, church_profile
 
@@ -39,6 +39,7 @@ class ChurchPatchIn(BaseModel):
     bible_translation: str | None = Field(None, max_length=20)
     default_hymnal: str | None = Field(None, max_length=20)
     default_benediction: str | None = Field(None, max_length=4000)
+    default_affirmation: ChurchAffirmation | None = None     # the affirmation spec
 
 
 @router.patch("/church", response_model=ChurchProfileOut,

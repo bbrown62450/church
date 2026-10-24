@@ -7,6 +7,7 @@ from typing import Annotated, Generic, Literal, Optional, TypeVar
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, StringConstraints
 
+import affirmation
 import bulletin_settings
 import liturgy_config
 import service_bulletin
@@ -20,6 +21,31 @@ class UserOut(BaseModel):
     email: str
     name: Optional[str] = None
     picture: Optional[str] = None
+
+
+AffirmationChoice = Literal["apostles", "nicene", "own"]
+
+
+class ServiceAffirmation(BaseModel):
+    """The Affirmation of Faith of one service (affirmation spec): switched on
+    or off, the choice, and the own text ("" unless the choice is "own"; the
+    server reads it so). Sent and answered alike."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    include: bool
+    choice: AffirmationChoice
+    text: str = Field(max_length=liturgy_config.LIMITS.max_section_text)
+
+
+class ChurchAffirmation(BaseModel):
+    """The church's default Affirmation of Faith (affirmation spec; GET and
+    PATCH /church): the choice and, for "own", the church's own text."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    choice: AffirmationChoice
+    text: str = Field(max_length=liturgy_config.LIMITS.max_section_text)
 
 
 class ChurchOut(BaseModel):
@@ -40,6 +66,7 @@ class ChurchProfileOut(ChurchOut):
     default_hymnal: Optional[str]           # slice 3: the stored default hymnal (read only), or null
     effective_hymnal: Optional[str]         # slice 3: the hymnal the builder opens; null with no hymns
     default_benediction: str                # slice 4: the church's default; full Halverson text when unset or "Halverson"; "" = none
+    default_affirmation: ChurchAffirmation  # the affirmation spec: the Apostles' Creed when unset
 
 
 class MeOut(BaseModel):
@@ -378,6 +405,9 @@ class ServiceDraft(BaseModel):
     custom_elements: list[CustomElementIn] = Field(default_factory=list,
                                                    max_length=liturgy_config.LIMITS.max_custom_elements)
     bulletin: Optional[ServiceBulletin] = None
+    # The affirmation spec. Left out (a page from before it): the files print the Apostles' Creed, a POST
+    # stores none and a PUT keeps the saved one.
+    affirmation: Optional[ServiceAffirmation] = None
 
     def to_input(self):
         """The usecases' copy (usecases.archive.ServiceInput); usecases never import api/*."""
@@ -396,7 +426,8 @@ class ServiceDraft(BaseModel):
             include_communion=self.include_communion,
             custom_elements=tuple(CustomElement(e.label, e.text, e.insert_after) for e in self.custom_elements),
             bulletin=None if self.bulletin is None else service_bulletin.read(self.bulletin.model_dump(
-                exclude=None if "cover_image_id" in self.bulletin.model_fields_set else {"cover_image_id"})))
+                exclude=None if "cover_image_id" in self.bulletin.model_fields_set else {"cover_image_id"})),
+            affirmation=None if self.affirmation is None else affirmation.read(self.affirmation.model_dump()))
 
 
 # --- slice 5a-2: the archive (5a spec, "Schemas"; GET/POST/PUT/DELETE /services) ---
@@ -451,6 +482,7 @@ class ServiceOut(BaseModel):
     include_communion: bool
     custom_elements: list[CustomElementOut]
     bulletin: ServiceBulletin           # PR 2b; nothing filled in for a service saved without one
+    affirmation: ServiceAffirmation     # the affirmation spec; the Apostles' Creed, included, when none was saved
     created_by: Optional[AuthorOut]     # null when the author's account was removed
     saved_at: str                       # ISO 8601 with "+00:00"; send it back as If-Match
 

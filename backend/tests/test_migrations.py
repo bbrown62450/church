@@ -794,7 +794,7 @@ def test_0006_adds_the_nullable_bulletin_column_and_keeps_rows(sqlite_url):
             user_id, church_id = _seed_owner_and_church(conn)
             kept = _insert_legacy_service(conn, church_id, user_id)
             before = _services_shape(conn)
-        _alembic(sqlite_url, "upgrade", "head")
+        _alembic(sqlite_url, "upgrade", "0006_services_bulletin")
         with engine.begin() as conn:
             at_head = _services_shape(conn)
             inserted = _insert_legacy_service(conn, church_id, user_id, date_iso="2026-10-04")
@@ -1610,3 +1610,136 @@ def test_the_owner_s_read_only_queries_around_0009(pg_admin_url):
     assert check_before == {"version": "0008_invites_integrity", "one_owner_index": 0}
     assert after == {**before, "version": "0009_memberships_one_owner", "one_owner_index": 1}
     assert check_after == {"version": "0009_memberships_one_owner", "one_owner_index": 1}
+
+
+# --- The affirmation spec: 0010_services_affirmation ---
+
+# What `alembic upgrade 0009_memberships_one_owner:0010_services_affirmation --sql` prints on Postgres,
+# comments and blank lines left out: the preview the owner reads before the merge
+# (backend/migrations/README.md, "Before 0010_services_affirmation", step 3).
+PREVIEW_0010 = [
+    "BEGIN;",
+    "SET LOCAL lock_timeout = '5s';",
+    "SET LOCAL statement_timeout = '60s';",
+    "ALTER TABLE services ADD COLUMN affirmation JSON;",
+    "UPDATE alembic_version SET version_num='0010_services_affirmation' "
+    "WHERE alembic_version.version_num = '0009_memberships_one_owner';",
+    "COMMIT;",
+]
+
+
+def test_0010_adds_the_nullable_affirmation_column_and_keeps_rows(sqlite_url):
+    _alembic(sqlite_url, "upgrade", "0009_memberships_one_owner")
+    engine = sa.create_engine(sqlite_url, poolclass=NullPool)
+    try:
+        with engine.begin() as conn:
+            user_id, church_id = _seed_owner_and_church(conn)
+            kept = _insert_legacy_service(conn, church_id, user_id)
+            before = _services_shape(conn)
+        _alembic(sqlite_url, "upgrade", "0010_services_affirmation")
+        with engine.begin() as conn:
+            after = _services_shape(conn)
+            inserted = _insert_legacy_service(conn, church_id, user_id, date_iso="2026-10-04")
+            rows = conn.execute(sa.text("SELECT id, occasion, affirmation FROM services ORDER BY service_date_iso")).all()
+    finally:
+        engine.dispose()
+    assert after["columns"] == before["columns"] + [("affirmation", "JSON", True)]
+    assert (after["pk"], after["fks"], after["indexes"]) == (before["pk"], before["fks"], before["indexes"])
+    # The row from before keeps its data and reads NULL (the Apostles' Creed, included); so does a new one.
+    assert [(uuid.UUID(str(r.id)), r.occasion, r.affirmation) for r in rows] == [
+        (kept, "Pentecost 17", None), (inserted, "Pentecost 17", None)]
+
+
+def test_0010_downgrade_gives_back_the_0009_services_table(sqlite_url):
+    _alembic(sqlite_url, "upgrade", "0009_memberships_one_owner")
+    engine = sa.create_engine(sqlite_url, poolclass=NullPool)
+    try:
+        with engine.connect() as conn:
+            before = _services_shape(conn)
+        _alembic(sqlite_url, "upgrade", "0010_services_affirmation")
+        with engine.begin() as conn:
+            user_id, church_id = _seed_owner_and_church(conn)
+            _insert_legacy_service(conn, church_id, user_id)
+            conn.execute(sa.text("""UPDATE services SET bulletin = '{}',
+                                    affirmation = '{"include": false, "choice": "nicene", "text": ""}'"""))
+        _alembic(sqlite_url, "downgrade", "0009_memberships_one_owner")
+        with engine.connect() as conn:
+            after = _services_shape(conn)
+            rows = conn.execute(sa.text("SELECT occasion, bulletin FROM services")).all()
+            version = conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
+    finally:
+        engine.dispose()
+    assert after == before
+    assert [tuple(r) for r in rows] == [("Pentecost 17", "{}")]
+    assert version == "0009_memberships_one_owner"
+
+
+def test_offline_sql_for_0010_is_one_column_add_under_the_timeouts():
+    cfg = alembic_config(url="postgresql://preview@localhost:1/preview", configure_logger=False)
+    cfg.output_buffer = buffer = io.StringIO()
+    command.upgrade(cfg, "0009_memberships_one_owner:0010_services_affirmation", sql=True)
+    lines = [line for line in buffer.getvalue().splitlines() if line.strip() and not line.startswith("--")]
+    assert lines == PREVIEW_0010
+
+
+def test_the_readme_shows_the_0010_preview_exactly_and_in_full():
+    """README "Before 0010_services_affirmation", step 3: PREVIEW_0010, nothing
+    shortened, and the step says it is for reading only (as 0009's)."""
+    section = _readme().split("\n## Before 0010_services_affirmation (Affirmation of Faith)\n", 1)[1]
+    step = section.split("\n### Step 3: Read the SQL the upgrade will run\n", 1)[1].split("\n### ", 1)[0]
+    block = "BEGIN;" + step.split("\n```\nBEGIN;", 1)[1].split("\n```", 1)[0]
+    assert block.splitlines() == PREVIEW_0010
+    assert "**Read only. Do not run this.**" in step
+    assert "Expected, exactly and in full" in step
+    assert "..." not in step and "\u2026" not in step
+
+
+def _readme_0010_sql(n: int) -> str:
+    """The n-th ```sql block of README "Before 0010_services_affirmation": 0 is step 2's
+    counts, 1 step 4's after-deploy check."""
+    section = _readme().split("\n## Before 0010_services_affirmation (Affirmation of Faith)\n", 1)[1]
+    return re.findall(r"```sql\n(.*?)```", section, re.S)[n]
+
+
+def test_the_readme_s_0010_deploy_log_line_is_alembic_s(sqlite_url, caplog):
+    """Step 4's deploy-log line is what `alembic upgrade head` logs for 0010."""
+    section = _readme().split("\n## Before 0010_services_affirmation (Affirmation of Faith)\n", 1)[1]
+    step = section.split("\n### Step 4: After the deploy (read-only)\n", 1)[1].split("\n### ", 1)[0]
+    logged = step.split("\n```\n", 1)[1].split("\n```", 1)[0]
+    _alembic(sqlite_url, "upgrade", "0009_memberships_one_owner")
+    caplog.set_level(logging.INFO, logger="alembic.runtime.migration")
+    _alembic(sqlite_url, "upgrade", "0010_services_affirmation")
+    assert logged == "INFO  [alembic.runtime.migration] " + next(
+        r.getMessage() for r in caplog.records if r.getMessage().startswith("Running upgrade 0009"))
+
+
+@pytest.mark.postgres
+def test_the_owner_s_read_only_queries_around_0010(pg_admin_url):
+    """README "Before 0010_services_affirmation": step 2's counts before and after
+    the upgrade, and step 4's check, which also answers before 0010 is applied."""
+    with throwaway_database(pg_admin_url, role_bypassrls=True) as sandbox:
+        _alembic(sandbox.role_url, "upgrade", "0009_memberships_one_owner")
+        engine = _pg_engine(sandbox.role_url)
+        try:
+            with engine.begin() as conn:
+                user_id, church_id = _seed_owner_and_church(conn)
+                kept = _insert_legacy_service(conn, church_id, user_id)
+                _insert_legacy_service(conn, church_id, user_id, date_iso="2026-10-04")
+            with engine.connect() as conn:
+                before = dict(conn.execute(text(_readme_0010_sql(0))).mappings().one())
+                check_before = dict(conn.execute(text(_readme_0010_sql(1))).mappings().one())
+            _alembic(sandbox.role_url, "upgrade", "0010_services_affirmation")
+            with engine.begin() as conn:
+                check_at_deploy = dict(conn.execute(text(_readme_0010_sql(1))).mappings().one())
+                conn.execute(text("UPDATE services SET affirmation = CAST(:a AS json) WHERE id = :id"),
+                             {"a": '{"include": false, "choice": "nicene", "text": ""}', "id": kept})
+            with engine.connect() as conn:
+                after = dict(conn.execute(text(_readme_0010_sql(0))).mappings().one())
+                check_after = dict(conn.execute(text(_readme_0010_sql(1))).mappings().one())
+        finally:
+            engine.dispose()
+    assert before == {"version": "0009_memberships_one_owner", "services": 2, "churches": 1}
+    assert check_before == {"version": "0009_memberships_one_owner", "new_column": 0, "with_affirmation": 0}
+    assert check_at_deploy == {"version": "0010_services_affirmation", "new_column": 1, "with_affirmation": 0}
+    assert after == {**before, "version": "0010_services_affirmation"}
+    assert check_after == {"version": "0010_services_affirmation", "new_column": 1, "with_affirmation": 1}

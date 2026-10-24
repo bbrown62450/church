@@ -1,6 +1,65 @@
 {
   "components": {
     "schemas": {
+      "AffirmationChoiceOut": {
+        "properties": {
+          "credit": {
+            "title": "Credit",
+            "type": "string"
+          },
+          "key": {
+            "enum": [
+              "apostles",
+              "nicene",
+              "own"
+            ],
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "text",
+          "credit"
+        ],
+        "title": "AffirmationChoiceOut",
+        "type": "object"
+      },
+      "AffirmationConfigOut": {
+        "properties": {
+          "choices": {
+            "items": {
+              "$ref": "#/components/schemas/AffirmationChoiceOut"
+            },
+            "title": "Choices",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "toggle_label": {
+            "title": "Toggle Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "toggle_label",
+          "choices"
+        ],
+        "title": "AffirmationConfigOut",
+        "type": "object"
+      },
       "ArchivedHymn": {
         "description": "A saved slot's hymn. in_hymnal: the hymn is in the church's hymnal now\n(by its id, else by title and number), with its current title, number and\nhymnal; otherwise the stored snapshot, hymn_id null.",
         "properties": {
@@ -565,6 +624,32 @@
         "title": "CardNotesOut",
         "type": "object"
       },
+      "ChurchAffirmation": {
+        "additionalProperties": false,
+        "description": "The church's default Affirmation of Faith (affirmation spec; GET and\nPATCH /church): the choice and, for \"own\", the church's own text.",
+        "properties": {
+          "choice": {
+            "enum": [
+              "apostles",
+              "nicene",
+              "own"
+            ],
+            "title": "Choice",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 20000,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "choice",
+          "text"
+        ],
+        "title": "ChurchAffirmation",
+        "type": "object"
+      },
       "ChurchOut": {
         "properties": {
           "id": {
@@ -609,6 +694,16 @@
               }
             ],
             "title": "Bible Translation"
+          },
+          "default_affirmation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChurchAffirmation"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "default_benediction": {
             "anyOf": [
@@ -675,6 +770,9 @@
               }
             ],
             "title": "Bible Translation"
+          },
+          "default_affirmation": {
+            "$ref": "#/components/schemas/ChurchAffirmation"
           },
           "default_benediction": {
             "title": "Default Benediction",
@@ -748,7 +846,8 @@
           "effective_translation_label",
           "default_hymnal",
           "effective_hymnal",
-          "default_benediction"
+          "default_benediction",
+          "default_affirmation"
         ],
         "title": "ChurchProfileOut",
         "type": "object"
@@ -2486,6 +2585,9 @@
       },
       "LiturgyConfigOut": {
         "properties": {
+          "affirmation": {
+            "$ref": "#/components/schemas/AffirmationConfigOut"
+          },
           "ai_available": {
             "title": "Ai Available",
             "type": "boolean"
@@ -2533,6 +2635,7 @@
           "assurance_response",
           "default_benediction_fallback",
           "communion",
+          "affirmation",
           "limits",
           "ai_available"
         ],
@@ -4056,6 +4159,37 @@
         "title": "SermonText",
         "type": "object"
       },
+      "ServiceAffirmation": {
+        "additionalProperties": false,
+        "description": "The Affirmation of Faith of one service (affirmation spec): switched on\nor off, the choice, and the own text (\"\" unless the choice is \"own\"; the\nserver reads it so). Sent and answered alike.",
+        "properties": {
+          "choice": {
+            "enum": [
+              "apostles",
+              "nicene",
+              "own"
+            ],
+            "title": "Choice",
+            "type": "string"
+          },
+          "include": {
+            "title": "Include",
+            "type": "boolean"
+          },
+          "text": {
+            "maxLength": 20000,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "include",
+          "choice",
+          "text"
+        ],
+        "title": "ServiceAffirmation",
+        "type": "object"
+      },
       "ServiceBulletin": {
         "additionalProperties": false,
         "description": "The printed bulletin's weekly fields (PR 2b), every field present. Texts\nare not checked for line breaks: the server reads them tolerantly\n(service_bulletin.read: a one-line field's line breaks become spaces), so a\ndownload never meets a 422 for one. `unchecked` names the boxes whose text\ncame from last week and is not checked yet.",
@@ -4157,6 +4291,16 @@
         "additionalProperties": false,
         "description": "One service (inventory \u00a72.1 plus hymnal, F \u00a71.3). The limits are slice\n4's (GenerateLiturgyIn, liturgy_config.LIMITS); HymnRef, SlotHymns and\nSectionKey are imported unchanged. Usecases take `to_input()`.\n`bulletin` (printed bulletin PR 2b) is optional, so a client from before\n2b keeps working: a POST without it saves no bulletin, a PUT without it\nkeeps the saved one.",
         "properties": {
+          "affirmation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ServiceAffirmation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "bulletin": {
             "anyOf": [
               {
@@ -4263,6 +4407,9 @@
       "ServiceOut": {
         "description": "A saved service as the builder opens it (GET, POST and PUT /services).",
         "properties": {
+          "affirmation": {
+            "$ref": "#/components/schemas/ServiceAffirmation"
+          },
           "bulletin": {
             "$ref": "#/components/schemas/ServiceBulletin"
           },
@@ -4383,6 +4530,7 @@
           "include_communion",
           "custom_elements",
           "bulletin",
+          "affirmation",
           "created_by",
           "saved_at"
         ],
