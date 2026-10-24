@@ -37,6 +37,66 @@ def test_the_creeds_are_the_texts_checked_for_this_change():
     assert pb.APOSTLES_CREED is af.APOSTLES_CREED
 
 
+# The creeds in full, written out here (not read from affirmation.py), so a
+# changed word, capital, spelling or line order fails. The Nicene Creed is
+# ELLC's (https://www.englishtexts.org/the-nicene-creed, checked 2026-10-24),
+# line 26 without its brackets.
+NICENE_SENSE_LINES = [
+    "We believe in one God,",
+    "the Father, the Almighty,",
+    "maker of heaven and earth,",
+    "of all that is, seen and unseen.",
+    "We believe in one Lord, Jesus Christ,",
+    "the only Son of God,",
+    "eternally begotten of the Father,",
+    "God from God, Light from Light,",
+    "true God from true God,",
+    "begotten, not made,",
+    "of one Being with the Father;",
+    "through him all things were made.",
+    "For us and for our salvation",
+    "he came down from heaven,",
+    "was incarnate of the Holy Spirit and the Virgin Mary",
+    "and became truly human.",
+    "For our sake he was crucified under Pontius Pilate;",
+    "he suffered death and was buried.",
+    "On the third day he rose again",
+    "in accordance with the Scriptures;",
+    "he ascended into heaven",
+    "and is seated at the right hand of the Father.",
+    "He will come again in glory to judge the living and the dead,",
+    "and his kingdom will have no end.",
+    "We believe in the Holy Spirit, the Lord, the giver of life,",
+    "who proceeds from the Father and the Son,",
+    "who with the Father and the Son is worshiped and glorified,",
+    "who has spoken through the prophets.",
+    "We believe in one holy catholic and apostolic Church.",
+    "We acknowledge one baptism for the forgiveness of sins.",
+    "We look for the resurrection of the dead,",
+    "and the life of the world to come. Amen.",
+]
+APOSTLES_IN_FULL = (
+    "I believe in God, the Father almighty, Maker of heaven and earth, and in Jesus Christ his only Son, "
+    "our Lord; who was conceived by the Holy Ghost, born of the Virgin Mary, suffered under Pontius Pilate, "
+    "was crucified, dead, and buried; he descended into hell; the third day he rose again from the dead; "
+    "he ascended into heaven, and sitteth on the right hand of God the Father Almighty; from thence he "
+    "shall come to judge the quick and the dead. I believe in the Holy Ghost; the holy catholic church; "
+    "the communion of saints; the forgiveness of sins; the resurrection of the body; and the life "
+    "everlasting. Amen.")
+NICENE_CREDIT_IN_FULL = ("English translations of the Nicene Creed, © 1998 English Language Liturgical "
+                         "Consultation (ELLC), and used by permission. www.englishtexts.org")
+
+
+def test_the_creeds_in_full_word_for_word():
+    assert af.APOSTLES_CREED == APOSTLES_IN_FULL
+    lines = af.NICENE_CREED.split("\n")
+    assert len(lines) == len(NICENE_SENSE_LINES) == 32
+    for number, (line, expected) in enumerate(zip(lines, NICENE_SENSE_LINES), start=1):
+        assert line == expected, f"Nicene line {number}"
+    assert af.NICENE_CREED == "\n".join(NICENE_SENSE_LINES)
+    assert af.NICENE_CREDIT == NICENE_CREDIT_IN_FULL
+
+
 @pytest.mark.parametrize("raw, expected", [
     (None, af.Affirmation()),
     ("nicene", af.Affirmation()),
